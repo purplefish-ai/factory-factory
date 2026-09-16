@@ -1,32 +1,47 @@
 # Claude Transcript Whitespace Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Remove blank padded rows created by Claude usage telemetry while preserving usage statistics, visible string results, and tool-call pairing.
+**Goal:** Remove blank padded rows created by Claude usage telemetry while
+preserving usage statistics, visible string results, and tool-call pairing.
 
-**Architecture:** Keep all ACP usage messages in persisted transcript and reducer state. Filter result messages that have no non-empty string content at the shared `groupAdjacentToolCalls` rendering boundary before they can split tool sequences or become virtual rows.
+**Architecture:** Keep all ACP usage messages in persisted transcript and
+reducer state. Filter result messages that have no non-empty string content at
+the shared `groupAdjacentToolCalls` rendering boundary before they can split
+tool sequences or become virtual rows.
 
 **Tech Stack:** TypeScript, Vitest, React chat protocol helpers
 
 ## Global Constraints
 
-- Apply the behavior to every transcript surface through the existing shared grouping helper.
-- Preserve object-valued usage results in reducer and persisted transcript state.
+- Apply the behavior to every transcript surface through the existing shared
+  grouping helper.
+- Preserve object-valued usage results in reducer and persisted transcript
+  state.
 - Preserve non-empty string result rendering.
-- Preserve matching tool-use/tool-result pairing when usage telemetry occurs between them.
-- Do not change backend protocols, persistence, database schemas, or provider-specific branches.
+- Preserve matching tool-use/tool-result pairing when usage telemetry occurs
+  between them.
+- Do not change backend protocols, persistence, database schemas, or
+  provider-specific branches.
 
 ---
 
 ### Task 1: Filter Non-Renderable Result Rows
 
 **Files:**
+
 - Modify: `src/lib/chat-protocol.ts:695`
 - Test: `src/lib/chat-protocol.test.ts:232`
 
 **Interfaces:**
-- Consumes: `ChatMessage`, `GroupedMessageItem`, and the existing `groupAdjacentToolCalls(messages: ChatMessage[]): GroupedMessageItem[]` API.
-- Produces: unchanged `groupAdjacentToolCalls` signature with non-renderable result messages omitted from its returned rendering items.
+
+- Consumes: `ChatMessage`, `GroupedMessageItem`, and the existing
+  `groupAdjacentToolCalls(messages: ChatMessage[]): GroupedMessageItem[]` API.
+- Produces: unchanged `groupAdjacentToolCalls` signature with non-renderable
+  result messages omitted from its returned rendering items.
 
 - [x] **Step 1: Add failing regression tests**
 
@@ -90,8 +105,9 @@ it('does not let usage results split matching tool calls and results', () => {
 
 Run: `pnpm test src/lib/chat-protocol.test.ts`
 
-Expected: the non-renderable result cases fail because each result is returned as a grouped item,
-and the tool-pairing test fails because telemetry splits the adjacent sequence.
+Expected: the non-renderable result cases fail because each result is returned
+as a grouped item, and the tool-pairing test fails because telemetry splits the
+adjacent sequence.
 
 - [x] **Step 3: Add the minimal rendering predicate and filter**
 
@@ -107,7 +123,8 @@ function isRenderableGroupedMessage(message: ChatMessage): boolean {
 }
 ```
 
-At the start of the `groupAdjacentToolCalls` loop, skip these messages before late-tool-result and sequence-boundary processing:
+At the start of the `groupAdjacentToolCalls` loop, skip these messages before
+late-tool-result and sequence-boundary processing:
 
 ```ts
 for (const message of messages.filter(isRenderableGroupedMessage)) {
@@ -146,4 +163,6 @@ git commit -m "Fix blank rows in Claude transcripts"
 
 - [ ] **Step 7: Publish the requested draft PR**
 
-Confirm the final diff contains only the design, plan, test, and implementation files. Push the current feature branch and open a draft pull request describing the Claude usage-event root cause and verification commands.
+Confirm the final diff contains only the design, plan, test, and implementation
+files. Push the current feature branch and open a draft pull request describing
+the Claude usage-event root cause and verification commands.

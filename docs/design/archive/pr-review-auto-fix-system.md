@@ -4,16 +4,23 @@ Status: superseded by ratchet-system.md
 
 ## Overview
 
-The PR Review Auto-Fix System automatically monitors PRs for new review comments and creates dedicated Claude sessions to address reviewer feedback. When enabled, the system polls for new review comments and spawns specialized "PR Review Fixing" sessions that implement the requested changes.
+The PR Review Auto-Fix System automatically monitors PRs for new review comments
+and creates dedicated Claude sessions to address reviewer feedback. When
+enabled, the system polls for new review comments and spawns specialized "PR
+Review Fixing" sessions that implement the requested changes.
 
 **Related:**
-- [CI Monitoring System Design](./ci-monitoring-system.md) - Similar polling architecture
-- [CI Fixing System Design](./ci-fixing-system.md) - Similar session creation pattern
+
+- [CI Monitoring System Design](./ci-monitoring-system.md) - Similar polling
+  architecture
+- [CI Fixing System Design](./ci-fixing-system.md) - Similar session creation
+  pattern
 
 ## Requirements (from Issue #383)
 
 1. Automatically fetch PR review comments and address them
-2. Create dedicated Claude sessions to fix review feedback (similar to CI auto-fix)
+2. Create dedicated Claude sessions to fix review feedback (similar to CI
+   auto-fix)
 3. Admin panel configuration:
    - Toggle to enable/disable automated PR review fixing
    - Configure which users' comments should trigger auto-fix
@@ -23,11 +30,16 @@ The PR Review Auto-Fix System automatically monitors PRs for new review comments
 
 ### Design Principles
 
-1. **Single PR Review Fixer Per Workspace** - Only one PR Review Fixing session can be active at a time per workspace
-2. **Non-Blocking** - The fixing session runs independently; it doesn't block other workspace sessions
-3. **Idempotent** - Multiple comment detections should not spawn duplicate sessions
-4. **User Filtering** - Only comments from allowed users trigger auto-fix (empty list means all users)
-5. **Rich Context** - Pass detailed review/comment information to the fixing session
+1. **Single PR Review Fixer Per Workspace** - Only one PR Review Fixing session
+   can be active at a time per workspace
+2. **Non-Blocking** - The fixing session runs independently; it doesn't block
+   other workspace sessions
+3. **Idempotent** - Multiple comment detections should not spawn duplicate
+   sessions
+4. **User Filtering** - Only comments from allowed users trigger auto-fix (empty
+   list means all users)
+5. **Rich Context** - Pass detailed review/comment information to the fixing
+   session
 
 ### High-Level Architecture
 
@@ -148,7 +160,8 @@ model Workspace {
 
 ### Session Identification
 
-Uses the existing `workflow` field on `ClaudeSession` with value `"pr-review-fix"`:
+Uses the existing `workflow` field on `ClaudeSession` with value
+`"pr-review-fix"`:
 
 ```typescript
 const PR_REVIEW_FIX_WORKFLOW = 'pr-review-fix';
@@ -180,13 +193,16 @@ stateDiagram-v2
 ```
 
 **Key Configuration:**
+
 - `PR_REVIEW_MONITOR_INTERVAL_MS`: 2 minutes (120,000ms)
 - `MAX_CONCURRENT_CHECKS`: 5 concurrent workspace checks
 
 **Lifecycle Methods:**
+
 - `start()` - Begins the continuous polling loop
 - `stop()` - Signals shutdown and waits for in-flight checks
-- `checkAllWorkspaces()` - Checks all workspaces with PRs (also callable manually)
+- `checkAllWorkspaces()` - Checks all workspaces with PRs (also callable
+  manually)
 
 **Comment Filtering Logic:**
 
@@ -235,26 +251,30 @@ stateDiagram-v2
 
 **Race Condition Prevention:**
 
-1. **In-Memory Tracking:** `pendingFixes` Map prevents concurrent triggers for same workspace
+1. **In-Memory Tracking:** `pendingFixes` Map prevents concurrent triggers for
+   same workspace
 2. **Database Transaction:** Atomic check-and-create within transaction
-3. **Session Working Check:** Verifies session is actually processing before skipping
+3. **Session Working Check:** Verifies session is actually processing before
+   skipping
 
 **Re-Review Request:**
 
-After the Claude session pushes changes addressing the review comments, it posts a comment on the PR mentioning all reviewers:
+After the Claude session pushes changes addressing the review comments, it posts
+a comment on the PR mentioning all reviewers:
 
 ```bash
 gh pr comment 123 --body "@reviewer1 @reviewer2 I've addressed the review comments. Please re-review when you have a chance."
 ```
 
 This is achieved by:
+
 1. Extracting unique reviewer usernames from reviews and comments
 2. Including the `gh pr comment` command in the session's instructions
 3. Claude executes the command after pushing changes
 
 **Initial Prompt Structure:**
 
-```markdown
+````markdown
 ## PR Review Comments Alert
 
 New review comments have been received on PR #123.
@@ -286,10 +306,11 @@ New review comments have been received on PR #123.
 6. After pushing, post a comment on the PR asking for re-review using this command:
    ```bash
    gh pr comment 123 --body "@reviewer1 @reviewer2 I've addressed the review comments. Please re-review when you have a chance."
-   ```
+````
 
 Please address these review comments.
-```
+
+````
 
 ### GitHub CLI Integration
 
@@ -307,7 +328,7 @@ async getReviewComments(repo: string, prNumber: number): Promise<Array<{
   createdAt: string;
   url: string;
 }>>
-```
+````
 
 Uses GitHub API: `gh api repos/{owner}/{repo}/pulls/{number}/comments`
 
@@ -320,6 +341,7 @@ async addPRComment(repo: string, prNumber: number, body: string): Promise<void>
 Uses: `gh pr comment {prNumber} --repo {repo} --body {body}`
 
 Combined with existing `getPRFullDetails()` for:
+
 - Review states (CHANGES_REQUESTED, APPROVED, etc.)
 - General PR comments (not line-specific)
 
@@ -341,6 +363,7 @@ flowchart LR
 ```
 
 **UI Components:**
+
 1. **Toggle Switch** - Enable/disable `autoFixPrReviewComments`
 2. **Allowed Users Input** - Comma-separated GitHub usernames
 3. **Custom Prompt Textarea** - Additional instructions for Claude sessions
@@ -363,9 +386,11 @@ await prReviewMonitorService.stop();
 ### tRPC Endpoints
 
 **User Settings Router** (`src/backend/trpc/user-settings.trpc.ts`):
+
 - `update` mutation accepts new fields
 
 **Admin Router** (`src/backend/trpc/admin.trpc.ts`):
+
 - `triggerPRReviewCheck` mutation for manual trigger
 
 ### Service Exports
@@ -379,13 +404,13 @@ export { prReviewMonitorService } from './pr-review-monitor.service';
 
 ## Configuration Parameters
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `autoFixPrReviewComments` | `false` | Master toggle for the feature |
-| `prReviewFixAllowedUsers` | `null` (all users) | Array of GitHub usernames whose comments trigger auto-fix |
-| `prReviewFixPrompt` | `null` | Custom instructions appended to session prompt |
-| `PR_REVIEW_MONITOR_INTERVAL_MS` | 120000 (2 min) | Polling interval |
-| `MAX_CONCURRENT_CHECKS` | 5 | Max concurrent workspace checks |
+| Parameter                       | Default            | Description                                               |
+| ------------------------------- | ------------------ | --------------------------------------------------------- |
+| `autoFixPrReviewComments`       | `false`            | Master toggle for the feature                             |
+| `prReviewFixAllowedUsers`       | `null` (all users) | Array of GitHub usernames whose comments trigger auto-fix |
+| `prReviewFixPrompt`             | `null`             | Custom instructions appended to session prompt            |
+| `PR_REVIEW_MONITOR_INTERVAL_MS` | 120000 (2 min)     | Polling interval                                          |
+| `MAX_CONCURRENT_CHECKS`         | 5                  | Max concurrent workspace checks                           |
 
 ## Error Handling
 
@@ -403,6 +428,7 @@ flowchart TD
 ```
 
 **Key Error Scenarios:**
+
 1. **Invalid PR URL** - Logged as warning, workspace skipped
 2. **GitHub API failure** - Logged as error, workspace skipped
 3. **Session limit reached** - Returns `skipped` status with reason
@@ -410,15 +436,15 @@ flowchart TD
 
 ## Comparison with CI Auto-Fix
 
-| Aspect | CI Auto-Fix | PR Review Auto-Fix |
-|--------|------------|-------------------|
-| Trigger | CI status change to FAILURE | New review comments |
-| Polling Interval | 1 minute | 2 minutes |
-| Workflow ID | `ci-fix` | `pr-review-fix` |
-| Session Name | "CI Fixing" | "PR Review Fixing" |
-| User Filtering | N/A | Configurable allowed users |
-| Custom Prompt | N/A | Configurable |
-| Tracking Fields | `prCiFailedAt`, `prCiLastNotifiedAt` | `prReviewLastCheckedAt`, `prReviewLastCommentId` |
+| Aspect           | CI Auto-Fix                          | PR Review Auto-Fix                               |
+| ---------------- | ------------------------------------ | ------------------------------------------------ |
+| Trigger          | CI status change to FAILURE          | New review comments                              |
+| Polling Interval | 1 minute                             | 2 minutes                                        |
+| Workflow ID      | `ci-fix`                             | `pr-review-fix`                                  |
+| Session Name     | "CI Fixing"                          | "PR Review Fixing"                               |
+| User Filtering   | N/A                                  | Configurable allowed users                       |
+| Custom Prompt    | N/A                                  | Configurable                                     |
+| Tracking Fields  | `prCiFailedAt`, `prCiLastNotifiedAt` | `prReviewLastCheckedAt`, `prReviewLastCommentId` |
 
 ## Future Enhancements
 

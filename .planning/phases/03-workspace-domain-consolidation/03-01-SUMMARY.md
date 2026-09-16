@@ -48,7 +48,9 @@ completed: 2026-02-10
 
 # Phase 03 Plan 01: State Derivation Files Summary
 
-**Moved flow-state, kanban-state, and init-policy pure state-derivation functions to domains/workspace/state/ with co-located tests and re-export shims**
+**Moved flow-state, kanban-state, and init-policy pure state-derivation
+functions to domains/workspace/state/ with co-located tests and re-export
+shims**
 
 ## Performance
 
@@ -59,48 +61,79 @@ completed: 2026-02-10
 - **Files modified:** 9
 
 ## Accomplishments
-- Established `src/backend/domains/workspace/state/` directory with 3 source files and 3 co-located test files
-- Kanban-state uses intra-domain relative import `./flow-state` for sibling dependency
-- Cross-domain imports (session.service, resource_accessors, logger) converted to absolute alias paths
+
+- Established `src/backend/domains/workspace/state/` directory with 3 source
+  files and 3 co-located test files
+- Kanban-state uses intra-domain relative import `./flow-state` for sibling
+  dependency
+- Cross-domain imports (session.service, resource_accessors, logger) converted
+  to absolute alias paths
 - Re-export shims at all 3 old service paths maintain backward compatibility
-- All 34 tests pass at new locations; typecheck, dep-cruise (708 modules), and knip all pass
+- All 34 tests pass at new locations; typecheck, dep-cruise (708 modules), and
+  knip all pass
 
 ## Task Commits
 
 Each task was committed atomically:
 
 1. **Task 1: Move flow-state and kanban-state** - `f988fc9` (feat)
-2. **Task 2: Move init-policy** - `5508494` (feat, committed by parallel executor)
+2. **Task 2: Move init-policy** - `5508494` (feat, committed by parallel
+   executor)
 
 ## Files Created/Modified
-- `src/backend/domains/workspace/state/flow-state.ts` - WorkspaceFlowState derivation (168 LOC)
-- `src/backend/domains/workspace/state/flow-state.test.ts` - 9 tests for flow state derivation
-- `src/backend/domains/workspace/state/kanban-state.ts` - KanbanColumn computation + KanbanStateService (185 LOC)
-- `src/backend/domains/workspace/state/kanban-state.test.ts` - 22 tests for kanban column computation
-- `src/backend/domains/workspace/state/init-policy.ts` - WorkspaceInitPolicy derivation (112 LOC)
-- `src/backend/domains/workspace/state/init-policy.test.ts` - 3 tests for init policy
-- `src/backend/services/workspace-flow-state.service.ts` - Re-export shim (deprecated)
+
+- `src/backend/domains/workspace/state/flow-state.ts` - WorkspaceFlowState
+  derivation (168 LOC)
+- `src/backend/domains/workspace/state/flow-state.test.ts` - 9 tests for flow
+  state derivation
+- `src/backend/domains/workspace/state/kanban-state.ts` - KanbanColumn
+  computation + KanbanStateService (185 LOC)
+- `src/backend/domains/workspace/state/kanban-state.test.ts` - 22 tests for
+  kanban column computation
+- `src/backend/domains/workspace/state/init-policy.ts` - WorkspaceInitPolicy
+  derivation (112 LOC)
+- `src/backend/domains/workspace/state/init-policy.test.ts` - 3 tests for init
+  policy
+- `src/backend/services/workspace-flow-state.service.ts` - Re-export shim
+  (deprecated)
 - `src/backend/services/kanban-state.service.ts` - Re-export shim (deprecated)
-- `src/backend/services/workspace-init-policy.service.ts` - Re-export shim (deprecated)
+- `src/backend/services/workspace-init-policy.service.ts` - Re-export shim
+  (deprecated)
 
 ## Decisions Made
-- **Direct module paths in shims:** Re-export shims point to `@/backend/domains/workspace/state/flow-state` (direct path) rather than through the barrel, since the barrel is not yet populated. Plan 05 will update these to use the barrel.
-- **Cross-domain imports via absolute paths:** kanban-state.ts imports session.service and resource_accessors via `@/backend/services/` and `@/backend/resource_accessors/` absolute aliases instead of relative paths, since these are cross-domain dependencies.
-- **Intra-domain relative imports:** kanban-state.ts imports flow-state via `./flow-state` since both live in the same state/ subdirectory.
+
+- **Direct module paths in shims:** Re-export shims point to
+  `@/backend/domains/workspace/state/flow-state` (direct path) rather than
+  through the barrel, since the barrel is not yet populated. Plan 05 will update
+  these to use the barrel.
+- **Cross-domain imports via absolute paths:** kanban-state.ts imports
+  session.service and resource_accessors via `@/backend/services/` and
+  `@/backend/resource_accessors/` absolute aliases instead of relative paths,
+  since these are cross-domain dependencies.
+- **Intra-domain relative imports:** kanban-state.ts imports flow-state via
+  `./flow-state` since both live in the same state/ subdirectory.
 
 ## Deviations from Plan
 
 None - plan executed exactly as written.
 
 ## Issues Encountered
-- Pre-commit hook stash/restore mechanism interacted with parallel plan executor (03-02), causing initial task 1 commit to be lost. Re-staged and re-committed successfully. Init-policy (task 2) was coincidentally committed by the parallel 03-02 executor's stash backup.
+
+- Pre-commit hook stash/restore mechanism interacted with parallel plan executor
+  (03-02), causing initial task 1 commit to be lost. Re-staged and re-committed
+  successfully. Init-policy (task 2) was coincidentally committed by the
+  parallel 03-02 executor's stash backup.
 
 ## User Setup Required
+
 None - no external service configuration required.
 
 ## Next Phase Readiness
-- Workspace `state/` subdirectory established with all 3 pure state-derivation files
-- Ready for Plans 02-04 to move remaining workspace services (lifecycle, queries, trpc)
+
+- Workspace `state/` subdirectory established with all 3 pure state-derivation
+  files
+- Ready for Plans 02-04 to move remaining workspace services (lifecycle,
+  queries, trpc)
 - Plan 05 will populate the barrel and update shim paths
 
 ## Self-Check: PASSED
@@ -108,5 +141,5 @@ None - no external service configuration required.
 All 9 files verified present. Both commits (f988fc9, 5508494) found in history.
 
 ---
-*Phase: 03-workspace-domain-consolidation*
-*Completed: 2026-02-10*
+
+_Phase: 03-workspace-domain-consolidation_ _Completed: 2026-02-10_

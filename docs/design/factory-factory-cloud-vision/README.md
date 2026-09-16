@@ -2,56 +2,128 @@
 
 Status: proposed
 
-This document lays out my vision for what a "Cloud" version for Factory Factory could look like
+This document lays out my vision for what a "Cloud" version for Factory Factory
+could look like
 
 ## How it behaves
-Workspaces default to working on desktop (because engineers like control), but users can click a button to "Send to Cloud". This creates a claude CLI instance in the cloud that executes. The ratchet listener for this workspace is also moved to the cloud. The workspace as seen in the user's UI looks the same as any other workspace, but the work is happening in the cloud. 
+
+Workspaces default to working on desktop (because engineers like control), but
+users can click a button to "Send to Cloud". This creates a claude CLI instance
+in the cloud that executes. The ratchet listener for this workspace is also
+moved to the cloud. The workspace as seen in the user's UI looks the same as any
+other workspace, but the work is happening in the cloud.
 
 ## Use cases
 
 ### V1: You go out to lunch, but your work keeps happening
-The user has 5 workspaces open and they are all busy. It's lunchtime; the user wants to get food and close their laptop, but they want the work to continue. So they send all 5 workspaces to cloud. 
 
-They have lunch and come back, to find all workspaces have open PRs with 5/5 from Greptile. Now all they need to do is test all the changes and push!
+The user has 5 workspaces open and they are all busy. It's lunchtime; the user
+wants to get food and close their laptop, but they want the work to continue. So
+they send all 5 workspaces to cloud.
+
+They have lunch and come back, to find all workspaces have open PRs with 5/5
+from Greptile. Now all they need to do is test all the changes and push!
 
 ### V2: Checking up on work while running errands
-The user needs to do a grocery run, but they want to keep their workspace active. They only started this workspace, so it's not ready to go solo yet. The user sends the workspace to cloud, closes their laptop and goes to the grocery store. 
 
-At the grocery store, they go on their FF App (or website?) and check the workspace's status. Looks like the agent has some questions for them. The grocery store has a small seating area, so the user sits down and goes through a few rounds of questions and answers, then reviews their design doc using Markdown Preview mode. The doc and the diagrams look correct; the workspace is ready to go! The user asks the agent to make a PR, then continues with the grocery run. 
+The user needs to do a grocery run, but they want to keep their workspace
+active. They only started this workspace, so it's not ready to go solo yet. The
+user sends the workspace to cloud, closes their laptop and goes to the grocery
+store.
 
-The user gets home and puts away their groceries. Now they open up their laptop and check on the workspace. There's a PR open, 5/5 on github, and the implementation matches the design doc. Perfect - all we need to do now is test and merge!
+At the grocery store, they go on their FF App (or website?) and check the
+workspace's status. Looks like the agent has some questions for them. The
+grocery store has a small seating area, so the user sits down and goes through a
+few rounds of questions and answers, then reviews their design doc using
+Markdown Preview mode. The doc and the diagrams look correct; the workspace is
+ready to go! The user asks the agent to make a PR, then continues with the
+grocery run.
+
+The user gets home and puts away their groceries. Now they open up their laptop
+and check on the workspace. There's a PR open, 5/5 on github, and the
+implementation matches the design doc. Perfect - all we need to do now is test
+and merge!
 
 ### V3: Talking to their agent while taking a walk
-The user does their best work while walking. So they fire up a new workspace on their mobile app and go for a walk. The user has headphones on, and is just talking to the agent. In the workspace, the user starts out by working with the agent to define a design doc. Once the user's satisfied with the voice agent's explanation of the work, they sit down on a park bench and start reviewing the design doc. 
 
-The design doc and diagrams look good! Time to let the agent continue. 
+The user does their best work while walking. So they fire up a new workspace on
+their mobile app and go for a walk. The user has headphones on, and is just
+talking to the agent. In the workspace, the user starts out by working with the
+agent to define a design doc. Once the user's satisfied with the voice agent's
+explanation of the work, they sit down on a park bench and start reviewing the
+design doc.
 
-As the user walks home, they suddenly have a question about the work - they realized that there's a new edge case they hadn't thought of! They open up the agent and fire up voice mode, and immediately ask about the edge case. 
+The design doc and diagrams look good! Time to let the agent continue.
 
-After thinking for a moment, the agent says "This edge case is new; nice catch! Would you like me to integrate this into the design document?" The user says yes. 
+As the user walks home, they suddenly have a question about the work - they
+realized that there's a new edge case they hadn't thought of! They open up the
+agent and fire up voice mode, and immediately ask about the edge case.
 
-The agent implements the design according to the original design doc, and then reviews the design. When it reviews, the agent realizes that the design has changed - the new edge case has been added! It updates the design to include the edge case. 
+After thinking for a moment, the agent says "This edge case is new; nice catch!
+Would you like me to integrate this into the design document?" The user says
+yes.
 
-The user gets home. The weather is beautiful, so they are invigorated and ready to go. They open up their laptop and check on the workspace. There's a PR, and greptile gives it 5/5. The design doc clearly includes the new edge case the user thought of, and the implementation matches the design exactly. 
+The agent implements the design according to the original design doc, and then
+reviews the design. When it reviews, the agent realizes that the design has
+changed - the new edge case has been added! It updates the design to include the
+edge case.
+
+The user gets home. The weather is beautiful, so they are invigorated and ready
+to go. They open up their laptop and check on the workspace. There's a PR, and
+greptile gives it 5/5. The design doc clearly includes the new edge case the
+user thought of, and the implementation matches the design exactly.
 
 Perfect - now to do some testing!
 
 ### V4: The manager's story
-Martin manages a team of 5 engineers. He's sipping his coffee, starting his day. Martin likes to start off his day by checking in on what the team is up to. 
 
-Everyone on the team is using FactoryFactory, and the team has a Factory Factory Team subscription, so checking in is very easy: all Martin has to do is login to the cloud site and navigate to the team view.
+Martin manages a team of 5 engineers. He's sipping his coffee, starting his day.
+Martin likes to start off his day by checking in on what the team is up to.
 
-In the team view, Martin can see a list of team members, along with some stats about the workspaces they have open. 
+Everyone on the team is using FactoryFactory, and the team has a Factory Factory
+Team subscription, so checking in is very easy: all Martin has to do is login to
+the cloud site and navigate to the team view.
 
-Martin starts out by checking on Jane. She's new to the team so she may need a little extra support. Martin clicks the card with Jane's details on it, which takes him to a teammate detail view. This shows Martin that Jane's got 4 workspaces open. One of them has her work relating to a pretty difficult task - just then, Martin recalls a subtle edge case that could completely derail the work! He clicks on the workspace, and has his agent check if the work that Jane is doing considers that edge case. After thinking for a bit, his agent confirms that, yes - Jane's work does consider that edge case. Martin is impressed; she was the right hire after all! He sends her a quick message on slack, congratulating her for catching the edge case.
+In the team view, Martin can see a list of team members, along with some stats
+about the workspaces they have open.
 
-Then he checks Eric's page. Eric has 4 workspaces open. Martin knows what 3 of the workspaces are about - what about the 4th? He checks the workspace - it's a new POC that Eric is thinking about. The branch has many changes, and the documentation is hard to follow. Martin asks the agent to look at the work and make him a document that explains it in simple terms, with diagrams. After thinking about it for a bit, the agent gives him a simple diagram. 
+Martin starts out by checking on Jane. She's new to the team so she may need a
+little extra support. Martin clicks the card with Jane's details on it, which
+takes him to a teammate detail view. This shows Martin that Jane's got 4
+workspaces open. One of them has her work relating to a pretty difficult task -
+just then, Martin recalls a subtle edge case that could completely derail the
+work! He clicks on the workspace, and has his agent check if the work that Jane
+is doing considers that edge case. After thinking for a bit, his agent confirms
+that, yes - Jane's work does consider that edge case. Martin is impressed; she
+was the right hire after all! He sends her a quick message on slack,
+congratulating her for catching the edge case.
 
-Oh no - this POC is cool, but Martin thinks its not in line with the team's strategy. He wants to make sure, though, so he asks his agent to double check his intuition - for context, he includes a link to the strategy document he wrote the day before. The agent thinks about it, and gives a detailed reply - Eric's POC is not quite in line with the company's strategy. 
+Then he checks Eric's page. Eric has 4 workspaces open. Martin knows what 3 of
+the workspaces are about - what about the 4th? He checks the workspace - it's a
+new POC that Eric is thinking about. The branch has many changes, and the
+documentation is hard to follow. Martin asks the agent to look at the work and
+make him a document that explains it in simple terms, with diagrams. After
+thinking about it for a bit, the agent gives him a simple diagram.
 
-Next, Martin checks Boris' work. Oh no! Looks like Boris is working on something that seems to duplicate some of Jane's work. It's a big change though, and the duplication might be a small part of the work, not the whole of it. Martin asks his agent to check what the degree of overlap is. As Martin sips is coffee, the agent tells him that there is some overlap, but it's small, and if Boris were to reduce the scope of his work, the issue would be sorted. Easy enough! Martin sends Boris a slack message about this now.
+Oh no - this POC is cool, but Martin thinks its not in line with the team's
+strategy. He wants to make sure, though, so he asks his agent to double check
+his intuition - for context, he includes a link to the strategy document he
+wrote the day before. The agent thinks about it, and gives a detailed reply -
+Eric's POC is not quite in line with the company's strategy.
 
-Martin goes through the rest of his team and catches up on what they are working on. No surprises, but good progress! He stands up and looks outside. Great day for a walk; perhaps he can enjoy the weather while he thinks about how to bring Eric's work in line with the strategy... he sees a few ways to do it, and a walk is the perfect way to digest. 
+Next, Martin checks Boris' work. Oh no! Looks like Boris is working on something
+that seems to duplicate some of Jane's work. It's a big change though, and the
+duplication might be a small part of the work, not the whole of it. Martin asks
+his agent to check what the degree of overlap is. As Martin sips is coffee, the
+agent tells him that there is some overlap, but it's small, and if Boris were to
+reduce the scope of his work, the issue would be sorted. Easy enough! Martin
+sends Boris a slack message about this now.
+
+Martin goes through the rest of his team and catches up on what they are working
+on. No surprises, but good progress! He stands up and looks outside. Great day
+for a walk; perhaps he can enjoy the weather while he thinks about how to bring
+Eric's work in line with the strategy... he sees a few ways to do it, and a walk
+is the perfect way to digest.
 
 # Technical Details
 
@@ -132,33 +204,54 @@ graph TB
 
 ### Component Descriptions
 
-- **Factory Factory Desktop (Electron)**: Desktop application using FF Core library. Runs workspaces locally or sends them to cloud. Streams real-time updates via WebSocket.
+- **Factory Factory Desktop (Electron)**: Desktop application using FF Core
+  library. Runs workspaces locally or sends them to cloud. Streams real-time
+  updates via WebSocket.
 
-- **FF Cloud Server (Closed Source)**: Multi-tenant orchestration layer. Handles authentication, billing, VM provisioning, and WebSocket relay between clients and VMs. Does NOT execute workspaces directly.
+- **FF Cloud Server (Closed Source)**: Multi-tenant orchestration layer. Handles
+  authentication, billing, VM provisioning, and WebSocket relay between clients
+  and VMs. Does NOT execute workspaces directly.
 
-- **VMs (Docker/Firecracker)**: Isolated execution environments, one per user. All of a user's workspaces run inside their VM as Claude CLI subprocesses managed by FF Core. User authenticates to GitHub and Anthropic inside their VM via terminal.
+- **VMs (Docker/Firecracker)**: Isolated execution environments, one per user.
+  All of a user's workspaces run inside their VM as Claude CLI subprocesses
+  managed by FF Core. User authenticates to GitHub and Anthropic inside their VM
+  via terminal.
 
-- **FF Core Library (Open Source)**: Published to npm as `@factory-factory/core`. Provides workspace execution primitives: Claude CLI management, session management, git operations, ratchet logic. Used by both desktop and cloud VMs.
+- **FF Core Library (Open Source)**: Published to npm as
+  `@factory-factory/core`. Provides workspace execution primitives: Claude CLI
+  management, session management, git operations, ratchet logic. Used by both
+  desktop and cloud VMs.
 
-- **Claude CLI**: Subprocess managed by FF Core that wraps the Anthropic Claude API. Handles tool execution, streaming responses, and conversation management.
+- **Claude CLI**: Subprocess managed by FF Core that wraps the Anthropic Claude
+  API. Handles tool execution, streaming responses, and conversation management.
 
-- **Factory Factory Mobile**: Mobile application (pure frontend) that connects to FF Cloud to view workspaces and interact with running sessions via WebSocket.
+- **Factory Factory Mobile**: Mobile application (pure frontend) that connects
+  to FF Cloud to view workspaces and interact with running sessions via
+  WebSocket.
 
-- **Ratchet**: Auto-fix system built into FF Core. Polls GitHub for PR status (CI failures, review comments) and automatically spawns fix sessions. Runs inside VMs alongside workspaces.
+- **Ratchet**: Auto-fix system built into FF Core. Polls GitHub for PR status
+  (CI failures, review comments) and automatically spawns fix sessions. Runs
+  inside VMs alongside workspaces.
 
-- **GitHub**: External service for git operations (push, pull) and ratchet polling (PR status, CI checks).
+- **GitHub**: External service for git operations (push, pull) and ratchet
+  polling (PR status, CI checks).
 
-- **Anthropic API**: Cloud service that powers Claude CLI. Each Claude CLI subprocess makes API calls to claude.ai for AI responses.
+- **Anthropic API**: Cloud service that powers Claude CLI. Each Claude CLI
+  subprocess makes API calls to claude.ai for AI responses.
 
 ## Open questions
 
-See [Appendix: Open Questions](./appendix-open-questions.md) for detailed Q&A on Claude CLI internals, streaming protocol, sandboxing, Firecracker vs Docker, and filesystem layout.
+See [Appendix: Open Questions](./appendix-open-questions.md) for detailed Q&A on
+Claude CLI internals, streaming protocol, sandboxing, Firecracker vs Docker, and
+filesystem layout.
 
 ## Cloud Architecture
 
-**Constraint: FF itself must remain open source. FF Cloud must be closed source.**
+**Constraint: FF itself must remain open source. FF Cloud must be closed
+source.**
 
-See [Appendix: Alternative Approaches](./appendix-alternatives.md) for other approaches we considered and why we chose this one.
+See [Appendix: Alternative Approaches](./appendix-alternatives.md) for other
+approaches we considered and why we chose this one.
 
 ### FF as a Library
 
@@ -226,20 +319,22 @@ class CloudWorkspaceService {
 
 **FF Core Library (Open Source) - Workspace Execution Primitives**
 
-The library handles **single-workspace execution** - everything needed to run one workspace:
+The library handles **single-workspace execution** - everything needed to run
+one workspace:
 
-| Responsibility | What it does |
-|----------------|-------------|
-| **Claude CLI Management** | Spawn, communicate with, monitor Claude CLI subprocesses |
-| **Workspace Lifecycle** | Create workspace from issue, load state, save state |
-| **Session Management** | Start/stop sessions, send messages, handle responses |
-| **Message State** | Track message history, handle streaming, store conversation |
-| **File Operations** | Read/write files in workspace directory |
-| **Git Integration** | Clone repos, commit changes, push to GitHub |
-| **Ratchet Logic** | Poll GitHub for CI/review status, trigger fix sessions |
-| **Local Storage** | SQLite for workspace metadata, session history |
+| Responsibility            | What it does                                                |
+| ------------------------- | ----------------------------------------------------------- |
+| **Claude CLI Management** | Spawn, communicate with, monitor Claude CLI subprocesses    |
+| **Workspace Lifecycle**   | Create workspace from issue, load state, save state         |
+| **Session Management**    | Start/stop sessions, send messages, handle responses        |
+| **Message State**         | Track message history, handle streaming, store conversation |
+| **File Operations**       | Read/write files in workspace directory                     |
+| **Git Integration**       | Clone repos, commit changes, push to GitHub                 |
+| **Ratchet Logic**         | Poll GitHub for CI/review status, trigger fix sessions      |
+| **Local Storage**         | SQLite for workspace metadata, session history              |
 
 **What FF Core does NOT do:**
+
 - ❌ Multi-user management (single workspace context)
 - ❌ Authentication/authorization
 - ❌ Billing or quotas
@@ -251,16 +346,17 @@ The library handles **single-workspace execution** - everything needed to run on
 
 Uses FF Core library + adds desktop-specific features:
 
-| Responsibility | What it does |
-|----------------|-------------|
-| **Local Server** | Express server on localhost (single user) |
-| **UI Backend** | tRPC API for Electron frontend |
-| **Workspace Management** | List workspaces, switch between them (uses FF Core) |
-| **Local Database** | Single SQLite database for all user's workspaces |
-| **WebSocket** | Stream Claude messages to frontend (uses FF Core events) |
-| **Electron Integration** | Window management, system tray, auto-launch |
+| Responsibility           | What it does                                             |
+| ------------------------ | -------------------------------------------------------- |
+| **Local Server**         | Express server on localhost (single user)                |
+| **UI Backend**           | tRPC API for Electron frontend                           |
+| **Workspace Management** | List workspaces, switch between them (uses FF Core)      |
+| **Local Database**       | Single SQLite database for all user's workspaces         |
+| **WebSocket**            | Stream Claude messages to frontend (uses FF Core events) |
+| **Electron Integration** | Window management, system tray, auto-launch              |
 
 **What Desktop does NOT do:**
+
 - ❌ Multi-user support
 - ❌ VM orchestration (runs directly on user's machine)
 - ❌ Cloud storage (everything local)
@@ -269,18 +365,19 @@ Uses FF Core library + adds desktop-specific features:
 
 Uses FF Core library (in VMs) + adds cloud-specific features:
 
-| Responsibility | What it does |
-|----------------|-------------|
-| **User Management** | Authentication, authorization, user accounts |
-| **Billing** | Subscriptions, quotas, usage tracking, payments |
-| **VM Orchestration** | Provision/terminate VMs, warm pools, lifecycle management |
-| **Multi-Tenant DB** | PostgreSQL with userId foreign keys everywhere |
-| **WebSocket Relay** | Route messages between desktop/mobile clients and VMs |
-| **Team Features** | Manager view, workspace sharing, team stats |
-| **Workspace Routing** | Map workspace requests to correct VM |
-| **API Gateway** | REST/WebSocket endpoints for clients |
+| Responsibility        | What it does                                              |
+| --------------------- | --------------------------------------------------------- |
+| **User Management**   | Authentication, authorization, user accounts              |
+| **Billing**           | Subscriptions, quotas, usage tracking, payments           |
+| **VM Orchestration**  | Provision/terminate VMs, warm pools, lifecycle management |
+| **Multi-Tenant DB**   | PostgreSQL with userId foreign keys everywhere            |
+| **WebSocket Relay**   | Route messages between desktop/mobile clients and VMs     |
+| **Team Features**     | Manager view, workspace sharing, team stats               |
+| **Workspace Routing** | Map workspace requests to correct VM                      |
+| **API Gateway**       | REST/WebSocket endpoints for clients                      |
 
 **What Cloud does NOT do directly:**
+
 - ❌ Execute workspaces directly (delegates to FF Core in VMs)
 - ❌ Manage Claude CLI (FF Core handles this in VMs)
 - ❌ Store workspace state (VMs store in SQLite via FF Core)
@@ -418,9 +515,11 @@ export class CloudWebSocketRelay {
 
 ### What Happens to the Current FF Repo?
 
-**Short answer: This repo stays the same, just gets reorganized into a monorepo with `packages/core` and `packages/desktop`, and publishes FF Core to npm.**
+**Short answer: This repo stays the same, just gets reorganized into a monorepo
+with `packages/core` and `packages/desktop`, and publishes FF Core to npm.**
 
 **Current structure (this repo):**
+
 ```
 factory-factory/  (public repo)
   src/
@@ -437,6 +536,7 @@ factory-factory/  (public repo)
 ```
 
 **After refactoring (same repo, reorganized):**
+
 ```
 factory-factory/  (public repo - stays public, stays open source)
   packages/
@@ -475,6 +575,7 @@ factory-factory/  (public repo - stays public, stays open source)
 **Key changes to this repo:**
 
 1. **Convert to pnpm workspace** (or npm workspaces):
+
    ```yaml
    # pnpm-workspace.yaml
    packages:
@@ -493,6 +594,7 @@ factory-factory/  (public repo - stays public, stays open source)
    - Update imports to use `@factory-factory/core`
 
 4. **Publish FF Core to npm**:
+
    ```bash
    cd packages/core
    pnpm publish  # Publishes to npmjs.com
@@ -513,6 +615,7 @@ factory-factory/  (public repo - stays public, stays open source)
 **Does the desktop app still work the same way?**
 
 ✅ **Yes, exactly the same from the user's perspective:**
+
 - Same Electron app
 - Same UI
 - Same features
@@ -521,17 +624,20 @@ factory-factory/  (public repo - stays public, stays open source)
 
 **What changes for developers?**
 
-- **Import paths change**: Instead of `import { ClaudeClient } from '@/backend/domains/session/claude'`, now `import { ClaudeClient } from '@factory-factory/core'`
+- **Import paths change**: Instead of
+  `import { ClaudeClient } from '@/backend/domains/session/claude'`, now
+  `import { ClaudeClient } from '@factory-factory/core'`
 - **Two packages to work on**: `packages/core/` and `packages/desktop/`
-- **Build order**: Build core first, then desktop (handled automatically by pnpm workspace)
+- **Build order**: Build core first, then desktop (handled automatically by pnpm
+  workspace)
 
 **Benefits of keeping it in the same repo:**
 
-✅ **Single source of truth**: Core and desktop stay in sync
-✅ **Easier development**: Change core and desktop together in one PR
-✅ **Shared tooling**: ESLint, Prettier, TypeScript config, CI/CD
-✅ **Atomic commits**: Core + desktop changes in one commit
-✅ **Monorepo superpowers**: `pnpm --filter` to run commands per package
+✅ **Single source of truth**: Core and desktop stay in sync ✅ **Easier
+development**: Change core and desktop together in one PR ✅ **Shared tooling**:
+ESLint, Prettier, TypeScript config, CI/CD ✅ **Atomic commits**: Core + desktop
+changes in one commit ✅ **Monorepo superpowers**: `pnpm --filter` to run
+commands per package
 
 **Workflow after refactoring:**
 
@@ -575,43 +681,45 @@ factory-factory-cloud/  (private repo)
 
 ### Summary: Same Repo, Just Reorganized
 
-| What | Before | After |
-|------|--------|-------|
-| **Repo visibility** | Public | Public (same) |
-| **License** | Open source | Open source (same) |
-| **Structure** | Single package (`src/`) | Monorepo (`packages/core`, `packages/desktop`) |
-| **Desktop app** | Works as-is | Works exactly the same (uses core as dependency) |
-| **FF Core** | N/A (embedded in desktop) | Published to npm, usable by anyone |
-| **Contributors** | Contribute to FF Desktop | Contribute to FF Core and/or FF Desktop |
-| **Commands** | `pnpm dev`, `pnpm build` | Same commands work (monorepo handles it) |
-| **Cloud repo** | N/A | Separate private repo, installs core from npm |
+| What                | Before                    | After                                            |
+| ------------------- | ------------------------- | ------------------------------------------------ |
+| **Repo visibility** | Public                    | Public (same)                                    |
+| **License**         | Open source               | Open source (same)                               |
+| **Structure**       | Single package (`src/`)   | Monorepo (`packages/core`, `packages/desktop`)   |
+| **Desktop app**     | Works as-is               | Works exactly the same (uses core as dependency) |
+| **FF Core**         | N/A (embedded in desktop) | Published to npm, usable by anyone               |
+| **Contributors**    | Contribute to FF Desktop  | Contribute to FF Core and/or FF Desktop          |
+| **Commands**        | `pnpm dev`, `pnpm build`  | Same commands work (monorepo handles it)         |
+| **Cloud repo**      | N/A                       | Separate private repo, installs core from npm    |
 
-**No need for users to change anything** - they still install FF Desktop the same way, it just internally uses FF Core as a library now.
+**No need for users to change anything** - they still install FF Desktop the
+same way, it just internally uses FF Core as a library now.
 
 ### Desktop vs Cloud: Same Core, Different Wrappers
 
-| Component | Desktop (Open) | Cloud (Closed) |
-|-----------|----------------|----------------|
-| **Workspace logic** | `@factory-factory/core` | `@factory-factory/core` (in VM) |
-| **Session management** | `@factory-factory/core` | `@factory-factory/core` (in VM) |
-| **Claude CLI** | `@factory-factory/core` | `@factory-factory/core` (in VM) |
-| **Storage** | SQLite (local) | SQLite (per-VM) + PostgreSQL (multi-tenant) |
-| **UI** | Electron React app | Web app + Mobile app |
-| **Server** | Express (single-user) | Express (multi-tenant orchestration) |
-| **User management** | N/A (single user) | FF Cloud (closed source) |
-| **Billing** | N/A | FF Cloud (closed source) |
-| **Team features** | N/A | FF Cloud (closed source) |
-| **VM orchestration** | N/A | FF Cloud (closed source) |
+| Component              | Desktop (Open)          | Cloud (Closed)                              |
+| ---------------------- | ----------------------- | ------------------------------------------- |
+| **Workspace logic**    | `@factory-factory/core` | `@factory-factory/core` (in VM)             |
+| **Session management** | `@factory-factory/core` | `@factory-factory/core` (in VM)             |
+| **Claude CLI**         | `@factory-factory/core` | `@factory-factory/core` (in VM)             |
+| **Storage**            | SQLite (local)          | SQLite (per-VM) + PostgreSQL (multi-tenant) |
+| **UI**                 | Electron React app      | Web app + Mobile app                        |
+| **Server**             | Express (single-user)   | Express (multi-tenant orchestration)        |
+| **User management**    | N/A (single user)       | FF Cloud (closed source)                    |
+| **Billing**            | N/A                     | FF Cloud (closed source)                    |
+| **Team features**      | N/A                     | FF Cloud (closed source)                    |
+| **VM orchestration**   | N/A                     | FF Cloud (closed source)                    |
 
 ### Benefits of This Approach
 
-✅ **FF Core stays 100% open source**: All workspace execution logic is open
-✅ **Desktop stays open source**: Uses FF Core, no cloud-specific code
-✅ **Cloud-specific features are closed**: User management, billing, teams, VM orchestration
-✅ **Code reuse**: Desktop and Cloud VMs run identical FF Core
-✅ **Community contributions**: Open source contributors can improve FF Core, benefiting both desktop and cloud
-✅ **Testing**: FF Core can be tested independently, works on desktop and in VMs
-✅ **Clear boundary**: Open source = execution primitives, Closed source = multi-tenant infrastructure
+✅ **FF Core stays 100% open source**: All workspace execution logic is open ✅
+**Desktop stays open source**: Uses FF Core, no cloud-specific code ✅
+**Cloud-specific features are closed**: User management, billing, teams, VM
+orchestration ✅ **Code reuse**: Desktop and Cloud VMs run identical FF Core ✅
+**Community contributions**: Open source contributors can improve FF Core,
+benefiting both desktop and cloud ✅ **Testing**: FF Core can be tested
+independently, works on desktop and in VMs ✅ **Clear boundary**: Open source =
+execution primitives, Closed source = multi-tenant infrastructure
 
 ### How FF Cloud Consumes FF Core (Practical Details)
 
@@ -718,33 +826,40 @@ export class CloudWorkspaceService {
 └─────────────────────────────────────────────────────┘
 ```
 
-
 ### Version Management
 
 - **FF Core** uses semantic versioning (1.0.0, 1.1.0, 2.0.0)
-- **FF Desktop** uses workspace reference during dev: `"@factory-factory/core": "workspace:*"`
-- **FF Cloud** can pin to specific version: `"@factory-factory/core": "1.2.3"` for stability
+- **FF Desktop** uses workspace reference during dev:
+  `"@factory-factory/core": "workspace:*"`
+- **FF Cloud** can pin to specific version: `"@factory-factory/core": "1.2.3"`
+  for stability
 - Breaking changes in FF Core trigger a major version bump
 
 ## Implementation Phases (Cloud MVP)
 
-See [V1 - MVP Plan](./V1%20-%20MVP%20plan/README.md) for detailed per-phase docs.
+See [V1 - MVP Plan](./V1%20-%20MVP%20plan/README.md) for detailed per-phase
+docs.
 
-| Phase | Name | What it delivers |
-|-------|------|-----------------|
-| 1 | Core Library Extraction | `@factory-factory/core` published to npm, desktop works via the library |
-| 2 | FF Cloud Server + VM Execution | Per-user VMs running workspaces in Docker, terminal onboarding for gh/claude auth |
-| 3 | Auth & Billing | User accounts, multi-tenant enforcement, Stripe billing |
-| 4 | WebSocket Relay + Web Frontend | Real-time streaming and a web UI for cloud workspaces |
-| 5 | Ratchet Handoff | Ratchet works across desktop/cloud |
+| Phase | Name                           | What it delivers                                                                  |
+| ----- | ------------------------------ | --------------------------------------------------------------------------------- |
+| 1     | Core Library Extraction        | `@factory-factory/core` published to npm, desktop works via the library           |
+| 2     | FF Cloud Server + VM Execution | Per-user VMs running workspaces in Docker, terminal onboarding for gh/claude auth |
+| 3     | Auth & Billing                 | User accounts, multi-tenant enforcement, Stripe billing                           |
+| 4     | WebSocket Relay + Web Frontend | Real-time streaming and a web UI for cloud workspaces                             |
+| 5     | Ratchet Handoff                | Ratchet works across desktop/cloud                                                |
 
-**VM model:** 1 VM per user (not per workspace). All workspaces run inside the user's VM as Claude CLI subprocesses managed by FF Core. Credentials (GitHub, Anthropic) are stored in the VM — the user authenticates via a terminal session during onboarding, same as they would on desktop.
+**VM model:** 1 VM per user (not per workspace). All workspaces run inside the
+user's VM as Claude CLI subprocesses managed by FF Core. Credentials (GitHub,
+Anthropic) are stored in the VM — the user authenticates via a terminal session
+during onboarding, same as they would on desktop.
 
-See [Appendix: Alternative Approaches](./appendix-alternatives.md) for VM startup time analysis and comparison tables.
+See [Appendix: Alternative Approaches](./appendix-alternatives.md) for VM
+startup time analysis and comparison tables.
 
 ## How FF Cloud Communicates with VMs
 
-FF Cloud doesn't communicate with VMs via CLI commands. Instead, FF Core library runs **inside each VM** and FF Cloud communicates via:
+FF Cloud doesn't communicate with VMs via CLI commands. Instead, FF Core library
+runs **inside each VM** and FF Cloud communicates via:
 
 1. **VM Management API**: Provision/terminate VMs, execute commands in VMs
 2. **WebSocket Relay**: Real-time message streaming between clients and VMs
@@ -885,27 +1000,27 @@ class CloudWebSocketRelay {
 
 FF Cloud uses the same message types that Desktop FF already uses:
 
-| Type | Direction | Description |
-|------|-----------|-------------|
-| `user_message` | Client → VM | User sends message to Claude |
-| `claude_message` | VM → Client | Claude's response (streaming) |
-| `status` | VM → Client | Session status (running/idle) |
-| `user_question` | VM → Client | AskUserQuestion tool |
-| `permission_request` | VM → Client | Permission prompt |
-| `question_response` | Client → VM | Answer to question |
-| `permission_response` | Client → VM | Permission approval/denial |
-| `messages_snapshot` | VM → Client | Full state on connect |
+| Type                  | Direction   | Description                   |
+| --------------------- | ----------- | ----------------------------- |
+| `user_message`        | Client → VM | User sends message to Claude  |
+| `claude_message`      | VM → Client | Claude's response (streaming) |
+| `status`              | VM → Client | Session status (running/idle) |
+| `user_question`       | VM → Client | AskUserQuestion tool          |
+| `permission_request`  | VM → Client | Permission prompt             |
+| `question_response`   | Client → VM | Answer to question            |
+| `permission_response` | Client → VM | Permission approval/denial    |
+| `messages_snapshot`   | VM → Client | Full state on connect         |
 
 ### Key Differences from Desktop
 
-| Aspect | Desktop FF | FF Cloud |
-|--------|-----------|----------|
-| **FF Core location** | Runs on user's machine | Runs inside VMs |
-| **Communication** | Direct (local WebSocket) | Relayed (client ↔ cloud ↔ VM) |
-| **Database** | SQLite (local) | PostgreSQL (multi-tenant) + SQLite (per-VM) |
-| **Authentication** | N/A (single user) | JWT tokens, userId checks |
-| **VM management** | N/A | Provision, monitor, terminate VMs |
-| **Message routing** | Direct | FF Cloud routes by workspaceId → vmId |
+| Aspect               | Desktop FF               | FF Cloud                                    |
+| -------------------- | ------------------------ | ------------------------------------------- |
+| **FF Core location** | Runs on user's machine   | Runs inside VMs                             |
+| **Communication**    | Direct (local WebSocket) | Relayed (client ↔ cloud ↔ VM)               |
+| **Database**         | SQLite (local)           | PostgreSQL (multi-tenant) + SQLite (per-VM) |
+| **Authentication**   | N/A (single user)        | JWT tokens, userId checks                   |
+| **VM management**    | N/A                      | Provision, monitor, terminate VMs           |
+| **Message routing**  | Direct                   | FF Cloud routes by workspaceId → vmId       |
 
 ### Implementation: VM WebSocket Server
 
@@ -967,35 +1082,43 @@ const server = new VMWebSocketServer();
 
 ### Benefits of This Approach
 
-✅ **No CLI overhead**: FF Core is a library, not a CLI subprocess
-✅ **Type safety**: TypeScript types across the entire stack
-✅ **Real-time streaming**: WebSocket for instant message relay
-✅ **Reuses desktop logic**: Same FF Core in desktop and cloud VMs
-✅ **Simple routing**: FF Cloud maps workspaceId → vmId → forward message
-✅ **Security**: Authentication at cloud layer, FF Core doesn't handle multi-tenancy
+✅ **No CLI overhead**: FF Core is a library, not a CLI subprocess ✅ **Type
+safety**: TypeScript types across the entire stack ✅ **Real-time streaming**:
+WebSocket for instant message relay ✅ **Reuses desktop logic**: Same FF Core in
+desktop and cloud VMs ✅ **Simple routing**: FF Cloud maps workspaceId → vmId →
+forward message ✅ **Security**: Authentication at cloud layer, FF Core doesn't
+handle multi-tenancy
 
 ## Ratchet Handoff: Desktop → Cloud
 
-**Problem**: When a workspace is sent to cloud, the desktop's ratchet service (which polls GitHub for PR status) needs to stop, and the cloud's ratchet service needs to start. How do we coordinate this handoff?
+**Problem**: When a workspace is sent to cloud, the desktop's ratchet service
+(which polls GitHub for PR status) needs to stop, and the cloud's ratchet
+service needs to start. How do we coordinate this handoff?
 
 ### Current Ratchet Architecture (Desktop)
 
 **How ratchet works today (desktop FF):**
 
-1. **Ratchet Service** runs in the desktop backend, polls all workspaces with PRs every 1 minute
+1. **Ratchet Service** runs in the desktop backend, polls all workspaces with
+   PRs every 1 minute
 2. For each workspace with `ratchetEnabled: true`:
    - Fetches PR status from GitHub (CI status, review comments)
-   - Compares current state to last known state (stored in `ratchetState`, `ratchetLastCiRunId`, `prReviewLastCheckedAt`)
-   - If state changed (CI failed, new review comments), dispatches a "fixer session"
-3. **Fixer session**: Spawns a Claude CLI session with a ratchet-specific prompt, attempts to fix the issue
+   - Compares current state to last known state (stored in `ratchetState`,
+     `ratchetLastCiRunId`, `prReviewLastCheckedAt`)
+   - If state changed (CI failed, new review comments), dispatches a "fixer
+     session"
+3. **Fixer session**: Spawns a Claude CLI session with a ratchet-specific
+   prompt, attempts to fix the issue
 4. **State tracking** (in workspace table):
    - `ratchetEnabled`: User toggle (workspace-level)
-   - `ratchetState`: Current PR state (IDLE/CI_RUNNING/CI_FAILED/REVIEW_PENDING/READY/MERGED)
+   - `ratchetState`: Current PR state
+     (IDLE/CI_RUNNING/CI_FAILED/REVIEW_PENDING/READY/MERGED)
    - `ratchetActiveSessionId`: ID of active fixer session (null if idle)
    - `ratchetLastCiRunId`: Last known CI run ID (prevents duplicate dispatches)
    - `prReviewLastCheckedAt`: Timestamp of last review activity check
 
-**Key insight:** Ratchet is a **stateful polling loop** with state stored in the workspace table.
+**Key insight:** Ratchet is a **stateful polling loop** with state stored in the
+workspace table.
 
 ### Handoff Challenge
 
@@ -1004,7 +1127,8 @@ When "Send to Cloud" is clicked:
 1. Desktop must **stop polling** this workspace (no longer its responsibility)
 2. Cloud must **start polling** this workspace (now cloud's responsibility)
 3. **State must transfer** seamlessly (no duplicate fixes, no missed events)
-4. **In-flight fixer sessions** must complete gracefully (desktop) or transfer (cloud)
+4. **In-flight fixer sessions** must complete gracefully (desktop) or transfer
+   (cloud)
 
 ### Solution: Location-Aware Ratchet with State Transfer
 
@@ -1069,7 +1193,8 @@ class CloudRatchetService {
 }
 ```
 
-**Result:** Desktop and cloud ratchet loops automatically filter by location, no coordination needed.
+**Result:** Desktop and cloud ratchet loops automatically filter by location, no
+coordination needed.
 
 #### 3. Send to Cloud: Update Location + Transfer State
 
@@ -1134,7 +1259,8 @@ async function createWorkspaceFromDesktop(data: DesktopWorkspaceData) {
 
 #### 4. Handling In-Flight Fixer Sessions
 
-**Scenario:** Desktop ratchet dispatched a fixer session, then user clicks "Send to Cloud" before fixer completes.
+**Scenario:** Desktop ratchet dispatched a fixer session, then user clicks "Send
+to Cloud" before fixer completes.
 
 **Option A: Let desktop fixer complete (simpler)**
 
@@ -1161,8 +1287,10 @@ async function sendWorkspaceToCloud(workspaceId: string) {
 ```
 
 **User experience:**
+
 - User clicks "Send to Cloud"
-- If ratchet fixer is active: Show error message "Fixer is running, please wait..."
+- If ratchet fixer is active: Show error message "Fixer is running, please
+  wait..."
 - After fixer completes: User can retry "Send to Cloud"
 
 **Option B: Transfer session to cloud (more complex)**
@@ -1200,6 +1328,7 @@ async function sendWorkspaceToCloud(workspaceId: string) {
 ```
 
 **Recommendation:** Use **Option A (block send if fixer active)** for MVP:
+
 - Simpler implementation
 - Avoids complex session state transfer
 - Rare edge case (fixer sessions are short, ~2-5 minutes)
@@ -1233,25 +1362,26 @@ async function pullWorkspaceFromCloud(cloudWorkspaceId: string) {
 
 ### Handoff Summary
 
-| Step | Desktop Action | Cloud Action | Ratchet Impact |
-|------|---------------|--------------|----------------|
-| **1. Send to Cloud** | Upload workspace state, set `location='CLOUD'` | Create workspace in VM, store in cloud DB | Desktop stops polling (location filter), cloud starts polling |
-| **2. Cloud polling** | N/A (ignores workspace) | Cloud ratchet service polls workspace every 1 minute | Cloud dispatches fixers if PR state changes |
-| **3. Pull from Cloud** | Download state, set `location='DESKTOP'`, terminate cloud VM | VM terminates, workspace removed from cloud DB | Cloud stops polling (VM gone), desktop resumes polling |
+| Step                   | Desktop Action                                               | Cloud Action                                         | Ratchet Impact                                                |
+| ---------------------- | ------------------------------------------------------------ | ---------------------------------------------------- | ------------------------------------------------------------- |
+| **1. Send to Cloud**   | Upload workspace state, set `location='CLOUD'`               | Create workspace in VM, store in cloud DB            | Desktop stops polling (location filter), cloud starts polling |
+| **2. Cloud polling**   | N/A (ignores workspace)                                      | Cloud ratchet service polls workspace every 1 minute | Cloud dispatches fixers if PR state changes                   |
+| **3. Pull from Cloud** | Download state, set `location='DESKTOP'`, terminate cloud VM | VM terminates, workspace removed from cloud DB       | Cloud stops polling (VM gone), desktop resumes polling        |
 
 ### State Synchronization Details
 
 **What gets transferred:**
 
-| Field | Desktop → Cloud | Cloud → Desktop | Purpose |
-|-------|----------------|-----------------|---------|
-| `ratchetEnabled` | ✅ Yes | ✅ Yes | User's toggle preference |
-| `ratchetState` | ✅ Yes | ✅ Yes | Current PR state (IDLE/CI_FAILED/etc.) |
-| `ratchetLastCiRunId` | ✅ Yes | ✅ Yes | Prevents duplicate fix dispatches |
-| `prReviewLastCheckedAt` | ✅ Yes | ✅ Yes | Last review activity timestamp |
-| `ratchetActiveSessionId` | ❌ No (block send if active) | ❌ No | Session is environment-specific |
+| Field                    | Desktop → Cloud              | Cloud → Desktop | Purpose                                |
+| ------------------------ | ---------------------------- | --------------- | -------------------------------------- |
+| `ratchetEnabled`         | ✅ Yes                       | ✅ Yes          | User's toggle preference               |
+| `ratchetState`           | ✅ Yes                       | ✅ Yes          | Current PR state (IDLE/CI_FAILED/etc.) |
+| `ratchetLastCiRunId`     | ✅ Yes                       | ✅ Yes          | Prevents duplicate fix dispatches      |
+| `prReviewLastCheckedAt`  | ✅ Yes                       | ✅ Yes          | Last review activity timestamp         |
+| `ratchetActiveSessionId` | ❌ No (block send if active) | ❌ No           | Session is environment-specific        |
 
 **What doesn't get transferred:**
+
 - Active fixer sessions (must complete before send/pull)
 - Session message history (optional: could transfer for continuity)
 - Claude CLI process state (each environment spawns fresh)
@@ -1261,6 +1391,7 @@ async function pullWorkspaceFromCloud(cloudWorkspaceId: string) {
 #### Edge Case 1: User sends to cloud, immediately pulls back
 
 **Behavior:**
+
 1. Desktop uploads state, sets `location='CLOUD'`
 2. Desktop ratchet stops polling immediately
 3. Cloud ratchet picks up workspace within 1 minute
@@ -1272,17 +1403,20 @@ async function pullWorkspaceFromCloud(cloudWorkspaceId: string) {
 #### Edge Case 2: Cloud ratchet dispatches fixer, user pulls workspace
 
 **Behavior:**
+
 1. Cloud ratchet dispatches fixer session in VM
 2. User clicks "Pull from Cloud"
 3. Cloud: Block pull request if fixer active (same as Option A above)
 4. User waits for fixer to complete
 5. Pull succeeds after fixer finishes
 
-**Alternative:** Transfer fixer session to desktop (Option B), but MVP should just block.
+**Alternative:** Transfer fixer session to desktop (Option B), but MVP should
+just block.
 
 #### Edge Case 3: GitHub rate limit during handoff
 
 **Behavior:**
+
 1. Desktop ratchet hit rate limit, backed off to 5 minute interval
 2. User sends workspace to cloud
 3. Cloud ratchet starts fresh, no backoff state transfer
@@ -1298,14 +1432,17 @@ model Workspace {
 }
 ```
 
-For MVP: Accept that cloud might hit rate limit immediately after handoff (rare, self-healing).
+For MVP: Accept that cloud might hit rate limit immediately after handoff (rare,
+self-healing).
 
 ### Implementation Checklist
 
 **Phase 1 (MVP):**
+
 - [x] Add `location` and `cloudVmId` fields to workspace schema
 - [ ] Update desktop ratchet service to filter by `location='DESKTOP'`
-- [ ] Implement cloud ratchet service (identical logic, filter by `location='CLOUD'`)
+- [ ] Implement cloud ratchet service (identical logic, filter by
+      `location='CLOUD'`)
 - [ ] Update "Send to Cloud" to transfer ratchet state
 - [ ] Block "Send to Cloud" if ratchet fixer is active
 - [ ] Update "Pull from Cloud" to transfer ratchet state back
@@ -1315,6 +1452,7 @@ For MVP: Accept that cloud might hit rate limit immediately after handoff (rare,
 - [ ] Test: Pull from cloud resumes desktop ratchet correctly
 
 **Phase 2 (Enhancements):**
+
 - [ ] Transfer active fixer sessions (Option B)
 - [ ] Transfer backoff state to prevent immediate rate limits
 - [ ] Add UI indicator: "Ratchet active on: Desktop | Cloud"
@@ -1324,9 +1462,9 @@ For MVP: Accept that cloud might hit rate limit immediately after handoff (rare,
 ### Benefits of This Approach
 
 ✅ **No coordination overhead**: Desktop and cloud ratchet loops are independent
-✅ **Automatic handoff**: Changing `location` field triggers handoff
-✅ **No duplicate fixes**: State transfer prevents re-processing same PR state
-✅ **Stateless services**: Ratchet services don't need to communicate, just read DB
-✅ **Resilient**: If cloud ratchet fails, user can pull back to desktop
-✅ **Same code**: Desktop and cloud use identical FF Core ratchet logic
-✅ **Fast handoff**: Cloud picks up within 1 minute (ratchet poll interval)
+✅ **Automatic handoff**: Changing `location` field triggers handoff ✅ **No
+duplicate fixes**: State transfer prevents re-processing same PR state ✅
+**Stateless services**: Ratchet services don't need to communicate, just read DB
+✅ **Resilient**: If cloud ratchet fails, user can pull back to desktop ✅
+**Same code**: Desktop and cloud use identical FF Core ratchet logic ✅ **Fast
+handoff**: Cloud picks up within 1 minute (ratchet poll interval)

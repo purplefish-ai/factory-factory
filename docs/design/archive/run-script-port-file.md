@@ -4,13 +4,22 @@ Status: implemented
 
 ## Problem
 
-When the run script (`pnpm dev`) starts a dev server, the `postRun` command (e.g., `cloudflared tunnel --url http://localhost:{port}`) needs to know which port the dev server is listening on. Currently, `{port}` is only substituted when the `run` command itself contains `{port}`, because that's what triggers Factory Factory to allocate a port via `PortAllocationService.findFreePort()`.
+When the run script (`pnpm dev`) starts a dev server, the `postRun` command
+(e.g., `cloudflared tunnel --url http://localhost:{port}`) needs to know which
+port the dev server is listening on. Currently, `{port}` is only substituted
+when the `run` command itself contains `{port}`, because that's what triggers
+Factory Factory to allocate a port via `PortAllocationService.findFreePort()`.
 
-For projects like Factory Factory where the dev server picks its own port (e.g., `pnpm dev` starts Vite on port 3000 and backend on 3001), `{port}` is never allocated, so the postRun command receives the literal string `{port}`.
+For projects like Factory Factory where the dev server picks its own port (e.g.,
+`pnpm dev` starts Vite on port 3000 and backend on 3001), `{port}` is never
+allocated, so the postRun command receives the literal string `{port}`.
 
 ## Solution
 
-The dev server (CLI `serve` command) writes a `.factory-factory-port` file to its working directory after startup. The postRun shell command reads this file directly — all port-discovery logic lives in the shell command, not in the app's TypeScript code.
+The dev server (CLI `serve` command) writes a `.factory-factory-port` file to
+its working directory after startup. The postRun shell command reads this file
+directly — all port-discovery logic lives in the shell command, not in the app's
+TypeScript code.
 
 ### Port file
 
@@ -21,19 +30,22 @@ The dev server (CLI `serve` command) writes a `.factory-factory-port` file to it
 
 ### PostRun command
 
-The postRun command in `factory-factory.json` handles polling and reading the port file itself:
+The postRun command in `factory-factory.json` handles polling and reading the
+port file itself:
 
 ```
 while [ ! -f .factory-factory-port ]; do sleep 0.5; done; cloudflared tunnel --url http://localhost:$(cat .factory-factory-port)
 ```
 
-No changes to `spawnPostRunScript` in the app — the shell command does all the work.
+No changes to `spawnPostRunScript` in the app — the shell command does all the
+work.
 
 ## Changes
 
 ### 1. CLI writes port file on startup — `src/cli/index.ts`
 
-In the `createOnReady` callback, after printing the ready banner, write the port file:
+In the `createOnReady` callback, after printing the ready banner, write the port
+file:
 
 ```typescript
 const portFilePath = join(process.cwd(), '.factory-factory-port');

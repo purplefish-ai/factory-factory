@@ -3,10 +3,10 @@
 ## Problem
 
 Workspace initialization banners use fixed Tailwind palette colors such as
-`bg-red-50`, `bg-yellow-50`, and `bg-blue-50`. Those colors remain light in
-dark mode, so error, warning, and informational banners look like light-theme
-panels inside the dark workspace UI. The no-session workspace initialization
-notice repeats the same light-only warning palette.
+`bg-red-50`, `bg-yellow-50`, and `bg-blue-50`. Those colors remain light in dark
+mode, so error, warning, and informational banners look like light-theme panels
+inside the dark workspace UI. The no-session workspace initialization notice
+repeats the same light-only warning palette.
 
 The rest of the banner audit found correctly themed examples that either use
 semantic theme tokens or provide explicit dark-mode colors. Shared destructive
@@ -39,8 +39,8 @@ Keep layout, icons, copy, and actions unchanged.
 Add a focused unit test for the semantic banner-style utility. The test will
 assert the exact semantic mapping for all three banner kinds and reject
 light-only fixed palette classes. Run the test before implementation to confirm
-it fails because the utility does not exist, then run it after implementation
-to confirm the mapping.
+it fails because the utility does not exist, then run it after implementation to
+confirm the mapping.
 
 Render the affected workspace states in Storybook or the local app and inspect
 them in both light and dark themes. Verify that:

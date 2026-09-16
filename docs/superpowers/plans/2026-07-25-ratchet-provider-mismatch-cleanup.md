@@ -28,9 +28,11 @@ preserved after the stop attempt.
 ### Task 1: Reproduce the orphaned-session race
 
 **Files:**
+
 - Test: `src/backend/services/ratchet/service/ratchet.service.test.ts`
 
 **Interfaces:**
+
 - Consumes: `RatchetService.checkActiveFixerSession(workspace, signal)`
 - Produces: a regression test proving the mismatched session stop is attempted
   after post-write cancellation
@@ -38,9 +40,9 @@ preserved after the stop attempt.
 - [ ] **Step 1: Add the failing regression test**
 
 Add a test under `checkActiveFixerSession edge cases` that returns a running
-`CODEX` session while the resolved workspace Ratchet provider is `CLAUDE`.
-Abort the supplied controller inside `mockWorkspaceBridge.recordSessionEnd`
-before resolving `true`.
+`CODEX` session while the resolved workspace Ratchet provider is `CLAUDE`. Abort
+the supplied controller inside `mockWorkspaceBridge.recordSessionEnd` before
+resolving `true`.
 
 Assert these literal outcomes:
 
@@ -68,11 +70,13 @@ check rejects with `timeoutError` and settlement records `DIED`.
 ### Task 2: Guarantee abort-insensitive mismatch cleanup
 
 **Files:**
+
 - Modify:
   `src/backend/services/ratchet/service/ratchet-active-session.helpers.ts`
 - Test: `src/backend/services/ratchet/service/ratchet.service.test.ts`
 
 **Interfaces:**
+
 - Consumes: `RatchetSessionBridge.stopSession(sessionId): Promise<void>`
 - Produces: best-effort cleanup that never throws and a provider-mismatch branch
   that attempts cleanup after either settlement success or settlement failure
@@ -119,6 +123,7 @@ Expected: all Ratchet service tests pass, including the new regression test.
 ### Task 3: Verify, review, and publish
 
 **Files:**
+
 - Review:
   `src/backend/services/ratchet/service/ratchet-active-session.helpers.ts`
 - Review: `src/backend/services/ratchet/service/ratchet.service.test.ts`
@@ -128,6 +133,7 @@ Expected: all Ratchet service tests pass, including the new regression test.
   `docs/superpowers/plans/2026-07-25-ratchet-provider-mismatch-cleanup.md`
 
 **Interfaces:**
+
 - Consumes: repository pnpm scripts and GitHub CLI authentication
 - Produces: committed branch and pull request closing issue `#1983`
 
@@ -164,5 +170,5 @@ git commit -m "Fix Ratchet mismatch cleanup after abort (#1983)"
 
 Push the current branch with upstream tracking. Create a PR titled
 `Fix #1983: Stop mismatched Ratchet sessions after abort` whose body explains
-the root cause, implementation, full verification, `Closes #1983`, and ends
-with the required Factory Factory signature.
+the root cause, implementation, full verification, `Closes #1983`, and ends with
+the required Factory Factory signature.

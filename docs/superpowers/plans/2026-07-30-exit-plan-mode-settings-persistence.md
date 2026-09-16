@@ -1,8 +1,12 @@
 # ExitPlanMode Settings Persistence Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Keep plan mode disabled across refresh after an approved `ExitPlanMode` request.
+**Goal:** Keep plan mode disabled across refresh after an approved
+`ExitPlanMode` request.
 
 **Architecture:** Persist the capability-clamped disabled setting at the shared
 plan-approval action boundary. Keep the reducer pure and preserve the existing
@@ -12,7 +16,8 @@ Codex and non-Codex completion behavior.
 
 ## Global Constraints
 
-- Do not change permission-response wire messages or provider-specific completion behavior.
+- Do not change permission-response wire messages or provider-specific
+  completion behavior.
 - Do not add persistence side effects to reducers.
 - Preserve the `answerQuestion` ExitPlanMode path's in-memory update.
 
@@ -21,12 +26,15 @@ Codex and non-Codex completion behavior.
 ### Task 1: Add the regression test and persistence fix
 
 **Files:**
+
 - Modify: `src/client/features/chat/use-chat-state.integration.test.tsx`
 - Modify: `src/client/features/chat/use-chat-actions.ts`
 
 **Interfaces:**
+
 - Consumes: `UseChatStateReturn.approvePermission(requestId, allow, optionId?)`
-- Produces: session-scoped persisted `ChatSettings` with `planModeEnabled: false`
+- Produces: session-scoped persisted `ChatSettings` with
+  `planModeEnabled: false`
 
 - [ ] **Step 1: Write the failing integration test**
 
@@ -87,9 +95,11 @@ git commit -m "Persist plan mode exit approval (#2093)"
 ### Task 2: Verify, review, and publish
 
 **Files:**
+
 - Review: all changes relative to `origin/main`
 
 **Interfaces:**
+
 - Consumes: the completed regression fix
 - Produces: a clean branch and pull request closing issue #2093
 

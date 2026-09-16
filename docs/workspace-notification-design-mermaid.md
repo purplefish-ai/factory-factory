@@ -2,9 +2,12 @@
 
 ## Executive Summary
 
-**Goal:** Notify user via OS desktop notification when all Claude sessions in a workspace finish working, but only when the app window is not focused or the chat is not visible.
+**Goal:** Notify user via OS desktop notification when all Claude sessions in a
+workspace finish working, but only when the app window is not focused or the
+chat is not visible.
 
 **Key Design Decisions:**
+
 - ✅ OS desktop notification (using existing `notification.service.ts`)
 - ✅ Per-workspace scope (all sessions must finish)
 - ✅ Suppress when app window is focused OR chat is visible
@@ -108,27 +111,27 @@ gantt
 
 **Detailed Timeline:**
 
-| Time | Event | Component | State Change |
-|------|-------|-----------|--------------|
-| T0 | Session 1 starts processing<br/>emits 'session_id' | ClaudeClient | |
-| T1 | chat.handler receives event<br/>calls markSessionRunning() | chat.handler.ts | |
-| T2 | Add session1 to runningSet | workspace-activity.service | runningSessions:<br/>Set { session1 } |
-| T3 | Session 2 starts processing<br/>emits 'session_id' | ClaudeClient | |
-| T4 | chat.handler receives event<br/>calls markSessionRunning() | chat.handler.ts | |
-| T5 | Add session2 to runningSet | workspace-activity.service | runningSessions:<br/>Set { s1, s2 } |
-| T6 | Session 1 finishes<br/>emits 'result' | ClaudeClient | |
-| T7 | chat.handler receives result<br/>calls markSessionIdle() | chat.handler.ts | |
-| T8 | Remove session1 from runningSet<br/>Check: size === 0? NO<br/>NO notification triggered | workspace-activity.service | runningSessions:<br/>Set { s2 }<br/>(still running) |
-| T9 | Session 2 finishes<br/>emits 'result' | ClaudeClient | |
-| T10 | chat.handler receives result<br/>calls markSessionIdle() | chat.handler.ts | |
-| T11 | Remove session2 from runningSet<br/>Check: size === 0? YES<br/>✅ Emit 'workspace_idle' | workspace-activity.service | runningSessions:<br/>Set {}<br/>(ALL DONE!) |
-| T12 | workspace_idle handler runs<br/>Query workspace from DB<br/>Emit 'request_notification' | workspace-activity.service | |
-| T13 | Broadcast to WebSocket clients<br/>type: workspace_notification_request | setupWorkspaceNotifications()<br/>chat.handler.ts | |
-| T14 | WebSocket receives message<br/>Dispatch CustomEvent | use-chat-websocket.ts<br/>Frontend | |
-| T15 | WorkspaceNotificationManager<br/>receives CustomEvent | WorkspaceNotificationManager.tsx | |
-| T16 | Check suppression logic:<br/>- isWindowFocused? NO<br/>- isChatVisible? NO<br/>- shouldSuppress? NO | WorkspaceNotificationManager.tsx | |
-| T17 | ✅ Call new Notification()<br/>Display OS notification | Browser Notification API | |
-| T18 | 🔔 User sees notification! | Operating System | |
+| Time | Event                                                                                               | Component                                         | State Change                                        |
+| ---- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------- | --------------------------------------------------- |
+| T0   | Session 1 starts processing<br/>emits 'session_id'                                                  | ClaudeClient                                      |                                                     |
+| T1   | chat.handler receives event<br/>calls markSessionRunning()                                          | chat.handler.ts                                   |                                                     |
+| T2   | Add session1 to runningSet                                                                          | workspace-activity.service                        | runningSessions:<br/>Set { session1 }               |
+| T3   | Session 2 starts processing<br/>emits 'session_id'                                                  | ClaudeClient                                      |                                                     |
+| T4   | chat.handler receives event<br/>calls markSessionRunning()                                          | chat.handler.ts                                   |                                                     |
+| T5   | Add session2 to runningSet                                                                          | workspace-activity.service                        | runningSessions:<br/>Set { s1, s2 }                 |
+| T6   | Session 1 finishes<br/>emits 'result'                                                               | ClaudeClient                                      |                                                     |
+| T7   | chat.handler receives result<br/>calls markSessionIdle()                                            | chat.handler.ts                                   |                                                     |
+| T8   | Remove session1 from runningSet<br/>Check: size === 0? NO<br/>NO notification triggered             | workspace-activity.service                        | runningSessions:<br/>Set { s2 }<br/>(still running) |
+| T9   | Session 2 finishes<br/>emits 'result'                                                               | ClaudeClient                                      |                                                     |
+| T10  | chat.handler receives result<br/>calls markSessionIdle()                                            | chat.handler.ts                                   |                                                     |
+| T11  | Remove session2 from runningSet<br/>Check: size === 0? YES<br/>✅ Emit 'workspace_idle'             | workspace-activity.service                        | runningSessions:<br/>Set {}<br/>(ALL DONE!)         |
+| T12  | workspace_idle handler runs<br/>Query workspace from DB<br/>Emit 'request_notification'             | workspace-activity.service                        |                                                     |
+| T13  | Broadcast to WebSocket clients<br/>type: workspace_notification_request                             | setupWorkspaceNotifications()<br/>chat.handler.ts |                                                     |
+| T14  | WebSocket receives message<br/>Dispatch CustomEvent                                                 | use-chat-websocket.ts<br/>Frontend                |                                                     |
+| T15  | WorkspaceNotificationManager<br/>receives CustomEvent                                               | WorkspaceNotificationManager.tsx                  |                                                     |
+| T16  | Check suppression logic:<br/>- isWindowFocused? NO<br/>- isChatVisible? NO<br/>- shouldSuppress? NO | WorkspaceNotificationManager.tsx                  |                                                     |
+| T17  | ✅ Call new Notification()<br/>Display OS notification                                              | Browser Notification API                          |                                                     |
+| T18  | 🔔 User sees notification!                                                                          | Operating System                                  |                                                     |
 
 ### Sequence Diagrams
 
@@ -248,7 +251,8 @@ sequenceDiagram
 
 #### Flow 6: Complete End-to-End Flow (Happy Path)
 
-**User Context:** Working on "Feature X" workspace with 2 sessions running, switches to browser to read docs. Both sessions finish while away.
+**User Context:** Working on "Feature X" workspace with 2 sessions running,
+switches to browser to read docs. Both sessions finish while away.
 
 ```mermaid
 sequenceDiagram
@@ -285,4 +289,3 @@ sequenceDiagram
 ## Detailed Design
 
 [Rest of the design document continues as before with code samples...]
-

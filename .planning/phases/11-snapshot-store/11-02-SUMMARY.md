@@ -40,7 +40,9 @@ completed: 2026-02-11
 
 # Phase 11 Plan 02: Snapshot Store Test Suite Summary
 
-**39 passing Vitest tests covering CRUD, versioning, field-level timestamps, derived state recomputation, event emission, error handling, and ARCH-02 compliance for WorkspaceSnapshotStore**
+**39 passing Vitest tests covering CRUD, versioning, field-level timestamps,
+derived state recomputation, event emission, error handling, and ARCH-02
+compliance for WorkspaceSnapshotStore**
 
 ## Performance
 
@@ -51,67 +53,103 @@ completed: 2026-02-11
 - **Files modified:** 1
 
 ## Accomplishments
-- Created comprehensive test suite with 39 test cases covering all 8 requirements (STORE-01 through STORE-06, ARCH-01, ARCH-02)
-- Verified field-level timestamp merging prevents stale concurrent updates across independent field groups
-- Verified derived state recomputes correctly when raw fields change, including effective isWorking (session OR flow)
-- Verified event emission timing (after all state is consistent, preventing stale derived state in events)
+
+- Created comprehensive test suite with 39 test cases covering all 8
+  requirements (STORE-01 through STORE-06, ARCH-01, ARCH-02)
+- Verified field-level timestamp merging prevents stale concurrent updates
+  across independent field groups
+- Verified derived state recomputes correctly when raw fields change, including
+  effective isWorking (session OR flow)
+- Verified event emission timing (after all state is consistent, preventing
+  stale derived state in events)
 
 ## Task Commits
 
 Each task was committed atomically:
 
-1. **Task 1: Create test suite for store CRUD, versioning, timestamps, and project index** - `2d3e6f1` (test)
-2. **Task 2: Add tests for derived state recomputation and event emission** - `543673d` (test)
+1. **Task 1: Create test suite for store CRUD, versioning, timestamps, and
+   project index** - `2d3e6f1` (test)
+2. **Task 2: Add tests for derived state recomputation and event emission** -
+   `543673d` (test)
 
 ## Files Created/Modified
-- `src/backend/services/workspace-snapshot-store.service.test.ts` - 39 test cases organized in 8 describe blocks covering all store requirements (558 lines)
+
+- `src/backend/services/workspace-snapshot-store.service.test.ts` - 39 test
+  cases organized in 8 describe blocks covering all store requirements (558
+  lines)
 
 ## Decisions Made
-- ARCH-02 compliance test filters to actual `import` statements only, since the service file's JSDoc comment legitimately mentions `@/backend/domains/` as documentation
-- Field-group timestamp isolation tests supply only fields from specific groups to avoid all groups getting the same timestamp from `makeUpdate()`
-- Derived state tests use responsive mock derivation functions (e.g., `deriveFlowState` returns `CI_WAIT` when `prUrl` is set) rather than static mocks, enabling realistic verification of recomputation
+
+- ARCH-02 compliance test filters to actual `import` statements only, since the
+  service file's JSDoc comment legitimately mentions `@/backend/domains/` as
+  documentation
+- Field-group timestamp isolation tests supply only fields from specific groups
+  to avoid all groups getting the same timestamp from `makeUpdate()`
+- Derived state tests use responsive mock derivation functions (e.g.,
+  `deriveFlowState` returns `CI_WAIT` when `prUrl` is set) rather than static
+  mocks, enabling realistic verification of recomputation
 
 ## Deviations from Plan
 
 ### Auto-fixed Issues
 
-**1. [Rule 1 - Bug] Fixed field-group timestamp test to isolate groups correctly**
+**1. [Rule 1 - Bug] Fixed field-group timestamp test to isolate groups
+correctly**
+
 - **Found during:** Task 1 (STORE-06 field-level timestamp tests)
-- **Issue:** Test case "different field groups can update independently" used `makeUpdate()` which sets ALL field groups at the same timestamp, making PR group timestamp 100 and preventing a lower-timestamp PR update
-- **Fix:** Changed first upsert to provide only workspace-group fields (`projectId`, `name`, `status`), leaving PR group at default timestamp 0 so the second upsert at timestamp 50 correctly applies
-- **Files modified:** src/backend/services/workspace-snapshot-store.service.test.ts
-- **Verification:** Test passes, correctly demonstrating independent field group updates
+- **Issue:** Test case "different field groups can update independently" used
+  `makeUpdate()` which sets ALL field groups at the same timestamp, making PR
+  group timestamp 100 and preventing a lower-timestamp PR update
+- **Fix:** Changed first upsert to provide only workspace-group fields
+  (`projectId`, `name`, `status`), leaving PR group at default timestamp 0 so
+  the second upsert at timestamp 50 correctly applies
+- **Files modified:**
+  src/backend/services/workspace-snapshot-store.service.test.ts
+- **Verification:** Test passes, correctly demonstrating independent field group
+  updates
 - **Committed in:** 2d3e6f1 (Task 1 commit)
 
 **2. [Rule 1 - Bug] Fixed ARCH-02 test false positive from JSDoc comment**
+
 - **Found during:** Task 2 (ARCH-02 compliance test)
-- **Issue:** `toContain('@/backend/domains/')` matched the service file's JSDoc comment describing ARCH-02 compliance, not an actual import
-- **Fix:** Changed test to filter file content to only `import` statement lines before checking for domain path references
-- **Files modified:** src/backend/services/workspace-snapshot-store.service.test.ts
-- **Verification:** Test passes, correctly validates zero domain imports while ignoring comments
+- **Issue:** `toContain('@/backend/domains/')` matched the service file's JSDoc
+  comment describing ARCH-02 compliance, not an actual import
+- **Fix:** Changed test to filter file content to only `import` statement lines
+  before checking for domain path references
+- **Files modified:**
+  src/backend/services/workspace-snapshot-store.service.test.ts
+- **Verification:** Test passes, correctly validates zero domain imports while
+  ignoring comments
 - **Committed in:** 543673d (Task 2 commit)
 
 ---
 
-**Total deviations:** 2 auto-fixed (2 bugs in test logic)
-**Impact on plan:** Both were correctness fixes in the test assertions. No scope creep -- all 39 planned test cases implemented.
+**Total deviations:** 2 auto-fixed (2 bugs in test logic) **Impact on plan:**
+Both were correctness fixes in the test assertions. No scope creep -- all 39
+planned test cases implemented.
 
 ## Issues Encountered
+
 None beyond the auto-fixed deviations above.
 
 ## User Setup Required
+
 None - no external service configuration required.
 
 ## Next Phase Readiness
+
 - Snapshot store is fully tested and verified, ready for downstream phases
-- Event collection (Phase 12/13) can build on the tested upsert/remove/event APIs
-- Reconciliation (Phase 14) can rely on tested field-level timestamp merging for concurrent update safety
-- WebSocket transport (Phase 15) can subscribe to tested snapshot_changed/snapshot_removed events
+- Event collection (Phase 12/13) can build on the tested upsert/remove/event
+  APIs
+- Reconciliation (Phase 14) can rely on tested field-level timestamp merging for
+  concurrent update safety
+- WebSocket transport (Phase 15) can subscribe to tested
+  snapshot_changed/snapshot_removed events
 
 ## Self-Check: PASSED
 
 All files verified present, all commits verified in git log.
 
 ---
-*Phase: 11-snapshot-store*
-*Completed: 2026-02-11*
+
+_Phase: 11-snapshot-store_ _Completed: 2026-02-11_

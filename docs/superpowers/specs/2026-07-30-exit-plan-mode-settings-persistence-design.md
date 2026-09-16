@@ -2,8 +2,8 @@
 
 ## Problem
 
-Approving `ExitPlanMode` clears `chatSettings.planModeEnabled` in memory, but the
-action flow does not update the session-scoped settings in `sessionStorage`.
+Approving `ExitPlanMode` clears `chatSettings.planModeEnabled` in memory, but
+the action flow does not update the session-scoped settings in `sessionStorage`.
 Reloading can therefore restore the stale enabled value.
 
 ## Approaches considered
@@ -40,6 +40,6 @@ browser `sessionStorage`: enable and persist plan mode, approve an
 settings are disabled. The test will fail before the production change because
 the stored value remains `true`.
 
-Existing reducer tests continue to cover denial and unrelated-tool behavior.
-The implementation conditions remain unchanged, so those paths do not invoke
-the completion helper and cannot overwrite persisted plan mode.
+Existing reducer tests continue to cover denial and unrelated-tool behavior. The
+implementation conditions remain unchanged, so those paths do not invoke the
+completion helper and cannot overwrite persisted plan mode.

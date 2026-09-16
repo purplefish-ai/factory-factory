@@ -1,12 +1,21 @@
 # Ratchet Dispatch Timeout Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Prevent Ratchet's 90-second workspace watchdog from aborting a fixer after its ACP session has successfully started.
+**Goal:** Prevent Ratchet's 90-second workspace watchdog from aborting a fixer
+after its ACP session has successfully started.
 
-**Architecture:** Keep the existing watchdog and committed-side-effect mechanism. Correct the `afterStart` lifecycle boundary for `start_empty_and_send`, then wire Ratchet's existing `commitSideEffects` callback to that boundary so the long agent turn is governed by the session prompt timeout.
+**Architecture:** Keep the existing watchdog and committed-side-effect
+mechanism. Correct the `afterStart` lifecycle boundary for
+`start_empty_and_send`, then wire Ratchet's existing `commitSideEffects`
+callback to that boundary so the long agent turn is governed by the session
+prompt timeout.
 
-**Tech Stack:** TypeScript, Vitest, Express backend service capsules, ACP session runtime.
+**Tech Stack:** TypeScript, Vitest, Express backend service capsules, ACP
+session runtime.
 
 ## Global Constraints
 
@@ -14,23 +23,30 @@
 - Preserve `start_with_prompt` behavior.
 - Preserve existing dispatch persistence, cleanup, and retry semantics.
 - Import service capsules only through their public barrel APIs.
-- Write regression tests before production changes and observe each test fail for the intended reason.
+- Write regression tests before production changes and observe each test fail
+  for the intended reason.
 
 ---
 
 ### Task 1: Correct the Fixer Session `afterStart` Boundary
 
 **Files:**
+
 - Modify: `src/backend/services/ratchet/service/fixer-session.service.test.ts`
 - Modify: `src/backend/services/ratchet/service/fixer-session.service.ts`
 
 **Interfaces:**
-- Consumes: `AcquireAndDispatchInput.afterStart(params: { sessionId: string; prompt: string }): void | Promise<void>`
-- Produces: For `dispatchMode: 'start_empty_and_send'`, `afterStart` runs after `startSession`/`restartSession` resolves and before `sendSessionMessage` begins.
+
+- Consumes:
+  `AcquireAndDispatchInput.afterStart(params: { sessionId: string; prompt: string }): void | Promise<void>`
+- Produces: For `dispatchMode: 'start_empty_and_send'`, `afterStart` runs after
+  `startSession`/`restartSession` resolves and before `sendSessionMessage`
+  begins.
 
 - [ ] **Step 1: Write the failing callback-order regression test**
 
-Add this test after `creates and starts a new session` in `fixer-session.service.test.ts`:
+Add this test after `creates and starts a new session` in
+`fixer-session.service.test.ts`:
 
 ```ts
 it('calls afterStart after startup and before awaiting the agent turn', async () => {
@@ -85,7 +101,8 @@ Run:
 pnpm test src/backend/services/ratchet/service/fixer-session.service.test.ts
 ```
 
-Expected: FAIL because the current order is `started`, `turn-started`, `after-start`.
+Expected: FAIL because the current order is `started`, `turn-started`,
+`after-start`.
 
 - [ ] **Step 3: Move the callback to the startup boundary**
 
@@ -110,7 +127,8 @@ if (input.dispatchMode === 'start_empty_and_send') {
 }
 ```
 
-Leave the existing `afterStart` call after `startOrRestartSession` in the `start_with_prompt` branch unchanged.
+Leave the existing `afterStart` call after `startOrRestartSession` in the
+`start_with_prompt` branch unchanged.
 
 - [ ] **Step 4: Run the focused test and verify GREEN**
 
@@ -134,16 +152,22 @@ git commit -m "Fix fixer session after-start timing"
 ### Task 2: Commit Ratchet Dispatches When the Session Starts
 
 **Files:**
+
 - Modify: `src/backend/services/ratchet/service/ratchet.service.test.ts`
-- Modify: `src/backend/services/ratchet/service/ratchet-fixer-dispatch.helpers.ts`
+- Modify:
+  `src/backend/services/ratchet/service/ratchet-fixer-dispatch.helpers.ts`
 
 **Interfaces:**
-- Consumes: `AcquireAndDispatchInput.afterStart` from Task 1 and `commitSideEffects(): void` from `RatchetWorkspaceCheckCoordinator`.
-- Produces: Ratchet marks the workspace check committed immediately after fixer session startup and again idempotently when the dispatch record is persisted.
+
+- Consumes: `AcquireAndDispatchInput.afterStart` from Task 1 and
+  `commitSideEffects(): void` from `RatchetWorkspaceCheckCoordinator`.
+- Produces: Ratchet marks the workspace check committed immediately after fixer
+  session startup and again idempotently when the dispatch record is persisted.
 
 - [ ] **Step 1: Write the failing Ratchet wiring test**
 
-Add this test at the start of the `triggerFixer error handling` describe block in `ratchet.service.test.ts`:
+Add this test at the start of the `triggerFixer error handling` describe block
+in `ratchet.service.test.ts`:
 
 ```ts
 it('commits the workspace check as soon as the fixer session starts', async () => {
@@ -190,7 +214,8 @@ it('commits the workspace check as soon as the fixer session starts', async () =
 });
 ```
 
-The two calls are intentional: one at session startup and one at dispatch-record persistence. The coordinator marker is idempotent.
+The two calls are intentional: one at session startup and one at dispatch-record
+persistence. The coordinator marker is idempotent.
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
@@ -200,7 +225,8 @@ Run:
 pnpm test src/backend/services/ratchet/service/ratchet.service.test.ts
 ```
 
-Expected: FAIL because `input.afterStart` is undefined and `commitSideEffects` is called only once.
+Expected: FAIL because `input.afterStart` is undefined and `commitSideEffects`
+is called only once.
 
 - [ ] **Step 3: Wire Ratchet to the startup callback**
 
@@ -213,7 +239,8 @@ afterStart: () => {
 },
 ```
 
-The existing `commitSideEffects()` call in `handleStartedFixerResult` remains unchanged.
+The existing `commitSideEffects()` call in `handleStartedFixerResult` remains
+unchanged.
 
 - [ ] **Step 4: Run the focused Ratchet tests and verify GREEN**
 
@@ -237,9 +264,11 @@ git commit -m "Preserve started Ratchet fixer turns"
 ### Task 3: Verify and Publish
 
 **Files:**
+
 - Verify: all modified production, test, spec, and plan files.
 
 **Interfaces:**
+
 - Consumes: completed changes from Tasks 1 and 2.
 - Produces: a verified branch and draft pull request.
 
@@ -272,7 +301,8 @@ pnpm typecheck
 pnpm check
 ```
 
-Expected: both commands exit 0. Existing documented warnings may remain, but no errors or new violations are allowed.
+Expected: both commands exit 0. Existing documented warnings may remain, but no
+errors or new violations are allowed.
 
 - [ ] **Step 4: Inspect the final diff**
 
@@ -284,7 +314,8 @@ git diff --check
 git diff origin/main...HEAD
 ```
 
-Expected: only the approved Ratchet fix, regression tests, spec, and plan are present; `git diff --check` emits no output.
+Expected: only the approved Ratchet fix, regression tests, spec, and plan are
+present; `git diff --check` emits no output.
 
 - [ ] **Step 5: Commit any formatter-only changes**
 
@@ -297,7 +328,8 @@ git commit -m "Format Ratchet timeout fix"
 
 If it changed nothing, skip this commit.
 
-- [ ] **Step 6: Rebase or merge the latest `origin/main`, then re-run focused tests**
+- [ ] **Step 6: Rebase or merge the latest `origin/main`, then re-run focused
+      tests**
 
 Fetch and integrate the latest main branch using a non-destructive merge:
 
@@ -316,4 +348,6 @@ Expected: integration succeeds and all focused tests pass.
 
 - [ ] **Step 7: Push and open a draft PR**
 
-Push the current feature branch, then open a draft PR targeting `main` with a concise summary of the timeout root cause, the lifecycle-boundary fix, and verification commands run.
+Push the current feature branch, then open a draft PR targeting `main` with a
+concise summary of the timeout root cause, the lifecycle-boundary fix, and
+verification commands run.

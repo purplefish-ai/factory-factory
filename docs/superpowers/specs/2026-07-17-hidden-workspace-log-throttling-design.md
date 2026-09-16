@@ -16,11 +16,11 @@ terminal output keep their existing implementations.
 ## Design Options
 
 1. **Hook-local bounded buffer with visibility-aware presentation (selected).**
-   Each `useLogStream` instance owns a non-React rolling chunk buffer and accepts
-   whether its panel is visible. Transport callbacks always append to the
-   buffer, while React output updates are scheduled only for the visible stream.
-   This is the smallest boundary that preserves the existing shared connection
-   and status API.
+   Each `useLogStream` instance owns a non-React rolling chunk buffer and
+   accepts whether its panel is visible. Transport callbacks always append to
+   the buffer, while React output updates are scheduled only for the visible
+   stream. This is the smallest boundary that preserves the existing shared
+   connection and status API.
 2. **Disconnect hidden streams.** This would eliminate hidden traffic but would
    weaken connection indicators, force reconnects on tab changes, and depend on
    replay timing to avoid gaps.

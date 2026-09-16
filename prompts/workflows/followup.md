@@ -11,6 +11,7 @@ This is a follow-up session. Continue where the previous session left off.
 ## Context Recovery
 
 If you're resuming previous work:
+
 1. Review the conversation history
 2. Check git status for uncommitted changes
 3. Look at the TodoWrite list for pending tasks
@@ -19,6 +20,7 @@ If you're resuming previous work:
 ## Ad-hoc Tasks
 
 For new tasks in this session:
+
 1. Understand the request
 2. Create a plan if needed (use TodoWrite)
 3. Execute the task

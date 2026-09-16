@@ -72,7 +72,9 @@ completed: 2026-02-10
 
 # Phase 2 Plan 3: Session Store Migration Summary
 
-**All 13 session-store files (types, queue, transcript, runtime machine, replay builder, publisher, hydrator, process-exit, registry) moved to domains/session/store/ with intra-domain imports**
+**All 13 session-store files (types, queue, transcript, runtime machine, replay
+builder, publisher, hydrator, process-exit, registry) moved to
+domains/session/store/ with intra-domain imports**
 
 ## Performance
 
@@ -83,52 +85,85 @@ completed: 2026-02-10
 - **Files modified:** 24
 
 ## Accomplishments
-- Migrated all 13 session-store files (9 source + 4 test) to `src/backend/domains/session/store/`
-- Updated `session-domain.service.ts` to use relative `./store/` imports (intra-domain)
-- Created 9 re-export shims at old `services/session-store/` paths for backward compatibility
-- Updated external imports: `../constants` -> `@/backend/services/constants`, `@/backend/claude` -> `@/shared/claude`, `../chat-connection.service` -> `@/backend/services/chat-connection.service`
+
+- Migrated all 13 session-store files (9 source + 4 test) to
+  `src/backend/domains/session/store/`
+- Updated `session-domain.service.ts` to use relative `./store/` imports
+  (intra-domain)
+- Created 9 re-export shims at old `services/session-store/` paths for backward
+  compatibility
+- Updated external imports: `../constants` -> `@/backend/services/constants`,
+  `@/backend/claude` -> `@/shared/claude`, `../chat-connection.service` ->
+  `@/backend/services/chat-connection.service`
 - All 1529 tests pass, full typecheck clean
 
 ## Task Commits
 
 Each task was committed atomically:
 
-1. **Task 1: Move leaf files (types, queue, transcript, runtime-machine, replay-builder)** - `f73c80c` (feat)
-2. **Task 2: Move hydrator, publisher, process-exit, store-registry** - `d88f08a` (feat)
+1. **Task 1: Move leaf files (types, queue, transcript, runtime-machine,
+   replay-builder)** - `f73c80c` (feat)
+2. **Task 2: Move hydrator, publisher, process-exit, store-registry** -
+   `d88f08a` (feat)
 
 ## Files Created/Modified
-- `src/backend/domains/session/store/session-store.types.ts` - Session store type definitions
-- `src/backend/domains/session/store/session-queue.ts` - Queue/pending-request mutation helpers
-- `src/backend/domains/session/store/session-transcript.ts` - Transcript projection, history mapping, event append
-- `src/backend/domains/session/store/session-runtime-machine.ts` - Runtime transition semantics
-- `src/backend/domains/session/store/session-replay-builder.ts` - Snapshot/replay event builders
-- `src/backend/domains/session/store/session-publisher.ts` - WebSocket transport boundary
-- `src/backend/domains/session/store/session-hydrator.ts` - JSONL history hydration
-- `src/backend/domains/session/store/session-process-exit.ts` - Process exit reset/rehydrate policy
-- `src/backend/domains/session/store/session-store-registry.ts` - In-memory store lifecycle
-- `src/backend/domains/session/session-domain.service.ts` - Updated to use relative store/ imports
+
+- `src/backend/domains/session/store/session-store.types.ts` - Session store
+  type definitions
+- `src/backend/domains/session/store/session-queue.ts` - Queue/pending-request
+  mutation helpers
+- `src/backend/domains/session/store/session-transcript.ts` - Transcript
+  projection, history mapping, event append
+- `src/backend/domains/session/store/session-runtime-machine.ts` - Runtime
+  transition semantics
+- `src/backend/domains/session/store/session-replay-builder.ts` -
+  Snapshot/replay event builders
+- `src/backend/domains/session/store/session-publisher.ts` - WebSocket transport
+  boundary
+- `src/backend/domains/session/store/session-hydrator.ts` - JSONL history
+  hydration
+- `src/backend/domains/session/store/session-process-exit.ts` - Process exit
+  reset/rehydrate policy
+- `src/backend/domains/session/store/session-store-registry.ts` - In-memory
+  store lifecycle
+- `src/backend/domains/session/session-domain.service.ts` - Updated to use
+  relative store/ imports
 - `knip.json` - Added services/session-store/ to ignore for shim files
 
 ## Decisions Made
-- **HistoryMessage import source:** Used `@/shared/claude` directly rather than routing through `@/backend/domains/session/claude` barrel, since the type originates in shared and the claude barrel doesn't re-export it.
-- **Intra-domain imports:** `session-domain.service.ts` now uses `./store/` relative imports rather than `@/backend/services/session-store/` absolute paths, establishing the pattern for domain cohesion.
-- **Knip ignore for shims:** Added `src/backend/services/session-store/*.ts` to knip ignore since these re-export shims have no direct importers after the domain service switched to relative imports.
+
+- **HistoryMessage import source:** Used `@/shared/claude` directly rather than
+  routing through `@/backend/domains/session/claude` barrel, since the type
+  originates in shared and the claude barrel doesn't re-export it.
+- **Intra-domain imports:** `session-domain.service.ts` now uses `./store/`
+  relative imports rather than `@/backend/services/session-store/` absolute
+  paths, establishing the pattern for domain cohesion.
+- **Knip ignore for shims:** Added `src/backend/services/session-store/*.ts` to
+  knip ignore since these re-export shims have no direct importers after the
+  domain service switched to relative imports.
 
 ## Deviations from Plan
 
 ### Auto-fixed Issues
 
 **1. [Rule 3 - Blocking] Cleaned up orphaned files from incomplete Plan 02-02**
+
 - **Found during:** Task 1 (pre-commit hook failure)
-- **Issue:** Untracked files (`monitoring.ts`, `permissions.ts`, `process.ts`, `permission-coordinator.ts`, `session.ts`, `process.test.ts`, `permissions.test.ts`) in `domains/session/claude/` from a prior incomplete plan execution caused knip "unused files" errors
-- **Fix:** Removed all orphaned untracked files; reverted uncommitted registry.ts modifications
+- **Issue:** Untracked files (`monitoring.ts`, `permissions.ts`, `process.ts`,
+  `permission-coordinator.ts`, `session.ts`, `process.test.ts`,
+  `permissions.test.ts`) in `domains/session/claude/` from a prior incomplete
+  plan execution caused knip "unused files" errors
+- **Fix:** Removed all orphaned untracked files; reverted uncommitted
+  registry.ts modifications
 - **Files modified:** 7 files removed (all untracked)
 - **Verification:** `pnpm typecheck` passes, knip passes
 - **Committed in:** Not committed separately (cleanup before Task 1 commit)
 
 **2. [Rule 3 - Blocking] Added knip ignore for session-store shim directory**
+
 - **Found during:** Task 2 (pre-commit hook failure)
-- **Issue:** Knip reported session-store shim files as "unused" since session-domain.service.ts switched to direct intra-domain imports
+- **Issue:** Knip reported session-store shim files as "unused" since
+  session-domain.service.ts switched to direct intra-domain imports
 - **Fix:** Added `src/backend/services/session-store/*.ts` to knip ignore list
 - **Files modified:** `knip.json`
 - **Verification:** knip passes
@@ -136,25 +171,32 @@ Each task was committed atomically:
 
 ---
 
-**Total deviations:** 2 auto-fixed (both Rule 3 - blocking)
-**Impact on plan:** Both fixes necessary to pass pre-commit hooks. No scope creep.
+**Total deviations:** 2 auto-fixed (both Rule 3 - blocking) **Impact on plan:**
+Both fixes necessary to pass pre-commit hooks. No scope creep.
 
 ## Issues Encountered
+
 None beyond the deviation-handled items above.
 
 ## User Setup Required
+
 None - no external service configuration required.
 
 ## Next Phase Readiness
+
 - Session store fully migrated to domain; ready for Plans 04-06
-- The `services/session-store/` directory now contains only re-export shims + README
+- The `services/session-store/` directory now contains only re-export shims +
+  README
 - `session-domain.service.ts` is the single consumer and uses intra-domain paths
-- `session-publisher.ts` still imports `chatConnectionService` from `@/backend/services/chat-connection.service` -- will be updated when chat-connection moves in Plan 05
+- `session-publisher.ts` still imports `chatConnectionService` from
+  `@/backend/services/chat-connection.service` -- will be updated when
+  chat-connection moves in Plan 05
 
 ## Self-Check: PASSED
 
-All 13 domain files verified present. All 9 shim files verified present. Both task commits (f73c80c, d88f08a) verified in git log.
+All 13 domain files verified present. All 9 shim files verified present. Both
+task commits (f73c80c, d88f08a) verified in git log.
 
 ---
-*Phase: 02-session-domain-consolidation*
-*Completed: 2026-02-10*
+
+_Phase: 02-session-domain-consolidation_ _Completed: 2026-02-10_

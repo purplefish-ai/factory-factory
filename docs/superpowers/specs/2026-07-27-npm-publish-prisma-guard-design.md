@@ -7,21 +7,22 @@ its inline Prisma version check requires `prisma` to appear in both
 `dependencies` and `devDependencies`.
 
 Commit `2684a415` removed the redundant `devDependencies.prisma` entry while
-retaining `prisma` as an exact runtime dependency. That placement is intentional:
-the published package runs Prisma commands during installation and database
-migration. The workflow guard was not updated with the package manifest.
+retaining `prisma` as an exact runtime dependency. That placement is
+intentional: the published package runs Prisma commands during installation and
+database migration. The workflow guard was not updated with the package
+manifest.
 
 ## Considered Approaches
 
-1. Restore `devDependencies.prisma`.
-   This would satisfy the stale check but duplicate a runtime dependency and
-   preserve an unnecessary manifest invariant.
-2. Edit the inline workflow expression.
-   This is the smallest text change, but leaves a long, untested JavaScript
-   program embedded in YAML and makes future drift easy to miss.
-3. Extract and test the manifest check.
-   This keeps the intended invariant explicit and gives both local and CI users
-   the same executable validation. This is the selected approach.
+1. Restore `devDependencies.prisma`. This would satisfy the stale check but
+   duplicate a runtime dependency and preserve an unnecessary manifest
+   invariant.
+2. Edit the inline workflow expression. This is the smallest text change, but
+   leaves a long, untested JavaScript program embedded in YAML and makes future
+   drift easy to miss.
+3. Extract and test the manifest check. This keeps the intended invariant
+   explicit and gives both local and CI users the same executable validation.
+   This is the selected approach.
 
 ## Design
 

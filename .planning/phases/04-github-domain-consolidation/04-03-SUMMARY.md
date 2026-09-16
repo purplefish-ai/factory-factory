@@ -41,7 +41,8 @@ completed: 2026-02-10
 
 # Phase 4 Plan 03: GitHub Domain Barrel & Smoke Test Summary
 
-**Selective barrel exports for all 4 GitHub domain modules with smoke test verifying no circular dependency breakage**
+**Selective barrel exports for all 4 GitHub domain modules with smoke test
+verifying no circular dependency breakage**
 
 ## Performance
 
@@ -52,39 +53,55 @@ completed: 2026-02-10
 - **Files modified:** 2
 
 ## Accomplishments
-- Populated GitHub domain barrel with 4 runtime values and 10 types from 4 source modules
-- Created smoke test verifying all runtime exports are defined (catches circular deps)
-- Phase 4 requirements fully satisfied: GH-01 (domain owns GitHub CLI), GH-02 (PR snapshot + review monitoring consolidated), GH-03 (co-located unit tests covering public API)
+
+- Populated GitHub domain barrel with 4 runtime values and 10 types from 4
+  source modules
+- Created smoke test verifying all runtime exports are defined (catches circular
+  deps)
+- Phase 4 requirements fully satisfied: GH-01 (domain owns GitHub CLI), GH-02
+  (PR snapshot + review monitoring consolidated), GH-03 (co-located unit tests
+  covering public API)
 - Full test suite passes: 1741 tests across 95 files
 
 ## Task Commits
 
 Each task was committed atomically:
 
-1. **Task 1: Populate GitHub domain barrel with selective named exports** - `cb905da` (feat)
-2. **Task 2: Create GitHub domain smoke test and run full verification** - `97ee579` (test)
+1. **Task 1: Populate GitHub domain barrel with selective named exports** -
+   `cb905da` (feat)
+2. **Task 2: Create GitHub domain smoke test and run full verification** -
+   `97ee579` (test)
 
 ## Files Created/Modified
-- `src/backend/domains/github/index.ts` - GitHub domain barrel with selective named re-exports from all 4 modules
-- `src/backend/domains/github/github-domain-exports.test.ts` - Smoke test verifying 4 runtime exports are defined
+
+- `src/backend/domains/github/index.ts` - GitHub domain barrel with selective
+  named re-exports from all 4 modules
+- `src/backend/domains/github/github-domain-exports.test.ts` - Smoke test
+  verifying 4 runtime exports are defined
 
 ## Decisions Made
-- Biome auto-sorted barrel exports alphabetically by import path (expected per 03-05 convention); section comments remain as landmarks
+
+- Biome auto-sorted barrel exports alphabetically by import path (expected per
+  03-05 convention); section comments remain as landmarks
 
 ## Deviations from Plan
 
 None - plan executed exactly as written.
 
 ## Issues Encountered
+
 None
 
 ## User Setup Required
+
 None - no external service configuration required.
 
 ## Next Phase Readiness
+
 - Phase 4 (GitHub Domain Consolidation) is complete
 - All 3 plans executed: file migration (01, 02), barrel + smoke test (03)
-- 5 files in src/backend/domains/github/: github-cli, pr-snapshot, pr-review-fixer, pr-review-monitor, index
+- 5 files in src/backend/domains/github/: github-cli, pr-snapshot,
+  pr-review-fixer, pr-review-monitor, index
 - Re-export shims at all old services/ paths maintain backward compatibility
 - Ready for Phase 5 (Ratchet Domain Consolidation)
 
@@ -93,5 +110,5 @@ None - no external service configuration required.
 All files found. All commits verified.
 
 ---
-*Phase: 04-github-domain-consolidation*
-*Completed: 2026-02-10*
+
+_Phase: 04-github-domain-consolidation_ _Completed: 2026-02-10_

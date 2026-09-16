@@ -2,19 +2,22 @@
 
 Status: superseded by PR #2023
 
-**Risk**: Low
-**Depends on**: Stage 5 (all domain extraction complete)
+**Risk**: Low **Depends on**: Stage 5 (all domain extraction complete)
 **Estimated scope**: ~10 new/modified files
 
 ## Goal
 
-Clean up the core public API surface, add consumer-facing integration tests, and prepare `@factory-factory/core` for npm publication. This is the final stage -- after this, the library is usable by external consumers (including the future FF Cloud product).
+Clean up the core public API surface, add consumer-facing integration tests, and
+prepare `@factory-factory/core` for npm publication. This is the final stage --
+after this, the library is usable by external consumers (including the future FF
+Cloud product).
 
 ## What Gets Done
 
 ### Part A: Clean Up Public API
 
-Review and finalize `packages/core/src/index.ts`. The public API should be intentional -- every export is a deliberate part of the library contract.
+Review and finalize `packages/core/src/index.ts`. The public API should be
+intentional -- every export is a deliberate part of the library contract.
 
 **Exports organized by category:**
 
@@ -97,6 +100,7 @@ export { createMockRatchetSessionBridge } from './testing/mock-bridges.js';
 ```
 
 **Rules for public API:**
+
 - Every exported symbol has JSDoc documentation
 - No `any` types in public signatures
 - No internal implementation details exposed
@@ -105,7 +109,8 @@ export { createMockRatchetSessionBridge } from './testing/mock-bridges.js';
 
 ### Part B: Integration Tests
 
-Create consumer-facing integration tests that exercise the public API as a black box.
+Create consumer-facing integration tests that exercise the public API as a black
+box.
 
 ```typescript
 // packages/core/src/__tests__/integration/ratchet-workflow.test.ts
@@ -205,11 +210,13 @@ Update `.dependency-cruiser.cjs` to handle the new package boundary:
 
 - Allow desktop code to import from `@factory-factory/core`
 - Ensure core does not import from desktop (`@/*`, `@prisma-gen/*`)
-- Update `no-cross-domain-imports` rule to account for domains that are now re-export layers
+- Update `no-cross-domain-imports` rule to account for domains that are now
+  re-export layers
 
 ### Part E: README for Core Package
 
 Create `packages/core/README.md` with:
+
 - Package description and purpose
 - Installation instructions
 - Quick start example (create a service, provide storage, run)
@@ -240,7 +247,8 @@ packages/core/
 
 ## Tests to Add
 
-- 3 integration test suites (ratchet workflow, session lifecycle, workspace state)
+- 3 integration test suites (ratchet workflow, session lifecycle, workspace
+  state)
 - Public API smoke test: import every exported symbol and verify it's defined
 
 ## Verification Checklist
@@ -273,12 +281,12 @@ node -e "const core = require('@factory-factory/core'); console.log(Object.keys(
 
 ## Risks and Mitigations
 
-| Risk | Likelihood | Mitigation |
-|------|-----------|------------|
-| Accidentally exposing internal types | Medium | Explicit export list in index.ts; review each export |
-| Missing dependency in core package.json | Medium | Integration test in scratch project catches this |
-| Large tarball size | Low | `"files"` field limits to dist/ only |
-| Breaking change in public API | N/A | This is v0.1.0; semver allows breaking changes before 1.0 |
+| Risk                                    | Likelihood | Mitigation                                                |
+| --------------------------------------- | ---------- | --------------------------------------------------------- |
+| Accidentally exposing internal types    | Medium     | Explicit export list in index.ts; review each export      |
+| Missing dependency in core package.json | Medium     | Integration test in scratch project catches this          |
+| Large tarball size                      | Low        | `"files"` field limits to dist/ only                      |
+| Breaking change in public API           | N/A        | This is v0.1.0; semver allows breaking changes before 1.0 |
 
 ## npm Publishing Process
 
@@ -289,6 +297,7 @@ node -e "const core = require('@factory-factory/core'); console.log(Object.keys(
 5. Verify: `npm info @factory-factory/core`
 
 For subsequent releases, use semantic versioning:
+
 - Patch (0.1.x): Bug fixes, no API changes
 - Minor (0.x.0): New features, backward compatible
 - Major (x.0.0): Breaking API changes
@@ -296,8 +305,10 @@ For subsequent releases, use semantic versioning:
 ## What Success Looks Like
 
 After Stage 6:
+
 - `@factory-factory/core` is published on npm
-- Desktop app works identically (uses `workspace:*` in dev, published version in CI)
+- Desktop app works identically (uses `workspace:*` in dev, published version in
+  CI)
 - A cloud consumer can `npm install @factory-factory/core` and:
   - Implement `WorkspaceStorage` and `SessionStorage` with their own database
   - Provide a `CreateLogger` function for their logging framework

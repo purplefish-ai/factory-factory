@@ -1,31 +1,42 @@
 # Design Doc: Persistent Insights in Auto-Iteration Mode
 
-Status: implemented
-**Date:** 2026-04-03
+Status: implemented **Date:** 2026-04-03
 
 ---
 
 ## Problem Statement
 
-Auto-iteration mode runs an agent in a closed loop to improve a codebase against a target metric. Over many iterations the agent accumulates valuable knowledge — deferred approaches that were too risky to try mid-run, hypotheses about what might unlock larger gains, environmental observations (e.g. "the test suite is non-deterministic under condition X") — but has no first-class place to record it prospectively.
+Auto-iteration mode runs an agent in a closed loop to improve a codebase against
+a target metric. Over many iterations the agent accumulates valuable knowledge —
+deferred approaches that were too risky to try mid-run, hypotheses about what
+might unlock larger gains, environmental observations (e.g. "the test suite is
+non-deterministic under condition X") — but has no first-class place to record
+it prospectively.
 
-The **logbook** (`auto-iteration-logbook.json`) is a retrospective record of what was *attempted* (accepted, rejected, crashed). It is useful for session recycles within a run, but:
+The **logbook** (`auto-iteration-logbook.json`) is a retrospective record of
+what was _attempted_ (accepted, rejected, crashed). It is useful for session
+recycles within a run, but:
 
 - It is **overwritten when a new run starts**, so nothing carries forward
 - It records outcomes, not forward-looking ideas
 - Humans cannot easily contribute to it
 
-As a result, every new run starts blind. The agent repeats dead ends it already discovered, and humans have no channel to seed ideas into the loop.
+As a result, every new run starts blind. The agent repeats dead ends it already
+discovered, and humans have no channel to seed ideas into the loop.
 
 ---
 
 ## Goals
 
-- Give the agent a place to record **prospective insights** during a run: deferred approaches, hypotheses, environmental observations — anything that might help attain the target
+- Give the agent a place to record **prospective insights** during a run:
+  deferred approaches, hypotheses, environmental observations — anything that
+  might help attain the target
 - Make those insights **accessible to the same workspace's subsequent runs**
 - Allow **humans to read and contribute** insights (bidirectional)
-- Keep the mechanism **lightweight** — a plain Markdown file the agent writes to directly
-- Allow insights to be **marked resolved or obsolete** so stale content does not accumulate
+- Keep the mechanism **lightweight** — a plain Markdown file the agent writes to
+  directly
+- Allow insights to be **marked resolved or obsolete** so stale content does not
+  accumulate
 
 ### Non-Goals (v1)
 
@@ -37,7 +48,9 @@ As a result, every new run starts blind. The agent repeats dead ends it already 
 
 ## Solution: `.factory-factory/auto-iteration-insights.md`
 
-Introduce a single Markdown file that persists across runs within a workspace. The agent may freely read and write it during any phase. Humans may edit it via a text editor in the UI.
+Introduce a single Markdown file that persists across runs within a workspace.
+The agent may freely read and write it during any phase. Humans may edit it via
+a text editor in the UI.
 
 ### File location
 
@@ -45,11 +58,13 @@ Introduce a single Markdown file that persists across runs within a workspace. T
 {worktreePath}/.factory-factory/auto-iteration-insights.md
 ```
 
-Same directory as the logbook. Excluded from git commits (via `unstageInsights()` in `git-ops.ts`, mirroring how the logbook is handled).
+Same directory as the logbook. Excluded from git commits (via
+`unstageInsights()` in `git-ops.ts`, mirroring how the logbook is handled).
 
 ### Format convention
 
-Freeform Markdown. The agent and humans write naturally. A light tagging convention is used to signal insight status:
+Freeform Markdown. The agent and humans write naturally. A light tagging
+convention is used to signal insight status:
 
 ```markdown
 # Auto-Iteration Insights
@@ -74,9 +89,11 @@ Freeform Markdown. The agent and humans write naturally. A light tagging convent
 ```
 
 **Status tags:**
+
 - `[open]` — active, inject into future runs
 - `[resolved]` — addressed; keep for history but exclude from injection
-- `[obsolete]` — no longer relevant; agent or human may delete or keep for reference
+- `[obsolete]` — no longer relevant; agent or human may delete or keep for
+  reference
 
 Untagged entries are treated as `[open]` by default.
 
@@ -86,7 +103,8 @@ Untagged entries are treated as `[open]` by default.
 
 ### By the agent
 
-The agent is instructed in its **system prompt** that it may write to the insights file at any time:
+The agent is instructed in its **system prompt** that it may write to the
+insights file at any time:
 
 ```
 You have access to a persistent insights file at .factory-factory/auto-iteration-insights.md.
@@ -96,11 +114,14 @@ preserving — you do not need to wait for a specific phase. You may also mark o
 [resolved] or [obsolete], and trim the file to remove clutter when appropriate.
 ```
 
-The agent writes using its normal file tools — no special structured output format required. It can append a new run section, add bullet points, update tags, or prune stale entries as it sees fit.
+The agent writes using its normal file tools — no special structured output
+format required. It can append a new run section, add bullet points, update
+tags, or prune stale entries as it sees fit.
 
 ### By humans
 
-The auto-iteration panel in the UI exposes a **text editor tab** showing the raw Markdown of the insights file. Humans can:
+The auto-iteration panel in the UI exposes a **text editor tab** showing the raw
+Markdown of the insights file. Humans can:
 
 - Add ideas before starting a run ("try approach X")
 - Mark entries resolved after reviewing results
@@ -114,7 +135,9 @@ Changes are saved directly to the file in the worktree.
 
 ### On run start (system prompt)
 
-When a new auto-iteration run begins, the full contents of the insights file (filtered to `[open]` entries, capped at a token budget — suggested ~2000 tokens) are injected into the **system prompt**:
+When a new auto-iteration run begins, the full contents of the insights file
+(filtered to `[open]` entries, capped at a token budget — suggested ~2000
+tokens) are injected into the **system prompt**:
 
 ```
 INSIGHTS FROM PREVIOUS RUNS (from auto-iteration-insights.md):
@@ -124,11 +147,14 @@ Use these as starting points. They are not exhaustive — explore freely, but do
 approaches already recorded as obsolete.
 ```
 
-If the file does not exist or contains no `[open]` entries, this section is omitted.
+If the file does not exist or contains no `[open]` entries, this section is
+omitted.
 
 ### On session recycle (handoff prompt)
 
-The same filtered insights are included in the **session recycle handoff prompt**, alongside the logbook summary. This ensures knowledge is carried forward even within long runs that cross session boundaries.
+The same filtered insights are included in the **session recycle handoff
+prompt**, alongside the logbook summary. This ensures knowledge is carried
+forward even within long runs that cross session boundaries.
 
 ---
 
@@ -140,7 +166,9 @@ The same filtered insights are included in the **session recycle handoff prompt*
         ──→  (deleted)    (agent trims the file; entry gone)
 ```
 
-The agent is encouraged to trim the file periodically — e.g., during session recycles — to keep the injection footprint manageable. There is no enforced size limit; the agent exercises judgment.
+The agent is encouraged to trim the file periodically — e.g., during session
+recycles — to keep the injection footprint manageable. There is no enforced size
+limit; the agent exercises judgment.
 
 ---
 
@@ -148,7 +176,8 @@ The agent is encouraged to trim the file periodically — e.g., during session r
 
 ### 1. File service (`insights.service.ts`)
 
-Add alongside `logbook.service.ts` in `src/backend/services/auto-iteration/service/`:
+Add alongside `logbook.service.ts` in
+`src/backend/services/auto-iteration/service/`:
 
 ```typescript
 export const insightsService = {
@@ -159,15 +188,18 @@ export const insightsService = {
 };
 ```
 
-The `write` method is used by the tRPC `saveInsights` endpoint (UI editor tab). The agent also writes directly via file tools.
+The `write` method is used by the tRPC `saveInsights` endpoint (UI editor tab).
+The agent also writes directly via file tools.
 
 ### 2. Git exclusion (`git-ops.ts`)
 
-Add `unstageInsights()` mirroring `unstageLogbook()`. Call it in `commitAll()` before every commit.
+Add `unstageInsights()` mirroring `unstageLogbook()`. Call it in `commitAll()`
+before every commit.
 
 ### 3. System prompt (`prompts.ts`)
 
-Update `buildSystemPrompt()` to accept optional `insightsContent: string | null` and inject the insights block.
+Update `buildSystemPrompt()` to accept optional `insightsContent: string | null`
+and inject the insights block.
 
 ### 4. Handoff prompt (`prompts.ts`)
 
@@ -175,11 +207,14 @@ Update `buildHandoffPrompt()` similarly.
 
 ### 5. Run start (`auto-iteration.service.ts`)
 
-On `start()`, call `insightsService.initialize()` (no-op if file exists), read open entries, pass to prompt builders.
+On `start()`, call `insightsService.initialize()` (no-op if file exists), read
+open entries, pass to prompt builders.
 
 ### 6. UI: insights editor tab
 
-In `auto-iteration-panel.tsx`, add a tab alongside the logbook viewer that renders the raw Markdown in an editable textarea, with a save button that writes to the file via a new tRPC endpoint:
+In `auto-iteration-panel.tsx`, add a tab alongside the logbook viewer that
+renders the raw Markdown in an editable textarea, with a save button that writes
+to the file via a new tRPC endpoint:
 
 ```typescript
 // auto-iteration.trpc.ts
@@ -191,6 +226,13 @@ saveInsights(workspaceId, content: string): void
 
 ## What This Doesn't Solve
 
-- **Bidirectional agent ↔ agent across workspaces** — insights are workspace-scoped. A separate "workspace notes" or project-level knowledge base would be needed for that.
-- **Structured querying** — the file is freeform. If insight volume grows large enough to need search, a future v2 could introduce structured JSON with a Markdown view layer.
-- **Automatic insight generation** — the agent writes insights opportunistically. A future "reflection phase" (a dedicated prompt every N iterations) could actively synthesize insights rather than relying on the agent noticing something worth recording.
+- **Bidirectional agent ↔ agent across workspaces** — insights are
+  workspace-scoped. A separate "workspace notes" or project-level knowledge base
+  would be needed for that.
+- **Structured querying** — the file is freeform. If insight volume grows large
+  enough to need search, a future v2 could introduce structured JSON with a
+  Markdown view layer.
+- **Automatic insight generation** — the agent writes insights
+  opportunistically. A future "reflection phase" (a dedicated prompt every N
+  iterations) could actively synthesize insights rather than relying on the
+  agent noticing something worth recording.

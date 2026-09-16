@@ -4,11 +4,13 @@ Status: implemented
 
 ## Goal
 
-Simplify ratcheting language and controls so users can understand and act quickly:
+Simplify ratcheting language and controls so users can understand and act
+quickly:
 
 - One clear per-workspace control (hammer button).
 - Consistent visuals in workspace header, sidebar, and Kanban.
-- Global setting treated as a default for new GitHub-issue workspaces (not a hard gate).
+- Global setting treated as a default for new GitHub-issue workspaces (not a
+  hard gate).
 - Remove ambiguous glow/border effects that do not communicate clear state.
 
 ## Product Decisions (Confirmed)
@@ -18,17 +20,24 @@ Simplify ratcheting language and controls so users can understand and act quickl
    - On + idle: active hammer, dashed border visible but static.
    - On + processing: active hammer, dashed border with crawling-ants animation.
 2. Default behavior scope:
-   - Apply ratchet default only when creating a workspace from GitHub issues (for now).
+   - Apply ratchet default only when creating a workspace from GitHub issues
+     (for now).
 
 ## Current-State Findings
 
-- Global ratchet is currently a hard backend gate (`ratchet.service.ts` exits early if disabled).
+- Global ratchet is currently a hard backend gate (`ratchet.service.ts` exits
+  early if disabled).
 - Workspace header ratchet toggle is disabled when global setting is off.
-- Tooltip language currently says “Ratcheting is disabled globally...”, which conflicts with intended behavior.
-- Sidebar and Kanban ratchet indicators are currently separate and inconsistent (spinner-only treatment).
-- Some ratchet activity indicators do not check `workspace.ratchetEnabled`, so disabled workspaces can still look active.
-- `waiting-pulse` red glow is present and can be confused with ratchet signaling.
-- `ratchet-active` is referenced in UI but no longer appears to be backed by active CSS.
+- Tooltip language currently says “Ratcheting is disabled globally...”, which
+  conflicts with intended behavior.
+- Sidebar and Kanban ratchet indicators are currently separate and inconsistent
+  (spinner-only treatment).
+- Some ratchet activity indicators do not check `workspace.ratchetEnabled`, so
+  disabled workspaces can still look active.
+- `waiting-pulse` red glow is present and can be confused with ratchet
+  signaling.
+- `ratchet-active` is referenced in UI but no longer appears to be backed by
+  active CSS.
 
 ## Implementation Plan
 
@@ -36,7 +45,8 @@ Simplify ratcheting language and controls so users can understand and act quickl
 
 Create one reusable component for ratchet status + toggle behavior.
 
-- Add a shared component (example: `src/components/workspace/ratchet-toggle-button.tsx`) with:
+- Add a shared component (example:
+  `src/components/workspace/ratchet-toggle-button.tsx`) with:
   - `enabled` (workspace-level switch),
   - `isProcessing` (active state machine work),
   - `onToggle`,
@@ -55,7 +65,8 @@ Create one reusable component for ratchet status + toggle behavior.
 
 ## Phase 2: Behavioral Semantics (Global Default vs Hard Gate)
 
-Shift global semantics from “master enable” to “default for new GitHub issue workspaces”.
+Shift global semantics from “master enable” to “default for new GitHub issue
+workspaces”.
 
 - Backend ratchet loop:
   - Remove early return based on `userSettings.ratchetEnabled`.
@@ -65,7 +76,8 @@ Shift global semantics from “master enable” to “default for new GitHub iss
   - Keep always toggleable (no disable due to global setting).
   - Remove “disabled globally” UI copy.
 - Admin naming/copy:
-  - Rename “Enable Ratchet” to something like “Default ratcheting for new GitHub issue workspaces”.
+  - Rename “Enable Ratchet” to something like “Default ratcheting for new GitHub
+    issue workspaces”.
   - Clarify this does not disable workspace-level toggling.
 
 ## Phase 3: Creation Defaults (GitHub Issues Only)
@@ -85,27 +97,34 @@ Use the same control and same interpretation everywhere ratchet appears.
 - Workspace detail header:
   - Replace switch + wrench row with shared hammer control.
 - Sidebar item:
-  - Replace spinner-only ratchet indicator with shared control (or same visual token).
+  - Replace spinner-only ratchet indicator with shared control (or same visual
+    token).
 - Kanban card:
-  - Replace spinner-only ratchet indicator with shared control (or same visual token).
+  - Replace spinner-only ratchet indicator with shared control (or same visual
+    token).
 - Ensure processing logic is consistent:
   - `isProcessing = workspace.ratchetEnabled && ratchetState in [CI_RUNNING, CI_FAILED, REVIEW_PENDING]`
   - Exclude `IDLE`, `READY`, `MERGED`.
 
 ## Phase 5: Remove Ambiguous Glow Language/Effects
 
-- Remove `waiting-pulse` glow treatment from sidebar if retained only as visual noise.
+- Remove `waiting-pulse` glow treatment from sidebar if retained only as visual
+  noise.
 - Delete stale comments that mention ratchet border spacing when not true.
-- Remove any dead `ratchet-active` references or replace with new explicit class names tied to the shared component.
+- Remove any dead `ratchet-active` references or replace with new explicit class
+  names tied to the shared component.
 
 ## Phase 6: Migration and Safety
 
 Avoid surprising behavior for existing users.
 
 - Add migration/backfill strategy (pick one before implementation):
-  1. Conservative: if global ratchet is currently off, set all existing workspace `ratchetEnabled=false`.
-  2. Non-destructive: do not mutate existing workspaces; only apply new semantics forward.
-- Recommended: Conservative option to match prior user expectation that global off meant no automation.
+  1. Conservative: if global ratchet is currently off, set all existing
+     workspace `ratchetEnabled=false`.
+  2. Non-destructive: do not mutate existing workspaces; only apply new
+     semantics forward.
+- Recommended: Conservative option to match prior user expectation that global
+  off meant no automation.
 - Add release note describing semantic change.
 
 ## Phase 7: Testing and Validation
@@ -145,13 +164,17 @@ Avoid surprising behavior for existing users.
 - `src/backend/services/ratchet.service.ts`
 - `src/backend/trpc/workspace.trpc.ts`
 - `src/backend/resource_accessors/workspace.accessor.ts`
-- `docs/design/ratchet-visual-indicator.md` (follow-up update for historical accuracy)
+- `docs/design/ratchet-visual-indicator.md` (follow-up update for historical
+  accuracy)
 
 ## Risks
 
-- Semantic drift between “on” and “processing” if state checks differ by surface.
-- Unexpected automation for existing workspaces if migration/backfill is not handled.
-- UI clutter if hammer control is too prominent in dense sidebar rows (may require compact variant).
+- Semantic drift between “on” and “processing” if state checks differ by
+  surface.
+- Unexpected automation for existing workspaces if migration/backfill is not
+  handled.
+- UI clutter if hammer control is too prominent in dense sidebar rows (may
+  require compact variant).
 
 ## Rollout Order
 

@@ -21,11 +21,11 @@ paths:
   partial special-case normalization today.
 
 The installed `claude` command has no public model-list subcommand. The Claude
-Agent SDK initialization response used by `claude-agent-acp` is the authoritative
-catalog exposed by the runtime. It reports stable selection values, descriptions,
-effort capabilities, and resolved model information. For example, the current
-runtime reports entries whose descriptions identify `Opus 4.8 with 1M context`,
-`Fable 5`, `Sonnet 5`, and `Haiku 4.5`.
+Agent SDK initialization response used by `claude-agent-acp` is the
+authoritative catalog exposed by the runtime. It reports stable selection
+values, descriptions, effort capabilities, and resolved model information. For
+example, the current runtime reports entries whose descriptions identify
+`Opus 4.8 with 1M context`, `Fable 5`, `Sonnet 5`, and `Haiku 4.5`.
 
 The defect is therefore not that live sessions lack a catalog. It is that Admin
 never asks the Claude runtime for it and that the UI-facing normalization drops
@@ -80,9 +80,9 @@ The loader:
    when initialization, session creation, or catalog extraction fails.
 
 This is a control-plane query only. It does not send a prompt, consume model
-tokens, create a resumable Claude transcript, or enable tools.
-Managed Claude policy remains effective; only project and local workspace
-settings are excluded from the global Admin catalog.
+tokens, create a resumable Claude transcript, or enable tools. Managed Claude
+policy remains effective; only project and local workspace settings are excluded
+from the global Admin catalog.
 
 ## Label Normalization
 
@@ -118,9 +118,9 @@ labels and silently regress to unversioned labels after a model switch.
 
 ## Admin Provider Options
 
-`userSettings.getProviderOptions` starts Claude and Codex discovery concurrently.
-Each provider is converted independently into the existing `ProviderOptions`
-shape.
+`userSettings.getProviderOptions` starts Claude and Codex discovery
+concurrently. Each provider is converted independently into the existing
+`ProviderOptions` shape.
 
 On successful Claude discovery:
 
@@ -144,8 +144,8 @@ from the discovered or fallback list.
 Both selectors display the normalized concise labels while continuing to submit
 the original provider value:
 
-- Admin persists values such as `sonnet`, `opus[1m]`, or
-  `claude-fable-5[1m]` exactly as returned by Claude.
+- Admin persists values such as `sonnet`, `opus[1m]`, or `claude-fable-5[1m]`
+  exactly as returned by Claude.
 - In-chat selection sends the original ACP option value back through
   `setSessionConfigOption`.
 
@@ -166,15 +166,15 @@ Tests cover these boundaries and behaviors:
 
 - catalog extraction from a Claude ACP model config option;
 - guaranteed close/dispose behavior on success and failure;
-- concise formatting for default, versioned, context-window, missing-description,
-  and custom model entries;
+- concise formatting for default, versioned, context-window,
+  missing-description, and custom model entries;
 - successful Claude provider options with original values and normalized labels;
 - static Claude fallback with error metadata when discovery fails;
 - concurrent and independent Claude/Codex discovery outcomes;
 - normalization of initial session config options;
 - normalization of asynchronous mid-session config-option updates;
-- Admin rendering of versioned Claude options while preserving the current
-  saved value;
+- Admin rendering of versioned Claude options while preserving the current saved
+  value;
 - in-chat rendering and selection of versioned model labels.
 
 Focused Vitest suites run first during the red/green implementation cycles.

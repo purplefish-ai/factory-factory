@@ -1,30 +1,56 @@
 # ACP Runtime Manager Modularization Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace the 1,449-line `AcpRuntimeManager` implementation with a stable compatibility facade over one state-owning supervisor and focused ACP collaborators, while splitting its 2,705-line test and preserving observable behavior.
+**Goal:** Replace the 1,449-line `AcpRuntimeManager` implementation with a
+stable compatibility facade over one state-owning supervisor and focused ACP
+collaborators, while splitting its 2,705-line test and preserving observable
+behavior.
 
-**Architecture:** `AcpRuntimeSupervisor` becomes the sole owner of installed handles, pending creation, purpose/incarnation metadata, stop state, exit fences, and quiescence. A stateless client factory, prompt controller, runtime configuration controller, and sub-agent browser perform handle-scoped work; `AcpRuntimeManager` constructs the graph and preserves every existing caller-facing method.
+**Architecture:** `AcpRuntimeSupervisor` becomes the sole owner of installed
+handles, pending creation, purpose/incarnation metadata, stop state, exit
+fences, and quiescence. A stateless client factory, prompt controller, runtime
+configuration controller, and sub-agent browser perform handle-scoped work;
+`AcpRuntimeManager` constructs the graph and preserves every existing
+caller-facing method.
 
-**Tech Stack:** Node.js `^22.22 || >=24`, TypeScript 5.9, pnpm 10, Vitest 4, Agent Client Protocol SDK, Zod 4.
+**Tech Stack:** Node.js `^22.22 || >=24`, TypeScript 5.9, pnpm 10, Vitest 4,
+Agent Client Protocol SDK, Zod 4.
 
-**Spec:** `docs/superpowers/specs/2026-08-19-acp-runtime-manager-modularization-design.md`
+**Spec:**
+`docs/superpowers/specs/2026-08-19-acp-runtime-manager-modularization-design.md`
 
 ## Global Constraints
 
 - Use pnpm only; never use npm or yarn.
-- Preserve the existing `AcpRuntimeManager` constructor and public method signatures.
-- Preserve `PromptTimeoutError`, `AcpBrowseSessionUnavailableError`, and `AcpRuntimeCreatedCallback` import identity through re-exports from `acp-runtime-manager.ts`; preserve existing error names and messages.
-- Do not export internal collaborators from `service/acp/index.ts` or a session capsule barrel.
-- Only `AcpRuntimeSupervisor` may own or mutate cross-session runtime registries after Stage 5.
-- Stateless controllers may mutate protocol-local fields only on the supplied handle and may not retain handles.
-- Domain eligibility and durable reconciliation remain in session lifecycle coordinators.
-- Every new source and test file must stay below 1,000 physical lines and should target 600 lines or fewer.
-- Preserve ACP events, callback ordering, public errors, process signals, timeout values, and asserted logs.
-- Fix an exposed concurrency defect only when a documented invariant requires it; add a regression test and call it out separately.
-- Do not add `await import()`, new public barrel exports, direct `process.env` reads, or database access.
-- Run `pnpm check:file-length:update` after intentional reductions; never bless growth.
-- Each PR stage runs `pnpm check:fix`, `pnpm typecheck`, `pnpm test`, and `pnpm check`.
+- Preserve the existing `AcpRuntimeManager` constructor and public method
+  signatures.
+- Preserve `PromptTimeoutError`, `AcpBrowseSessionUnavailableError`, and
+  `AcpRuntimeCreatedCallback` import identity through re-exports from
+  `acp-runtime-manager.ts`; preserve existing error names and messages.
+- Do not export internal collaborators from `service/acp/index.ts` or a session
+  capsule barrel.
+- Only `AcpRuntimeSupervisor` may own or mutate cross-session runtime registries
+  after Stage 5.
+- Stateless controllers may mutate protocol-local fields only on the supplied
+  handle and may not retain handles.
+- Domain eligibility and durable reconciliation remain in session lifecycle
+  coordinators.
+- Every new source and test file must stay below 1,000 physical lines and should
+  target 600 lines or fewer.
+- Preserve ACP events, callback ordering, public errors, process signals,
+  timeout values, and asserted logs.
+- Fix an exposed concurrency defect only when a documented invariant requires
+  it; add a regression test and call it out separately.
+- Do not add `await import()`, new public barrel exports, direct `process.env`
+  reads, or database access.
+- Run `pnpm check:file-length:update` after intentional reductions; never bless
+  growth.
+- Each PR stage runs `pnpm check:fix`, `pnpm typecheck`, `pnpm test`, and
+  `pnpm check`.
 
 ---
 
@@ -32,14 +58,22 @@
 
 **Create:**
 
-- `src/backend/services/session/service/acp/acp-runtime-errors.ts`: runtime error classes and error metadata helpers.
-- `src/backend/services/session/service/acp/acp-subagent-browser.ts` and `.test.ts`: stateless sub-agent extension operations.
-- `src/backend/services/session/service/acp/acp-runtime-config-controller.ts` and `.test.ts`: live handle-scoped configuration.
-- `src/backend/services/session/service/acp/acp-prompt-controller.ts` and `.test.ts`: prompts, cancellation, deadlines, escalation.
-- `src/backend/services/session/service/acp/acp-runtime-contracts.ts`: internal metadata, context, signal, and process snapshot types.
-- `src/backend/services/session/service/acp/acp-client-factory.ts` and `.test.ts`: spawn and ACP negotiation.
-- `src/backend/services/session/service/acp/acp-runtime-supervisor.ts`: sole runtime state/lifecycle authority.
-- `src/backend/services/session/service/acp/acp-runtime-supervisor.creation.test.ts` and `.termination.test.ts`.
+- `src/backend/services/session/service/acp/acp-runtime-errors.ts`: runtime
+  error classes and error metadata helpers.
+- `src/backend/services/session/service/acp/acp-subagent-browser.ts` and
+  `.test.ts`: stateless sub-agent extension operations.
+- `src/backend/services/session/service/acp/acp-runtime-config-controller.ts`
+  and `.test.ts`: live handle-scoped configuration.
+- `src/backend/services/session/service/acp/acp-prompt-controller.ts` and
+  `.test.ts`: prompts, cancellation, deadlines, escalation.
+- `src/backend/services/session/service/acp/acp-runtime-contracts.ts`: internal
+  metadata, context, signal, and process snapshot types.
+- `src/backend/services/session/service/acp/acp-client-factory.ts` and
+  `.test.ts`: spawn and ACP negotiation.
+- `src/backend/services/session/service/acp/acp-runtime-supervisor.ts`: sole
+  runtime state/lifecycle authority.
+- `src/backend/services/session/service/acp/acp-runtime-supervisor.creation.test.ts`
+  and `.termination.test.ts`.
 - `src/backend/services/session/service/acp/acp-runtime-manager.test-harness.ts`.
 - `src/backend/services/session/service/acp/acp-runtime-manager.creation.test.ts`.
 - `src/backend/services/session/service/acp/acp-runtime-manager.browsing.test.ts`.
@@ -54,28 +88,34 @@
 - `src/backend/services/session/service/acp/acp-runtime-manager.test-helpers.ts`.
 - `src/backend/services/session/service/acp/acp-client-handler.test.ts`.
 - `src/backend/services/session/service/acp/acp-runtime-error-handler.ts`.
-- `src/backend/services/session/service/acp/index.ts` only to preserve existing exports if import locations move.
-- `src/backend/services/session/service/lifecycle/session-startup.coordinator.test.ts` for error-identity coverage.
-- `src/backend/services/session/service/acp/acp-session-negotiation.integration.test.ts` for public-manager integration coverage.
+- `src/backend/services/session/service/acp/index.ts` only to preserve existing
+  exports if import locations move.
+- `src/backend/services/session/service/lifecycle/session-startup.coordinator.test.ts`
+  for error-identity coverage.
+- `src/backend/services/session/service/acp/acp-session-negotiation.integration.test.ts`
+  for public-manager integration coverage.
 - `docs/architecture/agent-runtime.md`.
 - `scripts/file-length-baseline.json`.
 
 **Delete:**
 
-- `src/backend/services/session/service/acp/acp-runtime-manager.test.ts` after its tests are relocated.
+- `src/backend/services/session/service/acp/acp-runtime-manager.test.ts` after
+  its tests are relocated.
 
 ## Stage and PR Boundaries
 
-| PR stage | Tasks | Merge criterion |
-| --- | --- | --- |
-| 1. Characterization tests | 1 | Split suites pass; original test baseline entry removed |
-| 2. Sub-agent browsing | 2 | Manager browse API delegates without behavior change |
-| 3. Prompt and configuration | 3–4 | Both controllers are handle-scoped; manager contracts pass |
-| 4. Client factory | 5 | Manager retains installation but delegates spawn/negotiation |
-| 5. Runtime supervisor | 6–7 | Supervisor is the single state writer; concurrency matrix passes |
-| 6. Facade audit | 8 | Manager is below roughly 600 lines and leaves the baseline |
+| PR stage                    | Tasks | Merge criterion                                                  |
+| --------------------------- | ----- | ---------------------------------------------------------------- |
+| 1. Characterization tests   | 1     | Split suites pass; original test baseline entry removed          |
+| 2. Sub-agent browsing       | 2     | Manager browse API delegates without behavior change             |
+| 3. Prompt and configuration | 3–4   | Both controllers are handle-scoped; manager contracts pass       |
+| 4. Client factory           | 5     | Manager retains installation but delegates spawn/negotiation     |
+| 5. Runtime supervisor       | 6–7   | Supervisor is the single state writer; concurrency matrix passes |
+| 6. Facade audit             | 8     | Manager is below roughly 600 lines and leaves the baseline       |
 
-Do not start a later PR stage until the prior stage is merged or the execution branch is rebased onto the accepted stage. Tasks sharing a stage may be separate commits on that stage branch.
+Do not start a later PR stage until the prior stage is merged or the execution
+branch is rebased onto the accepted stage. Tasks sharing a stage may be separate
+commits on that stage branch.
 
 ---
 
@@ -84,14 +124,22 @@ Do not start a later PR stage until the prior stage is merged or the execution b
 **PR stage:** 1
 
 **Files:**
-- Create: the six `acp-runtime-manager.*.test.ts` files and `acp-runtime-manager.test-harness.ts` listed above.
-- Modify: `acp-runtime-manager.test-helpers.ts`, `acp-client-handler.test.ts`, `scripts/file-length-baseline.json`.
+
+- Create: the six `acp-runtime-manager.*.test.ts` files and
+  `acp-runtime-manager.test-harness.ts` listed above.
+- Modify: `acp-runtime-manager.test-helpers.ts`, `acp-client-handler.test.ts`,
+  `scripts/file-length-baseline.json`.
 - Delete: `acp-runtime-manager.test.ts`.
 
 **Interfaces:**
-- Produces: `MockChildProcess`, `createMockChildProcess()`, `createTestProcessHandle()`, `exitChildAfterSigterm()`, and `defaultHandlers()`.
-- Produces: one shared Vitest mock graph for spawn, SDK connection, streams, and logger calls.
-- Preserves: every public manager assertion, except three private probes replaced by public outcomes.
+
+- Produces: `MockChildProcess`, `createMockChildProcess()`,
+  `createTestProcessHandle()`, `exitChildAfterSigterm()`, and
+  `defaultHandlers()`.
+- Produces: one shared Vitest mock graph for spawn, SDK connection, streams, and
+  logger calls.
+- Preserves: every public manager assertion, except three private probes
+  replaced by public outcomes.
 
 - [ ] **Step 1: Record the green baseline**
 
@@ -167,11 +215,14 @@ export function createTestProcessHandle(params?: {
 }
 ```
 
-Move `defaultHandlers()` unchanged. Import `ChildProcess`, `EventEmitter`, `PassThrough`, `ClientSideConnection`, `vi`, `unsafeCoerce`, `AcpProcessHandle`, and `AcpRuntimeEventHandlers` explicitly.
+Move `defaultHandlers()` unchanged. Import `ChildProcess`, `EventEmitter`,
+`PassThrough`, `ClientSideConnection`, `vi`, `unsafeCoerce`, `AcpProcessHandle`,
+and `AcpRuntimeEventHandlers` explicitly.
 
 - [ ] **Step 3: Create the shared mock harness**
 
-Move the existing `vi.hoisted` mock state and `vi.mock` declarations into `acp-runtime-manager.test-harness.ts`. Export named mocks and:
+Move the existing `vi.hoisted` mock state and `vi.mock` declarations into
+`acp-runtime-manager.test-harness.ts`. Export named mocks and:
 
 ```ts
 export type ManagerTestHarness = {
@@ -184,7 +235,8 @@ export function createManagerTestHarness(): ManagerTestHarness {
 }
 ```
 
-The harness imports/re-exports the manager only after its mock declarations so every split suite uses the same mocked module graph.
+The harness imports/re-exports the manager only after its mock declarations so
+every split suite uses the same mocked module graph.
 
 - [ ] **Step 4: Relocate describe blocks exactly**
 
@@ -202,7 +254,8 @@ AcpClientHandler                          -> acp-client-handler.test.ts
 
 - [ ] **Step 5: Replace private probes with public outcomes**
 
-For creation-lock bookkeeping, prove duplicate stop identity and successful replacement:
+For creation-lock bookkeeping, prove duplicate stop identity and successful
+replacement:
 
 ```ts
 const firstStop = manager.stopClient('session-1');
@@ -214,7 +267,8 @@ await expect(manager.getOrCreateClient('session-1', defaultOptions(), defaultHan
 expect(mockSpawn).toHaveBeenCalledTimes(2);
 ```
 
-For stale prompt timeout replacement, remove the old handle through its real exit event:
+For stale prompt timeout replacement, remove the old handle through its real
+exit event:
 
 ```ts
 firstChild.exitCode = 1;
@@ -245,11 +299,13 @@ pnpm check:file-length
 git diff -- scripts/file-length-baseline.json
 ```
 
-Expected: the deleted test entry and legitimate downward counts are removed/lowered; no count increases.
+Expected: the deleted test entry and legitimate downward counts are
+removed/lowered; no count increases.
 
 - [ ] **Step 8: Verify and commit Stage 1**
 
-Run `pnpm check:fix`, `pnpm typecheck`, `pnpm test`, `pnpm check`, and `git diff --check` in order.
+Run `pnpm check:fix`, `pnpm typecheck`, `pnpm test`, `pnpm check`, and
+`git diff --check` in order.
 
 ```bash
 git add src/backend/services/session/service/acp scripts/file-length-baseline.json
@@ -263,13 +319,18 @@ git commit -m "Split ACP runtime manager tests"
 **PR stage:** 2
 
 **Files:**
-- Create: `acp-runtime-errors.ts`, `acp-subagent-browser.ts`, `acp-subagent-browser.test.ts`.
+
+- Create: `acp-runtime-errors.ts`, `acp-subagent-browser.ts`,
+  `acp-subagent-browser.test.ts`.
 - Modify: `acp-runtime-manager.ts`.
 - Test: manager browsing and startup coordinator suites.
 
 **Interfaces:**
-- Produces: `getAcpErrorLogDetails(error: unknown): AcpErrorLogDetails` and `isMethodNotFoundError(error: unknown): boolean`.
-- Produces: existing public error classes from `acp-runtime-errors.ts`, re-exported by the manager.
+
+- Produces: `getAcpErrorLogDetails(error: unknown): AcpErrorLogDetails` and
+  `isMethodNotFoundError(error: unknown): boolean`.
+- Produces: existing public error classes from `acp-runtime-errors.ts`,
+  re-exported by the manager.
 - Produces: handle-per-call browser methods.
 
 - [ ] **Step 1: Write direct browser tests**
@@ -289,7 +350,9 @@ await expect(browser.listSubagents(handle, { cursor: null, limit: 20 })).resolve
 expect(extMethod).toHaveBeenCalledWith(SUBAGENTS_LIST_METHOD, { sessionId: 'provider-session-1', cursor: null, limit: 20 });
 ```
 
-Also cover no handle, missing capability, invalid input, invalid response, provider codes `-32602`, `-32002`, `-32601`, `-32000`, protocol errors, unknown errors, and transcript success.
+Also cover no handle, missing capability, invalid input, invalid response,
+provider codes `-32602`, `-32002`, `-32601`, `-32000`, protocol errors, unknown
+errors, and transcript success.
 
 - [ ] **Step 2: Run the direct test and verify RED**
 
@@ -340,7 +403,8 @@ export function getAcpErrorLogDetails(error: unknown): AcpErrorLogDetails;
 export function isMethodNotFoundError(error: unknown): boolean;
 ```
 
-Keep JSON-stringification fallback and code/data narrowing unchanged. Re-export both public classes from `acp-runtime-manager.ts`; do not widen a barrel.
+Keep JSON-stringification fallback and code/data narrowing unchanged. Re-export
+both public classes from `acp-runtime-manager.ts`; do not widen a barrel.
 
 - [ ] **Step 4: Implement the stateless browser**
 
@@ -354,7 +418,8 @@ export class AcpSubagentBrowser {
 }
 ```
 
-Move existing schemas, method names, normalized codes, and messages unchanged. Missing handle rejects before capability inspection.
+Move existing schemas, method names, normalized codes, and messages unchanged.
+Missing handle rejects before capability inspection.
 
 - [ ] **Step 5: Delegate manager browse methods**
 
@@ -395,11 +460,14 @@ git commit -m "Extract ACP subagent browsing"
 **PR stage:** 3
 
 **Files:**
-- Create: `acp-runtime-config-controller.ts`, `acp-runtime-config-controller.test.ts`.
+
+- Create: `acp-runtime-config-controller.ts`,
+  `acp-runtime-config-controller.test.ts`.
 - Modify: `acp-runtime-manager.ts`.
 - Test: `acp-runtime-manager.config.test.ts`.
 
 **Interfaces:**
+
 - Consumes: `isMethodNotFoundError` from Task 2.
 - Produces: handle-scoped generic config, mode, and model operations.
 
@@ -417,7 +485,9 @@ expect(handle.connection.setSessionConfigOption).toHaveBeenCalledWith({
 expect(handle.configOptions).toEqual(nextOptions);
 ```
 
-Add mode cache replacement, Claude unstable-model success, Claude `-32601` fallback to generic `model`, non-method-not-found propagation, Codex generic model behavior, config schema rejection, and warning logs.
+Add mode cache replacement, Claude unstable-model success, Claude `-32601`
+fallback to generic `model`, non-method-not-found propagation, Codex generic
+model behavior, config schema rejection, and warning logs.
 
 - [ ] **Step 2: Run the direct test and verify RED**
 
@@ -439,7 +509,8 @@ export class AcpRuntimeConfigController {
 }
 ```
 
-Move the existing algorithms unchanged. Derive provider session ID from the handle and update only `handle.configOptions`.
+Move the existing algorithms unchanged. Derive provider session ID from the
+handle and update only `handle.configOptions`.
 
 - [ ] **Step 4: Delegate manager methods and preserve missing-session errors**
 
@@ -473,13 +544,16 @@ git commit -m "Extract ACP runtime configuration"
 **PR stage:** 3
 
 **Files:**
+
 - Create: `acp-prompt-controller.ts`, `acp-prompt-controller.test.ts`.
 - Modify: `acp-runtime-manager.ts`.
 - Test: `acp-runtime-manager.prompt.test.ts`, `session.prompt.service.test.ts`.
 
 **Interfaces:**
+
 - Consumes: `PromptTimeoutError` from Task 2.
-- Produces: handle-scoped prompt/cancel operations using current-handle and stop ports.
+- Produces: handle-scoped prompt/cancel operations using current-handle and stop
+  ports.
 
 - [ ] **Step 1: Write failing prompt-controller tests**
 
@@ -492,7 +566,9 @@ const runtimePort: AcpPromptRuntimePort = {
 };
 ```
 
-Cover prompt success/rejection, cancellation with no handle/not in flight/in flight, timeout cancellation success, cancellation failure, cancellation hang followed by stop, and stale-handle protection.
+Cover prompt success/rejection, cancellation with no handle/not in flight/in
+flight, timeout cancellation success, cancellation failure, cancellation hang
+followed by stop, and stale-handle protection.
 
 - [ ] **Step 2: Run the direct test and verify RED**
 
@@ -517,7 +593,8 @@ export class AcpPromptController {
 }
 ```
 
-Move the existing timer, five-second cancel bound, stale-handle checks, best-effort stop, logs, and `isPromptInFlight` transitions unchanged.
+Move the existing timer, five-second cancel bound, stale-handle checks,
+best-effort stop, logs, and `isPromptInFlight` transitions unchanged.
 
 - [ ] **Step 4: Delegate manager prompt methods**
 
@@ -530,7 +607,9 @@ this.promptController = new AcpPromptController({
 });
 ```
 
-Delegate `sendPrompt` after the existing missing-session error, delegate public `cancelPrompt`, and call `cancelPrompt(sessionId, handle)` from `stopClientOnce`.
+Delegate `sendPrompt` after the existing missing-session error, delegate public
+`cancelPrompt`, and call `cancelPrompt(sessionId, handle)` from
+`stopClientOnce`.
 
 - [ ] **Step 5: Complete Stage 3 verification and commit**
 
@@ -553,12 +632,16 @@ git commit -m "Extract ACP prompt control"
 **PR stage:** 4
 
 **Files:**
-- Create: `acp-runtime-contracts.ts`, `acp-client-factory.ts`, `acp-client-factory.test.ts`.
+
+- Create: `acp-runtime-contracts.ts`, `acp-client-factory.ts`,
+  `acp-client-factory.test.ts`.
 - Modify: `acp-runtime-error-handler.ts`, `acp-runtime-manager.ts`.
 - Test: manager creation and session negotiation integration suites.
 
 **Interfaces:**
-- Consumes: Task 2 errors and existing spawn, stream, handler, and config helpers.
+
+- Consumes: Task 2 errors and existing spawn, stream, handler, and config
+  helpers.
 - Produces: internal metadata/signal contracts and an uninstalled handle.
 
 - [ ] **Step 1: Define contracts and write failing factory tests**
@@ -586,9 +669,18 @@ export type AcpRuntimeCreatedCallback = (
 ) => void;
 ```
 
-Replace the manager-local callback type with `export type { AcpRuntimeCreatedCallback } from './acp-runtime-contracts';` so the existing deep import remains source-compatible. Update `acp-runtime-error-handler.ts` to use `Pick<AcpRuntimeMetadata, 'incarnationId' | 'purpose'>` instead of its local context type.
+Replace the manager-local callback type with
+`export type { AcpRuntimeCreatedCallback } from './acp-runtime-contracts';` so
+the existing deep import remains source-compatible. Update
+`acp-runtime-error-handler.ts` to use
+`Pick<AcpRuntimeMetadata, 'incarnationId' | 'purpose'>` instead of its local
+context type.
 
-Write factory tests for empty working directory, Claude/Codex/override spawn commands, environment and stdio, initialization, new session, stored-session load, active load fallback, browse load failure, invalid config options, spawn error, startup timeout, stop/shutdown cancellation, stderr logging, permission policy, and failed-start SIGTERM/SIGKILL cleanup.
+Write factory tests for empty working directory, Claude/Codex/override spawn
+commands, environment and stdio, initialization, new session, stored-session
+load, active load fallback, browse load failure, invalid config options, spawn
+error, startup timeout, stop/shutdown cancellation, stderr logging, permission
+policy, and failed-start SIGTERM/SIGKILL cleanup.
 
 - [ ] **Step 2: Run the factory test and verify RED**
 
@@ -624,11 +716,14 @@ export class AcpClientFactory {
 }
 ```
 
-Move `resolveAutoApprovePolicy`, spawn/stream construction, SDK setup, initialization, create/resume negotiation, load-failure logging, and failed-start cleanup. Do not add maps or retain handles.
+Move `resolveAutoApprovePolicy`, spawn/stream construction, SDK setup,
+initialization, create/resume negotiation, load-failure logging, and
+failed-start cleanup. Do not add maps or retain handles.
 
 - [ ] **Step 4: Keep installation in the manager temporarily**
 
-The manager creates/disposes cancellation signals, calls the factory, rechecks shutdown/stop, then performs the current synchronous installation order:
+The manager creates/disposes cancellation signals, calls the factory, rechecks
+shutdown/stop, then performs the current synchronous installation order:
 
 ```ts
 const handle = await this.clientFactory.createClient({
@@ -673,12 +768,18 @@ git commit -m "Extract ACP client factory"
 **PR stage:** 5
 
 **Files:**
-- Create: `acp-runtime-supervisor.ts`, `acp-runtime-supervisor.creation.test.ts`, `acp-runtime-supervisor.termination.test.ts`.
+
+- Create: `acp-runtime-supervisor.ts`,
+  `acp-runtime-supervisor.creation.test.ts`,
+  `acp-runtime-supervisor.termination.test.ts`.
 - Modify: `acp-runtime-contracts.ts`.
 
 **Interfaces:**
-- Consumes: `AcpClientFactory`, prompt cancellation, exit/error helpers, and `AcpRuntimeQuiescence`.
-- Produces: every stateful creation, registry, status, stop, exit, quiescence, and shutdown operation.
+
+- Consumes: `AcpClientFactory`, prompt cancellation, exit/error helpers, and
+  `AcpRuntimeQuiescence`.
+- Produces: every stateful creation, registry, status, stop, exit, quiescence,
+  and shutdown operation.
 
 - [ ] **Step 1: Write creation and exit tests**
 
@@ -697,7 +798,9 @@ expect(factory.createClient).toHaveBeenCalledTimes(1);
 await expect(second).resolves.toBe(await first);
 ```
 
-Cover active/browse promotion, pending creation, different-session concurrency, lock release, exit fencing, reentrant same-session rejection, managed/stale exits, runtime-error predicates, callback ordering, and status/process queries.
+Cover active/browse promotion, pending creation, different-session concurrency,
+lock release, exit fencing, reentrant same-session rejection, managed/stale
+exits, runtime-error predicates, callback ordering, and status/process queries.
 
 - [ ] **Step 2: Write termination and shutdown tests**
 
@@ -716,7 +819,10 @@ expect(handle.child.kill).toHaveBeenCalledWith('SIGTERM');
 expect(supervisor.getClient('session-1')).toBeUndefined();
 ```
 
-Also cover duplicate `stopClient`, failed first stop with/without barriers, cancellation before SIGTERM, SIGKILL escalation, shutdown admission, active+browse+pending inventory, pending timeout, quiescence wait, final sweep, and registry cleanup.
+Also cover duplicate `stopClient`, failed first stop with/without barriers,
+cancellation before SIGTERM, SIGKILL escalation, shutdown admission,
+active+browse+pending inventory, pending timeout, quiescence wait, final sweep,
+and registry cleanup.
 
 - [ ] **Step 3: Run both tests and verify RED**
 
@@ -754,7 +860,12 @@ export class AcpRuntimeSupervisor {
 }
 ```
 
-The supervisor creates metadata with `randomUUID`, owns startup signals, calls the factory, installs/removes handles, wires exit handling, and invokes creation callbacks. `getInstalledHandle` intentionally exposes the raw installed-map lookup to the facade so prompt/config methods preserve their current behavior; public `getClient` continues to hide browse-only or non-running handles. Do not mirror these collections in the manager after cutover.
+The supervisor creates metadata with `randomUUID`, owns startup signals, calls
+the factory, installs/removes handles, wires exit handling, and invokes creation
+callbacks. `getInstalledHandle` intentionally exposes the raw installed-map
+lookup to the facade so prompt/config methods preserve their current behavior;
+public `getClient` continues to hide browse-only or non-running handles. Do not
+mirror these collections in the manager after cutover.
 
 - [ ] **Step 5: Implement the complete method surface**
 
@@ -818,10 +929,12 @@ git commit -m "Add ACP runtime supervisor"
 **PR stage:** 5
 
 **Files:**
+
 - Modify: `acp-runtime-manager.ts`, `acp-runtime-manager.facade.test.ts`.
 - Test: every focused manager, collaborator, and supervisor suite.
 
 **Interfaces:**
+
 - Consumes: complete supervisor surface from Task 6.
 - Produces: a manager graph with no cross-session registry in the facade.
 
@@ -878,15 +991,15 @@ export class AcpRuntimeManager {
 
 - [ ] **Step 4: Delegate every method by ownership**
 
-| Manager methods | Delegate |
-| --- | --- |
-| startup timeout/environment | `clientFactory` |
-| callbacks, handle/purpose/pending queries | `supervisor` |
-| creation barrier, creation, stop, shutdown | `supervisor` |
-| process/status queries | `supervisor` |
-| browse capability/list/transcript | `subagentBrowser` with supervisor browse handle |
-| prompt/cancel | `promptController` with supervisor raw installed handle |
-| config/mode/model | `configController` with supervisor raw installed handle |
+| Manager methods                            | Delegate                                                |
+| ------------------------------------------ | ------------------------------------------------------- |
+| startup timeout/environment                | `clientFactory`                                         |
+| callbacks, handle/purpose/pending queries  | `supervisor`                                            |
+| creation barrier, creation, stop, shutdown | `supervisor`                                            |
+| process/status queries                     | `supervisor`                                            |
+| browse capability/list/transcript          | `subagentBrowser` with supervisor browse handle         |
+| prompt/cancel                              | `promptController` with supervisor raw installed handle |
+| config/mode/model                          | `configController` with supervisor raw installed handle |
 
 Representative methods:
 
@@ -928,12 +1041,17 @@ git commit -m "Move ACP runtime state to supervisor"
 **PR stage:** 6
 
 **Files:**
-- Modify: `acp-runtime-manager.ts`, `acp-runtime-manager.facade.test.ts`, `acp/index.ts`.
-- Modify: `docs/architecture/agent-runtime.md`, `scripts/file-length-baseline.json`.
+
+- Modify: `acp-runtime-manager.ts`, `acp-runtime-manager.facade.test.ts`,
+  `acp/index.ts`.
+- Modify: `docs/architecture/agent-runtime.md`,
+  `scripts/file-length-baseline.json`.
 
 **Interfaces:**
+
 - Consumes: all prior collaborators.
-- Produces: final compatibility facade below roughly 600 lines and unchanged public exports.
+- Produces: final compatibility facade below roughly 600 lines and unchanged
+  public exports.
 
 - [ ] **Step 1: Add final public-surface and barrel assertions**
 
@@ -974,7 +1092,8 @@ const acceptsExpectedRuntimeSurface = (_runtime: ExpectedRuntimeSurface): void =
 acceptsExpectedRuntimeSurface(new AcpRuntimeManager());
 ```
 
-Add a source assertion that `acp/index.ts` does not export any internal collaborator.
+Add a source assertion that `acp/index.ts` does not export any internal
+collaborator.
 
 - [ ] **Step 2: Run facade tests**
 
@@ -982,7 +1101,8 @@ Add a source assertion that `acp/index.ts` does not export any internal collabor
 pnpm test src/backend/services/session/service/acp/acp-runtime-manager.facade.test.ts
 ```
 
-Expected: PASS if Stage 5 completed the facade; otherwise fail only on transitional state/exports removed next.
+Expected: PASS if Stage 5 completed the facade; otherwise fail only on
+transitional state/exports removed next.
 
 - [ ] **Step 3: Remove transitional code and run ownership audits**
 
@@ -992,7 +1112,8 @@ rg -n "as unknown as.*AcpRuntimeManager" src/backend/services/session/service/ac
 rg -n "AcpRuntimeSupervisor|AcpClientFactory|AcpPromptController|AcpRuntimeConfigController|AcpSubagentBrowser" src/backend/services/session/service/acp/index.ts src/backend/services/session/service/index.ts
 ```
 
-Expected: no matches. The facade contains collaborator fields and delegation only.
+Expected: no matches. The facade contains collaborator fields and delegation
+only.
 
 - [ ] **Step 4: Update the architecture guide**
 
@@ -1016,7 +1137,8 @@ pnpm check:file-length
 git diff -- scripts/file-length-baseline.json
 ```
 
-Expected: manager below roughly 600 lines; its 1,449-line entry removed; no count grows.
+Expected: manager below roughly 600 lines; its 1,449-line entry removed; no
+count grows.
 
 - [ ] **Step 6: Run affected integration and lifecycle tests**
 
@@ -1037,7 +1159,8 @@ pnpm check
 git diff --check
 ```
 
-If local Codex CLI differs from the pin, report the normal schema skip exactly; CI remains strict.
+If local Codex CLI differs from the pin, report the normal schema skip exactly;
+CI remains strict.
 
 - [ ] **Step 8: Commit Stage 6**
 
@@ -1054,4 +1177,5 @@ wc -l src/backend/services/session/service/acp/acp-runtime-manager.ts src/backen
 rg -n "acp-runtime-manager(.test)?\.ts" scripts/file-length-baseline.json
 ```
 
-Expected: clean worktree; every focused source below 1,000 lines; facade below roughly 600; neither original manager entry remains in the baseline.
+Expected: clean worktree; every focused source below 1,000 lines; facade below
+roughly 600; neither original manager entry remains in the baseline.

@@ -1,19 +1,29 @@
 # Voice Worklet Cleanup Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Prevent queued AudioWorklet messages from invoking speech callbacks after voice capture cleanup.
+**Goal:** Prevent queued AudioWorklet messages from invoking speech callbacks
+after voice capture cleanup.
 
-**Architecture:** Keep resource disposal centralized in `disposeCaptureResources`. Detach the worklet port handler before closing and disconnecting, mirroring the existing WebSocket lifecycle boundary, and protect it with a focused unit regression test.
+**Architecture:** Keep resource disposal centralized in
+`disposeCaptureResources`. Detach the worklet port handler before closing and
+disconnecting, mirroring the existing WebSocket lifecycle boundary, and protect
+it with a focused unit regression test.
 
 **Tech Stack:** TypeScript, React voice feature, Web Audio API, Vitest, pnpm.
 
 ## Global Constraints
 
 - Use pnpm, never npm or yarn.
-- Keep the change scoped to AudioWorklet cleanup and its co-located regression test.
-- Follow test-driven development: observe the regression test fail before changing production code.
-- Run `pnpm check:fix`, `pnpm typecheck`, `pnpm test`, `pnpm check`, and `pnpm build` before handoff.
+- Keep the change scoped to AudioWorklet cleanup and its co-located regression
+  test.
+- Follow test-driven development: observe the regression test fail before
+  changing production code.
+- Run `pnpm check:fix`, `pnpm typecheck`, `pnpm test`, `pnpm check`, and
+  `pnpm build` before handoff.
 - Close GitHub issue #2164 from the pull request body.
 
 ---
@@ -21,12 +31,17 @@
 ### Task 1: Detach the AudioWorklet message handler during cleanup
 
 **Files:**
+
 - Modify: `src/client/features/voice/use-mic-capture.ts`
 - Test: `src/client/features/voice/use-mic-capture.test.ts`
 
 **Interfaces:**
-- Consumes: `CaptureResources` and the existing `AudioWorkletNode.port.onmessage` lifecycle.
-- Produces: exported `disposeCaptureResources(resources: CaptureResources): void`, which clears `port.onmessage` before closing and disconnecting a present worklet node.
+
+- Consumes: `CaptureResources` and the existing
+  `AudioWorkletNode.port.onmessage` lifecycle.
+- Produces: exported
+  `disposeCaptureResources(resources: CaptureResources): void`, which clears
+  `port.onmessage` before closing and disconnecting a present worklet node.
 
 - [ ] **Step 1: Write the failing regression test**
 
@@ -54,7 +69,8 @@ it('detaches queued worklet messages before closing capture resources', () => {
 });
 ```
 
-- [ ] **Step 2: Run the focused test and verify the new test fails because the handler remains installed**
+- [ ] **Step 2: Run the focused test and verify the new test fails because the
+      handler remains installed**
 
 Run: `pnpm test src/client/features/voice/use-mic-capture.test.ts`
 

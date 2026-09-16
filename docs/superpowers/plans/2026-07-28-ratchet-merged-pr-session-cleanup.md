@@ -1,12 +1,22 @@
 # Ratchet Merged-PR Session Cleanup Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Stop every live Ratchet workflow session before a normal Ratchet check persists a merged pull request as terminal.
+**Goal:** Stop every live Ratchet workflow session before a normal Ratchet check
+persists a merged pull request as terminal.
 
-**Architecture:** Add a focused cleanup method to `RatchetService` that enumerates workspace sessions through the existing session bridge, filters active Ratchet workflows, and stops their live runtimes. Invoke it immediately after a fresh `MERGED` PR observation and before decision construction, allowing failures to flow through the existing workspace-check error path so later polls retry.
+**Architecture:** Add a focused cleanup method to `RatchetService` that
+enumerates workspace sessions through the existing session bridge, filters
+active Ratchet workflows, and stops their live runtimes. Invoke it immediately
+after a fresh `MERGED` PR observation and before decision construction, allowing
+failures to flow through the existing workspace-check error path so later polls
+retry.
 
-**Tech Stack:** TypeScript, Express backend service capsules, Vitest, projected Ratchet state backed by cached PR observations.
+**Tech Stack:** TypeScript, Express backend service capsules, Vitest, projected
+Ratchet state backed by cached PR observations.
 
 ## Global Constraints
 
@@ -22,12 +32,17 @@
 ### Task 1: Clean Up Ratchet Sessions on a Fresh Merged-PR Observation
 
 **Files:**
+
 - Modify: `src/backend/services/ratchet/service/ratchet.service.ts`
 - Test: `src/backend/services/ratchet/service/ratchet.service.test.ts`
 
 **Interfaces:**
-- Consumes: `RatchetSessionBridge.findSessionsByWorkspaceId(workspaceId)`, `RatchetSessionBridge.isSessionRunning(sessionId)`, and `RatchetSessionBridge.stopSession(sessionId)`.
-- Produces: private `RatchetService.stopActiveRatchetSessionsForMergedPr(workspaceId: string, signal: AbortSignal): Promise<void>`.
+
+- Consumes: `RatchetSessionBridge.findSessionsByWorkspaceId(workspaceId)`,
+  `RatchetSessionBridge.isSessionRunning(sessionId)`, and
+  `RatchetSessionBridge.stopSession(sessionId)`.
+- Produces: private
+  `RatchetService.stopActiveRatchetSessionsForMergedPr(workspaceId: string, signal: AbortSignal): Promise<void>`.
 
 - [ ] **Step 1: Write the successful-cleanup regression test**
 

@@ -19,8 +19,8 @@ stable release, `0.145.0`, while preserving reproducible schema-drift checks.
 
 ## Implementation
 
-The CI workflow remains the source of truth for the exact Codex CLI release
-used by schema validation. The schema snapshot remains coupled to that release
+The CI workflow remains the source of truth for the exact Codex CLI release used
+by schema validation. The schema snapshot remains coupled to that release
 through its `codexCliVersion` field. Both files must change together so CI
 installs the same release that generated the committed snapshot.
 
@@ -31,10 +31,10 @@ scripts, dependencies, or abstractions are needed.
 ## Error Handling
 
 If Codex `0.145.0` cannot generate the TypeScript app-server schema, or if the
-generated files no longer match the snapshot script's expected inputs, stop
-and diagnose that compatibility break instead of weakening the drift check.
-Unexpected removals from the method snapshot must be inspected before the
-result is accepted.
+generated files no longer match the snapshot script's expected inputs, stop and
+diagnose that compatibility break instead of weakening the drift check.
+Unexpected removals from the method snapshot must be inspected before the result
+is accepted.
 
 ## Verification
 

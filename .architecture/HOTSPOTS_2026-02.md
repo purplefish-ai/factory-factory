@@ -1,41 +1,49 @@
 # Factory Factory Backend Architecture Analysis
 
-> **SUPERSEDED:** This analysis was generated pre-refactor (2026-02-09). The SRP Consolidation & Domain Module Refactor (Phases 1-10, completed 2026-02-10) addressed all issues identified here:
-> - "97 service-to-service dependencies" -- Reduced via domain modules and orchestration layer
-> - "session.service.ts 27 dependents" -- Session logic consolidated into `src/backend/domains/session/`
-> - "`src/backend/claude/` mixed concerns" -- Absorbed into session domain at `domains/session/claude/`
+> **SUPERSEDED:** This analysis was generated pre-refactor (2026-02-09). The SRP
+> Consolidation & Domain Module Refactor (Phases 1-10, completed 2026-02-10)
+> addressed all issues identified here:
+>
+> - "97 service-to-service dependencies" -- Reduced via domain modules and
+>   orchestration layer
+> - "session.service.ts 27 dependents" -- Session logic consolidated into
+>   `src/backend/domains/session/`
+> - "`src/backend/claude/` mixed concerns" -- Absorbed into session domain at
+>   `domains/session/claude/`
 > - Action Plan Phases 1-3 -- Completed by SRP refactor Phases 1-9
 >
-> For current architecture, see `AGENTS.md` and `.planning/codebase/ARCHITECTURE.md`.
+> For current architecture, see `AGENTS.md` and
+> `.planning/codebase/ARCHITECTURE.md`.
 
-**Generated:** 2026-02-09
-**Backend Modules Analyzed:** 202
-**Circular Dependencies:** 0 ✓
+**Generated:** 2026-02-09 **Backend Modules Analyzed:** 202 **Circular
+Dependencies:** 0 ✓
 
 ---
 
 ## 🔥 Critical Hotspots
 
 ### 1. **logger.service.ts** - 64 dependents
-**Impact:** CRITICAL - Changes affect 31% of codebase
-**Type:** Infrastructure utility
-**Risk:** Low (stable interface)
+
+**Impact:** CRITICAL - Changes affect 31% of codebase **Type:** Infrastructure
+utility **Risk:** Low (stable interface)
 
 **Action:** ✅ Already well-designed as a pure utility. Keep as-is.
 
 ---
 
 ### 2. **workspace.accessor.ts** - 27 dependents
-**Impact:** HIGH - Core data access layer
-**Type:** Data accessor (Prisma)
+
+**Impact:** HIGH - Core data access layer **Type:** Data accessor (Prisma)
 **Current violations:** None
 
 **Concern:** Being used by multiple layers:
+
 - ✅ `services/` (expected) - 17 imports
-- ⚠️  `interceptors/` (questionable) - 2 imports
-- ⚠️  `routers/` (violation?) - 1 import
+- ⚠️ `interceptors/` (questionable) - 2 imports
+- ⚠️ `routers/` (violation?) - 1 import
 
 **Action:**
+
 ```javascript
 // Add to dependency-cruiser.cjs
 {
@@ -50,13 +58,15 @@
 ---
 
 ### 3. **session.service.ts** - 27 dependents
-**Impact:** HIGH - Session lifecycle orchestration
-**Type:** Business logic
+
+**Impact:** HIGH - Session lifecycle orchestration **Type:** Business logic
 **Dependencies:** 11 modules (moderate coupling)
 
-**Concern:** Central orchestrator for sessions, but has 97 service-to-service dependencies total across all services.
+**Concern:** Central orchestrator for sessions, but has 97 service-to-service
+dependencies total across all services.
 
 **Architecture smell detected:**
+
 ```
 chat-event-forwarder.service → session-store.service
 chat-event-forwarder.service → session.service
@@ -82,7 +92,8 @@ src/backend/domain/session/
 
 ## 🌊 Data Flow Issues: Message/Transcript Handling
 
-You mentioned concern about **message durability and dual writes**. Analysis shows:
+You mentioned concern about **message durability and dual writes**. Analysis
+shows:
 
 ### Current Message Flow Architecture
 
@@ -135,6 +146,7 @@ You mentioned concern about **message durability and dual writes**. Analysis sho
    - BUT doesn't write - Claude CLI owns this
 
 **The Problem:** Three separate concerns mixed together:
+
 - ❌ Transcript state (in-memory)
 - ❌ Audit logging (files)
 - ❌ Persistence (Claude CLI's .jsonl)
@@ -179,24 +191,22 @@ export interface TranscriptPersistence {
 }
 ```
 
-This ensures:
-✅ Single code path for ALL writes
-✅ Atomicity (persist → commit)
-✅ Events for cross-cutting concerns (WebSocket, audit logs)
-✅ No divergence possible
+This ensures: ✅ Single code path for ALL writes ✅ Atomicity (persist → commit)
+✅ Events for cross-cutting concerns (WebSocket, audit logs) ✅ No divergence
+possible
 
 ---
 
 ## 📊 Layer Coupling Summary
 
-| Layer | Modules | Avg Coupling | Assessment |
-|-------|---------|--------------|------------|
-| **app-context.ts** | 1 | 35.0 | ⚠️ Central hub - by design |
-| **services** | 91 | 6.9 | ⚠️ HIGH - needs decomposition |
-| **resource_accessors** | 9 | 9.4 | ✅ Appropriate for data layer |
-| **claude** | 17 | 6.6 | ⚠️ Mixed concerns (protocol + domain) |
-| **trpc** | 20 | 5.7 | ✅ Good |
-| **routers** | 18 | 5.1 | ✅ Good |
+| Layer                  | Modules | Avg Coupling | Assessment                            |
+| ---------------------- | ------- | ------------ | ------------------------------------- |
+| **app-context.ts**     | 1       | 35.0         | ⚠️ Central hub - by design            |
+| **services**           | 91      | 6.9          | ⚠️ HIGH - needs decomposition         |
+| **resource_accessors** | 9       | 9.4          | ✅ Appropriate for data layer         |
+| **claude**             | 17      | 6.6          | ⚠️ Mixed concerns (protocol + domain) |
+| **trpc**               | 20      | 5.7          | ✅ Good                               |
+| **routers**            | 18      | 5.1          | ✅ Good                               |
 
 ### Cross-Layer Dependencies (Top Issues)
 
@@ -246,7 +256,8 @@ This ensures:
 1. Create `src/backend/domain/message/` module
 2. Move transcript logic from `session-store.service.ts`
 3. Define `TranscriptPersistence` interface
-4. Implement in `src/backend/infrastructure/persistence/claude-transcript.persistence.ts`
+4. Implement in
+   `src/backend/infrastructure/persistence/claude-transcript.persistence.ts`
 5. Update consumers to use new aggregate
 
 ### Phase 3: Refactor Services Layer (Next Month)
@@ -277,6 +288,7 @@ src/backend/
 ```
 
 Break down services into:
+
 - Domain services (business logic)
 - Application services (orchestration)
 - Infrastructure services (technical concerns)
@@ -299,6 +311,7 @@ node /tmp/analyze-deps.mjs > metrics-$(date +%Y-%m).txt
 ```
 
 **Success Metrics:**
+
 - ✅ Zero circular dependencies (current: 0)
 - 🎯 Service-to-service coupling < 50 (current: 97)
 - 🎯 Average service coupling < 5.0 (current: 6.9)

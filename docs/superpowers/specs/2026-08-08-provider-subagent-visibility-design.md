@@ -3,14 +3,14 @@
 ## Goal
 
 Make provider-initiated sub-agents visible and inspectable in Factory Factory
-without turning them into Factory Factory sessions or child workspaces. The first
-implementation targets Codex, remains read-only, and uses an ACP boundary that
-future providers such as Claude can implement without client changes.
+without turning them into Factory Factory sessions or child workspaces. The
+first implementation targets Codex, remains read-only, and uses an ACP boundary
+that future providers such as Claude can implement without client changes.
 
 ## User Experience
 
-Rename the workspace right-panel **Children** tab to **Agents**. The tab contains
-two deliberately separate sections:
+Rename the workspace right-panel **Children** tab to **Agents**. The tab
+contains two deliberately separate sections:
 
 1. **Sub-agents** shows provider-initiated agents belonging to the currently
    selected parent session. Active sub-agents are expanded and visible. Finished
@@ -20,20 +20,21 @@ two deliberately separate sections:
    and behavior. These entries remain independent workspaces with their existing
    navigation and lifecycle controls.
 
-Each sub-agent row shows a provider-supplied or fallback name, normalized status,
-elapsed time, and a short latest-activity or result preview. Active rows sort by
-creation time, oldest first, to keep the launch order stable; completed rows sort
-by most recent completion or update time. The normalized lifecycle states are:
+Each sub-agent row shows a provider-supplied or fallback name, normalized
+status, elapsed time, and a short latest-activity or result preview. Active rows
+sort by creation time, oldest first, to keep the launch order stable; completed
+rows sort by most recent completion or update time. The normalized lifecycle
+states are:
 
 - `starting`, `running`, and `waiting` in the active group;
 - `completed`, `failed`, `cancelled`, and `interrupted` in the completed group.
 
 Selecting a sub-agent drills into a read-only transcript inside the current
 parent session view. The parent session tab stays selected. A breadcrumb such as
-`Parent session > Sub-agent name`, a `Read only` badge, and a Back action replace
-the normal session header and composer. Returning restores the parent transcript
-and its scroll position. Changing the selected parent session or workspace exits
-the drill-in state.
+`Parent session > Sub-agent name`, a `Read only` badge, and a Back action
+replace the normal session header and composer. Returning restores the parent
+transcript and its scroll position. Changing the selected parent session or
+workspace exits the drill-in state.
 
 The transcript reuses the existing chat renderers for assistant text, reasoning,
 commands, file changes, tool calls, and results. No composer, permission prompt,
@@ -60,12 +61,12 @@ activity under namespaced `_meta.codex.subagent` metadata. This establishes a
 useful ecosystem pattern for live lifecycle reporting, but stable ACP does not
 yet define a provider-neutral child-thread browsing contract.
 
-Codex app-server supplies the missing read side: experimental parent and ancestor
-filters on `thread/list`, stored-thread reads through `thread/read`, paginated
-turn and item reads, and runtime thread statuses. Factory Factory's Codex adapter
-already opts into the experimental app-server API. Claude's ACP adapter already
-preserves sub-agent parent-tool attribution, which supplies correlation but not
-yet the same browseable transcript capability.
+Codex app-server supplies the missing read side: experimental parent and
+ancestor filters on `thread/list`, stored-thread reads through `thread/read`,
+paginated turn and item reads, and runtime thread statuses. Factory Factory's
+Codex adapter already opts into the experimental app-server API. Claude's ACP
+adapter already preserves sub-agent parent-tool attribution, which supplies
+correlation but not yet the same browseable transcript capability.
 
 Sources:
 
@@ -232,7 +233,8 @@ The flow is:
 1. The active adapter reports browse capability during ACP initialization.
 2. Standard ACP tool-call updates make live sub-agent activity visible in the
    parent transcript and invalidate the parent session's sub-agent list.
-3. Opening the Agents tab for a selected session requests the first summary page.
+3. Opening the Agents tab for a selected session requests the first summary
+   page.
 4. The session service invokes the adapter extension over the existing ACP
    connection and returns normalized summaries.
 5. Selecting a row requests the first read-only transcript page.
@@ -242,8 +244,9 @@ The flow is:
 8. Reconnecting or reloading a parent session repeats `list`, rebuilding the UI
    from provider history without database reconciliation.
 
-Factory Factory caches only normal React Query and live session state. It adds no
-Prisma model, export field, snapshot field, or backup behavior for sub-agents.
+Factory Factory caches only normal React Query and live session state. It adds
+no Prisma model, export field, snapshot field, or backup behavior for
+sub-agents.
 
 ## Client Composition and State
 
@@ -255,7 +258,8 @@ workspace section.
 The selected parent session ID is part of the sub-agent query key. Selecting a
 different session therefore shows only that session's provider children, while
 the child-workspace section remains unchanged. Providers without the browse
-capability omit the Sub-agents section entirely; there is no provider-name check.
+capability omit the Sub-agents section entirely; there is no provider-name
+check.
 
 Drill-in selection is ephemeral UI state containing the parent session ID and
 sub-agent ID. It does not create a session tab, route to another workspace, or
@@ -263,8 +267,8 @@ mutate the selected top-level session. The parent transcript's scroll state is
 preserved while the read-only child transcript is shown.
 
 The Agents tab loads sub-agent summaries only when relevant to the visible panel
-and selected session. Transcript pages load on demand. Live invalidation replaces
-polling; reconnect reconciliation provides the safety net.
+and selected session. Transcript pages load on demand. Live invalidation
+replaces polling; reconnect reconciliation provides the safety net.
 
 ## Authorization and Trust Boundary
 
@@ -286,8 +290,9 @@ filesystem paths, credentials, raw configuration, or unrelated thread metadata.
 - If listing fails after capability discovery, the section shows a contained
   unavailable state with Retry; the parent session remains usable.
 - If a child summary exists but its log is missing, corrupt, or outside provider
-  retention, the row remains visible and the drill-in shows `Transcript
-  unavailable` with the normalized outcome and preview when available.
+  retention, the row remains visible and the drill-in shows
+  `Transcript unavailable` with the normalized outcome and preview when
+  available.
 - If an active child disappears during reconnect, the authoritative provider
   list wins. When the provider reports a terminal status, the row moves to the
   completed group; Factory Factory does not synthesize success.
@@ -307,9 +312,9 @@ read pagination, transcript conversion, invalidation notifications, unknown
 fields, malformed responses, and unsupported app-server methods.
 
 Session service and transport tests will cover capability detection, unsupported
-providers, exact parent-session connection selection, direct-child authorization,
-pagination, reconnect reconciliation, typed errors, and the absence of provider
-branches outside the adapter.
+providers, exact parent-session connection selection, direct-child
+authorization, pagination, reconnect reconciliation, typed errors, and the
+absence of provider branches outside the adapter.
 
 React tests will cover session scoping, active and completed grouping, completed
 collapse state, sorting, provider capability gating, loading and unavailable

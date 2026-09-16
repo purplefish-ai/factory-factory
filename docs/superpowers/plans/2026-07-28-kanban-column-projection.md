@@ -1,47 +1,79 @@
 # Kanban Column Projection Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make a workspace's Kanban column a pure projection of its status reason code, so the column a card sits in can never contradict the label it shows, and WAITING means only "a human owns the next action".
+**Goal:** Make a workspace's Kanban column a pure projection of its status
+reason code, so the column a card sits in can never contradict the label it
+shows, and WAITING means only "a human owns the next action".
 
-**Architecture:** A total `Record<WorkspaceStatusReasonCode, KanbanColumn | null>` in `src/shared/` replaces the independent `computeKanbanColumn` derivation. Four new status reason codes close the gaps that previously fell through to the WAITING fallback, one redundant code is deleted, and four fields join the snapshot wire so the live stream and the tRPC query derive identically. A separate client fix stops a snapshot-introduced workspace from appearing on the board while its issue is still in the Todo column.
+**Architecture:** A total
+`Record<WorkspaceStatusReasonCode, KanbanColumn | null>` in `src/shared/`
+replaces the independent `computeKanbanColumn` derivation. Four new status
+reason codes close the gaps that previously fell through to the WAITING
+fallback, one redundant code is deleted, and four fields join the snapshot wire
+so the live stream and the tRPC query derive identically. A separate client fix
+stops a snapshot-introduced workspace from appearing on the board while its
+issue is still in the Todo column.
 
-**Tech Stack:** TypeScript (strict), Prisma + SQLite, tRPC, Zod, React + React Query, Vitest, Biome.
+**Tech Stack:** TypeScript (strict), Prisma + SQLite, tRPC, Zod, React + React
+Query, Vitest, Biome.
 
 ## Global Constraints
 
-- Schemas use Zod. No raw typecasts (`as` on values); `as const` and type-only assertions are fine.
-- Backend service capsules are imported through their barrel (`@/backend/services/session`), never internal paths.
+- Schemas use Zod. No raw typecasts (`as` on values); `as const` and type-only
+  assertions are fine.
+- Backend service capsules are imported through their barrel
+  (`@/backend/services/session`), never internal paths.
 - Path aliases: `@/*` → `src/`, `@prisma-gen/*` → `prisma/generated/`.
 - Tests are co-located with the module they cover.
-- Run `pnpm check:fix` before each commit; `pnpm typecheck` and `pnpm test` must pass.
+- Run `pnpm check:fix` before each commit; `pnpm typecheck` and `pnpm test` must
+  pass.
 - `pnpm check:prisma-schema` must pass after any `prisma/schema.prisma` change.
 - Commit messages: short, imperative, under 72 characters on the first line.
-- Do not commit to `main`. All work lands on the current branch `kanban-column-projection`.
+- Do not commit to `main`. All work lands on the current branch
+  `kanban-column-projection`.
 
 ---
 
 ### Task 1: Persist the ratchet's own stall conclusion
 
-The ratchet already decides it will take no further action until the PR changes, then discards that decision. Persist it as a boolean so status derivation can read it without recomputing a snapshot key it cannot see.
+The ratchet already decides it will take no further action until the PR changes,
+then discards that decision. Persist it as a boolean so status derivation can
+read it without recomputing a snapshot key it cannot see.
 
 **Files:**
+
 - Modify: `prisma/schema.prisma` (model `WorkspaceRatchet`, around line 348)
-- Create: `prisma/migrations/<timestamp>_add_ratchet_dispatch_stalled/migration.sql` (generated)
-- Modify: `src/backend/services/workspace/resources/workspace-ratchet.accessor.ts`
-- Modify: `src/backend/services/ratchet/service/bridges.ts` (`RatchetWorkspaceBridge`, line 58)
+- Create:
+  `prisma/migrations/<timestamp>_add_ratchet_dispatch_stalled/migration.sql`
+  (generated)
+- Modify:
+  `src/backend/services/workspace/resources/workspace-ratchet.accessor.ts`
+- Modify: `src/backend/services/ratchet/service/bridges.ts`
+  (`RatchetWorkspaceBridge`, line 58)
 - Modify: `src/backend/services/ratchet/service/ratchet.service.ts`
 - Modify: `src/backend/orchestration/domain-bridges.orchestrator.ts`
-- Test: `src/backend/services/workspace/resources/workspace-ratchet.accessor.test.ts`
+- Test:
+  `src/backend/services/workspace/resources/workspace-ratchet.accessor.test.ts`
 - Test: `src/backend/services/ratchet/service/ratchet.service.test.ts`
 
 **Interfaces:**
+
 - Consumes: nothing from earlier tasks.
-- Produces: `WorkspaceRatchetFields.ratchetDispatchStalled: boolean` (flattened read name), `workspaceRatchetAccessor.markDispatchStalled(workspaceId, snapshotKey): Promise<boolean>`, reached from the ratchet via `RatchetWorkspaceBridge`. Task 3 puts this on the snapshot wire; Task 4 consumes it as `dispatchStalled` in `WorkspaceStatusReasonInput`.
+- Produces: `WorkspaceRatchetFields.ratchetDispatchStalled: boolean` (flattened
+  read name),
+  `workspaceRatchetAccessor.markDispatchStalled(workspaceId, snapshotKey): Promise<boolean>`,
+  reached from the ratchet via `RatchetWorkspaceBridge`. Task 3 puts this on the
+  snapshot wire; Task 4 consumes it as `dispatchStalled` in
+  `WorkspaceStatusReasonInput`.
 
 - [ ] **Step 1: Add the column to the Prisma schema**
 
-In `prisma/schema.prisma`, inside `model WorkspaceRatchet`, add after `dispatchRetryCount`:
+In `prisma/schema.prisma`, inside `model WorkspaceRatchet`, add after
+`dispatchRetryCount`:
 
 ```prisma
   // The ratchet's own conclusion that it will not act again until the PR
@@ -54,20 +86,26 @@ In `prisma/schema.prisma`, inside `model WorkspaceRatchet`, add after `dispatchR
 
 - [ ] **Step 2: Generate and apply the migration**
 
-Run: `pnpm db:migrate --name add_ratchet_dispatch_stalled`
-Expected: a new folder under `prisma/migrations/`, and "Your database is now in sync with your schema." Prisma does not emit `ALTER TABLE ... ADD COLUMN` for SQLite here — it emits a `RedefineTables` block that creates `new_WorkspaceRatchet`, copies every existing column across with `INSERT ... SELECT`, drops the old table, renames, and recreates the `lastCheckedAt` index. That is expected and non-destructive; confirm the `INSERT ... SELECT` lists all seven pre-existing columns.
+Run: `pnpm db:migrate --name add_ratchet_dispatch_stalled` Expected: a new
+folder under `prisma/migrations/`, and "Your database is now in sync with your
+schema." Prisma does not emit `ALTER TABLE ... ADD COLUMN` for SQLite here — it
+emits a `RedefineTables` block that creates `new_WorkspaceRatchet`, copies every
+existing column across with `INSERT ... SELECT`, drops the old table, renames,
+and recreates the `lastCheckedAt` index. That is expected and non-destructive;
+confirm the `INSERT ... SELECT` lists all seven pre-existing columns.
 
-Then run: `pnpm db:generate`
-Expected: "Generated Prisma Client".
+Then run: `pnpm db:generate` Expected: "Generated Prisma Client".
 
 - [ ] **Step 3: Verify the schema check passes**
 
-Run: `pnpm check:prisma-schema`
-Expected: exit 0, no drift reported.
+Run: `pnpm check:prisma-schema` Expected: exit 0, no drift reported.
 
 - [ ] **Step 4: Write the failing accessor test**
 
-`src/backend/services/workspace/resources/workspace-ratchet.accessor.test.ts` already exists and provides a `ratchetRow(overrides?: Partial<WorkspaceRatchetRow>)` factory at line 31. Add `dispatchStalled: false` to that factory's defaults, then add:
+`src/backend/services/workspace/resources/workspace-ratchet.accessor.test.ts`
+already exists and provides a
+`ratchetRow(overrides?: Partial<WorkspaceRatchetRow>)` factory at line 31. Add
+`dispatchStalled: false` to that factory's defaults, then add:
 
 ```ts
 describe('flattenWorkspaceRatchet', () => {
@@ -83,18 +121,21 @@ describe('flattenWorkspaceRatchet', () => {
 });
 ```
 
-`flattenWorkspaceRatchet` is exported from the accessor (line 70); add it to that file's existing import if it is not already there.
+`flattenWorkspaceRatchet` is exported from the accessor (line 70); add it to
+that file's existing import if it is not already there.
 
 - [ ] **Step 5: Run the test to verify it fails**
 
-Run: `pnpm test src/backend/services/workspace/resources/workspace-ratchet.accessor.test.ts`
+Run:
+`pnpm test src/backend/services/workspace/resources/workspace-ratchet.accessor.test.ts`
 Expected: FAIL — `ratchetDispatchStalled` is undefined, not `false`/`true`.
 
 - [ ] **Step 6: Flatten the new column**
 
 In `src/backend/services/workspace/resources/workspace-ratchet.accessor.ts`:
 
-Add to the `WorkspaceRatchetFields` interface, after `ratchetDispatchRetryCount: number;`:
+Add to the `WorkspaceRatchetFields` interface, after
+`ratchetDispatchRetryCount: number;`:
 
 ```ts
   ratchetDispatchStalled: boolean;
@@ -106,7 +147,8 @@ Add to the defaults object (the one containing `ratchetDispatchRetryCount: 0`):
   ratchetDispatchStalled: false,
 ```
 
-Add to the flattening return (beside `ratchetDispatchRetryCount: ratchet.dispatchRetryCount`):
+Add to the flattening return (beside
+`ratchetDispatchRetryCount: ratchet.dispatchRetryCount`):
 
 ```ts
     ratchetDispatchStalled: ratchet.dispatchStalled,
@@ -114,7 +156,8 @@ Add to the flattening return (beside `ratchetDispatchRetryCount: ratchet.dispatc
 
 - [ ] **Step 7: Run the test to verify it passes**
 
-Run: `pnpm test src/backend/services/workspace/resources/workspace-ratchet.accessor.test.ts`
+Run:
+`pnpm test src/backend/services/workspace/resources/workspace-ratchet.accessor.test.ts`
 Expected: PASS.
 
 - [ ] **Step 8: Add the write and clear paths**
@@ -137,16 +180,24 @@ In the same accessor, add a setter next to the existing dispatch writers:
 
 In `disable`, add `dispatchStalled: false` to the `data` object.
 
-In `resetSettledDispatch`, add `dispatchStalled: false` to the `data` object of its `updateMany` — the reset already fires when an observation invalidates the settled dispatch, which is exactly when a stall stops being true.
+In `resetSettledDispatch`, add `dispatchStalled: false` to the `data` object of
+its `updateMany` — the reset already fires when an observation invalidates the
+settled dispatch, which is exactly when a stall stops being true.
 
 - [ ] **Step 9: Write the failing ratchet decision tests**
 
-`src/backend/services/ratchet/service/ratchet.service.test.ts` has no shared arrangement factory — each test builds its own mock workspace and calls `ratchetService.checkWorkspaceById(id)`. Copy the arrangement from two existing tests rather than inventing a harness:
+`src/backend/services/ratchet/service/ratchet.service.test.ts` has no shared
+arrangement factory — each test builds its own mock workspace and calls
+`ratchetService.checkWorkspaceById(id)`. Copy the arrangement from two existing
+tests rather than inventing a harness:
 
-- `'does not dispatch when PR state unchanged since last dispatch'` (line 583) — the unchanged-key case.
-- the DIED-retry tests around lines 1526 and 1570, which set `ratchetDispatchOutcome: 'DIED'` with a retry count.
+- `'does not dispatch when PR state unchanged since last dispatch'` (line 583) —
+  the unchanged-key case.
+- the DIED-retry tests around lines 1526 and 1570, which set
+  `ratchetDispatchOutcome: 'DIED'` with a retry count.
 
-Add `markDispatchStalled: vi.fn()` to the workspace-ratchet accessor mock in that file's `vi.mock` block, then add three tests beside the ones above:
+Add `markDispatchStalled: vi.fn()` to the workspace-ratchet accessor mock in
+that file's `vi.mock` block, then add three tests beside the ones above:
 
 ```ts
 it('marks the dispatch stalled when a settled dispatch achieved nothing', async () => {
@@ -180,16 +231,21 @@ it('does not mark the dispatch stalled when the PR state has changed', async () 
 });
 ```
 
-Fill each arrangement comment with the actual mock setup copied from the referenced test — the three tests differ only in `ratchetDispatchOutcome`, `ratchetDispatchRetryCount`, and whether the cached snapshot key matches the computed one.
+Fill each arrangement comment with the actual mock setup copied from the
+referenced test — the three tests differ only in `ratchetDispatchOutcome`,
+`ratchetDispatchRetryCount`, and whether the cached snapshot key matches the
+computed one.
 
 - [ ] **Step 10: Run the tests to verify they fail**
 
-Run: `pnpm test src/backend/services/ratchet/service/ratchet.service.test.ts -t "stalled"`
+Run:
+`pnpm test src/backend/services/ratchet/service/ratchet.service.test.ts -t "stalled"`
 Expected: FAIL — `markDispatchStalled` is not a function / never called.
 
 - [ ] **Step 11: Set the flag at the two decline points**
 
-In `src/backend/services/ratchet/service/ratchet.service.ts`, in `decideRatchetAction`, change the unchanged-key gate:
+In `src/backend/services/ratchet/service/ratchet.service.ts`, in
+`decideRatchetAction`, change the unchanged-key gate:
 
 ```ts
     if (!context.hasStateChangedSinceLastDispatch) {
@@ -220,9 +276,15 @@ In `decideDiedFixerRetry`, change the exhausted-retries branch:
     }
 ```
 
-`decideRatchetAction` is already `async`, and `decideDiedFixerRetry` is too (it awaits `hasActiveSession`).
+`decideRatchetAction` is already `async`, and `decideDiedFixerRetry` is too (it
+awaits `hasActiveSession`).
 
-The snippets above already call through the bridge, which is mandatory: the ratchet capsule does **not** import `workspaceRatchetAccessor` — it reaches workspace state only through `RatchetWorkspaceBridge` (`src/backend/services/ratchet/service/bridges.ts:58`, which today exposes `findFixerContext` and `recordSessionEnd`). Adding a direct import would violate the capsule boundary and fail `pnpm check`. So:
+The snippets above already call through the bridge, which is mandatory: the
+ratchet capsule does **not** import `workspaceRatchetAccessor` — it reaches
+workspace state only through `RatchetWorkspaceBridge`
+(`src/backend/services/ratchet/service/bridges.ts:58`, which today exposes
+`findFixerContext` and `recordSessionEnd`). Adding a direct import would violate
+the capsule boundary and fail `pnpm check`. So:
 
 Add to `RatchetWorkspaceBridge`:
 
@@ -230,13 +292,18 @@ Add to `RatchetWorkspaceBridge`:
   markDispatchStalled(workspaceId: string): Promise<void>;
 ```
 
-Wire it in `src/backend/orchestration/domain-bridges.orchestrator.ts` where the ratchet's workspace bridge object is constructed, alongside the existing `recordSessionEnd` delegate:
+Wire it in `src/backend/orchestration/domain-bridges.orchestrator.ts` where the
+ratchet's workspace bridge object is constructed, alongside the existing
+`recordSessionEnd` delegate:
 
 ```ts
     markDispatchStalled: (workspaceId) => workspaceRatchetAccessor.markDispatchStalled(workspaceId),
 ```
 
-Then call `await this.workspace.markDispatchStalled(context.workspace.id)` at both decline points, matching how `this.workspace.recordSessionEnd` is called at `ratchet.service.ts:315`. The test double in Step 9 mocks the bridge, not the accessor.
+Then call `await this.workspace.markDispatchStalled(context.workspace.id)` at
+both decline points, matching how `this.workspace.recordSessionEnd` is called at
+`ratchet.service.ts:315`. The test double in Step 9 mocks the bridge, not the
+accessor.
 
 - [ ] **Step 12: Run the tests to verify they pass**
 
@@ -245,8 +312,8 @@ Expected: PASS, including the pre-existing tests in that file.
 
 - [ ] **Step 13: Verify boundaries and types**
 
-Run: `pnpm typecheck && pnpm check`
-Expected: exit 0; dependency-cruiser reports no violations.
+Run: `pnpm typecheck && pnpm check` Expected: exit 0; dependency-cruiser reports
+no violations.
 
 - [ ] **Step 14: Commit**
 
@@ -261,12 +328,17 @@ git commit -m "Persist ratchet dispatch stall conclusion"
 ### Task 2: Detect a session that is starting
 
 **Files:**
+
 - Modify: `src/shared/session-runtime.ts`
 - Test: `src/shared/session-runtime.test.ts`
 
 **Interfaces:**
+
 - Consumes: nothing from earlier tasks.
-- Produces: `hasStartingSessionSummary(summaries: Pick<SessionSummary, 'runtimePhase'>[]): boolean`. Task 4 consumes it as the `isSessionStarting` input; Task 5 calls it at both derivation sites.
+- Produces:
+  `hasStartingSessionSummary(summaries: Pick<SessionSummary, 'runtimePhase'>[]): boolean`.
+  Task 4 consumes it as the `isSessionStarting` input; Task 5 calls it at both
+  derivation sites.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -298,11 +370,13 @@ describe('hasStartingSessionSummary', () => {
 });
 ```
 
-Add `hasStartingSessionSummary` to the existing import from `./session-runtime` at the top of that file.
+Add `hasStartingSessionSummary` to the existing import from `./session-runtime`
+at the top of that file.
 
 - [ ] **Step 7: Run the test to verify it fails**
 
-Run: `pnpm test src/shared/session-runtime.test.ts -t "hasStartingSessionSummary"`
+Run:
+`pnpm test src/shared/session-runtime.test.ts -t "hasStartingSessionSummary"`
 Expected: FAIL with "hasStartingSessionSummary is not a function".
 
 - [ ] **Step 3: Implement the predicate**
@@ -329,8 +403,7 @@ export function hasStartingSessionSummary(
 
 - [ ] **Step 9: Run the test to verify it passes**
 
-Run: `pnpm test src/shared/session-runtime.test.ts`
-Expected: PASS.
+Run: `pnpm test src/shared/session-runtime.test.ts` Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -344,23 +417,35 @@ git commit -m "Add starting-session summary predicate"
 
 ### Task 3: Carry the four missing facts on the snapshot wire
 
-The snapshot stream and the tRPC query must derive from the same facts. `hasMergeConflict`, `mode`, `autoIterationStatus`, and `dispatchStalled` are read by the query path today but absent from the wire, so this task plumbs them end to end with no behavior change.
+The snapshot stream and the tRPC query must derive from the same facts.
+`hasMergeConflict`, `mode`, `autoIterationStatus`, and `dispatchStalled` are
+read by the query path today but absent from the wire, so this task plumbs them
+end to end with no behavior change.
 
 **Files:**
+
 - Modify: `src/shared/workspace-snapshot.ts`
-- Modify: `src/backend/services/workspace/service/snapshot/workspace-snapshot-store.service.ts`
+- Modify:
+  `src/backend/services/workspace/service/snapshot/workspace-snapshot-store.service.ts`
 - Modify: `src/backend/orchestration/snapshot-reconciliation.orchestrator.ts`
 - Modify: `src/client/lib/snapshot-to-workspace.ts`
 - Test: `src/shared/workspace-snapshot.test.ts`
-- Test: `src/backend/services/workspace/service/snapshot/workspace-snapshot-store.service.test.ts`
+- Test:
+  `src/backend/services/workspace/service/snapshot/workspace-snapshot-store.service.test.ts`
 
 **Interfaces:**
+
 - Consumes: `ratchetDispatchStalled` from Task 1.
-- Produces: `WorkspaceSnapshotEntry` gains `hasMergeConflict: boolean`, `mode: WorkspaceMode`, `autoIterationStatus: AutoIterationStatus | null`, `ratchetDispatchStalled: boolean`. Task 5 reads all four in `recomputeDerivedState`.
+- Produces: `WorkspaceSnapshotEntry` gains `hasMergeConflict: boolean`,
+  `mode: WorkspaceMode`, `autoIterationStatus: AutoIterationStatus | null`,
+  `ratchetDispatchStalled: boolean`. Task 5 reads all four in
+  `recomputeDerivedState`.
 
 - [ ] **Step 1: Write the failing schema test**
 
-`src/shared/workspace-snapshot.test.ts` builds entries with a local `makeCompleteSnapshot()` (line 8) that wraps `makeWorkspaceSnapshotEntry` from `@/test-utils/workspace-snapshot`. Add:
+`src/shared/workspace-snapshot.test.ts` builds entries with a local
+`makeCompleteSnapshot()` (line 8) that wraps `makeWorkspaceSnapshotEntry` from
+`@/test-utils/workspace-snapshot`. Add:
 
 ```ts
 it('carries merge conflict, mode, auto-iteration status, and dispatch stall', () => {
@@ -383,8 +468,8 @@ it('carries merge conflict, mode, auto-iteration status, and dispatch stall', ()
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `pnpm test src/shared/workspace-snapshot.test.ts`
-Expected: FAIL — the schema strips or rejects the unknown keys.
+Run: `pnpm test src/shared/workspace-snapshot.test.ts` Expected: FAIL — the
+schema strips or rejects the unknown keys.
 
 - [ ] **Step 3: Extend the schema**
 
@@ -409,16 +494,21 @@ after `hasHadSessions: z.boolean(),`
   autoIterationStatus: z.nativeEnum(AutoIterationStatus).nullable(),
 ```
 
-Import `WorkspaceMode` and `AutoIterationStatus` from `@/shared/core` alongside the existing enum imports in that file. Both are exported there as const objects with matching types (`enums.ts:137-146` for `AutoIterationStatus`, whose values are `IDLE`, `RUNNING`, `PAUSED`, `COMPLETED`, `MAX_ITERATIONS`, `STOPPED`, `FAILED`), so `z.nativeEnum` works on both exactly as it does for `WorkspaceStatus`.
+Import `WorkspaceMode` and `AutoIterationStatus` from `@/shared/core` alongside
+the existing enum imports in that file. Both are exported there as const objects
+with matching types (`enums.ts:137-146` for `AutoIterationStatus`, whose values
+are `IDLE`, `RUNNING`, `PAUSED`, `COMPLETED`, `MAX_ITERATIONS`, `STOPPED`,
+`FAILED`), so `z.nativeEnum` works on both exactly as it does for
+`WorkspaceStatus`.
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `pnpm test src/shared/workspace-snapshot.test.ts`
-Expected: PASS.
+Run: `pnpm test src/shared/workspace-snapshot.test.ts` Expected: PASS.
 
 - [ ] **Step 5: Add the fields to the store's input and field groups**
 
-In `src/backend/services/workspace/service/snapshot/workspace-snapshot-store.service.ts`:
+In
+`src/backend/services/workspace/service/snapshot/workspace-snapshot-store.service.ts`:
 
 Add to `SnapshotUpdateInput`, in the matching comment blocks:
 
@@ -475,7 +565,8 @@ Add to `createDefaultEntry`, matching the surrounding style:
 
 - [ ] **Step 6: Populate the fields in reconciliation**
 
-In `src/backend/orchestration/snapshot-reconciliation.orchestrator.ts`, in the returned `SnapshotUpdateInput` object, add:
+In `src/backend/orchestration/snapshot-reconciliation.orchestrator.ts`, in the
+returned `SnapshotUpdateInput` object, add:
 
 ```ts
       hasMergeConflict: ws.prHasMergeConflict,
@@ -484,11 +575,22 @@ In `src/backend/orchestration/snapshot-reconciliation.orchestrator.ts`, in the r
       ratchetDispatchStalled: ws.ratchetDispatchStalled,
 ```
 
-All four read names come from the accessors that flatten the 1:1 side tables — `prHasMergeConflict` from `workspace-pr.accessor.ts:48`, `mode` and `autoIterationStatus` from `workspace-auto-iteration.accessor.ts:26-27`, and `ratchetDispatchStalled` from Task 1. The rows arrive via `this.dependencies.workspaceMaintenanceService.findActiveWithSessionsAndProject()` (line 300); if its select does not carry the `pr`, `autoIteration`, or `ratchet` relations, widen it so the flatteners run.
+All four read names come from the accessors that flatten the 1:1 side tables —
+`prHasMergeConflict` from `workspace-pr.accessor.ts:48`, `mode` and
+`autoIterationStatus` from `workspace-auto-iteration.accessor.ts:26-27`, and
+`ratchetDispatchStalled` from Task 1. The rows arrive via
+`this.dependencies.workspaceMaintenanceService.findActiveWithSessionsAndProject()`
+(line 300); if its select does not carry the `pr`, `autoIteration`, or `ratchet`
+relations, widen it so the flatteners run.
 
 - [ ] **Step 7: Write the failing store test**
 
-`src/backend/services/workspace/service/snapshot/workspace-snapshot-store.service.test.ts` builds inputs with `makeUpdate(overrides?: Partial<SnapshotUpdateInput>)` (line 34) and calls `store.upsert(id, update, source, timestamp)` — four arguments, not three. First add the new fields to `makeUpdate`'s defaults (`hasMergeConflict: false`, `mode: 'STANDARD'`, `autoIterationStatus: null`, `ratchetDispatchStalled: false`), then add:
+`src/backend/services/workspace/service/snapshot/workspace-snapshot-store.service.test.ts`
+builds inputs with `makeUpdate(overrides?: Partial<SnapshotUpdateInput>)`
+(line 34) and calls `store.upsert(id, update, source, timestamp)` — four
+arguments, not three. First add the new fields to `makeUpdate`'s defaults
+(`hasMergeConflict: false`, `mode: 'STANDARD'`, `autoIterationStatus: null`,
+`ratchetDispatchStalled: false`), then add:
 
 ```ts
 it('accepts and stores the merge conflict, mode, auto-iteration, and stall fields', () => {
@@ -516,20 +618,28 @@ it('accepts and stores the merge conflict, mode, auto-iteration, and stall field
 
 - [ ] **Step 8: Run the test to verify it passes**
 
-Run: `pnpm test src/backend/services/workspace/service/snapshot/workspace-snapshot-store.service.test.ts`
-Expected: PASS (the schema and field-group work in Steps 3 and 5 already satisfies it).
+Run:
+`pnpm test src/backend/services/workspace/service/snapshot/workspace-snapshot-store.service.test.ts`
+Expected: PASS (the schema and field-group work in Steps 3 and 5 already
+satisfies it).
 
 - [ ] **Step 9: Stop defaulting the moved fields on the client**
 
-In `src/client/lib/snapshot-to-workspace.ts`, remove `mode` from `mutationOnlyFieldDefaults()` — it is now a live field — and add to `projectSnapshotToLiveFields`:
+In `src/client/lib/snapshot-to-workspace.ts`, remove `mode` from
+`mutationOnlyFieldDefaults()` — it is now a live field — and add to
+`projectSnapshotToLiveFields`:
 
 ```ts
     mode: entry.mode,
 ```
 
-Leave `autoIterationStatus`, `autoIterationConfig`, and `autoIterationProgress` in `mutationOnlyFieldDefaults()`: only `autoIterationStatus` is on the wire and it is consumed by derivation on the backend, so the client list row keeps its existing mutation-sourced values rather than gaining a second source of truth.
+Leave `autoIterationStatus`, `autoIterationConfig`, and `autoIterationProgress`
+in `mutationOnlyFieldDefaults()`: only `autoIterationStatus` is on the wire and
+it is consumed by derivation on the backend, so the client list row keeps its
+existing mutation-sourced values rather than gaining a second source of truth.
 
-Add to `mergeProjectSnapshotIntoWorkspaceDetail`, beside the existing `ratchetDispatchOutcome` line:
+Add to `mergeProjectSnapshotIntoWorkspaceDetail`, beside the existing
+`ratchetDispatchOutcome` line:
 
 ```ts
     ratchetDispatchStalled: entry.ratchetDispatchStalled,
@@ -537,8 +647,10 @@ Add to `mergeProjectSnapshotIntoWorkspaceDetail`, beside the existing `ratchetDi
 
 - [ ] **Step 10: Verify the whole suite still passes**
 
-Run: `pnpm test && pnpm typecheck`
-Expected: PASS. Fix any snapshot-entry fixtures in `src/test-utils/workspace-snapshot.ts` that now fail schema validation by adding the four fields with their defaults (`false`, `'STANDARD'`, `null`, `false`).
+Run: `pnpm test && pnpm typecheck` Expected: PASS. Fix any snapshot-entry
+fixtures in `src/test-utils/workspace-snapshot.ts` that now fail schema
+validation by adding the four fields with their defaults (`false`, `'STANDARD'`,
+`null`, `false`).
 
 - [ ] **Step 11: Commit**
 
@@ -552,9 +664,13 @@ git commit -m "Carry conflict, mode, and stall state on snapshot wire"
 
 ### Task 4: Rewrite the status reason and project the column from it
 
-Merged from two tasks. The reason codes and the column map are one logical change: changing `WorkspaceStatusReasonInput` breaks both derivation call sites immediately, so splitting them would land a commit that does not typecheck, against this plan's Global Constraints.
+Merged from two tasks. The reason codes and the column map are one logical
+change: changing `WorkspaceStatusReasonInput` breaks both derivation call sites
+immediately, so splitting them would land a commit that does not typecheck,
+against this plan's Global Constraints.
 
 **Files:**
+
 - Modify: `src/shared/workspace-status-reason.ts`
 - Test: `src/shared/workspace-status-reason.test.ts`
 - Create: `src/shared/kanban-column-projection.ts`
@@ -562,19 +678,33 @@ Merged from two tasks. The reason codes and the column map are one logical chang
 - Delete: `src/backend/services/workspace/service/state/kanban-state.ts`
 - Delete: `src/backend/services/workspace/service/state/kanban-state.test.ts`
 - Modify: `src/backend/lib/workspace-derived-state.ts`
-- Modify: `src/backend/services/workspace/service/query/workspace-query.service.ts`
-- Modify: `src/backend/services/workspace/service/snapshot/workspace-snapshot-store.service.ts`
+- Modify:
+  `src/backend/services/workspace/service/query/workspace-query.service.ts`
+- Modify:
+  `src/backend/services/workspace/service/snapshot/workspace-snapshot-store.service.ts`
 - Modify: `src/backend/orchestration/domain-bridges.orchestrator.ts`
 - Modify: `src/backend/services/workspace/service/state/flow-state.ts`
 - Test: `src/backend/services/workspace/service/state/flow-state.test.ts`
 
 **Interfaces:**
-- Consumes: `hasStartingSessionSummary` (Task 2) indirectly — this task only takes the resulting boolean.
-- Produces: `kanbanColumnForStatusReason(code: WorkspaceStatusReasonCode): KanbanColumn | null`. `WorkspaceStatusReasonInput` drops `runScriptStatus`, gains `isSessionStarting: boolean`, `hasMergeConflict: boolean`, `ratchetEnabled: boolean`, `dispatchStalled: boolean`, `mode: WorkspaceMode`, `autoIterationStatus: AutoIterationStatus | null`. `WORKSPACE_STATUS_REASON_CODES` drops `DEV_SERVER_RUNNING` and gains `STARTING_SESSION`, `AUTO_ITERATING`, `FIXING_MERGE_CONFLICT`, `MERGE_CONFLICT`, `RATCHET_STALLED`, and every code is mapped to a column in the same task.
+
+- Consumes: `hasStartingSessionSummary` (Task 2) indirectly — this task only
+  takes the resulting boolean.
+- Produces:
+  `kanbanColumnForStatusReason(code: WorkspaceStatusReasonCode): KanbanColumn | null`.
+  `WorkspaceStatusReasonInput` drops `runScriptStatus`, gains
+  `isSessionStarting: boolean`, `hasMergeConflict: boolean`,
+  `ratchetEnabled: boolean`, `dispatchStalled: boolean`, `mode: WorkspaceMode`,
+  `autoIterationStatus: AutoIterationStatus | null`.
+  `WORKSPACE_STATUS_REASON_CODES` drops `DEV_SERVER_RUNNING` and gains
+  `STARTING_SESSION`, `AUTO_ITERATING`, `FIXING_MERGE_CONFLICT`,
+  `MERGE_CONFLICT`, `RATCHET_STALLED`, and every code is mapped to a column in
+  the same task.
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `src/shared/workspace-status-reason.test.ts`. First extend `makeInput`'s defaults — remove `runScriptStatus` and add:
+Add to `src/shared/workspace-status-reason.test.ts`. First extend `makeInput`'s
+defaults — remove `runScriptStatus` and add:
 
 ```ts
     isSessionStarting: false,
@@ -688,12 +818,14 @@ Delete any existing test asserting `DEV_SERVER_RUNNING`.
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `pnpm test src/shared/workspace-status-reason.test.ts`
-Expected: FAIL — unknown properties on the input type and missing codes.
+Run: `pnpm test src/shared/workspace-status-reason.test.ts` Expected: FAIL —
+unknown properties on the input type and missing codes.
 
 - [ ] **Step 3: Update the code list and input type**
 
-In `src/shared/workspace-status-reason.ts`, in `WORKSPACE_STATUS_REASON_CODES`, remove `'DEV_SERVER_RUNNING'` and add `'STARTING_SESSION'`, `'AUTO_ITERATING'`, `'FIXING_MERGE_CONFLICT'`, `'MERGE_CONFLICT'`, `'RATCHET_STALLED'`.
+In `src/shared/workspace-status-reason.ts`, in `WORKSPACE_STATUS_REASON_CODES`,
+remove `'DEV_SERVER_RUNNING'` and add `'STARTING_SESSION'`, `'AUTO_ITERATING'`,
+`'FIXING_MERGE_CONFLICT'`, `'MERGE_CONFLICT'`, `'RATCHET_STALLED'`.
 
 Replace `WorkspaceStatusReasonInput` with:
 
@@ -718,7 +850,9 @@ export interface WorkspaceStatusReasonInput {
 }
 ```
 
-Remove the `RunScriptStatus` import and add `WorkspaceMode` plus the auto-iteration status type, importing them the same way Task 3 imported them into the snapshot schema.
+Remove the `RunScriptStatus` import and add `WorkspaceMode` plus the
+auto-iteration status type, importing them the same way Task 3 imported them
+into the snapshot schema.
 
 - [ ] **Step 4: Update the derivation branches**
 
@@ -742,9 +876,12 @@ function deriveActiveReason(input: WorkspaceStatusReasonInput): OptionalWorkspac
 }
 ```
 
-The dev-server branch is gone: nothing read `DEV_SERVER_RUNNING`, the Kanban card already renders its own indicator from `runScriptStatus`, and returning it here masked the real reason for any workspace with a dev server up.
+The dev-server branch is gone: nothing read `DEV_SERVER_RUNNING`, the Kanban
+card already renders its own indicator from `runScriptStatus`, and returning it
+here masked the real reason for any workspace with a dev server up.
 
-In `derivePrFlowReason`, insert two blocks immediately before the existing `if (input.flowPhase === 'CI_WAIT')`:
+In `derivePrFlowReason`, insert two blocks immediately before the existing
+`if (input.flowPhase === 'CI_WAIT')`:
 
 ```ts
   if (input.ratchetEnabled && input.dispatchStalled) {
@@ -772,10 +909,11 @@ Change the two ready branches to report that a human owns the next action:
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
-Run: `pnpm test src/shared/workspace-status-reason.test.ts`
-Expected: PASS.
+Run: `pnpm test src/shared/workspace-status-reason.test.ts` Expected: PASS.
 
-The status-reason module will not typecheck on its own between Steps 3 and 6 — its two call sites are updated in Step 11. Do not commit until Step 15, when the whole change is green.
+The status-reason module will not typecheck on its own between Steps 3 and 6 —
+its two call sites are updated in Step 11. Do not commit until Step 15, when the
+whole change is green.
 
 - [ ] **Step 6: Write the failing projection test**
 
@@ -841,8 +979,8 @@ describe('kanbanColumnForStatusReason', () => {
 
 - [ ] **Step 7: Run the test to verify it fails**
 
-Run: `pnpm test src/shared/kanban-column-projection.test.ts`
-Expected: FAIL — module not found.
+Run: `pnpm test src/shared/kanban-column-projection.test.ts` Expected: FAIL —
+module not found.
 
 - [ ] **Step 8: Write the projection**
 
@@ -912,14 +1050,15 @@ export function kanbanColumnForStatusReason(
 
 - [ ] **Step 9: Run the test to verify it passes**
 
-Run: `pnpm test src/shared/kanban-column-projection.test.ts`
-Expected: PASS.
+Run: `pnpm test src/shared/kanban-column-projection.test.ts` Expected: PASS.
 
 - [ ] **Step 10: Rewire the assembly**
 
 In `src/backend/lib/workspace-derived-state.ts`:
 
-Replace the `WorkspaceDerivedStateInput` ratchet-dispatch and run-script fields — remove `ratchetDispatchOutcome`, `ratchetDispatchRetryCount`, and `runScriptStatus`, and add:
+Replace the `WorkspaceDerivedStateInput` ratchet-dispatch and run-script fields
+— remove `ratchetDispatchOutcome`, `ratchetDispatchRetryCount`, and
+`runScriptStatus`, and add:
 
 ```ts
   isSessionStarting: boolean;
@@ -930,7 +1069,8 @@ Replace the `WorkspaceDerivedStateInput` ratchet-dispatch and run-script fields 
   autoIterationStatus: AutoIterationStatus | null;
 ```
 
-Remove `computeKanbanColumn` from `WorkspaceDerivedStateFns`, leaving only `deriveSidebarStatus`.
+Remove `computeKanbanColumn` from `WorkspaceDerivedStateFns`, leaving only
+`deriveSidebarStatus`.
 
 Replace the body of `assembleWorkspaceDerivedState`:
 
@@ -984,7 +1124,11 @@ Import `kanbanColumnForStatusReason` from `@/shared/kanban-column-projection`.
 
 - [ ] **Step 11: Update the two call sites**
 
-In `src/backend/services/workspace/service/query/workspace-query.service.ts`, in `deriveProjectWorkspaces`, drop `computeKanbanColumn` from the injected `fns` object and from the imports, delete the `ratchetDispatchOutcome`/`ratchetDispatchRetryCount`/`runScriptStatus` inputs, and add:
+In `src/backend/services/workspace/service/query/workspace-query.service.ts`, in
+`deriveProjectWorkspaces`, drop `computeKanbanColumn` from the injected `fns`
+object and from the imports, delete the
+`ratchetDispatchOutcome`/`ratchetDispatchRetryCount`/`runScriptStatus` inputs,
+and add:
 
 ```ts
             isSessionStarting: hasStartingSessionSummary(sessionSummaries),
@@ -995,9 +1139,12 @@ In `src/backend/services/workspace/service/query/workspace-query.service.ts`, in
             autoIterationStatus: workspace.autoIterationStatus,
 ```
 
-Import `hasStartingSessionSummary` alongside the existing `hasWorkingSessionSummary` import from `@/shared/session-runtime`.
+Import `hasStartingSessionSummary` alongside the existing
+`hasWorkingSessionSummary` import from `@/shared/session-runtime`.
 
-In `src/backend/services/workspace/service/snapshot/workspace-snapshot-store.service.ts`, in `recomputeDerivedState`, make the matching changes reading from `entry`:
+In
+`src/backend/services/workspace/service/snapshot/workspace-snapshot-store.service.ts`,
+in `recomputeDerivedState`, make the matching changes reading from `entry`:
 
 ```ts
         isSessionStarting: hasStartingSessionSummary(entry.sessionSummaries),
@@ -1008,9 +1155,14 @@ In `src/backend/services/workspace/service/snapshot/workspace-snapshot-store.ser
         autoIterationStatus: entry.autoIterationStatus,
 ```
 
-and pass only `{ deriveSidebarStatus: this.derive.deriveSidebarStatus }` as the second argument.
+and pass only `{ deriveSidebarStatus: this.derive.deriveSidebarStatus }` as the
+second argument.
 
-In `src/backend/services/workspace/service/snapshot/workspace-snapshot-store.service.ts`, remove `computeKanbanColumn` from the `SnapshotDerivationFns` interface. In `src/backend/orchestration/domain-bridges.orchestrator.ts`, remove it from the object passed to the store's `configure()` call and from that file's imports.
+In
+`src/backend/services/workspace/service/snapshot/workspace-snapshot-store.service.ts`,
+remove `computeKanbanColumn` from the `SnapshotDerivationFns` interface. In
+`src/backend/orchestration/domain-bridges.orchestrator.ts`, remove it from the
+object passed to the store's `configure()` call and from that file's imports.
 
 - [ ] **Step 12: Delete the superseded module**
 
@@ -1018,11 +1170,15 @@ In `src/backend/services/workspace/service/snapshot/workspace-snapshot-store.ser
 git rm src/backend/services/workspace/service/state/kanban-state.ts src/backend/services/workspace/service/state/kanban-state.test.ts
 ```
 
-Its coverage now lives in `src/shared/kanban-column-projection.test.ts` (the mapping) and `src/shared/workspace-status-reason.test.ts` (the conditions that select each code).
+Its coverage now lives in `src/shared/kanban-column-projection.test.ts` (the
+mapping) and `src/shared/workspace-status-reason.test.ts` (the conditions that
+select each code).
 
 - [ ] **Step 13: Make the CI observation pure**
 
-In `src/backend/services/workspace/service/state/flow-state.ts`, delete the `CI_UNKNOWN_GRACE_MS` constant and replace the `CIStatus.UNKNOWN` branch of `deriveWorkspaceCiObservation`:
+In `src/backend/services/workspace/service/state/flow-state.ts`, delete the
+`CI_UNKNOWN_GRACE_MS` constant and replace the `CIStatus.UNKNOWN` branch of
+`deriveWorkspaceCiObservation`:
 
 ```ts
   if (input.prCiStatus === CIStatus.UNKNOWN) {
@@ -1036,9 +1192,11 @@ In `src/backend/services/workspace/service/state/flow-state.ts`, delete the `CI_
   }
 ```
 
-Remove the now-unused `prUpdatedAt` reads inside that function; leave `prUpdatedAt` on `WorkspaceFlowStateInput`, which other callers still pass.
+Remove the now-unused `prUpdatedAt` reads inside that function; leave
+`prUpdatedAt` on `WorkspaceFlowStateInput`, which other callers still pass.
 
-Update `src/backend/services/workspace/service/state/flow-state.test.ts`: delete any test asserting the 90-second decay to `NO_CHECKS`, and add:
+Update `src/backend/services/workspace/service/state/flow-state.test.ts`: delete
+any test asserting the 90-second decay to `NO_CHECKS`, and add:
 
 ```ts
 it('reads an unfetched CI status as not fetched regardless of elapsed time', () => {
@@ -1057,8 +1215,10 @@ it('reads an unfetched CI status as not fetched regardless of elapsed time', () 
 
 - [ ] **Step 14: Run the full suite**
 
-Run: `pnpm test && pnpm typecheck && pnpm check`
-Expected: PASS with no dependency violations. Existing tests that construct `WorkspaceDerivedStateInput` or `WorkspaceStatusReasonInput` will need the new fields; add them with the defaults `false`, `'STANDARD'`, `null`.
+Run: `pnpm test && pnpm typecheck && pnpm check` Expected: PASS with no
+dependency violations. Existing tests that construct
+`WorkspaceDerivedStateInput` or `WorkspaceStatusReasonInput` will need the new
+fields; add them with the defaults `false`, `'STANDARD'`, `null`.
 
 - [ ] **Step 15: Commit**
 
@@ -1073,20 +1233,32 @@ git commit -m "Project Kanban column from workspace status reason"
 ### Task 5: Stop a new workspace appearing on the board and in Todo at once
 
 **Files:**
+
 - Modify: `src/client/hooks/use-project-snapshot-sync.ts`
 - Modify: `src/client/features/kanban/kanban-context.tsx`
 - Test: `src/client/hooks/use-project-snapshot-sync.test.ts`
 - Test: `src/client/features/kanban/kanban-context.test.tsx`
 
 **Interfaces:**
+
 - Consumes: nothing from earlier tasks.
 - Produces: nothing later depends on it.
 
-- [ ] **Step 1: Update the existing invalidation contract and write the failing tests**
+- [ ] **Step 1: Update the existing invalidation contract and write the failing
+      tests**
 
-`src/client/hooks/use-project-snapshot-sync.test.ts` has a `describe('cache invalidation strategy')` block at line 442 whose first test — `'snapshot_changed and snapshot_removed never invalidate caches'` — asserts precisely the behavior this task changes. It must be narrowed, not left in place, or the task ends with a red suite.
+`src/client/hooks/use-project-snapshot-sync.test.ts` has a
+`describe('cache invalidation strategy')` block at line 442 whose first test —
+`'snapshot_changed and snapshot_removed never invalidate caches'` — asserts
+precisely the behavior this task changes. It must be narrowed, not left in
+place, or the task ends with a red suite.
 
-Rename that test to `'snapshot_changed and snapshot_removed do not invalidate caches for a known workspace'` and seed the list cache with the entry's workspace id before dispatching, using the same `mocks.workspaceListState`-style seeding the rest of the file uses for `listForProject.getData`. Its `expectNoInvalidations()` assertion then still holds and now documents the narrower rule.
+Rename that test to
+`'snapshot_changed and snapshot_removed do not invalidate caches for a known workspace'`
+and seed the list cache with the entry's workspace id before dispatching, using
+the same `mocks.workspaceListState`-style seeding the rest of the file uses for
+`listForProject.getData`. Its `expectNoInvalidations()` assertion then still
+holds and now documents the narrower rule.
 
 Then add, in the same block:
 
@@ -1112,24 +1284,34 @@ it('invalidates when snapshot_full introduces a workspace the cache has never se
 });
 ```
 
-Adapt `makeEntry` to whatever argument it already takes in that file; if it takes no workspace id, spread an override (`{ ...makeEntry(), workspaceId: 'ws-new' }`).
+Adapt `makeEntry` to whatever argument it already takes in that file; if it
+takes no workspace id, spread an override
+(`{ ...makeEntry(), workspaceId: 'ws-new' }`).
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `pnpm test src/client/hooks/use-project-snapshot-sync.test.ts`
-Expected: FAIL — `invalidate` is never called.
+Run: `pnpm test src/client/hooks/use-project-snapshot-sync.test.ts` Expected:
+FAIL — `invalidate` is never called.
 
 - [ ] **Step 3: Invalidate on an unknown workspace**
 
-In `src/client/hooks/use-project-snapshot-sync.ts`, add a ref beside the existing `baselineProjectsRef`:
+In `src/client/hooks/use-project-snapshot-sync.ts`, add a ref beside the
+existing `baselineProjectsRef`:
 
 ```ts
   const invalidatedForUnknownWorkspaceRef = useRef<Set<string>>(new Set());
 ```
 
-A snapshot entry carries only live fields. Mutation-sourced fields — including `githubIssueNumber` and `linearIssueId`, which the Todo column matches issues against — fall back to nulls for a workspace no fetch has returned yet, so the workspace lands on the board while its issue is still in Todo. Invalidating once at the point of introduction repairs every such field rather than the two that happen to hurt.
+A snapshot entry carries only live fields. Mutation-sourced fields — including
+`githubIssueNumber` and `linearIssueId`, which the Todo column matches issues
+against — fall back to nulls for a workspace no fetch has returned yet, so the
+workspace lands on the board while its issue is still in Todo. Invalidating once
+at the point of introduction repairs every such field rather than the two that
+happen to hurt.
 
-Thread the ref through `applySnapshotChangedMessage` and `applySnapshotFullMessage` as a parameter and, in each, after the `setData` call:
+Thread the ref through `applySnapshotChangedMessage` and
+`applySnapshotFullMessage` as a parameter and, in each, after the `setData`
+call:
 
 ```ts
   const introduced = entriesToCheck.filter(
@@ -1145,9 +1327,13 @@ Thread the ref through `applySnapshotChangedMessage` and `applySnapshotFullMessa
   }
 ```
 
-Both helpers are module-scoped functions, not hooks, so pass the ref's **contents** in — `invalidatedForUnknownWorkspaceRef.current` — and name the parameter `alreadyInvalidated: Set<string>`. Passing the ref object itself and calling `.has`/`.add` on it directly is a type error.
+Both helpers are module-scoped functions, not hooks, so pass the ref's
+**contents** in — `invalidatedForUnknownWorkspaceRef.current` — and name the
+parameter `alreadyInvalidated: Set<string>`. Passing the ref object itself and
+calling `.has`/`.add` on it directly is a type error.
 
-Compute `knownWorkspaceIds` *before* each function's `setData` call, since `setData` is what inserts the unknown workspace:
+Compute `knownWorkspaceIds` _before_ each function's `setData` call, since
+`setData` is what inserts the unknown workspace:
 
 ```ts
   const knownWorkspaceIds = new Set(
@@ -1155,16 +1341,22 @@ Compute `knownWorkspaceIds` *before* each function's `setData` call, since `setD
   );
 ```
 
-For `applySnapshotChangedMessage`, `entriesToCheck` is `[entry]`; for `applySnapshotFullMessage` it is `entries`.
+For `applySnapshotChangedMessage`, `entriesToCheck` is `[entry]`; for
+`applySnapshotFullMessage` it is `entries`.
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `pnpm test src/client/hooks/use-project-snapshot-sync.test.ts`
-Expected: PASS.
+Run: `pnpm test src/client/hooks/use-project-snapshot-sync.test.ts` Expected:
+PASS.
 
 - [ ] **Step 5: Write the failing issue-link test**
 
-`src/client/features/kanban/kanban-context.test.tsx` renders via `renderProvider()`, which returns the captured context, and mocks `trpc.github.listIssuesForProject.useQuery` to return a hardcoded `{ issues: [] }` (line 101). Make that mock's issues configurable first: add `githubIssues: [] as Array<{ number: number; title: string }>` to the hoisted `mocks` object, and change the mock to `data: { issues: mocks.githubIssues }`.
+`src/client/features/kanban/kanban-context.test.tsx` renders via
+`renderProvider()`, which returns the captured context, and mocks
+`trpc.github.listIssuesForProject.useQuery` to return a hardcoded
+`{ issues: [] }` (line 101). Make that mock's issues configurable first: add
+`githubIssues: [] as Array<{ number: number; title: string }>` to the hoisted
+`mocks` object, and change the mock to `data: { issues: mocks.githubIssues }`.
 
 Then add:
 
@@ -1192,16 +1384,20 @@ it('keeps an archiving workspace suppressing its issue', () => {
 });
 ```
 
-Reset `mocks.githubIssues = []` in the existing `beforeEach` alongside the other mock resets. Match `mocks.workspaceListState`'s existing shape in that `beforeEach` — copy any additional required workspace fields from it rather than trimming the fixture.
+Reset `mocks.githubIssues = []` in the existing `beforeEach` alongside the other
+mock resets. Match `mocks.workspaceListState`'s existing shape in that
+`beforeEach` — copy any additional required workspace fields from it rather than
+trimming the fixture.
 
 - [ ] **Step 6: Run the test to verify it fails**
 
-Run: `pnpm test src/client/features/kanban/kanban-context.test.tsx`
-Expected: FAIL — the issue card renders.
+Run: `pnpm test src/client/features/kanban/kanban-context.test.tsx` Expected:
+FAIL — the issue card renders.
 
 - [ ] **Step 7: Feed the issue filter the unfiltered list**
 
-In `src/client/features/kanban/kanban-context.tsx`, change the `useProjectIssues` call to source links from the unfiltered query data:
+In `src/client/features/kanban/kanban-context.tsx`, change the
+`useProjectIssues` call to source links from the unfiltered query data:
 
 ```tsx
   } = useProjectIssues(projectId, issueProvider, {
@@ -1213,12 +1409,12 @@ In `src/client/features/kanban/kanban-context.tsx`, change the `useProjectIssues
   });
 ```
 
-Leave the `workspaces` memo and its null-column filter alone; the board still renders from it.
+Leave the `workspaces` memo and its null-column filter alone; the board still
+renders from it.
 
 - [ ] **Step 8: Run the tests to verify they pass**
 
-Run: `pnpm test src/client/features/kanban`
-Expected: PASS.
+Run: `pnpm test src/client/features/kanban` Expected: PASS.
 
 - [ ] **Step 9: Commit**
 
@@ -1233,31 +1429,53 @@ git commit -m "Stop new workspaces showing in Todo and on the board"
 ### Task 6: Update the documentation
 
 **Files:**
+
 - Modify: `AGENTS.md`
 
 **Interfaces:**
+
 - Consumes: everything above.
 - Produces: nothing.
 
 - [ ] **Step 1: Correct the Kanban model bullet**
 
-In `AGENTS.md`, in the **Kanban model** bullet, replace the sentence describing column derivation with:
+In `AGENTS.md`, in the **Kanban model** bullet, replace the sentence describing
+column derivation with:
 
-> The column is a projection of `statusReason.code` through `KANBAN_COLUMN_BY_STATUS_REASON_CODE` (`src/shared/kanban-column-projection.ts`), derived on every read and never persisted, so the column a card sits in and the label it shows cannot disagree. The map is typed as a total `Record` over the code union, so a new reason code without a column is a compile error. WAITING is positively asserted — it means a human owns the next action — and a code with no obvious home belongs in WORKING.
+> The column is a projection of `statusReason.code` through
+> `KANBAN_COLUMN_BY_STATUS_REASON_CODE`
+> (`src/shared/kanban-column-projection.ts`), derived on every read and never
+> persisted, so the column a card sits in and the label it shows cannot
+> disagree. The map is typed as a total `Record` over the code union, so a new
+> reason code without a column is a compile error. WAITING is positively
+> asserted — it means a human owns the next action — and a code with no obvious
+> home belongs in WORKING.
 
-Delete the clause claiming READY workspaces with no prior sessions are hidden from the board. No such filter exists: the projection takes no `hasHadSessions` input and `listForProject` excludes only archiving and archived workspaces.
+Delete the clause claiming READY workspaces with no prior sessions are hidden
+from the board. No such filter exists: the projection takes no `hasHadSessions`
+input and `listForProject` excludes only archiving and archived workspaces.
 
 - [ ] **Step 2: Correct the auto-iteration bullet**
 
-In the **Auto-iteration state** bullet, replace the claim that none of the five fields are on the snapshot wire:
+In the **Auto-iteration state** bullet, replace the claim that none of the five
+fields are on the snapshot wire:
 
-> `mode` and `autoIterationStatus` are on the snapshot wire, because the status reason derives `AUTO_ITERATING` from them and the snapshot store has to reach the same answer as the query path. The other three (`config`, `progress`, `sessionId`) remain in the client's `mutationOnlyFieldDefaults`.
+> `mode` and `autoIterationStatus` are on the snapshot wire, because the status
+> reason derives `AUTO_ITERATING` from them and the snapshot store has to reach
+> the same answer as the query path. The other three (`config`, `progress`,
+> `sessionId`) remain in the client's `mutationOnlyFieldDefaults`.
 
 - [ ] **Step 3: Correct the ratchet bullet**
 
 In the **Auto-Fix (Ratchet)** bullet, add after the dispatch-record sentence:
 
-> A `dispatchStalled` boolean on the same row records the ratchet's own conclusion that it will not act again until the PR changes — set both when a settled dispatch achieved nothing for an unchanged snapshot key and when a `DIED` fixer exhausts its retries, cleared by `resetSettledDispatch` and `disable`. It is what moves a stuck workspace out of the WORKING column; the snapshot key hashes `statusCheckRollup` detail `WorkspacePR` does not store, so no reader can re-derive it.
+> A `dispatchStalled` boolean on the same row records the ratchet's own
+> conclusion that it will not act again until the PR changes — set both when a
+> settled dispatch achieved nothing for an unchanged snapshot key and when a
+> `DIED` fixer exhausts its retries, cleared by `resetSettledDispatch` and
+> `disable`. It is what moves a stuck workspace out of the WORKING column; the
+> snapshot key hashes `statusCheckRollup` detail `WorkspacePR` does not store,
+> so no reader can re-derive it.
 
 - [ ] **Step 4: Verify the full suite one last time**
 
@@ -1278,7 +1496,12 @@ git commit -m "Document Kanban column projection"
 After Task 6, confirm the behavior the plan exists to fix:
 
 1. Run `pnpm dev` and open a project's Kanban board.
-2. Click Start on a Todo issue. The issue card should leave the Todo column as the workspace card appears — never both at once.
-3. Watch the new card through provisioning and session startup. It should stay in Working continuously, with no flash into Waiting.
-4. Confirm a workspace whose agent has finished a turn with no PR sits in Waiting labelled "Ready for next prompt".
-5. Start the dev server on a workspace with an open, green PR. The card must stay in Waiting labelled "Ready to merge", with the green dev-server icon showing — the label must not change to "Dev server running".
+2. Click Start on a Todo issue. The issue card should leave the Todo column as
+   the workspace card appears — never both at once.
+3. Watch the new card through provisioning and session startup. It should stay
+   in Working continuously, with no flash into Waiting.
+4. Confirm a workspace whose agent has finished a turn with no PR sits in
+   Waiting labelled "Ready for next prompt".
+5. Start the dev server on a workspace with an open, green PR. The card must
+   stay in Waiting labelled "Ready to merge", with the green dev-server icon
+   showing — the label must not change to "Dev server running".

@@ -1,22 +1,39 @@
 # Kanban Next-Action Ownership Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make `WORKING`, `WAITING`, and `DONE` represent next-action ownership while keeping live agent execution as a separate session-only signal.
+**Goal:** Make `WORKING`, `WAITING`, and `DONE` represent next-action ownership
+while keeping live agent execution as a separate session-only signal.
 
-**Architecture:** Keep `deriveWorkspaceFlowState` responsible for PR/CI/Ratchet automation progress, and make `computeKanbanColumn` combine that flow activity with lifecycle, live session activity, explicit human blockers, and exhausted Ratchet dispatch state. Thread the existing dispatch outcome/retry fields through the in-memory snapshot and publish dispatch changes through the Ratchet event boundary so live and cached projections converge immediately.
+**Architecture:** Keep `deriveWorkspaceFlowState` responsible for PR/CI/Ratchet
+automation progress, and make `computeKanbanColumn` combine that flow activity
+with lifecycle, live session activity, explicit human blockers, and exhausted
+Ratchet dispatch state. Thread the existing dispatch outcome/retry fields
+through the in-memory snapshot and publish dispatch changes through the Ratchet
+event boundary so live and cached projections converge immediately.
 
-**Tech Stack:** TypeScript, Express service capsules, Prisma-generated types, EventEmitter orchestration, Vitest, Biome, pnpm.
+**Tech Stack:** TypeScript, Express service capsules, Prisma-generated types,
+EventEmitter orchestration, Vitest, Biome, pnpm.
 
 ## Global Constraints
 
-- `WorkspaceDerivedState.isWorking` remains session-only; CI and Ratchet flow must not set it to true.
-- `ARCHIVING` and `ARCHIVED` return `null`, and merged/closed PRs return `DONE` before other rules.
-- `FAILED`, pending interactive requests, session runtime errors, and exhausted `DIED` dispatches are human-owned `WAITING` states.
-- `NEW`, `PROVISIONING`, active sessions, `CI_WAIT`, `RATCHET_VERIFY`, and `RATCHET_FIXING` are `WORKING` unless a higher-priority human-attention rule applies.
+- `WorkspaceDerivedState.isWorking` remains session-only; CI and Ratchet flow
+  must not set it to true.
+- `ARCHIVING` and `ARCHIVED` return `null`, and merged/closed PRs return `DONE`
+  before other rules.
+- `FAILED`, pending interactive requests, session runtime errors, and exhausted
+  `DIED` dispatches are human-owned `WAITING` states.
+- `NEW`, `PROVISIONING`, active sessions, `CI_WAIT`, `RATCHET_VERIFY`, and
+  `RATCHET_FIXING` are `WORKING` unless a higher-priority human-attention rule
+  applies.
 - `COMPLETED` does not by itself move a workspace to `WAITING`.
-- Ratchet exhaustion uses `SERVICE_THRESHOLDS.ratchetDispatchMaxRetries`; do not duplicate the numeric limit.
-- No Prisma migration, poll-frequency change, new Kanban column, or Ratchet dispatch-policy change.
+- Ratchet exhaustion uses `SERVICE_THRESHOLDS.ratchetDispatchMaxRetries`; do not
+  duplicate the numeric limit.
+- No Prisma migration, poll-frequency change, new Kanban column, or Ratchet
+  dispatch-policy change.
 - Service consumers continue importing capsule APIs through barrel files.
 
 ---
@@ -24,23 +41,36 @@
 ### Task 1: Canonical next-action ownership derivation
 
 **Files:**
+
 - Modify: `src/backend/services/workspace/service/state/kanban-state.ts`
 - Modify: `src/backend/services/workspace/service/state/kanban-state.test.ts`
 - Modify: `src/backend/lib/workspace-derived-state.ts`
 - Modify: `src/backend/lib/workspace-derived-state.test.ts`
-- Modify: `src/backend/services/workspace/service/query/workspace-query.service.ts`
-- Modify: `src/backend/services/workspace/service/query/workspace-query.service.test.ts`
-- Modify: `src/backend/services/workspace/service/lifecycle/state-machine.service.ts`
-- Modify: `src/backend/services/workspace/service/lifecycle/state-machine.service.test.ts`
+- Modify:
+  `src/backend/services/workspace/service/query/workspace-query.service.ts`
+- Modify:
+  `src/backend/services/workspace/service/query/workspace-query.service.test.ts`
+- Modify:
+  `src/backend/services/workspace/service/lifecycle/state-machine.service.ts`
+- Modify:
+  `src/backend/services/workspace/service/lifecycle/state-machine.service.test.ts`
 - Modify: `src/backend/services/workspace-snapshot-store.service.ts`
 
 **Interfaces:**
-- Consumes: `WorkspaceFlowState.isWorking`, `WorkspacePendingRequestType`, Prisma `RatchetDispatchOutcome`, and `SERVICE_THRESHOLDS.ratchetDispatchMaxRetries`.
-- Produces: a pure `computeKanbanColumn(input: KanbanStateInput): KanbanColumn | null` whose input separates `sessionIsWorking` from `flowIsWorking` and carries explicit human-attention state.
 
-- [ ] **Step 1: Expand the existing Kanban tests with precedence-focused failing tests**
+- Consumes: `WorkspaceFlowState.isWorking`, `WorkspacePendingRequestType`,
+  Prisma `RatchetDispatchOutcome`, and
+  `SERVICE_THRESHOLDS.ratchetDispatchMaxRetries`.
+- Produces: a pure
+  `computeKanbanColumn(input: KanbanStateInput): KanbanColumn | null` whose
+  input separates `sessionIsWorking` from `flowIsWorking` and carries explicit
+  human-attention state.
 
-Add a local input builder to `kanban-state.test.ts` and test terminal, human-owned, and automation-owned cases without mocks:
+- [ ] **Step 1: Expand the existing Kanban tests with precedence-focused failing
+      tests**
+
+Add a local input builder to `kanban-state.test.ts` and test terminal,
+human-owned, and automation-owned cases without mocks:
 
 ```ts
 function makeInput(overrides: Partial<KanbanStateInput> = {}): KanbanStateInput {
@@ -81,13 +111,18 @@ expect(
 ).toBe('WAITING');
 ```
 
-Also cover `NEW`, `PROVISIONING`, active session, runtime error, `COMPLETED`, merged, closed, and archived.
+Also cover `NEW`, `PROVISIONING`, active session, runtime error, `COMPLETED`,
+merged, closed, and archived.
 
-In the service tests, add full persisted-workspace cases proving `updateCachedKanbanColumn` writes `WORKING` for pending CI with no live session and `WAITING` for a `DIED` dispatch at the retry limit.
+In the service tests, add full persisted-workspace cases proving
+`updateCachedKanbanColumn` writes `WORKING` for pending CI with no live session
+and `WAITING` for a `DIED` dispatch at the retry limit.
 
-- [ ] **Step 2: Add a failing derived-state regression test for the reported transition**
+- [ ] **Step 2: Add a failing derived-state regression test for the reported
+      transition**
 
-In `workspace-derived-state.test.ts`, pass `sessionIsWorking: false` and `flowState.isWorking: true`, then assert:
+In `workspace-derived-state.test.ts`, pass `sessionIsWorking: false` and
+`flowState.isWorking: true`, then assert:
 
 ```ts
 expect(result.isWorking).toBe(false);
@@ -97,9 +132,11 @@ expect(computeKanbanColumn).toHaveBeenCalledWith(
 );
 ```
 
-Include required dispatch defaults on every `WorkspaceDerivedStateInput` fixture.
+Include required dispatch defaults on every `WorkspaceDerivedStateInput`
+fixture.
 
-- [ ] **Step 3: Run the focused tests and verify the new expectations fail for the intended reason**
+- [ ] **Step 3: Run the focused tests and verify the new expectations fail for
+      the intended reason**
 
 Run:
 
@@ -109,11 +146,14 @@ pnpm exec vitest run \
   src/backend/lib/workspace-derived-state.test.ts
 ```
 
-Expected: failures show `FAILED` still returns `WORKING`, flow-only ownership returns `WAITING`, or the new input properties are absent from the current interface.
+Expected: failures show `FAILED` still returns `WORKING`, flow-only ownership
+returns `WAITING`, or the new input properties are absent from the current
+interface.
 
 - [ ] **Step 4: Implement the pure ownership rules**
 
-Change `KanbanStateInput` to the following shape and implement the precedence literally:
+Change `KanbanStateInput` to the following shape and implement the precedence
+literally:
 
 ```ts
 export interface KanbanStateInput {
@@ -133,9 +173,12 @@ const retriesExhausted =
   input.ratchetDispatchRetryCount >= SERVICE_THRESHOLDS.ratchetDispatchMaxRetries;
 ```
 
-Order the branches as archived, done, human attention, initializing/automation, fallback waiting. Update the function comment to define columns by next-action ownership.
+Order the branches as archived, done, human attention, initializing/automation,
+fallback waiting. Update the function comment to define columns by next-action
+ownership.
 
-- [ ] **Step 5: Keep session activity separate in the canonical derived-state assembler**
+- [ ] **Step 5: Keep session activity separate in the canonical derived-state
+      assembler**
 
 Extend `WorkspaceDerivedStateInput` with:
 
@@ -144,7 +187,8 @@ ratchetDispatchOutcome: RatchetDispatchOutcome | null;
 ratchetDispatchRetryCount: number;
 ```
 
-Keep `const isWorking = input.sessionIsWorking`, but call the Kanban function with:
+Keep `const isWorking = input.sessionIsWorking`, but call the Kanban function
+with:
 
 ```ts
 kanbanColumn: fns.computeKanbanColumn({
@@ -162,13 +206,24 @@ kanbanColumn: fns.computeKanbanColumn({
 
 - [ ] **Step 6: Update all direct derivation call sites**
 
-For full workspace rows, pass `workspace.ratchetDispatchOutcome` and `workspace.ratchetDispatchRetryCount`. Use `runtimeState.isSessionWorking` and `runtimeState.flowState.isWorking`, not `runtimeState.isWorking`, for the two independent activity inputs.
+For full workspace rows, pass `workspace.ratchetDispatchOutcome` and
+`workspace.ratchetDispatchRetryCount`. Use `runtimeState.isSessionWorking` and
+`runtimeState.flowState.isWorking`, not `runtimeState.isWorking`, for the two
+independent activity inputs.
 
-For lifecycle cache transitions, derive flow from the workspace PR/Ratchet fields, pass `sessionIsWorking: false`, and pass `pendingRequestType: null` plus `hasSessionRuntimeError: false` because those are in-memory overlays. Until Task 2 adds raw dispatch fields to `WorkspaceSnapshotEntry`, the snapshot-store call site must explicitly pass `ratchetDispatchOutcome: null` and `ratchetDispatchRetryCount: 0`; do not substitute the derived `isWorking` field.
+For lifecycle cache transitions, derive flow from the workspace PR/Ratchet
+fields, pass `sessionIsWorking: false`, and pass `pendingRequestType: null` plus
+`hasSessionRuntimeError: false` because those are in-memory overlays. Until Task
+2 adds raw dispatch fields to `WorkspaceSnapshotEntry`, the snapshot-store call
+site must explicitly pass `ratchetDispatchOutcome: null` and
+`ratchetDispatchRetryCount: 0`; do not substitute the derived `isWorking` field.
 
 - [ ] **Step 7: Update query/lifecycle tests and verify Task 1 is green**
 
-Change lifecycle expectations so `PROVISIONING -> FAILED` writes `cachedKanbanColumn: 'WAITING'`. Add a query-service case with pending CI, no working session, and assert `isWorking: false` plus `cachedKanbanColumn: 'WORKING'`.
+Change lifecycle expectations so `PROVISIONING -> FAILED` writes
+`cachedKanbanColumn: 'WAITING'`. Add a query-service case with pending CI, no
+working session, and assert `isWorking: false` plus
+`cachedKanbanColumn: 'WORKING'`.
 
 Run:
 
@@ -202,18 +257,26 @@ git commit -m "Derive Kanban columns from next-action ownership"
 ### Task 2: Persist Ratchet dispatch state in workspace snapshots
 
 **Files:**
+
 - Modify: `src/backend/services/workspace-snapshot-store.service.ts`
 - Modify: `src/backend/services/workspace-snapshot-store.service.test.ts`
 - Modify: `src/backend/orchestration/snapshot-reconciliation.orchestrator.ts`
-- Modify: `src/backend/orchestration/snapshot-reconciliation.orchestrator.test.ts`
+- Modify:
+  `src/backend/orchestration/snapshot-reconciliation.orchestrator.test.ts`
 
 **Interfaces:**
-- Consumes: persisted `Workspace.ratchetDispatchOutcome` and `Workspace.ratchetDispatchRetryCount`.
-- Produces: `WorkspaceSnapshotEntry.ratchetDispatchOutcome`, `WorkspaceSnapshotEntry.ratchetDispatchRetryCount`, and matching optional `SnapshotUpdateInput` fields in the Ratchet timestamp group.
+
+- Consumes: persisted `Workspace.ratchetDispatchOutcome` and
+  `Workspace.ratchetDispatchRetryCount`.
+- Produces: `WorkspaceSnapshotEntry.ratchetDispatchOutcome`,
+  `WorkspaceSnapshotEntry.ratchetDispatchRetryCount`, and matching optional
+  `SnapshotUpdateInput` fields in the Ratchet timestamp group.
 
 - [ ] **Step 1: Add failing snapshot-store ownership transition tests**
 
-Configure the real derivation functions and seed a ready workspace with an open PR, no session activity, Ratchet enabled, `ratchetDispatchOutcome: null`, and retry count `0`. Apply updates representing:
+Configure the real derivation functions and seed a ready workspace with an open
+PR, no session activity, Ratchet enabled, `ratchetDispatchOutcome: null`, and
+retry count `0`. Apply updates representing:
 
 ```ts
 { prCiStatus: 'PENDING', ratchetState: 'CI_RUNNING' } // WORKING
@@ -226,7 +289,8 @@ Configure the real derivation functions and seed a ready workspace with an open 
 } // WAITING
 ```
 
-Assert `entry.isWorking` stays false throughout and the Kanban sequence is `WORKING`, `WORKING`, `WORKING`, `WAITING`.
+Assert `entry.isWorking` stays false throughout and the Kanban sequence is
+`WORKING`, `WORKING`, `WORKING`, `WAITING`.
 
 - [ ] **Step 2: Run the snapshot test and verify RED**
 
@@ -236,7 +300,8 @@ Run:
 pnpm exec vitest run src/backend/services/workspace-snapshot-store.service.test.ts
 ```
 
-Expected: the entry/update types or exhausted-retry assertion fail because dispatch metadata is not stored.
+Expected: the entry/update types or exhausted-retry assertion fail because
+dispatch metadata is not stored.
 
 - [ ] **Step 3: Add dispatch fields to the Ratchet snapshot group**
 
@@ -247,11 +312,17 @@ ratchetDispatchOutcome: RatchetDispatchOutcome | null;
 ratchetDispatchRetryCount: number;
 ```
 
-to `WorkspaceSnapshotEntry`, optional forms to `SnapshotUpdateInput`, defaults `null` and `0` in `createDefaultEntry`, and both names to `RATCHET_FIELDS`. Pass them into `assembleWorkspaceDerivedState` during every recomputation.
+to `WorkspaceSnapshotEntry`, optional forms to `SnapshotUpdateInput`, defaults
+`null` and `0` in `createDefaultEntry`, and both names to `RATCHET_FIELDS`. Pass
+them into `assembleWorkspaceDerivedState` during every recomputation.
 
-- [ ] **Step 4: Add reconciliation coverage before production reconciliation changes**
+- [ ] **Step 4: Add reconciliation coverage before production reconciliation
+      changes**
 
-Extend the reconciliation fixture with `ratchetDispatchOutcome: 'DIED'` and an exhausted count. Assert the resulting snapshot contains both values and is `WAITING`. Add both fields to `DriftComparableField` and the Ratchet drift group, then assert drift detection reports either changed field.
+Extend the reconciliation fixture with `ratchetDispatchOutcome: 'DIED'` and an
+exhausted count. Assert the resulting snapshot contains both values and is
+`WAITING`. Add both fields to `DriftComparableField` and the Ratchet drift
+group, then assert drift detection reports either changed field.
 
 - [ ] **Step 5: Seed dispatch fields from authoritative workspace rows**
 
@@ -262,7 +333,8 @@ ratchetDispatchOutcome: ws.ratchetDispatchOutcome,
 ratchetDispatchRetryCount: ws.ratchetDispatchRetryCount,
 ```
 
-This makes startup and periodic reconciliation deterministic without a schema migration.
+This makes startup and periodic reconciliation deterministic without a schema
+migration.
 
 - [ ] **Step 6: Run Task 2 tests and verify GREEN**
 
@@ -291,16 +363,22 @@ git commit -m "Track Ratchet dispatch state in workspace snapshots"
 ### Task 3: Publish live Ratchet dispatch ownership changes
 
 **Files:**
+
 - Modify: `src/backend/services/ratchet/service/ratchet.service.ts`
 - Modify: `src/backend/services/ratchet/service/ratchet.service.test.ts`
-- Modify: `src/backend/services/ratchet/service/ratchet-active-session.helpers.ts`
+- Modify:
+  `src/backend/services/ratchet/service/ratchet-active-session.helpers.ts`
 - Modify: `src/backend/services/ratchet/service/index.ts`
 - Modify: `src/backend/orchestration/event-collector.orchestrator.ts`
 - Modify: `src/backend/orchestration/event-collector.orchestrator.test.ts`
 
 **Interfaces:**
-- Consumes: successful dispatch-record mutations and the snapshot Ratchet field group from Task 2.
-- Produces: `RATCHET_DISPATCH_CHANGED` with `RatchetDispatchChangedEvent { workspaceId, outcome, retryCount }` and an immediate event-collector upsert.
+
+- Consumes: successful dispatch-record mutations and the snapshot Ratchet field
+  group from Task 2.
+- Produces: `RATCHET_DISPATCH_CHANGED` with
+  `RatchetDispatchChangedEvent { workspaceId, outcome, retryCount }` and an
+  immediate event-collector upsert.
 
 - [ ] **Step 1: Add failing Ratchet service event tests**
 
@@ -319,11 +397,19 @@ expect(events).toContainEqual({
 });
 ```
 
-Also exercise a successful retry dispatch and expect `{ outcome: 'RUNNING', retryCount: 1 }`. A lost conditional settlement must emit nothing.
+Also exercise a successful retry dispatch and expect
+`{ outcome: 'RUNNING', retryCount: 1 }`. A lost conditional settlement must emit
+nothing.
 
-- [ ] **Step 2: Add a failing active-session fallback event test to the Ratchet service suite**
+- [ ] **Step 2: Add a failing active-session fallback event test to the Ratchet
+      service suite**
 
-Exercise the service's private `checkActiveFixerSession` wrapper with a missing/dead recorded fixer and assert the public dispatch-change event receives the workspace ID, settled outcome, and the workspace's current retry count. Assert no event on `ended_concurrently`. Implement the helper boundary with an `onDispatchChanged` callback so the helper remains independent of the service emitter.
+Exercise the service's private `checkActiveFixerSession` wrapper with a
+missing/dead recorded fixer and assert the public dispatch-change event receives
+the workspace ID, settled outcome, and the workspace's current retry count.
+Assert no event on `ended_concurrently`. Implement the helper boundary with an
+`onDispatchChanged` callback so the helper remains independent of the service
+emitter.
 
 - [ ] **Step 3: Run Ratchet tests and verify RED**
 
@@ -349,11 +435,16 @@ export interface RatchetDispatchChangedEvent {
 }
 ```
 
-Emit only after a dispatch-record mutation succeeds. `recordSessionEnd` should re-read the workspace after the conditional update and emit its authoritative outcome/count. The active-fixer fallback passes a callback into `checkActiveFixerSession`, and a successful `TRIGGERED_FIXER` emits `RUNNING` with the decision's retry count. Do not emit for failed CAS/disabled paths.
+Emit only after a dispatch-record mutation succeeds. `recordSessionEnd` should
+re-read the workspace after the conditional update and emit its authoritative
+outcome/count. The active-fixer fallback passes a callback into
+`checkActiveFixerSession`, and a successful `TRIGGERED_FIXER` emits `RUNNING`
+with the decision's retry count. Do not emit for failed CAS/disabled paths.
 
 - [ ] **Step 5: Add failing event-collector propagation tests**
 
-Capture the registered `ratchet_dispatch_changed` listener, invoke it with an exhausted `DIED` event, and assert an immediate store upsert:
+Capture the registered `ratchet_dispatch_changed` listener, invoke it with an
+exhausted `DIED` event, and assert an immediate store upsert:
 
 ```ts
 expect(mockUpsert).toHaveBeenCalledWith(
@@ -370,7 +461,11 @@ Update listener-count/log expectations to include the new subscription.
 
 - [ ] **Step 6: Wire the event collector and cache refresh**
 
-Subscribe through the Ratchet barrel, enqueue both dispatch fields with `{ immediate: true }`, and fire-and-forget `kanbanStateService.updateCachedKanbanColumn(workspaceId)` with warning logging on failure. Use the same cache-refresh helper after `RATCHET_STATE_CHANGED` and `RATCHET_TOGGLED`, since either can change durable ownership.
+Subscribe through the Ratchet barrel, enqueue both dispatch fields with
+`{ immediate: true }`, and fire-and-forget
+`kanbanStateService.updateCachedKanbanColumn(workspaceId)` with warning logging
+on failure. Use the same cache-refresh helper after `RATCHET_STATE_CHANGED` and
+`RATCHET_TOGGLED`, since either can change durable ownership.
 
 - [ ] **Step 7: Run Task 3 tests and verify GREEN**
 
@@ -401,10 +496,13 @@ git commit -m "Publish Ratchet dispatch ownership changes"
 ### Task 4: Align workspace progression documentation
 
 **Files:**
+
 - Modify: `docs/workspaces.md`
 
 **Interfaces:**
-- Consumes: verified ownership derivation, snapshot propagation, cache refresh, and Ratchet dispatch event behavior from Tasks 1–3.
+
+- Consumes: verified ownership derivation, snapshot propagation, cache refresh,
+  and Ratchet dispatch event behavior from Tasks 1–3.
 - Produces: current repository documentation for the implemented model.
 
 - [ ] **Step 1: Rewrite the stale Working/Waiting documentation**
@@ -414,7 +512,8 @@ Update `docs/workspaces.md` to:
 - point at current service-capsule paths;
 - state the current two-minute Ratchet and three-minute PR-sync intervals;
 - define `isWorking` as session-only;
-- define Kanban through next-action ownership and list the exhausted-retry override;
+- define Kanban through next-action ownership and list the exhausted-retry
+  override;
 - remove `hasHadSessions` from `computeKanbanColumn` inputs;
 - correct the duplicated archived-workspace bullet and stale testing paths.
 
@@ -443,11 +542,15 @@ git commit -m "Document Kanban ownership semantics"
 ### Task 5: Full verification and cleanup
 
 **Files:**
-- Modify only files already in scope if verification finds formatting or type issues.
+
+- Modify only files already in scope if verification finds formatting or type
+  issues.
 
 **Interfaces:**
+
 - Consumes: completed implementation from Tasks 1–4.
-- Produces: verified repository state with no behavior, type, lint, build, or documentation regressions attributable to the change.
+- Produces: verified repository state with no behavior, type, lint, build, or
+  documentation regressions attributable to the change.
 
 - [ ] **Step 1: Run the complete focused regression set**
 
@@ -474,7 +577,8 @@ pnpm check
 pnpm typecheck
 ```
 
-Expected: each command exits `0`. Inspect `git diff` after `check:fix` and retain only in-scope formatting changes.
+Expected: each command exits `0`. Inspect `git diff` after `check:fix` and
+retain only in-scope formatting changes.
 
 - [ ] **Step 3: Run the full test suite and production build**
 
@@ -483,7 +587,9 @@ pnpm test
 pnpm build
 ```
 
-Expected: both commands exit `0`. If a pre-existing unrelated failure appears, capture its exact output and verify it also occurs on the pre-change commit before reporting it as pre-existing.
+Expected: both commands exit `0`. If a pre-existing unrelated failure appears,
+capture its exact output and verify it also occurs on the pre-change commit
+before reporting it as pre-existing.
 
 - [ ] **Step 4: Inspect final scope and behavior evidence**
 
@@ -493,13 +599,16 @@ git diff ced1cf04..HEAD --stat
 git log -5 --oneline
 ```
 
-Confirm only the design/plan, Kanban derivation, snapshot propagation, Ratchet event wiring, tests, and `docs/workspaces.md` changed. Re-read the design's column-rule checklist against the final tests.
+Confirm only the design/plan, Kanban derivation, snapshot propagation, Ratchet
+event wiring, tests, and `docs/workspaces.md` changed. Re-read the design's
+column-rule checklist against the final tests.
 
 - [ ] **Step 5: Commit any verification-only formatting fix**
 
 Only if Step 2 changed in-scope files after Task 4:
 
-Stage only the already listed Task 1–4 files changed by Biome, verify the staged diff, and commit:
+Stage only the already listed Task 1–4 files changed by Biome, verify the staged
+diff, and commit:
 
 ```bash
 git diff --name-only

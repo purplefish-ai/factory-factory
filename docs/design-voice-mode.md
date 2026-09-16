@@ -2,13 +2,28 @@
 
 ## Executive Summary
 
-**Goal:** Let a user work with the Claude/Codex agent harness in a workspace entirely by voice — speak instructions, hear the agent's final answers spoken back, hear a sampling of its live reasoning while it's still working, and interrupt it mid-turn by saying "please stop."
+**Goal:** Let a user work with the Claude/Codex agent harness in a workspace
+entirely by voice — speak instructions, hear the agent's final answers spoken
+back, hear a sampling of its live reasoning while it's still working, and
+interrupt it mid-turn by saying "please stop."
 
-**Key finding that shapes this design:** the agent harness itself does not need to change. The ACP event stream the backend already receives from Claude/Codex sessions structurally distinguishes reasoning (`agent_thought_chunk`) from final reply text (`agent_message_chunk`), and separately publishes a turn-completion signal (`SessionRuntimeState.activity: WORKING → IDLE`) independent of that content. Voice mode is built as a new consumer of data that already exists, not a fork of the agent loop.
+**Key finding that shapes this design:** the agent harness itself does not need
+to change. The ACP event stream the backend already receives from Claude/Codex
+sessions structurally distinguishes reasoning (`agent_thought_chunk`) from final
+reply text (`agent_message_chunk`), and separately publishes a turn-completion
+signal (`SessionRuntimeState.activity: WORKING → IDLE`) independent of that
+content. Voice mode is built as a new consumer of data that already exists, not
+a fork of the agent loop.
 
-**BYOK:** users bring their own Deepgram API key, entered once in an admin settings tab, encrypted at rest with the same `CryptoService` (AES-256-GCM) already used for the Linear integration's API key.
+**BYOK:** users bring their own Deepgram API key, entered once in an admin
+settings tab, encrypted at rest with the same `CryptoService` (AES-256-GCM)
+already used for the Linear integration's API key.
 
-**Scope of change to the existing system:** additive. The existing text chat pipeline, the existing hard `stop` control, and the existing ACP event emission are all unmodified. Voice mode taps in as a second WebSocket endpoint and a second listener on the existing internal event bus — see [§5](#5-what-changes-in-the-existing-system) for the precise list.
+**Scope of change to the existing system:** additive. The existing text chat
+pipeline, the existing hard `stop` control, and the existing ACP event emission
+are all unmodified. Voice mode taps in as a second WebSocket endpoint and a
+second listener on the existing internal event bus — see
+[§5](#5-what-changes-in-the-existing-system) for the precise list.
 
 ---
 
@@ -111,7 +126,10 @@ sequenceDiagram
     Note over Runtime: subprocess is gone —\nnext turn respawns it
 ```
 
-This is a full teardown: it always kills the ACP subprocess. It's the right tool for "I'm done, stop entirely," and it stays exactly as-is. It is the wrong tool for a mid-conversation "please stop" in voice mode, which is why §2 introduces a second, lighter path.
+This is a full teardown: it always kills the ACP subprocess. It's the right tool
+for "I'm done, stop entirely," and it stays exactly as-is. It is the wrong tool
+for a mid-conversation "please stop" in voice mode, which is why §2 introduces a
+second, lighter path.
 
 ---
 
@@ -201,7 +219,8 @@ sequenceDiagram
 
 ### 2.3 Sequence: selective narration (thinking vs. conclusion)
 
-This is the core new logic. It runs entirely downstream of the existing `AcpEventProcessor` output — no change to how those deltas are produced.
+This is the core new logic. It runs entirely downstream of the existing
+`AcpEventProcessor` output — no change to how those deltas are produced.
 
 ```mermaid
 sequenceDiagram
@@ -271,7 +290,11 @@ model UserSettings {
 }
 ```
 
-`SessionLifecycleEventReason` gains one new enum member (`VOICE_INTERRUPT`, alongside the existing `USER_STOP` / `PROMPT_TIMEOUT` / etc.) so a voice-triggered cancel is attributable in history, distinct from a typed "please stop" via the hard stop button. Purely additive — no existing reason changes meaning.
+`SessionLifecycleEventReason` gains one new enum member (`VOICE_INTERRUPT`,
+alongside the existing `USER_STOP` / `PROMPT_TIMEOUT` / etc.) so a
+voice-triggered cancel is attributable in history, distinct from a typed "please
+stop" via the hard stop button. Purely additive — no existing reason changes
+meaning.
 
 ---
 
@@ -307,22 +330,26 @@ Frontend:
 
 ## 5. What Changes in the Existing System
 
-This is the direct answer to "what changes to the regular logical flows that already exist":
+This is the direct answer to "what changes to the regular logical flows that
+already exist":
 
-| Existing flow | Change |
-|---|---|
-| Typed message → `queue_message` → ACP prompt execution | **None.** Voice input produces text that enters at the exact same `queue_message` call the composer already makes. |
-| ACP event translation (`AcpEventTranslator`, `AcpEventProcessor`) | **None.** Same events, same shapes, same flush timing. |
-| `SessionEventBus` → `ChatConnectionRegistry` → chat WebSocket → reducer → UI rendering | **None.** Existing broadcast is untouched. Voice mode adds a second, independent listener on the same bus (`VoiceNarrationService`) — this is additive by construction, since `SessionEventBus` is already a plain `EventEmitter` that supports multiple subscribers. |
-| Hard `stop` (WS `{type: 'stop'}` → `SessionLifecycleService.stopSession` → SIGTERM/SIGKILL) | **None.** Stays the sole path for "stop and don't resume this turn," used identically by typed and voice UIs alike when the user hits the Stop button. |
-| `AcpRuntimeManager.cancelPrompt` | **Reused, not modified.** Previously called only internally for prompt-timeout recovery; voice interrupt becomes a second caller. Its behavior (ACP-level cancel, no process kill, orphaned tool calls finalized) is exactly what was already built for a different reason — we're not adding new cancellation semantics, just a new trigger. |
-| `SessionRuntimeState.activity` (WORKING/IDLE) and `session_runtime_updated` | **None.** Read by the new narrator service as an additional consumer; not modified or delayed by that read. |
-| `UserSettings` schema / admin settings service | **Additive migration only** (two new nullable/defaulted columns). No existing field changes shape or meaning. |
-| `ChatBarCapabilities` | **Additive flag** (`voiceInput.enabled`), following the exact pattern already used for `thinking.enabled`, `attachments.enabled`, etc. When false (default), composer rendering is pixel-identical to today. |
-| WebSocket upgrade dispatcher (`server.ts`) | **Additive route registration** (`/voice` added to the existing path→handler map alongside `/chat`, `/terminal`, `/snapshots`). Existing routes untouched. |
-| `SessionLifecycleEventReason` enum | **Additive member** (`VOICE_INTERRUPT`). Existing reasons unchanged. |
+| Existing flow                                                                               | Change                                                                                                                                                                                                                                                                                                                                        |
+| ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Typed message → `queue_message` → ACP prompt execution                                      | **None.** Voice input produces text that enters at the exact same `queue_message` call the composer already makes.                                                                                                                                                                                                                            |
+| ACP event translation (`AcpEventTranslator`, `AcpEventProcessor`)                           | **None.** Same events, same shapes, same flush timing.                                                                                                                                                                                                                                                                                        |
+| `SessionEventBus` → `ChatConnectionRegistry` → chat WebSocket → reducer → UI rendering      | **None.** Existing broadcast is untouched. Voice mode adds a second, independent listener on the same bus (`VoiceNarrationService`) — this is additive by construction, since `SessionEventBus` is already a plain `EventEmitter` that supports multiple subscribers.                                                                         |
+| Hard `stop` (WS `{type: 'stop'}` → `SessionLifecycleService.stopSession` → SIGTERM/SIGKILL) | **None.** Stays the sole path for "stop and don't resume this turn," used identically by typed and voice UIs alike when the user hits the Stop button.                                                                                                                                                                                        |
+| `AcpRuntimeManager.cancelPrompt`                                                            | **Reused, not modified.** Previously called only internally for prompt-timeout recovery; voice interrupt becomes a second caller. Its behavior (ACP-level cancel, no process kill, orphaned tool calls finalized) is exactly what was already built for a different reason — we're not adding new cancellation semantics, just a new trigger. |
+| `SessionRuntimeState.activity` (WORKING/IDLE) and `session_runtime_updated`                 | **None.** Read by the new narrator service as an additional consumer; not modified or delayed by that read.                                                                                                                                                                                                                                   |
+| `UserSettings` schema / admin settings service                                              | **Additive migration only** (two new nullable/defaulted columns). No existing field changes shape or meaning.                                                                                                                                                                                                                                 |
+| `ChatBarCapabilities`                                                                       | **Additive flag** (`voiceInput.enabled`), following the exact pattern already used for `thinking.enabled`, `attachments.enabled`, etc. When false (default), composer rendering is pixel-identical to today.                                                                                                                                  |
+| WebSocket upgrade dispatcher (`server.ts`)                                                  | **Additive route registration** (`/voice` added to the existing path→handler map alongside `/chat`, `/terminal`, `/snapshots`). Existing routes untouched.                                                                                                                                                                                    |
+| `SessionLifecycleEventReason` enum                                                          | **Additive member** (`VOICE_INTERRUPT`). Existing reasons unchanged.                                                                                                                                                                                                                                                                          |
 
-Net effect: a user who never enables voice mode should see **zero behavioral difference** anywhere in the app — every touch point above is either a new listener, a new route, or a new enum value, none of which affect the path when voice mode is off.
+Net effect: a user who never enables voice mode should see **zero behavioral
+difference** anywhere in the app — every touch point above is either a new
+listener, a new route, or a new enum value, none of which affect the path when
+voice mode is off.
 
 ---
 
@@ -331,184 +358,441 @@ Net effect: a user who never enables voice mode should see **zero behavioral dif
 Each phase validates one architectural bet independently before building on it.
 
 ### Phase 0 — Admin settings & BYOK plumbing
-- `UserSettings` migration, `voice.trpc.ts` (`getConfig`/`updateConfig`), `VoiceModeSection.tsx` admin tab.
-- Validate the key with a lightweight Deepgram call before saving (mirrors `IssueTrackingSection`'s "validate then save" UX).
-- No audio yet. **Exit criteria:** key round-trips encrypted, `hasApiKey` reflects state correctly, feature stays fully hidden until enabled.
+
+- `UserSettings` migration, `voice.trpc.ts` (`getConfig`/`updateConfig`),
+  `VoiceModeSection.tsx` admin tab.
+- Validate the key with a lightweight Deepgram call before saving (mirrors
+  `IssueTrackingSection`'s "validate then save" UX).
+- No audio yet. **Exit criteria:** key round-trips encrypted, `hasApiKey`
+  reflects state correctly, feature stays fully hidden until enabled.
 
 ### Phase 1 — Speech-to-text in (push-to-talk)
-- `mintGrantToken` endpoint (backend calls Deepgram `/v1/auth/grant` with the decrypted key, TTL tuned to session length, refreshed before expiry).
-- `useMicCapture` hook: push-to-talk button, direct browser→Deepgram STT WebSocket, final transcript fed into the existing composer send path.
-- No TTS, no interrupt. **Exit criteria:** a spoken instruction reaches the agent and gets a normal typed-style response; validates the direct-to-Deepgram browser flow and token minting end-to-end.
+
+- `mintGrantToken` endpoint (backend calls Deepgram `/v1/auth/grant` with the
+  decrypted key, TTL tuned to session length, refreshed before expiry).
+- `useMicCapture` hook: push-to-talk button, direct browser→Deepgram STT
+  WebSocket, final transcript fed into the existing composer send path.
+- No TTS, no interrupt. **Exit criteria:** a spoken instruction reaches the
+  agent and gets a normal typed-style response; validates the direct-to-Deepgram
+  browser flow and token minting end-to-end.
 
 ### Phase 2 — Text-to-speech out (final answers only)
-- `/voice` WS handler, `VoiceNarrationService` skeleton that only speaks the accumulated final-answer text, triggered off `activity: WORKING → IDLE`.
+
+- `/voice` WS handler, `VoiceNarrationService` skeleton that only speaks the
+  accumulated final-answer text, triggered off `activity: WORKING → IDLE`.
 - `useVoicePlayback` queued audio playback.
-- No thinking narration yet — every final answer is read in full, once complete. **Exit criteria:** validates backend TTS synthesis, audio delivery framing (base64-over-JSON on `/voice`), and playback latency budget.
+- No thinking narration yet — every final answer is read in full, once complete.
+  **Exit criteria:** validates backend TTS synthesis, audio delivery framing
+  (base64-over-JSON on `/voice`), and playback latency budget.
 
 ### Phase 3 — Selective thinking narration
-- Implement the clause-buffer / drop-on-backlog / flush-on-transition state machine from §2.3.
-- This phase is mostly UX tuning (clause boundary heuristics, cooldown between spoken thinking snippets) once the mechanism is in place. **Exit criteria:** user reports voice mode "feels like listening to a colleague think out loud," not a monologue or a wall of silence.
+
+- Implement the clause-buffer / drop-on-backlog / flush-on-transition state
+  machine from §2.3.
+- This phase is mostly UX tuning (clause boundary heuristics, cooldown between
+  spoken thinking snippets) once the mechanism is in place. **Exit criteria:**
+  user reports voice mode "feels like listening to a colleague think out loud,"
+  not a monologue or a wall of silence.
 
 ### Phase 4 — Voice interrupt & barge-in
-- `soft_stop` WS message + handler wired to `cancelPrompt`, gated to only scan for stop-phrases while `WORKING`.
-- Client-side VAD for barge-in (pause/duck TTS playback the instant the user starts speaking).
-- New `SessionLifecycleEventReason.VOICE_INTERRUPT`. **Exit criteria:** "please stop" reliably cancels the in-flight turn without killing the subprocess, and doesn't false-positive during normal dictation while idle.
+
+- `soft_stop` WS message + handler wired to `cancelPrompt`, gated to only scan
+  for stop-phrases while `WORKING`.
+- Client-side VAD for barge-in (pause/duck TTS playback the instant the user
+  starts speaking).
+- New `SessionLifecycleEventReason.VOICE_INTERRUPT`. **Exit criteria:** "please
+  stop" reliably cancels the in-flight turn without killing the subprocess, and
+  doesn't false-positive during normal dictation while idle.
 
 ---
 
 ## 7. Risks & Open Questions
 
-1. **Latency stacking** across mic → STT → transcript → ACP → first token → narration decision → TTS → playback needs real measurement; each hop is individually cheap but they're serial for the first utterance of a turn.
-2. **Clause segmentation is a tuning problem**, not an architecture problem — expect iteration in Phase 3.
-3. **`cancelPrompt`'s only production caller today is internal timeout recovery**; voice interrupt is its first user-initiated caller. Verify `finalizeOrphanedToolCalls` and downstream `SessionLifecycleEvent` recording behave correctly for the new reason, not just `PROMPT_TIMEOUT`.
-4. **Audio backpressure policy**: the existing `sendStreamOutput` helper silently drops frames above a buffered-bytes threshold, which is fine for terminal text but produces an audible glitch for dropped audio. Needs its own policy, not a reuse of the lossy default as-is.
-5. **Deepgram TTS WebSocket framing specifics** (Flush/Interrupt control messages, codec choice) need a focused doc read during Phase 2 implementation — not confirmed in this design pass.
+1. **Latency stacking** across mic → STT → transcript → ACP → first token →
+   narration decision → TTS → playback needs real measurement; each hop is
+   individually cheap but they're serial for the first utterance of a turn.
+2. **Clause segmentation is a tuning problem**, not an architecture problem —
+   expect iteration in Phase 3.
+3. **`cancelPrompt`'s only production caller today is internal timeout
+   recovery**; voice interrupt is its first user-initiated caller. Verify
+   `finalizeOrphanedToolCalls` and downstream `SessionLifecycleEvent` recording
+   behave correctly for the new reason, not just `PROMPT_TIMEOUT`.
+4. **Audio backpressure policy**: the existing `sendStreamOutput` helper
+   silently drops frames above a buffered-bytes threshold, which is fine for
+   terminal text but produces an audible glitch for dropped audio. Needs its own
+   policy, not a reuse of the lossy default as-is.
+5. **Deepgram TTS WebSocket framing specifics** (Flush/Interrupt control
+   messages, codec choice) need a focused doc read during Phase 2 implementation
+   — not confirmed in this design pass.
 
 ### 7.1 Conditions for "zero impact on existing users" to actually hold
 
-§5 argues every change is additive at the architecture level. That's true of the diagrams, but three implementation choices determine whether it's true in practice:
+§5 argues every change is additive at the architecture level. That's true of the
+diagrams, but three implementation choices determine whether it's true in
+practice:
 
-- **`VoiceNarrationService`'s listener on `SessionEventBus` must fail closed.** The bus is a plain `EventEmitter`; listeners on the same event fire synchronously in registration order, so an uncaught exception in the narrator's handler can propagate up through the `.emit()` call and disrupt delivery to `ChatConnectionRegistry` — the path every session, voice or not, depends on. The handler must be wrapped so a bug in new code cannot affect existing chat delivery.
-- **The listener must no-op in O(1) for non-voice sessions**, and that check must be the first thing it does. Otherwise every session pays a small constant tax on every delta forever, whether or not voice mode is ever touched — a real if small performance regression for the entire existing user base, not a behavioral one.
-- **`cancelPrompt` needs test coverage for its new caller.** The function itself doesn't change, but it's only been exercised via one internal trigger (timeout recovery) so far; a user-initiated call may hit it at different points in the turn lifecycle than a timeout ever would. "It's reused, so it's safe" isn't sufficient — it needs to be verified in the new context before shipping Phase 4.
+- **`VoiceNarrationService`'s listener on `SessionEventBus` must fail closed.**
+  The bus is a plain `EventEmitter`; listeners on the same event fire
+  synchronously in registration order, so an uncaught exception in the
+  narrator's handler can propagate up through the `.emit()` call and disrupt
+  delivery to `ChatConnectionRegistry` — the path every session, voice or not,
+  depends on. The handler must be wrapped so a bug in new code cannot affect
+  existing chat delivery.
+- **The listener must no-op in O(1) for non-voice sessions**, and that check
+  must be the first thing it does. Otherwise every session pays a small constant
+  tax on every delta forever, whether or not voice mode is ever touched — a real
+  if small performance regression for the entire existing user base, not a
+  behavioral one.
+- **`cancelPrompt` needs test coverage for its new caller.** The function itself
+  doesn't change, but it's only been exercised via one internal trigger (timeout
+  recovery) so far; a user-initiated call may hit it at different points in the
+  turn lifecycle than a timeout ever would. "It's reused, so it's safe" isn't
+  sufficient — it needs to be verified in the new context before shipping
+  Phase 4.
 
 ---
 
 ## 8. Detailed Phase Scoping
 
-Confirmed against Deepgram's current API docs and this repo's exact boilerplate. Each phase below is independently shippable and gates the next.
+Confirmed against Deepgram's current API docs and this repo's exact boilerplate.
+Each phase below is independently shippable and gates the next.
 
 **Deepgram contracts confirmed for this scoping pass:**
 
-- **STT**: `wss://api.deepgram.com/v1/listen` — query params `model`, `language`, `encoding`, `sample_rate`, `channels`, `interim_results`, `endpointing`, `utterance_end_ms`, `vad_events`, `smart_format`. Server sends `Results` (`is_final`/`speech_final`), `UtteranceEnd`, `SpeechStarted`, `Metadata`. Client ends the stream with `{type: "CloseStream"}`.
-- **TTS**: `wss://api.deepgram.com/v2/speak` (Flux TTS, upgraded from the original `v1/speak` Aura-2 contract below) — query params `model` (voice, e.g. `flux-*-en`), `encoding` (`linear16`/`mulaw`/`alaw`), `sample_rate`, `speed`. Client sends `{type:"Speak", text}`, `{type:"Flush"}` (synthesize what's buffered now, ends the turn), `{type:"Interrupt"}` (cancel the active turn on barge-in — the built-in "user interrupted the agent" primitive; the server acks with `SpeechInterrupted`, always reporting `audio_played_ms`), `{type:"Close"}`. `Interrupt` takes an **optional** `playback_offset` (`{type:"time_ms", value}`, milliseconds from session audio start, and each one must advance past the last); supplying it makes the ack additionally report the `text_spoken`/`text_remaining` split, and omitting it is valid — the interrupt still cancels the turn, the ack just carries no split. We omit it: the split exists to reconcile "what did the caller actually hear" back into LLM context, and our interrupt is the agent's own thinking→answer transition, where the superseded text is discarded rather than fed back. Server streams raw binary audio frames back (no JSON wrapper), plus `Connected`/`SpeechStarted`/`SpeechMetadata`/`Flushed`/`SpeechInterrupted`/`SessionMetadata`/`Warning`/`Error` JSON control messages. (Original Aura-2 contract, superseded: `wss://api.deepgram.com/v1/speak`, `model=aura-2-*`, `{type:"Clear"}` instead of `Interrupt`, acked with `Cleared` instead of `SpeechInterrupted`.)
-- **Browser auth** (native `WebSocket` can't set custom headers): minted server-side via `POST https://api.deepgram.com/v1/auth/grant` with `Authorization: Token <decrypted long-lived key>`, optional `ttl_seconds` (default 30s, max 3600s). **Correction from live testing (see §9):** Deepgram's own docs suggest passing the grant token via an `?access_token=<jwt>` query parameter, but a real account rejects that with `401 INVALID_AUTH` at `/v1/listen` — verified via a direct Node `ws` connection showing the raw HTTP response, which the browser hides. The working mechanism is the `Sec-WebSocket-Protocol` subprotocol list — `new WebSocket(url, ['bearer', token])` — the one auth channel a browser `WebSocket` actually can set without custom headers.
-- **This repo's WS registration boilerplate** is a one-line addition: `server.ts` builds each handler via `create<X>UpgradeHandler(application)` and adds it to a `Map<string, Handler>` (`server.ts:107-116`) that a single `server.on('upgrade', ...)` dispatcher reads by pathname (`server.ts:363-384`). A `/voice` route is exactly this pattern — no change to existing entries.
-- **`stop` lives in the same discriminated union as every other chat control message** (`ChatMessageSchema`, `src/shared/websocket/chat-message.schema.ts:36-112`). Giving voice its own `voice-message.schema.ts` and its own `/voice` connection means the existing chat schema and its handlers gain zero new variants — an even cleaner separation than implied earlier.
+- **STT**: `wss://api.deepgram.com/v1/listen` — query params `model`,
+  `language`, `encoding`, `sample_rate`, `channels`, `interim_results`,
+  `endpointing`, `utterance_end_ms`, `vad_events`, `smart_format`. Server sends
+  `Results` (`is_final`/`speech_final`), `UtteranceEnd`, `SpeechStarted`,
+  `Metadata`. Client ends the stream with `{type: "CloseStream"}`.
+- **TTS**: `wss://api.deepgram.com/v2/speak` (Flux TTS, upgraded from the
+  original `v1/speak` Aura-2 contract below) — query params `model` (voice, e.g.
+  `flux-*-en`), `encoding` (`linear16`/`mulaw`/`alaw`), `sample_rate`, `speed`.
+  Client sends `{type:"Speak", text}`, `{type:"Flush"}` (synthesize what's
+  buffered now, ends the turn), `{type:"Interrupt"}` (cancel the active turn on
+  barge-in — the built-in "user interrupted the agent" primitive; the server
+  acks with `SpeechInterrupted`, always reporting `audio_played_ms`),
+  `{type:"Close"}`. `Interrupt` takes an **optional** `playback_offset`
+  (`{type:"time_ms", value}`, milliseconds from session audio start, and each
+  one must advance past the last); supplying it makes the ack additionally
+  report the `text_spoken`/`text_remaining` split, and omitting it is valid —
+  the interrupt still cancels the turn, the ack just carries no split. We omit
+  it: the split exists to reconcile "what did the caller actually hear" back
+  into LLM context, and our interrupt is the agent's own thinking→answer
+  transition, where the superseded text is discarded rather than fed back.
+  Server streams raw binary audio frames back (no JSON wrapper), plus
+  `Connected`/`SpeechStarted`/`SpeechMetadata`/`Flushed`/`SpeechInterrupted`/`SessionMetadata`/`Warning`/`Error`
+  JSON control messages. (Original Aura-2 contract, superseded:
+  `wss://api.deepgram.com/v1/speak`, `model=aura-2-*`, `{type:"Clear"}` instead
+  of `Interrupt`, acked with `Cleared` instead of `SpeechInterrupted`.)
+- **Browser auth** (native `WebSocket` can't set custom headers): minted
+  server-side via `POST https://api.deepgram.com/v1/auth/grant` with
+  `Authorization: Token <decrypted long-lived key>`, optional `ttl_seconds`
+  (default 30s, max 3600s). **Correction from live testing (see §9):**
+  Deepgram's own docs suggest passing the grant token via an
+  `?access_token=<jwt>` query parameter, but a real account rejects that with
+  `401 INVALID_AUTH` at `/v1/listen` — verified via a direct Node `ws`
+  connection showing the raw HTTP response, which the browser hides. The working
+  mechanism is the `Sec-WebSocket-Protocol` subprotocol list —
+  `new WebSocket(url, ['bearer', token])` — the one auth channel a browser
+  `WebSocket` actually can set without custom headers.
+- **This repo's WS registration boilerplate** is a one-line addition:
+  `server.ts` builds each handler via `create<X>UpgradeHandler(application)` and
+  adds it to a `Map<string, Handler>` (`server.ts:107-116`) that a single
+  `server.on('upgrade', ...)` dispatcher reads by pathname
+  (`server.ts:363-384`). A `/voice` route is exactly this pattern — no change to
+  existing entries.
+- **`stop` lives in the same discriminated union as every other chat control
+  message** (`ChatMessageSchema`,
+  `src/shared/websocket/chat-message.schema.ts:36-112`). Giving voice its own
+  `voice-message.schema.ts` and its own `/voice` connection means the existing
+  chat schema and its handlers gain zero new variants — an even cleaner
+  separation than implied earlier.
 
 ### Phase 0 — Admin settings & BYOK plumbing
 
-**Goal:** an encrypted Deepgram key and an enabled toggle exist and round-trip correctly. No audio.
+**Goal:** an encrypted Deepgram key and an enabled toggle exist and round-trip
+correctly. No audio.
 
 **Tasks:**
-- `prisma/schema.prisma`: add `voiceModeEnabled Boolean @default(false)` and `deepgramApiKeyEncrypted String?` to `UserSettings`; `pnpm db:migrate`.
-- `src/backend/trpc/voice.trpc.ts` (NEW), mirroring `linear.trpc.ts`'s shape exactly:
-  - `getConfig` query → `{ enabled, hasApiKey }`, never plaintext (mirrors `PublicLinearConfigSchema`'s stripping pattern).
-  - `updateConfig` mutation → input `{ enabled, apiKey? }`; encrypts via `cryptoService.encrypt()` before persisting only when a new `apiKey` is supplied (mirrors `project.trpc.ts:352-361`); omitted `apiKey` leaves the stored value untouched.
-  - `validateApiKey` mutation → a cheap authenticated Deepgram call (e.g. `GET /v1/projects`) before the user is allowed to save, mirroring `linear.validateKeyAndListTeams`.
+
+- `prisma/schema.prisma`: add `voiceModeEnabled Boolean @default(false)` and
+  `deepgramApiKeyEncrypted String?` to `UserSettings`; `pnpm db:migrate`.
+- `src/backend/trpc/voice.trpc.ts` (NEW), mirroring `linear.trpc.ts`'s shape
+  exactly:
+  - `getConfig` query → `{ enabled, hasApiKey }`, never plaintext (mirrors
+    `PublicLinearConfigSchema`'s stripping pattern).
+  - `updateConfig` mutation → input `{ enabled, apiKey? }`; encrypts via
+    `cryptoService.encrypt()` before persisting only when a new `apiKey` is
+    supplied (mirrors `project.trpc.ts:352-361`); omitted `apiKey` leaves the
+    stored value untouched.
+  - `validateApiKey` mutation → a cheap authenticated Deepgram call (e.g.
+    `GET /v1/projects`) before the user is allowed to save, mirroring
+    `linear.validateKeyAndListTeams`.
 - `src/backend/trpc/index.ts`: mount `voice: voiceRouter`.
-- `src/client/routes/admin-page.tsx` + `src/client/routes/admin/VoiceModeSection.tsx` (NEW): new "Voice" tab, local never-prefilled `apiKey` state, validate-then-save flow — mirrors `IssueTrackingSection.tsx`'s `LinearConfigFields`.
+- `src/client/routes/admin-page.tsx` +
+  `src/client/routes/admin/VoiceModeSection.tsx` (NEW): new "Voice" tab, local
+  never-prefilled `apiKey` state, validate-then-save flow — mirrors
+  `IssueTrackingSection.tsx`'s `LinearConfigFields`.
 
-**Decisions needed:** none blocking — this phase is a mechanical repeat of an existing pattern.
+**Decisions needed:** none blocking — this phase is a mechanical repeat of an
+existing pattern.
 
-**Acceptance criteria:** key round-trips through encrypt/decrypt; `trpc.voice.getConfig` payload contains no plaintext key (verify in devtools network tab); toggling `enabled` off is observable by every later phase's capability check.
+**Acceptance criteria:** key round-trips through encrypt/decrypt;
+`trpc.voice.getConfig` payload contains no plaintext key (verify in devtools
+network tab); toggling `enabled` off is observable by every later phase's
+capability check.
 
 ### Phase 1 — Speech-to-text in (push-to-talk)
 
-**Goal:** a spoken instruction reaches the agent as a normal message. No TTS, no interrupt.
+**Goal:** a spoken instruction reaches the agent as a normal message. No TTS, no
+interrupt.
 
 **Tasks:**
-- `voice.trpc.ts`: add `mintGrantToken` mutation — calls Deepgram's `/v1/auth/grant` with the decrypted key, returns `{ accessToken, expiresAt }`. Never exposes the long-lived key.
-- `src/client/features/voice/use-mic-capture.ts` (NEW): `getUserMedia` → capture → `new WebSocket('wss://api.deepgram.com/v1/listen?...', ['bearer', token])` (subprotocol auth, see §9 correction above — not a query param) with `model=nova-3`, `language=en`, `encoding=linear16`, `sample_rate=16000`, `interim_results=true`, `smart_format=true`, `vad_events=true`. Final `Results` → `onFinalTranscript(text)`; interim `Results` → `onInterimTranscript(text)` (unused until Phase 4). Mic release sends `{type:'CloseStream'}`.
-- `onFinalTranscript` feeds into the **exact same** send path the composer already uses for typed text (`use-chat-actions.ts`) — zero new code on the send side.
-- `src/shared/chat-capabilities.ts`: add `voiceInput.enabled`, computed from `voiceModeEnabled && hasApiKey`.
-- `src/client/features/voice/voice-mode-toggle.tsx` (NEW): push-to-talk control, gated by that flag.
+
+- `voice.trpc.ts`: add `mintGrantToken` mutation — calls Deepgram's
+  `/v1/auth/grant` with the decrypted key, returns `{ accessToken, expiresAt }`.
+  Never exposes the long-lived key.
+- `src/client/features/voice/use-mic-capture.ts` (NEW): `getUserMedia` → capture
+  → `new WebSocket('wss://api.deepgram.com/v1/listen?...', ['bearer', token])`
+  (subprotocol auth, see §9 correction above — not a query param) with
+  `model=nova-3`, `language=en`, `encoding=linear16`, `sample_rate=16000`,
+  `interim_results=true`, `smart_format=true`, `vad_events=true`. Final
+  `Results` → `onFinalTranscript(text)`; interim `Results` →
+  `onInterimTranscript(text)` (unused until Phase 4). Mic release sends
+  `{type:'CloseStream'}`.
+- `onFinalTranscript` feeds into the **exact same** send path the composer
+  already uses for typed text (`use-chat-actions.ts`) — zero new code on the
+  send side.
+- `src/shared/chat-capabilities.ts`: add `voiceInput.enabled`, computed from
+  `voiceModeEnabled && hasApiKey`.
+- `src/client/features/voice/voice-mode-toggle.tsx` (NEW): push-to-talk control,
+  gated by that flag.
 
 **Decisions needed:**
-- **Audio capture method.** `MediaRecorder` (`audio/webm;codecs=opus`) is less code but batches on a timeslice and needs an opus-aware Deepgram encoding; an `AudioWorkletNode` streaming raw 16kHz PCM is lower-latency and matches Deepgram's preferred `linear16` directly, at the cost of a worklet processor script. Recommend the worklet given voice mode's whole value proposition is feeling like a live conversation — latency is the product here.
-- **Token refresh strategy.** Deepgram confirms a connection stays authenticated past token expiry once the handshake succeeds, so a single voice-mode session only needs a fresh token on reconnect, not on a timer. Simplest correct approach: mint once per connection attempt.
 
-**Acceptance criteria:** a spoken sentence produces a `queue_message` with the correct transcript and gets a normal agent response, indistinguishable from typing it.
+- **Audio capture method.** `MediaRecorder` (`audio/webm;codecs=opus`) is less
+  code but batches on a timeslice and needs an opus-aware Deepgram encoding; an
+  `AudioWorkletNode` streaming raw 16kHz PCM is lower-latency and matches
+  Deepgram's preferred `linear16` directly, at the cost of a worklet processor
+  script. Recommend the worklet given voice mode's whole value proposition is
+  feeling like a live conversation — latency is the product here.
+- **Token refresh strategy.** Deepgram confirms a connection stays authenticated
+  past token expiry once the handshake succeeds, so a single voice-mode session
+  only needs a fresh token on reconnect, not on a timer. Simplest correct
+  approach: mint once per connection attempt.
+
+**Acceptance criteria:** a spoken sentence produces a `queue_message` with the
+correct transcript and gets a normal agent response, indistinguishable from
+typing it.
 
 ### Phase 2 — Text-to-speech out (final answers only)
 
 **Goal:** the completed final answer is spoken once per turn.
 
 **Tasks:**
-- `src/shared/websocket/voice-message.schema.ts` (NEW): separate discriminated union from `ChatMessageSchema` — `{type:'audio_chunk', data, seq}` (server→client), plus scaffolding for `{type:'soft_stop'}` (built in Phase 4).
-- `src/backend/routers/websocket/voice.handler.ts` (NEW): `createVoiceUpgradeHandler(application)` built with `createWebSocketUpgradeHandler({ connectionName: 'voice', requiredParams: ['sessionId'], ... })`, mirroring `chat.handler.ts`/`snapshots.handler.ts`.
-- `src/backend/server.ts`: one new map entry, `['/voice', voiceUpgradeHandler]` — the entire footprint on this file.
-- `src/backend/services/session/service/voice/voice-narration.service.ts` (NEW, minimal for this phase): tracks active voice sessions in a `Map`; listener on `sessionEventBus` checks that map first (O(1) no-op, per §7.1) before doing anything else; on `activity: IDLE`, opens/reuses a Deepgram TTS socket, sends `{type:'Speak', text: <accumulated final answer>}` then `{type:'Flush'}`; forwards binary audio frames back to the browser as base64-wrapped `audio_chunk` messages.
-- `src/client/features/voice/use-voice-playback.ts` (NEW): decodes base64 → raw PCM, manually builds `AudioBuffer`s for scheduled playback (Deepgram's `linear16` output is headerless PCM, not a container format, so `decodeAudioData` doesn't apply — this is real client-side work, not just "play the blob").
 
-**Decisions needed:** none blocking; base64-over-JSON framing choice from the original design is reconfirmed reasonable — Deepgram's raw PCM at 24kHz is ~48KB/s, ~64KB/s after base64 inflation, trivial for a local WebSocket.
+- `src/shared/websocket/voice-message.schema.ts` (NEW): separate discriminated
+  union from `ChatMessageSchema` — `{type:'audio_chunk', data, seq}`
+  (server→client), plus scaffolding for `{type:'soft_stop'}` (built in Phase 4).
+- `src/backend/routers/websocket/voice.handler.ts` (NEW):
+  `createVoiceUpgradeHandler(application)` built with
+  `createWebSocketUpgradeHandler({ connectionName: 'voice', requiredParams: ['sessionId'], ... })`,
+  mirroring `chat.handler.ts`/`snapshots.handler.ts`.
+- `src/backend/server.ts`: one new map entry, `['/voice', voiceUpgradeHandler]`
+  — the entire footprint on this file.
+- `src/backend/services/session/service/voice/voice-narration.service.ts` (NEW,
+  minimal for this phase): tracks active voice sessions in a `Map`; listener on
+  `sessionEventBus` checks that map first (O(1) no-op, per §7.1) before doing
+  anything else; on `activity: IDLE`, opens/reuses a Deepgram TTS socket, sends
+  `{type:'Speak', text: <accumulated final answer>}` then `{type:'Flush'}`;
+  forwards binary audio frames back to the browser as base64-wrapped
+  `audio_chunk` messages.
+- `src/client/features/voice/use-voice-playback.ts` (NEW): decodes base64 → raw
+  PCM, manually builds `AudioBuffer`s for scheduled playback (Deepgram's
+  `linear16` output is headerless PCM, not a container format, so
+  `decodeAudioData` doesn't apply — this is real client-side work, not just
+  "play the blob").
 
-**Acceptance criteria:** every completed turn is audibly spoken once; turn-complete-to-first-audio latency is measured and recorded as a baseline for Phase 3/4 tuning.
+**Decisions needed:** none blocking; base64-over-JSON framing choice from the
+original design is reconfirmed reasonable — Deepgram's raw PCM at 24kHz is
+~48KB/s, ~64KB/s after base64 inflation, trivial for a local WebSocket.
+
+**Acceptance criteria:** every completed turn is audibly spoken once;
+turn-complete-to-first-audio latency is measured and recorded as a baseline for
+Phase 3/4 tuning.
 
 ### Phase 3 — Selective thinking narration
 
-**Goal:** implement the clause-buffer / drop-on-backlog / flush-on-transition state machine from §2.3.
+**Goal:** implement the clause-buffer / drop-on-backlog / flush-on-transition
+state machine from §2.3.
 
 **Tasks:**
-- Extend `voice-narration.service.ts` to also read `session_delta` thinking/assistant content, using the same block-boundary signal `AcpEventProcessor` already computes (read-only reuse, no changes to that file).
-- Clause segmentation: flush a clause on sentence-ending punctuation or a max-length fallback so an unpunctuated thought can't buffer forever.
-- Enqueue a thinking clause for synthesis only when the session's utterance queue is empty; otherwise drop it.
-- On detecting the thinking→assistant transition: send `{type:'Interrupt'}` to the Deepgram TTS socket to cut off any in-flight thinking narration (this is literally the same primitive Deepgram's own docs describe for a human interrupting a TTS agent — repurposed here for the agent's own thinking-to-conclusion transition), then switch to buffering final-answer text. Audio already in flight keeps arriving until the `SpeechInterrupted` ack, so the client must also be told to drop what it has buffered.
+
+- Extend `voice-narration.service.ts` to also read `session_delta`
+  thinking/assistant content, using the same block-boundary signal
+  `AcpEventProcessor` already computes (read-only reuse, no changes to that
+  file).
+- Clause segmentation: flush a clause on sentence-ending punctuation or a
+  max-length fallback so an unpunctuated thought can't buffer forever.
+- Enqueue a thinking clause for synthesis only when the session's utterance
+  queue is empty; otherwise drop it.
+- On detecting the thinking→assistant transition: send `{type:'Interrupt'}` to
+  the Deepgram TTS socket to cut off any in-flight thinking narration (this is
+  literally the same primitive Deepgram's own docs describe for a human
+  interrupting a TTS agent — repurposed here for the agent's own
+  thinking-to-conclusion transition), then switch to buffering final-answer
+  text. Audio already in flight keeps arriving until the `SpeechInterrupted`
+  ack, so the client must also be told to drop what it has buffered.
 - On turn-complete: flush remaining final text.
-- Tunable constants (hardcoded for v1, no admin UI): max/min clause length, cooldown between spoken clauses.
+- Tunable constants (hardcoded for v1, no admin UI): max/min clause length,
+  cooldown between spoken clauses.
 
-**Decisions needed:** none blocking — explicitly a tuning phase, expect iteration against real transcripts rather than getting it right on paper.
+**Decisions needed:** none blocking — explicitly a tuning phase, expect
+iteration against real transcripts rather than getting it right on paper.
 
-**Acceptance criteria:** during a multi-step turn, at most one thinking clause is ever "in flight"; the instant the final answer starts, in-progress thinking narration is audibly cut off in favor of it.
+**Acceptance criteria:** during a multi-step turn, at most one thinking clause
+is ever "in flight"; the instant the final answer starts, in-progress thinking
+narration is audibly cut off in favor of it.
 
 ### Phase 4 — Voice interrupt & barge-in
 
-**Goal:** "please stop" cancels the in-flight turn without killing the subprocess; the user speaking pauses playback.
+**Goal:** "please stop" cancels the in-flight turn without killing the
+subprocess; the user speaking pauses playback.
 
 **Tasks:**
-- Implement the `soft_stop` handler (scaffolded in Phase 2's schema) on the `/voice` connection, mirroring `chat-message-handlers/handlers/stop.handler.ts`'s structure but calling `acpRuntimeManager.cancelPrompt(sessionId)` directly — bypassing `SessionLifecycleService.stopSession`'s teardown entirely.
-- `src/shared/core/enums.ts`: add `VOICE_INTERRUPT` to `SessionLifecycleEventReason`; record it via `sessionLifecycleEventService.record()` alongside the cancel call.
-- `use-mic-capture.ts`: while `sessionStatus.phase === 'running'`, scan interim transcripts for a small stop-phrase set; on match, send `{type:'soft_stop'}`.
-- `src/client/features/voice/use-barge-in.ts` (NEW): simple RMS-energy voice-activity threshold on the mic stream (no VAD library needed at this scope) to detect the user starting to talk; on detection, immediately pause `use-voice-playback.ts` output.
-- **New test coverage for `cancelPrompt`** (per §7.1 risk 3): exercise the voice-triggered call at multiple points in a turn (before any tool call, mid-tool-call, mid text stream) and confirm `finalizeOrphanedToolCalls` and lifecycle-event recording behave correctly — genuinely new coverage, since the only existing caller is timeout recovery.
+
+- Implement the `soft_stop` handler (scaffolded in Phase 2's schema) on the
+  `/voice` connection, mirroring
+  `chat-message-handlers/handlers/stop.handler.ts`'s structure but calling
+  `acpRuntimeManager.cancelPrompt(sessionId)` directly — bypassing
+  `SessionLifecycleService.stopSession`'s teardown entirely.
+- `src/shared/core/enums.ts`: add `VOICE_INTERRUPT` to
+  `SessionLifecycleEventReason`; record it via
+  `sessionLifecycleEventService.record()` alongside the cancel call.
+- `use-mic-capture.ts`: while `sessionStatus.phase === 'running'`, scan interim
+  transcripts for a small stop-phrase set; on match, send `{type:'soft_stop'}`.
+- `src/client/features/voice/use-barge-in.ts` (NEW): simple RMS-energy
+  voice-activity threshold on the mic stream (no VAD library needed at this
+  scope) to detect the user starting to talk; on detection, immediately pause
+  `use-voice-playback.ts` output.
+- **New test coverage for `cancelPrompt`** (per §7.1 risk 3): exercise the
+  voice-triggered call at multiple points in a turn (before any tool call,
+  mid-tool-call, mid text stream) and confirm `finalizeOrphanedToolCalls` and
+  lifecycle-event recording behave correctly — genuinely new coverage, since the
+  only existing caller is timeout recovery.
 
 **Decisions needed:**
-- Stop-phrase matching: start with plain substring match on interim transcripts (cheapest, ships fastest); revisit only if false positives/negatives show up in real use.
-- Barge-in sensitivity (RMS threshold, minimum sustained-speech duration) — expect iteration, same as Phase 3.
 
-**Acceptance criteria:** "please stop" cancels generation within roughly one STT round-trip; the ACP subprocess is confirmed still alive afterward (no respawn); the next spoken instruction is picked up immediately with no restart delay.
+- Stop-phrase matching: start with plain substring match on interim transcripts
+  (cheapest, ships fastest); revisit only if false positives/negatives show up
+  in real use.
+- Barge-in sensitivity (RMS threshold, minimum sustained-speech duration) —
+  expect iteration, same as Phase 3.
+
+**Acceptance criteria:** "please stop" cancels generation within roughly one STT
+round-trip; the ACP subprocess is confirmed still alive afterward (no respawn);
+the next spoken instruction is picked up immediately with no restart delay.
 
 ---
 
 ## 9. Post-Implementation Corrections
 
-Findings from live testing against a real Deepgram account, after the design above was written but before it had been verified end-to-end (see §7's stated gap: "never tested against a live Deepgram account").
+Findings from live testing against a real Deepgram account, after the design
+above was written but before it had been verified end-to-end (see §7's stated
+gap: "never tested against a live Deepgram account").
 
 ### 9.1 Grant-token browser auth: query param doesn't work, subprotocol does
 
-§8's Phase 1 scoping stated the browser passes its STT grant token via `?access_token=<jwt>` on the query string, based on Deepgram's own token-based-auth guide ("pass the resulting JWT via the URL query parameter... instead of the Sec-WebSocket-Protocol header"). **This is wrong for `/v1/listen` on a real account.**
+§8's Phase 1 scoping stated the browser passes its STT grant token via
+`?access_token=<jwt>` on the query string, based on Deepgram's own
+token-based-auth guide ("pass the resulting JWT via the URL query parameter...
+instead of the Sec-WebSocket-Protocol header"). **This is wrong for `/v1/listen`
+on a real account.**
 
-Diagnosis path (browser `WebSocket` objects intentionally hide the HTTP-level detail of a failed handshake — no status code, no body, just an `error` event with no properties and a `close` event with code `1006` and no reason):
-1. Ruled out CSP (none configured anywhere in this app), an app-side race closing the socket early (reproduced identically in a bare `new WebSocket(...)` in a fresh console context, outside all app code), and token expiry (reproduced with a token minted and used within the same second).
-2. Used Node's `ws` library server-side — unlike a browser, it surfaces the real HTTP response for a rejected upgrade. A fresh, valid, correctly-scoped grant token passed via `?access_token=` got a clean `401 { err_code: "INVALID_AUTH", err_msg: "Invalid credentials." }` from Deepgram's server.
-3. The same token via the `Authorization: Bearer <token>` header succeeded — proving the token itself was valid and the endpoint accepts it, just not via the query parameter.
-4. Since browsers can't set that header, tested the `Sec-WebSocket-Protocol` subprotocol list instead (`new WebSocket(url, protocols)` — a real browser API, unlike headers). `['bearer', token]` succeeded; `['Bearer', token]` succeeded; `['token', token]` (the pattern Deepgram documents for raw API keys) did not.
+Diagnosis path (browser `WebSocket` objects intentionally hide the HTTP-level
+detail of a failed handshake — no status code, no body, just an `error` event
+with no properties and a `close` event with code `1006` and no reason):
 
-**Corrected mechanism:** `new WebSocket('wss://api.deepgram.com/v1/listen?...', ['bearer', accessToken])`. Implemented in `use-mic-capture.ts`. No backend change needed — `mintGrantToken` itself was already correct; this only affected how the browser presents the token it returns.
+1. Ruled out CSP (none configured anywhere in this app), an app-side race
+   closing the socket early (reproduced identically in a bare
+   `new WebSocket(...)` in a fresh console context, outside all app code), and
+   token expiry (reproduced with a token minted and used within the same
+   second).
+2. Used Node's `ws` library server-side — unlike a browser, it surfaces the real
+   HTTP response for a rejected upgrade. A fresh, valid, correctly-scoped grant
+   token passed via `?access_token=` got a clean
+   `401 { err_code: "INVALID_AUTH", err_msg: "Invalid credentials." }` from
+   Deepgram's server.
+3. The same token via the `Authorization: Bearer <token>` header succeeded —
+   proving the token itself was valid and the endpoint accepts it, just not via
+   the query parameter.
+4. Since browsers can't set that header, tested the `Sec-WebSocket-Protocol`
+   subprotocol list instead (`new WebSocket(url, protocols)` — a real browser
+   API, unlike headers). `['bearer', token]` succeeded; `['Bearer', token]`
+   succeeded; `['token', token]` (the pattern Deepgram documents for raw API
+   keys) did not.
+
+**Corrected mechanism:**
+`new WebSocket('wss://api.deepgram.com/v1/listen?...', ['bearer', accessToken])`.
+Implemented in `use-mic-capture.ts`. No backend change needed — `mintGrantToken`
+itself was already correct; this only affected how the browser presents the
+token it returns.
 
 ### 9.2 `language=en` set explicitly
 
-Also added `language=en` to the STT connection params during this investigation (Deepgram has reported project/model access issues for `nova-3` connections that omit it, despite English being documented as the model's default). Cheap, safe, and removes one more unverified assumption — kept even though the root cause above turned out to be the auth mechanism, not this.
+Also added `language=en` to the STT connection params during this investigation
+(Deepgram has reported project/model access issues for `nova-3` connections that
+omit it, despite English being documented as the model's default). Cheap, safe,
+and removes one more unverified assumption — kept even though the root cause
+above turned out to be the auth mechanism, not this.
 
 ---
 
 ## 10. Proposed (Unimplemented): Voice-Mode-Aware Response Brevity
 
-Phases 0–4 above are fully implemented and shipped (PR #2126). This section is a **proposal for a follow-on body of work**, not yet built — captured here so the design and the investigation behind it aren't lost between sessions.
+Phases 0–4 above are fully implemented and shipped (PR #2126). This section is a
+**proposal for a follow-on body of work**, not yet built — captured here so the
+design and the investigation behind it aren't lost between sessions.
 
 ### 10.1 Problem
 
-The coding harness (Claude/Codex) often responds with multi-paragraph, structured answers — headers, bullet lists, code blocks — which is the right format for a screen but hard to follow spoken aloud one sentence at a time. Users in voice mode want noticeably shorter, more conversational replies while voice mode is on, reverting to normal-length replies once it's off.
+The coding harness (Claude/Codex) often responds with multi-paragraph,
+structured answers — headers, bullet lists, code blocks — which is the right
+format for a screen but hard to follow spoken aloud one sentence at a time.
+Users in voice mode want noticeably shorter, more conversational replies while
+voice mode is on, reverting to normal-length replies once it's off.
 
-This is a distinct problem from the markdown-stripping already implemented in `voice-narration.service.ts`'s `stripMarkdownForSpeech` — that makes long structured text *speakable*, but doesn't make it *shorter*. Both remain useful together: even a deliberately concise voice-mode reply may still contain the odd bit of markdown, and stripping stays a correctness safety net regardless of how well the brevity instruction is followed.
+This is a distinct problem from the markdown-stripping already implemented in
+`voice-narration.service.ts`'s `stripMarkdownForSpeech` — that makes long
+structured text _speakable_, but doesn't make it _shorter_. Both remain useful
+together: even a deliberately concise voice-mode reply may still contain the odd
+bit of markdown, and stripping stays a correctness safety net regardless of how
+well the brevity instruction is followed.
 
 ### 10.2 Why there's no existing hook for this
 
-Investigated end-to-end (backend message-send path) before writing this proposal:
+Investigated end-to-end (backend message-send path) before writing this
+proposal:
 
-- The ACP protocol's `PromptRequest.prompt` field is exactly `ContentBlock[]` — content blocks that make up **the user's message**. There is no system/role-tagged channel, no analog to an OpenAI `system` message, nothing resembling this CLI's own `<system-reminder>` mechanism. Confirmed against the `@agentclientprotocol/sdk` schema.
-- There *is* a `systemPrompt?: string` field already defined on `AcpClientOptions` (`src/backend/services/session/service/acp/types.ts:19`) that looks like it should be exactly this hook — but it's dead code. Nothing in `acp-runtime-manager.ts` reads it; `connection.newSession({ cwd, mcpServers })` and `connection.loadSession({ sessionId, cwd, mcpServers })` (the only two calls that create/resume a session) don't pass it through. It was likely built for a different purpose (workspace/session-level context — see `SessionPromptBuilder.buildSystemPrompt`, which *does* get threaded into `AcpClientOptions.systemPrompt` at session creation, just never delivered) and isn't a live wire today.
-- So: no protocol-level "mode" flag exists to flip. Any brevity instruction has to travel as ordinary message content, because that's the only channel ACP exposes.
+- The ACP protocol's `PromptRequest.prompt` field is exactly `ContentBlock[]` —
+  content blocks that make up **the user's message**. There is no
+  system/role-tagged channel, no analog to an OpenAI `system` message, nothing
+  resembling this CLI's own `<system-reminder>` mechanism. Confirmed against the
+  `@agentclientprotocol/sdk` schema.
+- There _is_ a `systemPrompt?: string` field already defined on
+  `AcpClientOptions` (`src/backend/services/session/service/acp/types.ts:19`)
+  that looks like it should be exactly this hook — but it's dead code. Nothing
+  in `acp-runtime-manager.ts` reads it;
+  `connection.newSession({ cwd, mcpServers })` and
+  `connection.loadSession({ sessionId, cwd, mcpServers })` (the only two calls
+  that create/resume a session) don't pass it through. It was likely built for a
+  different purpose (workspace/session-level context — see
+  `SessionPromptBuilder.buildSystemPrompt`, which _does_ get threaded into
+  `AcpClientOptions.systemPrompt` at session creation, just never delivered) and
+  isn't a live wire today.
+- So: no protocol-level "mode" flag exists to flip. Any brevity instruction has
+  to travel as ordinary message content, because that's the only channel ACP
+  exposes.
 
 ### 10.3 Message-send path today (verified)
 
@@ -532,69 +816,242 @@ flowchart LR
     style SendSession fill:#c8e6c9
 ```
 
-Voice messages are always sent via `queue_message` (`use-chat-actions.ts`'s `sendMessage`, which `VoiceModeToggle` calls into) — never via the separate `user_input` WS message type, which only exists for a direct send while a turn is already running and is handled by a different file, `user-input.handler.ts`, that the queued path never touches. So the call site that matters for this feature is `ChatMessageHandlerService.buildMessageContent`/`dispatchMessage` (`chat-message-handlers.service.ts:759`/`612`), not `user-input.handler.ts` — earlier drafts of this section named the latter, which was wrong.
+Voice messages are always sent via `queue_message` (`use-chat-actions.ts`'s
+`sendMessage`, which `VoiceModeToggle` calls into) — never via the separate
+`user_input` WS message type, which only exists for a direct send while a turn
+is already running and is handled by a different file, `user-input.handler.ts`,
+that the queued path never touches. So the call site that matters for this
+feature is `ChatMessageHandlerService.buildMessageContent`/`dispatchMessage`
+(`chat-message-handlers.service.ts:759`/`612`), not `user-input.handler.ts` —
+earlier drafts of this section named the latter, which was wrong.
 
-The key structural fact this diagram makes visible: **persistence (`queue-message.handler.ts`, what's stored and shown in the chat transcript) and transmission (`buildMessageContent`/`sendSessionMessage`, what's actually sent to the agent) are already two separate steps operating on the same `QueuedMessage`.** `sendSessionMessage`'s `content` parameter accepts either a plain string *or* an `AgentContentItem[]` — when it's an array, `toContentBlocks` turns every item into its own `ContentBlock` in the same `prompt` array sent to ACP. That's the seam: nothing stops `buildMessageContent` from appending a second `{type:'text'}` block carrying the brevity instruction to whatever `processAttachmentsAndBuildContent` already produced for that message — the persisted chat message (built earlier, from the untouched original text) never sees it.
+The key structural fact this diagram makes visible: **persistence
+(`queue-message.handler.ts`, what's stored and shown in the chat transcript) and
+transmission (`buildMessageContent`/`sendSessionMessage`, what's actually sent
+to the agent) are already two separate steps operating on the same
+`QueuedMessage`.** `sendSessionMessage`'s `content` parameter accepts either a
+plain string _or_ an `AgentContentItem[]` — when it's an array,
+`toContentBlocks` turns every item into its own `ContentBlock` in the same
+`prompt` array sent to ACP. That's the seam: nothing stops `buildMessageContent`
+from appending a second `{type:'text'}` block carrying the brevity instruction
+to whatever `processAttachmentsAndBuildContent` already produced for that
+message — the persisted chat message (built earlier, from the untouched original
+text) never sees it.
 
-Two things a naive version of this seam gets wrong, both corrected in §10.4 below:
-1. **The flag has to survive queueing.** `QueuedMessage` (`queued.ts:17`) is enqueued, peeked, dequeued, and possibly requeued (`session-queue.ts:6-37`, retried via `handleDispatchError` → `requeueFront` → `scheduleTurnInProgressRetry`) as the same object reference, with no re-derivation from the original WS input. A `voiceMode` flag added only to the `queue_message` zod schema is validated and then discarded — `buildQueuedMessage` (`utils.ts:17`) doesn't currently forward every input field onto the `QueuedMessage` it builds, so the flag never reaches dispatch time unless it's explicitly added to `QueuedMessage` itself and copied across in `buildQueuedMessage`.
-2. **Attachments already flow through this same message.** `processAttachmentsAndBuildContent` (`attachment-processing.ts:271`) is what turns `msg.text` plus `msg.attachments` into the final string-or-`AgentContentItem[]` content today; a voice-flagged queued message can in principle carry the same pending text/image attachments any other queued message can. Appending the instruction has to be a transform on top of that function's output, not a replacement for it, or attachments on a voice turn would be silently dropped.
+Two things a naive version of this seam gets wrong, both corrected in §10.4
+below:
+
+1. **The flag has to survive queueing.** `QueuedMessage` (`queued.ts:17`) is
+   enqueued, peeked, dequeued, and possibly requeued (`session-queue.ts:6-37`,
+   retried via `handleDispatchError` → `requeueFront` →
+   `scheduleTurnInProgressRetry`) as the same object reference, with no
+   re-derivation from the original WS input. A `voiceMode` flag added only to
+   the `queue_message` zod schema is validated and then discarded —
+   `buildQueuedMessage` (`utils.ts:17`) doesn't currently forward every input
+   field onto the `QueuedMessage` it builds, so the flag never reaches dispatch
+   time unless it's explicitly added to `QueuedMessage` itself and copied across
+   in `buildQueuedMessage`.
+2. **Attachments already flow through this same message.**
+   `processAttachmentsAndBuildContent` (`attachment-processing.ts:271`) is what
+   turns `msg.text` plus `msg.attachments` into the final
+   string-or-`AgentContentItem[]` content today; a voice-flagged queued message
+   can in principle carry the same pending text/image attachments any other
+   queued message can. Appending the instruction has to be a transform on top of
+   that function's output, not a replacement for it, or attachments on a voice
+   turn would be silently dropped.
 
 ### 10.4 Proposed design
 
-1. **Carry a `voiceMode: boolean` flag on the message itself**, not as session-level state. Add it to the `queue_message` (and `user_input`) zod schemas in `src/shared/websocket/chat-message.schema.ts` (mirrors how `settings?: ChatSettingsSchema` already rides along per-message). `VoiceModeToggle` is the only caller that would ever set it `true`; the normal composer never sets it. This means the "until voice mode is over" requirement in the original ask is free — the flag is per-message, so the instant a message *isn't* voice-flagged (typed, or after voice mode is turned off), the agent gets its normal unmodified prompt. No separate "resume normal-length" signal is needed.
-2. **Client**: `use-chat-actions.ts`'s `sendMessage` gains an options parameter (`sendMessage(text, { voiceMode: true })`); `VoiceModeToggle`'s `onFinalTranscript` wraps `props.sendMessage` to always pass `voiceMode: true` rather than being passed directly as it is today.
-3. **Carry the flag through the queue, not just the wire schema.** Voice messages are always sent via `queue_message` (§10.3), so the schema flag alone isn't enough — it has to survive `enqueue`/`peek`/`dequeue`/`requeue`. Add `voiceMode?: boolean` to `QueuedMessage` (`src/shared/acp-protocol/protocol/queued.ts:17`) and set it in `buildQueuedMessage` (`src/backend/services/session/service/chat/chat-message-handlers/utils.ts:17`) from the validated input. Because `session-queue.ts` (`enqueueMessage`/`dequeueNext`/`requeueFront`/`peekNext`) passes the same `QueuedMessage` object through by reference, the flag then survives every requeue/retry path (`handleDispatchError` → `requeueFront` → `scheduleTurnInProgressRetry`, and every external `tryDispatchNextMessage` caller — workspace init, notification delivery, `resume_queued_messages`) for free, with no extra plumbing per call site. It must also survive the one path that rebuilds a `QueuedMessage`-shaped value instead of passing the original through: `RecentMessageRejection.userMessage` (`session-store.types.ts:11`), a `Pick<QueuedMessage, 'text' | 'timestamp' | 'attachments'>` that `failMessage` uses to restore a failed send back into the composer for retry. Add `'voiceMode'` to that `Pick` and thread it through `failMessage` — a retried voice message should still get the brevity instruction, since the user has no way to re-toggle voice mode on for a message that already failed.
-4. **Backend, at actual dispatch time**: the call that matters is `ChatMessageHandlerService.buildMessageContent`/`dispatchMessage` (`chat-message-handlers.service.ts:759`/`612`) — the queued-dispatch path never goes through `user-input.handler.ts` (that file only handles the separate, non-queued `user_input` message type). `buildMessageContent` already calls `processAttachmentsAndBuildContent(msg.text, msg.attachments)` (`attachment-processing.ts:271`) to fold in any pending text/image attachments; when `msg.voiceMode` is true, normalize that function's `string | AgentContentItem[]` result into content-block form (wrap a bare string as a single `{type:'text'}` block) and append one more `{type:'text'}` block carrying the brevity instruction, so attachments on a voice turn are preserved rather than dropped. Persistence (`buildQueuedMessage`'s effect on what's stored/shown in the transcript) is otherwise untouched — the transcript still only ever sees the original text.
-5. **Instruction wording** (starting point, expect iteration — same spirit as the clause-length tuning in §8 Phase 3): *"The user is speaking to you by voice and will hear this reply read aloud via text-to-speech, not read it on screen. Keep the reply to 2–4 short sentences for a straightforward answer. Avoid headers, bullet/numbered lists, tables, and code blocks unless the content genuinely can't be conveyed without them — describe steps in flowing prose instead."*
-6. **Send it on every voice-flagged message, not just the first.** ACP sessions are conversational, but an instruction given once early in a long session is exactly the kind of thing model adherence can drift away from over many turns (same failure mode as any long-context instruction-following). Repeating a short instruction every turn costs a little context but removes that whole class of risk — and it's the only option anyway, since per §10.2 there's no persistent system-level place to put it once.
+1. **Carry a `voiceMode: boolean` flag on the message itself**, not as
+   session-level state. Add it to the `queue_message` (and `user_input`) zod
+   schemas in `src/shared/websocket/chat-message.schema.ts` (mirrors how
+   `settings?: ChatSettingsSchema` already rides along per-message).
+   `VoiceModeToggle` is the only caller that would ever set it `true`; the
+   normal composer never sets it. This means the "until voice mode is over"
+   requirement in the original ask is free — the flag is per-message, so the
+   instant a message _isn't_ voice-flagged (typed, or after voice mode is turned
+   off), the agent gets its normal unmodified prompt. No separate "resume
+   normal-length" signal is needed.
+2. **Client**: `use-chat-actions.ts`'s `sendMessage` gains an options parameter
+   (`sendMessage(text, { voiceMode: true })`); `VoiceModeToggle`'s
+   `onFinalTranscript` wraps `props.sendMessage` to always pass
+   `voiceMode: true` rather than being passed directly as it is today.
+3. **Carry the flag through the queue, not just the wire schema.** Voice
+   messages are always sent via `queue_message` (§10.3), so the schema flag
+   alone isn't enough — it has to survive `enqueue`/`peek`/`dequeue`/`requeue`.
+   Add `voiceMode?: boolean` to `QueuedMessage`
+   (`src/shared/acp-protocol/protocol/queued.ts:17`) and set it in
+   `buildQueuedMessage`
+   (`src/backend/services/session/service/chat/chat-message-handlers/utils.ts:17`)
+   from the validated input. Because `session-queue.ts`
+   (`enqueueMessage`/`dequeueNext`/`requeueFront`/`peekNext`) passes the same
+   `QueuedMessage` object through by reference, the flag then survives every
+   requeue/retry path (`handleDispatchError` → `requeueFront` →
+   `scheduleTurnInProgressRetry`, and every external `tryDispatchNextMessage`
+   caller — workspace init, notification delivery, `resume_queued_messages`) for
+   free, with no extra plumbing per call site. It must also survive the one path
+   that rebuilds a `QueuedMessage`-shaped value instead of passing the original
+   through: `RecentMessageRejection.userMessage` (`session-store.types.ts:11`),
+   a `Pick<QueuedMessage, 'text' | 'timestamp' | 'attachments'>` that
+   `failMessage` uses to restore a failed send back into the composer for retry.
+   Add `'voiceMode'` to that `Pick` and thread it through `failMessage` — a
+   retried voice message should still get the brevity instruction, since the
+   user has no way to re-toggle voice mode on for a message that already failed.
+4. **Backend, at actual dispatch time**: the call that matters is
+   `ChatMessageHandlerService.buildMessageContent`/`dispatchMessage`
+   (`chat-message-handlers.service.ts:759`/`612`) — the queued-dispatch path
+   never goes through `user-input.handler.ts` (that file only handles the
+   separate, non-queued `user_input` message type). `buildMessageContent`
+   already calls `processAttachmentsAndBuildContent(msg.text, msg.attachments)`
+   (`attachment-processing.ts:271`) to fold in any pending text/image
+   attachments; when `msg.voiceMode` is true, normalize that function's
+   `string | AgentContentItem[]` result into content-block form (wrap a bare
+   string as a single `{type:'text'}` block) and append one more `{type:'text'}`
+   block carrying the brevity instruction, so attachments on a voice turn are
+   preserved rather than dropped. Persistence (`buildQueuedMessage`'s effect on
+   what's stored/shown in the transcript) is otherwise untouched — the
+   transcript still only ever sees the original text.
+5. **Instruction wording** (starting point, expect iteration — same spirit as
+   the clause-length tuning in §8 Phase 3): _"The user is speaking to you by
+   voice and will hear this reply read aloud via text-to-speech, not read it on
+   screen. Keep the reply to 2–4 short sentences for a straightforward answer.
+   Avoid headers, bullet/numbered lists, tables, and code blocks unless the
+   content genuinely can't be conveyed without them — describe steps in flowing
+   prose instead."_
+6. **Send it on every voice-flagged message, not just the first.** ACP sessions
+   are conversational, but an instruction given once early in a long session is
+   exactly the kind of thing model adherence can drift away from over many turns
+   (same failure mode as any long-context instruction-following). Repeating a
+   short instruction every turn costs a little context but removes that whole
+   class of risk — and it's the only option anyway, since per §10.2 there's no
+   persistent system-level place to put it once.
 
 ### 10.5 Alternatives considered
 
-| Option | Description | Rejected because |
-|---|---|---|
-| Append instruction to the *visible* message text | Simplest: just concatenate before both storing and sending. | User's own chat bubble would show a repeated instructional suffix on every voice turn — clutters the transcript, and the agent may visibly acknowledge/quote it back ("Since you're on voice, I'll keep this short..."), which is itself the wrong kind of length. |
-| Wire up the dead `AcpClientOptions.systemPrompt` field, gated on a per-session voice flag | Would feel like "the proper way" if it worked. | It's genuinely not delivered anywhere in the ACP calls today (§10.2) — fixing that is a larger, riskier change to session creation/resumption for a payoff no bigger than the per-message approach, and `systemPrompt` is session-scoped, not message-scoped, so it wouldn't cleanly turn off the instant voice mode is toggled off mid-session without extra plumbing anyway. |
-| Admin-configurable target length / instruction text (mirroring the TTS voice/speed admin controls) | Consistent with existing admin UX for voice tuning. | Reasonable future refinement, not blocking for v1 — start with a single hardcoded instruction, revisit if real usage shows the fixed wording is wrong for some users' workflows. |
+| Option                                                                                             | Description                                                 | Rejected because                                                                                                                                                                                                                                                                                                                                                               |
+| -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Append instruction to the _visible_ message text                                                   | Simplest: just concatenate before both storing and sending. | User's own chat bubble would show a repeated instructional suffix on every voice turn — clutters the transcript, and the agent may visibly acknowledge/quote it back ("Since you're on voice, I'll keep this short..."), which is itself the wrong kind of length.                                                                                                             |
+| Wire up the dead `AcpClientOptions.systemPrompt` field, gated on a per-session voice flag          | Would feel like "the proper way" if it worked.              | It's genuinely not delivered anywhere in the ACP calls today (§10.2) — fixing that is a larger, riskier change to session creation/resumption for a payoff no bigger than the per-message approach, and `systemPrompt` is session-scoped, not message-scoped, so it wouldn't cleanly turn off the instant voice mode is toggled off mid-session without extra plumbing anyway. |
+| Admin-configurable target length / instruction text (mirroring the TTS voice/speed admin controls) | Consistent with existing admin UX for voice tuning.         | Reasonable future refinement, not blocking for v1 — start with a single hardcoded instruction, revisit if real usage shows the fixed wording is wrong for some users' workflows.                                                                                                                                                                                               |
 
 ### 10.6 Interaction with existing narration (§2.3 / §9)
 
-No change needed to `VoiceNarrationService`'s clause-buffering/streaming narration — shorter responses just mean fewer clauses to narrate per turn, which is strictly easier on that pipeline, not a conflict. `stripMarkdownForSpeech` stays as-is regardless of how well the brevity instruction is followed by the model.
+No change needed to `VoiceNarrationService`'s clause-buffering/streaming
+narration — shorter responses just mean fewer clauses to narrate per turn, which
+is strictly easier on that pipeline, not a conflict. `stripMarkdownForSpeech`
+stays as-is regardless of how well the brevity instruction is followed by the
+model.
 
 ### 10.7 Open questions / risks
 
-1. **Provider-agnostic by construction, but unverified in practice.** The injection point (`sendSessionMessage`/`toContentBlocks`) is shared code upstream of both the Claude and Codex ACP adapters, so this should work identically for both — but neither has been tested against this specific two-block prompt shape and should be verified for each during implementation.
-2. **Instruction adherence is a model-behavior problem, not an architecture problem** — same category as the clause-segmentation tuning in §8 Phase 3. Expect iteration on wording, and expect it to work better for straightforward Q&A turns than for turns where genuine complexity (e.g. explaining a multi-file change) makes brevity actively unhelpful; the instruction as worded above already hedges with "for a straightforward answer" for this reason.
-3. **Attachments compose with the instruction, they don't block it.** Voice-flagged queued messages go through the same `processAttachmentsAndBuildContent` (`attachment-processing.ts:271`) as any other queued message, so a voice turn carrying pending text/image attachments (voice mode currently has no attachment UI, but the queue and the type signature both already allow it) still needs its combined text/image content preserved — §10.4 point 4 appends the instruction block on top of that function's output rather than replacing it, specifically to avoid this.
-4. **`voiceMode` needs to reach every place a `QueuedMessage` is read, not just the happy path.** `RecentMessageRejection.userMessage` (`session-store.types.ts:11`, a `Pick<QueuedMessage, 'text' | 'timestamp' | 'attachments'>` used by `failMessage` to restore a failed send back into the composer for retry) doesn't currently carry `settings` or `voiceMode` at all. Resolved in §10.4 point 3: `voiceMode` survives that round-trip, so a retried voice message still gets the brevity instruction.
-5. **Whether to expose a toggle for this at all, or make it the unconditional behavior of voice mode.** Given the design is a per-message flag with no other UI surface proposed, the simplest v1 is "always on whenever voice mode is on, no separate setting" — matches how markdown-stripping and clause-by-clause narration aren't separately toggleable either.
+1. **Provider-agnostic by construction, but unverified in practice.** The
+   injection point (`sendSessionMessage`/`toContentBlocks`) is shared code
+   upstream of both the Claude and Codex ACP adapters, so this should work
+   identically for both — but neither has been tested against this specific
+   two-block prompt shape and should be verified for each during implementation.
+2. **Instruction adherence is a model-behavior problem, not an architecture
+   problem** — same category as the clause-segmentation tuning in §8 Phase 3.
+   Expect iteration on wording, and expect it to work better for straightforward
+   Q&A turns than for turns where genuine complexity (e.g. explaining a
+   multi-file change) makes brevity actively unhelpful; the instruction as
+   worded above already hedges with "for a straightforward answer" for this
+   reason.
+3. **Attachments compose with the instruction, they don't block it.**
+   Voice-flagged queued messages go through the same
+   `processAttachmentsAndBuildContent` (`attachment-processing.ts:271`) as any
+   other queued message, so a voice turn carrying pending text/image attachments
+   (voice mode currently has no attachment UI, but the queue and the type
+   signature both already allow it) still needs its combined text/image content
+   preserved — §10.4 point 4 appends the instruction block on top of that
+   function's output rather than replacing it, specifically to avoid this.
+4. **`voiceMode` needs to reach every place a `QueuedMessage` is read, not just
+   the happy path.** `RecentMessageRejection.userMessage`
+   (`session-store.types.ts:11`, a
+   `Pick<QueuedMessage, 'text' | 'timestamp' | 'attachments'>` used by
+   `failMessage` to restore a failed send back into the composer for retry)
+   doesn't currently carry `settings` or `voiceMode` at all. Resolved in §10.4
+   point 3: `voiceMode` survives that round-trip, so a retried voice message
+   still gets the brevity instruction.
+5. **Whether to expose a toggle for this at all, or make it the unconditional
+   behavior of voice mode.** Given the design is a per-message flag with no
+   other UI surface proposed, the simplest v1 is "always on whenever voice mode
+   is on, no separate setting" — matches how markdown-stripping and
+   clause-by-clause narration aren't separately toggleable either.
 
 ### 10.8 Rough implementation shape
 
 Not phased like §8 — this is small enough to be one unit of work:
 
-- `src/shared/websocket/chat-message.schema.ts`: add `voiceMode: z.boolean().optional()` to `queue_message` and `user_input` schemas.
-- `src/shared/acp-protocol/protocol/queued.ts`: add `voiceMode?: boolean` to `QueuedMessage`.
-- `src/backend/services/session/service/chat/chat-message-handlers/utils.ts`: `buildQueuedMessage` copies `message.voiceMode` onto the returned `QueuedMessage`.
-- `session-store.types.ts`: add `'voiceMode'` to `RecentMessageRejection.userMessage`'s `Pick<QueuedMessage, ...>`, and thread it through wherever `failMessage` constructs that value, so a retried voice message keeps the flag (§10.7 point 4).
-- `src/client/features/chat/use-chat-actions.ts`: `sendMessage` accepts an options param; thread `voiceMode` into the `QueueMessageRequest` sent over the WS.
-- `src/client/features/voice/voice-mode-toggle.tsx`: wrap `props.onFinalTranscript` so it always calls through with `voiceMode: true` instead of being passed as `onFinalTranscript` directly.
-- `src/backend/services/session/service/chat/chat-message-handlers.service.ts`: `buildMessageContent` (759), when `msg.voiceMode` is true, normalizes the `string | AgentContentItem[]` result of `processAttachmentsAndBuildContent` into content-block form and appends the instruction block, instead of calling `sendSessionMessage` with a bare 2-block array. `user-input.handler.ts:33` gets the equivalent treatment for the separate non-queued `user_input` path, for consistency, even though voice messages don't take that path today.
-- A new constant for the instruction text, colocated with the other voice-mode constants (e.g. alongside `voice-narration.service.ts` or a new small shared module) so it's one place to tune.
-- Tests: a handler-level test asserting the instruction block is present only when `voiceMode: true` and appended *after* any attachment content, absent for a normal typed/queued message, and still present alongside attachment blocks for a voice-flagged message that has them — the STT `UtteranceEnd` fix earlier in this work shipped a "looks right, isn't" bug (a side effect hidden inside an optional-call argument that never ran in production) past a test suite that happened to always provide the optional callback; don't repeat that mistake here by testing only the case where every optional field is populated.
+- `src/shared/websocket/chat-message.schema.ts`: add
+  `voiceMode: z.boolean().optional()` to `queue_message` and `user_input`
+  schemas.
+- `src/shared/acp-protocol/protocol/queued.ts`: add `voiceMode?: boolean` to
+  `QueuedMessage`.
+- `src/backend/services/session/service/chat/chat-message-handlers/utils.ts`:
+  `buildQueuedMessage` copies `message.voiceMode` onto the returned
+  `QueuedMessage`.
+- `session-store.types.ts`: add `'voiceMode'` to
+  `RecentMessageRejection.userMessage`'s `Pick<QueuedMessage, ...>`, and thread
+  it through wherever `failMessage` constructs that value, so a retried voice
+  message keeps the flag (§10.7 point 4).
+- `src/client/features/chat/use-chat-actions.ts`: `sendMessage` accepts an
+  options param; thread `voiceMode` into the `QueueMessageRequest` sent over the
+  WS.
+- `src/client/features/voice/voice-mode-toggle.tsx`: wrap
+  `props.onFinalTranscript` so it always calls through with `voiceMode: true`
+  instead of being passed as `onFinalTranscript` directly.
+- `src/backend/services/session/service/chat/chat-message-handlers.service.ts`:
+  `buildMessageContent` (759), when `msg.voiceMode` is true, normalizes the
+  `string | AgentContentItem[]` result of `processAttachmentsAndBuildContent`
+  into content-block form and appends the instruction block, instead of calling
+  `sendSessionMessage` with a bare 2-block array. `user-input.handler.ts:33`
+  gets the equivalent treatment for the separate non-queued `user_input` path,
+  for consistency, even though voice messages don't take that path today.
+- A new constant for the instruction text, colocated with the other voice-mode
+  constants (e.g. alongside `voice-narration.service.ts` or a new small shared
+  module) so it's one place to tune.
+- Tests: a handler-level test asserting the instruction block is present only
+  when `voiceMode: true` and appended _after_ any attachment content, absent for
+  a normal typed/queued message, and still present alongside attachment blocks
+  for a voice-flagged message that has them — the STT `UtteranceEnd` fix earlier
+  in this work shipped a "looks right, isn't" bug (a side effect hidden inside
+  an optional-call argument that never ran in production) past a test suite that
+  happened to always provide the optional callback; don't repeat that mistake
+  here by testing only the case where every optional field is populated.
 
-**Acceptance criteria:** a voice-mode turn produces a visibly shorter response than the same question asked via typed chat in the same session; the chat transcript shows only the user's actual spoken words, never the injected instruction; toggling voice mode off mid-session immediately returns to normal-length responses on the very next message.
+**Acceptance criteria:** a voice-mode turn produces a visibly shorter response
+than the same question asked via typed chat in the same session; the chat
+transcript shows only the user's actual spoken words, never the injected
+instruction; toggling voice mode off mid-session immediately returns to
+normal-length responses on the very next message.
 
 ## 11. Verified Implementation Plan (Ready to Build)
 
-§10 was written from an end-to-end trace of the message-send path; this section re-verifies every call site named there against the code as it exists today and turns the plan into an exact, file-by-file diff. Two facts fell out of re-verification that §10 didn't have:
+§10 was written from an end-to-end trace of the message-send path; this section
+re-verifies every call site named there against the code as it exists today and
+turns the plan into an exact, file-by-file diff. Two facts fell out of
+re-verification that §10 didn't have:
 
-- **`QueuedMessage` has exactly two producers.** `buildQueuedMessage` (`utils.ts:17`) is called from `queue-message.handler.ts:61` (the client-driven path `VoiceModeToggle` uses) and from `load-session.handler.ts:93` (auto-enqueuing a workspace's stored initial message on session load — unrelated to voice, and it constructs its input object inline without a `voiceMode` field, so it's provably unaffected: the field stays `undefined`).
-- **Queue state is never persisted.** `SessionStore.queue` (`session-store.types.ts:24`) is in-memory only — it isn't part of `export-data.schema.ts`'s backup format (checked: no `queue` field anywhere in that schema) and there's no outbound zod schema for `QueuedMessage` on the WS snapshot wire (`websocket.ts:41/72` type it as plain TS, not `z.object`). So `voiceMode` needs no migration, no export-format change, and no runtime validation beyond the one inbound zod schema in §11.1.
+- **`QueuedMessage` has exactly two producers.** `buildQueuedMessage`
+  (`utils.ts:17`) is called from `queue-message.handler.ts:61` (the
+  client-driven path `VoiceModeToggle` uses) and from
+  `load-session.handler.ts:93` (auto-enqueuing a workspace's stored initial
+  message on session load — unrelated to voice, and it constructs its input
+  object inline without a `voiceMode` field, so it's provably unaffected: the
+  field stays `undefined`).
+- **Queue state is never persisted.** `SessionStore.queue`
+  (`session-store.types.ts:24`) is in-memory only — it isn't part of
+  `export-data.schema.ts`'s backup format (checked: no `queue` field anywhere in
+  that schema) and there's no outbound zod schema for `QueuedMessage` on the WS
+  snapshot wire (`websocket.ts:41/72` type it as plain TS, not `z.object`). So
+  `voiceMode` needs no migration, no export-format change, and no runtime
+  validation beyond the one inbound zod schema in §11.1.
 
 ### 11.1 File-by-file changes
 
-**1. `src/shared/websocket/chat-message.schema.ts`** — add the flag to both message types that can carry a prompt, mirroring how `settings` already rides along (line 60):
+**1. `src/shared/websocket/chat-message.schema.ts`** — add the flag to both
+message types that can carry a prompt, mirroring how `settings` already rides
+along (line 60):
 
 ```ts
 // queue_message (currently lines 55-61)
@@ -616,7 +1073,8 @@ z.object({
 }),
 ```
 
-**2. `src/shared/acp-protocol/protocol/queued.ts`** — add the field to the shared interface (currently lines 17-28):
+**2. `src/shared/acp-protocol/protocol/queued.ts`** — add the field to the
+shared interface (currently lines 17-28):
 
 ```ts
 export interface QueuedMessage {
@@ -629,7 +1087,9 @@ export interface QueuedMessage {
 }
 ```
 
-**3. `src/backend/services/session/service/chat/chat-message-handlers/utils.ts`** — `buildQueuedMessage` (lines 17-34) copies the flag through:
+**3.
+`src/backend/services/session/service/chat/chat-message-handlers/utils.ts`** —
+`buildQueuedMessage` (lines 17-34) copies the flag through:
 
 ```ts
 return {
@@ -642,9 +1102,13 @@ return {
 };
 ```
 
-No change needed in `session-queue.ts` (`enqueueMessage`/`peekNext`/`dequeueNext`/`requeueFront`, lines 6-37) — they pass the whole `QueuedMessage` object by reference, so the flag survives every queue/retry path for free, exactly as §10.4 point 3 predicted.
+No change needed in `session-queue.ts`
+(`enqueueMessage`/`peekNext`/`dequeueNext`/`requeueFront`, lines 6-37) — they
+pass the whole `QueuedMessage` object by reference, so the flag survives every
+queue/retry path for free, exactly as §10.4 point 3 predicted.
 
-**4. `src/backend/services/session/service/store/session-store.types.ts`** — widen the retry-recovery `Pick` (line 11):
+**4. `src/backend/services/session/service/store/session-store.types.ts`** —
+widen the retry-recovery `Pick` (line 11):
 
 ```ts
 userMessage?: Pick<QueuedMessage, 'text' | 'timestamp' | 'attachments' | 'voiceMode'> & {
@@ -652,7 +1116,8 @@ userMessage?: Pick<QueuedMessage, 'text' | 'timestamp' | 'attachments' | 'voiceM
 };
 ```
 
-**5. `src/backend/services/session/service/session-domain.service.ts`** — `failMessage` (lines 155-167) adds one field to the object it already builds:
+**5. `src/backend/services/session/service/session-domain.service.ts`** —
+`failMessage` (lines 155-167) adds one field to the object it already builds:
 
 ```ts
 failMessage(sessionId: string, message: QueuedMessage, errorMessage: string): void {
@@ -671,7 +1136,9 @@ failMessage(sessionId: string, message: QueuedMessage, errorMessage: string): vo
 }
 ```
 
-**6. `src/backend/services/session/service/chat/chat-message-handlers.service.ts`** — `buildMessageContent` (line 759) is the actual injection point:
+**6.
+`src/backend/services/session/service/chat/chat-message-handlers.service.ts`** —
+`buildMessageContent` (line 759) is the actual injection point:
 
 ```ts
 private buildMessageContent(msg: QueuedMessage): string | AgentContentItem[] {
@@ -685,13 +1152,24 @@ private buildMessageContent(msg: QueuedMessage): string | AgentContentItem[] {
 }
 ```
 
-Called from `dispatchMessage` at line 612 (`const content = this.buildMessageContent(msg);`) — no other change needed there; `sendSessionMessage(dbSessionId, content)` at line 638 already accepts `string | AgentContentItem[]` unchanged.
+Called from `dispatchMessage` at line 612
+(`const content = this.buildMessageContent(msg);`) — no other change needed
+there; `sendSessionMessage(dbSessionId, content)` at line 638 already accepts
+`string | AgentContentItem[]` unchanged.
 
-**7. `src/backend/services/session/service/chat/chat-message-handlers/handlers/user-input.handler.ts`** — same treatment for parity, even though the queued path is the only one `VoiceModeToggle` uses today (lines 18-30 build `messageContent` from `rawContent`; wrap it through the same helper before `sendSessionMessage`).
+**7.
+`src/backend/services/session/service/chat/chat-message-handlers/handlers/user-input.handler.ts`**
+— same treatment for parity, even though the queued path is the only one
+`VoiceModeToggle` uses today (lines 18-30 build `messageContent` from
+`rawContent`; wrap it through the same helper before `sendSessionMessage`).
 
-**8. New constant** — `VOICE_MODE_BREVITY_INSTRUCTION`, colocated with `voice-narration.service.ts` (e.g. a new `src/backend/services/session/service/voice/voice-mode-instructions.ts`), holding the §10.4 point 5 wording. One file to tune later.
+**8. New constant** — `VOICE_MODE_BREVITY_INSTRUCTION`, colocated with
+`voice-narration.service.ts` (e.g. a new
+`src/backend/services/session/service/voice/voice-mode-instructions.ts`),
+holding the §10.4 point 5 wording. One file to tune later.
 
-**9. `src/client/features/chat/use-chat-actions.ts`** — `sendMessage` (line 276) grows an options param:
+**9. `src/client/features/chat/use-chat-actions.ts`** — `sendMessage` (line 276)
+grows an options param:
 
 ```ts
 export interface UseChatActionsReturn {
@@ -716,9 +1194,13 @@ const sendMessage = useCallback(
 );
 ```
 
-Every other caller of `sendMessage` (composer, `queueAutomaticMessage`'s sibling call sites, retry flows) keeps calling it with one argument — `options` is `undefined`, `voiceMode` is `undefined`, wire payload is unchanged.
+Every other caller of `sendMessage` (composer, `queueAutomaticMessage`'s sibling
+call sites, retry flows) keeps calling it with one argument — `options` is
+`undefined`, `voiceMode` is `undefined`, wire payload is unchanged.
 
-**10. `src/client/features/voice/voice-mode-toggle.tsx`** — today `onFinalTranscript` is passed straight through as a prop and wired directly to `useMicCapture` (line 119); wrap it locally instead:
+**10. `src/client/features/voice/voice-mode-toggle.tsx`** — today
+`onFinalTranscript` is passed straight through as a prop and wired directly to
+`useMicCapture` (line 119); wrap it locally instead:
 
 ```ts
 const handleFinalTranscript = useCallback(
@@ -728,30 +1210,61 @@ const handleFinalTranscript = useCallback(
 // pass handleFinalTranscript to useMicCapture instead of onFinalTranscript
 ```
 
-This requires widening the `onFinalTranscript` prop type on `VoiceModeToggleProps` (line 13) to `(text: string, options?: { voiceMode?: boolean }) => void`, and its one call site, `workspace-detail-chat-content.tsx:313` (`onFinalTranscript={props.sendMessage}`), needs no change — `sendMessage`'s new signature already matches.
+This requires widening the `onFinalTranscript` prop type on
+`VoiceModeToggleProps` (line 13) to
+`(text: string, options?: { voiceMode?: boolean }) => void`, and its one call
+site, `workspace-detail-chat-content.tsx:313`
+(`onFinalTranscript={props.sendMessage}`), needs no change — `sendMessage`'s new
+signature already matches.
 
 ### 11.2 Performance & cost impact on non-voice-mode operation
 
-This was the explicit question motivating this doc: **does building this measurably slow down, or add cost to, chat when voice mode is off (or on but for someone else's session)?** Walking every touch point above:
+This was the explicit question motivating this doc: **does building this
+measurably slow down, or add cost to, chat when voice mode is off (or on but for
+someone else's session)?** Walking every touch point above:
 
-| Layer | What changes for a non-voice message | Cost |
-|---|---|---|
-| Zod parse (`chat-message.schema.ts`) | One more `.optional()` key in a `z.object` | Same as the existing `settings` field — zod skips validation work entirely for an absent optional key. Unmeasurable. |
-| `QueuedMessage` construction (`utils.ts`) | One more property assignment, value `undefined` | A single property write on an object already being built. Unmeasurable. |
-| Queue lifecycle (`session-queue.ts`) | None — object passed by reference | Zero. |
-| Dispatch (`chat-message-handlers.service.ts`) | One `if (!msg.voiceMode)` boolean check, then early-return the *same* value `processAttachmentsAndBuildContent` already produced | One branch, no new allocation, no extra array iteration. The non-voice path returns the identical reference it returns today. |
-| `sendSessionMessage`/`toContentBlocks` (`session.service.ts`) | None — untouched, still receives `string \| AgentContentItem[]` | Zero. |
-| ACP call to Claude/Codex | None | Zero — no extra prompt, no extra turn, no extra tokens for a non-voice message. |
-| Persistence / export | None — `voiceMode` never reaches the DB or the backup format | Zero. |
+| Layer                                                         | What changes for a non-voice message                                                                                             | Cost                                                                                                                          |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Zod parse (`chat-message.schema.ts`)                          | One more `.optional()` key in a `z.object`                                                                                       | Same as the existing `settings` field — zod skips validation work entirely for an absent optional key. Unmeasurable.          |
+| `QueuedMessage` construction (`utils.ts`)                     | One more property assignment, value `undefined`                                                                                  | A single property write on an object already being built. Unmeasurable.                                                       |
+| Queue lifecycle (`session-queue.ts`)                          | None — object passed by reference                                                                                                | Zero.                                                                                                                         |
+| Dispatch (`chat-message-handlers.service.ts`)                 | One `if (!msg.voiceMode)` boolean check, then early-return the _same_ value `processAttachmentsAndBuildContent` already produced | One branch, no new allocation, no extra array iteration. The non-voice path returns the identical reference it returns today. |
+| `sendSessionMessage`/`toContentBlocks` (`session.service.ts`) | None — untouched, still receives `string \| AgentContentItem[]`                                                                  | Zero.                                                                                                                         |
+| ACP call to Claude/Codex                                      | None                                                                                                                             | Zero — no extra prompt, no extra turn, no extra tokens for a non-voice message.                                               |
+| Persistence / export                                          | None — `voiceMode` never reaches the DB or the backup format                                                                     | Zero.                                                                                                                         |
 
-Net: for every message sent without voice mode on, the new code adds a handful of `undefined`/falsy checks on the hot path and **zero** new network calls, DB writes, allocations of consequence, or LLM tokens. The generated prompt content for a non-voice message is byte-for-byte identical to what `main` produces today — this is provable from the `buildMessageContent` diff above, since the `!msg.voiceMode` branch returns `processAttachmentsAndBuildContent`'s result unmodified, which is exactly what the function returns today.
+Net: for every message sent without voice mode on, the new code adds a handful
+of `undefined`/falsy checks on the hot path and **zero** new network calls, DB
+writes, allocations of consequence, or LLM tokens. The generated prompt content
+for a non-voice message is byte-for-byte identical to what `main` produces today
+— this is provable from the `buildMessageContent` diff above, since the
+`!msg.voiceMode` branch returns `processAttachmentsAndBuildContent`'s result
+unmodified, which is exactly what the function returns today.
 
-**Where cost is added, it's scoped to voice-mode messages only, and it's small even there:** one extra `{type: 'text'}` content block (~350 characters of instruction text) appended to a prompt that was already being sent for that turn — not an additional ACP call, not an additional turn, not additional latency before the existing call fires. The only place this could show up is a marginal increase in input tokens for voice-flagged turns specifically (§10.4 point 6 — sent every turn, not just the first), which is an intentional, scoped tradeoff for voice-mode users, not a regression for anyone else.
+**Where cost is added, it's scoped to voice-mode messages only, and it's small
+even there:** one extra `{type: 'text'}` content block (~350 characters of
+instruction text) appended to a prompt that was already being sent for that turn
+— not an additional ACP call, not an additional turn, not additional latency
+before the existing call fires. The only place this could show up is a marginal
+increase in input tokens for voice-flagged turns specifically (§10.4 point 6 —
+sent every turn, not just the first), which is an intentional, scoped tradeoff
+for voice-mode users, not a regression for anyone else.
 
 ### 11.3 Test plan
 
-- Schema: `queue_message`/`user_input` still parse correctly with `voiceMode` absent (existing tests must keep passing unmodified) and with `voiceMode: true`/`false`.
-- `buildQueuedMessage`: flag copied through when present, `undefined` when absent.
-- `buildMessageContent`/`dispatchMessage`: instruction block present only when `voiceMode: true`, appended after attachment content, absent for a plain queued message, present alongside attachment blocks for a voice-flagged message that has them (per §10.8's note on not repeating the `UtteranceEnd` optional-argument bug — test the flag both set and unset, not just the happy path).
-- `failMessage`/`RecentMessageRejection`: a failed voice-flagged message keeps `voiceMode: true` in `userMessage`.
-- End-to-end sanity via `pnpm typecheck` + `pnpm test`: assert no existing chat/queue test's expected payload changes (this is the regression check for the "non-voice path is untouched" claim in §11.2).
+- Schema: `queue_message`/`user_input` still parse correctly with `voiceMode`
+  absent (existing tests must keep passing unmodified) and with
+  `voiceMode: true`/`false`.
+- `buildQueuedMessage`: flag copied through when present, `undefined` when
+  absent.
+- `buildMessageContent`/`dispatchMessage`: instruction block present only when
+  `voiceMode: true`, appended after attachment content, absent for a plain
+  queued message, present alongside attachment blocks for a voice-flagged
+  message that has them (per §10.8's note on not repeating the `UtteranceEnd`
+  optional-argument bug — test the flag both set and unset, not just the happy
+  path).
+- `failMessage`/`RecentMessageRejection`: a failed voice-flagged message keeps
+  `voiceMode: true` in `userMessage`.
+- End-to-end sanity via `pnpm typecheck` + `pnpm test`: assert no existing
+  chat/queue test's expected payload changes (this is the regression check for
+  the "non-voice path is untouched" claim in §11.2).

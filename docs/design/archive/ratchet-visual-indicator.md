@@ -23,15 +23,19 @@ The same control appears in:
 - `workspace.ratchetEnabled === true`
 - `workspace.ratchetState` is one of `CI_RUNNING`, `CI_FAILED`, `REVIEW_PENDING`
 
-All other `ratchetState` values (`IDLE`, `READY`, `MERGED`) render as **On + idle** when enabled.
+All other `ratchetState` values (`IDLE`, `READY`, `MERGED`) render as **On +
+idle** when enabled.
 
 ## Interaction Rules
 
 - Clicking the hammer toggles `workspace.ratchetEnabled`.
 - Toggling is always available at workspace level.
-- Global ratchet setting in Admin is **only** the default for new GitHub-issue-created workspaces.
-- Reduced motion disables ants animation while preserving a visible dashed border.
+- Global ratchet setting in Admin is **only** the default for new
+  GitHub-issue-created workspaces.
+- Reduced motion disables ants animation while preserving a visible dashed
+  border.
 
 ## Notes
 
-- Previous `ratchet-active` and glow-based signaling were removed in favor of this single control.
+- Previous `ratchet-active` and glow-based signaling were removed in favor of
+  this single control.

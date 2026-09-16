@@ -1,25 +1,47 @@
 # Durable Session Stop Reasons Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Persist every interrupted turn and stopped session as an explanatory chat-log entry, and raise the normal user-turn timeout from one hour to four hours.
+**Goal:** Persist every interrupted turn and stopped session as an explanatory
+chat-log entry, and raise the normal user-turn timeout from one hour to four
+hours.
 
-**Architecture:** The session capsule owns an append-only `SessionLifecycleEvent` table and a focused service that persists, deduplicates, hydrates, and live-publishes structured lifecycle messages. Provider history remains authoritative for provider messages; lifecycle messages are mapped to stable chat-message IDs and merged into that history by timestamp whenever a session loads or a transcript is saved. Prompt, explicit-stop, workspace-archive, and unexpected-exit paths supply typed reasons and caller-stable dedupe keys.
+**Architecture:** The session capsule owns an append-only
+`SessionLifecycleEvent` table and a focused service that persists, deduplicates,
+hydrates, and live-publishes structured lifecycle messages. Provider history
+remains authoritative for provider messages; lifecycle messages are mapped to
+stable chat-message IDs and merged into that history by timestamp whenever a
+session loads or a transcript is saved. Prompt, explicit-stop,
+workspace-archive, and unexpected-exit paths supply typed reasons and
+caller-stable dedupe keys.
 
-**Tech Stack:** TypeScript, Prisma/SQLite, Express/tRPC, ACP, WebSocket session deltas, React, Vitest, Testing Library, Biome, pnpm.
+**Tech Stack:** TypeScript, Prisma/SQLite, Express/tRPC, ACP, WebSocket session
+deltas, React, Vitest, Testing Library, Biome, pnpm.
 
 ## Global Constraints
 
-- The standard user prompt deadline is exactly `4 * 60 * 60 * 1000` (`14_400_000`) milliseconds.
-- Auto-iteration's configurable prompt timeout, tool-call timeouts, shutdown waits, queue waits, and ratchet scheduling do not change.
-- Lifecycle events are append-only and survive `AgentSession` deletion; only deleting the owning `Workspace` cascades them.
-- `[sessionId, dedupeKey]` is unique, with indexes on `[sessionId, createdAt]` and `workspaceId`.
+- The standard user prompt deadline is exactly `4 * 60 * 60 * 1000`
+  (`14_400_000`) milliseconds.
+- Auto-iteration's configurable prompt timeout, tool-call timeouts, shutdown
+  waits, queue waits, and ratchet scheduling do not change.
+- Lifecycle events are append-only and survive `AgentSession` deletion; only
+  deleting the owning `Workspace` cascades them.
+- `[sessionId, dedupeKey]` is unique, with indexes on `[sessionId, createdAt]`
+  and `workspaceId`.
 - Provider transcript files are never modified.
 - Database persistence is attempted before live lifecycle-message emission.
-- Provider error text is whitespace-normalized, stripped of unsafe detail, and bounded to 240 characters before persistence.
-- Hydration failures are logged and do not block provider history or session usability.
-- Lifecycle messages use stable IDs, merge chronologically, and remain idempotent through reconnects and Codex history backfills.
-- Prompt timeout, user stop, session close, workspace archive, and system stop render with neutral/warning styling; provider failure and unexpected exit render with error styling.
+- Provider error text is whitespace-normalized, stripped of unsafe detail, and
+  bounded to 240 characters before persistence.
+- Hydration failures are logged and do not block provider history or session
+  usability.
+- Lifecycle messages use stable IDs, merge chronologically, and remain
+  idempotent through reconnects and Codex history backfills.
+- Prompt timeout, user stop, session close, workspace archive, and system stop
+  render with neutral/warning styling; provider failure and unexpected exit
+  render with error styling.
 - Existing service-capsule and client feature import boundaries remain intact.
 
 ---
@@ -28,13 +50,17 @@
 
 **Files:**
 
-- Modify: `prisma/schema.prisma` next to `AgentSession` and the `Workspace` relations
-- Create: `prisma/migrations/20260730140000_add_session_lifecycle_events/migration.sql`
+- Modify: `prisma/schema.prisma` next to `AgentSession` and the `Workspace`
+  relations
+- Create:
+  `prisma/migrations/20260730140000_add_session_lifecycle_events/migration.sql`
 - Modify: `src/shared/core/enums.ts`
 - Modify: `src/shared/core/index.ts`
 - Modify: `src/backend/services/registry.ts`
-- Create: `src/backend/services/session/resources/session-lifecycle-event.accessor.ts`
-- Create: `src/backend/services/session/resources/session-lifecycle-event.accessor.test.ts`
+- Create:
+  `src/backend/services/session/resources/session-lifecycle-event.accessor.ts`
+- Create:
+  `src/backend/services/session/resources/session-lifecycle-event.accessor.test.ts`
 
 **Interfaces:**
 
@@ -79,7 +105,8 @@ export interface SessionLifecycleEventStore {
 
 - [ ] **Step 1: Write the accessor tests**
 
-Create `session-lifecycle-event.accessor.test.ts` with a hoisted Prisma mock and these assertions:
+Create `session-lifecycle-event.accessor.test.ts` with a hoisted Prisma mock and
+these assertions:
 
 ```ts
 it('upserts by the compound session and dedupe key', async () => {
@@ -175,7 +202,8 @@ model SessionLifecycleEvent {
 }
 ```
 
-Add `sessionLifecycleEvents SessionLifecycleEvent[]` to `Workspace`. Create the SQLite migration:
+Add `sessionLifecycleEvents SessionLifecycleEvent[]` to `Workspace`. Create the
+SQLite migration:
 
 ```sql
 CREATE TABLE "SessionLifecycleEvent" (
@@ -202,7 +230,9 @@ CREATE INDEX "SessionLifecycleEvent_workspaceId_idx"
 
 - [ ] **Step 4: Add shared enum mirrors and service ownership**
 
-Export the two const/type pairs shown in the Interfaces block from `enums.ts` and `core/index.ts`. Add `SessionLifecycleEvent` to `prismaModelNames` and to the session service's `ownsModels` array.
+Export the two const/type pairs shown in the Interfaces block from `enums.ts`
+and `core/index.ts`. Add `SessionLifecycleEvent` to `prismaModelNames` and to
+the session service's `ownsModels` array.
 
 - [ ] **Step 5: Generate Prisma and implement the resource accessor**
 
@@ -291,17 +321,22 @@ git commit -m "Add session lifecycle event storage"
 
 - Modify: `src/shared/acp-protocol/protocol/messages.ts`
 - Modify: `src/shared/acp-protocol/protocol.test.ts`
-- Create: `src/backend/services/session/service/store/session-lifecycle-transcript.ts`
-- Create: `src/backend/services/session/service/store/session-lifecycle-transcript.test.ts`
+- Create:
+  `src/backend/services/session/service/store/session-lifecycle-transcript.ts`
+- Create:
+  `src/backend/services/session/service/store/session-lifecycle-transcript.test.ts`
 - Modify: `src/backend/services/session/service/session-domain.service.ts`
 - Modify: `src/backend/services/session/service/session-domain.service.test.ts`
-- Create: `src/backend/services/session/service/lifecycle/session-lifecycle-event.service.ts`
-- Create: `src/backend/services/session/service/lifecycle/session-lifecycle-event.service.test.ts`
+- Create:
+  `src/backend/services/session/service/lifecycle/session-lifecycle-event.service.ts`
+- Create:
+  `src/backend/services/session/service/lifecycle/session-lifecycle-event.service.test.ts`
 - Modify: `src/backend/services/session/service/lifecycle/session-services.ts`
 
 **Interfaces:**
 
-- Consumes: `SessionLifecycleEventRecord`, `SessionLifecycleEventStore`, and the shared enum types from Task 1.
+- Consumes: `SessionLifecycleEventRecord`, `SessionLifecycleEventStore`, and the
+  shared enum types from Task 1.
 - Produces:
 
 ```ts
@@ -343,7 +378,8 @@ SessionLifecycleEventService.prototype.hydrate = (sessionId: string) => Promise<
 
 - [ ] **Step 1: Add failing protocol and merge tests**
 
-Add a protocol test proving `session_lifecycle` is accepted by `AGENT_MESSAGE_TYPES`. Add merge tests:
+Add a protocol test proving `session_lifecycle` is accepted by
+`AGENT_MESSAGE_TYPES`. Add merge tests:
 
 ```ts
 it('maps an event to a stable structured chat message', () => {
@@ -393,7 +429,8 @@ Expected: FAIL because the message variant and merge helper do not exist.
 
 - [ ] **Step 3: Extend the shared protocol**
 
-Add `session_lifecycle` to `AgentMessage['type']` and `AGENT_MESSAGE_TYPE_MAP`, and add:
+Add `session_lifecycle` to `AgentMessage['type']` and `AGENT_MESSAGE_TYPE_MAP`,
+and add:
 
 ```ts
 export interface SessionLifecycleMessage {
@@ -405,7 +442,9 @@ export interface SessionLifecycleMessage {
 }
 ```
 
-Add `lifecycle?: SessionLifecycleMessage` to `AgentMessage`. Import the enum types through `@/shared/core` on backend/client code and a relative `../../core/index.js` import inside the shared protocol package.
+Add `lifecycle?: SessionLifecycleMessage` to `AgentMessage`. Import the enum
+types through `@/shared/core` on backend/client code and a relative
+`../../core/index.js` import inside the shared protocol package.
 
 - [ ] **Step 4: Implement deterministic transcript mapping and merge**
 
@@ -454,7 +493,9 @@ export function mergeLifecycleTranscript(
 
 - [ ] **Step 5: Add failing domain and lifecycle-service tests**
 
-Prove that a stable message emits once, duplicate records are harmless, persistence precedes emission, persistence failure logs and best-effort emits, and hydration re-merges after `clearSession`:
+Prove that a stable message emits once, duplicate records are harmless,
+persistence precedes emission, persistence failure logs and best-effort emits,
+and hydration re-merges after `clearSession`:
 
 ```ts
 it('persists before publishing and publishes a duplicate only once', async () => {
@@ -496,7 +537,8 @@ Run:
 pnpm vitest run src/backend/services/session/service/session-domain.service.test.ts src/backend/services/session/service/lifecycle/session-lifecycle-event.service.test.ts
 ```
 
-Expected: FAIL because `upsertLifecycleMessage` and `SessionLifecycleEventService` do not exist.
+Expected: FAIL because `upsertLifecycleMessage` and
+`SessionLifecycleEventService` do not exist.
 
 - [ ] **Step 7: Implement domain upsert and the lifecycle-event service**
 
@@ -516,13 +558,19 @@ Implement `SessionLifecycleEventService.record` so it:
 1. calls `store.upsert` with `createdAt ?? new Date()`;
 2. converts the returned row with `toLifecycleChatMessage`;
 3. calls `domain.upsertLifecycleMessage`;
-4. emits `{ type: 'agent_message', data: lifecycleChatMessage.message }` only when newly inserted in memory;
-5. on persistence failure, logs the full error, constructs a best-effort transient lifecycle message, upserts/emits it, and returns `null`;
+4. emits `{ type: 'agent_message', data: lifecycleChatMessage.message }` only
+   when newly inserted in memory;
+5. on persistence failure, logs the full error, constructs a best-effort
+   transient lifecycle message, upserts/emits it, and returns `null`;
 6. never logs that the event was durable when the accessor rejected.
 
-Implement `hydrate` so it catches and logs `findBySessionId` errors, otherwise calls `mergeLifecycleTranscript(domain.getTranscriptSnapshot(sessionId), events)` and `domain.replaceTranscript(sessionId, merged)`.
+Implement `hydrate` so it catches and logs `findBySessionId` errors, otherwise
+calls
+`mergeLifecycleTranscript(domain.getTranscriptSnapshot(sessionId), events)` and
+`domain.replaceTranscript(sessionId, merged)`.
 
-Construct and export `sessionLifecycleEventService` in `session-services.ts` before the prompt/lifecycle coordinators.
+Construct and export `sessionLifecycleEventService` in `session-services.ts`
+before the prompt/lifecycle coordinators.
 
 - [ ] **Step 8: Verify transcript behavior**
 
@@ -547,22 +595,32 @@ git commit -m "Merge durable lifecycle events into chat"
 
 **Files:**
 
-- Modify: `src/backend/services/session/service/chat/chat-message-handlers/handlers/load-session.handler.ts`
-- Modify: `src/backend/services/session/service/chat/chat-message-handlers/handlers/load-session.handler.test.ts`
-- Modify: `src/backend/services/session/service/lifecycle/session.lifecycle.service.ts`
-- Modify: `src/backend/services/session/service/lifecycle/session.lifecycle.service.test.ts`
+- Modify:
+  `src/backend/services/session/service/chat/chat-message-handlers/handlers/load-session.handler.ts`
+- Modify:
+  `src/backend/services/session/service/chat/chat-message-handlers/handlers/load-session.handler.test.ts`
+- Modify:
+  `src/backend/services/session/service/lifecycle/session.lifecycle.service.ts`
+- Modify:
+  `src/backend/services/session/service/lifecycle/session.lifecycle.service.test.ts`
 - Modify: `src/backend/trpc/session.trpc.ts`
 - Modify: `src/backend/trpc/session.router.test.ts`
-- Create: `src/client/features/chat/agent-activity/message-renderers/session-lifecycle-message-renderer.tsx`
-- Create: `src/client/features/chat/agent-activity/message-renderers/session-lifecycle-message-renderer.test.tsx`
-- Create: `src/client/features/chat/agent-activity/message-renderers/session-lifecycle-message-renderer.stories.tsx`
-- Modify: `src/client/features/chat/agent-activity/message-renderers/assistant-message-renderer.tsx`
-- Modify: `src/client/features/chat/agent-activity/message-renderers/assistant-message-renderer.test.tsx`
+- Create:
+  `src/client/features/chat/agent-activity/message-renderers/session-lifecycle-message-renderer.tsx`
+- Create:
+  `src/client/features/chat/agent-activity/message-renderers/session-lifecycle-message-renderer.test.tsx`
+- Create:
+  `src/client/features/chat/agent-activity/message-renderers/session-lifecycle-message-renderer.stories.tsx`
+- Modify:
+  `src/client/features/chat/agent-activity/message-renderers/assistant-message-renderer.tsx`
+- Modify:
+  `src/client/features/chat/agent-activity/message-renderers/assistant-message-renderer.test.tsx`
 - Modify: `src/client/features/chat/chat-reducer.test.ts`
 
 **Interfaces:**
 
-- Consumes: `sessionLifecycleEventService.hydrate(sessionId)` and `AgentMessage.lifecycle` from Task 2.
+- Consumes: `sessionLifecycleEventService.hydrate(sessionId)` and
+  `AgentMessage.lifecycle` from Task 2.
 - Produces:
 
 ```ts
@@ -593,7 +651,12 @@ it('hydrates lifecycle events after provider history and before replay', async (
 });
 ```
 
-In the lifecycle test for closed transcript persistence, clear the domain store, return one lifecycle event from the accessor, call `persistClosedSession('session-1')`, and assert the saved `messages` includes `session-lifecycle:event-1`. In the session-router test, assert delete calls `stopSession`, then `persistClosedSession`, then clears memory and deletes the row.
+In the lifecycle test for closed transcript persistence, clear the domain store,
+return one lifecycle event from the accessor, call
+`persistClosedSession('session-1')`, and assert the saved `messages` includes
+`session-lifecycle:event-1`. In the session-router test, assert delete calls
+`stopSession`, then `persistClosedSession`, then clears memory and deletes the
+row.
 
 - [ ] **Step 2: Run backend hydration tests**
 
@@ -614,15 +677,24 @@ await hydrateProviderHistoryIfNeeded(sessionId, dbSession);
 await sessionLifecycleEventService.hydrate(sessionId);
 ```
 
-Wrap the call inside `hydrate` itself, so a database read failure logs and returns without blocking `subscribe`.
+Wrap the call inside `hydrate` itself, so a database read failure logs and
+returns without blocking `subscribe`.
 
-Inject `lifecycleEventService` into `SessionLifecycleService`. Extract the existing ratchet persistence body into a public `persistClosedSession(sessionId)` method that loads the session, calls:
+Inject `lifecycleEventService` into `SessionLifecycleService`. Extract the
+existing ratchet persistence body into a public
+`persistClosedSession(sessionId)` method that loads the session, calls:
 
 ```ts
 await this.lifecycleEventService.hydrate(sessionId);
 ```
 
-then reads the transcript and persists it with `closedSessionPersistenceService`. Make `persistRatchetTranscript` delegate to the shared implementation. In the `deleteSession` mutation, call `persistClosedSession(input.id)` after the explicit close stop and before `clearSession` and `deleteAgentSession`. This guarantees both ordinary closed sessions and restarted ratchet sessions include durable lifecycle rows before the transcript artifact is written.
+then reads the transcript and persists it with
+`closedSessionPersistenceService`. Make `persistRatchetTranscript` delegate to
+the shared implementation. In the `deleteSession` mutation, call
+`persistClosedSession(input.id)` after the explicit close stop and before
+`clearSession` and `deleteAgentSession`. This guarantees both ordinary closed
+sessions and restarted ratchet sessions include durable lifecycle rows before
+the transcript artifact is written.
 
 - [ ] **Step 4: Add failing renderer tests**
 
@@ -647,7 +719,8 @@ it.each([
 });
 ```
 
-Add an assistant-renderer integration test proving a `session_lifecycle` message reaches the dedicated renderer.
+Add an assistant-renderer integration test proving a `session_lifecycle` message
+reaches the dedicated renderer.
 
 Add reducer coverage proving current runtime state cannot erase history:
 
@@ -713,7 +786,8 @@ Expected: FAIL because the renderer and branch do not exist.
 
 - [ ] **Step 6: Implement the lifecycle row and Storybook states**
 
-Use `WarningCircleIcon` for non-error reasons and `XCircleIcon` for error reasons. Render `message.lifecycle.message` and:
+Use `WarningCircleIcon` for non-error reasons and `XCircleIcon` for error
+reasons. Render `message.lifecycle.message` and:
 
 ```tsx
 <time dateTime={message.lifecycle.timestamp}>
@@ -748,7 +822,8 @@ if (message.type === 'session_lifecycle') {
 }
 ```
 
-Create Storybook stories for a four-hour timeout, HTTP 529 overload, manual stop, and unexpected exit.
+Create Storybook stories for a four-hour timeout, HTTP 529 overload, manual
+stop, and unexpected exit.
 
 - [ ] **Step 7: Verify hydration and UI**
 
@@ -773,17 +848,23 @@ git commit -m "Show lifecycle reasons in session chat"
 
 **Files:**
 
-- Modify: `src/backend/services/session/service/lifecycle/acp-event-processor.ts`
-- Modify: `src/backend/services/session/service/lifecycle/acp-event-processor.text-streaming.test.ts`
+- Modify:
+  `src/backend/services/session/service/lifecycle/acp-event-processor.ts`
+- Modify:
+  `src/backend/services/session/service/lifecycle/acp-event-processor.text-streaming.test.ts`
 - Modify: `src/backend/services/session/service/lifecycle/session.service.ts`
-- Modify: `src/backend/services/session/service/lifecycle/session.prompt.service.test.ts`
+- Modify:
+  `src/backend/services/session/service/lifecycle/session.prompt.service.test.ts`
 - Modify: `src/backend/services/session/service/lifecycle/session-services.ts`
-- Modify: `src/backend/services/session/service/lifecycle/session.error-message.ts`
-- Modify: `src/backend/services/session/service/lifecycle/session.error-message.test.ts`
+- Modify:
+  `src/backend/services/session/service/lifecycle/session.error-message.ts`
+- Modify:
+  `src/backend/services/session/service/lifecycle/session.error-message.test.ts`
 
 **Interfaces:**
 
-- Consumes: `SessionLifecycleEventService.record` from Task 2 and `PromptTimeoutError` from `@/backend/services/session/service/acp`.
+- Consumes: `SessionLifecycleEventService.record` from Task 2 and
+  `PromptTimeoutError` from `@/backend/services/session/service/acp`.
 - Produces:
 
 ```ts
@@ -804,7 +885,8 @@ export function toProviderFailureChatMessage(
 
 - [ ] **Step 1: Add failing attempt-key and error-sanitization tests**
 
-Assert each turn receives a UUID-like stable key, the key remains accessible until `finishPromptTurn`, and different turns differ. Add:
+Assert each turn receives a UUID-like stable key, the key remains accessible
+until `finishPromptTurn`, and different turns differ. Add:
 
 ```ts
 it.each([
@@ -822,7 +904,10 @@ it('adds the provider name and terminal punctuation', () => {
 });
 ```
 
-The sanitizer may retain `HTTP <status>`, `Overloaded`, and concise provider wording. It must return `The provider returned an error.` for text containing token/key/authorization/credential patterns and slice the final string to 240 characters.
+The sanitizer may retain `HTTP <status>`, `Overloaded`, and concise provider
+wording. It must return `The provider returned an error.` for text containing
+token/key/authorization/credential patterns and slice the final string to 240
+characters.
 
 - [ ] **Step 2: Run attempt-key and sanitizer tests**
 
@@ -853,11 +938,20 @@ finishPromptTurn(sessionId: string): void {
 }
 ```
 
-Also clear the key from `clearSessionState`, and expose the already-tracked provider through `getProvider`. Implement `toPublicProviderErrorMessage` using whitespace collapse, case-insensitive secret-pattern rejection, overload-parenthesis normalization, and `slice(0, 240)`. Implement `toProviderFailureChatMessage` so `CODEX` displays as `Codex`, `CLAUDE` as `Claude`, an unknown provider as `The provider`, and the final copy has exactly one terminal period. When the sanitizer returns its generic safe sentence, return `Turn stopped: the provider returned an error.` without duplicating the provider phrase.
+Also clear the key from `clearSessionState`, and expose the already-tracked
+provider through `getProvider`. Implement `toPublicProviderErrorMessage` using
+whitespace collapse, case-insensitive secret-pattern rejection,
+overload-parenthesis normalization, and `slice(0, 240)`. Implement
+`toProviderFailureChatMessage` so `CODEX` displays as `Codex`, `CLAUDE` as
+`Claude`, an unknown provider as `The provider`, and the final copy has exactly
+one terminal period. When the sanitizer returns its generic safe sentence,
+return `Turn stopped: the provider returned an error.` without duplicating the
+provider phrase.
 
 - [ ] **Step 4: Add failing four-hour, timeout, 529, and suppression tests**
 
-In `session.prompt.service.test.ts`, inject a mocked lifecycle-event service and assert:
+In `session.prompt.service.test.ts`, inject a mocked lifecycle-event service and
+assert:
 
 ```ts
 it('uses the four-hour deadline for normal user messages', async () => {
@@ -930,7 +1024,10 @@ Capture the key:
 const attemptKey = this.acpEventProcessor.beginPromptTurn(sessionId);
 ```
 
-In `executeAcpMessage`'s catch, before `completePromptTurnIfCurrent`, skip lifecycle recording when the turn-already-running guard fired, when `isSessionStopping(sessionId)` is true, or when the stop generation changed. Otherwise `await`:
+In `executeAcpMessage`'s catch, before `completePromptTurnIfCurrent`, skip
+lifecycle recording when the turn-already-running guard fired, when
+`isSessionStopping(sessionId)` is true, or when the stop generation changed.
+Otherwise `await`:
 
 ```ts
 await this.lifecycleEventService.record({
@@ -949,13 +1046,19 @@ await this.lifecycleEventService.record({
 });
 ```
 
-If `workspaceId` is missing, log the classification and do not fabricate a database owner.
+If `workspaceId` is missing, log the classification and do not fabricate a
+database owner.
 
 Inject `lifecycleEventService` into `SessionService` in `session-services.ts`.
 
 - [ ] **Step 7: Cover ACP error-message deduplication**
 
-When `handleAcpDelta` sees an `agent_message` whose nested message has `type === 'error'`, use `getActivePromptAttemptKey(sid)` and call the same recorder with `turn:<attempt-key>:stop`. The later prompt rejection uses the identical key, so the unique database key and stable transcript ID keep one synthetic entry. Add a test that sends the ACP error and then rejects the prompt, and assert the transcript contains one lifecycle message.
+When `handleAcpDelta` sees an `agent_message` whose nested message has
+`type === 'error'`, use `getActivePromptAttemptKey(sid)` and call the same
+recorder with `turn:<attempt-key>:stop`. The later prompt rejection uses the
+identical key, so the unique database key and stable transcript ID keep one
+synthetic entry. Add a test that sends the ACP error and then rejects the
+prompt, and assert the transcript contains one lifecycle message.
 
 - [ ] **Step 8: Verify all prompt paths**
 
@@ -980,10 +1083,14 @@ git commit -m "Record prompt failures and extend timeout"
 
 **Files:**
 
-- Modify: `src/backend/services/session/service/lifecycle/session.lifecycle.service.ts`
-- Modify: `src/backend/services/session/service/lifecycle/session.lifecycle.service.test.ts`
-- Modify: `src/backend/services/session/service/chat/chat-message-handlers/handlers/stop.handler.ts`
-- Modify: `src/backend/services/session/service/chat/chat-message-handlers/handlers/stop.handler.test.ts`
+- Modify:
+  `src/backend/services/session/service/lifecycle/session.lifecycle.service.ts`
+- Modify:
+  `src/backend/services/session/service/lifecycle/session.lifecycle.service.test.ts`
+- Modify:
+  `src/backend/services/session/service/chat/chat-message-handlers/handlers/stop.handler.ts`
+- Modify:
+  `src/backend/services/session/service/chat/chat-message-handlers/handlers/stop.handler.test.ts`
 - Modify: `src/backend/trpc/session.trpc.ts`
 - Modify: `src/backend/trpc/session.router.test.ts`
 - Modify: `src/backend/orchestration/workspace-archive.orchestrator.ts`
@@ -1075,7 +1182,8 @@ Expected: FAIL because stop reasons are not recorded.
 
 - [ ] **Step 3: Implement stop-reason recording**
 
-Default internal calls to `SYSTEM_STOP`. After loading the session and before changing runtime state, persist:
+Default internal calls to `SYSTEM_STOP`. After loading the session and before
+changing runtime state, persist:
 
 ```ts
 await this.lifecycleEventService.record({
@@ -1099,7 +1207,8 @@ const SESSION_STOP_MESSAGES: Record<SessionStopReason, string> = {
 };
 ```
 
-`stopWorkspaceSessions` forwards the supplied reason to every active/runtime session.
+`stopWorkspaceSessions` forwards the supplied reason to every active/runtime
+session.
 
 - [ ] **Step 4: Implement unexpected-exit recording**
 
@@ -1126,7 +1235,8 @@ await this.lifecycleEventService.record({
 });
 ```
 
-This is separate from a preceding provider turn error because process death is independently useful, while deliberate shutdown is excluded.
+This is separate from a preceding provider turn error because process death is
+independently useful, while deliberate shutdown is excluded.
 
 - [ ] **Step 5: Add failing caller-intent tests**
 
@@ -1140,7 +1250,10 @@ expect(stopWorkspaceSessions).toHaveBeenCalledWith('workspace-1', {
 expect(stopSession).toHaveBeenCalledWith('session-1', { reason: 'SESSION_CLOSED' });
 ```
 
-Cover the chat stop handler, session tRPC stop/delete mutations, workspace archive cleanup, and the event collector's archived-workspace cleanup. Keep the `persistClosedSession` assertion added in Task 3 when updating the delete expectation.
+Cover the chat stop handler, session tRPC stop/delete mutations, workspace
+archive cleanup, and the event collector's archived-workspace cleanup. Keep the
+`persistClosedSession` assertion added in Task 3 when updating the delete
+expectation.
 
 - [ ] **Step 6: Run caller-intent tests**
 
@@ -1166,7 +1279,8 @@ Make session deletion/close call:
 await sessionLifecycleService.stopSession(sessionId, { reason: 'SESSION_CLOSED' });
 ```
 
-before deleting the `AgentSession`. Make archive cleanup and the archived-workspace collector call:
+before deleting the `AgentSession`. Make archive cleanup and the
+archived-workspace collector call:
 
 ```ts
 await sessionLifecycleService.stopWorkspaceSessions(workspaceId, {
@@ -1174,7 +1288,8 @@ await sessionLifecycleService.stopWorkspaceSessions(workspaceId, {
 });
 ```
 
-Leave restart, auto-iteration recycle, ratchet cleanup, startup cleanup, and server shutdown on the default `SYSTEM_STOP`.
+Leave restart, auto-iteration recycle, ratchet cleanup, startup cleanup, and
+server shutdown on the default `SYSTEM_STOP`.
 
 - [ ] **Step 8: Verify all stop paths**
 
@@ -1205,7 +1320,8 @@ git commit -m "Record session stop causes"
 **Interfaces:**
 
 - Consumes: all behavior from Tasks 1–5.
-- Produces: documented operating behavior and full-repository verification evidence.
+- Produces: documented operating behavior and full-repository verification
+  evidence.
 
 - [ ] **Step 1: Update the ACP Runtime feature note**
 
@@ -1233,7 +1349,8 @@ pnpm check:service-registry
 pnpm vitest run src/backend/services/session/resources/session-lifecycle-event.accessor.test.ts src/backend/services/session/service/store/session-lifecycle-transcript.test.ts src/backend/services/session/service/lifecycle/session-lifecycle-event.service.test.ts src/backend/services/session/service/chat/chat-message-handlers/handlers/load-session.handler.test.ts src/backend/services/session/service/lifecycle/session.prompt.service.test.ts src/backend/services/session/service/lifecycle/session.lifecycle.service.test.ts src/client/features/chat/agent-activity/message-renderers/session-lifecycle-message-renderer.test.tsx src/client/features/chat/agent-activity/message-renderers/assistant-message-renderer.test.tsx src/client/features/chat/chat-reducer.test.ts
 ```
 
-Expected: formatting produces no unexpected semantic changes and every focused check PASS.
+Expected: formatting produces no unexpected semantic changes and every focused
+check PASS.
 
 - [ ] **Step 3: Run repository guardrails**
 
@@ -1246,7 +1363,9 @@ pnpm test
 pnpm build
 ```
 
-Expected: all commands exit successfully. If an unrelated pre-existing failure occurs, preserve its exact output separately and still rerun every affected focused test.
+Expected: all commands exit successfully. If an unrelated pre-existing failure
+occurs, preserve its exact output separately and still rerun every affected
+focused test.
 
 - [ ] **Step 4: Review the final diff against the design**
 
@@ -1266,7 +1385,8 @@ Confirm from the diff that:
 - every lifecycle row has a stable dedupe key;
 - persistence precedes lifecycle live emission;
 - reconnect hydration happens after provider hydration and before replay;
-- provider and exit failures render as errors while deliberate stops render as warnings;
+- provider and exit failures render as errors while deliberate stops render as
+  warnings;
 - generated Prisma changes correspond only to the new model/enums.
 
 - [ ] **Step 5: Commit documentation and any format-only fixes**

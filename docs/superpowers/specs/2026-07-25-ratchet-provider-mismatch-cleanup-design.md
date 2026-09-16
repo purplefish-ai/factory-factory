@@ -7,11 +7,10 @@ workspace check is cancelled while the dispatch record is being settled.
 
 ## Root Cause
 
-`checkActiveFixerSession` settles a provider-mismatched dispatch before it
-stops the session. If cancellation occurs during `recordSessionEnd`, the write
-can commit and the following abort check throws before the stop helper is
-called. The dispatch is then `DIED` while the mismatched session remains
-`RUNNING`.
+`checkActiveFixerSession` settles a provider-mismatched dispatch before it stops
+the session. If cancellation occurs during `recordSessionEnd`, the write can
+commit and the following abort check throws before the stop helper is called.
+The dispatch is then `DIED` while the mismatched session remains `RUNNING`.
 
 The stop helper is also abort-sensitive even though it is cleanup code that is
 intended to be best-effort and never throw. Its abort checks can prevent the
@@ -20,9 +19,10 @@ stop attempt or replace a stop failure warning with a cancellation exception.
 ## Design
 
 Keep cancellation barriers around ordinary Ratchet work, including before
-settlement and after `recordSessionEnd`. Make session stopping abort-insensitive:
-`safeStopSession` will always attempt `sessionBridge.stopSession`, catch every
-failure, and log the existing warning context.
+settlement and after `recordSessionEnd`. Make session stopping
+abort-insensitive: `safeStopSession` will always attempt
+`sessionBridge.stopSession`, catch every failure, and log the existing warning
+context.
 
 For the provider-mismatch branch, run the stop helper in a `finally` block
 around settlement. This preserves the existing settlement-before-stop ordering
@@ -39,8 +39,8 @@ pre-settlement cancellation behavior.
   error after cleanup finishes.
 - A stop failure is logged with the existing warning message and context.
 - A stop failure never masks a settlement or cancellation error.
-- Cancellation before provider mismatch is established still prevents
-  settlement and cleanup side effects.
+- Cancellation before provider mismatch is established still prevents settlement
+  and cleanup side effects.
 
 ## Testing
 

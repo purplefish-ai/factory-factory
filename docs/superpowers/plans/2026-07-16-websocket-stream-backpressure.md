@@ -1,34 +1,52 @@
 # WebSocket Stream Backpressure Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Bound queued WebSocket data for high-volume terminal and log output and log asynchronous send failures.
+**Goal:** Bound queued WebSocket data for high-volume terminal and log output
+and log asynchronous send failures.
 
-**Architecture:** Extend the existing `websocket-send` utility with a stream-specific sender that drops output when the current `bufferedAmount` plus the UTF-8 message size would exceed 1 MiB, and tracks per-socket congestion warnings in a `WeakSet`. Route only live output callbacks through this helper; leave replay and low-volume control messages on their existing paths.
+**Architecture:** Extend the existing `websocket-send` utility with a
+stream-specific sender that drops output when the current `bufferedAmount` plus
+the UTF-8 message size would exceed 1 MiB, and tracks per-socket congestion
+warnings in a `WeakSet`. Route only live output callbacks through this helper;
+leave replay and low-volume control messages on their existing paths.
 
 **Tech Stack:** TypeScript, `ws`, Vitest, Express WebSocket handlers
 
 ## Global Constraints
 
-- Apply backpressure only to live workspace-terminal, setup-terminal, dev-log, and post-run-log output.
-- Use a fixed 1 MiB threshold and drop chunks when `ws.bufferedAmount + Buffer.byteLength(message)` is greater than the threshold.
-- Emit at most one warning per socket congestion window and resume sends when the current buffer has enough capacity for the next message.
+- Apply backpressure only to live workspace-terminal, setup-terminal, dev-log,
+  and post-run-log output.
+- Use a fixed 1 MiB threshold and drop chunks when
+  `ws.bufferedAmount + Buffer.byteLength(message)` is greater than the
+  threshold.
+- Emit at most one warning per socket congestion window and resume sends when
+  the current buffer has enough capacity for the next message.
 - Use the `ws.send` callback to log asynchronous send failures.
 - Do not add an application-level output queue or pause shared PTYs.
 - Do not introduce `TopicBroadcaster` or change the browser WebSocket protocol.
-- Keep replay payloads and low-volume create, exit, and error messages unchanged.
+- Keep replay payloads and low-volume create, exit, and error messages
+  unchanged.
 
 ---
 
 ### Task 1: Add the stream-aware WebSocket send primitive
 
 **Files:**
+
 - Modify: `src/backend/lib/websocket-send.ts`
 - Test: `src/backend/lib/websocket-send.test.ts`
 
 **Interfaces:**
-- Consumes: `WebSocket.readyState`, `WebSocket.bufferedAmount`, `WebSocket.send(data, callback)` from `ws`, and `Buffer.byteLength(message)` for UTF-8 payload size
-- Produces: `MAX_WEBSOCKET_STREAM_BUFFERED_BYTES: number` and `sendStreamOutput(ws, message, logger, description?): boolean`
+
+- Consumes: `WebSocket.readyState`, `WebSocket.bufferedAmount`,
+  `WebSocket.send(data, callback)` from `ws`, and `Buffer.byteLength(message)`
+  for UTF-8 payload size
+- Produces: `MAX_WEBSOCKET_STREAM_BUFFERED_BYTES: number` and
+  `sendStreamOutput(ws, message, logger, description?): boolean`
 
 - [ ] **Step 1: Add failing tests for threshold, recovery, and send errors**
 
@@ -205,7 +223,8 @@ Run:
 pnpm vitest run src/backend/lib/websocket-send.test.ts
 ```
 
-Expected: FAIL because `MAX_WEBSOCKET_STREAM_BUFFERED_BYTES` and `sendStreamOutput` are not exported.
+Expected: FAIL because `MAX_WEBSOCKET_STREAM_BUFFERED_BYTES` and
+`sendStreamOutput` are not exported.
 
 - [ ] **Step 3: Implement the minimal stream sender**
 
@@ -280,6 +299,7 @@ git commit -m "Add WebSocket stream backpressure helper"
 ### Task 2: Route high-volume handler output through the primitive
 
 **Files:**
+
 - Modify: `src/backend/routers/websocket/push-channel.handler.ts`
 - Modify: `src/backend/routers/websocket/terminal.handler.ts`
 - Modify: `src/backend/routers/websocket/setup-terminal.handler.ts`
@@ -288,8 +308,11 @@ git commit -m "Add WebSocket stream backpressure helper"
 - Test: `src/backend/routers/websocket/setup-terminal.handler.test.ts`
 
 **Interfaces:**
-- Consumes: `sendStreamOutput(ws, serializedOutput, logger, description)` from Task 1
-- Produces: bounded live output sends for both shared log channels, workspace terminals, and setup terminals
+
+- Consumes: `sendStreamOutput(ws, serializedOutput, logger, description)` from
+  Task 1
+- Produces: bounded live output sends for both shared log channels, workspace
+  terminals, and setup terminals
 
 - [ ] **Step 1: Add `bufferedAmount` to handler WebSocket mocks**
 
@@ -307,7 +330,8 @@ Import the threshold in `dev-logs.handler.test.ts`:
 import { MAX_WEBSOCKET_STREAM_BUFFERED_BYTES } from '@/backend/lib/websocket-send';
 ```
 
-Extend `streams buffered and live output only while socket is open` after obtaining `outputSubscriber`:
+Extend `streams buffered and live output only while socket is open` after
+obtaining `outputSubscriber`:
 
 ```ts
 ws.send.mockClear();
@@ -401,7 +425,8 @@ Import the threshold in `setup-terminal.handler.test.ts`:
 import { MAX_WEBSOCKET_STREAM_BUFFERED_BYTES } from '@/backend/lib/websocket-send';
 ```
 
-In the existing creation/routing test, replace the immediate `onDataCallback` assertion with:
+In the existing creation/routing test, replace the immediate `onDataCallback`
+assertion with:
 
 ```ts
 ws.send.mockClear();
@@ -417,7 +442,8 @@ expect(ws.send).toHaveBeenCalledWith(
 );
 ```
 
-- [ ] **Step 5: Run the handler tests and verify they fail because output still bypasses the helper**
+- [ ] **Step 5: Run the handler tests and verify they fail because output still
+      bypasses the helper**
 
 Run:
 
@@ -501,7 +527,8 @@ Keep create and exit messages unchanged.
 
 - [ ] **Step 9: Update existing live-output call-shape assertions**
 
-Any existing assertion for live terminal, setup-terminal, dev-log, or post-run-log output must expect the callback argument:
+Any existing assertion for live terminal, setup-terminal, dev-log, or
+post-run-log output must expect the callback argument:
 
 ```ts
 expect(ws.send).toHaveBeenCalledWith(
@@ -510,7 +537,8 @@ expect(ws.send).toHaveBeenCalledWith(
 );
 ```
 
-Replay payloads and control-message assertions must continue expecting one argument.
+Replay payloads and control-message assertions must continue expecting one
+argument.
 
 - [ ] **Step 10: Run all affected WebSocket tests**
 
@@ -544,11 +572,14 @@ git commit -m "Bound high-volume WebSocket output buffering"
 ### Task 3: Verify repository guardrails
 
 **Files:**
+
 - Verify: all changed files
 
 **Interfaces:**
+
 - Consumes: completed Tasks 1 and 2
-- Produces: evidence that the issue is fixed without type, lint, boundary, or test regressions
+- Produces: evidence that the issue is fixed without type, lint, boundary, or
+  test regressions
 
 - [ ] **Step 1: Run formatting and apply any mechanical changes**
 
@@ -558,7 +589,8 @@ Run:
 pnpm check:fix
 ```
 
-Expected: exit 0. If files change, inspect and commit only formatting changes related to this issue.
+Expected: exit 0. If files change, inspect and commit only formatting changes
+related to this issue.
 
 - [ ] **Step 2: Run TypeScript checks**
 
@@ -600,4 +632,5 @@ git status --short
 git log --oneline -3
 ```
 
-Expected: no whitespace errors; only intentional issue files are modified or committed.
+Expected: no whitespace errors; only intentional issue files are modified or
+committed.

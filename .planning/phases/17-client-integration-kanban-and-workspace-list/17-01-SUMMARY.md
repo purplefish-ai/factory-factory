@@ -44,7 +44,8 @@ completed: 2026-02-11
 
 # Phase 17 Plan 01: Client Integration - Kanban and Workspace List Summary
 
-**WebSocket-driven kanban cache sync via mapSnapshotEntryToKanbanWorkspace with reduced polling (30s kanban, 60s table)**
+**WebSocket-driven kanban cache sync via mapSnapshotEntryToKanbanWorkspace with
+reduced polling (30s kanban, 60s table)**
 
 ## Performance
 
@@ -55,55 +56,85 @@ completed: 2026-02-11
 - **Files modified:** 6
 
 ## Accomplishments
-- Created snapshot-to-kanban mapping function that transforms WebSocket snapshot entries to the kanban workspace shape, merging non-snapshot fields from existing cache
-- Extended useProjectSnapshotSync hook to update both sidebar and kanban React Query caches from a single WebSocket connection
+
+- Created snapshot-to-kanban mapping function that transforms WebSocket snapshot
+  entries to the kanban workspace shape, merging non-snapshot fields from
+  existing cache
+- Extended useProjectSnapshotSync hook to update both sidebar and kanban React
+  Query caches from a single WebSocket connection
 - Reduced kanban polling from 15s to 30s and table view polling from 15s to 60s
 
 ## Task Commits
 
 Each task was committed atomically:
 
-1. **Task 1: Create snapshot-to-kanban mapping function with tests** - `8a8ac13` (feat)
-2. **Task 2: Extend sync hook to update kanban cache and reduce polling cadences** - `52156e9` (feat)
+1. **Task 1: Create snapshot-to-kanban mapping function with tests** - `8a8ac13`
+   (feat)
+2. **Task 2: Extend sync hook to update kanban cache and reduce polling
+   cadences** - `52156e9` (feat)
 
 ## Files Created/Modified
-- `src/frontend/lib/snapshot-to-kanban.ts` - Maps WorkspaceSnapshotEntry to kanban workspace shape (Record<string, unknown>)
-- `src/frontend/lib/snapshot-to-kanban.test.ts` - 9 tests for kanban mapping function
-- `src/frontend/hooks/use-project-snapshot-sync.ts` - Extended to update listWithKanbanState cache alongside sidebar cache
-- `src/frontend/hooks/use-project-snapshot-sync.test.ts` - 20 tests (9 sidebar + 11 kanban cache tests)
-- `src/frontend/components/kanban/kanban-context.tsx` - Reduced refetchInterval to 30s, staleTime to 25s
-- `src/client/routes/projects/workspaces/list.tsx` - Reduced refetchInterval to 60s, staleTime to 50s
+
+- `src/frontend/lib/snapshot-to-kanban.ts` - Maps WorkspaceSnapshotEntry to
+  kanban workspace shape (Record<string, unknown>)
+- `src/frontend/lib/snapshot-to-kanban.test.ts` - 9 tests for kanban mapping
+  function
+- `src/frontend/hooks/use-project-snapshot-sync.ts` - Extended to update
+  listWithKanbanState cache alongside sidebar cache
+- `src/frontend/hooks/use-project-snapshot-sync.test.ts` - 20 tests (9 sidebar +
+  11 kanban cache tests)
+- `src/frontend/components/kanban/kanban-context.tsx` - Reduced refetchInterval
+  to 30s, staleTime to 25s
+- `src/client/routes/projects/workspaces/list.tsx` - Reduced refetchInterval to
+  60s, staleTime to 50s
 
 ## Decisions Made
-- Extracted 3 kanban cache helper functions (buildKanbanCacheFromFull, upsertKanbanCacheEntry, removeFromKanbanCache) to keep handleMessage under Biome's cognitive complexity limit of 15
-- Entries with null kanbanColumn are filtered out of the kanban cache (matching server-side listWithKanbanState behavior where READY workspaces with no sessions are hidden)
-- Non-snapshot fields (description, initErrorMessage, githubIssueNumber) are merged from existing cache entries to preserve data that only comes from the initial tRPC query
+
+- Extracted 3 kanban cache helper functions (buildKanbanCacheFromFull,
+  upsertKanbanCacheEntry, removeFromKanbanCache) to keep handleMessage under
+  Biome's cognitive complexity limit of 15
+- Entries with null kanbanColumn are filtered out of the kanban cache (matching
+  server-side listWithKanbanState behavior where READY workspaces with no
+  sessions are hidden)
+- Non-snapshot fields (description, initErrorMessage, githubIssueNumber) are
+  merged from existing cache entries to preserve data that only comes from the
+  initial tRPC query
 
 ## Deviations from Plan
 
 ### Auto-fixed Issues
 
-**1. [Rule 3 - Blocking] Extracted kanban cache updaters to satisfy Biome complexity limit**
+**1. [Rule 3 - Blocking] Extracted kanban cache updaters to satisfy Biome
+complexity limit**
+
 - **Found during:** Task 2 (Extend sync hook)
-- **Issue:** Adding kanban cache updates inline in handleMessage pushed cognitive complexity to 18 (limit: 15), and inline `if (!prev) return prev;` violated Biome's `useBlockStatements` rule
-- **Fix:** Extracted three pure helper functions: `buildKanbanCacheFromFull`, `upsertKanbanCacheEntry`, `removeFromKanbanCache`
+- **Issue:** Adding kanban cache updates inline in handleMessage pushed
+  cognitive complexity to 18 (limit: 15), and inline `if (!prev) return prev;`
+  violated Biome's `useBlockStatements` rule
+- **Fix:** Extracted three pure helper functions: `buildKanbanCacheFromFull`,
+  `upsertKanbanCacheEntry`, `removeFromKanbanCache`
 - **Files modified:** src/frontend/hooks/use-project-snapshot-sync.ts
 - **Verification:** `pnpm check:fix` passes with zero errors
 - **Committed in:** 52156e9 (Task 2 commit)
 
 ---
 
-**Total deviations:** 1 auto-fixed (1 blocking)
-**Impact on plan:** Refactoring was necessary to satisfy existing lint rules. No scope creep -- same functionality, cleaner structure.
+**Total deviations:** 1 auto-fixed (1 blocking) **Impact on plan:** Refactoring
+was necessary to satisfy existing lint rules. No scope creep -- same
+functionality, cleaner structure.
 
 ## Issues Encountered
+
 None
 
 ## User Setup Required
+
 None - no external service configuration required.
 
 ## Next Phase Readiness
-- All three project surfaces (sidebar, kanban, table) now receive consistent workspace state
+
+- All three project surfaces (sidebar, kanban, table) now receive consistent
+  workspace state
 - Sidebar and kanban receive real-time updates via WebSocket (~200ms)
 - Table view maintains relaxed 60s polling (not snapshot-driven, as planned)
 - Ready for Phase 18 or any further client integration work
@@ -118,5 +149,5 @@ None - no external service configuration required.
 - Dependency-cruiser: zero violations
 
 ---
-*Phase: 17-client-integration-kanban-and-workspace-list*
-*Completed: 2026-02-11*
+
+_Phase: 17-client-integration-kanban-and-workspace-list_ _Completed: 2026-02-11_

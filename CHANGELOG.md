@@ -3,110 +3,191 @@
 All notable changes to Factory Factory will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+and this project adheres to
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.4.8] - 2026-09-09
 
 ### Changed
 
-- Upgrade the supported runtime to Node.js 26.8.1 and pnpm 12.3.4, updating release environments, dependency build permissions, and the verified Docker bootstrap (#2230, #2234)
-- Upgrade the application toolchain to TypeScript 7.0.2, Vite 8.2.2, Vitest 5.0.0, jsdom 30.0.1, Biome 2.5.12, Knip 6.35.0, dependency-cruiser 18.2.0, and related development tools (#2220, #2222, #2247, #2248)
-- Upgrade the ACP SDK to 1.4.0 and Claude ACP to 0.75.1, migrate model switching to the supported configuration API, validate ACP snapshots, share Codex model discovery, and remove transitional runtime callbacks (#2223, #2225, #2226)
-- Refresh Prisma, Storybook, and other compatible dependencies; update the Codex CLI compatibility baseline to 0.153.4 and regenerate its app-server method snapshot (#2218)
-- Upgrade Electron to 44.3.0 and require macOS 13 or newer; migrate clipboard image paste to the asynchronous API and repair desktop packaging (#2249)
-- Upgrade Linear SDK to 94, better-sqlite3 to 13, Chalk to 6, Commander to 15, and DayPicker to 10; migrate the calendar to `@daypicker/react` and preserve its behavior and styling (#2252)
-- Lazy-load application routes and Mermaid diagrams, reuse chat groups during streaming, and skip grouping scans when message arrays are unchanged (#2224, #2233, #2250)
-- Stream workspace snapshots before Git refreshes complete, narrow Git cache invalidation, and extract the authoritative Ratchet projection worker (#2228, #2229, #2232)
-- Extract Admin settings into focused sections and refresh shadcn components while removing unused dependencies (#2227, #2254)
-- Bound workspace file previews and untracked diffs, virtualize large diffs, and move syntax highlighting to a worker (#2251, #2253)
+- Upgrade the supported runtime to Node.js 26.8.1 and pnpm 12.3.4, updating
+  release environments, dependency build permissions, and the verified Docker
+  bootstrap (#2230, #2234)
+- Upgrade the application toolchain to TypeScript 7.0.2, Vite 8.2.2, Vitest
+  5.0.0, jsdom 30.0.1, Biome 2.5.12, Knip 6.35.0, dependency-cruiser 18.2.0, and
+  related development tools (#2220, #2222, #2247, #2248)
+- Upgrade the ACP SDK to 1.4.0 and Claude ACP to 0.75.1, migrate model switching
+  to the supported configuration API, validate ACP snapshots, share Codex model
+  discovery, and remove transitional runtime callbacks (#2223, #2225, #2226)
+- Refresh Prisma, Storybook, and other compatible dependencies; update the Codex
+  CLI compatibility baseline to 0.153.4 and regenerate its app-server method
+  snapshot (#2218)
+- Upgrade Electron to 44.3.0 and require macOS 13 or newer; migrate clipboard
+  image paste to the asynchronous API and repair desktop packaging (#2249)
+- Upgrade Linear SDK to 94, better-sqlite3 to 13, Chalk to 6, Commander to 15,
+  and DayPicker to 10; migrate the calendar to `@daypicker/react` and preserve
+  its behavior and styling (#2252)
+- Lazy-load application routes and Mermaid diagrams, reuse chat groups during
+  streaming, and skip grouping scans when message arrays are unchanged (#2224,
+  #2233, #2250)
+- Stream workspace snapshots before Git refreshes complete, narrow Git cache
+  invalidation, and extract the authoritative Ratchet projection worker (#2228,
+  #2229, #2232)
+- Extract Admin settings into focused sections and refresh shadcn components
+  while removing unused dependencies (#2227, #2254)
+- Bound workspace file previews and untracked diffs, virtualize large diffs, and
+  move syntax highlighting to a worker (#2251, #2253)
 
 ### Fixed
 
-- Recover reordered tool results without dropping valid transcript content (#2236)
-- Preserve stopped session status on clean runtime exits, cancel pending ACP permissions during soft stops, wait for child processes after SIGKILL, and ignore late notifications from cancelled Codex turns (#2235, #2239, #2243, #2246)
-- Show Electron rejection stack traces and stop the backend before quitting after fatal Electron errors (#2238, #2241)
-- Keep the latest pull-request review activity when results reach the pagination limit (#2242)
+- Recover reordered tool results without dropping valid transcript content
+  (#2236)
+- Preserve stopped session status on clean runtime exits, cancel pending ACP
+  permissions during soft stops, wait for child processes after SIGKILL, and
+  ignore late notifications from cancelled Codex turns (#2235, #2239, #2243,
+  #2246)
+- Show Electron rejection stack traces and stop the backend before quitting
+  after fatal Electron errors (#2238, #2241)
+- Keep the latest pull-request review activity when results reach the pagination
+  limit (#2242)
 - Clean worktrees correctly under symlinked base directories (#2237)
-- Complete startup scripts after their shell exits and count working agents accurately in completion notifications (#2240, #2244)
-- Rebuild and cache Prisma's separate SQLite driver for Electron alongside the N-API driver, and fix calendar cell sizing with Tailwind 4 (#2252)
+- Complete startup scripts after their shell exits and count working agents
+  accurately in completion notifications (#2240, #2244)
+- Rebuild and cache Prisma's separate SQLite driver for Electron alongside the
+  N-API driver, and fix calendar cell sizing with Tailwind 4 (#2252)
 
 ### Security
 
-- Resolve Dependabot alerts for fast-uri, xmldom, qs, MySQL2, and deepmerge-ts with patched dependency resolutions (#2218)
-- Update Claude ACP's bundled Claude Agent SDK to 0.3.266 for upstream permission-handling fixes through a scoped dependency override (#2252)
+- Resolve Dependabot alerts for fast-uri, xmldom, qs, MySQL2, and deepmerge-ts
+  with patched dependency resolutions (#2218)
+- Update Claude ACP's bundled Claude Agent SDK to 0.3.266 for upstream
+  permission-handling fixes through a scoped dependency override (#2252)
 
 ### Documentation
 
-- Clarify duplicate list-key stability and refresh agent guidance for current Claude, Codex, and frontier-model practices (#2221, #2245)
+- Clarify duplicate list-key stability and refresh agent guidance for current
+  Claude, Codex, and frontier-model practices (#2221, #2245)
 
 ## [0.4.7] - 2026-09-08
 
 ### Changed
 
-- Publish npm releases through OIDC-authenticated staging, require maintainer approval on npm, and finalize the GitHub release from the original staging run's commit (#2199)
-- Modularize session lifecycle and ACP runtime management into focused services for context, notification delivery, startup, termination, runtime exits, workflow finalization, configuration, prompting, sub-agent browsing, and supervision, with smaller compatibility facades and focused contract suites (#2165, #2170, #2173, #2174, #2175, #2176, #2177, #2179, #2180, #2184)
-- Keep workspaces in Working while Codex goals remain active, including between prompts and after session resume (#2182)
-- Enforce a 1,000-line ceiling for new JavaScript and TypeScript files, ratchet oversized legacy files downward, and reject dangling symlinks from file-length checks (#2155, #2156)
-- Remove obsolete lifecycle test stubs, Electron preload APIs, Git and shell helpers, file traversal utilities, decision-log accessors, GitHub schemas, and issue-closing code (#2178, #2188, #2189, #2190, #2191, #2192, #2193, #2194)
-- Remove unused file-lock and provider-runtime abstractions, session and permission helpers, project and workspace accessors, workspace re-exports, PR review procedures, and file-reference parsing code (#2204, #2205, #2206, #2207, #2210, #2211, #2212, #2213, #2214)
+- Publish npm releases through OIDC-authenticated staging, require maintainer
+  approval on npm, and finalize the GitHub release from the original staging
+  run's commit (#2199)
+- Modularize session lifecycle and ACP runtime management into focused services
+  for context, notification delivery, startup, termination, runtime exits,
+  workflow finalization, configuration, prompting, sub-agent browsing, and
+  supervision, with smaller compatibility facades and focused contract suites
+  (#2165, #2170, #2173, #2174, #2175, #2176, #2177, #2179, #2180, #2184)
+- Keep workspaces in Working while Codex goals remain active, including between
+  prompts and after session resume (#2182)
+- Enforce a 1,000-line ceiling for new JavaScript and TypeScript files, ratchet
+  oversized legacy files downward, and reject dangling symlinks from file-length
+  checks (#2155, #2156)
+- Remove obsolete lifecycle test stubs, Electron preload APIs, Git and shell
+  helpers, file traversal utilities, decision-log accessors, GitHub schemas, and
+  issue-closing code (#2178, #2188, #2189, #2190, #2191, #2192, #2193, #2194)
+- Remove unused file-lock and provider-runtime abstractions, session and
+  permission helpers, project and workspace accessors, workspace re-exports, PR
+  review procedures, and file-reference parsing code (#2204, #2205, #2206,
+  #2207, #2210, #2211, #2212, #2213, #2214)
 
 ### Fixed
 
-- Resolve the staged npm tarball as a local file instead of a GitHub repository during release publishing
-- Prevent npm package installation and release smoke tests from deadlocking by running the installed Prisma CLI directly during postinstall
-- Preserve Codex notification ordering, serialize turn completion behind earlier item events, reject empty sub-agent receiver IDs, and validate permission request options before rendering (#2157, #2166, #2167, #2187)
-- Prevent disconnected terminal creation, stale sub-agent tabs after refetch failures, stale voice worklet callbacks, and orphaned Git worktrees after workspace deletion (#2168, #2169, #2171, #2172)
-- Stop sub-agent activity events from canceling long turns and prevent command handoffs from emitting duplicate tool completions (#2186, #2196)
+- Resolve the staged npm tarball as a local file instead of a GitHub repository
+  during release publishing
+- Prevent npm package installation and release smoke tests from deadlocking by
+  running the installed Prisma CLI directly during postinstall
+- Preserve Codex notification ordering, serialize turn completion behind earlier
+  item events, reject empty sub-agent receiver IDs, and validate permission
+  request options before rendering (#2157, #2166, #2167, #2187)
+- Prevent disconnected terminal creation, stale sub-agent tabs after refetch
+  failures, stale voice worklet callbacks, and orphaned Git worktrees after
+  workspace deletion (#2168, #2169, #2171, #2172)
+- Stop sub-agent activity events from canceling long turns and prevent command
+  handoffs from emitting duplicate tool completions (#2186, #2196)
 - Respect deliberate Ratchet stops when settling fixer exits (#2195)
-- Finalize unmatched running tool calls when loading sessions that stopped or crashed (#2197)
+- Finalize unmatched running tool calls when loading sessions that stopped or
+  crashed (#2197)
 
 ### Documentation
 
-- Refresh the agent guide for current Claude and Codex workflows, move subsystem detail into focused architecture notes, and add scoped backend and client guidance (#2154)
+- Refresh the agent guide for current Claude and Codex workflows, move subsystem
+  detail into focused architecture notes, and add scoped backend and client
+  guidance (#2154)
 
 ## [0.4.6] - 2026-08-11
 
 ### Added
 
-- Add optional BYOK Deepgram voice mode for workspace sessions, with spoken replies and reasoning, voice interruption and barge-in, conversational response shaping, configurable voices, speed and speech sensitivity, and coordinated audio cues (#2126, #2127, #2144)
-- Show session-scoped provider sub-agents alongside child workspaces in the Agents panel, with live status and read-only transcripts that open in persisted workspace tabs (#2145, #2147)
-- Discover available Claude models dynamically, label their resolved family and version in selectors, and update the bundled Claude ACP to expose Opus 5 (#2152, #2153)
+- Add optional BYOK Deepgram voice mode for workspace sessions, with spoken
+  replies and reasoning, voice interruption and barge-in, conversational
+  response shaping, configurable voices, speed and speech sensitivity, and
+  coordinated audio cues (#2126, #2127, #2144)
+- Show session-scoped provider sub-agents alongside child workspaces in the
+  Agents panel, with live status and read-only transcripts that open in
+  persisted workspace tabs (#2145, #2147)
+- Discover available Claude models dynamically, label their resolved family and
+  version in selectors, and update the bundled Claude ACP to expose Opus 5
+  (#2152, #2153)
 
 ### Changed
 
-- Render session lifecycle notices as compact single-line rows with right-aligned timestamps (#2148)
+- Render session lifecycle notices as compact single-line rows with
+  right-aligned timestamps (#2148)
 
 ### Fixed
 
-- Harden chat and session lifecycle by rejecting malformed snapshots, clearing ACP state after managed stops, recovering messages interrupted during dispatch, and preventing queued WebSocket messages from replaying into another session (#2137, #2138, #2140, #2143)
-- Prevent chat shortcuts from firing while IME text composition is active (#2141)
-- Clean stale Git worktree registrations when workspace directories are missing and stop reconciliation from starting another workspace during shutdown (#2139, #2142)
-- Hide non-renderable Claude usage telemetry that produced blank transcript rows while preserving usage data and tool pairing (#2149)
+- Harden chat and session lifecycle by rejecting malformed snapshots, clearing
+  ACP state after managed stops, recovering messages interrupted during
+  dispatch, and preventing queued WebSocket messages from replaying into another
+  session (#2137, #2138, #2140, #2143)
+- Prevent chat shortcuts from firing while IME text composition is active
+  (#2141)
+- Clean stale Git worktree registrations when workspace directories are missing
+  and stop reconciliation from starting another workspace during shutdown
+  (#2139, #2142)
+- Hide non-renderable Claude usage telemetry that produced blank transcript rows
+  while preserving usage data and tool pairing (#2149)
 
 ### Security
 
-- Upgrade Electron, Mermaid, PostCSS, and transitive dependency overrides to patched releases (#2151)
+- Upgrade Electron, Mermaid, PostCSS, and transitive dependency overrides to
+  patched releases (#2151)
 
 ## [0.4.5] - 2026-07-30
 
 ### Added
 
-- Persist structured session stop reasons in chat transcripts and extend normal agent turns to a four-hour timeout (#2124)
+- Persist structured session stop reasons in chat transcripts and extend normal
+  agent turns to a four-hour timeout (#2124)
 
 ### Changed
 
-- Follow repository title conventions when creating pull requests from issues (#2112)
+- Follow repository title conventions when creating pull requests from issues
+  (#2112)
 
 ### Fixed
 
-- Preserve manual workspace provider selections, plan-mode approvals and first-message settings, dismissed slash palettes, and empty agent question prompts (#2101, #2102, #2104, #2109, #2111)
-- Release inactive session lifecycle state, clear stale Quick Chat sessions, and cover cleanup while sessions are being viewed (#2105, #2107, #2114)
-- Prevent approval state from leaking across pull requests and refresh the Create PR action after sessions finish (#2106, #2108)
-- Protect retry worktrees from stale cleanup and recover orphaned worktrees left by interrupted provisioning (#2103, #2123)
-- Validate VP8 partition bounds, recover failed screenshot loading, and guard Linear screenshot URLs when GitHub metadata is unavailable (#2110, #2113, #2117)
-- Preserve valid local branches that share a remote name and resolve Windows workspace file links (#2115, #2116)
-- Reject invalid starting ports and trim repository paths during project creation (#2119, #2122)
-- Keep monthly periodic tasks aligned to their configured timezone near month boundaries (#2120)
+- Preserve manual workspace provider selections, plan-mode approvals and
+  first-message settings, dismissed slash palettes, and empty agent question
+  prompts (#2101, #2102, #2104, #2109, #2111)
+- Release inactive session lifecycle state, clear stale Quick Chat sessions, and
+  cover cleanup while sessions are being viewed (#2105, #2107, #2114)
+- Prevent approval state from leaking across pull requests and refresh the
+  Create PR action after sessions finish (#2106, #2108)
+- Protect retry worktrees from stale cleanup and recover orphaned worktrees left
+  by interrupted provisioning (#2103, #2123)
+- Validate VP8 partition bounds, recover failed screenshot loading, and guard
+  Linear screenshot URLs when GitHub metadata is unavailable (#2110, #2113,
+  #2117)
+- Preserve valid local branches that share a remote name and resolve Windows
+  workspace file links (#2115, #2116)
+- Reject invalid starting ports and trim repository paths during project
+  creation (#2119, #2122)
+- Keep monthly periodic tasks aligned to their configured timezone near month
+  boundaries (#2120)
 - Keep project archive failures visible and available for retry (#2121)
 - Deduplicate Git-reported and inferred folders in the Changes panel (#2118)
 
@@ -115,18 +196,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Normalize Kanban card status chips and tighten their metadata layout (#2073)
-- Show issue creators consistently across GitHub and Linear Todo cards, and clarify the provider-specific column heading (#2066)
+- Show issue creators consistently across GitHub and Linear Todo cards, and
+  clarify the provider-specific column heading (#2066)
 
 ### Fixed
 
 - Preserve failed dispatch drafts after runtime crashes (#2072)
 - Await run-script cleanup during server shutdown (#2071)
 - Keep monthly periodic tasks anchored to their configured day (#2070)
-- Guard Ratchet observations against pull-request URL changes and clean up completed fixer sessions correctly (#2068, #2069)
+- Guard Ratchet observations against pull-request URL changes and clean up
+  completed fixer sessions correctly (#2068, #2069)
 
 ### Documentation
 
-- Correct the documented Ratchet observation guard to reflect pull-request URL keying (#2074)
+- Correct the documented Ratchet observation guard to reflect pull-request URL
+  keying (#2074)
 
 ## [0.4.3] - 2026-07-29
 
@@ -136,16 +220,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Serve Kanban Git statistics from the workspace cache and project columns from the shared status reason (#2053, #2063)
-- Commit workspace changes before archiving and enforce foreign-key index coverage (#2051, #2059)
+- Serve Kanban Git statistics from the workspace cache and project columns from
+  the shared status reason (#2053, #2063)
+- Commit workspace changes before archiving and enforce foreign-key index
+  coverage (#2051, #2059)
 - Update the bundled Codex CLI schemas to 0.145.0 (#2064)
 
 ### Fixed
 
-- Preserve macOS screenshot media types when pasting images into task and chat inputs (#2042, #2052)
-- Correct dark-mode status banner colors and center modal animations (#2054, #2058)
-- Stop Ratchet sessions after pull requests merge and prevent ACP dispatch errors from retrying indefinitely (#2056, #2057)
-- Publish auto-iteration status changes immediately to the workspace snapshot stream (#2065)
+- Preserve macOS screenshot media types when pasting images into task and chat
+  inputs (#2042, #2052)
+- Correct dark-mode status banner colors and center modal animations (#2054,
+  #2058)
+- Stop Ratchet sessions after pull requests merge and prevent ACP dispatch
+  errors from retrying indefinitely (#2056, #2057)
+- Publish auto-iteration status changes immediately to the workspace snapshot
+  stream (#2065)
 
 ### Documentation
 
@@ -156,19 +246,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Upgrade React Router and raise the supported Node.js baseline (#2012)
-- Remove unused core and Next.js remnants, dead endpoints, and duplicated handlers (#2023, #2024)
-- Derive Kanban and Ratchet state, share workspace list data, and split Ratchet, pull-request, run-script, and auto-iteration persistence into focused records (#2025, #2026, #2027, #2028, #2029, #2031, #2034)
-- Split session responsibilities into focused services and consolidate branch naming, background polling, and pull-request fetch coordination (#2032, #2033, #2035, #2036)
-- Move client UI into feature-owned modules and enforce public cross-feature boundaries (#2037, #2038)
+- Remove unused core and Next.js remnants, dead endpoints, and duplicated
+  handlers (#2023, #2024)
+- Derive Kanban and Ratchet state, share workspace list data, and split Ratchet,
+  pull-request, run-script, and auto-iteration persistence into focused records
+  (#2025, #2026, #2027, #2028, #2029, #2031, #2034)
+- Split session responsibilities into focused services and consolidate branch
+  naming, background polling, and pull-request fetch coordination (#2032, #2033,
+  #2035, #2036)
+- Move client UI into feature-owned modules and enforce public cross-feature
+  boundaries (#2037, #2038)
 
 ### Fixed
 
-- Prevent duplicate child-workspace messages and preserve workspace hierarchy during backup and restore (#1986, #2006)
-- Preserve ACP model selection and custom IDE commands, and insert file-mention whitespace correctly (#1987, #2003, #2004)
-- Stabilize chat and session lifecycle by ignoring summary-order drift, preventing error-order collisions and stopped-prompt revival, and closing unused session logs (#2005, #2008, #2009, #2011)
-- Publish attached pull-request URLs and prompt-failure dispatch state promptly, initialize Ratchet settings correctly, and stop mismatched Ratchet sessions after aborts (#2010, #2016, #2017, #2020)
-- Clean up failed auto-iteration and terminated runtime state while preserving required runtime files and clearing stale terminal PIDs and crashed proxy URLs (#2014, #2015, #2019, #2021)
-- Distinguish retry compare-and-swap failures, guard TCP port fallback exhaustion, and prevent false process-timeout reports (#2013, #2018, #2022)
+- Prevent duplicate child-workspace messages and preserve workspace hierarchy
+  during backup and restore (#1986, #2006)
+- Preserve ACP model selection and custom IDE commands, and insert file-mention
+  whitespace correctly (#1987, #2003, #2004)
+- Stabilize chat and session lifecycle by ignoring summary-order drift,
+  preventing error-order collisions and stopped-prompt revival, and closing
+  unused session logs (#2005, #2008, #2009, #2011)
+- Publish attached pull-request URLs and prompt-failure dispatch state promptly,
+  initialize Ratchet settings correctly, and stop mismatched Ratchet sessions
+  after aborts (#2010, #2016, #2017, #2020)
+- Clean up failed auto-iteration and terminated runtime state while preserving
+  required runtime files and clearing stale terminal PIDs and crashed proxy URLs
+  (#2014, #2015, #2019, #2021)
+- Distinguish retry compare-and-swap failures, guard TCP port fallback
+  exhaustion, and prevent false process-timeout reports (#2013, #2018, #2022)
 
 ### Security
 
@@ -182,77 +287,120 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Add configurable Ratchet review-trigger modes for changes-requested feedback, unresolved inline threads, and optional commented review summaries (#1969)
-- Add `TRUST_PROXY_HEADERS` support for deployments behind trusted reverse proxies (#1976)
+- Add configurable Ratchet review-trigger modes for changes-requested feedback,
+  unresolved inline threads, and optional commented review summaries (#1969)
+- Add `TRUST_PROXY_HEADERS` support for deployments behind trusted reverse
+  proxies (#1976)
 
 ### Changed
 
-- Derive Kanban columns from next-action ownership so automated CI and Ratchet work remains in Working while explicit human attention moves to Waiting (#1978)
-- Centralize workspace Git reads behind a shared, invalidation-aware snapshot cache (#1968)
-- Batch pull-request discovery by repository with bounded backoff, jitter, and non-overlapping scheduling (#1974)
-- Consolidate backend composition, service ownership, persistence boundaries, application errors, shared snapshot contracts, project issue loading, and child-workspace messaging (#1970, #1972, #1973, #1975, #1979, #1980, #1981)
-- Tighten backend dead-code coverage and remove unused dependencies and request-scoping residue (#1971)
+- Derive Kanban columns from next-action ownership so automated CI and Ratchet
+  work remains in Working while explicit human attention moves to Waiting
+  (#1978)
+- Centralize workspace Git reads behind a shared, invalidation-aware snapshot
+  cache (#1968)
+- Batch pull-request discovery by repository with bounded backoff, jitter, and
+  non-overlapping scheduling (#1974)
+- Consolidate backend composition, service ownership, persistence boundaries,
+  application errors, shared snapshot contracts, project issue loading, and
+  child-workspace messaging (#1970, #1972, #1973, #1975, #1979, #1980, #1981)
+- Tighten backend dead-code coverage and remove unused dependencies and
+  request-scoping residue (#1971)
 
 ### Fixed
 
-- Harden ACP rendering, initialization cleanup, thinking-budget validation, completed tool-call persistence, and assistant-text streaming (#1925, #1927, #1930, #1938, #1954)
-- Preserve concurrent slash-command caches, reset reopened palette selection, and revalidate file mentions at the live cursor (#1926, #1929, #1935)
-- Preserve closed-session tabs, prevent dismissed setup-warning flashes, keep workspace links from changing selection, and prevent header overlap on smaller displays (#1928, #1931, #1933, #1937)
-- Use unsaved custom IDE commands during testing and preserve agent-selected Codex branch renames (#1939, #1940)
+- Harden ACP rendering, initialization cleanup, thinking-budget validation,
+  completed tool-call persistence, and assistant-text streaming (#1925, #1927,
+  #1930, #1938, #1954)
+- Preserve concurrent slash-command caches, reset reopened palette selection,
+  and revalidate file mentions at the live cursor (#1926, #1929, #1935)
+- Preserve closed-session tabs, prevent dismissed setup-warning flashes, keep
+  workspace links from changing selection, and prevent header overlap on smaller
+  displays (#1928, #1931, #1933, #1937)
+- Use unsaved custom IDE commands during testing and preserve agent-selected
+  Codex branch renames (#1939, #1940)
 - Prevent stale auto-iteration cleanup from deleting replacement loops (#1936)
-- Scope pull-request synchronization and Ratchet dispatch snapshots correctly across projects and pull requests (#1932, #1951)
-- Deliver child-workspace report-back instructions and surface actionable child-workspace errors (#1941, #1950)
-- Handle Kanban archive failures, suppress no-op snapshot fan-out, and bound archived-workspace caches (#1952, #1953, #1967)
-- Throttle hidden-workspace log updates while preserving bounded output and live status indicators (#1955)
+- Scope pull-request synchronization and Ratchet dispatch snapshots correctly
+  across projects and pull requests (#1932, #1951)
+- Deliver child-workspace report-back instructions and surface actionable
+  child-workspace errors (#1941, #1950)
+- Handle Kanban archive failures, suppress no-op snapshot fan-out, and bound
+  archived-workspace caches (#1952, #1953, #1967)
+- Throttle hidden-workspace log updates while preserving bounded output and live
+  status indicators (#1955)
 - Preserve live Ratchet fixer turns after ACP startup (#1977)
 
 ### Documentation
 
-- Refresh the README and product screenshot, and correct chat-flow, child-message-delivery, and coverage documentation (#1934, #1964, #1965, #1966)
+- Refresh the README and product screenshot, and correct chat-flow,
+  child-message-delivery, and coverage documentation (#1934, #1964, #1965,
+  #1966)
 
 ## [0.4.0] - 2026-07-16
 
 ### Added
 
-- Add child workspaces with cross-project spawning, live and persisted messaging, UI management, and archive safeguards (#1706, #1708, #1713, #1718, #1892)
+- Add child workspaces with cross-project spawning, live and persisted
+  messaging, UI management, and archive safeguards (#1706, #1708, #1713, #1718,
+  #1892)
 - Add Fable to the default Claude model options (#1845, #1846)
 - Add project default branch detection (#1824)
 - Add WebSocket output backpressure handling (#1882)
 
 ### Changed
 
-- Consolidate WebSocket consumers and handlers around shared transport and topic broadcasting (#1879, #1881, #1883)
-- Strengthen ratchet dispatch and reconciliation with explicit dispatch records, resolved-thread filtering, bounded checks, and compare-and-set transitions (#1857, #1858, #1863, #1864, #1865, #1866, #1894)
-- Bound resource-intensive searches, pagination, output buffers, and shell execution (#1776, #1782, #1784, #1786, #1797, #1800, #1802, #1805, #1806, #1850)
+- Consolidate WebSocket consumers and handlers around shared transport and topic
+  broadcasting (#1879, #1881, #1883)
+- Strengthen ratchet dispatch and reconciliation with explicit dispatch records,
+  resolved-thread filtering, bounded checks, and compare-and-set transitions
+  (#1857, #1858, #1863, #1864, #1865, #1866, #1894)
+- Bound resource-intensive searches, pagination, output buffers, and shell
+  execution (#1776, #1782, #1784, #1786, #1797, #1800, #1802, #1805, #1806,
+  #1850)
 - Migrate the interface icon set to Phosphor (#1878)
 - Enforce test coverage minimums (#1880)
 
 ### Fixed
 
-- Harden session startup, shutdown, recovery, and failed-exit persistence (#1740, #1791, #1794, #1826, #1829, #1830, #1831, #1832, #1833, #1835)
-- Preserve run-script exit state and retry terminal process cleanup (#1767, #1855, #1856)
-- Prevent lost periodic-task dispatches and overlapping terminal resource scans (#1798, #1799)
-- Keep workspace, Kanban, pull-request, review-badge, and snapshot state synchronized across concurrent transitions (#1783, #1789, #1790, #1803, #1828, #1891, #1893)
-- Make branch rename metadata atomic and clear stale automatic-rename state (#1775, #1804, #1822, #1849)
-- Fix workspace slash-command isolation, precedence, and non-file command filtering (#1719, #1834, #1848)
-- Fix workspace cleanup, deletion, and archive rollback behavior (#1787, #1793, #1825)
-- Fix chat hydration, attachment autosave warnings, rejected-message replay, and empty tool-result history (#1788, #1792, #1823, #1829)
-- Fix CORS and port binding for explicit, wildcard, and all-interface hosts (#1721, #1795, #1827, #1854)
+- Harden session startup, shutdown, recovery, and failed-exit persistence
+  (#1740, #1791, #1794, #1826, #1829, #1830, #1831, #1832, #1833, #1835)
+- Preserve run-script exit state and retry terminal process cleanup (#1767,
+  #1855, #1856)
+- Prevent lost periodic-task dispatches and overlapping terminal resource scans
+  (#1798, #1799)
+- Keep workspace, Kanban, pull-request, review-badge, and snapshot state
+  synchronized across concurrent transitions (#1783, #1789, #1790, #1803, #1828,
+  #1891, #1893)
+- Make branch rename metadata atomic and clear stale automatic-rename state
+  (#1775, #1804, #1822, #1849)
+- Fix workspace slash-command isolation, precedence, and non-file command
+  filtering (#1719, #1834, #1848)
+- Fix workspace cleanup, deletion, and archive rollback behavior (#1787, #1793,
+  #1825)
+- Fix chat hydration, attachment autosave warnings, rejected-message replay, and
+  empty tool-result history (#1788, #1792, #1823, #1829)
+- Fix CORS and port binding for explicit, wildcard, and all-interface hosts
+  (#1721, #1795, #1827, #1854)
 - Make the first user-settings read atomic (#1781)
 - Resolve nested configuration path variables (#1852)
 - Deduplicate persisted workspace notifications (#1851)
 - Shut down cleanly on unhandled rejections (#1853)
-- Prevent parent/child workspace messages from being lost during delivery (#1892)
+- Prevent parent/child workspace messages from being lost during delivery
+  (#1892)
 
 ### Security
 
-- Restrict executable tRPC mutations and authorize terminal WebSocket replay (#1779, #1796)
-- Harden issue-start and branch-rename prompt context and worktree cleanup paths (#1775, #1777, #1778)
-- Apply trusted-local validation and guarded fan-out sends across WebSocket channels (#1875, #1876, #1877)
+- Restrict executable tRPC mutations and authorize terminal WebSocket replay
+  (#1779, #1796)
+- Harden issue-start and branch-rename prompt context and worktree cleanup paths
+  (#1775, #1777, #1778)
+- Apply trusted-local validation and guarded fan-out sends across WebSocket
+  channels (#1875, #1876, #1877)
 
 ### Documentation
 
-- Update child-workspace, session lifecycle, service ownership, dependency, and CI documentation (#1696, #1704, #1705, #1708, #1837, #1838, #1839, #1847)
+- Update child-workspace, session lifecycle, service ownership, dependency, and
+  CI documentation (#1696, #1704, #1705, #1708, #1837, #1838, #1839, #1847)
 
 ## [0.3.21] - 2026-06-22
 
@@ -448,10 +596,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Make PR status sync non-blocking on app load (#1496)
 - Stop archived workspace sessions (#1498)
-- Retry auto-iteration on prompt timeout and allow resume from failed state (#1500)
+- Retry auto-iteration on prompt timeout and allow resume from failed state
+  (#1500)
 - Resolve Dependabot dependency alerts (#1499, #1505)
 - Optimize terminal output buffering (#1509)
-- Correct ratchet active session and terminal buffer documentation (#1515, #1516)
+- Correct ratchet active session and terminal buffer documentation (#1515,
+  #1516)
 - Accept draft PR merge state (#1536)
 - Allow ratchet when sessions are idle (#1547)
 
@@ -461,7 +611,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Drop stale WebSocket events (#1501)
 - Fix ACP permission question handling (#1502)
 - Fix ratchet active session detection (#1503)
-- Validate setup terminal WebSocket origins and require Origin headers (#1504, #1533)
+- Validate setup terminal WebSocket origins and require Origin headers (#1504,
+  #1533)
 - Handle terminal CI check outcomes (#1508)
 - Guard stopped ACP exits (#1510)
 - Fix active session limit checks and UI (#1511, #1537)
@@ -521,7 +672,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add auto-iteration workspace mode (#1464)
 - Create PR automatically when auto-iteration reaches terminal state (#1467)
 - Add auto-iteration progress banner to workspace view (#1471)
-- Add auto-iteration resilience: timeout, recovery, and death propagation (#1473)
+- Add auto-iteration resilience: timeout, recovery, and death propagation
+  (#1473)
 - Add strategy file and throughput metric to auto-iteration (#1474)
 - Add persistent insights file for auto-iteration mode (#1475)
 - Add workspace details button to view initial prompt and description (#1478)
@@ -537,7 +689,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Fix PR association missed when gh pr create exits non-zero or session ends (#1472)
+- Fix PR association missed when gh pr create exits non-zero or session ends
+  (#1472)
 - Prevent auto-iteration agent from self-iterating during implement step (#1480)
 
 ### Documentation
@@ -680,27 +833,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Add first-class web search tool display in session tool cards (#1237)
 - Add ACP context compaction indicator state wiring (#1246)
-- Add app/core enum drift guard to keep shared enum contracts synchronized (#1256, #1259)
-- Add workspace-detail navigation affordances with Reviews workspace and back-link actions (#1262, #1268, #1269)
-- Add stop hook to pre-push branch rename interceptor for safer interrupt handling (#1273)
+- Add app/core enum drift guard to keep shared enum contracts synchronized
+  (#1256, #1259)
+- Add workspace-detail navigation affordances with Reviews workspace and
+  back-link actions (#1262, #1268, #1269)
+- Add stop hook to pre-push branch rename interceptor for safer interrupt
+  handling (#1273)
 
 ### Changed
 
 - Improve terminal/logs hierarchy and setup status UX (#1236)
-- Centralize environment variable validation through `ConfigEnvSchema` for consistent startup checks (#1247)
-- Centralize workspace archiving with persisted `ARCHIVING` state and hide archiving rows in snapshot streams (#1250, #1280)
-- Unify snapshot projection semantics (`stateComputedAt`) and workspace derived-state assembly to reduce backend/UI drift (#1253, #1257, #1260)
-- Unify CI status classification and run-script config persistence behavior (#1258, #1261)
-- Organize settings into tabs and reuse Kanban workspace creation UI in the sidebar flow (#1266, #1272)
-- Downgrade ratchet workspace check failures to warnings and route reconciliation initialization through the ratchet bridge (#1270, #1277)
-- Make ACP context compaction translation type-safe and propagate `stopAllClients` timeout through runtime manager boundaries (#1276, #1278)
+- Centralize environment variable validation through `ConfigEnvSchema` for
+  consistent startup checks (#1247)
+- Centralize workspace archiving with persisted `ARCHIVING` state and hide
+  archiving rows in snapshot streams (#1250, #1280)
+- Unify snapshot projection semantics (`stateComputedAt`) and workspace
+  derived-state assembly to reduce backend/UI drift (#1253, #1257, #1260)
+- Unify CI status classification and run-script config persistence behavior
+  (#1258, #1261)
+- Organize settings into tabs and reuse Kanban workspace creation UI in the
+  sidebar flow (#1266, #1272)
+- Downgrade ratchet workspace check failures to warnings and route
+  reconciliation initialization through the ratchet bridge (#1270, #1277)
+- Make ACP context compaction translation type-safe and propagate
+  `stopAllClients` timeout through runtime manager boundaries (#1276, #1278)
 - Expand single-writer checker coverage for workspace mutators (#1267)
 
 ### Fixed
 
 - Fix chat auto-scroll behavior during rapid tool-call expansion (#1248)
-- Clear pending request state and prompt-turn timers when sessions stop (#1243, #1245)
-- Fix sidebar/layout regressions across workspace flows: board sidebar reset on navigation, side-panel resize handle hit target, draggable app sidebar resizing, new-workspace card button wrapping, and sidebar workspace form overflow (#1279, #1281, #1282, #1284, #1285)
+- Clear pending request state and prompt-turn timers when sessions stop (#1243,
+  #1245)
+- Fix sidebar/layout regressions across workspace flows: board sidebar reset on
+  navigation, side-panel resize handle hit target, draggable app sidebar
+  resizing, new-workspace card button wrapping, and sidebar workspace form
+  overflow (#1279, #1281, #1282, #1284, #1285)
 - Fix inconsistent auto-fix label naming in sidebar workspace form (#1279)
 
 ### Refactored
@@ -708,7 +875,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Extract workspace flow types into shared modules (#1238)
 - Refactor interceptor timer lifecycle handling (#1239)
 - Refactor `SessionService` ACP event processing into dedicated modules (#1240)
-- Refactor Codex app-server ACP adapter into focused parser/retry/negotiation modules (#1241, #1283)
+- Refactor Codex app-server ACP adapter into focused parser/retry/negotiation
+  modules (#1241, #1283)
 - Extract workspace initialization startup script pipeline (#1242)
 - Refactor ratchet service into focused helper modules (#1249)
 - Rename session history loader service file for clearer ownership (#1274)
@@ -726,7 +894,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Add `postRun` script support to `factory-factory.json` for post-session automation hooks (#1206)
+- Add `postRun` script support to `factory-factory.json` for post-session
+  automation hooks (#1206)
 - Add startup mode selection when creating Kanban workspaces (#1218)
 - Add Kanban new-task attachment support in workspace creation flows (#1211)
 - Add `@` file mention autocomplete in Kanban workspace creation (#1202)
@@ -735,46 +904,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Unify workspace state projection and remove UI polling for more immediate status updates (#1228)
-- Improve Kanban navigation and workspace creation flow, including direct project-name navigation and sidebar creation entrypoints (#1223, #1208)
-- Update workspace and board UX with refined headers, controls, and mobile PR context chips (#1196, #1197, #1200, #1219, #1220)
-- Group terminal logs under a single Logs tab and streamline sidebar tab/grouping behavior (#1230, #1231, #1232)
-- Separate settings into General and Project sections for clearer configuration boundaries (#1215)
+- Unify workspace state projection and remove UI polling for more immediate
+  status updates (#1228)
+- Improve Kanban navigation and workspace creation flow, including direct
+  project-name navigation and sidebar creation entrypoints (#1223, #1208)
+- Update workspace and board UX with refined headers, controls, and mobile PR
+  context chips (#1196, #1197, #1200, #1219, #1220)
+- Group terminal logs under a single Logs tab and streamline sidebar
+  tab/grouping behavior (#1230, #1231, #1232)
+- Separate settings into General and Project sections for clearer configuration
+  boundaries (#1215)
 - Increase pasted text attachment threshold for larger input support (#1226)
-- Consolidate `src/frontend` into `src/client` to simplify client structure and ownership (#1207)
+- Consolidate `src/frontend` into `src/client` to simplify client structure and
+  ownership (#1207)
 - Revert workspace scripts to `pnpm install/dev` defaults (#1205)
 - Switch local Docker development to `docker-compose` with file watching (#1203)
-- Skip archive warnings for done or merged workspaces to reduce unnecessary prompts (#1214)
+- Skip archive warnings for done or merged workspaces to reduce unnecessary
+  prompts (#1214)
 
 ### Fixed
 
-- Fix archived workspaces lingering in sidebar and project summary views by tightening archive filtering and visibility updates (#1221, #1227)
+- Fix archived workspaces lingering in sidebar and project summary views by
+  tightening archive filtering and visibility updates (#1221, #1227)
 - Fix Workspaces sidebar navigation button highlighting on detail routes (#1222)
 - Fix duplicate workspace entries appearing in the sidebar (#1216)
-- Fix Docker-in-Docker daemon crash by adding `containerd` and vfs driver configuration (#1204)
-- Harden JSON fallback parsing with schema validation and remove unsafe runtime coercions in snapshot paths (#1234, #1233)
+- Fix Docker-in-Docker daemon crash by adding `containerd` and vfs driver
+  configuration (#1204)
+- Harden JSON fallback parsing with schema validation and remove unsafe runtime
+  coercions in snapshot paths (#1234, #1233)
 
 ### Refactored
 
 - Refactor Codex ACP adapter into parser, stream, and protocol modules (#1225)
-- Extract session configuration and permission services and split associated tests for better module isolation (#1224)
-- Route conversation rename behavior through the session domain barrel API (#1217)
-- Inject session runtime singletons through `AppContext` to centralize runtime wiring (#1213)
+- Extract session configuration and permission services and split associated
+  tests for better module isolation (#1224)
+- Route conversation rename behavior through the session domain barrel API
+  (#1217)
+- Inject session runtime singletons through `AppContext` to centralize runtime
+  wiring (#1213)
 - Refactor run script service dependency-injection wiring (#1235)
-- Remove deprecated or legacy compatibility paths (`KanbanIssue` alias, sidecar init fallback, eager CORS app context initialization) (#1209, #1210, #1212)
+- Remove deprecated or legacy compatibility paths (`KanbanIssue` alias, sidecar
+  init fallback, eager CORS app context initialization) (#1209, #1210, #1212)
 
 ## [0.3.7] - 2026-02-20
 
 ### Added
 
 - Add pre-PR branch rename interceptor (#1097)
-- Add archive controls and bulk archive actions in Kanban and workspace views (#1101, #1107, #1138, #1159)
-- Add New Workspace actions in workspace detail and Kanban Issues column (#1106, #1111)
+- Add archive controls and bulk archive actions in Kanban and workspace views
+  (#1101, #1107, #1138, #1159)
+- Add New Workspace actions in workspace detail and Kanban Issues column (#1106,
+  #1111)
 - Add Docker build-and-push workflow for GHCR branch testing (#1108)
 - Add PR re-review tagging comment after ratchet fixes (#1116)
 - Add inline workspace creation form on Kanban board (#1123)
-- Add terminal QR code and proxy script for private tunnel direct links (#1146, #1155)
-- Add empty-state messaging for no active workspaces in side panel (#1137, #1152)
+- Add terminal QR code and proxy script for private tunnel direct links (#1146,
+  #1155)
+- Add empty-state messaging for no active workspaces in side panel (#1137,
+  #1152)
 - Add default permission presets for ratchet and workspace sessions (#1160)
 - Surface session startup failures across workspace surfaces (#1167)
 - Add GitHub URL clone flow for project creation (#1169)
@@ -783,23 +970,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Refresh app UI/UX and iterate on Kanban and workspace information density (#1099, #1110, #1125, #1131, #1133, #1136, #1143, #1144, #1150, #1157, #1165, #1173, #1182, #1188)
-- Rewrite Dockerfile/docker-compose for cloud deployment and proxy workflows (#1098, #1124, #1156)
+- Refresh app UI/UX and iterate on Kanban and workspace information density
+  (#1099, #1110, #1125, #1131, #1133, #1136, #1143, #1144, #1150, #1157, #1165,
+  #1173, #1182, #1188)
+- Rewrite Dockerfile/docker-compose for cloud deployment and proxy workflows
+  (#1098, #1124, #1156)
 - Rename auto-generated branches before push and PR (#1176)
-- Improve workspace and sidebar navigation patterns across desktop/mobile (#1102, #1105, #1113, #1115, #1171, #1174, #1178, #1181, #1192)
-- Improve mobile layout behavior and menu/header ergonomics (#1118, #1147, #1148, #1149)
+- Improve workspace and sidebar navigation patterns across desktop/mobile
+  (#1102, #1105, #1113, #1115, #1171, #1174, #1178, #1181, #1192)
+- Improve mobile layout behavior and menu/header ergonomics (#1118, #1147,
+  #1148, #1149)
 - Improve chat follow-mode near-bottom scrolling behavior (#1121, #1122)
-- Make Kanban transitions and archive interactions feel immediate (#1154, #1170, #1187)
-- Improve ratchet reliability by gating dispatch on actionable PR signals and persisting toggle state snapshots (#1145, #1184, #1189)
-- Move workspace quick actions into the session bar and auto-save IDE settings on change (#1183, #1194)
-- Enforce provider CLI readiness checks and update ratchet Codex startup defaults (#1117, #1162)
+- Make Kanban transitions and archive interactions feel immediate (#1154, #1170,
+  #1187)
+- Improve ratchet reliability by gating dispatch on actionable PR signals and
+  persisting toggle state snapshots (#1145, #1184, #1189)
+- Move workspace quick actions into the session bar and auto-save IDE settings
+  on change (#1183, #1194)
+- Enforce provider CLI readiness checks and update ratchet Codex startup
+  defaults (#1117, #1162)
 
 ### Fixed
 
-- Fix active navigation highlighting and board labeling inconsistencies (#1104, #1128)
+- Fix active navigation highlighting and board labeling inconsistencies (#1104,
+  #1128)
 - Fix mobile chat reconnect getting stuck on "Connecting" (#1112)
 - Fix circular JSON crash in NewWorkspaceButton onClick (#1127, #1129)
-- Fix Docker runtime crashes from Prisma 7 `.ts` imports in compiled output (#1119, #1151)
+- Fix Docker runtime crashes from Prisma 7 `.ts` imports in compiled output
+  (#1119, #1151)
 - Fix Docker publish workflow trigger on pushes to `main` (#1135)
 - Fix null `submittedAt` handling in PR review details (#1141)
 - Fix Kanban archive cancel navigation and done-column UX (#1142)
@@ -825,7 +1023,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add Linear issues to Kanban board (Deliverable 3) (#1072)
 - Persist chat input attachments across navigation/refresh (#1073)
 - Persist workspace tool-call expansion across navigation (#1074)
-- Add Linear issue prompt, state sync, header link, and export schema (D4-D6) (#1079)
+- Add Linear issue prompt, state sync, header link, and export schema (D4-D6)
+  (#1079)
 - Add ff proxy command with private cloudflared auth mode (#1088)
 
 ### Changed
@@ -876,7 +1075,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Group new-session controls and clarify provider affordance (#1053)
 - Render stripped plaintext in live reasoning indicator (#1054)
 - Improve Storybook coverage for key app views (#1051)
-- Poll for review comments every 2 minutes and include them in fixer prompt (#1059)
+- Poll for review comments every 2 minutes and include them in fixer prompt
+  (#1059)
 
 ### Fixed
 
@@ -912,7 +1112,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix Codex execution mode options when requirements are missing (#1039)
 - Handle Codex `commandExecution` payloads in PR detector flow (#1038)
 - Fix missing transcript entry for dequeued queued messages (#1037)
-- Propagate idle transition and queue-clear snapshots on session stop (#1034, #1035)
+- Propagate idle transition and queue-clear snapshots on session stop (#1034,
+  #1035)
 - Avoid chat auto-scroll during hydration (#1036)
 - Fix false frontend force-kill log on shutdown (#1033)
 - Fix false orphan agent sessions in admin process list (#1031)
@@ -922,30 +1123,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Refactored
 
 - Refactor duplicate code paths across UI and session loaders (#1023)
-- Remove deprecated auto-fix monitor/fixer stack and unused workspace ratchet fields (#1019, #1020)
+- Remove deprecated auto-fix monitor/fixer stack and unused workspace ratchet
+  fields (#1019, #1020)
 
 ## [0.3.3] - 2026-02-14
 
 ### Fixed
 
-- Fix `npx factory-factory@latest serve` failing during npm package linking (`Cannot destructure property 'package' of 'node.target' as it is null`) by removing the published `file:packages/core` dependency and in-package core import path
+- Fix `npx factory-factory@latest serve` failing during npm package linking
+  (`Cannot destructure property 'package' of 'node.target' as it is null`) by
+  removing the published `file:packages/core` dependency and in-package core
+  import path
 
 ### CI
 
-- Align npm publish workflow smoke test to use packed-tarball `npm exec --package ...` so npx/npm exec install-link failures are caught before release
+- Align npm publish workflow smoke test to use packed-tarball
+  `npm exec --package ...` so npx/npm exec install-link failures are caught
+  before release
 
 ## [0.3.2] - 2026-02-14
 
 ### Fixed
 
-- Fix `npx factory-factory@latest serve` crashing at startup with Prisma runtime `Cannot read properties of undefined (reading 'graph')` by pinning `@prisma/adapter-better-sqlite3`, `@prisma/client`, and `prisma` to 7.3.0 and enforcing supported Node engines in package metadata
+- Fix `npx factory-factory@latest serve` crashing at startup with Prisma runtime
+  `Cannot read properties of undefined (reading 'graph')` by pinning
+  `@prisma/adapter-better-sqlite3`, `@prisma/client`, and `prisma` to 7.3.0 and
+  enforcing supported Node engines in package metadata
 - Update installation prerequisites to match Prisma-supported Node versions
 
 ## [0.3.1] - 2026-02-14
 
 ### Fixed
 
-- Fix npm/npx installation failure by replacing `workspace:*` dependency resolution for `@factory-factory/core` with publish-safe packaging
+- Fix npm/npx installation failure by replacing `workspace:*` dependency
+  resolution for `@factory-factory/core` with publish-safe packaging
 
 ## [0.3.0] - 2026-02-14
 
@@ -990,7 +1201,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Replace raw runtime casts with Zod validation (#990)
 - Remove duplicated workspace session model defaults (#985)
 - Refactor ratchet session stop handling (#978)
-- Reset ratchet dispatch tracking when fixer session dies without doing work (#976)
+- Reset ratchet dispatch tracking when fixer session dies without doing work
+  (#976)
 - Clear persisted Codex thread mappings on session clear (#973)
 - Fix workspace not updating after PR creation detected (#954)
 - Add exponential backoff polling for late-arriving PR review comments (#945)
@@ -1012,14 +1224,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Add v1.1 Project Snapshot Service for improved workspace state management (#944)
+- Add v1.1 Project Snapshot Service for improved workspace state management
+  (#944)
 - Add Factory Factory signature to agent-created PRs (#938)
 - Always show session tab bar with + button for easier session management (#948)
 
 ### Fixed
 
 - Fix snapshot_removed not clearing workspace.get cache (#952)
-- Fix #912: Catch unhandled sendRaw rejection in sendInitialize and sendRewindFiles (#946)
+- Fix #912: Catch unhandled sendRaw rejection in sendInitialize and
+  sendRewindFiles (#946)
 - Fix CI status computation to handle NEUTRAL conclusion (#947)
 - Fix #935: Prevent workspace from tagging old merged PRs (#939)
 - Fix #914: LoggerService crash on circular references (#925)
@@ -1074,7 +1288,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix session loading stuck on cold start (#872)
 - Fix workspace reorder triggering page refresh (#885)
 - Fix non-selected session tab status icons (#891)
-- Fix intra-domain import: use worktreeLifecycleService.setInitMode directly (#889)
+- Fix intra-domain import: use worktreeLifecycleService.setInitMode directly
+  (#889)
 - Fix run script STOPPING leak on process exit (#897)
 - Fix queued messages disappearing when switching workspaces (#868)
 - Fix queued messages disappearing on page refresh (#855)
@@ -1116,7 +1331,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Clean up ratchet sessions when work is finished (#877)
 - Skip merged and disabled workspaces in ratchet poll loop (#852)
 - Enable parallel workspace archiving by removing global isPending check (#870)
-- Enable parallel workspace archiving and skip confirmation for merged PRs (#854)
+- Enable parallel workspace archiving and skip confirmation for merged PRs
+  (#854)
 - Reduce GitHub API polling and add rate limit backoff (#860)
 - Archive v1.0 SRP Consolidation milestone (#904)
 
@@ -1149,7 +1365,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Add visual indicators for pending plan approval and user questions (#771) (#815)
+- Add visual indicators for pending plan approval and user questions (#771)
+  (#815)
 
 ## [0.2.5] - 2026-02-07
 
@@ -1176,7 +1393,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix sidebar width localStorage persistence (#808)
 - Fix #800: Unify the Markdown loading logic (#804)
 - Fix #727: Introduce guarded run-script runtime state machine (#792)
-- Fix #750: Add lint guardrails for unsafe JSON.parse casts and unknown resolver casts (#794)
+- Fix #750: Add lint guardrails for unsafe JSON.parse casts and unknown resolver
+  casts (#794)
 - Fix #747: Validate persisted JSON stores with Zod schemas (#793)
 - Fix #748: Use shared schema for frontend backup import parsing (#789)
 - Fix #746: Schema-validate GitHub CLI JSON responses (#788)
@@ -1185,7 +1403,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Refactored
 
-- Validate Claude stream JSON and session JSONL inputs at parse boundaries (#745, #790)
+- Validate Claude stream JSON and session JSONL inputs at parse boundaries
+  (#745, #790)
 - Refactor chat handler registry to eliminate message payload casts (#785)
 
 ## [0.2.4] - 2026-02-06
@@ -1278,13 +1497,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Bump process memory limit from 2GB to 10GB to reduce OOM kills (#696)
-- Make ratchet review fixer fully autonomous - no longer asks for user input (#690)
+- Make ratchet review fixer fully autonomous - no longer asks for user input
+  (#690)
 
 ### Fixed
 
-- Fix sendMessage unhandled promise rejections when protocol stream breaks (#696)
+- Fix sendMessage unhandled promise rejections when protocol stream breaks
+  (#696)
 - Fix ratchet state update to only occur after confirmed message delivery (#696)
-- Fix placeholder PR number in pr-review-fix prompt to dynamically resolve from current branch (#690)
+- Fix placeholder PR number in pr-review-fix prompt to dynamically resolve from
+  current branch (#690)
 
 ### Refactored
 
@@ -1374,7 +1596,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Replace chat status bar with subtle tab status dot (#591)
 - Persist tab scroll state across navigation (#585)
 - Cache slash commands for offline palette (#535)
-- Always play workspace completion sound regardless of focus or active workspace (#508)
+- Always play workspace completion sound regardless of focus or active workspace
+  (#508)
 - Move Create PR button inline with workspace title (#538)
 - Always show refresh button in factory config section (#527)
 - Use small button size for new workspace button (#507)
@@ -1453,7 +1676,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Workspace notification system for agent completion (#467)
 - Shift+Tab keyboard shortcut to toggle plan mode (#464)
 - Smart delta compression for WebSocket message replay (#441)
-- Handle SDK events: context compaction, task notifications, and status updates (#461)
+- Handle SDK events: context compaction, task notifications, and status updates
+  (#461)
 - Differentiate system message subtypes (#460)
 
 ### Changed
@@ -1471,29 +1695,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix diff vs main to prefer origin/main over local main (#469)
 - Fix quick action not executing when clicked (#466)
 - Fix ExitPlanMode and add comprehensive Zod schemas for tool inputs (#459)
-- Fix code review issues: config caching, division by zero, and opacity inheritance (#445)
-- Fix message ordering by using backend-assigned order instead of timestamps (#443)
+- Fix code review issues: config caching, division by zero, and opacity
+  inheritance (#445)
+- Fix message ordering by using backend-assigned order instead of timestamps
+  (#443)
 - Fix node-pty spawn-helper permissions for npx installs (#442)
-- Fix "Cannot read properties of undefined (reading 'length')" during tool streaming (#440)
+- Fix "Cannot read properties of undefined (reading 'length')" during tool
+  streaming (#440)
 
 ## [0.1.3] - 2025-02-01
 
 ### Fixed
+
 - User messages appearing at top instead of chronological position (#438)
 - Express 5 sendFile requiring root option for SPA fallback (#437)
 
 ### Changed
+
 - Grouped copy and cancel buttons for queued messages (#436)
 
 ## [0.1.2] - 2025-02-01
 
 ### Added
+
 - Message state machine for unified chat message tracking (#426)
 - Terminal tabs inline in bottom panel tab bar (#420)
 - Quick actions dropdown to chat bar (#414)
 - Cancel button for inline queued messages (#433)
 
 ### Fixed
+
 - Spinner not showing for subsequent messages in chat session (#434)
 - Queued messages losing styling after workspace navigation (#431)
 - Fetch latest from origin when creating git worktrees (#428)
@@ -1509,8 +1740,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Code scanning security alerts (#401)
 
 ### Changed
+
 - External link icon added to GitHub link with reduced footer padding (#419)
-- Type safety improvements for WebSocket handlers and chat state management (#415)
+- Type safety improvements for WebSocket handlers and chat state management
+  (#415)
 - Consolidated terminal/devlog panel into single row (#409)
 - Replaced phase label with GitHub repo link in sidebar footer (#416)
 - Skip archive confirmation for workspaces with merged PRs (#406)
@@ -1518,6 +1751,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed unused Claude message state machine methods (#430)
 
 ### Infrastructure
+
 - Automatic tag creation added to npm publish workflow (#422)
 - Screenshot added to README (#403)
 
@@ -1530,7 +1764,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Workspace Management**: Create isolated git worktrees for parallel development
+- **Workspace Management**: Create isolated git worktrees for parallel
+  development
 - **Claude Code Integration**: Real-time streaming chat with Claude Code CLI
 - **Terminal Sessions**: Full PTY terminal per workspace
 - **Session Persistence**: Resume previous Claude sessions
@@ -1543,7 +1778,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Task Tracking**: Visual panel for tracking tool calls and tasks
 - **Quick Actions**: Fetch & rebase, and other common operations
 - **Branch Renaming**: Automatic branch name suggestions based on conversation
-- **Project Configuration**: `factory-factory.json` for project-specific settings
+- **Project Configuration**: `factory-factory.json` for project-specific
+  settings
 
 ### Features
 

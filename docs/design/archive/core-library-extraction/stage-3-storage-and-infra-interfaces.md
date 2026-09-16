@@ -2,28 +2,36 @@
 
 Status: superseded by PR #2023
 
-**Risk**: Medium
-**Depends on**: Stage 2 (enums and shared types in core)
+**Risk**: Medium **Depends on**: Stage 2 (enums and shared types in core)
 **Estimated scope**: ~15 new files in core, ~10 modified files in desktop
 
 ## Goal
 
-Define the storage abstraction layer and infrastructure interfaces that decouple domain logic from Prisma and desktop-specific singletons. Extract pure derivation functions into core. This stage makes domain extraction (Stages 4-5) possible.
+Define the storage abstraction layer and infrastructure interfaces that decouple
+domain logic from Prisma and desktop-specific singletons. Extract pure
+derivation functions into core. This stage makes domain extraction (Stages 4-5)
+possible.
 
 ## Problem
 
 Domain services currently depend on:
-1. **Prisma resource accessors** (`workspaceAccessor`, `claudeSessionAccessor`) for database access
-2. **Infrastructure singletons** (`createLogger`, `configService`) for logging and configuration
-3. **Service constants** (`SERVICE_LIMITS`, `SERVICE_INTERVAL_MS`) for tuning parameters
 
-Core cannot depend on any of these. We need interfaces that core defines and desktop implements.
+1. **Prisma resource accessors** (`workspaceAccessor`, `claudeSessionAccessor`)
+   for database access
+2. **Infrastructure singletons** (`createLogger`, `configService`) for logging
+   and configuration
+3. **Service constants** (`SERVICE_LIMITS`, `SERVICE_INTERVAL_MS`) for tuning
+   parameters
+
+Core cannot depend on any of these. We need interfaces that core defines and
+desktop implements.
 
 ## What Gets Done
 
 ### Part A: Storage Interfaces
 
-Define TypeScript interfaces in `packages/core/src/storage/` that mirror the resource accessor method signatures using core's own types (from Stage 2).
+Define TypeScript interfaces in `packages/core/src/storage/` that mirror the
+resource accessor method signatures using core's own types (from Stage 2).
 
 #### `WorkspaceStorage`
 
@@ -221,13 +229,14 @@ export interface CoreServiceConfig {
 
 Move pure business logic that depends only on core types:
 
-| Source | Destination |
-|--------|-------------|
-| `src/backend/domains/workspace/state/flow-state.ts` | `packages/core/src/workspace/flow-state.ts` |
-| `src/backend/domains/workspace/state/init-policy.ts` | `packages/core/src/workspace/init-policy.ts` |
+| Source                                                                                           | Destination                                    |
+| ------------------------------------------------------------------------------------------------ | ---------------------------------------------- |
+| `src/backend/domains/workspace/state/flow-state.ts`                                              | `packages/core/src/workspace/flow-state.ts`    |
+| `src/backend/domains/workspace/state/init-policy.ts`                                             | `packages/core/src/workspace/init-policy.ts`   |
 | `src/backend/domains/workspace/state/kanban-state.ts` (pure `computeKanbanColumn` function only) | `packages/core/src/workspace/kanban-column.ts` |
 
-These functions operate on enum values and plain data -- they have no infrastructure dependencies.
+These functions operate on enum values and plain data -- they have no
+infrastructure dependencies.
 
 Desktop originals become re-exports:
 
@@ -278,11 +287,14 @@ packages/core/src/
 
 ## Modified Files
 
-- `src/backend/resource_accessors/workspace.accessor.ts` -- add `implements WorkspaceStorage`
-- `src/backend/resource_accessors/claude-session.accessor.ts` -- add `implements SessionStorage`
+- `src/backend/resource_accessors/workspace.accessor.ts` -- add
+  `implements WorkspaceStorage`
+- `src/backend/resource_accessors/claude-session.accessor.ts` -- add
+  `implements SessionStorage`
 - `src/backend/domains/workspace/state/flow-state.ts` -- becomes re-export
 - `src/backend/domains/workspace/state/init-policy.ts` -- becomes re-export
-- `src/backend/domains/workspace/state/kanban-state.ts` -- pure function part moves; service part stays
+- `src/backend/domains/workspace/state/kanban-state.ts` -- pure function part
+  moves; service part stays
 - `src/backend/domains/workspace/index.ts` -- update re-exports
 
 ## Tests to Add
@@ -330,26 +342,34 @@ pnpm check:fix
 
 ## Risks and Mitigations
 
-| Risk | Likelihood | Mitigation |
-|------|-----------|------------|
-| Storage interface doesn't cover all accessor methods | Medium | Start with methods used by ratchet/session/workspace services; expand as needed in Stage 5 |
-| `Partial<WorkspaceRecord>` is too loose for CAS updates | Low | Can tighten with branded types later; structural match is sufficient for extraction |
-| Pure function extraction breaks imports | Low | Desktop re-exports maintain backward compatibility |
-| `implements` clause reveals method signature mismatches | Medium | This is the point -- fix signatures to match; structural typing helps |
+| Risk                                                    | Likelihood | Mitigation                                                                                 |
+| ------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------ |
+| Storage interface doesn't cover all accessor methods    | Medium     | Start with methods used by ratchet/session/workspace services; expand as needed in Stage 5 |
+| `Partial<WorkspaceRecord>` is too loose for CAS updates | Low        | Can tighten with branded types later; structural match is sufficient for extraction        |
+| Pure function extraction breaks imports                 | Low        | Desktop re-exports maintain backward compatibility                                         |
+| `implements` clause reveals method signature mismatches | Medium     | This is the point -- fix signatures to match; structural typing helps                      |
 
 ## Design Decisions
 
 ### Why interfaces, not abstract classes?
 
-Interfaces impose zero runtime overhead and allow multiple inheritance. Desktop's `WorkspaceAccessor` already exists as a class -- we just add an `implements` clause. No constructor changes needed.
+Interfaces impose zero runtime overhead and allow multiple inheritance.
+Desktop's `WorkspaceAccessor` already exists as a class -- we just add an
+`implements` clause. No constructor changes needed.
 
 ### Why not extract the resource accessors themselves?
 
-Resource accessors are Prisma-coupled by design. They use `prisma.workspace.findMany()`, `prisma.$transaction()`, etc. These are implementation details that vary by storage backend. Core defines the contract; each consumer provides the implementation.
+Resource accessors are Prisma-coupled by design. They use
+`prisma.workspace.findMany()`, `prisma.$transaction()`, etc. These are
+implementation details that vary by storage backend. Core defines the contract;
+each consumer provides the implementation.
 
 ### Why extract pure functions now?
 
-`flow-state.ts`, `init-policy.ts`, and `computeKanbanColumn` are pure derivation functions that operate on enums and plain data. They are the easiest code to extract and they validate the pattern before we tackle stateful services in Stage 5.
+`flow-state.ts`, `init-policy.ts`, and `computeKanbanColumn` are pure derivation
+functions that operate on enums and plain data. They are the easiest code to
+extract and they validate the pattern before we tackle stateful services in
+Stage 5.
 
 ## Out of Scope
 

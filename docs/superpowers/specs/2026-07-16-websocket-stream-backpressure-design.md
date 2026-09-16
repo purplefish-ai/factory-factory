@@ -29,15 +29,14 @@ the new output chunk is dropped instead of being added to the socket's send
 queue.
 
 Dropping is tracked per socket as a congestion window. The helper logs one
-warning when it first begins dropping chunks, suppresses repeated warnings
-while the socket remains congested, and clears the congestion state when a
-later send observes that the queued amount has fallen to or below the
-threshold. This bounds log volume as well as socket buffering.
+warning when it first begins dropping chunks, suppresses repeated warnings while
+the socket remains congested, and clears the congestion state when a later send
+observes that the queued amount has fallen to or below the threshold. This
+bounds log volume as well as socket buffering.
 
 Successful sends use the `ws.send` callback. Callback errors are normalized and
-logged, covering asynchronous failures that the existing synchronous
-`try/catch` helper cannot observe. Synchronous exceptions remain caught and
-logged.
+logged, covering asynchronous failures that the existing synchronous `try/catch`
+helper cannot observe. Synchronous exceptions remain caught and logged.
 
 The shared dev-log and post-run-log handler factory uses the new helper for live
 output. The workspace terminal and setup-terminal handlers use it only in their

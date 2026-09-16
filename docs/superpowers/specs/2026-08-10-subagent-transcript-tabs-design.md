@@ -53,8 +53,8 @@ The alternatives were rejected:
 ## Tab Model
 
 A sub-agent tab stores the data needed to render before and after reload. The
-full last-known selection snapshot retains the unavailable-state preview as
-well as the identity, label, and lifecycle fields:
+full last-known selection snapshot retains the unavailable-state preview as well
+as the identity, label, and lifecycle fields:
 
 ```ts
 interface MainViewTab {
@@ -126,8 +126,8 @@ on demand before listing or reading its historical sub-agents.
 
 The backend owns this readiness boundary. A sub-agent list or transcript read
 ensures that the stored provider session has completed ACP `loadSession`, then
-uses the negotiated browse capability. The endpoint does not return and cache
-an early `supported: false` result merely because adapter startup or capability
+uses the negotiated browse capability. The endpoint does not return and cache an
+early `supported: false` result merely because adapter startup or capability
 negotiation is still in progress.
 
 Restoration is passive: it does not send the default continuation prompt,

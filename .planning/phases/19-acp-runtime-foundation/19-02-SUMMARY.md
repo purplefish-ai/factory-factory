@@ -52,7 +52,9 @@ completed: 2026-02-13
 
 # Phase 19 Plan 02: ACP Session Service Integration Summary
 
-**ACP runtime wired into SessionService with create/prompt/stream/cancel/stop lifecycle, event pipeline forwarding via emitDelta, and runtime detection in existing WebSocket/tRPC handlers**
+**ACP runtime wired into SessionService with create/prompt/stream/cancel/stop
+lifecycle, event pipeline forwarding via emitDelta, and runtime detection in
+existing WebSocket/tRPC handlers**
 
 ## Performance
 
@@ -63,53 +65,87 @@ completed: 2026-02-13
 - **Files modified:** 3
 
 ## Accomplishments
-- SessionService now has full ACP lifecycle: createAcpClient, sendAcpMessage, cancelAcpPrompt methods with runtime state management
-- ACP event forwarding pipeline connected: AcpClientHandler.sessionUpdate -> onAcpEvent -> sessionDomainService.emitDelta -> publisher -> WebSocket (reuses proven Claude/Codex infrastructure)
-- Existing API surface inherits ACP support: user-input.handler -> sendSessionMessage detects ACP (RUNTIME-05), stop.handler/session.trpc -> stopSession detects ACP (RUNTIME-06)
-- Session domain barrel exports all ACP public types and singletons for downstream consumers
+
+- SessionService now has full ACP lifecycle: createAcpClient, sendAcpMessage,
+  cancelAcpPrompt methods with runtime state management
+- ACP event forwarding pipeline connected: AcpClientHandler.sessionUpdate ->
+  onAcpEvent -> sessionDomainService.emitDelta -> publisher -> WebSocket (reuses
+  proven Claude/Codex infrastructure)
+- Existing API surface inherits ACP support: user-input.handler ->
+  sendSessionMessage detects ACP (RUNTIME-05), stop.handler/session.trpc ->
+  stopSession detects ACP (RUNTIME-06)
+- Session domain barrel exports all ACP public types and singletons for
+  downstream consumers
 
 ## Task Commits
 
 Each task was committed atomically:
 
-1. **Task 1: Wire AcpRuntimeManager into session service and event pipeline** - `56b238a7` (feat)
-2. **Task 2: Verify ACP integration end-to-end** - Human verification checkpoint (approved)
+1. **Task 1: Wire AcpRuntimeManager into session service and event pipeline** -
+   `56b238a7` (feat)
+2. **Task 2: Verify ACP integration end-to-end** - Human verification checkpoint
+   (approved)
 
 **Plan metadata:** `beefe17b` (docs: complete plan)
 
 ## Files Created/Modified
-- `src/backend/domains/session/lifecycle/session.service.ts` - Added ACP client creation, send, cancel, stop methods; ACP branches in getOrCreateSessionClient, sendSessionMessage, stopSession, stopAllClients; ACP checks in isSessionRunning/isSessionWorking/isAnySessionWorking; setupAcpEventHandler for delta pipeline wiring
-- `src/backend/domains/session/runtime/index.ts` - Added AcpRuntimeManager, AcpProcessHandle, AcpRuntimeEventHandlers, AcpClientOptions exports
-- `src/backend/domains/session/index.ts` - Added ACP section with AcpClientOptions, AcpSessionState, AcpClientHandler, AcpProcessHandle, AcpRuntimeManager, acpRuntimeManager, AcpRuntimeEventHandlers exports
+
+- `src/backend/domains/session/lifecycle/session.service.ts` - Added ACP client
+  creation, send, cancel, stop methods; ACP branches in
+  getOrCreateSessionClient, sendSessionMessage, stopSession, stopAllClients; ACP
+  checks in isSessionRunning/isSessionWorking/isAnySessionWorking;
+  setupAcpEventHandler for delta pipeline wiring
+- `src/backend/domains/session/runtime/index.ts` - Added AcpRuntimeManager,
+  AcpProcessHandle, AcpRuntimeEventHandlers, AcpClientOptions exports
+- `src/backend/domains/session/index.ts` - Added ACP section with
+  AcpClientOptions, AcpSessionState, AcpClientHandler, AcpProcessHandle,
+  AcpRuntimeManager, acpRuntimeManager, AcpRuntimeEventHandlers exports
 
 ## Decisions Made
-- ACP sessions detected at runtime via `acpRuntimeManager.getClient(sessionId)` inside existing `sendSessionMessage` and `stopSession` methods -- no new tRPC routes or WebSocket handlers needed (RUNTIME-05, RUNTIME-06)
-- ACP event types translated to existing delta types: `acp_agent_message_chunk` -> `agent_message`, `acp_tool_call` -> `content_block_start` (tool_use), `acp_tool_call_update` -> `tool_progress`
-- `useAcp` opt-in boolean flag gates ACP session creation -- safe for production with no accidental activation
-- ACP prompt dispatch uses fire-and-forget pattern (`void this.sendAcpMessage(...)`) matching Codex precedent for non-blocking WebSocket response
+
+- ACP sessions detected at runtime via `acpRuntimeManager.getClient(sessionId)`
+  inside existing `sendSessionMessage` and `stopSession` methods -- no new tRPC
+  routes or WebSocket handlers needed (RUNTIME-05, RUNTIME-06)
+- ACP event types translated to existing delta types: `acp_agent_message_chunk`
+  -> `agent_message`, `acp_tool_call` -> `content_block_start` (tool_use),
+  `acp_tool_call_update` -> `tool_progress`
+- `useAcp` opt-in boolean flag gates ACP session creation -- safe for production
+  with no accidental activation
+- ACP prompt dispatch uses fire-and-forget pattern
+  (`void this.sendAcpMessage(...)`) matching Codex precedent for non-blocking
+  WebSocket response
 
 ## Deviations from Plan
 
-None - plan executed exactly as written. All verification checks passed (typecheck, tests, lint).
+None - plan executed exactly as written. All verification checks passed
+(typecheck, tests, lint).
 
 ## Issues Encountered
-None - all implementation was additive alongside existing Claude/Codex paths with no conflicts.
+
+None - all implementation was additive alongside existing Claude/Codex paths
+with no conflicts.
 
 ## User Setup Required
 
 None - no external service configuration required.
 
 ## Next Phase Readiness
-- Phase 19 ACP Runtime Foundation is complete: isolated runtime module (Plan 01) + session service integration (Plan 02)
-- AcpRuntimeManager has full lifecycle wired through SessionService with event streaming
-- Ready for Phase 20: Event Translation + Permissions (richer event mapping, permission UI integration)
-- Ready for Phase 21: Config Options + Unified Runtime (provider selection, configuration management)
+
+- Phase 19 ACP Runtime Foundation is complete: isolated runtime module
+  (Plan 01) + session service integration (Plan 02)
+- AcpRuntimeManager has full lifecycle wired through SessionService with event
+  streaming
+- Ready for Phase 20: Event Translation + Permissions (richer event mapping,
+  permission UI integration)
+- Ready for Phase 21: Config Options + Unified Runtime (provider selection,
+  configuration management)
 - All existing tests pass with zero regressions, ACP paths are opt-in only
 
 ## Self-Check: PASSED
 
-All 3 modified files verified on disk. Task 1 commit (56b238a7) verified in git log.
+All 3 modified files verified on disk. Task 1 commit (56b238a7) verified in git
+log.
 
 ---
-*Phase: 19-acp-runtime-foundation*
-*Completed: 2026-02-13*
+
+_Phase: 19-acp-runtime-foundation_ _Completed: 2026-02-13_

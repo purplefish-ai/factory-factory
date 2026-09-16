@@ -2,7 +2,8 @@
 
 Status: proposed
 
-**Goal:** Extract FF's execution primitives into a standalone library so both desktop and cloud can use them.
+**Goal:** Extract FF's execution primitives into a standalone library so both
+desktop and cloud can use them.
 
 ## 1.1 Monorepo Conversion
 
@@ -31,14 +32,20 @@ factory-factory/
 Move the following into `packages/core/`:
 
 **All 6 domains** (from `src/backend/domains/`):
-- `session/` — Claude CLI process management (`ClaudeClient`, `ClaudeProcess`, protocol, `SessionManager`, lifecycle)
-- `workspace/` — Workspace state machine, lifecycle, kanban state derivation, init policy
-- `ratchet/` — Auto-fix polling loop, fixer session dispatch, CI/review detection, reconciliation
-- `github/` — GitHub CLI wrapper, PR info extraction, CI status computation, review comments
+
+- `session/` — Claude CLI process management (`ClaudeClient`, `ClaudeProcess`,
+  protocol, `SessionManager`, lifecycle)
+- `workspace/` — Workspace state machine, lifecycle, kanban state derivation,
+  init policy
+- `ratchet/` — Auto-fix polling loop, fixer session dispatch, CI/review
+  detection, reconciliation
+- `github/` — GitHub CLI wrapper, PR info extraction, CI status computation,
+  review comments
 - `terminal/` — Terminal subprocess management, TTY spawning
 - `run-script/` — Startup and custom script execution
 
 **Infrastructure services** (from `src/backend/services/`):
+
 - `logger.service` — Structured logging (pino)
 - `config.service` — Environment config
 - `git-ops.service` — Git operations (clone, push, worktree management)
@@ -47,12 +54,14 @@ Move the following into `packages/core/`:
 - `rate-limiter.service` — GitHub API rate limit coordination
 
 **Data layer:**
+
 - Resource accessors (from `src/backend/resource_accessors/`)
 - Prisma schema and migrations (SQLite, single-tenant)
 
 ## 1.3 Core Library API
 
-Everything below is exported from `@factory-factory/core`. This is the complete public API surface.
+Everything below is exported from `@factory-factory/core`. This is the complete
+public API surface.
 
 ### Session Domain
 
@@ -615,6 +624,7 @@ export function configureDomainBridges(): void
 ```
 
 This is called once at startup. It wires:
+
 - Ratchet ↔ Session bridge (process lifecycle)
 - Ratchet ↔ GitHub bridge (PR data retrieval)
 - Workspace ↔ Session bridge (activity checks)
@@ -685,8 +695,10 @@ UserSettings
 ## 1.3 Refactor `packages/desktop/`
 
 Move everything that isn't core into `packages/desktop/`:
+
 - Server (`server.ts`, `app-context.ts`)
-- tRPC routers (`workspace`, `session`, `project`, `github`, `prReview`, `admin`, `userSettings`, `decisionLog`)
+- tRPC routers (`workspace`, `session`, `project`, `github`, `prReview`,
+  `admin`, `userSettings`, `decisionLog`)
 - WebSocket handlers (`/chat`, `/terminal`, `/dev-logs`)
 - Orchestration layer (bridge wiring — same logic, new import paths)
 - Electron wrapper
@@ -694,6 +706,7 @@ Move everything that isn't core into `packages/desktop/`:
 - CLI entrypoint
 
 Update all imports:
+
 ```typescript
 // Before
 import { ClaudeClient } from '@/backend/domains/session/claude';
@@ -702,48 +715,64 @@ import { ClaudeClient } from '@/backend/domains/session/claude';
 import { ClaudeClient } from '@factory-factory/core';
 ```
 
-Desktop's orchestration layer calls `configureDomainBridges()` from core at startup — same wiring as today, just imported from the library.
+Desktop's orchestration layer calls `configureDomainBridges()` from core at
+startup — same wiring as today, just imported from the library.
 
 ## 1.4 Verify and Publish
 
 - All existing tests pass
-- Desktop app works identically (same commands: `pnpm dev`, `pnpm build`, `pnpm dev:electron`)
+- Desktop app works identically (same commands: `pnpm dev`, `pnpm build`,
+  `pnpm dev:electron`)
 - Publish `@factory-factory/core` to npm with semantic versioning
 
 ## How to test manually
 
 1. **Install core from npm in a fresh project:**
+
    ```bash
    mkdir /tmp/test-core && cd /tmp/test-core && npm init -y
    npm install @factory-factory/core
    node -e "const core = require('@factory-factory/core'); console.log(Object.keys(core))"
    ```
+
    Verify the exported API matches the spec in section 1.3.
 
 2. **Run the desktop app end-to-end:**
+
    ```bash
    pnpm dev:electron
    ```
-   Create a project, create a workspace from a GitHub issue, start a Claude session, send a message, verify streaming responses. This should work identically to before the refactor.
+
+   Create a project, create a workspace from a GitHub issue, start a Claude
+   session, send a message, verify streaming responses. This should work
+   identically to before the refactor.
 
 3. **Run the full test suite:**
+
    ```bash
    pnpm test && pnpm typecheck && pnpm check:fix
    ```
+
    All tests pass, no type errors, no lint errors.
 
 4. **Verify domain isolation:**
+
    ```bash
    pnpm exec dependency-cruiser -- packages/core/src
    ```
-   No cross-domain imports within core. All bridge interfaces are used correctly.
+
+   No cross-domain imports within core. All bridge interfaces are used
+   correctly.
 
 5. **Verify desktop imports core (not internal paths):**
    ```bash
    grep -r "from '@/backend/domains/" packages/desktop/src/ | head -20
    ```
-   Should return zero results — all domain imports should be from `@factory-factory/core`.
+   Should return zero results — all domain imports should be from
+   `@factory-factory/core`.
 
 ## Done when
 
-Desktop FF works exactly as before, but internally uses the extracted core library. `@factory-factory/core` is published to npm and installable by any consumer.
+Desktop FF works exactly as before, but internally uses the extracted core
+library. `@factory-factory/core` is published to npm and installable by any
+consumer.

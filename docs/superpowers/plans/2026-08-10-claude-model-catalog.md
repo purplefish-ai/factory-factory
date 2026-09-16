@@ -1,20 +1,34 @@
 # Claude Model Catalog and Explicit Labels Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Discover Claude models through the Claude ACP runtime and display concise, versioned model labels in both Admin and in-chat selectors without changing saved defaults.
+**Goal:** Discover Claude models through the Claude ACP runtime and display
+concise, versioned model labels in both Admin and in-chat selectors without
+changing saved defaults.
 
-**Architecture:** A temporary, non-persisted `ClaudeAcpAgent` session supplies the global Claude catalog. One pure formatter normalizes Claude model option names at every ACP ingress and in the catalog loader; the user-settings router discovers Claude and Codex concurrently with independent fallbacks.
+**Architecture:** A temporary, non-persisted `ClaudeAcpAgent` session supplies
+the global Claude catalog. One pure formatter normalizes Claude model option
+names at every ACP ingress and in the catalog loader; the user-settings router
+discovers Claude and Codex concurrently with independent fallbacks.
 
-**Tech Stack:** TypeScript, `@agentclientprotocol/claude-agent-acp`, ACP SDK config options, Express/tRPC, React, Radix dropdowns, Vitest, jsdom, Storybook
+**Tech Stack:** TypeScript, `@agentclientprotocol/claude-agent-acp`, ACP SDK
+config options, Express/tRPC, React, Radix dropdowns, Vitest, jsdom, Storybook
 
 ## Global Constraints
 
-- Keep `UserSettings.defaultClaudeModel`, its schema default, and every existing saved value unchanged.
-- Store and send the original provider option value; normalize display names only.
-- Use the Claude ACP runtime as the catalog source; do not parse `claude --help` or add a second static version map.
-- The catalog session must use `persistSession: false`, `tools: []`, no MCP servers, and no prompt.
-- Exclude project/local workspace settings from the global Admin catalog while preserving user and managed Claude policy.
+- Keep `UserSettings.defaultClaudeModel`, its schema default, and every existing
+  saved value unchanged.
+- Store and send the original provider option value; normalize display names
+  only.
+- Use the Claude ACP runtime as the catalog source; do not parse `claude --help`
+  or add a second static version map.
+- The catalog session must use `persistSession: false`, `tools: []`, no MCP
+  servers, and no prompt.
+- Exclude project/local workspace settings from the global Admin catalog while
+  preserving user and managed Claude policy.
 - Claude and Codex discovery must fail independently.
 - Retain the current static Claude aliases and efforts as the fallback.
 - Do not show raw resolved model IDs in either dropdown.
@@ -25,18 +39,29 @@
 ### Task 1: Normalize concise Claude model labels at every ACP ingress
 
 **Files:**
+
 - Create: `src/backend/services/session/service/acp/claude-model-options.ts`
-- Create: `src/backend/services/session/service/acp/claude-model-options.test.ts`
-- Modify: `src/backend/services/session/service/acp/acp-session-config-options.ts`
-- Create: `src/backend/services/session/service/acp/acp-session-config-options.test.ts`
-- Modify: `src/backend/services/session/service/lifecycle/session.config.service.ts`
-- Modify: `src/backend/services/session/service/lifecycle/session.config.service.test.ts`
+- Create:
+  `src/backend/services/session/service/acp/claude-model-options.test.ts`
+- Modify:
+  `src/backend/services/session/service/acp/acp-session-config-options.ts`
+- Create:
+  `src/backend/services/session/service/acp/acp-session-config-options.test.ts`
+- Modify:
+  `src/backend/services/session/service/lifecycle/session.config.service.ts`
+- Modify:
+  `src/backend/services/session/service/lifecycle/session.config.service.test.ts`
 
 **Interfaces:**
-- Produces: `formatClaudeModelOptionName(option: Pick<SessionConfigSelectOption, 'value' | 'name' | 'description'>): string`
-- Produces: `normalizeSessionConfigOptions(provider: string, configOptions: SessionConfigOption[]): SessionConfigOption[]`
-- Consumes: ACP model option descriptions such as `Sonnet 5 · Efficient for routine tasks`
-- Preserves: every option `value`, description, ordering, grouping, and non-Claude option
+
+- Produces:
+  `formatClaudeModelOptionName(option: Pick<SessionConfigSelectOption, 'value' | 'name' | 'description'>): string`
+- Produces:
+  `normalizeSessionConfigOptions(provider: string, configOptions: SessionConfigOption[]): SessionConfigOption[]`
+- Consumes: ACP model option descriptions such as
+  `Sonnet 5 · Efficient for routine tasks`
+- Preserves: every option `value`, description, ordering, grouping, and
+  non-Claude option
 
 - [ ] **Step 1: Write formatter tests**
 
@@ -223,7 +248,8 @@ Run:
 pnpm test src/backend/services/session/service/acp/acp-session-config-options.test.ts
 ```
 
-Expected: FAIL because non-default Claude options still retain unversioned names.
+Expected: FAIL because non-default Claude options still retain unversioned
+names.
 
 - [ ] **Step 7: Route all Claude model options through the formatter**
 
@@ -320,8 +346,8 @@ Run:
 pnpm test src/backend/services/session/service/lifecycle/session.config.service.test.ts
 ```
 
-Expected: FAIL because `applyConfigOptionsUpdateDelta` currently stores and emits
-the raw notification options.
+Expected: FAIL because `applyConfigOptionsUpdateDelta` currently stores and
+emits the raw notification options.
 
 - [ ] **Step 11: Normalize notification options before storage and emission**
 
@@ -368,23 +394,29 @@ git commit -m "Show resolved Claude model versions"
 ### Task 2: Add the ephemeral Claude ACP catalog loader
 
 **Files:**
-- Create: `src/backend/services/session/service/acp/claude-model-catalog-loader.ts`
-- Create: `src/backend/services/session/service/acp/claude-model-catalog-loader.test.ts`
+
+- Create:
+  `src/backend/services/session/service/acp/claude-model-catalog-loader.ts`
+- Create:
+  `src/backend/services/session/service/acp/claude-model-catalog-loader.test.ts`
 - Modify: `src/backend/services/session/service/acp/index.ts`
 - Modify: `src/backend/services/session/service/index.ts`
 - Modify: `src/backend/app-context.ts`
 
 **Interfaces:**
-- Produces: `ClaudeModelCatalogEntry = { id: string; displayName: string; description: string | null }`
-- Produces: `fetchClaudeModelCatalogFromAcp(): Promise<ClaudeModelCatalogEntry[]>`
+
+- Produces:
+  `ClaudeModelCatalogEntry = { id: string; displayName: string; description: string | null }`
+- Produces:
+  `fetchClaudeModelCatalogFromAcp(): Promise<ClaudeModelCatalogEntry[]>`
 - Consumes: `ClaudeAcpAgent.newSession(...).configOptions`
 - Exposes: `ApplicationServices.fetchClaudeModelCatalogFromAcp`
 
 - [ ] **Step 1: Write catalog loader tests with a mocked ACP agent**
 
 Create `claude-model-catalog-loader.test.ts`. Hoist mocks for `initialize`,
-`newSession`, `closeSession`, and `dispose`, then replace `ClaudeAcpAgent` with a
-test class through `vi.mock('@agentclientprotocol/claude-agent-acp', ...)`.
+`newSession`, `closeSession`, and `dispose`, then replace `ClaudeAcpAgent` with
+a test class through `vi.mock('@agentclientprotocol/claude-agent-acp', ...)`.
 
 The success fixture must return:
 
@@ -488,9 +520,9 @@ export type ClaudeModelCatalogEntry = {
 
 Build the no-prompt client using
 `ConstructorParameters<typeof ClaudeAcpAgent>[0]`. Void notification methods may
-be no-ops; request/IO methods must throw `Claude catalog discovery cannot service
-ACP callbacks` if unexpectedly invoked. Adapt the repository logger to the
-Claude agent's two-method logger interface:
+be no-ops; request/IO methods must throw
+`Claude catalog discovery cannot service ACP callbacks` if unexpectedly invoked.
+Adapt the repository logger to the Claude agent's two-method logger interface:
 
 ```typescript
 const appLogger = createLogger('claude-model-catalog-loader');
@@ -561,8 +593,8 @@ try {
 }
 ```
 
-Keep the implementation local to the session capsule and do not export the
-no-op client.
+Keep the implementation local to the session capsule and do not export the no-op
+client.
 
 - [ ] **Step 4: Run the loader test to verify GREEN**
 
@@ -584,9 +616,8 @@ Export `fetchClaudeModelCatalogFromAcp` and `ClaudeModelCatalogEntry` through:
 In `app-context.ts`:
 
 1. Import `fetchClaudeModelCatalogFromAcp` from the session capsule.
-2. Add
-   `fetchClaudeModelCatalogFromAcp: typeof fetchClaudeModelCatalogFromAcp` to
-   `ApplicationServices`.
+2. Add `fetchClaudeModelCatalogFromAcp: typeof fetchClaudeModelCatalogFromAcp`
+   to `ApplicationServices`.
 3. Add the function to `createDefaultApplicationDependencies().services`.
 
 - [ ] **Step 6: Verify exports and application context types**
@@ -614,10 +645,12 @@ git commit -m "Load Claude model catalog from ACP"
 ### Task 3: Use dynamic Claude options with independent provider fallbacks
 
 **Files:**
+
 - Modify: `src/backend/trpc/user-settings.trpc.ts`
 - Modify: `src/backend/trpc/user-settings.router.test.ts`
 
 **Interfaces:**
+
 - Consumes: `ApplicationServices.fetchClaudeModelCatalogFromAcp`
 - Consumes: `ApplicationServices.fetchCodexModelCatalogFromAppServer`
 - Produces: unchanged `getProviderOptions` response shape with
@@ -633,8 +666,8 @@ fetchClaudeModelCatalogFromAcp: (...args: unknown[]) =>
   mockFetchClaudeModelCatalogFromAcp(...args),
 ```
 
-Reset it in `beforeEach` and give both catalog mocks successful default values so
-unrelated router tests do not depend on fallback paths.
+Reset it in `beforeEach` and give both catalog mocks successful default values
+so unrelated router tests do not depend on fallback paths.
 
 - [ ] **Step 2: Write the dynamic Claude provider-options test**
 
@@ -753,12 +786,17 @@ git commit -m "Use Claude catalog in provider settings"
 ### Task 4: Verify explicit labels in both selectors and add visual coverage
 
 **Files:**
+
 - Modify: `src/client/routes/admin-page.test.tsx`
-- Modify: `src/client/features/chat/chat-input/components/acp-config-selector.tsx`
-- Create: `src/client/features/chat/chat-input/components/acp-config-selector.test.tsx`
-- Create: `src/client/features/chat/chat-input/components/acp-config-selector.stories.tsx`
+- Modify:
+  `src/client/features/chat/chat-input/components/acp-config-selector.tsx`
+- Create:
+  `src/client/features/chat/chat-input/components/acp-config-selector.test.tsx`
+- Create:
+  `src/client/features/chat/chat-input/components/acp-config-selector.stories.tsx`
 
 **Interfaces:**
+
 - Consumes: Admin `ProviderOptions.models[].label`
 - Consumes: live ACP `AcpConfigOption.options[].name`
 - Produces: selector callbacks containing the original option value
@@ -799,10 +837,11 @@ expect(mocks.updateSettingsMutate).toHaveBeenCalledWith({
 });
 ```
 
-Add a second test with `mocks.userSettings.defaultClaudeModel = 'claude-legacy'`.
-Open the selector and assert `claude-legacy` is present alongside the discovered
-options. This preserves saved custom or retired model values without adding them
-to the backend catalog.
+Add a second test with
+`mocks.userSettings.defaultClaudeModel = 'claude-legacy'`. Open the selector and
+assert `claude-legacy` is present alongside the discovered options. This
+preserves saved custom or retired model values without adding them to the
+backend catalog.
 
 - [ ] **Step 3: Run the Admin test**
 
@@ -943,10 +982,12 @@ git commit -m "Show explicit Claude models in selectors"
 ### Task 5: Document behavior and run complete verification
 
 **Files:**
+
 - Modify: `AGENTS.md` under **ACP Runtime**
 - Review: all changes since `main`
 
 **Interfaces:**
+
 - Consumes: completed catalog loader, normalization, router, and selector work
 - Produces: current repository guidance and a fully verified branch
 
