@@ -40,8 +40,17 @@ class TestWorker {
 
 let container: HTMLDivElement;
 let root: Root;
+const originalScrollTo = HTMLElement.prototype.scrollTo;
 
 beforeEach(() => {
+  // jsdom lacks the native scrollTo used by measurement compensation.
+  HTMLElement.prototype.scrollTo = function (options?: ScrollToOptions | number) {
+    if (typeof options === 'object') {
+      this.scrollTop = options.top ?? this.scrollTop;
+      this.scrollLeft = options.left ?? this.scrollLeft;
+      setTimeout(() => this.dispatchEvent(new Event('scroll')), 0);
+    }
+  };
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   vi.stubGlobal('Worker', TestWorker);
   TestWorker.instances = [];
@@ -73,6 +82,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(() => root.unmount());
   container.remove();
+  HTMLElement.prototype.scrollTo = originalScrollTo;
   vi.unstubAllGlobals();
 });
 

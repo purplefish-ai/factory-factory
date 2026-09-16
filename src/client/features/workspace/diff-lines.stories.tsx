@@ -49,12 +49,18 @@ function DiffStory({
 }) {
   const saved = useRef<ScrollState | null>(initialScrollState);
   const [visible, setVisible] = useState(true);
+  const [narrow, setNarrow] = useState(false);
   return (
     <div className="space-y-2">
       <Button variant="outline" onClick={() => setVisible((value) => !value)}>
         {visible ? 'Hide diff' : 'Show diff'}
       </Button>
-      {visible && <DiffStoryContent lines={lines} theme={theme} saved={saved} />}
+      <Button variant="outline" onClick={() => setNarrow((value) => !value)}>
+        {narrow ? 'Widen diff' : 'Narrow diff'}
+      </Button>
+      <div style={{ width: narrow ? 360 : 800, maxWidth: '100%' }}>
+        {visible && <DiffStoryContent lines={lines} theme={theme} saved={saved} />}
+      </div>
     </div>
   );
 }
@@ -98,5 +104,12 @@ export const LegacyWrappedPosition: Story = {
   args: {
     ...WrappedLines.args,
     initialScrollState: { top: 24_007, left: 0 },
+  },
+};
+
+export const RestoredWrappedPosition: Story = {
+  args: {
+    ...WrappedLines.args,
+    initialScrollState: { top: 32_007, left: 0, diffAnchor: { index: 500, offset: 7 } },
   },
 };
