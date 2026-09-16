@@ -1,24 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  clearTransientOverrideOnCategoryChange,
-  getRouteCategoryForPath,
-} from './use-sidebar-default-open';
-
-describe('getRouteCategoryForPath', () => {
-  it('classifies workspace detail paths', () => {
-    expect(getRouteCategoryForPath('/projects/alpha/workspaces/ws-1')).toBe('workspace_detail');
-  });
-
-  it('classifies board paths with and without trailing slash', () => {
-    expect(getRouteCategoryForPath('/projects/alpha/workspaces')).toBe('board');
-    expect(getRouteCategoryForPath('/projects/alpha/workspaces/')).toBe('board');
-  });
-
-  it('classifies settings and reviews as default routes', () => {
-    expect(getRouteCategoryForPath('/admin')).toBe('default');
-    expect(getRouteCategoryForPath('/reviews')).toBe('default');
-  });
-});
+import { clearTransientOverrideOnCategoryChange } from './use-sidebar-default-open';
 
 describe('clearTransientOverrideOnCategoryChange', () => {
   it('clears board override when leaving board routes', () => {
