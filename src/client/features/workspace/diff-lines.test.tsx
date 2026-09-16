@@ -253,3 +253,167 @@ it('lets a sibling Radix scrollbar interrupt pending restoration', async () => {
   expect(currentViewport.scrollTop).toBe(150);
   expect(saved?.top).toBe(150);
 });
+
+it('does not persist a queued restore scroll after a click cancels refinement', async () => {
+  const clicked = interruptFirstWrite('pointerdown');
+  await act(() =>
+    root.render(
+      <Harness initial={{ top: 32_007, left: 0, diffAnchor: { index: 500, offset: 7 } }} />
+    )
+  );
+  await settle();
+  expect(clicked()).toBe(true);
+  expect(saved).toBeNull();
+  const viewport = container.querySelector<HTMLDivElement>('[data-viewport]')!;
+  await act(() => {
+    viewport.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    viewport.dispatchEvent(new Event('scroll'));
+  });
+  expect(saved).toBeNull();
+  await act(() => {
+    viewport.scrollTop = 150;
+    viewport.dispatchEvent(new Event('scroll'));
+  });
+  expect(saved?.top).toBe(150);
+});
+
+function interruptFirstWrite(event: string, scrollbar = false) {
+  let interrupted = false;
+  vi.spyOn(HTMLElement.prototype, 'scrollTo').mockImplementation(function (
+    this: HTMLElement,
+    options: ScrollToOptions | number
+  ) {
+    if (typeof options !== 'object') {
+      return;
+    }
+    this.scrollTop = options.top ?? this.scrollTop;
+    this.scrollLeft = options.left ?? this.scrollLeft;
+    if (!interrupted && this.scrollTop > 0) {
+      interrupted = true;
+      setTimeout(() => {
+        const target = scrollbar ? container.querySelector('[data-scroll-thumb]')! : this;
+        target.dispatchEvent(new Event(event, { bubbles: true }));
+      }, 0);
+    }
+    setTimeout(() => this.dispatchEvent(new Event('scroll')), 0);
+  });
+  return () => interrupted;
+}
+
+it.each(['wheel', 'touchstart', 'keydown', 'pointerdown', 'scrollbar'])(
+  'hands off to actual scrolling after %s interrupts an offscreen restore',
+  async (gesture) => {
+    const interrupted = interruptFirstWrite(
+      gesture === 'scrollbar' ? 'pointerdown' : gesture,
+      gesture === 'scrollbar'
+    );
+    await act(() =>
+      root.render(
+        <Harness initial={{ top: 32_007, left: 0, diffAnchor: { index: 500, offset: 7 } }} />
+      )
+    );
+    await settle();
+    expect(interrupted()).toBe(true);
+    expect(saved).toBeNull();
+    const viewport = container.querySelector<HTMLDivElement>('[data-viewport]')!;
+    await act(() => {
+      viewport.scrollTop = 150;
+      viewport.dispatchEvent(new Event('scroll'));
+    });
+    await settle();
+    expect(viewport.scrollTop).toBe(150);
+    expect(saved?.top).toBe(150);
+  }
+);
+
+it('does not swallow real movement when a second click precedes its scroll event', async () => {
+  interruptFirstWrite('pointerdown');
+  await act(() =>
+    root.render(
+      <Harness initial={{ top: 32_007, left: 0, diffAnchor: { index: 500, offset: 7 } }} />
+    )
+  );
+  await settle();
+  const viewport = container.querySelector<HTMLDivElement>('[data-viewport]')!;
+  await act(() => {
+    viewport.scrollTop = 150;
+    viewport.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    viewport.dispatchEvent(new Event('scroll'));
+  });
+  expect(saved?.top).toBe(150);
+});
+
+it('retains the intended anchor when resizing an interrupted restore', async () => {
+  interruptFirstWrite('pointerdown');
+  await act(() =>
+    root.render(
+      <Harness initial={{ top: 32_007, left: 4, diffAnchor: { index: 500, offset: 7 } }} />
+    )
+  );
+  await settle();
+  expect(saved).toBeNull();
+  width = 640;
+  await act(() => {
+    for (const callback of observers) {
+      callback([], {} as ResizeObserver);
+    }
+  });
+  await settle();
+  expect(saved).toMatchObject({ left: 4, diffAnchor: { index: 500, offset: 7 } });
+});
+
+it('does not persist a queued migration scroll after interruption', async () => {
+  interruptFirstWrite('pointerdown');
+  await act(() => root.render(<Harness initial={{ top: 32_007, left: 4 }} />));
+  await settle();
+  expect(saved).toBeNull();
+  const viewport = container.querySelector<HTMLDivElement>('[data-viewport]')!;
+  await act(() => {
+    viewport.scrollLeft = 40;
+    viewport.dispatchEvent(new Event('scroll'));
+  });
+  expect(saved?.left).toBe(40);
+});
+
+it('keeps the saved anchor when a hidden viewport cannot finish restoring', async () => {
+  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(0);
+  await act(() =>
+    root.render(
+      <Harness initial={{ top: 32_007, left: 0, diffAnchor: { index: 500, offset: 7 } }} />
+    )
+  );
+  await settle();
+  expect(saved).toBeNull();
+});
+
+it('cancels pending restoration on unmount without saving an intermediate position', async () => {
+  await act(() =>
+    root.render(
+      <Harness initial={{ top: 32_007, left: 0, diffAnchor: { index: 500, offset: 7 } }} />
+    )
+  );
+  await act(() => vi.advanceTimersByTime(20));
+  await act(() => root.render(null));
+  await settle();
+  expect(saved).toBeNull();
+});
+
+it('uses actual user movement when resize precedes the queued scroll event', async () => {
+  interruptFirstWrite('pointerdown');
+  await act(() =>
+    root.render(
+      <Harness initial={{ top: 32_007, left: 0, diffAnchor: { index: 500, offset: 7 } }} />
+    )
+  );
+  await settle();
+  const viewport = container.querySelector<HTMLDivElement>('[data-viewport]')!;
+  await act(() => {
+    viewport.scrollTop = 150;
+    width = 640;
+    for (const callback of observers) {
+      callback([], {} as ResizeObserver);
+    }
+  });
+  await settle();
+  expect(saved).toMatchObject({ diffAnchor: { index: 2, offset: 22 } });
+});

@@ -1,4 +1,3 @@
-import { useVirtualizer } from '@tanstack/react-virtual';
 import { type RefObject, useMemo } from 'react';
 import { withOccurrenceKeys } from '@/client/lib/list-keys';
 import { getDiffLineBackground, getDiffLinePrefix, getDiffLineTextColor } from '@/lib/diff/styles';
@@ -92,19 +91,8 @@ export function DiffLines({
   scrollState,
   onScrollStateChange,
 }: DiffLinesProps) {
-  const virtualized = lines.length > 200;
-  const virtualizer = useVirtualizer({
-    count: lines.length,
-    getScrollElement: () => scrollContainerRef.current,
-    estimateSize: () => 16,
-    overscan: 8,
-    enabled: virtualized,
-  });
-
-  const measurementVersion = useDiffScroll({
+  const { virtualizer, virtualized, measurementVersion } = useDiffScroll({
     lines,
-    virtualizer,
-    virtualized,
     scrollContainerRef,
     scrollState,
     onScrollStateChange,
