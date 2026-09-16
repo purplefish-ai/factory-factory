@@ -1,0 +1,27 @@
+docs/architecture/workspace-state.md
+  s_abc5d8e83263c5::t_2c51fca86d264f 50-56
+src/backend/trpc/admin.router.test.ts
+  s_abc5d8e83263c5::t_bbcd5c80e3bcd9 51,53,128,136,516-549
+src/backend/trpc/admin.trpc.ts
+  s_abc5d8e83263c5::t_fa9cb47b4425cf 14,286
+src/shared/schemas/export-data.schema.test.ts
+  s_abc5d8e83263c5::t_4f82bd0e210efd 28,299-304
+src/shared/schemas/export-data.schema.ts
+  s_abc5d8e83263c5::t_898ddc11ea00c3 65,67
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f261fc501a68c5089cd2f3e85d6d0c252568c642",
+  "prompts": {},
+  "sessions": {
+    "s_abc5d8e83263c5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0aa3d-0654-7a32-9673-7e1e42bf2976",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "martin-purplefish <martin@purplefish.com>"
+    }
+  }
+}
