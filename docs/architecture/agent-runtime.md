@@ -73,10 +73,35 @@ ACP's offline turn/cancellation, session options, resume, and file audit suites,
 including coalesced results stamped with the last user UUID and the new UUID
 array. These checks do not exercise live model streaming or prompt persistence.
 
-Factory Factory's session init/load paths do not forward a custom system prompt;
-ACP's bare Claude Code preset retains its existing prompt snapshot behavior.
-Before changing that metadata, revisit the SDK's custom/append prompt snapshot
-semantics. See
+### Session prompts
+
+ACP init/load uses the provider's built-in instructions; Factory Factory does
+not supply a custom system prompt. Task prompts are sent as ordinary session
+messages:
+
+- Issue starts: `src/shared/issue-start-prompt.ts`, shared with the editable UI
+  preview. It supplies untrusted issue data, the implementation/PR outcome,
+  repository-defined verification, and screenshot/PR metadata.
+- PR maintenance: `prompts/ratchet/dispatch.md`, rendered by
+  `src/backend/prompts/ratchet-dispatch.ts` with PR context and reply
+  preferences.
+- Quick actions: `prompts/quick-actions/` (see below).
+- Auto-iteration: `src/backend/services/auto-iteration/service/prompts.ts`.
+  Implementation turns make one focused change; the loop owns verification and
+  keep/revert decisions. Measurement and critique turns retain their JSON
+  contracts, and the final turn creates a PR for accepted changes.
+- Child workspace starts append `buildChildWorkspaceContext` through workspace
+  initialization. Conversation-based branch renaming sends a separate prompt
+  through the rename interceptor.
+
+Legacy workflow templates and unused system-prompt construction have been
+removed. Stored workflow IDs still select session behavior and permissions. Keep
+prompts focused on outcomes and actual automation contracts, and defer
+repository-specific tools and verification commands to repository guidance.
+
+Claude ACP retains its bare Claude Code preset and existing prompt snapshot
+behavior. Before introducing custom system-prompt metadata, revisit the SDK's
+custom/append snapshot semantics. See
 [the upgrade validation](../superpowers/plans/2026-09-09-remaining-dependencies.md).
 
 ## Session lifecycle ownership
@@ -148,8 +173,8 @@ Workspace quick actions are markdown-driven from `prompts/quick-actions/`
 (frontmatter metadata + prompt body). Agent quick actions create follow-up
 sessions and auto-send the prompt content once the session is ready.
 
-`prompts/` is copied into `dist/` on build, so a new prompt file ships without a
-code change.
+`prompts/` is copied into `dist/` on build and packaged alongside the unpacked
+Electron backend, so a new prompt file ships without a code change.
 
 Electron fatal-error handlers await backend shutdown before quitting. Concurrent
 fatal errors share one shutdown attempt. Cleanup failures and a 30-second

@@ -20,9 +20,7 @@ vi.mock('@/backend/services/settings', () => ({
   },
 }));
 
-vi.mock('./session.prompt-builder', () => ({
-  sessionPromptBuilder: {},
-}));
+vi.mock('./session.prompt-builder', () => ({}));
 
 vi.mock('./session.repository', () => ({
   sessionRepository: {},

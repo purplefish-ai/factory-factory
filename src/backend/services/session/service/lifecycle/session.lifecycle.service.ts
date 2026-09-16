@@ -178,7 +178,6 @@ export class SessionLifecycleService {
   getSessionOptions(sessionId: string): Promise<{
     workingDir: string;
     resumeProviderSessionId: string | undefined;
-    systemPrompt: string | undefined;
     model: string;
     workspaceStatus: WorkspaceStatus;
   } | null> {

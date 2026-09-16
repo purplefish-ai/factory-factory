@@ -24,7 +24,6 @@ describe('session services composition', () => {
     vi.spyOn(sessionLifecycleService, 'getSessionOptions').mockResolvedValue({
       workingDir: '/tmp/worktree',
       resumeProviderSessionId: undefined,
-      systemPrompt: undefined,
       model: 'sonnet',
       workspaceStatus: WorkspaceStatus.READY,
     });

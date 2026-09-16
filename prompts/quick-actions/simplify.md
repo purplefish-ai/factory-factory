@@ -5,4 +5,6 @@ type: agent
 icon: sparkles
 ---
 
-Run /code-simplifier to simplify and refine the recently modified code.
+Simplify the recent changes in this workspace while preserving their behavior.
+Follow repository conventions, keep the scope focused, verify the result, and
+summarize what you improved.

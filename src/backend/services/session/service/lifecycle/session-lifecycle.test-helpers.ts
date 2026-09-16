@@ -69,7 +69,6 @@ export type LifecycleHarness = {
     | 'getSessionById'
     | 'getSessionsByWorkspaceId'
     | 'getWorkspaceById'
-    | 'getProjectById'
     | 'markWorkspaceHasHadSessions'
     | 'updateSession'
     | 'updateSessionIfStatus'
@@ -406,7 +405,6 @@ export function createLifecycleTestWorkspace(
     hasHadSessions: false,
     createdAt: new Date('2026-07-15T00:00:00.000Z'),
     updatedAt: new Date('2026-07-15T00:00:00.000Z'),
-    runScriptPort: null,
     ...overrides,
   };
 }
@@ -481,7 +479,6 @@ export function createLifecycleHarness(
         ])
     ),
     getWorkspaceById: vi.fn<SessionRepository['getWorkspaceById']>(async () => workspace),
-    getProjectById: vi.fn<SessionRepository['getProjectById']>(async () => null),
     markWorkspaceHasHadSessions: vi.fn<SessionRepository['markWorkspaceHasHadSessions']>(
       async () => undefined
     ),
@@ -496,7 +493,6 @@ export function createLifecycleHarness(
     | 'getSessionById'
     | 'getSessionsByWorkspaceId'
     | 'getWorkspaceById'
-    | 'getProjectById'
     | 'markWorkspaceHasHadSessions'
     | 'updateSession'
     | 'updateSessionIfStatus'
@@ -650,17 +646,8 @@ export function createLifecycleHarness(
   const lifecycleGate = new SessionLifecycleGate({
     isRuntimeStopInProgress: (sessionId) => runtimeManager.isStopInProgress(sessionId),
   });
-  const promptBuilder = {
-    shouldInjectBranchRename: vi.fn(() => false),
-    buildSystemPrompt: vi.fn(() => ({
-      workflowPrompt: undefined,
-      systemPrompt: 'system prompt',
-      injectedBranchRename: false,
-    })),
-  };
   const contextService = new SessionContextService({
     repository,
-    promptBuilder,
     permissionPresetPort: {
       getPermissionPreset:
         overrides.getPermissionPreset ??

@@ -364,7 +364,6 @@ export class SessionStartupCoordinator {
       purpose: options.purpose,
       workingDir: sessionContext.workingDir,
       model: options.model ?? sessionContext.model,
-      systemPrompt: sessionContext.systemPrompt,
       permissionPreset,
       sessionId,
       resumeProviderSessionId: session.providerSessionId ?? undefined,

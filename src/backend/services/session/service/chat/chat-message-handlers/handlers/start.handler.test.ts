@@ -55,7 +55,6 @@ describe('createStartHandler', () => {
       mocks.getSessionOptions.mockResolvedValue({
         workingDir: '/tmp/work',
         resumeProviderSessionId: undefined,
-        systemPrompt: undefined,
         model: 'sonnet',
         workspaceStatus,
       });
