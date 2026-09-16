@@ -1,0 +1,23 @@
+docs/architecture/integrations.md
+  s_abc5d8e83263c5::t_95b24ef226dd97 30-33
+src/backend/orchestration/event-collector.linear.test.ts
+  s_abc5d8e83263c5::t_726a1b8c1b019c 8,18-31,55-58,65,71-113
+src/backend/orchestration/event-collector.orchestrator.ts
+  s_abc5d8e83263c5::t_b33365e2d76b9f 300,447,449-454,457,610-615
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "99c4b81a3cb4217e6196161df5c6e665546461ea",
+  "prompts": {},
+  "sessions": {
+    "s_abc5d8e83263c5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0aa3d-0654-7a32-9673-7e1e42bf2976",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "martin-purplefish <martin@purplefish.com>"
+    }
+  }
+}
