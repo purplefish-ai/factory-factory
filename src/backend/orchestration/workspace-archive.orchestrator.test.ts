@@ -10,6 +10,7 @@ vi.mock('./workspace-children.orchestrator', () => ({
 }));
 
 vi.mock('@/backend/services/workspace', () => ({
+  workspaceActivityService: { clearWorkspace: vi.fn() },
   workspaceMaintenanceService: {
     findStaleArchiving: vi.fn(),
   },

@@ -2,6 +2,7 @@ import { ApplicationError } from '@/backend/lib/application-error';
 import { createLogger } from '@/backend/services/logger.service';
 import type { SessionStopReason } from '@/backend/services/session';
 import {
+  workspaceActivityService,
   workspaceMaintenanceService,
   workspaceStateMachine,
   worktreeLifecycleService,
@@ -58,6 +59,9 @@ export async function cleanupWorkspaceRuntimeResources(
 ): Promise<void> {
   const { runScriptService, sessionLifecycleService, terminalService } = services;
   const sessionStopReason = operation === 'archive' ? 'WORKSPACE_ARCHIVED' : 'SYSTEM_STOP';
+
+  // Stopping sessions must not announce completion while worktree cleanup is pending.
+  workspaceActivityService.clearWorkspace(workspaceId);
 
   const cleanupResults = await Promise.allSettled([
     sessionLifecycleService.stopWorkspaceSessions(workspaceId, {
