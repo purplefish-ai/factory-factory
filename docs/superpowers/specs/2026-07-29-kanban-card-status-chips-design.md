@@ -20,9 +20,9 @@ agent activity, pending user actions, CI flow, pull request state, and terminal
 states.
 
 The Kanban card maps `WAITING_FOR_CI` to the label “CI Running.” Other reasons
-use their existing labels, including “Agent working,” “Needs permission,”
-“Ready to merge,” and “Merged.” This label override remains local to the card so
-other surfaces do not change wording.
+use their existing labels, including “Agent working,” “Needs permission,” “Ready
+to merge,” and “Merged.” This label override remains local to the card so other
+surfaces do not change wording.
 
 The chip's visual treatment follows the existing status-reason tone:
 

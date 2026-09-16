@@ -1,8 +1,8 @@
 # Settings
 
-Open Settings from the app navigation. General Settings includes IDE preferences,
-chat defaults, and server logs. Project Settings controls the selected project's
-factory configuration and issue provider.
+Open Settings from the app navigation. General Settings includes IDE
+preferences, chat defaults, and server logs. Project Settings controls the
+selected project's factory configuration and issue provider.
 
 ## Custom IDE commands
 
@@ -24,8 +24,8 @@ older selection does not replace a newer selection.
 ## Factory configuration
 
 The editor waits for the selected project's `factory-factory.json` query to
-succeed. Loading and failed queries do not count as an absent configuration.
-A failed query disables editing and offers **Retry**; a successful query that
+succeed. Loading and failed queries do not count as an absent configuration. A
+failed query disables editing and offers **Retry**; a successful query that
 finds no file allows creating one.
 
 Use **Edit factory configuration** to edit the loaded scripts. If loading fails

@@ -2,39 +2,38 @@
 
 ## Problem
 
-Branch naming currently uses three wildcard tool interceptors:
-`branch-rename`, `pre-push-rename`, and `pre-pr-rename`. Each interceptor calls
-`extractMatchingCommand` with a different regular expression, so every tool
-call is scanned three times across its start and completion lifecycle. The
+Branch naming currently uses three wildcard tool interceptors: `branch-rename`,
+`pre-push-rename`, and `pre-pr-rename`. Each interceptor calls
+`extractMatchingCommand` with a different regular expression, so every tool call
+is scanned three times across its start and completion lifecycle. The
 implementations, registrations, and tests are also split across three files
 despite belonging to one branch-naming concern.
 
 ## Decision
 
-Replace the three interceptors with one stateful
-`BranchNamingInterceptor` in
-`src/backend/interceptors/branch-naming.interceptor.ts`. The module will
-export only:
+Replace the three interceptors with one stateful `BranchNamingInterceptor` in
+`src/backend/interceptors/branch-naming.interceptor.ts`. The module will export
+only:
 
 - `createBranchNamingInterceptor()`
 - `branchNamingInterceptor`
 
 The legacy interceptor and factory exports will be removed.
 
-The interceptor will subscribe to all tools once and use a
-`[regex, handler]` table for the three triggers:
+The interceptor will subscribe to all tools once and use a `[regex, handler]`
+table for the three triggers:
 
 - `git branch -m` or `git branch -M`
 - `git push`
 - `gh pr create`
 
 `onToolStart` will call `extractMatchingCommand` once with a combined
-branch-naming regular expression. It will test the extracted command against
-the route table, synchronously record every matching route under a key made
-from `sessionId` and `toolUseId`, and then run the matching start handlers.
-Recording all matches before the first await prevents completion events from
-observing partially routed state. Commands containing multiple triggers will
-run every matching handler in table order.
+branch-naming regular expression. It will test the extracted command against the
+route table, synchronously record every matching route under a key made from
+`sessionId` and `toolUseId`, and then run the matching start handlers. Recording
+all matches before the first await prevents completion events from observing
+partially routed state. Commands containing multiple triggers will run every
+matching handler in table order.
 
 `onToolComplete` will consume the recorded routes and run their completion
 handlers without scanning the command again.
@@ -44,11 +43,11 @@ handlers without scanning the command again.
 The unified interceptor will retain each trigger's current timing and side
 effects:
 
-- A completed manual branch rename invalidates the workspace Git-state cache.
-  If the tool succeeded, the interceptor resolves the current branch from
-  `HEAD` and atomically stores it as an agent-chosen branch.
-- A push trigger attempts to replace an auto-generated branch before the push.
-  A successful push resets PR-discovery backoff.
+- A completed manual branch rename invalidates the workspace Git-state cache. If
+  the tool succeeded, the interceptor resolves the current branch from `HEAD`
+  and atomically stores it as an agent-chosen branch.
+- A push trigger attempts to replace an auto-generated branch before the push. A
+  successful push resets PR-discovery backoff.
 - A PR-create trigger attempts the same pre-command rename. After successful PR
   creation, it deletes the superseded remote branch only when the old and new
   remote refs both still resolve to `HEAD`.

@@ -6,7 +6,8 @@ expectsPR: false
 
 # Exploration Workflow
 
-You are exploring the codebase to understand how things work or answer questions.
+You are exploring the codebase to understand how things work or answer
+questions.
 
 ## When to Use This Workflow
 
@@ -19,21 +20,25 @@ You are exploring the codebase to understand how things work or answer questions
 ## Exploration Techniques
 
 ### 1. Start with Entry Points
+
 - Find main files, routers, or handlers
 - Trace the code path from user action to implementation
 - Identify key modules and their responsibilities
 
 ### 2. Use Search Effectively
+
 - `Grep` for specific function or variable names
 - `Glob` for file patterns (e.g., `**/*.test.ts`)
 - Read file headers and exports first
 
 ### 3. Build Mental Models
+
 - Map out module dependencies
 - Identify core abstractions and patterns
 - Note important files and their purposes
 
 ### 4. Document Findings
+
 - Summarize what you learned
 - Note important files and code locations
 - Explain patterns and conventions used
@@ -48,6 +53,7 @@ You are exploring the codebase to understand how things work or answer questions
 ## Output Format
 
 When answering questions, include:
+
 - Direct answer to the question
 - Relevant file paths with line numbers
 - Brief explanation of how the code works

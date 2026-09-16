@@ -2,31 +2,38 @@
 
 Status: superseded by PR #2023
 
-**Risk**: High
-**Depends on**: Stage 4 (Claude protocol in core)
-**Estimated scope**: ~30 files moved/adapted, ~20 files modified in desktop
+**Risk**: High **Depends on**: Stage 4 (Claude protocol in core) **Estimated
+scope**: ~30 files moved/adapted, ~20 files modified in desktop
 
 ## Goal
 
-Extract the stateful domain services for ratchet, workspace, and session into core. After this stage, core contains all the workspace execution primitives needed by a cloud consumer. Desktop becomes a thin wiring layer that provides storage implementations and infrastructure deps.
+Extract the stateful domain services for ratchet, workspace, and session into
+core. After this stage, core contains all the workspace execution primitives
+needed by a cloud consumer. Desktop becomes a thin wiring layer that provides
+storage implementations and infrastructure deps.
 
 ## Problem
 
 Domain services currently:
-1. Import resource accessors directly (`workspaceAccessor`, `claudeSessionAccessor`)
+
+1. Import resource accessors directly (`workspaceAccessor`,
+   `claudeSessionAccessor`)
 2. Import logger and config singletons
 3. Define bridge interfaces that reference Prisma types
 4. Emit events consumed by the orchestration layer
 
-These services need to accept storage interfaces and infrastructure deps via injection while preserving their existing behavior.
+These services need to accept storage interfaces and infrastructure deps via
+injection while preserving their existing behavior.
 
 ## What Gets Done
 
-This stage is broken into 3 sub-phases, each independently verifiable. Do them in order.
+This stage is broken into 3 sub-phases, each independently verifiable. Do them
+in order.
 
 ### Sub-phase 5A: Extract Ratchet Domain (Cleanest Boundaries)
 
 The ratchet domain is the ideal first extraction target because:
+
 - All cross-domain deps are behind bridge interfaces
 - Well-defined data access pattern (workspace accessor only)
 - Self-contained polling/dispatch logic
@@ -34,33 +41,41 @@ The ratchet domain is the ideal first extraction target because:
 
 **Files to move:**
 
-| Source | Destination |
-|--------|-------------|
-| `domains/ratchet/bridges.ts` | `packages/core/src/ratchet/bridges.ts` |
-| `domains/ratchet/ratchet.service.ts` | `packages/core/src/ratchet/ratchet.service.ts` |
-| `domains/ratchet/ci-fixer.service.ts` | `packages/core/src/ratchet/ci-fixer.service.ts` |
-| `domains/ratchet/ci-monitor.service.ts` | `packages/core/src/ratchet/ci-monitor.service.ts` |
-| `domains/ratchet/fixer-session.service.ts` | `packages/core/src/ratchet/fixer-session.service.ts` |
+| Source                                      | Destination                                           |
+| ------------------------------------------- | ----------------------------------------------------- |
+| `domains/ratchet/bridges.ts`                | `packages/core/src/ratchet/bridges.ts`                |
+| `domains/ratchet/ratchet.service.ts`        | `packages/core/src/ratchet/ratchet.service.ts`        |
+| `domains/ratchet/ci-fixer.service.ts`       | `packages/core/src/ratchet/ci-fixer.service.ts`       |
+| `domains/ratchet/ci-monitor.service.ts`     | `packages/core/src/ratchet/ci-monitor.service.ts`     |
+| `domains/ratchet/fixer-session.service.ts`  | `packages/core/src/ratchet/fixer-session.service.ts`  |
 | `domains/ratchet/reconciliation.service.ts` | `packages/core/src/ratchet/reconciliation.service.ts` |
 
 **Dependency changes per file:**
 
 `ratchet.service.ts`:
-- `import { workspaceAccessor }` -> accept `WorkspaceStorage` via constructor/configure
+
+- `import { workspaceAccessor }` -> accept `WorkspaceStorage` via
+  constructor/configure
 - `import { createLogger }` -> accept `CreateLogger` via constructor/configure
-- `import { configService }` -> accept `CoreServiceConfig` via constructor/configure
-- `import { SERVICE_INTERVAL_MS, SERVICE_LIMITS }` -> use `CoreServiceConfig` values
+- `import { configService }` -> accept `CoreServiceConfig` via
+  constructor/configure
+- `import { SERVICE_INTERVAL_MS, SERVICE_LIMITS }` -> use `CoreServiceConfig`
+  values
 - Bridge interfaces stay the same (already in bridges.ts)
 
 `ci-fixer.service.ts`:
+
 - Same pattern: replace accessor/logger/config singletons with injected deps
 
 `fixer-session.service.ts`:
+
 - `import { claudeSessionAccessor }` -> accept `SessionStorage` via deps
 - `import { workspaceAccessor }` -> accept `WorkspaceStorage` via deps
 
 `bridges.ts`:
-- `import type { CIStatus } from '@prisma-gen/client'` -> `from '../types/enums.js'` (already in core from Stage 2)
+
+- `import type { CIStatus } from '@prisma-gen/client'` ->
+  `from '../types/enums.js'` (already in core from Stage 2)
 
 **Service initialization pattern:**
 
@@ -117,34 +132,37 @@ ratchetService.configure({
 
 ### Sub-phase 5B: Extract Workspace State Services
 
-Extract workspace services that operate on pure state and storage, leaving desktop-specific ones behind.
+Extract workspace services that operate on pure state and storage, leaving
+desktop-specific ones behind.
 
 **Move to core:**
 
-| Source | Destination | Notes |
-|--------|-------------|-------|
-| `domains/workspace/bridges.ts` | `packages/core/src/workspace/bridges.ts` | Bridge interface definitions |
-| `domains/workspace/lifecycle/state-machine.service.ts` | `packages/core/src/workspace/state-machine.service.ts` | CAS-based state transitions |
-| `domains/workspace/lifecycle/activity.service.ts` | `packages/core/src/workspace/activity.service.ts` | Session running/idle tracking |
-| `domains/workspace/state/workspace-runtime-state.ts` | `packages/core/src/workspace/runtime-state.ts` | Runtime state type |
-| `domains/workspace/query/workspace-query.service.ts` | Evaluate -- may stay | Complex bridge deps |
+| Source                                                 | Destination                                            | Notes                         |
+| ------------------------------------------------------ | ------------------------------------------------------ | ----------------------------- |
+| `domains/workspace/bridges.ts`                         | `packages/core/src/workspace/bridges.ts`               | Bridge interface definitions  |
+| `domains/workspace/lifecycle/state-machine.service.ts` | `packages/core/src/workspace/state-machine.service.ts` | CAS-based state transitions   |
+| `domains/workspace/lifecycle/activity.service.ts`      | `packages/core/src/workspace/activity.service.ts`      | Session running/idle tracking |
+| `domains/workspace/state/workspace-runtime-state.ts`   | `packages/core/src/workspace/runtime-state.ts`         | Runtime state type            |
+| `domains/workspace/query/workspace-query.service.ts`   | Evaluate -- may stay                                   | Complex bridge deps           |
 
 **Stay in desktop:**
 
-| File | Reason |
-|------|--------|
-| `lifecycle/creation.service.ts` | Depends on git-ops, worktree, orchestration |
-| `lifecycle/data.service.ts` | Thin wrapper around accessor; stays near Prisma |
-| `worktree/worktree-lifecycle.service.ts` | OS-level git worktree management |
-| `query/workspace-query.service.ts` | Many bridge deps; may stay in desktop |
+| File                                     | Reason                                          |
+| ---------------------------------------- | ----------------------------------------------- |
+| `lifecycle/creation.service.ts`          | Depends on git-ops, worktree, orchestration     |
+| `lifecycle/data.service.ts`              | Thin wrapper around accessor; stays near Prisma |
+| `worktree/worktree-lifecycle.service.ts` | OS-level git worktree management                |
+| `query/workspace-query.service.ts`       | Many bridge deps; may stay in desktop           |
 
 **Dependency changes:**
 
 `state-machine.service.ts`:
+
 - Replace `workspaceAccessor` with `WorkspaceStorage`
 - Replace `createLogger` with injected `CreateLogger`
 
 `activity.service.ts`:
+
 - Replace `createLogger` with injected `CreateLogger`
 - This is mostly in-memory state; minimal storage deps
 
@@ -154,30 +172,31 @@ Extract session management services that will be used by cloud.
 
 **Move to core:**
 
-| Source | Destination | Notes |
-|--------|-------------|-------|
-| `domains/session/bridges.ts` | `packages/core/src/session/bridges.ts` | Bridge interface definitions |
-| `domains/session/session-domain.service.ts` | `packages/core/src/session/session-domain.service.ts` | In-memory state (Map-based) |
-| `domains/session/lifecycle/session.service.ts` | `packages/core/src/session/session.service.ts` | Start/stop/create sessions |
-| `domains/session/lifecycle/session.process-manager.ts` | `packages/core/src/session/process-manager.ts` | Process lifecycle |
-| `domains/session/lifecycle/session.repository.ts` | `packages/core/src/session/repository.ts` | Session CRUD |
-| `domains/session/lifecycle/session.prompt-builder.ts` | `packages/core/src/session/prompt-builder.ts` | Prompt construction |
-| `domains/session/store/*.ts` | `packages/core/src/session/store/*.ts` | Session store (hydrator, queue, transcript, etc.) |
-| `domains/session/data/session-data.service.ts` | `packages/core/src/session/session-data.service.ts` | Session data operations |
+| Source                                                 | Destination                                           | Notes                                             |
+| ------------------------------------------------------ | ----------------------------------------------------- | ------------------------------------------------- |
+| `domains/session/bridges.ts`                           | `packages/core/src/session/bridges.ts`                | Bridge interface definitions                      |
+| `domains/session/session-domain.service.ts`            | `packages/core/src/session/session-domain.service.ts` | In-memory state (Map-based)                       |
+| `domains/session/lifecycle/session.service.ts`         | `packages/core/src/session/session.service.ts`        | Start/stop/create sessions                        |
+| `domains/session/lifecycle/session.process-manager.ts` | `packages/core/src/session/process-manager.ts`        | Process lifecycle                                 |
+| `domains/session/lifecycle/session.repository.ts`      | `packages/core/src/session/repository.ts`             | Session CRUD                                      |
+| `domains/session/lifecycle/session.prompt-builder.ts`  | `packages/core/src/session/prompt-builder.ts`         | Prompt construction                               |
+| `domains/session/store/*.ts`                           | `packages/core/src/session/store/*.ts`                | Session store (hydrator, queue, transcript, etc.) |
+| `domains/session/data/session-data.service.ts`         | `packages/core/src/session/session-data.service.ts`   | Session data operations                           |
 
 **Stay in desktop:**
 
-| File | Reason |
-|------|--------|
-| `chat/chat-connection.service.ts` | WebSocket-coupled |
-| `chat/chat-event-forwarder.service.ts` | Desktop notification bridge |
-| `chat/chat-message-handlers.service.ts` | WebSocket message routing |
+| File                                       | Reason                             |
+| ------------------------------------------ | ---------------------------------- |
+| `chat/chat-connection.service.ts`          | WebSocket-coupled                  |
+| `chat/chat-event-forwarder.service.ts`     | Desktop notification bridge        |
+| `chat/chat-message-handlers.service.ts`    | WebSocket message routing          |
 | `chat/chat-message-handlers/handlers/*.ts` | Individual handler implementations |
-| `logging/session-file-logger.service.ts` | Desktop filesystem logging |
+| `logging/session-file-logger.service.ts`   | Desktop filesystem logging         |
 
 **Dependency changes:**
 
-Same pattern as ratchet: replace accessor/logger/config singletons with `deps` injection.
+Same pattern as ratchet: replace accessor/logger/config singletons with `deps`
+injection.
 
 ## New Files
 
@@ -237,7 +256,8 @@ packages/core/src/
 
 ### Port all existing domain tests to core
 
-Each moved service file has co-located tests that move with it. Tests need their mock setups updated:
+Each moved service file has co-located tests that move with it. Tests need their
+mock setups updated:
 
 ```typescript
 // packages/core/src/ratchet/ratchet.service.test.ts
@@ -302,44 +322,49 @@ pnpm check:fix
 
 ## Risks and Mitigations
 
-| Risk | Likelihood | Mitigation |
-|------|-----------|------------|
-| Service initialization order issues | Medium | Desktop wiring in `domain-bridges.orchestrator.ts` already handles order; core just needs `configure()` called before `start()` |
-| Missing bridge method in interface | Medium | TypeScript will catch at compile time when desktop wires bridges |
-| Session store complexity | High | The session store has ~9 files with complex state management; move as a group, don't split |
-| Event emission changes | Medium | Services emit events via typed emitters; ensure event types are exported from core |
-| `reconciliation.service.ts` imports orchestration | Known | This is an existing exemption in dependency-cruiser; in core, reconciliation accepts a `reinitialize` callback instead |
+| Risk                                              | Likelihood | Mitigation                                                                                                                      |
+| ------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Service initialization order issues               | Medium     | Desktop wiring in `domain-bridges.orchestrator.ts` already handles order; core just needs `configure()` called before `start()` |
+| Missing bridge method in interface                | Medium     | TypeScript will catch at compile time when desktop wires bridges                                                                |
+| Session store complexity                          | High       | The session store has ~9 files with complex state management; move as a group, don't split                                      |
+| Event emission changes                            | Medium     | Services emit events via typed emitters; ensure event types are exported from core                                              |
+| `reconciliation.service.ts` imports orchestration | Known      | This is an existing exemption in dependency-cruiser; in core, reconciliation accepts a `reinitialize` callback instead          |
 
 ## Design Decisions
 
 ### Why ratchet first?
 
 Ratchet has:
+
 - The cleanest bridge architecture (4 bridges, all well-defined)
 - No WebSocket coupling
 - No frontend coupling
 - Self-contained polling loop
-- Most representative of the "cloud use case" (auto-fix runs without user interaction)
+- Most representative of the "cloud use case" (auto-fix runs without user
+  interaction)
 
 If the extraction pattern works for ratchet, it works for everything.
 
 ### What stays in desktop permanently?
 
-| Module | Reason |
-|--------|--------|
-| `chat/` (all WebSocket handlers) | WebSocket/tRPC transport coupling |
-| `terminal/` domain | `node-pty` native module |
-| `run-script/` domain | Local process management, port allocation |
-| `github/` domain | `gh` CLI wrapper (desktop-specific) |
-| `worktree/` service | OS-level git worktree management |
-| `orchestration/` layer | Desktop-specific wiring; cloud has its own |
-| `resource_accessors/` | Prisma implementations of storage interfaces |
-| `routers/` | tRPC router definitions |
-| `middleware/` | Express middleware |
+| Module                           | Reason                                       |
+| -------------------------------- | -------------------------------------------- |
+| `chat/` (all WebSocket handlers) | WebSocket/tRPC transport coupling            |
+| `terminal/` domain               | `node-pty` native module                     |
+| `run-script/` domain             | Local process management, port allocation    |
+| `github/` domain                 | `gh` CLI wrapper (desktop-specific)          |
+| `worktree/` service              | OS-level git worktree management             |
+| `orchestration/` layer           | Desktop-specific wiring; cloud has its own   |
+| `resource_accessors/`            | Prisma implementations of storage interfaces |
+| `routers/`                       | tRPC router definitions                      |
+| `middleware/`                    | Express middleware                           |
 
 ### Why `configure()` instead of constructor injection?
 
-The existing codebase uses a `configure()` pattern for bridge injection (called at startup by `domain-bridges.orchestrator.ts`). Extending this pattern to storage and infra deps maintains consistency with the existing architecture. Services are module-level singletons that get configured once at startup.
+The existing codebase uses a `configure()` pattern for bridge injection (called
+at startup by `domain-bridges.orchestrator.ts`). Extending this pattern to
+storage and infra deps maintains consistency with the existing architecture.
+Services are module-level singletons that get configured once at startup.
 
 ## Out of Scope
 

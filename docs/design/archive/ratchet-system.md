@@ -4,7 +4,10 @@ Status: superseded by src/backend/services/ratchet/
 
 ## Overview
 
-The "Ratchet" is a centralized PR progression system that replaces the current separate CI monitor and PR review monitor services. It continuously advances each PR toward merge by detecting the current state and triggering the appropriate action.
+The "Ratchet" is a centralized PR progression system that replaces the current
+separate CI monitor and PR review monitor services. It continuously advances
+each PR toward merge by detecting the current state and triggering the
+appropriate action.
 
 ## Current Architecture (Problems)
 
@@ -23,9 +26,13 @@ Today we have two independent polling services:
 ```
 
 **Problems:**
-1. **Duplicated logic**: Both services query workspaces, fetch PR data, manage sessions
-2. **No coordination**: CI fixer doesn't know about review comments; review fixer doesn't know about CI status
-3. **Missing states**: Merge conflicts aren't handled; successful PRs just sit there
+
+1. **Duplicated logic**: Both services query workspaces, fetch PR data, manage
+   sessions
+2. **No coordination**: CI fixer doesn't know about review comments; review
+   fixer doesn't know about CI status
+3. **Missing states**: Merge conflicts aren't handled; successful PRs just sit
+   there
 4. **Inefficient polling**: Two services hitting GitHub API separately
 5. **Complex configuration**: Separate toggles for CI fix and PR review fix
 
@@ -363,7 +370,8 @@ You are resolving merge conflicts between this PR branch and the base branch (us
 
 ### 6. Review Fixer Enhancements
 
-The review fixer should post a comment and resolve review threads after addressing comments:
+The review fixer should post a comment and resolve review threads after
+addressing comments:
 
 ```typescript
 // Enhanced prompt for review fixer
@@ -394,7 +402,8 @@ prompts/workflows/
 
 ### 8. Admin UI Changes
 
-Replace the separate CI and PR Review settings sections with a unified Ratchet section:
+Replace the separate CI and PR Review settings sections with a unified Ratchet
+section:
 
 ```tsx
 // src/client/routes/admin.tsx
@@ -438,17 +447,20 @@ function RatchetSettingsSection() {
 ## Migration Plan
 
 ### Phase 1: Add Ratchet Service (Parallel)
+
 1. Create `ratchet.service.ts` with the new state machine
 2. Add new schema fields with migration
 3. Keep existing CI monitor and PR review monitor running
 4. Add feature flag to enable ratchet (default off)
 
 ### Phase 2: Deprecate Old Services
+
 1. When ratchet is enabled, stop the old services
 2. Migrate settings: `autoFixCiIssues` → `ratchetAutoFixCi`, etc.
 3. Log warnings when old settings are used
 
 ### Phase 3: Remove Old Services
+
 1. Remove `ci-monitor.service.ts` and `pr-review-monitor.service.ts`
 2. Remove old settings fields
 3. Update all documentation
@@ -530,7 +542,8 @@ sequenceDiagram
 
 ## Handling State Transitions During Active Work
 
-A critical scenario: **What happens if a fixer is working on one issue and the state changes?**
+A critical scenario: **What happens if a fixer is working on one issue and the
+state changes?**
 
 ### Example: Review Fixer causes CI failure
 
@@ -546,11 +559,14 @@ Timeline:
 
 ### Design: Single Active Fixer Per Workspace
 
-The key insight is that **only one fixer should be active at a time per workspace**. When the state changes, the Ratchet notifies the active fixer session, which handles the new issue inline.
+The key insight is that **only one fixer should be active at a time per
+workspace**. When the state changes, the Ratchet notifies the active fixer
+session, which handles the new issue inline.
 
 #### Notify the Active Fixer
 
-The active fixer session receives a message about the new issue and handles it inline:
+The active fixer session receives a message about the new issue and handles it
+inline:
 
 ```typescript
 async executeRatchetAction(workspace, state, prState, settings): Promise<RatchetAction> {
@@ -601,16 +617,20 @@ async executeRatchetAction(workspace, state, prState, settings): Promise<Ratchet
 
 ### Why This Approach
 
-1. **Context preservation**: The active Claude session has full context of what it was doing
-2. **Efficiency**: No need to start a new session; the current one can handle the new issue
-3. **Natural flow**: A developer would also handle a CI failure inline rather than context-switching
+1. **Context preservation**: The active Claude session has full context of what
+   it was doing
+2. **Efficiency**: No need to start a new session; the current one can handle
+   the new issue
+3. **Natural flow**: A developer would also handle a CI failure inline rather
+   than context-switching
 4. **Simplicity**: One session manages the entire fix cycle
 
 ### State Priority
 
 When notifying an active fixer, follow this priority (most urgent first):
 
-1. **CI_FAILED** - Always notify immediately; CI must pass before anything else matters
+1. **CI_FAILED** - Always notify immediately; CI must pass before anything else
+   matters
 2. **MERGE_CONFLICT** - Notify; conflicts block mergeability
 3. **REVIEW_PENDING** - Can wait; only notify if fixer was doing something else
 
@@ -619,7 +639,8 @@ When notifying an active fixer, follow this priority (most urgent first):
 Each fixer workflow should include instructions to:
 
 1. **Check CI status after pushing**: Before considering the task complete
-2. **Handle interruptions**: If notified of a new issue, address it before continuing
+2. **Handle interruptions**: If notified of a new issue, address it before
+   continuing
 3. **Re-verify at the end**: Run full checks before declaring success
 
 ### Updated Workflow Prompts
@@ -697,34 +718,42 @@ sequenceDiagram
 
 ## Open Questions
 
-1. **Auto-merge safety**: Should auto-merge require approval first? Should it respect branch protection rules?
+1. **Auto-merge safety**: Should auto-merge require approval first? Should it
+   respect branch protection rules?
 
-2. **Conflict resolution strategy**: When resolving conflicts, should we prefer main or the feature branch? Should complex conflicts be flagged for human review?
+2. **Conflict resolution strategy**: When resolving conflicts, should we prefer
+   main or the feature branch? Should complex conflicts be flagged for human
+   review?
 
-3. **Review thread resolution**: GitHub's API for resolving review threads is limited. Should we rely on the comment mentioning reviewers, or try to use the API?
+3. **Review thread resolution**: GitHub's API for resolving review threads is
+   limited. Should we rely on the comment mentioning reviewers, or try to use
+   the API?
 
-4. **Rate limiting**: How do we handle GitHub API rate limits when checking many PRs?
+4. **Rate limiting**: How do we handle GitHub API rate limits when checking many
+   PRs?
 
-5. **Notification preferences**: Should users be notified when ratchet takes action? Via what channel?
+5. **Notification preferences**: Should users be notified when ratchet takes
+   action? Via what channel?
 
 6. **Fixer session lifecycle**: Should fixer sessions be:
-   - (A) Terminated when their specific issue is resolved (e.g., CI fixer stops when CI passes)?
+   - (A) Terminated when their specific issue is resolved (e.g., CI fixer stops
+     when CI passes)?
    - (B) Kept alive to handle subsequent issues in the same PR?
    - (C) Reused across multiple state transitions until PR is merged?
 
 ## Files to Change
 
-| File | Change |
-|------|--------|
-| `prisma/schema.prisma` | Add RatchetState enum, new fields |
-| `src/backend/services/ratchet.service.ts` | NEW - main ratchet service |
-| `src/backend/services/main-merger.service.ts` | NEW - merge conflict resolver |
-| `src/backend/services/ci-fixer.service.ts` | Minor updates for ratchet integration |
-| `src/backend/services/pr-review-fixer.service.ts` | Minor updates for ratchet integration |
-| `src/backend/server.ts` | Replace old services with ratchet |
-| `src/backend/app-context.ts` | Add ratchetService |
-| `src/backend/resource_accessors/workspace.accessor.ts` | Add ratchet query methods |
-| `src/backend/resource_accessors/user-settings.accessor.ts` | Add ratchet settings |
-| `src/backend/trpc/admin.trpc.ts` | Add ratchet endpoints |
-| `src/client/routes/admin.tsx` | Replace settings UI |
-| `prompts/workflows/main-merge.md` | NEW - merge conflict workflow |
+| File                                                       | Change                                |
+| ---------------------------------------------------------- | ------------------------------------- |
+| `prisma/schema.prisma`                                     | Add RatchetState enum, new fields     |
+| `src/backend/services/ratchet.service.ts`                  | NEW - main ratchet service            |
+| `src/backend/services/main-merger.service.ts`              | NEW - merge conflict resolver         |
+| `src/backend/services/ci-fixer.service.ts`                 | Minor updates for ratchet integration |
+| `src/backend/services/pr-review-fixer.service.ts`          | Minor updates for ratchet integration |
+| `src/backend/server.ts`                                    | Replace old services with ratchet     |
+| `src/backend/app-context.ts`                               | Add ratchetService                    |
+| `src/backend/resource_accessors/workspace.accessor.ts`     | Add ratchet query methods             |
+| `src/backend/resource_accessors/user-settings.accessor.ts` | Add ratchet settings                  |
+| `src/backend/trpc/admin.trpc.ts`                           | Add ratchet endpoints                 |
+| `src/client/routes/admin.tsx`                              | Replace settings UI                   |
+| `prompts/workflows/main-merge.md`                          | NEW - merge conflict workflow         |

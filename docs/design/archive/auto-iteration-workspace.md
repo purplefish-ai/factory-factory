@@ -4,38 +4,83 @@ Status: implemented
 
 ## Problem Statement
 
-Factory Factory workspaces currently operate as open-ended sessions: a user describes work, an LLM agent implements it, and the user reviews the result. There is no built-in mechanism for **goal-directed, metric-driven iteration** — where the system repeatedly attempts to improve code against a measurable target.
+Factory Factory workspaces currently operate as open-ended sessions: a user
+describes work, an LLM agent implements it, and the user reviews the result.
+There is no built-in mechanism for **goal-directed, metric-driven iteration** —
+where the system repeatedly attempts to improve code against a measurable
+target.
 
-Users want to define a quantitative goal (e.g., "get test pass rate from 60% to 95%", "reduce bundle size below 200KB", "lower p99 latency to <50ms") and have the system autonomously iterate toward it, keeping good changes and discarding bad ones.
+Users want to define a quantitative goal (e.g., "get test pass rate from 60% to
+95%", "reduce bundle size below 200KB", "lower p99 latency to <50ms") and have
+the system autonomously iterate toward it, keeping good changes and discarding
+bad ones.
 
 ## Solution Overview
 
 Introduce **auto-iteration workspaces** — a new workspace mode where:
 
-1. The user specifies a **test command** (produces measurable output) and a **target** (what "done" looks like).
-2. The system runs an autonomous loop: **measure → analyze → implement → measure → evaluate → critique → accept/reject**.
-3. Each iteration is logged to an **agent logbook** (JSON file in the worktree) with full traceability.
-4. The UI shows real-time progress: iteration count, metric trajectory, and the logbook.
+1. The user specifies a **test command** (produces measurable output) and a
+   **target** (what "done" looks like).
+2. The system runs an autonomous loop: **measure → analyze → implement → measure
+   → evaluate → critique → accept/reject**.
+3. Each iteration is logged to an **agent logbook** (JSON file in the worktree)
+   with full traceability.
+4. The UI shows real-time progress: iteration count, metric trajectory, and the
+   logbook.
 
-The loop terminates when the target is reached, max iterations are hit, or the user manually stops.
+The loop terminates when the target is reached, max iterations are hit, or the
+user manually stops.
 
 ### Prior Art: Karpathy's autoresearch
 
-This design is informed by [karpathy/autoresearch](https://github.com/karpathy/autoresearch), which applies the same core loop (modify → measure → keep/discard → repeat) to LLM training research. Key lessons incorporated from that project:
+This design is informed by
+[karpathy/autoresearch](https://github.com/karpathy/autoresearch), which applies
+the same core loop (modify → measure → keep/discard → repeat) to LLM training
+research. Key lessons incorporated from that project:
 
-1. **Context window hygiene** — autoresearch redirects all experiment output to a log file and reads only key metrics via `grep`, preventing context flooding. We adopt the same principle with four layers: input truncation, session recycling (fresh session every N iterations with a compact handoff), output redirection guidance in the system prompt, and the logbook as external memory. See the dedicated [Context Window Hygiene](#context-window-hygiene) section.
-2. **Crash resilience** — autoresearch handles crashes explicitly: attempt a fix, if it doesn't work after a few tries, log as "crash" and move on. We add the same crash-and-recover loop.
-3. **Simplicity criterion** — autoresearch instructs the agent that "all else being equal, simpler is better. A tiny improvement that adds ugly complexity isn't worth it." We incorporate this into both the implementation prompt and the critique prompt.
-4. **Never stop** — autoresearch runs indefinitely until manually interrupted. We support this via an optional `maxIterations` (default 25, set to 0 for unlimited).
+1. **Context window hygiene** — autoresearch redirects all experiment output to
+   a log file and reads only key metrics via `grep`, preventing context
+   flooding. We adopt the same principle with four layers: input truncation,
+   session recycling (fresh session every N iterations with a compact handoff),
+   output redirection guidance in the system prompt, and the logbook as external
+   memory. See the dedicated [Context Window Hygiene](#context-window-hygiene)
+   section.
+2. **Crash resilience** — autoresearch handles crashes explicitly: attempt a
+   fix, if it doesn't work after a few tries, log as "crash" and move on. We add
+   the same crash-and-recover loop.
+3. **Simplicity criterion** — autoresearch instructs the agent that "all else
+   being equal, simpler is better. A tiny improvement that adds ugly complexity
+   isn't worth it." We incorporate this into both the implementation prompt and
+   the critique prompt.
+4. **Never stop** — autoresearch runs indefinitely until manually interrupted.
+   We support this via an optional `maxIterations` (default 25, set to 0 for
+   unlimited).
 
 Where we diverge from autoresearch (intentionally):
-- **`git revert` vs `git reset`** — autoresearch uses `git reset` for cleaner history. We use `git revert` for full traceability, since production codebases benefit from seeing what was tried and rejected.
-- **Critiquer step** — autoresearch has no post-hoc critique; it relies on the agent's judgment during implementation. We add an explicit critique phase because production codebases need stronger safeguards against metric gaming and unmaintainable hacks.
-- **Structured logbook** — autoresearch uses a simple TSV. We use a structured JSON logbook with richer metadata (diffs, critique notes, commit refs) suitable for UI display.
 
-Additional ideas adopted from autoresearch:
-5. **Strategy file (inspired by `program.md`)** — autoresearch decouples research methodology (`program.md`) from executable code (`train.py`), allowing humans to iterate on agent instructions while the agent iterates on code. We adopt this as `.factory-factory/auto-iteration-strategy.md` — a user-editable markdown file in the worktree that the agent reads fresh at the start of each iteration. This enables "meta-iteration": humans steer the agent mid-run without stopping or restarting the loop. See the dedicated [Strategy File](#strategy-file) section.
-6. **Throughput metric** — autoresearch frames outcomes as "~12 experiments/hour". We surface iterations/hour in the UI so users can gauge loop health and compare configurations. See the [Throughput Metric](#throughput-metric) section under UI Changes.
+- **`git revert` vs `git reset`** — autoresearch uses `git reset` for cleaner
+  history. We use `git revert` for full traceability, since production codebases
+  benefit from seeing what was tried and rejected.
+- **Critiquer step** — autoresearch has no post-hoc critique; it relies on the
+  agent's judgment during implementation. We add an explicit critique phase
+  because production codebases need stronger safeguards against metric gaming
+  and unmaintainable hacks.
+- **Structured logbook** — autoresearch uses a simple TSV. We use a structured
+  JSON logbook with richer metadata (diffs, critique notes, commit refs)
+  suitable for UI display.
+
+Additional ideas adopted from autoresearch: 5. **Strategy file (inspired by
+`program.md`)** — autoresearch decouples research methodology (`program.md`)
+from executable code (`train.py`), allowing humans to iterate on agent
+instructions while the agent iterates on code. We adopt this as
+`.factory-factory/auto-iteration-strategy.md` — a user-editable markdown file in
+the worktree that the agent reads fresh at the start of each iteration. This
+enables "meta-iteration": humans steer the agent mid-run without stopping or
+restarting the loop. See the dedicated [Strategy File](#strategy-file)
+section. 6. **Throughput metric** — autoresearch frames outcomes as "~12
+experiments/hour". We surface iterations/hour in the UI so users can gauge loop
+health and compare configurations. See the
+[Throughput Metric](#throughput-metric) section under UI Changes.
 
 ---
 
@@ -115,7 +160,12 @@ Additional ideas adopted from autoresearch:
 
 ### Context Window Hygiene
 
-Running 25+ iterations in a single ACP session is a context window management problem. Each iteration adds test output, tool call results (file reads, command runs), git diffs, and LLM responses to the conversation history. Without mitigation, the context fills up, the provider starts truncating earlier messages, and the LLM loses track of what's been tried — re-attempting already-rejected approaches.
+Running 25+ iterations in a single ACP session is a context window management
+problem. Each iteration adds test output, tool call results (file reads, command
+runs), git diffs, and LLM responses to the conversation history. Without
+mitigation, the context fills up, the provider starts truncating earlier
+messages, and the LLM loses track of what's been tried — re-attempting
+already-rejected approaches.
 
 We use four layers of mitigation:
 
@@ -123,13 +173,19 @@ We use four layers of mitigation:
 
 All external data sent to the LLM is truncated before injection:
 
-- **Test output**: Kept to last 200 lines + extracted summary lines (see `truncateTestOutput` in the Running the Test Command section). Over 25 iterations, this alone saves ~100k tokens vs raw output.
-- **Git diffs** (for critique): Large diffs are truncated to stat-summary + the first 500 lines of hunks. The LLM can always read the full diff via tool calls if needed.
+- **Test output**: Kept to last 200 lines + extracted summary lines (see
+  `truncateTestOutput` in the Running the Test Command section). Over 25
+  iterations, this alone saves ~100k tokens vs raw output.
+- **Git diffs** (for critique): Large diffs are truncated to stat-summary + the
+  first 500 lines of hunks. The LLM can always read the full diff via tool calls
+  if needed.
 - **Crash output**: Last 100 lines only.
 
 #### Layer 2: Session recycling
 
-This is the biggest lever. Instead of one long-lived ACP session for the entire run, we **start a fresh session every N iterations** (default: every 10). The new session receives a compact handoff prompt built from the logbook:
+This is the biggest lever. Instead of one long-lived ACP session for the entire
+run, we **start a fresh session every N iterations** (default: every 10). The
+new session receives a compact handoff prompt built from the logbook:
 
 ```
 You are continuing an auto-iteration run. Here is your context:
@@ -153,9 +209,15 @@ CURRENT STATE:
 The codebase already contains all accepted changes. Continue iterating.
 ```
 
-This gives the LLM everything it needs (what worked, what didn't, current state) without carrying 10 iterations of full conversation history. The logbook serves as external memory that survives across session boundaries.
+This gives the LLM everything it needs (what worked, what didn't, current state)
+without carrying 10 iterations of full conversation history. The logbook serves
+as external memory that survives across session boundaries.
 
-**When to recycle**: The service tracks a `sessionIterationCount`. When it reaches the configured `sessionRecycleInterval` (default 10), the current session is stopped and a new one is started with the handoff prompt. The interval is configurable because optimal recycling depends on context window size and iteration complexity.
+**When to recycle**: The service tracks a `sessionIterationCount`. When it
+reaches the configured `sessionRecycleInterval` (default 10), the current
+session is stopped and a new one is started with the handoff prompt. The
+interval is configurable because optimal recycling depends on context window
+size and iteration complexity.
 
 #### Layer 3: Output redirection for tool calls
 
@@ -169,54 +231,80 @@ and read only the relevant parts:
   grep -E "PASS|FAIL|error" /tmp/output.log
 ```
 
-This mirrors autoresearch's `uv run train.py > run.log 2>&1` + `grep "^val_bpb:" run.log` pattern. It prevents the LLM's own tool calls from flooding the context window — the biggest source of uncontrolled context growth.
+This mirrors autoresearch's `uv run train.py > run.log 2>&1` +
+`grep "^val_bpb:" run.log` pattern. It prevents the LLM's own tool calls from
+flooding the context window — the biggest source of uncontrolled context growth.
 
 #### Layer 4: Logbook as external memory
 
-The JSON logbook at `.factory-factory/auto-iteration-logbook.json` serves double duty:
+The JSON logbook at `.factory-factory/auto-iteration-logbook.json` serves double
+duty:
 
 1. **UI display** — the frontend reads it for the iteration log view
-2. **LLM external memory** — on session recycling, the handoff prompt is built from the logbook rather than from conversation history. The LLM can also read the logbook directly via file read tool calls if it needs to revisit earlier iteration details.
+2. **LLM external memory** — on session recycling, the handoff prompt is built
+   from the logbook rather than from conversation history. The LLM can also read
+   the logbook directly via file read tool calls if it needs to revisit earlier
+   iteration details.
 
-This means no iteration context is ever truly lost — it's just moved from expensive conversation history to a cheap file on disk.
+This means no iteration context is ever truly lost — it's just moved from
+expensive conversation history to a cheap file on disk.
 
 ### Why same-session critique (not a separate session)
 
-The critiquer uses the **same ACP session** with a role-shifted prompt rather than a separate session. This is simpler:
+The critiquer uses the **same ACP session** with a role-shifted prompt rather
+than a separate session. This is simpler:
+
 - No second session lifecycle to manage
 - The LLM already has full context of what it changed and why
 - Fewer resources consumed (one process, one context window)
-- Bias is mitigated through an explicitly adversarial system prompt that instructs the LLM to look for workarounds, metric gaming, and unmaintainable code
+- Bias is mitigated through an explicitly adversarial system prompt that
+  instructs the LLM to look for workarounds, metric gaming, and unmaintainable
+  code
 
 ### Why LLM-based metric evaluation (not parsed numbers)
 
-The test command output is evaluated by the LLM rather than a regex/parser because:
+The test command output is evaluated by the LLM rather than a regex/parser
+because:
+
 - Supports arbitrary output formats without configuration
 - Handles "higher is better" and "lower is better" automatically
 - Can interpret nuanced results (e.g., "3 tests pass but 1 new test was added")
 - The user's target description is natural language anyway
 
-The LLM is asked to respond with structured JSON for the evaluation, so the backend can reliably parse the result.
+The LLM is asked to respond with structured JSON for the evaluation, so the
+backend can reliably parse the result.
 
 ---
 
 ## Strategy File
 
-The **strategy file** at `.factory-factory/auto-iteration-strategy.md` is a user-editable markdown file that the agent reads fresh at the start of each iteration. It enables mid-run guidance without stopping or restarting the loop.
+The **strategy file** at `.factory-factory/auto-iteration-strategy.md` is a
+user-editable markdown file that the agent reads fresh at the start of each
+iteration. It enables mid-run guidance without stopping or restarting the loop.
 
 ### Lifecycle
 
-1. **Seeded on start** — When auto-iteration begins, a default template is written (if no file exists) containing the target description and test command as context, plus a placeholder section for user guidance.
-2. **Read each iteration** — At the top of `runIteration()`, the file is read from disk. If present, its content is injected into the implement prompt inside a `<strategy>` block.
-3. **Optional** — If the file is missing or deleted, the agent proceeds normally with no strategy context.
-4. **User-editable at any time** — Users can edit the file between iterations (e.g., while the agent is running tests or during a pause) to steer the agent's approach, add constraints, or redirect focus.
+1. **Seeded on start** — When auto-iteration begins, a default template is
+   written (if no file exists) containing the target description and test
+   command as context, plus a placeholder section for user guidance.
+2. **Read each iteration** — At the top of `runIteration()`, the file is read
+   from disk. If present, its content is injected into the implement prompt
+   inside a `<strategy>` block.
+3. **Optional** — If the file is missing or deleted, the agent proceeds normally
+   with no strategy context.
+4. **User-editable at any time** — Users can edit the file between iterations
+   (e.g., while the agent is running tests or during a pause) to steer the
+   agent's approach, add constraints, or redirect focus.
 
 ### Why a file (not a config field)
 
-- **Zero-restart editing** — Users edit a local file with their editor; no API call or UI interaction needed
+- **Zero-restart editing** — Users edit a local file with their editor; no API
+  call or UI interaction needed
 - **Versioned with the worktree** — Git tracks changes to the strategy over time
-- **Readable by the agent** — The agent can also read the file directly via tool calls if it needs to reference strategy mid-implementation
-- **Follows logbook pattern** — Same `.factory-factory/` directory, same service handles I/O
+- **Readable by the agent** — The agent can also read the file directly via tool
+  calls if it needs to reference strategy mid-implementation
+- **Follows logbook pattern** — Same `.factory-factory/` directory, same service
+  handles I/O
 
 ### Default template
 
@@ -303,7 +391,8 @@ interface AutoIterationProgress {
 
 ### Agent Logbook (JSON file in worktree)
 
-Located at `.factory-factory/auto-iteration-logbook.json` in the workspace worktree.
+Located at `.factory-factory/auto-iteration-logbook.json` in the workspace
+worktree.
 
 ```typescript
 interface AgentLogbook {
@@ -421,6 +510,7 @@ class AutoIterationService {
 ```
 
 The `start()` method:
+
 1. Validates workspace is in `AUTO_ITERATION` mode with config present
 2. Sets status to `RUNNING`
 3. Runs the baseline measurement
@@ -447,11 +537,15 @@ async function runTestCommand(worktreePath: string, command: string, timeoutSeco
 }
 ```
 
-This is intentionally **not** the run-script service — auto-iteration test commands are short-lived measurement commands (run-to-completion), while run-script manages long-running dev servers. A simple `child_process.spawn` wrapper is sufficient.
+This is intentionally **not** the run-script service — auto-iteration test
+commands are short-lived measurement commands (run-to-completion), while
+run-script manages long-running dev servers. A simple `child_process.spawn`
+wrapper is sufficient.
 
 ### Output Truncation (Context Window Hygiene)
 
-Inspired by autoresearch's approach of redirecting output to files and reading only key lines, test output is truncated before being sent to the LLM:
+Inspired by autoresearch's approach of redirecting output to files and reading
+only key lines, test output is truncated before being sent to the LLM:
 
 ```typescript
 function truncateTestOutput(raw: string, maxLines = 200): string {
@@ -475,7 +569,8 @@ function truncateTestOutput(raw: string, maxLines = 200): string {
 }
 ```
 
-This prevents context window exhaustion across many iterations — critical for runs with 25+ iterations.
+This prevents context window exhaustion across many iterations — critical for
+runs with 25+ iterations.
 
 ### Git Operations
 
@@ -492,7 +587,8 @@ git revert HEAD --no-edit
 // No action needed — commit stays
 ```
 
-Using `git revert` (not `git reset`) so the history shows what was tried and rejected. The revert commit message will reference the original.
+Using `git revert` (not `git reset`) so the history shows what was tried and
+rejected. The revert commit message will reference the original.
 
 ---
 
@@ -539,7 +635,8 @@ Extend the existing `workspace.create` mutation to accept `AUTO_ITERATION` mode:
 
 ### 1. Launch Button — Split Button Pattern
 
-Replace the current launch button in `inline-workspace-form.tsx` with a **split button**:
+Replace the current launch button in `inline-workspace-form.tsx` with a **split
+button**:
 
 ```
 ┌──────────────────┬───┐
@@ -556,7 +653,9 @@ Replace the current launch button in `inline-workspace-form.tsx` with a **split 
 - **Right side (chevron)**: Opens dropdown with "Auto-Iteration" option
 - Clicking "Auto-Iteration" switches the form to auto-iteration mode
 
-**Why split button over long-press**: Split buttons are a standard, accessible UI pattern. Long-press has poor discoverability, no keyboard equivalent, and conflicts with mobile touch interactions.
+**Why split button over long-press**: Split buttons are a standard, accessible
+UI pattern. Long-press has poor discoverability, no keyboard equivalent, and
+conflicts with mobile touch interactions.
 
 ### 2. Auto-Iteration Configuration Form
 
@@ -598,12 +697,14 @@ When auto-iteration mode is selected, the inline form shows additional fields:
 Auto-iteration workspaces show a distinct badge on the kanban card:
 
 - **Badge**: iteration count indicator (e.g., "Iter 3/25")
-- **Color coding**: Same as standard workspaces (brand for working, amber for waiting)
+- **Color coding**: Same as standard workspaces (brand for working, amber for
+  waiting)
 - **Tooltip**: Shows current metric summary on hover
 
 ### 4. Workspace Detail Page — Auto-Iteration View
 
-When viewing an auto-iteration workspace, the detail page shows a specialized layout:
+When viewing an auto-iteration workspace, the detail page shows a specialized
+layout:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -647,22 +748,29 @@ When viewing an auto-iteration workspace, the detail page shows a specialized la
 
 ### 5. Throughput Metric
 
-The UI displays an **iterations/hour** throughput metric to help users gauge loop health and compare configurations (inspired by autoresearch's "~12 experiments/hour" framing).
+The UI displays an **iterations/hour** throughput metric to help users gauge
+loop health and compare configurations (inspired by autoresearch's "~12
+experiments/hour" framing).
 
-**Computation**: Client-side, from existing `startedAt` and `currentIteration` fields:
+**Computation**: Client-side, from existing `startedAt` and `currentIteration`
+fields:
 
 ```typescript
 iterationsPerHour = currentIteration / ((Date.now() - startedAt) / 3_600_000)
 ```
 
 **Display**:
+
 - Format: "2.4 iter/hr" (one decimal when < 10, rounded integer otherwise)
-- **Progress banner** (`RunningBanner`): Shown in the iteration stats area alongside "Iteration N / M"
+- **Progress banner** (`RunningBanner`): Shown in the iteration stats area
+  alongside "Iteration N / M"
 - **Detail panel** (`ProgressSummary`): Shown next to the iteration count
-- Only displayed once at least 1 iteration has completed (avoids division by zero)
+- Only displayed once at least 1 iteration has completed (avoids division by
+  zero)
 - Shown in running and paused states; not shown for terminal states
 
-No backend changes needed — the metric is derived from fields already present in `AutoIterationProgress`.
+No backend changes needed — the metric is derived from fields already present in
+`AutoIterationProgress`.
 
 ### 6. WebSocket Events
 
@@ -794,6 +902,7 @@ Respond with JSON:
 ## Implementation Plan
 
 ### Phase 1: Data Model & Service Skeleton
+
 1. Add `WorkspaceMode`, `AutoIterationStatus` enums to Prisma schema
 2. Add auto-iteration fields to `Workspace` model
 3. Run migration
@@ -801,6 +910,7 @@ Respond with JSON:
 5. Register in `registry.ts`
 
 ### Phase 2: Core Loop
+
 1. Implement `logbook.service.ts` (read/write logbook JSON)
 2. Implement `metric-evaluation.service.ts` (LLM metric judgment)
 3. Implement `critique.service.ts` (LLM critique prompts)
@@ -808,16 +918,20 @@ Respond with JSON:
 5. Wire up bridges to session and workspace services
 
 ### Phase 3: tRPC API
+
 1. Create `auto-iteration.trpc.ts` with start/pause/resume/stop/status/logbook
 2. Extend `workspace.create` to accept `AUTO_ITERATION` mode
 3. Add WebSocket event forwarding for progress updates
 
 ### Phase 4: UI — Launch & Configuration
+
 1. Convert launch button to split button in `inline-workspace-form.tsx`
-2. Add auto-iteration configuration fields (test command, target, max iterations)
+2. Add auto-iteration configuration fields (test command, target, max
+   iterations)
 3. Wire up workspace creation with mode + config
 
 ### Phase 5: UI — Progress & Logbook
+
 1. Add auto-iteration progress panel to workspace detail page
 2. Add iteration log viewer (expandable entries)
 3. Add kanban card badge for iteration count
@@ -825,17 +939,24 @@ Respond with JSON:
 5. Wire up WebSocket event listeners for real-time updates
 
 ### Phase 6: Testing & Polish
+
 1. Unit tests for logbook, metric evaluation, critique services
 2. Integration test for the iteration loop (mocked ACP)
-3. Edge cases: test command timeout, LLM returns malformed JSON, workspace archived mid-loop
+3. Edge cases: test command timeout, LLM returns malformed JSON, workspace
+   archived mid-loop
 4. UI polish: loading states, error handling, empty states
 
 ---
 
 ## Open Questions / Future Work
 
-- **Multiple test commands**: Could support running several metrics in parallel (e.g., coverage AND performance). Out of scope for v1.
-- **Branching strategies**: Could create a branch per iteration attempt rather than reverting. Adds complexity for v1.
-- **Cost tracking**: LLM token usage per iteration would be useful to surface. Can be added once ACP exposes token counts.
-- **Separate critiquer model**: Using a different (possibly cheaper or more capable) model for critique. Requires multi-session support, deferred.
-- **Workspace conversion**: Allowing conversion between standard and auto-iteration workspaces. Explicitly out of scope per requirements.
+- **Multiple test commands**: Could support running several metrics in parallel
+  (e.g., coverage AND performance). Out of scope for v1.
+- **Branching strategies**: Could create a branch per iteration attempt rather
+  than reverting. Adds complexity for v1.
+- **Cost tracking**: LLM token usage per iteration would be useful to surface.
+  Can be added once ACP exposes token counts.
+- **Separate critiquer model**: Using a different (possibly cheaper or more
+  capable) model for critique. Requires multi-session support, deferred.
+- **Workspace conversion**: Allowing conversion between standard and
+  auto-iteration workspaces. Explicitly out of scope per requirements.

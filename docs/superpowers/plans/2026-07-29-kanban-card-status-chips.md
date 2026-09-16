@@ -1,22 +1,33 @@
 # Kanban Card Status Chips Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Give every Kanban card one canonical status chip and place its issue and pull request links on one compact metadata row.
+**Goal:** Give every Kanban card one canonical status chip and place its issue
+and pull request links on one compact metadata row.
 
-**Architecture:** Keep workspace-state precedence in the existing shared `statusReason`; add a Kanban-local chip component that only adapts its label and tone for card presentation. Simplify `KanbanCard` to render that chip once, remove the parallel setup/CI presentation paths, and compose issue and PR controls in a single row without changing navigation behavior.
+**Architecture:** Keep workspace-state precedence in the existing shared
+`statusReason`; add a Kanban-local chip component that only adapts its label and
+tone for card presentation. Simplify `KanbanCard` to render that chip once,
+remove the parallel setup/CI presentation paths, and compose issue and PR
+controls in a single row without changing navigation behavior.
 
 **Tech Stack:** React, TypeScript, Tailwind CSS, Vitest/jsdom, Storybook.
 
 ## Global Constraints
 
 - This is a presentation-only change to the Kanban card.
-- Do not change shared workspace status-reason derivation, Kanban column projection, snapshot payloads, or labels on other workspace surfaces.
+- Do not change shared workspace status-reason derivation, Kanban column
+  projection, snapshot payloads, or labels on other workspace surfaces.
 - Render exactly one workspace status chip from `workspace.statusReason`.
 - Map `WAITING_FOR_CI` to “CI Running” only on Kanban cards.
-- Keep issue and PR controls independently clickable with their current external-navigation and propagation behavior.
+- Keep issue and PR controls independently clickable with their current
+  external-navigation and propagation behavior.
 - Keep the branch on a separate truncating row below issue/PR metadata.
-- Preserve the session runtime error detail beneath the canonical “Session error” chip.
+- Preserve the session runtime error detail beneath the canonical “Session
+  error” chip.
 - Do not introduce a new cross-feature API or backend field.
 
 ---
@@ -24,17 +35,25 @@
 ### Task 1: Canonical Kanban Status Chip
 
 **Files:**
+
 - Create: `src/client/features/kanban/kanban-card-status-chip.tsx`
 - Create: `src/client/features/kanban/kanban-card-status-chip.test.tsx`
-- Modify: `src/client/features/kanban/kanban-card.tsx:15-33,330-371,412-424,517-544`
-- Modify: `src/client/features/kanban/kanban-card.test.tsx:27-37,67-85,124-211,303-319`
+- Modify:
+  `src/client/features/kanban/kanban-card.tsx:15-33,330-371,412-424,517-544`
+- Modify:
+  `src/client/features/kanban/kanban-card.test.tsx:27-37,67-85,124-211,303-319`
 
 **Interfaces:**
-- Consumes: `WorkspaceStatusReason` and `WorkspaceStatusReasonTone` from `@/shared/workspace-status-reason`.
-- Produces: `KanbanStatusChip({ statusReason }: { statusReason: WorkspaceStatusReason }): JSX.Element`.
-- Produces: one element with `data-testid="kanban-status-chip"` per `KanbanCard` when `workspace.statusReason` is present.
 
-- [ ] **Step 1: Add focused failing tests for the card-local status label and tone mapping**
+- Consumes: `WorkspaceStatusReason` and `WorkspaceStatusReasonTone` from
+  `@/shared/workspace-status-reason`.
+- Produces:
+  `KanbanStatusChip({ statusReason }: { statusReason: WorkspaceStatusReason }): JSX.Element`.
+- Produces: one element with `data-testid="kanban-status-chip"` per `KanbanCard`
+  when `workspace.statusReason` is present.
+
+- [ ] **Step 1: Add focused failing tests for the card-local status label and
+      tone mapping**
 
 Create `src/client/features/kanban/kanban-card-status-chip.test.tsx`:
 
@@ -88,7 +107,8 @@ describe('KanbanStatusChip', () => {
 });
 ```
 
-- [ ] **Step 2: Run the chip test and verify the missing component is the failure**
+- [ ] **Step 2: Run the chip test and verify the missing component is the
+      failure**
 
 Run:
 
@@ -153,7 +173,8 @@ pnpm test src/client/features/kanban/kanban-card-status-chip.test.tsx
 
 Expected: PASS with 7 cases.
 
-- [ ] **Step 5: Replace the old card-status expectations with failing canonical-chip expectations**
+- [ ] **Step 5: Replace the old card-status expectations with failing
+      canonical-chip expectations**
 
 In `src/client/features/kanban/kanban-card.test.tsx`:
 
@@ -312,7 +333,8 @@ present because the canonical status chip is always metadata:
 expect(container.querySelector('[data-testid="card-content"]')).not.toBeNull();
 ```
 
-- [ ] **Step 6: Run the Kanban card test and verify the old rendering fails the new contract**
+- [ ] **Step 6: Run the Kanban card test and verify the old rendering fails the
+      new contract**
 
 Run:
 
@@ -324,14 +346,15 @@ Expected: FAIL because `KanbanCard` does not render
 `[data-testid="kanban-status-chip"]` and still emits the setup/CI presentation
 paths.
 
-- [ ] **Step 7: Integrate the canonical chip and remove the parallel status paths**
+- [ ] **Step 7: Integrate the canonical chip and remove the parallel status
+      paths**
 
 In `src/client/features/kanban/kanban-card.tsx`:
 
 1. Import `KanbanStatusChip` from `./kanban-card-status-chip`.
-2. Remove `CiStatusChip`, `SetupStatusChip`,
-   `shouldShowWorkspaceStatusReason`, `WorkspaceSidebarCiState`, `PRState`, and
-   `deriveWorkspaceSidebarStatus` imports.
+2. Remove `CiStatusChip`, `SetupStatusChip`, `shouldShowWorkspaceStatusReason`,
+   `WorkspaceSidebarCiState`, `PRState`, and `deriveWorkspaceSidebarStatus`
+   imports.
 3. Delete `CiRow`.
 4. In `deriveCardState`, delete `sidebarStatus`, `showSetup`, `showCi`, and
    `showStatusReason`. Make the metadata condition:
@@ -355,8 +378,8 @@ const hasMetadata =
 ```
 
 7. Delete the old setup, plain status-reason, and CI rows.
-8. Keep the detailed runtime error row. Do not suppress a `SESSION_ERROR`
-   reason merely because the detail exists.
+8. Keep the detailed runtime error row. Do not suppress a `SESSION_ERROR` reason
+   merely because the detail exists.
 
 - [ ] **Step 8: Run the chip and card tests together**
 
@@ -388,11 +411,13 @@ commit contains only canonical-status presentation and tests.
 ### Task 2: Combined Issue and Pull Request Metadata Row
 
 **Files:**
+
 - Modify: `src/client/features/kanban/kanban-card.tsx:67-138,517-545`
 - Modify: `src/client/features/kanban/kanban-card.test.tsx:213-319`
 - Modify: `src/client/features/kanban/kanban-card.stories.tsx:81-130`
 
 **Interfaces:**
+
 - Consumes: the existing private `IssueLink`, `deriveIssueLink`,
   `workspace.prUrl`, `workspace.prNumber`, `workspace.prState`, and
   `PrStateBadge`.
@@ -456,7 +481,8 @@ it('renders linked issue and pull request controls on one metadata row', () => {
 The current `PrStateBadge` test mock renders “PR”, which verifies that the draft
 qualifier remains inside the combined row.
 
-- [ ] **Step 2: Run the test and verify the missing combined row is the failure**
+- [ ] **Step 2: Run the test and verify the missing combined row is the
+      failure**
 
 Run:
 
@@ -466,7 +492,8 @@ pnpm test src/client/features/kanban/kanban-card.test.tsx
 
 Expected: FAIL because `[data-testid="issue-pr-row"]` does not exist.
 
-- [ ] **Step 3: Replace the separate issue and PR rows with one combined component**
+- [ ] **Step 3: Replace the separate issue and PR rows with one combined
+      component**
 
 In `src/client/features/kanban/kanban-card.tsx`, replace `PullRequestRow` and
 `IssueRow` with:

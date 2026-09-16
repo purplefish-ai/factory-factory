@@ -2,8 +2,8 @@
 
 ## Problem
 
-A normal Ratchet poll can observe that a pull request was merged while a
-Ratchet fixer session is still running. The current merged-PR decision returns
+A normal Ratchet poll can observe that a pull request was merged while a Ratchet
+fixer session is still running. The current merged-PR decision returns
 `COMPLETED` and transitions the workspace to `MERGED`, but active fixer
 inspection only runs for open pull requests. As a result, the session can
 continue after the pull request is merged.
@@ -24,8 +24,8 @@ Ratchet will:
 4. Continue through the existing merged-PR decision and persist the workspace
    Ratchet state as `MERGED` only after all selected sessions stop successfully.
 
-Sessions from other workflows are not stopped. Ratchet sessions that are
-already stopped are ignored.
+Sessions from other workflows are not stopped. Ratchet sessions that are already
+stopped are ignored.
 
 If any stop fails, the workspace check returns its existing `ERROR` result and
 does not transition the Ratchet state to `MERGED`. The workspace remains in the

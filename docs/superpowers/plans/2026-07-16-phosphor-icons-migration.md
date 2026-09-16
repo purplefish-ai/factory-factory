@@ -1,34 +1,50 @@
 # Phosphor Icons Migration Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace every active `lucide-react` usage with native `@phosphor-icons/react` imports using the regular weight.
+**Goal:** Replace every active `lucide-react` usage with native
+`@phosphor-icons/react` imports using the regular weight.
 
-**Architecture:** Migrate the dependency and icon bindings directly, without a compatibility barrel or global provider. Use a static regression test to prevent Lucide from returning, update dynamic icon types to Phosphor's `Icon`, and replace vendor-class assertions with application-owned selectors.
+**Architecture:** Migrate the dependency and icon bindings directly, without a
+compatibility barrel or global provider. Use a static regression test to prevent
+Lucide from returning, update dynamic icon types to Phosphor's `Icon`, and
+replace vendor-class assertions with application-owned selectors.
 
-**Tech Stack:** React 19, TypeScript, Vite, Vitest, Biome, pnpm, `@phosphor-icons/react` 2.1.10.
+**Tech Stack:** React 19, TypeScript, Vite, Vitest, Biome, pnpm,
+`@phosphor-icons/react` 2.1.10.
 
 ## Global Constraints
 
 - Use direct named imports from `@phosphor-icons/react`.
 - Use Phosphor's native export names; do not alias them to Lucide names.
-- Use Phosphor's default `regular` weight unless an existing filled status marker requires `weight="fill"`.
-- Preserve existing dimensions, colors, animations, accessibility, labels, and interactions.
-- Do not introduce an icon wrapper, compatibility barrel, or global `IconContext`.
+- Use Phosphor's default `regular` weight unless an existing filled status
+  marker requires `weight="fill"`.
+- Preserve existing dimensions, colors, animations, accessibility, labels, and
+  interactions.
+- Do not introduce an icon wrapper, compatibility barrel, or global
+  `IconContext`.
 - Remove all active `lucide-react`, `LucideIcon`, and `lucide-` references.
 - Keep the repository-owned Factory Factory logo unchanged.
-- Do not dispatch subagents unless the user explicitly authorizes multi-agent work.
+- Do not dispatch subagents unless the user explicitly authorizes multi-agent
+  work.
 
 ---
 
 ### Task 1: Add the migration regression contract
 
 **Files:**
+
 - Create: `src/lib/icon-library.test.ts`
 
 **Interfaces:**
-- Consumes: repository root `package.json`, `src/` tree, and `docs/design/ratchet-ux-simplification-plan.md`
-- Produces: a Vitest contract that rejects Lucide dependencies/imports/classes and requires Phosphor
+
+- Consumes: repository root `package.json`, `src/` tree, and
+  `docs/design/ratchet-ux-simplification-plan.md`
+- Produces: a Vitest contract that rejects Lucide dependencies/imports/classes
+  and requires Phosphor
 
 - [ ] **Step 1: Write the failing test**
 
@@ -91,7 +107,8 @@ Run:
 pnpm exec vitest run src/lib/icon-library.test.ts
 ```
 
-Expected: FAIL because `@phosphor-icons/react` is absent and `lucide-react` is still present.
+Expected: FAIL because `@phosphor-icons/react` is absent and `lucide-react` is
+still present.
 
 - [ ] **Step 3: Commit the failing contract**
 
@@ -105,15 +122,18 @@ git commit -m "Test Phosphor icon dependency"
 ### Task 2: Replace the dependency and production icon imports
 
 **Files:**
+
 - Modify: `package.json`
 - Modify: `pnpm-lock.yaml`
-- Modify: every `.ts` or `.tsx` file under `src/client/` and `src/components/` returned by:
+- Modify: every `.ts` or `.tsx` file under `src/client/` and `src/components/`
+  returned by:
 
 ```bash
 rg -l "from ['\"]lucide-react['\"]" src/client src/components --glob '*.ts' --glob '*.tsx'
 ```
 
 **Interfaces:**
+
 - Consumes: the mapping table below and existing JSX SVG props/classes
 - Produces: direct Phosphor imports and native Phosphor component identifiers
 
@@ -126,69 +146,71 @@ pnpm remove lucide-react
 pnpm add @phosphor-icons/react@^2.1.10
 ```
 
-Expected: `package.json` and `pnpm-lock.yaml` contain `@phosphor-icons/react` and no `lucide-react` dependency.
+Expected: `package.json` and `pnpm-lock.yaml` contain `@phosphor-icons/react`
+and no `lucide-react` dependency.
 
 - [ ] **Step 2: Apply the exact semantic mapping**
 
-Use unchanged names directly when Phosphor exports the same name. Apply these renamed exports everywhere:
+Use unchanged names directly when Phosphor exports the same name. Apply these
+renamed exports everywhere:
 
-| Lucide export | Phosphor export |
-|---|---|
-| `Activity` | `PulseIcon` |
-| `AlertCircle` | `WarningCircleIcon` |
-| `AlertTriangle`, `AlertTriangleIcon` | `WarningIcon` |
-| `ArrowDownToLine` | `DownloadSimpleIcon` |
-| `ArrowRightLeft` | `ArrowsLeftRightIcon` |
-| `Bot` | `RobotIcon` |
-| `CalendarIcon` | `CalendarIcon` |
-| `CheckCircle2`, `CheckCircle2Icon` | `CheckCircleIcon` |
-| `ChevronDown`, `ChevronDownIcon` | `CaretDownIcon` |
-| `ChevronLeft`, `ChevronLeftIcon` | `CaretLeftIcon` |
-| `ChevronRight`, `ChevronRightIcon` | `CaretRightIcon` |
-| `ChevronUp` | `CaretUpIcon` |
-| `ChevronsUpDown` | `CaretUpDownIcon` |
-| `CircleDashedIcon` | `CircleDashedIcon` |
-| `CircleDot` | `DotOutlineIcon` |
-| `CircleSlash` | `ProhibitIcon` |
-| `ExternalLink` | `ArrowSquareOutIcon` |
-| `FileCheck` | `ClipboardTextIcon` |
-| `FileDiff` | `GitDiffIcon` |
-| `FileJson` | `FileCodeIcon` |
-| `FileQuestion` | `FileDashedIcon` |
-| `FolderOpenIcon` | `FolderOpenIcon` |
-| `Github` | `GithubLogoIcon` |
-| `GripVertical` | `DotsSixVerticalIcon` |
-| `HelpCircle` | `QuestionIcon` |
-| `ImagePlus` | `ImageIcon` |
-| `Layers` | `StackIcon` |
-| `Link2` | `LinkIcon` |
-| `ListTodo` | `ListChecksIcon` |
-| `Loader2`, `Loader2Icon` | `SpinnerGapIcon` |
-| `LucideIcon` | `Icon` |
-| `MapIcon` | `MapTrifoldIcon` |
-| `Menu` | `ListIcon` |
-| `MessageCircleQuestion` | `ChatCircleDotsIcon` |
-| `MessageSquare` | `ChatIcon` |
-| `MessageSquareText` | `ChatTextIcon` |
-| `Monitor` | `DesktopIcon` |
-| `MoreHorizontal` | `DotsThreeIcon` |
-| `Network` | `TreeStructureIcon` |
-| `OctagonX` | `XCircleIcon` |
-| `PanelLeft`, `PanelRight` | `SidebarSimpleIcon` |
-| `RefreshCw`, `RefreshCwIcon` | `ArrowsClockwiseIcon` |
-| `RotateCcw` | `ArrowCounterClockwiseIcon` |
-| `Save` | `FloppyDiskIcon` |
-| `Search` | `MagnifyingGlassIcon` |
-| `Send` | `PaperPlaneTiltIcon` |
-| `Server` | `HardDrivesIcon` |
-| `Settings` | `GearIcon` |
-| `Settings2` | `GearSixIcon` |
-| `ShieldAlert` | `ShieldWarningIcon` |
-| `ShieldX` | `ShieldSlashIcon` |
-| `Sparkles` | `SparkleIcon` |
-| `TerminalIcon` | `TerminalIcon` |
-| `Trash2` | `TrashIcon` |
-| `Zap` | `LightningIcon` |
+| Lucide export                        | Phosphor export             |
+| ------------------------------------ | --------------------------- |
+| `Activity`                           | `PulseIcon`                 |
+| `AlertCircle`                        | `WarningCircleIcon`         |
+| `AlertTriangle`, `AlertTriangleIcon` | `WarningIcon`               |
+| `ArrowDownToLine`                    | `DownloadSimpleIcon`        |
+| `ArrowRightLeft`                     | `ArrowsLeftRightIcon`       |
+| `Bot`                                | `RobotIcon`                 |
+| `CalendarIcon`                       | `CalendarIcon`              |
+| `CheckCircle2`, `CheckCircle2Icon`   | `CheckCircleIcon`           |
+| `ChevronDown`, `ChevronDownIcon`     | `CaretDownIcon`             |
+| `ChevronLeft`, `ChevronLeftIcon`     | `CaretLeftIcon`             |
+| `ChevronRight`, `ChevronRightIcon`   | `CaretRightIcon`            |
+| `ChevronUp`                          | `CaretUpIcon`               |
+| `ChevronsUpDown`                     | `CaretUpDownIcon`           |
+| `CircleDashedIcon`                   | `CircleDashedIcon`          |
+| `CircleDot`                          | `DotOutlineIcon`            |
+| `CircleSlash`                        | `ProhibitIcon`              |
+| `ExternalLink`                       | `ArrowSquareOutIcon`        |
+| `FileCheck`                          | `ClipboardTextIcon`         |
+| `FileDiff`                           | `GitDiffIcon`               |
+| `FileJson`                           | `FileCodeIcon`              |
+| `FileQuestion`                       | `FileDashedIcon`            |
+| `FolderOpenIcon`                     | `FolderOpenIcon`            |
+| `Github`                             | `GithubLogoIcon`            |
+| `GripVertical`                       | `DotsSixVerticalIcon`       |
+| `HelpCircle`                         | `QuestionIcon`              |
+| `ImagePlus`                          | `ImageIcon`                 |
+| `Layers`                             | `StackIcon`                 |
+| `Link2`                              | `LinkIcon`                  |
+| `ListTodo`                           | `ListChecksIcon`            |
+| `Loader2`, `Loader2Icon`             | `SpinnerGapIcon`            |
+| `LucideIcon`                         | `Icon`                      |
+| `MapIcon`                            | `MapTrifoldIcon`            |
+| `Menu`                               | `ListIcon`                  |
+| `MessageCircleQuestion`              | `ChatCircleDotsIcon`        |
+| `MessageSquare`                      | `ChatIcon`                  |
+| `MessageSquareText`                  | `ChatTextIcon`              |
+| `Monitor`                            | `DesktopIcon`               |
+| `MoreHorizontal`                     | `DotsThreeIcon`             |
+| `Network`                            | `TreeStructureIcon`         |
+| `OctagonX`                           | `XCircleIcon`               |
+| `PanelLeft`, `PanelRight`            | `SidebarSimpleIcon`         |
+| `RefreshCw`, `RefreshCwIcon`         | `ArrowsClockwiseIcon`       |
+| `RotateCcw`                          | `ArrowCounterClockwiseIcon` |
+| `Save`                               | `FloppyDiskIcon`            |
+| `Search`                             | `MagnifyingGlassIcon`       |
+| `Send`                               | `PaperPlaneTiltIcon`        |
+| `Server`                             | `HardDrivesIcon`            |
+| `Settings`                           | `GearIcon`                  |
+| `Settings2`                          | `GearSixIcon`               |
+| `ShieldAlert`                        | `ShieldWarningIcon`         |
+| `ShieldX`                            | `ShieldSlashIcon`           |
+| `Sparkles`                           | `SparkleIcon`               |
+| `TerminalIcon`                       | `TerminalIcon`              |
+| `Trash2`                             | `TrashIcon`                 |
+| `Zap`                                | `LightningIcon`             |
 
 For each source file:
 
@@ -203,7 +225,8 @@ For each source file:
 Add `mirrored` to the `SidebarSimple` instances that replace `PanelRight` in:
 
 - `src/client/routes/projects/workspaces/workspace-detail-header/toggle-right-panel-button.tsx`
-- Any other file where the former `PanelRight` specifically represented a right-hand panel
+- Any other file where the former `PanelRight` specifically represented a
+  right-hand panel
 
 Example:
 
@@ -220,7 +243,8 @@ pnpm check:fix
 pnpm typecheck
 ```
 
-Expected: formatting succeeds; typecheck may still report test mock names until Task 3, but must not report missing production Phosphor exports.
+Expected: formatting succeeds; typecheck may still report test mock names until
+Task 3, but must not report missing production Phosphor exports.
 
 - [ ] **Step 5: Commit the production migration**
 
@@ -234,6 +258,7 @@ git commit -m "Migrate UI icons to Phosphor"
 ### Task 3: Update tests and remove vendor-class coupling
 
 **Files:**
+
 - Modify: `src/client/components/kanban/inline-workspace-form.test.tsx`
 - Modify: `src/client/components/kanban/issue-card.test.tsx`
 - Modify: `src/client/components/kanban/issue-launch-sheet.test.tsx`
@@ -248,6 +273,7 @@ git commit -m "Migrate UI icons to Phosphor"
 - Modify: source components needing application-owned selectors
 
 **Interfaces:**
+
 - Consumes: native Phosphor export names from Task 2
 - Produces: mocks and assertions independent of icon-library-generated classes
 
@@ -269,11 +295,13 @@ vi.mock('@phosphor-icons/react', () => ({
 }));
 ```
 
-Apply the same mapping table from Task 2 to every mocked export in the listed test files.
+Apply the same mapping table from Task 2 to every mocked export in the listed
+test files.
 
 - [ ] **Step 2: Add stable selectors for semantic icon states**
 
-Update `src/client/components/workspace-status-icon.tsx` so each returned icon has an application-owned marker:
+Update `src/client/components/workspace-status-icon.tsx` so each returned icon
+has an application-owned marker:
 
 ```tsx
 <ShieldWarningIcon data-icon="permission-request" ... />
@@ -297,14 +325,16 @@ expect(markup).toContain('data-icon="runtime-error"');
 
 - [ ] **Step 3: Replace navigation icon class assertions**
 
-Add accessible labels to the session-tab scroll buttons in `src/components/chat/session-tab-bar.tsx` if they do not already have them:
+Add accessible labels to the session-tab scroll buttons in
+`src/components/chat/session-tab-bar.tsx` if they do not already have them:
 
 ```tsx
 aria-label="Scroll session tabs left"
 aria-label="Scroll session tabs right"
 ```
 
-Then update `src/components/chat/palette-and-tabbar-regressions.test.tsx` to query:
+Then update `src/components/chat/palette-and-tabbar-regressions.test.tsx` to
+query:
 
 ```ts
 container.querySelector('[aria-label="Scroll session tabs right"]')
@@ -314,7 +344,8 @@ instead of `.lucide-chevron-right`.
 
 - [ ] **Step 4: Replace question icon class assertion**
 
-Add `data-slot="question-prompt-icon"` to the responsive icon wrapper in `src/components/chat/question-prompt.tsx`.
+Add `data-slot="question-prompt-icon"` to the responsive icon wrapper in
+`src/components/chat/question-prompt.tsx`.
 
 Update `src/components/chat/question-prompt.test.tsx`:
 
@@ -358,10 +389,13 @@ git commit -m "Update icon regression tests"
 ### Task 4: Update icon guidance and prove Lucide is gone
 
 **Files:**
+
 - Modify: `docs/design/ratchet-ux-simplification-plan.md`
-- Modify: any active source/test/story file still reported by the cleanup searches
+- Modify: any active source/test/story file still reported by the cleanup
+  searches
 
 **Interfaces:**
+
 - Consumes: completed dependency, production, and test migrations
 - Produces: repository with no active Lucide references
 
@@ -422,9 +456,11 @@ git commit -m "Remove remaining Lucide references"
 ### Task 5: Full verification
 
 **Files:**
+
 - Modify only files required to fix migration-caused verification failures
 
 **Interfaces:**
+
 - Consumes: complete Phosphor migration
 - Produces: verified build and test evidence
 
@@ -458,7 +494,8 @@ pnpm typecheck
 pnpm build
 ```
 
-Expected: both pass and Vite bundles `@phosphor-icons/react` imports successfully.
+Expected: both pass and Vite bundles `@phosphor-icons/react` imports
+successfully.
 
 - [ ] **Step 4: Run final searches and inspect the diff**
 
@@ -473,7 +510,8 @@ git diff --check
 git diff --stat HEAD~3
 ```
 
-Expected: no Lucide matches, no whitespace errors, and only migration-related changes.
+Expected: no Lucide matches, no whitespace errors, and only migration-related
+changes.
 
 - [ ] **Step 5: Commit any verification fixes**
 

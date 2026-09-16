@@ -8,29 +8,30 @@ wire, the v4 export format and the client are unchanged.
 Worktree cleanup matches Git's registered paths against the real worktree base
 directory, so a symlinked base still removes Git metadata. Branch-resume
 validation also resolves the base before checking registered worktrees, so an
-already checked-out branch is rejected before creating a workspace. It resolves the base
-separately from the worktree so cleanup also works after the worktree is deleted.
-If the base symlink itself no longer resolves, cleanup logs a warning and matches
-only the exact configured path. Restore the original base symlink and retry to
-remove a canonical registration; guessing from a basename or pruning unrelated
-registrations could remove another workspace.
+already checked-out branch is rejected before creating a workspace. It resolves
+the base separately from the worktree so cleanup also works after the worktree
+is deleted. If the base symlink itself no longer resolves, cleanup logs a
+warning and matches only the exact configured path. Restore the original base
+symlink and retry to remove a canonical registration; guessing from a basename
+or pruning unrelated registrations could remove another workspace.
 
 A failed workspace that still has a worktree allows queued chat messages to be
 resumed without rerunning setup. Its single workspace-level script warning
-exposes **Dispatch queued messages** for the selected chat. Ready workspaces with
-a setup warning dispatch normally and do not show this action.
+exposes **Dispatch queued messages** for the selected chat. Ready workspaces
+with a setup warning dispatch normally and do not show this action.
 
 ## Run script
 
 Startup output accumulates across factory setup and project startup phases. The
-first executed phase clears output from prior attempts; subsequent phases append.
+first executed phase clears output from prior attempts; subsequent phases
+append.
 
 Startup provisioning follows the main shell's exit. Output pipes normally drain
 to closure, with a one-second limit after exit so background descendants that
 inherit the pipes cannot keep provisioning open. Later output is drained and
-discarded until those descendants close their pipes, so writing after provisioning
-does not interrupt them. Persistent background commands should redirect output if
-it needs to remain available after startup.
+discarded until those descendants close their pipes, so writing after
+provisioning does not interrupt them. Persistent background commands should
+redirect output if it needs to remain available after startup.
 
 The workspace's dev server lives in a 1:1 `WorkspaceRunScript` row (`command`,
 `postRunCommand`, `cleanupCommand`, `pid`, `port`, `startedAt`, `status`),
@@ -41,7 +42,7 @@ Two concerns share the row: the three commands are a cache of the worktree's
 `factory-factory.json`, the four runtime columns describe a live process. They
 share it because they share a writer.
 
-The config group is *not* derived on read the way the kanban column and
+The config group is _not_ derived on read the way the kanban column and
 `RatchetState` are — its source of truth is a file, so deriving it would cost a
 filesystem call per workspace per list query; `reconcileWorkspaceCommandCache`
 repairs drift before a script starts or stops instead.
@@ -100,9 +101,10 @@ the live stream re-derived every card from a stale status and a running loop
 read as waiting between iterations. The event carries `mode` as well as `status`
 — the store's copy of `mode` is otherwise seeded only by reconciliation, so a
 loop reaching a gap inside that window would be derived against a `STANDARD` it
-never had. The two status writes report the row they landed on (`{ mode, status
-}`, and `{ settled, mode }` for the compare-and-swap) so the service never
-infers the mode from the fact that an auto-iteration code path is running.
+never had. The two status writes report the row they landed on
+(`{ mode, status }`, and `{ settled, mode }` for the compare-and-swap) so the
+service never infers the mode from the fact that an auto-iteration code path is
+running.
 
 Startup sweeps only `RUNNING` to `FAILED` — `PAUSED` is a state the user chose
 and the terminal states are results they have not seen.
@@ -113,13 +115,13 @@ The UI has a provider-driven intake column (`GitHub Issues` or `Linear Issues`)
 plus the columns `WORKING`, `WAITING`, `DONE`.
 
 The column is a projection of `statusReason.code` through
-`KANBAN_COLUMN_BY_STATUS_REASON_CODE` (`src/shared/kanban-column-projection.ts`),
-derived on every read and never persisted, so the column a card sits in and the
-label it shows cannot disagree. The map is typed as a total `Record` over the
-code union, so a new reason code without a column is a compile error. WAITING is
-positively asserted — it means a human owns the next action — and a code with no
-obvious home belongs in WORKING. Archived workspaces derive no column at all so
-they stay off the board.
+`KANBAN_COLUMN_BY_STATUS_REASON_CODE`
+(`src/shared/kanban-column-projection.ts`), derived on every read and never
+persisted, so the column a card sits in and the label it shows cannot disagree.
+The map is typed as a total `Record` over the code union, so a new reason code
+without a column is a compile error. WAITING is positively asserted — it means a
+human owns the next action — and a code with no obvious home belongs in WORKING.
+Archived workspaces derive no column at all so they stay off the board.
 
 Codex tasks remain automation-owned between turns. The app-server adapter
 bridges `thread/goal/updated` and `thread/goal/cleared` into session runtime
@@ -140,17 +142,17 @@ of them behind the one query (~20s at 68 worktrees).
 
 `gitStats` is a reconciliation field. Each snapshot poll first seeds all
 database and runtime fields, retaining any cached Git stats, then releases the
-startup snapshot barrier. A runtime snapshot failure is isolated to its workspace;
-healthy workspaces still seed, stale entries are removed, and Git refresh continues.
-It recomputes Git stats with bounded concurrency and
+startup snapshot barrier. A runtime snapshot failure is isolated to its
+workspace; healthy workspaces still seed, stale entries are removed, and Git
+refresh continues. It recomputes Git stats with bounded concurrency and
 publishes each workspace as soon as its Git commands finish; one slow worktree
 cannot hold the rest of the board. A failed Git refresh retains a non-null
 cached value, while a workspace that no longer has a worktree is explicitly
 cleared to null. Git stats have their own optional timestamp group, so the
 seed's `lastActivityAt` and the later Git update can carry the same poll-start
-timestamp without weakening either field's stale-update protection. The
-optional timestamp keeps older snapshot payloads valid during upgrades. A card
-can be missing its diff badge for a moment rather than the board being missing
+timestamp without weakening either field's stale-update protection. The optional
+timestamp keeps older snapshot payloads valid during upgrades. A card can be
+missing its diff badge for a moment rather than the board being missing
 entirely.
 
 Each cache entry watches its worktree and private Git directory, while linked
@@ -168,17 +170,18 @@ last dependent closes it.
 Workspace completion notifications count the distinct sessions that worked in
 the uninterrupted busy interval ending at the idle transition. Historical idle
 sessions do not inflate the count, and repeated turns from one session count
-once. The idle event captures the count before the asynchronous workspace lookup,
-so a subsequent interval cannot change an earlier notification. Lookups and
-notification requests run in idle order per workspace; a failed lookup does not
-block later intervals, and separate workspaces can proceed independently.
+once. The idle event captures the count before the asynchronous workspace
+lookup, so a subsequent interval cannot change an earlier notification. Lookups
+and notification requests run in idle order per workspace; a failed lookup does
+not block later intervals, and separate workspaces can proceed independently.
 
 Archiving or deleting a workspace suppresses completion notifications throughout
-runtime shutdown, worktree cleanup, persistence, and archive rollback. Late prompt
-callbacks cannot lift suppression; overlapping cleanup operations keep it active
-until both finish. Activity created during cleanup is invalidated before normal
-notifications resume. Persisted ARCHIVING/ARCHIVED workspaces and deleted rows
-also suppress late notifications after cleanup has ended. Other workspace caches
-are cleared only after the archive or deletion succeeds. Restarted activity gets
-a new state, so an older lookup cannot notify for that earlier lifecycle. Clearing also detaches the old
-notification chain, so restarted work does not wait for an earlier lookup.
+runtime shutdown, worktree cleanup, persistence, and archive rollback. Late
+prompt callbacks cannot lift suppression; overlapping cleanup operations keep it
+active until both finish. Activity created during cleanup is invalidated before
+normal notifications resume. Persisted ARCHIVING/ARCHIVED workspaces and deleted
+rows also suppress late notifications after cleanup has ended. Other workspace
+caches are cleared only after the archive or deletion succeeds. Restarted
+activity gets a new state, so an older lookup cannot notify for that earlier
+lifecycle. Clearing also detaches the old notification chain, so restarted work
+does not wait for an earlier lookup.

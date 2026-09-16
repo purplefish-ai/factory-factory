@@ -56,7 +56,8 @@ completed: 2026-02-10
 
 # Phase 2 Plan 1: Foundation Types, Protocol, and Registry Summary
 
-**Claude protocol types, NDJSON handler, and instance-based ProcessRegistry moved to session domain with backward-compatible shims at all old paths**
+**Claude protocol types, NDJSON handler, and instance-based ProcessRegistry
+moved to session domain with backward-compatible shims at all old paths**
 
 ## Performance
 
@@ -67,38 +68,56 @@ completed: 2026-02-10
 - **Files modified:** 14
 
 ## Accomplishments
-- Moved types.ts, types/process-types.ts, constants.ts, protocol.ts, protocol-io.ts to src/backend/domains/session/claude/
-- Co-located test files (types.test.ts, protocol.test.ts) at new location, 182 tests passing
-- Refactored ProcessRegistry from module-level Map to instance-based class (DOM-04 compliance)
-- Created backward-compatible shims at all 6 old paths; existing consumers unaffected
-- All verification passing: pnpm typecheck, 182 domain tests, 161 old-path tests, dep-cruiser, knip
+
+- Moved types.ts, types/process-types.ts, constants.ts, protocol.ts,
+  protocol-io.ts to src/backend/domains/session/claude/
+- Co-located test files (types.test.ts, protocol.test.ts) at new location, 182
+  tests passing
+- Refactored ProcessRegistry from module-level Map to instance-based class
+  (DOM-04 compliance)
+- Created backward-compatible shims at all 6 old paths; existing consumers
+  unaffected
+- All verification passing: pnpm typecheck, 182 domain tests, 161 old-path
+  tests, dep-cruiser, knip
 
 ## Task Commits
 
 Each task was committed atomically:
 
 1. **Task 1: Move types, constants, and protocol layer** - `2198706` (feat)
-2. **Task 2: Refactor registry to instance-based ProcessRegistry** - `e606ae7` (feat)
+2. **Task 2: Refactor registry to instance-based ProcessRegistry** - `e606ae7`
+   (feat)
 
 ## Files Created/Modified
-- `src/backend/domains/session/claude/types.ts` - Claude protocol types and Zod schemas (canonical location)
-- `src/backend/domains/session/claude/types/process-types.ts` - Process status and resource types
-- `src/backend/domains/session/claude/constants.ts` - Timeout and limit constants
-- `src/backend/domains/session/claude/protocol.ts` - ClaudeProtocol NDJSON handler (updated imports to absolute paths)
+
+- `src/backend/domains/session/claude/types.ts` - Claude protocol types and Zod
+  schemas (canonical location)
+- `src/backend/domains/session/claude/types/process-types.ts` - Process status
+  and resource types
+- `src/backend/domains/session/claude/constants.ts` - Timeout and limit
+  constants
+- `src/backend/domains/session/claude/protocol.ts` - ClaudeProtocol NDJSON
+  handler (updated imports to absolute paths)
 - `src/backend/domains/session/claude/protocol-io.ts` - Protocol IO adapter
 - `src/backend/domains/session/claude/protocol.test.ts` - 53 protocol tests
 - `src/backend/domains/session/claude/types.test.ts` - 129 type guard tests
-- `src/backend/domains/session/claude/registry.ts` - Instance-based ProcessRegistry class (DOM-04)
+- `src/backend/domains/session/claude/registry.ts` - Instance-based
+  ProcessRegistry class (DOM-04)
 - `src/backend/claude/types.ts` - Re-export shim
 - `src/backend/claude/types/process-types.ts` - Re-export shim
 - `src/backend/claude/constants.ts` - Re-export shim
 - `src/backend/claude/protocol.ts` - Re-export shim
 - `src/backend/claude/protocol-io.ts` - Re-export shim
-- `src/backend/claude/registry.ts` - Backward-compatible shim with singleton + free functions
+- `src/backend/claude/registry.ts` - Backward-compatible shim with singleton +
+  free functions
 
 ## Decisions Made
-- Used absolute path aliases (`@/backend/services/logger.service`, `@/backend/lib/event-emitter-types`) in the new protocol.ts instead of relative paths, since the file moved deeper into the directory tree
-- Registry shim uses inline `import()` type expressions for function signatures rather than a separate type-only import, keeping the shim simpler
+
+- Used absolute path aliases (`@/backend/services/logger.service`,
+  `@/backend/lib/event-emitter-types`) in the new protocol.ts instead of
+  relative paths, since the file moved deeper into the directory tree
+- Registry shim uses inline `import()` type expressions for function signatures
+  rather than a separate type-only import, keeping the shim simpler
 
 ## Deviations from Plan
 
@@ -113,14 +132,19 @@ None.
 None - no external service configuration required.
 
 ## Next Phase Readiness
-- Session domain's claude/ subdirectory is established with types, protocol, and registry
-- Move-and-shim pattern validated and ready for Plans 02-06 (process, permissions, session, monitoring, index)
-- All existing consumers continue to work via shims; no import changes needed yet
+
+- Session domain's claude/ subdirectory is established with types, protocol, and
+  registry
+- Move-and-shim pattern validated and ready for Plans 02-06 (process,
+  permissions, session, monitoring, index)
+- All existing consumers continue to work via shims; no import changes needed
+  yet
 
 ## Self-Check: PASSED
 
-All 14 files verified present. Both commit hashes (2198706, e606ae7) verified in git log.
+All 14 files verified present. Both commit hashes (2198706, e606ae7) verified in
+git log.
 
 ---
-*Phase: 02-session-domain-consolidation*
-*Completed: 2026-02-10*
+
+_Phase: 02-session-domain-consolidation_ _Completed: 2026-02-10_

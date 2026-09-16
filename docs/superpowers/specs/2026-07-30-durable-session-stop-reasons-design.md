@@ -16,22 +16,22 @@ so the user saw work stop without an explanation.
 
 1. Persist append-only session lifecycle events and merge them into provider
    history. This is the selected approach because it preserves chronology,
-   supports multiple stops in one resumable session, survives process and
-   server restarts, and does not modify provider-owned transcript files.
+   supports multiple stops in one resumable session, survives process and server
+   restarts, and does not modify provider-owned transcript files.
 2. Store only the latest stop reason on `AgentSession`. This would be simpler,
    but it would provide a status banner rather than a chat log and would discard
    earlier interruptions.
 3. Emit a synthetic WebSocket message. This is the smallest change, but it
-   repeats the current defect: clients disconnected at the time of failure
-   never receive it, and refresh loses it.
+   repeats the current defect: clients disconnected at the time of failure never
+   receive it, and refresh loses it.
 
 ## Persistence Model
 
-The session service capsule will own a new append-only
-`SessionLifecycleEvent` Prisma model. An event belongs to a workspace and is
-identified logically by `sessionId`, rather than by a foreign key to
-`AgentSession`, so it survives moving an active session into `ClosedSession`.
-Deleting the workspace cascades to its lifecycle events.
+The session service capsule will own a new append-only `SessionLifecycleEvent`
+Prisma model. An event belongs to a workspace and is identified logically by
+`sessionId`, rather than by a foreign key to `AgentSession`, so it survives
+moving an active session into `ClosedSession`. Deleting the workspace cascades
+to its lifecycle events.
 
 Each row contains:
 
@@ -39,8 +39,7 @@ Each row contains:
 - `workspaceId` and `sessionId`;
 - a typed event kind: `TURN_INTERRUPTED` or `SESSION_STOPPED`;
 - a typed reason: `PROMPT_TIMEOUT`, `PROVIDER_ERROR`, `USER_STOP`,
-  `SESSION_CLOSED`, `WORKSPACE_ARCHIVED`, `UNEXPECTED_EXIT`, or
-  `SYSTEM_STOP`;
+  `SESSION_CLOSED`, `WORKSPACE_ARCHIVED`, `UNEXPECTED_EXIT`, or `SYSTEM_STOP`;
 - a human-readable message suitable for the chat transcript;
 - a caller-stable `dedupeKey`;
 - `createdAt`.
@@ -63,8 +62,8 @@ emitting a delta only when that message was not already present.
 Prompt execution receives a stable attempt key when
 `AcpEventProcessor.beginPromptTurn` starts the turn. All failure paths for that
 attempt use `turn:<attempt-key>:stop` as their dedupe key. This prevents a
-provider error reported through an ACP message and the resulting rejected
-prompt promise from creating two transcript entries.
+provider error reported through an ACP message and the resulting rejected prompt
+promise from creating two transcript entries.
 
 The recorder covers:
 
@@ -99,14 +98,14 @@ variant containing event id, kind, reason, message, and timestamp.
 
 On active-session load, provider history is hydrated exactly as it is today.
 Persisted lifecycle events are then mapped to stable chat-message ids, merged
-with that transcript by timestamp, and assigned deterministic display order.
-The merge is idempotent, so live events already present in memory are not
-duplicated during a reconnect or Codex tool-history backfill.
+with that transcript by timestamp, and assigned deterministic display order. The
+merge is idempotent, so live events already present in memory are not duplicated
+during a reconnect or Codex tool-history backfill.
 
 When an active session is closed, its transcript already contains lifecycle
 messages. Closed-session persistence therefore writes them into the existing
-closed transcript artifact. The close path explicitly hydrates lifecycle
-events before writing as a recovery boundary for sessions closed after a server
+closed transcript artifact. The close path explicitly hydrates lifecycle events
+before writing as a recovery boundary for sessions closed after a server
 restart.
 
 Lifecycle events are append-only. Starting or successfully completing a later
@@ -135,8 +134,8 @@ configurable timeout. Tool-specific timeouts, shutdown waits, queue waits, and
 ratchet scheduling are unchanged.
 
 The timeout remains a fixed upper bound rather than an inactivity timer. A turn
-that reaches four hours is cancelled gracefully through the existing ACP
-cancel path and records the durable timeout event before returning to idle.
+that reaches four hours is cancelled gracefully through the existing ACP cancel
+path and records the durable timeout event before returning to idle.
 
 ## Error Handling
 
@@ -148,8 +147,7 @@ cancel path and records the durable timeout event before returning to idle.
 - Provider error text is normalized and bounded before persistence so an
   upstream payload cannot create an unbounded chat row.
 - Unique dedupe keys make retrying an event write safe.
-- A runtime-state transition to idle cannot remove a lifecycle transcript
-  entry.
+- A runtime-state transition to idle cannot remove a lifecycle transcript entry.
 
 ## Testing
 

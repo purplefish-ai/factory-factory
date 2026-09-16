@@ -1,25 +1,48 @@
 # Provider-Initiated Sub-Agent Visibility Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Show Codex provider-initiated sub-agents in the workspace Agents panel and allow users to inspect their live or completed transcripts in a read-only drill-in view.
+**Goal:** Show Codex provider-initiated sub-agents in the workspace Agents panel
+and allow users to inspect their live or completed transcripts in a read-only
+drill-in view.
 
-**Architecture:** The internal Codex adapter emits ordinary ACP tool calls with `factoryfactory.ai` metadata and implements a narrow ACP list/read extension. `AcpRuntimeManager` validates that extension and exposes it through the session tRPC router; existing session WebSockets carry invalidation events. A new client subagents feature renders the session-scoped list and projects paginated ACP transcript updates through the existing chat rendering model without creating database sessions or Prisma rows.
+**Architecture:** The internal Codex adapter emits ordinary ACP tool calls with
+`factoryfactory.ai` metadata and implements a narrow ACP list/read extension.
+`AcpRuntimeManager` validates that extension and exposes it through the session
+tRPC router; existing session WebSockets carry invalidation events. A new client
+subagents feature renders the session-scoped list and projects paginated ACP
+transcript updates through the existing chat rendering model without creating
+database sessions or Prisma rows.
 
-**Tech Stack:** TypeScript, `@agentclientprotocol/sdk`, Codex app-server JSON-RPC, Zod, Express/tRPC, WebSockets, React 19, TanStack Query, Vitest, Storybook, Biome
+**Tech Stack:** TypeScript, `@agentclientprotocol/sdk`, Codex app-server
+JSON-RPC, Zod, Express/tRPC, WebSockets, React 19, TanStack Query, Vitest,
+Storybook, Biome
 
 ## Global Constraints
 
-- Use `factoryfactory.ai` for every ACP extension method, notification, capability, and metadata key.
-- Codex is the only provider implementation in this plan; capability detection must keep the backend and client provider-neutral.
-- Provider sub-agents remain read-only and are never represented as Factory Factory sessions, workspaces, or child workspaces.
-- The provider remains the source of truth; add no Prisma model, snapshot field, export field, or backup payload.
-- Show direct children of the currently selected parent session only; do not visualize deeper descendants in this release.
-- Keep active sub-agents visible and place terminal outcomes under a collapsed `Completed · N` group.
-- Keep the selected parent session tab active during drill-in, hide the composer, and preserve the parent transcript and scroll position.
-- Keep existing child-workspace creation, navigation, polling, and archive behavior unchanged inside the renamed Agents tab.
-- Validate extension capabilities, metadata, requests, responses, and notifications with Zod at the ACP boundary.
-- Follow test-first red-green cycles, run focused tests after every task, and commit each task separately.
+- Use `factoryfactory.ai` for every ACP extension method, notification,
+  capability, and metadata key.
+- Codex is the only provider implementation in this plan; capability detection
+  must keep the backend and client provider-neutral.
+- Provider sub-agents remain read-only and are never represented as Factory
+  Factory sessions, workspaces, or child workspaces.
+- The provider remains the source of truth; add no Prisma model, snapshot field,
+  export field, or backup payload.
+- Show direct children of the currently selected parent session only; do not
+  visualize deeper descendants in this release.
+- Keep active sub-agents visible and place terminal outcomes under a collapsed
+  `Completed · N` group.
+- Keep the selected parent session tab active during drill-in, hide the
+  composer, and preserve the parent transcript and scroll position.
+- Keep existing child-workspace creation, navigation, polling, and archive
+  behavior unchanged inside the renamed Agents tab.
+- Validate extension capabilities, metadata, requests, responses, and
+  notifications with Zod at the ACP boundary.
+- Follow test-first red-green cycles, run focused tests after every task, and
+  commit each task separately.
 
 ---
 
@@ -27,60 +50,97 @@
 
 ### Shared protocol
 
-- Create `src/shared/acp-protocol/subagents.ts` for extension constants, Zod schemas, and provider-neutral DTOs.
-- Create `src/shared/acp-protocol/subagents.test.ts` for contract parsing and rejection cases.
-- Create `src/shared/acp-protocol/session-update-translator.ts` for the environment-neutral ACP update translator currently owned by the backend.
-- Modify `src/shared/acp-protocol/index.ts` to publish the new contract and translator.
-- Modify `src/shared/acp-protocol/protocol/websocket.ts` to add the `subagents_changed` session delta.
+- Create `src/shared/acp-protocol/subagents.ts` for extension constants, Zod
+  schemas, and provider-neutral DTOs.
+- Create `src/shared/acp-protocol/subagents.test.ts` for contract parsing and
+  rejection cases.
+- Create `src/shared/acp-protocol/session-update-translator.ts` for the
+  environment-neutral ACP update translator currently owned by the backend.
+- Modify `src/shared/acp-protocol/index.ts` to publish the new contract and
+  translator.
+- Modify `src/shared/acp-protocol/protocol/websocket.ts` to add the
+  `subagents_changed` session delta.
 
 ### Codex ACP adapter
 
-- Create `src/backend/services/session/service/acp/codex-app-server-adapter/codex-subagent-mapper.ts` for Codex item-to-ACP tool metadata and status normalization.
-- Create `src/backend/services/session/service/acp/codex-app-server-adapter/codex-subagent-mapper.test.ts` for singular/multi-receiver activity mapping.
-- Create `src/backend/services/session/service/acp/codex-app-server-adapter/codex-subagent-controller.ts` for parent-scoped list/read and invalidation.
-- Create `src/backend/services/session/service/acp/codex-app-server-adapter/codex-subagent-controller.test.ts` for app-server request, pagination, authorization, and normalization behavior.
-- Modify `adapter-state.ts`, `codex-zod.ts`, `stream-event-handler.ts`, and `codex-app-server-acp-adapter.ts` to use those focused modules.
+- Create
+  `src/backend/services/session/service/acp/codex-app-server-adapter/codex-subagent-mapper.ts`
+  for Codex item-to-ACP tool metadata and status normalization.
+- Create
+  `src/backend/services/session/service/acp/codex-app-server-adapter/codex-subagent-mapper.test.ts`
+  for singular/multi-receiver activity mapping.
+- Create
+  `src/backend/services/session/service/acp/codex-app-server-adapter/codex-subagent-controller.ts`
+  for parent-scoped list/read and invalidation.
+- Create
+  `src/backend/services/session/service/acp/codex-app-server-adapter/codex-subagent-controller.test.ts`
+  for app-server request, pagination, authorization, and normalization behavior.
+- Modify `adapter-state.ts`, `codex-zod.ts`, `stream-event-handler.ts`, and
+  `codex-app-server-acp-adapter.ts` to use those focused modules.
 - Modify their existing tests and the manual integration test.
 
 ### Session runtime and transport
 
-- Modify `acp-process-handle.ts` and `acp-runtime-manager.ts` to validate capability metadata and invoke extension methods.
-- Modify `acp-client-handler.ts` and `acp-runtime-events.ts` to receive extension invalidations.
-- Modify `acp-event-processor.ts` to publish `subagents_changed` through the existing session event stream.
-- Modify `session.trpc.ts` to expose `listSubagents` and `readSubagentTranscript` queries.
-- Create `src/client/lib/subagent-events.ts` for the typed browser invalidation event shared by chat transport and the subagents feature.
-- Modify `use-chat-transport.ts` and the chat reducer's exhaustive WebSocket map to dispatch but not reduce that invalidation event.
+- Modify `acp-process-handle.ts` and `acp-runtime-manager.ts` to validate
+  capability metadata and invoke extension methods.
+- Modify `acp-client-handler.ts` and `acp-runtime-events.ts` to receive
+  extension invalidations.
+- Modify `acp-event-processor.ts` to publish `subagents_changed` through the
+  existing session event stream.
+- Modify `session.trpc.ts` to expose `listSubagents` and
+  `readSubagentTranscript` queries.
+- Create `src/client/lib/subagent-events.ts` for the typed browser invalidation
+  event shared by chat transport and the subagents feature.
+- Modify `use-chat-transport.ts` and the chat reducer's exhaustive WebSocket map
+  to dispatch but not reduce that invalidation event.
 
 ### Client UI
 
-- Create `src/client/features/chat/project-acp-transcript.ts` and its test to turn transcript ACP updates into existing `ChatMessage` objects.
-- Create `src/client/features/subagents/` with a public barrel, list container, presentational list, transcript view, invalidation hook, tests, and stories.
-- Create `src/client/features/workspace/agents-panel.tsx` to compose provider sub-agents with the existing child-workspace section.
-- Create `src/client/features/workspace/right-panel-state.ts` and its test for the persisted `child-workspaces` to `agents` migration.
-- Modify `right-panel.tsx`, `child-workspaces-panel.tsx`, `workspace-detail-view.tsx`, and their tests to support the new composition and drill-in state.
+- Create `src/client/features/chat/project-acp-transcript.ts` and its test to
+  turn transcript ACP updates into existing `ChatMessage` objects.
+- Create `src/client/features/subagents/` with a public barrel, list container,
+  presentational list, transcript view, invalidation hook, tests, and stories.
+- Create `src/client/features/workspace/agents-panel.tsx` to compose provider
+  sub-agents with the existing child-workspace section.
+- Create `src/client/features/workspace/right-panel-state.ts` and its test for
+  the persisted `child-workspaces` to `agents` migration.
+- Modify `right-panel.tsx`, `child-workspaces-panel.tsx`,
+  `workspace-detail-view.tsx`, and their tests to support the new composition
+  and drill-in state.
 
 ### Documentation
 
-- Modify `AGENTS.md` to document provider-initiated sub-agent visibility separately from child workspaces.
+- Modify `AGENTS.md` to document provider-initiated sub-agent visibility
+  separately from child workspaces.
 
 ---
 
 ### Task 1: Define the Provider-Neutral ACP Sub-Agent Contract
 
 **Files:**
+
 - Create: `src/shared/acp-protocol/subagents.ts`
 - Create: `src/shared/acp-protocol/subagents.test.ts`
 - Modify: `src/shared/acp-protocol/index.ts`
 
 **Interfaces:**
-- Produces: `SUBAGENTS_CAPABILITY_META_KEY`, `SUBAGENT_TOOL_META_KEY`, `SUBAGENTS_LIST_METHOD`, `SUBAGENTS_READ_METHOD`, and `SUBAGENTS_CHANGED_METHOD`
-- Produces: `SubagentBrowseCapability`, `SubagentStatus`, `SubagentSummary`, `SubagentTranscriptUpdate`, `SubagentListParams`, `SubagentListResult`, `SubagentReadParams`, `SubagentReadResult`, and `SubagentsChangedParams`
-- Produces: Zod schemas for every produced type and the supported ACP transcript update subset
+
+- Produces: `SUBAGENTS_CAPABILITY_META_KEY`, `SUBAGENT_TOOL_META_KEY`,
+  `SUBAGENTS_LIST_METHOD`, `SUBAGENTS_READ_METHOD`, and
+  `SUBAGENTS_CHANGED_METHOD`
+- Produces: `SubagentBrowseCapability`, `SubagentStatus`, `SubagentSummary`,
+  `SubagentTranscriptUpdate`, `SubagentListParams`, `SubagentListResult`,
+  `SubagentReadParams`, `SubagentReadResult`, and `SubagentsChangedParams`
+- Produces: Zod schemas for every produced type and the supported ACP transcript
+  update subset
 - Consumes: Zod and ACP `SessionUpdate` field conventions
 
 - [ ] **Step 1: Write failing contract tests**
 
-Cover the exact namespace, capability version, all lifecycle states, cursor bounds, direct list/read payloads, valid transcript updates, unknown passthrough fields, and rejection of malformed IDs, dates, status values, and unsupported capability versions.
+Cover the exact namespace, capability version, all lifecycle states, cursor
+bounds, direct list/read payloads, valid transcript updates, unknown passthrough
+fields, and rejection of malformed IDs, dates, status values, and unsupported
+capability versions.
 
 ```typescript
 expect(SUBAGENTS_LIST_METHOD).toBe('factoryfactory.ai/subagents/list');
@@ -137,7 +197,10 @@ export type SubagentSummary = z.infer<typeof subagentSummarySchema>;
 export type SubagentReadResult = z.infer<typeof subagentReadResultSchema>;
 ```
 
-Define a discriminated Zod union for the transcript updates the adapter produces: `user_message_chunk`, `agent_message_chunk`, `agent_thought_chunk`, `tool_call`, `tool_call_update`, and `plan`. Mark individual objects `.passthrough()` so additive ACP fields do not break version 1.
+Define a discriminated Zod union for the transcript updates the adapter
+produces: `user_message_chunk`, `agent_message_chunk`, `agent_thought_chunk`,
+`tool_call`, `tool_call_update`, and `plan`. Mark individual objects
+`.passthrough()` so additive ACP fields do not break version 1.
 
 - [ ] **Step 4: Run the contract test and verify GREEN**
 
@@ -157,25 +220,42 @@ git commit -m "Define ACP sub-agent inspection contract"
 ### Task 2: Surface Codex Sub-Agent Activity as Standard ACP Tool Calls
 
 **Files:**
-- Create: `src/backend/services/session/service/acp/codex-app-server-adapter/codex-subagent-mapper.ts`
-- Create: `src/backend/services/session/service/acp/codex-app-server-adapter/codex-subagent-mapper.test.ts`
-- Modify: `src/backend/services/session/service/acp/codex-app-server-adapter/adapter-state.ts`
-- Modify: `src/backend/services/session/service/acp/codex-app-server-adapter/codex-zod.ts`
-- Modify: `src/backend/services/session/service/acp/codex-app-server-adapter/codex-zod.test.ts`
-- Modify: `src/backend/services/session/service/acp/codex-app-server-adapter/stream-event-handler.ts`
-- Modify: `src/backend/services/session/service/acp/codex-app-server-adapter/stream-event-handler.test.ts`
-- Modify: `src/backend/services/session/service/acp/codex-app-server-adapter/codex-app-server-acp-adapter.ts`
-- Modify: `src/backend/services/session/service/acp/codex-app-server-adapter/codex-app-server-acp-adapter.test.ts`
+
+- Create:
+  `src/backend/services/session/service/acp/codex-app-server-adapter/codex-subagent-mapper.ts`
+- Create:
+  `src/backend/services/session/service/acp/codex-app-server-adapter/codex-subagent-mapper.test.ts`
+- Modify:
+  `src/backend/services/session/service/acp/codex-app-server-adapter/adapter-state.ts`
+- Modify:
+  `src/backend/services/session/service/acp/codex-app-server-adapter/codex-zod.ts`
+- Modify:
+  `src/backend/services/session/service/acp/codex-app-server-adapter/codex-zod.test.ts`
+- Modify:
+  `src/backend/services/session/service/acp/codex-app-server-adapter/stream-event-handler.ts`
+- Modify:
+  `src/backend/services/session/service/acp/codex-app-server-adapter/stream-event-handler.test.ts`
+- Modify:
+  `src/backend/services/session/service/acp/codex-app-server-adapter/codex-app-server-acp-adapter.ts`
+- Modify:
+  `src/backend/services/session/service/acp/codex-app-server-adapter/codex-app-server-acp-adapter.test.ts`
 
 **Interfaces:**
-- Produces: `SubagentToolMapping` with display data, `_meta`, and affected child thread IDs
-- Produces: `mapCodexSubagentToolItem(item, parentSessionId): SubagentToolMapping | null`
+
+- Produces: `SubagentToolMapping` with display data, `_meta`, and affected child
+  thread IDs
+- Produces:
+  `mapCodexSubagentToolItem(item, parentSessionId): SubagentToolMapping | null`
 - Modifies: `ToolCallState` to carry optional `meta: Record<string, unknown>`
 - Consumes: `collabAgentToolCall` and `subAgentActivity` Codex thread items
 
 - [ ] **Step 1: Write failing mapper and stream tests**
 
-Require `subAgentActivity` to produce a singular provider-neutral ID, `collabAgentToolCall` with one receiver to produce the same metadata, multi-receiver calls to report every affected ID without inventing a singular ID, and started/completed stream events to retain `_meta` on standard ACP tool calls.
+Require `subAgentActivity` to produce a singular provider-neutral ID,
+`collabAgentToolCall` with one receiver to produce the same metadata,
+multi-receiver calls to report every affected ID without inventing a singular
+ID, and started/completed stream events to retain `_meta` on standard ACP tool
+calls.
 
 ```typescript
 expect(
@@ -208,7 +288,8 @@ expect(
 pnpm exec vitest run src/backend/services/session/service/acp/codex-app-server-adapter/codex-subagent-mapper.test.ts src/backend/services/session/service/acp/codex-app-server-adapter/stream-event-handler.test.ts src/backend/services/session/service/acp/codex-app-server-adapter/codex-app-server-acp-adapter.test.ts
 ```
 
-Expected: FAIL because both Codex item types are reported as unhandled and tool-call state drops metadata.
+Expected: FAIL because both Codex item types are reported as unhandled and
+tool-call state drops metadata.
 
 - [ ] **Step 3: Add tolerant Codex item schemas and the focused mapper**
 
@@ -231,9 +312,13 @@ const collabAgentToolCallItemSchema = threadItemSchema.extend({
 }).passthrough();
 ```
 
-The mapper must return stable launch/interact/interrupt titles, ACP kind `other`, no filesystem locations, and `affectedSubagentIds` for invalidation. Attach singular `factoryfactory.ai/subagent` metadata only when one child can be identified.
+The mapper must return stable launch/interact/interrupt titles, ACP kind
+`other`, no filesystem locations, and `affectedSubagentIds` for invalidation.
+Attach singular `factoryfactory.ai/subagent` metadata only when one child can be
+identified.
 
-- [ ] **Step 4: Preserve metadata through start, progress, completion, and replay**
+- [ ] **Step 4: Preserve metadata through start, progress, completion, and
+      replay**
 
 Extend tool state and every tool emission path:
 
@@ -258,7 +343,8 @@ await emitSessionUpdate(sessionId, {
 });
 ```
 
-Do not advertise the browse capability in this task; the standard tool-call behavior must remain useful by itself.
+Do not advertise the browse capability in this task; the standard tool-call
+behavior must remain useful by itself.
 
 - [ ] **Step 5: Run focused adapter tests and verify GREEN**
 
@@ -266,7 +352,8 @@ Do not advertise the browse capability in this task; the standard tool-call beha
 pnpm exec vitest run src/backend/services/session/service/acp/codex-app-server-adapter/codex-subagent-mapper.test.ts src/backend/services/session/service/acp/codex-app-server-adapter/codex-zod.test.ts src/backend/services/session/service/acp/codex-app-server-adapter/stream-event-handler.test.ts src/backend/services/session/service/acp/codex-app-server-adapter/codex-app-server-acp-adapter.test.ts
 ```
 
-Expected: all mapper, schema, stream, and adapter tests pass; existing command/file/MCP tool tests remain unchanged.
+Expected: all mapper, schema, stream, and adapter tests pass; existing
+command/file/MCP tool tests remain unchanged.
 
 - [ ] **Step 6: Commit standard ACP activity mapping**
 
@@ -278,26 +365,44 @@ git commit -m "Surface Codex sub-agents through ACP tools"
 ### Task 3: Implement Codex Parent-Scoped List, Read, and Invalidation
 
 **Files:**
-- Create: `src/backend/services/session/service/acp/codex-app-server-adapter/codex-subagent-controller.ts`
-- Create: `src/backend/services/session/service/acp/codex-app-server-adapter/codex-subagent-controller.test.ts`
-- Modify: `src/backend/services/session/service/acp/codex-app-server-adapter/codex-zod.ts`
-- Modify: `src/backend/services/session/service/acp/codex-app-server-adapter/codex-zod.test.ts`
-- Modify: `src/backend/services/session/service/acp/codex-app-server-adapter/stream-event-handler.ts`
-- Modify: `src/backend/services/session/service/acp/codex-app-server-adapter/stream-event-handler.test.ts`
-- Modify: `src/backend/services/session/service/acp/codex-app-server-adapter/codex-app-server-acp-adapter.ts`
-- Modify: `src/backend/services/session/service/acp/codex-app-server-adapter/codex-app-server-acp-adapter.test.ts`
+
+- Create:
+  `src/backend/services/session/service/acp/codex-app-server-adapter/codex-subagent-controller.ts`
+- Create:
+  `src/backend/services/session/service/acp/codex-app-server-adapter/codex-subagent-controller.test.ts`
+- Modify:
+  `src/backend/services/session/service/acp/codex-app-server-adapter/codex-zod.ts`
+- Modify:
+  `src/backend/services/session/service/acp/codex-app-server-adapter/codex-zod.test.ts`
+- Modify:
+  `src/backend/services/session/service/acp/codex-app-server-adapter/stream-event-handler.ts`
+- Modify:
+  `src/backend/services/session/service/acp/codex-app-server-adapter/stream-event-handler.test.ts`
+- Modify:
+  `src/backend/services/session/service/acp/codex-app-server-adapter/codex-app-server-acp-adapter.ts`
+- Modify:
+  `src/backend/services/session/service/acp/codex-app-server-adapter/codex-app-server-acp-adapter.test.ts`
 
 **Interfaces:**
+
 - Produces: `CodexSubagentController.list(params): Promise<SubagentListResult>`
 - Produces: `CodexSubagentController.read(params): Promise<SubagentReadResult>`
-- Produces: `CodexSubagentController.notifyChanged(parentSessionId, subagentId, change): Promise<void>`
-- Produces: parent lookup for Codex `thread/status/changed` invalidation, populated from activity and authoritative list results
-- Produces: adapter `extMethod(method, params): Promise<Record<string, unknown>>`
-- Consumes: parent `AdapterSession`, Codex `thread/list`, Codex `thread/read`, Task 2 tool mappings, and `AgentSideConnection.extNotification`
+- Produces:
+  `CodexSubagentController.notifyChanged(parentSessionId, subagentId, change): Promise<void>`
+- Produces: parent lookup for Codex `thread/status/changed` invalidation,
+  populated from activity and authoritative list results
+- Produces: adapter
+  `extMethod(method, params): Promise<Record<string, unknown>>`
+- Consumes: parent `AdapterSession`, Codex `thread/list`, Codex `thread/read`,
+  Task 2 tool mappings, and `AgentSideConnection.extNotification`
 
 - [ ] **Step 1: Write failing list and authorization tests**
 
-Require list to call `thread/list` with the parent's thread ID, cursor, limit, creation ordering, and experimental `parentThreadId`. Normalize name, timestamps, status, preview, and terminal last-turn outcome. Require no descendants from another parent, and require returned direct-child IDs to populate the controller's parent lookup.
+Require list to call `thread/list` with the parent's thread ID, cursor, limit,
+creation ordering, and experimental `parentThreadId`. Normalize name,
+timestamps, status, preview, and terminal last-turn outcome. Require no
+descendants from another parent, and require returned direct-child IDs to
+populate the controller's parent lookup.
 
 ```typescript
 expect(codex.request).toHaveBeenCalledWith('thread/list', {
@@ -312,7 +417,12 @@ expect(result.subagents.map((item) => item.id)).toEqual(['child-thread-1']);
 
 - [ ] **Step 2: Write failing read and cursor tests**
 
-Use a parent with two children and a foreign thread. Require `read` to re-list/verify direct ownership before `thread/read`, reject the foreign ID with `RequestError.invalidParams`, select the newest `limit` complete turns initially, return updates in chronological order with `projectionBoundary: 'turn'`, and encode the first selected turn ID into an opaque cursor for older pages.
+Use a parent with two children and a foreign thread. Require `read` to
+re-list/verify direct ownership before `thread/read`, reject the foreign ID with
+`RequestError.invalidParams`, select the newest `limit` complete turns
+initially, return updates in chronological order with
+`projectionBoundary: 'turn'`, and encode the first selected turn ID into an
+opaque cursor for older pages.
 
 ```typescript
 const first = await controller.read({
@@ -326,7 +436,9 @@ expect(first.projectionBoundary).toBe('turn');
 expect(first.nextCursor).toEqual(expect.any(String));
 ```
 
-After the list establishes correlation, feed `thread/status/changed` for one direct child and one unrelated thread. Require exactly one namespaced `completed` notification for the direct child and none for the unrelated thread.
+After the list establishes correlation, feed `thread/status/changed` for one
+direct child and one unrelated thread. Require exactly one namespaced
+`completed` notification for the direct child and none for the unrelated thread.
 
 - [ ] **Step 3: Run focused controller tests and verify RED**
 
@@ -334,11 +446,13 @@ After the list establishes correlation, feed `thread/status/changed` for one dir
 pnpm exec vitest run src/backend/services/session/service/acp/codex-app-server-adapter/codex-subagent-controller.test.ts src/backend/services/session/service/acp/codex-app-server-adapter/codex-app-server-acp-adapter.test.ts
 ```
 
-Expected: FAIL because the adapter has no extension handler, parent-filtered schemas, or transcript collector.
+Expected: FAIL because the adapter has no extension handler, parent-filtered
+schemas, or transcript collector.
 
 - [ ] **Step 4: Add Codex list/read schemas and status normalization**
 
-Parse only required thread fields and retain additive fields. Map runtime and last-turn status as follows:
+Parse only required thread fields and retain additive fields. Map runtime and
+last-turn status as follows:
 
 ```typescript
 function normalizeCodexSubagentStatus(input: {
@@ -361,15 +475,20 @@ function normalizeCodexSubagentStatus(input: {
 }
 ```
 
-Codex does not expose distinct thread or turn states for the provider-neutral `starting` and
-`cancelled` values. Preserve its explicit `interrupted` outcome instead of inventing a cancellation
-state, and use the active wait flags for the observable `waiting` state.
+Codex does not expose distinct thread or turn states for the provider-neutral
+`starting` and `cancelled` values. Preserve its explicit `interrupted` outcome
+instead of inventing a cancellation state, and use the active wait flags for the
+observable `waiting` state.
 
-For terminal threads, inspect the last turn returned by `thread/read` when the list response does not contain enough outcome data. Use the last agent message as `resultPreview`, trim whitespace, and cap it at 240 characters. Limit concurrent terminal-summary reads to four.
+For terminal threads, inspect the last turn returned by `thread/read` when the
+list response does not contain enough outcome data. Use the last agent message
+as `resultPreview`, trim whitespace, and cap it at 240 characters. Limit
+concurrent terminal-summary reads to four.
 
 - [ ] **Step 5: Refactor history replay into a reusable collector**
 
-Keep existing session replay behavior while allowing a synthetic, unregistered child projection session:
+Keep existing session replay behavior while allowing a synthetic, unregistered
+child projection session:
 
 ```typescript
 async projectThreadTurns(
@@ -383,9 +502,12 @@ async replayThreadHistory(sessionId: string, threadId: string): Promise<void> {
 }
 ```
 
-Create the projection session from the parent's cwd/defaults with fresh tool/replay maps; never register it in `sessionIdByThreadId` or mutate the parent's replay state.
+Create the projection session from the parent's cwd/defaults with fresh
+tool/replay maps; never register it in `sessionIdByThreadId` or mutate the
+parent's replay state.
 
-- [ ] **Step 6: Implement extension routing, capability advertisement, and invalidation**
+- [ ] **Step 6: Implement extension routing, capability advertisement, and
+      invalidation**
 
 Advertise capability only now that both methods exist:
 
@@ -404,7 +526,14 @@ agentCapabilities: {
 }
 ```
 
-Parse params before dispatch and results before returning. Throw `RequestError.methodNotFound(method)` for every other extension method. On Task 2 activity items, remember child-to-parent correlation and emit one `factoryfactory.ai/subagents/changed` notification per affected child with `created`, `updated`, or `completed`. Parse Codex `thread/status/changed`; when its thread ID is a remembered direct child, map active status to `updated` and terminal status to `completed` for the same parent. Ignore unrelated thread IDs. Notification failure must not fail the parent turn.
+Parse params before dispatch and results before returning. Throw
+`RequestError.methodNotFound(method)` for every other extension method. On Task
+2 activity items, remember child-to-parent correlation and emit one
+`factoryfactory.ai/subagents/changed` notification per affected child with
+`created`, `updated`, or `completed`. Parse Codex `thread/status/changed`; when
+its thread ID is a remembered direct child, map active status to `updated` and
+terminal status to `completed` for the same parent. Ignore unrelated thread IDs.
+Notification failure must not fail the parent turn.
 
 - [ ] **Step 7: Run focused controller and adapter tests and verify GREEN**
 
@@ -412,7 +541,8 @@ Parse params before dispatch and results before returning. Throw `RequestError.m
 pnpm exec vitest run src/backend/services/session/service/acp/codex-app-server-adapter/codex-subagent-controller.test.ts src/backend/services/session/service/acp/codex-app-server-adapter/codex-zod.test.ts src/backend/services/session/service/acp/codex-app-server-adapter/stream-event-handler.test.ts src/backend/services/session/service/acp/codex-app-server-adapter/codex-app-server-acp-adapter.test.ts
 ```
 
-Expected: list/read authorization, status, cursor, transcript, capability, notification, and existing replay tests pass.
+Expected: list/read authorization, status, cursor, transcript, capability,
+notification, and existing replay tests pass.
 
 - [ ] **Step 8: Commit Codex browsing support**
 
@@ -424,6 +554,7 @@ git commit -m "Add Codex ACP sub-agent browsing"
 ### Task 4: Add Provider-Neutral Runtime Methods and Extension Notifications
 
 **Files:**
+
 - Modify: `src/backend/services/session/service/acp/acp-process-handle.ts`
 - Create: `src/backend/services/session/service/acp/acp-process-handle.test.ts`
 - Modify: `src/backend/services/session/service/acp/acp-runtime-manager.ts`
@@ -435,16 +566,24 @@ git commit -m "Add Codex ACP sub-agent browsing"
 - Modify: `src/backend/services/session/service/index.ts`
 
 **Interfaces:**
-- Produces: `AcpProcessHandle.getSubagentBrowseCapability(): SubagentBrowseCapability | null`
-- Produces: `AcpRuntimeManager.getSubagentBrowseCapability(sessionId): SubagentBrowseCapability | null`
-- Produces: `AcpRuntimeManager.listSubagents(sessionId, input): Promise<SubagentListResult>`
-- Produces: `AcpRuntimeManager.readSubagentTranscript(sessionId, input): Promise<SubagentReadResult>`
+
+- Produces:
+  `AcpProcessHandle.getSubagentBrowseCapability(): SubagentBrowseCapability | null`
+- Produces:
+  `AcpRuntimeManager.getSubagentBrowseCapability(sessionId): SubagentBrowseCapability | null`
+- Produces:
+  `AcpRuntimeManager.listSubagents(sessionId, input): Promise<SubagentListResult>`
+- Produces:
+  `AcpRuntimeManager.readSubagentTranscript(sessionId, input): Promise<SubagentReadResult>`
 - Produces: `AcpSubagentsChangedEvent` in `AcpRuntimeEvent`
 - Consumes: Task 1 schemas and `ClientSideConnection.extMethod`
 
 - [ ] **Step 1: Write failing capability and extension invocation tests**
 
-Require a version-1 capability under `agentCapabilities._meta`, reject wrong versions/shapes, substitute the provider session ID before calling the adapter, pass cursors unchanged, parse both responses, and reject calls when no live handle or capability exists.
+Require a version-1 capability under `agentCapabilities._meta`, reject wrong
+versions/shapes, substitute the provider session ID before calling the adapter,
+pass cursors unchanged, parse both responses, and reject calls when no live
+handle or capability exists.
 
 ```typescript
 mockExtMethod.mockResolvedValue({ subagents: [], nextCursor: null });
@@ -458,7 +597,10 @@ expect(mockExtMethod).toHaveBeenCalledWith(SUBAGENTS_LIST_METHOD, {
 
 - [ ] **Step 2: Write failing notification tests**
 
-Call `AcpClientHandler.extNotification` with a valid change and require one DB-session-scoped runtime event. Require unknown extension notifications to log and resolve without dispatch, and malformed known notifications to log and resolve without crashing the ACP connection.
+Call `AcpClientHandler.extNotification` with a valid change and require one
+DB-session-scoped runtime event. Require unknown extension notifications to log
+and resolve without dispatch, and malformed known notifications to log and
+resolve without crashing the ACP connection.
 
 ```typescript
 await handler.extNotification(SUBAGENTS_CHANGED_METHOD, {
@@ -479,11 +621,13 @@ expect(onEvent).toHaveBeenCalledWith('db-session-1', {
 pnpm exec vitest run src/backend/services/session/service/acp/acp-process-handle.test.ts src/backend/services/session/service/acp/acp-runtime-manager.test.ts src/backend/services/session/service/acp/acp-client-handler.test.ts
 ```
 
-Expected: FAIL because capability parsing, runtime methods, and `extNotification` do not exist.
+Expected: FAIL because capability parsing, runtime methods, and
+`extNotification` do not exist.
 
 - [ ] **Step 4: Implement capability parsing and runtime methods**
 
-Keep the DB session ID outside the extension boundary and require the live handle:
+Keep the DB session ID outside the extension boundary and require the live
+handle:
 
 ```typescript
 getSubagentBrowseCapability(): SubagentBrowseCapability | null {
@@ -501,11 +645,14 @@ async listSubagents(
 getSubagentBrowseCapability(sessionId: string): SubagentBrowseCapability | null;
 ```
 
-Call `connection.extMethod`, parse the returned record, and keep method-not-found/provider errors typed and visible to the caller.
+Call `connection.extMethod`, parse the returned record, and keep
+method-not-found/provider errors typed and visible to the caller.
 
 - [ ] **Step 5: Implement known extension notification routing**
 
-Add `extNotification` to `AcpClientHandler`, extend `AcpRuntimeEvent`, and export the new types through the session capsule barrels. Keep logging before dispatch, matching ordinary ACP update behavior.
+Add `extNotification` to `AcpClientHandler`, extend `AcpRuntimeEvent`, and
+export the new types through the session capsule barrels. Keep logging before
+dispatch, matching ordinary ACP update behavior.
 
 - [ ] **Step 6: Run focused runtime tests and verify GREEN**
 
@@ -513,7 +660,8 @@ Add `extNotification` to `AcpClientHandler`, extend `AcpRuntimeEvent`, and expor
 pnpm exec vitest run src/backend/services/session/service/acp/acp-process-handle.test.ts src/backend/services/session/service/acp/acp-runtime-manager.test.ts src/backend/services/session/service/acp/acp-client-handler.test.ts
 ```
 
-Expected: all capability, invocation, response validation, notification, and existing runtime lifecycle tests pass.
+Expected: all capability, invocation, response validation, notification, and
+existing runtime lifecycle tests pass.
 
 - [ ] **Step 7: Commit the provider-neutral runtime boundary**
 
@@ -525,10 +673,13 @@ git commit -m "Expose sub-agent browsing through ACP runtime"
 ### Task 5: Expose Session Queries and Live Invalidation Transport
 
 **Files:**
+
 - Modify: `src/shared/acp-protocol/protocol/websocket.ts`
 - Modify: `src/shared/acp-protocol/protocol.test.ts`
-- Modify: `src/backend/services/session/service/lifecycle/acp-event-processor.ts`
-- Create: `src/backend/services/session/service/lifecycle/acp-event-processor.subagents.test.ts`
+- Modify:
+  `src/backend/services/session/service/lifecycle/acp-event-processor.ts`
+- Create:
+  `src/backend/services/session/service/lifecycle/acp-event-processor.subagents.test.ts`
 - Modify: `src/backend/trpc/session.trpc.ts`
 - Modify: `src/backend/trpc/session.router.test.ts`
 - Create: `src/client/lib/subagent-events.ts`
@@ -537,15 +688,23 @@ git commit -m "Expose sub-agent browsing through ACP runtime"
 - Modify: `src/client/features/chat/reducer/index.ts`
 
 **Interfaces:**
-- Produces: `subagents_changed` session delta with DB `sessionId`, `subagentId`, and change kind
-- Produces: `session.listSubagents` query returning `{ supported: false }` or `{ supported: true, subagents, nextCursor }`
-- Produces: `session.readSubagentTranscript` query returning `SubagentReadResult`
+
+- Produces: `subagents_changed` session delta with DB `sessionId`, `subagentId`,
+  and change kind
+- Produces: `session.listSubagents` query returning `{ supported: false }` or
+  `{ supported: true, subagents, nextCursor }`
+- Produces: `session.readSubagentTranscript` query returning
+  `SubagentReadResult`
 - Produces: `subscribeToSubagentChanges(listener): () => void` in the client
-- Consumes: Task 4 runtime methods and the existing session publisher/WebSocket recursion
+- Consumes: Task 4 runtime methods and the existing session publisher/WebSocket
+  recursion
 
 - [ ] **Step 1: Write failing protocol, processor, and transport tests**
 
-Require a direct and `session_delta`-wrapped `subagents_changed` event to pass the runtime guard. Require `AcpEventProcessor` to convert the runtime event into one session-domain delta. Require chat transport to dispatch one typed browser event and no reducer action.
+Require a direct and `session_delta`-wrapped `subagents_changed` event to pass
+the runtime guard. Require `AcpEventProcessor` to convert the runtime event into
+one session-domain delta. Require chat transport to dispatch one typed browser
+event and no reducer action.
 
 ```typescript
 expect(isWebSocketMessage({
@@ -558,7 +717,8 @@ expect(isWebSocketMessage({
 
 - [ ] **Step 2: Write failing router tests**
 
-Cover unsupported capability, supported empty list, cursor forwarding, read forwarding, no live runtime, and adapter validation errors.
+Cover unsupported capability, supported empty list, cursor forwarding, read
+forwarding, no live runtime, and adapter validation errors.
 
 ```typescript
 await expect(caller.listSubagents({ sessionId: 'session-1', limit: 50 })).resolves.toEqual({
@@ -578,7 +738,8 @@ expect(acpRuntimeManager.readSubagentTranscript).toHaveBeenCalledWith('session-1
 pnpm exec vitest run src/shared/acp-protocol/protocol.test.ts src/backend/services/session/service/lifecycle/acp-event-processor.subagents.test.ts src/backend/trpc/session.router.test.ts src/client/features/chat/use-chat-transport.test.ts
 ```
 
-Expected: FAIL because the event union, processor branch, router procedures, and browser event helper do not exist.
+Expected: FAIL because the event union, processor branch, router procedures, and
+browser event helper do not exist.
 
 - [ ] **Step 4: Add the session delta and processor branch**
 
@@ -590,11 +751,17 @@ subagents_changed: {
 };
 ```
 
-Handle `acp_subagents_changed` before ordinary session updates and publish through `sessionDomainService.emitDelta`. This event is ephemeral and must not enter transcript persistence or replay.
+Handle `acp_subagents_changed` before ordinary session updates and publish
+through `sessionDomainService.emitDelta`. This event is ephemeral and must not
+enter transcript persistence or replay.
 
 - [ ] **Step 5: Add parent-session queries**
 
-Use Zod input schemas with `limit` bounds from Task 1. `listSubagents` checks `getSubagentBrowseCapability()` before invoking the extension. `readSubagentTranscript` returns `PRECONDITION_FAILED` for unsupported sessions and lets typed invalid-relationship/provider errors flow through the existing tRPC error mapping.
+Use Zod input schemas with `limit` bounds from Task 1. `listSubagents` checks
+`getSubagentBrowseCapability()` before invoking the extension.
+`readSubagentTranscript` returns `PRECONDITION_FAILED` for unsupported sessions
+and lets typed invalid-relationship/provider errors flow through the existing
+tRPC error mapping.
 
 - [ ] **Step 6: Dispatch a typed browser invalidation event**
 
@@ -606,7 +773,9 @@ export function subscribeToSubagentChanges(
 ): () => void;
 ```
 
-Add `subagents_changed: null` to the reducer's exhaustive message map. In `useChatTransport`, dispatch through the helper and return before creating a reducer action.
+Add `subagents_changed: null` to the reducer's exhaustive message map. In
+`useChatTransport`, dispatch through the helper and return before creating a
+reducer action.
 
 - [ ] **Step 7: Run focused transport tests and verify GREEN**
 
@@ -614,7 +783,8 @@ Add `subagents_changed: null` to the reducer's exhaustive message map. In `useCh
 pnpm exec vitest run src/shared/acp-protocol/protocol.test.ts src/backend/services/session/service/lifecycle/acp-event-processor.subagents.test.ts src/backend/trpc/session.router.test.ts src/client/features/chat/use-chat-transport.test.ts
 ```
 
-Expected: protocol, runtime-to-domain, router, nested WebSocket, and browser event tests pass.
+Expected: protocol, runtime-to-domain, router, nested WebSocket, and browser
+event tests pass.
 
 - [ ] **Step 8: Commit the application transport**
 
@@ -626,23 +796,28 @@ git commit -m "Add sub-agent session queries and invalidation"
 ### Task 6: Reuse the Chat Model for Read-Only ACP Transcript Pages
 
 **Files:**
+
 - Create: `src/shared/acp-protocol/session-update-translator.ts`
 - Create: `src/shared/acp-protocol/session-update-translator.test.ts`
 - Modify: `src/shared/acp-protocol/index.ts`
 - Modify: `src/backend/services/session/service/acp/acp-event-translator.ts`
-- Modify: `src/backend/services/session/service/acp/acp-event-translator.test.ts`
+- Modify:
+  `src/backend/services/session/service/acp/acp-event-translator.test.ts`
 - Create: `src/client/features/chat/project-acp-transcript.ts`
 - Create: `src/client/features/chat/project-acp-transcript.test.ts`
 - Modify: `src/client/features/chat/index.ts`
 
 **Interfaces:**
+
 - Produces: shared `AcpEventTranslator` with no backend import
 - Produces: `projectAcpTranscriptUpdates(updates): ChatMessage[]`
-- Consumes: Task 1 transcript update union, existing chat reducer helpers, and current ACP translation semantics
+- Consumes: Task 1 transcript update union, existing chat reducer helpers, and
+  current ACP translation semantics
 
 - [ ] **Step 1: Write failing environment-neutral translation tests**
 
-Move the existing translator expectations to the shared module without changing live translation semantics. Require malformed data to warn and return no deltas.
+Move the existing translator expectations to the shared module without changing
+live translation semantics. Require malformed data to warn and return no deltas.
 
 ```typescript
 const translator = new AcpEventTranslator({ warn: vi.fn() });
@@ -656,7 +831,10 @@ expect(
 
 - [ ] **Step 2: Write failing transcript projection tests**
 
-Use a transcript containing user text, assistant text, reasoning, a pending command tool call, its terminal update, and a second assistant result. Require deterministic message order, one paired tool result, no pending composer state, and identical projection when the same pages are recombined.
+Use a transcript containing user text, assistant text, reasoning, a pending
+command tool call, its terminal update, and a second assistant result. Require
+deterministic message order, one paired tool result, no pending composer state,
+and identical projection when the same pages are recombined.
 
 ```typescript
 const messages = projectAcpTranscriptUpdates(updates);
@@ -676,9 +854,11 @@ expect(messages.some((message) => message.message?.type === 'tool_result')).toBe
 pnpm exec vitest run src/shared/acp-protocol/session-update-translator.test.ts src/backend/services/session/service/acp/acp-event-translator.test.ts src/client/features/chat/project-acp-transcript.test.ts
 ```
 
-Expected: FAIL because the shared translator and read-only projector do not exist.
+Expected: FAIL because the shared translator and read-only projector do not
+exist.
 
-- [ ] **Step 4: Move the translator behind an environment-neutral logger interface**
+- [ ] **Step 4: Move the translator behind an environment-neutral logger
+      interface**
 
 ```typescript
 export type AcpTranslationLogger = {
@@ -691,11 +871,16 @@ export class AcpEventTranslator {
 }
 ```
 
-Keep `src/backend/.../acp-event-translator.ts` as a compatibility re-export so existing internal imports do not widen or duplicate implementation.
+Keep `src/backend/.../acp-event-translator.ts` as a compatibility re-export so
+existing internal imports do not widen or duplicate implementation.
 
 - [ ] **Step 5: Implement deterministic read-only projection**
 
-Handle `user_message_chunk` directly as a user `ChatMessage`. Translate the remaining updates, allocate monotonically increasing `order`, and run the same chat reducer actions used for WebSocket messages. Use deterministic IDs derived from page order and tool-call IDs; use a fixed ISO timestamp when provider history has none.
+Handle `user_message_chunk` directly as a user `ChatMessage`. Translate the
+remaining updates, allocate monotonically increasing `order`, and run the same
+chat reducer actions used for WebSocket messages. Use deterministic IDs derived
+from page order and tool-call IDs; use a fixed ISO timestamp when provider
+history has none.
 
 ```typescript
 const TRANSCRIPT_FALLBACK_TIMESTAMP = '1970-01-01T00:00:00.000Z';
@@ -745,7 +930,10 @@ export function projectAcpTranscriptUpdates(
 }
 ```
 
-`readTextContent` accepts only ACP text chunks without coercing image/resource blocks. `transcriptLogger` is a module-local no-op logger. The function must be pure: do not read the DOM, mutate input pages, reuse live session reducer state, or leak reducer-generated IDs/timestamps into the result.
+`readTextContent` accepts only ACP text chunks without coercing image/resource
+blocks. `transcriptLogger` is a module-local no-op logger. The function must be
+pure: do not read the DOM, mutate input pages, reuse live session reducer state,
+or leak reducer-generated IDs/timestamps into the result.
 
 - [ ] **Step 6: Run translation and projection tests and verify GREEN**
 
@@ -753,7 +941,8 @@ export function projectAcpTranscriptUpdates(
 pnpm exec vitest run src/shared/acp-protocol/session-update-translator.test.ts src/backend/services/session/service/acp/acp-event-translator.test.ts src/backend/services/session/service/lifecycle/acp-event-processor.text-streaming.test.ts src/client/features/chat/project-acp-transcript.test.ts
 ```
 
-Expected: shared translation, existing live ACP processing, and read-only transcript projection pass together.
+Expected: shared translation, existing live ACP processing, and read-only
+transcript projection pass together.
 
 - [ ] **Step 7: Commit transcript reuse**
 
@@ -765,6 +954,7 @@ git commit -m "Project ACP sub-agent transcripts into chat"
 ### Task 7: Build the Agents Panel and Session-Scoped Sub-Agent List
 
 **Files:**
+
 - Create: `src/client/features/subagents/index.ts`
 - Create: `src/client/features/subagents/types.ts`
 - Create: `src/client/features/subagents/use-subagent-invalidation.ts`
@@ -783,15 +973,23 @@ git commit -m "Project ACP sub-agent transcripts into chat"
 - Modify: `src/client/features/workspace/index.ts`
 
 **Interfaces:**
-- Produces: `SubagentSelection` and `SubagentListItem` client types inferred from `AppRouter`
+
+- Produces: `SubagentSelection` and `SubagentListItem` client types inferred
+  from `AppRouter`
 - Produces: `ProviderSubagentsSection({ sessionId, enabled, onSelect })`
-- Produces: `AgentsPanel({ workspaceId, sessionId, sessionReady, isParentWorkspace, onOpenSubagent })`
-- Produces: `parseStoredTopTab(value): TopPanelTab | null` and `loadPersistedTopPanelState(storage, workspaceId)` with legacy migration
+- Produces:
+  `AgentsPanel({ workspaceId, sessionId, sessionReady, isParentWorkspace, onOpenSubagent })`
+- Produces: `parseStoredTopTab(value): TopPanelTab | null` and
+  `loadPersistedTopPanelState(storage, workspaceId)` with legacy migration
 - Consumes: Task 5 list query and browser invalidation event
 
 - [ ] **Step 1: Write failing presentational list tests**
 
-Require provider/fallback names, normalized status, elapsed time, and active previews. Require active rows to render oldest first and completed rows newest first beneath a collapsed `Completed · N` control; expansion reveals terminal statuses/result previews. Cover row selection, loading, empty, unsupported, and contained error states with fake time for stable elapsed labels.
+Require provider/fallback names, normalized status, elapsed time, and active
+previews. Require active rows to render oldest first and completed rows newest
+first beneath a collapsed `Completed · N` control; expansion reveals terminal
+statuses/result previews. Cover row selection, loading, empty, unsupported, and
+contained error states with fake time for stable elapsed labels.
 
 ```typescript
 expect(screen.getByText('Security review')).toBeVisible();
@@ -802,11 +1000,17 @@ expect(screen.getByText('Finished audit')).toBeVisible();
 
 - [ ] **Step 2: Write failing persisted-tab migration tests**
 
-Require `agents` to round-trip, legacy `child-workspaces` to map to `agents` and rewrite local storage through `loadPersistedTopPanelState`, existing change-tab migrations to remain intact, and unknown values to fall back to `changes`.
+Require `agents` to round-trip, legacy `child-workspaces` to map to `agents` and
+rewrite local storage through `loadPersistedTopPanelState`, existing change-tab
+migrations to remain intact, and unknown values to fall back to `changes`.
 
 - [ ] **Step 3: Write failing query and invalidation tests**
 
-Require no query while the panel is hidden or the selected session has not hydrated; one parent-scoped query when ready; disconnect/reconnect of the same selected session to refetch the authoritative list; a null render for `{ supported: false }`; session-matching browser invalidation to refetch; and another session's event to leave the query untouched.
+Require no query while the panel is hidden or the selected session has not
+hydrated; one parent-scoped query when ready; disconnect/reconnect of the same
+selected session to refetch the authoritative list; a null render for
+`{ supported: false }`; session-matching browser invalidation to refetch; and
+another session's event to leave the query untouched.
 
 ```typescript
 expect(listSubagentsQuery).toHaveBeenCalledWith(
@@ -823,7 +1027,11 @@ expect(invalidate).toHaveBeenCalledTimes(1);
 
 - [ ] **Step 4: Write failing Agents composition and right-panel tests**
 
-Require the tab label to be `Agents` for both parent and child workspaces. When active, require the provider section to receive only the selected session while the child-workspace section receives only the workspace ID. Require child workspaces to render for eligible parents, remain absent for child workspaces, and remain unchanged when the selected session changes.
+Require the tab label to be `Agents` for both parent and child workspaces. When
+active, require the provider section to receive only the selected session while
+the child-workspace section receives only the workspace ID. Require child
+workspaces to render for eligible parents, remain absent for child workspaces,
+and remain unchanged when the selected session changes.
 
 - [ ] **Step 5: Run list, query, composition, and state tests and verify RED**
 
@@ -849,15 +1057,26 @@ type SubagentListProps = {
 };
 ```
 
-Stories must cover empty, active-only, mixed with collapsed completion, expanded completion, loading, unsupported, and list error at a 320 px panel width.
+Stories must cover empty, active-only, mixed with collapsed completion, expanded
+completion, loading, unsupported, and list error at a 320 px panel width.
 
 - [ ] **Step 7: Implement query ownership and live invalidation**
 
-`ProviderSubagentsSection` calls `session.listSubagents` only when the Agents tab is visible, `sessionId` exists, and the parent session has hydrated. A readiness transition from disconnected to hydrated invalidates the selected session's list before enabling it. Subscribe to the browser event and invalidate only matching parent-session list queries. Return `null` for unsupported providers so the Sub-agents section is absent. Keep completed expansion state local to the selected session.
+`ProviderSubagentsSection` calls `session.listSubagents` only when the Agents
+tab is visible, `sessionId` exists, and the parent session has hydrated. A
+readiness transition from disconnected to hydrated invalidates the selected
+session's list before enabling it. Subscribe to the browser event and invalidate
+only matching parent-session list queries. Return `null` for unsupported
+providers so the Sub-agents section is absent. Keep completed expansion state
+local to the selected session.
 
 - [ ] **Step 8: Compose the Agents panel and migrate persisted state**
 
-Rename the internal top-tab key to `agents`, always show the Agents tab so child workspaces can inspect provider sub-agents, and render the Child Workspaces section only when `isParentWorkspace` is true. Add an `embedded` presentation prop to `ChildWorkspacesPanel` so both sections share one vertical scroll container without changing its dialog or links.
+Rename the internal top-tab key to `agents`, always show the Agents tab so child
+workspaces can inspect provider sub-agents, and render the Child Workspaces
+section only when `isParentWorkspace` is true. Add an `embedded` presentation
+prop to `ChildWorkspacesPanel` so both sections share one vertical scroll
+container without changing its dialog or links.
 
 ```tsx
 <AgentsPanel
@@ -869,14 +1088,17 @@ Rename the internal top-tab key to `agents`, always show the Agents tab so child
 />
 ```
 
-- [ ] **Step 9: Run list, query, migration, composition, and boundary tests and verify GREEN**
+- [ ] **Step 9: Run list, query, migration, composition, and boundary tests and
+      verify GREEN**
 
 ```bash
 pnpm exec vitest run src/client/features/subagents/subagent-list.test.tsx src/client/features/subagents/provider-subagents-section.test.tsx src/client/features/workspace/agents-panel.test.tsx src/client/features/workspace/right-panel-state.test.ts src/client/features/workspace/right-panel.test.tsx src/client/features/workspace/workspace-panel-context.test.tsx
 pnpm deps:check
 ```
 
-Expected: list states, sorting, collapse, migration, and dependency boundaries pass. The `workspace` feature imports subagents only from `@/client/features/subagents`.
+Expected: list states, sorting, collapse, migration, and dependency boundaries
+pass. The `workspace` feature imports subagents only from
+`@/client/features/subagents`.
 
 - [ ] **Step 10: Commit the Agents panel**
 
@@ -888,6 +1110,7 @@ git commit -m "Add session-scoped sub-agents to Agents panel"
 ### Task 8: Add Read-Only Transcript Drill-In Without Replacing the Parent Session
 
 **Files:**
+
 - Create: `src/client/features/subagents/subagent-transcript-content.tsx`
 - Create: `src/client/features/subagents/subagent-transcript-view.tsx`
 - Create: `src/client/features/subagents/subagent-transcript-view.test.tsx`
@@ -898,13 +1121,19 @@ git commit -m "Add session-scoped sub-agents to Agents panel"
 - Modify: `src/client/routes/projects/workspaces/workspace-detail-view.test.tsx`
 
 **Interfaces:**
+
 - Produces: `SubagentTranscriptView({ selection, onBack, workspaceId })`
-- Produces: presentational `SubagentTranscriptContent` for Storybook and component tests
+- Produces: presentational `SubagentTranscriptContent` for Storybook and
+  component tests
 - Consumes: Task 5 read query/invalidation and Task 6 transcript projector
 
 - [ ] **Step 1: Write failing transcript view tests**
 
-Require breadcrumb parent/child names, `Read only` badge, exact terminal status, and no textarea, composer, permission, stop, steering, close, or archive controls. Cover Back callback, loading, empty, unavailable with retained preview, initial newest-page projection, and Load older prepending without losing the current viewport.
+Require breadcrumb parent/child names, `Read only` badge, exact terminal status,
+and no textarea, composer, permission, stop, steering, close, or archive
+controls. Cover Back callback, loading, empty, unavailable with retained
+preview, initial newest-page projection, and Load older prepending without
+losing the current viewport.
 
 ```typescript
 expect(screen.getByText('Session 1')).toBeVisible();
@@ -915,7 +1144,10 @@ expect(document.querySelector('textarea')).toBeNull();
 
 - [ ] **Step 2: Write failing workspace drill-in tests**
 
-Update the RightPanel mock so it can call `onOpenSubagent`. Require the parent ChatContent DOM node to remain mounted but hidden, the session tab selection prop to remain unchanged, the transcript to appear, Back to restore the same parent node, and changing `selectedDbSessionId` to clear the drill-in.
+Update the RightPanel mock so it can call `onOpenSubagent`. Require the parent
+ChatContent DOM node to remain mounted but hidden, the session tab selection
+prop to remain unchanged, the transcript to appear, Back to restore the same
+parent node, and changing `selectedDbSessionId` to clear the drill-in.
 
 - [ ] **Step 3: Run transcript and workspace tests and verify RED**
 
@@ -923,11 +1155,14 @@ Update the RightPanel mock so it can call `onOpenSubagent`. Require the parent C
 pnpm exec vitest run src/client/features/subagents/subagent-transcript-view.test.tsx src/client/routes/projects/workspaces/workspace-detail-view.test.tsx
 ```
 
-Expected: FAIL because no transcript component or drill-in selection state exists.
+Expected: FAIL because no transcript component or drill-in selection state
+exists.
 
 - [ ] **Step 4: Implement paginated read-only transcript data flow**
 
-Use `session.readSubagentTranscript.useInfiniteQuery` with `limit: 10`. The first page contains newest turns; subsequent pages are older. Reverse page order before flattening updates, then call `projectAcpTranscriptUpdates`.
+Use `session.readSubagentTranscript.useInfiniteQuery` with `limit: 10`. The
+first page contains newest turns; subsequent pages are older. Reverse page order
+before flattening updates, then call `projectAcpTranscriptUpdates`.
 
 ```typescript
 const projectedPages = query.data.pages.map((page, pageIndex) => {
@@ -943,15 +1178,24 @@ const projectedPages = query.data.pages.map((page, pageIndex) => {
 const messages = projectedPages.reverse().flat();
 ```
 
-Subscribe to matching sub-agent invalidations and refetch active transcript pages. Preserve scroll position when older pages prepend by recording `scrollHeight - scrollTop` before fetch and restoring that distance after render.
+Subscribe to matching sub-agent invalidations and refetch active transcript
+pages. Preserve scroll position when older pages prepend by recording
+`scrollHeight - scrollTop` before fetch and restoring that distance after
+render.
 
 - [ ] **Step 5: Implement the read-only presentation and stories**
 
-Render the breadcrumb, status badge, result preview fallback, Back button, virtualized grouped message renderers, Load older control, and contained error/retry states. Stories must cover active/live, completed, failed, empty, loading, and transcript unavailable at desktop and narrow widths.
+Render the breadcrumb, status badge, result preview fallback, Back button,
+virtualized grouped message renderers, Load older control, and contained
+error/retry states. Stories must cover active/live, completed, failed, empty,
+loading, and transcript unavailable at desktop and narrow widths.
 
 - [ ] **Step 6: Keep the parent chat mounted during route-level drill-in**
 
-Add local selection state to `WorkspaceDetailView`. Pass selected session readiness from the container (`runtimeSessionId === selectedDbSessionId && connected`) to RightPanel. Render chat and transcript as siblings:
+Add local selection state to `WorkspaceDetailView`. Pass selected session
+readiness from the container
+(`runtimeSessionId === selectedDbSessionId && connected`) to RightPanel. Render
+chat and transcript as siblings:
 
 ```tsx
 <div className={cn('h-full', selectedSubagent && 'hidden')}>
@@ -966,7 +1210,8 @@ Add local selection state to `WorkspaceDetailView`. Pass selected session readin
 )}
 ```
 
-Reset selection when workspace ID or selected parent session ID changes. Do not add a main-view tab or mutate `selectedDbSessionId` when a child opens.
+Reset selection when workspace ID or selected parent session ID changes. Do not
+add a main-view tab or mutate `selectedDbSessionId` when a child opens.
 
 - [ ] **Step 7: Run transcript and workspace tests and verify GREEN**
 
@@ -975,7 +1220,8 @@ pnpm exec vitest run src/client/features/subagents/subagent-transcript-view.test
 pnpm deps:check
 ```
 
-Expected: all read-only, pagination, unavailable, Back, session reset, scroll preservation, and feature-boundary tests pass.
+Expected: all read-only, pagination, unavailable, Back, session reset, scroll
+preservation, and feature-boundary tests pass.
 
 - [ ] **Step 8: Commit read-only drill-in**
 
@@ -987,17 +1233,27 @@ git commit -m "Add read-only sub-agent transcript drill-in"
 ### Task 9: Verify Real Codex Recovery, Visual States, and Documentation
 
 **Files:**
-- Modify: `src/backend/services/session/service/acp/codex-app-server-adapter/codex-app-server-acp-adapter.manual.integration.test.ts`
+
+- Modify:
+  `src/backend/services/session/service/acp/codex-app-server-adapter/codex-app-server-acp-adapter.manual.integration.test.ts`
 - Modify: `AGENTS.md`
 - Review: all files changed by Tasks 1-8
 
 **Interfaces:**
-- Consumes: complete provider-neutral contract, Codex adapter, runtime transport, and client UI
-- Produces: one opt-in real Codex sub-agent scenario and current repository feature documentation
+
+- Consumes: complete provider-neutral contract, Codex adapter, runtime
+  transport, and client UI
+- Produces: one opt-in real Codex sub-agent scenario and current repository
+  feature documentation
 
 - [ ] **Step 1: Extend the manual connection and write the real Codex scenario**
 
-Add `extNotification` recording to the manual connection. Under `RUN_REAL_CODEX_APP_SERVER_PROMPT_TESTS=1`, start a Codex session with a prompt that explicitly spawns one bounded research sub-agent and waits for it. Require at least one namespaced tool update, list the child, read a non-empty transcript, and repeat list/read after closing and loading a fresh adapter for the same provider session ID.
+Add `extNotification` recording to the manual connection. Under
+`RUN_REAL_CODEX_APP_SERVER_PROMPT_TESTS=1`, start a Codex session with a prompt
+that explicitly spawns one bounded research sub-agent and waits for it. Require
+at least one namespaced tool update, list the child, read a non-empty
+transcript, and repeat list/read after closing and loading a fresh adapter for
+the same provider session ID.
 
 ```typescript
 expect(recordedUpdates.some(hasFactoryFactorySubagentMeta)).toBe(true);
@@ -1006,11 +1262,14 @@ expect(read.updates.length).toBeGreaterThan(0);
 expect(reloadedList.subagents.map((item) => item.id)).toContain(list.subagents[0]!.id);
 ```
 
-Keep this scenario opt-in because it requires local Codex authentication and consumes tokens.
+Keep this scenario opt-in because it requires local Codex authentication and
+consumes tokens.
 
 - [ ] **Step 2: Update the feature note**
 
-Add a separate AGENTS.md bullet stating that provider-initiated sub-agents are session-scoped, read-only, provider-owned, surfaced through `factoryfactory.ai` ACP extensions, shown in the Agents panel, and distinct from child workspaces.
+Add a separate AGENTS.md bullet stating that provider-initiated sub-agents are
+session-scoped, read-only, provider-owned, surfaced through `factoryfactory.ai`
+ACP extensions, shown in the Agents panel, and distinct from child workspaces.
 
 - [ ] **Step 3: Run all focused feature tests**
 
@@ -1031,7 +1290,8 @@ pnpm build
 pnpm build:storybook
 ```
 
-Expected: all six commands exit zero. Inspect and fix every reproducible failure, then rerun the failed command and its affected focused tests.
+Expected: all six commands exit zero. Inspect and fix every reproducible
+failure, then rerun the failed command and its affected focused tests.
 
 - [ ] **Step 5: Perform visual QA**
 
@@ -1039,7 +1299,12 @@ Expected: all six commands exit zero. Inspect and fix every reproducible failure
 pnpm storybook
 ```
 
-Inspect the sub-agent list and transcript stories at 320 px, 768 px, and desktop widths in light and dark themes. Verify active status motion, collapsed completed content, truncation, focus order, keyboard expansion, Back navigation, error copy, scroll containment, and that no composer appears in transcript stories. Capture review screenshots if the implementation workflow requires PR evidence.
+Inspect the sub-agent list and transcript stories at 320 px, 768 px, and desktop
+widths in light and dark themes. Verify active status motion, collapsed
+completed content, truncation, focus order, keyboard expansion, Back navigation,
+error copy, scroll containment, and that no composer appears in transcript
+stories. Capture review screenshots if the implementation workflow requires PR
+evidence.
 
 - [ ] **Step 6: Run the opt-in Codex scenario when authenticated**
 
@@ -1047,7 +1312,10 @@ Inspect the sub-agent list and transcript stories at 320 px, 768 px, and desktop
 pnpm test:codex-app-server:manual:prompt
 ```
 
-Expected: the real app-server prompt, live metadata, parent-filtered list, transcript read, and restart recovery assertions pass. If the environment lacks Codex authentication, record this one check as not run and keep all deterministic adapter tests green.
+Expected: the real app-server prompt, live metadata, parent-filtered list,
+transcript read, and restart recovery assertions pass. If the environment lacks
+Codex authentication, record this one check as not run and keep all
+deterministic adapter tests green.
 
 - [ ] **Step 7: Exercise the real in-app lifecycle when authenticated**
 
@@ -1055,7 +1323,16 @@ Expected: the real app-server prompt, live metadata, parent-filtered list, trans
 pnpm dev
 ```
 
-In a Codex parent session, request one bounded sub-agent and wait for it. Open Agents and verify the live row and parent tool call, open the read-only child transcript while it is updating, use Back and confirm the parent's exact scroll position, observe the terminal row move beneath collapsed `Completed · 1`, expand and reopen it, restart Factory Factory, reload the same parent session, and inspect the completed transcript again. Also switch parent sessions and confirm the sub-agent list and any open drill-in reset while Child workspaces remain workspace-scoped. Record screenshots or a short result note for PR evidence. If local provider authentication is unavailable, record this manual scenario as not run rather than weakening deterministic coverage.
+In a Codex parent session, request one bounded sub-agent and wait for it. Open
+Agents and verify the live row and parent tool call, open the read-only child
+transcript while it is updating, use Back and confirm the parent's exact scroll
+position, observe the terminal row move beneath collapsed `Completed · 1`,
+expand and reopen it, restart Factory Factory, reload the same parent session,
+and inspect the completed transcript again. Also switch parent sessions and
+confirm the sub-agent list and any open drill-in reset while Child workspaces
+remain workspace-scoped. Record screenshots or a short result note for PR
+evidence. If local provider authentication is unavailable, record this manual
+scenario as not run rather than weakening deterministic coverage.
 
 - [ ] **Step 8: Review the full diff and confirm persistence boundaries**
 
@@ -1064,7 +1341,9 @@ git diff origin/main -- prisma src/backend src/client src/shared AGENTS.md docs/
 git status --short
 ```
 
-Expected: no Prisma schema/migration, workspace snapshot, export, or backup file changed; provider branches exist only inside adapter code; `.superpowers/brainstorm/` remains uncommitted or ignored.
+Expected: no Prisma schema/migration, workspace snapshot, export, or backup file
+changed; provider branches exist only inside adapter code;
+`.superpowers/brainstorm/` remains uncommitted or ignored.
 
 - [ ] **Step 9: Commit verification documentation**
 
@@ -1073,4 +1352,6 @@ git add AGENTS.md src/backend/services/session/service/acp/codex-app-server-adap
 git commit -m "Document and verify provider sub-agents"
 ```
 
-The feature is ready for code review when deterministic verification passes, Storybook states have been inspected, the optional real-provider result is recorded, and `git status --short` contains no unexpected implementation files.
+The feature is ready for code review when deterministic verification passes,
+Storybook states have been inspected, the optional real-provider result is
+recorded, and `git status --short` contains no unexpected implementation files.

@@ -2,7 +2,8 @@
 
 Status: implemented
 
-This document covers rollback handling for migration `20260212163000_agent_session_provider_cutover`.
+This document covers rollback handling for migration
+`20260212163000_agent_session_provider_cutover`.
 
 ## Preconditions
 
@@ -13,7 +14,8 @@ This document covers rollback handling for migration `20260212163000_agent_sessi
 ## Failure Handling
 
 - The migration is transactional in the app migration runner.
-- If any migration step fails, the migration transaction is rolled back and `ClaudeSession` remains intact.
+- If any migration step fails, the migration transaction is rolled back and
+  `ClaudeSession` remains intact.
 - Do not continue startup on a partially failed migration run.
 
 ## Rollback Procedure
@@ -29,7 +31,8 @@ This document covers rollback handling for migration `20260212163000_agent_sessi
 ## Post-Restore Validation
 
 - `ClaudeSession` table exists and row count matches pre-deploy backup.
-- `_prisma_migrations` does not contain a successful entry for `20260212163000_agent_session_provider_cutover`.
+- `_prisma_migrations` does not contain a successful entry for
+  `20260212163000_agent_session_provider_cutover`.
 - UI workspace/session load works on at least one previously active workspace.
 
 ## Retry Guidance

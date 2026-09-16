@@ -4,13 +4,16 @@ description: Capture screenshots of the running dev app
 type: agent
 icon: camera
 ---
-Take exactly one screenshot of the workspace's running development app to capture the current state of the UI.
+
+Take exactly one screenshot of the workspace's running development app to
+capture the current state of the UI.
 
 ## Step 1: Start the dev server
 
 1. Read `factory-factory.json` in the repo root for the `scripts.run` command
 2. Pick a free port and replace `{port}` in the command with it
-3. Start the dev server in the background with `BROWSER=none` set in the environment (do NOT open a browser window) and wait for it to be ready
+3. Start the dev server in the background with `BROWSER=none` set in the
+   environment (do NOT open a browser window) and wait for it to be ready
 
 ## Step 2: Take a single screenshot
 

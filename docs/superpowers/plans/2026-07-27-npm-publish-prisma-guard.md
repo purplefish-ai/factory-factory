@@ -1,17 +1,27 @@
 # npm Publish Prisma Guard Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make the npm publish workflow accept the intentional runtime-only Prisma dependency placement while continuing to reject missing, ranged, or mismatched Prisma versions.
+**Goal:** Make the npm publish workflow accept the intentional runtime-only
+Prisma dependency placement while continuing to reject missing, ranged, or
+mismatched Prisma versions.
 
-**Architecture:** Replace the untested JavaScript embedded in the GitHub Actions workflow with a focused Node.js command. Execute that real command from Vitest against temporary package manifests so the CI contract is covered independently of the repository's current manifest.
+**Architecture:** Replace the untested JavaScript embedded in the GitHub Actions
+workflow with a focused Node.js command. Execute that real command from Vitest
+against temporary package manifests so the CI contract is covered independently
+of the repository's current manifest.
 
 **Tech Stack:** Node.js ESM, TypeScript, Vitest, GitHub Actions YAML, pnpm
 
 ## Global Constraints
 
-- Keep `prisma` in `dependencies`; the published package invokes Prisma at runtime.
-- Require exact, matching versions for `@prisma/adapter-better-sqlite3`, `@prisma/client`, and `prisma`.
+- Keep `prisma` in `dependencies`; the published package invokes Prisma at
+  runtime.
+- Require exact, matching versions for `@prisma/adapter-better-sqlite3`,
+  `@prisma/client`, and `prisma`.
 - Do not require or restore `devDependencies.prisma`.
 - Keep the fix limited to the publish guard and its regression coverage.
 
@@ -20,12 +30,17 @@
 ### Task 1: Add the tested Prisma dependency checker
 
 **Files:**
+
 - Create: `scripts/check-prisma-versions.mjs`
 - Create: `src/backend/testing/check-prisma-versions-script.test.ts`
 
 **Interfaces:**
-- Consumes: An optional package manifest path as `process.argv[2]`; defaults to `package.json` in the current working directory.
-- Produces: Exit code `0` and a confirmation on stdout for aligned exact versions; exit code `1` with a dependency-specific error for invalid manifests.
+
+- Consumes: An optional package manifest path as `process.argv[2]`; defaults to
+  `package.json` in the current working directory.
+- Produces: Exit code `0` and a confirmation on stdout for aligned exact
+  versions; exit code `1` with a dependency-specific error for invalid
+  manifests.
 
 - [ ] **Step 1: Write the failing regression tests**
 
@@ -115,7 +130,8 @@ Run:
 pnpm exec vitest run src/backend/testing/check-prisma-versions-script.test.ts
 ```
 
-Expected: all four tests fail because `scripts/check-prisma-versions.mjs` does not exist.
+Expected: all four tests fail because `scripts/check-prisma-versions.mjs` does
+not exist.
 
 - [ ] **Step 3: Add the minimal checker**
 
@@ -192,11 +208,14 @@ git commit -m "Test npm publish Prisma version guard"
 ### Task 2: Route npm publishing through the tested checker
 
 **Files:**
+
 - Modify: `.github/workflows/npm-publish.yml:46`
 
 **Interfaces:**
+
 - Consumes: `scripts/check-prisma-versions.mjs` from Task 1.
-- Produces: The `Verify Prisma versions are pinned` workflow step with the same name and corrected manifest contract.
+- Produces: The `Verify Prisma versions are pinned` workflow step with the same
+  name and corrected manifest contract.
 
 - [ ] **Step 1: Replace the stale inline workflow check**
 
@@ -238,7 +257,8 @@ pnpm typecheck
 pnpm build
 ```
 
-Expected: every command exits `0` with no test failures, type errors, dependency violations, or build failure.
+Expected: every command exits `0` with no test failures, type errors, dependency
+violations, or build failure.
 
 - [ ] **Step 5: Reproduce the package portion of the publish workflow**
 
@@ -253,4 +273,6 @@ Expected: both commands exit `0`; no registry write occurs.
 
 - [ ] **Step 6: Review the final diff and publish a draft PR**
 
-Confirm only the spec, plan, checker, test, and workflow files differ from `origin/main`. Push the current branch and open a draft PR targeting `main` with the root cause and all verification commands in the body.
+Confirm only the spec, plan, checker, test, and workflow files differ from
+`origin/main`. Push the current branch and open a draft PR targeting `main` with
+the root cause and all verification commands in the body.

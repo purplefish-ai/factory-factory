@@ -45,7 +45,8 @@ completed: 2026-02-10
 
 # Phase 6 Plan 1: Terminal Domain Consolidation Summary
 
-**Terminal PTY service moved to domain with shim, barrel, and 34 co-located unit tests covering full public API**
+**Terminal PTY service moved to domain with shim, barrel, and 34 co-located unit
+tests covering full public API**
 
 ## Performance
 
@@ -56,8 +57,11 @@ completed: 2026-02-10
 - **Files modified:** 5
 
 ## Accomplishments
-- Terminal domain owns PTY management, output buffering, and monitoring (TERM-01)
-- Verified all 4 Maps are private instance fields with no module-level mutable state (TERM-02)
+
+- Terminal domain owns PTY management, output buffering, and monitoring
+  (TERM-01)
+- Verified all 4 Maps are private instance fields with no module-level mutable
+  state (TERM-02)
 - 34 co-located unit tests covering all public API methods (TERM-03)
 - Re-export shim preserves backward compatibility for all existing consumers
 - Full test suite passes (1775 tests, 0 regressions)
@@ -66,26 +70,40 @@ completed: 2026-02-10
 
 Each task was committed atomically:
 
-1. **Task 1: Move terminal.service.ts to domain, create shim, populate barrel** - `5d61d79` (feat)
-2. **Task 2: Create domain unit tests and barrel smoke test (TERM-03)** - `c3f571d` (test)
+1. **Task 1: Move terminal.service.ts to domain, create shim, populate
+   barrel** - `5d61d79` (feat)
+2. **Task 2: Create domain unit tests and barrel smoke test (TERM-03)** -
+   `c3f571d` (test)
 
 ## Files Created/Modified
-- `src/backend/domains/terminal/terminal.service.ts` - TerminalService class with exported class + singleton (moved from services/)
-- `src/backend/domains/terminal/index.ts` - Domain barrel with selective named exports (7 exports)
-- `src/backend/services/terminal.service.ts` - Re-export shim (@deprecated, direct module path)
-- `src/backend/domains/terminal/terminal.service.test.ts` - 33 unit tests covering all public API methods
-- `src/backend/domains/terminal/terminal-domain-exports.test.ts` - Barrel export smoke test (1 test)
+
+- `src/backend/domains/terminal/terminal.service.ts` - TerminalService class
+  with exported class + singleton (moved from services/)
+- `src/backend/domains/terminal/index.ts` - Domain barrel with selective named
+  exports (7 exports)
+- `src/backend/services/terminal.service.ts` - Re-export shim (@deprecated,
+  direct module path)
+- `src/backend/domains/terminal/terminal.service.test.ts` - 33 unit tests
+  covering all public API methods
+- `src/backend/domains/terminal/terminal-domain-exports.test.ts` - Barrel export
+  smoke test (1 test)
 
 ## Decisions Made
-- Logger import updated from relative `./logger.service` to absolute `@/backend/services/logger.service` for cross-domain import pattern
-- TerminalService class exported (was private) for test isolation via `new TerminalService()` in tests
-- Shim imports from direct module path (`@/backend/domains/terminal/terminal.service`) not barrel to avoid circular dep risks
+
+- Logger import updated from relative `./logger.service` to absolute
+  `@/backend/services/logger.service` for cross-domain import pattern
+- TerminalService class exported (was private) for test isolation via
+  `new TerminalService()` in tests
+- Shim imports from direct module path
+  (`@/backend/domains/terminal/terminal.service`) not barrel to avoid circular
+  dep risks
 
 ## Deviations from Plan
 
 ### Auto-fixed Issues
 
 **1. [Rule 3 - Blocking] Removed unused MockInstance import**
+
 - **Found during:** Task 2 (unit tests)
 - **Issue:** Biome flagged unused `MockInstance` type import from vitest
 - **Fix:** Removed the unused import
@@ -95,24 +113,29 @@ Each task was committed atomically:
 
 ---
 
-**Total deviations:** 1 auto-fixed (1 blocking)
-**Impact on plan:** Trivial lint fix. No scope change.
+**Total deviations:** 1 auto-fixed (1 blocking) **Impact on plan:** Trivial lint
+fix. No scope change.
 
 ## Issues Encountered
+
 None
 
 ## User Setup Required
+
 None - no external service configuration required.
 
 ## Next Phase Readiness
+
 - Terminal domain fully consolidated with TERM-01, TERM-02, TERM-03 satisfied
-- Ready for Phase 7 (Run Script Domain Consolidation) or Phase 8 (Orchestration Layer)
+- Ready for Phase 7 (Run Script Domain Consolidation) or Phase 8 (Orchestration
+  Layer)
 - All 7 existing consumers continue to work via shim at old path
 
 ## Self-Check: PASSED
 
-All 5 files verified present. Both commit hashes (5d61d79, c3f571d) confirmed in git log.
+All 5 files verified present. Both commit hashes (5d61d79, c3f571d) confirmed in
+git log.
 
 ---
-*Phase: 06-terminal-domain-consolidation*
-*Completed: 2026-02-10*
+
+_Phase: 06-terminal-domain-consolidation_ _Completed: 2026-02-10_

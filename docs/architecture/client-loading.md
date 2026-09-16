@@ -12,6 +12,7 @@ Ordinary Markdown and workspace file links do not wait for it.
 
 Use `pnpm exec vite build --manifest` to inspect the production chunks. The
 initial JavaScript cost includes the entry and its transitive static imports in
-`dist/client/.vite/manifest.json`; dynamic imports load when needed. Compare both
-raw and gzip sizes, and smoke-test direct page navigation after changing split
-points. Markdown's Storybook stories cover plain text, diagrams, and render errors.
+`dist/client/.vite/manifest.json`; dynamic imports load when needed. Compare
+both raw and gzip sizes, and smoke-test direct page navigation after changing
+split points. Markdown's Storybook stories cover plain text, diagrams, and
+render errors.

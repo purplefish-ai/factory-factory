@@ -48,7 +48,9 @@ completed: 2026-02-11
 
 # Phase 14 Plan 01: Reconciliation Service Summary
 
-**Snapshot reconciliation service with 60s polling, p-limit(3) git stats, field-level drift detection, pollStartTs timestamp safety, and stale entry cleanup**
+**Snapshot reconciliation service with 60s polling, p-limit(3) git stats,
+field-level drift detection, pollStartTs timestamp safety, and stale entry
+cleanup**
 
 ## Performance
 
@@ -59,10 +61,13 @@ completed: 2026-02-11
 - **Files modified:** 4
 
 ## Accomplishments
+
 - SnapshotReconciliationService with configure/start/stop/reconcile lifecycle
-- Drift detection (RCNL-04) comparing existing snapshot against authoritative DB values
+- Drift detection (RCNL-04) comparing existing snapshot against authoritative DB
+  values
 - pollStartTs passed to every upsert (RCNL-03) for field-level timestamp safety
-- Git stats computed with p-limit(3) concurrency (RCNL-02), only during reconciliation
+- Git stats computed with p-limit(3) concurrency (RCNL-02), only during
+  reconciliation
 - Stale entry cleanup removes snapshots for workspaces no longer in DB
 - 20 passing tests covering drift detection, reconciliation core, and lifecycle
 
@@ -70,56 +75,83 @@ completed: 2026-02-11
 
 Each task was committed atomically:
 
-1. **Task 1: Add workspace accessor/store helpers, create reconciliation service** - `df9da7f` (feat)
-2. **Task 2: Add comprehensive tests for reconciliation service** - `d2682a5` (test)
+1. **Task 1: Add workspace accessor/store helpers, create reconciliation
+   service** - `df9da7f` (feat)
+2. **Task 2: Add comprehensive tests for reconciliation service** - `d2682a5`
+   (test)
 
 ## Files Created/Modified
-- `src/backend/orchestration/snapshot-reconciliation.orchestrator.ts` - Reconciliation service with configure/start/stop/reconcile, drift detection, stale cleanup
-- `src/backend/orchestration/snapshot-reconciliation.orchestrator.test.ts` - 20 tests: 6 drift detection, 11 reconciliation, 3 lifecycle
-- `src/backend/resource_accessors/workspace.accessor.ts` - Added findAllNonArchivedWithSessionsAndProject() + WorkspaceWithSessionsAndProject type
-- `src/backend/services/workspace-snapshot-store.service.ts` - Added getAllWorkspaceIds() method
+
+- `src/backend/orchestration/snapshot-reconciliation.orchestrator.ts` -
+  Reconciliation service with configure/start/stop/reconcile, drift detection,
+  stale cleanup
+- `src/backend/orchestration/snapshot-reconciliation.orchestrator.test.ts` - 20
+  tests: 6 drift detection, 11 reconciliation, 3 lifecycle
+- `src/backend/resource_accessors/workspace.accessor.ts` - Added
+  findAllNonArchivedWithSessionsAndProject() + WorkspaceWithSessionsAndProject
+  type
+- `src/backend/services/workspace-snapshot-store.service.ts` - Added
+  getAllWorkspaceIds() method
 
 ## Decisions Made
-- Used bridge pattern for session domain access (ReconciliationBridges) -- consistent with kanbanStateService and workspaceQueryService patterns, enables clean unit testing
-- Static imports from domain barrels at top level (same pattern as event-collector.orchestrator.ts) rather than lazy require() calls
-- Extracted buildAuthoritativeFields() and removeStaleEntries() private methods to keep reconcile() under Biome's cognitive complexity limit of 15
+
+- Used bridge pattern for session domain access (ReconciliationBridges) --
+  consistent with kanbanStateService and workspaceQueryService patterns, enables
+  clean unit testing
+- Static imports from domain barrels at top level (same pattern as
+  event-collector.orchestrator.ts) rather than lazy require() calls
+- Extracted buildAuthoritativeFields() and removeStaleEntries() private methods
+  to keep reconcile() under Biome's cognitive complexity limit of 15
 
 ## Deviations from Plan
 
 ### Auto-fixed Issues
 
-**1. [Rule 1 - Bug] Fixed Biome non-null assertion and cognitive complexity errors**
+**1. [Rule 1 - Bug] Fixed Biome non-null assertion and cognitive complexity
+errors**
+
 - **Found during:** Task 1
-- **Issue:** Biome linter rejected `this.bridges!` non-null assertions and flagged reconcile() with cognitive complexity 18 (max 15)
-- **Fix:** Added getter pattern for bridges (same as store's `derive` getter), extracted buildAuthoritativeFields() and removeStaleEntries() helper methods
-- **Files modified:** src/backend/orchestration/snapshot-reconciliation.orchestrator.ts
+- **Issue:** Biome linter rejected `this.bridges!` non-null assertions and
+  flagged reconcile() with cognitive complexity 18 (max 15)
+- **Fix:** Added getter pattern for bridges (same as store's `derive` getter),
+  extracted buildAuthoritativeFields() and removeStaleEntries() helper methods
+- **Files modified:**
+  src/backend/orchestration/snapshot-reconciliation.orchestrator.ts
 - **Verification:** `pnpm check:fix` passes, `pnpm typecheck` passes
 - **Committed in:** df9da7f (Task 1 commit)
 
 **2. [Rule 1 - Bug] Fixed TypeScript strict null checks in test file**
+
 - **Found during:** Task 2
-- **Issue:** TypeScript strict mode rejected unguarded mock.calls[N] array access (possibly undefined)
-- **Fix:** Added non-null assertions on mock.calls array indexing (standard test pattern)
-- **Files modified:** src/backend/orchestration/snapshot-reconciliation.orchestrator.test.ts
+- **Issue:** TypeScript strict mode rejected unguarded mock.calls[N] array
+  access (possibly undefined)
+- **Fix:** Added non-null assertions on mock.calls array indexing (standard test
+  pattern)
+- **Files modified:**
+  src/backend/orchestration/snapshot-reconciliation.orchestrator.test.ts
 - **Verification:** `pnpm typecheck` passes
 - **Committed in:** d2682a5 (Task 2 commit)
 
 ---
 
-**Total deviations:** 2 auto-fixed (2 bugs -- linter/type compliance)
-**Impact on plan:** Both auto-fixes necessary for passing CI. No scope creep.
+**Total deviations:** 2 auto-fixed (2 bugs -- linter/type compliance) **Impact
+on plan:** Both auto-fixes necessary for passing CI. No scope creep.
 
 ## Issues Encountered
+
 None
 
 ## User Setup Required
+
 None - no external service configuration required.
 
 ## Next Phase Readiness
+
 - Reconciliation service is ready for server wiring in Plan 02
-- configureSnapshotReconciliation() function ready to be called in server startup after configureDomainBridges()
+- configureSnapshotReconciliation() function ready to be called in server
+  startup after configureDomainBridges()
 - snapshotReconciliationService.stop() ready for server shutdown sequence
 
 ---
-*Phase: 14-safety-net-reconciliation*
-*Completed: 2026-02-11*
+
+_Phase: 14-safety-net-reconciliation_ _Completed: 2026-02-11_

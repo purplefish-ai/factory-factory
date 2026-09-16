@@ -2,8 +2,8 @@
 
 ## Context
 
-Workspace `cms4xzahi000ix0y4zu1k8dx2` was created with an initial text prompt and
-one PNG screenshot. The screenshot bytes and filename were valid, but its
+Workspace `cms4xzahi000ix0y4zu1k8dx2` was created with an initial text prompt
+and one PNG screenshot. The screenshot bytes and filename were valid, but its
 persisted MIME type was an empty string. Session `cms4xzai3000jx0y41byz30zt`
 started successfully and queued the initial message. When the workspace became
 ready, dispatch rejected the attachment with:
@@ -42,16 +42,16 @@ Add a pure image format inspector next to the existing attachment processing
 logic. It decodes the normalized base64 payload, recognizes the supported
 format, and validates its complete container structure:
 
-- PNG requires valid chunk boundaries and CRCs, one or more `IDAT` chunks, and
-  a terminal `IEND`.
+- PNG requires valid chunk boundaries and CRCs, one or more `IDAT` chunks, and a
+  terminal `IEND`.
 - JPEG requires bounded marker segments, a frame, scan data, and a terminal
   `EOI`.
 - GIF requires bounded color tables and data blocks plus a terminal trailer.
 - WebP requires a size-consistent `RIFF` container and a structurally valid
   image payload chunk.
 
-Detection returns the canonical ACP-compatible media type:
-`image/png`, `image/jpeg`, `image/gif`, or `image/webp`.
+Detection returns the canonical ACP-compatible media type: `image/png`,
+`image/jpeg`, `image/gif`, or `image/webp`.
 
 Image normalization becomes the authoritative backend operation:
 
@@ -95,8 +95,8 @@ A valid supported image is accepted even if its declared MIME type is empty,
 `image/jpg`, names a different supported format, or is mislabeled as text. The
 validated bytes win over both MIME metadata fields.
 
-An image whose decoded bytes do not match a supported signature is rejected as
-a `PermanentAttachmentError` with an actionable message indicating that the
+An image whose decoded bytes do not match a supported signature is rejected as a
+`PermanentAttachmentError` with an actionable message indicating that the
 attachment does not contain supported image data. The queue retains its existing
 permanent-error behavior for genuinely invalid attachments.
 
@@ -127,10 +127,10 @@ Extend the co-located attachment-processing tests with hand-checked fixtures:
 - Existing line-wrapped base64 behavior remains accepted.
 - Text attachment behavior remains unchanged.
 
-The primary regression assertion exercises
-`processAttachmentsAndBuildContent`, because message delivery—not the detector's
-private implementation—is the user-visible contract. A focused test run will be
-followed by type checking and the repository guardrails.
+The primary regression assertion exercises `processAttachmentsAndBuildContent`,
+because message delivery—not the detector's private implementation—is the
+user-visible contract. A focused test run will be followed by type checking and
+the repository guardrails.
 
 ## Alternatives Considered
 

@@ -4,23 +4,32 @@ Status: superseded by ratchet-system.md
 
 ## Overview
 
-The CI Fixing System extends the existing CI Monitoring System to automatically create and manage dedicated Claude sessions that fix CI failures. When a workspace's PR fails CI, the system spawns a specialized "CI Fixing" session that investigates the failures and implements fixes.
+The CI Fixing System extends the existing CI Monitoring System to automatically
+create and manage dedicated Claude sessions that fix CI failures. When a
+workspace's PR fails CI, the system spawns a specialized "CI Fixing" session
+that investigates the failures and implements fixes.
 
-**Related:** [CI Monitoring System Design](./ci-monitoring-system.md) - The monitoring infrastructure this feature builds upon.
+**Related:** [CI Monitoring System Design](./ci-monitoring-system.md) - The
+monitoring infrastructure this feature builds upon.
 
 ## Requirements (from Issue #487)
 
-1. When a workspace fails CI, create a new Claude session dedicated to fixing CI issues
+1. When a workspace fails CI, create a new Claude session dedicated to fixing CI
+   issues
 2. Name the session "CI Fixing" for clear identification
-3. Prevent duplicate concurrent CI fixing sessions - if a CI fixing session already exists and is actively working, do not create another
+3. Prevent duplicate concurrent CI fixing sessions - if a CI fixing session
+   already exists and is actively working, do not create another
 
 ## Architecture
 
 ### Design Principles
 
-1. **Single CI Fixer Per Workspace** - Only one CI Fixing session can be active at a time per workspace
-2. **Non-Blocking** - The CI fixing session runs independently; it doesn't block other workspace sessions
-3. **Idempotent** - Multiple CI failure detections should not spawn duplicate sessions
+1. **Single CI Fixer Per Workspace** - Only one CI Fixing session can be active
+   at a time per workspace
+2. **Non-Blocking** - The CI fixing session runs independently; it doesn't block
+   other workspace sessions
+3. **Idempotent** - Multiple CI failure detections should not spawn duplicate
+   sessions
 4. **Rich Context** - Pass detailed CI failure information to the fixing session
 
 ### High-Level Flow
@@ -53,7 +62,8 @@ sequenceDiagram
 
 ### Option A: Workflow-Based Identification (Recommended)
 
-Use the existing `workflow` field on `ClaudeSession` to identify CI fixing sessions.
+Use the existing `workflow` field on `ClaudeSession` to identify CI fixing
+sessions.
 
 ```prisma
 // No schema changes needed - use existing workflow field
@@ -63,11 +73,13 @@ model ClaudeSession {
 ```
 
 **Advantages:**
+
 - No schema migration required
 - Leverages existing patterns
 - Natural fit with workflow-based session organization
 
 **Query for existing CI fixing session:**
+
 ```typescript
 const existingSession = await claudeSessionAccessor.findByWorkspaceId(workspaceId, {
   workflow: 'ci-fix',
@@ -90,16 +102,19 @@ model Workspace {
 ```
 
 **Advantages:**
+
 - More explicit intent
 - Faster lookup for active CI fixer
 
 **Disadvantages:**
+
 - Requires schema migration
 - Additional state to maintain
 
 ### Recommendation
 
-Use **Option A** - the workflow-based approach aligns with existing patterns and requires no schema changes.
+Use **Option A** - the workflow-based approach aligns with existing patterns and
+requires no schema changes.
 
 ## New Components
 
@@ -206,7 +221,8 @@ private async handleCIFailure(workspace: Workspace, failureDetails: CIFailureDet
 
 ### Race Condition Prevention
 
-Multiple CI failure detections could attempt to create sessions simultaneously. We need to prevent race conditions:
+Multiple CI failure detections could attempt to create sessions simultaneously.
+We need to prevent race conditions:
 
 ```mermaid
 flowchart TD
@@ -312,7 +328,9 @@ class CIFixerService {
 
 ### Recommendation
 
-Use **Option 1 (Database-Level Lock)** for correctness across server restarts and potential multi-instance deployments. Combine with **Option 2** for efficiency in avoiding redundant DB queries during rapid fire events.
+Use **Option 1 (Database-Level Lock)** for correctness across server restarts
+and potential multi-instance deployments. Combine with **Option 2** for
+efficiency in avoiding redundant DB queries during rapid fire events.
 
 ## Initial Prompt Construction
 
@@ -406,14 +424,14 @@ stateDiagram-v2
 
 ### When to Create vs Reuse Sessions
 
-| Existing Session State | CI Status | Action |
-|----------------------|-----------|--------|
-| None | FAILURE | Create new session |
-| RUNNING + Working | FAILURE | Skip (already fixing) |
-| RUNNING + Idle | FAILURE | Send new prompt to existing session |
-| IDLE | FAILURE | Start existing session with new prompt |
-| COMPLETED | FAILURE | Create new session |
-| FAILED | FAILURE | Create new session |
+| Existing Session State | CI Status | Action                                 |
+| ---------------------- | --------- | -------------------------------------- |
+| None                   | FAILURE   | Create new session                     |
+| RUNNING + Working      | FAILURE   | Skip (already fixing)                  |
+| RUNNING + Idle         | FAILURE   | Send new prompt to existing session    |
+| IDLE                   | FAILURE   | Start existing session with new prompt |
+| COMPLETED              | FAILURE   | Create new session                     |
+| FAILED                 | FAILURE   | Create new session                     |
 
 ## Frontend Integration
 
@@ -434,6 +452,7 @@ Add visual indication that a CI fixing session is active:
 ### Session Tab Behavior
 
 The CI fixing session should:
+
 - Appear in the session tabs like any other session
 - Be clearly labeled as "CI Fixing"
 - Show working/idle status
@@ -449,7 +468,8 @@ The CI fixing session should:
 
 2. **Session start fails**
    - Mark session as FAILED
-   - Notify via existing CI notification (falls back to informing active session)
+   - Notify via existing CI notification (falls back to informing active
+     session)
 
 3. **GitHub API fails to fetch details**
    - Start session with minimal context
@@ -466,6 +486,7 @@ The CI fixing session should:
 Add the `autoFixCiIssues` setting to the existing `UserSettings` model:
 
 **Schema Change:**
+
 ```prisma
 model UserSettings {
   id                String   @id @default(cuid())
@@ -486,6 +507,7 @@ model UserSettings {
 ```
 
 **tRPC Update** (in `user-settings.trpc.ts`):
+
 ```typescript
 update: publicProcedure
   .input(z.object({
@@ -498,8 +520,9 @@ update: publicProcedure
   }),
 ```
 
-**Admin UI** (in `admin.tsx`):
-Add a toggle switch in a new "CI Settings" section:
+**Admin UI** (in `admin.tsx`): Add a toggle switch in a new "CI Settings"
+section:
+
 ```tsx
 <SettingsSection title="CI Settings">
   <Toggle
@@ -512,6 +535,7 @@ Add a toggle switch in a new "CI Settings" section:
 ```
 
 **Service Integration** (in `ci-monitor.service.ts`):
+
 ```typescript
 private async handleCIFailure(workspace: Workspace, failureDetails: CIFailureDetails) {
   // Always notify active session (existing behavior)
@@ -548,19 +572,29 @@ const CI_FIX_CONFIG = {
 ## Design Decisions
 
 ### 1. Automatic for All Workspaces (with Global Toggle)
-CI fixing sessions are created automatically whenever CI fails on any workspace with a PR - controlled by a global admin setting. This provides a simple on/off switch without per-workspace complexity.
+
+CI fixing sessions are created automatically whenever CI fails on any workspace
+with a PR - controlled by a global admin setting. This provides a simple on/off
+switch without per-workspace complexity.
 
 **Global Admin Setting:** `autoFixCiIssues` (default: `false`)
 
-When enabled, CI fixing sessions are created automatically for all workspaces. When disabled, the system only notifies active sessions about CI failures (existing behavior).
+When enabled, CI fixing sessions are created automatically for all workspaces.
+When disabled, the system only notifies active sessions about CI failures
+(existing behavior).
 
 ### 2. Notify and Continue When CI Passes
+
 When CI passes while a CI fixing session is still running:
+
 - Send a message to the session informing it that CI has passed
-- Let the session continue its work (it may be fixing other issues or completing cleanup)
+- Let the session continue its work (it may be fixing other issues or completing
+  cleanup)
 - The session will finish naturally
 
-**Implementation:** In the CI monitor, when detecting a FAILURE → SUCCESS transition for a workspace with an active CI fixing session:
+**Implementation:** In the CI monitor, when detecting a FAILURE → SUCCESS
+transition for a workspace with an active CI fixing session:
+
 ```typescript
 if (previousStatus === 'FAILURE' && newStatus === 'SUCCESS') {
   const ciFixSession = await ciFixerService.getActiveCIFixSession(workspaceId);
@@ -574,9 +608,12 @@ if (previousStatus === 'FAILURE' && newStatus === 'SUCCESS') {
 ```
 
 ### 3. Inherit Model from Workspace
-CI fixing sessions use the same model as the workspace's most recent session. This provides consistency and respects user preferences.
+
+CI fixing sessions use the same model as the workspace's most recent session.
+This provides consistency and respects user preferences.
 
 **Implementation:**
+
 ```typescript
 async function getModelForCIFix(workspaceId: string): Promise<string> {
   const recentSession = await claudeSessionAccessor.findByWorkspaceId(workspaceId, {
@@ -600,29 +637,34 @@ async function getModelForCIFix(workspaceId: string): Promise<string> {
 ## Implementation Plan
 
 ### Phase 1: Admin Setting & Schema
+
 1. Add `autoFixCiIssues` field to `UserSettings` model
 2. Run Prisma migration
 3. Update `user-settings.accessor.ts` and `user-settings.trpc.ts`
 4. Add toggle UI in admin dashboard
 
 ### Phase 2: Core Infrastructure
+
 5. Create `ci-fix` workflow file
 6. Implement `CIFixerService` with session creation logic
 7. Add concurrency handling (database transaction approach)
 
 ### Phase 3: Integration
+
 8. Integrate with CI Monitor Service (check setting before triggering)
 9. Add detailed check run fetching to GitHub CLI service
 10. Build initial prompt with failure context
 11. Add CI pass notification to active fixing sessions
 
 ### Phase 4: Polish
+
 12. Add frontend badges/indicators for CI fixing sessions
 13. Implement metrics/logging
 
 ## Summary
 
 The CI Fixing System:
+
 - Creates dedicated "CI Fixing" sessions when CI fails
 - Prevents duplicate concurrent sessions per workspace
 - Provides rich context about failures to help Claude fix issues
@@ -630,4 +672,5 @@ The CI Fixing System:
 - Uses workflow-based identification (no schema changes)
 - Handles race conditions via database transactions
 
-This design enables fully automated CI failure resolution while maintaining control over resource usage and preventing runaway session creation.
+This design enables fully automated CI failure resolution while maintaining
+control over resource usage and preventing runaway session creation.

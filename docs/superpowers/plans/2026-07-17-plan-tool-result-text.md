@@ -1,29 +1,41 @@
 # Plan Tool Result Text Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Prevent metadata-only Codex plan results from rendering item IDs as plan text.
+**Goal:** Prevent metadata-only Codex plan results from rendering item IDs as
+plan text.
 
-**Architecture:** Keep permissive shared plan parsing intact for its existing consumers. Add a renderer-local content guard that follows only explicit plan-bearing fields, then use the existing extractor for normalization.
+**Architecture:** Keep permissive shared plan parsing intact for its existing
+consumers. Add a renderer-local content guard that follows only explicit
+plan-bearing fields, then use the existing extractor for normalization.
 
 **Tech Stack:** TypeScript, React renderer utilities, Vitest, Biome, pnpm
 
 ## Global Constraints
 
 - Change only the plan tool-result renderer and its focused tests.
-- Preserve direct text, fenced JSON, array content, and nested `plan.content[]` support.
-- Return `null` for metadata-only, blank, or nested metadata-only plan envelopes.
+- Preserve direct text, fenced JSON, array content, and nested `plan.content[]`
+  support.
+- Return `null` for metadata-only, blank, or nested metadata-only plan
+  envelopes.
 
 ---
 
 ### Task 1: Add plan-result regression coverage
 
 **Files:**
+
 - Test: `src/components/agent-activity/tool-renderers/tool-result-plan.test.ts`
 
 **Interfaces:**
-- Consumes: `extractPlanToolResult(content: ToolResultContentValue): ExtractedPlanToolResult | null`
-- Produces: Regression expectations for metadata-only and invalid explicit fields.
+
+- Consumes:
+  `extractPlanToolResult(content: ToolResultContentValue): ExtractedPlanToolResult | null`
+- Produces: Regression expectations for metadata-only and invalid explicit
+  fields.
 
 - [ ] **Step 1: Add failing metadata-only tests**
 
@@ -70,19 +82,25 @@ it('returns null for nested metadata-only plan payloads', () => {
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
-Run: `pnpm exec vitest run src/components/agent-activity/tool-renderers/tool-result-plan.test.ts`
+Run:
+`pnpm exec vitest run src/components/agent-activity/tool-renderers/tool-result-plan.test.ts`
 
-Expected: the metadata-only and invalid explicit-field tests fail because IDs are returned as plan text.
+Expected: the metadata-only and invalid explicit-field tests fail because IDs
+are returned as plan text.
 
 ### Task 2: Guard plan extraction at the renderer boundary
 
 **Files:**
+
 - Modify: `src/components/agent-activity/tool-renderers/tool-result-plan.ts`
 - Test: `src/components/agent-activity/tool-renderers/tool-result-plan.test.ts`
 
 **Interfaces:**
-- Consumes: parsed `Record<string, unknown>` plan envelopes and `extractPlanText(value: unknown): string | null`
-- Produces: renderer-local validation that only explicit plan content qualifies for specialized rendering.
+
+- Consumes: parsed `Record<string, unknown>` plan envelopes and
+  `extractPlanText(value: unknown): string | null`
+- Produces: renderer-local validation that only explicit plan content qualifies
+  for specialized rendering.
 
 - [ ] **Step 1: Add recursive explicit-content validation**
 
@@ -116,7 +134,8 @@ return extractPlanText(planPayload);
 
 - [ ] **Step 3: Run focused tests and verify GREEN**
 
-Run: `pnpm exec vitest run src/components/agent-activity/tool-renderers/tool-result-plan.test.ts`
+Run:
+`pnpm exec vitest run src/components/agent-activity/tool-renderers/tool-result-plan.test.ts`
 
 Expected: all tests pass.
 
@@ -130,9 +149,11 @@ git commit -m "Fix plan result metadata rendering (#1921)"
 ### Task 3: Verify and publish
 
 **Files:**
+
 - Review: all changes relative to `origin/main`
 
 **Interfaces:**
+
 - Consumes: the completed renderer fix and tests.
 - Produces: a clean, pushed issue branch and a pull request closing #1921.
 
@@ -146,10 +167,13 @@ Expected: every command exits successfully.
 
 Run: `git diff origin/main && git status --short`
 
-Expected: only intended files differ and the working tree is clean after committing any formatter changes.
+Expected: only intended files differ and the working tree is clean after
+committing any formatter changes.
 
 - [ ] **Step 3: Push and create the pull request**
 
-Run: `git push -u origin HEAD`, then create the PR with title `Fix #1921: Prevent plan IDs rendering as text`, the required test checklist, `Closes #1921`, and the Factory Factory signature.
+Run: `git push -u origin HEAD`, then create the PR with title
+`Fix #1921: Prevent plan IDs rendering as text`, the required test checklist,
+`Closes #1921`, and the Factory Factory signature.
 
 Expected: `gh pr view` returns the created pull request URL.

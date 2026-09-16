@@ -1,8 +1,12 @@
 # Backend Image Media-Type Normalization Implementation Plan
 
-**Goal:** Deliver valid PNG, JPEG, GIF, and WebP attachments even when client MIME metadata is empty or incorrect.
+**Goal:** Deliver valid PNG, JPEG, GIF, and WebP attachments even when client
+MIME metadata is empty or incorrect.
 
-**Architecture:** Keep image handling inside the session capsule's attachment-processing boundary. Decode validated base64 once per processing pass, inspect supported container structures, and return an immutable attachment copy carrying the canonical ACP media type and image discriminator.
+**Architecture:** Keep image handling inside the session capsule's
+attachment-processing boundary. Decode validated base64 once per processing
+pass, inspect supported container structures, and return an immutable attachment
+copy carrying the canonical ACP media type and image discriminator.
 
 **Tech Stack:** TypeScript, Node.js `Buffer`, Vitest
 
@@ -10,7 +14,8 @@
 
 - Do not add support for new image formats or transcode unsupported formats.
 - Do not add a runtime dependency.
-- Enforce the existing 10 MiB image limit from decoded data rather than client metadata.
+- Enforce the existing 10 MiB image limit from decoded data rather than client
+  metadata.
 - Keep text attachment behavior unchanged.
 - Treat unsupported or corrupt image bytes as permanent attachment errors.
 
@@ -20,18 +25,27 @@
 
 **Files:**
 
-- Modify: `src/backend/services/session/service/chat/chat-message-handlers/attachment-processing.ts`
-- Create: `src/backend/services/session/service/chat/chat-message-handlers/image-format-validation.ts`
-- Test: `src/backend/services/session/service/chat/chat-message-handlers/attachment-processing.test.ts`
+- Modify:
+  `src/backend/services/session/service/chat/chat-message-handlers/attachment-processing.ts`
+- Create:
+  `src/backend/services/session/service/chat/chat-message-handlers/image-format-validation.ts`
+- Test:
+  `src/backend/services/session/service/chat/chat-message-handlers/attachment-processing.test.ts`
 
 **Interfaces:**
 
-- Consumes: `MessageAttachment.data`, `MessageAttachment.type`, and `resolveAttachmentContentType`.
-- Produces: `processAttachmentsAndBuildContent()` output whose ACP image blocks use canonical detected media types.
+- Consumes: `MessageAttachment.data`, `MessageAttachment.type`, and
+  `resolveAttachmentContentType`.
+- Produces: `processAttachmentsAndBuildContent()` output whose ACP image blocks
+  use canonical detected media types.
 
 - [ ] **Step 1: Write the failing regression tests**
 
-Add table-driven assertions to `attachment-processing.test.ts` using literal base64 fixtures for PNG, JPEG, GIF, and WebP. Assert that empty, incorrect, non-canonical, and text-declaring metadata is replaced by the detected canonical type and image discriminator in the ACP content returned by `processAttachmentsAndBuildContent`.
+Add table-driven assertions to `attachment-processing.test.ts` using literal
+base64 fixtures for PNG, JPEG, GIF, and WebP. Assert that empty, incorrect,
+non-canonical, and text-declaring metadata is replaced by the detected canonical
+type and image discriminator in the ACP content returned by
+`processAttachmentsAndBuildContent`.
 
 Add a corrupt-image assertion:
 
@@ -54,9 +68,11 @@ Run:
 pnpm test src/backend/services/session/service/chat/chat-message-handlers/attachment-processing.test.ts
 ```
 
-Expected: the empty-type PNG case fails with `UnsupportedImageTypeError`, proving the affected session behavior is reproduced.
+Expected: the empty-type PNG case fails with `UnsupportedImageTypeError`,
+proving the affected session behavior is reproduced.
 
-- [ ] **Step 3: Implement structural image inspection and immutable normalization**
+- [ ] **Step 3: Implement structural image inspection and immutable
+      normalization**
 
 In `attachment-processing.ts`, add a private detector returning:
 
@@ -139,7 +155,8 @@ pnpm check
 pnpm test
 ```
 
-Expected: each command exits successfully with no test failures or guardrail violations.
+Expected: each command exits successfully with no test failures or guardrail
+violations.
 
 - [ ] **Step 6: Commit the implementation**
 

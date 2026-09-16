@@ -1,36 +1,57 @@
 # Failed Dispatch Rejection Retention Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Preserve unexpired failed-dispatch recovery records across inactive session-store eviction so reconnects can restore drafts for the existing 60-second window.
+**Goal:** Preserve unexpired failed-dispatch recovery records across inactive
+session-store eviction so reconnects can restore drafts for the existing
+60-second window.
 
-**Architecture:** Make store clearing optionally retain only unexpired `recentRejections` while rebuilding every other field from the registry's default state. Opt into that behavior only from lifecycle and WebSocket inactivity eviction; destructive deletion and rollback paths keep the current full clear.
+**Architecture:** Make store clearing optionally retain only unexpired
+`recentRejections` while rebuilding every other field from the registry's
+default state. Opt into that behavior only from lifecycle and WebSocket
+inactivity eviction; destructive deletion and rollback paths keep the current
+full clear.
 
 **Tech Stack:** TypeScript, Express/WebSocket backend services, Vitest, pnpm
 
 ## Global Constraints
 
-- Default `clearSession(sessionId)` behavior must remain a full destructive clear.
+- Default `clearSession(sessionId)` behavior must remain a full destructive
+  clear.
 - Preserve only entries with `expiresAt > Date.now()`.
-- Reset transcript, queue, pending requests, runtime, hydration state, ordering, initial messages, and history-retry cooldowns.
-- Preserve both `REJECTED` and `FAILED` record shapes without changing the 60-second TTL or 100-record cap.
-- Prune preserved payloads at their expiry and delete an untouched preservation-only store without deleting a reactivated store.
-- Destructively clear transient ratchet session state immediately after its database row is deleted.
-- Do not change viewer counting, runtime-running guards, client replay protocol, or UI behavior.
+- Reset transcript, queue, pending requests, runtime, hydration state, ordering,
+  initial messages, and history-retry cooldowns.
+- Preserve both `REJECTED` and `FAILED` record shapes without changing the
+  60-second TTL or 100-record cap.
+- Prune preserved payloads at their expiry and delete an untouched
+  preservation-only store without deleting a reactivated store.
+- Destructively clear transient ratchet session state immediately after its
+  database row is deleted.
+- Do not change viewer counting, runtime-running guards, client replay protocol,
+  or UI behavior.
 
 ---
 
 ### Task 1: Add opt-in rejection-preserving store clear
 
 **Files:**
+
 - Modify: `src/backend/services/session/service/store/session-store-registry.ts`
-- Test: `src/backend/services/session/service/store/session-store-registry.test.ts`
+- Test:
+  `src/backend/services/session/service/store/session-store-registry.test.ts`
 - Modify: `src/backend/services/session/service/session-domain.service.ts`
 - Test: `src/backend/services/session/service/session-domain.service.test.ts`
 
 **Interfaces:**
-- Consumes: `SessionStore.recentRejections` and each record's numeric `expiresAt`.
-- Produces: `clearSession(sessionId: string, options?: { preserveRejections?: boolean }): void` on both `SessionStoreRegistry` and `SessionDomainService`.
+
+- Consumes: `SessionStore.recentRejections` and each record's numeric
+  `expiresAt`.
+- Produces:
+  `clearSession(sessionId: string, options?: { preserveRejections?: boolean }): void`
+  on both `SessionStoreRegistry` and `SessionDomainService`.
 
 - [ ] **Step 1: Write the failing registry test**
 
@@ -41,8 +62,8 @@ rejection plus unrelated queue/runtime state, calls:
 registry.clearSession('session-1', { preserveRejections: true });
 ```
 
-Then assert the recreated store contains only the literal active rejection,
-has an empty queue, has the initial runtime state, and no longer has its
+Then assert the recreated store contains only the literal active rejection, has
+an empty queue, has the initial runtime state, and no longer has its
 history-retry cooldown.
 
 - [ ] **Step 2: Run the registry test to verify RED**
@@ -172,14 +193,20 @@ Expected: both files pass.
 ### Task 2: Preserve rejections in every inactive eviction path
 
 **Files:**
-- Modify: `src/backend/services/session/service/lifecycle/session.lifecycle.service.ts`
+
+- Modify:
+  `src/backend/services/session/service/lifecycle/session.lifecycle.service.ts`
 - Test: `src/backend/services/session/service/lifecycle/session.service.test.ts`
 - Modify: `src/backend/routers/websocket/chat.handler.ts`
 - Test: `src/backend/routers/websocket/chat.handler.test.ts`
 
 **Interfaces:**
-- Consumes: `SessionDomainService.clearSession(sessionId, { preserveRejections: true })` from Task 1.
-- Produces: inactivity cleanup that resets ordinary store state without deleting reconnect recovery records.
+
+- Consumes:
+  `SessionDomainService.clearSession(sessionId, { preserveRejections: true })`
+  from Task 1.
+- Produces: inactivity cleanup that resets ordinary store state without deleting
+  reconnect recovery records.
 
 - [ ] **Step 1: Write the failing lifecycle race test**
 
@@ -209,9 +236,9 @@ In `clearSessionStoreIfInactive`, keep both guards and call:
 this.sessionDomainService.clearSession(sessionId, { preserveRejections: true });
 ```
 
-Update the existing manual-stop cleanup expectation to include the option.
-After a transient ratchet session's database row is successfully deleted in
-either manual-stop or runtime-exit cleanup, call the one-argument destructive
+Update the existing manual-stop cleanup expectation to include the option. After
+a transient ratchet session's database row is successfully deleted in either
+manual-stop or runtime-exit cleanup, call the one-argument destructive
 `clearSession(sessionId)` before the shared inactivity cleanup. Tests must prove
 the destructive clear occurs after each database delete. If persistence or
 deletion fails, do not destructively clear because the session row remains.
@@ -291,12 +318,15 @@ git commit -m "Preserve failed dispatch drafts on cleanup (#2061)"
 ### Task 3: Verify, review, and publish
 
 **Files:**
+
 - Review: all files changed against `origin/main`
 - Create temporarily: `/tmp/pr-body.md`
 
 **Interfaces:**
+
 - Consumes: committed implementation from Tasks 1-2.
-- Produces: a pushed issue branch and verified GitHub pull request closing #2061.
+- Produces: a pushed issue branch and verified GitHub pull request closing
+  #2061.
 
 - [ ] **Step 1: Run the required verification chain**
 

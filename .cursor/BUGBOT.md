@@ -2,7 +2,9 @@
 
 ## Project Overview
 
-This is a workspace-based coding environment where users interact with Claude Code through isolated workspaces. The app runs as both a web application and an Electron desktop app.
+This is a workspace-based coding environment where users interact with Claude
+Code through isolated workspaces. The app runs as both a web application and an
+Electron desktop app.
 
 ## Architecture
 
@@ -25,7 +27,8 @@ This is a workspace-based coding environment where users interact with Claude Co
 - All database queries must go through `src/backend/resource_accessors/`
 - tRPC routers live in `src/backend/trpc/`
 - Claude integration code is in `src/backend/claude/`
-- WebSocket handlers: `/chat` for Claude CLI streaming, `/terminal` for PTY sessions
+- WebSocket handlers: `/chat` for Claude CLI streaming, `/terminal` for PTY
+  sessions
 
 ### Frontend Rules
 
@@ -44,12 +47,13 @@ This is a workspace-based coding environment where users interact with Claude Co
 ### Common Pitfalls
 
 - Don't commit `.env` files or credentials
-- Prisma schema changes require running `pnpm check:prisma-schema` (regenerates client, checks service registry, typechecks); commit the updated `prisma/generated/` output alongside the schema change
+- Prisma schema changes require running `pnpm check:prisma-schema` (regenerates
+  client, checks service registry, typechecks); commit the updated
+  `prisma/generated/` output alongside the schema change
 - Electron builds have different database paths than web mode
 - Test both web and Electron modes when making backend changes
 
 ## Testing
 
-Run tests with `pnpm test` (Vitest)
-Lint with `pnpm check:fix` (Biome)
-Typecheck with `pnpm typecheck`
+Run tests with `pnpm test` (Vitest) Lint with `pnpm check:fix` (Biome) Typecheck
+with `pnpm typecheck`

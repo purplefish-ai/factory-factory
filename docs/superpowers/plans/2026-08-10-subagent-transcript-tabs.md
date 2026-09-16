@@ -1,41 +1,70 @@
 # Sub-Agent Transcript Tabs Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace sub-agent transcript drill-in navigation with persisted, closable workspace tabs whose robot icon reflects the sub-agent lifecycle.
+**Goal:** Replace sub-agent transcript drill-in navigation with persisted,
+closable workspace tabs whose robot icon reflects the sub-agent lifecycle.
 
-**Architecture:** Extend the existing workspace panel state with a validated `subagent` tab and explicit open/update operations. Render sub-agent tabs and transcripts through the existing `MainViewTabBar` and `MainViewContent`, while the transcript query reports refreshed provider summaries back into the persisted tab snapshot. Keep `WorkspaceDetailView` responsible only for validating Agents-panel selections and closing the mobile sheet.
+**Architecture:** Extend the existing workspace panel state with a validated
+`subagent` tab and explicit open/update operations. Render sub-agent tabs and
+transcripts through the existing `MainViewTabBar` and `MainViewContent`, while
+the transcript query reports refreshed provider summaries back into the
+persisted tab snapshot. Keep `WorkspaceDetailView` responsible only for
+validating Agents-panel selections and closing the mobile sheet.
 
-**Tech Stack:** React 19, TypeScript, Zod, TanStack Query through tRPC, Vitest with jsdom, Phosphor icons, Tailwind CSS.
+**Tech Stack:** React 19, TypeScript, Zod, TanStack Query through tRPC, Vitest
+with jsdom, Phosphor icons, Tailwind CSS.
 
 ## Global Constraints
 
-- Sub-agent tabs persist with the existing workspace tabs and survive chat switches and application reloads.
-- Tab identity is the pair of parent session ID and sub-agent ID; reopening that pair focuses and refreshes one tab.
-- Different sub-agents, including equal child IDs under different parent sessions, may be open simultaneously.
-- The tab displays a close button, a provider name or existing fallback name, and a status-colored `RobotIcon`.
-- `starting` and `running` are blue and gently pulsing; `waiting` is amber; `completed` is green; `failed` is red; `cancelled` and `interrupted` are muted.
-- Remove the Back button, breadcrumb, `Read only` pill, and status pill from the transcript content.
-- Preserve existing loading, empty, pagination, invalidation, retry, unavailable, scroll, and read-only behavior.
-- Keep provider sub-agent browsing disabled when no parent session is selected or its ACP process is stopped.
-- When the selected parent ACP process becomes alive, invalidate the cached unsupported result and reveal recovered sub-agents without a page refresh.
-- This is client-only: do not change ACP, tRPC, provider retention, or mutation controls.
+- Sub-agent tabs persist with the existing workspace tabs and survive chat
+  switches and application reloads.
+- Tab identity is the pair of parent session ID and sub-agent ID; reopening that
+  pair focuses and refreshes one tab.
+- Different sub-agents, including equal child IDs under different parent
+  sessions, may be open simultaneously.
+- The tab displays a close button, a provider name or existing fallback name,
+  and a status-colored `RobotIcon`.
+- `starting` and `running` are blue and gently pulsing; `waiting` is amber;
+  `completed` is green; `failed` is red; `cancelled` and `interrupted` are
+  muted.
+- Remove the Back button, breadcrumb, `Read only` pill, and status pill from the
+  transcript content.
+- Preserve existing loading, empty, pagination, invalidation, retry,
+  unavailable, scroll, and read-only behavior.
+- Keep provider sub-agent browsing disabled when no parent session is selected
+  or its ACP process is stopped.
+- When the selected parent ACP process becomes alive, invalidate the cached
+  unsupported result and reveal recovered sub-agents without a page refresh.
+- This is client-only: do not change ACP, tRPC, provider retention, or mutation
+  controls.
 
 ---
 
 ### Task 1: Persisted sub-agent tab model
 
 **Files:**
+
 - Modify: `src/client/features/workspace/workspace-panel-context.tsx`
 - Modify: `src/client/features/workspace/workspace-panel-context.test.tsx`
 
 **Interfaces:**
-- Consumes: `SubagentSelection` from `@/client/features/subagents` and `subagentSummarySchema` from `@/shared/acp-protocol`.
-- Produces: `MainViewTab.type` includes `'subagent'`; `MainViewTab.subagentSelection?: SubagentSelection`; `openSubagentTab(selection: SubagentSelection): void`; `updateSubagentTab(selection: SubagentSelection): void` on `WorkspacePanelContextValue`.
+
+- Consumes: `SubagentSelection` from `@/client/features/subagents` and
+  `subagentSummarySchema` from `@/shared/acp-protocol`.
+- Produces: `MainViewTab.type` includes `'subagent'`;
+  `MainViewTab.subagentSelection?: SubagentSelection`;
+  `openSubagentTab(selection: SubagentSelection): void`;
+  `updateSubagentTab(selection: SubagentSelection): void` on
+  `WorkspacePanelContextValue`.
 
 - [ ] **Step 1: Write failing persistence and identity tests**
 
-Extend the probe so tests exercise the real provider operations and rendered state:
+Extend the probe so tests exercise the real provider operations and rendered
+state:
 
 ```tsx
 const runningSelection: SubagentSelection = {
@@ -172,9 +201,13 @@ it('restores a valid persisted sub-agent tab and rejects an incomplete one', asy
 });
 ```
 
-Keep `renderPanel`, `clickButton`, and `readProbe` as test-only helpers in `workspace-panel-context.test.tsx`; they must mount the real `WorkspacePanelProvider` and derive expectations from literal values rather than production helpers.
+Keep `renderPanel`, `clickButton`, and `readProbe` as test-only helpers in
+`workspace-panel-context.test.tsx`; they must mount the real
+`WorkspacePanelProvider` and derive expectations from literal values rather than
+production helpers.
 
-- [ ] **Step 2: Run the focused test and verify the new tests fail for missing sub-agent tab support**
+- [ ] **Step 2: Run the focused test and verify the new tests fail for missing
+      sub-agent tab support**
 
 Run:
 
@@ -182,7 +215,8 @@ Run:
 pnpm test src/client/features/workspace/workspace-panel-context.test.tsx
 ```
 
-Expected: FAIL because `openSubagentTab`, `updateSubagentTab`, the `subagent` enum member, and `subagentSelection` do not exist.
+Expected: FAIL because `openSubagentTab`, `updateSubagentTab`, the `subagent`
+enum member, and `subagentSelection` do not exist.
 
 - [ ] **Step 3: Implement the minimal tab model and context operations**
 
@@ -276,7 +310,9 @@ const updateSubagentTab = useCallback((selection: SubagentSelection) => {
 }, []);
 ```
 
-Include both callbacks in the memoized context value and dependency list. Preserve the existing `closeTab` neighboring-tab behavior and local-storage effects.
+Include both callbacks in the memoized context value and dependency list.
+Preserve the existing `closeTab` neighboring-tab behavior and local-storage
+effects.
 
 - [ ] **Step 4: Run the focused test and verify it passes**
 
@@ -300,6 +336,7 @@ git commit -m "Add persisted sub-agent workspace tabs"
 ### Task 2: Headerless transcript and reusable live-summary hook
 
 **Files:**
+
 - Modify: `src/client/features/subagents/subagent-transcript-content.tsx`
 - Modify: `src/client/features/subagents/subagent-transcript-view.tsx`
 - Modify: `src/client/features/subagents/subagent-transcript-view.test.tsx`
@@ -310,12 +347,20 @@ git commit -m "Add persisted sub-agent workspace tabs"
 - Modify: `src/client/features/subagents/index.ts`
 
 **Interfaces:**
-- Consumes: the existing `SubagentSelection`, transcript queries, and browser invalidation event.
-- Produces: `useLiveSubagentSelection(selection: SubagentSelection): SubagentSelection` from the public subagents barrel; `SubagentTranscriptContentProps` no longer has `onBack`; the transcript root contains no navigation/status header; `SubagentTranscriptView` no longer duplicates the summary query.
 
-- [ ] **Step 1: Write failing tests for the removed header and extracted summary behavior**
+- Consumes: the existing `SubagentSelection`, transcript queries, and browser
+  invalidation event.
+- Produces:
+  `useLiveSubagentSelection(selection: SubagentSelection): SubagentSelection`
+  from the public subagents barrel; `SubagentTranscriptContentProps` no longer
+  has `onBack`; the transcript root contains no navigation/status header;
+  `SubagentTranscriptView` no longer duplicates the summary query.
 
-Replace the breadcrumb test with behavior that proves the transcript is still readable but has no duplicate navigation chrome:
+- [ ] **Step 1: Write failing tests for the removed header and extracted summary
+      behavior**
+
+Replace the breadcrumb test with behavior that proves the transcript is still
+readable but has no duplicate navigation chrome:
 
 ```tsx
 it('renders transcript content without breadcrumb, back action, or status pills', () => {
@@ -337,7 +382,8 @@ it('renders transcript content without breadcrumb, back action, or status pills'
 });
 ```
 
-Update the unavailable-state test to retain the preview and Retry assertions but remove its old expectation that the `Failed` header pill is visible.
+Update the unavailable-state test to retain the preview and Retry assertions but
+remove its old expectation that the `Failed` header pill is visible.
 
 Move summary-refresh assertions out of `SubagentTranscriptView` and into a new
 hook test that mounts a real probe while mocking only the tRPC boundary:
@@ -382,7 +428,8 @@ it('returns the authoritative provider summary and refetches only matching inval
 });
 ```
 
-- [ ] **Step 2: Run both focused suites and verify the tests fail against the existing header/back contract**
+- [ ] **Step 2: Run both focused suites and verify the tests fail against the
+      existing header/back contract**
 
 Run:
 
@@ -390,11 +437,15 @@ Run:
 pnpm test src/client/features/subagents/subagent-transcript-content.test.tsx src/client/features/subagents/subagent-transcript-view.test.tsx
 ```
 
-Expected: FAIL because the old header remains, `onBack` is required, and the live-summary hook does not exist.
+Expected: FAIL because the old header remains, `onBack` is required, and the
+live-summary hook does not exist.
 
-- [ ] **Step 3: Remove transcript navigation chrome and extract the summary observer**
+- [ ] **Step 3: Remove transcript navigation chrome and extract the summary
+      observer**
 
-Delete `TranscriptHeader`, `statusLabel`, and `statusClassName`; remove the unused `ArrowLeftIcon`, `CaretRightIcon`, `cn`, and header-only imports. Change the content contract and render to:
+Delete `TranscriptHeader`, `statusLabel`, and `statusClassName`; remove the
+unused `ArrowLeftIcon`, `CaretRightIcon`, `cn`, and header-only imports. Change
+the content contract and render to:
 
 ```tsx
 export interface SubagentTranscriptContentProps {
@@ -491,13 +542,14 @@ The omitted `TERMINAL_STATUSES`, timestamp-validation, and
 `isProvenAtLeastAsFresh` helpers are the focused freshness policy implemented
 alongside this hook; see the production file for their full definitions.
 
-Export the hook from `src/client/features/subagents/index.ts`. Remove the summary
-query and summary refetch from `SubagentTranscriptView`; keep its transcript
-query and matching transcript invalidation. Pass only `workspaceId`, `selection`,
-and `state` to `SubagentTranscriptContent`. Update every story and test invocation
-to remove `onBack`.
+Export the hook from `src/client/features/subagents/index.ts`. Remove the
+summary query and summary refetch from `SubagentTranscriptView`; keep its
+transcript query and matching transcript invalidation. Pass only `workspaceId`,
+`selection`, and `state` to `SubagentTranscriptContent`. Update every story and
+test invocation to remove `onBack`.
 
-- [ ] **Step 4: Run focused tests and verify they pass without regressing pagination or invalidation**
+- [ ] **Step 4: Run focused tests and verify they pass without regressing
+      pagination or invalidation**
 
 Run:
 
@@ -520,6 +572,7 @@ git commit -m "Simplify sub-agent transcript view"
 ### Task 3: Render status-colored sub-agent tabs and tab content
 
 **Files:**
+
 - Modify: `src/client/features/workspace/main-view-tab-bar.tsx`
 - Create: `src/client/features/workspace/main-view-tab-bar.test.tsx`
 - Create: `src/client/features/workspace/main-view-tab-bar.stories.tsx`
@@ -527,18 +580,25 @@ git commit -m "Simplify sub-agent transcript view"
 - Create: `src/client/features/workspace/main-view-content.test.tsx`
 
 **Interfaces:**
-- Consumes: `MainViewTab.subagentSelection`, `updateSubagentTab(selection)`, `useLiveSubagentSelection(selection)`, `SubagentTranscriptView`, and the existing `TabButton` close behavior.
-- Produces: closable sub-agent tabs with accessible status-labelled `RobotIcon`s that refresh even while inactive; active sub-agent content renders `SubagentTranscriptView`.
 
-- [ ] **Step 1: Write failing tab-bar tests for close affordance and lifecycle colors**
+- Consumes: `MainViewTab.subagentSelection`, `updateSubagentTab(selection)`,
+  `useLiveSubagentSelection(selection)`, `SubagentTranscriptView`, and the
+  existing `TabButton` close behavior.
+- Produces: closable sub-agent tabs with accessible status-labelled `RobotIcon`s
+  that refresh even while inactive; active sub-agent content renders
+  `SubagentTranscriptView`.
 
-Mount the real `WorkspacePanelProvider` and `MainViewTabBar`, seeding local storage with a sub-agent tab. Use a table of literal expected classes:
+- [ ] **Step 1: Write failing tab-bar tests for close affordance and lifecycle
+      colors**
+
+Mount the real `WorkspacePanelProvider` and `MainViewTabBar`, seeding local
+storage with a sub-agent tab. Use a table of literal expected classes:
 
 Mock only `trpc.session.listSubagents.useInfiniteQuery` in this test file. Back
-it with `mocks.summary`, return one supported page containing
-`mocks.summary`, and return stable `mocks.listRefetch` and pagination functions.
-Reset `mocks.summary` in `beforeEach`; each table row then assigns a complete
-matching summary with that row's literal status before rendering, so the real
+it with `mocks.summary`, return one supported page containing `mocks.summary`,
+and return stable `mocks.listRefetch` and pagination functions. Reset
+`mocks.summary` in `beforeEach`; each table row then assigns a complete matching
+summary with that row's literal status before rendering, so the real
 `useLiveSubagentSelection` hook remains under test without order-dependent
 fixture state.
 
@@ -569,7 +629,10 @@ it.each([
 });
 ```
 
-Use a workspace-specific storage key consistently in `seedSubagentTab` and `renderTabBar`; the helper must seed `activeTabId` to the deterministic sub-agent tab ID and render required `MainViewTabBar` props with literal empty sessions, `selectedProvider="CODEX"`, and `setSelectedProvider={vi.fn()}`.
+Use a workspace-specific storage key consistently in `seedSubagentTab` and
+`renderTabBar`; the helper must seed `activeTabId` to the deterministic
+sub-agent tab ID and render required `MainViewTabBar` props with literal empty
+sessions, `selectedProvider="CODEX"`, and `setSelectedProvider={vi.fn()}`.
 
 Add one integration case where storage starts with `running`, the mocked
 `listSubagents` response returns the same child as `completed`, and the test
@@ -577,9 +640,12 @@ waits for both the green icon and the persisted `completed` selection. This is
 the regression test that catches an inactive tab failing to consume a provider
 status update.
 
-- [ ] **Step 2: Write a failing content integration test using the real transcript component**
+- [ ] **Step 2: Write a failing content integration test using the real
+      transcript component**
 
-Mock only the tRPC query boundary, keeping `MainViewContent`, `SubagentTranscriptView`, and `SubagentTranscriptContent` real. Return a loading transcript query and a non-loading summary query:
+Mock only the tRPC query boundary, keeping `MainViewContent`,
+`SubagentTranscriptView`, and `SubagentTranscriptContent` real. Return a loading
+transcript query and a non-loading summary query:
 
 ```tsx
 vi.mock('@/client/lib/trpc', () => ({
@@ -626,7 +692,8 @@ it('renders a persisted active sub-agent tab while keeping chat mounted and hidd
 });
 ```
 
-- [ ] **Step 3: Run the new suites and verify they fail because sub-agent tabs are not rendered**
+- [ ] **Step 3: Run the new suites and verify they fail because sub-agent tabs
+      are not rendered**
 
 Run:
 
@@ -634,9 +701,11 @@ Run:
 pnpm test src/client/features/workspace/main-view-tab-bar.test.tsx src/client/features/workspace/main-view-content.test.tsx
 ```
 
-Expected: FAIL because `MainViewTabBar` has no robot status rendering and `MainViewContent` has no sub-agent branch.
+Expected: FAIL because `MainViewTabBar` has no robot status rendering and
+`MainViewContent` has no sub-agent branch.
 
-- [ ] **Step 4: Implement robot status rendering in the existing file-like tab group**
+- [ ] **Step 4: Implement robot status rendering in the existing file-like tab
+      group**
 
 Import `RobotIcon` and add the literal state mapping:
 
@@ -674,7 +743,9 @@ const icon = subagentStatus ? (
 );
 ```
 
-Return `RobotIcon` from `getTabIcon('subagent')` as the type-safe fallback. Because sub-agent tabs are included in `nonChatTabs`, they automatically appear after the separator and use `closeTab` through the existing `TabItem` mapping.
+Return `RobotIcon` from `getTabIcon('subagent')` as the type-safe fallback.
+Because sub-agent tabs are included in `nonChatTabs`, they automatically appear
+after the separator and use `closeTab` through the existing `TabItem` mapping.
 
 Render sub-agent tabs through a dedicated component so calling the live-summary
 hook follows React's hook rules. Pass the required selection as its own prop so
@@ -730,7 +801,8 @@ In the `nonChatTabs` mapping, render `SubagentTabItem` only when both
 the existing `TabItem`. Pass `updateSubagentTab` from the panel context as
 `onRefresh`.
 
-- [ ] **Step 5: Render active sub-agent transcript content and persist refreshes**
+- [ ] **Step 5: Render active sub-agent transcript content and persist
+      refreshes**
 
 Add the active content branch:
 
@@ -748,9 +820,12 @@ const subagentSelection =
 )}
 ```
 
-`showChat` remains true only for a missing or `chat` tab, so the existing mounted chat wrapper becomes hidden for sub-agent tabs without custom scroll bookkeeping.
+`showChat` remains true only for a missing or `chat` tab, so the existing
+mounted chat wrapper becomes hidden for sub-agent tabs without custom scroll
+bookkeeping.
 
-- [ ] **Step 6: Run the new suites and all directly affected workspace/sub-agent suites**
+- [ ] **Step 6: Run the new suites and all directly affected workspace/sub-agent
+      suites**
 
 Run:
 
@@ -779,17 +854,25 @@ git commit -m "Render sub-agent transcript tabs"
 ### Task 4: Replace route-local drill-in with panel tab opening
 
 **Files:**
+
 - Modify: `src/client/routes/projects/workspaces/workspace-detail-container.tsx`
 - Modify: `src/client/routes/projects/workspaces/workspace-detail-view.tsx`
 - Modify: `src/client/routes/projects/workspaces/workspace-detail-view.test.tsx`
 
 **Interfaces:**
-- Consumes: `openSubagentTab(selection)` from `useWorkspacePanel` and `SubagentSelection` from the public subagents barrel.
-- Produces: `SessionTabsProps.handleOpenSubagentTab(selection)`; Agents-panel selection opens or focuses a persisted tab while mobile still closes the right-panel sheet.
+
+- Consumes: `openSubagentTab(selection)` from `useWorkspacePanel` and
+  `SubagentSelection` from the public subagents barrel.
+- Produces: `SessionTabsProps.handleOpenSubagentTab(selection)`; Agents-panel
+  selection opens or focuses a persisted tab while mobile still closes the
+  right-panel sheet.
 
 - [ ] **Step 1: Replace drill-in tests with failing tab-opening behavior**
 
-Add `handleOpenSubagentTab: vi.fn()` to `createViewProps().sessionTabs`. Remove the `SubagentTranscriptView` feature mock and the tests for Back navigation, route-local scroll restoration, clearing on session change, and clearing on workspace change.
+Add `handleOpenSubagentTab: vi.fn()` to `createViewProps().sessionTabs`. Remove
+the `SubagentTranscriptView` feature mock and the tests for Back navigation,
+route-local scroll restoration, clearing on session change, and clearing on
+workspace change.
 
 Replace them with:
 
@@ -845,9 +928,11 @@ it('ignores a sub-agent selection owned by another parent session', () => {
 });
 ```
 
-Keep and update the mobile test so it asserts both `handleOpenSubagentTab` and `setRightPanelVisible(false)`.
+Keep and update the mobile test so it asserts both `handleOpenSubagentTab` and
+`setRightPanelVisible(false)`.
 
-- [ ] **Step 2: Run the route suite and verify it fails against drill-in behavior**
+- [ ] **Step 2: Run the route suite and verify it fails against drill-in
+      behavior**
 
 Run:
 
@@ -855,9 +940,11 @@ Run:
 pnpm test src/client/routes/projects/workspaces/workspace-detail-view.test.tsx
 ```
 
-Expected: FAIL because `handleOpenSubagentTab` is not in the view contract and the view still owns drill-in rendering.
+Expected: FAIL because `handleOpenSubagentTab` is not in the view contract and
+the view still owns drill-in rendering.
 
-- [ ] **Step 3: Wire the panel operation through the container and simplify the view**
+- [ ] **Step 3: Wire the panel operation through the container and simplify the
+      view**
 
 In the container, destructure and pass the new operation:
 
@@ -877,7 +964,8 @@ sessionTabs={{
 }}
 ```
 
-In `WorkspaceDetailView`, add the typed field and replace the existing handler body:
+In `WorkspaceDetailView`, add the typed field and replace the existing handler
+body:
 
 ```ts
 interface SessionTabsProps {
@@ -910,7 +998,10 @@ const handleOpenSubagent = useCallback(
 );
 ```
 
-Delete `subagentDrillIn`, `parentChatScrollTopRef`, `restoreParentScrollRef`, both scope/scroll effects, `handleBackFromSubagent`, the direct `SubagentTranscriptView` import, and the `cn` import. Restore the workspace content child to:
+Delete `subagentDrillIn`, `parentChatScrollTopRef`, `restoreParentScrollRef`,
+both scope/scroll effects, `handleBackFromSubagent`, the direct
+`SubagentTranscriptView` import, and the `cn` import. Restore the workspace
+content child to:
 
 ```tsx
 <ChatContent {...chat} />
@@ -924,7 +1015,8 @@ Run:
 pnpm test src/client/routes/projects/workspaces/workspace-detail-view.test.tsx src/client/features/workspace/workspace-panel-context.test.tsx src/client/features/workspace/main-view-tab-bar.test.tsx src/client/features/workspace/main-view-content.test.tsx
 ```
 
-Expected: all route opening, mobile sheet, panel persistence, tab icon, and content selection tests PASS.
+Expected: all route opening, mobile sheet, panel persistence, tab icon, and
+content selection tests PASS.
 
 - [ ] **Step 5: Commit the route integration**
 
@@ -938,12 +1030,16 @@ git commit -m "Open sub-agents in workspace tabs"
 ### Task 5: Full verification and visual QA
 
 **Files:**
+
 - Verify: all files changed in Tasks 1-4
-- Reference: `docs/superpowers/specs/2026-08-10-subagent-transcript-tabs-design.md`
+- Reference:
+  `docs/superpowers/specs/2026-08-10-subagent-transcript-tabs-design.md`
 
 **Interfaces:**
+
 - Consumes: the completed implementation and approved design.
-- Produces: fresh automated and visual evidence that the implementation satisfies the design.
+- Produces: fresh automated and visual evidence that the implementation
+  satisfies the design.
 
 - [ ] **Step 1: Run the complete affected test set**
 
@@ -962,7 +1058,8 @@ pnpm check:fix
 git diff --check
 ```
 
-Expected: every command exits 0. Inspect `git diff` after `check:fix` and include only formatting changes caused by the implementation.
+Expected: every command exits 0. Inspect `git diff` after `check:fix` and
+include only formatting changes caused by the implementation.
 
 - [ ] **Step 3: Run the full test suite**
 
@@ -974,7 +1071,8 @@ Expected: the full Vitest suite exits 0 with zero failed tests.
 
 - [ ] **Step 4: Visually inspect the updated stories/application**
 
-Start Storybook or the development app with the repository command appropriate to the available fixture data:
+Start Storybook or the development app with the repository command appropriate
+to the available fixture data:
 
 ```bash
 pnpm storybook
@@ -982,12 +1080,14 @@ pnpm storybook
 
 Verify at desktop and mobile widths:
 
-- opening an active sub-agent creates one blue pulsing robot tab with a visible close affordance on hover/focus;
+- opening an active sub-agent creates one blue pulsing robot tab with a visible
+  close affordance on hover/focus;
 - opening a completed sub-agent creates a green robot tab;
 - reopening the same sub-agent focuses one tab rather than duplicating it;
 - switching chats, files, and sub-agent tabs preserves each tab;
 - reloading restores the sub-agent tab and its last-known icon state;
-- the transcript begins directly with its loading, empty, error, or message content and has no breadcrumb header;
+- the transcript begins directly with its loading, empty, error, or message
+  content and has no breadcrumb header;
 - closing the active sub-agent selects the neighboring tab;
 - selecting from the mobile Agents sheet opens the tab and closes the sheet.
 
@@ -995,7 +1095,8 @@ Stop the development server after inspection.
 
 - [ ] **Step 5: Commit any verification-driven formatting or story corrections**
 
-If Step 2 or Step 4 produced necessary tracked corrections, commit only those exact files:
+If Step 2 or Step 4 produced necessary tracked corrections, commit only those
+exact files:
 
 ```bash
 git add src/client/features/workspace/workspace-panel-context.tsx src/client/features/workspace/workspace-panel-context.test.tsx src/client/features/workspace/main-view-tab-bar.tsx src/client/features/workspace/main-view-tab-bar.test.tsx src/client/features/workspace/main-view-tab-bar.stories.tsx src/client/features/workspace/main-view-content.tsx src/client/features/workspace/main-view-content.test.tsx src/client/features/subagents/subagent-transcript-content.tsx src/client/features/subagents/subagent-transcript-view.tsx src/client/features/subagents/subagent-transcript-content.test.tsx src/client/features/subagents/subagent-transcript-view.test.tsx src/client/features/subagents/subagent-transcript-view.stories.tsx src/client/features/subagents/use-live-subagent-selection.ts src/client/features/subagents/use-live-subagent-selection.test.tsx src/client/features/subagents/index.ts src/client/routes/projects/workspaces/workspace-detail-container.tsx src/client/routes/projects/workspaces/workspace-detail-view.tsx src/client/routes/projects/workspaces/workspace-detail-view.test.tsx
@@ -1009,14 +1110,22 @@ If the worktree is already clean, do not create an empty commit.
 ### Task 6: Refresh provider sub-agents when a stopped parent starts
 
 **Files:**
-- Modify: `src/client/routes/projects/workspaces/workspace-detail-container.utils.ts`
-- Test: `src/client/routes/projects/workspaces/workspace-detail-container.utils.test.ts`
+
+- Modify:
+  `src/client/routes/projects/workspaces/workspace-detail-container.utils.ts`
+- Test:
+  `src/client/routes/projects/workspaces/workspace-detail-container.utils.test.ts`
 - Modify: `src/client/routes/projects/workspaces/workspace-detail-container.tsx`
 - Verify: `src/client/features/subagents/provider-subagents-section.test.tsx`
 
 **Interfaces:**
-- Consumes: `selectedDbSessionId`, `runtimeSessionId`, WebSocket `connected`, and `sessionRuntime.processState` from `useChatWebSocket`.
-- Produces: `isProviderSubagentSessionReady(options): boolean`, passed to `WorkspaceDetailView` as `selectedSessionReady`; the existing `useSubagentInvalidation` false-to-true path invalidates `listSubagents` before enabling it.
+
+- Consumes: `selectedDbSessionId`, `runtimeSessionId`, WebSocket `connected`,
+  and `sessionRuntime.processState` from `useChatWebSocket`.
+- Produces: `isProviderSubagentSessionReady(options): boolean`, passed to
+  `WorkspaceDetailView` as `selectedSessionReady`; the existing
+  `useSubagentInvalidation` false-to-true path invalidates `listSubagents`
+  before enabling it.
 
 - [ ] **Step 1: Write the failing readiness tests**
 
@@ -1059,7 +1168,8 @@ pnpm test src/client/routes/projects/workspaces/workspace-detail-container.utils
 
 Expected: FAIL because `isProviderSubagentSessionReady` is not exported.
 
-- [ ] **Step 3: Implement the readiness predicate and wire it into the container**
+- [ ] **Step 3: Implement the readiness predicate and wire it into the
+      container**
 
 Add this focused contract to `workspace-detail-container.utils.ts`:
 
@@ -1106,7 +1216,8 @@ session or a stopped process the value stays false; the existing
 `ProviderSubagentsSection` transition test proves that false-to-true readiness
 invalidates the cached query before enabling it.
 
-- [ ] **Step 4: Run the focused readiness and invalidation suites and verify GREEN**
+- [ ] **Step 4: Run the focused readiness and invalidation suites and verify
+      GREEN**
 
 Run:
 

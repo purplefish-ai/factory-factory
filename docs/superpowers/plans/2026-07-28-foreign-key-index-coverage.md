@@ -1,17 +1,27 @@
 # Foreign-Key Index Coverage Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Reject unindexed Prisma relation scalar fields and add the one missing index for `Workspace.periodicTaskId`.
+**Goal:** Reject unindexed Prisma relation scalar fields and add the one missing
+index for `Workspace.periodicTaskId`.
 
-**Architecture:** A repository-local TypeScript command statically reads `prisma/schema.prisma`, extracts owning-side relation columns and covering indexes, and exits non-zero for uncovered relations or stale exemptions. The schema and SQLite migration add the missing index, and `package.json` makes the guard part of the standard check pipeline.
+**Architecture:** A repository-local TypeScript command statically reads
+`prisma/schema.prisma`, extracts owning-side relation columns and covering
+indexes, and exits non-zero for uncovered relations or stale exemptions. The
+schema and SQLite migration add the missing index, and `package.json` makes the
+guard part of the standard check pipeline.
 
-**Tech Stack:** TypeScript, `tsx`, Prisma schema language, SQLite migrations, pnpm.
+**Tech Stack:** TypeScript, `tsx`, Prisma schema language, SQLite migrations,
+pnpm.
 
 ## Global Constraints
 
 - Check only owning-side `@relation(fields: [...])` scalar columns.
-- Accept coverage by the leading columns of `@@index`, `@@unique`, `@@id`, `@unique`, or `@id`.
+- Accept coverage by the leading columns of `@@index`, `@@unique`, `@@id`,
+  `@unique`, or `@id`.
 - Keep an exemption map that rejects unknown and stale entries.
 - Do not change relation behavior or application query behavior.
 - Do not commit changes unless the user explicitly requests a commit.
@@ -21,16 +31,21 @@
 ### Task 1: Add the Foreign-Key Index Guard
 
 **Files:**
+
 - Create: `scripts/check-fk-indexes.ts`
 - Modify: `package.json`
 
 **Interfaces:**
+
 - Consumes: `prisma/schema.prisma`
-- Produces: `pnpm check:fk-indexes`, a command that exits `0` when every owning relation has a covering index and exits `1` with one diagnostic per violation otherwise.
+- Produces: `pnpm check:fk-indexes`, a command that exits `0` when every owning
+  relation has a covering index and exits `1` with one diagnostic per violation
+  otherwise.
 
 - [ ] **Step 1: Create the checker**
 
-Implement the established `iron-fillet` checker pattern in `scripts/check-fk-indexes.ts`:
+Implement the established `iron-fillet` checker pattern in
+`scripts/check-fk-indexes.ts`:
 
 ```ts
 import { readFileSync } from 'node:fs';
@@ -178,7 +193,8 @@ Add this script to `package.json`:
 "check:fk-indexes": "tsx scripts/check-fk-indexes.ts"
 ```
 
-Do not add it to the aggregate `check` command yet; the red test needs to isolate the new guard.
+Do not add it to the aggregate `check` command yet; the red test needs to
+isolate the new guard.
 
 - [ ] **Step 3: Run the checker and verify RED**
 
@@ -194,18 +210,23 @@ Expected: exit `1` with exactly one uncovered relation:
 Model "Workspace" relation on [periodicTaskId] has no covering index.
 ```
 
-If any other relation is reported, stop and reconcile the checker with the schema before changing indexes.
+If any other relation is reported, stop and reconcile the checker with the
+schema before changing indexes.
 
 ### Task 2: Add the Missing Workspace Index
 
 **Files:**
+
 - Modify: `prisma/schema.prisma`
-- Create: `prisma/migrations/20260728000000_add_workspace_periodic_task_id_index/migration.sql`
+- Create:
+  `prisma/migrations/20260728000000_add_workspace_periodic_task_id_index/migration.sql`
 - Regenerate: `prisma/generated/internal/class.ts`
 
 **Interfaces:**
+
 - Consumes: the failing `pnpm check:fk-indexes` guard from Task 1.
-- Produces: a schema and migration where `Workspace.periodicTaskId` has the physical SQLite index `Workspace_periodicTaskId_idx`.
+- Produces: a schema and migration where `Workspace.periodicTaskId` has the
+  physical SQLite index `Workspace_periodicTaskId_idx`.
 
 - [ ] **Step 1: Add the schema index**
 
@@ -220,7 +241,8 @@ In `Workspace`, keep the single-column foreign-key indexes together:
 
 - [ ] **Step 2: Add the SQLite migration**
 
-Create `prisma/migrations/20260728000000_add_workspace_periodic_task_id_index/migration.sql`:
+Create
+`prisma/migrations/20260728000000_add_workspace_periodic_task_id_index/migration.sql`:
 
 ```sql
 -- CreateIndex
@@ -268,11 +290,14 @@ Expected: exit `0` with no schema drift.
 ### Task 3: Integrate and Verify the Guardrail
 
 **Files:**
+
 - Modify: `package.json`
 
 **Interfaces:**
+
 - Consumes: the passing `pnpm check:fk-indexes` command from Task 2.
-- Produces: a standard `pnpm check` pipeline that enforces foreign-key index coverage.
+- Produces: a standard `pnpm check` pipeline that enforces foreign-key index
+  coverage.
 
 - [ ] **Step 1: Wire the guard into `pnpm check`**
 
@@ -290,7 +315,8 @@ Run:
 pnpm check:fix
 ```
 
-Review the resulting diff and keep only formatting changes in the files in this plan.
+Review the resulting diff and keep only formatting changes in the files in this
+plan.
 
 - [ ] **Step 3: Run focused verification**
 

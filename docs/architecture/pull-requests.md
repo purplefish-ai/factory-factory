@@ -40,19 +40,20 @@ changes-requested review would not be visible until the separate PR-sync poller
 caught up.
 
 Live snapshot invalidations go through `RatchetProjectionWorker`, owned by the
-event collector for one start/stop lifetime. It re-reads when invalidations arrive
-during a read, retries failures at 1s and 2s with a three-attempt budget, and
-suppresses archived workspaces and results arriving after stop. The collector
-keeps the event subscriptions and coalesced snapshot writes; reconciliation is
-the safety net after the worker exhausts its retries.
+event collector for one start/stop lifetime. It re-reads when invalidations
+arrive during a read, retries failures at 1s and 2s with a three-attempt budget,
+and suppresses archived workspaces and results arriving after stop. The
+collector keeps the event subscriptions and coalesced snapshot writes;
+reconciliation is the safety net after the worker exhausts its retries.
 
 ### Dispatch tracking
 
 Each fixer dispatch is tracked via an explicit record on that row (snapshot key
-+ outcome `RUNNING`/`COMPLETED`/`DIED` + retry count): deliberate stops and
-clean exits settle as `COMPLETED` (no re-dispatch while the PR state is
-unchanged), unexpected exits settle as `DIED` and are re-dispatched for the same
-PR state up to 3 times.
+
+- outcome `RUNNING`/`COMPLETED`/`DIED` + retry count): deliberate stops and
+  clean exits settle as `COMPLETED` (no re-dispatch while the PR state is
+  unchanged), unexpected exits settle as `DIED` and are re-dispatched for the
+  same PR state up to 3 times.
 
 A `dispatchStalled` boolean on the same row records the ratchet's own conclusion
 that it will not act again until the PR changes — set both when a settled
@@ -72,9 +73,9 @@ snapshot key hashes `statusCheckRollup` detail `WorkspacePR` does not store, so
 no reader can re-derive it.
 
 Inline review comment fetches retain at most 2,000 comments, ordered by newest
-update first at the API boundary. Hitting that budget drops older activity rather
-than the newest comment or edit used in the dispatch snapshot. Returned comments
-are in ascending update order.
+update first at the API boundary. Hitting that budget drops older activity
+rather than the newest comment or edit used in the dispatch snapshot. Returned
+comments are in ascending update order.
 
 Review comments belonging to resolved review threads (GraphQL
 `reviewThreads.isResolved`) are excluded from fixer dispatch prompts and from

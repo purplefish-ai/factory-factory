@@ -43,7 +43,8 @@ completed: 2026-02-11
 
 # Phase 12 Plan 01: Domain Event Emission Summary
 
-**EventEmitter-based state change events on workspace and run-script state machines with typed constants and 11 emission/non-emission tests**
+**EventEmitter-based state change events on workspace and run-script state
+machines with typed constants and 11 emission/non-emission tests**
 
 ## Performance
 
@@ -54,51 +55,80 @@ completed: 2026-02-11
 - **Files modified:** 6
 
 ## Accomplishments
-- WorkspaceStateMachineService extends EventEmitter, emits WORKSPACE_STATE_CHANGED on all 3 mutation paths (transition, startProvisioning FAILED path, resetToNew)
-- RunScriptStateMachineService extends EventEmitter, emits RUN_SCRIPT_STATUS_CHANGED on transition() (all other methods delegate to transition)
-- 11 new tests verifying emission on success and non-emission on CAS failure, invalid transition, and max retry exceeded
-- Event constants and payload types exported from domain barrels for downstream consumers
+
+- WorkspaceStateMachineService extends EventEmitter, emits
+  WORKSPACE_STATE_CHANGED on all 3 mutation paths (transition, startProvisioning
+  FAILED path, resetToNew)
+- RunScriptStateMachineService extends EventEmitter, emits
+  RUN_SCRIPT_STATUS_CHANGED on transition() (all other methods delegate to
+  transition)
+- 11 new tests verifying emission on success and non-emission on CAS failure,
+  invalid transition, and max retry exceeded
+- Event constants and payload types exported from domain barrels for downstream
+  consumers
 
 ## Task Commits
 
 Each task was committed atomically:
 
-1. **Task 1: Add event emission to workspace and run-script state machines** - `f1ed474` (feat)
-2. **Task 2: Add event emission tests for workspace and run-script state machines** - `e5b91af` (test)
+1. **Task 1: Add event emission to workspace and run-script state machines** -
+   `f1ed474` (feat)
+2. **Task 2: Add event emission tests for workspace and run-script state
+   machines** - `e5b91af` (test)
 
 **Plan metadata:** `a81df9b` (docs: complete plan)
 
 ## Files Created/Modified
-- `src/backend/domains/workspace/lifecycle/state-machine.service.ts` - Extended EventEmitter, added WORKSPACE_STATE_CHANGED constant, WorkspaceStateChangedEvent type, emit calls in transition(), startProvisioning(), resetToNew()
-- `src/backend/domains/workspace/index.ts` - Barrel exports for WORKSPACE_STATE_CHANGED and WorkspaceStateChangedEvent
-- `src/backend/domains/run-script/run-script-state-machine.service.ts` - Extended EventEmitter, added RUN_SCRIPT_STATUS_CHANGED constant, RunScriptStatusChangedEvent type, emit call in transition()
-- `src/backend/domains/run-script/index.ts` - Barrel exports for RUN_SCRIPT_STATUS_CHANGED and RunScriptStatusChangedEvent
-- `src/backend/domains/workspace/lifecycle/state-machine.service.test.ts` - 7 event emission tests
-- `src/backend/domains/run-script/run-script-state-machine.service.test.ts` - 4 event emission tests
+
+- `src/backend/domains/workspace/lifecycle/state-machine.service.ts` - Extended
+  EventEmitter, added WORKSPACE_STATE_CHANGED constant,
+  WorkspaceStateChangedEvent type, emit calls in transition(),
+  startProvisioning(), resetToNew()
+- `src/backend/domains/workspace/index.ts` - Barrel exports for
+  WORKSPACE_STATE_CHANGED and WorkspaceStateChangedEvent
+- `src/backend/domains/run-script/run-script-state-machine.service.ts` -
+  Extended EventEmitter, added RUN_SCRIPT_STATUS_CHANGED constant,
+  RunScriptStatusChangedEvent type, emit call in transition()
+- `src/backend/domains/run-script/index.ts` - Barrel exports for
+  RUN_SCRIPT_STATUS_CHANGED and RunScriptStatusChangedEvent
+- `src/backend/domains/workspace/lifecycle/state-machine.service.test.ts` - 7
+  event emission tests
+- `src/backend/domains/run-script/run-script-state-machine.service.test.ts` - 4
+  event emission tests
 
 ## Decisions Made
-- Events emitted AFTER successful CAS mutation, never before or on failure -- ensures consumers only see committed state changes
-- EventEmitter pattern (Node.js native) chosen over custom pub/sub for simplicity and zero new dependencies
+
+- Events emitted AFTER successful CAS mutation, never before or on failure --
+  ensures consumers only see committed state changes
+- EventEmitter pattern (Node.js native) chosen over custom pub/sub for
+  simplicity and zero new dependencies
 
 ## Deviations from Plan
 
 None - plan executed exactly as written.
 
 ## Issues Encountered
+
 None
 
 ## User Setup Required
+
 None - no external service configuration required.
 
 ## Next Phase Readiness
-- Both state machines now emit typed events that downstream consumers (Phase 13 Event Collector) can subscribe to
-- Event constants and payload types are available from domain barrels for type-safe event handling
-- Ready for Plan 02 (session state machine event emission) and Phase 13 (event collector wiring)
+
+- Both state machines now emit typed events that downstream consumers (Phase 13
+  Event Collector) can subscribe to
+- Event constants and payload types are available from domain barrels for
+  type-safe event handling
+- Ready for Plan 02 (session state machine event emission) and Phase 13 (event
+  collector wiring)
 
 ## Self-Check: PASSED
 
-All 6 modified files verified present. Both task commits (f1ed474, e5b91af) verified in git log.
+All 6 modified files verified present. Both task commits (f1ed474, e5b91af)
+verified in git log.
 
 ---
-*Phase: 12-domain-event-emission*
-*Completed: 2026-02-11*
+
+_Phase: 12-domain-event-emission_ _Completed: 2026-02-11_

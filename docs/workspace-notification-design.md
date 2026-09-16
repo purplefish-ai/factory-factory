@@ -2,9 +2,12 @@
 
 ## Executive Summary
 
-**Goal:** Notify user via OS desktop notification when all Claude sessions in a workspace finish working, but only when the app window is not focused or the chat is not visible.
+**Goal:** Notify user via OS desktop notification when all Claude sessions in a
+workspace finish working, but only when the app window is not focused or the
+chat is not visible.
 
 **Key Design Decisions:**
+
 - ✅ OS desktop notification (using existing `notification.service.ts`)
 - ✅ Per-workspace scope (all sessions must finish)
 - ✅ Suppress when app window is focused OR chat is visible
@@ -554,7 +557,8 @@ User Context: Working on "Feature X" workspace with 2 sessions running,
 
 **File:** `src/backend/services/workspace-activity.service.ts` (NEW)
 
-This service maintains a real-time map of which workspaces have running sessions.
+This service maintains a real-time map of which workspaces have running
+sessions.
 
 ```typescript
 /**
@@ -743,11 +747,14 @@ export const workspaceActivityService = new WorkspaceActivityService();
 Add workspace activity tracking when session states change:
 
 **Location 1:** Add import at top of file (after line 18):
+
 ```typescript
 import { workspaceActivityService } from '../../services/workspace-activity.service';
 ```
 
-**Location 2:** In `setupChatClientEvents()`, update the `session_id` event handler (around line 173):
+**Location 2:** In `setupChatClientEvents()`, update the `session_id` event
+handler (around line 173):
+
 ```typescript
 client.on('session_id', (claudeSessionId) => {
   if (DEBUG_CHAT_WS) {
@@ -780,7 +787,9 @@ client.on('session_id', (claudeSessionId) => {
 });
 ```
 
-**Location 3:** In `setupChatClientEvents()`, update the `result` event handler (around line 262):
+**Location 3:** In `setupChatClientEvents()`, update the `result` event handler
+(around line 262):
+
 ```typescript
 client.on('result', (result) => {
   if (DEBUG_CHAT_WS) {
@@ -800,7 +809,9 @@ client.on('result', (result) => {
 });
 ```
 
-**Location 4:** Add workspace notification forwarding (after `setupChatClientEvents` function, around line 290):
+**Location 4:** Add workspace notification forwarding (after
+`setupChatClientEvents` function, around line 290):
+
 ```typescript
 /**
  * Set up workspace-level notification forwarding.
@@ -844,7 +855,9 @@ function setupWorkspaceNotifications(): void {
 }
 ```
 
-**Location 5:** Call `setupWorkspaceNotifications()` in the upgrade handler (around line 614, inside `wss.handleUpgrade`):
+**Location 5:** Call `setupWorkspaceNotifications()` in the upgrade handler
+(around line 614, inside `wss.handleUpgrade`):
+
 ```typescript
 wss.handleUpgrade(request, socket, head, (ws) => {
   logger.info('Chat WebSocket connection established', {
@@ -866,7 +879,8 @@ wss.handleUpgrade(request, socket, head, (ws) => {
 
 **File:** `src/backend/services/notification.service.ts` (MODIFY)
 
-Add a workspace completion notification method (around line 335, before the final export):
+Add a workspace completion notification method (around line 335, before the
+final export):
 
 ```typescript
 /**
@@ -1034,7 +1048,8 @@ function showNotification(workspaceName: string, sessionCount: number): void {
 
 **File:** `src/client/features/chat/use-chat-websocket.ts` (MODIFY)
 
-Update the WebSocket message handler to pass notification requests to the manager.
+Update the WebSocket message handler to pass notification requests to the
+manager.
 
 Find the `ws.onmessage` handler and add handling for the new message type:
 
@@ -1153,23 +1168,27 @@ declare global {
 ## Implementation Plan
 
 ### Phase 1: Backend Foundation (1-2 hours)
+
 1. Create `workspace-activity.service.ts`
 2. Update `chat.handler.ts` to track session state changes
 3. Add workspace notification method to `notification.service.ts`
 4. Wire up workspace idle event to notification request
 
 ### Phase 2: Frontend Integration (1-2 hours)
+
 1. Create `use-window-focus.ts` hook
 2. Create `WorkspaceNotificationManager.tsx` component
 3. Update chat WebSocket to forward notification requests
 4. Add notification manager to app root
 
 ### Phase 3: Electron Enhancement (30 min)
+
 1. Update Electron main process to track focus
 2. Update preload script to expose focus API
 3. Update TypeScript types for Electron API
 
 ### Phase 4: Testing & Polish (1 hour)
+
 1. Test notification suppression logic
 2. Test multi-session workspace scenarios
 3. Test Electron and browser environments
@@ -1178,26 +1197,35 @@ declare global {
 ## File Changes Summary
 
 ### New Files (3)
-- `src/backend/services/workspace-activity.service.ts` - Workspace activity tracking
+
+- `src/backend/services/workspace-activity.service.ts` - Workspace activity
+  tracking
 - `src/client/hooks/use-window-focus.ts` - Window focus detection
-- `src/client/features/workspace/WorkspaceNotificationManager.tsx` - Notification manager component
+- `src/client/features/workspace/WorkspaceNotificationManager.tsx` -
+  Notification manager component
 
 ### Modified Files (6)
-- `src/backend/routers/websocket/chat.handler.ts` - Add workspace activity tracking
-- `src/backend/services/notification.service.ts` - Add workspace notification method
-- `src/client/features/chat/use-chat-websocket.ts` - Forward notification requests
+
+- `src/backend/routers/websocket/chat.handler.ts` - Add workspace activity
+  tracking
+- `src/backend/services/notification.service.ts` - Add workspace notification
+  method
+- `src/client/features/chat/use-chat-websocket.ts` - Forward notification
+  requests
 - `src/client/router.tsx` - Add notification manager to app
 - `electron/main/index.ts` - Track window focus events
 - `electron/preload/index.ts` - Expose focus API
 - `src/types/electron.d.ts` - Add TypeScript types
 
 ### Export Updates (1)
+
 - `src/backend/services/index.ts` - Export `workspaceActivityService`
 
 ## Testing Checklist
 
 - [ ] Single session in workspace finishes → notification sent (when unfocused)
-- [ ] Multiple sessions in workspace, only last one finishing → notification sent
+- [ ] Multiple sessions in workspace, only last one finishing → notification
+      sent
 - [ ] Multiple sessions, one finishes while others run → no notification
 - [ ] Window is focused → notification suppressed
 - [ ] Chat/workspace is visible in UI → notification suppressed
@@ -1209,17 +1237,22 @@ declare global {
 
 ## Benefits of This Approach
 
-1. **Minimal Disruption:** Leverages existing infrastructure (`notification.service.ts`, WebSocket system, session tracking)
+1. **Minimal Disruption:** Leverages existing infrastructure
+   (`notification.service.ts`, WebSocket system, session tracking)
 
 2. **Clean Separation:** Backend tracks activity, frontend decides suppression
 
-3. **Workspace-Scoped:** Properly handles workspaces with multiple concurrent sessions
+3. **Workspace-Scoped:** Properly handles workspaces with multiple concurrent
+   sessions
 
-4. **Smart Suppression:** Dual-check (window focus + chat visibility) prevents notification spam
+4. **Smart Suppression:** Dual-check (window focus + chat visibility) prevents
+   notification spam
 
-5. **Electron-Ready:** Works in both browser and Electron with proper OS notifications
+5. **Electron-Ready:** Works in both browser and Electron with proper OS
+   notifications
 
-6. **Extensible:** Easy to add user preferences, custom sounds, or different notification types later
+6. **Extensible:** Easy to add user preferences, custom sounds, or different
+   notification types later
 
 ## Future Enhancements (Optional)
 
@@ -1233,6 +1266,10 @@ declare global {
 
 ## Questions & Notes
 
-- **Browser Notification Permissions:** Users will need to grant notification permissions the first time. Consider adding a prompt/onboarding flow.
-- **Testing Strategy:** Should test with multiple browser tabs open to ensure suppression logic works correctly.
-- **Performance:** The workspace activity service keeps state in memory. For very large numbers of workspaces, consider periodic cleanup of idle workspace states.
+- **Browser Notification Permissions:** Users will need to grant notification
+  permissions the first time. Consider adding a prompt/onboarding flow.
+- **Testing Strategy:** Should test with multiple browser tabs open to ensure
+  suppression logic works correctly.
+- **Performance:** The workspace activity service keeps state in memory. For
+  very large numbers of workspaces, consider periodic cleanup of idle workspace
+  states.

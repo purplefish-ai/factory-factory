@@ -1,6 +1,7 @@
 # Contributing to Factory Factory
 
-Thank you for your interest in contributing to Factory Factory! This document provides guidelines and information for contributors.
+Thank you for your interest in contributing to Factory Factory! This document
+provides guidelines and information for contributors.
 
 ## Getting Started
 
@@ -104,10 +105,23 @@ Write clear, descriptive commit messages:
 
 ### Code Style
 
-- We use [Biome](https://biomejs.dev/) for linting and formatting
-- Run `pnpm check` for standard guardrails and `pnpm check:fix` to automatically fix Biome issues
-- `pnpm check` enforces Codex schema drift in CI. Locally, that check is skipped unless the pinned Codex CLI is installed; use `CODEX_SCHEMA_CHECK=strict pnpm check:codex-schema` to enforce it.
-- `prisma/generated/` is generated and excluded from Biome linting. After changing `prisma/schema.prisma`, run `pnpm check:prisma-schema` to regenerate Prisma output, enforce Prisma import/ownership rules, and typecheck the resulting type surface. CI also runs `pnpm check:prisma-generated` after generation to fail if generated output is not committed.
+- We use [Biome](https://biomejs.dev/) for source linting and formatting, and
+  [Prettier](https://prettier.io/) for Markdown. Markdown prose wraps at 80
+  columns; fenced code is preserved.
+- Run `pnpm check` for standard guardrails and `pnpm check:fix` to automatically
+  fix Biome issues and format Markdown
+- `pnpm check` enforces Codex schema drift in CI. Locally, that check is skipped
+  unless the pinned Codex CLI is installed; use
+  `CODEX_SCHEMA_CHECK=strict pnpm check:codex-schema` to enforce it.
+- `prisma/generated/` is generated and excluded from Biome linting. After
+  changing `prisma/schema.prisma`, run `pnpm check:prisma-schema` to regenerate
+  Prisma output, enforce Prisma import/ownership rules, and typecheck the
+  resulting type surface. CI also runs `pnpm check:prisma-generated` after
+  generation to fail if generated output is not committed.
+- Staged `.md` files are formatted automatically by the pre-commit hook. Use
+  `pnpm format:markdown` to format all Markdown or `pnpm check:markdown` to
+  check it. CI includes this check through `pnpm check`. Git-ignored files are
+  excluded.
 - Follow existing patterns in the codebase
 - Use TypeScript strict mode
 - Prefer Zod for schemas and validation; avoid raw typecasts
@@ -134,8 +148,10 @@ prisma/               # Database schema and migrations
 
 ## Contributor Checklist
 
-- Add or update tests and run `pnpm test` (use `pnpm test:watch` while developing)
-- Add or update Storybook stories when UI changes are introduced (`pnpm storybook`)
+- Add or update tests and run `pnpm test` (use `pnpm test:watch` while
+  developing)
+- Add or update Storybook stories when UI changes are introduced
+  (`pnpm storybook`)
 - Run `pnpm check`, `pnpm typecheck`, and `pnpm check:fix`
 - Run `pnpm check:prisma-schema` when `prisma/schema.prisma` changes
 - Ensure schemas use Zod and avoid raw typecasts
@@ -158,8 +174,10 @@ We welcome feature requests! Please:
 
 ## Questions?
 
-Feel free to open a discussion or issue if you have questions about contributing.
+Feel free to open a discussion or issue if you have questions about
+contributing.
 
 ## License
 
-By contributing to Factory Factory, you agree that your contributions will be licensed under the MIT License.
+By contributing to Factory Factory, you agree that your contributions will be
+licensed under the MIT License.

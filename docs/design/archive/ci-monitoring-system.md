@@ -4,14 +4,20 @@ Status: superseded by ratchet-system.md
 
 ## Overview
 
-The CI Monitoring System is a background service that watches all Pull Requests across workspaces and automatically notifies active Claude sessions when CI checks fail. It implements a **global singleton cron** that monitors all workspaces in a single polling loop.
+The CI Monitoring System is a background service that watches all Pull Requests
+across workspaces and automatically notifies active Claude sessions when CI
+checks fail. It implements a **global singleton cron** that monitors all
+workspaces in a single polling loop.
 
 ## Architecture Type: Global Singleton Cron
 
 ### Key Design Decision
-**We use ONE global cron that checks ALL workspaces**, not one cron per workspace.
+
+**We use ONE global cron that checks ALL workspaces**, not one cron per
+workspace.
 
 **Rationale:**
+
 - More efficient resource usage (single timer, single orchestrator)
 - Prevents thundering herd if we had N workspace timers all firing
 - Easier to monitor and debug (single service, single log namespace)
@@ -19,7 +25,8 @@ The CI Monitoring System is a background service that watches all Pull Requests 
 
 ### Execution Model: Wait-Then-Sleep Pattern
 
-The cron uses an **async loop with wait-then-sleep**, which guarantees no overlapping executions.
+The cron uses an **async loop with wait-then-sleep**, which guarantees no
+overlapping executions.
 
 ```
 Timeline:
@@ -31,6 +38,7 @@ T=2:27  → Check starts again
 ```
 
 **Implementation:**
+
 ```javascript
 async function runContinuousLoop() {
   while (!isShuttingDown) {
@@ -41,6 +49,7 @@ async function runContinuousLoop() {
 ```
 
 **Trade-offs:**
+
 - ✅ Guaranteed no overlap - checks never run concurrently
 - ✅ No overlap guard needed - architectural guarantee
 - ✅ Simpler resource management
@@ -48,13 +57,16 @@ async function runContinuousLoop() {
 - ⚠️ If a check takes 15s, next check starts at T+75s (not T+60s)
 
 **Alternative considered:** `setInterval()` pattern
+
 ```javascript
 // NOT implemented - shows the alternative
 setInterval(() => {
   checkAllWorkspaces();  // Fires every 60s regardless of completion
 }, 60000);
 ```
-This provides more predictable timing (always T+0, T+60, T+120) but risks overlapping executions if checks take >60s.
+
+This provides more predictable timing (always T+0, T+60, T+120) but risks
+overlapping executions if checks take >60s.
 
 ## High-Level Architecture
 
@@ -114,6 +126,7 @@ graph TB
 **Location:** `src/backend/services/ci-monitor.service.ts`
 
 **Lifecycle:**
+
 ```mermaid
 stateDiagram-v2
     [*] --> Stopped
@@ -129,6 +142,7 @@ stateDiagram-v2
 ```
 
 **Key Properties:**
+
 - **Single instance:** Created once as `ciMonitorService` singleton
 - **Global state:**
   - `monitorLoop`: Promise tracking the continuous loop
@@ -233,12 +247,12 @@ prCiLastNotifiedAt: DateTime?
 
 **State Transitions:**
 
-| Previous CI Status | Current CI Status | prCiFailedAt | prCiLastNotifiedAt |
-|-------------------|-------------------|--------------|-------------------|
-| SUCCESS | FAILURE | Set to now() | (unchanged) |
-| FAILURE | FAILURE | (unchanged) | Set to now() if notified |
-| FAILURE | SUCCESS | Set to NULL | (unchanged) |
-| UNKNOWN | FAILURE | Set to now() | (unchanged) |
+| Previous CI Status | Current CI Status | prCiFailedAt | prCiLastNotifiedAt       |
+| ------------------ | ----------------- | ------------ | ------------------------ |
+| SUCCESS            | FAILURE           | Set to now() | (unchanged)              |
+| FAILURE            | FAILURE           | (unchanged)  | Set to now() if notified |
+| FAILURE            | SUCCESS           | Set to NULL  | (unchanged)              |
+| UNKNOWN            | FAILURE           | Set to now() | (unchanged)              |
 
 ## Notification Logic
 
@@ -266,6 +280,7 @@ flowchart TD
 **Notification Cooldown:** 10 minutes (`MIN_NOTIFICATION_INTERVAL_MS`)
 
 **Message Format:**
+
 ```markdown
 ⚠️ **CI Failure Detected**
 
@@ -292,11 +307,14 @@ const results = await Promise.all(
 ```
 
 **Why 5 concurrent checks?**
+
 - Balances throughput vs GitHub API rate limits
 - Prevents overwhelming the system with parallel requests
-- Each check involves: GitHub API call + database updates + potential session notification
+- Each check involves: GitHub API call + database updates + potential session
+  notification
 
 **Behavior:**
+
 ```
 Workspace Queue: [w1, w2, w3, w4, w5, w6, w7, w8]
                   |   |   |   |   |
@@ -332,6 +350,7 @@ async function cleanup() {
 ```
 
 **Graceful Shutdown:**
+
 ```mermaid
 sequenceDiagram
     participant Server
@@ -402,6 +421,7 @@ graph LR
 ```
 
 **Component:** `CIFailureWarning`
+
 - Shows AlertTriangle icon when `prCiStatus === 'FAILURE'`
 - Tooltip explains issue and suggests checking PR
 - Reactive to database changes via tRPC polling (15s)
@@ -411,16 +431,19 @@ graph LR
 ### Resource Usage
 
 **Memory:**
+
 - Single service instance
 - ~5 concurrent Promise handlers (p-limit)
 - Minimal per-workspace state (only in-flight checks)
 
 **Network:**
+
 - GitHub API calls: N workspaces × 1 request per minute
 - Rate limited to 5 concurrent requests
 - Example: 50 workspaces = 50 API calls spread over ~10 seconds
 
 **Database:**
+
 - Query: 1 × per minute (find workspaces with PRs)
 - Updates: N × per minute (workspace CI status)
 - Conditional updates: Only when status changes
@@ -428,11 +451,13 @@ graph LR
 ### Timing Analysis
 
 **Best Case (0 workspaces):**
+
 ```
 Query DB → 0 results → Complete in ~10ms
 ```
 
 **Average Case (20 workspaces, 5 failures):**
+
 ```
 Query DB (50ms)
   ↓
@@ -448,6 +473,7 @@ Total: ~1.5 seconds
 ```
 
 **Worst Case (100 workspaces, all failing, all have sessions):**
+
 ```
 Query DB (100ms)
   ↓
@@ -479,11 +505,11 @@ const MIN_NOTIFICATION_INTERVAL_MS = 10 * 60 * 1000;  // 10 minutes
 
 **Tuning Considerations:**
 
-| Parameter | Lower Value | Higher Value |
-|-----------|-------------|--------------|
-| `CI_MONITOR_INTERVAL_MS` | More responsive, higher load | Less responsive, lower load |
-| `MAX_CONCURRENT_CHECKS` | Safer rate limits, slower | Faster checks, risk rate limits |
-| `MIN_NOTIFICATION_INTERVAL_MS` | More notifications (spam) | Fewer notifications (might miss issues) |
+| Parameter                      | Lower Value                  | Higher Value                            |
+| ------------------------------ | ---------------------------- | --------------------------------------- |
+| `CI_MONITOR_INTERVAL_MS`       | More responsive, higher load | Less responsive, lower load             |
+| `MAX_CONCURRENT_CHECKS`        | Safer rate limits, slower    | Faster checks, risk rate limits         |
+| `MIN_NOTIFICATION_INTERVAL_MS` | More notifications (spam)    | Fewer notifications (might miss issues) |
 
 ## Comparison with Alternative Designs
 
@@ -508,6 +534,7 @@ workspaces.forEach(ws => {
 ```
 
 **Why we didn't choose this:**
+
 - ❌ N timers = N * overhead
 - ❌ Thundering herd when all fire simultaneously
 - ❌ Complex lifecycle (must start/stop on workspace create/delete)
@@ -526,6 +553,7 @@ app.post('/webhooks/github/check_suite', (req, res) => {
 ```
 
 **Why we didn't choose this:**
+
 - ❌ Requires public webhook endpoint (networking complexity)
 - ❌ Webhook reliability concerns (retries, deduplication)
 - ❌ GitHub webhook setup per repository
@@ -543,12 +571,14 @@ start() {
 ```
 
 **Trade-offs:**
+
 - ✅ Predictable timing (fires at T+0, T+60, T+120...)
 - ✅ Standard Node.js pattern
 - ❌ Risk of overlapping executions if checks take >60s
 - ❌ Requires overlap guard or shutdown flag
 
 **Our choice (wait-then-sleep) is better for:**
+
 - Guaranteed no overlapping executions
 - Simpler resource management
 - No need for overlap guards
@@ -591,16 +621,19 @@ logger.info('Notified active session about CI failure', {
 ### Metrics to Monitor
 
 **Service Health:**
+
 - Check duration (should be < 60s)
 - Success rate (GitHub API failures)
 - Workspaces checked per minute
 
 **Notification Health:**
+
 - Notifications sent per minute
 - Notification delivery rate
 - Time from CI failure to notification
 
 **Database Health:**
+
 - Query latency for `findWithPRsForCIMonitoring()`
 - Update latency per workspace
 
@@ -633,7 +666,9 @@ logger.info('Notified active session about CI failure', {
 
 ## Summary
 
-The CI Monitoring System uses a **global singleton cron with wait-then-sleep** that:
+The CI Monitoring System uses a **global singleton cron with wait-then-sleep**
+that:
+
 - ✅ Checks all workspaces in one polling loop (not per-workspace crons)
 - ✅ Uses async loop with wait-then-sleep (not setInterval)
 - ✅ Guarantees no overlapping executions
@@ -642,4 +677,7 @@ The CI Monitoring System uses a **global singleton cron with wait-then-sleep** t
 - ✅ Throttles notifications to prevent spam (10-minute cooldown)
 - ✅ Gracefully handles shutdown (exits loop cleanly)
 
-This design balances **simplicity, efficiency, and reliability** while providing timely notifications to help developers fix CI issues quickly. The wait-then-sleep pattern ensures robust resource management by guaranteeing that checks never overlap, eliminating the need for overlap guards.
+This design balances **simplicity, efficiency, and reliability** while providing
+timely notifications to help developers fix CI issues quickly. The
+wait-then-sleep pattern ensures robust resource management by guaranteeing that
+checks never overlap, eliminating the need for overlap guards.

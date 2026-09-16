@@ -1,32 +1,49 @@
 # Update Claude ACP Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Update Factory Factory's bundled Claude ACP runtime so dynamic model discovery exposes Opus 5 instead of stale Opus 4.8 metadata.
+**Goal:** Update Factory Factory's bundled Claude ACP runtime so dynamic model
+discovery exposes Opus 5 instead of stale Opus 4.8 metadata.
 
-**Architecture:** Keep the existing ephemeral ACP catalog-discovery flow unchanged. Update the ACP package and lockfile so both catalog discovery and live Claude sessions use a newer bundled Claude Agent SDK, then verify the real ACP boundary reports Opus 5.
+**Architecture:** Keep the existing ephemeral ACP catalog-discovery flow
+unchanged. Update the ACP package and lockfile so both catalog discovery and
+live Claude sessions use a newer bundled Claude Agent SDK, then verify the real
+ACP boundary reports Opus 5.
 
-**Tech Stack:** pnpm, TypeScript, Vitest, Agent Client Protocol, Claude Agent SDK
+**Tech Stack:** pnpm, TypeScript, Vitest, Agent Client Protocol, Claude Agent
+SDK
 
 ## Global Constraints
 
 - Preserve ACP-driven dynamic model discovery; do not hard-code model names.
-- Preserve raw model option values while allowing descriptions to drive display labels.
-- Limit production changes to dependency metadata and compatibility fixes required by the update.
+- Preserve raw model option values while allowing descriptions to drive display
+  labels.
+- Limit production changes to dependency metadata and compatibility fixes
+  required by the update.
 
 ---
 
 ### Task 1: Update and verify Claude ACP
 
 **Files:**
+
 - Modify: `package.json`
 - Modify: `pnpm-lock.yaml`
-- Test: `src/backend/services/session/service/acp/claude-model-catalog-loader.test.ts`
-- Test: `src/backend/services/session/service/acp/acp-session-negotiation.integration.test.ts`
+- Test:
+  `src/backend/services/session/service/acp/claude-model-catalog-loader.test.ts`
+- Test:
+  `src/backend/services/session/service/acp/acp-session-negotiation.integration.test.ts`
 
 **Interfaces:**
-- Consumes: `@agentclientprotocol/claude-agent-acp`'s `claude-agent-acp` binary and `NewSessionMeta` type.
-- Produces: The unchanged `fetchClaudeModelCatalogFromAcp(): Promise<ClaudeModelCatalogEntry[]>` boundary backed by current Claude model metadata.
+
+- Consumes: `@agentclientprotocol/claude-agent-acp`'s `claude-agent-acp` binary
+  and `NewSessionMeta` type.
+- Produces: The unchanged
+  `fetchClaudeModelCatalogFromAcp(): Promise<ClaudeModelCatalogEntry[]>`
+  boundary backed by current Claude model metadata.
 
 - [ ] **Step 1: Record the failing real-boundary reproduction**
 
@@ -46,7 +63,8 @@ Run:
 pnpm update @agentclientprotocol/claude-agent-acp@0.66.0
 ```
 
-Expected: `package.json` and `pnpm-lock.yaml` resolve ACP `0.66.0` and its newer Claude Agent SDK.
+Expected: `package.json` and `pnpm-lock.yaml` resolve ACP `0.66.0` and its newer
+Claude Agent SDK.
 
 - [ ] **Step 3: Verify the focused automated tests**
 
@@ -75,7 +93,8 @@ pnpm check
 pnpm check:fix
 ```
 
-Expected: every command exits successfully and formatting produces no unintended changes.
+Expected: every command exits successfully and formatting produces no unintended
+changes.
 
 - [ ] **Step 6: Commit and publish**
 
@@ -85,4 +104,5 @@ git commit -m "Update Claude ACP for Opus 5"
 git push -u origin "$(git branch --show-current)"
 ```
 
-Open a draft PR describing the stale bundled Claude Code root cause and the verification commands.
+Open a draft PR describing the stale bundled Claude Code root cause and the
+verification commands.

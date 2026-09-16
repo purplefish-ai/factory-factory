@@ -14,18 +14,19 @@ configuration values and stdio/HTTP/SSE MCP servers; it rejects ACP-tunneled MCP
 servers, which it does not advertise support for.
 
 Persisted ACP config snapshots are validated with a strict schema for ACP select
-and boolean options before being used for inactive-session options or capabilities. Malformed
-snapshots are treated as cache misses; provider history identity recovery stays
-independent of configuration validity. Valid snapshots restore omitted model/mode
-categories for both providers, while retaining Codex's provider-supplied labels.
+and boolean options before being used for inactive-session options or
+capabilities. Malformed snapshots are treated as cache misses; provider history
+identity recovery stays independent of configuration validity. Valid snapshots
+restore omitted model/mode categories for both providers, while retaining
+Codex's provider-supplied labels.
 
 Session init/load fails unless model/mode select options can be obtained from
-provider `configOptions` or legacy model/mode response fields. Permission requests
-present multi-option selection
-(`allow_once`, `allow_always`, `deny_once`, `deny_always`) and are bridged
-through ACP permission response handlers. Soft cancellation (including voice stop
-and prompt timeout) resolves pending permission requests with a cancelled outcome,
-dismisses their prompts, and keeps the bridge available for later turns.
+provider `configOptions` or legacy model/mode response fields. Permission
+requests present multi-option selection (`allow_once`, `allow_always`,
+`deny_once`, `deny_always`) and are bridged through ACP permission response
+handlers. Soft cancellation (including voice stop and prompt timeout) resolves
+pending permission requests with a cancelled outcome, dismisses their prompts,
+and keeps the bridge available for later turns.
 
 Session stop history is durable: `SessionLifecycleEvent` rows are append-only,
 deduplicated by session/attempt key, merged chronologically with provider
@@ -53,30 +54,30 @@ ingress so Admin and in-chat selectors show explicit family versions while
 preserving raw provider values and configured defaults.
 
 Admin Codex options and inactive-session chat capabilities share
-`CodexModelCatalogService`. It coalesces concurrent app-server discovery,
-caches successful catalogs for 30 seconds from completion, and gives each
-consumer an isolated copy. Discovery failures are not cached; each consumer
-keeps its existing fallback and the next request retries discovery.
+`CodexModelCatalogService`. It coalesces concurrent app-server discovery, caches
+successful catalogs for 30 seconds from completion, and gives each consumer an
+isolated copy. Discovery failures are not cached; each consumer keeps its
+existing fallback and the next request retries discovery.
 
-The ACP layer is import-fenced by dependency-cruiser
-(`acp-no-external-imports`, `codex-app-server-adapter-self-contained`,
-`session-model-import-boundary`, `session-runtime-import-boundary`). The Codex
-app-server schemas are generated — run `pnpm codex:schema:generate` and check
-drift with `pnpm check:codex-schema`.
+The ACP layer is import-fenced by dependency-cruiser (`acp-no-external-imports`,
+`codex-app-server-adapter-self-contained`, `session-model-import-boundary`,
+`session-runtime-import-boundary`). The Codex app-server schemas are generated —
+run `pnpm codex:schema:generate` and check drift with `pnpm check:codex-schema`.
 
 ### Claude SDK dependency override
 
-Claude ACP 0.75.1 pins Claude Agent SDK 0.3.257. `pnpm-workspace.yaml` scopes
-an override to SDK 0.3.266 for upstream permission-handling fixes. Remove the
+Claude ACP 0.75.1 pins Claude Agent SDK 0.3.257. `pnpm-workspace.yaml` scopes an
+override to SDK 0.3.266 for upstream permission-handling fixes. Remove the
 override when ACP adopts an equal or newer SDK. The upgrade was checked against
 ACP's offline turn/cancellation, session options, resume, and file audit suites,
-including coalesced results stamped with the last user UUID and the new UUID array.
-These checks do not exercise live model streaming or prompt persistence.
+including coalesced results stamped with the last user UUID and the new UUID
+array. These checks do not exercise live model streaming or prompt persistence.
 
 Factory Factory's session init/load paths do not forward a custom system prompt;
 ACP's bare Claude Code preset retains its existing prompt snapshot behavior.
 Before changing that metadata, revisit the SDK's custom/append prompt snapshot
-semantics. See [the upgrade validation](../superpowers/plans/2026-09-09-remaining-dependencies.md).
+semantics. See
+[the upgrade validation](../superpowers/plans/2026-09-09-remaining-dependencies.md).
 
 ## Session lifecycle ownership
 
@@ -99,17 +100,17 @@ the exit code to determine terminal status.
 Startup, termination, runtime exit, notifications, context, and workflow
 finalization each have one coordinator or service.
 
-| Responsibility | Owner | Reconciliation point |
-| --- | --- | --- |
-| Startup | `SessionStartupCoordinator` | Persisted `RUNNING` state |
-| Termination | `SessionTerminationCoordinator` | Persisted idle/stopped state |
-| Runtime exit | `SessionRuntimeExitCoordinator` | Terminal status and unexpected-exit lifecycle history |
-| Notifications | `SessionNotificationDeliveryService` | Transcript plus delivered evidence |
-| Context | `SessionContextService` | Operational precondition; no durable-state reconciliation |
-| Workflow finalization | `SessionWorkflowFinalizer` | Idempotent workflow completion |
+| Responsibility        | Owner                                | Reconciliation point                                      |
+| --------------------- | ------------------------------------ | --------------------------------------------------------- |
+| Startup               | `SessionStartupCoordinator`          | Persisted `RUNNING` state                                 |
+| Termination           | `SessionTerminationCoordinator`      | Persisted idle/stopped state                              |
+| Runtime exit          | `SessionRuntimeExitCoordinator`      | Terminal status and unexpected-exit lifecycle history     |
+| Notifications         | `SessionNotificationDeliveryService` | Transcript plus delivered evidence                        |
+| Context               | `SessionContextService`              | Operational precondition; no durable-state reconciliation |
+| Workflow finalization | `SessionWorkflowFinalizer`           | Idempotent workflow completion                            |
 
-When changing lifecycle behavior, keep these boundaries intact: coordinators
-and services own their named responsibility and reconciliation evidence where
+When changing lifecycle behavior, keep these boundaries intact: coordinators and
+services own their named responsibility and reconciliation evidence where
 applicable; context supplies operational inputs. The lifecycle facade delegates
 public operations and the session composition root wires the owners.
 

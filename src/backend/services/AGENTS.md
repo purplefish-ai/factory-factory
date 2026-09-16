@@ -8,9 +8,10 @@ Root `services/*.ts` is infrastructure only, as declared in `registry.ts`.
 
 Enforced by dependency-cruiser and ownership checks:
 
-- External callers use capsule barrels, except `orchestration/data-backup.service.ts`
-  may import `settings/resources/data-backup.accessor.ts` directly.
-  Capsules declare dependencies in `registry.ts`.
+- External callers use capsule barrels, except
+  `orchestration/data-backup.service.ts` may import
+  `settings/resources/data-backup.accessor.ts` directly. Capsules declare
+  dependencies in `registry.ts`.
 - Service logic uses its capsule's accessors. Resources may compose sibling
   accessors but cannot import another capsule's resources or application layers
   (`service/`, `orchestration/`, `routers/`, `trpc/`, `agents/`).
@@ -24,7 +25,9 @@ Enforced by dependency-cruiser and ownership checks:
 
 - Recurring work registers with `jobRunner`, not `setInterval`; read
   [background jobs](../../../docs/architecture/background-jobs.md).
-- Application `gh` calls go through `GitHubCLIService` for the shared rate budget.
+- Application `gh` calls go through `GitHubCLIService` for the shared rate
+  budget.
 - Side-table accessors (`WorkspacePR`, `WorkspaceRatchet`, `WorkspaceRunScript`,
   `WorkspaceAutoIteration`) flatten rows onto the workspace on read, preserving
-  wire field names. Read [workspace state](../../../docs/architecture/workspace-state.md).
+  wire field names. Read
+  [workspace state](../../../docs/architecture/workspace-state.md).

@@ -14,17 +14,15 @@ relations unless their referential actions are rewritten for the audit.
 
 ## Considered Approaches
 
-1. Run only the one-time Prisma audit and add the missing index.
-   This fixes the current gap but permits later schema changes to introduce the
-   same problem.
-2. Rewrite the schema into `relationMode = "prisma"` during every check.
-   This uses Prisma's warning directly, but requires temporary changes to
-   referential actions and couples the check to unrelated cyclic-relation
-   validation rules.
-3. Add a static foreign-key index checker and the missing index.
-   This is the selected approach. It follows the established `iron-fillet`
-   pattern, checks exactly the intended invariant, and can run without a
-   database or schema rewrite.
+1. Run only the one-time Prisma audit and add the missing index. This fixes the
+   current gap but permits later schema changes to introduce the same problem.
+2. Rewrite the schema into `relationMode = "prisma"` during every check. This
+   uses Prisma's warning directly, but requires temporary changes to referential
+   actions and couples the check to unrelated cyclic-relation validation rules.
+3. Add a static foreign-key index checker and the missing index. This is the
+   selected approach. It follows the established `iron-fillet` pattern, checks
+   exactly the intended invariant, and can run without a database or schema
+   rewrite.
 
 ## Design
 

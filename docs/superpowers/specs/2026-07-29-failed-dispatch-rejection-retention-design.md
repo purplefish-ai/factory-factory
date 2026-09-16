@@ -16,8 +16,8 @@ draft in `recentRejections`. The lifecycle handler then fully clears the store.
 
 A disconnected WebSocket has a parallel loss path. It defers inactive cleanup
 until its in-flight message handler settles. The failed dispatch records its
-rejection as that handler settles, and the deferred cleanup then fully clears the
-same store.
+rejection as that handler settles, and the deferred cleanup then fully clears
+the same store.
 
 ## Design
 

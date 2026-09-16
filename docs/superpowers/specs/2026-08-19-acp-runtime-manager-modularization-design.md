@@ -24,8 +24,8 @@ independently green and preserve the public `AcpRuntimeManager` contract.
   reducing it to a compatibility facade below roughly 600 lines.
 - Make `AcpRuntimeSupervisor` the sole owner of cross-session mutable runtime
   state and lifecycle coordination.
-- Separate process creation, prompt execution, live configuration, and
-  sub-agent browsing into focused units with narrow interfaces.
+- Separate process creation, prompt execution, live configuration, and sub-agent
+  browsing into focused units with narrow interfaces.
 - Split the 2,705-line manager test by responsibility without weakening its
   assertions or relying on private-member access.
 - Remove both original manager entries from the file-length baseline.
@@ -42,8 +42,8 @@ independently green and preserve the public `AcpRuntimeManager` contract.
 - Generalizing the design into a provider framework beyond the needs of the
   current Claude and Codex runtimes.
 - Fixing unrelated defects. A concurrency defect exposed by an ownership
-  extraction may be fixed only when the new boundary cannot otherwise preserve
-  a required invariant; such a fix requires a focused regression test and an
+  extraction may be fixed only when the new boundary cannot otherwise preserve a
+  required invariant; such a fix requires a focused regression test and an
   explicit pull-request note.
 
 ## Architecture
@@ -63,16 +63,15 @@ Callers
 
 The manager retains its existing constructor and public methods. Callers in app
 context, lifecycle coordinators, routers, chat handlers, and voice handlers do
-not receive or import the internal collaborators. The singleton remains
-exported from the existing ACP and session barrels.
+not receive or import the internal collaborators. The singleton remains exported
+from the existing ACP and session barrels.
 
-During Stages 2 through 4, the existing manager temporarily supplies the
-handle lookup, current-incarnation checks, stop callback, and startup
-cancellation signals required by the extracted stateless units. Stage 5 moves
-those exact narrow ports to the supervisor without changing the collaborators'
-interfaces. The client factory's candidate is temporarily installed by the
-manager until the supervisor assumes that responsibility in the ownership
-cutover.
+During Stages 2 through 4, the existing manager temporarily supplies the handle
+lookup, current-incarnation checks, stop callback, and startup cancellation
+signals required by the extracted stateless units. Stage 5 moves those exact
+narrow ports to the supervisor without changing the collaborators' interfaces.
+The client factory's candidate is temporarily installed by the manager until the
+supervisor assumes that responsibility in the ownership cutover.
 
 ### AcpRuntimeSupervisor
 
@@ -86,10 +85,10 @@ The supervisor is the only unit that owns cross-session mutable runtime state:
 - stop operations, stop cancellation waiters, and shutdown admission state;
 - creation-operation barriers and quiescence.
 
-It owns creation admission, installation and removal, exit classification,
-stop, shutdown, and runtime status queries. Only the supervisor may add or
-remove a handle from the installed registry or decide whether a child belongs
-to the current incarnation.
+It owns creation admission, installation and removal, exit classification, stop,
+shutdown, and runtime status queries. Only the supervisor may add or remove a
+handle from the installed registry or decide whether a child belongs to the
+current incarnation.
 
 Protocol-local fields remain on `AcpProcessHandle`. A stateless controller may
 update `isPromptInFlight` or `configOptions` on the handle supplied for one
@@ -167,9 +166,9 @@ session startup. That barrier spans the entire caller operation through durable
 ### Exit
 
 The child exit callback enters the supervisor. The supervisor classifies the
-child as current or stale and managed or unexpected. It removes only the
-current installed handle, establishes the per-session exit fence, and dispatches
-the existing typed runtime-exit event. Replacement creation waits for that fence
+child as current or stale and managed or unexpected. It removes only the current
+installed handle, establishes the per-session exit fence, and dispatches the
+existing typed runtime-exit event. Replacement creation waits for that fence
 before installing another runtime. A stale child cannot affect the replacement.
 
 ### Stop and quiescence
@@ -188,8 +187,8 @@ observable when no barrier requires a second pass.
 ### Prompt execution
 
 The manager obtains the current active handle from the supervisor and delegates
-the call to the prompt controller. The controller holds that handle only for
-the duration of the call. If a timeout fires after replacement, the controller
+the call to the prompt controller. The controller holds that handle only for the
+duration of the call. If a timeout fires after replacement, the controller
 recognizes that its handle is stale and does not cancel or stop the replacement.
 
 ### Shutdown
@@ -228,8 +227,8 @@ Extracted units return typed results or throw existing errors. They do not add
 catch-and-continue behavior. Existing best-effort boundaries remain explicit:
 
 - failed-start cleanup contains process-kill errors;
-- prompt timeout escalation contains cleanup failures after the original
-  timeout has been established;
+- prompt timeout escalation contains cleanup failures after the original timeout
+  has been established;
 - the provider-session-ID callback logs and continues on failure; and
 - shutdown uses soft process-stop bounds before its final sweep.
 
@@ -242,10 +241,10 @@ regression test, and must be identified separately from the structural change.
 ### Stage 1: Split and strengthen characterization tests
 
 Split `acp-runtime-manager.test.ts` into responsibility-based public tests for
-creation, browsing, termination, prompts, configuration, and status queries.
-Add an explicit facade contract suite. Move existing assertions without
-weakening them, consolidate shared process/connection fixtures in the existing
-test-helper module, and eliminate private-member reach-through.
+creation, browsing, termination, prompts, configuration, and status queries. Add
+an explicit facade contract suite. Move existing assertions without weakening
+them, consolidate shared process/connection fixtures in the existing test-helper
+module, and eliminate private-member reach-through.
 
 All resulting test files must remain below 1,000 lines. Remove the original
 manager test from the file-length baseline when the split is complete.
@@ -253,18 +252,17 @@ manager test from the file-length baseline when the split is complete.
 ### Stage 2: Extract sub-agent browsing
 
 Create `acp-subagent-browser.ts` and its focused test. Move capability checks,
-parameter and result validation, extension calls, error metadata extraction,
-and browse error normalization behind a handle-per-call interface. Keep the
-manager methods and router behavior unchanged.
+parameter and result validation, extension calls, error metadata extraction, and
+browse error normalization behind a handle-per-call interface. Keep the manager
+methods and router behavior unchanged.
 
 ### Stage 3: Extract prompt and live configuration controllers
 
-Create `acp-prompt-controller.ts` and
-`acp-runtime-config-controller.ts` with focused tests. The manager supplies
-current handles and narrow runtime-state callbacks during this transitional
-stage; the supervisor backs the same ports after Stage 5. Preserve prompt
-timeout and stale-handle semantics, config cache updates, and Claude model
-fallback.
+Create `acp-prompt-controller.ts` and `acp-runtime-config-controller.ts` with
+focused tests. The manager supplies current handles and narrow runtime-state
+callbacks during this transitional stage; the supervisor backs the same ports
+after Stage 5. Preserve prompt timeout and stale-handle semantics, config cache
+updates, and Claude model fallback.
 
 ### Stage 4: Extract the ACP client factory
 
@@ -306,8 +304,8 @@ the manager falls below the hard limit.
 The final focused suite is expected to include:
 
 - `acp-runtime-manager.facade.test.ts` for the stable public contract;
-- `acp-runtime-supervisor.creation.test.ts` for serialization, pending
-  creation, promotion, installation, exits, fences, and incarnations;
+- `acp-runtime-supervisor.creation.test.ts` for serialization, pending creation,
+  promotion, installation, exits, fences, and incarnations;
 - `acp-runtime-supervisor.termination.test.ts` for stop, quiescence, process
   escalation, shutdown admission, and final sweeps;
 - `acp-client-factory.test.ts` for spawn configuration, streams, handshake,

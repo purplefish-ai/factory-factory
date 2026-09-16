@@ -1,19 +1,28 @@
 # VP8 Partition Boundary Validation Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Reject VP8 keyframes whose declared first partition exceeds the bytes available after the full ten-byte keyframe header.
+**Goal:** Reject VP8 keyframes whose declared first partition exceeds the bytes
+available after the full ten-byte keyframe header.
 
-**Architecture:** Preserve the existing attachment-validation and WebP parsing boundaries. Exercise the public `validateAttachment` behavior with a test-local RIFF/VP8 fixture, then correct the private capacity calculation by changing the header allowance from three bytes to ten.
+**Architecture:** Preserve the existing attachment-validation and WebP parsing
+boundaries. Exercise the public `validateAttachment` behavior with a test-local
+RIFF/VP8 fixture, then correct the private capacity calculation by changing the
+header allowance from three bytes to ten.
 
 **Tech Stack:** TypeScript, Node.js `Buffer`, Vitest
 
 ## Global Constraints
 
-- Keep `inspectSupportedImageFormat` and `validateAttachment` interfaces unchanged.
+- Keep `inspectSupportedImageFormat` and `validateAttachment` interfaces
+  unchanged.
 - Add no runtime dependencies.
 - Do not change validation for PNG, JPEG, GIF, VP8L, or animated WebP layout.
-- Preserve the existing permanent-error behavior for structurally invalid supported images.
+- Preserve the existing permanent-error behavior for structurally invalid
+  supported images.
 
 ---
 
@@ -21,13 +30,16 @@
 
 **Files:**
 
-- Modify: `src/backend/services/session/service/chat/chat-message-handlers/image-format-validation.ts:424`
-- Test: `src/backend/services/session/service/chat/chat-message-handlers/attachment-processing.test.ts`
+- Modify:
+  `src/backend/services/session/service/chat/chat-message-handlers/image-format-validation.ts:424`
+- Test:
+  `src/backend/services/session/service/chat/chat-message-handlers/attachment-processing.test.ts`
 
 **Interfaces:**
 
 - Consumes: `validateAttachment(attachment: MessageAttachment): void`
-- Produces: unchanged public APIs; malformed VP8 attachments now throw `PermanentAttachmentError`
+- Produces: unchanged public APIs; malformed VP8 attachments now throw
+  `PermanentAttachmentError`
 
 - [ ] **Step 1: Add a test-local malformed WebP builder**
 
@@ -109,8 +121,8 @@ Expected: every command exits successfully.
 
 - [ ] **Step 7: Review and commit**
 
-Review `git diff origin/main`, stage only the design, plan, validator, and
-test files, then commit with:
+Review `git diff origin/main`, stage only the design, plan, validator, and test
+files, then commit with:
 
 ```bash
 git commit -m "Fix VP8 partition boundary validation (#2094)"

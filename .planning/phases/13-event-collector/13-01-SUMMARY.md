@@ -47,7 +47,8 @@ completed: 2026-02-11
 
 # Phase 13 Plan 01: Event Collector Summary
 
-**Per-workspace coalescing event collector subscribing to 6 domain events with 150ms debounce window, ARCHIVED bypass, and unknown-workspace guard**
+**Per-workspace coalescing event collector subscribing to 6 domain events with
+150ms debounce window, ARCHIVED bypass, and unknown-workspace guard**
 
 ## Performance
 
@@ -58,9 +59,13 @@ completed: 2026-02-11
 - **Files modified:** 3
 
 ## Accomplishments
-- EventCoalescer class that accumulates SnapshotUpdateInput fields per workspace and flushes after 150ms debounce
-- configureEventCollector() subscribes to all 6 domain events with correct field mapping (no prReviewState leakage)
-- ARCHIVED workspace events trigger immediate store.remove() without coalescing delay
+
+- EventCoalescer class that accumulates SnapshotUpdateInput fields per workspace
+  and flushes after 150ms debounce
+- configureEventCollector() subscribes to all 6 domain events with correct field
+  mapping (no prReviewState leakage)
+- ARCHIVED workspace events trigger immediate store.remove() without coalescing
+  delay
 - Unknown workspaces (not yet seeded by reconciliation) gracefully skipped
 - Clean shutdown via stopEventCollector() flushes all pending coalesced updates
 - 19 tests covering coalescing behavior, field mapping, edge cases, and wiring
@@ -69,19 +74,30 @@ completed: 2026-02-11
 
 Each task was committed atomically:
 
-1. **Task 1: Implement EventCoalescer and configureEventCollector with tests** - `4cddf02` (feat)
-2. **Task 2: Wire event collector into server startup and shutdown** - `97903b0` (feat)
+1. **Task 1: Implement EventCoalescer and configureEventCollector with tests** -
+   `4cddf02` (feat)
+2. **Task 2: Wire event collector into server startup and shutdown** - `97903b0`
+   (feat)
 
 ## Files Created/Modified
-- `src/backend/orchestration/event-collector.orchestrator.ts` - EventCoalescer class, configureEventCollector(), stopEventCollector()
-- `src/backend/orchestration/event-collector.orchestrator.test.ts` - 19 tests for coalescing, field mapping, wiring, and edge cases
-- `src/backend/server.ts` - Import + startup call after configureDomainBridges() + shutdown call before ratchetService.stop()
+
+- `src/backend/orchestration/event-collector.orchestrator.ts` - EventCoalescer
+  class, configureEventCollector(), stopEventCollector()
+- `src/backend/orchestration/event-collector.orchestrator.test.ts` - 19 tests
+  for coalescing, field mapping, wiring, and edge cases
+- `src/backend/server.ts` - Import + startup call after
+  configureDomainBridges() + shutdown call before ratchetService.stop()
 
 ## Decisions Made
+
 - 150ms debounce window chosen as midpoint of 100-200ms requirement range
-- ARCHIVED events bypass coalescer entirely -- call store.remove() synchronously for instant UI feedback
-- Unknown workspaces silently skipped (not error) -- reconciliation in Phase 14 will seed them
-- Event collector imported directly from module path, NOT re-exported from orchestration/index.ts (following existing circular dep avoidance pattern per comment in index.ts)
+- ARCHIVED events bypass coalescer entirely -- call store.remove() synchronously
+  for instant UI feedback
+- Unknown workspaces silently skipped (not error) -- reconciliation in Phase 14
+  will seed them
+- Event collector imported directly from module path, NOT re-exported from
+  orchestration/index.ts (following existing circular dep avoidance pattern per
+  comment in index.ts)
 - StoreInterface exported for test type safety
 
 ## Deviations from Plan
@@ -89,16 +105,22 @@ Each task was committed atomically:
 ### Auto-fixed Issues
 
 **1. [Rule 1 - Bug] Fixed invalid RatchetState enum value in tests**
+
 - **Found during:** Task 1 (test creation)
-- **Issue:** Plan research used 'MONITORING' as example RatchetState but valid values are IDLE, CI_RUNNING, CI_FAILED, REVIEW_PENDING, READY, MERGED
+- **Issue:** Plan research used 'MONITORING' as example RatchetState but valid
+  values are IDLE, CI_RUNNING, CI_FAILED, REVIEW_PENDING, READY, MERGED
 - **Fix:** Replaced 'MONITORING' with 'CI_RUNNING' in test assertions
-- **Files modified:** src/backend/orchestration/event-collector.orchestrator.test.ts
+- **Files modified:**
+  src/backend/orchestration/event-collector.orchestrator.test.ts
 - **Verification:** TypeScript compilation passes, tests pass
 - **Committed in:** 4cddf02 (Task 1 commit)
 
-**2. [Rule 1 - Bug] Fixed Biome lint: block statements required for early return**
+**2. [Rule 1 - Bug] Fixed Biome lint: block statements required for early
+return**
+
 - **Found during:** Task 1 (lint check)
-- **Issue:** `if (!pending) return;` style violates Biome useBlockStatements rule
+- **Issue:** `if (!pending) return;` style violates Biome useBlockStatements
+  rule
 - **Fix:** Changed to `if (!pending) { return; }`
 - **Files modified:** src/backend/orchestration/event-collector.orchestrator.ts
 - **Verification:** pnpm check:fix passes clean
@@ -106,24 +128,30 @@ Each task was committed atomically:
 
 ---
 
-**Total deviations:** 2 auto-fixed (2 bug fixes)
-**Impact on plan:** Minor corrections for type safety and lint compliance. No scope creep.
+**Total deviations:** 2 auto-fixed (2 bug fixes) **Impact on plan:** Minor
+corrections for type safety and lint compliance. No scope creep.
 
 ## Issues Encountered
+
 None
 
 ## User Setup Required
+
 None - no external service configuration required.
 
 ## Next Phase Readiness
-- Event collector is wired and active -- domain events now flow to snapshot store via coalescing buffer
-- Phase 14 (reconciliation poll) can build the safety-net polling that seeds workspaces the event collector skips
-- Phase 15 (WebSocket transport) can subscribe to store SNAPSHOT_CHANGED events for push delivery
+
+- Event collector is wired and active -- domain events now flow to snapshot
+  store via coalescing buffer
+- Phase 14 (reconciliation poll) can build the safety-net polling that seeds
+  workspaces the event collector skips
+- Phase 15 (WebSocket transport) can subscribe to store SNAPSHOT_CHANGED events
+  for push delivery
 
 ## Self-Check: PASSED
 
 All files exist. All commits verified.
 
 ---
-*Phase: 13-event-collector*
-*Completed: 2026-02-11*
+
+_Phase: 13-event-collector_ _Completed: 2026-02-11_

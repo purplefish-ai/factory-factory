@@ -58,7 +58,7 @@
     "test:codex-app-server:manual": "node scripts/ensure-native-modules.mjs node && RUN_REAL_CODEX_APP_SERVER_TESTS=1 vitest run \"src/backend/services/session/service/acp/codex-app-server-adapter/*.manual.integration.test.ts\"",
     "test:codex-app-server:manual:prompt": "node scripts/ensure-native-modules.mjs node && RUN_REAL_CODEX_APP_SERVER_TESTS=1 RUN_REAL_CODEX_APP_SERVER_PROMPT_TESTS=1 vitest run src/backend/services/session/service/acp/codex-app-server-adapter/codex-app-server-acp-adapter.manual.integration.test.ts",
     "check:coverage:critical": "node scripts/check-critical-coverage.mjs",
-    "check": "biome check . && pnpm check:file-length && pnpm check:env && pnpm check:ownership && pnpm check:fk-indexes && pnpm deps:check && pnpm check:codex-schema",
+    "check": "biome check . && pnpm check:markdown && pnpm check:file-length && pnpm check:env && pnpm check:ownership && pnpm check:fk-indexes && pnpm deps:check && pnpm check:codex-schema",
     "check:imports": "node scripts/check-ambiguous-relative-imports.mjs",
     "check:env": "node scripts/check-no-direct-process-env.mjs",
     "check:biome-ignores": "node scripts/check-biome-ignores.mjs",
@@ -72,7 +72,7 @@
     "check:file-length": "tsx scripts/check-file-length.ts",
     "check:file-length:update": "tsx scripts/check-file-length.ts --update",
     "codex:schema:generate": "node scripts/generate-codex-app-server-schemas.mjs",
-    "check:fix": "biome check --write .",
+    "check:fix": "biome check --write . && pnpm format:markdown",
     "typecheck": "tsc --noEmit",
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
@@ -87,7 +87,9 @@
     "postinstall": "node scripts/postinstall.mjs",
     "prepare": "husky",
     "deps:check": "depcruise src electron --config .dependency-cruiser.cjs",
-    "knip": "knip --include files,dependencies,unlisted"
+    "knip": "knip --include files,dependencies,unlisted",
+    "check:markdown": "prettier --check \"**/*.md\"",
+    "format:markdown": "prettier --write \"**/*.md\""
   },
   "dependencies": {
     "@agentclientprotocol/claude-agent-acp": "^0.75.1",
@@ -159,6 +161,9 @@
   "lint-staged": {
     "!(prisma/generated/**/*)*.{js,jsx,ts,tsx,json,css}": [
       "biome check --write"
+    ],
+    "*.md": [
+      "prettier --write"
     ]
   },
   "devDependencies": {
@@ -194,6 +199,7 @@
     "knip": "^6.35.0",
     "lint-staged": "^17.5.0",
     "next-themes": "^0.4.6",
+    "prettier": "3.9.7",
     "storybook": "10.6.0",
     "supertest": "^7.2.2",
     "tailwindcss": "^4.3.3",

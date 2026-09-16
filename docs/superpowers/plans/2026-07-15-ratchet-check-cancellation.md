@@ -1,48 +1,82 @@
 # Ratchet Workspace Check Cancellation Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Stop timed-out ratchet workspace checks before they can dispatch or persist stale state, and cap ratchet batch processing at three concurrent workspaces.
+**Goal:** Stop timed-out ratchet workspace checks before they can dispatch or
+persist stale state, and cap ratchet batch processing at three concurrent
+workspaces.
 
-**Architecture:** The workspace-check coordinator owns an `AbortController` for every deduplicated in-flight check and aborts it when the existing 90-second timeout fires. The signal is checked at ratchet side-effect boundaries and passed through the ratchet GitHub bridge into abortable `gh` child processes; a ratchet-local `p-limit(3)` bounds workspace-level concurrency.
+**Architecture:** The workspace-check coordinator owns an `AbortController` for
+every deduplicated in-flight check and aborts it when the existing 90-second
+timeout fires. The signal is checked at ratchet side-effect boundaries and
+passed through the ratchet GitHub bridge into abortable `gh` child processes; a
+ratchet-local `p-limit(3)` bounds workspace-level concurrency.
 
-**Tech Stack:** TypeScript, Node.js `AbortController`/`AbortSignal`, `child_process.execFile`, `p-limit`, Vitest, Express backend service capsules.
+**Tech Stack:** TypeScript, Node.js `AbortController`/`AbortSignal`,
+`child_process.execFile`, `p-limit`, Vitest, Express backend service capsules.
 
 ## Global Constraints
 
-- Keep service-to-service imports through capsule barrels and keep bridge wiring in `src/backend/orchestration/`.
-- Preserve same-workspace singleflight behavior in `RatchetWorkspaceCheckCoordinator`.
-- Preserve non-ratchet GitHub CLI singleflight behavior; signal-bound reads must not share cancellable child processes.
-- Preserve the 90-second ratchet workspace timeout and the GitHub CLI global concurrency limit.
+- Keep service-to-service imports through capsule barrels and keep bridge wiring
+  in `src/backend/orchestration/`.
+- Preserve same-workspace singleflight behavior in
+  `RatchetWorkspaceCheckCoordinator`.
+- Preserve non-ratchet GitHub CLI singleflight behavior; signal-bound reads must
+  not share cancellable child processes.
+- Preserve the 90-second ratchet workspace timeout and the GitHub CLI global
+  concurrency limit.
 - Use a ratchet workspace concurrency limit of exactly `3`.
-- Do not change ratchet decision logic, poll cadence, result ordering, or aggregate counts.
-- Write each regression test first, run it to observe the expected failure, then add only the implementation needed to pass.
+- Do not change ratchet decision logic, poll cadence, result ordering, or
+  aggregate counts.
+- Write each regression test first, run it to observe the expected failure, then
+  add only the implementation needed to pass.
 
 ---
 
 ## File Map
 
-- `src/backend/services/ratchet/service/ratchet-workspace-check-coordinator.ts`: own each check's abort controller and timeout.
-- `src/backend/services/ratchet/service/ratchet-workspace-check-coordinator.test.ts`: coordinator cancellation and dedup regression coverage.
-- `src/backend/services/github/service/github-cli.service.ts`: accept optional signals for ratchet PR reads and pass them to `execFile` without cancellable singleflight sharing.
-- `src/backend/services/github/service/github-cli.service.test.ts`: child-process signal forwarding and signal-bound singleflight coverage.
-- `src/backend/services/ratchet/service/bridges.ts`: expose optional signals on the ratchet GitHub bridge.
-- `src/backend/orchestration/domain-bridges.orchestrator.ts`: forward bridge signals to the GitHub CLI service.
-- `src/backend/orchestration/domain-bridges.orchestrator.test.ts`: bridge signal delegation coverage.
-- `src/backend/services/ratchet/service/ratchet-pr-state.helpers.ts`: forward signals to both PR reads, release fetch claims, and rethrow abort reasons.
-- `src/backend/services/ratchet/service/ratchet-pr-state.helpers.test.ts`: helper forwarding and cancellation semantics.
-- `src/backend/services/ratchet/service/ratchet.service.ts`: propagate signals, add abort barriers, and limit batch workspace concurrency.
-- `src/backend/services/ratchet/service/ratchet.service.test.ts`: prevent post-timeout side effects and verify maximum concurrency.
+- `src/backend/services/ratchet/service/ratchet-workspace-check-coordinator.ts`:
+  own each check's abort controller and timeout.
+- `src/backend/services/ratchet/service/ratchet-workspace-check-coordinator.test.ts`:
+  coordinator cancellation and dedup regression coverage.
+- `src/backend/services/github/service/github-cli.service.ts`: accept optional
+  signals for ratchet PR reads and pass them to `execFile` without cancellable
+  singleflight sharing.
+- `src/backend/services/github/service/github-cli.service.test.ts`:
+  child-process signal forwarding and signal-bound singleflight coverage.
+- `src/backend/services/ratchet/service/bridges.ts`: expose optional signals on
+  the ratchet GitHub bridge.
+- `src/backend/orchestration/domain-bridges.orchestrator.ts`: forward bridge
+  signals to the GitHub CLI service.
+- `src/backend/orchestration/domain-bridges.orchestrator.test.ts`: bridge signal
+  delegation coverage.
+- `src/backend/services/ratchet/service/ratchet-pr-state.helpers.ts`: forward
+  signals to both PR reads, release fetch claims, and rethrow abort reasons.
+- `src/backend/services/ratchet/service/ratchet-pr-state.helpers.test.ts`:
+  helper forwarding and cancellation semantics.
+- `src/backend/services/ratchet/service/ratchet.service.ts`: propagate signals,
+  add abort barriers, and limit batch workspace concurrency.
+- `src/backend/services/ratchet/service/ratchet.service.test.ts`: prevent
+  post-timeout side effects and verify maximum concurrency.
 
 ### Task 1: Make the workspace-check coordinator abort timed-out runners
 
 **Files:**
-- Modify: `src/backend/services/ratchet/service/ratchet-workspace-check-coordinator.ts`
-- Test: `src/backend/services/ratchet/service/ratchet-workspace-check-coordinator.test.ts`
+
+- Modify:
+  `src/backend/services/ratchet/service/ratchet-workspace-check-coordinator.ts`
+- Test:
+  `src/backend/services/ratchet/service/ratchet-workspace-check-coordinator.test.ts`
 
 **Interfaces:**
-- Consumes: `WorkspaceWithPR`, `WorkspaceRatchetResult`, configured timeout supplier.
-- Produces: `run(workspace, runner: (signal: AbortSignal, commitSideEffects: () => void) => Promise<WorkspaceRatchetResult>, schedule?): Promise<WorkspaceRatchetResult>`.
+
+- Consumes: `WorkspaceWithPR`, `WorkspaceRatchetResult`, configured timeout
+  supplier.
+- Produces:
+  `run(workspace, runner: (signal: AbortSignal, commitSideEffects: () => void) => Promise<WorkspaceRatchetResult>, schedule?): Promise<WorkspaceRatchetResult>`.
 
 - [ ] **Step 1: Write a failing coordinator cancellation test**
 
@@ -89,9 +123,11 @@ Run:
 pnpm vitest run src/backend/services/ratchet/service/ratchet-workspace-check-coordinator.test.ts
 ```
 
-Expected: FAIL because `run` does not pass an `AbortSignal`, so `receivedSignal` is `undefined`.
+Expected: FAIL because `run` does not pass an `AbortSignal`, so `receivedSignal`
+is `undefined`.
 
-- [ ] **Step 3: Store a controller with the shared promise and abort it on timeout**
+- [ ] **Step 3: Store a controller with the shared promise and abort it on
+      timeout**
 
 Replace the promise-only map and runner plumbing with:
 
@@ -202,6 +238,7 @@ git commit -m "Abort timed-out ratchet workspace checks"
 ### Task 2: Add abortable GitHub PR reads without cross-caller cancellation
 
 **Files:**
+
 - Modify: `src/backend/services/github/service/github-cli.service.ts`
 - Test: `src/backend/services/github/service/github-cli.service.test.ts`
 - Modify: `src/backend/services/ratchet/service/bridges.ts`
@@ -209,10 +246,14 @@ git commit -m "Abort timed-out ratchet workspace checks"
 - Test: `src/backend/orchestration/domain-bridges.orchestrator.test.ts`
 
 **Interfaces:**
-- Consumes: optional `AbortSignal` from ratchet.
-- Produces: `getPRFullDetails(repo, prNumber, signal?)` and `getReviewComments(repo, prNumber, since?, signal?)`; bridge methods with identical optional signal positions.
 
-- [ ] **Step 1: Write failing GitHub CLI tests for signal forwarding and no signal-bound singleflight**
+- Consumes: optional `AbortSignal` from ratchet.
+- Produces: `getPRFullDetails(repo, prNumber, signal?)` and
+  `getReviewComments(repo, prNumber, since?, signal?)`; bridge methods with
+  identical optional signal positions.
+
+- [ ] **Step 1: Write failing GitHub CLI tests for signal forwarding and no
+      signal-bound singleflight**
 
 Add under `centralized exec - singleflight dedup`:
 
@@ -298,11 +339,14 @@ Run:
 pnpm vitest run src/backend/services/github/service/github-cli.service.test.ts
 ```
 
-Expected: FAIL because `getPRFullDetails` does not accept or forward a signal and identical reads are deduplicated.
+Expected: FAIL because `getPRFullDetails` does not accept or forward a signal
+and identical reads are deduplicated.
 
-- [ ] **Step 3: Add optional signal support to read execution and public PR methods**
+- [ ] **Step 3: Add optional signal support to read execution and public PR
+      methods**
 
-Extend read options and factor the process start so signal-bound calls skip the shared map:
+Extend read options and factor the process start so signal-bound calls skip the
+shared map:
 
 ```ts
 type ReadExecOptions = {
@@ -349,7 +393,9 @@ private exec(args: string[], options?: ReadExecOptions): Promise<ExecResult> {
 }
 ```
 
-Update the `getPRFullDetails` signature and replace its `this.exec` call with the following call. Insert `signal?.throwIfAborted()` as the first statement of its current catch block; no response-mapping lines change.
+Update the `getPRFullDetails` signature and replace its `this.exec` call with
+the following call. Insert `signal?.throwIfAborted()` as the first statement of
+its current catch block; no response-mapping lines change.
 
 ```ts
 async getPRFullDetails(
@@ -396,7 +442,9 @@ async getReviewComments(
 }>> {
 ```
 
-Add the first abort check at the top of its page loop, add `signal` to the existing `this.exec` options, and add the second abort check immediately after that await:
+Add the first abort check at the top of its page loop, add `signal` to the
+existing `this.exec` options, and add the second abort check immediately after
+that await:
 
 ```ts
   for (let page = 1; page <= MAX_PAGES; page++) {
@@ -412,7 +460,8 @@ Add the first abort check at the top of its page loop, add `signal` to the exist
   }
 ```
 
-Insert `signal?.throwIfAborted()` as the first statement of the method's current catch block:
+Insert `signal?.throwIfAborted()` as the first statement of the method's current
+catch block:
 
 ```ts
 } catch (error) {
@@ -500,7 +549,8 @@ Run:
 pnpm vitest run src/backend/services/github/service/github-cli.service.test.ts src/backend/orchestration/domain-bridges.orchestrator.test.ts
 ```
 
-Expected: both files PASS, including the pre-existing non-signal singleflight test.
+Expected: both files PASS, including the pre-existing non-signal singleflight
+test.
 
 - [ ] **Step 8: Commit the abortable GitHub transport**
 
@@ -512,14 +562,19 @@ git commit -m "Forward ratchet cancellation to GitHub reads"
 ### Task 3: Propagate cancellation through ratchet and block late side effects
 
 **Files:**
+
 - Modify: `src/backend/services/ratchet/service/ratchet-pr-state.helpers.ts`
 - Test: `src/backend/services/ratchet/service/ratchet-pr-state.helpers.test.ts`
 - Modify: `src/backend/services/ratchet/service/ratchet.service.ts`
 - Test: `src/backend/services/ratchet/service/ratchet.service.test.ts`
 
 **Interfaces:**
-- Consumes: coordinator runner signal and signal-aware ratchet GitHub bridge from Tasks 1–2.
-- Produces: a `fetchPRState` parameter object with required `signal: AbortSignal`, `processWorkspace(workspace, signal)`, and cancellation-safe service behavior.
+
+- Consumes: coordinator runner signal and signal-aware ratchet GitHub bridge
+  from Tasks 1–2.
+- Produces: a `fetchPRState` parameter object with required
+  `signal: AbortSignal`, `processWorkspace(workspace, signal)`, and
+  cancellation-safe service behavior.
 
 - [ ] **Step 1: Write a failing PR-state helper cancellation test**
 
@@ -573,7 +628,8 @@ Run:
 pnpm vitest run src/backend/services/ratchet/service/ratchet-pr-state.helpers.test.ts
 ```
 
-Expected: FAIL because `fetchPRState` has no signal input and does not forward or rethrow cancellation.
+Expected: FAIL because `fetchPRState` has no signal input and does not forward
+or rethrow cancellation.
 
 - [ ] **Step 3: Add helper signal forwarding and abort-specific catch behavior**
 
@@ -636,9 +692,11 @@ Use this catch ordering:
 }
 ```
 
-Update all existing direct helper calls in tests to pass `signal: new AbortController().signal`.
+Update all existing direct helper calls in tests to pass
+`signal: new AbortController().signal`.
 
-- [ ] **Step 4: Write a failing service regression test for post-timeout effects**
+- [ ] **Step 4: Write a failing service regression test for post-timeout
+      effects**
 
 Add under `checkAllWorkspaces`:
 
@@ -707,7 +765,8 @@ Run:
 pnpm vitest run src/backend/services/ratchet/service/ratchet.service.test.ts
 ```
 
-Expected: FAIL because the coordinator does not currently provide a signal to `processWorkspace`, and the released check continues past the timeout.
+Expected: FAIL because the coordinator does not currently provide a signal to
+`processWorkspace`, and the released check continues past the timeout.
 
 - [ ] **Step 6: Thread the signal and add abort barriers**
 
@@ -729,7 +788,8 @@ private async processWorkspace(
   signal.throwIfAborted();
 ```
 
-In the disabled branch, wrap its update await with these exact checks; no other disabled-branch statements change:
+In the disabled branch, wrap its update await with these exact checks; no other
+disabled-branch statements change:
 
 ```ts
 signal.throwIfAborted();
@@ -740,7 +800,8 @@ await workspaceAccessor.update(workspace.id, {
 signal.throwIfAborted();
 ```
 
-In the enabled branch, add abort checks after the username and PR-state awaits, retain the two early-return cases, and then use the following decision sequence:
+In the enabled branch, add abort checks after the username and PR-state awaits,
+retain the two early-return cases, and then use the following decision sequence:
 
 ```ts
   try {
@@ -863,9 +924,14 @@ private async fetchPRState(
 }
 ```
 
-Add `signal.throwIfAborted()` immediately before `triggerRatchetFixer`, `updateRatchetCheckIfEnabled`, `recordReviewCheck`, and `recordCIObservation`. Pass the signal into the private methods that own those boundaries (`applyRatchetDecision`, `triggerFixer`, `finishRatchetCheck`, and `updateWorkspaceAfterCheck`) so no side effect can begin after timeout.
+Add `signal.throwIfAborted()` immediately before `triggerRatchetFixer`,
+`updateRatchetCheckIfEnabled`, `recordReviewCheck`, and `recordCIObservation`.
+Pass the signal into the private methods that own those boundaries
+(`applyRatchetDecision`, `triggerFixer`, `finishRatchetCheck`, and
+`updateWorkspaceAfterCheck`) so no side effect can begin after timeout.
 
-Update direct private-method tests to supply a fresh non-aborted signal where their signatures change:
+Update direct private-method tests to supply a fresh non-aborted signal where
+their signatures change:
 
 ```ts
 const signal = new AbortController().signal;
@@ -879,7 +945,8 @@ Run:
 pnpm vitest run src/backend/services/ratchet/service/ratchet-workspace-check-coordinator.test.ts src/backend/services/ratchet/service/ratchet-pr-state.helpers.test.ts src/backend/services/ratchet/service/ratchet.service.test.ts
 ```
 
-Expected: all three files PASS with no unhandled rejection and the timeout still returns an `ERROR` action.
+Expected: all three files PASS with no unhandled rejection and the timeout still
+returns an `ERROR` action.
 
 - [ ] **Step 8: Commit ratchet signal propagation**
 
@@ -891,12 +958,15 @@ git commit -m "Stop ratchet side effects after timeout"
 ### Task 4: Cap ratchet batch concurrency at three workspaces
 
 **Files:**
+
 - Modify: `src/backend/services/ratchet/service/ratchet.service.ts`
 - Test: `src/backend/services/ratchet/service/ratchet.service.test.ts`
 
 **Interfaces:**
+
 - Consumes: existing `runWorkspaceCheckSafely(workspace)`.
-- Produces: unchanged `checkAllWorkspaces(): Promise<RatchetCheckResult>` with at most three active workspace checks.
+- Produces: unchanged `checkAllWorkspaces(): Promise<RatchetCheckResult>` with
+  at most three active workspace checks.
 
 - [ ] **Step 1: Write a failing maximum-concurrency test**
 
@@ -1017,7 +1087,8 @@ Run:
 pnpm vitest run src/backend/services/ratchet/service/ratchet-workspace-check-coordinator.test.ts src/backend/services/ratchet/service/ratchet-pr-state.helpers.test.ts src/backend/services/ratchet/service/ratchet.service.test.ts src/backend/services/github/service/github-cli.service.test.ts src/backend/orchestration/domain-bridges.orchestrator.test.ts
 ```
 
-Expected: all targeted tests PASS and the existing same-workspace deduplication test remains green.
+Expected: all targeted tests PASS and the existing same-workspace deduplication
+test remains green.
 
 - [ ] **Step 5: Commit bounded batch concurrency**
 
@@ -1029,10 +1100,12 @@ git commit -m "Limit concurrent ratchet workspace checks"
 ### Task 5: Repository verification and issue handoff
 
 **Files:**
+
 - Verify all modified files.
 - Update docs only if implementation behavior differs from the approved design.
 
 **Interfaces:**
+
 - Consumes: completed Tasks 1–4.
 - Produces: a verified branch ready for review or publication.
 
@@ -1066,7 +1139,8 @@ pnpm typecheck
 pnpm check
 ```
 
-Expected: all commands exit `0`. Record any pre-existing unrelated failure with its exact command and output instead of modifying unrelated code.
+Expected: all commands exit `0`. Record any pre-existing unrelated failure with
+its exact command and output instead of modifying unrelated code.
 
 - [ ] **Step 4: Inspect the final diff and commit formatting changes if needed**
 
@@ -1079,7 +1153,8 @@ git diff origin/main...HEAD --stat
 git diff origin/main...HEAD
 ```
 
-Expected: only issue #1862 implementation, tests, spec, and plan are present; `git diff --check` is clean.
+Expected: only issue #1862 implementation, tests, spec, and plan are present;
+`git diff --check` is clean.
 
 If formatting produced tracked changes, commit them:
 

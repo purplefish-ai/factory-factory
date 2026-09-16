@@ -42,7 +42,8 @@ completed: 2026-02-11
 
 # Phase 15 Plan 01: WebSocket Transport Summary
 
-**/snapshots WebSocket endpoint with project-scoped subscriptions, full snapshot on connect, per-workspace delta fan-out from store EventEmitter**
+**/snapshots WebSocket endpoint with project-scoped subscriptions, full snapshot
+on connect, per-workspace delta fan-out from store EventEmitter**
 
 ## Performance
 
@@ -53,9 +54,13 @@ completed: 2026-02-11
 - **Files modified:** 4
 
 ## Accomplishments
-- Created /snapshots WebSocket handler with project-scoped connection tracking (Map<projectId, Set<WebSocket>>)
-- Full snapshot sent on connect via workspaceSnapshotStore.getByProjectId(), per-workspace deltas pushed via store event subscription
-- 7 passing tests covering connect, reject, project isolation, removed events, readyState guard, cleanup, partial cleanup
+
+- Created /snapshots WebSocket handler with project-scoped connection tracking
+  (Map<projectId, Set<WebSocket>>)
+- Full snapshot sent on connect via workspaceSnapshotStore.getByProjectId(),
+  per-workspace deltas pushed via store event subscription
+- 7 passing tests covering connect, reject, project isolation, removed events,
+  readyState guard, cleanup, partial cleanup
 - Wired into server.ts: upgrade handler, SPA fallback exclusion, endpoints log
 
 ## Task Commits
@@ -63,33 +68,52 @@ completed: 2026-02-11
 Each task was committed atomically:
 
 1. **Task 1: Create snapshot WebSocket handler with tests** - `66cb554` (feat)
-2. **Task 2: Wire handler into server and update barrel export** - `9526bd5` (feat)
+2. **Task 2: Wire handler into server and update barrel export** - `9526bd5`
+   (feat)
 
 ## Files Created/Modified
-- `src/backend/routers/websocket/snapshots.handler.ts` - Snapshot WebSocket upgrade handler with project-scoped connection tracking and store event fan-out
-- `src/backend/routers/websocket/snapshots.handler.test.ts` - 7 tests covering full snapshot on connect, delta routing, project isolation, cleanup, readyState guard
-- `src/backend/routers/websocket/index.ts` - Barrel re-export of snapshot handler symbols
-- `src/backend/server.ts` - /snapshots upgrade handler registration, SPA exclusion, endpoints log entry
+
+- `src/backend/routers/websocket/snapshots.handler.ts` - Snapshot WebSocket
+  upgrade handler with project-scoped connection tracking and store event
+  fan-out
+- `src/backend/routers/websocket/snapshots.handler.test.ts` - 7 tests covering
+  full snapshot on connect, delta routing, project isolation, cleanup,
+  readyState guard
+- `src/backend/routers/websocket/index.ts` - Barrel re-export of snapshot
+  handler symbols
+- `src/backend/server.ts` - /snapshots upgrade handler registration, SPA
+  exclusion, endpoints log entry
 
 ## Decisions Made
-- Store subscription via idempotent `ensureStoreSubscription()` guard (subscribe once at handler creation, not per-connection) -- avoids EventEmitter listener leak
-- Connection map keyed by projectId for O(1) lookup during fan-out (matches WSKT-04 project isolation requirement)
-- Pre-serialize messages once before iterating connection set -- avoids redundant JSON.stringify per client
+
+- Store subscription via idempotent `ensureStoreSubscription()` guard (subscribe
+  once at handler creation, not per-connection) -- avoids EventEmitter listener
+  leak
+- Connection map keyed by projectId for O(1) lookup during fan-out (matches
+  WSKT-04 project isolation requirement)
+- Pre-serialize messages once before iterating connection set -- avoids
+  redundant JSON.stringify per client
 
 ## Deviations from Plan
 
 None - plan executed exactly as written.
 
 ## Issues Encountered
-- Biome lint required block statements (no single-line `if (x) return`) and disallowed `await import()` in tests -- resolved by using `vi.hoisted()` for mock references and block statements throughout
+
+- Biome lint required block statements (no single-line `if (x) return`) and
+  disallowed `await import()` in tests -- resolved by using `vi.hoisted()` for
+  mock references and block statements throughout
 
 ## User Setup Required
 
 None - no external service configuration required.
 
 ## Next Phase Readiness
-- /snapshots WebSocket endpoint is live and ready for client-side integration (Phase 16-17)
-- Message types: `snapshot_full`, `snapshot_changed`, `snapshot_removed` -- client can use these for type-safe message handling
+
+- /snapshots WebSocket endpoint is live and ready for client-side integration
+  (Phase 16-17)
+- Message types: `snapshot_full`, `snapshot_changed`, `snapshot_removed` --
+  client can use these for type-safe message handling
 - No blockers or concerns
 
 ## Self-Check: PASSED
@@ -102,5 +126,5 @@ None - no external service configuration required.
 - [x] Commit 9526bd5 - FOUND
 
 ---
-*Phase: 15-websocket-transport*
-*Completed: 2026-02-11*
+
+_Phase: 15-websocket-transport_ _Completed: 2026-02-11_

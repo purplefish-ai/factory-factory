@@ -1,12 +1,22 @@
 # PR 2056 Dispatch Failure Replay Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Preserve generic ACP dispatch failures across reconnects and reset provider-busy backoff after a terminal failure.
+**Goal:** Preserve generic ACP dispatch failures across reconnects and reset
+provider-busy backoff after a terminal failure.
 
-**Architecture:** Keep the existing short-lived in-memory terminal-message replay mechanism and extend its records to describe either `REJECTED` or `FAILED` states plus an optional recovery payload. Route generic dispatch failures through a `SessionDomainService.failMessage` boundary that records and publishes the same event, while clearing the handler's busy-turn attempt counter when that message terminates.
+**Architecture:** Keep the existing short-lived in-memory terminal-message
+replay mechanism and extend its records to describe either `REJECTED` or
+`FAILED` states plus an optional recovery payload. Route generic dispatch
+failures through a `SessionDomainService.failMessage` boundary that records and
+publishes the same event, while clearing the handler's busy-turn attempt counter
+when that message terminates.
 
-**Tech Stack:** TypeScript, Vitest, ACP WebSocket message-state events, in-memory session store
+**Tech Stack:** TypeScript, Vitest, ACP WebSocket message-state events,
+in-memory session store
 
 ## Global Constraints
 
@@ -20,16 +30,22 @@
 ### Task 1: Replay generic dispatch failures
 
 **Files:**
+
 - Modify: `src/backend/services/session/service/store/session-store.types.ts`
 - Modify: `src/backend/services/session/service/store/session-replay-builder.ts`
 - Test: `src/backend/services/session/service/session-domain.service.test.ts`
 - Modify: `src/backend/services/session/service/session-domain.service.ts`
-- Test: `src/backend/services/session/service/chat/chat-message-handlers.service.test.ts`
-- Modify: `src/backend/services/session/service/chat/chat-message-handlers.service.ts`
+- Test:
+  `src/backend/services/session/service/chat/chat-message-handlers.service.test.ts`
+- Modify:
+  `src/backend/services/session/service/chat/chat-message-handlers.service.ts`
 
 **Interfaces:**
-- Consumes: `QueuedMessage` and the existing `message_state_changed` WebSocket payload.
-- Produces: `SessionDomainService.failMessage(sessionId: string, message: QueuedMessage, errorMessage: string): void`.
+
+- Consumes: `QueuedMessage` and the existing `message_state_changed` WebSocket
+  payload.
+- Produces:
+  `SessionDomainService.failMessage(sessionId: string, message: QueuedMessage, errorMessage: string): void`.
 
 - [ ] **Step 1: Write the failing reconnect regression**
 
@@ -104,17 +120,21 @@ userMessage?: {
 };
 ```
 
-Keep omitted `state` backward-compatible as `REJECTED`. Update replay construction to use `rejection.state ?? MessageState.REJECTED` and include `userMessage` when present.
+Keep omitted `state` backward-compatible as `REJECTED`. Update replay
+construction to use `rejection.state ?? MessageState.REJECTED` and include
+`userMessage` when present.
 
 - [ ] **Step 4: Add the domain failure boundary**
 
-Factor the existing TTL/cap logic into a private record-and-publish helper. Keep `rejectMessage` behavior unchanged and implement:
+Factor the existing TTL/cap logic into a private record-and-publish helper. Keep
+`rejectMessage` behavior unchanged and implement:
 
 ```ts
 failMessage(sessionId: string, message: QueuedMessage, errorMessage: string): void
 ```
 
-The stored and live event must both be `FAILED` and carry the draft text, timestamp, attachments, and source `sessionId`.
+The stored and live event must both be `FAILED` and carry the draft text,
+timestamp, attachments, and source `sessionId`.
 
 - [ ] **Step 5: Run the reconnect regression and verify GREEN**
 
@@ -128,7 +148,8 @@ Expected: all tests pass.
 
 - [ ] **Step 6: Route dispatch failures through the domain boundary**
 
-Add `failMessage` to the handler test double, update generic-failure expectations to require:
+Add `failMessage` to the handler test double, update generic-failure
+expectations to require:
 
 ```ts
 expect(mockSessionDomainService.failMessage).toHaveBeenCalledWith(
@@ -138,7 +159,8 @@ expect(mockSessionDomainService.failMessage).toHaveBeenCalledWith(
 );
 ```
 
-Run the handler test and verify it fails while production still calls `emitDelta`, then replace the generic failure's direct event publication with:
+Run the handler test and verify it fails while production still calls
+`emitDelta`, then replace the generic failure's direct event publication with:
 
 ```ts
 sessionDomainService.failMessage(dbSessionId, msg, errorMessage);
@@ -157,10 +179,14 @@ Expected: all tests pass.
 ### Task 2: Reset stale busy-turn backoff
 
 **Files:**
-- Test: `src/backend/services/session/service/chat/chat-message-handlers.service.test.ts`
-- Modify: `src/backend/services/session/service/chat/chat-message-handlers.service.ts`
+
+- Test:
+  `src/backend/services/session/service/chat/chat-message-handlers.service.test.ts`
+- Modify:
+  `src/backend/services/session/service/chat/chat-message-handlers.service.ts`
 
 **Interfaces:**
+
 - Consumes: existing `turnInProgressRetryAttempts` session map.
 - Produces: a fresh one-second base delay after any generic terminal failure.
 
@@ -176,7 +202,10 @@ mockSessionService.sendSessionMessage
   .mockResolvedValueOnce(undefined);
 ```
 
-Advance the first one-second retry to reach the terminal failure, explicitly dispatch the retried draft, then advance one second and assert the fourth send occurred. The existing code waits two seconds because it retains the earlier attempt count.
+Advance the first one-second retry to reach the terminal failure, explicitly
+dispatch the retried draft, then advance one second and assert the fourth send
+occurred. The existing code waits two seconds because it retains the earlier
+attempt count.
 
 - [ ] **Step 2: Run the timer regression and verify RED**
 
@@ -209,9 +238,11 @@ Expected: all tests pass.
 ### Task 3: Verify and publish
 
 **Files:**
+
 - Verify all modified source and test files.
 
 **Interfaces:**
+
 - Consumes: repository scripts and GitHub CLI authentication.
 - Produces: a focused commit on the PR branch and reviewer assignments only.
 

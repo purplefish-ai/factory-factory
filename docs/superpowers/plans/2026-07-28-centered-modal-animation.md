@@ -1,42 +1,63 @@
 # Centered Modal Animation Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make every standard and confirmation modal fade and scale at the viewport center without directional travel.
+**Goal:** Make every standard and confirmation modal fade and scale at the
+viewport center without directional travel.
 
-**Architecture:** Keep the behavior in the shared Radix-based `DialogContent` and `AlertDialogContent` primitives so every consumer inherits it without API or call-site changes. Preserve the CSS translations that position content at the viewport center, remove only the animation translation utilities, and override content animation under `prefers-reduced-motion`.
+**Architecture:** Keep the behavior in the shared Radix-based `DialogContent`
+and `AlertDialogContent` primitives so every consumer inherits it without API or
+call-site changes. Preserve the CSS translations that position content at the
+viewport center, remove only the animation translation utilities, and override
+content animation under `prefers-reduced-motion`.
 
-**Tech Stack:** React 19, Radix Dialog and Alert Dialog, Tailwind CSS 4 animation utilities, Vitest 4, jsdom, Storybook
+**Tech Stack:** React 19, Radix Dialog and Alert Dialog, Tailwind CSS 4
+animation utilities, Vitest 4, jsdom, Storybook
 
 ## Global Constraints
 
 - Apply the behavior to `DialogContent` and `AlertDialogContent`.
-- Preserve the existing 200 ms duration, overlay fade, centered layout, and public component APIs.
-- Open with opacity from 0 to 1 and scale from 95% to 100%; reverse those effects on close.
+- Preserve the existing 200 ms duration, overlay fade, centered layout, and
+  public component APIs.
+- Open with opacity from 0 to 1 and scale from 95% to 100%; reverse those
+  effects on close.
 - Do not add per-modal variants or update individual modal consumers.
-- Do not change sheets, drawers, menus, popovers, tooltips, or other anchored surfaces.
-- Under `prefers-reduced-motion: reduce`, modal content must have no scale or directional animation.
+- Do not change sheets, drawers, menus, popovers, tooltips, or other anchored
+  surfaces.
+- Under `prefers-reduced-motion: reduce`, modal content must have no scale or
+  directional animation.
 
 ## File Map
 
-- Create `src/components/ui/dialog.test.tsx` to lock the shared regular-modal and confirmation-modal class contract.
-- Create `src/components/ui/dialog.stories.tsx` to provide interactive visual QA for both modal types.
-- Modify `src/components/ui/dialog.tsx` to remove directional content animation and add reduced-motion behavior.
-- Modify `src/components/ui/alert-dialog.tsx` to make the matching confirmation-modal change.
+- Create `src/components/ui/dialog.test.tsx` to lock the shared regular-modal
+  and confirmation-modal class contract.
+- Create `src/components/ui/dialog.stories.tsx` to provide interactive visual QA
+  for both modal types.
+- Modify `src/components/ui/dialog.tsx` to remove directional content animation
+  and add reduced-motion behavior.
+- Modify `src/components/ui/alert-dialog.tsx` to make the matching
+  confirmation-modal change.
 
 ---
 
 ### Task 1: Center all shared modal animation
 
 **Files:**
+
 - Create: `src/components/ui/dialog.test.tsx`
 - Create: `src/components/ui/dialog.stories.tsx`
 - Modify: `src/components/ui/dialog.tsx:30-52`
 - Modify: `src/components/ui/alert-dialog.tsx:27-43`
 
 **Interfaces:**
-- Consumes: Radix `data-state="open" | "closed"` attributes and the existing Tailwind animation utilities.
-- Produces: unchanged `DialogContent` and `AlertDialogContent` React component APIs with a shared centered-motion class contract.
+
+- Consumes: Radix `data-state="open" | "closed"` attributes and the existing
+  Tailwind animation utilities.
+- Produces: unchanged `DialogContent` and `AlertDialogContent` React component
+  APIs with a shared centered-motion class contract.
 
 - [ ] **Step 1: Write the failing shared-primitive test**
 
@@ -129,23 +150,27 @@ Run:
 pnpm test -- src/components/ui/dialog.test.tsx
 ```
 
-Expected: both tests fail because `DialogContent` and `AlertDialogContent` still contain `slide-in-*` and `slide-out-*` classes.
+Expected: both tests fail because `DialogContent` and `AlertDialogContent` still
+contain `slide-in-*` and `slide-out-*` classes.
 
 - [ ] **Step 3: Remove directional animation and add reduced-motion overrides**
 
-In `src/components/ui/dialog.tsx`, replace the `DialogPrimitive.Content` class string with:
+In `src/components/ui/dialog.tsx`, replace the `DialogPrimitive.Content` class
+string with:
 
 ```tsx
 'fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-3 border bg-background p-4 shadow-sm duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out motion-reduce:data-[state=open]:animate-none motion-reduce:data-[state=closed]:animate-none data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:rounded-lg'
 ```
 
-In `src/components/ui/alert-dialog.tsx`, replace the `AlertDialogPrimitive.Content` class string with:
+In `src/components/ui/alert-dialog.tsx`, replace the
+`AlertDialogPrimitive.Content` class string with:
 
 ```tsx
 'fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-sm duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out motion-reduce:data-[state=open]:animate-none motion-reduce:data-[state=closed]:animate-none data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:rounded-lg'
 ```
 
-Do not alter `DialogOverlay`, `AlertDialogOverlay`, or `src/components/ui/sheet.tsx`.
+Do not alter `DialogOverlay`, `AlertDialogOverlay`, or
+`src/components/ui/sheet.tsx`.
 
 - [ ] **Step 4: Run the focused test and confirm the class contract passes**
 
@@ -255,7 +280,9 @@ pnpm typecheck
 pnpm check
 ```
 
-Expected: formatting makes no semantic changes, the focused test reports 2 passing tests, and the full test, type-check, and repository-check commands exit with code 0.
+Expected: formatting makes no semantic changes, the focused test reports 2
+passing tests, and the full test, type-check, and repository-check commands exit
+with code 0.
 
 - [ ] **Step 7: Perform visual and scope verification**
 
@@ -269,7 +296,8 @@ Open the `UI/Dialog` → `Centered Motion` story and verify:
 
 1. The regular modal stays centered throughout its open and close animation.
 2. The confirmation modal uses the same centered fade-and-scale motion.
-3. Browser emulation of `prefers-reduced-motion: reduce` removes content animation.
+3. Browser emulation of `prefers-reduced-motion: reduce` removes content
+   animation.
 
 Stop Storybook, then verify the edit scope:
 
@@ -278,7 +306,8 @@ git diff --exit-code -- src/components/ui/sheet.tsx
 git diff --name-only
 ```
 
-Expected: the first command exits with code 0 and no output. The second command contains only:
+Expected: the first command exits with code 0 and no output. The second command
+contains only:
 
 ```text
 src/components/ui/alert-dialog.tsx

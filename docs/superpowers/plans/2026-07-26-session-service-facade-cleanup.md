@@ -1,39 +1,60 @@
 # Session Service Facade Cleanup Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace `SessionService`'s forwarding API with direct use of focused session services while retaining `SessionService` for serialized ACP prompt execution.
+**Goal:** Replace `SessionService`'s forwarding API with direct use of focused
+session services while retaining `SessionService` for serialized ACP prompt
+execution.
 
-**Architecture:** Add a session-capsule composition module that constructs and exports the shared focused service instances. Inject prompt sending into `SessionLifecycleService`, inject lifecycle-state readers into the prompt-only `SessionService`, and migrate every caller to the service that owns its operation.
+**Architecture:** Add a session-capsule composition module that constructs and
+exports the shared focused service instances. Inject prompt sending into
+`SessionLifecycleService`, inject lifecycle-state readers into the prompt-only
+`SessionService`, and migrate every caller to the service that owns its
+operation.
 
 **Tech Stack:** TypeScript, Express/tRPC, ACP SDK, Vitest, Biome, pnpm
 
 ## Global Constraints
 
 - Keep `sessionService` for prompt coordination only.
-- Export the focused session service instances through `@/backend/services/session`.
+- Export the focused session service instances through
+  `@/backend/services/session`.
 - Add no deprecated forwarding methods or compatibility aliases.
-- Preserve current prompt serialization, lifecycle, configuration, permission, runtime-state, and workspace-activity behavior.
+- Preserve current prompt serialization, lifecycle, configuration, permission,
+  runtime-state, and workspace-activity behavior.
 - External consumers import only from the session barrel.
-- Keep tests beside the session modules or existing backend consumers they cover.
+- Keep tests beside the session modules or existing backend consumers they
+  cover.
 
 ---
 
 ### Task 1: Make prompt sending a lifecycle dependency
 
 **Files:**
-- Modify: `src/backend/services/session/service/lifecycle/session.lifecycle.service.ts`
-- Modify: `src/backend/services/session/service/lifecycle/session.lifecycle.service.test.ts`
+
+- Modify:
+  `src/backend/services/session/service/lifecycle/session.lifecycle.service.ts`
+- Modify:
+  `src/backend/services/session/service/lifecycle/session.lifecycle.service.test.ts`
 
 **Interfaces:**
-- Consumes: `SendSessionMessage = (sessionId: string, content: string) => Promise<void>`
+
+- Consumes:
+  `SendSessionMessage = (sessionId: string, content: string) => Promise<void>`
 - Produces: `SessionLifecycleServiceDependencies.sendSessionMessage`
-- Produces: `startSession(sessionId: string, options?: StartSessionOptions): Promise<void>`
-- Produces: `restartSession(sessionId: string, options?: StartSessionOptions): Promise<void>`
+- Produces:
+  `startSession(sessionId: string, options?: StartSessionOptions): Promise<void>`
+- Produces:
+  `restartSession(sessionId: string, options?: StartSessionOptions): Promise<void>`
 
-- [ ] **Step 1: Change the lifecycle tests to express constructor-injected prompt sending**
+- [ ] **Step 1: Change the lifecycle tests to express constructor-injected
+      prompt sending**
 
-Update the lifecycle test builders to pass `sendSessionMessage` in the constructor:
+Update the lifecycle test builders to pass `sendSessionMessage` in the
+constructor:
 
 ```ts
 const sendSessionMessage = vi.fn(async () => undefined);
@@ -51,7 +72,10 @@ const service = new SessionLifecycleService({
 });
 ```
 
-Call `service.startSession('session-1', options)` and `service.restartSession('session-1', options)` without passing the sender as a method argument. Retain assertions that explicit prompts are sent once and queued notifications suppress the default prompt.
+Call `service.startSession('session-1', options)` and
+`service.restartSession('session-1', options)` without passing the sender as a
+method argument. Retain assertions that explicit prompts are sent once and
+queued notifications suppress the default prompt.
 
 - [ ] **Step 2: Run the focused lifecycle tests and verify RED**
 
@@ -61,7 +85,8 @@ Run:
 pnpm vitest run src/backend/services/session/service/lifecycle/session.lifecycle.service.test.ts
 ```
 
-Expected: TypeScript/Vitest fails because `sendSessionMessage` is not a constructor dependency and the existing methods still require it as an argument.
+Expected: TypeScript/Vitest fails because `sendSessionMessage` is not a
+constructor dependency and the existing methods still require it as an argument.
 
 - [ ] **Step 3: Inject and use the prompt sender**
 
@@ -84,7 +109,8 @@ export type SessionLifecycleServiceDependencies = {
 };
 ```
 
-Remove the sender parameter from `startSession` and `restartSession`, and use `this.sendSessionMessage` for initial and restart prompts.
+Remove the sender parameter from `startSession` and `restartSession`, and use
+`this.sendSessionMessage` for initial and restart prompts.
 
 - [ ] **Step 4: Run the focused lifecycle tests and verify GREEN**
 
@@ -109,20 +135,27 @@ git commit -m "Inject session lifecycle prompt sender"
 ### Task 2: Build the focused service graph and shrink SessionService
 
 **Files:**
+
 - Create: `src/backend/services/session/service/lifecycle/session-services.ts`
 - Modify: `src/backend/services/session/service/lifecycle/session.service.ts`
-- Modify: `src/backend/services/session/service/lifecycle/session.service.test.ts`
-- Delete: `src/backend/services/session/service/lifecycle/session.service.coverage.test.ts`
+- Modify:
+  `src/backend/services/session/service/lifecycle/session.service.test.ts`
+- Delete:
+  `src/backend/services/session/service/lifecycle/session.service.coverage.test.ts`
 
 **Interfaces:**
+
 - Produces: `sessionPermissionService: SessionPermissionService`
 - Produces: `sessionConfigService: SessionConfigService`
 - Produces: `acpEventProcessor: AcpEventProcessor`
-- Produces: `sessionPromptTurnCompletionService: SessionPromptTurnCompletionService`
+- Produces:
+  `sessionPromptTurnCompletionService: SessionPromptTurnCompletionService`
 - Produces: `sessionRetryService: SessionRetryService`
 - Produces: `sessionLifecycleService: SessionLifecycleService`
-- Produces: `sessionService: SessionPromptService`, narrowed to the public prompt API
-- Keeps: a private `SessionService` coordinator whose queue cleanup is used only by lifecycle hooks
+- Produces: `sessionService: SessionPromptService`, narrowed to the public
+  prompt API
+- Keeps: a private `SessionService` coordinator whose queue cleanup is used only
+  by lifecycle hooks
 
 - [ ] **Step 1: Point behavioral tests at the intended focused instances**
 
@@ -139,11 +172,17 @@ import {
 } from './session-services';
 ```
 
-Replace lifecycle calls such as `sessionService.startSession`, `stopSession`, `getSessionClient`, `getRuntimeSnapshot`, `getStopGeneration`, and `stopAllClients` with `sessionLifecycleService`. Replace config, permission, and completion-handler calls with their owning instances. Access ACP processor state directly instead of casting through a private `SessionService` field.
+Replace lifecycle calls such as `sessionService.startSession`, `stopSession`,
+`getSessionClient`, `getRuntimeSnapshot`, `getStopGeneration`, and
+`stopAllClients` with `sessionLifecycleService`. Replace config, permission, and
+completion-handler calls with their owning instances. Access ACP processor state
+directly instead of casting through a private `SessionService` field.
 
-Keep prompt assertions on `sessionService.sendSessionMessage` and `sessionService.sendAcpMessage`.
+Keep prompt assertions on `sessionService.sendSessionMessage` and
+`sessionService.sendAcpMessage`.
 
-- [ ] **Step 2: Run the existing SessionService behavioral suite and verify RED**
+- [ ] **Step 2: Run the existing SessionService behavioral suite and verify
+      RED**
 
 Run:
 
@@ -177,7 +216,10 @@ Retain:
 - per-session limiter creation, cleanup, and rejection
 - ACP prompt execution and prompt-turn finalization
 
-Remove all lifecycle, configuration, permission, runtime query, history, repository, and shutdown forwarding methods. Replace internal calls to the removed lifecycle methods with `getStopGeneration` and `isSessionStopping` dependencies.
+Remove all lifecycle, configuration, permission, runtime query, history,
+repository, and shutdown forwarding methods. Replace internal calls to the
+removed lifecycle methods with `getStopGeneration` and `isSessionStopping`
+dependencies.
 
 - [ ] **Step 4: Create the composition module**
 
@@ -236,11 +278,14 @@ export const sessionLifecycleService = new SessionLifecycleService({
 });
 ```
 
-Move the tool-timeout cancellation callback from the old constructor into this composition module, preserving both runtime guards and logging.
+Move the tool-timeout cancellation callback from the old constructor into this
+composition module, preserving both runtime guards and logging.
 
 - [ ] **Step 5: Remove delegation-only coverage**
 
-Delete `session.service.coverage.test.ts`. Its wrapper assertions are intentionally obsolete; retain its content conversion and limiter behaviors only if they are not already covered in `session.service.test.ts`.
+Delete `session.service.coverage.test.ts`. Its wrapper assertions are
+intentionally obsolete; retain its content conversion and limiter behaviors only
+if they are not already covered in `session.service.test.ts`.
 
 - [ ] **Step 6: Run the session graph tests and verify GREEN**
 
@@ -271,29 +316,46 @@ git commit -m "Split focused session services from facade"
 ### Task 3: Publish the focused API and migrate session-internal callers
 
 **Files:**
+
 - Modify: `src/backend/services/session/service/index.ts`
 - Modify: `src/backend/services/session/service/interceptor.bridge.ts`
-- Modify: `src/backend/services/session/service/chat/chat-message-handlers.service.ts`
-- Modify: `src/backend/services/session/service/chat/chat-message-handlers/types.ts`
-- Modify: `src/backend/services/session/service/chat/chat-message-handlers/registry.ts`
-- Modify: `src/backend/services/session/service/chat/chat-message-handlers/handlers/load-session.handler.ts`
-- Modify: `src/backend/services/session/service/chat/chat-message-handlers/handlers/permission-response.handler.ts`
-- Modify: `src/backend/services/session/service/chat/chat-message-handlers/handlers/set-config-option.handler.ts`
-- Modify: `src/backend/services/session/service/chat/chat-message-handlers/handlers/set-model.handler.ts`
-- Modify: `src/backend/services/session/service/chat/chat-message-handlers/handlers/set-thinking-budget.handler.ts`
-- Modify: `src/backend/services/session/service/chat/chat-message-handlers/handlers/start.handler.ts`
-- Modify: `src/backend/services/session/service/chat/chat-message-handlers/handlers/stop.handler.ts`
-- Modify: `src/backend/services/session/service/chat/chat-message-handlers/handlers/user-input.handler.ts`
+- Modify:
+  `src/backend/services/session/service/chat/chat-message-handlers.service.ts`
+- Modify:
+  `src/backend/services/session/service/chat/chat-message-handlers/types.ts`
+- Modify:
+  `src/backend/services/session/service/chat/chat-message-handlers/registry.ts`
+- Modify:
+  `src/backend/services/session/service/chat/chat-message-handlers/handlers/load-session.handler.ts`
+- Modify:
+  `src/backend/services/session/service/chat/chat-message-handlers/handlers/permission-response.handler.ts`
+- Modify:
+  `src/backend/services/session/service/chat/chat-message-handlers/handlers/set-config-option.handler.ts`
+- Modify:
+  `src/backend/services/session/service/chat/chat-message-handlers/handlers/set-model.handler.ts`
+- Modify:
+  `src/backend/services/session/service/chat/chat-message-handlers/handlers/set-thinking-budget.handler.ts`
+- Modify:
+  `src/backend/services/session/service/chat/chat-message-handlers/handlers/start.handler.ts`
+- Modify:
+  `src/backend/services/session/service/chat/chat-message-handlers/handlers/stop.handler.ts`
+- Modify:
+  `src/backend/services/session/service/chat/chat-message-handlers/handlers/user-input.handler.ts`
 - Modify: co-located tests under `src/backend/services/session/service/chat/`
 
 **Interfaces:**
-- Produces: barrel exports for the eight focused sub-services and prompt-only `sessionService`
-- Produces: handler dependencies split by `sessionLifecycleService`, `sessionConfigService`, `sessionPermissionService`, `acpRuntimeManager`, and `sessionService`
+
+- Produces: barrel exports for the eight focused sub-services and prompt-only
+  `sessionService`
+- Produces: handler dependencies split by `sessionLifecycleService`,
+  `sessionConfigService`, `sessionPermissionService`, `acpRuntimeManager`, and
+  `sessionService`
 - Produces: transcript conversion local to `sessionInterceptorBridge`
 
 - [ ] **Step 1: Update handler tests to inject focused dependencies**
 
-Replace the broad `ChatMessageHandlerSessionService` fake with capability-specific interfaces. For example:
+Replace the broad `ChatMessageHandlerSessionService` fake with
+capability-specific interfaces. For example:
 
 ```ts
 const deps = {
@@ -305,7 +367,10 @@ const deps = {
 };
 ```
 
-For user input, inject `acpRuntimeManager.isSessionRunning` and `sessionService.sendSessionMessage`. For permission responses, inject `sessionPermissionService.respondToPermission`. For start/stop handlers, inject `sessionLifecycleService`.
+For user input, inject `acpRuntimeManager.isSessionRunning` and
+`sessionService.sendSessionMessage`. For permission responses, inject
+`sessionPermissionService.respondToPermission`. For start/stop handlers, inject
+`sessionLifecycleService`.
 
 - [ ] **Step 2: Run chat handler tests and verify RED**
 
@@ -315,7 +380,8 @@ Run:
 pnpm vitest run src/backend/services/session/service/chat
 ```
 
-Expected: tests fail because handler factories and registry still accept the broad session facade.
+Expected: tests fail because handler factories and registry still accept the
+broad session facade.
 
 - [ ] **Step 3: Export the focused instances**
 
@@ -337,13 +403,18 @@ export { SessionConfigService } from './lifecycle/session.config.service';
 export { SessionPermissionService } from './lifecycle/session.permission.service';
 ```
 
-Continue exporting `sessionRepository` and `sessionPromptBuilder` from their existing modules.
+Continue exporting `sessionRepository` and `sessionPromptBuilder` from their
+existing modules.
 
 - [ ] **Step 4: Migrate chat and interceptor callers**
 
-Use focused dependencies for every handler operation. In `interceptor.bridge.ts`, map transcript entries to `HistoryMessage[]` locally, read them from `sessionDomainService`, query running state from `acpRuntimeManager`, and retain prompt sending through `sessionService`.
+Use focused dependencies for every handler operation. In
+`interceptor.bridge.ts`, map transcript entries to `HistoryMessage[]` locally,
+read them from `sessionDomainService`, query running state from
+`acpRuntimeManager`, and retain prompt sending through `sessionService`.
 
-Do not add an aggregate replacement service interface. Each handler factory accepts only the capabilities it invokes.
+Do not add an aggregate replacement service interface. Each handler factory
+accepts only the capabilities it invokes.
 
 - [ ] **Step 5: Run chat and interceptor tests and verify GREEN**
 
@@ -371,6 +442,7 @@ git commit -m "Use focused services in session handlers"
 ### Task 4: Migrate application, orchestration, router, and server callers
 
 **Files:**
+
 - Modify: `src/backend/app-context.ts`
 - Modify: `src/backend/orchestration/domain-bridges.orchestrator.ts`
 - Modify: `src/backend/orchestration/event-collector.orchestrator.ts`
@@ -386,6 +458,7 @@ git commit -m "Use focused services in session handlers"
 - Modify: corresponding co-located tests and dependency fixtures
 
 **Interfaces:**
+
 - Produces: `ApplicationServices.sessionLifecycleService`
 - Produces: `ApplicationServices.sessionPromptTurnCompletionService`
 - Produces: `ApplicationServices.sessionRepository`
@@ -393,7 +466,8 @@ git commit -m "Use focused services in session handlers"
 
 - [ ] **Step 1: Update representative dependency fixtures first**
 
-Change application, orchestration, router, and server test fixtures to provide focused services. Representative fixture shape:
+Change application, orchestration, router, and server test fixtures to provide
+focused services. Representative fixture shape:
 
 ```ts
 {
@@ -435,11 +509,13 @@ pnpm vitest run \
   src/backend/server.upgrade.test.ts
 ```
 
-Expected: dependency shape and call assertions fail because production callers still use `sessionService` for non-prompt operations.
+Expected: dependency shape and call assertions fail because production callers
+still use `sessionService` for non-prompt operations.
 
 - [ ] **Step 3: Migrate the application context and bridge wiring**
 
-Add the focused instances to default application services. Build snapshot reconciliation with `sessionLifecycleService.getRuntimeSnapshot`.
+Add the focused instances to default application services. Build snapshot
+reconciliation with `sessionLifecycleService.getRuntimeSnapshot`.
 
 In domain bridge wiring:
 
@@ -514,11 +590,14 @@ git commit -m "Migrate callers to focused session services"
 ### Task 5: Format, validate, and prepare the pull request
 
 **Files:**
+
 - Modify: any task-owned TypeScript file changed mechanically by Biome
-- Review: `docs/superpowers/specs/2026-07-26-session-service-facade-cleanup-design.md`
+- Review:
+  `docs/superpowers/specs/2026-07-26-session-service-facade-cleanup-design.md`
 - Review: `docs/superpowers/plans/2026-07-26-session-service-facade-cleanup.md`
 
 **Interfaces:**
+
 - Consumes: all focused service exports and migrated callers from Tasks 1–4
 - Produces: a verified branch ready to push and open as a draft PR
 
@@ -532,7 +611,8 @@ git diff --check
 git status -sb
 ```
 
-Expected: Biome completes, `git diff --check` reports no whitespace errors, and only task-owned files are modified.
+Expected: Biome completes, `git diff --check` reports no whitespace errors, and
+only task-owned files are modified.
 
 - [ ] **Step 2: Run the full verification suite**
 
@@ -544,7 +624,8 @@ pnpm typecheck
 pnpm check
 ```
 
-Expected: all commands exit successfully. Record the Vitest file/test counts and any intentional skips.
+Expected: all commands exit successfully. Record the Vitest file/test counts and
+any intentional skips.
 
 - [ ] **Step 3: Review the final diff against the design**
 
@@ -558,7 +639,8 @@ rg -n "from ['\"]@/backend/services/session/service/" src/backend \
   --glob '!src/backend/services/session/**'
 ```
 
-Expected: the diff contains only the documented facade cleanup, and no external consumer imports session internals.
+Expected: the diff contains only the documented facade cleanup, and no external
+consumer imports session internals.
 
 - [ ] **Step 4: Commit any formatting-only changes**
 
@@ -579,7 +661,9 @@ If formatting made no changes, do not create an empty commit.
 
 - [ ] **Step 5: Publish the branch and open the draft PR**
 
-Verify `gh` availability and authentication, push the branch, and open a draft PR with a body covering the API split, behavior preservation, removed wrapper tests, and all validation commands:
+Verify `gh` availability and authentication, push the branch, and open a draft
+PR with a body covering the API split, behavior preservation, removed wrapper
+tests, and all validation commands:
 
 ```bash
 gh --version
@@ -587,4 +671,7 @@ gh auth status
 git push -u origin agent/cleanup-session-service-facade
 ```
 
-Use the connected GitHub integration to create the draft PR against the repository's default branch. If the connector cannot infer the repository or branch, create a body file with `pr_body_file=$(mktemp)` and use `gh pr create --draft --body-file "$pr_body_file"`.
+Use the connected GitHub integration to create the draft PR against the
+repository's default branch. If the connector cannot infer the repository or
+branch, create a body file with `pr_body_file=$(mktemp)` and use
+`gh pr create --draft --body-file "$pr_body_file"`.

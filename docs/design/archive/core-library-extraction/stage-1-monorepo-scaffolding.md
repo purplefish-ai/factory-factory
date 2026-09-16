@@ -2,18 +2,20 @@
 
 Status: superseded by PR #2023
 
-**Risk**: Very Low
-**Depends on**: Nothing (first stage)
-**Estimated scope**: ~8 new files, 0 modified source files
+**Risk**: Very Low **Depends on**: Nothing (first stage) **Estimated scope**: ~8
+new files, 0 modified source files
 
 ## Goal
 
-Convert the single-package repo into a pnpm workspace monorepo and create the `packages/core/` skeleton. No existing code is moved or modified -- this is purely additive infrastructure.
+Convert the single-package repo into a pnpm workspace monorepo and create the
+`packages/core/` skeleton. No existing code is moved or modified -- this is
+purely additive infrastructure.
 
 ## What Gets Done
 
 1. Create `pnpm-workspace.yaml` at repo root
-2. Create `packages/core/` with package.json, tsconfig, vitest config, and empty barrel file
+2. Create `packages/core/` with package.json, tsconfig, vitest config, and empty
+   barrel file
 3. Verify the root package still works alongside the new workspace member
 
 ## New Files
@@ -25,7 +27,8 @@ packages:
   - 'packages/*'
 ```
 
-The root package remains an implicit workspace member (pnpm treats the root as a workspace member by default when `pnpm-workspace.yaml` exists).
+The root package remains an implicit workspace member (pnpm treats the root as a
+workspace member by default when `pnpm-workspace.yaml` exists).
 
 ### `packages/core/package.json`
 
@@ -58,6 +61,7 @@ The root package remains an implicit workspace member (pnpm treats the root as a
 ```
 
 Notes:
+
 - `"private": true` initially -- changed to `false` in Stage 6 when publishing
 - `"type": "module"` matches the root package (ESM)
 - Versions of typescript and vitest should match what root uses
@@ -95,6 +99,7 @@ Notes:
 ```
 
 Notes:
+
 - No `@/*` path alias -- core uses relative imports only
 - `noEmit: false` -- this config is used for building, not just type checking
 - Strict settings match root tsconfig
@@ -126,9 +131,12 @@ export default defineConfig({
 
 ### Root `package.json`
 
-No structural changes required. The root package continues to work as-is. pnpm workspace resolution means `pnpm install` from root will install deps for all workspace members.
+No structural changes required. The root package continues to work as-is. pnpm
+workspace resolution means `pnpm install` from root will install deps for all
+workspace members.
 
 However, verify:
+
 - `pnpm install` resolves correctly (may need `pnpm install` re-run)
 - Root scripts (`pnpm dev`, `pnpm build`, `pnpm test`) are unaffected
 - No accidental hoisting issues with shared deps
@@ -173,11 +181,11 @@ pnpm dev  # manual: verify app starts
 
 ## Risks and Mitigations
 
-| Risk | Likelihood | Mitigation |
-|------|-----------|------------|
-| pnpm workspace hoisting conflicts | Low | Use `pnpm install` and check for resolution warnings |
-| Root scripts break | Very Low | No root files are modified; workspace config is additive |
-| CI pipeline confusion | Low | Ensure CI runs `pnpm install` from root first |
+| Risk                              | Likelihood | Mitigation                                               |
+| --------------------------------- | ---------- | -------------------------------------------------------- |
+| pnpm workspace hoisting conflicts | Low        | Use `pnpm install` and check for resolution warnings     |
+| Root scripts break                | Very Low   | No root files are modified; workspace config is additive |
+| CI pipeline confusion             | Low        | Ensure CI runs `pnpm install` from root first            |
 
 ## Out of Scope
 
