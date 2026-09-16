@@ -1,0 +1,75 @@
+docs/architecture/agent-runtime.md
+  s_9e4736f8303047::t_04f2ef88a505ea 76-104,176-177
+docs/architecture/pull-requests.md
+  s_9e4736f8303047::t_f8da99853f4ee0 18-30
+electron-builder.yml
+  s_9e4736f8303047::t_64e1322a3caa81 12-13,79-80
+prompts/quick-actions/fetch-rebase.md
+  s_9e4736f8303047::t_0b5efba44114f4 3,8-11
+prompts/quick-actions/rename-branch.md
+  s_9e4736f8303047::t_a9f09d8bbd6557 8-10
+prompts/quick-actions/review.md
+  s_9e4736f8303047::t_eb2311c9b8a36e 8-12
+prompts/quick-actions/screenshots.md
+  s_9e4736f8303047::t_885866051b2fa3 8-13
+prompts/quick-actions/simplify.md
+  s_9e4736f8303047::t_051ee43682a320 8-10
+prompts/ratchet/dispatch.md
+  s_9e4736f8303047::t_e70349b4a60e5c 1-4,6-9,11,13-14,16-17
+scripts/electron-prompts.test.ts
+  s_9e4736f8303047::t_9ed7b0128185fe 1-69
+scripts/file-length-baseline.json
+  s_9e4736f8303047::t_2359d827782e58 18
+src/backend/orchestration/workspace-children.orchestrator.ts
+  s_9e4736f8303047::t_9427dbfa2179f9 59
+src/backend/orchestration/workspace-init-issue-prompts.test.ts
+  s_9e4736f8303047::t_c1ad7198f6df9c 74,81,92
+src/backend/prompts/branch-rename.ts
+  s_9e4736f8303047::t_b851a39ff9d8e6 4,50
+src/backend/prompts/markdown-loader.ts
+  s_9e4736f8303047::t_7b0c7e0687ef18 5
+src/backend/prompts/ratchet-dispatch.test.ts
+  s_9e4736f8303047::t_3c41e21b69af8a 22-41,53-73,77,81-82,86,92-95,100,119,125,132-133,144
+src/backend/prompts/ratchet-dispatch.ts
+  s_9e4736f8303047::t_7beca781e7ffb2 18-20,22-23,38,41,68,70,72,125,127,133
+src/backend/services/auto-iteration/service/prompts.ts
+  s_9e4736f8303047::t_7a021823a128a5 28-36,61,96,129,133,199
+src/backend/services/session/service/index.ts
+  s_9e4736f8303047::t_a2ec81fd3bb703 45
+src/backend/services/session/service/lifecycle/session-context.service.test.ts
+  s_9e4736f8303047::t_b6057b5a801092 34,45,69-73,75,83-94
+src/backend/services/session/service/lifecycle/session-context.service.ts
+  s_9e4736f8303047::t_2e0b8bf0637537 24
+src/backend/services/session/service/lifecycle/session-lifecycle-external-ports.test.ts
+  s_9e4736f8303047::t_e6684ac3d98db6 23
+src/backend/services/session/service/lifecycle/session.prompt-builder.test.ts
+  s_9e4736f8303047::t_6f5e60bce4be76 1-2
+src/backend/services/session/service/lifecycle/session.repository.test.ts
+  s_9e4736f8303047::t_96f44ffb821c9d 1,36,42
+src/backend/services/session/service/lifecycle/session.repository.ts
+  s_9e4736f8303047::t_67d13fdcb22141 1,6,36,43,54
+src/backend/trpc/workspace.trpc.ts
+  s_9e4736f8303047::t_37f112ea230f01 237
+src/client/features/kanban/issue-launch-sheet.test.tsx
+  s_9e4736f8303047::t_f72a2b7faae45a 341-343,365-367
+src/shared/issue-start-prompt.test.ts
+  s_9e4736f8303047::t_1f2c510f0df7db 102-108
+src/shared/issue-start-prompt.ts
+  s_9e4736f8303047::t_6f381757751f6c 52,68,70,72,74,77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e3e1a30730d6d6445341fc839c37a8565f1a50bf",
+  "prompts": {},
+  "sessions": {
+    "s_9e4736f8303047": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0ab22-06ee-76e2-beed-9404ec6f8eb0",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "martin-purplefish <martin@purplefish.com>"
+    }
+  }
+}
