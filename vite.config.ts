@@ -2,7 +2,7 @@ import { resolve } from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
-import { workerSafeAliases } from './scripts/vite-worker-aliases';
+import { workerSafeAliases } from './scripts/vite-worker-aliases.ts';
 
 // Backend URL is set by the CLI when running in development mode
 const backendUrl = process.env.BACKEND_URL || 'http://localhost:3000';

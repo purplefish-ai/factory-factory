@@ -9,10 +9,10 @@ ENV PNPM_HOME=/pnpm
 ENV PATH="${PNPM_HOME}/bin:${PNPM_HOME}:${PATH}"
 # Keep the pnpm version and release asset SHA-256 digests pinned together.
 # Use musl release archives on Alpine and verify before extraction.
-RUN PNPM_VERSION=12.3.4 \
+RUN PNPM_VERSION=12.4.2 \
   && case "$(uname -m)" in \
-       x86_64) PNPM_ARCH=x64; PNPM_SHA256=e4c4f54599627cc0646fbb2ea8103bd6c88634533fbd6c6f5ca0f6fe7d6f5d9c ;; \
-       aarch64) PNPM_ARCH=arm64; PNPM_SHA256=75c0b268cedbf9b57b69dcef576b9b307dd5b7650c1f967ac1b8f8d6afc1ca25 ;; \
+       x86_64) PNPM_ARCH=x64; PNPM_SHA256=5ac22f6d1da756482490a10b3be1b929a62fa1022a5b034b37856fab609cbd6c ;; \
+       aarch64) PNPM_ARCH=arm64; PNPM_SHA256=bf7597812c814030e759c20691dab88a1b271f495576fdbc4dae568458367105 ;; \
        *) echo "Unsupported pnpm architecture: $(uname -m)" >&2; exit 1 ;; \
      esac \
   && mkdir -p "${PNPM_HOME}" \

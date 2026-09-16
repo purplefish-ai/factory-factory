@@ -213,7 +213,7 @@ export class AutoIterationService {
     }
 
     // Wait for the previous loop to fully exit before starting a new one
-    if (loop.loopPromise) {
+    if (loop.loopPromise !== null) {
       const prevPromise = loop.loopPromise;
       await prevPromise;
       // Another resume() may have already restarted the loop while we awaited

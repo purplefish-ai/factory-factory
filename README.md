@@ -139,7 +139,7 @@ consider a VM or container when working with untrusted code.
 
 ## Development
 
-Use pnpm 12.3.4, pinned in `package.json`. Dependency build permissions live in
+Use pnpm 12.4.2, pinned in `package.json`. Dependency build permissions live in
 `pnpm-workspace.yaml` under `allowBuilds`; review new build scripts with
 `pnpm approve-builds` when adding or updating dependencies.
 

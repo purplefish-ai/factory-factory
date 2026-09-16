@@ -204,7 +204,7 @@ export class AcpRuntimeSupervisor {
 
   stopClient(sessionId: string): Promise<void> {
     const existingStop = this.stopOperations.get(sessionId);
-    if (existingStop) {
+    if (existingStop !== undefined) {
       logger.debug('ACP session stop already in progress', { sessionId });
       return existingStop;
     }
