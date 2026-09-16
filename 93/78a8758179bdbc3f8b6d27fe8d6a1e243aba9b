@@ -1,0 +1,25 @@
+docs/architecture/workspace-state.md
+  s_abc5d8e83263c5::t_b992748ac6f6a9 164-167
+src/backend/orchestration/workspace-archive.orchestrator.test.ts
+  s_abc5d8e83263c5::t_34b74c02bae7c9 13
+src/backend/orchestration/workspace-archive.orchestrator.ts
+  s_abc5d8e83263c5::t_18dc9fac5352e1 5,63-65
+src/backend/orchestration/workspace-runtime-cleanup-notification.test.ts
+  s_abc5d8e83263c5::t_ce5e0d8f2bc023 1-48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9378a8758179bdbc3f8b6d27fe8d6a1e243aba9b",
+  "prompts": {},
+  "sessions": {
+    "s_abc5d8e83263c5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0aa3d-0654-7a32-9673-7e1e42bf2976",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "martin-purplefish <martin@purplefish.com>"
+    }
+  }
+}
