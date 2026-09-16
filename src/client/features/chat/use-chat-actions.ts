@@ -4,12 +4,10 @@
  * This hook provides stable action callbacks for:
  * - Sending messages
  * - Stopping chat
- * - Clearing chat
  * - Approving permissions
  * - Answering questions
  * - Updating settings
  * - Removing queued messages
- * - Task notifications
  * - Rewind files operations
  */
 
@@ -66,14 +64,11 @@ export interface SendMessageOptions {
 export interface UseChatActionsReturn {
   sendMessage: (text: string, options?: SendMessageOptions) => void;
   stopChat: () => void;
-  clearChat: () => void;
   approvePermission: (requestId: string, allow: boolean, optionId?: string) => void;
   answerQuestion: (requestId: string, answers: Record<string, string | string[]>) => void;
   updateSettings: (settings: Partial<ChatSettings>) => void;
   removeQueuedMessage: (id: string) => void;
   resumeQueuedMessages: () => void;
-  dismissTaskNotification: (id: string) => void;
-  clearTaskNotifications: () => void;
   setConfigOption: (configId: string, value: string) => void;
   startRewindPreview: (userMessageUuid: string) => void;
   confirmRewind: () => void;
@@ -389,19 +384,6 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
     }
   }, [send, dispatch, stateRef]);
 
-  const clearChat = useCallback(() => {
-    // Stop any running provider session process
-    if (stateRef.current.sessionStatus.phase === 'running') {
-      dispatch({ type: 'STOP_REQUESTED' });
-      send({ type: 'stop' } as StopMessage);
-    }
-
-    // Clear state
-    dispatch({ type: 'CLEAR_CHAT' });
-
-    // The reconnect will be handled by the parent component that owns the transport
-  }, [send, dispatch, stateRef]);
-
   const approvePermission = useCallback(
     (requestId: string, allow: boolean, optionId?: string) => {
       // Validate requestId matches pending permission to prevent stale responses
@@ -491,17 +473,6 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
   const resumeQueuedMessages = useCallback(() => {
     send({ type: 'resume_queued_messages' } as ResumeQueuedMessagesInput);
   }, [send]);
-
-  const dismissTaskNotification = useCallback(
-    (id: string) => {
-      dispatch({ type: 'DISMISS_TASK_NOTIFICATION', payload: { id } });
-    },
-    [dispatch]
-  );
-
-  const clearTaskNotifications = useCallback(() => {
-    dispatch({ type: 'CLEAR_TASK_NOTIFICATIONS' });
-  }, [dispatch]);
 
   const setConfigOption = useCallback(
     (configId: string, value: string) => {
@@ -609,14 +580,11 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
   return {
     sendMessage,
     stopChat,
-    clearChat,
     approvePermission,
     answerQuestion,
     updateSettings,
     removeQueuedMessage,
     resumeQueuedMessages,
-    dismissTaskNotification,
-    clearTaskNotifications,
     setConfigOption,
     startRewindPreview,
     confirmRewind,

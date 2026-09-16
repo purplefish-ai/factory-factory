@@ -105,7 +105,6 @@ export interface UseChatWebSocketReturn {
   sendMessage: (text: string, options?: SendMessageOptions) => void;
   stopChat: () => void;
   restartSession: () => void;
-  clearChat: () => void;
   approvePermission: (requestId: string, allow: boolean, optionId?: string) => void;
   answerQuestion: (requestId: string, answers: Record<string, string | string[]>) => void;
   updateSettings: (settings: Partial<ChatSettings>) => void;
@@ -113,9 +112,6 @@ export interface UseChatWebSocketReturn {
   setInputAttachments: (attachments: MessageAttachment[]) => void;
   removeQueuedMessage: (id: string) => void;
   resumeQueuedMessages: () => void;
-  // Task notification actions
-  dismissTaskNotification: (id: string) => void;
-  clearTaskNotifications: () => void;
   // ACP config option action
   setConfigOption: (configId: string, value: string) => void;
   // Rewind files actions
@@ -359,7 +355,6 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     sendMessage: chat.sendMessage,
     stopChat: chat.stopChat,
     restartSession,
-    clearChat: chat.clearChat,
     approvePermission: chat.approvePermission,
     answerQuestion: chat.answerQuestion,
     updateSettings: chat.updateSettings,
@@ -367,8 +362,6 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     setInputAttachments: chat.setInputAttachments,
     removeQueuedMessage: chat.removeQueuedMessage,
     resumeQueuedMessages: chat.resumeQueuedMessages,
-    dismissTaskNotification: chat.dismissTaskNotification,
-    clearTaskNotifications: chat.clearTaskNotifications,
     setConfigOption: chat.setConfigOption,
     // Rewind files actions
     startRewindPreview: chat.startRewindPreview,
