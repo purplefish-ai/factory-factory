@@ -72,7 +72,7 @@ export class AcpRuntimeQuiescence {
 
   stopAndQuiesce(sessionId: string): Promise<void> {
     const existing = this.quiescenceOperations.get(sessionId);
-    if (existing) {
+    if (existing !== undefined) {
       return existing;
     }
 

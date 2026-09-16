@@ -61,9 +61,8 @@ export class CodexNotificationQueue {
     if (!itemKey) {
       const previousTurnBarrier = this.turnBarriersByThreadId.get(threadId);
       const itemBarriers = [...(this.itemBarriersByThreadId.get(threadId) ?? [])];
-      const dependencies = previousTurnBarrier
-        ? [previousTurnBarrier, ...itemBarriers]
-        : itemBarriers;
+      const dependencies =
+        previousTurnBarrier !== undefined ? [previousTurnBarrier, ...itemBarriers] : itemBarriers;
       const turnBarrier =
         dependencies.length > 0
           ? Promise.all(dependencies).then(() => processSafely())

@@ -248,7 +248,7 @@ export class WorkspaceGitStateService {
     }
 
     const existing = this.inFlight.get(key);
-    if (existing) {
+    if (existing !== undefined) {
       return existing;
     }
 

@@ -69,7 +69,7 @@ class FixerSessionService {
   async acquireAndDispatch(input: AcquireAndDispatchInput): Promise<AcquireAndDispatchResult> {
     const key = `${input.workspaceId}:${input.workflow}`;
     const pending = this.pendingAcquisitions.get(key);
-    if (pending) {
+    if (pending !== undefined) {
       logger.debug('Fixer acquisition already in progress', {
         workspaceId: input.workspaceId,
         workflow: input.workflow,

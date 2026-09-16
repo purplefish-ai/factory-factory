@@ -150,7 +150,7 @@ class GitHubCLIService {
 
     const key = args.join('\0');
     const existing = this.inflight.get(key);
-    if (existing) {
+    if (existing !== undefined) {
       return existing;
     }
 

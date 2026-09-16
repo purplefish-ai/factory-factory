@@ -64,14 +64,14 @@ The ACP layer is import-fenced by dependency-cruiser (`acp-no-external-imports`,
 `session-runtime-import-boundary`). The Codex app-server schemas are generated —
 run `pnpm codex:schema:generate` and check drift with `pnpm check:codex-schema`.
 
-### Claude SDK dependency override
+### Claude SDK dependency
 
-Claude ACP 0.75.1 pins Claude Agent SDK 0.3.257. `pnpm-workspace.yaml` scopes an
-override to SDK 0.3.266 for upstream permission-handling fixes. Remove the
-override when ACP adopts an equal or newer SDK. The upgrade was checked against
-ACP's offline turn/cancellation, session options, resume, and file audit suites,
-including coalesced results stamped with the last user UUID and the new UUID
-array. These checks do not exercise live model streaming or prompt persistence.
+Claude ACP 0.78.0 pins Claude Agent SDK 0.3.270, which includes the upstream
+permission-handling fixes previously supplied by our scoped SDK override. The
+override is no longer needed. Offline ACP tests cover turn/cancellation, session
+options, resume, and file audit behavior, including coalesced results stamped
+with the last user UUID and the new UUID array. These checks do not exercise
+live model streaming or prompt persistence.
 
 ### Session prompts
 

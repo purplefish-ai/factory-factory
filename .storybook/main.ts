@@ -2,7 +2,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { StorybookConfig } from '@storybook/react-vite';
 import tailwindcss from '@tailwindcss/vite';
-import { workerSafeAliases } from '../scripts/vite-worker-aliases';
+import { workerSafeAliases } from '../scripts/vite-worker-aliases.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
