@@ -142,9 +142,8 @@ vi.mock('./workspace-detail-chat-content', () => ({
     createElement('section', { ref: props.viewportRef, 'data-testid': 'parent-chat' }, 'Chat'),
 }));
 
-vi.mock('./workspace-overlays', () => ({
-  ArchivingOverlay: () => createElement('div', null, 'Archiving'),
-  ScriptFailedBanner: () => createElement('div', null, 'Script failed'),
+vi.mock('./use-retry-workspace-init', () => ({
+  useRetryWorkspaceInit: () => ({ retry: vi.fn(), retryInit: { isPending: false } }),
 }));
 
 function createMutationLike() {
@@ -299,7 +298,7 @@ describe('WorkspaceDetailView', () => {
 
     const { container, root } = renderView(props);
 
-    expect(container.textContent).not.toContain('Script failed');
+    expect(container.textContent).not.toContain('Init script failed');
 
     root.unmount();
   });
@@ -312,10 +311,38 @@ describe('WorkspaceDetailView', () => {
 
     const { container, root } = renderView(props);
 
-    expect(container.textContent).toContain('Script failed');
+    expect(container.textContent).toContain('Init script failed');
 
     root.unmount();
   });
+
+  it.each([false, true])(
+    'exposes manual dispatch only when required (showPlay: %s)',
+    async (showPlay) => {
+      const props = createViewProps(0);
+      const initStatus = createInitStatus(!showPlay);
+      initStatus.status = showPlay ? 'FAILED' : 'READY';
+      initStatus.chatBanner!.showPlay = showPlay;
+      props.workspaceState.isScriptFailed = true;
+      props.workspaceState.workspaceInitStatus = initStatus;
+      props.chat.resumeQueuedMessages = vi.fn();
+      const { container, root } = renderView(props);
+      try {
+        const dispatch = Array.from(container.querySelectorAll('button')).find((button) =>
+          button.textContent?.includes('Dispatch queued messages')
+        );
+        if (showPlay) {
+          expect(dispatch).toBeDefined();
+          await act(() => dispatch!.click());
+          expect(props.chat.resumeQueuedMessages).toHaveBeenCalledOnce();
+        } else {
+          expect(dispatch).toBeUndefined();
+        }
+      } finally {
+        await act(() => root.unmount());
+      }
+    }
+  );
 
   it('clears screenshot loading when session creation fails', async () => {
     let rejectSessionCreation: ((error: Error) => void) | undefined;

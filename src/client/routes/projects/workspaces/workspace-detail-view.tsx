@@ -92,12 +92,14 @@ function ScriptBanner({
   workspaceInitStatus,
   setupWarningDismissed,
   dismissSetupWarning,
+  resumeQueuedMessages,
 }: {
   workspaceId: string;
   isScriptFailed: boolean;
   workspaceInitStatus: WorkspaceStateProps['workspaceInitStatus'];
   setupWarningDismissed: boolean | null;
   dismissSetupWarning: () => void;
+  resumeQueuedMessages: ChatContentProps['resumeQueuedMessages'];
 }) {
   const visibleBanner = getVisibleInitBanner(
     workspaceInitStatus?.chatBanner,
@@ -110,6 +112,8 @@ function ScriptBanner({
         initErrorMessage={workspaceInitStatus?.initErrorMessage ?? null}
         initOutput={workspaceInitStatus?.initOutput ?? null}
         hasStartupScript={workspaceInitStatus?.hasStartupScript ?? false}
+        showPlay={visibleBanner.showPlay}
+        onPlay={resumeQueuedMessages}
         showDismiss={visibleBanner.showDismiss}
         onDismiss={dismissSetupWarning}
       />
@@ -236,6 +240,7 @@ export function WorkspaceDetailView({
         workspaceInitStatus={workspaceState.workspaceInitStatus}
         setupWarningDismissed={workspaceState.setupWarningDismissed}
         dismissSetupWarning={workspaceState.dismissSetupWarning}
+        resumeQueuedMessages={chat.resumeQueuedMessages}
       />
 
       <AutoIterationProgressBanner
