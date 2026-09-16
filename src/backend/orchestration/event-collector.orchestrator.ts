@@ -297,7 +297,7 @@ class EventCollectorState {
   readonly logger: Logger;
   activeCoalescer: EventCoalescer | null = null;
   lastIdlePrRefreshByWorkspace = new Map<string, number>();
-  linearMergeCompletions = new Map<string, { prIdentity: string }>();
+  linearMergeCompletions = new Map<string, Pick<PRSnapshotUpdatedEvent, 'prNumber' | 'prUrl'>>();
   teardownListeners: Array<() => void> = [];
   ratchetProjection: RatchetProjectionWorker | null = null;
 
@@ -444,12 +444,17 @@ function buildWorkspaceStateChangeFields(event: WorkspaceStateChangedEvent): Sna
 async function handleLinearIssueCompletedOnMerge(
   state: EventCollectorState,
   workspaceId: string,
-  prIdentity: string
+  prIdentity: Pick<PRSnapshotUpdatedEvent, 'prNumber' | 'prUrl'>
 ): Promise<void> {
-  if (state.linearMergeCompletions.get(workspaceId)?.prIdentity === prIdentity) {
+  const previous = state.linearMergeCompletions.get(workspaceId);
+  if (
+    previous?.prNumber === prIdentity.prNumber &&
+    (!(previous.prUrl && prIdentity.prUrl) || previous.prUrl === prIdentity.prUrl)
+  ) {
+    previous.prUrl ??= prIdentity.prUrl;
     return;
   }
-  const attempt = { prIdentity };
+  const attempt = { ...prIdentity };
   state.linearMergeCompletions.set(workspaceId, attempt);
   let completed = false;
   try {
@@ -602,7 +607,12 @@ function startEventCollectorWithState(state: EventCollectorState): void {
       event.workspaceId
     );
     const shouldRefreshRatchet = shouldRefreshRatchetForPrSwitch(previousSnapshot, event);
-    const prIdentity = JSON.stringify([event.prNumber, event.prUrl ?? previousSnapshot?.prUrl]);
+    const prIdentity = {
+      prNumber: event.prNumber,
+      prUrl:
+        event.prUrl ??
+        (previousSnapshot?.prNumber === event.prNumber ? previousSnapshot.prUrl : undefined),
+    };
     const snapshotUpdate: SnapshotUpdateInput = {
       ...(event.prUrl !== undefined ? { prUrl: event.prUrl } : {}),
       prNumber: event.prNumber,

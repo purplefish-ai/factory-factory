@@ -5,7 +5,7 @@ import { deriveWorkspaceFlowState, WorkspaceSnapshotStore } from '@/backend/serv
 import { deriveWorkspaceSidebarStatus } from '@/shared/core';
 import { createEventCollectorOrchestrator } from './event-collector.orchestrator';
 
-function createHarness(prState: 'OPEN' | 'MERGED' = 'OPEN') {
+function createHarness(prState: 'OPEN' | 'MERGED' | null = 'OPEN') {
   const store = new WorkspaceSnapshotStore();
   store.configure({
     deriveFlowState: (input) =>
@@ -15,18 +15,20 @@ function createHarness(prState: 'OPEN' | 'MERGED' = 'OPEN') {
       }),
     deriveSidebarStatus: deriveWorkspaceSidebarStatus,
   });
-  store.upsert(
-    'ws-1',
-    {
-      projectId: 'project-1',
-      status: 'READY',
-      prState,
-      prNumber: 7,
-      prUrl: 'https://github.com/org/repo/pull/7',
-    },
-    'reconciliation',
-    1
-  );
+  if (prState) {
+    store.upsert(
+      'ws-1',
+      {
+        projectId: 'project-1',
+        status: 'READY',
+        prState,
+        prNumber: 7,
+        prUrl: 'https://github.com/org/repo/pull/7',
+      },
+      'reconciliation',
+      1
+    );
+  }
   const prSnapshotService = new EventEmitter();
   const markIssueCompleted = vi.fn().mockResolvedValue(true);
   const getWorkspaceLinearContext = vi
@@ -50,19 +52,65 @@ function createHarness(prState: 'OPEN' | 'MERGED' = 'OPEN') {
     workspaceSnapshotStore: store,
   } as never);
   collector.start();
-  const emitMerge = (prNumber = 7) =>
+  const emitMerge = (
+    prNumber = 7,
+    prUrl: string | null = `https://github.com/org/repo/pull/${prNumber}`
+  ) =>
     prSnapshotService.emit(PR_SNAPSHOT_UPDATED, {
       workspaceId: 'ws-1',
       prNumber,
       prState: 'MERGED',
       prCiStatus: 'SUCCESS',
       prReviewState: null,
-      prUrl: `https://github.com/org/repo/pull/${prNumber}`,
+      ...(prUrl === null ? {} : { prUrl }),
     });
   return { collector, emitMerge, markIssueCompleted, getWorkspaceLinearContext };
 }
 
 describe('Linear completion on PR merge', () => {
+  it.each([false, true])(
+    'deduplicates unseeded ratchet and poller events (settled: %s)',
+    async (settled) => {
+      const { collector, emitMerge, markIssueCompleted } = createHarness(null);
+      try {
+        emitMerge(7, null);
+        if (settled) {
+          await vi.waitFor(() => expect(markIssueCompleted).toHaveBeenCalledTimes(1));
+        }
+        emitMerge();
+        await Promise.resolve();
+        expect(markIssueCompleted).toHaveBeenCalledExactlyOnceWith('test-key', 'issue-1');
+      } finally {
+        collector.stop();
+      }
+    }
+  );
+
+  it('distinguishes same-numbered PRs after learning an initially missing URL', async () => {
+    const { collector, emitMerge, markIssueCompleted } = createHarness(null);
+    try {
+      emitMerge(7, null);
+      emitMerge();
+      emitMerge(7, 'https://github.com/org/other/pull/7');
+      await Promise.resolve();
+      expect(markIssueCompleted).toHaveBeenCalledTimes(2);
+    } finally {
+      collector.stop();
+    }
+  });
+
+  it('distinguishes a newly linked same-numbered PR from a seeded ratchet completion', async () => {
+    const { collector, emitMerge, markIssueCompleted } = createHarness();
+    try {
+      emitMerge(7, null);
+      emitMerge(7, 'https://github.com/org/other/pull/7');
+      await Promise.resolve();
+      expect(markIssueCompleted).toHaveBeenCalledTimes(2);
+    } finally {
+      collector.stop();
+    }
+  });
+
   it('completes the linked issue once across repeated merged snapshots', async () => {
     const { collector, emitMerge, markIssueCompleted } = createHarness();
     try {
