@@ -1,0 +1,37 @@
+docs/architecture/diff-rendering.md
+  s_abc5d8e83263c5::t_f2aa7c49fddc99 21-37,41-47,53
+docs/superpowers/plans/2026-09-16-diff-scroll-ownership.md
+  s_abc5d8e83263c5::t_43f758c6718094 1-47
+src/client/features/workspace/diff-lines.stories.tsx
+  s_abc5d8e83263c5::t_74d268670e3c69 52,58-63,109-115
+src/client/features/workspace/diff-lines.test.tsx
+  s_abc5d8e83263c5::t_212428d6723428 256-419
+src/client/features/workspace/diff-lines.tsx
+  s_abc5d8e83263c5::t_23f9398836d54c 94
+src/client/features/workspace/diff-scroll-controller.test.ts
+  s_abc5d8e83263c5::t_a8cc2e1475c31e 1-64
+src/client/features/workspace/diff-scroll-controller.ts
+  s_abc5d8e83263c5::t_553b812c9bd89f 1-136
+src/client/features/workspace/diff-scroll-position.ts
+  s_abc5d8e83263c5::t_9361c18e0ff24f 1-106
+src/client/features/workspace/diff-viewer.test.tsx
+  s_abc5d8e83263c5::t_1bcb5e4ac3e483 43,46-53,85
+src/client/features/workspace/use-diff-scroll.ts
+  s_abc5d8e83263c5::t_ae08978aaee3d4 1,4,14,23-39,46-53,55-59,63-68,74-76,80,82-83,85-88,91
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bf2bf571ff86c4359da04e0b3b66eb09c10ca6a1",
+  "prompts": {},
+  "sessions": {
+    "s_abc5d8e83263c5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0aa3d-0654-7a32-9673-7e1e42bf2976",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "martin-purplefish <martin@purplefish.com>"
+    }
+  }
+}
