@@ -62,9 +62,9 @@ const WorkspaceProviderSelection = z.enum(enumValues(CoreWorkspaceProviderSelect
 const exportedProjectSchema = z.object({
   id: z.string(),
   name: z.string(),
-  slug: z.string(),
+  slug: z.string().min(1),
   repoPath: z.string(),
-  worktreeBasePath: z.string(),
+  worktreeBasePath: z.string().min(1),
   defaultBranch: z.string(),
   githubOwner: z.string().nullable(),
   githubRepo: z.string().nullable(),

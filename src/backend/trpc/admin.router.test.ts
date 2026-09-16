@@ -48,8 +48,9 @@ vi.mock('./log-file-reader', () => ({
 }));
 
 import { adminRouter } from './admin.trpc';
+import type { Context } from './trpc';
 
-function createCaller() {
+function createCaller(requestTrust?: Context['requestTrust']) {
   const rateLimiter = {
     getApiUsageStats: vi.fn(() => ({
       requestsLastMinute: 2,
@@ -124,6 +125,7 @@ function createCaller() {
   };
 
   const caller = adminRouter.createCaller({
+    requestTrust,
     appContext: {
       services: {
         configService: {
@@ -131,6 +133,7 @@ function createCaller() {
             nodeEnv: 'test',
           }),
           getAppVersion: () => '0.3.6',
+          getCorsConfig: () => ({ allowedOrigins: ['http://localhost:3000'] }),
         },
         serverInstanceService: {
           getPort: () => 3111,
@@ -508,5 +511,39 @@ describe('adminRouter', () => {
 
     mockStat.mockRejectedValueOnce(new Error('missing'));
     await expect(caller.downloadLogFile()).resolves.toBe('');
+  });
+});
+
+describe('backup import trust boundary', () => {
+  const input = {
+    meta: { exportedAt: '2026-09-16T00:00:00.000Z', version: '0.4.8', schemaVersion: 4 as const },
+    data: {
+      projects: [],
+      workspaces: [],
+      agentSessions: [],
+      terminalSessions: [],
+      userSettings: null,
+    },
+  };
+
+  it.each([
+    { remoteAddress: '203.0.113.10', isLocal: false },
+    { remoteAddress: '127.0.0.1', isLocal: true, origin: 'https://untrusted.example' },
+  ])('rejects import from an untrusted request: %j', async (trust) => {
+    const { caller } = createCaller(trust);
+    mockImportData.mockClear();
+    await expect(caller.importData(input)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(mockImportData).not.toHaveBeenCalled();
+  });
+
+  it('allows import from a trusted local client', async () => {
+    const { caller } = createCaller({
+      remoteAddress: '127.0.0.1',
+      isLocal: true,
+      origin: 'http://localhost:3000',
+    });
+    mockImportData.mockResolvedValue({ imported: 0 });
+    await expect(caller.importData(input)).resolves.toMatchObject({ success: true });
+    expect(mockImportData).toHaveBeenCalledWith(input);
   });
 });

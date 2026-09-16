@@ -11,7 +11,7 @@ import { z } from 'zod';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 import { buildAgentProcesses, mergeAgentSessions } from './admin-active-processes';
 import { readFilteredLogEntriesPage } from './log-file-reader';
-import { type Context, publicProcedure, router } from './trpc';
+import { type Context, publicProcedure, router, trustedLocalProcedure } from './trpc';
 
 const loggerName = 'admin-trpc';
 
@@ -283,7 +283,7 @@ export const adminRouter = router({
    * Skips records that already exist (by ID).
    * Returns counts of imported/skipped records.
    */
-  importData: publicProcedure.input(exportDataSchema).mutation(async ({ ctx, input }) => {
+  importData: trustedLocalProcedure.input(exportDataSchema).mutation(async ({ ctx, input }) => {
     const results = await ctx.appContext.services.dataBackupService.importData(input);
     return {
       success: true,
