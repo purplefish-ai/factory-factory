@@ -32,6 +32,10 @@ handlers. Soft cancellation (including voice stop and prompt timeout) resolves
 pending permission requests with a cancelled outcome, dismisses their prompts,
 and keeps the bridge available for later turns.
 
+Approving a Codex plan queues the automatic approval turn with the same
+plan-disabled settings persisted for the session, preventing that turn from
+re-entering plan mode.
+
 Session stop history is durable: `SessionLifecycleEvent` rows are append-only,
 deduplicated by session/attempt key, merged chronologically with provider
 history, and rendered as structured chat rows after reconnect or restart.
