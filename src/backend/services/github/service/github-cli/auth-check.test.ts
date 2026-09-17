@@ -7,6 +7,7 @@ vi.mock('@/backend/lib/shell', () => ({
 }));
 
 import { checkGithubAuth } from './auth-check';
+import { GH_TIMEOUT_MS } from './constants';
 
 describe('checkGithubAuth', () => {
   beforeEach(() => {
@@ -23,6 +24,20 @@ describe('checkGithubAuth', () => {
     await expect(checkGithubAuth()).resolves.toEqual({
       authenticated: true,
       user: 'octocat',
+    });
+  });
+
+  it('bounds the auth status check with the health-check timeout', async () => {
+    mockExecCommand.mockResolvedValue({
+      code: 0,
+      stdout: '',
+      stderr: 'Logged in to github.com account octocat\n',
+    });
+
+    await checkGithubAuth();
+
+    expect(mockExecCommand).toHaveBeenCalledWith('gh', ['auth', 'status'], {
+      timeout: GH_TIMEOUT_MS.healthAuth,
     });
   });
 

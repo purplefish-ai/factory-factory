@@ -1,5 +1,5 @@
 import { execCommand } from '@/backend/lib/shell';
-import { ghExecLimit } from './constants';
+import { GH_TIMEOUT_MS, ghExecLimit } from './constants';
 
 export interface AuthCheckResult {
   authenticated: boolean;
@@ -13,7 +13,9 @@ export interface AuthCheckResult {
  */
 export async function checkGithubAuth(): Promise<AuthCheckResult> {
   try {
-    const result = await ghExecLimit(() => execCommand('gh', ['auth', 'status']));
+    const result = await ghExecLimit(() =>
+      execCommand('gh', ['auth', 'status'], { timeout: GH_TIMEOUT_MS.healthAuth })
+    );
     // gh auth status writes to stderr on success
     const output = result.stderr || result.stdout;
 
