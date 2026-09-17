@@ -2,7 +2,11 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { useRef, useState } from 'react';
 import { fn } from 'storybook/test';
 import type { UseChatWebSocketReturn } from '@/client/features/chat';
-import { DEFAULT_CHAT_SETTINGS, type QueuedMessage } from '@/lib/chat-protocol';
+import {
+  DEFAULT_CHAT_SETTINGS,
+  type MessageAttachment,
+  type QueuedMessage,
+} from '@/lib/chat-protocol';
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { QuickChatContent } from './quick-chat-content';
 
@@ -27,7 +31,19 @@ export const QueuedMessageCancellation: Story = {
         settings: DEFAULT_CHAT_SETTINGS,
       },
     ]);
+    const [inputAttachments, setInputAttachments] = useState<MessageAttachment[]>([
+      {
+        id: 'notes',
+        name: 'notes.txt',
+        type: 'text/plain',
+        size: 5,
+        data: 'notes',
+        contentType: 'text',
+      },
+    ]);
     const chatState = {
+      inputAttachments,
+      setInputAttachments,
       messages: queuedMessages.map((message, order) => ({
         ...message,
         order,

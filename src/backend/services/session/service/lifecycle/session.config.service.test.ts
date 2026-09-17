@@ -988,7 +988,7 @@ describe('SessionConfigService', () => {
     async (workflow) => {
       vi.mocked(userSettingsService.get).mockResolvedValue(
         unsafeCoerce({
-          ratchetPermissions: 'RELAXED',
+          ratchetPermissions: workflow === 'default' ? 'STRICT' : 'RELAXED',
           defaultWorkspacePermissions: workflow === 'default' ? 'RELAXED' : 'STRICT',
         })
       );

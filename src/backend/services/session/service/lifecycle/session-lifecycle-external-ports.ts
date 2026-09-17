@@ -7,7 +7,16 @@ import { SessionContextService } from './session-context.service';
 import type { SessionAcpEnvironmentPort } from './session-lifecycle.types';
 import { getWorkflowPermissionPreset } from './session-workflow-permissions';
 
-const ALL_INTERFACES_HOSTS = new Set(['0.0.0.0', '::', '::0', '0:0:0:0:0:0:0:0']);
+function isWildcardHost(host: string): boolean {
+  if (host === '0.0.0.0') {
+    return true;
+  }
+  if (!host.includes(':')) {
+    return false;
+  }
+  const urlHost = host.startsWith('[') ? host : `[${host}]`;
+  return URL.canParse(`http://${urlHost}`) && new URL(`http://${urlHost}`).hostname === '[::]';
+}
 
 export const sessionContextService = new SessionContextService({
   repository: sessionRepository,
@@ -24,7 +33,7 @@ const getBackendPort = (): number =>
 
 function getBackendBaseUrl(): string {
   const host = configService.getBackendHost() ?? 'localhost';
-  const connectHost = ALL_INTERFACES_HOSTS.has(host) ? 'localhost' : host;
+  const connectHost = isWildcardHost(host) ? 'localhost' : host;
   const urlHost =
     connectHost.includes(':') && !connectHost.startsWith('[') ? `[${connectHost}]` : connectHost;
   return `http://${urlHost}:${getBackendPort()}`;

@@ -197,3 +197,10 @@ export const InteractivePasteDrop: Story = {
     );
   },
 };
+
+export const RuntimeError: Story = {
+  args: {
+    onSend: onSendAction,
+    placeholder: 'Agent encountered an error. Type a message to retry...',
+  },
+};

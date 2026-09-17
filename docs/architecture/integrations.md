@@ -19,11 +19,15 @@ check through both the aggregate CLI cache and GitHub's own cache. Forced checks
 wait for older refreshes before rechecking so pre-login results cannot overwrite
 the new status displayed in the UI.
 
+Cache clearing also supersedes in-flight checks, so late pre-upgrade results
+cannot replace the post-upgrade status.
+
 ## Linear
 
 A per-project issue provider can be set to Linear with an encrypted API key plus
 team selection. Kanban intake uses Linear issues assigned to the configured
-viewer. Starting from an issue creates a linked workspace (`linearIssueId`,
+viewer. Team selection loads every page of accessible Linear teams. Starting
+from an issue creates a linked workspace (`linearIssueId`,
 `linearIssueIdentifier`, `linearIssueUrl`), and workspace lifecycle events
 best-effort sync issue state back to Linear. PR merge completion suppresses
 concurrent attempts and successful repeats for the same PR during a collector

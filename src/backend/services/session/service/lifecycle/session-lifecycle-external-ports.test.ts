@@ -47,6 +47,20 @@ describe('session lifecycle external ports', () => {
     }
   );
 
+  it.each([
+    ['::1', 'http://[::1]:3002'],
+    ['[::1]', 'http://[::1]:3002'],
+    ['2001:db8::1', 'http://[2001:db8::1]:3002'],
+    ['backend.local', 'http://backend.local:3002'],
+  ])('preserves explicit connect host %s', (host, expectedUrl) => {
+    vi.mocked(configService.getBackendHost).mockReturnValueOnce(host);
+    const mcpServers = sessionAcpEnvironment.getMcpServers({
+      workspaceId: 'workspace-1',
+      parentWorkspaceId: null,
+    });
+    expect(mcpServers?.[0]?.env).toMatchObject({ FF_API_BASE_URL: expectedUrl });
+  });
+
   it('uses the configured host and runtime-bound port for child-workspace MCP requests', () => {
     const mcpServers = sessionAcpEnvironment.getMcpServers({
       workspaceId: 'workspace-1',
@@ -58,7 +72,7 @@ describe('session lifecycle external ports', () => {
     });
   });
 
-  it.each(['0.0.0.0', '::', '::0', '0:0:0:0:0:0:0:0'])(
+  it.each(['0.0.0.0', '::', '::0', '0:0:0:0:0:0:0:0', '0::', '0:0::', '::0:0', '0000::', '[0::]'])(
     'uses localhost as the MCP destination when binding to wildcard host %s',
     (host) => {
       vi.mocked(configService.getBackendHost).mockReturnValueOnce(host);
