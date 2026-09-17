@@ -2,6 +2,8 @@
 // Public API for the GitHub domain module.
 // Consumers should import from '@/backend/services/github' only.
 
+// --- GitHub CLI auth check ---
+export { type AuthCheckResult, checkGithubAuth } from './github-cli/auth-check';
 // --- Adversarial-review code review posting ---
 export {
   type CodeReviewComment,

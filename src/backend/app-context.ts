@@ -39,7 +39,12 @@ import { autoIterationService, insightsService, logbookService } from './service
 import { configService } from './services/config.service';
 import { cryptoService } from './services/crypto.service';
 import { decisionLogService } from './services/decision-log';
-import { githubCLIService, prFetchCoordinator, prSnapshotService } from './services/github';
+import {
+  checkGithubAuth,
+  githubCLIService,
+  prFetchCoordinator,
+  prSnapshotService,
+} from './services/github';
 import { linearClientService, linearStateSyncService } from './services/linear';
 import { createLogger, getLogFilePath } from './services/logger.service';
 import { periodicTaskService } from './services/periodic-task';
@@ -107,6 +112,7 @@ import { workspaceGitStateService } from './services/workspace-git-state.service
 export type ApplicationServices = BridgeServices & {
   acpRuntimeManager: typeof acpRuntimeManager;
   acpTraceLogger: AcpTraceLogger;
+  checkGithubAuth: typeof checkGithubAuth;
   cliHealthService: typeof cliHealthService;
   configService: typeof configService;
   cryptoService: typeof cryptoService;
@@ -209,6 +215,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     autoIterationService,
     chatEventForwarderService,
     chatMessageHandlerService,
+    checkGithubAuth,
     cliHealthService,
     configService,
     computePendingRequestType,

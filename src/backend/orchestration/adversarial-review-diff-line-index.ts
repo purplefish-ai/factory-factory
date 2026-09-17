@@ -5,8 +5,8 @@
  * unmodified line it read for context but that isn't part of this diff.
  */
 
-const NEW_FILE_HEADER_PATTERN = /^\+\+\+ (?:b\/(.+)|\/dev\/null)$/;
-const OLD_FILE_HEADER_PATTERN = /^--- (?:a\/(.+)|\/dev\/null)$/;
+const NEW_FILE_HEADER_PATTERN = /^\+\+\+ (?:b\/(.+?)(?:\t.*)?|\/dev\/null(?:\t.*)?)$/;
+const OLD_FILE_HEADER_PATTERN = /^--- (?:a\/(.+?)(?:\t.*)?|\/dev\/null(?:\t.*)?)$/;
 const HUNK_HEADER_PATTERN = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
 const CONTENT_LINE_MARKERS = new Set(['+', '-', ' ', '\\']);
 

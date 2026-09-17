@@ -80,6 +80,7 @@ vi.mock('@/backend/services/config.service', () => ({ configService: {} }));
 vi.mock('@/backend/services/crypto.service', () => ({ cryptoService: {} }));
 vi.mock('@/backend/services/decision-log', () => ({ decisionLogService: {} }));
 vi.mock('@/backend/services/github', () => ({
+  checkGithubAuth: vi.fn(),
   githubCLIService: {},
   prFetchCoordinator: {},
   prSnapshotService: {},
@@ -213,7 +214,12 @@ import {
 import { configService } from '@/backend/services/config.service';
 import { cryptoService } from '@/backend/services/crypto.service';
 import { decisionLogService } from '@/backend/services/decision-log';
-import { githubCLIService, prFetchCoordinator, prSnapshotService } from '@/backend/services/github';
+import {
+  checkGithubAuth,
+  githubCLIService,
+  prFetchCoordinator,
+  prSnapshotService,
+} from '@/backend/services/github';
 import { JobRunner } from '@/backend/services/job-runner.service';
 import { linearClientService, linearStateSyncService } from '@/backend/services/linear';
 import { createLogger, getLogFilePath } from '@/backend/services/logger.service';
@@ -347,6 +353,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     archiveWorkspace,
     chatEventForwarderService: graphChatEventForwarderService,
     chatMessageHandlerService,
+    checkGithubAuth,
     cleanupWorkspaceRuntimeResources,
     cleanupWorkspaceScopedCaches: (workspaceId: string) =>
       graphEventCollector?.removeWorkspace(workspaceId),
