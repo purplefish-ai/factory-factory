@@ -1,5 +1,9 @@
 # Agent Runtime
 
+Rejected or failed messages restore their text and attachments only when the
+current session composer is empty. A newer draft or attachment selection is
+preserved, and clearing it later does not replay the earlier recovery.
+
 ## ACP runtime
 
 All agent sessions use the Agent Client Protocol (ACP) via
