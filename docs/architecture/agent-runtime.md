@@ -1,5 +1,9 @@
 # Agent Runtime
 
+Rejected or failed messages restore their text and attachments only when the
+current session composer is empty. A newer draft or attachment selection is
+preserved, and clearing it later does not replay the earlier recovery.
+
 ## ACP runtime
 
 All agent sessions use the Agent Client Protocol (ACP) via
@@ -28,6 +32,10 @@ handlers. Soft cancellation (including voice stop and prompt timeout) resolves
 pending permission requests with a cancelled outcome, dismisses their prompts,
 and keeps the bridge available for later turns.
 
+Approving a Codex plan queues the automatic approval turn with the same
+plan-disabled settings persisted for the session, preventing that turn from
+re-entering plan mode.
+
 Session stop history is durable: `SessionLifecycleEvent` rows are append-only,
 deduplicated by session/attempt key, merged chronologically with provider
 history, and rendered as structured chat rows after reconnect or restart.
@@ -46,6 +54,9 @@ Normal user turns have a fixed four-hour deadline; auto-iteration keeps its
 separate configured deadline. Explicit stops, closes, workspace archives,
 provider failures, prompt timeouts, and unexpected process exits record distinct
 typed reasons.
+
+The chat composer uses generic retry wording for runtime errors; the banner
+provides the specific startup, prompt, or process-exit error.
 
 Admin Claude model options come from an ephemeral, non-persisted Claude ACP
 session with tools disabled; discovery failure falls back to static aliases.
@@ -155,6 +166,10 @@ A parent workspace can spawn child workspaces (in any project) via MCP tools
 exposed to the agent (`spawn_child_workspace`, `send_message_to_child`,
 `archive_child_workspace`, `list_projects`). Children report back via
 `send_message_to_parent`.
+
+Child-workspace MCP requests connect to localhost when the backend binds to an
+IPv4 or IPv6 wildcard, including equivalent compressed IPv6 spellings. Explicit
+bind addresses remain the connection destination.
 
 Messages are persisted first as `WorkspaceNotification` rows, then delivered
 live to active sessions when available; undelivered rows are delivered at the

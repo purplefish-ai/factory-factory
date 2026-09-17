@@ -145,6 +145,55 @@ describe('useChatState rejected message recovery', () => {
     harness.cleanup();
   });
 
+  it.each([MessageState.REJECTED, MessageState.FAILED])(
+    'preserves a new draft when an earlier message becomes %s',
+    async (newState) => {
+      const harness = renderChatState('session-A');
+      await flushEffects();
+      try {
+        flushSync(() => harness.chatRef.current?.sendMessage('earlier message'));
+        const messageId = getSentMessageId(harness.send);
+        flushSync(() => harness.chatRef.current?.setInputDraft('new draft'));
+        flushSync(() =>
+          harness.chatRef.current?.dispatch({
+            type: 'MESSAGE_STATE_CHANGED',
+            payload: { id: messageId, newState, errorMessage: 'Failed' },
+          })
+        );
+        await flushEffects();
+        expect(harness.chatRef.current?.inputDraft).toBe('new draft');
+        expect(harness.chatRef.current?.lastRejectedMessage).toBeNull();
+        flushSync(() => harness.chatRef.current?.setInputDraft(''));
+        await flushEffects();
+        expect(harness.chatRef.current?.inputDraft).toBe('');
+      } finally {
+        harness.cleanup();
+      }
+    }
+  );
+
+  it('preserves an attachment-only draft when an earlier message is rejected', async () => {
+    const harness = renderChatState('session-A');
+    await flushEffects();
+    try {
+      flushSync(() => harness.chatRef.current?.sendMessage('earlier message'));
+      const messageId = getSentMessageId(harness.send);
+      flushSync(() => harness.chatRef.current?.setInputAttachments([createAttachment()]));
+      flushSync(() =>
+        harness.chatRef.current?.dispatch({
+          type: 'MESSAGE_STATE_CHANGED',
+          payload: { id: messageId, newState: MessageState.REJECTED, errorMessage: 'Rejected' },
+        })
+      );
+      await flushEffects();
+      expect(harness.chatRef.current?.inputDraft).toBe('');
+      expect(harness.chatRef.current?.inputAttachments).toEqual([createAttachment()]);
+      expect(harness.chatRef.current?.lastRejectedMessage).toBeNull();
+    } finally {
+      harness.cleanup();
+    }
+  });
+
   it('warns when input attachments cannot be autosaved', async () => {
     const harness = renderChatState('session-A');
     await flushEffects();
@@ -330,6 +379,13 @@ describe('useChatState plan mode persistence', () => {
 
     expect(harness.chatRef.current?.chatSettings.planModeEnabled).toBe(false);
     expect(loadSettings('session-A')?.planModeEnabled).toBe(false);
+    expect(harness.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'queue_message',
+        text: 'Approved',
+        settings: expect.objectContaining({ planModeEnabled: false }),
+      })
+    );
 
     harness.cleanup();
   });

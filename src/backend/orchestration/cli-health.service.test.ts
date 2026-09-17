@@ -263,6 +263,30 @@ describe('cliHealthService', () => {
     expect((await cliHealthService.checkHealth()).allHealthy).toBe(true);
   });
 
+  it('keeps post-upgrade health when a cleared background refresh finishes later', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(0);
+    const healthy = { isInstalled: true, isAuthenticated: true };
+    const checkClaude = vi.spyOn(cliHealthService, 'checkClaudeCLI').mockResolvedValue(healthy);
+    vi.spyOn(cliHealthService, 'checkCodexCLI').mockResolvedValue(healthy);
+    mockGithubCheckHealth.mockResolvedValue(healthy);
+    await cliHealthService.checkHealth();
+
+    let finishOld!: (value: typeof healthy) => void;
+    checkClaude.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishOld = resolve;
+      })
+    );
+    now.mockReturnValue(30_001);
+    await cliHealthService.checkHealth();
+    mockExecFile.mockResolvedValue({ stdout: 'upgraded', stderr: '' });
+    expect((await cliHealthService.upgradeProviderCLI('CLAUDE')).health.allHealthy).toBe(true);
+
+    finishOld({ isInstalled: false, isAuthenticated: false });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect((await cliHealthService.checkHealth()).allHealthy).toBe(true);
+  });
+
   it('reports unhealthy when Claude or GitHub are unauthenticated', async () => {
     vi.spyOn(cliHealthService, 'checkClaudeCLI').mockResolvedValue({
       isInstalled: true,
