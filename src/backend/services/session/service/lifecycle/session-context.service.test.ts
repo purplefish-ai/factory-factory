@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import type { SessionRepository } from './session.repository';
 import type { SessionPermissionPresetPort } from './session-context.service';
 import { SessionContextService } from './session-context.service';
@@ -112,6 +113,8 @@ describe('SessionContextService', () => {
   it.each([
     { workflow: 'code', fallback: 'STRICT' as const },
     { workflow: 'ratchet', fallback: 'YOLO' as const },
+    { workflow: 'auto-iteration', fallback: 'YOLO' as const },
+    { workflow: ADVERSARIAL_REVIEW_WORKFLOW, fallback: 'YOLO' as const },
   ])(
     'uses the $fallback fallback when $workflow permission settings cannot be read',
     async ({ workflow, fallback }) => {

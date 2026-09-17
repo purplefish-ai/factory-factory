@@ -6,13 +6,13 @@ import type { DiffFile, DiffHunk, DiffLine } from './types';
 
 /**
  * Checks if a line is a diff header (metadata line).
+ * Inside a hunk, --- and +++ are content; diff --git starts the next file.
  */
-function isHeaderLine(line: string): boolean {
+function isHeaderLine(line: string, inHunk: boolean): boolean {
   return (
     line.startsWith('diff --git') ||
     line.startsWith('index ') ||
-    line.startsWith('---') ||
-    line.startsWith('+++') ||
+    (!inHunk && (line.startsWith('---') || line.startsWith('+++'))) ||
     line.startsWith('new file') ||
     line.startsWith('deleted file')
   );
@@ -82,7 +82,7 @@ export function parseDetailedDiff(diff: string): DiffLine[] {
   let inHunk = false;
 
   for (const line of lines) {
-    if (isHeaderLine(line)) {
+    if (isHeaderLine(line, inHunk)) {
       result.push({ type: 'header', content: line });
       inHunk = false;
     } else if (line.startsWith('@@')) {
@@ -135,10 +135,10 @@ export function parseFileDiff(diff: string): DiffFile[] {
       currentHunk = { header: line, lines: [] };
       currentFile.hunks.push(currentHunk);
     } else if (currentHunk && currentFile) {
-      if (line.startsWith('+') && !line.startsWith('+++')) {
+      if (line.startsWith('+')) {
         currentHunk.lines.push({ type: 'add', content: line.slice(1) });
         currentFile.additions++;
-      } else if (line.startsWith('-') && !line.startsWith('---')) {
+      } else if (line.startsWith('-')) {
         currentHunk.lines.push({ type: 'del', content: line.slice(1) });
         currentFile.deletions++;
       } else if (line.startsWith(' ')) {

@@ -68,8 +68,49 @@ describe('LinearClientService', () => {
   });
 
   describe('listTeams', () => {
+    it('includes teams from every page in the team picker', async () => {
+      const teams = vi
+        .fn()
+        .mockResolvedValueOnce({
+          nodes: [{ id: 'team-1', name: 'Engineering', key: 'ENG' }],
+          pageInfo: { hasNextPage: true, endCursor: 'page-1' },
+        })
+        .mockResolvedValueOnce({
+          nodes: [{ id: 'team-2', name: 'Product', key: 'PROD' }],
+          pageInfo: { hasNextPage: true, endCursor: 'page-2' },
+        })
+        .mockResolvedValueOnce({
+          nodes: [{ id: 'team-3', name: 'Design', key: 'DES' }],
+          pageInfo: { hasNextPage: false, endCursor: null },
+        });
+      setMockClient({ teams });
+
+      expect(await linearClientService.listTeams('linear-api-key')).toEqual([
+        { id: 'team-1', name: 'Engineering', key: 'ENG' },
+        { id: 'team-2', name: 'Product', key: 'PROD' },
+        { id: 'team-3', name: 'Design', key: 'DES' },
+      ]);
+      expect(teams).toHaveBeenNthCalledWith(1, { first: 50 });
+      expect(teams).toHaveBeenNthCalledWith(2, { first: 50, after: 'page-1' });
+      expect(teams).toHaveBeenNthCalledWith(3, { first: 50, after: 'page-2' });
+      expect(teams).toHaveBeenCalledTimes(3);
+    });
+
+    it('fails instead of returning a partial list when a next-page cursor is missing', async () => {
+      setMockClient({
+        teams: vi.fn().mockResolvedValue({
+          nodes: [{ id: 'team-1', name: 'Engineering', key: 'ENG' }],
+          pageInfo: { hasNextPage: true, endCursor: null },
+        }),
+      });
+      await expect(linearClientService.listTeams('linear-api-key')).rejects.toThrow(
+        'Linear teams page is missing an end cursor'
+      );
+    });
+
     it('maps teams from Linear response', async () => {
       const teams = vi.fn().mockResolvedValue({
+        pageInfo: { hasNextPage: false, endCursor: null },
         nodes: [
           { id: 'team-1', name: 'Engineering', key: 'ENG' },
           { id: 'team-2', name: 'Product', key: 'PROD' },
@@ -90,6 +131,7 @@ describe('LinearClientService', () => {
   describe('validateKeyAndListTeams', () => {
     it('returns validation response with teams on success', async () => {
       const teams = vi.fn().mockResolvedValue({
+        pageInfo: { hasNextPage: false, endCursor: null },
         nodes: [{ id: 'team-1', name: 'Engineering', key: 'ENG' }],
       });
       setMockClient({

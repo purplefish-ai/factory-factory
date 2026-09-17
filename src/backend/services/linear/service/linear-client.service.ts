@@ -66,12 +66,25 @@ class LinearClientService {
   /** List teams accessible to the authenticated user. */
   async listTeams(apiKey: string): Promise<LinearTeam[]> {
     const client = this.createClient(apiKey);
-    const connection = await client.teams();
-    return connection.nodes.map((team) => ({
-      id: team.id,
-      name: team.name,
-      key: team.key,
-    }));
+    const teams: LinearTeam[] = [];
+    let after: string | undefined;
+    while (true) {
+      const connection = await client.teams({ first: 50, ...(after ? { after } : {}) });
+      teams.push(
+        ...connection.nodes.map((team) => ({
+          id: team.id,
+          name: team.name,
+          key: team.key,
+        }))
+      );
+      if (!connection.pageInfo.hasNextPage) {
+        return teams;
+      }
+      after = connection.pageInfo.endCursor ?? undefined;
+      if (!after) {
+        throw new Error('Linear teams page is missing an end cursor');
+      }
+    }
   }
 
   /** Validate an API key and, on success, list accessible teams in a single call. */

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockFindByIdWithProject = vi.hoisted(() => vi.fn());
 const mockFindById = vi.hoisted(() => vi.fn());
+const mockMarkReady = vi.hoisted(() => vi.fn());
 const mockResetToNew = vi.hoisted(() => vi.fn());
 const mockStartProvisioning = vi.hoisted(() => vi.fn());
 const mockStartProvisioningFromReady = vi.hoisted(() => vi.fn());
@@ -39,6 +40,7 @@ function createCaller(requestTrust?: {
           findById: (...args: unknown[]) => mockFindById(...args),
         },
         workspaceStateMachine: {
+          markReady: (...args: unknown[]) => mockMarkReady(...args),
           resetToNew: (...args: unknown[]) => mockResetToNew(...args),
           startProvisioning: (...args: unknown[]) => mockStartProvisioning(...args),
           startProvisioningFromReady: (...args: unknown[]) =>
@@ -229,7 +231,11 @@ describe('workspaceInitRouter', () => {
     mockFindByIdWithProject.mockResolvedValue(workspace);
     mockStartProvisioningFromReady.mockResolvedValue({ status: 'PROVISIONING' });
     mockReadConfig.mockResolvedValue({ setupCommands: [] });
-    mockExecuteStartupScriptPipeline.mockResolvedValue(undefined);
+    mockExecuteStartupScriptPipeline.mockResolvedValue({
+      handled: true,
+      phase: 'factory_setup',
+      success: true,
+    });
     mockFindById.mockResolvedValue({ id: 'w3', status: 'READY' });
 
     const caller = createCaller();
@@ -251,6 +257,41 @@ describe('workspaceInitRouter', () => {
       throw new Error('Expected startup pipeline and queued dispatch to be called');
     }
     expect(pipelineCallOrder).toBeLessThan(retryDispatchCallOrder);
+  });
+
+  it('restores READY before dispatch when retry has no remaining startup scripts', async () => {
+    const workspace = {
+      id: 'w3',
+      status: 'READY',
+      initErrorMessage: 'setup script failed',
+      worktreePath: '/tmp/w3',
+      project: { id: 'p1' },
+    };
+    mockFindByIdWithProject.mockResolvedValue(workspace);
+    mockStartProvisioningFromReady.mockImplementation(() => {
+      workspace.status = 'PROVISIONING';
+      return Promise.resolve(workspace);
+    });
+    mockReadConfig.mockResolvedValue({ scripts: {} });
+    mockExecuteStartupScriptPipeline.mockResolvedValue({
+      handled: false,
+      phase: null,
+      success: true,
+    });
+    mockMarkReady.mockImplementation(() => {
+      workspace.status = 'READY';
+      return Promise.resolve();
+    });
+    mockFindById.mockImplementation(() => Promise.resolve(workspace));
+    mockRetryQueuedDispatchAfterWorkspaceReady.mockImplementationOnce(() => {
+      expect(workspace.status).toBe('READY');
+      return Promise.resolve();
+    });
+
+    await expect(createCaller().retryInit({ id: 'w3' })).resolves.toMatchObject({
+      status: 'READY',
+    });
+    expect(mockMarkReady).toHaveBeenCalledWith('w3');
   });
 
   it('throws TOO_MANY_REQUESTS when READY+warning retry exceeds max retries', async () => {

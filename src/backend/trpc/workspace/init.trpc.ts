@@ -45,6 +45,44 @@ async function retryFailedWorkspaceWithExistingWorktree(
   });
 }
 
+async function retryReadyWorkspaceWithWarning(
+  ctx: Context,
+  workspace: WorkspaceWithProject,
+  worktreePath: string,
+  maxRetries: number
+) {
+  const {
+    factoryConfigService,
+    workspaceStateMachine,
+    executeStartupScriptPipeline,
+    retryQueuedDispatchAfterWorkspaceReady,
+  } = ctx.appContext.services;
+  // Read config before state transition so a readConfig failure
+  // doesn't leave the workspace stuck in PROVISIONING.
+  const factoryConfig = await factoryConfigService.readConfig(worktreePath);
+
+  const updatedWorkspace = await workspaceStateMachine.startProvisioningFromReady(
+    workspace.id,
+    maxRetries
+  );
+  if (!updatedWorkspace) {
+    throw maxRetriesExceededError(maxRetries);
+  }
+
+  const startupScriptPipelineResult = await executeStartupScriptPipeline({
+    workspaceId: workspace.id,
+    workspaceWithProject: workspace,
+    worktreePath,
+    factoryConfig,
+  });
+
+  if (!startupScriptPipelineResult.handled) {
+    await workspaceStateMachine.markReady(workspace.id);
+  }
+
+  await retryQueuedDispatchAfterWorkspaceReady(workspace.id, null);
+}
+
 // =============================================================================
 // Router
 // =============================================================================
@@ -85,10 +123,7 @@ export const workspaceInitRouter = router({
     .input(z.object({ id: z.string(), useExistingBranch: z.boolean().optional() }))
     .mutation(async ({ ctx, input }) => {
       const {
-        executeStartupScriptPipeline,
-        factoryConfigService,
         initializeWorkspaceWorktree,
-        retryQueuedDispatchAfterWorkspaceReady,
         workspaceDataService,
         workspaceStateMachine,
         worktreeLifecycleService,
@@ -146,27 +181,7 @@ export const workspaceInitRouter = router({
       // READY+warning: workspace is functional but setup script failed.
       // Retry by re-running the full startup script pipeline.
       if (isRetryableFromReadyWarning) {
-        // Read config before state transition so a readConfig failure
-        // doesn't leave the workspace stuck in PROVISIONING.
-        const worktreePath = workspace.worktreePath;
-        const factoryConfig = await factoryConfigService.readConfig(worktreePath);
-
-        const updatedWorkspace = await workspaceStateMachine.startProvisioningFromReady(
-          workspace.id,
-          maxRetries
-        );
-        if (!updatedWorkspace) {
-          throw maxRetriesExceededError(maxRetries);
-        }
-
-        await executeStartupScriptPipeline({
-          workspaceId: workspace.id,
-          workspaceWithProject: workspace as WorkspaceWithProject,
-          worktreePath,
-          factoryConfig,
-        });
-
-        await retryQueuedDispatchAfterWorkspaceReady(workspace.id, null);
+        await retryReadyWorkspaceWithWarning(ctx, workspace, workspace.worktreePath, maxRetries);
 
         return workspaceDataService.findById(input.id);
       }

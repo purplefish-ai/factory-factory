@@ -123,6 +123,11 @@ claims its backoff before a PR exists. `syncedAt` was `prUpdatedAt` on
 caller's observation time. Claiming a discovery attempt no longer bumps
 `Workspace.updatedAt`, so polling no longer registers as workspace activity.
 
+Idle-triggered PR refreshes retain a 30-second cooldown per workspace. At the
+workspace cache limit, only expired cooldowns are removed; if all entries are
+still live, new idle refreshes are skipped until a later idle event can claim a
+slot. The regular PR sync poll remains the fallback under capacity pressure.
+
 ## PR fetch coordination
 
 The scheduler's PR sync and the ratchet both fetch the same workspaces' PRs, so

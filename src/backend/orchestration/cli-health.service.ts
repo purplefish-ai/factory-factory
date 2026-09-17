@@ -262,8 +262,11 @@ class CLIHealthService {
     if (!this.refreshInFlight) {
       const refresh = this.runHealthCheck(forceRefresh)
         .then((status) => {
-          this.cachedStatus = status;
-          this.cacheTimestamp = Date.now();
+          // A cleared refresh can finish after the post-upgrade check.
+          if (this.refreshInFlight === refresh) {
+            this.cachedStatus = status;
+            this.cacheTimestamp = Date.now();
+          }
           return status;
         })
         .finally(() => {

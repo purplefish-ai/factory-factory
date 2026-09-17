@@ -205,11 +205,16 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   useEffect(() => {
     if (state.lastRejectedMessage) {
       const { text, attachments, sessionId } = state.lastRejectedMessage;
-      if (!sessionId || sessionId !== dbSessionIdRef.current) {
+      if (
+        !sessionId ||
+        sessionId !== dbSessionIdRef.current ||
+        inputDraft.length > 0 ||
+        inputAttachmentsRef.current.length > 0
+      ) {
         dispatch({ type: 'CLEAR_REJECTED_MESSAGE' });
         return;
       }
-      // Restore the message text to the input so user can retry
+      // Restore only into an empty composer so delayed failures preserve newer drafts.
       setInputDraft(text);
       // Restore attachments if present
       if (attachments && attachments.length > 0) {
@@ -218,7 +223,7 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       // Clear the rejected message state after processing
       dispatch({ type: 'CLEAR_REJECTED_MESSAGE' });
     }
-  }, [state.lastRejectedMessage, setInputDraft, setInputAttachments]);
+  }, [state.lastRejectedMessage, inputDraft, setInputDraft, setInputAttachments]);
 
   // =============================================================================
   // Action Callbacks Hook
