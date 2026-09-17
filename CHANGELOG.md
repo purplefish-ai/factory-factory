@@ -6,6 +6,54 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.9] - 2026-09-17
+
+### Changed
+
+- Upgrade Deepgram TTS to Flux voices (#2209)
+- Update dependencies, including Vite's native config loading path (#2307)
+- Simplify agent prompts, remove obsolete workflow scaffolding, remove unused
+  reducer cases and UI helpers, and centralize diff scroll restoration (#2289,
+  #2290, #2291, #2292, #2293, #2294, #2305, #2306)
+- Automate Markdown formatting and prose wrapping (#2304)
+- Use unattended permissions for auto-iteration and load all accessible Linear
+  teams (#2311, #2317, #2326, #2330)
+
+### Fixed
+
+- Handle non-Error Electron exceptions safely (#2264, #2276)
+- Resolve symlinked worktree bases before branch checks, preserve idle status
+  during graceful shutdown, and suppress completion notifications after archive
+  and workspace cleanup (#2260, #2275, #2277, #2278, #2281, #2302)
+- Preserve startup-script output across phases, show script failure banners once
+  per workspace, and isolate workspace snapshot reconciliation failures (#2265,
+  #2266, #2272, #2282, #2286, #2287)
+- Reject empty derived project slugs, validate backup projects, and restrict
+  imports to local clients (#2259, #2279, #2298, #2303)
+- Stop voice capture when the selected session closes (#2285)
+- Show and cancel queued messages in Quick Chat and preserve Kanban Quick Chat
+  attachments (#2280, #2309, #2331)
+- Refresh CLI authentication after terminal login and ignore superseded CLI
+  health refresh results (#2288, #2320, #2328)
+- Deduplicate Linear completion for merged pull request snapshots and during
+  startup (#2261, #2283, #2300)
+- Avoid counting duplicate result token usage twice (#2284)
+- Restore queued message dispatch after setup failure, wait for projects before
+  showing onboarding, and restore ready state when setup retry has no scripts
+  (#2296, #2301, #2318, #2319, #2325, #2329)
+- Preserve new drafts during message rejection recovery and preserve plan exit
+  settings on approval turns (#2316, #2321, #2334, #2335)
+- Preserve idle pull request cooldowns at cache capacity (#2313, #2333)
+- Use accurate chat runtime error wording (#2315, #2332)
+- Preserve header-like content in diff hunks (#2310, #2323)
+- Normalize IPv6 wildcard MCP destinations (#2312, #2324)
+- Stop agent sessions after auto-iteration loop failures (#2327)
+
+### Documentation
+
+- Align Node.js, large-module, and Vite/Vitest documentation with the current
+  project state (#2256, #2257, #2258)
+
 ## [0.4.8] - 2026-09-09
 
 ### Changed
