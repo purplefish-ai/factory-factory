@@ -27,4 +27,38 @@ describe('userSettingsAccessor.update', () => {
 
     expect(settings.ratchetEnabled).toBe(true);
   });
+
+  it('normalizes a valid reviewer Claude model before saving', async () => {
+    mockUpsert.mockImplementation(
+      async ({ update }: { update: Record<string, unknown> }) => update
+    );
+
+    const settings = await userSettingsAccessor.update({ reviewerClaudeModel: 'OPUS' });
+
+    expect(settings.reviewerClaudeModel).toBe('opus');
+  });
+
+  it('rejects a reviewer Claude model that looks like a Codex model', async () => {
+    await expect(userSettingsAccessor.update({ reviewerClaudeModel: 'gpt-4' })).rejects.toThrow(
+      'Invalid reviewer Claude model'
+    );
+    expect(mockUpsert).not.toHaveBeenCalled();
+  });
+
+  it('rejects a reviewer Codex model that looks like a Claude model', async () => {
+    await expect(
+      userSettingsAccessor.update({ reviewerCodexModel: 'claude-sonnet-5' })
+    ).rejects.toThrow('Invalid reviewer Codex model');
+    expect(mockUpsert).not.toHaveBeenCalled();
+  });
+
+  it('clears the reviewer model override when set to null', async () => {
+    mockUpsert.mockImplementation(
+      async ({ update }: { update: Record<string, unknown> }) => update
+    );
+
+    const settings = await userSettingsAccessor.update({ reviewerClaudeModel: null });
+
+    expect(settings.reviewerClaudeModel).toBeNull();
+  });
 });

@@ -1,9 +1,10 @@
 import { createLogger } from '@/backend/services/logger.service';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { PermissionPreset } from '@/backend/services/session/service/acp';
+import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import type { WorkspaceStatus } from '@/shared/core';
 import type { SessionRepository } from './session.repository';
-import { getWorkflowPermissionPreset } from './session-workflow-permissions';
+import { isUnattendedWorkflow } from './session-workflow-permissions';
 
 const logger = createLogger('session');
 
@@ -76,7 +77,16 @@ export class SessionContextService {
   }
 
   async resolvePermissionPreset(session: AgentSessionRecord): Promise<PermissionPreset> {
-    const fallback: PermissionPreset = getWorkflowPermissionPreset(session.workflow);
+    // Non-interactive workflows have no one to answer a permission prompt, so
+    // if settings fail to load below they fall back to YOLO rather than
+    // risking a deadlock. Adversarial review is included even though its
+    // happy-path preset is `defaultWorkspacePermissions` (see
+    // session-lifecycle-external-ports.ts) — its read-only contract is
+    // enforced structurally via `plan` startup mode, not via this preset.
+    const fallback: PermissionPreset =
+      isUnattendedWorkflow(session.workflow) || session.workflow === ADVERSARIAL_REVIEW_WORKFLOW
+        ? 'YOLO'
+        : 'STRICT';
     try {
       return await this.dependencies.permissionPresetPort.getPermissionPreset(session.workflow);
     } catch (error) {

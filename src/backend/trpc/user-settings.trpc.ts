@@ -12,7 +12,7 @@ import {
 import { z } from 'zod';
 import type { ApplicationServices } from '@/backend/app-context';
 import { execCommand } from '@/backend/lib/shell';
-import { publicProcedure, router } from './trpc';
+import { publicProcedure, router, trustedLocalProcedure } from './trpc';
 
 const providerModelOptionSchema = z.object({
   value: z.string(),
@@ -144,7 +144,7 @@ export const userSettingsRouter = router({
   /**
    * Update user settings
    */
-  update: publicProcedure
+  update: trustedLocalProcedure
     .input(
       z.object({
         preferredIde: z.enum(['cursor', 'vscode', 'custom']).optional(),
@@ -176,6 +176,11 @@ export const userSettingsRouter = router({
         // Permission preset defaults
         defaultWorkspacePermissions: z.nativeEnum(SessionPermissionPreset).optional(),
         ratchetPermissions: z.nativeEnum(SessionPermissionPreset).optional(),
+        // Adversarial review settings
+        reviewerSessionProvider: z.nativeEnum(SessionProvider).optional(),
+        reviewerClaudeModel: z.string().trim().min(1).nullable().optional(),
+        reviewerCodexModel: z.string().trim().min(1).nullable().optional(),
+        postReviewToGitHub: z.boolean().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {

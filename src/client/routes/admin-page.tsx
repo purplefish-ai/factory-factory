@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
+  AdversarialReviewSection,
   ApiUsageSection,
   AppInfoSection,
   ChatProviderDefaultsSection,
@@ -133,6 +134,7 @@ export default function AdminDashboardPage() {
             <ChatProviderDefaultsSection />
             <CliAuthSection />
             <RatchetSettingsSection />
+            <AdversarialReviewSection />
             <AppInfoSection />
             <DataBackupSection />
             <ServerLogsSection />

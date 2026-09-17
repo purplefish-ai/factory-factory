@@ -445,6 +445,24 @@ class WorkspacePRAccessor {
   }
 
   /**
+   * The minimal PR identity + state needed to decide whether a workspace has
+   * an open PR to act on (e.g. adversarial review), without pulling in the
+   * rest of the cached aggregate.
+   */
+  async findPRState(
+    workspaceId: string
+  ): Promise<{ prUrl: string | null; prNumber: number | null; prState: PRState } | null> {
+    const row = await prisma.workspacePR.findUnique({
+      where: { workspaceId },
+      select: { url: true, number: true, state: true },
+    });
+    if (!row) {
+      return null;
+    }
+    return { prUrl: row.url, prNumber: row.number, prState: row.state };
+  }
+
+  /**
    * Write a refreshed aggregate, compare-and-swap on the aggregate the caller
    * read. A concurrent refresh that already moved the cache wins and this is a
    * no-op, which is what tells the caller not to reset a settled dispatch.

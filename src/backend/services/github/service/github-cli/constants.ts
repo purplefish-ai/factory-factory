@@ -1,5 +1,14 @@
+import pLimit from 'p-limit';
+
 /** Max concurrent gh CLI processes system-wide. */
 export const GH_CONCURRENCY = 5;
+
+/**
+ * Shared across every module that shells out to `gh`, so the system-wide
+ * process cap in `GH_CONCURRENCY` is actually enforced rather than each
+ * caller getting its own independent pool.
+ */
+export const ghExecLimit = pLimit(GH_CONCURRENCY);
 
 export const GH_TIMEOUT_MS = Object.freeze({
   healthVersion: 5000,

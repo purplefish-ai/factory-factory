@@ -442,6 +442,11 @@ async function importUserSettings(
       defaultCodexReasoningEffort: settings.defaultCodexReasoningEffort,
       defaultWorkspacePermissions: settings.defaultWorkspacePermissions,
       ratchetPermissions: settings.ratchetPermissions,
+      // Adversarial review settings
+      reviewerSessionProvider: settings.reviewerSessionProvider,
+      reviewerClaudeModel: settings.reviewerClaudeModel,
+      reviewerCodexModel: settings.reviewerCodexModel,
+      postReviewToGitHub: settings.postReviewToGitHub,
       voiceModeEnabled: settings.voiceModeEnabled,
       voiceTtsModel: settings.voiceTtsModel,
       voiceTtsSpeed: settings.voiceTtsSpeed,
@@ -595,6 +600,11 @@ class DataBackupService {
               defaultCodexReasoningEffort: userSettings.defaultCodexReasoningEffort,
               defaultWorkspacePermissions: userSettings.defaultWorkspacePermissions,
               ratchetPermissions: userSettings.ratchetPermissions,
+              // Adversarial review settings
+              reviewerSessionProvider: userSettings.reviewerSessionProvider,
+              reviewerClaudeModel: userSettings.reviewerClaudeModel,
+              reviewerCodexModel: userSettings.reviewerCodexModel,
+              postReviewToGitHub: userSettings.postReviewToGitHub,
               voiceModeEnabled: userSettings.voiceModeEnabled,
               voiceTtsModel: userSettings.voiceTtsModel,
               voiceTtsSpeed: userSettings.voiceTtsSpeed,

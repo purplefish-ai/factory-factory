@@ -42,6 +42,9 @@ vi.mock('@/backend/orchestration/snapshot-reconciliation.orchestrator', () => ({
     stop = vi.fn(async () => undefined);
   },
 }));
+vi.mock('@/backend/orchestration/adversarial-review.orchestrator', () => ({
+  triggerAdversarialReview: vi.fn(),
+}));
 vi.mock('@/backend/orchestration/workspace-archive.orchestrator', () => ({
   archiveWorkspace: vi.fn(),
   cleanupWorkspaceRuntimeResources: vi.fn(),
@@ -77,6 +80,7 @@ vi.mock('@/backend/services/config.service', () => ({ configService: {} }));
 vi.mock('@/backend/services/crypto.service', () => ({ cryptoService: {} }));
 vi.mock('@/backend/services/decision-log', () => ({ decisionLogService: {} }));
 vi.mock('@/backend/services/github', () => ({
+  checkGithubAuth: vi.fn(),
   githubCLIService: {},
   prFetchCoordinator: {},
   prSnapshotService: {},
@@ -170,6 +174,7 @@ import type {
 } from '@/backend/app-context';
 import { prisma } from '@/backend/db';
 import { registerInterceptors, startInterceptors, stopInterceptors } from '@/backend/interceptors';
+import { triggerAdversarialReview } from '@/backend/orchestration/adversarial-review.orchestrator';
 import { cliHealthService } from '@/backend/orchestration/cli-health.service';
 import { dataBackupService } from '@/backend/orchestration/data-backup.service';
 import type { configureDomainBridges } from '@/backend/orchestration/domain-bridges.orchestrator';
@@ -209,7 +214,12 @@ import {
 import { configService } from '@/backend/services/config.service';
 import { cryptoService } from '@/backend/services/crypto.service';
 import { decisionLogService } from '@/backend/services/decision-log';
-import { githubCLIService, prFetchCoordinator, prSnapshotService } from '@/backend/services/github';
+import {
+  checkGithubAuth,
+  githubCLIService,
+  prFetchCoordinator,
+  prSnapshotService,
+} from '@/backend/services/github';
 import { JobRunner } from '@/backend/services/job-runner.service';
 import { linearClientService, linearStateSyncService } from '@/backend/services/linear';
 import { createLogger, getLogFilePath } from '@/backend/services/logger.service';
@@ -343,12 +353,14 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     archiveWorkspace,
     chatEventForwarderService: graphChatEventForwarderService,
     chatMessageHandlerService,
+    checkGithubAuth,
     cleanupWorkspaceRuntimeResources,
     cleanupWorkspaceScopedCaches: (workspaceId: string) =>
       graphEventCollector?.removeWorkspace(workspaceId),
     cliHealthService,
     configService: graphConfigService,
     computePendingRequestType,
+    triggerAdversarialReview,
     createChildWorkspace,
     deliverWorkspaceNotification,
     createLogger,

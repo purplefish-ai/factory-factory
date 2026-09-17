@@ -26,6 +26,10 @@ interface UpdateUserSettingsInput {
   defaultCodexReasoningEffort?: string | null;
   defaultWorkspacePermissions?: SessionPermissionPreset;
   ratchetPermissions?: SessionPermissionPreset;
+  reviewerSessionProvider?: SessionProvider;
+  reviewerClaudeModel?: string | null;
+  reviewerCodexModel?: string | null;
+  postReviewToGitHub?: boolean;
   voiceModeEnabled?: boolean;
   deepgramApiKeyEncrypted?: string | null;
   voiceTtsModel?: string;
@@ -65,6 +69,37 @@ function normalizeDefaultSessionModels(data: UpdateUserSettingsInput): {
   }
 
   return { normalizedClaudeModel, normalizedCodexModel };
+}
+
+function normalizeReviewerModels(data: UpdateUserSettingsInput): {
+  normalizedReviewerClaudeModel: string | null | undefined;
+  normalizedReviewerCodexModel: string | null | undefined;
+} {
+  const normalizedReviewerClaudeModel =
+    data.reviewerClaudeModel === undefined
+      ? undefined
+      : (normalizeSessionModelForProvider(data.reviewerClaudeModel, 'CLAUDE') ?? null);
+  if (
+    data.reviewerClaudeModel !== undefined &&
+    data.reviewerClaudeModel !== null &&
+    normalizedReviewerClaudeModel === null
+  ) {
+    throw new Error('Invalid reviewer Claude model');
+  }
+
+  const normalizedReviewerCodexModel =
+    data.reviewerCodexModel === undefined
+      ? undefined
+      : (normalizeSessionModelForProvider(data.reviewerCodexModel, 'CODEX') ?? null);
+  if (
+    data.reviewerCodexModel !== undefined &&
+    data.reviewerCodexModel !== null &&
+    normalizedReviewerCodexModel === null
+  ) {
+    throw new Error('Invalid reviewer Codex model');
+  }
+
+  return { normalizedReviewerClaudeModel, normalizedReviewerCodexModel };
 }
 
 function normalizeOptionalEffort(value: string | null | undefined): string | null | undefined {
@@ -138,6 +173,22 @@ function buildSessionModelDefaults(
   };
 }
 
+function buildReviewerDefaults(
+  data: UpdateUserSettingsInput,
+  normalizedReviewerClaudeModel: string | null | undefined,
+  normalizedReviewerCodexModel: string | null | undefined
+): Pick<
+  Prisma.UserSettingsCreateInput,
+  'reviewerSessionProvider' | 'reviewerClaudeModel' | 'reviewerCodexModel' | 'postReviewToGitHub'
+> {
+  return {
+    reviewerSessionProvider: data.reviewerSessionProvider ?? 'CODEX',
+    reviewerClaudeModel: normalizedReviewerClaudeModel ?? null,
+    reviewerCodexModel: normalizedReviewerCodexModel ?? null,
+    postReviewToGitHub: data.postReviewToGitHub ?? true,
+  };
+}
+
 function buildVoiceDefaults(
   data: UpdateUserSettingsInput
 ): Pick<
@@ -172,7 +223,9 @@ function buildCreateData(
   normalizedClaudeModel: string | undefined,
   normalizedCodexModel: string | undefined,
   normalizedClaudeEffort: string | null | undefined,
-  normalizedCodexEffort: string | null | undefined
+  normalizedCodexEffort: string | null | undefined,
+  normalizedReviewerClaudeModel: string | null | undefined,
+  normalizedReviewerCodexModel: string | null | undefined
 ): Prisma.UserSettingsCreateInput {
   return {
     userId,
@@ -185,6 +238,7 @@ function buildCreateData(
       normalizedClaudeEffort,
       normalizedCodexEffort
     ),
+    ...buildReviewerDefaults(data, normalizedReviewerClaudeModel, normalizedReviewerCodexModel),
     ...buildVoiceDefaults(data),
   };
 }
@@ -254,6 +308,8 @@ class UserSettingsAccessor {
     const { normalizedClaudeModel, normalizedCodexModel } = normalizeDefaultSessionModels(data);
     const normalizedClaudeEffort = normalizeOptionalEffort(data.defaultClaudeReasoningEffort);
     const normalizedCodexEffort = normalizeOptionalEffort(data.defaultCodexReasoningEffort);
+    const { normalizedReviewerClaudeModel, normalizedReviewerCodexModel } =
+      normalizeReviewerModels(data);
 
     return await prisma.userSettings.upsert({
       where: { userId },
@@ -263,6 +319,8 @@ class UserSettingsAccessor {
         defaultCodexModel: normalizedCodexModel,
         defaultClaudeReasoningEffort: normalizedClaudeEffort,
         defaultCodexReasoningEffort: normalizedCodexEffort,
+        reviewerClaudeModel: normalizedReviewerClaudeModel,
+        reviewerCodexModel: normalizedReviewerCodexModel,
       },
       create: buildCreateData(
         userId,
@@ -270,7 +328,9 @@ class UserSettingsAccessor {
         normalizedClaudeModel,
         normalizedCodexModel,
         normalizedClaudeEffort,
-        normalizedCodexEffort
+        normalizedCodexEffort,
+        normalizedReviewerClaudeModel,
+        normalizedReviewerCodexModel
       ),
     });
   }
