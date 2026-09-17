@@ -112,6 +112,8 @@ export function QuickChatContent({
           slashCommandsLoaded={chatState.slashCommandsLoaded}
           value={chatState.inputDraft}
           onChange={chatState.setInputDraft}
+          attachments={chatState.inputAttachments}
+          onAttachmentsChange={chatState.setInputAttachments}
           onHeightChange={handleHeightChange}
           pendingMessageCount={chatState.pendingMessages.size}
           workspaceId={workspaceId}
