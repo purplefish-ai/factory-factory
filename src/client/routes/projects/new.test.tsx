@@ -173,34 +173,37 @@ function createStorageStub(): Storage {
   };
 }
 
-function renderPage() {
+function renderPage(options: { projects: typeof projects | undefined } = { projects }) {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
-  const navigationData = {
-    projects,
-    selectedProjectSlug: 'beta',
-    selectProjectSlug: selectProjectSlugMock,
-    selectedProjectId: 'project-2',
-    issueProvider: 'GITHUB',
-    serverWorkspaces: undefined,
-    reviewCount: 0,
-    needsAttention: () => false,
-    clearAttention: vi.fn(),
-    currentWorkspaceId: undefined,
-  } as unknown as AppNavigationData;
+  const renderProjects = (nextProjects: typeof projects | undefined) => {
+    const navigationData = {
+      projects: nextProjects,
+      selectedProjectSlug: 'beta',
+      selectProjectSlug: selectProjectSlugMock,
+      selectedProjectId: 'project-2',
+      issueProvider: 'GITHUB',
+      serverWorkspaces: undefined,
+      reviewCount: 0,
+      needsAttention: () => false,
+      clearAttention: vi.fn(),
+      currentWorkspaceId: undefined,
+    } as unknown as AppNavigationData;
 
-  flushSync(() => {
-    root.render(
-      createElement(
-        AppNavigationDataProvider,
-        { value: navigationData },
-        createElement(NewProjectPage)
-      )
-    );
-  });
+    flushSync(() => {
+      root.render(
+        createElement(
+          AppNavigationDataProvider,
+          { value: navigationData },
+          createElement(NewProjectPage)
+        )
+      );
+    });
+  };
+  renderProjects(options.projects);
 
-  return { container, root };
+  return { container, root, renderProjects };
 }
 
 beforeEach(() => {
@@ -221,6 +224,29 @@ afterEach(() => {
   vi.useRealTimers();
   document.body.innerHTML = '';
   localStorage.clear();
+});
+
+describe('NewProjectPage project loading', () => {
+  it('waits for the project list before showing onboarding', () => {
+    // An explicitly undefined list represents the pending query.
+    const { container, root, renderProjects } = renderPage({ projects: undefined });
+    expect(container.textContent).not.toContain('Get Started');
+    expect(container.textContent).not.toContain('Add your first repository');
+    expect(container.textContent).toContain('Loading projects');
+
+    renderProjects(projects);
+    expect(container.textContent).not.toContain('Loading projects');
+    expect(container.textContent).not.toContain('Get Started');
+    expect(container.querySelector('h1')?.textContent).toBe('Add Project');
+    root.unmount();
+  });
+
+  it('shows onboarding only for a loaded empty project list', () => {
+    const { container, root } = renderPage({ projects: [] });
+    expect(container.textContent).toContain('Get Started');
+    expect(container.textContent).toContain('Add your first repository');
+    root.unmount();
+  });
 });
 
 describe('NewProjectPage navigation', () => {
