@@ -156,6 +156,10 @@ exposed to the agent (`spawn_child_workspace`, `send_message_to_child`,
 `archive_child_workspace`, `list_projects`). Children report back via
 `send_message_to_parent`.
 
+Child-workspace MCP requests connect to localhost when the backend binds to an
+IPv4 or IPv6 wildcard, including equivalent compressed IPv6 spellings. Explicit
+bind addresses remain the connection destination.
+
 Messages are persisted first as `WorkspaceNotification` rows, then delivered
 live to active sessions when available; undelivered rows are delivered at the
 next session start. Max depth is 1 — children cannot have children.
