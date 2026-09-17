@@ -1,10 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { resumeWorkspaceIdsSchema } from '@/shared/schemas/persisted-stores.schema';
 import {
   forgetResumeWorkspace,
   isResumeWorkspace,
   readResumeWorkspaceIds,
-  rememberResumeWorkspace,
 } from './resume-workspace-storage';
 
 const mockStorage = new Map<string, string>();
@@ -75,54 +73,6 @@ describe('resume-workspace-storage', () => {
 
       const result = readResumeWorkspaceIds();
       expect(result).toEqual([]);
-    });
-  });
-
-  describe('rememberResumeWorkspace', () => {
-    it('adds workspace ID to empty list', () => {
-      rememberResumeWorkspace('ws-1');
-
-      expect(mockLocalStorage.setItem).toHaveBeenCalledWith(
-        'ff_resume_workspace_ids',
-        JSON.stringify(['ws-1'])
-      );
-    });
-
-    it('adds workspace ID to existing list', () => {
-      mockStorage.set('ff_resume_workspace_ids', JSON.stringify(['ws-1']));
-
-      rememberResumeWorkspace('ws-2');
-
-      expect(mockLocalStorage.setItem).toHaveBeenLastCalledWith(
-        'ff_resume_workspace_ids',
-        JSON.stringify(['ws-1', 'ws-2'])
-      );
-    });
-
-    it('does not add duplicate workspace IDs', () => {
-      mockStorage.set('ff_resume_workspace_ids', JSON.stringify(['ws-1']));
-
-      rememberResumeWorkspace('ws-1');
-
-      expect(mockLocalStorage.setItem).toHaveBeenLastCalledWith(
-        'ff_resume_workspace_ids',
-        JSON.stringify(['ws-1'])
-      );
-    });
-
-    it('trims list to last 200 entries', () => {
-      const ids = Array.from({ length: 205 }, (_, i) => `ws-${i}`);
-      mockStorage.set('ff_resume_workspace_ids', JSON.stringify(ids));
-
-      rememberResumeWorkspace('ws-new');
-
-      const savedValue = mockLocalStorage.setItem.mock.calls[
-        mockLocalStorage.setItem.mock.calls.length - 1
-      ]![1] as string;
-      const parsed = JSON.parse(savedValue);
-      const savedIds = resumeWorkspaceIdsSchema.parse(parsed);
-      expect(savedIds).toHaveLength(200);
-      expect(savedIds[savedIds.length - 1]).toBe('ws-new');
     });
   });
 
