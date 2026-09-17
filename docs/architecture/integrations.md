@@ -23,7 +23,8 @@ the new status displayed in the UI.
 
 A per-project issue provider can be set to Linear with an encrypted API key plus
 team selection. Kanban intake uses Linear issues assigned to the configured
-viewer. Starting from an issue creates a linked workspace (`linearIssueId`,
+viewer. Team selection loads every page of accessible Linear teams. Starting
+from an issue creates a linked workspace (`linearIssueId`,
 `linearIssueIdentifier`, `linearIssueUrl`), and workspace lifecycle events
 best-effort sync issue state back to Linear. PR merge completion suppresses
 concurrent attempts and successful repeats for the same PR during a collector
