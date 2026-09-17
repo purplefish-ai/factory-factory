@@ -7,11 +7,7 @@ import {
   removeWorkspaceFromProjectWorkspaceCache,
   restoreWorkspacesToProjectWorkspaceCache,
 } from '@/client/lib/workspace-cache-helpers';
-import {
-  type NewSessionProviderSelection,
-  resolveExplicitSessionProvider,
-  type SessionProviderValue,
-} from '@/lib/session-provider-selection';
+import type { SessionProviderValue } from '@/lib/session-provider-selection';
 
 // =============================================================================
 // Helpers
@@ -104,9 +100,6 @@ interface UseSessionManagementOptions {
   selectedProvider: SessionProviderValue;
   onArchiveGitIndexLocked: () => void;
 }
-
-export type { NewSessionProviderSelection };
-export { resolveExplicitSessionProvider };
 
 /** Minimal mutation interface exposing only the properties we use */
 interface MutationLike<TInput, TOutput = unknown, TError = unknown> {
