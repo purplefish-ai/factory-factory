@@ -146,13 +146,6 @@ vi.mock('./use-retry-workspace-init', () => ({
   useRetryWorkspaceInit: () => ({ retry: vi.fn(), retryInit: { isPending: false } }),
 }));
 
-function createMutationLike() {
-  return {
-    mutate: vi.fn(),
-    isPending: false,
-  };
-}
-
 function createInitStatus(
   showDismiss: boolean
 ): NonNullable<WorkspaceDetailViewProps['workspaceState']['workspaceInitStatus']> {
@@ -192,14 +185,8 @@ function createViewProps(activeChildCount: number): WorkspaceDetailViewProps {
     },
     header: {
       archivePending: false,
-      availableIdes: [],
-      preferredIde: '',
-      openInIde: createMutationLike(),
-      handleArchiveRequest: vi.fn(),
       handleQuickAction: vi.fn(),
-      running: false,
       isCreatingSession: false,
-      hasChanges: false,
     },
     sessionTabs: {
       sessions: [

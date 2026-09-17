@@ -362,14 +362,8 @@ export function WorkspaceDetailContainer() {
         }}
         header={{
           archivePending: archiveWorkspace.isPending,
-          availableIdes,
-          preferredIde,
-          openInIde,
-          handleArchiveRequest,
           handleQuickAction,
-          running: workspaceRunning,
           isCreatingSession: createSession.isPending,
-          hasChanges,
         }}
         sessionTabs={{
           sessions,
