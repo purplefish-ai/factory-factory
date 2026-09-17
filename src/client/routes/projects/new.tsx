@@ -17,6 +17,7 @@ import { useProjectHeaderNavigation } from '@/client/hooks/use-project-header-na
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 type ProjectSource = 'local' | 'github';
@@ -246,6 +247,15 @@ export default function NewProjectPage() {
       </TabsContent>
     </Tabs>
   );
+
+  if (projects === undefined) {
+    return (
+      <output className="flex h-full items-center justify-center gap-2 p-6">
+        <Spinner className="size-5" aria-hidden="true" />
+        <span className="text-muted-foreground">Loading projects...</span>
+      </output>
+    );
+  }
 
   // Onboarding view when no projects exist
   if (!hasExistingProjects) {
