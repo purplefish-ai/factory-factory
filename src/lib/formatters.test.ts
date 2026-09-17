@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatBytes, formatCpu, formatIdleTime, formatStatusLabel } from './formatters';
+import { formatBytes, formatCpu, formatIdleTime } from './formatters';
 
 describe('formatBytes', () => {
   it('formats null/undefined as -', () => {
@@ -37,23 +37,5 @@ describe('formatIdleTime', () => {
     expect(formatIdleTime(500)).toBe('500ms');
     expect(formatIdleTime(5000)).toBe('5s');
     expect(formatIdleTime(120_000)).toBe('2.0m');
-  });
-});
-
-describe('formatStatusLabel', () => {
-  it('formats ALL_CAPS status to capitalized', () => {
-    expect(formatStatusLabel('NEW')).toBe('New');
-    expect(formatStatusLabel('PROVISIONING')).toBe('Provisioning');
-    expect(formatStatusLabel('READY')).toBe('Ready');
-    expect(formatStatusLabel('FAILED')).toBe('Failed');
-    expect(formatStatusLabel('ARCHIVED')).toBe('Archived');
-  });
-
-  it('handles mixed case input', () => {
-    expect(formatStatusLabel('MiXeD')).toBe('Mixed');
-  });
-
-  it('handles lowercase input', () => {
-    expect(formatStatusLabel('lowercase')).toBe('Lowercase');
   });
 });
