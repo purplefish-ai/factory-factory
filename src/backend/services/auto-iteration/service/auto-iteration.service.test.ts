@@ -9,7 +9,9 @@ import type {
   AutoIterationSessionBridge,
   AutoIterationWorkspaceBridge,
 } from './bridges';
+import * as gitOps from './git-ops';
 import { insightsService } from './insights.service';
+import * as testRunner from './test-runner.service';
 
 type Logger = ReturnType<typeof createLogger>;
 type AutoIterationServiceInternals = {
@@ -82,6 +84,7 @@ describe('AutoIterationService resume', () => {
   let workspaceBridge: AutoIterationWorkspaceBridge;
 
   beforeEach(() => {
+    vi.restoreAllMocks();
     logger = createLoggerMock();
     service = new AutoIterationService(logger);
     serviceInternals = service as unknown as AutoIterationServiceInternals;
@@ -91,7 +94,7 @@ describe('AutoIterationService resume', () => {
   });
 
   it.each([false, true])(
-    'stops the session after a between-turn persistence failure (stop fails: %s)',
+    'stops the session when the initial measuring-phase write fails (stop fails: %s)',
     async (stopFails) => {
       const loop = createPausedLoop('ws-1');
       serviceInternals.loops.set('ws-1', loop);
@@ -105,6 +108,63 @@ describe('AutoIterationService resume', () => {
       await service.resume('ws-1');
       await loop.loopPromise;
 
+      expect(sessionBridge.stopSession).toHaveBeenCalledWith('session-1');
+      expect(workspaceBridge.finishAutoIterationIfSessionMatches).toHaveBeenCalledWith(
+        'ws-1',
+        'session-1',
+        AutoIterationStatus.FAILED
+      );
+      expect(service.isRunning('ws-1')).toBe(false);
+    }
+  );
+
+  it.each(['logbook', 'progress'] as const)(
+    'stops the session when post-iteration %s persistence fails',
+    async (failureSite) => {
+      const loop = createPausedLoop('ws-1');
+      const logbookBridge = createLogbookBridge();
+      service.configure(sessionBridge, workspaceBridge, logbookBridge);
+      serviceInternals.loops.set('ws-1', loop);
+      vi.spyOn(testRunner, 'runTestCommand').mockResolvedValue({
+        stdout: 'Tests passed',
+        stderr: '',
+        exitCode: 0,
+        timedOut: false,
+      });
+      vi.spyOn(gitOps, 'hasUncommittedChanges').mockResolvedValue(false);
+      const persistenceError = new Error('post-iteration persistence failed');
+      if (failureSite === 'logbook') {
+        vi.mocked(logbookBridge.appendEntry).mockRejectedValueOnce(persistenceError);
+      } else {
+        vi.mocked(workspaceBridge.updateAutoIterationProgress).mockImplementation(
+          (_id, progress) =>
+            progress.currentPhase === 'idle' ? Promise.reject(persistenceError) : Promise.resolve()
+        );
+      }
+
+      await service.resume('ws-1');
+      await loop.loopPromise;
+
+      expect(sessionBridge.sendPrompt).toHaveBeenCalledTimes(1);
+      expect(sessionBridge.waitForIdle).toHaveBeenCalledWith('session-1');
+      expect(logbookBridge.appendEntry).toHaveBeenCalledWith(
+        '/tmp/worktree',
+        expect.objectContaining({
+          iteration: 1,
+          status: 'crashed',
+          crashError: 'Agent made no code changes',
+        })
+      );
+      expect(loop.progress).toMatchObject({
+        currentPhase: 'idle',
+        currentIteration: 1,
+        crashedCount: 1,
+      });
+      expect(loop.progress.lastIterationAt).not.toBeNull();
+      expect(logger.error).toHaveBeenCalledWith('Auto-iteration loop failed on resume', {
+        workspaceId: 'ws-1',
+        error: String(persistenceError),
+      });
       expect(sessionBridge.stopSession).toHaveBeenCalledWith('session-1');
       expect(workspaceBridge.finishAutoIterationIfSessionMatches).toHaveBeenCalledWith(
         'ws-1',
