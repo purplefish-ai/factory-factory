@@ -317,7 +317,7 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
   );
 
   const queueAutomaticMessage = useCallback(
-    (text: string) => {
+    (text: string, settings: ChatSettings) => {
       const trimmedText = text.trim();
       if (!trimmedText) {
         return;
@@ -337,14 +337,11 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
         type: 'queue_message',
         id,
         text: trimmedText,
-        settings: clampChatSettingsForCapabilities(
-          stateRef.current.chatSettings,
-          stateRef.current.chatCapabilities
-        ),
+        settings,
       };
       send(msg);
     },
-    [send, dispatch, dbSessionIdRef, stateRef]
+    [send, dispatch, dbSessionIdRef]
   );
 
   const completeCodexPlanApproval = useCallback(
@@ -369,7 +366,7 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
       );
       persistSettings(dbSessionIdRef.current, syncedSettings);
       if (isCodexProvider) {
-        queueAutomaticMessage('Approved');
+        queueAutomaticMessage('Approved', syncedSettings);
       }
     },
     [send, dispatch, dbSessionIdRef, queueAutomaticMessage]

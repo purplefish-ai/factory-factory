@@ -330,6 +330,13 @@ describe('useChatState plan mode persistence', () => {
 
     expect(harness.chatRef.current?.chatSettings.planModeEnabled).toBe(false);
     expect(loadSettings('session-A')?.planModeEnabled).toBe(false);
+    expect(harness.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'queue_message',
+        text: 'Approved',
+        settings: expect.objectContaining({ planModeEnabled: false }),
+      })
+    );
 
     harness.cleanup();
   });
