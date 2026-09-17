@@ -909,6 +909,11 @@ export class AutoIterationService {
     status: AutoIterationStatus
   ): Promise<void> {
     try {
+      await this.session.stopSession(loop.sessionId);
+    } catch {
+      // The session may already be stopped; terminal persistence must still run.
+    }
+    try {
       await this.finishLoopIfSessionMatches(loop, status);
     } catch (error) {
       this.logger.error('Failed to persist auto-iteration terminal state', {

@@ -106,6 +106,10 @@ never had. The two status writes report the row they landed on
 service never infers the mode from the fact that an auto-iteration code path is
 running.
 
+A rejected auto-iteration loop stops its backing session before settling
+terminal state. Session teardown is best-effort so a failed stop does not
+prevent terminal persistence or removal of the in-memory loop.
+
 Startup sweeps only `RUNNING` to `FAILED` — `PAUSED` is a state the user chose
 and the terminal states are results they have not seen.
 

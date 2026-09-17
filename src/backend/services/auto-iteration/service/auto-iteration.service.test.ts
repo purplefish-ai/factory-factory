@@ -90,6 +90,31 @@ describe('AutoIterationService resume', () => {
     service.configure(sessionBridge, workspaceBridge, createLogbookBridge());
   });
 
+  it.each([false, true])(
+    'stops the session after a between-turn persistence failure (stop fails: %s)',
+    async (stopFails) => {
+      const loop = createPausedLoop('ws-1');
+      serviceInternals.loops.set('ws-1', loop);
+      vi.mocked(workspaceBridge.updateAutoIterationProgress).mockRejectedValueOnce(
+        new Error('database unavailable')
+      );
+      if (stopFails) {
+        vi.mocked(sessionBridge.stopSession).mockRejectedValueOnce(new Error('already stopped'));
+      }
+
+      await service.resume('ws-1');
+      await loop.loopPromise;
+
+      expect(sessionBridge.stopSession).toHaveBeenCalledWith('session-1');
+      expect(workspaceBridge.finishAutoIterationIfSessionMatches).toHaveBeenCalledWith(
+        'ws-1',
+        'session-1',
+        AutoIterationStatus.FAILED
+      );
+      expect(service.isRunning('ws-1')).toBe(false);
+    }
+  );
+
   it('starts only one run loop for concurrent resume calls', async () => {
     const loop = createPausedLoop('ws-1');
     serviceInternals.loops.set('ws-1', loop);
@@ -319,11 +344,12 @@ describe('AutoIterationService resume', () => {
     expect(service.isRunning('ws-1')).toBe(false);
   });
 
-  it('finishes a dead session with a session-keyed mutation', () => {
+  it('finishes a dead session with a session-keyed mutation', async () => {
     const loop = createPausedLoop('ws-1');
     serviceInternals.loops.set('ws-1', loop);
 
     service.onSessionDeath('ws-1', 'session-1');
+    await loop.loopPromise;
 
     expect(workspaceBridge.finishAutoIterationIfSessionMatches).toHaveBeenCalledWith(
       'ws-1',
