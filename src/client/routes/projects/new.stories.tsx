@@ -33,4 +33,13 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const LoadingProjects: Story = {};
+export const LoadingProjects: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A single loading status is announced; the decorative spinner is hidden from assistive technology.',
+      },
+    },
+  },
+};

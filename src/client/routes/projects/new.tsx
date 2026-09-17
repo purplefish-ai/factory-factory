@@ -250,10 +250,10 @@ export default function NewProjectPage() {
 
   if (projects === undefined) {
     return (
-      <div className="flex h-full items-center justify-center gap-2 p-6" role="status">
-        <Spinner className="size-5" />
+      <output className="flex h-full items-center justify-center gap-2 p-6">
+        <Spinner className="size-5" aria-hidden="true" />
         <span className="text-muted-foreground">Loading projects...</span>
-      </div>
+      </output>
     );
   }
 

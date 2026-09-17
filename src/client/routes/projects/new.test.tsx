@@ -241,6 +241,16 @@ describe('NewProjectPage project loading', () => {
     root.unmount();
   });
 
+  it('exposes a single loading announcement to assistive technology', () => {
+    const { container, root } = renderPage({ projects: undefined });
+    const statuses = Array.from(container.querySelectorAll('output, [role="status"]')).filter(
+      (element) => !element.closest('[aria-hidden="true"]')
+    );
+    expect(statuses).toHaveLength(1);
+    expect(statuses[0]?.textContent).toBe('Loading projects...');
+    root.unmount();
+  });
+
   it('shows onboarding only for a loaded empty project list', () => {
     const { container, root } = renderPage({ projects: [] });
     expect(container.textContent).toContain('Get Started');

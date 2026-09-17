@@ -490,6 +490,14 @@ async function handleLinearIssueCompletedOnMerge(
 // Event collector lifecycle
 // ---------------------------------------------------------------------------
 
+function removeExpiredIdlePrCooldowns(cooldowns: Map<string, number>, now: number): void {
+  for (const [id, refreshedAt] of cooldowns) {
+    if (now - refreshedAt >= IDLE_PR_REFRESH_COOLDOWN_MS) {
+      cooldowns.delete(id);
+    }
+  }
+}
+
 /**
  * Subscribe to all domain event sources and route events through the
  * coalescing buffer to the snapshot store.
@@ -522,17 +530,20 @@ function startEventCollectorWithState(state: EventCollectorState): void {
 
   const refreshPrSnapshotOnIdle = (workspaceId: string): void => {
     const now = Date.now();
-    const lastRefresh = state.lastIdlePrRefreshByWorkspace.get(workspaceId) ?? 0;
-    if (now - lastRefresh < IDLE_PR_REFRESH_COOLDOWN_MS) {
+    const lastRefresh = state.lastIdlePrRefreshByWorkspace.get(workspaceId);
+    if (lastRefresh !== undefined && now - lastRefresh < IDLE_PR_REFRESH_COOLDOWN_MS) {
       return;
     }
     if (
       !state.lastIdlePrRefreshByWorkspace.has(workspaceId) &&
       state.lastIdlePrRefreshByWorkspace.size >= SERVICE_LIMITS.workspaceScopedCacheMaxEntries
     ) {
-      const oldestWorkspaceId = state.lastIdlePrRefreshByWorkspace.keys().next().value;
-      if (oldestWorkspaceId !== undefined) {
-        state.lastIdlePrRefreshByWorkspace.delete(oldestWorkspaceId);
+      // Preserve live cooldowns: idle refreshes are best-effort under capacity pressure.
+      removeExpiredIdlePrCooldowns(state.lastIdlePrRefreshByWorkspace, now);
+      if (
+        state.lastIdlePrRefreshByWorkspace.size >= SERVICE_LIMITS.workspaceScopedCacheMaxEntries
+      ) {
+        return;
       }
     }
     state.lastIdlePrRefreshByWorkspace.set(workspaceId, now);
