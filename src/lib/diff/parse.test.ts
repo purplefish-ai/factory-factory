@@ -106,6 +106,34 @@ index 1234567..0000000`;
     });
   });
 
+  it('preserves header-like content and following lines across file boundaries', () => {
+    const diff = `diff --git a/first.txt b/first.txt
+--- a/first.txt
++++ b/first.txt
+@@ -10,3 +20,3 @@
+ before
+--- a/header-like-content
++++ b/header-like-content
+ after
+diff --git a/second.txt b/second.txt
+--- a/second.txt
++++ b/second.txt
+@@ -1 +1 @@
+-old
++new`;
+
+    const result = parseDetailedDiff(diff);
+
+    expect(result.slice(4, 8)).toEqual([
+      { type: 'context', content: 'before', lineNumber: { old: 10, new: 20 } },
+      { type: 'deletion', content: '-- a/header-like-content', lineNumber: { old: 11 } },
+      { type: 'addition', content: '++ b/header-like-content', lineNumber: { new: 21 } },
+      { type: 'context', content: 'after', lineNumber: { old: 12, new: 22 } },
+    ]);
+    expect(result.slice(8, 11).map((line) => line.type)).toEqual(['header', 'header', 'header']);
+    expect(result.at(-1)).toEqual({ type: 'addition', content: 'new', lineNumber: { new: 1 } });
+  });
+
   it('handles empty context lines', () => {
     const diff = `@@ -1,3 +1,3 @@
  line 1
@@ -258,6 +286,36 @@ diff --git a/file2.txt b/file2.txt
     expect(result).toHaveLength(1);
     expect(result[0]?.additions).toBe(1);
     expect(result[0]?.deletions).toBe(0);
+  });
+
+  it('counts header-like additions and deletions as hunk content', () => {
+    const diff = `diff --git a/test.txt b/test.txt
+--- a/test.txt
++++ b/test.txt
+@@ -1,3 +1,3 @@
+ before
+--- a/header-like-content
++++ b/header-like-content
+ after`;
+
+    expect(parseFileDiff(diff)).toEqual([
+      {
+        name: 'test.txt',
+        additions: 1,
+        deletions: 1,
+        hunks: [
+          {
+            header: '@@ -1,3 +1,3 @@',
+            lines: [
+              { type: 'context', content: 'before' },
+              { type: 'del', content: '-- a/header-like-content' },
+              { type: 'add', content: '++ b/header-like-content' },
+              { type: 'context', content: 'after' },
+            ],
+          },
+        ],
+      },
+    ]);
   });
 
   it('handles empty lines as context', () => {

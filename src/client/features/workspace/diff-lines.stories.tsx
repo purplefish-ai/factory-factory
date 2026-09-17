@@ -113,3 +113,11 @@ export const RestoredWrappedPosition: Story = {
     initialScrollState: { top: 32_007, left: 0, diffAnchor: { index: 500, offset: 7 } },
   },
 };
+
+export const HeaderLikeContent: Story = {
+  args: {
+    lines: parseDetailedDiff(
+      '@@ -1,3 +1,3 @@\n before\n--- deleted SQL comment\n+++counter;\n after'
+    ),
+  },
+};
