@@ -2,6 +2,7 @@ import type { RatchetReviewTriggerMode } from '@prisma-gen/client';
 import { SERVICE_CACHE_TTL_MS, SERVICE_INTERVAL_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
 import type { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
+import { hasAdversarialReviewMarker } from '@/shared/adversarial-review';
 import {
   CIStatus,
   deriveRatchetState,
@@ -207,7 +208,11 @@ export function computeLatestReviewActivityAtMs(
           state === 'CHANGES_REQUESTED' ||
           (reviewTriggerMode === 'ALL_REVIEW_FEEDBACK' &&
             state === 'COMMENTED' &&
-            (review.body?.trim().length ?? 0) > 0)
+            (review.body?.trim().length ?? 0) > 0) ||
+          // An adversarial-review finding is an explicit, on-demand request for
+          // feedback (the user clicked the button), so it counts as actionable
+          // regardless of the admin's ambient review-trigger-mode setting.
+          (state === 'COMMENTED' && hasAdversarialReviewMarker(review.body))
         );
       })
       .map((review) => ({
@@ -261,7 +266,8 @@ export function buildReviewSummariesForPrompt(
 
       if (
         state !== 'CHANGES_REQUESTED' &&
-        !(reviewTriggerMode === 'ALL_REVIEW_FEEDBACK' && state === 'COMMENTED')
+        !(reviewTriggerMode === 'ALL_REVIEW_FEEDBACK' && state === 'COMMENTED') &&
+        !(state === 'COMMENTED' && hasAdversarialReviewMarker(review.body))
       ) {
         return false;
       }

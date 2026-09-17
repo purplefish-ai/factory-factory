@@ -176,6 +176,11 @@ export const userSettingsRouter = router({
         // Permission preset defaults
         defaultWorkspacePermissions: z.nativeEnum(SessionPermissionPreset).optional(),
         ratchetPermissions: z.nativeEnum(SessionPermissionPreset).optional(),
+        // Adversarial review settings
+        reviewerSessionProvider: z.nativeEnum(SessionProvider).optional(),
+        reviewerClaudeModel: z.string().trim().min(1).nullable().optional(),
+        reviewerCodexModel: z.string().trim().min(1).nullable().optional(),
+        postReviewToGitHub: z.boolean().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {

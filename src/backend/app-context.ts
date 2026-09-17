@@ -1,5 +1,6 @@
 import { prisma } from './db';
 import { registerInterceptors, startInterceptors, stopInterceptors } from './interceptors';
+import { triggerAdversarialReview } from './orchestration/adversarial-review.orchestrator';
 import { cliHealthService } from './orchestration/cli-health.service';
 import { dataBackupService } from './orchestration/data-backup.service';
 import {
@@ -151,6 +152,7 @@ export type ApplicationServices = BridgeServices & {
   workspaceRelationshipsService: typeof workspaceRelationshipsService;
   worktreeLifecycleService: typeof worktreeLifecycleService;
   computePendingRequestType: typeof computePendingRequestType;
+  triggerAdversarialReview: typeof triggerAdversarialReview;
   archiveWorkspace: typeof archiveWorkspace;
   cleanupWorkspaceRuntimeResources: typeof cleanupWorkspaceRuntimeResources;
   cleanupWorkspaceScopedCaches(workspaceId: string): void;
@@ -210,6 +212,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     cliHealthService,
     configService,
     computePendingRequestType,
+    triggerAdversarialReview,
     cryptoService,
     createLogger,
     dataBackupService,

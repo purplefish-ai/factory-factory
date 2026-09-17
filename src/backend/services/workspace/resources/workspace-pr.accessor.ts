@@ -414,6 +414,24 @@ class WorkspacePRAccessor {
    * transaction so the value it returns is the one `applyAggregateIfUnchanged`
    * guards on.
    */
+  /**
+   * The minimal PR identity + state needed to decide whether a workspace has
+   * an open PR to act on (e.g. adversarial review), without pulling in the
+   * rest of the cached aggregate.
+   */
+  async findPRState(
+    workspaceId: string
+  ): Promise<{ prUrl: string | null; prNumber: number | null; prState: PRState } | null> {
+    const row = await prisma.workspacePR.findUnique({
+      where: { workspaceId },
+      select: { url: true, number: true, state: true },
+    });
+    if (!row) {
+      return null;
+    }
+    return { prUrl: row.url, prNumber: row.number, prState: row.state };
+  }
+
   async readAggregate(
     transaction: Prisma.TransactionClient,
     workspaceId: string

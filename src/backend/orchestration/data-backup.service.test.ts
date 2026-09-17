@@ -236,6 +236,10 @@ const mockUserSettings: UserSettings = {
   defaultCodexReasoningEffort: 'high',
   defaultWorkspacePermissions: 'STRICT',
   ratchetPermissions: 'YOLO',
+  reviewerSessionProvider: SessionProvider.CODEX,
+  reviewerClaudeModel: null,
+  reviewerCodexModel: null,
+  postReviewToGitHub: true,
   // Non-default values — an export/import test that only ever exercises
   // defaults can't tell a real persisted preference from a value the
   // schema's default happened to backfill (see the voiceModeEnabled et al.

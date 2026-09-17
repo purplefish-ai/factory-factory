@@ -26,6 +26,10 @@ interface UpdateUserSettingsInput {
   defaultCodexReasoningEffort?: string | null;
   defaultWorkspacePermissions?: SessionPermissionPreset;
   ratchetPermissions?: SessionPermissionPreset;
+  reviewerSessionProvider?: SessionProvider;
+  reviewerClaudeModel?: string | null;
+  reviewerCodexModel?: string | null;
+  postReviewToGitHub?: boolean;
   voiceModeEnabled?: boolean;
   deepgramApiKeyEncrypted?: string | null;
   voiceTtsModel?: string;

@@ -2,6 +2,16 @@
 // Public API for the GitHub domain module.
 // Consumers should import from '@/backend/services/github' only.
 
+// --- Adversarial-review code review posting ---
+export {
+  type CodeReviewComment,
+  type CodeReviewCommentSide,
+  createReviewComment,
+  getPRDescription,
+  getPRHeadCommitSha,
+  type SubmitCodeReviewInput,
+  submitCodeReview,
+} from './github-cli/code-review';
 export { classifyError as classifyGitHubCLIError } from './github-cli/errors';
 // --- GitHub CLI wrapper ---
 export {
