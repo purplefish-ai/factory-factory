@@ -20,6 +20,9 @@ resumed without rerunning setup. Its single workspace-level script warning
 exposes **Dispatch queued messages** for the selected chat. Ready workspaces
 with a setup warning dispatch normally and do not show this action.
 
+Retrying a ready workspace with a setup warning restores READY even when its
+setup and startup scripts have been removed, before queued messages dispatch.
+
 Kanban Quick Chat keeps composer attachments in shared chat state, so sending,
 rejection recovery, and session restoration use the same attachments as the full
 workspace chat.
