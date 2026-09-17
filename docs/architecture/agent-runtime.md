@@ -55,6 +55,9 @@ separate configured deadline. Explicit stops, closes, workspace archives,
 provider failures, prompt timeouts, and unexpected process exits record distinct
 typed reasons.
 
+The chat composer uses generic retry wording for runtime errors; the banner
+provides the specific startup, prompt, or process-exit error.
+
 Admin Claude model options come from an ephemeral, non-persisted Claude ACP
 session with tools disabled; discovery failure falls back to static aliases.
 Claude model names are normalized from provider descriptions at every ACP config

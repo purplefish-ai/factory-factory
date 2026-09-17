@@ -114,7 +114,7 @@ function getInputPlaceholder({
     return 'Agent is starting...';
   }
   if (sessionRuntime.phase === 'error') {
-    return 'Agent failed to start. Type a message to retry...';
+    return 'Agent encountered an error. Type a message to retry...';
   }
   if (pendingRequest.type === 'permission' && pendingRequest.request.toolName === 'ExitPlanMode') {
     return 'Approve the plan or keep planning...';
