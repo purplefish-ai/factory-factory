@@ -16,17 +16,11 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import pLimit from 'p-limit';
 import { createLogger } from '@/backend/services/logger.service';
-import { GH_CONCURRENCY, GH_TIMEOUT_MS } from './constants';
+import { ghExecLimit as execLimit, GH_TIMEOUT_MS } from './constants';
 
 const execFileAsync = promisify(execFile);
 const logger = createLogger('github-cli-code-review');
-
-// A separate, small concurrency gate rather than sharing the main service's
-// limiter: this path is a rare, user-triggered action (one click), not a poll
-// loop, so it doesn't need to compete with or throttle high-frequency reads.
-const execLimit = pLimit(GH_CONCURRENCY);
 
 export type CodeReviewCommentSide = 'LEFT' | 'RIGHT';
 
@@ -38,8 +32,31 @@ export interface CodeReviewComment {
 }
 
 export interface SubmitCodeReviewInput {
+  /** Anchors comments to the diff this review was computed against, not the PR's possibly-newer head. */
+  commitId: string;
   body: string;
   comments: CodeReviewComment[];
+}
+
+/**
+ * Thrown by `submitCodeReview` so callers can tell a definitive self-review
+ * rejection (safe to fall back to the no-self-review-restriction endpoints)
+ * apart from a transient/auth/rate-limit failure (where falling back would
+ * risk posting duplicate comments once the underlying call actually lands).
+ */
+export class ReviewSubmissionError extends Error {
+  constructor(
+    message: string,
+    readonly isSelfReviewRejection: boolean
+  ) {
+    super(message);
+    this.name = 'ReviewSubmissionError';
+  }
+}
+
+/** `gh api` surfaces the HTTP status in its error text, e.g. "HTTP 422: ...". */
+function isSelfReviewRejection(errorMessage: string): boolean {
+  return /HTTP 422/.test(errorMessage);
 }
 
 async function withTempJsonFile<T>(payload: unknown, fn: (path: string) => Promise<T>): Promise<T> {
@@ -67,6 +84,7 @@ export async function submitCodeReview(
   input: SubmitCodeReviewInput
 ): Promise<void> {
   const payload = {
+    commit_id: input.commitId,
     body: input.body,
     event: 'COMMENT',
     comments: input.comments.map((comment) => ({
@@ -102,7 +120,10 @@ export async function submitCodeReview(
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logger.warn('Failed to submit code review via gh api', { repo, prNumber, error: errorMessage });
-    throw new Error(`Failed to submit code review: ${errorMessage}`);
+    throw new ReviewSubmissionError(
+      `Failed to submit code review: ${errorMessage}`,
+      isSelfReviewRejection(errorMessage)
+    );
   }
 }
 

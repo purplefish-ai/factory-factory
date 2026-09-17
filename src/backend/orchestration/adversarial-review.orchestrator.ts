@@ -18,6 +18,7 @@ import {
   getPRDescription,
   getPRHeadCommitSha,
   githubCLIService,
+  ReviewSubmissionError,
   submitCodeReview,
 } from '@/backend/services/github';
 import { createLogger } from '@/backend/services/logger.service';
@@ -52,7 +53,28 @@ export interface TriggerAdversarialReviewResult {
   sessionId: string;
 }
 
-export async function triggerAdversarialReview(
+// Per-workspace acquisition lock: without it, two concurrent triggers can
+// both observe "no active session" before either has created one, starting
+// duplicate reviewers. A second call for the same workspace instead awaits
+// the first call's own in-flight result rather than repeating its checks.
+const inFlightTriggers = new Map<string, Promise<TriggerAdversarialReviewResult>>();
+
+export function triggerAdversarialReview(
+  workspaceId: string
+): Promise<TriggerAdversarialReviewResult> {
+  const existingTrigger = inFlightTriggers.get(workspaceId);
+  if (existingTrigger !== undefined) {
+    return existingTrigger;
+  }
+
+  const trigger = triggerAdversarialReviewLocked(workspaceId).finally(() => {
+    inFlightTriggers.delete(workspaceId);
+  });
+  inFlightTriggers.set(workspaceId, trigger);
+  return trigger;
+}
+
+async function triggerAdversarialReviewLocked(
   workspaceId: string
 ): Promise<TriggerAdversarialReviewResult> {
   const [fixerContext, prState] = await Promise.all([
@@ -103,7 +125,16 @@ export async function triggerAdversarialReview(
     model,
   });
 
-  await sessionLifecycleService.startSession(session.id, { startupModePreset: 'non_interactive' });
+  // `plan` mode structurally blocks write tools (not just the permission
+  // preset, which non-interactive sessions can't be prompted to approve
+  // anyway) — see session-lifecycle-external-ports.ts for the matching
+  // permission-preset side of this. An empty initial prompt prevents the
+  // startup default ("Continue with the task.") from running a turn before
+  // the review prompt below is the first thing the model sees.
+  await sessionLifecycleService.startSession(session.id, {
+    initialPrompt: '',
+    startupModePreset: 'plan',
+  });
 
   // Fire-and-forget: the caller gets the session id back immediately so the
   // client can switch to it and watch it work; the review turn itself can
@@ -148,44 +179,57 @@ interface RunAdversarialReviewTurnParams {
 async function runAdversarialReviewTurn(params: RunAdversarialReviewTurnParams): Promise<void> {
   const { sessionId, repo, prUrl, prNumber, postReviewToGitHub } = params;
 
-  const [diff, fullDetails, description] = await Promise.all([
-    githubCLIService.getPRDiff(repo, prNumber),
-    githubCLIService.getPRFullDetails(repo, prNumber),
-    getPRDescription(repo, prNumber),
-  ]);
-
-  const prompt = buildAdversarialReviewDispatchPrompt({
-    prUrl,
-    prNumber,
-    prDescription: description,
-    prDiff: diff,
-    existingReviewCommentsSummary: summarizeExistingActivity(fullDetails),
-  });
-
-  await sessionService.sendSessionMessage(sessionId, prompt);
-
-  const finalMessage = getLastAssistantMessageText(sessionId);
-  if (!finalMessage) {
-    logger.warn('Adversarial review session produced no assistant message', { sessionId });
-    return;
-  }
-
-  let findings: AdversarialReviewFindings;
   try {
-    findings = parseAdversarialReviewFindings(finalMessage);
-  } catch (error) {
-    logger.warn('Failed to parse adversarial review findings', {
-      sessionId,
-      error: error instanceof Error ? error.message : String(error),
+    const [diff, headSha, fullDetails, description] = await Promise.all([
+      githubCLIService.getPRDiff(repo, prNumber),
+      getPRHeadCommitSha(repo, prNumber),
+      githubCLIService.getPRFullDetails(repo, prNumber),
+      getPRDescription(repo, prNumber),
+    ]);
+
+    const prompt = buildAdversarialReviewDispatchPrompt({
+      prUrl,
+      prNumber,
+      prDescription: description,
+      prDiff: diff,
+      existingReviewCommentsSummary: summarizeExistingActivity(fullDetails),
     });
-    return;
-  }
 
-  if (!postReviewToGitHub) {
-    return;
-  }
+    await sessionService.sendSessionMessage(sessionId, prompt);
 
-  await postFindingsToGitHub(repo, prNumber, diff, findings);
+    const finalMessage = getLastAssistantMessageText(sessionId);
+    if (!finalMessage) {
+      logger.warn('Adversarial review session produced no assistant message', { sessionId });
+      return;
+    }
+
+    let findings: AdversarialReviewFindings;
+    try {
+      findings = parseAdversarialReviewFindings(finalMessage);
+    } catch (error) {
+      logger.warn('Failed to parse adversarial review findings', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return;
+    }
+
+    if (!postReviewToGitHub) {
+      return;
+    }
+
+    await postFindingsToGitHub(repo, prNumber, diff, headSha, findings);
+  } finally {
+    // A one-off review turn: retire the session once it's done so a later
+    // trigger starts a fresh review instead of finding this one "already
+    // active" forever.
+    await sessionLifecycleService.stopSession(sessionId).catch((error) => {
+      logger.warn('Failed to stop adversarial review session after its turn', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
 }
 
 function summarizeExistingActivity(fullDetails: {
@@ -229,6 +273,7 @@ async function postFindingsToGitHub(
   repo: string,
   prNumber: number,
   diff: string,
+  headSha: string,
   findings: AdversarialReviewFindings
 ): Promise<void> {
   const diffIndex = buildDiffLineIndex(diff);
@@ -255,6 +300,7 @@ async function postFindingsToGitHub(
 
   try {
     await submitCodeReview(repo, prNumber, {
+      commitId: headSha,
       body,
       comments: validComments.map((comment) => ({
         path: comment.path,
@@ -265,20 +311,27 @@ async function postFindingsToGitHub(
     });
     return;
   } catch (error) {
-    logger.warn('submitCodeReview failed; falling back to individual comments', {
+    // Only a confirmed self-review rejection is safe to retry through the
+    // fallback endpoints — any other failure (auth, rate limit, timeout) may
+    // have still landed the review server-side, so falling back blind risks
+    // posting duplicate comments.
+    if (!(error instanceof ReviewSubmissionError && error.isSelfReviewRejection)) {
+      throw error;
+    }
+    logger.warn('submitCodeReview rejected as self-review; falling back to individual comments', {
       repo,
       prNumber,
-      error: error instanceof Error ? error.message : String(error),
+      error: error.message,
     });
   }
 
   // Fallback for when the review-object endpoint rejects this app's `gh`
   // identity for reviewing its own PR: post the same content through
-  // endpoints with no such self-review restriction.
-  const commitId = await getPRHeadCommitSha(repo, prNumber);
+  // endpoints with no such self-review restriction, anchored to the same
+  // commit the diff (and therefore the findings' line numbers) was read at.
   for (const comment of validComments) {
     await createReviewComment(repo, prNumber, {
-      commitId,
+      commitId: headSha,
       path: comment.path,
       line: comment.line,
       side: comment.side,

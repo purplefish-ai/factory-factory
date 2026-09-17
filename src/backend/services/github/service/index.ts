@@ -9,6 +9,7 @@ export {
   createReviewComment,
   getPRDescription,
   getPRHeadCommitSha,
+  ReviewSubmissionError,
   type SubmitCodeReviewInput,
   submitCodeReview,
 } from './github-cli/code-review';

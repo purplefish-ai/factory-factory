@@ -7,10 +7,10 @@
  */
 
 import { z } from 'zod';
-import { publicProcedure, router } from './trpc';
+import { router, trustedLocalProcedure } from './trpc';
 
 export const adversarialReviewRouter = router({
-  trigger: publicProcedure
+  trigger: trustedLocalProcedure
     .input(z.object({ workspaceId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       return await ctx.appContext.services.triggerAdversarialReview(input.workspaceId);

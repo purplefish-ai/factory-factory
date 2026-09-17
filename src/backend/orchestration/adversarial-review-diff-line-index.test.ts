@@ -68,4 +68,40 @@ describe('buildDiffLineIndex', () => {
     const index = buildDiffLineIndex('');
     expect(index.has('anything.ts', 'RIGHT', 1)).toBe(false);
   });
+
+  it('does not misparse hunk content that resembles a file header', () => {
+    const diff = [
+      'diff --git a/src/foo.ts b/src/foo.ts',
+      '--- a/src/foo.ts',
+      '+++ b/src/foo.ts',
+      '@@ -1,3 +1,3 @@',
+      ' context',
+      // A removed line whose own text starts with "-- ", which renders as
+      // "--- " (three dashes) once the diff's own "-" marker is prepended.
+      '--- old marker line',
+      // An added line whose own text starts with "++ b/", which renders as
+      // a "+++ b/..." file header once the diff's own "+" marker is prepended.
+      '+++ b/not/a/real/header.ts',
+    ].join('\n');
+
+    const index = buildDiffLineIndex(diff);
+    expect(index.has('src/foo.ts', 'LEFT', 2)).toBe(true);
+    expect(index.has('src/foo.ts', 'RIGHT', 2)).toBe(true);
+  });
+
+  it('indexes removed lines of a deleted file on the LEFT side using the old path', () => {
+    const diff = [
+      'diff --git a/src/gone.ts b/src/gone.ts',
+      'deleted file mode 100644',
+      '--- a/src/gone.ts',
+      '+++ /dev/null',
+      '@@ -1,2 +0,0 @@',
+      '-line one',
+      '-line two',
+    ].join('\n');
+
+    const index = buildDiffLineIndex(diff);
+    expect(index.has('src/gone.ts', 'LEFT', 1)).toBe(true);
+    expect(index.has('src/gone.ts', 'LEFT', 2)).toBe(true);
+  });
 });

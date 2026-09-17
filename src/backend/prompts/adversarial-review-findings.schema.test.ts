@@ -43,6 +43,27 @@ describe('parseAdversarialReviewFindings', () => {
     });
   });
 
+  it('parses findings whose comment body embeds its own code fence', () => {
+    const findings = {
+      summary: 'See the snippet below.',
+      comments: [
+        {
+          path: 'src/foo.ts',
+          line: 5,
+          side: 'RIGHT' as const,
+          severity: 'nit' as const,
+          body: 'Prefer:\n```ts\nconst x = 1;\n```\ninstead.',
+        },
+      ],
+    };
+    // JSON.stringify escapes the body's real newlines to literal `\n`, so the
+    // nested fences land inline on the same JSON line rather than on their
+    // own line — exactly the shape that used to fool the lazy fence matcher.
+    const message = ['```json', JSON.stringify(findings), '```'].join('\n');
+
+    expect(parseAdversarialReviewFindings(message)).toEqual(findings);
+  });
+
   it('uses the last fenced JSON block when the model emits more than one', () => {
     const message = [
       '```json',
@@ -68,12 +89,25 @@ describe('parseAdversarialReviewFindings', () => {
     expect(() => parseAdversarialReviewFindings(message)).toThrow(/not valid json/i);
   });
 
-  it('throws when a comment references an invalid side or severity', () => {
+  it('throws when a comment references an invalid side', () => {
     const message = [
       '```json',
       JSON.stringify({
         summary: 'Bad comment.',
         comments: [{ path: 'a.ts', line: 1, side: 'MIDDLE', severity: 'blocking', body: 'x' }],
+      }),
+      '```',
+    ].join('\n');
+
+    expect(() => parseAdversarialReviewFindings(message)).toThrow(/failed validation/i);
+  });
+
+  it('throws when a comment references an invalid severity', () => {
+    const message = [
+      '```json',
+      JSON.stringify({
+        summary: 'Bad comment.',
+        comments: [{ path: 'a.ts', line: 1, side: 'RIGHT', severity: 'critical', body: 'x' }],
       }),
       '```',
     ].join('\n');

@@ -142,6 +142,20 @@ function buildSessionModelDefaults(
   };
 }
 
+function buildReviewerDefaults(
+  data: UpdateUserSettingsInput
+): Pick<
+  Prisma.UserSettingsCreateInput,
+  'reviewerSessionProvider' | 'reviewerClaudeModel' | 'reviewerCodexModel' | 'postReviewToGitHub'
+> {
+  return {
+    reviewerSessionProvider: data.reviewerSessionProvider ?? 'CODEX',
+    reviewerClaudeModel: data.reviewerClaudeModel ?? null,
+    reviewerCodexModel: data.reviewerCodexModel ?? null,
+    postReviewToGitHub: data.postReviewToGitHub ?? true,
+  };
+}
+
 function buildVoiceDefaults(
   data: UpdateUserSettingsInput
 ): Pick<
@@ -189,6 +203,7 @@ function buildCreateData(
       normalizedClaudeEffort,
       normalizedCodexEffort
     ),
+    ...buildReviewerDefaults(data),
     ...buildVoiceDefaults(data),
   };
 }

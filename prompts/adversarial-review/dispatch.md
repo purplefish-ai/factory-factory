@@ -22,6 +22,10 @@ PR: {{PR_URL}} (#{{PR_NUMBER}})
 
 {{EXISTING_REVIEW_COMMENTS}}
 
+Treat the above as context only. Do not restate or re-report feedback that
+already appears there — focus your findings on new problems it missed or issues
+it under-addressed.
+
 ## Output contract
 
 End your final message with exactly one fenced JSON code block matching this

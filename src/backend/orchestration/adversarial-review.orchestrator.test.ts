@@ -26,6 +26,7 @@ vi.mock('@/backend/services/session', () => ({
   },
   sessionLifecycleService: {
     startSession: vi.fn(),
+    stopSession: vi.fn(),
   },
   sessionService: {
     sendSessionMessage: vi.fn(),
@@ -45,7 +46,7 @@ vi.mock('@/backend/services/workspace', () => ({
   },
 }));
 
-import { githubCLIService } from '@/backend/services/github';
+import { getPRHeadCommitSha, githubCLIService } from '@/backend/services/github';
 import { sessionDataService, sessionLifecycleService } from '@/backend/services/session';
 import { userSettingsService } from '@/backend/services/settings';
 import { workspaceDataService } from '@/backend/services/workspace';
@@ -79,6 +80,8 @@ function mockOpenPrWorkspace() {
   } as never);
   vi.mocked(githubCLIService.getPRDiff).mockResolvedValue('');
   vi.mocked(githubCLIService.getPRFullDetails).mockResolvedValue({ reviews: [] } as never);
+  vi.mocked(getPRHeadCommitSha).mockResolvedValue('abc123');
+  vi.mocked(sessionLifecycleService.stopSession).mockResolvedValue(undefined);
 }
 
 describe('triggerAdversarialReview', () => {
@@ -90,8 +93,9 @@ describe('triggerAdversarialReview', () => {
     vi.mocked(workspaceDataService.findFixerContext).mockResolvedValue(null);
     vi.mocked(workspaceDataService.findPRState).mockResolvedValue(null);
 
-    await expect(triggerAdversarialReview(WORKSPACE_ID)).rejects.toThrow(ApplicationError);
-    await expect(triggerAdversarialReview(WORKSPACE_ID)).rejects.toMatchObject({
+    const rejection = triggerAdversarialReview(WORKSPACE_ID);
+    await expect(rejection).rejects.toThrow(ApplicationError);
+    await expect(rejection).rejects.toMatchObject({
       code: 'NOT_FOUND',
     });
   });
@@ -165,7 +169,23 @@ describe('triggerAdversarialReview', () => {
     );
     expect(sessionLifecycleService.startSession).toHaveBeenCalledWith(
       'new-session',
-      expect.objectContaining({ startupModePreset: 'non_interactive' })
+      expect.objectContaining({ initialPrompt: '', startupModePreset: 'plan' })
     );
+  });
+
+  it('serializes concurrent triggers for the same workspace instead of racing', async () => {
+    mockOpenPrWorkspace();
+    vi.mocked(sessionDataService.createAgentSession).mockResolvedValue({
+      id: 'new-session',
+    } as never);
+
+    const [first, second] = await Promise.all([
+      triggerAdversarialReview(WORKSPACE_ID),
+      triggerAdversarialReview(WORKSPACE_ID),
+    ]);
+
+    expect(first).toEqual({ status: 'started', sessionId: 'new-session' });
+    expect(second).toEqual(first);
+    expect(sessionDataService.createAgentSession).toHaveBeenCalledTimes(1);
   });
 });

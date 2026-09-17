@@ -2,6 +2,7 @@ import { ShieldWarningIcon, SpinnerGapIcon } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { WorkspaceHeaderWorkspace } from './types';
 import { hasVisiblePullRequest, isWorkspaceClosed, isWorkspaceMerged } from './utils';
@@ -9,9 +10,11 @@ import { hasVisiblePullRequest, isWorkspaceClosed, isWorkspaceMerged } from './u
 export function AdversarialReviewButton({
   workspace,
   workspaceId,
+  renderAsMenuItem = false,
 }: {
   workspace: WorkspaceHeaderWorkspace;
   workspaceId: string;
+  renderAsMenuItem?: boolean;
 }) {
   const utils = trpc.useUtils();
   const trigger = trpc.adversarialReview.trigger.useMutation({
@@ -36,6 +39,22 @@ export function AdversarialReviewButton({
     return null;
   }
 
+  if (renderAsMenuItem) {
+    return (
+      <DropdownMenuItem
+        onSelect={() => trigger.mutate({ workspaceId })}
+        disabled={trigger.isPending}
+      >
+        {trigger.isPending ? (
+          <SpinnerGapIcon className="h-4 w-4 animate-spin" />
+        ) : (
+          <ShieldWarningIcon className="h-4 w-4" />
+        )}
+        Adversarial review
+      </DropdownMenuItem>
+    );
+  }
+
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -43,6 +62,7 @@ export function AdversarialReviewButton({
           variant="ghost"
           size="icon"
           className="h-6 w-6 md:h-8 md:w-8"
+          aria-label="Start adversarial review"
           disabled={trigger.isPending}
           onClick={() => trigger.mutate({ workspaceId })}
         >

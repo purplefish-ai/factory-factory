@@ -1,11 +1,10 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import pLimit from 'p-limit';
 import { createLogger } from '@/backend/services/logger.service';
 import { isRateLimitMessage } from '@/backend/services/rate-limit-backoff';
 import type { CIStatus, PRState } from '@/shared/core';
 import type { PRWithFullDetails, ReviewAction } from '@/shared/github-types';
-import { GH_CONCURRENCY, GH_MAX_BUFFER_BYTES, GH_TIMEOUT_MS } from './github-cli/constants';
+import { GH_MAX_BUFFER_BYTES, GH_TIMEOUT_MS, ghExecLimit } from './github-cli/constants';
 import { classifyError, logGitHubCLIError } from './github-cli/errors';
 import {
   computeCIStatus,
@@ -89,7 +88,7 @@ function collectResolvedReviewCommentIds(
 const RATE_LIMIT_FAST_FAIL_MS = 60_000;
 
 class GitHubCLIService {
-  private readonly execLimit = pLimit(GH_CONCURRENCY);
+  private readonly execLimit = ghExecLimit;
   private readonly inflight = new Map<string, Promise<ExecResult>>();
 
   // Stale-while-revalidate caches for expensive GitHub CLI calls.

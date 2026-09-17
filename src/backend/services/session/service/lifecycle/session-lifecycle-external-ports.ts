@@ -2,16 +2,20 @@ import { configService } from '@/backend/services/config.service';
 import { serverInstanceService } from '@/backend/services/server-instance.service';
 import { getChildWorkspaceMcpServerConfig } from '@/backend/services/session/service/acp/child-workspace-mcp-server';
 import { userSettingsService } from '@/backend/services/settings';
-import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import { sessionRepository } from './session.repository';
 import { SessionContextService } from './session-context.service';
 import type { SessionAcpEnvironmentPort } from './session-lifecycle.types';
 
 const ALL_INTERFACES_HOSTS = new Set(['0.0.0.0', '::', '::0', '0:0:0:0:0:0:0:0']);
 
-// Non-interactive sessions that need full trust (no one can answer a permission
-// prompt) share ratchet's permission preset, which defaults to YOLO.
-const AUTONOMOUS_WORKFLOWS = new Set(['ratchet', ADVERSARIAL_REVIEW_WORKFLOW]);
+// Ratchet is non-interactive (no one can answer a permission prompt) and needs
+// full write trust to fix issues, so it gets its own permission preset, which
+// defaults to YOLO. Adversarial review is also non-interactive but is
+// read-only by contract (see docs/design/adversarial-review.md) — it gets
+// `defaultWorkspacePermissions` like any other session instead, and relies on
+// the `plan` startup mode (adversarial-review.orchestrator.ts) to structurally
+// block write tools rather than on being fully trusted.
+const AUTONOMOUS_WORKFLOWS = new Set(['ratchet']);
 
 export const sessionContextService = new SessionContextService({
   repository: sessionRepository,

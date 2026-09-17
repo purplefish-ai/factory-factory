@@ -16,7 +16,7 @@ export const adversarialReviewFindingsSchema = z.object({
 export type AdversarialReviewComment = z.infer<typeof adversarialReviewCommentSchema>;
 export type AdversarialReviewFindings = z.infer<typeof adversarialReviewFindingsSchema>;
 
-const JSON_FENCE_PATTERN = /```json\s*([\s\S]*?)```/g;
+const JSON_FENCE_PATTERN = /```json[ \t]*\r?\n([\s\S]*?)\r?\n```[ \t]*(?=\r?\n|$)/gi;
 
 /**
  * Extract the last fenced ```json block from the review session's final

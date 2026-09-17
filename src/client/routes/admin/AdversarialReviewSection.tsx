@@ -28,7 +28,26 @@ export function AdversarialReviewSection() {
       toast.success('Adversarial review settings updated');
       utils.userSettings.get.invalidate();
     },
-    onError: (error) => {
+    onError: (error, variables) => {
+      // Roll back only the selector this failed mutation touched, and only if
+      // a newer selection hasn't already replaced it — otherwise a slow,
+      // now-superseded model save could clobber a value the user picked
+      // after it was sent.
+      const savedSettings = utils.userSettings.get.getData() ?? settings;
+      if (variables.reviewerClaudeModel !== undefined) {
+        setLocalClaudeModel((model) =>
+          model === variables.reviewerClaudeModel
+            ? (savedSettings?.reviewerClaudeModel ?? 'sonnet')
+            : model
+        );
+      }
+      if (variables.reviewerCodexModel !== undefined) {
+        setLocalCodexModel((model) =>
+          model === variables.reviewerCodexModel
+            ? (savedSettings?.reviewerCodexModel ?? 'default')
+            : model
+        );
+      }
       toast.error(`Failed to update adversarial review settings: ${error.message}`);
     },
   });

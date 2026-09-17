@@ -92,7 +92,6 @@ for `defaultSessionProvider`/`defaultClaudeModel`/`defaultCodexModel`):
 - **Reviewer provider**: `CLAUDE` / `CODEX` select.
 - **Reviewer model** (per provider, same live-catalog + fallback pattern as
   `getModelOptions`/`getEffortOptions` in `ChatProviderDefaultsSection.tsx:75`).
-- **Reviewer reasoning effort** (per provider, optional).
 - **Post reviews to GitHub** toggle, default **on** (this is the point of the
   feature); turning it off runs the review in-app only, useful for dry-running a
   new reviewer model/prompt without touching the PR.
@@ -132,7 +131,6 @@ Add to `UserSettings` (`prisma/schema.prisma:588`), mirroring the existing
 reviewerSessionProvider SessionProvider @default(CODEX)
 reviewerClaudeModel     String?
 reviewerCodexModel      String?
-reviewerReasoningEffort String?
 postReviewToGitHub      Boolean @default(true)
 ```
 
@@ -161,7 +159,7 @@ Ratchet's restart-on-idle, dispatch-tracking semantics that don't apply here.
    starting a new one (idempotency — same spirit as
    `fixerSessionService.getActiveSession`, minus the restart-on-idle branch).
 3. Read `reviewerSessionProvider` / `reviewerClaudeModel` / `reviewerCodexModel`
-   / `reviewerReasoningEffort` from `userSettingsService`.
+   from `userSettingsService`.
 4. Fetch PR context via existing `GitHubCLIService` methods: `getPRDiff`
    (`github-cli.service.ts:570`) and `getPRFullDetails`
    (`github-cli.service.ts:489`, which includes `headRefOid`, needed as the
@@ -250,7 +248,11 @@ available to a self-authored PR's own reviewing identity. Instead:
 
 - The review's summary body is prefixed with a fixed, greppable marker, e.g.
   `<!-- factory-factory:adversarial-review -->`, identifying it as an automated
-  adversarial-review finding (as distinct from a human's comment).
+  adversarial-review finding (as distinct from a human's comment). Because the
+  marker text is public on the PR, recognizing it alone would let any GitHub
+  user spoof an adversarial-review finding by copying it into their own review;
+  the marker only counts if the review's author also matches this app's own
+  authenticated `gh` identity (`ratchet-pr-state.helpers.ts`).
 - Ratchet's existing "does this PR have actionable review feedback" detection
   (referenced in `docs/architecture/pull-requests.md` as the
   `CHANGES_REQUESTED`/`ALL_REVIEW_FEEDBACK` trigger-mode check, and the
@@ -275,11 +277,14 @@ available to a self-authored PR's own reviewing identity. Instead:
 
 Resolved during review:
 
-- **Session permissions for a read-only review.** ✅ Resolved: `YOLO`, matching
-  Ratchet's fixer — the user will be available to notice and intervene if
-  something goes wrong, so trusting the prompt (plus a post-hoc "worktree
-  unchanged" check) is acceptable rather than risking a stall with no one able
-  to approve a permission prompt.
+- **Session permissions for a read-only review.** ✅ Resolved: the session
+  starts in `plan` startup mode (`adversarial-review.orchestrator.ts`), which
+  structurally blocks write tools rather than relying on trusting the prompt —
+  unlike Ratchet's fixer, this workflow has no legitimate reason to ever need
+  write access, so reusing Ratchet's `YOLO`-by-default permission preset would
+  grant it anyway. It also uses `defaultWorkspacePermissions` instead of
+  `ratchetPermissions` for the same reason
+  (`session-lifecycle-external-ports.ts`).
 - **Merge-blocking event type.** ✅ Resolved: always `COMMENT`, never
   `REQUEST_CHANGES`/`APPROVE`. The original plan was to map severity to
   `REQUEST_CHANGES` so Ratchet's native trigger would pick it up "for free," but
@@ -325,7 +330,7 @@ Resolved during review:
 
 | Area            | File                                                                                          | Change                                                                                                                                                          |
 | --------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Schema          | `prisma/schema.prisma`                                                                        | +5 fields on `UserSettings`                                                                                                                                     |
+| Schema          | `prisma/schema.prisma`                                                                        | +4 fields on `UserSettings`                                                                                                                                     |
 | Admin UI        | `src/client/routes/admin/AdversarialReviewSection.tsx`                                        | new, cloned from `ChatProviderDefaultsSection.tsx`                                                                                                              |
 | Admin API       | `src/backend/trpc/user-settings.trpc.ts`                                                      | extend `update`'s Zod schema (`:147`)                                                                                                                           |
 | Backend capsule | `src/backend/services/adversarial-review/` (`index.ts`, `service/`)                           | new                                                                                                                                                             |
