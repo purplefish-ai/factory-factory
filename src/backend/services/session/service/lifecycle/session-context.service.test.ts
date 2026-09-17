@@ -112,6 +112,7 @@ describe('SessionContextService', () => {
   it.each([
     { workflow: 'code', fallback: 'STRICT' as const },
     { workflow: 'ratchet', fallback: 'YOLO' as const },
+    { workflow: 'auto-iteration', fallback: 'YOLO' as const },
   ])(
     'uses the $fallback fallback when $workflow permission settings cannot be read',
     async ({ workflow, fallback }) => {

@@ -19,6 +19,7 @@ import {
   getSelectOptions,
   type SessionProvider,
 } from './session-config-option-helpers';
+import { getWorkflowPermissionPreset, isUnattendedWorkflow } from './session-workflow-permissions';
 
 const logger = createLogger('session');
 
@@ -640,7 +641,7 @@ export class SessionConfigService {
   ): string | null {
     if (
       provider !== 'CODEX' ||
-      workflow !== 'ratchet' ||
+      !isUnattendedWorkflow(workflow) ||
       startupModePreset !== 'non_interactive' ||
       !executionModeOption
     ) {
@@ -663,12 +664,10 @@ export class SessionConfigService {
     sessionId: string,
     workflow: string
   ): Promise<SessionPermissionPreset> {
-    const fallback: SessionPermissionPreset = workflow === 'ratchet' ? 'YOLO' : 'STRICT';
+    const fallback: SessionPermissionPreset = getWorkflowPermissionPreset(workflow);
     try {
       const settings = await userSettingsService.get();
-      return workflow === 'ratchet'
-        ? settings.ratchetPermissions
-        : settings.defaultWorkspacePermissions;
+      return getWorkflowPermissionPreset(workflow, settings);
     } catch (error) {
       logger.warn('Failed loading user permission presets; using defaults', {
         sessionId,

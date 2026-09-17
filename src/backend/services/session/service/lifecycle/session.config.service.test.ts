@@ -149,7 +149,7 @@ describe('SessionConfigService', () => {
     );
   });
 
-  it('applies Codex ratchet non-interactive startup execution mode using YOLO', async () => {
+  it.each(['ratchet', 'auto-iteration'])('sets %s unattended mode', async (workflow) => {
     const modeConfig = {
       id: 'mode',
       name: 'Mode',
@@ -193,16 +193,11 @@ describe('SessionConfigService', () => {
       { ...executionModeConfig, currentValue: '["never","danger-full-access"]' },
     ]);
 
-    await service.applyStartupModePreset(
-      'session-codex-ratchet',
-      handle,
-      'non_interactive',
-      'ratchet'
-    );
+    await service.applyStartupModePreset('session-codex', handle, 'non_interactive', workflow);
 
-    expect(runtimeManager.setSessionMode).toHaveBeenCalledWith('session-codex-ratchet', 'code');
+    expect(runtimeManager.setSessionMode).toHaveBeenCalledWith('session-codex', 'code');
     expect(runtimeManager.setConfigOption).toHaveBeenCalledWith(
-      'session-codex-ratchet',
+      'session-codex',
       'execution_mode',
       '["never","danger-full-access"]'
     );
@@ -988,24 +983,47 @@ describe('SessionConfigService', () => {
     expect(metadataUpdates).toHaveLength(2);
   });
 
-  it('applies configured permission preset for CODEX sessions from user settings', async () => {
-    vi.mocked(userSettingsService.get).mockResolvedValue(
-      unsafeCoerce({
-        ratchetPermissions: 'YOLO',
-        defaultWorkspacePermissions: 'RELAXED',
-      })
-    );
+  it.each(['default', 'auto-iteration'])(
+    'applies configured permissions for %s',
+    async (workflow) => {
+      vi.mocked(userSettingsService.get).mockResolvedValue(
+        unsafeCoerce({
+          ratchetPermissions: 'RELAXED',
+          defaultWorkspacePermissions: workflow === 'default' ? 'RELAXED' : 'STRICT',
+        })
+      );
 
-    const handle = unsafeCoerce<AcpProcessHandle>({
-      provider: 'CODEX',
-      providerSessionId: 'provider-codex-1',
-      configOptions: [
+      const handle = unsafeCoerce<AcpProcessHandle>({
+        provider: 'CODEX',
+        providerSessionId: 'provider-codex-1',
+        configOptions: [
+          {
+            id: 'execution_mode',
+            name: 'Execution Mode',
+            type: 'select',
+            category: 'permission',
+            currentValue: '["on-request","workspace-write"]',
+            options: [
+              {
+                value: '["on-request","workspace-write"]',
+                name: 'On Request',
+              },
+              {
+                value: '["on-failure","workspace-write"]',
+                name: 'On Failure',
+              },
+            ],
+          },
+        ],
+      });
+
+      runtimeManager.setConfigOption.mockResolvedValue([
         {
           id: 'execution_mode',
           name: 'Execution Mode',
           type: 'select',
           category: 'permission',
-          currentValue: '["on-request","workspace-write"]',
+          currentValue: '["on-failure","workspace-write"]',
           options: [
             {
               value: '["on-request","workspace-write"]',
@@ -1017,44 +1035,24 @@ describe('SessionConfigService', () => {
             },
           ],
         },
-      ],
-    });
+      ]);
 
-    runtimeManager.setConfigOption.mockResolvedValue([
-      {
-        id: 'execution_mode',
-        name: 'Execution Mode',
-        type: 'select',
-        category: 'permission',
-        currentValue: '["on-failure","workspace-write"]',
-        options: [
-          {
-            value: '["on-request","workspace-write"]',
-            name: 'On Request',
-          },
-          {
-            value: '["on-failure","workspace-write"]',
-            name: 'On Failure',
-          },
-        ],
-      },
-    ]);
+      await service.applyConfiguredPermissionPreset(
+        'session-1',
+        unsafeCoerce({
+          id: 'session-1',
+          workflow,
+        }),
+        handle
+      );
 
-    await service.applyConfiguredPermissionPreset(
-      'session-1',
-      unsafeCoerce({
-        id: 'session-1',
-        workflow: 'default',
-      }),
-      handle
-    );
-
-    expect(runtimeManager.setConfigOption).toHaveBeenCalledWith(
-      'session-1',
-      'execution_mode',
-      '["on-failure","workspace-write"]'
-    );
-  });
+      expect(runtimeManager.setConfigOption).toHaveBeenCalledWith(
+        'session-1',
+        'execution_mode',
+        '["on-failure","workspace-write"]'
+      );
+    }
+  );
 
   it('applies configured permission preset for CLAUDE sessions that expose permission config', async () => {
     vi.mocked(userSettingsService.get).mockResolvedValue(

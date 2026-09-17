@@ -5,6 +5,7 @@ import { userSettingsService } from '@/backend/services/settings';
 import { sessionRepository } from './session.repository';
 import { SessionContextService } from './session-context.service';
 import type { SessionAcpEnvironmentPort } from './session-lifecycle.types';
+import { getWorkflowPermissionPreset } from './session-workflow-permissions';
 
 const ALL_INTERFACES_HOSTS = new Set(['0.0.0.0', '::', '::0', '0:0:0:0:0:0:0:0']);
 
@@ -13,9 +14,7 @@ export const sessionContextService = new SessionContextService({
   permissionPresetPort: {
     async getPermissionPreset(workflow) {
       const settings = await userSettingsService.get();
-      return workflow === 'ratchet'
-        ? settings.ratchetPermissions
-        : settings.defaultWorkspacePermissions;
+      return getWorkflowPermissionPreset(workflow, settings);
     },
   },
 });

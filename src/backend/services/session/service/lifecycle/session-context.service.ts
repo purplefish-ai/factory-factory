@@ -3,6 +3,7 @@ import type { AgentSessionRecord } from '@/backend/services/session/resources/ag
 import type { PermissionPreset } from '@/backend/services/session/service/acp';
 import type { WorkspaceStatus } from '@/shared/core';
 import type { SessionRepository } from './session.repository';
+import { getWorkflowPermissionPreset } from './session-workflow-permissions';
 
 const logger = createLogger('session');
 
@@ -75,7 +76,7 @@ export class SessionContextService {
   }
 
   async resolvePermissionPreset(session: AgentSessionRecord): Promise<PermissionPreset> {
-    const fallback: PermissionPreset = session.workflow === 'ratchet' ? 'YOLO' : 'STRICT';
+    const fallback: PermissionPreset = getWorkflowPermissionPreset(session.workflow);
     try {
       return await this.dependencies.permissionPresetPort.getPermissionPreset(session.workflow);
     } catch (error) {

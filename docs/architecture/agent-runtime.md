@@ -104,6 +104,11 @@ behavior. Before introducing custom system-prompt metadata, revisit the SDK's
 custom/append snapshot semantics. See
 [the upgrade validation](../superpowers/plans/2026-09-09-remaining-dependencies.md).
 
+Auto-iteration and ratchet sessions use the configured ratchet permission
+preset, with YOLO as the fallback if settings cannot be read. Codex
+non-interactive startup for either workflow selects the unattended execution
+mode so approval requests do not stall the loop waiting for a viewer.
+
 ## Session lifecycle ownership
 
 `SessionLifecycleGate` owns domain startup/stop eligibility.
