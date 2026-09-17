@@ -4,7 +4,7 @@ export { ChatProviderDefaultsSection } from './ChatProviderDefaultsSection';
 export { CliAuthSection } from './CliAuthSection';
 export { DataBackupSection } from './DataBackupSection';
 export { IdeSettingsSection } from './IdeSettingsSection';
-export { IssueTrackingSection, ProjectIssueTrackingCard } from './IssueTrackingSection';
+export { ProjectIssueTrackingCard } from './IssueTrackingSection';
 export { NotificationSettingsSection } from './NotificationSettingsSection';
 export { PeriodicTasksSection } from './PeriodicTasksSection';
 export {
