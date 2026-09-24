@@ -6,11 +6,8 @@ import type { WorkspaceWithProject } from './types';
 
 const logger = createLogger('workspace-init-script-pipeline');
 
-export type StartupScriptPhase = 'factory_setup' | 'project_startup';
-
 export interface StartupScriptPipelineResult {
   handled: boolean;
-  phase: StartupScriptPhase | null;
   success: boolean;
 }
 
@@ -22,7 +19,6 @@ interface StartupScriptPipelineContext {
 }
 
 interface StartupScriptPhaseDefinition {
-  phase: StartupScriptPhase;
   shouldRun: (context: StartupScriptPipelineContext) => boolean;
   buildProjectConfig: (
     context: StartupScriptPipelineContext
@@ -33,7 +29,6 @@ interface StartupScriptPhaseDefinition {
 
 const scriptPhaseDefinitions: StartupScriptPhaseDefinition[] = [
   {
-    phase: 'factory_setup',
     shouldRun: (context) => !!context.factoryConfig?.scripts.setup,
     buildProjectConfig: (context) => ({
       ...context.workspaceWithProject.project,
@@ -48,7 +43,6 @@ const scriptPhaseDefinitions: StartupScriptPhaseDefinition[] = [
     scriptFailedLogMessage: 'Setup script from factory-factory.json failed (non-blocking)',
   },
   {
-    phase: 'project_startup',
     shouldRun: (context) =>
       startupScriptService.hasStartupScript(context.workspaceWithProject.project),
     buildProjectConfig: (context) => context.workspaceWithProject.project,
@@ -113,7 +107,7 @@ export async function executeStartupScriptPipeline(
   }
 
   if (!handled) {
-    return { handled: false, phase: null, success: true };
+    return { handled: false, success: true };
   }
 
   // Single final state transition after all phases have run.
@@ -125,5 +119,5 @@ export async function executeStartupScriptPipeline(
     await workspaceStateMachine.markReady(context.workspaceId);
   }
 
-  return { handled: true, phase: null, success: true };
+  return { handled: true, success: true };
 }

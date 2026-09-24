@@ -233,7 +233,6 @@ describe('workspaceInitRouter', () => {
     mockReadConfig.mockResolvedValue({ setupCommands: [] });
     mockExecuteStartupScriptPipeline.mockResolvedValue({
       handled: true,
-      phase: 'factory_setup',
       success: true,
     });
     mockFindById.mockResolvedValue({ id: 'w3', status: 'READY' });
@@ -275,7 +274,6 @@ describe('workspaceInitRouter', () => {
     mockReadConfig.mockResolvedValue({ scripts: {} });
     mockExecuteStartupScriptPipeline.mockResolvedValue({
       handled: false,
-      phase: null,
       success: true,
     });
     mockMarkReady.mockImplementation(() => {
