@@ -9,10 +9,7 @@ import {
   DEFAULT_CHAT_SETTINGS,
   type MessageAttachment,
 } from '@/lib/chat-protocol';
-import {
-  type ChatBarCapabilities,
-  createClaudeChatBarCapabilities,
-} from '@/shared/chat-capabilities';
+import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import { useChatInputActions } from './use-chat-input-actions';
 
 interface ShortcutHarnessProps {
@@ -113,6 +110,27 @@ function dispatchModShortcut(textarea: HTMLTextAreaElement, key: string): Keyboa
   return event;
 }
 
+function claudeChatBarCapabilities(): ChatBarCapabilities {
+  return {
+    provider: 'CLAUDE',
+    model: {
+      enabled: true,
+      options: [
+        { value: 'opus', label: 'Opus' },
+        { value: 'sonnet', label: 'Sonnet' },
+      ],
+      selected: 'sonnet',
+    },
+    reasoning: { enabled: false, options: [] },
+    thinking: { enabled: true, defaultBudget: 10_000 },
+    planMode: { enabled: true },
+    attachments: { enabled: true, kinds: ['image', 'text'] },
+    slashCommands: { enabled: true },
+    usageStats: { enabled: true, contextWindow: true },
+    rewind: { enabled: true },
+  };
+}
+
 afterEach(() => {
   document.body.innerHTML = '';
 });
@@ -120,7 +138,7 @@ afterEach(() => {
 describe('useChatInputActions keyboard shortcuts', () => {
   it('does not send when Enter confirms an IME composition', () => {
     const onSend = vi.fn();
-    const capabilities = createClaudeChatBarCapabilities('sonnet');
+    const capabilities = claudeChatBarCapabilities();
     const { root, container, textarea } = renderHarness({
       capabilities,
       onSend,
@@ -148,7 +166,7 @@ describe('useChatInputActions keyboard shortcuts', () => {
   it('does not dismiss the slash menu when a Mod+Enter send is skipped', () => {
     const onCloseSlashMenu = vi.fn();
     const onSend = vi.fn();
-    const capabilities = createClaudeChatBarCapabilities('sonnet');
+    const capabilities = claudeChatBarCapabilities();
     const { root, container, textarea } = renderHarness({
       capabilities,
       disabled: true,
@@ -170,7 +188,7 @@ describe('useChatInputActions keyboard shortcuts', () => {
   it('closes the slash menu after a successful Mod+Enter send', () => {
     const onCloseSlashMenu = vi.fn();
     const onSend = vi.fn();
-    const capabilities = createClaudeChatBarCapabilities('sonnet');
+    const capabilities = claudeChatBarCapabilities();
     const { root, container, textarea } = renderHarness({
       capabilities,
       onCloseSlashMenu,
@@ -191,7 +209,7 @@ describe('useChatInputActions keyboard shortcuts', () => {
 
   it('toggles plan mode with Mod+Shift+P when plan mode is enabled', () => {
     const onSettingsChange = vi.fn();
-    const capabilities = createClaudeChatBarCapabilities('sonnet');
+    const capabilities = claudeChatBarCapabilities();
     const { root, container, textarea } = renderHarness({
       capabilities,
       onSettingsChange,
@@ -208,7 +226,7 @@ describe('useChatInputActions keyboard shortcuts', () => {
 
   it('does not toggle plan mode with Mod+Shift+P while running', () => {
     const onSettingsChange = vi.fn();
-    const capabilities = createClaudeChatBarCapabilities('sonnet');
+    const capabilities = claudeChatBarCapabilities();
     const { root, container, textarea } = renderHarness({
       capabilities,
       onSettingsChange,
@@ -226,7 +244,7 @@ describe('useChatInputActions keyboard shortcuts', () => {
 
   it('toggles thinking mode with Mod+Shift+T when thinking is enabled', () => {
     const onSettingsChange = vi.fn();
-    const capabilities = createClaudeChatBarCapabilities('sonnet');
+    const capabilities = claudeChatBarCapabilities();
     const { root, container, textarea } = renderHarness({
       capabilities,
       onSettingsChange,

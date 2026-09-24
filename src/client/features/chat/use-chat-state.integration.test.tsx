@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MessageAttachment } from '@/lib/chat-protocol';
 import { MessageState } from '@/lib/chat-protocol';
-import { createCodexChatBarCapabilities } from '@/shared/chat-capabilities';
+import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import { loadSettings } from './chat-persistence';
 import { type UseChatStateReturn, useChatState } from './use-chat-state';
 
@@ -347,13 +347,24 @@ describe('useChatState plan mode persistence', () => {
   });
 
   it('persists disabled plan mode after approving ExitPlanMode', async () => {
+    const codexCapabilities: ChatBarCapabilities = {
+      provider: 'CODEX',
+      model: { enabled: false, options: [] },
+      reasoning: { enabled: false, options: [] },
+      thinking: { enabled: false },
+      planMode: { enabled: true },
+      attachments: { enabled: false, kinds: [] },
+      slashCommands: { enabled: false },
+      usageStats: { enabled: false, contextWindow: false },
+      rewind: { enabled: false },
+    };
     const harness = renderChatState('session-A');
     await flushEffects();
 
     flushSync(() => {
       harness.chatRef.current?.dispatch({
         type: 'WS_CHAT_CAPABILITIES',
-        payload: { capabilities: createCodexChatBarCapabilities() },
+        payload: { capabilities: codexCapabilities },
       });
     });
     flushSync(() => {
