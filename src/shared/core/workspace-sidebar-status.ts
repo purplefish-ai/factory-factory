@@ -119,31 +119,3 @@ export function getWorkspaceCiTooltip(
   }
   return 'No PR attached';
 }
-
-export function getWorkspacePrTooltipSuffix(
-  ciState: WorkspaceSidebarCiState,
-  prState: PRState | null
-): string {
-  if (prState === 'CLOSED') {
-    return ' · Closed';
-  }
-  if (ciState === 'CLOSED') {
-    return ' · Closed';
-  }
-  if (ciState === 'MERGED') {
-    return ' · Merged';
-  }
-  if (ciState === 'FAILING') {
-    return ' · CI failing';
-  }
-  if (ciState === 'CONFLICT') {
-    return ' · Conflicts';
-  }
-  if (ciState === 'RUNNING') {
-    return ' · CI running';
-  }
-  if (ciState === 'PASSING') {
-    return ' · CI passing';
-  }
-  return '';
-}

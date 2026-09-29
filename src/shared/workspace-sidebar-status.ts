@@ -3,7 +3,6 @@ export {
   getWorkspaceActivityTooltip,
   getWorkspaceCiLabel,
   getWorkspaceCiTooltip,
-  getWorkspacePrTooltipSuffix,
   type WorkspaceSidebarActivityState,
   type WorkspaceSidebarCiState,
   type WorkspaceSidebarStatus,
