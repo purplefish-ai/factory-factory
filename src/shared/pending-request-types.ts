@@ -4,25 +4,6 @@
  */
 
 /**
- * Tool names that support using a message as an interactive response.
- * - AskUserQuestion: User can respond with free-form text (treated as "Other" option)
- * - ExitPlanMode: User can deny with feedback text
- */
-export const INTERACTIVE_RESPONSE_TOOLS = ['AskUserQuestion', 'ExitPlanMode'] as const;
-
-/**
- * Type for interactive response tool names.
- */
-export type InteractiveResponseTool = (typeof INTERACTIVE_RESPONSE_TOOLS)[number];
-
-/**
- * Runtime guard for tool names that support frontend interactive-response routing.
- */
-export function isInteractiveResponseTool(toolName: string): toolName is InteractiveResponseTool {
-  return (INTERACTIVE_RESPONSE_TOOLS as readonly string[]).includes(toolName);
-}
-
-/**
  * Returns true when the tool input looks like AskUserQuestion input.
  * This supports adapters that map question prompts to a non-standard tool name.
  */
