@@ -19,8 +19,6 @@ import {
 export interface WorkspaceDerivedFlowState {
   phase: WorkspaceFlowPhase;
   ciObservation: WorkspaceCiObservation;
-  hasActivePr: boolean;
-  isWorking: boolean;
   shouldAnimateRatchetButton: boolean;
 }
 
@@ -62,14 +60,6 @@ export interface WorkspaceDerivedState {
   ratchetButtonAnimated: boolean;
   statusReason: WorkspaceStatusReason;
 }
-
-export const DEFAULT_WORKSPACE_DERIVED_FLOW_STATE: WorkspaceDerivedFlowState = {
-  phase: 'NO_PR',
-  ciObservation: 'CHECKS_UNKNOWN',
-  hasActivePr: false,
-  isWorking: false,
-  shouldAnimateRatchetButton: false,
-};
 
 export function assembleWorkspaceDerivedState(
   input: WorkspaceDerivedStateInput,
