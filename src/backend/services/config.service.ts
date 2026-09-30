@@ -82,7 +82,7 @@ export interface CorsConfig {
    * CORS middleware, WebSocket upgrades, and tRPC's trusted-local check.
    * Never enable in production or when the backend is reachable beyond
    * loopback — this removes the app's only defense against a malicious
-   * webpage calling the local API with the user's session.
+   * webpage you have open calling the local API on your behalf.
    */
   disableCorsChecks?: boolean;
 }
@@ -402,6 +402,14 @@ class ConfigService {
     const errors: string[] = [];
 
     // SQLite database path is always set (has default), no validation needed
+
+    if (this.config.cors.disableCorsChecks) {
+      warnings.push(
+        'DISABLE_CORS_CHECKS is enabled: Origin validation is disabled for HTTP CORS, ' +
+          'WebSocket upgrades, and tRPC trusted-local checks. Local dev only - never run ' +
+          'with this set in a deployed or reverse-proxied environment.'
+      );
+    }
 
     // Log warnings
     warnings.forEach((w) => logger.warn(w));

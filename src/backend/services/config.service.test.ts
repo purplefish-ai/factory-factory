@@ -90,6 +90,13 @@ describe('configService environment accessors', () => {
     expect(configService.getMigrationsPath()).toBe('/tmp/migrations');
   });
 
+  it('defaults disableCorsChecks to false when DISABLE_CORS_CHECKS is absent', () => {
+    Reflect.deleteProperty(process.env, 'DISABLE_CORS_CHECKS');
+    configService.reload();
+
+    expect(configService.getCorsConfig().disableCorsChecks).toBe(false);
+  });
+
   it('expands BASE_DIR before dependent config paths', () => {
     const bracedBaseDir = '$' + '{BASE_DIR}';
     process.env.USER = 'testuser';

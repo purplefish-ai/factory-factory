@@ -122,11 +122,27 @@ describe('validateWebSocketOrigin', () => {
     expect(socket.destroy).toHaveBeenCalledTimes(1);
   });
 
-  it('allows upgrades with no or mismatched Origin when disableCorsChecks is set', () => {
+  it('allows upgrades with no Origin when disableCorsChecks is set', () => {
     const socket = createSocket();
 
     const isValid = validateWebSocketOrigin({
       request: { headers: {} } as IncomingMessage,
+      socket,
+      configService: createConfigService(['http://localhost:3000'], [], false, true),
+      logger: createLogger(),
+      connectionName: 'terminal WebSocket',
+    });
+
+    expect(isValid).toBe(true);
+    expect(socket.write).not.toHaveBeenCalled();
+    expect(socket.destroy).not.toHaveBeenCalled();
+  });
+
+  it('allows upgrades with a mismatched Origin when disableCorsChecks is set', () => {
+    const socket = createSocket();
+
+    const isValid = validateWebSocketOrigin({
+      request: { headers: { origin: 'https://attacker.example' } } as IncomingMessage,
       socket,
       configService: createConfigService(['http://localhost:3000'], [], false, true),
       logger: createLogger(),
