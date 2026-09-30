@@ -91,6 +91,7 @@ export const ConfigEnvSchema = z.object({
   CORS_ALLOWED_ORIGINS: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   TRUSTED_LOCAL_CIDRS: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   TRUST_PROXY_HEADERS: z.preprocess(parseBoolean, z.boolean()).catch(false),
+  DISABLE_CORS_CHECKS: z.preprocess(parseBoolean, z.boolean()).catch(false),
   BASE_DIR: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   WORKTREE_BASE_DIR: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   REPOS_DIR: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),

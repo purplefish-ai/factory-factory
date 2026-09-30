@@ -127,6 +127,13 @@ reachable solely through your trusted proxy** (i.e. bound to loopback) —
 otherwise clients could spoof address headers. The remote-address trust check
 (loopback / `TRUSTED_LOCAL_CIDRS`) still applies.
 
+For local testing from an origin that isn't in `CORS_ALLOWED_ORIGINS` (an
+alternate dev frontend, a LAN device, curl/Postman), set
+`DISABLE_CORS_CHECKS=true` to skip Origin validation entirely. **Local dev
+only** — never set this in a deployed or reverse-proxied environment; it removes
+the app's only defense against a malicious webpage calling the local API with
+your session.
+
 ## Security
 
 > [!WARNING] Factory Factory runs coding agents that can execute commands and

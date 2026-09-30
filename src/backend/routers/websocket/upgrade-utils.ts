@@ -42,6 +42,11 @@ export function validateWebSocketOrigin({
   logger: WebSocketOriginLogger;
   connectionName: string;
 }): boolean {
+  const corsConfig = configService.getCorsConfig();
+  if (corsConfig.disableCorsChecks) {
+    return true;
+  }
+
   const origin = request.headers?.origin;
   if (!origin) {
     logger.warn(`Rejected ${connectionName} connection without Origin header`);
@@ -49,8 +54,7 @@ export function validateWebSocketOrigin({
     return false;
   }
 
-  const allowedOrigins = configService.getCorsConfig().allowedOrigins;
-  if (!isOriginAllowed(origin, allowedOrigins)) {
+  if (!isOriginAllowed(origin, corsConfig.allowedOrigins)) {
     logger.warn(`Rejected ${connectionName} connection from unauthorized origin`, { origin });
     sendBadRequest(socket, 'Unauthorized origin');
     return false;

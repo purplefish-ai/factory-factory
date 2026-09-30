@@ -19,10 +19,16 @@ function createLogger() {
 function createConfigService(
   allowedOrigins: string[],
   trustedLocalCidrs: string[] = [],
-  trustProxyHeaders = false
+  trustProxyHeaders = false,
+  disableCorsChecks = false
 ) {
   return {
-    getCorsConfig: vi.fn(() => ({ allowedOrigins, trustedLocalCidrs, trustProxyHeaders })),
+    getCorsConfig: vi.fn(() => ({
+      allowedOrigins,
+      trustedLocalCidrs,
+      trustProxyHeaders,
+      disableCorsChecks,
+    })),
   };
 }
 
@@ -114,6 +120,22 @@ describe('validateWebSocketOrigin', () => {
     expect(isValid).toBe(false);
     expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('Unauthorized origin'));
     expect(socket.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('allows upgrades with no or mismatched Origin when disableCorsChecks is set', () => {
+    const socket = createSocket();
+
+    const isValid = validateWebSocketOrigin({
+      request: { headers: {} } as IncomingMessage,
+      socket,
+      configService: createConfigService(['http://localhost:3000'], [], false, true),
+      logger: createLogger(),
+      connectionName: 'terminal WebSocket',
+    });
+
+    expect(isValid).toBe(true);
+    expect(socket.write).not.toHaveBeenCalled();
+    expect(socket.destroy).not.toHaveBeenCalled();
   });
 });
 
