@@ -1,6 +1,5 @@
 import { z } from 'zod';
 
-const PermissionModeSchema = z.enum(['strict', 'relaxed', 'yolo']);
 const LogLevelSchema = z.enum(['error', 'warn', 'info', 'debug']);
 const NodeEnvSchema = z.enum(['development', 'production', 'test']);
 
@@ -65,8 +64,6 @@ export const LoggerEnvSchema = z.object({
 });
 
 export const ConfigEnvSchema = z.object({
-  DEFAULT_MODEL: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
-  DEFAULT_PERMISSIONS: z.preprocess(toLowerString, PermissionModeSchema).catch('yolo'),
   LOG_LEVEL: z.preprocess(toLowerString, LogLevelSchema).catch('info'),
   SERVICE_NAME: z.preprocess(toTrimmedString, z.string().min(1)).catch('factoryfactory'),
   ACP_STARTUP_TIMEOUT_MS: PositiveIntEnvSchema.catch(30_000),

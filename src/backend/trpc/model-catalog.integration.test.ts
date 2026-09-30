@@ -25,7 +25,7 @@ function createConsumers(
       appContext: {
         services: {
           codexModelCatalogService,
-          fetchClaudeModelCatalogFromAcp: vi.fn(async () => []),
+          claudeModelCatalogService: { getModels: vi.fn(async () => []) },
         },
       },
     })

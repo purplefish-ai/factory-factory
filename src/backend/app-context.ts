@@ -63,8 +63,8 @@ import {
   acpTraceLogger,
   chatEventForwarderService,
   chatMessageHandlerService,
+  claudeModelCatalogService,
   codexModelCatalogService,
-  fetchClaudeModelCatalogFromAcp,
   type SessionFileLogger,
   sessionDataService,
   sessionDomainService,
@@ -113,7 +113,7 @@ export type ApplicationServices = BridgeServices & {
   dataBackupService: typeof dataBackupService;
   decisionLogQueryService: typeof decisionLogService;
   executeStartupScriptPipeline: typeof executeStartupScriptPipeline;
-  fetchClaudeModelCatalogFromAcp: typeof fetchClaudeModelCatalogFromAcp;
+  claudeModelCatalogService: Pick<typeof claudeModelCatalogService, 'getModels'>;
   codexModelCatalogService: Pick<typeof codexModelCatalogService, 'getModels'>;
   factoryConfigService: Pick<typeof FactoryConfigService, 'readConfig'>;
   findAvailablePort: typeof findAvailablePort;
@@ -215,7 +215,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     dataBackupService,
     decisionLogQueryService: decisionLogService,
     executeStartupScriptPipeline,
-    fetchClaudeModelCatalogFromAcp,
+    claudeModelCatalogService,
     codexModelCatalogService,
     factoryConfigService: FactoryConfigService,
     findAvailablePort,

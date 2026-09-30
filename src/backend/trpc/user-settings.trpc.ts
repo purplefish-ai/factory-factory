@@ -57,10 +57,10 @@ function formatEffortLabel(value: string): string {
 }
 
 async function getClaudeProviderOptions(
-  fetchClaudeModelCatalogFromAcp: ApplicationServices['fetchClaudeModelCatalogFromAcp']
+  claudeModelCatalogService: ApplicationServices['claudeModelCatalogService']
 ): Promise<ProviderOptions> {
   try {
-    const catalog = await fetchClaudeModelCatalogFromAcp();
+    const catalog = await claudeModelCatalogService.getModels();
     return {
       source: 'cli',
       models: catalog.map((model) => ({
@@ -132,7 +132,7 @@ export const userSettingsRouter = router({
 
   getProviderOptions: publicProcedure.query(async ({ ctx }) => {
     const [claude, codex] = await Promise.all([
-      getClaudeProviderOptions(ctx.appContext.services.fetchClaudeModelCatalogFromAcp),
+      getClaudeProviderOptions(ctx.appContext.services.claudeModelCatalogService),
       getCodexProviderOptions(ctx.appContext.services.codexModelCatalogService),
     ]);
     return {
