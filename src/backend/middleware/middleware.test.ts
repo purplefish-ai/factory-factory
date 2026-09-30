@@ -224,6 +224,22 @@ describe('corsMiddleware', () => {
 
       expect(mockRes.headers['Access-Control-Allow-Origin']).toBe('http://127.0.0.1:4000');
     });
+
+    it('should reflect any origin when disableCorsChecks is set', () => {
+      mockGetCorsConfig.mockReturnValue({
+        allowedOrigins: ['https://example.com'],
+        disableCorsChecks: true,
+      });
+
+      const mockReq = createMockReq({
+        headers: { origin: 'https://attacker.example' },
+      });
+
+      corsMiddleware(mockReq, toResponse(mockRes), mockNext);
+
+      expect(mockRes.headers['Access-Control-Allow-Origin']).toBe('https://attacker.example');
+      expect(mockRes.headers['Access-Control-Allow-Credentials']).toBe('true');
+    });
   });
 
   describe('CORS headers', () => {

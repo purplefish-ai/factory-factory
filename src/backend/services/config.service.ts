@@ -77,6 +77,14 @@ export interface CorsConfig {
    * proxy that is the sole path to it (e.g. nginx -> 127.0.0.1).
    */
   trustProxyHeaders?: boolean;
+  /**
+   * Local dev only: disables Origin validation entirely across the Express
+   * CORS middleware, WebSocket upgrades, and tRPC's trusted-local check.
+   * Never enable in production or when the backend is reachable beyond
+   * loopback — this removes the app's only defense against a malicious
+   * webpage you have open calling the local API on your behalf.
+   */
+  disableCorsChecks?: boolean;
 }
 
 /**
@@ -269,6 +277,7 @@ function buildCorsConfig(env: ConfigEnv): CorsConfig {
           .filter(Boolean)
       : [],
     trustProxyHeaders: env.TRUST_PROXY_HEADERS,
+    disableCorsChecks: env.DISABLE_CORS_CHECKS,
   };
 }
 
@@ -393,6 +402,14 @@ class ConfigService {
     const errors: string[] = [];
 
     // SQLite database path is always set (has default), no validation needed
+
+    if (this.config.cors.disableCorsChecks) {
+      warnings.push(
+        'DISABLE_CORS_CHECKS is enabled: Origin validation is disabled for HTTP CORS, ' +
+          'WebSocket upgrades, and tRPC trusted-local checks. Local dev only - never run ' +
+          'with this set in a deployed or reverse-proxied environment.'
+      );
+    }
 
     // Log warnings
     warnings.forEach((w) => logger.warn(w));
@@ -589,6 +606,7 @@ class ConfigService {
       allowedOrigins: [...this.config.cors.allowedOrigins],
       trustedLocalCidrs: [...(this.config.cors.trustedLocalCidrs ?? [])],
       trustProxyHeaders: this.config.cors.trustProxyHeaders,
+      disableCorsChecks: this.config.cors.disableCorsChecks,
     };
   }
 

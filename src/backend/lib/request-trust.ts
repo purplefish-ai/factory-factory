@@ -122,7 +122,15 @@ function getEffectivePort(url: URL): string {
   return url.protocol === 'https:' ? '443' : '80';
 }
 
-export function isOriginAllowed(origin: string, allowedOrigins: readonly string[]): boolean {
+export function isOriginAllowed(
+  origin: string,
+  allowedOrigins: readonly string[],
+  disableCorsChecks = false
+): boolean {
+  if (disableCorsChecks) {
+    return true;
+  }
+
   if (allowedOrigins.includes(origin)) {
     return true;
   }

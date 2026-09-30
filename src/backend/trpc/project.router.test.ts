@@ -466,6 +466,44 @@ describe('projectRouter', () => {
     expect(mockProjectManagementService.validateRepoPath).not.toHaveBeenCalled();
   });
 
+  it('allows privileged project mutations from disallowed browser origins when disableCorsChecks is set', async () => {
+    const caller = createCaller(
+      {
+        remoteAddress: '127.0.0.1',
+        origin: 'https://attacker.example',
+        isLocal: true,
+      },
+      {
+        allowedOrigins: ['http://localhost:3000'],
+        disableCorsChecks: true,
+      }
+    );
+    mockProjectManagementService.validateRepoPath.mockResolvedValue({ valid: true });
+    mockProjectManagementService.create.mockResolvedValue({ id: 'created' });
+
+    await expect(caller.create({ repoPath: '/good/path' })).resolves.toEqual({ id: 'created' });
+    expect(mockProjectManagementService.create).toHaveBeenCalled();
+  });
+
+  it('still rejects privileged project mutations from untrusted remote addresses when disableCorsChecks is set', async () => {
+    const caller = createCaller(
+      {
+        remoteAddress: '203.0.113.10',
+        origin: 'https://attacker.example',
+        isLocal: false,
+      },
+      {
+        allowedOrigins: ['http://localhost:3000'],
+        disableCorsChecks: true,
+      }
+    );
+
+    await expect(caller.create({ repoPath: '/repo/path' })).rejects.toThrow(
+      'trusted local Factory Factory client'
+    );
+    expect(mockProjectManagementService.validateRepoPath).not.toHaveBeenCalled();
+  });
+
   it('creates projects successfully and validates update edge cases', async () => {
     const caller = createCaller();
     mockProjectManagementService.validateRepoPath.mockResolvedValue({ valid: true });
