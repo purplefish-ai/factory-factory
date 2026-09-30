@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { KanbanColumn, PRState, RatchetState, WorkspaceStatus } from '@/shared/core';
 import {
   assembleWorkspaceDerivedState,
-  DEFAULT_WORKSPACE_DERIVED_FLOW_STATE,
   type WorkspaceDerivedStateInput,
 } from './workspace-derived-state';
 
@@ -24,37 +23,16 @@ function makeInput(
     dispatchStalled: false,
     mode: 'STANDARD',
     autoIterationStatus: null,
-    flowState: DEFAULT_WORKSPACE_DERIVED_FLOW_STATE,
+    flowState: {
+      phase: 'NO_PR',
+      ciObservation: 'CHECKS_UNKNOWN',
+      shouldAnimateRatchetButton: false,
+    },
     ...overrides,
   };
 }
 
 describe('assembleWorkspaceDerivedState', () => {
-  it('uses live session activity, not PR flow activity, for workspace working state', () => {
-    const deriveSidebarStatus = vi.fn(() => ({
-      activityState: 'IDLE' as const,
-      ciState: 'NONE' as const,
-    }));
-
-    const result = assembleWorkspaceDerivedState(
-      makeInput({
-        flowState: {
-          ...DEFAULT_WORKSPACE_DERIVED_FLOW_STATE,
-          isWorking: true,
-        },
-      }),
-      { deriveSidebarStatus }
-    );
-
-    expect(result.isWorking).toBe(false);
-    expect(deriveSidebarStatus).toHaveBeenCalledWith(
-      expect.objectContaining({
-        isWorking: false,
-      })
-    );
-    expect(result.flowPhase).toBe('NO_PR');
-  });
-
   it('projects the kanban column from the status reason it just computed', () => {
     const idle = assembleWorkspaceDerivedState(makeInput(), {
       deriveSidebarStatus: () => ({ activityState: 'IDLE', ciState: 'NONE' }),
@@ -79,8 +57,6 @@ describe('assembleWorkspaceDerivedState', () => {
         flowState: {
           phase: 'CI_WAIT',
           ciObservation: 'CHECKS_PENDING',
-          hasActivePr: true,
-          isWorking: true,
           shouldAnimateRatchetButton: true,
         },
       }),

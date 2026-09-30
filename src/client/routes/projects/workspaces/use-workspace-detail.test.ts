@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   type NewSessionProviderSelection,
   resolveExplicitSessionProvider,
-} from './use-workspace-detail';
+} from '@/lib/session-provider-selection';
 
 describe('resolveExplicitSessionProvider', () => {
   it('returns undefined when workspace default is selected', () => {

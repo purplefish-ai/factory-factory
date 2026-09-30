@@ -41,14 +41,8 @@ interface WorkspaceStateProps {
 
 interface HeaderProps {
   archivePending: boolean;
-  availableIdes: ReturnType<typeof useSessionManagement>['availableIdes'];
-  preferredIde: string;
-  openInIde: ReturnType<typeof useSessionManagement>['openInIde'];
-  handleArchiveRequest: () => void;
   handleQuickAction: ReturnType<typeof useSessionManagement>['handleQuickAction'];
-  running: boolean;
   isCreatingSession: boolean;
-  hasChanges: boolean | undefined;
 }
 
 interface SessionTabsProps {

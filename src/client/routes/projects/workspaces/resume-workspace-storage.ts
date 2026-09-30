@@ -32,15 +32,6 @@ function writeResumeWorkspaceIds(ids: string[]) {
   }
 }
 
-export function rememberResumeWorkspace(workspaceId: string) {
-  const existing = readResumeWorkspaceIds();
-  if (!existing.includes(workspaceId)) {
-    existing.push(workspaceId);
-  }
-  const trimmed = existing.slice(-200);
-  writeResumeWorkspaceIds(trimmed);
-}
-
 export function forgetResumeWorkspace(workspaceId: string) {
   const existing = readResumeWorkspaceIds().filter((id) => id !== workspaceId);
   writeResumeWorkspaceIds(existing);

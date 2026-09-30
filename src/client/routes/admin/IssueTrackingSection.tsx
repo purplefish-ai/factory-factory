@@ -1,10 +1,9 @@
-import { CheckCircleIcon, LinkIcon } from '@phosphor-icons/react';
+import { CheckCircleIcon } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -236,45 +235,5 @@ export function ProjectIssueTrackingCard({
         </div>
       </div>
     </div>
-  );
-}
-
-export function IssueTrackingSection({
-  projects,
-}: {
-  projects: Array<{
-    id: string;
-    name: string;
-    issueProvider: string;
-    issueTrackerConfig: PublicIssueTrackerConfig | null;
-  }>;
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <LinkIcon className="w-5 h-5" />
-          Issue Tracking
-        </CardTitle>
-        <CardDescription>
-          Configure the issue provider for each project (GitHub Issues or Linear)
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {projects.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No projects found.</p>
-        ) : (
-          projects.map((project) => (
-            <ProjectIssueTrackingCard
-              key={project.id}
-              projectId={project.id}
-              projectName={project.name}
-              currentProvider={project.issueProvider}
-              issueTrackerConfig={project.issueTrackerConfig}
-            />
-          ))
-        )}
-      </CardContent>
-    </Card>
   );
 }
