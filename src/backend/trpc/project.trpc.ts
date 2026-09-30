@@ -410,7 +410,7 @@ export const projectRouter = router({
 
   // Check if GitHub CLI is authenticated
   checkGithubAuth: publicProcedure.query(({ ctx }) => {
-    return ctx.appContext.services.gitCloneService.checkGithubAuth();
+    return ctx.appContext.services.checkGithubAuth();
   }),
 
   // Clone a GitHub repo and create a project

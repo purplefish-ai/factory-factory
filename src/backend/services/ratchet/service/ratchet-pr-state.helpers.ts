@@ -2,6 +2,7 @@ import type { RatchetReviewTriggerMode } from '@prisma-gen/client';
 import { SERVICE_CACHE_TTL_MS, SERVICE_INTERVAL_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
 import type { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
+import { hasAdversarialReviewMarker } from '@/shared/adversarial-review';
 import {
   CIStatus,
   deriveRatchetState,
@@ -129,6 +130,28 @@ export function isIgnoredReviewAuthor(
   return authorLogin === authenticatedUsername;
 }
 
+/**
+ * Whether a review carries the adversarial-review marker *and* was actually
+ * posted by this app's own authenticated GitHub identity. Requiring both
+ * matters for two different reasons on the two call sites below: it exempts
+ * the app's own marker-tagged reviews from the "ignore reviews I authored"
+ * filter (otherwise a self-posted adversarial review could never become
+ * actionable feedback), and it stops any other GitHub user from spoofing an
+ * adversarial review by copying the public marker text into their own review
+ * — a spoofed review's author never matches, so it's treated as an ordinary
+ * review instead of dispatch-worthy, untrusted-content-bearing feedback.
+ */
+function isOwnAdversarialReviewMarker(
+  review: { author: { login: string }; body?: string },
+  authenticatedUsername: string | null
+): boolean {
+  return (
+    authenticatedUsername !== null &&
+    review.author.login === authenticatedUsername &&
+    hasAdversarialReviewMarker(review.body)
+  );
+}
+
 function parseSubmittedAtMs(submittedAt: string | null | undefined): number | null {
   if (!submittedAt) {
     return null;
@@ -207,23 +230,31 @@ export function computeLatestReviewActivityAtMs(
           state === 'CHANGES_REQUESTED' ||
           (reviewTriggerMode === 'ALL_REVIEW_FEEDBACK' &&
             state === 'COMMENTED' &&
-            (review.body?.trim().length ?? 0) > 0)
+            (review.body?.trim().length ?? 0) > 0) ||
+          // An adversarial-review finding is an explicit, on-demand request for
+          // feedback (the user clicked the button), so it counts as actionable
+          // regardless of the admin's ambient review-trigger-mode setting.
+          (state === 'COMMENTED' && isOwnAdversarialReviewMarker(review, authenticatedUsername))
         );
       })
       .map((review) => ({
         authorLogin: review.author.login,
         timestamp: review.submittedAt,
+        bypassAuthorFilter: isOwnAdversarialReviewMarker(review, authenticatedUsername),
       })),
     ...reviewComments.map((reviewComment) => ({
       authorLogin: reviewComment.author.login,
       timestamp: reviewComment.updatedAt,
+      bypassAuthorFilter: false,
     })),
   ];
 
   const timestamps = entries
     .filter(
-      (entry): entry is { authorLogin: string; timestamp: string } =>
-        entry.timestamp !== null && !isIgnoredReviewAuthor(entry.authorLogin, authenticatedUsername)
+      (entry): entry is { authorLogin: string; timestamp: string; bypassAuthorFilter: boolean } =>
+        entry.timestamp !== null &&
+        (entry.bypassAuthorFilter ||
+          !isIgnoredReviewAuthor(entry.authorLogin, authenticatedUsername))
     )
     .map((entry) => Date.parse(entry.timestamp))
     .filter((timestamp) => Number.isFinite(timestamp));
@@ -249,7 +280,9 @@ export function buildReviewSummariesForPrompt(
 
   return prDetails.reviews
     .filter((review, index) => {
-      if (isIgnoredReviewAuthor(review.author.login, authenticatedUsername)) {
+      const isOwnMarkerReview = isOwnAdversarialReviewMarker(review, authenticatedUsername);
+
+      if (isIgnoredReviewAuthor(review.author.login, authenticatedUsername) && !isOwnMarkerReview) {
         return false;
       }
 
@@ -261,7 +294,8 @@ export function buildReviewSummariesForPrompt(
 
       if (
         state !== 'CHANGES_REQUESTED' &&
-        !(reviewTriggerMode === 'ALL_REVIEW_FEEDBACK' && state === 'COMMENTED')
+        !(reviewTriggerMode === 'ALL_REVIEW_FEEDBACK' && state === 'COMMENTED') &&
+        !(state === 'COMMENTED' && isOwnMarkerReview)
       ) {
         return false;
       }

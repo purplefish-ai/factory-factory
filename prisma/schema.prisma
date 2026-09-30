@@ -597,6 +597,12 @@ model UserSettings {
   defaultWorkspacePermissions SessionPermissionPreset @default(STRICT) // Default execution-mode preset for non-ratchet sessions
   ratchetPermissions        SessionPermissionPreset @default(YOLO) // Default execution-mode preset for ratchet sessions
 
+  // Adversarial Review Settings (on-demand review of the open PR by a different provider/model)
+  reviewerSessionProvider   SessionProvider @default(CODEX) // Provider used for adversarial review sessions
+  reviewerClaudeModel       String? // Reviewer model when reviewerSessionProvider is CLAUDE
+  reviewerCodexModel        String? // Reviewer model when reviewerSessionProvider is CODEX
+  postReviewToGitHub        Boolean @default(true) // Post the review to the PR; off runs in-app only
+
   // Voice Mode Settings (BYOK Deepgram)
   voiceModeEnabled          Boolean  @default(false)  // Admin toggle for the voice mode feature
   deepgramApiKeyEncrypted   String?                    // AES-256-GCM encrypted, same scheme as Linear's apiKey

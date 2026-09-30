@@ -18,6 +18,14 @@ function isWildcardHost(host: string): boolean {
   return URL.canParse(`http://${urlHost}`) && new URL(`http://${urlHost}`).hostname === '[::]';
 }
 
+// Ratchet and auto-iteration are non-interactive (no one can answer a
+// permission prompt) and need full write trust to fix issues, so they get the
+// ratchet permission preset, which defaults to YOLO (see
+// getWorkflowPermissionPreset). Adversarial review is also non-interactive but
+// is read-only by contract (see docs/design/adversarial-review.md) — it falls
+// through to `defaultWorkspacePermissions` like any other session, and relies
+// on the `plan` startup mode (adversarial-review.orchestrator.ts) to
+// structurally block write tools rather than on being fully trusted.
 export const sessionContextService = new SessionContextService({
   repository: sessionRepository,
   permissionPresetPort: {

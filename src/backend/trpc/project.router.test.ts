@@ -69,11 +69,11 @@ function createCaller(
         cryptoService: {
           encrypt: (value: string) => mockEncrypt(value),
         },
+        checkGithubAuth: (...args: unknown[]) => mockCheckGithubAuth(...args),
         factoryConfigService: {
           readConfig: (...args: unknown[]) => mockReadConfig(...args),
         },
         gitCloneService: {
-          checkGithubAuth: (...args: unknown[]) => mockCheckGithubAuth(...args),
           getClonePath: (...args: unknown[]) => mockGetClonePath(...args),
           checkExistingClone: (...args: unknown[]) => mockCheckExistingClone(...args),
           clone: (...args: unknown[]) => mockCloneRepo(...args),

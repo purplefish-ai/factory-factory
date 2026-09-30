@@ -24,6 +24,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { useWorkspaceProjectNavigation } from './use-workspace-project-navigation';
 import {
+  AdversarialReviewButton,
   ArchiveActionButton,
   getWorkspaceHeaderLabel,
   OpenInIdeAction,
@@ -215,6 +216,7 @@ export function WorkspaceDetailHeaderSlot({
             <>
               <WorkspaceProviderSettings workspace={workspace} workspaceId={workspaceId} />
               <RatchetingToggle workspace={workspace} workspaceId={workspaceId} />
+              <AdversarialReviewButton workspace={workspace} workspaceId={workspaceId} />
               <WorkspaceBranchLink workspace={workspace} />
               <OpenInIdeAction
                 workspaceId={workspaceId}

@@ -27,6 +27,7 @@ vi.mock('@/client/features/workspace', () => ({
     createElement('a', { href: `/projects/${projectSlug}/workspaces` }, 'Back'),
 }));
 vi.mock('./admin/index', () => ({
+  AdversarialReviewSection: () => createElement('section', null, 'Adversarial Review'),
   ApiUsageSection: () => createElement('section', null, 'API Usage'),
   PeriodicTasksSection: () => createElement('section', null, 'Periodic Tasks'),
   ProcessesSection: () => createElement('section', null, 'Processes'),

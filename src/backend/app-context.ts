@@ -1,5 +1,6 @@
 import { prisma } from './db';
 import { registerInterceptors, startInterceptors, stopInterceptors } from './interceptors';
+import { triggerAdversarialReview } from './orchestration/adversarial-review.orchestrator';
 import { cliHealthService } from './orchestration/cli-health.service';
 import { dataBackupService } from './orchestration/data-backup.service';
 import {
@@ -38,7 +39,12 @@ import { autoIterationService, insightsService, logbookService } from './service
 import { configService } from './services/config.service';
 import { cryptoService } from './services/crypto.service';
 import { decisionLogService } from './services/decision-log';
-import { githubCLIService, prFetchCoordinator, prSnapshotService } from './services/github';
+import {
+  checkGithubAuth,
+  githubCLIService,
+  prFetchCoordinator,
+  prSnapshotService,
+} from './services/github';
 import { linearClientService, linearStateSyncService } from './services/linear';
 import { createLogger, getLogFilePath } from './services/logger.service';
 import { periodicTaskService } from './services/periodic-task';
@@ -106,6 +112,7 @@ import { workspaceGitStateService } from './services/workspace-git-state.service
 export type ApplicationServices = BridgeServices & {
   acpRuntimeManager: typeof acpRuntimeManager;
   acpTraceLogger: AcpTraceLogger;
+  checkGithubAuth: typeof checkGithubAuth;
   cliHealthService: typeof cliHealthService;
   configService: typeof configService;
   cryptoService: typeof cryptoService;
@@ -151,6 +158,7 @@ export type ApplicationServices = BridgeServices & {
   workspaceRelationshipsService: typeof workspaceRelationshipsService;
   worktreeLifecycleService: typeof worktreeLifecycleService;
   computePendingRequestType: typeof computePendingRequestType;
+  triggerAdversarialReview: typeof triggerAdversarialReview;
   archiveWorkspace: typeof archiveWorkspace;
   cleanupWorkspaceRuntimeResources: typeof cleanupWorkspaceRuntimeResources;
   cleanupWorkspaceScopedCaches(workspaceId: string): void;
@@ -207,9 +215,11 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     autoIterationService,
     chatEventForwarderService,
     chatMessageHandlerService,
+    checkGithubAuth,
     cliHealthService,
     configService,
     computePendingRequestType,
+    triggerAdversarialReview,
     cryptoService,
     createLogger,
     dataBackupService,

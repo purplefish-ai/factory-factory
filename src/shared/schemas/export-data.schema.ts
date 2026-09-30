@@ -175,6 +175,11 @@ const exportedUserSettingsSchema = z.object({
   defaultCodexReasoningEffort: z.string().nullable().optional().default(null),
   defaultWorkspacePermissions: SessionPermissionPreset.optional().default('STRICT'),
   ratchetPermissions: SessionPermissionPreset.optional().default('YOLO'),
+  // Adversarial review settings
+  reviewerSessionProvider: SessionProvider.optional().default('CODEX'),
+  reviewerClaudeModel: z.string().nullable().optional().default(null),
+  reviewerCodexModel: z.string().nullable().optional().default(null),
+  postReviewToGitHub: z.boolean().optional().default(true),
   // Voice mode: the Deepgram API key is intentionally excluded (secret, and
   // scoped per-install), but the enabled toggle and selected voice/speed are
   // just preferences. A restored install still needs its own key before

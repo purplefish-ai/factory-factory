@@ -119,42 +119,6 @@ class GitCloneService {
     logger.info('Clone completed', { url, destination });
     return { success: true, output: result.stderr }; // git clone writes progress to stderr
   }
-
-  /**
-   * Check if the GitHub CLI is authenticated.
-   */
-  async checkGithubAuth(): Promise<{
-    authenticated: boolean;
-    user?: string;
-    error?: string;
-  }> {
-    try {
-      const result = await execCommand('gh', ['auth', 'status']);
-      // gh auth status writes to stderr on success
-      const output = result.stderr || result.stdout;
-
-      if (result.code === 0) {
-        // Extract username from output like "Logged in to github.com account username"
-        const userMatch = output.match(/account\s+(\S+)/);
-        return {
-          authenticated: true,
-          user: userMatch?.[1],
-        };
-      }
-
-      return { authenticated: false, error: output };
-    } catch (error) {
-      // gh CLI not installed or not found
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      if (message.includes('ENOENT') || message.includes('not found')) {
-        return {
-          authenticated: false,
-          error: 'GitHub CLI (gh) is not installed. Install it from https://cli.github.com',
-        };
-      }
-      return { authenticated: false, error: message };
-    }
-  }
 }
 
 export const gitCloneService = new GitCloneService();

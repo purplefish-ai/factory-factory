@@ -1,4 +1,5 @@
 import { adminRouter } from './admin.trpc';
+import { adversarialReviewRouter } from './adversarial-review.trpc';
 import { autoIterationRouter } from './auto-iteration.trpc';
 import { closedSessionsRouter } from './closed-sessions.trpc';
 import { decisionLogRouter } from './decision-log.trpc';
@@ -17,6 +18,7 @@ export const appRouter = router({
   project: projectRouter,
   decisionLog: decisionLogRouter,
   admin: adminRouter,
+  adversarialReview: adversarialReviewRouter,
   workspace: workspaceRouter,
   session: sessionRouter,
   closedSessions: closedSessionsRouter,

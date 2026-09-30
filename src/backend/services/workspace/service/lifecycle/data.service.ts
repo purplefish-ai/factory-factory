@@ -32,6 +32,10 @@ class WorkspaceDataService {
     return workspaceAccessor.findPRContext(id);
   }
 
+  findPRState(id: string) {
+    return workspacePrAccessor.findPRState(id);
+  }
+
   findRatchetProjection(id: string) {
     return workspaceRatchetAccessor.findSnapshotProjection(id);
   }

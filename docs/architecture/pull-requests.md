@@ -15,6 +15,15 @@ snapshot. PR states: `IDLE` / `CI_RUNNING` / `CI_FAILED` / `REVIEW_PENDING` /
 active. Admin settings control the default ratchet state for new workspaces and
 the global review-trigger mode.
 
+One narrow, deliberate exception to "ordinary comments never trigger Ratchet": a
+review whose body carries the Adversarial Review feature's marker
+(`src/shared/adversarial-review.ts`) is always actionable, regardless of
+`ratchetReviewTriggerMode` — see
+[Adversarial Review](../design/adversarial-review.md). This exists because this
+app's own `gh` identity is also the PR's author, which rules out using GitHub's
+native `REQUEST_CHANGES` review state to signal "actionable" the way a human
+reviewer's does.
+
 The dispatch prompt asks the agent to refresh GitHub state, address actionable
 feedback, fix CI, and resolve conflicts autonomously. It leaves execution order
 and repository-specific checks to the agent. Base-branch updates happen when

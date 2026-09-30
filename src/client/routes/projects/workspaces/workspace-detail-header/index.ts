@@ -1,3 +1,4 @@
+export { AdversarialReviewButton } from './adversarial-review-button';
 export { ArchiveActionButton } from './archive-action-button';
 export { OpenDevAppAction } from './open-dev-app-action';
 export { OpenInIdeAction } from './open-in-ide-action';

@@ -240,6 +240,10 @@ const mockUserSettings: UserSettings = {
   // defaults can't tell a real persisted preference from a value the
   // schema's default happened to backfill (see the voiceModeEnabled et al.
   // assertions below).
+  reviewerSessionProvider: SessionProvider.CLAUDE,
+  reviewerClaudeModel: 'opus',
+  reviewerCodexModel: 'gpt-5-codex-high',
+  postReviewToGitHub: false,
   voiceModeEnabled: true,
   deepgramApiKeyEncrypted: null,
   voiceTtsModel: 'flux-cliff-en',
@@ -373,6 +377,10 @@ function createImportData(
         ratchetPermissions: 'YOLO',
         // Non-default so the import test below actually exercises restoring
         // a persisted preference, not just the schema's own default.
+        reviewerSessionProvider: SessionProvider.CLAUDE,
+        reviewerClaudeModel: 'opus',
+        reviewerCodexModel: 'gpt-5-codex-high',
+        postReviewToGitHub: false,
         voiceModeEnabled: true,
         voiceTtsModel: 'flux-cliff-en',
         voiceTtsSpeed: 1.3,
@@ -418,6 +426,10 @@ describe('DataBackupService', () => {
           defaultCodexModel: 'gpt-5-codex',
           defaultWorkspacePermissions: 'STRICT',
           ratchetPermissions: 'YOLO',
+          reviewerSessionProvider: SessionProvider.CLAUDE,
+          reviewerClaudeModel: 'opus',
+          reviewerCodexModel: 'gpt-5-codex-high',
+          postReviewToGitHub: false,
           voiceModeEnabled: true,
           voiceTtsModel: 'flux-cliff-en',
           voiceTtsSpeed: 1.3,
@@ -664,6 +676,10 @@ describe('DataBackupService', () => {
       expect(mockTx.userSettings.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           ratchetReviewTriggerMode: 'ALL_REVIEW_FEEDBACK',
+          reviewerSessionProvider: SessionProvider.CLAUDE,
+          reviewerClaudeModel: 'opus',
+          reviewerCodexModel: 'gpt-5-codex-high',
+          postReviewToGitHub: false,
           voiceModeEnabled: true,
           voiceTtsModel: 'flux-cliff-en',
           voiceTtsSpeed: 1.3,
