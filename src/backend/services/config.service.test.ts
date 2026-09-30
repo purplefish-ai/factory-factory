@@ -90,6 +90,13 @@ describe('configService environment accessors', () => {
     expect(configService.getMigrationsPath()).toBe('/tmp/migrations');
   });
 
+  it('defaults disableCorsChecks to false when DISABLE_CORS_CHECKS is absent', () => {
+    Reflect.deleteProperty(process.env, 'DISABLE_CORS_CHECKS');
+    configService.reload();
+
+    expect(configService.getCorsConfig().disableCorsChecks).toBe(false);
+  });
+
   it('expands BASE_DIR before dependent config paths', () => {
     const bracedBaseDir = '$' + '{BASE_DIR}';
     process.env.USER = 'testuser';
@@ -132,6 +139,7 @@ describe('configService environment accessors', () => {
     process.env.CORS_ALLOWED_ORIGINS = 'http://localhost:9999, https://example.com';
     process.env.TRUSTED_LOCAL_CIDRS = '172.17.0.1/32, 172.18.0.0/16';
     process.env.TRUST_PROXY_HEADERS = 'true';
+    process.env.DISABLE_CORS_CHECKS = 'true';
     process.env.BRANCH_RENAME_MESSAGE_THRESHOLD = '4';
     process.env.EVENT_COMPRESSION_ENABLED = 'false';
     process.env.WEB_CONCURRENCY = '3';
@@ -187,6 +195,7 @@ describe('configService environment accessors', () => {
       allowedOrigins: ['http://localhost:9999', 'https://example.com'],
       trustedLocalCidrs: ['172.17.0.1/32', '172.18.0.0/16'],
       trustProxyHeaders: true,
+      disableCorsChecks: true,
     });
     expect(configService.getDebugConfig()).toEqual({ chatWebSocket: true });
     expect(configService.getCompressionConfig()).toEqual({ enabled: false });

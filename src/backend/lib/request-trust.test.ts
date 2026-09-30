@@ -70,5 +70,10 @@ describe('request trust helpers', () => {
       expect(isOriginAllowed('http://localhost:3000/', ['http://127.0.0.1:3000'])).toBe(false);
       expect(isOriginAllowed('http://localhost:80/', ['http://127.0.0.1'])).toBe(false);
     });
+
+    it('allows any origin when disableCorsChecks is set', () => {
+      expect(isOriginAllowed('https://attacker.example', [], true)).toBe(true);
+      expect(isOriginAllowed('not a url', ['http://localhost:3000'], true)).toBe(true);
+    });
   });
 });

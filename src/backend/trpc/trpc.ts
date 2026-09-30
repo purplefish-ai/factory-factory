@@ -92,7 +92,11 @@ function isTrustedLocalContext(ctx: Context): boolean {
     return true;
   }
 
-  return isOriginAllowed(ctx.requestTrust.origin, corsConfig.allowedOrigins);
+  return isOriginAllowed(
+    ctx.requestTrust.origin,
+    corsConfig.allowedOrigins,
+    corsConfig.disableCorsChecks
+  );
 }
 
 /**
