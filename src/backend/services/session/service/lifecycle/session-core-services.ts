@@ -2,12 +2,14 @@ import { createLogger } from '@/backend/services/logger.service';
 import { sessionLifecycleEventAccessor } from '@/backend/services/session/resources/session-lifecycle-event.accessor';
 import {
   acpRuntimeManager,
+  fetchClaudeModelCatalogFromAcp,
   fetchCodexModelCatalogFromAppServer,
 } from '@/backend/services/session/service/acp';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
 import { workspaceDataService, workspaceNotificationService } from '@/backend/services/workspace';
 import { AcpEventProcessor } from './acp-event-processor';
+import { ClaudeModelCatalogService } from './claude-model-catalog.service';
 import { closedSessionPersistenceService } from './closed-session-persistence.service';
 import { CodexModelCatalogService } from './codex-model-catalog.service';
 import { SessionConfigService } from './session.config.service';
@@ -61,6 +63,10 @@ export const sessionPermissionService = new SessionPermissionService({
 
 export const codexModelCatalogService = new CodexModelCatalogService({
   fetchModels: fetchCodexModelCatalogFromAppServer,
+});
+
+export const claudeModelCatalogService = new ClaudeModelCatalogService({
+  fetchModels: fetchClaudeModelCatalogFromAcp,
 });
 
 export const sessionConfigService = new SessionConfigService({

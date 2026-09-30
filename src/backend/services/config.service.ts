@@ -14,21 +14,6 @@ import { createLogger } from './logger.service';
 const logger = createLogger('config');
 
 /**
- * Permission modes for sessions
- */
-type PermissionMode = 'strict' | 'relaxed' | 'yolo';
-
-/**
- * Session execution profile
- */
-export interface SessionProfile {
-  model: string;
-  permissionMode: PermissionMode;
-  maxTokens: number;
-  temperature: number;
-}
-
-/**
  * Log levels for the logger service
  */
 export type LogLevel = 'error' | 'warn' | 'info' | 'debug';
@@ -135,9 +120,6 @@ interface SystemConfig {
   databasePathFromEnv?: string;
   migrationsPath?: string;
 
-  // Default session profile
-  defaultSessionProfile: SessionProfile;
-
   // Health check settings
   healthCheckIntervalMs: number;
 
@@ -176,52 +158,6 @@ interface SystemConfig {
 
   // App version
   appVersion: string;
-}
-
-/**
- * Model name mapping for environment variable values
- */
-const MODEL_MAPPING: Record<string, string> = {
-  sonnet: 'claude-sonnet-4-5-20250929',
-  opus: 'claude-opus-4-5-20251101',
-  haiku: 'claude-3-5-haiku-20241022',
-};
-
-/**
- * Resolve model name from environment variable or use default
- */
-function resolveModel(envVar: string | undefined, defaultModel: string): string {
-  if (!envVar) {
-    return defaultModel;
-  }
-
-  // Check if it's a known alias
-  const mapped = MODEL_MAPPING[envVar.toLowerCase()];
-  if (mapped) {
-    return mapped;
-  }
-
-  // If it looks like a full model name, use it directly
-  if (envVar.startsWith('claude-')) {
-    return envVar;
-  }
-
-  logger.warn(`Unknown model alias: ${envVar}, using default`);
-  return defaultModel;
-}
-
-/**
- * Build default session profile from environment
- */
-function buildDefaultSessionProfile(env: ConfigEnv): SessionProfile {
-  const defaultModel = 'claude-sonnet-4-5-20250929';
-
-  return {
-    model: resolveModel(env.DEFAULT_MODEL, defaultModel),
-    permissionMode: env.DEFAULT_PERMISSIONS,
-    maxTokens: 8192,
-    temperature: 1.0,
-  };
 }
 
 /**
@@ -330,9 +266,6 @@ function loadSystemConfig(): SystemConfig {
     databasePathFromEnv,
     migrationsPath,
 
-    // Default session profile
-    defaultSessionProfile: buildDefaultSessionProfile(env),
-
     // Health check settings
     healthCheckIntervalMs: env.HEALTH_CHECK_INTERVAL_MS, // 5 minutes
 
@@ -428,13 +361,6 @@ class ConfigService {
    */
   getSystemConfig(): SystemConfig {
     return { ...this.config };
-  }
-
-  /**
-   * Get the default session profile
-   */
-  getDefaultSessionProfile(): SessionProfile {
-    return { ...this.config.defaultSessionProfile };
   }
 
   /**
@@ -568,20 +494,6 @@ class ConfigService {
    */
   getPRDiscoveryLimits(): PRDiscoveryLimits {
     return { ...this.config.prDiscovery };
-  }
-
-  /**
-   * Get available model options
-   */
-  getAvailableModels(): { alias: string; model: string }[] {
-    return Object.entries(MODEL_MAPPING).map(([alias, model]) => ({ alias, model }));
-  }
-
-  /**
-   * Get available permission modes
-   */
-  getAvailablePermissionModes(): PermissionMode[] {
-    return ['strict', 'relaxed', 'yolo'];
   }
 
   /**

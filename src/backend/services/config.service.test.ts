@@ -116,8 +116,6 @@ describe('configService environment accessors', () => {
   });
 
   it('builds profile/configuration values from environment aliases and toggles', () => {
-    process.env.DEFAULT_MODEL = 'opus';
-    process.env.DEFAULT_PERMISSIONS = 'strict';
     process.env.NODE_ENV = 'production';
     process.env.BACKEND_PORT = '4242';
     process.env.BACKEND_HOST = '0.0.0.0';
@@ -169,12 +167,6 @@ describe('configService environment accessors', () => {
     expect(configService.getAppVersion()).toBe('9.9.9');
     expect(configService.getDatabasePath()).toBe('/tmp/custom.db');
     expect(configService.getDatabasePathFromEnv()).toBe('/tmp/custom.db');
-    expect(configService.getDefaultSessionProfile()).toEqual({
-      model: 'claude-opus-4-5-20251101',
-      permissionMode: 'strict',
-      maxTokens: 8192,
-      temperature: 1,
-    });
 
     expect(configService.getRateLimiterConfig()).toEqual(
       expect.objectContaining({
@@ -217,13 +209,6 @@ describe('configService environment accessors', () => {
     expect(configService.getMaxSessionsPerWorkspace()).toBeGreaterThan(0);
     expect(configService.getFrontendStaticPath()).toBe('/tmp/frontend');
     expect(configService.getMigrationsPath()).toBe('/tmp/migrations');
-    expect(configService.getAvailableModels()).toEqual(
-      expect.arrayContaining([
-        { alias: 'sonnet', model: expect.any(String) },
-        { alias: 'opus', model: expect.any(String) },
-      ])
-    );
-    expect(configService.getAvailablePermissionModes()).toEqual(['strict', 'relaxed', 'yolo']);
 
     const childEnv = configService.getChildProcessEnv();
     childEnv.__TEST_CONFIG_COPY__ = 'mutated';

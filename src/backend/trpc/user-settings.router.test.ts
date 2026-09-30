@@ -5,7 +5,7 @@ const mockUpdate = vi.hoisted(() => vi.fn());
 const mockGetWorkspaceOrder = vi.hoisted(() => vi.fn());
 const mockUpdateWorkspaceOrder = vi.hoisted(() => vi.fn());
 const mockExecCommand = vi.hoisted(() => vi.fn());
-const mockFetchClaudeModelCatalogFromAcp = vi.hoisted(() => vi.fn());
+const mockGetClaudeModels = vi.hoisted(() => vi.fn());
 const mockGetCodexModels = vi.hoisted(() => vi.fn());
 
 vi.mock('@/backend/lib/shell', () => ({
@@ -18,8 +18,9 @@ function createCaller() {
   return userSettingsRouter.createCaller({
     appContext: {
       services: {
-        fetchClaudeModelCatalogFromAcp: (...args: unknown[]) =>
-          mockFetchClaudeModelCatalogFromAcp(...args),
+        claudeModelCatalogService: {
+          getModels: (...args: unknown[]) => mockGetClaudeModels(...args),
+        },
         codexModelCatalogService: {
           getModels: (...args: unknown[]) => mockGetCodexModels(...args),
         },
@@ -37,9 +38,9 @@ function createCaller() {
 describe('userSettingsRouter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockFetchClaudeModelCatalogFromAcp.mockReset();
+    mockGetClaudeModels.mockReset();
     mockGetCodexModels.mockReset();
-    mockFetchClaudeModelCatalogFromAcp.mockResolvedValue([
+    mockGetClaudeModels.mockResolvedValue([
       { id: 'default', displayName: 'Default', description: null },
     ]);
     mockGetCodexModels.mockResolvedValue([
@@ -169,7 +170,7 @@ describe('userSettingsRouter', () => {
   });
 
   it('returns provider options from dynamic Claude and Codex catalogs', async () => {
-    mockFetchClaudeModelCatalogFromAcp.mockResolvedValue([
+    mockGetClaudeModels.mockResolvedValue([
       {
         id: 'default',
         displayName: 'Default — Opus 4.8 (1M)',
@@ -269,7 +270,7 @@ describe('userSettingsRouter', () => {
   });
 
   it('falls back to static Claude options without affecting dynamic Codex options', async () => {
-    mockFetchClaudeModelCatalogFromAcp.mockRejectedValue(new Error('claude unavailable'));
+    mockGetClaudeModels.mockRejectedValue(new Error('claude unavailable'));
 
     await expect(createCaller().getProviderOptions()).resolves.toMatchObject({
       CLAUDE: {
@@ -287,7 +288,7 @@ describe('userSettingsRouter', () => {
   });
 
   it('keeps dynamic Claude options when Codex catalog loading fails', async () => {
-    mockFetchClaudeModelCatalogFromAcp.mockResolvedValue([
+    mockGetClaudeModels.mockResolvedValue([
       {
         id: 'claude-fable-5[1m]',
         displayName: 'Fable 5',
@@ -323,13 +324,13 @@ describe('userSettingsRouter', () => {
     const codexCatalog = new Promise((resolve) => {
       resolveCodex = resolve;
     });
-    mockFetchClaudeModelCatalogFromAcp.mockReturnValue(claudeCatalog);
+    mockGetClaudeModels.mockReturnValue(claudeCatalog);
     mockGetCodexModels.mockReturnValue(codexCatalog);
 
     const providerOptions = createCaller().getProviderOptions();
     await Promise.resolve();
 
-    expect(mockFetchClaudeModelCatalogFromAcp).toHaveBeenCalledTimes(1);
+    expect(mockGetClaudeModels).toHaveBeenCalledTimes(1);
     expect(mockGetCodexModels).toHaveBeenCalledTimes(1);
 
     resolveClaude!([{ id: 'default', displayName: 'Default', description: null }]);
