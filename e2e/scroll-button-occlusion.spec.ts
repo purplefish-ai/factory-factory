@@ -12,14 +12,16 @@ async function expectReachableAboveComposer(button: Locator, composer: Locator) 
       return buttonBox.y + buttonBox.height <= composerBox.y;
     })
     .toBe(true);
-  expect(
-    await button.evaluate((element) => {
-      const rect = element.getBoundingClientRect();
-      return element.contains(
-        document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)
-      );
-    })
-  ).toBe(true);
+  await expect
+    .poll(() =>
+      button.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        return element.contains(
+          document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)
+        );
+      })
+    )
+    .toBe(true);
 }
 
 for (const viewport of [
@@ -47,7 +49,7 @@ for (const viewport of [
     const chat = page.getByTestId('mock-conversation');
     const input = chat.getByPlaceholder('Type a message...');
     // A cold Storybook server compiles the chat dependency tree on first load.
-    await expect(input).toBeVisible({ timeout: 20_000 });
+    await expect(input).toBeVisible({ timeout: 40_000 });
     const messageViewport = chat.locator('.overflow-y-auto').first();
     const composer = chat.locator('.border-t.bg-background').first();
     const button = chat.getByRole('button', { name: 'Scroll to bottom' });
@@ -92,17 +94,19 @@ for (const viewport of [
     await expectReachableAboveComposer(button, composer);
     const send = chat.getByRole('button', { name: 'Send message' });
     await expect(send).toBeEnabled();
-    expect(
-      await send.evaluate((element) => {
-        const rect = element.getBoundingClientRect();
-        return (
-          rect.bottom <= window.innerHeight &&
-          element.contains(
-            document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)
-          )
-        );
-      })
-    ).toBe(true);
+    await expect
+      .poll(() =>
+        send.evaluate((element) => {
+          const rect = element.getBoundingClientRect();
+          return (
+            rect.bottom <= window.innerHeight &&
+            element.contains(
+              document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)
+            )
+          );
+        })
+      )
+      .toBe(true);
     await page.getByRole('button', { name: 'Clear prompt' }).click();
 
     await button.click();

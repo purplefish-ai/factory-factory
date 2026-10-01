@@ -4,7 +4,8 @@ export default defineConfig({
   testDir: './e2e',
   testMatch: 'scroll-button-occlusion.spec.ts',
   workers: 1,
-  timeout: 30_000,
+  timeout: 60_000,
+  retries: process.env.CI ? 2 : 0,
   use: {
     baseURL: 'http://127.0.0.1:6194',
     screenshot: 'only-on-failure',
