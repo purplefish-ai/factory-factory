@@ -19,7 +19,7 @@ afterAll(async () => {
   await destroyIntegrationDatabase(db);
 });
 
-async function fixture() {
+async function fixture(withMetadata = true) {
   const project = await db.prisma.project.create({
     data: {
       name: 'fixture',
@@ -39,12 +39,44 @@ async function fixture() {
       provider: 'CODEX',
       model: 'test',
       providerSessionId: 'old',
-      providerMetadata: { acpConfigSnapshot: { providerSessionId: 'old' } },
+      ...(withMetadata
+        ? { providerMetadata: { acpConfigSnapshot: { providerSessionId: 'old' } } }
+        : {}),
     },
   });
 }
 
 describe('atomic provider identity reconciliation in SQLite', () => {
+  it('guards initially null metadata for both config writes and identity rollover', async () => {
+    const configSession = await fixture(false);
+    expect(configSession.providerMetadata).toBeNull();
+    expect(
+      await accessor.updateIfProviderIdentity(configSession.id, configSession, {
+        providerMetadata: { acpConfigSnapshot: { providerSessionId: 'old' } },
+      })
+    ).toBe(1);
+    expect(
+      await accessor.updateIfProviderIdentity(configSession.id, configSession, {
+        providerMetadata: { acpConfigSnapshot: { providerSessionId: 'wrong' } },
+      })
+    ).toBe(0);
+    const session = await fixture(false);
+    expect(session.providerMetadata).toBeNull();
+    expect(
+      await accessor.rolloverProviderIdentity(session.id, {
+        previousProviderSessionId: 'old',
+        providerSessionId: 'new',
+        expectedUpdatedAt: session.updatedAt,
+        expectedProviderMetadata: null,
+        providerMetadata: { acpConfigSnapshot: { providerSessionId: 'new' } },
+      })
+    ).toBe(1);
+    expect(
+      await accessor.updateIfProviderIdentity(session.id, session, {
+        providerMetadata: { acpConfigSnapshot: { providerSessionId: 'old' } },
+      })
+    ).toBe(0);
+  });
   it('persists matching identity, config snapshot and audit in the final row', async () => {
     const session = await fixture();
     const metadata = {

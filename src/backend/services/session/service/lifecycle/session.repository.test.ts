@@ -46,6 +46,7 @@ describe('SessionRepository', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionDomainService.clearAllSessions();
   });
 
   it('allows first non-null providerSessionId assignment', async () => {
@@ -118,6 +119,17 @@ describe('SessionRepository', () => {
     expect(sessions.update).not.toHaveBeenCalled();
   });
 
+  it('rejects a config snapshot until an authoritative provider identity exists', async () => {
+    sessions.findById.mockResolvedValue(createSession());
+    sessions.updateIfProviderIdentity.mockResolvedValue(1);
+    await expect(
+      repository.updateSession('s1', {
+        providerMetadata: { acpConfigSnapshot: { providerSessionId: 'stale' } },
+      })
+    ).rejects.toThrow('Stale provider config snapshot');
+    expect(sessions.updateIfProviderIdentity).not.toHaveBeenCalled();
+  });
+
   it('preserves durable rollover audit when a current config snapshot is refreshed', async () => {
     const current = createSession({
       providerSessionId: 'new',
@@ -169,7 +181,6 @@ describe('SessionRepository', () => {
     sessions.delete.mockResolvedValue(createSession());
     await repository.deleteSession('s1');
     expect(sessionDomainService.acceptProviderHistoryIdentity('s1', 'old')).toBe(true);
-    sessionDomainService.clearAllSessions();
   });
 
   it('delegates conditional session updates to the session accessor', async () => {

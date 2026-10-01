@@ -140,8 +140,8 @@ export class SessionRepository {
     }
     const snapshot = metadata.acpConfigSnapshot;
     if (
-      current.providerSessionId &&
-      (!isMetadataRecord(snapshot) || snapshot.providerSessionId !== current.providerSessionId)
+      !(current.providerSessionId && isMetadataRecord(snapshot)) ||
+      snapshot.providerSessionId !== current.providerSessionId
     ) {
       throw new Error(`Stale provider config snapshot for session ${sessionId}`);
     }

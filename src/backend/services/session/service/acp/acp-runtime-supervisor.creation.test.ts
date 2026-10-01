@@ -714,6 +714,34 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
     expect(handle.child.signalCode).toBe('SIGTERM');
   });
 
+  it('kills a fallback candidate before installation when rollover persistence rejects', async () => {
+    const handle = createTestProcessHandle({
+      providerSessionId: 'new',
+      sessionCreationOutcome: {
+        kind: 'resume_fallback',
+        previousProviderSessionId: 'old',
+        reason: 'load_failed',
+      },
+    });
+    exitChildAfterSigterm(mockChildOf(handle));
+    const { supervisor } = createHarness(() => Promise.resolve(handle));
+    const onSessionId = vi.fn();
+    await expect(
+      supervisor.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        {
+          onProviderIdentityRollover: () => Promise.reject(new Error('rollover failed')),
+          onSessionId,
+        },
+        defaultContext()
+      )
+    ).rejects.toThrow('rollover failed');
+    expect(supervisor.getInstalledHandle('session-1')).toBeUndefined();
+    expect(onSessionId).not.toHaveBeenCalled();
+    expect(handle.child.signalCode).toBe('SIGTERM');
+  });
+
   it('rolls back an installed runtime when the creation callback throws', async () => {
     // Catches a rejected creation leaving its live runtime installed and reusable.
     const handle = createTestProcessHandle();

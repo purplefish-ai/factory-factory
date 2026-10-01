@@ -461,7 +461,7 @@ export class AcpRuntimeSupervisor {
       }
       try {
         eventsReady = true;
-        for (const args of bufferedEvents) {
+        for (const args of bufferedEvents.splice(0)) {
           dispatchEvent?.(...args);
         }
       } catch (error) {

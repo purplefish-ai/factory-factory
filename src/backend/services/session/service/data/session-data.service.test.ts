@@ -22,6 +22,7 @@ vi.mock('./session-provider-resolver.service', () => ({
 describe('sessionDataService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionDomainService.clearAllSessions();
   });
 
   it('reclaims the history identity fence after permanent deletion, but retains it on failure', async () => {
@@ -35,7 +36,6 @@ describe('sessionDataService', () => {
     vi.mocked(agentSessionAccessor.delete).mockResolvedValue(createLifecycleTestSession());
     await sessionDataService.deleteAgentSession('session-1');
     expect(sessionDomainService.acceptProviderHistoryIdentity('session-1', 'old')).toBe(true);
-    sessionDomainService.clearAllSessions();
   });
 
   it('resolves provider and model defaults before atomic fixer acquisition', async () => {

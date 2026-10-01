@@ -15,10 +15,10 @@ vi.mock('@/backend/services/session/service/data/session-history-loader.service'
   claudeSessionHistoryLoaderService: { loadSessionHistory: loadClaude },
 }));
 
-const record = (id: string): ProviderHistorySession => ({
-  provider: 'CODEX',
+const record = (id: string, provider: 'CODEX' | 'CLAUDE' = 'CODEX'): ProviderHistorySession => ({
+  provider,
   providerSessionId: id,
-  providerMetadata: { acpConfigSnapshot: { provider: 'CODEX', providerSessionId: id } },
+  providerMetadata: { acpConfigSnapshot: { provider, providerSessionId: id } },
   workspace: { worktreePath: '/tmp/history-fixture' },
 });
 const oldMessage: ChatMessage = {
@@ -66,6 +66,27 @@ describe('history hydration after provider identity rollover', () => {
       sessionDomainService.getTranscriptSnapshot('history-session').map((entry) => entry.text)
     ).toEqual(['new turn']);
     expect(loadCodex.mock.calls.every(([input]) => input.providerSessionId === 'new')).toBe(true);
+  });
+
+  it('discards an in-flight old Claude history read and loads the new identity', async () => {
+    const stale = createDeferred<unknown>();
+    loadClaude.mockReturnValueOnce(stale.promise);
+    const hydration = hydrateProviderHistoryIfNeeded('history-session', record('old', 'CLAUDE'));
+    await vi.waitFor(() => expect(loadClaude).toHaveBeenCalledOnce());
+    sessionDomainService.resetProviderHistory('history-session', 'new');
+    stale.resolve(loaded('stale Claude turn'));
+    await hydration;
+    expect(sessionDomainService.getTranscriptSnapshot('history-session')).toEqual([]);
+    loadClaude.mockResolvedValueOnce(loaded('new Claude turn'));
+    await hydrateProviderHistoryIfNeeded('history-session', record('new', 'CLAUDE'));
+    expect(loadClaude).toHaveBeenLastCalledWith({
+      providerSessionId: 'new',
+      workingDir: '/tmp/history-fixture',
+    });
+    expect(sessionDomainService.getTranscriptSnapshot('history-session')[0]?.text).toBe(
+      'new Claude turn'
+    );
+    expect(loadCodex).not.toHaveBeenCalled();
   });
 
   it.each(['loaded', 'not_found'] as const)(
