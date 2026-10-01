@@ -234,9 +234,11 @@ export type ResolvedReviewThreadsPage = NonNullable<
 
 export const reviewCommentSchema = z.object({
   id: z.number(),
-  user: z.object({
-    login: z.string(),
-  }),
+  user: z
+    .object({
+      login: z.string(),
+    })
+    .nullable(),
   body: z.string(),
   path: z.string(),
   line: z.number().nullable(),

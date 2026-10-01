@@ -97,7 +97,9 @@ no reader can re-derive it.
 Inline review comment fetches retain at most 2,000 comments, ordered by newest
 update first at the API boundary. Hitting that budget drops older activity
 rather than the newest comment or edit used in the dispatch snapshot. Returned
-comments are in ascending update order.
+comments are in ascending update order. Comments from deleted GitHub accounts
+are retained with an empty author login, preserving their feedback and activity
+timestamps without inventing an identity or failing the PR fetch.
 
 Review comments belonging to resolved review threads (GraphQL
 `reviewThreads.isResolved`) are excluded from fixer dispatch prompts and from
