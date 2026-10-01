@@ -57,7 +57,12 @@ export function WorkspacesBoardView({
   issueProvider: IssueProvider;
 }) {
   return (
-    <KanbanProvider projectId={projectId} projectSlug={slug} issueProvider={issueProvider}>
+    <KanbanProvider
+      key={projectId}
+      projectId={projectId}
+      projectSlug={slug}
+      issueProvider={issueProvider}
+    >
       <BoardHeaderSlot
         selectedProjectSlug={selectedProjectSlug}
         onProjectChange={onProjectChange}
