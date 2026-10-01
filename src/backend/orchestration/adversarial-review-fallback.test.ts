@@ -198,7 +198,10 @@ describe('adversarial-review fallback delivery', () => {
     expect(createReviewComment).toHaveBeenCalledTimes(2);
     expect(logger.error).toHaveBeenCalledWith(
       'Adversarial review turn failed',
-      expect.objectContaining({ errors: [summaryError, inlineError] }),
+      expect.objectContaining({
+        errors: [summaryError, inlineError],
+        message: expect.stringContaining('issue comment failed; first inline failed'),
+      }),
       expect.any(Object)
     );
   });

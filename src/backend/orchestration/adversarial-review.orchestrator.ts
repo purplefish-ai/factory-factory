@@ -356,7 +356,11 @@ async function postFindingsToGitHub(
     }
   }
   if (postingErrors.length > 0) {
-    throw new AggregateError(postingErrors, 'Failed to post some adversarial review findings');
+    const failureDetails = postingErrors.map((error) => toError(error).message).join('; ');
+    throw new AggregateError(
+      postingErrors,
+      `Failed to post some adversarial review findings: ${failureDetails}`
+    );
   }
 }
 
