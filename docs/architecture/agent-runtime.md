@@ -59,10 +59,12 @@ The chat composer uses generic retry wording for runtime errors; the banner
 provides the specific startup, prompt, or process-exit error.
 
 Admin Claude model options come from an ephemeral, non-persisted Claude ACP
-session with tools disabled; discovery failure falls back to static aliases.
-Claude model names are normalized from provider descriptions at every ACP config
-ingress so Admin and in-chat selectors show explicit family versions while
-preserving raw provider values and configured defaults.
+session with tools disabled; `ClaudeModelCatalogService` coalesces concurrent
+discovery and caches the catalog for 30 seconds like `CodexModelCatalogService`.
+Discovery failure falls back to static aliases. Claude model names are
+normalized from provider descriptions at every ACP config ingress so Admin and
+in-chat selectors show explicit family versions while preserving raw provider
+values and configured defaults.
 
 Admin Codex options and inactive-session chat capabilities share
 `CodexModelCatalogService`. It coalesces concurrent app-server discovery, caches
