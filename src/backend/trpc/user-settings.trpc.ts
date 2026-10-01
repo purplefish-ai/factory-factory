@@ -192,9 +192,9 @@ export const userSettingsRouter = router({
     }),
 
   /**
-   * Test custom IDE command
+   * Test custom IDE command from a trusted local client
    */
-  testCustomCommand: publicProcedure
+  testCustomCommand: trustedLocalProcedure
     .input(
       z.object({
         customCommand: z.string(),
