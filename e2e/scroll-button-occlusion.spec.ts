@@ -46,7 +46,8 @@ for (const viewport of [
     );
     const chat = page.getByTestId('mock-conversation');
     const input = chat.getByPlaceholder('Type a message...');
-    await expect(input).toBeVisible();
+    // A cold Storybook server compiles the chat dependency tree on first load.
+    await expect(input).toBeVisible({ timeout: 20_000 });
     const messageViewport = chat.locator('.overflow-y-auto').first();
     const composer = chat.locator('.border-t.bg-background').first();
     const button = chat.getByRole('button', { name: 'Scroll to bottom' });
