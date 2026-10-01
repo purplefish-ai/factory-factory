@@ -220,7 +220,7 @@ export function ProjectIssueTrackingCard({
         issueProvider: value as IssueProvider,
       });
       // Keep the last confirmed provider even if the following refetch fails.
-      utils.project.list.setData(undefined, (projects) =>
+      utils.project.list.setQueriesData(undefined, {}, (projects) =>
         projects?.map((project) =>
           project.id === saved.id ? { ...project, issueProvider: saved.issueProvider } : project
         )

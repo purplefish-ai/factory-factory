@@ -2,6 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TRPCClientError } from '@trpc/client';
+import { getQueryKey } from '@trpc/react-query';
 import { observable } from '@trpc/server/observable';
 import { act, createElement, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -234,6 +235,29 @@ describe('issue provider selection', () => {
     await tick();
     expectProvider(IssueProvider.LINEAR);
   });
+
+  it.each([{ isArchived: false }, { isArchived: false, limit: 1, offset: 0 }])(
+    'updates existing filtered project caches after save even when refetch fails (%j)',
+    async (input) => {
+      await mount(IssueProvider.GITHUB);
+      const key = getQueryKey(trpc.project.list, input, 'query');
+      queryClient.setQueryData(key, [
+        { id: 'project-1', issueProvider: IssueProvider.GITHUB },
+        { id: 'other-project', issueProvider: IssueProvider.GITHUB },
+      ]);
+      choose(IssueProvider.LINEAR);
+      await tick();
+      serverProvider = IssueProvider.LINEAR;
+      failLists = true;
+      await act(async () => saves[0]!.succeed());
+      await tick();
+      expect(queryClient.getQueryData(key)).toEqual([
+        { id: 'project-1', issueProvider: IssueProvider.LINEAR },
+        { id: 'other-project', issueProvider: IssueProvider.GITHUB },
+      ]);
+      expectProvider(IssueProvider.LINEAR);
+    }
+  );
 
   it('uses the latest server provider when rolling back during a save', async () => {
     await mount(IssueProvider.GITHUB);
