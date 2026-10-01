@@ -37,6 +37,7 @@ describe('auto-iteration Git cleanup integration', () => {
     git(worktreePath, ['init']);
     git(worktreePath, ['config', 'user.email', 'integration@example.com']);
     git(worktreePath, ['config', 'user.name', 'Integration Test']);
+    git(worktreePath, ['config', 'commit.gpgsign', 'false']);
 
     await writeFile(join(worktreePath, 'tracked.txt'), 'committed content\n', 'utf-8');
     git(worktreePath, ['add', 'tracked.txt']);

@@ -106,6 +106,7 @@ describe('AutoIterationService resume', () => {
       git(['init']);
       git(['config', 'user.email', 'integration@example.com']);
       git(['config', 'user.name', 'Integration Test']);
+      git(['config', 'commit.gpgsign', 'false']);
       await writeFile(join(worktreePath, 'code.ts'), 'implementation\n');
       git(['add', '-A']);
       git(['commit', '-m', 'Initial commit']);
