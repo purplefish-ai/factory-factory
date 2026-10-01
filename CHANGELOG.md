@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Refresh dependencies, including ACP SDK 1.6, Claude ACP 0.85, Linear SDK 97,
+  dotenv 18, Electron 44.5, Storybook 10.6.1, and Vitest 5.0.3.
+
+### Security
+
+- Patch seven registry advisories in brace-expansion, fast-uri, ip-address, and
+  DOMPurify.
+
 ## [0.4.9] - 2026-09-17
 
 ### Changed
