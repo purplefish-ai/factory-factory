@@ -37,6 +37,10 @@ with the same number in different repositories. Failed or incomplete transitions
 retry on later polls, and a seeded merged snapshot is attempted after startup.
 Removing a workspace or stopping the collector clears completion tracking.
 
+API key validation in admin settings clears earlier team choices before each
+request. Editing the key requires fresh validation and team selection before
+saving. Responses to superseded validations cannot restore earlier team choices.
+
 ## Periodic tasks
 
 Scheduled recurring tasks that create a fresh workspace on a configured cadence
