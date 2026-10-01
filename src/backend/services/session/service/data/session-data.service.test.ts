@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { agentSessionAccessor } from '@/backend/services/session/resources/agent-session.accessor';
+import { createLifecycleTestSession } from '@/backend/services/session/service/lifecycle/session-lifecycle.test-helpers';
+import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionDataService } from './session-data.service';
 import { sessionProviderResolverService } from './session-provider-resolver.service';
 
@@ -7,6 +9,7 @@ vi.mock('@/backend/services/session/resources/agent-session.accessor', () => ({
   agentSessionAccessor: {
     acquireFixerSession: vi.fn(),
     findById: vi.fn(),
+    delete: vi.fn(),
   },
 }));
 
@@ -19,6 +22,20 @@ vi.mock('./session-provider-resolver.service', () => ({
 describe('sessionDataService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('reclaims the history identity fence after permanent deletion, but retains it on failure', async () => {
+    sessionDomainService.resetProviderHistory('session-1', 'new');
+    sessionDomainService.clearSession('session-1');
+    vi.mocked(agentSessionAccessor.delete).mockRejectedValueOnce(new Error('delete failed'));
+    await expect(sessionDataService.deleteAgentSession('session-1')).rejects.toThrow(
+      'delete failed'
+    );
+    expect(sessionDomainService.acceptProviderHistoryIdentity('session-1', 'old')).toBe(false);
+    vi.mocked(agentSessionAccessor.delete).mockResolvedValue(createLifecycleTestSession());
+    await sessionDataService.deleteAgentSession('session-1');
+    expect(sessionDomainService.acceptProviderHistoryIdentity('session-1', 'old')).toBe(true);
+    sessionDomainService.clearAllSessions();
   });
 
   it('resolves provider and model defaults before atomic fixer acquisition', async () => {

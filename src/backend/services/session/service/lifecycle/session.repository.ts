@@ -5,6 +5,7 @@ import {
   type ProviderIdentityExpectation,
   type ProviderIdentityRolloverInput,
 } from '@/backend/services/session/resources/agent-session.accessor';
+import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { workspaceDataService } from '@/backend/services/workspace';
 
 function isMetadataRecord(value: Prisma.JsonValue | undefined): value is Prisma.JsonObject {
@@ -134,6 +135,9 @@ export class SessionRepository {
     if (!current) {
       throw new Error(`Session not found: ${sessionId}`);
     }
+    if (!current.providerSessionId && data.providerSessionId) {
+      throw new Error('Initial provider identity must be persisted before its config snapshot');
+    }
     const snapshot = metadata.acpConfigSnapshot;
     if (
       current.providerSessionId &&
@@ -167,7 +171,10 @@ export class SessionRepository {
   }
 
   deleteSession(sessionId: string): Promise<AgentSessionRecord> {
-    return this.sessions.delete(sessionId);
+    return this.sessions.delete(sessionId).then((session) => {
+      sessionDomainService.forgetProviderHistoryIdentity(sessionId);
+      return session;
+    });
   }
 
   recoverStaleRunningSessions(): Promise<number> {

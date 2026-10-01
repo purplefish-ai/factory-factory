@@ -459,9 +459,14 @@ export class AcpRuntimeSupervisor {
         await this.cleanupInstalledCandidate(sessionId, handle, metadata);
         throw notificationCancellation;
       }
-      eventsReady = true;
-      for (const args of bufferedEvents) {
-        dispatchEvent?.(...args);
+      try {
+        eventsReady = true;
+        for (const args of bufferedEvents) {
+          dispatchEvent?.(...args);
+        }
+      } catch (error) {
+        await this.cleanupInstalledCandidate(sessionId, handle, metadata);
+        throw error;
       }
       return handle;
     } finally {

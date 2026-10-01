@@ -1,6 +1,7 @@
 import type { Workspace } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentSessionRecord } from '@/backend/services/session';
+import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionRepository } from './session.repository';
 
@@ -55,6 +56,18 @@ describe('SessionRepository', () => {
 
     expect(updated.providerSessionId).toBe('provider-1');
     expect(sessions.update).toHaveBeenCalledWith('s1', { providerSessionId: 'provider-1' });
+  });
+
+  it('rejects combined initial identity and config writes rather than dropping identity', async () => {
+    sessions.findById.mockResolvedValue(createSession());
+    sessions.updateIfProviderIdentity.mockResolvedValue(1);
+    await expect(
+      repository.updateSession('s1', {
+        providerSessionId: 'first',
+        providerMetadata: { acpConfigSnapshot: { providerSessionId: 'first' } },
+      })
+    ).rejects.toThrow('Initial provider identity must be persisted before its config snapshot');
+    expect(sessions.updateIfProviderIdentity).not.toHaveBeenCalled();
   });
 
   it('allows idempotent re-write of same providerSessionId', async () => {
@@ -145,6 +158,18 @@ describe('SessionRepository', () => {
     await expect(repository.recoverStaleRunningSessions()).resolves.toBe(3);
 
     expect(sessions.recoverStaleRunning).toHaveBeenCalledOnce();
+  });
+
+  it('releases the retained history fence only after durable deletion succeeds', async () => {
+    sessionDomainService.resetProviderHistory('s1', 'new');
+    sessionDomainService.clearSession('s1');
+    sessions.delete.mockRejectedValueOnce(new Error('delete failed'));
+    await expect(repository.deleteSession('s1')).rejects.toThrow('delete failed');
+    expect(sessionDomainService.acceptProviderHistoryIdentity('s1', 'old')).toBe(false);
+    sessions.delete.mockResolvedValue(createSession());
+    await repository.deleteSession('s1');
+    expect(sessionDomainService.acceptProviderHistoryIdentity('s1', 'old')).toBe(true);
+    sessionDomainService.clearAllSessions();
   });
 
   it('delegates conditional session updates to the session accessor', async () => {

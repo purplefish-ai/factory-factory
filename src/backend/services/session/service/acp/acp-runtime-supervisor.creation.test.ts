@@ -564,6 +564,29 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
     expect(order).toEqual(['created', 'provider-id']);
   });
 
+  it('cleans an installed candidate when buffered event replay throws', async () => {
+    const handle = createTestProcessHandle();
+    exitChildAfterSigterm(mockChildOf(handle));
+    const { supervisor } = createHarness((params) => {
+      params.handlers.onAcpEvent?.('session-1', { type: 'acp_task_status_changed', active: true });
+      return Promise.resolve(handle);
+    });
+    await expect(
+      supervisor.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        {
+          onAcpEvent: () => {
+            throw new Error('replay failed');
+          },
+        },
+        defaultContext()
+      )
+    ).rejects.toThrow('replay failed');
+    expect(supervisor.getInstalledHandle('session-1')).toBeUndefined();
+    expect(mockChildOf(handle).kill).toHaveBeenCalledWith('SIGTERM');
+  });
+
   it('keeps fallback candidates invisible until reconciliation and discards partial old replay', async () => {
     const handle = createTestProcessHandle({
       providerSessionId: 'new',

@@ -45,7 +45,7 @@ async function fixture() {
 }
 
 describe('atomic provider identity reconciliation in SQLite', () => {
-  it('commits identity, config snapshot and audit together without a null identity window', async () => {
+  it('persists matching identity, config snapshot and audit in the final row', async () => {
     const session = await fixture();
     const metadata = {
       acpConfigSnapshot: { providerSessionId: 'new' },

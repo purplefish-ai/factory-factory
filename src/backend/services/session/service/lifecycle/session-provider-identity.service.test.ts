@@ -47,6 +47,12 @@ function harness() {
       if (session.providerSessionId !== input.previousProviderSessionId) {
         throw new Error('stale');
       }
+      if (
+        session.updatedAt !== input.expectedUpdatedAt ||
+        session.providerMetadata !== input.expectedProviderMetadata
+      ) {
+        throw new Error('stale CAS expectations');
+      }
       session = {
         ...session,
         providerSessionId: input.providerSessionId,
@@ -76,7 +82,23 @@ function harness() {
 describe('provider identity lifecycle reconciliation', () => {
   it('archives the observed transcript before atomically replacing identity and snapshot', async () => {
     const h = harness();
+    const original = h.session();
     await h.service.reconcile(h.event);
+    expect(h.repository.rolloverProviderIdentity).toHaveBeenCalledWith(
+      h.event.sessionId,
+      expect.objectContaining({
+        expectedUpdatedAt: original.updatedAt,
+        expectedProviderMetadata: original.providerMetadata,
+      })
+    );
+    expect(h.event.assertCurrent).toHaveBeenCalledTimes(5);
+    const fences = vi.mocked(h.event.assertCurrent).mock.invocationCallOrder;
+    expect(fences[1]).toBeGreaterThan(h.repository.getSessionById.mock.invocationCallOrder[0]!);
+    expect(fences[2]).toBeGreaterThan(h.repository.getWorkspaceById.mock.invocationCallOrder[0]!);
+    expect(fences[3]).toBeGreaterThan(h.archive.persistClosedSession.mock.invocationCallOrder[0]!);
+    expect(fences[4]).toBeLessThan(
+      h.repository.rolloverProviderIdentity.mock.invocationCallOrder[0]!
+    );
     expect(h.archive.persistClosedSession.mock.calls[0]?.[0].messages[0]?.text).toBe(
       'previous turn'
     );

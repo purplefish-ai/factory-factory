@@ -514,6 +514,11 @@ export class SessionDomainService extends EventEmitter {
     this.registry.clearAllSessions();
   }
 
+  /** Call only after durable deletion; ordinary store eviction must retain this fence. */
+  forgetProviderHistoryIdentity(sessionId: string): void {
+    this.repairedProviderHistoryIdentities.delete(sessionId);
+  }
+
   getAllPendingRequests(): Map<string, PendingInteractiveRequest> {
     return this.registry.getAllPendingRequests();
   }

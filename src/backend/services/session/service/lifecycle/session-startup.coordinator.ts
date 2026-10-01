@@ -383,7 +383,7 @@ export class SessionStartupCoordinator {
         workingDir: sessionContext.workingDir,
       }
     );
-    let handle: AcpProcessHandle;
+    let handle: AcpProcessHandle | undefined;
     try {
       handle = await creationPromise;
       this.assertStartupAllowed(sessionId, stopGeneration);
@@ -395,25 +395,27 @@ export class SessionStartupCoordinator {
         handle,
         { persistSnapshot: false, emitUpdates: false }
       );
+      this.assertStartupAllowed(sessionId, stopGeneration);
+      await this.persistAcpConfigSnapshot(sessionId, {
+        provider: handle.provider as PersistAcpConfigSnapshotParams['provider'],
+        providerSessionId: handle.providerSessionId,
+        configOptions: handle.configOptions,
+        existingMetadata:
+          handle.sessionCreationOutcome?.kind === 'resume_fallback'
+            ? ((await this.dependencies.repository.getSessionById(sessionId))?.providerMetadata ??
+              undefined)
+            : (session.providerMetadata ?? undefined),
+      });
+      this.assertStartupAllowed(sessionId, stopGeneration);
     } catch (error) {
       if (registration.isOnlyOperation()) {
+        if (handle) {
+          await this.dependencies.runtimeManager.stopClient(sessionId);
+        }
         this.dependencies.acpEventProcessor.clearSessionState(sessionId);
       }
       throw error;
     }
-
-    this.assertStartupAllowed(sessionId, stopGeneration);
-    await this.persistAcpConfigSnapshot(sessionId, {
-      provider: handle.provider as PersistAcpConfigSnapshotParams['provider'],
-      providerSessionId: handle.providerSessionId,
-      configOptions: handle.configOptions,
-      existingMetadata:
-        handle.sessionCreationOutcome?.kind === 'resume_fallback'
-          ? ((await this.dependencies.repository.getSessionById(sessionId))?.providerMetadata ??
-            undefined)
-          : (session.providerMetadata ?? undefined),
-    });
-    this.assertStartupAllowed(sessionId, stopGeneration);
 
     if (handle.configOptions.length > 0) {
       this.dependencies.sessionDomainService.emitDelta(sessionId, {

@@ -54,6 +54,7 @@ export type LifecycleHarnessOverrides = {
   getPermissionPreset?: SessionPermissionPresetPort['getPermissionPreset'];
   provider?: AgentSessionRecord['provider'];
   providerSessionId?: string | null;
+  sessionCreationOutcome?: AcpProcessHandle['sessionCreationOutcome'];
   providerProcessPid?: number | null;
   worktreePath?: string | null;
 };
@@ -453,7 +454,9 @@ export function createLifecycleHarness(
   const handle = {
     provider: session.provider,
     providerSessionId: session.providerSessionId ?? 'provider-session-1',
-    sessionCreationOutcome: { kind: session.providerSessionId ? 'resumed' : 'new' },
+    sessionCreationOutcome: overrides.sessionCreationOutcome ?? {
+      kind: session.providerSessionId ? 'resumed' : 'new',
+    },
     configOptions: [],
     isPromptInFlight: false,
     getSubagentBrowseCapability: vi.fn(() => ({

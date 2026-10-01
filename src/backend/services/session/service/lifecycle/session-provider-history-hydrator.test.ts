@@ -145,4 +145,57 @@ describe('history hydration after provider identity rollover', () => {
     );
     expect(loadCodex.mock.calls.every(([input]) => input.providerSessionId === 'new')).toBe(true);
   });
+
+  it('backfills new Codex tools into a live transcript and rejects stale tools across rollover', async () => {
+    const toolHistory = (id: string) => ({
+      status: 'loaded',
+      filePath: '/tmp/fixture.jsonl',
+      history: [
+        { type: 'assistant', content: 'before tool', timestamp: '2026-01-01T00:00:00Z' },
+        {
+          type: 'tool_use',
+          content: '',
+          timestamp: '2026-01-01T00:00:01Z',
+          toolName: 'exec_command',
+          toolId: id,
+          toolInput: { cmd: 'pwd' },
+        },
+        {
+          type: 'tool_result',
+          content: '/tmp/fixture',
+          timestamp: '2026-01-01T00:00:01Z',
+          toolId: id,
+        },
+        { type: 'assistant', content: 'after tool', timestamp: '2026-01-01T00:00:02Z' },
+      ],
+    });
+    const live: ChatMessage[] = ['before tool', 'after tool'].map((text, order) => ({
+      id: `live-${order}`,
+      source: 'agent',
+      timestamp: `2026-01-01T00:00:0${order * 2}Z`,
+      order,
+      message: {
+        type: 'assistant',
+        message: { role: 'assistant', content: [{ type: 'text', text }] },
+      },
+    }));
+    const stale = createDeferred<unknown>();
+    loadCodex.mockReturnValueOnce(stale.promise);
+    const hydration = hydrateProviderHistoryIfNeeded('history-session', record('old'));
+    await vi.waitFor(() => expect(loadCodex).toHaveBeenCalledOnce());
+    sessionDomainService.resetProviderHistory('history-session', 'new');
+    sessionDomainService.replaceTranscript('history-session', live, {
+      historySource: 'acp_fallback',
+    });
+    stale.resolve(toolHistory('stale-tool'));
+    await hydration;
+    expect(sessionDomainService.getTranscriptSnapshot('history-session')).toEqual(live);
+    loadCodex.mockResolvedValueOnce(toolHistory('new-tool'));
+    await hydrateProviderHistoryIfNeeded('history-session', record('new'));
+    const transcript = JSON.stringify(
+      sessionDomainService.getTranscriptSnapshot('history-session')
+    );
+    expect(transcript).toContain('new-tool');
+    expect(transcript).not.toContain('stale-tool');
+  });
 });
