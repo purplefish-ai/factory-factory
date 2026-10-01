@@ -83,7 +83,9 @@ export interface RatchetPRFullDetails {
   mergeStateStatus?: string;
   reviews: Array<{
     submittedAt: string | null;
-    author: { login: string };
+    /** REST chronology for ties/missing times; absent metadata retains feedback. */
+    chronologicalOrder?: number;
+    author: { login: string; isUnknown?: boolean };
     state?: string;
     body?: string;
     url?: string;

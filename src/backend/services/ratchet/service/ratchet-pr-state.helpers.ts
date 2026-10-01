@@ -10,6 +10,7 @@ import {
   type RatchetState,
   reduceCheckRollupToLatestRunAttempts,
 } from '@/shared/core';
+import type { GitHubReview } from '@/shared/github-types';
 import type { RatchetGitHubBridge } from './bridges';
 import type {
   PRStateFetchResult,
@@ -142,7 +143,7 @@ export function isIgnoredReviewAuthor(
  * review instead of dispatch-worthy, untrusted-content-bearing feedback.
  */
 function isOwnAdversarialReviewMarker(
-  review: { author: { login: string }; body?: string },
+  review: { author: GitHubReview['author']; body?: string },
   authenticatedUsername: string | null
 ): boolean {
   return (
@@ -165,7 +166,7 @@ function getApprovedReviewsByAuthor(
   reviews: Array<{
     submittedAt?: string | null;
     chronologicalOrder?: number;
-    author: { login: string };
+    author: GitHubReview['author'];
     state?: string;
   }>
 ): Map<string, Array<{ chronologicalOrder?: number; submittedAtMs: number | null }>> {
@@ -175,7 +176,7 @@ function getApprovedReviewsByAuthor(
   >();
 
   reviews.forEach((review) => {
-    if (review.state?.toUpperCase() !== 'APPROVED') {
+    if (review.author.isUnknown || review.state?.toUpperCase() !== 'APPROVED') {
       return;
     }
 
@@ -191,12 +192,19 @@ function getApprovedReviewsByAuthor(
 }
 
 function wasReviewSupersededByApproval(
-  review: { submittedAt?: string | null; chronologicalOrder?: number; author: { login: string } },
+  review: {
+    submittedAt?: string | null;
+    chronologicalOrder?: number;
+    author: GitHubReview['author'];
+  },
   approvedReviewsByAuthor: Map<
     string,
     Array<{ chronologicalOrder?: number; submittedAtMs: number | null }>
   >
 ): boolean {
+  if (review.author.isUnknown) {
+    return false;
+  }
   const submittedAtMs = parseSubmittedAtMs(review.submittedAt);
   const approvedReviews = approvedReviewsByAuthor.get(review.author.login) ?? [];
 
@@ -223,13 +231,13 @@ export function computeLatestReviewActivityAtMs(
     reviews: Array<{
       submittedAt: string | null;
       chronologicalOrder?: number;
-      author: { login: string };
+      author: GitHubReview['author'];
       state?: string;
       body?: string;
     }>;
-    comments: Array<{ updatedAt: string; author: { login: string } }>;
+    comments: Array<{ updatedAt: string; author: GitHubReview['author'] }>;
   },
-  reviewComments: Array<{ updatedAt: string; author: { login: string } }>,
+  reviewComments: Array<{ updatedAt: string; author: GitHubReview['author'] }>,
   authenticatedUsername: string | null,
   reviewTriggerMode: RatchetReviewTriggerMode
 ): number | null {
@@ -284,7 +292,7 @@ export function buildReviewSummariesForPrompt(
     reviews: Array<{
       submittedAt?: string | null;
       chronologicalOrder?: number;
-      author: { login: string };
+      author: GitHubReview['author'];
       state?: string;
       body?: string;
       url?: string;

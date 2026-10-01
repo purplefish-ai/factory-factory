@@ -46,14 +46,44 @@ describe('getChronologicalReviews', () => {
     );
   });
 
-  it('omits deleted authors without fabricating a shared reviewer identity', async () => {
+  it('retains deleted-author feedback with explicit unknown identity', async () => {
     const read = vi.fn().mockResolvedValue({
       stdout: JSON.stringify([
-        [{ ...review('deleted', 'APPROVED'), user: null }, review('present', 'CHANGES_REQUESTED')],
+        [
+          { ...review('deleted', 'CHANGES_REQUESTED'), user: null },
+          review('present', 'CHANGES_REQUESTED'),
+        ],
       ]),
     });
     expect(await getChronologicalReviews('owner/repo', 42, read)).toEqual([
+      expect.objectContaining({
+        id: 'deleted',
+        author: { login: '(deleted reviewer)', isUnknown: true },
+        chronologicalOrder: 0,
+        body: 'CHANGES_REQUESTED',
+      }),
       expect.objectContaining({ id: 'present', chronologicalOrder: 1 }),
+    ]);
+  });
+
+  it('preserves same-second review chronology across pages', async () => {
+    const read = vi.fn().mockResolvedValue({
+      stdout: JSON.stringify([
+        [review('changes', 'CHANGES_REQUESTED')],
+        [review('approval', 'APPROVED')],
+      ]),
+    });
+    expect(await getChronologicalReviews('owner/repo', 42, read)).toEqual([
+      expect.objectContaining({
+        id: 'changes',
+        submittedAt: '2026-01-01T00:00:00Z',
+        chronologicalOrder: 0,
+      }),
+      expect.objectContaining({
+        id: 'approval',
+        submittedAt: '2026-01-01T00:00:00Z',
+        chronologicalOrder: 1,
+      }),
     ]);
   });
 

@@ -2,16 +2,17 @@ import { z } from 'zod';
 import type { GitHubReview } from '@/shared/github-types';
 import { GH_MAX_BUFFER_BYTES } from './constants';
 import { mapReviews } from './mappers';
+import { reviewItemSchema } from './schemas';
 import { parseGhJson } from './utils';
 
 const reviewPagesSchema = z.array(
   z.array(
     z.object({
-      node_id: z.string(),
-      user: z.object({ login: z.string() }).nullable(),
-      state: z.string(),
-      submitted_at: z.string().nullish(),
-      body: z.string().optional(),
+      node_id: reviewItemSchema.shape.id,
+      user: reviewItemSchema.shape.author.omit({ isUnknown: true }).nullable(),
+      state: reviewItemSchema.shape.state,
+      submitted_at: reviewItemSchema.shape.submittedAt.optional(),
+      body: reviewItemSchema.shape.body,
     })
   )
 );
@@ -32,20 +33,14 @@ export async function getChronologicalReviews(
     { maxBuffer: GH_MAX_BUFFER_BYTES.reviews }
   );
   const reviews = parseGhJson(reviewPagesSchema, stdout, 'getChronologicalReviews').flat();
-  return reviews.flatMap((review, chronologicalOrder) => {
-    // A deleted reviewer cannot be matched safely to any approval.
-    if (review.user === null) {
-      return [];
-    }
-    const [mapped] = mapReviews([
-      {
-        id: review.node_id,
-        author: review.user,
-        state: review.state,
-        submittedAt: review.submitted_at ?? null,
-        body: review.body,
-      },
-    ]);
-    return mapped ? [{ ...mapped, chronologicalOrder }] : [];
-  });
+  return mapReviews(
+    reviews.map((review) => ({
+      id: review.node_id,
+      // Unknown authors retain feedback but cannot be matched to an approval.
+      author: review.user ?? { login: '(deleted reviewer)', isUnknown: true },
+      state: review.state,
+      submittedAt: review.submitted_at ?? null,
+      body: review.body,
+    }))
+  ).map((review, chronologicalOrder) => ({ ...review, chronologicalOrder }));
 }

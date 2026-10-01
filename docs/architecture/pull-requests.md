@@ -100,6 +100,8 @@ same-second or missing times use an explicit ordinal from GitHub's
 [chronologically ordered REST reviews endpoint](https://docs.github.com/en/rest/pulls/reviews#list-reviews-for-a-pull-request),
 including across pages. Ratchet never infers order from its input array or
 opaque review IDs; without enough ordering evidence, it retains the feedback.
+Deleted reviewers retain their feedback under an explicit unknown identity;
+their approvals never supersede another unknown author’s feedback.
 
 Inline review comment fetches retain at most 2,000 comments, ordered by newest
 update first at the API boundary. Hitting that budget drops older activity

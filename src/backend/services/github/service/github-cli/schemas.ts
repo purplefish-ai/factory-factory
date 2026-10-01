@@ -86,6 +86,14 @@ const fullPRStatusContextSchema = z.object({
   detailsUrl: z.string().optional(),
 });
 
+export const reviewItemSchema = z.object({
+  id: z.string(),
+  author: z.object({ login: z.string(), isUnknown: z.boolean().optional() }),
+  state: z.string(),
+  submittedAt: z.string().nullable(),
+  body: z.string().optional(),
+});
+
 export const fullPRDetailsSchema = z.object({
   number: z.number(),
   title: z.string(),
@@ -97,19 +105,6 @@ export const fullPRDetailsSchema = z.object({
   state: z.enum(['OPEN', 'CLOSED', 'MERGED']),
   reviewDecision: reviewDecisionSchema,
   statusCheckRollup: z.array(z.union([fullPRCheckRunSchema, fullPRStatusContextSchema])).nullable(),
-  reviews: z
-    .array(
-      z
-        .object({
-          id: z.string(),
-          author: z.object({ login: z.string() }),
-          state: z.string(),
-          submittedAt: z.string().nullable(),
-          body: z.string().optional(),
-        })
-        .passthrough()
-    )
-    .default([]),
   comments: z.array(
     z
       .object({

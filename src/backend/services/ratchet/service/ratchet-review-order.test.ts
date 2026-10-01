@@ -60,6 +60,20 @@ describe('review supersession ordering', () => {
     }
   });
 
+  it('never uses an unknown-author approval to supersede deleted-author feedback', () => {
+    const unknownAuthor = { login: '(deleted reviewer)', isUnknown: true };
+    const stale = { ...feedback('CHANGES_REQUESTED'), author: unknownAuthor };
+    const unknownApproval = { ...approval, author: unknownAuthor };
+    for (const reviews of [
+      [stale, unknownApproval],
+      [unknownApproval, stale],
+    ]) {
+      const result = evaluate(reviews, 'CHANGES_REQUESTED');
+      expect(result.summaries.map((review) => review.body)).toEqual([stale.body]);
+      expect(result.activity).toBe(Date.parse(timestamp));
+    }
+  });
+
   it('does not use another reviewer approval to supersede feedback', () => {
     const otherApproval = { ...approval, author: { login: 'other' } };
     const result = evaluate([feedback('CHANGES_REQUESTED'), otherApproval], 'CHANGES_REQUESTED');
