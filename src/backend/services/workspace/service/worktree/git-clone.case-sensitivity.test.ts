@@ -64,8 +64,11 @@ describe('GitHub clone paths on a case-sensitive filesystem', () => {
       for (const url of ['https://github.com/owner/repo', 'git@github.com:OWNER/REPO.git']) {
         const parsed = parseGithubUrl(url);
         expect(parsed).not.toBeNull();
-        const clonePath = await gitCloneService.getClonePath(reposDir, parsed!.owner, parsed!.repo);
-        const status = await gitCloneService.checkExistingClone(clonePath);
+        const { path: clonePath, status } = await gitCloneService.getClonePath(
+          reposDir,
+          parsed!.owner,
+          parsed!.repo
+        );
         if (status === 'not_exists') {
           await gitCloneService.clone(url, clonePath);
         }
@@ -83,21 +86,28 @@ describe('GitHub clone paths on a case-sensitive filesystem', () => {
     const source = join(tempDir, 'source');
     execFileSync('git', ['init', '--quiet', '--bare', source]);
     const parsed = parseGithubUrl('https://github.com/OwNeR/RePo.git');
-    const destination = await gitCloneService.getClonePath(reposDir, parsed!.owner, parsed!.repo);
+    const { path: destination, status } = await gitCloneService.getClonePath(
+      reposDir,
+      parsed!.owner,
+      parsed!.repo
+    );
     expect(destination).toBe(join(reposDir, 'owner', 'repo'));
-    expect(await gitCloneService.checkExistingClone(destination)).toBe('not_exists');
+    expect(status).toBe('not_exists');
     expect((await gitCloneService.clone(source, destination)).success).toBe(true);
-    expect(await gitCloneService.getClonePath(reposDir, 'OWNER', 'REPO')).toBe(destination);
-    expect(await gitCloneService.checkExistingClone(destination)).toBe('valid_repo');
+    expect(await gitCloneService.getClonePath(reposDir, 'OWNER', 'REPO')).toEqual({
+      path: destination,
+      status: 'valid_repo',
+    });
     expect(await readdir(reposDir)).toEqual(['owner']);
     expect(await readdir(join(reposDir, 'owner'))).toEqual(['repo']);
   });
 
   it('uses the canonical path for a new repo even when an older owner directory exists', async () => {
     await createRepo('OwNeR', 'OtherRepo');
-    expect(await gitCloneService.getClonePath(reposDir, 'OWNER', 'NewRepo')).toBe(
-      join(reposDir, 'owner', 'newrepo')
-    );
+    expect(await gitCloneService.getClonePath(reposDir, 'OWNER', 'NewRepo')).toEqual({
+      path: join(reposDir, 'owner', 'newrepo'),
+      status: 'not_exists',
+    });
   });
 
   it('preserves the non-repository guard for a differently cased existing path', async () => {
@@ -105,8 +115,7 @@ describe('GitHub clone paths on a case-sensitive filesystem', () => {
     await mkdir(destination, { recursive: true });
     await writeFile(join(destination, 'keep.txt'), 'not a repository');
     const resolved = await gitCloneService.getClonePath(reposDir, 'owner', 'repo');
-    expect(resolved).toBe(destination);
-    expect(await gitCloneService.checkExistingClone(resolved)).toBe('not_repo');
+    expect(resolved).toEqual({ path: destination, status: 'not_repo' });
     expect(await readdir(destination)).toEqual(['keep.txt']);
   });
 });

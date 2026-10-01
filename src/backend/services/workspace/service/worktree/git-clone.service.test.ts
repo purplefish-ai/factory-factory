@@ -121,10 +121,12 @@ describe('GitCloneService.getClonePath', () => {
   });
 
   it('prefers an existing canonical clone when multiple case variants exist', async () => {
-    await expect(gitCloneService.getClonePath('/repos', 'OwNeR', 'RePo')).resolves.toBe(
-      '/repos/owner/repo'
-    );
+    await expect(gitCloneService.getClonePath('/repos', 'OwNeR', 'RePo')).resolves.toEqual({
+      path: '/repos/owner/repo',
+      status: 'valid_repo',
+    });
     expect(mockReaddir).not.toHaveBeenCalledWith('/repos/unrelated');
+    expect(mockGitCommand).toHaveBeenCalledTimes(2);
   });
 
   it('searches all owner variants for a valid clone before rejecting non-repos', async () => {
@@ -133,9 +135,49 @@ describe('GitCloneService.getClonePath', () => {
       stdout: '',
       stderr: '',
     }));
-    await expect(gitCloneService.getClonePath('/repos', 'OWNER', 'REPO')).resolves.toBe(
-      '/repos/owner/RePo'
-    );
+    await expect(gitCloneService.getClonePath('/repos', 'OWNER', 'REPO')).resolves.toEqual({
+      path: '/repos/owner/RePo',
+      status: 'valid_repo',
+    });
+  });
+
+  it('returns the first conflicting path and its existing non-repository status', async () => {
+    mockGitCommand.mockResolvedValue({ code: 128, stdout: '', stderr: '' });
+    await expect(gitCloneService.getClonePath('/repos', 'OWNER', 'REPO')).resolves.toEqual({
+      path: '/repos/owner/repo',
+      status: 'not_repo',
+    });
+    expect(mockGitCommand).toHaveBeenCalledTimes(4);
+  });
+
+  it('returns a new canonical destination without spawning git', async () => {
+    mockReaddir.mockResolvedValue([]);
+    mockPathExists.mockResolvedValue(false);
+    await expect(gitCloneService.getClonePath('/repos', 'OWNER', 'REPO')).resolves.toEqual({
+      path: '/repos/owner/repo',
+      status: 'not_exists',
+    });
+    expect(mockGitCommand).not.toHaveBeenCalled();
+  });
+
+  it('keeps the selected first candidate status when later candidates disappeared', async () => {
+    mockPathExists.mockImplementation(async (path: string) => path === '/repos/owner/repo');
+    mockGitCommand.mockResolvedValue({ code: 128, stdout: '', stderr: '' });
+    await expect(gitCloneService.getClonePath('/repos', 'OWNER', 'REPO')).resolves.toEqual({
+      path: '/repos/owner/repo',
+      status: 'not_repo',
+    });
+    expect(mockGitCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it('checks the canonical path even when the scan found no candidates', async () => {
+    mockReaddir.mockResolvedValue([]);
+    mockGitCommand.mockResolvedValue({ code: 128, stdout: '', stderr: '' });
+    await expect(gitCloneService.getClonePath('/repos', 'OWNER', 'REPO')).resolves.toEqual({
+      path: '/repos/owner/repo',
+      status: 'not_repo',
+    });
+    expect(mockPathExists).toHaveBeenCalledWith('/repos/owner/repo');
   });
 
   it.each(['/repos', '/repos/owner'])(

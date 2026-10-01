@@ -15,6 +15,11 @@ export interface GithubRepo {
 
 export type ExistingCloneStatus = 'valid_repo' | 'not_repo' | 'not_exists';
 
+interface CloneDestination {
+  path: string;
+  status: ExistingCloneStatus;
+}
+
 const GITHUB_PATH_SEGMENT_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/;
 
 function isValidGithubPathSegment(segment: string): boolean {
@@ -66,7 +71,7 @@ class GitCloneService {
    * Reuse existing clone paths regardless of GitHub URL casing. New clones use
    * lowercase owner/repo paths; existing directories are never renamed.
    */
-  async getClonePath(reposDir: string, owner: string, repo: string): Promise<string> {
+  async getClonePath(reposDir: string, owner: string, repo: string): Promise<CloneDestination> {
     const canonicalPath = join(reposDir, owner.toLowerCase(), repo.toLowerCase());
     const candidates: string[] = [];
     for (const existingOwner of await findCaseInsensitiveEntries(reposDir, owner.toLowerCase())) {
@@ -83,13 +88,21 @@ class GitCloneService {
       candidates.splice(candidates.indexOf(canonicalPath), 1);
       candidates.unshift(canonicalPath);
     }
+    let firstCandidate: CloneDestination | undefined;
     for (const candidate of candidates) {
-      if ((await this.checkExistingClone(candidate)) === 'valid_repo') {
-        return candidate;
+      const destination = { path: candidate, status: await this.checkExistingClone(candidate) };
+      if (destination.status === 'valid_repo') {
+        return destination;
       }
+      firstCandidate ??= destination;
     }
-    // Keep the caller's non-repository guard for existing conflicting entries.
-    return candidates[0] ?? canonicalPath;
+    // Keep the caller's non-repository guard and reuse the selected path's status.
+    return (
+      firstCandidate ?? {
+        path: canonicalPath,
+        status: await this.checkExistingClone(canonicalPath),
+      }
+    );
   }
 
   /**

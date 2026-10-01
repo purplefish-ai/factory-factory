@@ -446,12 +446,13 @@ export const projectRouter = router({
         );
       }
 
-      // Compute clone destination
+      // Resolve the clone destination and reuse the scan's existing-clone status.
       const reposDir = configService.getReposDir();
-      const clonePath = await gitCloneService.getClonePath(reposDir, parsed.owner, parsed.repo);
-
-      // Check if already cloned
-      const existingStatus = await gitCloneService.checkExistingClone(clonePath);
+      const { path: clonePath, status: existingStatus } = await gitCloneService.getClonePath(
+        reposDir,
+        parsed.owner,
+        parsed.repo
+      );
 
       if (existingStatus === 'not_repo') {
         throw new Error(`Directory already exists at ${clonePath} but is not a git repository`);
