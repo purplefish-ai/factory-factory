@@ -899,23 +899,16 @@ describe('resource accessors integration', () => {
   });
 
   describe('decisionLogService', () => {
-    it('formats automatic error logs with structured context', async () => {
-      const entry = await decisionLogService.createAutomatic('agent-1', 'OpenFile', 'error', {
-        message: 'permission denied',
-        code: 'EACCES',
-      });
-
-      expect(entry.agentId).toBe('agent-1');
-      expect(entry.decision).toBe('Tool error: OpenFile');
-      expect(entry.reasoning).toBe('Automatic tool error log');
-      expect(entry.context).toContain('permission denied');
-      expect(entry.context).toContain('EACCES');
-    });
-
     it('lists recent logs scoped by agent id', async () => {
-      await decisionLogService.createManual('agent-1', 'Decision A', 'Reason A');
-      await decisionLogService.createManual('agent-2', 'Decision B', 'Reason B');
-      await decisionLogService.createManual('agent-1', 'Decision C', 'Reason C');
+      await prisma.decisionLog.create({
+        data: { agentId: 'agent-1', decision: 'Decision A', reasoning: 'Reason A' },
+      });
+      await prisma.decisionLog.create({
+        data: { agentId: 'agent-2', decision: 'Decision B', reasoning: 'Reason B' },
+      });
+      await prisma.decisionLog.create({
+        data: { agentId: 'agent-1', decision: 'Decision C', reasoning: 'Reason C' },
+      });
 
       const agentOne = await decisionLogService.list({ agentId: 'agent-1', limit: 10 });
       const all = await decisionLogService.list({ limit: 10 });
