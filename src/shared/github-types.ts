@@ -22,6 +22,7 @@ export interface GitHubStatusCheck {
   conclusion:
     | 'SUCCESS'
     | 'FAILURE'
+    | 'STARTUP_FAILURE'
     | 'SKIPPED'
     | 'CANCELLED'
     | 'TIMED_OUT'
