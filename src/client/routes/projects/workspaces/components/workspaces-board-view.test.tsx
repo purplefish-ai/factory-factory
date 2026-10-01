@@ -207,9 +207,14 @@ afterEach(async () => {
 });
 
 describe('WorkspacesBoardView project lifetime', () => {
-  it.each(['success', 'failure'] as const)(
-    'keeps delayed rename %s owned by its originating project across A/B/A',
-    async (outcome) => {
+  it.each([
+    ['success', 'b'],
+    ['failure', 'b'],
+    ['success', 'a'],
+    ['failure', 'a'],
+  ] as const)(
+    'keeps delayed rename %s owned by its origin while %s is selected',
+    async (outcome, selectedProject) => {
       const request = deferred<void>();
       mocks.rename.mockReturnValueOnce(request.promise);
       await render('a');
@@ -220,8 +225,10 @@ describe('WorkspacesBoardView project lifetime', () => {
         void save.catch(() => undefined);
       });
       await render('b');
-      await render('a');
-      await act(() => mocks.context!.openQuickChat('a-2'));
+      if (selectedProject === 'a') {
+        await render('a');
+      }
+      await act(() => mocks.context!.openQuickChat(`${selectedProject}-2`));
       const current = mocks.context!;
       await act(async () => {
         if (outcome === 'success') {
@@ -233,8 +240,10 @@ describe('WorkspacesBoardView project lifetime', () => {
       });
       expect(mocks.rename).toHaveBeenCalledExactlyOnceWith({ id: 'a-1', name: 'Mock rename' });
       expect(mocks.context).toBe(current);
-      expect(current.quickChatWorkspaceId).toBe('a-2');
+      expect(current.projectId).toBe(selectedProject);
+      expect(current.quickChatWorkspaceId).toBe(`${selectedProject}-2`);
       expect(current.archiveGitLockWorkspaceIds).toEqual([]);
+      expect(mocks.refetch).not.toHaveBeenCalledWith('b');
       if (outcome === 'success') {
         expect(mocks.refetch).toHaveBeenCalledExactlyOnceWith('a');
         expect(mocks.invalidate).toHaveBeenCalledExactlyOnceWith({ id: 'a-1' });
