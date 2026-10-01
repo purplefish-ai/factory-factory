@@ -406,4 +406,56 @@ describe('periodicTaskAccessor.reserveExecutionAndMarkDispatched', () => {
 
     expect(prismaMock.periodicTaskExecution.create).not.toHaveBeenCalled();
   });
+
+  it('lazily backfills a legacy monthly anchor from createdAt in the task timezone', async () => {
+    const timezone = 'America/Los_Angeles';
+    prismaMock.periodicTask.findUnique.mockResolvedValue({
+      createdAt: new Date('2026-02-01T07:30:00.000Z'), // Jan 31 23:30 in Los Angeles
+      scheduledDayOfMonth: null,
+      timezone,
+    });
+    prismaMock.periodicTaskExecution.create.mockResolvedValue({
+      id: 'exec-1',
+      periodicTaskId: 'task-1',
+      workspaceId: null,
+      status: 'RUNNING',
+    });
+    prismaMock.periodicTask.updateMany.mockResolvedValue({ count: 1 });
+
+    await periodicTaskAccessor.reserveExecutionAndMarkDispatched(
+      {
+        periodicTaskId: 'task-1',
+        workspaceId: null,
+        status: 'RUNNING',
+      },
+      {
+        cadence: 'MONTHLY',
+        scheduledTime: '09:00',
+        timezone,
+        scheduledDayOfMonth: null,
+      }
+    );
+
+    expect(prismaMock.periodicTask.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'task-1',
+        isEnabled: true,
+        nextRunAt: { lte: new Date('2026-02-28T15:00:00.000Z') },
+        executions: { none: { status: 'RUNNING' } },
+      },
+      data: expect.objectContaining({
+        scheduledDayOfMonth: 31,
+      }),
+    });
+
+    const updateArgs = prismaMock.periodicTask.updateMany.mock.calls[0]?.[0];
+    const nextRunAt = updateArgs?.data.nextRunAt as Date;
+    expect(getLocalParts(nextRunAt, timezone)).toMatchObject({
+      year: '2026',
+      month: '03',
+      day: '31',
+      hour: '09',
+      minute: '00',
+    });
+  });
 });
