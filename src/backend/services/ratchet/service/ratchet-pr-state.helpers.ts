@@ -235,7 +235,7 @@ export function computeLatestReviewActivityAtMs(
       state?: string;
       body?: string;
     }>;
-    comments: Array<{ updatedAt: string; author: GitHubReview['author'] }>;
+    comments: Array<{ updatedAt: string; author: GitHubReview['author']; body?: string }>;
   },
   reviewComments: Array<{ updatedAt: string; author: GitHubReview['author'] }>,
   authenticatedUsername: string | null,
@@ -271,6 +271,13 @@ export function computeLatestReviewActivityAtMs(
       timestamp: reviewComment.updatedAt,
       bypassAuthorFilter: false,
     })),
+    ...prDetails.comments
+      .filter((comment) => isOwnAdversarialReviewMarker(comment, authenticatedUsername))
+      .map((comment) => ({
+        authorLogin: comment.author.login,
+        timestamp: comment.updatedAt,
+        bypassAuthorFilter: true,
+      })),
   ];
 
   const timestamps = entries
@@ -297,13 +304,14 @@ export function buildReviewSummariesForPrompt(
       body?: string;
       url?: string;
     }>;
+    comments?: Array<{ author: GitHubReview['author']; body?: string; url?: string }>;
   },
   authenticatedUsername: string | null,
   reviewTriggerMode: RatchetReviewTriggerMode
 ): PRStateInfo['reviewComments'] {
   const approvedReviewsByAuthor = getApprovedReviewsByAuthor(prDetails.reviews);
 
-  return prDetails.reviews
+  const reviewSummaries = prDetails.reviews
     .filter((review) => {
       const isOwnMarkerReview = isOwnAdversarialReviewMarker(review, authenticatedUsername);
 
@@ -334,6 +342,21 @@ export function buildReviewSummariesForPrompt(
       line: null,
       url: review.url ?? prDetails.url,
     }));
+
+  // The fallback posts a conversation summary, including findings without
+  // diff anchors. Only the authenticated app's marker may opt into Ratchet.
+  return [
+    ...reviewSummaries,
+    ...(prDetails.comments ?? [])
+      .filter((comment) => isOwnAdversarialReviewMarker(comment, authenticatedUsername))
+      .map((comment) => ({
+        author: comment.author.login,
+        body: comment.body?.trim() ?? '',
+        path: 'PR review',
+        line: null,
+        url: comment.url ?? prDetails.url,
+      })),
+  ];
 }
 
 export function hasNewReviewActivitySinceLastDispatch(
