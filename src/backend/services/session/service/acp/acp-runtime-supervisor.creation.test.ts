@@ -564,6 +564,87 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
     expect(order).toEqual(['created', 'provider-id']);
   });
 
+  it.each(['factory', 'rollover', 'notification'] as const)(
+    'fails closed on startup event overflow during %s and permits a later retry',
+    async (phase) => {
+      const handle = createTestProcessHandle({
+        sessionCreationOutcome:
+          phase === 'rollover'
+            ? { kind: 'resume_fallback', previousProviderSessionId: 'old', reason: 'load_failed' }
+            : { kind: 'new' },
+      });
+      exitChildAfterSigterm(mockChildOf(handle));
+      const gate = createDeferred<void>();
+      let params: CreateAcpClientParams | undefined;
+      const onAcpEvent = vi.fn();
+      const commit = vi.fn();
+      let rolloverWaiting = false;
+      const { supervisor, createClient } = createHarness(async (factoryParams) => {
+        params = factoryParams;
+        if (phase === 'factory') {
+          await gate.promise;
+        }
+        return handle;
+      });
+      const creation = supervisor.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        {
+          onAcpEvent,
+          onProviderIdentityRollover: async (event) => {
+            rolloverWaiting = true;
+            await gate.promise;
+            event.assertCurrent();
+            commit();
+          },
+          onSessionId: async () => {
+            if (phase === 'notification') {
+              await gate.promise;
+            }
+          },
+        },
+        defaultContext()
+      );
+      const rejection = expect(creation).rejects.toThrow('ACP startup event buffer exceeded');
+      await vi.waitFor(() => {
+        expect(params).toBeDefined();
+        if (phase === 'notification') {
+          expect(supervisor.getInstalledHandle('session-1')).toBe(handle);
+        }
+        if (phase === 'rollover') {
+          expect(rolloverWaiting).toBe(true);
+        }
+      });
+      for (let i = 0; i < 20_000; i++) {
+        params?.handlers.onAcpEvent?.('session-1', {
+          type: 'acp_task_status_changed',
+          active: true,
+        });
+      }
+      if (phase === 'factory') {
+        await expect(params?.stopSignal.promise).rejects.toThrow(
+          'ACP startup event buffer exceeded'
+        );
+      }
+      gate.resolve(undefined);
+      await rejection;
+      expect(onAcpEvent).not.toHaveBeenCalled();
+      expect(commit).not.toHaveBeenCalled();
+      expect(supervisor.getInstalledHandle('session-1')).toBeUndefined();
+      expect(mockChildOf(handle).kill).toHaveBeenCalledWith('SIGTERM');
+      const replacement = createTestProcessHandle();
+      createClient.mockResolvedValueOnce(replacement);
+      await expect(
+        supervisor.getOrCreateClient(
+          'session-1',
+          defaultOptions(),
+          defaultHandlers(),
+          defaultContext()
+        )
+      ).resolves.toBe(replacement);
+    }
+  );
+
   it('cleans an installed candidate when buffered event replay throws', async () => {
     const handle = createTestProcessHandle();
     exitChildAfterSigterm(mockChildOf(handle));

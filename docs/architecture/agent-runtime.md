@@ -116,6 +116,12 @@ identity, even when they finish after rollover, and retry cooldowns reset for
 the new identity. After backend restart, the reconciled column is the
 authoritative history ID.
 
+Startup buffers at most 10,000 ACP events while provider creation and identity
+persistence are pending. Overflow cancels startup and terminates its candidate;
+it never installs a runtime with a silently truncated transcript. Rollover
+fencing rejects further reconciliation after overflow, and a later startup can
+retry.
+
 ### Session prompts
 
 ACP init/load uses the provider's built-in instructions; Factory Factory does
