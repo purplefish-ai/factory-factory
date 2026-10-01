@@ -2,14 +2,27 @@ import { z } from 'zod';
 
 /**
  * Cadence input schemas shared by `periodic-task.trpc.ts` and
- * `workspace-wake.trpc.ts` — both schedule on the same `PeriodicTaskCadence`
- * values with the same optional time-of-day/timezone fields.
+ * `workspace-wake.trpc.ts` — both schedule with the same optional
+ * time-of-day/timezone fields, on cadences drawn from the same
+ * `PeriodicTaskCadence` database enum.
+ *
+ * `EVERY_HOUR` is wake-schedule-only: the Periodic Task admin UI has no
+ * control to select or display it, so `periodicTaskCadenceSchema` excludes it
+ * to keep every `PeriodicTask` row on a cadence that UI can render.
  */
 
 export const cadenceSchema = z.enum([
   'EVERY_MINUTE',
   'EVERY_FIVE_MINUTES',
   'EVERY_HOUR',
+  'DAILY',
+  'WEEKLY',
+  'MONTHLY',
+]);
+
+export const periodicTaskCadenceSchema = z.enum([
+  'EVERY_MINUTE',
+  'EVERY_FIVE_MINUTES',
   'DAILY',
   'WEEKLY',
   'MONTHLY',

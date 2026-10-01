@@ -1,3 +1,4 @@
+import type { WorkspaceWakeSchedule } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { createLogger } from '@/backend/services/logger.service';
 import type {
@@ -14,7 +15,9 @@ const logger = {
   error: vi.fn(),
 } as unknown as Logger;
 
-function schedule(overrides: Partial<Record<string, unknown>> = {}) {
+const DISPATCHED_AT = new Date('2026-05-20T12:00:00.000Z');
+
+function schedule(overrides: Partial<WorkspaceWakeSchedule> = {}): WorkspaceWakeSchedule {
   return {
     workspaceId: 'ws-1',
     enabled: true,
@@ -58,7 +61,7 @@ describe('WorkspaceWakeService', () => {
       set: vi.fn(),
       clear: vi.fn(),
       findDue: vi.fn().mockResolvedValue([]),
-      markDispatched: vi.fn().mockResolvedValue(true),
+      markDispatched: vi.fn().mockResolvedValue(DISPATCHED_AT),
       recordOutcome: vi.fn().mockResolvedValue(undefined),
     };
     deliveryBridge = { deliver: vi.fn().mockResolvedValue({ delivered: true }) };
@@ -95,7 +98,9 @@ describe('WorkspaceWakeService', () => {
 
     expect(scheduleBridge.markDispatched).toHaveBeenCalledWith(schedule());
     expect(deliveryBridge.deliver).toHaveBeenCalledWith('ws-1', 'Check the logs');
-    expect(scheduleBridge.recordOutcome).toHaveBeenCalledWith('ws-1', { outcome: 'DELIVERED' });
+    expect(scheduleBridge.recordOutcome).toHaveBeenCalledWith('ws-1', DISPATCHED_AT, {
+      outcome: 'DELIVERED',
+    });
   });
 
   it('records SKIPPED_NO_SESSION when delivery finds nothing to wake', async () => {
@@ -105,7 +110,7 @@ describe('WorkspaceWakeService', () => {
     await runCycle(service);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(scheduleBridge.recordOutcome).toHaveBeenCalledWith('ws-1', {
+    expect(scheduleBridge.recordOutcome).toHaveBeenCalledWith('ws-1', DISPATCHED_AT, {
       outcome: 'SKIPPED_NO_SESSION',
     });
   });
@@ -117,7 +122,7 @@ describe('WorkspaceWakeService', () => {
     await runCycle(service);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(scheduleBridge.recordOutcome).toHaveBeenCalledWith('ws-1', {
+    expect(scheduleBridge.recordOutcome).toHaveBeenCalledWith('ws-1', DISPATCHED_AT, {
       outcome: 'FAILED',
       error: 'boom',
     });
@@ -125,7 +130,7 @@ describe('WorkspaceWakeService', () => {
 
   it('does not deliver when another poll cycle already claimed the schedule', async () => {
     scheduleBridge.findDue.mockResolvedValue([schedule()]);
-    scheduleBridge.markDispatched.mockResolvedValue(false);
+    scheduleBridge.markDispatched.mockResolvedValue(null);
 
     await runCycle(service);
 
@@ -140,11 +145,57 @@ describe('WorkspaceWakeService', () => {
     ]);
     scheduleBridge.markDispatched.mockImplementation(() => {
       controller.abort();
-      return Promise.resolve(true);
+      return Promise.resolve(DISPATCHED_AT);
     });
 
     await runCycle(service, controller.signal);
 
     expect(scheduleBridge.markDispatched).toHaveBeenCalledTimes(1);
+  });
+
+  it('logs and does not throw when findDue rejects', async () => {
+    scheduleBridge.findDue.mockRejectedValue(new Error('db unavailable'));
+
+    await expect(runCycle(service)).resolves.toBeUndefined();
+
+    expect(logger.error).toHaveBeenCalledWith('Workspace wake poll error', expect.any(Error));
+    expect(scheduleBridge.markDispatched).not.toHaveBeenCalled();
+  });
+
+  it('stop() waits for an in-flight detached delivery to finish', async () => {
+    scheduleBridge.findDue.mockResolvedValue([schedule()]);
+    let resolveDelivery!: (result: { delivered: boolean }) => void;
+    deliveryBridge.deliver.mockReturnValue(
+      new Promise((resolve) => {
+        resolveDelivery = resolve;
+      })
+    );
+
+    await runCycle(service);
+
+    let stopped = false;
+    const stopPromise = service.stop().then(() => {
+      stopped = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(stopped).toBe(false);
+
+    resolveDelivery({ delivered: true });
+    await stopPromise;
+    expect(stopped).toBe(true);
+    expect(scheduleBridge.recordOutcome).toHaveBeenCalledWith('ws-1', DISPATCHED_AT, {
+      outcome: 'DELIVERED',
+    });
+  });
+
+  it('warns and does nothing when the bridges are not configured', async () => {
+    const unconfigured = new WorkspaceWakeService(logger);
+
+    await expect(runCycle(unconfigured)).resolves.toBeUndefined();
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Workspace wake service not configured — skipping poll'
+    );
+    expect(scheduleBridge.findDue).not.toHaveBeenCalled();
   });
 });

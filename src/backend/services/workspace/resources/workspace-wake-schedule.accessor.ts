@@ -119,9 +119,12 @@ class WorkspaceWakeScheduleAccessor {
 
   /**
    * Atomically claim a due schedule and advance it to its next occurrence, so
-   * two overlapping poll cycles cannot both dispatch the same wake.
+   * two overlapping poll cycles cannot both dispatch the same wake. Returns
+   * the claim's `dispatchedAt` as an occurrence token: callers pass it back to
+   * `recordOutcome` so a slow, superseded delivery can't overwrite a later
+   * occurrence's outcome.
    */
-  async markDispatched(schedule: WorkspaceWakeSchedule): Promise<boolean> {
+  async markDispatched(schedule: WorkspaceWakeSchedule): Promise<Date | null> {
     const dispatchedAt = new Date();
     let resolvedScheduledDayOfMonth = schedule.scheduledDayOfMonth;
     if (schedule.cadence === 'MONTHLY' && resolvedScheduledDayOfMonth == null) {
@@ -149,15 +152,23 @@ class WorkspaceWakeScheduleAccessor {
         scheduledDayOfMonth: resolvedScheduledDayOfMonth,
       },
     });
-    return result.count > 0;
+    return result.count > 0 ? dispatchedAt : null;
   }
 
+  /**
+   * Records a delivery outcome, but only if `dispatchedAt` still matches the
+   * row's `lastWakeAt` — the occurrence token from the `markDispatched` claim
+   * that triggered this delivery. If a later occurrence has already been
+   * claimed (and so advanced `lastWakeAt`), this is a no-op, so a slow,
+   * superseded delivery cannot clobber the newer occurrence's outcome.
+   */
   async recordOutcome(
     workspaceId: string,
+    dispatchedAt: Date,
     outcome: { outcome: 'DELIVERED' | 'FAILED' | 'SKIPPED_NO_SESSION'; error?: string | null }
   ): Promise<void> {
     await prisma.workspaceWakeSchedule.updateMany({
-      where: { workspaceId },
+      where: { workspaceId, lastWakeAt: dispatchedAt },
       data: { lastOutcome: outcome.outcome, lastError: outcome.error ?? null },
     });
   }

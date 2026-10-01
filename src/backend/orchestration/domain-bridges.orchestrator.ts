@@ -67,7 +67,7 @@ import type {
   initializeWorkspaceWorktree,
   recoverStaleProvisioningWorkspace,
 } from './workspace-init.orchestrator';
-import { deliverWorkspaceWake } from './workspace-wake-delivery.orchestrator';
+import type { deliverWorkspaceWake } from './workspace-wake-delivery.orchestrator';
 
 type SessionDataService = typeof sessionDataService;
 type SessionDomainService = typeof sessionDomainService;
@@ -82,6 +82,7 @@ export type BridgeServices = {
   chatEventForwarderService: typeof chatEventForwarderService;
   chatMessageHandlerService: typeof chatMessageHandlerService;
   createLogger: typeof createLogger;
+  deliverWorkspaceWake: typeof deliverWorkspaceWake;
   fixerSessionService: typeof fixerSessionService;
   getWorkspaceInitPolicy: typeof getWorkspaceInitPolicy;
   githubCLIService: typeof githubCLIService;
@@ -272,6 +273,7 @@ export function configureDomainBridges(services: BridgeServices): void {
     chatEventForwarderService,
     chatMessageHandlerService,
     createLogger,
+    deliverWorkspaceWake,
     fixerSessionService,
     getWorkspaceInitPolicy,
     githubCLIService,
@@ -711,8 +713,8 @@ export function configureDomainBridges(services: BridgeServices): void {
       clear: (workspaceId) => workspaceWakeScheduleService.clear(workspaceId),
       findDue: () => workspaceWakeScheduleService.findDue(),
       markDispatched: (schedule) => workspaceWakeScheduleService.markDispatched(schedule),
-      recordOutcome: (workspaceId, outcome) =>
-        workspaceWakeScheduleService.recordOutcome(workspaceId, outcome),
+      recordOutcome: (workspaceId, dispatchedAt, outcome) =>
+        workspaceWakeScheduleService.recordOutcome(workspaceId, dispatchedAt, outcome),
     },
     delivery: {
       deliver: (workspaceId, prompt) => deliverWorkspaceWake(workspaceId, prompt),

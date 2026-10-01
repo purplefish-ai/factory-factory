@@ -5,6 +5,8 @@
  * in-process tRPC caller, so it calls back into its own server over HTTP.
  */
 
+const REQUEST_TIMEOUT_MS = 30_000;
+
 export async function callTrpcMutation(
   baseUrl: string,
   path: string,
@@ -16,6 +18,7 @@ export async function callTrpcMutation(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ json: input }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     const body = (await res.json()) as {
       result?: { data?: { json?: unknown } };
@@ -39,7 +42,10 @@ export async function callTrpcQuery(
     input !== undefined ? `?input=${encodeURIComponent(JSON.stringify({ json: input }))}` : '';
   const url = `${baseUrl}/api/trpc/${path}${inputParam}`;
   try {
-    const res = await fetch(url, { method: 'GET' });
+    const res = await fetch(url, {
+      method: 'GET',
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
     const body = (await res.json()) as {
       result?: { data?: { json?: unknown } };
       error?: { json?: { message?: string }; message?: string };

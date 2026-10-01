@@ -27,15 +27,16 @@ class WorkspaceWakeScheduleService {
     return workspaceWakeScheduleAccessor.findDue();
   }
 
-  markDispatched(schedule: WorkspaceWakeSchedule): Promise<boolean> {
+  markDispatched(schedule: WorkspaceWakeSchedule): Promise<Date | null> {
     return workspaceWakeScheduleAccessor.markDispatched(schedule);
   }
 
   recordOutcome(
     workspaceId: string,
+    dispatchedAt: Date,
     outcome: { outcome: 'DELIVERED' | 'FAILED' | 'SKIPPED_NO_SESSION'; error?: string | null }
   ): Promise<void> {
-    return workspaceWakeScheduleAccessor.recordOutcome(workspaceId, outcome);
+    return workspaceWakeScheduleAccessor.recordOutcome(workspaceId, dispatchedAt, outcome);
   }
 }
 

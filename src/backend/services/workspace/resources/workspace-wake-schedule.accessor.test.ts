@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockFindUnique = vi.fn();
 const mockUpsert = vi.fn();
@@ -26,6 +26,10 @@ import {
 
 beforeEach(() => {
   vi.clearAllMocks();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe('flattenWorkspaceWakeSchedule', () => {
@@ -106,8 +110,6 @@ describe('workspaceWakeScheduleAccessor.upsert', () => {
 
     const call = mockUpsert.mock.calls[0]![0];
     expect(call.create.scheduledDayOfMonth).toBe(15);
-
-    vi.useRealTimers();
   });
 });
 
@@ -146,14 +148,14 @@ describe('workspaceWakeScheduleAccessor.markDispatched', () => {
     lastError: null,
   };
 
-  it('atomically claims the schedule and advances nextWakeAt', async () => {
+  it('atomically claims the schedule, advances nextWakeAt, and returns an occurrence token', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(schedule.nextWakeAt);
     mockUpdateMany.mockResolvedValue({ count: 1 });
 
-    const claimed = await workspaceWakeScheduleAccessor.markDispatched(schedule);
+    const dispatchedAt = await workspaceWakeScheduleAccessor.markDispatched(schedule);
 
-    expect(claimed).toBe(true);
+    expect(dispatchedAt).toEqual(schedule.nextWakeAt);
     const call = mockUpdateMany.mock.calls[0]![0];
     expect(call.where).toEqual({
       workspaceId: 'ws-1',
@@ -162,36 +164,49 @@ describe('workspaceWakeScheduleAccessor.markDispatched', () => {
     });
     // DAILY cadence from the claim moment: exactly one day later.
     expect(call.data.nextWakeAt).toEqual(new Date('2026-05-21T12:00:00.000Z'));
-
-    vi.useRealTimers();
   });
 
-  it('returns false when another poll cycle already claimed it', async () => {
+  it('returns null when another poll cycle already claimed it', async () => {
     mockUpdateMany.mockResolvedValue({ count: 0 });
-    const claimed = await workspaceWakeScheduleAccessor.markDispatched(schedule);
-    expect(claimed).toBe(false);
+    const dispatchedAt = await workspaceWakeScheduleAccessor.markDispatched(schedule);
+    expect(dispatchedAt).toBeNull();
   });
 });
 
 describe('workspaceWakeScheduleAccessor.recordOutcome', () => {
+  const dispatchedAt = new Date('2026-05-20T12:00:00.000Z');
+
   it('stores the outcome and clears the error when none given', async () => {
     mockUpdateMany.mockResolvedValue({ count: 1 });
-    await workspaceWakeScheduleAccessor.recordOutcome('ws-1', { outcome: 'DELIVERED' });
+    await workspaceWakeScheduleAccessor.recordOutcome('ws-1', dispatchedAt, {
+      outcome: 'DELIVERED',
+    });
     expect(mockUpdateMany).toHaveBeenCalledWith({
-      where: { workspaceId: 'ws-1' },
+      where: { workspaceId: 'ws-1', lastWakeAt: dispatchedAt },
       data: { lastOutcome: 'DELIVERED', lastError: null },
     });
   });
 
   it('stores the error message on failure', async () => {
     mockUpdateMany.mockResolvedValue({ count: 1 });
-    await workspaceWakeScheduleAccessor.recordOutcome('ws-1', {
+    await workspaceWakeScheduleAccessor.recordOutcome('ws-1', dispatchedAt, {
       outcome: 'FAILED',
       error: 'boom',
     });
     expect(mockUpdateMany).toHaveBeenCalledWith({
-      where: { workspaceId: 'ws-1' },
+      where: { workspaceId: 'ws-1', lastWakeAt: dispatchedAt },
       data: { lastOutcome: 'FAILED', lastError: 'boom' },
+    });
+  });
+
+  it('is a no-op when a later occurrence has already been claimed', async () => {
+    mockUpdateMany.mockResolvedValue({ count: 0 });
+    await workspaceWakeScheduleAccessor.recordOutcome('ws-1', dispatchedAt, {
+      outcome: 'DELIVERED',
+    });
+    expect(mockUpdateMany).toHaveBeenCalledWith({
+      where: { workspaceId: 'ws-1', lastWakeAt: dispatchedAt },
+      data: { lastOutcome: 'DELIVERED', lastError: null },
     });
   });
 });

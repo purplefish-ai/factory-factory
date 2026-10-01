@@ -64,8 +64,8 @@ model WorkspaceWakeSchedule {
 Owned by the `workspace` capsule like the other side tables, but — unlike
 `WorkspaceRatchet`/`WorkspaceAutoIteration` — created lazily: most workspaces
 never set a schedule, so "no row" reads as "no schedule". Three display fields
-(`wakeScheduleEnabled`/`Cadence`/`NextWakeAt`) are flattened onto workspace
-reads for the kanban badge and right-panel tab.
+(`wakeScheduleEnabled`/`wakeScheduleCadence`/`wakeScheduleNextWakeAt`) are
+flattened onto workspace reads for the kanban badge and right-panel tab.
 
 The cadence math (timezone-aware next-run computation) was extracted from
 `periodic-task.accessor.ts` into `src/backend/lib/cadence-schedule.ts`, shared
@@ -157,12 +157,13 @@ Key files: `src/backend/services/workspace-wake/`,
 ## Resolved since first draft
 
 - **Visibility**: the schedule's display fields
-  (`wakeScheduleEnabled`/`Cadence`/`NextWakeAt`) are now flattened onto
-  workspace reads, feeding a kanban-card badge ("Wakes every hour") and a
-  read-only "Wake Schedule" right-panel tab with a cancel action.
+  (`wakeScheduleEnabled`/`wakeScheduleCadence`/`wakeScheduleNextWakeAt`) are now
+  flattened onto workspace reads, feeding a kanban-card badge ("Wakes every
+  hour") and a read-only "Wake Schedule" right-panel tab with a cancel action.
 - **Permission warning**: `workspaceWake.set` now returns a `permissionWarning`
-  when the default workspace preset isn't YOLO, and the MCP tool surfaces it so
-  the agent relays it at scheduling time.
+  when the resumed session's effective preset isn't auto-approving (YOLO or
+  RELAXED), and the MCP tool surfaces it so the agent relays it at scheduling
+  time.
 
 ## Open Questions
 

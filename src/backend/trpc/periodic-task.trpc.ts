@@ -1,6 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { cadenceSchema, scheduledTimeSchema, timezoneSchema } from './cadence-schemas';
+import { periodicTaskCadenceSchema, scheduledTimeSchema, timezoneSchema } from './cadence-schemas';
 import { publicProcedure, router } from './trpc';
 
 export const periodicTaskRouter = router({
@@ -23,7 +23,7 @@ export const periodicTaskRouter = router({
         projectId: z.string(),
         name: z.string().min(1),
         prompt: z.string().min(1),
-        cadence: cadenceSchema,
+        cadence: periodicTaskCadenceSchema,
         scheduledTime: scheduledTimeSchema,
         timezone: timezoneSchema,
       })
@@ -38,7 +38,7 @@ export const periodicTaskRouter = router({
         id: z.string(),
         name: z.string().min(1).optional(),
         prompt: z.string().min(1).optional(),
-        cadence: cadenceSchema.optional(),
+        cadence: periodicTaskCadenceSchema.optional(),
         scheduledTime: scheduledTimeSchema,
         timezone: timezoneSchema,
       })

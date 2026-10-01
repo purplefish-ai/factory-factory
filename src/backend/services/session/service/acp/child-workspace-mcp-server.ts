@@ -18,7 +18,8 @@
 
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
-import { callTrpcMutation, callTrpcQuery } from './mcp-trpc-client';
+import { resolveMcpServerSpawnCommand } from './mcp-self-spawn.js';
+import { callTrpcMutation, callTrpcQuery } from './mcp-trpc-client.js';
 
 // ---------------------------------------------------------------------------
 // Types (minimal MCP protocol subset)
@@ -325,6 +326,11 @@ async function handleRequest(
     return;
   }
 
+  if (req.method === 'ping') {
+    send({ jsonrpc: '2.0', id: req.id, result: {} });
+    return;
+  }
+
   if (req.method === 'tools/list') {
     const tools = hasParent
       ? [SEND_MSG_TOOL]
@@ -387,10 +393,11 @@ export function getChildWorkspaceMcpServerConfig(opts: {
   parentWorkspaceId: string | null;
   apiBaseUrl: string;
 }): { name: string; command: string; args: string[]; env: Record<string, string> } {
+  const { command, args } = resolveMcpServerSpawnCommand(fileURLToPath(import.meta.url));
   return {
     name: 'factory-factory-child-workspace',
-    command: process.execPath, // node
-    args: [fileURLToPath(import.meta.url)],
+    command,
+    args,
     env: {
       FF_CHILD_WORKSPACE_MCP: '1',
       FF_WORKSPACE_ID: opts.workspaceId,

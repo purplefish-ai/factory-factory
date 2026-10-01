@@ -244,11 +244,12 @@ jobs in [background-jobs.md](./background-jobs.md)) finds due, enabled schedules
 and resumes the workspace's most recently updated session — any status, not just
 `RUNNING`/`IDLE` — via the same enqueue-then-dispatch path normal chat messages
 use (`chatMessageHandlerService.tryDispatchNextMessage`), which auto-starts a
-stopped session's ACP client. The woken turn runs under the session's existing
-permission preset; if that preset isn't auto-approving (YOLO), tool-call
-approval prompts will stall with nobody present to answer them — so
-`workspaceWake.set` returns a `permissionWarning` in that case, which the MCP
-tool surfaces for the agent to relay at scheduling time.
+stopped session's ACP client. The woken turn runs under the resumed session's
+effective permission preset (derived from its workflow, same as
+`getWorkflowPermissionPreset`); if that preset isn't auto-approving (YOLO or
+RELAXED), tool-call approval prompts will stall with nobody present to answer
+them — so `workspaceWake.set` returns a `permissionWarning` in that case, which
+the MCP tool surfaces for the agent to relay at scheduling time.
 
 UI: `wakeScheduleEnabled`/`wakeScheduleCadence`/`wakeScheduleNextWakeAt` are
 flattened onto workspace reads like the other side tables (client-side they are

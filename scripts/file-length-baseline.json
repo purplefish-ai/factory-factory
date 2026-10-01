@@ -1,6 +1,6 @@
 {
   "src/backend/interceptors/branch-naming.interceptor.test.ts": 1112,
-  "src/backend/orchestration/domain-bridges.orchestrator.test.ts": 1096,
+  "src/backend/orchestration/domain-bridges.orchestrator.test.ts": 1100,
   "src/backend/orchestration/event-collector.orchestrator.test.ts": 1655,
   "src/backend/orchestration/workspace-init.orchestrator.test.ts": 1895,
   "src/backend/routers/websocket/terminal.handler.test.ts": 1012,

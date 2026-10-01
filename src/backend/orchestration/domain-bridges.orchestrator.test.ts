@@ -145,6 +145,8 @@ vi.mock('./workspace-init.orchestrator', () => ({
   recoverStaleProvisioningWorkspace: vi.fn(),
 }));
 
+vi.mock('./workspace-wake-delivery.orchestrator', () => ({ deliverWorkspaceWake: vi.fn() }));
+
 // --- Import mocked modules to get references ---
 
 import { githubCLIService, prFetchCoordinator, prSnapshotService } from '@/backend/services/github';
@@ -184,6 +186,7 @@ import {
   initializeWorkspaceWorktree,
   recoverStaleProvisioningWorkspace,
 } from './workspace-init.orchestrator';
+import { deliverWorkspaceWake } from './workspace-wake-delivery.orchestrator';
 
 // Helper to extract bridge argument from a mocked configure call.
 function getBridge<T>(mockFn: (arg: T) => void): T {
@@ -209,6 +212,7 @@ function createBridgeServices(overrides: Partial<BridgeServices> = {}): BridgeSe
     chatEventForwarderService,
     chatMessageHandlerService,
     createLogger,
+    deliverWorkspaceWake,
     fixerSessionService,
     getWorkspaceInitPolicy,
     githubCLIService,

@@ -23,7 +23,7 @@ vi.mock('@/backend/services/logger.service', () => ({
 
 import { deliverWorkspaceWake } from './workspace-wake-delivery.orchestrator';
 
-function session(id: string, updatedAt: string, status: 'RUNNING' | 'IDLE' | 'STOPPED') {
+function session(id: string, updatedAt: string, status: 'RUNNING' | 'IDLE' | 'COMPLETED') {
   return { id, status, updatedAt: new Date(updatedAt) };
 }
 
@@ -43,10 +43,10 @@ describe('deliverWorkspaceWake', () => {
     expect(mockEnqueue).not.toHaveBeenCalled();
   });
 
-  it('resumes a STOPPED session, unlike notification delivery which only targets RUNNING/IDLE', async () => {
+  it('resumes a dormant session, unlike notification delivery which only targets RUNNING/IDLE', async () => {
     mockFindSessionsByWorkspaceId.mockResolvedValue([
       session('session-old', '2026-01-01T00:00:00.000Z', 'RUNNING'),
-      session('session-new', '2026-01-02T00:00:00.000Z', 'STOPPED'),
+      session('session-new', '2026-01-02T00:00:00.000Z', 'COMPLETED'),
     ]);
 
     const result = await deliverWorkspaceWake('ws-1', 'check the logs');
@@ -68,6 +68,10 @@ describe('deliverWorkspaceWake', () => {
     const result = await deliverWorkspaceWake('ws-1', 'check the logs');
 
     expect(result).toEqual({ delivered: false });
+    expect(mockWarn).toHaveBeenCalledWith(
+      'deliverWorkspaceWake: enqueue failed',
+      expect.objectContaining({ error: 'queue full' })
+    );
     expect(mockTryDispatchNextMessage).not.toHaveBeenCalled();
   });
 });

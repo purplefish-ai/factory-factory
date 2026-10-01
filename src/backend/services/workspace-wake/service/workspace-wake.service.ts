@@ -31,9 +31,10 @@ export interface WorkspaceWakeScheduleBridge {
   set(workspaceId: string, input: SetWakeScheduleInput): Promise<WorkspaceWakeSchedule>;
   clear(workspaceId: string): Promise<void>;
   findDue(): Promise<WorkspaceWakeSchedule[]>;
-  markDispatched(schedule: WorkspaceWakeSchedule): Promise<boolean>;
+  markDispatched(schedule: WorkspaceWakeSchedule): Promise<Date | null>;
   recordOutcome(
     workspaceId: string,
+    dispatchedAt: Date,
     outcome: { outcome: WakeOutcome; error?: string | null }
   ): Promise<void>;
 }
@@ -48,6 +49,10 @@ const WORKSPACE_WAKE_POLL_JOB = 'workspace-wake-poll';
 export class WorkspaceWakeService {
   private scheduleBridge: WorkspaceWakeScheduleBridge | null = null;
   private deliveryBridge: WorkspaceWakeDeliveryBridge | null = null;
+  // Deliveries are detached from the poll cycle (see dispatchWake) so shutdown
+  // can't observe them through jobRunner.stop() alone; tracked here so stop()
+  // can wait for them instead of letting the database disconnect mid-write.
+  private readonly inFlightDeliveries = new Set<Promise<void>>();
 
   constructor(private readonly logger: Logger) {
     jobRunner.register({
@@ -84,6 +89,7 @@ export class WorkspaceWakeService {
 
   async stop(): Promise<void> {
     await jobRunner.stop(WORKSPACE_WAKE_POLL_JOB);
+    await Promise.allSettled(this.inFlightDeliveries);
   }
 
   private requireScheduleBridge(): WorkspaceWakeScheduleBridge {
@@ -121,8 +127,8 @@ export class WorkspaceWakeService {
       return;
     }
 
-    const claimed = await scheduleBridge.markDispatched(schedule);
-    if (!claimed) {
+    const dispatchedAt = await scheduleBridge.markDispatched(schedule);
+    if (!dispatchedAt) {
       // Another poll cycle already claimed this schedule's current occurrence.
       return;
     }
@@ -133,10 +139,10 @@ export class WorkspaceWakeService {
     // it must not block the poll cycle from reaching other due workspaces.
     // Same detached-dispatch reasoning as
     // `workspace-wake-delivery.orchestrator.ts`/`workspace-notification-delivery.orchestrator.ts`.
-    void deliveryBridge
+    const delivery = deliveryBridge
       .deliver(schedule.workspaceId, schedule.prompt)
       .then((result) =>
-        scheduleBridge.recordOutcome(schedule.workspaceId, {
+        scheduleBridge.recordOutcome(schedule.workspaceId, dispatchedAt, {
           outcome: result.delivered ? 'DELIVERED' : 'SKIPPED_NO_SESSION',
         })
       )
@@ -144,10 +150,20 @@ export class WorkspaceWakeService {
         this.logger.error('Workspace wake delivery failed', toError(error), {
           workspaceId: schedule.workspaceId,
         });
-        void scheduleBridge.recordOutcome(schedule.workspaceId, {
-          outcome: 'FAILED',
-          error: toError(error).message,
-        });
+        return scheduleBridge
+          .recordOutcome(schedule.workspaceId, dispatchedAt, {
+            outcome: 'FAILED',
+            error: toError(error).message,
+          })
+          .catch((outcomeError) => {
+            this.logger.error('Failed to record workspace wake outcome', toError(outcomeError), {
+              workspaceId: schedule.workspaceId,
+            });
+          });
       });
+    this.inFlightDeliveries.add(delivery);
+    void delivery.finally(() => {
+      this.inFlightDeliveries.delete(delivery);
+    });
   }
 }

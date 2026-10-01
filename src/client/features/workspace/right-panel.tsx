@@ -278,8 +278,23 @@ export function RightPanel({
     { id: workspaceId },
     { enabled: !!workspaceId }
   );
-  const { isAutoIteration, periodicTaskId, hasWakeSchedule, isParentWorkspace } =
-    deriveWorkspacePanelFlags(workspace);
+  const {
+    isAutoIteration,
+    periodicTaskId,
+    hasWakeSchedule: snapshotHasWakeSchedule,
+    isParentWorkspace,
+  } = deriveWorkspacePanelFlags(workspace);
+  // workspace.get's wakeSchedule* fields come from a websocket snapshot that
+  // doesn't carry this capsule's data on `snapshot_changed` deltas (only on a
+  // reconnect's `snapshot_full` baseline) — an agent setting/clearing its own
+  // schedule mid-session wouldn't flip this tab's visibility otherwise. Poll
+  // independently so the tab tracks the schedule live.
+  const { data: wakeSchedule } = trpc.workspaceWake.get.useQuery(
+    { workspaceId },
+    { enabled: !!workspaceId, refetchInterval: 15_000 }
+  );
+  const hasWakeSchedule =
+    wakeSchedule !== undefined ? !!wakeSchedule?.enabled : snapshotHasWakeSchedule;
 
   const { data: initStatus } = trpc.workspace.getInitStatus.useQuery(
     { id: workspaceId },
@@ -372,6 +387,14 @@ export function RightPanel({
       }
     }
   }, [isAutoIteration, periodicTaskId, handleTopTabChange, workspaceId]);
+
+  // Clearing the wake schedule hides its tab; fall back to a visible one so
+  // the top panel doesn't render empty.
+  useEffect(() => {
+    if (!hasWakeSchedule && activeTopTab === 'wake-schedule') {
+      handleTopTabChange('changes');
+    }
+  }, [hasWakeSchedule, activeTopTab, handleTopTabChange]);
 
   const handleBottomTabChange = useCallback(
     (tab: BottomPanelTab) => {

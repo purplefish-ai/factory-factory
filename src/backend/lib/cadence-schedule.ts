@@ -218,7 +218,10 @@ export function computeNextCadenceRunAt(
       next.setMinutes(next.getMinutes() + 5);
       break;
     case 'EVERY_HOUR':
-      next.setHours(next.getHours() + 1);
+      // Fixed millisecond advance, not setHours: setHours moves the
+      // process-local wall clock, which skips or repeats an hour across a
+      // DST transition instead of advancing by a real hour.
+      next.setTime(next.getTime() + 60 * 60 * 1000);
       break;
     case 'DAILY':
       next.setDate(next.getDate() + 1);

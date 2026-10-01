@@ -12,6 +12,7 @@ import { z } from 'zod';
 import {
   CIStatus as CoreCIStatus,
   IssueProvider as CoreIssueProvider,
+  PeriodicTaskCadence as CorePeriodicTaskCadence,
   PRState as CorePRState,
   RatchetReviewTriggerMode as CoreRatchetReviewTriggerMode,
   RatchetState as CoreRatchetState,
@@ -58,6 +59,7 @@ const SessionStatus = z.enum(enumValues(CoreSessionStatus));
 const SessionProvider = z.enum(enumValues(CoreSessionProvider));
 const SessionPermissionPreset = z.enum(enumValues(CoreSessionPermissionPreset));
 const WorkspaceProviderSelection = z.enum(enumValues(CoreWorkspaceProviderSelection));
+const PeriodicTaskCadence = z.enum(enumValues(CorePeriodicTaskCadence));
 
 const exportedProjectSchema = z.object({
   id: z.string(),
@@ -130,6 +132,19 @@ const exportedWorkspaceSchema = z.object({
   // backup file already on disk fail validation.
   ratchetLastCiRunId: z.string().nullable(),
   hasHadSessions: z.boolean(),
+  // Flattened out of WorkspaceWakeSchedule, added after schemaVersion 4 shipped —
+  // optional with defaults so files exported before this field existed still
+  // validate, restoring as "no schedule".
+  wakeScheduleEnabled: z.boolean().optional().default(false),
+  wakeScheduleCadence: PeriodicTaskCadence.nullable().optional().default(null),
+  wakeSchedulePrompt: z.string().nullable().optional().default(null),
+  wakeScheduleScheduledTime: z.string().nullable().optional().default(null),
+  wakeScheduleTimezone: z.string().nullable().optional().default(null),
+  wakeScheduleScheduledDayOfMonth: z.number().nullable().optional().default(null),
+  wakeScheduleNextWakeAt: z.string().nullable().optional().default(null),
+  wakeScheduleLastWakeAt: z.string().nullable().optional().default(null),
+  wakeScheduleLastOutcome: z.string().nullable().optional().default(null),
+  wakeScheduleLastError: z.string().nullable().optional().default(null),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

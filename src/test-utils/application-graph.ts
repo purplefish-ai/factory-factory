@@ -59,6 +59,9 @@ vi.mock('@/backend/orchestration/workspace-children.orchestrator', () => ({
 vi.mock('@/backend/orchestration/workspace-notification-delivery.orchestrator', () => ({
   deliverWorkspaceNotification: vi.fn(),
 }));
+vi.mock('@/backend/orchestration/workspace-wake-delivery.orchestrator', () => ({
+  deliverWorkspaceWake: vi.fn(),
+}));
 vi.mock('@/backend/orchestration/workspace-init.orchestrator', () => ({
   initializeWorkspaceWorktree: vi.fn(),
   recoverStaleProvisioningWorkspace: vi.fn(),
@@ -207,6 +210,7 @@ import {
 } from '@/backend/orchestration/workspace-init.orchestrator';
 import { executeStartupScriptPipeline } from '@/backend/orchestration/workspace-init-script-pipeline';
 import { deliverWorkspaceNotification } from '@/backend/orchestration/workspace-notification-delivery.orchestrator';
+import { deliverWorkspaceWake } from '@/backend/orchestration/workspace-wake-delivery.orchestrator';
 import { getQuickAction, listQuickActions } from '@/backend/prompts/quick-actions';
 import {
   autoIterationService,
@@ -361,6 +365,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     triggerAdversarialReview,
     createChildWorkspace,
     deliverWorkspaceNotification,
+    deliverWorkspaceWake,
     createLogger,
     createWorkspaceCreationService: () => ({ create: vi.fn() }),
     cryptoService,

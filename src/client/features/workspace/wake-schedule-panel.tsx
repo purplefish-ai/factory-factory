@@ -1,5 +1,6 @@
 import { AlarmIcon } from '@phosphor-icons/react';
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { cadenceLabel } from '@/client/lib/cadence-labels';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
@@ -19,15 +20,19 @@ const OUTCOME_LABELS: Record<string, string> = {
 export function WakeSchedulePanel({ workspaceId }: WakeSchedulePanelProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const utils = trpc.useUtils();
-  const { data: schedule, isLoading } = trpc.workspaceWake.get.useQuery(
-    { workspaceId },
-    { refetchInterval: 10_000 }
-  );
+  const {
+    data: schedule,
+    isLoading,
+    isError,
+  } = trpc.workspaceWake.get.useQuery({ workspaceId }, { refetchInterval: 10_000 });
   const clearMutation = trpc.workspaceWake.clear.useMutation({
     onSuccess: () => {
       void utils.workspaceWake.get.invalidate({ workspaceId });
       void utils.workspace.get.invalidate({ id: workspaceId });
       setConfirmOpen(false);
+    },
+    onError: (error) => {
+      toast.error(`Failed to cancel wake schedule: ${error.message}`);
     },
   });
 
@@ -35,6 +40,14 @@ export function WakeSchedulePanel({ workspaceId }: WakeSchedulePanelProps) {
     return (
       <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
         Loading...
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex items-center justify-center h-full text-sm text-destructive">
+        Failed to load wake schedule.
       </div>
     );
   }
