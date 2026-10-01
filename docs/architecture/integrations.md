@@ -17,6 +17,11 @@ Full PR metadata reads use a 10 MiB stdout buffer, like bulk diff and review
 comment reads, to accommodate paginated reviews, comments, and status checks.
 Responses above that limit still fail rather than returning truncated metadata.
 
+Check-run conclusions preserve `STARTUP_FAILURE` through PR-detail mapping, so
+both PR sync and Ratchet classify startup failures as failing CI, including when
+other checks are still running. Sidebar and Kanban projections therefore agree
+on the cached CI status.
+
 CLI authentication checks normally use cached health. Closing the setup terminal
 in admin settings or project onboarding, or choosing Recheck, forces a fresh
 check through both the aggregate CLI cache and GitHub's own cache. Forced checks
