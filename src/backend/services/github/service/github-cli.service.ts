@@ -515,7 +515,7 @@ class GitHubCLIService {
     try {
       const { stdout } = await this.exec(
         ['pr', 'view', String(prNumber), '--repo', repo, '--json', fields],
-        { timeout: GH_TIMEOUT_MS.default, signal }
+        { timeout: GH_TIMEOUT_MS.default, maxBuffer: GH_MAX_BUFFER_BYTES.fullPRDetails, signal }
       );
 
       const data = parseGhJson(fullPRDetailsSchema, stdout, 'getPRFullDetails');

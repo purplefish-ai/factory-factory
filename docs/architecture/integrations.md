@@ -13,6 +13,10 @@ identical in-flight reads. Do not spawn `gh` directly from a service. See
 [pull-requests.md](./pull-requests.md) for how the ratchet and the PR sync poll
 share that budget.
 
+Full PR metadata reads use a 10 MiB stdout buffer, like bulk diff and review
+comment reads, to accommodate paginated reviews, comments, and status checks.
+Responses above that limit still fail rather than returning truncated metadata.
+
 CLI authentication checks normally use cached health. Closing the setup terminal
 in admin settings or project onboarding, or choosing Recheck, forces a fresh
 check through both the aggregate CLI cache and GitHub's own cache. Forced checks
