@@ -72,6 +72,7 @@ function createFixture(previous: { prNumber?: number; prUrl?: string; prState?: 
   // IO is stubbed so this test cannot fetch GitHub or archive a live workspace.
   const dependencies = {
     createLogger: () => ({ info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() }),
+    getWorkspaceLinearContext: vi.fn().mockResolvedValue(null),
     prSnapshotService: prs,
     ratchetService: Object.assign(ratchet, { checkWorkspaceById: check }),
     workspaceDataService: { findRatchetProjection: read },
