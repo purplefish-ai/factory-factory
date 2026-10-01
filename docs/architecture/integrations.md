@@ -54,6 +54,9 @@ Removing a workspace or stopping the collector clears completion tracking.
 API key validation in admin settings clears earlier team choices before each
 request. Editing the key requires fresh validation and team selection before
 saving. Responses to superseded validations cannot restore earlier team choices.
+Failed Linear settings saves retain the validated key and selected team for
+retry. Successful saves clear the submitted form only if no key edits, team
+changes, or newer validation have superseded the submission.
 
 ## Periodic tasks
 

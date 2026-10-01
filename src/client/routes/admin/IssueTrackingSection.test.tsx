@@ -29,7 +29,11 @@ vi.mock('@/client/lib/trpc', () => ({
         }),
       },
     },
-    project: { update: { useMutation: () => ({ mutate: mocks.save, isPending: false }) } },
+    project: {
+      update: {
+        useMutation: () => ({ mutate: mocks.save, mutateAsync: mocks.save, isPending: false }),
+      },
+    },
   },
 }));
 
