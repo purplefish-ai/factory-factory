@@ -52,7 +52,6 @@ describe('adversarial-review marker recognition', () => {
       computePRState: vi.fn(() => 'OPEN' as const),
       coordinatePrFetch: async (_id, fetch) => ({ status: 'fetched', value: await fetch() }),
       getAuthenticatedUsername: vi.fn(),
-      fetchAndComputePRState: vi.fn(),
     };
     const params = {
       workspace: { id: 'ws', prUrl: url, prNumber: 1 } as never,
