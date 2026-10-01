@@ -407,7 +407,11 @@ export class SessionStartupCoordinator {
       provider: handle.provider as PersistAcpConfigSnapshotParams['provider'],
       providerSessionId: handle.providerSessionId,
       configOptions: handle.configOptions,
-      existingMetadata: session.providerMetadata ?? undefined,
+      existingMetadata:
+        handle.sessionCreationOutcome?.kind === 'resume_fallback'
+          ? ((await this.dependencies.repository.getSessionById(sessionId))?.providerMetadata ??
+            undefined)
+          : (session.providerMetadata ?? undefined),
     });
     this.assertStartupAllowed(sessionId, stopGeneration);
 

@@ -80,7 +80,26 @@ export type LimitedAgentSessionCreation =
   | { outcome: 'limit_reached' }
   | { outcome: 'created'; session: AgentSessionRecord };
 
+export interface ProviderIdentityRolloverInput {
+  previousProviderSessionId: string;
+  providerSessionId: string;
+  expectedUpdatedAt: Date;
+  expectedProviderMetadata: AgentSessionRecord['providerMetadata'];
+  providerMetadata: Prisma.InputJsonValue;
+}
+
+export type ProviderIdentityExpectation = Pick<
+  AgentSessionRecord,
+  'providerSessionId' | 'providerMetadata' | 'updatedAt'
+>;
+
 export interface AgentSessionAccessor {
+  updateIfProviderIdentity(
+    id: string,
+    expected: ProviderIdentityExpectation,
+    data: Omit<UpdateAgentSessionInput, 'providerSessionId'>
+  ): Promise<number>;
+  rolloverProviderIdentity(id: string, input: ProviderIdentityRolloverInput): Promise<number>;
   create(data: CreateAgentSessionInput): Promise<AgentSessionRecord>;
   createWithinWorkspaceLimit(
     data: CreateLimitedAgentSessionInput
@@ -192,6 +211,42 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
       data: toAgentSessionUpdateData(data),
     });
 
+    return result.count;
+  }
+
+  async updateIfProviderIdentity(
+    id: string,
+    expected: ProviderIdentityExpectation,
+    data: Omit<UpdateAgentSessionInput, 'providerSessionId'>
+  ): Promise<number> {
+    const result = await prisma.agentSession.updateMany({
+      where: {
+        id,
+        providerSessionId: expected.providerSessionId,
+        updatedAt: expected.updatedAt,
+        providerMetadata: { equals: expected.providerMetadata ?? Prisma.AnyNull },
+      },
+      data: toAgentSessionUpdateData({ ...data, providerSessionId: undefined }),
+    });
+    return result.count;
+  }
+
+  async rolloverProviderIdentity(
+    id: string,
+    input: ProviderIdentityRolloverInput
+  ): Promise<number> {
+    const result = await prisma.agentSession.updateMany({
+      where: {
+        id,
+        providerSessionId: input.previousProviderSessionId,
+        updatedAt: input.expectedUpdatedAt,
+        providerMetadata: { equals: input.expectedProviderMetadata ?? Prisma.AnyNull },
+      },
+      data: {
+        providerSessionId: input.providerSessionId,
+        providerMetadata: input.providerMetadata,
+      },
+    });
     return result.count;
   }
 

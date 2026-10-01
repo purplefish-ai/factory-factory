@@ -453,6 +453,7 @@ export function createLifecycleHarness(
   const handle = {
     provider: session.provider,
     providerSessionId: session.providerSessionId ?? 'provider-session-1',
+    sessionCreationOutcome: { kind: session.providerSessionId ? 'resumed' : 'new' },
     configOptions: [],
     isPromptInFlight: false,
     getSubagentBrowseCapability: vi.fn(() => ({

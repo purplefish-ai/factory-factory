@@ -27,6 +27,7 @@ describe('SessionRepository', () => {
     findById: vi.fn<() => Promise<AgentSessionRecord | null>>(),
     findByWorkspaceId: vi.fn<() => Promise<AgentSessionRecord[]>>(),
     update: vi.fn<() => Promise<AgentSessionRecord>>(),
+    updateIfProviderIdentity: vi.fn<() => Promise<number>>(),
     updateIfStatus: vi.fn<() => Promise<number>>(),
     delete: vi.fn<() => Promise<AgentSessionRecord>>(),
     recoverStaleRunning: vi.fn<() => Promise<number>>(),
@@ -80,6 +81,61 @@ describe('SessionRepository', () => {
     await expect(repository.updateSession('s1', { providerSessionId: null })).rejects.toThrow(
       /immutable/
     );
+    expect(sessions.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects an old config snapshot after provider identity reconciliation', async () => {
+    sessions.findById.mockResolvedValue(
+      createSession({
+        providerSessionId: 'new',
+        providerMetadata: {
+          acpConfigSnapshot: { providerSessionId: 'new' },
+          providerIdentityRollovers: ['audit'],
+        },
+      })
+    );
+    sessions.update.mockResolvedValue(createSession());
+    await expect(
+      repository.updateSession('s1', {
+        providerMetadata: {
+          acpConfigSnapshot: { providerSessionId: 'old' },
+        },
+      })
+    ).rejects.toThrow('Stale provider config snapshot');
+    expect(sessions.update).not.toHaveBeenCalled();
+  });
+
+  it('preserves durable rollover audit when a current config snapshot is refreshed', async () => {
+    const current = createSession({
+      providerSessionId: 'new',
+      providerMetadata: {
+        providerIdentityRollovers: ['audit'],
+        keep: 'current',
+      },
+    });
+    sessions.findById.mockResolvedValue(current);
+    sessions.updateIfProviderIdentity.mockResolvedValue(1);
+    await repository.updateSession('s1', {
+      providerMetadata: { acpConfigSnapshot: { providerSessionId: 'new' } },
+    });
+    expect(sessions.updateIfProviderIdentity).toHaveBeenCalledWith('s1', current, {
+      providerMetadata: {
+        keep: 'current',
+        providerIdentityRollovers: ['audit'],
+        acpConfigSnapshot: { providerSessionId: 'new' },
+      },
+    });
+    expect(sessions.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects a config snapshot if identity changes between read and write', async () => {
+    sessions.findById.mockResolvedValue(createSession({ providerSessionId: 'old' }));
+    sessions.updateIfProviderIdentity.mockResolvedValue(0);
+    await expect(
+      repository.updateSession('s1', {
+        providerMetadata: { acpConfigSnapshot: { providerSessionId: 'old' } },
+      })
+    ).rejects.toThrow('Stale provider metadata');
     expect(sessions.update).not.toHaveBeenCalled();
   });
 

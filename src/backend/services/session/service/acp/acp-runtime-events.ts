@@ -19,7 +19,28 @@ export type AcpRuntimeErrorEvent = Readonly<{
   purpose: AcpRuntimePurpose;
 }>;
 
+export type AcpSessionCreationOutcome =
+  | { kind: 'new' }
+  | { kind: 'resumed' }
+  | {
+      kind: 'resume_fallback';
+      previousProviderSessionId: string;
+      reason: 'load_failed' | 'load_unsupported';
+    };
+
+export type AcpProviderIdentityEvent = Readonly<{
+  sessionId: string;
+  providerSessionId: string;
+  provider: 'CLAUDE' | 'CODEX';
+  incarnationId: string;
+  outcome: Extract<AcpSessionCreationOutcome, { kind: 'resume_fallback' }>;
+  configOptions: import('@agentclientprotocol/sdk').SessionConfigOption[];
+  /** Checked again after every asynchronous preparation, before durable reconciliation. */
+  assertCurrent(): void;
+}>;
+
 export type AcpRuntimeEventHandlers = {
+  onProviderIdentityRollover?: (event: AcpProviderIdentityEvent) => Promise<void>;
   onSessionId?: (sessionId: string, providerSessionId: string) => Promise<void>;
   onRuntimeExit?: (event: AcpRuntimeExitEvent) => Promise<void>;
   onRuntimeError?: (event: AcpRuntimeErrorEvent) => Promise<void> | void;

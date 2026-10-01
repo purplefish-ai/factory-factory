@@ -72,7 +72,7 @@ export class AcpRuntimeSupervisor {
 
   getBrowseClient(sessionId: string): AcpProcessHandle | undefined {
     const handle = this.sessions.get(sessionId);
-    return handle?.isRunning() ? handle : undefined;
+    return handle?.isRunning() && !this.pendingCreation.has(sessionId) ? handle : undefined;
   }
 
   getInstalledHandle(sessionId: string): AcpProcessHandle | undefined {
@@ -379,6 +379,16 @@ export class AcpRuntimeSupervisor {
     const stopSignal = this.createSessionStopSignal(sessionId);
     const runtimeHandlers = this.createRuntimeHandlers(handlers, metadata);
     let startupActive = true;
+    let eventsReady = false;
+    const bufferedEvents: Parameters<NonNullable<AcpRuntimeEventHandlers['onAcpEvent']>>[] = [];
+    const dispatchEvent = runtimeHandlers.onAcpEvent;
+    runtimeHandlers.onAcpEvent = (...args) => {
+      if (eventsReady) {
+        dispatchEvent?.(...args);
+      } else {
+        bufferedEvents.push(args);
+      }
+    };
     try {
       const handle = await this.clientFactory.createClient({
         sessionId,
@@ -387,6 +397,9 @@ export class AcpRuntimeSupervisor {
         metadata,
         shutdownSignal,
         stopSignal,
+        discardFailedResumeReplay: () => {
+          bufferedEvents.length = 0;
+        },
         shouldDispatchRuntimeError: (child) =>
           startupActive ||
           (metadata.installed &&
@@ -398,6 +411,36 @@ export class AcpRuntimeSupervisor {
       if (cancellation) {
         await cleanupFailedAcpClientCreation(handle.child, sessionId);
         throw cancellation;
+      }
+
+      const assertCurrent = () => {
+        this.throwIfCreationCancelled(sessionId, stopGeneration);
+        if (this.currentRuntimeBySessionId.get(sessionId) !== metadata || !handle.isRunning()) {
+          throw new Error(`Stale ACP identity reconciliation for session ${sessionId}`);
+        }
+      };
+      if (handle.sessionCreationOutcome.kind === 'resume_fallback') {
+        try {
+          if (!handlers.onProviderIdentityRollover) {
+            throw new Error(
+              `Missing ACP provider identity reconciliation for session ${sessionId}`
+            );
+          }
+          assertCurrent();
+          await handlers.onProviderIdentityRollover({
+            sessionId,
+            providerSessionId: handle.providerSessionId,
+            provider: options.provider,
+            incarnationId: metadata.incarnationId,
+            outcome: handle.sessionCreationOutcome,
+            configOptions: handle.configOptions,
+            assertCurrent,
+          });
+          assertCurrent();
+        } catch (error) {
+          await cleanupFailedAcpClientCreation(handle.child, sessionId);
+          throw error;
+        }
       }
 
       this.runtimeMetadata.set(handle.child, metadata);
@@ -415,6 +458,10 @@ export class AcpRuntimeSupervisor {
       if (notificationCancellation) {
         await this.cleanupInstalledCandidate(sessionId, handle, metadata);
         throw notificationCancellation;
+      }
+      eventsReady = true;
+      for (const args of bufferedEvents) {
+        dispatchEvent?.(...args);
       }
       return handle;
     } finally {
@@ -606,15 +653,8 @@ export class AcpRuntimeSupervisor {
     if (!handlers.onSessionId) {
       return;
     }
-    try {
-      await handlers.onSessionId(sessionId, handle.providerSessionId);
-    } catch (error) {
-      logger.warn('Failed to handle ACP session ID event', {
-        sessionId,
-        providerSessionId: handle.providerSessionId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+    // Durable identity failures are startup failures: the caller cleans up the candidate.
+    await handlers.onSessionId(sessionId, handle.providerSessionId);
   }
 
   private async stopClientOnce(sessionId: string): Promise<void> {
