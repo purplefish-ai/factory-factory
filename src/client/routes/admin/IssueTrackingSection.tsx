@@ -37,9 +37,7 @@ function LinearConfigFields({
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const validationGeneration = useRef(0);
 
-  const validateAndList = trpc.linear.validateKeyAndListTeams.useMutation({
-    onError: (error) => toast.error(`Validation failed: ${error.message}`),
-  });
+  const validateAndList = trpc.linear.validateKeyAndListTeams.useMutation();
 
   const resetValidation = () => {
     validationGeneration.current += 1;
@@ -68,8 +66,12 @@ function LinearConfigFields({
       } else {
         toast.error(`Validation failed: ${result.error ?? 'Unknown error'}`);
       }
-    } catch {
-      // Transport errors already surfaced by onError callback
+    } catch (error) {
+      if (generation === validationGeneration.current) {
+        toast.error(
+          `Validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+        );
+      }
     }
   };
 

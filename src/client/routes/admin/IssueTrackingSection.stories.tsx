@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { TRPCClientError } from '@trpc/client';
 import { observable } from '@trpc/server/observable';
 import { useState } from 'react';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
@@ -8,6 +9,13 @@ import { IssueProvider } from '@/shared/core/enums';
 import { ProjectIssueTrackingCard } from './IssueTrackingSection';
 
 const onSave = fn();
+const responses: Record<string, (input: unknown) => unknown> = {
+  'project.update': (input) => {
+    onSave(input);
+    return {};
+  },
+  'project.list': () => [],
+};
 
 function mockValidationResult(input: unknown) {
   const isKeyB =
@@ -43,10 +51,12 @@ function LinearSettingsStory({ validationDelay = 0 }: { validationDelay?: number
                 }, validationDelay);
                 return () => clearTimeout(timer);
               }
-              if (op.path === 'project.update') {
-                onSave(input);
+              const respond = responses[op.path];
+              if (!respond) {
+                observer.error(new TRPCClientError(`No story fixture for ${op.path}`));
+                return undefined;
               }
-              observer.next({ result: { data: [] } });
+              observer.next({ result: { data: respond(input) } });
               observer.complete();
               return undefined;
             }),

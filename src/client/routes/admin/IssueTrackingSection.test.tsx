@@ -2,6 +2,7 @@
 
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IssueProvider } from '@/shared/core/enums';
 import { ProjectIssueTrackingCard } from './IssueTrackingSection';
@@ -13,7 +14,19 @@ vi.mock('@/client/lib/trpc', () => ({
     useUtils: () => ({ project: { list: { invalidate: vi.fn() } } }),
     linear: {
       validateKeyAndListTeams: {
-        useMutation: () => ({ mutateAsync: mocks.validate, isPending: false }),
+        useMutation: (options?: { onError?: (error: Error) => void }) => ({
+          mutateAsync: async (input: { apiKey: string }) => {
+            try {
+              return await mocks.validate(input);
+            } catch (error) {
+              if (error instanceof Error) {
+                options?.onError?.(error);
+              }
+              throw error;
+            }
+          },
+          isPending: false,
+        }),
       },
     },
     project: { update: { useMutation: () => ({ mutate: mocks.save, isPending: false }) } },
@@ -189,4 +202,27 @@ describe('Linear key/team validation', () => {
       })
     );
   });
+
+  it.each([false, true])(
+    'only reports current transport failures (superseded=%s)',
+    async (superseded) => {
+      let reject!: (error: Error) => void;
+      mocks.validate.mockReturnValue(
+        new Promise((_resolve, fail) => {
+          reject = fail;
+        })
+      );
+      enterKey('mock-key-a');
+      await validate();
+      if (superseded) {
+        enterKey('mock-key-b');
+      }
+      await act(async () => reject(new Error('Transport failure')));
+      if (superseded) {
+        expect(toast.error).not.toHaveBeenCalled();
+      } else {
+        expect(toast.error).toHaveBeenCalledExactlyOnceWith('Validation failed: Transport failure');
+      }
+    }
+  );
 });
