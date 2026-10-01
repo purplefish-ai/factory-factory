@@ -164,22 +164,26 @@ function parseSubmittedAtMs(submittedAt: string | null | undefined): number | nu
 function getApprovedReviewsByAuthor(
   reviews: Array<{
     submittedAt?: string | null;
+    chronologicalOrder?: number;
     author: { login: string };
     state?: string;
   }>
-): Map<string, Array<{ index: number; submittedAtMs: number | null }>> {
+): Map<string, Array<{ chronologicalOrder?: number; submittedAtMs: number | null }>> {
   const approvedReviewsByAuthor = new Map<
     string,
-    Array<{ index: number; submittedAtMs: number | null }>
+    Array<{ chronologicalOrder?: number; submittedAtMs: number | null }>
   >();
 
-  reviews.forEach((review, index) => {
+  reviews.forEach((review) => {
     if (review.state?.toUpperCase() !== 'APPROVED') {
       return;
     }
 
     const approvedReviews = approvedReviewsByAuthor.get(review.author.login) ?? [];
-    approvedReviews.push({ index, submittedAtMs: parseSubmittedAtMs(review.submittedAt) });
+    approvedReviews.push({
+      chronologicalOrder: review.chronologicalOrder,
+      submittedAtMs: parseSubmittedAtMs(review.submittedAt),
+    });
     approvedReviewsByAuthor.set(review.author.login, approvedReviews);
   });
 
@@ -187,19 +191,30 @@ function getApprovedReviewsByAuthor(
 }
 
 function wasReviewSupersededByApproval(
-  review: { submittedAt?: string | null; author: { login: string } },
-  reviewIndex: number,
-  approvedReviewsByAuthor: Map<string, Array<{ index: number; submittedAtMs: number | null }>>
+  review: { submittedAt?: string | null; chronologicalOrder?: number; author: { login: string } },
+  approvedReviewsByAuthor: Map<
+    string,
+    Array<{ chronologicalOrder?: number; submittedAtMs: number | null }>
+  >
 ): boolean {
   const submittedAtMs = parseSubmittedAtMs(review.submittedAt);
   const approvedReviews = approvedReviewsByAuthor.get(review.author.login) ?? [];
 
   return approvedReviews.some((approval) => {
-    if (submittedAtMs !== null && approval.submittedAtMs !== null) {
+    if (
+      submittedAtMs !== null &&
+      approval.submittedAtMs !== null &&
+      approval.submittedAtMs !== submittedAtMs
+    ) {
       return approval.submittedAtMs > submittedAtMs;
     }
 
-    return approval.index > reviewIndex;
+    // Only explicit API chronology can disambiguate ties or missing times.
+    return (
+      review.chronologicalOrder !== undefined &&
+      approval.chronologicalOrder !== undefined &&
+      approval.chronologicalOrder > review.chronologicalOrder
+    );
   });
 }
 
@@ -207,6 +222,7 @@ export function computeLatestReviewActivityAtMs(
   prDetails: {
     reviews: Array<{
       submittedAt: string | null;
+      chronologicalOrder?: number;
       author: { login: string };
       state?: string;
       body?: string;
@@ -220,8 +236,8 @@ export function computeLatestReviewActivityAtMs(
   const approvedReviewsByAuthor = getApprovedReviewsByAuthor(prDetails.reviews);
   const entries = [
     ...prDetails.reviews
-      .filter((review, index) => {
-        if (wasReviewSupersededByApproval(review, index, approvedReviewsByAuthor)) {
+      .filter((review) => {
+        if (wasReviewSupersededByApproval(review, approvedReviewsByAuthor)) {
           return false;
         }
 
@@ -267,6 +283,7 @@ export function buildReviewSummariesForPrompt(
     url: string;
     reviews: Array<{
       submittedAt?: string | null;
+      chronologicalOrder?: number;
       author: { login: string };
       state?: string;
       body?: string;
@@ -279,7 +296,7 @@ export function buildReviewSummariesForPrompt(
   const approvedReviewsByAuthor = getApprovedReviewsByAuthor(prDetails.reviews);
 
   return prDetails.reviews
-    .filter((review, index) => {
+    .filter((review) => {
       const isOwnMarkerReview = isOwnAdversarialReviewMarker(review, authenticatedUsername);
 
       if (isIgnoredReviewAuthor(review.author.login, authenticatedUsername) && !isOwnMarkerReview) {
@@ -288,7 +305,7 @@ export function buildReviewSummariesForPrompt(
 
       const state = review.state?.toUpperCase() ?? '';
 
-      if (wasReviewSupersededByApproval(review, index, approvedReviewsByAuthor)) {
+      if (wasReviewSupersededByApproval(review, approvedReviewsByAuthor)) {
         return false;
       }
 

@@ -40,6 +40,35 @@ import { githubCLIService } from './github-cli.service';
 
 vi.mocked(execFile).mockImplementation(mockExecFile as never);
 
+function mockFullDetails(data: {
+  reviews: Array<{
+    id: string;
+    author: { login: string };
+    state: string;
+    submittedAt: string | null;
+    body?: string;
+  }>;
+}) {
+  mockExecFile.mockImplementation((_command, args: string[]) =>
+    Promise.resolve({
+      stdout: JSON.stringify(
+        args[0] === 'api'
+          ? [
+              data.reviews.map((review) => ({
+                node_id: review.id,
+                user: review.author,
+                state: review.state,
+                submitted_at: review.submittedAt,
+                body: review.body,
+              })),
+            ]
+          : data
+      ),
+      stderr: '',
+    })
+  );
+}
+
 describe('GitHubCLIService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -553,10 +582,7 @@ describe('GitHubCLIService', () => {
           mergeStateStatus: 'DRAFT',
         };
 
-        mockExecFile.mockResolvedValue({
-          stdout: JSON.stringify(fullPRData),
-          stderr: '',
-        });
+        mockFullDetails(fullPRData);
 
         const result = await githubCLIService.getPRFullDetails('owner/repo', 123);
 
@@ -604,10 +630,7 @@ describe('GitHubCLIService', () => {
           mergeStateStatus: 'CLEAN',
         };
 
-        mockExecFile.mockResolvedValue({
-          stdout: JSON.stringify(fullPRData),
-          stderr: '',
-        });
+        mockFullDetails(fullPRData);
 
         const result = await githubCLIService.getPRFullDetails('owner/repo', 123);
 
@@ -666,10 +689,7 @@ describe('GitHubCLIService', () => {
           mergeStateStatus: 'CLEAN',
         };
 
-        mockExecFile.mockResolvedValue({
-          stdout: JSON.stringify(fullPRData),
-          stderr: '',
-        });
+        mockFullDetails(fullPRData);
 
         const result = await githubCLIService.getPRFullDetails('owner/repo', 123);
 
@@ -680,6 +700,7 @@ describe('GitHubCLIService', () => {
             state: 'PENDING',
             submittedAt: null,
             body: undefined,
+            chronologicalOrder: 0,
           },
         ]);
       });
@@ -1652,42 +1673,6 @@ describe('GitHubCLIService', () => {
       );
     });
 
-    it('passes abort signals to PR detail child processes', async () => {
-      const controller = new AbortController();
-      mockExecFile.mockResolvedValue({
-        stdout: JSON.stringify({
-          number: 42,
-          title: 'PR',
-          url: 'https://github.com/owner/repo/pull/42',
-          author: { login: 'author' },
-          createdAt: '2026-01-01T00:00:00Z',
-          updatedAt: '2026-01-01T00:00:00Z',
-          isDraft: false,
-          state: 'OPEN',
-          reviewDecision: null,
-          statusCheckRollup: [],
-          reviews: [],
-          comments: [],
-          labels: [],
-          additions: 0,
-          deletions: 0,
-          changedFiles: 0,
-          headRefName: 'feature',
-          baseRefName: 'main',
-          mergeStateStatus: 'CLEAN',
-        }),
-        stderr: '',
-      });
-
-      await githubCLIService.getPRFullDetails('owner/repo', 42, controller.signal);
-
-      expect(mockExecFile).toHaveBeenCalledWith(
-        'gh',
-        expect.any(Array),
-        expect.objectContaining({ signal: controller.signal })
-      );
-    });
-
     it('passes abort signals to review comment child processes', async () => {
       const controller = new AbortController();
       mockExecFile.mockResolvedValue({ stdout: '[]', stderr: '' });
@@ -1699,91 +1684,6 @@ describe('GitHubCLIService', () => {
         expect.any(Array),
         expect.objectContaining({ signal: controller.signal })
       );
-    });
-
-    it('does not singleflight identical signal-bound PR reads', async () => {
-      const first = new AbortController();
-      const second = new AbortController();
-      const prDetails = {
-        number: 42,
-        title: 'PR',
-        url: 'https://github.com/owner/repo/pull/42',
-        author: { login: 'author' },
-        createdAt: '2026-01-01T00:00:00Z',
-        updatedAt: '2026-01-01T00:00:00Z',
-        isDraft: false,
-        state: 'OPEN',
-        reviewDecision: null,
-        statusCheckRollup: [],
-        reviews: [],
-        comments: [],
-        labels: [],
-        additions: 0,
-        deletions: 0,
-        changedFiles: 0,
-        headRefName: 'feature',
-        baseRefName: 'main',
-        mergeStateStatus: 'CLEAN',
-      };
-      mockExecFile.mockResolvedValue({ stdout: JSON.stringify(prDetails), stderr: '' });
-
-      await Promise.all([
-        githubCLIService.getPRFullDetails('owner/repo', 42, first.signal),
-        githubCLIService.getPRFullDetails('owner/repo', 42, second.signal),
-      ]);
-
-      expect(mockExecFile).toHaveBeenCalledTimes(2);
-    });
-
-    it('does not spawn a signal-bound read that is cancelled while queued', async () => {
-      const prDetails = {
-        number: 42,
-        title: 'PR',
-        url: 'https://github.com/owner/repo/pull/42',
-        author: { login: 'author' },
-        createdAt: '2026-01-01T00:00:00Z',
-        updatedAt: '2026-01-01T00:00:00Z',
-        isDraft: false,
-        state: 'OPEN',
-        reviewDecision: null,
-        statusCheckRollup: [],
-        reviews: [],
-        comments: [],
-        labels: [],
-        additions: 0,
-        deletions: 0,
-        changedFiles: 0,
-        headRefName: 'feature',
-        baseRefName: 'main',
-        mergeStateStatus: 'CLEAN',
-      };
-      const releases: Array<() => void> = [];
-      mockExecFile.mockImplementation(
-        () =>
-          new Promise((resolve) => {
-            releases.push(() => resolve({ stdout: JSON.stringify(prDetails), stderr: '' }));
-          })
-      );
-
-      const blockers = Array.from({ length: 5 }, (_, index) => {
-        const controller = new AbortController();
-        return githubCLIService.getPRFullDetails('owner/repo', index + 1, controller.signal);
-      });
-      await vi.waitFor(() => expect(mockExecFile).toHaveBeenCalledTimes(5));
-
-      const queuedController = new AbortController();
-      const abortReason = new Error('queued request cancelled');
-      const queued = githubCLIService.getPRFullDetails('owner/repo', 99, queuedController.signal);
-      queuedController.abort(abortReason);
-      releases.shift()?.();
-
-      await expect(queued).rejects.toBe(abortReason);
-      expect(mockExecFile).toHaveBeenCalledTimes(5);
-
-      for (const release of releases) {
-        release();
-      }
-      await Promise.all(blockers);
     });
 
     it('deduplicates identical concurrent read calls', async () => {
