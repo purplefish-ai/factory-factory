@@ -1,5 +1,5 @@
 import { CheckCircleIcon } from '@phosphor-icons/react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
@@ -35,14 +35,33 @@ function LinearConfigFields({
   const [viewerName, setViewerName] = useState<string | null>(linearConfig?.viewerName ?? null);
   const [teams, setTeams] = useState<Array<{ id: string; name: string; key: string }>>([]);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const validationGeneration = useRef(0);
 
   const validateAndList = trpc.linear.validateKeyAndListTeams.useMutation({
     onError: (error) => toast.error(`Validation failed: ${error.message}`),
   });
 
+  const resetValidation = () => {
+    validationGeneration.current += 1;
+    setViewerName(null);
+    setTeams([]);
+    setSelectedTeamId(null);
+  };
+
+  const handleApiKeyChange = (value: string) => {
+    setApiKey(value);
+    resetValidation();
+  };
+
   const handleValidate = async () => {
+    resetValidation();
+    const generation = validationGeneration.current;
     try {
       const result = await validateAndList.mutateAsync({ apiKey });
+      // Key edits and newer validations supersede this response, even if the key changes back.
+      if (generation !== validationGeneration.current) {
+        return;
+      }
       if (result.valid) {
         setViewerName(result.viewerName ?? null);
         setTeams(result.teams ?? []);
@@ -67,10 +86,7 @@ function LinearConfigFields({
         viewerName,
       },
     });
-    setApiKey('');
-    setViewerName(null);
-    setTeams([]);
-    setSelectedTeamId(null);
+    handleApiKeyChange('');
   };
 
   const isValidated = viewerName !== null;
@@ -95,7 +111,7 @@ function LinearConfigFields({
             id={`api-key-${projectId}`}
             type="password"
             value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
+            onChange={(e) => handleApiKeyChange(e.target.value)}
             placeholder={hasStoredKey ? '••••••••••••••••••••' : 'lin_api_...'}
             className="font-mono text-sm w-[280px]"
           />
