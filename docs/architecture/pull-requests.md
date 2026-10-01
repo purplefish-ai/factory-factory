@@ -1,5 +1,14 @@
 # Pull Request Automation
 
+## PR detail diffs
+
+The PR detail panel uses `parseFileDiff` in `src/lib/diff/parse.ts` to display
+repository-relative destination filenames. It distinguishes Git's `a/` and `b/`
+prefixes from characters inside paths, decodes Git's quoted paths, and uses
+destination and rename metadata to disambiguate filenames containing spaces.
+Metadata only updates filenames before a hunk; header-like additions and
+deletions inside hunks remain diff content.
+
 ## Auto-Fix (Ratchet)
 
 Automatically watches pull requests and dispatches agents to fix issues
