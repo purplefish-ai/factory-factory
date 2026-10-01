@@ -173,8 +173,17 @@ describe('adversarial review startup permissions', () => {
       harness.runtime.setSessionMode.mockResolvedValue(harness.handle.configOptions);
     }
     await expect(start(harness, 'start')).rejects.toThrow();
-    expect(harness.runtimeManager.stopClient).toHaveBeenCalledWith(harness.session.id);
+    expect(harness.runtimeManager.stopClient).toHaveBeenCalledExactlyOnceWith(harness.session.id);
     expect(harness.sendSessionMessage).not.toHaveBeenCalled();
+    expect(harness.tryDispatchNextMessage).not.toHaveBeenCalled();
+  });
+
+  it('clears newly created review state when restriction failure cleanup rejects', async () => {
+    const harness = createHarness('CODEX');
+    harness.runtime.setConfigOption.mockRejectedValue(new Error('sandbox rejected'));
+    harness.runtimeManager.stopClient.mockRejectedValue(new Error('stop rejected'));
+    await expect(start(harness, 'chat auto-start')).rejects.toThrow('stop rejected');
+    expect(harness.acpEventProcessor.clearSessionState).toHaveBeenCalledWith(harness.session.id);
     expect(harness.tryDispatchNextMessage).not.toHaveBeenCalled();
   });
 
