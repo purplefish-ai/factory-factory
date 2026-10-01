@@ -256,6 +256,10 @@ describe('issue provider selection', () => {
         { id: 'other-project', issueProvider: IssueProvider.GITHUB },
       ]);
       expectProvider(IssueProvider.LINEAR);
+      expect(listReads).toBe(2);
+      expect(
+        queryClient.getQueryState(getQueryKey(trpc.project.list, undefined, 'query'))?.status
+      ).toBe('error');
     }
   );
 
