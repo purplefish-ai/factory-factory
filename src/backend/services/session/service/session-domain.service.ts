@@ -503,9 +503,15 @@ export class SessionDomainService extends EventEmitter {
     this.publisher.forwardSnapshot(store, { reason: 'inject_user_message' });
   }
 
-  clearSession(sessionId: string, options?: { preserveRejections?: boolean }): void {
+  clearSession(
+    sessionId: string,
+    options?: { preserveRejections?: boolean; permanentlyDeleted?: boolean }
+  ): void {
     this.initialMessages.delete(sessionId);
     this.registry.clearSession(sessionId, options);
+    if (options?.permanentlyDeleted) {
+      this.forgetProviderHistoryIdentity(sessionId);
+    }
   }
 
   clearAllSessions(): void {
