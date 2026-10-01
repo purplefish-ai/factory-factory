@@ -7,6 +7,11 @@ supports the workspace issue picker (`listIssuesForWorkspace`) and Kanban intake
 (`listIssuesForProject`, assigned to `@me`). Starting from an issue creates a
 linked workspace (`githubIssueNumber`, `githubIssueUrl`).
 
+The New Project authentication badge requires a successful login line and a zero
+exit status from `gh auth status`. Explicit login failures take precedence over
+success lines, including mixed valid/invalid accounts and older CLI versions
+that exit zero for invalid tokens. Both output streams are checked.
+
 All `gh` spawns go through `GitHubCLIService`, which owns the process-wide
 concurrency limit, the fast-fail on rate limiting, and singleflight dedup of
 identical in-flight reads. Do not spawn `gh` directly from a service. See
