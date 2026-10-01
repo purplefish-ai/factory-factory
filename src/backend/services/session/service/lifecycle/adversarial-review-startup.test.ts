@@ -232,9 +232,32 @@ describe('adversarial review startup permissions', () => {
       harness.runtime.setConfigOption.mockRejectedValue(new Error('sandbox rejected'));
       await expect(start(harness, path)).rejects.toThrow('sandbox rejected');
       expect(harness.runtimeManager.stopClient).toHaveBeenCalledWith(harness.session.id);
+      expect(harness.acpEventProcessor.clearSessionState).toHaveBeenCalledWith(harness.session.id);
+      expect(harness.sessionDomainService.setRuntimeSnapshot).toHaveBeenCalledWith(
+        harness.session.id,
+        expect.objectContaining({
+          phase: 'error',
+          processState: 'stopped',
+          activity: 'IDLE',
+          errorMessage: 'Failed to start agent: sandbox rejected',
+        })
+      );
       expect(harness.tryDispatchNextMessage).not.toHaveBeenCalled();
     }
   );
+
+  it('clears failed review startup state even when stopping the client rejects', async () => {
+    const harness = createHarness('CODEX');
+    harness.runtimeManager.getClient.mockReturnValue(harness.handle);
+    harness.runtime.setConfigOption.mockRejectedValue(new Error('sandbox rejected'));
+    harness.runtimeManager.stopClient.mockRejectedValue(new Error('stop rejected'));
+    await expect(start(harness, 'chat auto-start')).rejects.toThrow('stop rejected');
+    expect(harness.acpEventProcessor.clearSessionState).toHaveBeenCalledWith(harness.session.id);
+    expect(harness.sessionDomainService.setRuntimeSnapshot).not.toHaveBeenCalledWith(
+      harness.session.id,
+      expect.objectContaining({ processState: 'stopped' })
+    );
+  });
 
   it('persists and emits repaired permissions on an existing review client', async () => {
     const harness = createHarness('CODEX');

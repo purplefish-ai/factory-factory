@@ -465,7 +465,18 @@ export class SessionStartupCoordinator {
             existingAcp
           );
         } catch (error) {
-          await this.dependencies.runtimeManager.stopClient(sessionId);
+          try {
+            await this.dependencies.runtimeManager.stopClient(sessionId);
+            this.dependencies.sessionDomainService.setRuntimeSnapshot(sessionId, {
+              phase: 'error',
+              processState: 'stopped',
+              activity: 'IDLE',
+              errorMessage: `Failed to start agent: ${toErrorMessage(error)}`,
+              updatedAt: new Date().toISOString(),
+            });
+          } finally {
+            this.dependencies.acpEventProcessor.clearSessionState(sessionId);
+          }
           throw error;
         }
       }
