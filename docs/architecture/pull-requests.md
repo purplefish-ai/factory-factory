@@ -16,9 +16,10 @@ active. Admin settings control the default ratchet state for new workspaces and
 the global review-trigger mode.
 
 One narrow, deliberate exception to "ordinary comments never trigger Ratchet": a
-review whose body carries the Adversarial Review feature's marker
-(`src/shared/adversarial-review.ts`) is always actionable, regardless of
-`ratchetReviewTriggerMode` — see
+review or fallback conversation summary whose body carries the Adversarial
+Review feature's marker (`src/shared/adversarial-review.ts`) is always
+actionable, regardless of `ratchetReviewTriggerMode`, provided its author
+matches the authenticated GitHub identity — see
 [Adversarial Review](../design/adversarial-review.md). This exists because this
 app's own `gh` identity is also the PR's author, which rules out using GitHub's
 native `REQUEST_CHANGES` review state to signal "actionable" the way a human
@@ -111,7 +112,9 @@ their approvals never supersede another unknown author’s feedback.
 Inline review comment fetches retain at most 2,000 comments, ordered by newest
 update first at the API boundary. Hitting that budget drops older activity
 rather than the newest comment or edit used in the dispatch snapshot. Returned
-comments are in ascending update order.
+comments are in ascending update order. Comments from deleted GitHub accounts
+are retained with an empty author login, preserving their feedback and activity
+timestamps without inventing an identity or failing the PR fetch.
 
 Review comments belonging to resolved review threads (GraphQL
 `reviewThreads.isResolved`) are excluded from fixer dispatch prompts and from

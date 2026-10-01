@@ -32,7 +32,7 @@ export function AdversarialReviewButton({
   });
 
   if (
-    !hasVisiblePullRequest(workspace) ||
+    !(workspace.worktreePath && hasVisiblePullRequest(workspace)) ||
     isWorkspaceMerged(workspace) ||
     isWorkspaceClosed(workspace)
   ) {

@@ -63,6 +63,7 @@ vi.mock('@/backend/services/session/service/session-domain.service', () => ({
   sessionDomainService: {
     subscribe: mocks.subscribe,
     emitDelta: mocks.emitDelta,
+    createProviderHistoryFence: () => () => true,
     getTranscriptSnapshot: mocks.getTranscriptSnapshot,
     isHistoryHydrated: mocks.isHistoryHydrated,
     getHistoryHydrationSource: mocks.getHistoryHydrationSource,
@@ -211,7 +212,6 @@ describe('createLoadSessionHandler', () => {
       workingDir: '/tmp/worktree',
       message: { type: 'load_session', loadRequestId: 'load-1' } as never,
     });
-
     expect(mocks.loadClaudeSessionHistory).toHaveBeenCalledWith({
       providerSessionId: 'provider-session-1',
       workingDir: '/tmp/worktree',

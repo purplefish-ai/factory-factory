@@ -197,7 +197,11 @@ export function ProjectIssueTrackingCard({
   issueTrackerConfig: PublicIssueTrackerConfig | null;
 }) {
   const utils = trpc.useUtils();
-  const [provider, setProvider] = useState(currentProvider);
+  const [optimisticProvider, setOptimisticProvider] = useState<string | null>(null);
+  const providerGeneration = useRef(0);
+  const pendingProviderSaves = useRef(0);
+  const provider = optimisticProvider ?? currentProvider;
+  const updateProvider = trpc.project.update.useMutation();
 
   const updateProject = trpc.project.update.useMutation({
     onSuccess: () => {
@@ -207,9 +211,46 @@ export function ProjectIssueTrackingCard({
     onError: (error) => toast.error(`Failed to save: ${error.message}`),
   });
 
-  const handleProviderChange = (value: string) => {
-    setProvider(value);
-    updateProject.mutate({ id: projectId, issueProvider: value as IssueProvider });
+  const resyncProvider = async () => {
+    // Refetch after every outstanding write settles, including an older request finishing last.
+    if (pendingProviderSaves.current !== 0) {
+      return;
+    }
+    const generation = providerGeneration.current;
+    await utils.project.list.invalidate();
+    // A new choice made during the refetch still owns the optimistic display.
+    if (generation === providerGeneration.current && pendingProviderSaves.current === 0) {
+      setOptimisticProvider(null);
+    }
+  };
+
+  const handleProviderChange = async (value: string) => {
+    const generation = ++providerGeneration.current;
+    pendingProviderSaves.current += 1;
+    setOptimisticProvider(value);
+    try {
+      const saved = await updateProvider.mutateAsync({
+        id: projectId,
+        issueProvider: value as IssueProvider,
+      });
+      // Keep the last confirmed provider even if the following refetch fails.
+      utils.project.list.setQueriesData(undefined, {}, (projects) =>
+        projects?.map((project) =>
+          project.id === saved.id ? { ...project, issueProvider: saved.issueProvider } : project
+        )
+      );
+      if (generation === providerGeneration.current) {
+        toast.success('Issue tracking settings saved');
+      }
+    } catch (error) {
+      if (generation === providerGeneration.current) {
+        setOptimisticProvider(null);
+        toast.error(`Failed to save: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    } finally {
+      pendingProviderSaves.current -= 1;
+      await resyncProvider();
+    }
   };
 
   const handleLinearSave = async (config: IssueTrackerConfig) => {
@@ -244,7 +285,7 @@ export function ProjectIssueTrackingCard({
             <Select
               value={provider}
               onValueChange={handleProviderChange}
-              disabled={updateProject.isPending}
+              disabled={updateProvider.isPending || updateProject.isPending}
             >
               <SelectTrigger className="w-[180px]">
                 <SelectValue />

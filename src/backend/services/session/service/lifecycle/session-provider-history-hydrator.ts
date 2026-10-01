@@ -65,13 +65,19 @@ export async function hydrateProviderHistoryIfNeeded(
   sessionId: string,
   dbSession: ProviderHistorySession
 ): Promise<void> {
+  const providerSessionId = getProviderSessionId(dbSession);
+  const historyIsCurrent = providerSessionId
+    ? sessionDomainService.createProviderHistoryFence(sessionId, providerSessionId)
+    : () => true;
+  if (!historyIsCurrent) {
+    return;
+  }
   const existingTranscript = sessionDomainService.getTranscriptSnapshot(sessionId);
   const existingProviderMessages = providerMessages(existingTranscript);
   const isHistoryHydrated = sessionDomainService.isHistoryHydrated(sessionId);
   const historyHydrationSource = isHistoryHydrated
     ? sessionDomainService.getHistoryHydrationSource(sessionId)
     : undefined;
-  const providerSessionId = getProviderSessionId(dbSession);
   const shouldAttemptCodexToolBackfill =
     dbSession.provider === 'CODEX' &&
     existingProviderMessages.length > 0 &&
@@ -104,6 +110,9 @@ export async function hydrateProviderHistoryIfNeeded(
 
   const loadStart = Date.now();
   const loadResult = await loadProviderHistory(dbSession, providerSessionId);
+  if (!historyIsCurrent()) {
+    return;
+  }
   if (loadResult.status === 'loaded') {
     handleLoadedProviderHistory({
       sessionId,

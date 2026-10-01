@@ -36,6 +36,15 @@ the new status displayed in the UI.
 Cache clearing also supersedes in-flight checks, so late pre-upgrade results
 cannot replace the post-upgrade status.
 
+## Issue provider settings
+
+The admin provider selector rolls back failed saves to the latest project query
+value. Successful saves update the cached provider so a failed refresh retains
+the last confirmed value. After all overlapping provider writes settle, it
+refetches projects and releases the optimistic selection. Older completions and
+refetches cannot replace a newer pending choice. Idle selectors follow project
+query updates without a remount.
+
 ## Linear
 
 A per-project issue provider can be set to Linear with an encrypted API key plus

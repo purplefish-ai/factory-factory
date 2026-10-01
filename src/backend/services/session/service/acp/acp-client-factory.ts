@@ -13,7 +13,11 @@ import { AcpProcessHandle } from './acp-process-handle';
 import type { AcpRuntimeMetadata, AcpStartupSignal } from './acp-runtime-contracts';
 import { wireAcpRuntimeErrorHandler } from './acp-runtime-error-handler';
 import { AcpBrowseSessionUnavailableError, getAcpErrorLogDetails } from './acp-runtime-errors';
-import type { AcpRuntimeEvent, AcpRuntimeEventHandlers } from './acp-runtime-events';
+import type {
+  AcpRuntimeEvent,
+  AcpRuntimeEventHandlers,
+  AcpSessionCreationOutcome,
+} from './acp-runtime-events';
 import { raceWithSoftTimeout } from './acp-runtime-quiescence';
 import {
   createAcpSpawnError,
@@ -38,6 +42,7 @@ export type CreateAcpClientParams = {
   shutdownSignal: AcpStartupSignal;
   stopSignal: AcpStartupSignal;
   shouldDispatchRuntimeError(child: ChildProcess): boolean;
+  discardFailedResumeReplay?(): void;
 };
 
 function resolveAutoApprovePolicy(preset: PermissionPreset | undefined): AutoApprovePolicy {
@@ -202,7 +207,13 @@ export class AcpClientFactory {
       const agentCapabilities = initResult.agentCapabilities ?? {};
       const sessionInfo = await Promise.race([
         withTimeout({
-          promise: this.createOrResumeSession(connection, sessionId, options, agentCapabilities),
+          promise: this.createOrResumeSession(
+            connection,
+            sessionId,
+            options,
+            agentCapabilities,
+            params.discardFailedResumeReplay
+          ),
           timeoutMs: startupTimeoutMs,
           description: 'session creation',
           cancelOn: startupCancelOn,
@@ -218,6 +229,7 @@ export class AcpClientFactory {
         child,
         provider: options.provider,
         providerSessionId: sessionInfo.providerSessionId,
+        sessionCreationOutcome: sessionInfo.outcome,
         agentCapabilities,
       });
       handle.configOptions = sessionInfo.configOptions;
@@ -237,8 +249,13 @@ export class AcpClientFactory {
     connection: ClientSideConnection,
     sessionId: string,
     options: AcpClientOptions,
-    agentCapabilities: Record<string, unknown>
-  ): Promise<{ providerSessionId: string; configOptions: SessionConfigOption[] }> {
+    agentCapabilities: Record<string, unknown>,
+    discardFailedResumeReplay?: () => void
+  ): Promise<{
+    providerSessionId: string;
+    configOptions: SessionConfigOption[];
+    outcome: AcpSessionCreationOutcome;
+  }> {
     const storedId = options.resumeProviderSessionId;
     const browseOnly = options.purpose === 'browse';
     const mcpServers = (options.mcpServers ?? []).map((server) => ({
@@ -255,7 +272,7 @@ export class AcpClientFactory {
       mcpServers
     );
     if (resumed) {
-      return resumed;
+      return { ...resumed, outcome: { kind: 'resumed' } };
     }
 
     if (browseOnly) {
@@ -266,6 +283,9 @@ export class AcpClientFactory {
       );
     }
 
+    if (storedId) {
+      discardFailedResumeReplay?.();
+    }
     const sessionResult = await connection.newSession({ cwd: options.workingDir, mcpServers });
     logger.info('ACP session created', {
       sessionId,
@@ -273,6 +293,13 @@ export class AcpClientFactory {
     });
     return {
       providerSessionId: sessionResult.sessionId,
+      outcome: storedId
+        ? {
+            kind: 'resume_fallback',
+            previousProviderSessionId: storedId,
+            reason: agentCapabilities.loadSession === true ? 'load_failed' : 'load_unsupported',
+          }
+        : { kind: 'new' },
       configOptions: requireSessionConfigOptions(options.provider, 'newSession', sessionResult),
     };
   }

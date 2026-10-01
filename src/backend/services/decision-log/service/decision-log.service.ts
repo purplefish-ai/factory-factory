@@ -17,24 +17,6 @@ class DecisionLogService {
   list(options: { agentId?: string; limit?: number }): Promise<DecisionLog[]> {
     return decisionLogAccessor.list(options);
   }
-
-  createAutomatic(
-    agentId: string,
-    toolName: string,
-    type: 'invocation' | 'result' | 'error',
-    data: unknown
-  ): Promise<DecisionLog> {
-    return decisionLogAccessor.createAutomatic(agentId, toolName, type, data);
-  }
-
-  createManual(
-    agentId: string,
-    title: string,
-    body: string,
-    context?: string
-  ): Promise<DecisionLog> {
-    return decisionLogAccessor.createManual(agentId, title, body, context);
-  }
 }
 
 export const decisionLogService = new DecisionLogService();

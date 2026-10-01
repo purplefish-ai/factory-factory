@@ -768,7 +768,7 @@ class GitHubCLIService {
         for (const comment of pageComments) {
           allComments.push({
             id: comment.id,
-            author: { login: comment.user.login },
+            author: { login: comment.user?.login ?? '' },
             body: comment.body,
             path: comment.path,
             line: comment.line,

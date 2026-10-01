@@ -17,6 +17,9 @@ export interface SessionStore {
   sessionId: string;
   initialized: boolean;
   historyHydrated?: boolean;
+  historyProviderSessionId?: string;
+  historyReadGeneration?: number;
+  historySuspended?: boolean;
   historyHydratedAt?: string;
   historyHydrationSource?: 'jsonl' | 'acp_fallback' | 'none';
   transcript: ChatMessage[];

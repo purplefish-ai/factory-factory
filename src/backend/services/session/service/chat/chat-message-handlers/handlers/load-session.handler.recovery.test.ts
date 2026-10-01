@@ -50,6 +50,7 @@ vi.mock('@/backend/services/session/service/session-domain.service', () => ({
   sessionDomainService: {
     subscribe: mocks.subscribe,
     emitDelta: mocks.emitDelta,
+    createProviderHistoryFence: () => () => true,
     getTranscriptSnapshot: mocks.getTranscriptSnapshot,
     isHistoryHydrated: mocks.isHistoryHydrated,
     getHistoryHydrationSource: mocks.getHistoryHydrationSource,
