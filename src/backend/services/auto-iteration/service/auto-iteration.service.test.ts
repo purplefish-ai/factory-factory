@@ -1,3 +1,7 @@
+import { execFileSync } from 'node:child_process';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { createLogger } from '@/backend/services/logger.service';
 import { AutoIterationStatus } from '@/shared/core';
@@ -11,6 +15,7 @@ import type {
 } from './bridges';
 import * as gitOps from './git-ops';
 import { insightsService } from './insights.service';
+import { LogbookService } from './logbook.service';
 import * as testRunner from './test-runner.service';
 
 type Logger = ReturnType<typeof createLogger>;
@@ -91,6 +96,81 @@ describe('AutoIterationService resume', () => {
     sessionBridge = createSessionBridge();
     workspaceBridge = createWorkspaceBridge();
     service.configure(sessionBridge, workspaceBridge, createLogbookBridge());
+  });
+
+  it('records consecutive runtime-only iterations as crashes without committing or losing strategy', async () => {
+    const worktreePath = await mkdtemp(join(tmpdir(), 'ff-noop-iteration-'));
+    const git = (args: string[]) =>
+      execFileSync('git', args, { cwd: worktreePath, encoding: 'utf-8' }).trim();
+    try {
+      git(['init']);
+      git(['config', 'user.email', 'integration@example.com']);
+      git(['config', 'user.name', 'Integration Test']);
+      await writeFile(join(worktreePath, 'code.ts'), 'implementation\n');
+      git(['add', '-A']);
+      git(['commit', '-m', 'Initial commit']);
+      const initialHead = git(['rev-parse', 'HEAD']);
+      const runtimePath = join(worktreePath, '.factory-factory');
+      await mkdir(runtimePath);
+      const strategyPath = join(runtimePath, 'auto-iteration-strategy.md');
+      await writeFile(strategyPath, 'Keep this strategy\n');
+      await writeFile(join(runtimePath, 'auto-iteration-insights.md'), 'insights\n');
+      const logbookBridge = new LogbookService();
+      await logbookBridge.initialize(worktreePath, 'ws-noop', config, 'Tests passed', 'Baseline');
+      service.configure(sessionBridge, workspaceBridge, logbookBridge);
+      vi.mocked(workspaceBridge.getWorktreePath).mockResolvedValue(worktreePath);
+      const loop = createPausedLoop('ws-noop');
+      loop.config = { ...config, maxIterations: 2 };
+      serviceInternals.loops.set('ws-noop', loop);
+      const testCommand = vi.spyOn(testRunner, 'runTestCommand').mockResolvedValue({
+        stdout: 'Tests passed',
+        stderr: '',
+        exitCode: 0,
+        timedOut: false,
+      });
+      const commit = vi.spyOn(gitOps, 'commitAll');
+      const revert = vi.spyOn(gitOps, 'revertHead');
+
+      await service.resume('ws-noop');
+      await loop.loopPromise;
+
+      const logbook = await logbookBridge.read(worktreePath);
+      expect(logbook?.iterations).toHaveLength(2);
+      for (const iteration of [1, 2]) {
+        expect(logbook?.iterations[iteration - 1]).toEqual(
+          expect.objectContaining({
+            iteration,
+            status: 'crashed',
+            crashError: 'Agent made no code changes',
+            commitSha: '',
+            commitReverted: false,
+          })
+        );
+      }
+      expect(loop.progress).toMatchObject({
+        currentIteration: 2,
+        crashedCount: 2,
+        rejectedRegressionCount: 0,
+      });
+      expect(workspaceBridge.finishAutoIterationIfSessionMatches).toHaveBeenCalledWith(
+        'ws-noop',
+        'session-1',
+        AutoIterationStatus.MAX_ITERATIONS
+      );
+      expect(testCommand).toHaveBeenCalledTimes(2);
+      expect(sessionBridge.sendPrompt).toHaveBeenCalledTimes(2);
+      expect(sessionBridge.sendPrompt).toHaveBeenLastCalledWith(
+        'session-1',
+        expect.stringContaining('Keep this strategy'),
+        expect.any(Number)
+      );
+      expect(commit).not.toHaveBeenCalled();
+      expect(revert).not.toHaveBeenCalled();
+      expect(git(['rev-parse', 'HEAD'])).toBe(initialHead);
+      await expect(readFile(strategyPath, 'utf-8')).resolves.toBe('Keep this strategy\n');
+    } finally {
+      await rm(worktreePath, { recursive: true, force: true });
+    }
   });
 
   it.each([false, true])(
