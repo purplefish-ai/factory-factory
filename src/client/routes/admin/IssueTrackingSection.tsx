@@ -28,19 +28,19 @@ function LinearConfigFields({
 }: {
   projectId: string;
   linearConfig: PublicLinearConfig | null;
-  onSave: (config: IssueTrackerConfig) => void;
+  onSave: (config: IssueTrackerConfig) => Promise<void>;
   isSaving: boolean;
 }) {
   const [apiKey, setApiKey] = useState('');
   const [viewerName, setViewerName] = useState<string | null>(linearConfig?.viewerName ?? null);
   const [teams, setTeams] = useState<Array<{ id: string; name: string; key: string }>>([]);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
-  const validationGeneration = useRef(0);
+  const formGeneration = useRef(0);
 
   const validateAndList = trpc.linear.validateKeyAndListTeams.useMutation();
 
   const resetValidation = () => {
-    validationGeneration.current += 1;
+    formGeneration.current += 1;
     setViewerName(null);
     setTeams([]);
     setSelectedTeamId(null);
@@ -53,11 +53,11 @@ function LinearConfigFields({
 
   const handleValidate = async () => {
     resetValidation();
-    const generation = validationGeneration.current;
+    const generation = formGeneration.current;
     try {
       const result = await validateAndList.mutateAsync({ apiKey });
       // Key edits and newer validations supersede this response, even if the key changes back.
-      if (generation !== validationGeneration.current) {
+      if (generation !== formGeneration.current) {
         return;
       }
       if (result.valid) {
@@ -67,7 +67,7 @@ function LinearConfigFields({
         toast.error(`Validation failed: ${result.error ?? 'Unknown error'}`);
       }
     } catch (error) {
-      if (generation === validationGeneration.current) {
+      if (generation === formGeneration.current) {
         toast.error(
           `Validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`
         );
@@ -75,20 +75,28 @@ function LinearConfigFields({
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const selectedTeam = teams.find((t) => t.id === selectedTeamId);
     if (!(selectedTeam && viewerName)) {
       return;
     }
-    onSave({
-      linear: {
-        apiKey,
-        teamId: selectedTeam.id,
-        teamName: `${selectedTeam.name} (${selectedTeam.key})`,
-        viewerName,
-      },
-    });
-    handleApiKeyChange('');
+    const generation = ++formGeneration.current;
+    try {
+      await onSave({
+        linear: {
+          apiKey,
+          teamId: selectedTeam.id,
+          teamName: `${selectedTeam.name} (${selectedTeam.key})`,
+          viewerName,
+        },
+      });
+      // A completed save must not clear edits or validation started since submission.
+      if (generation === formGeneration.current) {
+        handleApiKeyChange('');
+      }
+    } catch {
+      // The mutation reports the error; retain the validated form for retry.
+    }
   };
 
   const isValidated = viewerName !== null;
@@ -131,7 +139,13 @@ function LinearConfigFields({
         <>
           <div className="space-y-1.5">
             <Label>Team</Label>
-            <Select value={selectedTeamId ?? ''} onValueChange={setSelectedTeamId}>
+            <Select
+              value={selectedTeamId ?? ''}
+              onValueChange={(value) => {
+                formGeneration.current += 1;
+                setSelectedTeamId(value);
+              }}
+            >
               <SelectTrigger className="w-[220px]">
                 <SelectValue placeholder="Select a team" />
               </SelectTrigger>
@@ -183,7 +197,11 @@ export function ProjectIssueTrackingCard({
   issueTrackerConfig: PublicIssueTrackerConfig | null;
 }) {
   const utils = trpc.useUtils();
-  const [provider, setProvider] = useState(currentProvider);
+  const [optimisticProvider, setOptimisticProvider] = useState<string | null>(null);
+  const providerGeneration = useRef(0);
+  const pendingProviderSaves = useRef(0);
+  const provider = optimisticProvider ?? currentProvider;
+  const updateProvider = trpc.project.update.useMutation();
 
   const updateProject = trpc.project.update.useMutation({
     onSuccess: () => {
@@ -193,13 +211,50 @@ export function ProjectIssueTrackingCard({
     onError: (error) => toast.error(`Failed to save: ${error.message}`),
   });
 
-  const handleProviderChange = (value: string) => {
-    setProvider(value);
-    updateProject.mutate({ id: projectId, issueProvider: value as IssueProvider });
+  const resyncProvider = async () => {
+    // Refetch after every outstanding write settles, including an older request finishing last.
+    if (pendingProviderSaves.current !== 0) {
+      return;
+    }
+    const generation = providerGeneration.current;
+    await utils.project.list.invalidate();
+    // A new choice made during the refetch still owns the optimistic display.
+    if (generation === providerGeneration.current && pendingProviderSaves.current === 0) {
+      setOptimisticProvider(null);
+    }
   };
 
-  const handleLinearSave = (config: IssueTrackerConfig) => {
-    updateProject.mutate({
+  const handleProviderChange = async (value: string) => {
+    const generation = ++providerGeneration.current;
+    pendingProviderSaves.current += 1;
+    setOptimisticProvider(value);
+    try {
+      const saved = await updateProvider.mutateAsync({
+        id: projectId,
+        issueProvider: value as IssueProvider,
+      });
+      // Keep the last confirmed provider even if the following refetch fails.
+      utils.project.list.setQueriesData(undefined, {}, (projects) =>
+        projects?.map((project) =>
+          project.id === saved.id ? { ...project, issueProvider: saved.issueProvider } : project
+        )
+      );
+      if (generation === providerGeneration.current) {
+        toast.success('Issue tracking settings saved');
+      }
+    } catch (error) {
+      if (generation === providerGeneration.current) {
+        setOptimisticProvider(null);
+        toast.error(`Failed to save: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    } finally {
+      pendingProviderSaves.current -= 1;
+      await resyncProvider();
+    }
+  };
+
+  const handleLinearSave = async (config: IssueTrackerConfig) => {
+    await updateProject.mutateAsync({
       id: projectId,
       issueProvider: IssueProvider.LINEAR,
       issueTrackerConfig: config,
@@ -230,7 +285,7 @@ export function ProjectIssueTrackingCard({
             <Select
               value={provider}
               onValueChange={handleProviderChange}
-              disabled={updateProject.isPending}
+              disabled={updateProvider.isPending || updateProject.isPending}
             >
               <SelectTrigger className="w-[180px]">
                 <SelectValue />

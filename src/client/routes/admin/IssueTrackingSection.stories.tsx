@@ -31,15 +31,30 @@ function mockValidationResult(input: unknown) {
   };
 }
 
-function LinearSettingsStory({ validationDelay = 0 }: { validationDelay?: number }) {
+function LinearSettingsStory({
+  validationDelay = 0,
+  failFirstSave = false,
+}: {
+  validationDelay?: number;
+  failFirstSave?: boolean;
+}) {
   const [queryClient] = useState(() => new QueryClient());
-  const [client] = useState(() =>
-    trpc.createClient({
+  const [client] = useState(() => {
+    let saveAttempts = 0;
+    const shouldFailSave = (path: string) =>
+      path === 'project.update' && failFirstSave && ++saveAttempts === 1;
+    return trpc.createClient({
       links: [
         () =>
           ({ op }) =>
             observable((observer) => {
               const input = op.input;
+              if (shouldFailSave(op.path)) {
+                const timer = setTimeout(() => {
+                  observer.error(new TRPCClientError('Mock save failure; retry is safe'));
+                }, 200);
+                return () => clearTimeout(timer);
+              }
               if (op.path === 'linear.validateKeyAndListTeams') {
                 const timer = setTimeout(() => {
                   observer.next({
@@ -61,8 +76,8 @@ function LinearSettingsStory({ validationDelay = 0 }: { validationDelay?: number
               return undefined;
             }),
       ],
-    })
-  );
+    });
+  });
   return (
     <trpc.Provider client={client} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
@@ -137,5 +152,27 @@ export const EditDuringValidation: Story = {
     await expect(canvas.queryByText(/Connected as/)).not.toBeInTheDocument();
     await expect(canvas.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
     await expect(onSave).not.toHaveBeenCalled();
+  },
+};
+
+export const RetryFailedSave: Story = {
+  render: () => <LinearSettingsStory failFirstSave />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const key = canvas.getByLabelText('API Key');
+    await userEvent.type(key, 'mock-key-a');
+    await userEvent.click(canvas.getByRole('button', { name: 'Validate' }));
+    await canvas.findByText('Connected as Mock Viewer A');
+    await userEvent.click(canvas.getByText('Select a team'));
+    await userEvent.click(await within(document.body).findByRole('option', { name: 'Team A (A)' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(canvas.getByRole('button', { name: 'Save' })).toBeEnabled());
+    await expect(key).toHaveValue('mock-key-a');
+    await expect(canvas.getByText('Connected as Mock Viewer A')).toBeInTheDocument();
+    await expect(canvas.getByText('Team A (A)')).toBeInTheDocument();
+    await userEvent.click(canvas.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(key).toHaveValue(''));
+    await expect(onSave).toHaveBeenCalledTimes(1);
+    await expect(canvas.queryByText(/Connected as/)).not.toBeInTheDocument();
   },
 };

@@ -18,6 +18,7 @@ const realUtil = await vi.importActual<typeof import('node:util')>('node:util');
 const execFixture = realUtil.promisify(realChildProcess.execFile);
 let fixtureDirectory: string;
 let fixturePath: string;
+let reviewFixturePath: string;
 
 function fullDetailsFixture() {
   const timestamp = '2026-09-01T00:00:00Z';
@@ -36,12 +37,12 @@ function fullDetailsFixture() {
       author: { login: 'reviewer' },
       state: 'APPROVED',
       submittedAt: timestamp,
-      body: 'r'.repeat(4096),
+      body: 'r'.repeat(6144),
     })),
     comments: Array.from({ length: 200 }, (_, index) => ({
       id: `comment-${index}`,
       author: { login: 'commenter' },
-      body: 'c'.repeat(3072),
+      body: 'c'.repeat(6144),
       createdAt: timestamp,
       updatedAt: timestamp,
       url: `https://github.com/owner/repo/pull/123#issuecomment-${index}`,
@@ -66,6 +67,7 @@ beforeEach(async () => {
   githubCLIService.clearCaches();
   fixtureDirectory = await mkdtemp(join(tmpdir(), 'gh-full-details-'));
   fixturePath = join(fixtureDirectory, 'pr.json');
+  reviewFixturePath = join(fixtureDirectory, 'reviews.json');
   // Replace only the external gh executable. Keep Node's real stdout buffering,
   // promisify behavior, and the service's parsing and mapping intact.
   vi.mocked(execFile).mockImplementation(((
@@ -74,10 +76,23 @@ beforeEach(async () => {
     options: ExecFileOptions
   ) => {
     expect(command).toBe('gh');
-    expect(args.slice(0, 3)).toEqual(['pr', 'view', '123']);
+    if (args[0] === 'api') {
+      expect(args).toEqual([
+        'api',
+        'repos/owner/repo/pulls/123/reviews?per_page=100',
+        '--paginate',
+        '--slurp',
+      ]);
+    } else {
+      expect(args.slice(0, 3)).toEqual(['pr', 'view', '123']);
+    }
     return execFixture(
       process.execPath,
-      ['-e', "process.stdout.write(require('node:fs').readFileSync(process.argv[1]))", fixturePath],
+      [
+        '-e',
+        "process.stdout.write(require('node:fs').readFileSync(process.argv[1]))",
+        args[0] === 'api' ? reviewFixturePath : fixturePath,
+      ],
       options
     );
   }) as never);
@@ -91,9 +106,21 @@ describe('full PR details stdout buffering', () => {
   it.each([false, true])(
     'loads all metadata beyond 1 MiB (with signal: %s)',
     async (withSignal) => {
-      const payload = JSON.stringify(fullDetailsFixture());
+      const fixture = fullDetailsFixture();
+      const restReviews = fixture.reviews.map((review) => ({
+        node_id: review.id,
+        user: review.author,
+        state: review.state,
+        submitted_at: review.submittedAt,
+        body: review.body,
+      }));
+      const reviewPayload = JSON.stringify([restReviews.slice(0, 100), restReviews.slice(100)]);
+      const { reviews: _unused, ...metadata } = fixture;
+      const payload = JSON.stringify(metadata);
       expect(Buffer.byteLength(payload)).toBeGreaterThan(1024 * 1024);
+      expect(Buffer.byteLength(reviewPayload)).toBeGreaterThan(1024 * 1024);
       await writeFile(fixturePath, payload);
+      await writeFile(reviewFixturePath, reviewPayload);
 
       const result = await githubCLIService.getPRFullDetails(
         'owner/repo',
@@ -103,9 +130,13 @@ describe('full PR details stdout buffering', () => {
 
       expect(result.number).toBe(123);
       expect(result.reviews).toHaveLength(200);
-      expect(result.reviews.at(-1)).toMatchObject({ id: 'review-199', body: 'r'.repeat(4096) });
+      expect(result.reviews.at(-1)).toMatchObject({
+        id: 'review-199',
+        body: 'r'.repeat(6144),
+        chronologicalOrder: 199,
+      });
       expect(result.comments).toHaveLength(200);
-      expect(result.comments.at(-1)).toMatchObject({ id: 'comment-199', body: 'c'.repeat(3072) });
+      expect(result.comments.at(-1)).toMatchObject({ id: 'comment-199', body: 'c'.repeat(6144) });
       expect(result.statusCheckRollup).toHaveLength(50);
       expect(result.statusCheckRollup?.at(-1)).toMatchObject({
         name: 'check-49',

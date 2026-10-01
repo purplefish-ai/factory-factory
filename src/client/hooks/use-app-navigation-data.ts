@@ -91,7 +91,11 @@ export function useAppNavigationData() {
   const { pathname } = useLocation();
   const [selectedProjectSlug, setSelectedProjectSlug] = useState<string>(getInitialProjectSlug);
 
-  const { data: projects } = trpc.project.list.useQuery({ isArchived: false });
+  const {
+    data: projects,
+    error: projectsError,
+    refetch: refetchProjects,
+  } = trpc.project.list.useQuery({ isArchived: false });
   const selectProjectSlug = useCallback((slug: string) => {
     setSelectedProjectSlug(slug);
     persistSelectedProjectSlug(slug);
@@ -140,6 +144,8 @@ export function useAppNavigationData() {
 
   return {
     projects,
+    projectsError,
+    refetchProjects,
     selectedProjectSlug,
     selectProjectSlug,
     selectedProjectId,

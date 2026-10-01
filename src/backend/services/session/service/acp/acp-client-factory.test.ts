@@ -347,6 +347,7 @@ describe('AcpClientFactory', () => {
     });
     expect(mocks.newSession).not.toHaveBeenCalled();
     expect(handle.providerSessionId).toBe('stored-provider-1');
+    expect(handle.sessionCreationOutcome).toEqual({ kind: 'resumed' });
   });
 
   it('logs an active load failure and falls back to a new session', async () => {
@@ -356,12 +357,24 @@ describe('AcpClientFactory', () => {
       data: { retryable: false },
     });
     mocks.loadSession.mockRejectedValue(loadError);
+    const discardFailedResumeReplay = vi.fn();
 
-    const handle = await new AcpClientFactory().createClient(
-      createParams({ options: defaultOptions({ resumeProviderSessionId: 'stored-provider-1' }) })
+    const handle = await new AcpClientFactory().createClient({
+      ...createParams({
+        options: defaultOptions({ resumeProviderSessionId: 'stored-provider-1' }),
+      }),
+      discardFailedResumeReplay,
+    });
+
+    expect(discardFailedResumeReplay.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.newSession.mock.invocationCallOrder[0]!
     );
-
     expect(handle.providerSessionId).toBe('provider-session-new');
+    expect(handle.sessionCreationOutcome).toEqual({
+      kind: 'resume_fallback',
+      previousProviderSessionId: 'stored-provider-1',
+      reason: 'load_failed',
+    });
     expect(mocks.logger.warn).toHaveBeenCalledWith('loadSession failed', {
       sessionId: 'session-1',
       storedProviderSessionId: 'stored-provider-1',
@@ -370,6 +383,19 @@ describe('AcpClientFactory', () => {
       errorData: { retryable: false },
       fallback: 'newSession',
     });
+  });
+
+  it('reports unsupported loadSession as an explicit resume fallback', async () => {
+    setupSuccessfulSpawn();
+    const handle = await new AcpClientFactory().createClient(
+      createParams({ options: defaultOptions({ resumeProviderSessionId: 'stored-provider-1' }) })
+    );
+    expect(handle.sessionCreationOutcome).toEqual({
+      kind: 'resume_fallback',
+      previousProviderSessionId: 'stored-provider-1',
+      reason: 'load_unsupported',
+    });
+    expect(mocks.loadSession).not.toHaveBeenCalled();
   });
 
   it('classifies a browse load failure without creating a replacement session', async () => {

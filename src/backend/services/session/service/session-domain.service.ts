@@ -43,6 +43,9 @@ const MAX_RECENT_REJECTIONS = 100;
 
 export class SessionDomainService extends EventEmitter {
   private readonly registry = new SessionStoreRegistry();
+  // Successful rollover identities fence delayed DB reads even after an inactive
+  // transcript store is evicted. These contain no transcript data.
+  private readonly repairedProviderHistoryIdentities = new Map<string, string>();
   private readonly publisher = new SessionPublisher();
   private readonly nowIso = () => new Date().toISOString();
   private readonly parityLogger = this.publisher.getParityLogger();
@@ -500,14 +503,26 @@ export class SessionDomainService extends EventEmitter {
     this.publisher.forwardSnapshot(store, { reason: 'inject_user_message' });
   }
 
-  clearSession(sessionId: string, options?: { preserveRejections?: boolean }): void {
+  clearSession(
+    sessionId: string,
+    options?: { preserveRejections?: boolean; permanentlyDeleted?: boolean }
+  ): void {
     this.initialMessages.delete(sessionId);
     this.registry.clearSession(sessionId, options);
+    if (options?.permanentlyDeleted) {
+      this.forgetProviderHistoryIdentity(sessionId);
+    }
   }
 
   clearAllSessions(): void {
     this.initialMessages.clear();
+    this.repairedProviderHistoryIdentities.clear();
     this.registry.clearAllSessions();
+  }
+
+  /** Call only after durable deletion; ordinary store eviction must retain this fence. */
+  forgetProviderHistoryIdentity(sessionId: string): void {
+    this.repairedProviderHistoryIdentities.delete(sessionId);
   }
 
   getAllPendingRequests(): Map<string, PendingInteractiveRequest> {
@@ -525,6 +540,64 @@ export class SessionDomainService extends EventEmitter {
   getTranscriptSnapshot(sessionId: string): ChatMessage[] {
     const store = this.registry.getOrCreate(sessionId);
     return [...store.transcript].sort(messageSort);
+  }
+
+  acceptProviderHistoryIdentity(sessionId: string, providerSessionId: string): boolean {
+    const repairedIdentity = this.repairedProviderHistoryIdentities.get(sessionId);
+    if (repairedIdentity && repairedIdentity !== providerSessionId) {
+      return false;
+    }
+    const store = this.registry.getOrCreate(sessionId);
+    store.historyProviderSessionId ??= providerSessionId;
+    return !store.historySuspended && store.historyProviderSessionId === providerSessionId;
+  }
+
+  createProviderHistoryFence(sessionId: string, providerSessionId: string): (() => boolean) | null {
+    if (!this.acceptProviderHistoryIdentity(sessionId, providerSessionId)) {
+      return null;
+    }
+    const store = this.registry.getOrCreate(sessionId);
+    const generation = store.historyReadGeneration ?? 0;
+    return () =>
+      this.registry.isCurrentStore(sessionId, store) &&
+      !store.historySuspended &&
+      store.historyProviderSessionId === providerSessionId &&
+      (store.historyReadGeneration ?? 0) === generation;
+  }
+
+  suspendProviderHistory(sessionId: string): () => void {
+    const store = this.registry.getOrCreate(sessionId);
+    const generation = (store.historyReadGeneration ?? 0) + 1;
+    store.historyReadGeneration = generation;
+    store.historySuspended = true;
+    return () => {
+      if (
+        this.registry.isCurrentStore(sessionId, store) &&
+        store.historyReadGeneration === generation
+      ) {
+        store.historySuspended = false;
+      }
+    };
+  }
+
+  resetProviderHistory(sessionId: string, providerSessionId: string): void {
+    this.repairedProviderHistoryIdentities.set(sessionId, providerSessionId);
+    const store = this.registry.getOrCreateActive(sessionId);
+    store.historyProviderSessionId = providerSessionId;
+    store.historyReadGeneration = (store.historyReadGeneration ?? 0) + 1;
+    store.historySuspended = false;
+    store.historyHydrated = false;
+    store.historyHydrationSource = undefined;
+    store.historyHydratedAt = undefined;
+    this.clearHistoryRetryCooldown(sessionId);
+    // Stop evidence belongs to the AgentSession; provider messages belong to the archived identity.
+    this.replaceTranscript(
+      sessionId,
+      store.transcript.filter(
+        (entry) => entry.source === 'agent' && entry.message?.type === 'session_lifecycle'
+      )
+    );
+    this.publisher.forwardSnapshot(store, { reason: 'manual_emit' });
   }
 
   isHistoryHydrated(sessionId: string): boolean {

@@ -11,9 +11,9 @@ import {
   computePRState,
   mapComments,
   mapLabels,
-  mapReviews,
   mapStatusChecks,
 } from './github-cli/mappers';
+import { getChronologicalReviews } from './github-cli/reviews';
 import {
   fullPRDetailsSchema,
   issueSchema,
@@ -501,7 +501,6 @@ class GitHubCLIService {
       'state',
       'reviewDecision',
       'statusCheckRollup',
-      'reviews',
       'comments',
       'labels',
       'additions',
@@ -519,8 +518,9 @@ class GitHubCLIService {
       );
 
       const data = parseGhJson(fullPRDetailsSchema, stdout, 'getPRFullDetails');
-
-      const [, repoName] = repo.split('/') as [string, string];
+      const reviews = await getChronologicalReviews(repo, prNumber, (args, options) =>
+        this.exec(args, { ...options, timeout: GH_TIMEOUT_MS.default, signal })
+      );
 
       return {
         number: data.number,
@@ -528,7 +528,7 @@ class GitHubCLIService {
         url: data.url,
         author: data.author,
         repository: {
-          name: repoName,
+          name: repo.split('/')[1] ?? '',
           nameWithOwner: repo,
         },
         createdAt: data.createdAt,
@@ -537,7 +537,7 @@ class GitHubCLIService {
         state: data.state,
         reviewDecision: data.reviewDecision,
         statusCheckRollup: data.statusCheckRollup ? mapStatusChecks(data.statusCheckRollup) : null,
-        reviews: mapReviews(data.reviews),
+        reviews,
         comments: mapComments(data.comments),
         labels: mapLabels(data.labels),
         additions: data.additions || 0,
@@ -768,7 +768,7 @@ class GitHubCLIService {
         for (const comment of pageComments) {
           allComments.push({
             id: comment.id,
-            author: { login: comment.user.login },
+            author: { login: comment.user?.login ?? '' },
             body: comment.body,
             path: comment.path,
             line: comment.line,

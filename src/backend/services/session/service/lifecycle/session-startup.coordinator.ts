@@ -385,7 +385,7 @@ export class SessionStartupCoordinator {
         workingDir: sessionContext.workingDir,
       }
     );
-    let handle: AcpProcessHandle;
+    let handle: AcpProcessHandle | undefined;
     try {
       handle = await creationPromise;
       this.assertStartupAllowed(sessionId, stopGeneration);
@@ -405,24 +405,22 @@ export class SessionStartupCoordinator {
           permissionPreset
         );
       }
+      this.assertStartupAllowed(sessionId, stopGeneration);
+      await this.persistAcpConfigSnapshot(sessionId, {
+        provider: handle.provider as PersistAcpConfigSnapshotParams['provider'],
+        providerSessionId: handle.providerSessionId,
+        configOptions: handle.configOptions,
+        existingMetadata:
+          handle.sessionCreationOutcome?.kind === 'resume_fallback'
+            ? ((await this.dependencies.repository.getSessionById(sessionId))?.providerMetadata ??
+              undefined)
+            : (session.providerMetadata ?? undefined),
+      });
+      this.assertStartupAllowed(sessionId, stopGeneration);
     } catch (error) {
-      if (session.workflow === ADVERSARIAL_REVIEW_WORKFLOW) {
-        await this.dependencies.runtimeManager.stopClient(sessionId);
-      }
-      if (registration.isOnlyOperation()) {
-        this.dependencies.acpEventProcessor.clearSessionState(sessionId);
-      }
+      await this.cleanupFailedClientCreation(sessionId, session.workflow, handle, registration);
       throw error;
     }
-
-    this.assertStartupAllowed(sessionId, stopGeneration);
-    await this.persistAcpConfigSnapshot(sessionId, {
-      provider: handle.provider as PersistAcpConfigSnapshotParams['provider'],
-      providerSessionId: handle.providerSessionId,
-      configOptions: handle.configOptions,
-      existingMetadata: session.providerMetadata ?? undefined,
-    });
-    this.assertStartupAllowed(sessionId, stopGeneration);
 
     if (handle.configOptions.length > 0) {
       this.dependencies.sessionDomainService.emitDelta(sessionId, {
@@ -442,6 +440,24 @@ export class SessionStartupCoordinator {
       assertAllowed: () => this.assertStartupAllowed(sessionId, stopGeneration),
     });
     return { handle, dispatchableNotificationCount: dispatchableCount };
+  }
+
+  private async cleanupFailedClientCreation(
+    sessionId: string,
+    workflow: string | undefined,
+    handle: AcpProcessHandle | undefined,
+    registration: AcpClientCreationOperation
+  ): Promise<void> {
+    const isOnlyOperation = registration.isOnlyOperation();
+    try {
+      if (handle && (isOnlyOperation || workflow === ADVERSARIAL_REVIEW_WORKFLOW)) {
+        await this.dependencies.runtimeManager.stopClient(sessionId);
+      }
+    } finally {
+      if (isOnlyOperation) {
+        this.dependencies.acpEventProcessor.clearSessionState(sessionId);
+      }
+    }
   }
 
   private async getOrCreateAcpSessionClient(

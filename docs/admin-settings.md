@@ -19,7 +19,10 @@ preserves the saved custom command for later use.
 
 Model selections save immediately. If a save fails, the affected model selector
 returns to the saved value and an error toast appears. A late failure from an
-older selection does not replace a newer selection.
+older selection does not replace a newer selection, even when the same model is
+selected again. Selectors stay disabled until the save and its settings refresh
+finish. Delayed refreshes cannot replace a pending choice; later server changes
+synchronize normally after saves settle.
 
 ## Factory configuration
 

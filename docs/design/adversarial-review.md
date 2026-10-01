@@ -1,9 +1,8 @@
 # Design Doc: Adversarial Review
 
-> **Status:** Implemented. One item (the `COMMENT`-event self-review path,
-> including the individual-comments fallback) is confirmed via GitHub API
-> research but not yet exercised against a live PR in this repo — worth
-> verifying end-to-end after this merges.
+> **Status:** Implemented. The `COMMENT`-event self-review path and defensive
+> fallback have mock coverage but have not been exercised end-to-end against a
+> live PR in this repo. Normal self-review fallback reachability is unverified.
 
 ## Summary
 
@@ -115,6 +114,8 @@ quick-actions menu (`main-view-tab-bar.tsx:391`). Reasoning:
 Button behavior:
 
 - Hidden/disabled when there's no open PR.
+- Hidden in both the toolbar and overflow menu when the workspace has no
+  worktree. A failed setup that retains a worktree can still be reviewed.
 - Shows a spinner and is disabled while an adversarial-review session is already
   `RUNNING`/`IDLE` for this workspace; clicking again while active switches to
   that session's tab instead of starting a second one.
@@ -257,9 +258,11 @@ available to a self-authored PR's own reviewing identity. Instead:
   (referenced in `docs/architecture/pull-requests.md` as the
   `CHANGES_REQUESTED`/`ALL_REVIEW_FEEDBACK` trigger-mode check, and the
   resolved-thread exclusion logic in the ratchet capsule) gets a small addition:
-  a review or unresolved inline thread carrying the marker counts as actionable
-  regardless of trigger mode, the same way a human's changes-requested review or
-  unresolved thread does today.
+  an authenticated marker-tagged review or fallback conversation summary counts
+  as actionable regardless of trigger mode. The fallback summary includes the
+  full inline findings as well as summary-only and out-of-diff findings, because
+  Ratchet filters ordinary self-authored inline comments. An inline marker is
+  not required; ordinary conversation comments still do not count.
 - This is a genuine (if small) change to Ratchet's trigger logic, not just new
   code in the new capsule — worth calling out since it touches an existing,
   carefully-scoped area (`docs/architecture/pull-requests.md` is explicit that
@@ -329,7 +332,9 @@ Resolved during review:
   fixes the event to `COMMENT`. The self-review fallback path (per-line
   comments + one issue comment) is kept in the design as defense-in-depth in
   case of edge cases the docs don't cover, but is no longer expected to be the
-  common path.
+  common path. Only HTTP 422 failures with an explicit self-approval or
+  self-request-changes rejection qualify for this fallback; generic validation,
+  invalid diff anchors, and spam-related 422 failures do not.
 
 ---
 
