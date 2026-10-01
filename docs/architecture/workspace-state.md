@@ -183,6 +183,12 @@ the associated ref event performs the invalidation. If the shared watcher fails,
 all of its dependents switch to the five-minute fallback expiry; removing the
 last dependent closes it.
 
+The board provider and its children are keyed by project ID. Switching projects
+resets archive recovery and confirmation dialogs, Quick Chat, inline forms, and
+the initial mobile tab. Archive results arriving after a switch still reconcile
+the originating project cache, but cannot open recovery in the new board, even
+when the user has already switched back to the original project.
+
 ## Completion notifications
 
 Workspace completion notifications count the distinct sessions that worked in
