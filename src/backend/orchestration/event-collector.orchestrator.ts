@@ -667,9 +667,22 @@ function startEventCollectorWithState(state: EventCollectorState): void {
   );
 
   const prUrlAttachedHandler = (event: PRUrlAttachedEvent) => {
-    coalescer.enqueue(event.workspaceId, { prUrl: event.prUrl }, 'event:pr_url_attached', {
-      immediate: true,
-    });
+    // No snapshot was fetched for this URL. Publish its neutral cache and drop
+    // the old PR's projection before any subscriber can archive it as merged.
+    coalescer.enqueue(
+      event.workspaceId,
+      {
+        prUrl: event.prUrl,
+        prNumber: null,
+        prState: 'NONE',
+        prCiStatus: 'UNKNOWN',
+        hasMergeConflict: false,
+        ratchetState: 'IDLE',
+      },
+      'event:pr_url_attached',
+      { immediate: true }
+    );
+    ratchetProjection.request(event.workspaceId);
   };
   dependencies.prSnapshotService.on(PR_URL_ATTACHED, prUrlAttachedHandler);
   state.teardownListeners.push(() =>
