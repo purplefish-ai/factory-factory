@@ -51,6 +51,7 @@ import { getPRHeadCommitSha, githubCLIService } from '@/backend/services/github'
 import { sessionDataService, sessionLifecycleService } from '@/backend/services/session';
 import { userSettingsService } from '@/backend/services/settings';
 import { workspaceDataService } from '@/backend/services/workspace';
+import { ADVERSARIAL_REVIEW_MARKER } from '@/shared/adversarial-review';
 import {
   summarizeExistingActivity,
   triggerAdversarialReview,
@@ -220,7 +221,7 @@ describe('summarizeExistingActivity', () => {
           {
             author: { login: 'factory-factory[bot]' },
             state: 'COMMENTED',
-            body: '<!-- factory-factory:adversarial-review -->\n\n## Adversarial Review\n\nFound a race condition.',
+            body: `${ADVERSARIAL_REVIEW_MARKER}\n\n## Adversarial Review\n\nFound a race condition.`,
           },
         ],
       },
@@ -237,7 +238,7 @@ describe('summarizeExistingActivity', () => {
           {
             author: { login: 'cubic-dev-ai[bot]' },
             state: 'COMMENTED',
-            body: '<!-- factory-factory:adversarial-review -->\n\n## Adversarial Review\n\nNo issues found.',
+            body: `${ADVERSARIAL_REVIEW_MARKER}\n\n## Adversarial Review\n\nNo issues found.`,
           },
         ],
       },
