@@ -13,6 +13,10 @@ identical in-flight reads. Do not spawn `gh` directly from a service. See
 [pull-requests.md](./pull-requests.md) for how the ratchet and the PR sync poll
 share that budget.
 
+Full PR metadata reads use a 10 MiB stdout buffer, like bulk diff and review
+comment reads, to accommodate paginated reviews, comments, and status checks.
+Responses above that limit still fail rather than returning truncated metadata.
+
 Check-run conclusions preserve `STARTUP_FAILURE` through PR-detail mapping, so
 both PR sync and Ratchet classify startup failures as failing CI, including when
 other checks are still running. Sidebar and Kanban projections therefore agree
