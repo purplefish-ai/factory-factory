@@ -26,7 +26,8 @@ interface RatchetProjectionDependencies {
 
 /**
  * One collector lifetime's authoritative Ratchet reads. Requests arriving during
- * a read advance its revision so the latest observation is eventually published.
+ * a read advance its revision so superseded observations are discarded and the
+ * latest observation is published.
  * Create a new worker on restart; a stopped worker never publishes again.
  */
 export class RatchetProjectionWorker {
@@ -76,11 +77,17 @@ export class RatchetProjectionWorker {
     return this.active && !this.archivedWorkspaceIds.has(workspaceId);
   }
 
-  private async project(workspaceId: string): Promise<boolean> {
+  private async project(
+    workspaceId: string,
+    refresh: ProjectionRefresh,
+    targetRevision: number
+  ): Promise<boolean> {
     try {
       const workspace = await this.dependencies.read(workspaceId);
       if (
         !(workspace && this.isActive(workspaceId)) ||
+        this.refreshes.get(workspaceId) !== refresh ||
+        refresh.revision !== targetRevision ||
         workspace.status === WorkspaceStatus.ARCHIVING ||
         workspace.status === WorkspaceStatus.ARCHIVED
       ) {
@@ -109,7 +116,7 @@ export class RatchetProjectionWorker {
     let failedAttempts = 0;
     try {
       while (this.isActive(workspaceId)) {
-        const succeeded = await this.project(workspaceId);
+        const succeeded = await this.project(workspaceId, refresh, targetRevision);
         const newerRevision = getNewerRevision(refresh, targetRevision);
         if (succeeded) {
           if (newerRevision === null) {
