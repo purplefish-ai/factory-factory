@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ProviderCliWarning } from '@/client/components/provider-cli-warning';
 import { trpc } from '@/client/lib/trpc';
@@ -21,21 +21,34 @@ export function ChatProviderDefaultsSection() {
   const utils = trpc.useUtils();
   const [localClaudeModel, setLocalClaudeModel] = useState('sonnet');
   const [localCodexModel, setLocalCodexModel] = useState('default');
+  const latestModelSaves = useRef<
+    Partial<Record<'CLAUDE' | 'CODEX', { defaultClaudeModel?: string; defaultCodexModel?: string }>>
+  >({});
   const updateSettings = trpc.userSettings.update.useMutation({
-    onSuccess: () => {
+    // Keep writes and their refetches ordered, including queued rapid selections.
+    scope: { id: 'chat-provider-defaults' },
+    onMutate: () => utils.userSettings.get.cancel(),
+    onSuccess: async (savedSettings) => {
+      utils.userSettings.get.setData(undefined, savedSettings);
       toast.success('Chat defaults updated');
-      utils.userSettings.get.invalidate();
+      await utils.userSettings.get.invalidate();
     },
     onError: (error, variables) => {
       const savedSettings = utils.userSettings.get.getData() ?? settings;
-      if (variables.defaultClaudeModel !== undefined) {
+      if (
+        variables.defaultClaudeModel !== undefined &&
+        latestModelSaves.current.CLAUDE === variables
+      ) {
         setLocalClaudeModel((model) =>
           model === variables.defaultClaudeModel
             ? (savedSettings?.defaultClaudeModel ?? 'sonnet')
             : model
         );
       }
-      if (variables.defaultCodexModel !== undefined) {
+      if (
+        variables.defaultCodexModel !== undefined &&
+        latestModelSaves.current.CODEX === variables
+      ) {
         setLocalCodexModel((model) =>
           model === variables.defaultCodexModel
             ? (savedSettings?.defaultCodexModel ?? 'default')
@@ -47,9 +60,12 @@ export function ChatProviderDefaultsSection() {
   });
 
   useEffect(() => {
+    if (updateSettings.isPending) {
+      return;
+    }
     setLocalClaudeModel(settings?.defaultClaudeModel ?? 'sonnet');
     setLocalCodexModel(settings?.defaultCodexModel ?? 'default');
-  }, [settings?.defaultClaudeModel, settings?.defaultCodexModel]);
+  }, [settings?.defaultClaudeModel, settings?.defaultCodexModel, updateSettings.isPending]);
 
   if (isLoading) {
     return (
@@ -93,17 +109,11 @@ export function ChatProviderDefaultsSection() {
   const modelSettingsByProvider = {
     CLAUDE: {
       fallbackValue: 'sonnet',
-      currentValue: currentClaudeModel,
-      localValue: localClaudeModel,
-      setLocalValue: setLocalClaudeModel,
       buildPayload: (model: string) => ({ defaultClaudeModel: model }),
       buildEffortPayload: (effort: string | null) => ({ defaultClaudeReasoningEffort: effort }),
     },
     CODEX: {
       fallbackValue: 'default',
-      currentValue: currentCodexModel,
-      localValue: localCodexModel,
-      setLocalValue: setLocalCodexModel,
       buildPayload: (model: string) => ({ defaultCodexModel: model }),
       buildEffortPayload: (effort: string | null) => ({ defaultCodexReasoningEffort: effort }),
     },
@@ -113,14 +123,9 @@ export function ChatProviderDefaultsSection() {
     const providerSettings = modelSettingsByProvider[provider];
     const normalizedValue = value.trim() || providerSettings.fallbackValue;
 
-    if (normalizedValue === providerSettings.currentValue) {
-      if (providerSettings.localValue !== providerSettings.currentValue) {
-        providerSettings.setLocalValue(providerSettings.currentValue);
-      }
-      return;
-    }
-
-    updateSettings.mutate(providerSettings.buildPayload(normalizedValue));
+    const payload = providerSettings.buildPayload(normalizedValue);
+    latestModelSaves.current[provider] = payload;
+    updateSettings.mutate(payload);
   };
 
   const saveDefaultEffort = (provider: 'CLAUDE' | 'CODEX', value: string) => {
