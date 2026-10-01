@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   lists: new Map<string, WorkspaceList>(),
   isMobile: false,
   context: null as ReturnType<typeof useKanban> | null,
+  rename: vi.fn(),
   archive: vi.fn(),
   bulkArchive: vi.fn(),
   cancel: vi.fn(),
@@ -118,7 +119,7 @@ vi.mock('@/client/lib/trpc', () => ({
         }),
       },
       syncAllPRStatuses: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
-      rename: { useMutation: () => ({ mutateAsync: vi.fn() }) },
+      rename: { useMutation: () => ({ mutateAsync: mocks.rename }) },
       archive: { useMutation: () => ({ mutateAsync: mocks.archive }) },
       bulkArchive: { useMutation: () => ({ mutateAsync: mocks.bulkArchive, isPending: false }) },
     },
@@ -206,6 +207,53 @@ afterEach(async () => {
 });
 
 describe('WorkspacesBoardView project lifetime', () => {
+  it.each([
+    ['success', 'b'],
+    ['failure', 'b'],
+    ['success', 'a'],
+    ['failure', 'a'],
+  ] as const)(
+    'keeps delayed rename %s owned by its origin while %s is selected',
+    async (outcome, selectedProject) => {
+      const request = deferred<void>();
+      mocks.rename.mockReturnValueOnce(request.promise);
+      await render('a');
+      let save!: Promise<void>;
+      await act(() => {
+        save = mocks.context!.renameWorkspace('a-1', 'Mock rename');
+        // Observe rejection before deliberately rejecting the deferred transport.
+        void save.catch(() => undefined);
+      });
+      await render('b');
+      if (selectedProject === 'a') {
+        await render('a');
+      }
+      await act(() => mocks.context!.openQuickChat(`${selectedProject}-2`));
+      const current = mocks.context!;
+      await act(async () => {
+        if (outcome === 'success') {
+          request.resolve();
+        } else {
+          request.reject(new Error('Mock rename failure'));
+        }
+        await save.catch(() => undefined);
+      });
+      expect(mocks.rename).toHaveBeenCalledExactlyOnceWith({ id: 'a-1', name: 'Mock rename' });
+      expect(mocks.context).toBe(current);
+      expect(current.projectId).toBe(selectedProject);
+      expect(current.quickChatWorkspaceId).toBe(`${selectedProject}-2`);
+      expect(current.archiveGitLockWorkspaceIds).toEqual([]);
+      expect(mocks.refetch).not.toHaveBeenCalledWith('b');
+      if (outcome === 'success') {
+        expect(mocks.refetch).toHaveBeenCalledExactlyOnceWith('a');
+        expect(mocks.invalidate).toHaveBeenCalledExactlyOnceWith({ id: 'a-1' });
+      } else {
+        expect(mocks.refetch).not.toHaveBeenCalled();
+        expect(mocks.invalidate).not.toHaveBeenCalled();
+      }
+    }
+  );
+
   it('preserves board state when the same project rerenders', async () => {
     await render('a');
     await act(() => {
