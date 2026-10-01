@@ -16,9 +16,10 @@ active. Admin settings control the default ratchet state for new workspaces and
 the global review-trigger mode.
 
 One narrow, deliberate exception to "ordinary comments never trigger Ratchet": a
-review whose body carries the Adversarial Review feature's marker
-(`src/shared/adversarial-review.ts`) is always actionable, regardless of
-`ratchetReviewTriggerMode` — see
+review or fallback conversation summary whose body carries the Adversarial
+Review feature's marker (`src/shared/adversarial-review.ts`) is always
+actionable, regardless of `ratchetReviewTriggerMode`, provided its author
+matches the authenticated GitHub identity — see
 [Adversarial Review](../design/adversarial-review.md). This exists because this
 app's own `gh` identity is also the PR's author, which rules out using GitHub's
 native `REQUEST_CHANGES` review state to signal "actionable" the way a human

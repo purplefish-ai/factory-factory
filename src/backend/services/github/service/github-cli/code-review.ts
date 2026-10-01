@@ -54,9 +54,24 @@ export class ReviewSubmissionError extends Error {
   }
 }
 
-/** `gh api` surfaces the HTTP status in its error text, e.g. "HTTP 422: ...". */
-function isSelfReviewRejection(errorMessage: string): boolean {
-  return /HTTP 422/.test(errorMessage);
+/** 422 also covers invalid diff anchors and spam; require an explicit reason. */
+function isSelfReviewRejection(error: unknown): boolean {
+  const messages = [error instanceof Error ? error.message : String(error)];
+  if (typeof error === 'object' && error !== null) {
+    // gh can put the API's validation details in stdout while stderr only
+    // reports the status. execFile's Error.message does not include stdout.
+    if ('stdout' in error && typeof error.stdout === 'string') {
+      messages.push(error.stdout);
+    }
+    if ('stderr' in error && typeof error.stderr === 'string') {
+      messages.push(error.stderr);
+    }
+  }
+  const details = messages.join('\n');
+  return (
+    /\bHTTP 422\b/.test(details) &&
+    /\bCan(?:not| not) (?:approve|request changes on) your own pull request\b/i.test(details)
+  );
 }
 
 async function withTempJsonFile<T>(payload: unknown, fn: (path: string) => Promise<T>): Promise<T> {
@@ -122,7 +137,7 @@ export async function submitCodeReview(
     logger.warn('Failed to submit code review via gh api', { repo, prNumber, error: errorMessage });
     throw new ReviewSubmissionError(
       `Failed to submit code review: ${errorMessage}`,
-      isSelfReviewRejection(errorMessage)
+      isSelfReviewRejection(error)
     );
   }
 }

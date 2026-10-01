@@ -329,6 +329,14 @@ async function postFindingsToGitHub(
   // identity for reviewing its own PR: post the same content through
   // endpoints with no such self-review restriction, anchored to the same
   // commit the diff (and therefore the findings' line numbers) was read at.
+  // Ratchet ignores ordinary self-authored inline comments. Publish the full
+  // findings in its authenticated marker summary before any inline post can
+  // fail, so summary-only and cross-file findings still reach the fixer.
+  const inlineFindings = validComments.map(
+    (comment) =>
+      `### ${comment.path}:${comment.line} (${comment.side})\n\n${formatCommentBody(comment)}`
+  );
+  await githubCLIService.addPRComment(repo, prNumber, [body, ...inlineFindings].join('\n\n'));
   for (const comment of validComments) {
     await createReviewComment(repo, prNumber, {
       commitId: headSha,
@@ -338,7 +346,6 @@ async function postFindingsToGitHub(
       body: formatCommentBody(comment),
     });
   }
-  await githubCLIService.addPRComment(repo, prNumber, body);
 }
 
 function formatCommentBody(comment: AdversarialReviewComment): string {
