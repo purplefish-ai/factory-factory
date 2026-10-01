@@ -181,11 +181,12 @@ async function runAdversarialReviewTurn(params: RunAdversarialReviewTurnParams):
   const { sessionId, repo, prUrl, prNumber, postReviewToGitHub } = params;
 
   try {
-    const [diff, headSha, fullDetails, description] = await Promise.all([
+    const [diff, headSha, fullDetails, description, authenticatedUsername] = await Promise.all([
       githubCLIService.getPRDiff(repo, prNumber),
       getPRHeadCommitSha(repo, prNumber),
       githubCLIService.getPRFullDetails(repo, prNumber),
       getPRDescription(repo, prNumber),
+      githubCLIService.getAuthenticatedUsername(),
     ]);
 
     const prompt = buildAdversarialReviewDispatchPrompt({
@@ -193,7 +194,7 @@ async function runAdversarialReviewTurn(params: RunAdversarialReviewTurnParams):
       prNumber,
       prDescription: description,
       prDiff: diff,
-      existingReviewCommentsSummary: summarizeExistingActivity(fullDetails),
+      existingReviewCommentsSummary: summarizeExistingActivity(fullDetails, authenticatedUsername),
     });
 
     await sessionService.sendSessionMessage(sessionId, prompt);
@@ -238,13 +239,22 @@ async function runAdversarialReviewTurn(params: RunAdversarialReviewTurnParams):
 // the PR is clean, so it's excluded from the "don't repeat this" context.
 // Our own prior marker-tagged reviews are real findings (or a real prior
 // clean pass) worth not repeating, so they're kept even if posted under a
-// bot-suffixed identity.
-export function summarizeExistingActivity(fullDetails: {
-  reviews: Array<{ author: { login: string }; state?: string; body?: string }>;
-}): string {
+// bot-suffixed identity — but only when that review actually came from our
+// own authenticated `gh` identity, since the marker text itself is public
+// and any other bot could copy it to get its "no issues" verdict treated as
+// ours.
+export function summarizeExistingActivity(
+  fullDetails: {
+    reviews: Array<{ author: { login: string }; state?: string; body?: string }>;
+  },
+  authenticatedUsername: string | null
+): string {
   return fullDetails.reviews
     .filter(
-      (review) => hasAdversarialReviewMarker(review.body) || !review.author.login.endsWith('[bot]')
+      (review) =>
+        (hasAdversarialReviewMarker(review.body) &&
+          review.author.login === authenticatedUsername) ||
+        !review.author.login.endsWith('[bot]')
     )
     .filter((review) => (review.body?.trim().length ?? 0) > 0)
     .map(
