@@ -88,7 +88,7 @@ async function handleStartedFixerResult(params: {
   if (recorded) {
     onRecorded();
     onDispatchChanged?.({ workspaceId: workspace.id });
-    if (result.promptCompletion) {
+    if (result.promptCompletion !== undefined) {
       void settleFailedPromptCompletion({
         workspaceId: workspace.id,
         sessionId: result.sessionId,

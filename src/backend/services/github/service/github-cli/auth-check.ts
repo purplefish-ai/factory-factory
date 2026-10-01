@@ -16,12 +16,13 @@ export async function checkGithubAuth(): Promise<AuthCheckResult> {
     const result = await ghExecLimit(() =>
       execCommand('gh', ['auth', 'status'], { timeout: GH_TIMEOUT_MS.healthAuth })
     );
-    // gh auth status writes to stderr on success
-    const output = result.stderr || result.stdout;
+    // gh versions differ in which stream they use for auth status.
+    const output = [result.stderr, result.stdout].filter(Boolean).join('\n');
+    const userMatch = output.match(/Logged in to \S+ (?:account|as)\s+(\S+)/);
 
-    if (result.code === 0) {
-      const userMatch = output.match(/account\s+(\S+)/);
-      return { authenticated: true, user: userMatch?.[1] };
+    // Older gh versions can exit zero even when a configured token is invalid.
+    if (result.code === 0 && userMatch && !/Failed to log in/i.test(output)) {
+      return { authenticated: true, user: userMatch[1] };
     }
 
     return { authenticated: false, error: output };

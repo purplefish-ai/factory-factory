@@ -10,6 +10,10 @@ import { getKanbanColumns, KanbanColumn } from './kanban-column';
  *
  * These stories demonstrate the visual layout using KanbanColumn components directly.
  * The ISSUES column requires tRPC and is not shown in these stories.
+ * WorkspacesBoardView remounts the provider and board when projectId changes,
+ * clearing dialogs, Quick Chat, forms and the initial mobile tab selection.
+ * Project-switch lifecycle and delayed archive responses are covered by
+ * workspaces-board-view.test.tsx using the real provider and board.
  */
 
 // =============================================================================

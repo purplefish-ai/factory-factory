@@ -120,6 +120,13 @@ prevent terminal persistence or removal of the in-memory loop.
 Startup sweeps only `RUNNING` to `FAILED` — `PAUSED` is a state the user chose
 and the terminal states are results they have not seen.
 
+Auto-iteration treats the root `.factory-factory/` directory as runtime state:
+it does not count toward implementation changes and is excluded from iteration
+commits and amendments, even when already staged. No-op iterations are recorded
+as `crashed` before committing or measuring again, and rejecting code changes
+preserves the strategy file for the next iteration. Nested directories with the
+same name remain implementation files.
+
 ## Kanban model
 
 The UI has a provider-driven intake column (`GitHub Issues` or `Linear Issues`)
@@ -175,6 +182,12 @@ and excludes, and reftable state. Object and reflog writes are ignored because
 the associated ref event performs the invalidation. If the shared watcher fails,
 all of its dependents switch to the five-minute fallback expiry; removing the
 last dependent closes it.
+
+The board provider and its children are keyed by project ID. Switching projects
+resets archive recovery and confirmation dialogs, Quick Chat, inline forms, and
+the initial mobile tab. Archive results arriving after a switch still reconcile
+the originating project cache, but cannot open recovery in the new board, even
+when the user has already switched back to the original project.
 
 ## Completion notifications
 

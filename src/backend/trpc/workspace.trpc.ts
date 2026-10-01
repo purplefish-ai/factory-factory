@@ -455,7 +455,12 @@ export const workspaceCoreRouter = router({
           });
         }
 
+        const deletedSessions =
+          await ctx.appContext.services.sessionDataService.findAgentSessionsByWorkspaceId(input.id);
         const result = await workspaceDataService.delete(input.id);
+        for (const session of deletedSessions) {
+          ctx.appContext.services.sessionDomainService.forgetProviderHistoryIdentity(session.id);
+        }
         ctx.appContext.services.cleanupWorkspaceScopedCaches(input.id);
         return result;
       }

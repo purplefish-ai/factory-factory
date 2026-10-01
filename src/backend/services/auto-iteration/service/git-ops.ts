@@ -3,17 +3,17 @@ import { promisify } from 'node:util';
 import { workspaceGitStateService } from '@/backend/services/workspace-git-state.service';
 
 const execFileAsync = promisify(execFile);
+const IMPLEMENTATION_PATHS = ['.', ':(top,exclude).factory-factory'];
 
 function git(worktreePath: string, args: string[]): Promise<{ stdout: string; stderr: string }> {
   return execFileAsync('git', args, { cwd: worktreePath, maxBuffer: 10 * 1024 * 1024 });
 }
 
-/** Stage all changes and commit with a message. Returns the short commit SHA. */
+/** Commit implementation changes, excluding runtime files. Returns the short commit SHA. */
 export async function commitAll(worktreePath: string, message: string): Promise<string> {
   try {
-    await git(worktreePath, ['add', '-A']);
-    await unstageLogbook(worktreePath);
-    await unstageInsights(worktreePath);
+    await git(worktreePath, ['add', '-A', '--', ...IMPLEMENTATION_PATHS]);
+    await unstageRuntimeDirectory(worktreePath);
     await git(worktreePath, ['commit', '-m', message, '--allow-empty']);
   } finally {
     workspaceGitStateService.invalidate(worktreePath);
@@ -25,9 +25,8 @@ export async function commitAll(worktreePath: string, message: string): Promise<
 /** Amend the most recent commit with staged changes. Returns the updated short commit SHA. */
 export async function amendHead(worktreePath: string): Promise<string> {
   try {
-    await git(worktreePath, ['add', '-A']);
-    await unstageLogbook(worktreePath);
-    await unstageInsights(worktreePath);
+    await git(worktreePath, ['add', '-A', '--', ...IMPLEMENTATION_PATHS]);
+    await unstageRuntimeDirectory(worktreePath);
     await git(worktreePath, ['commit', '--amend', '--no-edit']);
   } finally {
     workspaceGitStateService.invalidate(worktreePath);
@@ -67,14 +66,16 @@ export async function discardUncommittedChanges(worktreePath: string): Promise<v
   }
 }
 
-/** Check if there are any uncommitted changes. */
+/** Check for implementation changes outside the root runtime directory. */
 export async function hasUncommittedChanges(worktreePath: string): Promise<boolean> {
-  const { stdout } = await git(worktreePath, ['status', '--porcelain']);
+  const { stdout } = await git(worktreePath, [
+    'status',
+    '--porcelain',
+    '--',
+    ...IMPLEMENTATION_PATHS,
+  ]);
   return stdout.trim().length > 0;
 }
-
-const LOGBOOK_PATH = '.factory-factory/auto-iteration-logbook.json';
-const INSIGHTS_PATH = '.factory-factory/auto-iteration-insights.md';
 
 async function hasHead(worktreePath: string): Promise<boolean> {
   try {
@@ -101,25 +102,5 @@ async function unstageRuntimeDirectory(worktreePath: string): Promise<void> {
       '--',
       '.factory-factory/',
     ]);
-  }
-}
-
-/** Unstage the auto-iteration logbook if it is currently staged. */
-async function unstageLogbook(worktreePath: string): Promise<void> {
-  try {
-    await git(worktreePath, ['reset', 'HEAD', '--', LOGBOOK_PATH]);
-  } catch {
-    // HEAD may not exist yet (initial commit). Fall back to rm --cached which
-    // works regardless of whether HEAD exists.
-    await git(worktreePath, ['rm', '--cached', '--ignore-unmatch', '--', LOGBOOK_PATH]);
-  }
-}
-
-/** Unstage the auto-iteration insights file if it is currently staged. */
-async function unstageInsights(worktreePath: string): Promise<void> {
-  try {
-    await git(worktreePath, ['reset', 'HEAD', '--', INSIGHTS_PATH]);
-  } catch {
-    await git(worktreePath, ['rm', '--cached', '--ignore-unmatch', '--', INSIGHTS_PATH]);
   }
 }

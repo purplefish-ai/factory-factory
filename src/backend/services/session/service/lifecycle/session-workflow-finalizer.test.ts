@@ -157,7 +157,9 @@ describe('SessionWorkflowFinalizer', () => {
     );
     expect(harness.persistence.persistClosedSession).toHaveBeenCalledOnce();
     expect(harness.repository.deleteSession).toHaveBeenCalledWith('session-1');
-    expect(harness.domain.clearSession).toHaveBeenCalledWith('session-1');
+    expect(harness.domain.clearSession).toHaveBeenCalledWith('session-1', {
+      permanentlyDeleted: true,
+    });
   });
 
   it('keeps deliberate stop cleanup best effort when transient persistence or deletion fails', async () => {
@@ -274,7 +276,9 @@ describe('SessionWorkflowFinalizer', () => {
 
     expect(harness.persistence.persistClosedSession).toHaveBeenCalledOnce();
     expect(harness.repository.deleteSession).toHaveBeenCalledWith('session-1');
-    expect(harness.domain.clearSession).toHaveBeenCalledWith('session-1');
+    expect(harness.domain.clearSession).toHaveBeenCalledWith('session-1', {
+      permanentlyDeleted: true,
+    });
   });
 
   it('notifies auto-iteration only for unmanaged runtime exits', async () => {
@@ -362,7 +366,9 @@ describe('SessionWorkflowFinalizer', () => {
 
     expect(harness.persistence.persistClosedSession).toHaveBeenCalledOnce();
     expect(harness.repository.deleteSession).toHaveBeenCalledOnce();
-    expect(harness.domain.clearSession).toHaveBeenCalledWith('session-1');
+    expect(harness.domain.clearSession).toHaveBeenCalledWith('session-1', {
+      permanentlyDeleted: true,
+    });
   });
 
   it('keeps a transient ratchet session retryable when persistence reports it missing', async () => {
