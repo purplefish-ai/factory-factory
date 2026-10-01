@@ -155,15 +155,6 @@ class PRSnapshotService extends EventEmitter {
   }
 
   /**
-   * Record that CI failure notification was sent.
-   */
-  async recordCINotification(workspaceId: string, notifiedAt = new Date()): Promise<void> {
-    await this.workspace.recordSnapshot(workspaceId, {
-      prCiLastNotifiedAt: notifiedAt,
-    });
-  }
-
-  /**
    * Record PR review polling checkpoint.
    */
   async recordReviewCheck(workspaceId: string, input: ReviewCheckInput = {}): Promise<void> {

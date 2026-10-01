@@ -87,7 +87,6 @@ beforeEach(() => {
     computeCIStatus: vi.fn(() => CIStatus.SUCCESS),
     computePRState: vi.fn(() => 'OPEN' as const),
     getAuthenticatedUsername: vi.fn(async () => 'app-user'),
-    fetchAndComputePRState: vi.fn(),
     coordinatePrFetch: vi.fn(async (_workspaceId, fetch) => ({
       status: 'fetched' as const,
       value: await fetch(),
@@ -98,7 +97,6 @@ beforeEach(() => {
     session,
     snapshot: {
       recordPrObservation: vi.fn(),
-      recordCINotification: vi.fn(),
       recordReviewCheck: vi.fn(),
     },
     workspace: {
