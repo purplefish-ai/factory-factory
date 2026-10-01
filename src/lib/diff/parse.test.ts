@@ -290,6 +290,13 @@ rename to "b/caf\303\251\tnew.ts"`;
     expect(parseFileDiff(diff)[0]?.name).toBe('b/café\tnew.ts');
   });
 
+  it.each(['\\351', '\\303\\251\\377'])('preserves undecodable octal bytes %s', (bytes) => {
+    const name = `lib/raw${bytes}.txt`;
+    const diff = `diff --git "a/${name}" "b/${name}"\n+++ "b/${name}"`;
+
+    expect(parseFileDiff(diff)[0]?.name).toBe(name);
+  });
+
   it('decodes destination markers and keeps literal backslashes distinct from octal escapes', () => {
     const diff = String.raw`diff --git "a/lib/old\\303.txt" "b/lib/new\\303.txt"
 --- "a/lib/old\\303.txt"

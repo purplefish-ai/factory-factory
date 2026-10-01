@@ -27,9 +27,15 @@ function decodeGitPath(path: string): string {
         return escapes[escapeCode] ?? match;
       }
       const bytes = match.match(/[0-7]{3}/g) ?? [];
-      return new TextDecoder('utf-8', { ignoreBOM: true }).decode(
-        Uint8Array.from(bytes, (byte) => Number.parseInt(byte, 8))
-      );
+      try {
+        return new TextDecoder('utf-8', { ignoreBOM: true, fatal: true }).decode(
+          Uint8Array.from(bytes, (byte) => Number.parseInt(byte, 8))
+        );
+      } catch {
+        // Git paths can contain arbitrary bytes. Retain their octal spelling
+        // rather than replacing bytes or guessing a legacy character encoding.
+        return match;
+      }
     });
 }
 

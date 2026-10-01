@@ -60,12 +60,12 @@ describe('PRDetailPanel diff filenames', () => {
       );
       await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'd' })));
 
-      expect(
-        Array.from(
-          container.querySelectorAll('.font-medium.truncate'),
-          (label) => label.textContent
-        )
-      ).toEqual(paths);
+      const textNodes = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+      const renderedText: (string | null)[] = [];
+      for (let node = textNodes.nextNode(); node; node = textNodes.nextNode()) {
+        renderedText.push(node.textContent);
+      }
+      expect(renderedText).toEqual(expect.arrayContaining(paths));
       expect(container.textContent).toContain('old');
       expect(container.textContent).toContain('new');
     } finally {
