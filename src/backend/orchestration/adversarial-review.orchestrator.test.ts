@@ -50,7 +50,10 @@ import { getPRHeadCommitSha, githubCLIService } from '@/backend/services/github'
 import { sessionDataService, sessionLifecycleService } from '@/backend/services/session';
 import { userSettingsService } from '@/backend/services/settings';
 import { workspaceDataService } from '@/backend/services/workspace';
-import { triggerAdversarialReview } from './adversarial-review.orchestrator';
+import {
+  summarizeExistingActivity,
+  triggerAdversarialReview,
+} from './adversarial-review.orchestrator';
 
 const WORKSPACE_ID = 'ws-1';
 
@@ -187,5 +190,35 @@ describe('triggerAdversarialReview', () => {
     expect(first).toEqual({ status: 'started', sessionId: 'new-session' });
     expect(second).toEqual(first);
     expect(sessionDataService.createAgentSession).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('summarizeExistingActivity', () => {
+  it('drops other automated review bots but keeps human reviews', () => {
+    const summary = summarizeExistingActivity({
+      reviews: [
+        { author: { login: 'cubic-dev-ai[bot]' }, state: 'COMMENTED', body: 'No issues found.' },
+        { author: { login: 'alice' }, state: 'CHANGES_REQUESTED', body: 'Please add a test.' },
+      ],
+    });
+
+    expect(summary).not.toContain('cubic-dev-ai');
+    expect(summary).not.toContain('No issues found.');
+    expect(summary).toContain('alice');
+    expect(summary).toContain('Please add a test.');
+  });
+
+  it('keeps a prior adversarial-review verdict even under a bot-suffixed identity', () => {
+    const summary = summarizeExistingActivity({
+      reviews: [
+        {
+          author: { login: 'factory-factory[bot]' },
+          state: 'COMMENTED',
+          body: '<!-- factory-factory:adversarial-review -->\n\n## Adversarial Review\n\nFound a race condition.',
+        },
+      ],
+    });
+
+    expect(summary).toContain('Found a race condition.');
   });
 });

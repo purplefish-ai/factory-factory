@@ -33,6 +33,7 @@ import { workspaceDataService } from '@/backend/services/workspace';
 import {
   ADVERSARIAL_REVIEW_MARKER,
   ADVERSARIAL_REVIEW_WORKFLOW,
+  hasAdversarialReviewMarker,
 } from '@/shared/adversarial-review';
 import { PRState, SessionStatus } from '@/shared/core';
 import { buildDiffLineIndex } from './adversarial-review-diff-line-index';
@@ -232,10 +233,19 @@ async function runAdversarialReviewTurn(params: RunAdversarialReviewTurnParams):
   }
 }
 
-function summarizeExistingActivity(fullDetails: {
+// Other automated review tools' verdicts are noise here, not signal: an
+// unrelated bot saying "no issues" must not read as independent confirmation
+// the PR is clean, so it's excluded from the "don't repeat this" context.
+// Our own prior marker-tagged reviews are real findings (or a real prior
+// clean pass) worth not repeating, so they're kept even if posted under a
+// bot-suffixed identity.
+export function summarizeExistingActivity(fullDetails: {
   reviews: Array<{ author: { login: string }; state?: string; body?: string }>;
 }): string {
   return fullDetails.reviews
+    .filter(
+      (review) => hasAdversarialReviewMarker(review.body) || !review.author.login.endsWith('[bot]')
+    )
     .filter((review) => (review.body?.trim().length ?? 0) > 0)
     .map(
       (review) => `Review by ${review.author.login} (${review.state ?? 'UNKNOWN'}): ${review.body}`
