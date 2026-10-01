@@ -36,7 +36,9 @@ export interface GitHubStatusCheck {
 
 export interface GitHubReview {
   id: string;
-  author: { login: string };
+  /** Ordinal in the documented chronological REST review response, across pages. */
+  chronologicalOrder?: number;
+  author: { login: string; isUnknown?: boolean };
   state: 'APPROVED' | 'CHANGES_REQUESTED' | 'COMMENTED' | 'PENDING' | 'DISMISSED';
   submittedAt: string | null;
   body?: string;

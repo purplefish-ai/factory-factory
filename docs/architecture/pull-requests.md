@@ -99,6 +99,15 @@ sweep. It is what moves a stuck workspace out of the WORKING column; the
 snapshot key hashes `statusCheckRollup` detail `WorkspacePR` does not store, so
 no reader can re-derive it.
 
+Review summaries superseded by the same author's approval are excluded from
+prompts and review activity. Different valid submission times take precedence;
+same-second or missing times use an explicit ordinal from GitHub's
+[chronologically ordered REST reviews endpoint](https://docs.github.com/en/rest/pulls/reviews#list-reviews-for-a-pull-request),
+including across pages. Ratchet never infers order from its input array or
+opaque review IDs; without enough ordering evidence, it retains the feedback.
+Deleted reviewers retain their feedback under an explicit unknown identity;
+their approvals never supersede another unknown author’s feedback.
+
 Inline review comment fetches retain at most 2,000 comments, ordered by newest
 update first at the API boundary. Hitting that budget drops older activity
 rather than the newest comment or edit used in the dispatch snapshot. Returned
