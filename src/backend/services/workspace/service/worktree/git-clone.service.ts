@@ -1,4 +1,4 @@
-import { mkdir, rm } from 'node:fs/promises';
+import { mkdir, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathExists } from '@/backend/lib/file-helpers';
 import { execCommand, gitCommand } from '@/backend/lib/shell';
@@ -19,6 +19,18 @@ const GITHUB_PATH_SEGMENT_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?
 
 function isValidGithubPathSegment(segment: string): boolean {
   return GITHUB_PATH_SEGMENT_PATTERN.test(segment);
+}
+
+async function findCaseInsensitiveEntries(directory: string, name: string): Promise<string[]> {
+  try {
+    return (await readdir(directory)).filter((entry) => entry.toLowerCase() === name);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') {
+      return [];
+    }
+    throw error;
+  }
 }
 
 /**
@@ -51,10 +63,33 @@ export function parseGithubUrl(url: string): GithubRepo | null {
 
 class GitCloneService {
   /**
-   * Compute the clone destination path for a GitHub repo.
+   * Reuse existing clone paths regardless of GitHub URL casing. New clones use
+   * lowercase owner/repo paths; existing directories are never renamed.
    */
-  getClonePath(reposDir: string, owner: string, repo: string): string {
-    return join(reposDir, owner, repo);
+  async getClonePath(reposDir: string, owner: string, repo: string): Promise<string> {
+    const canonicalPath = join(reposDir, owner.toLowerCase(), repo.toLowerCase());
+    const candidates: string[] = [];
+    for (const existingOwner of await findCaseInsensitiveEntries(reposDir, owner.toLowerCase())) {
+      const ownerPath = join(reposDir, existingOwner);
+      for (const existingRepo of await findCaseInsensitiveEntries(ownerPath, repo.toLowerCase())) {
+        candidates.push(join(ownerPath, existingRepo));
+      }
+    }
+
+    // Stable choice even if older imports already created multiple case variants.
+    // Prefer the canonical clone, then other valid repositories over non-repos.
+    candidates.sort();
+    if (candidates.includes(canonicalPath)) {
+      candidates.splice(candidates.indexOf(canonicalPath), 1);
+      candidates.unshift(canonicalPath);
+    }
+    for (const candidate of candidates) {
+      if ((await this.checkExistingClone(candidate)) === 'valid_repo') {
+        return candidate;
+      }
+    }
+    // Keep the caller's non-repository guard for existing conflicting entries.
+    return candidates[0] ?? canonicalPath;
   }
 
   /**

@@ -448,7 +448,7 @@ export const projectRouter = router({
 
       // Compute clone destination
       const reposDir = configService.getReposDir();
-      const clonePath = gitCloneService.getClonePath(reposDir, parsed.owner, parsed.repo);
+      const clonePath = await gitCloneService.getClonePath(reposDir, parsed.owner, parsed.repo);
 
       // Check if already cloned
       const existingStatus = await gitCloneService.checkExistingClone(clonePath);

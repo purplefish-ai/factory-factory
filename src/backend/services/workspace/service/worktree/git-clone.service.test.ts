@@ -3,12 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mockPathExists = vi.fn();
 const mockMkdir = vi.fn();
 const mockRm = vi.fn();
+const mockReaddir = vi.fn();
 const mockExecCommand = vi.fn();
 const mockGitCommand = vi.fn();
 
 vi.mock('node:fs/promises', () => ({
   mkdir: (...args: unknown[]) => mockMkdir(...args),
   rm: (...args: unknown[]) => mockRm(...args),
+  readdir: (...args: unknown[]) => mockReaddir(...args),
 }));
 
 vi.mock('@/backend/lib/file-helpers', () => ({
@@ -102,6 +104,53 @@ describe('parseGithubUrl', () => {
     expect(parseGithubUrl('git@github.com:owner name/repo')).toBeNull();
     expect(parseGithubUrl('git@github.com:owner/repo name')).toBeNull();
   });
+});
+
+describe('GitCloneService.getClonePath', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mockPathExists.mockResolvedValue(true);
+    // Simulate Linux, where multiple differently cased owner paths can coexist.
+    mockReaddir.mockImplementation((path: string) => {
+      if (path === '/repos') {
+        return Promise.resolve(['owner', 'OWNER', 'unrelated']);
+      }
+      return Promise.resolve(['RePo', 'repo']);
+    });
+    mockGitCommand.mockResolvedValue({ code: 0, stdout: '', stderr: '' });
+  });
+
+  it('prefers an existing canonical clone when multiple case variants exist', async () => {
+    await expect(gitCloneService.getClonePath('/repos', 'OwNeR', 'RePo')).resolves.toBe(
+      '/repos/owner/repo'
+    );
+    expect(mockReaddir).not.toHaveBeenCalledWith('/repos/unrelated');
+  });
+
+  it('searches all owner variants for a valid clone before rejecting non-repos', async () => {
+    mockGitCommand.mockImplementation(async (_args: string[], path: string) => ({
+      code: path === '/repos/owner/RePo' ? 0 : 128,
+      stdout: '',
+      stderr: '',
+    }));
+    await expect(gitCloneService.getClonePath('/repos', 'OWNER', 'REPO')).resolves.toBe(
+      '/repos/owner/RePo'
+    );
+  });
+
+  it.each(['/repos', '/repos/owner'])(
+    'propagates directory access errors at %s instead of choosing another clone path',
+    async (deniedPath) => {
+      const error = Object.assign(new Error('permission denied'), { code: 'EACCES' });
+      mockReaddir.mockImplementation((path: string) => {
+        if (path === deniedPath) {
+          return Promise.reject(error);
+        }
+        return Promise.resolve(['owner']);
+      });
+      await expect(gitCloneService.getClonePath('/repos', 'owner', 'repo')).rejects.toBe(error);
+    }
+  );
 });
 
 describe('GitCloneService.checkExistingClone', () => {

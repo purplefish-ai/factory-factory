@@ -98,7 +98,7 @@ describe('projectRouter', () => {
       authenticated: true,
       user: 'martin',
     });
-    mockGetClonePath.mockReturnValue('/repos/purplefish-ai/factory-factory');
+    mockGetClonePath.mockResolvedValue('/repos/purplefish-ai/factory-factory');
     mockCheckExistingClone.mockResolvedValue('valid_repo');
   });
 
