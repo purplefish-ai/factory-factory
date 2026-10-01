@@ -40,8 +40,14 @@ function parseGithubUrl(url: string): { owner: string; repo: string } | null {
 export default function NewProjectPage() {
   const navigate = useNavigate();
   const [source, setSource] = useState<ProjectSource>('github');
-  const { selectedProjectSlug, projects, handleProjectChange, handleCurrentProjectSelect } =
-    useProjectHeaderNavigation();
+  const {
+    selectedProjectSlug,
+    projects,
+    projectsError,
+    refetchProjects,
+    handleProjectChange,
+    handleCurrentProjectSelect,
+  } = useProjectHeaderNavigation();
 
   // Local path state
   const [repoPath, setRepoPath] = useState('');
@@ -249,6 +255,26 @@ export default function NewProjectPage() {
   );
 
   if (projects === undefined) {
+    if (projectsError) {
+      return (
+        <div className="mx-auto max-w-lg p-4 md:p-6">
+          <Card>
+            <CardHeader>
+              <div role="alert">
+                <CardTitle>Unable to load projects</CardTitle>
+                <CardDescription>{projectsError.message}</CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent className="flex gap-2">
+              <Button onClick={() => void refetchProjects()}>Retry</Button>
+              <Button variant="outline" asChild>
+                <Link to="/projects">Back to Projects</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
     return (
       <output className="flex h-full items-center justify-center gap-2 p-6">
         <Spinner className="size-5" aria-hidden="true" />
