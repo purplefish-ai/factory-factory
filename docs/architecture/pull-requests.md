@@ -67,6 +67,11 @@ arrive during a read, retries failures at 1s and 2s with a three-attempt budget,
 and suppresses archived workspaces and results arriving after stop. The
 collector keeps the event subscriptions and coalesced snapshot writes;
 reconciliation is the safety net after the worker exhausts its retries.
+Successful PR switches clear the previous ratchet projection in the same
+snapshot publication as the new PR facts. In-flight reads superseded by a newer
+invalidation are discarded before publishing, so neither a delayed read nor
+failed refresh retries can restore the previous PR's merged status or bypass
+archive confirmation for the new open PR.
 
 ### Dispatch tracking
 
