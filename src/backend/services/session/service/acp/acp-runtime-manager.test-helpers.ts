@@ -79,6 +79,7 @@ export function markChildKilledOnSignal(child: MockChildProcess): void {
 export function createTestProcessHandle(params?: {
   provider?: string;
   providerSessionId?: string;
+  sessionCreationOutcome?: AcpProcessHandle['sessionCreationOutcome'];
   agentCapabilities?: Record<string, unknown>;
   connection?: Partial<ClientSideConnection>;
 }): AcpProcessHandle {
@@ -86,6 +87,7 @@ export function createTestProcessHandle(params?: {
     connection: unsafeCoerce<ClientSideConnection>(params?.connection ?? {}),
     child: unsafeCoerce<ChildProcess>(createMockChildProcess()),
     provider: params?.provider ?? 'CODEX',
+    sessionCreationOutcome: params?.sessionCreationOutcome,
     providerSessionId: params?.providerSessionId ?? 'provider-session-1',
     agentCapabilities: params?.agentCapabilities ?? {},
   });

@@ -213,7 +213,7 @@ export class SessionWorkflowFinalizer {
 
   private clearDeletedTransientSession(sessionId: string, trigger: 'stop' | 'exit'): void {
     this.persistedTransientSessionIds.delete(sessionId);
-    this.dependencies.sessionDomainService.clearSession(sessionId);
+    this.dependencies.sessionDomainService.clearSession(sessionId, { permanentlyDeleted: true });
     logger.debug('Deleted transient ratchet session', { sessionId, trigger });
   }
 

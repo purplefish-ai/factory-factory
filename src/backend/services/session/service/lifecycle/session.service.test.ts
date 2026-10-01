@@ -1483,9 +1483,9 @@ describe('SessionService', () => {
         messages: transcript,
       });
       expect(sessionRepository.deleteSession).toHaveBeenCalledWith('session-1');
-      expect(clearSessionSpy).toHaveBeenCalledWith('session-1');
+      expect(clearSessionSpy).toHaveBeenCalledWith('session-1', { permanentlyDeleted: true });
       const destructiveClearCallIndex = clearSessionSpy.mock.calls.findIndex(
-        ([sessionId, options]) => sessionId === 'session-1' && options === undefined
+        ([sessionId, options]) => sessionId === 'session-1' && options?.permanentlyDeleted === true
       );
       expect(destructiveClearCallIndex).toBeGreaterThanOrEqual(0);
       expect(
@@ -1699,9 +1699,9 @@ describe('SessionService', () => {
       'COMPLETED'
     );
     expect(sessionRepository.deleteSession).toHaveBeenCalledWith('session-1');
-    expect(clearSessionSpy).toHaveBeenCalledWith('session-1');
+    expect(clearSessionSpy).toHaveBeenCalledWith('session-1', { permanentlyDeleted: true });
     const destructiveClearCallIndex = clearSessionSpy.mock.calls.findIndex(
-      ([sessionId, options]) => sessionId === 'session-1' && options === undefined
+      ([sessionId, options]) => sessionId === 'session-1' && options?.permanentlyDeleted === true
     );
     expect(destructiveClearCallIndex).toBeGreaterThanOrEqual(0);
     expect(vi.mocked(sessionRepository.deleteSession).mock.invocationCallOrder[0]).toBeLessThan(

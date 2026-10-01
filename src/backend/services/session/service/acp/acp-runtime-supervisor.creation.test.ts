@@ -564,6 +564,265 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
     expect(order).toEqual(['created', 'provider-id']);
   });
 
+  it.each(['factory', 'rollover', 'notification'] as const)(
+    'fails closed on startup event overflow during %s and permits a later retry',
+    async (phase) => {
+      const handle = createTestProcessHandle({
+        sessionCreationOutcome:
+          phase === 'rollover'
+            ? { kind: 'resume_fallback', previousProviderSessionId: 'old', reason: 'load_failed' }
+            : { kind: 'new' },
+      });
+      exitChildAfterSigterm(mockChildOf(handle));
+      const gate = createDeferred<void>();
+      let params: CreateAcpClientParams | undefined;
+      const onAcpEvent = vi.fn();
+      const commit = vi.fn();
+      let rolloverWaiting = false;
+      const { supervisor, createClient } = createHarness(async (factoryParams) => {
+        params = factoryParams;
+        if (phase === 'factory') {
+          await gate.promise;
+        }
+        return handle;
+      });
+      const creation = supervisor.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        {
+          onAcpEvent,
+          onProviderIdentityRollover: async (event) => {
+            rolloverWaiting = true;
+            await gate.promise;
+            event.assertCurrent();
+            commit();
+          },
+          onSessionId: async () => {
+            if (phase === 'notification') {
+              await gate.promise;
+            }
+          },
+        },
+        defaultContext()
+      );
+      const rejection = expect(creation).rejects.toThrow('ACP startup event buffer exceeded');
+      await vi.waitFor(() => {
+        expect(params).toBeDefined();
+        if (phase === 'notification') {
+          expect(supervisor.getInstalledHandle('session-1')).toBe(handle);
+        }
+        if (phase === 'rollover') {
+          expect(rolloverWaiting).toBe(true);
+        }
+      });
+      for (let i = 0; i < 20_000; i++) {
+        params?.handlers.onAcpEvent?.('session-1', {
+          type: 'acp_task_status_changed',
+          active: true,
+        });
+      }
+      if (phase === 'factory') {
+        await expect(params?.stopSignal.promise).rejects.toThrow(
+          'ACP startup event buffer exceeded'
+        );
+      }
+      gate.resolve(undefined);
+      await rejection;
+      expect(onAcpEvent).not.toHaveBeenCalled();
+      expect(commit).not.toHaveBeenCalled();
+      expect(supervisor.getInstalledHandle('session-1')).toBeUndefined();
+      expect(mockChildOf(handle).kill).toHaveBeenCalledWith('SIGTERM');
+      const replacement = createTestProcessHandle();
+      createClient.mockResolvedValueOnce(replacement);
+      await expect(
+        supervisor.getOrCreateClient(
+          'session-1',
+          defaultOptions(),
+          defaultHandlers(),
+          defaultContext()
+        )
+      ).resolves.toBe(replacement);
+    }
+  );
+
+  it('cleans an installed candidate when buffered event replay throws', async () => {
+    const handle = createTestProcessHandle();
+    exitChildAfterSigterm(mockChildOf(handle));
+    const { supervisor } = createHarness((params) => {
+      params.handlers.onAcpEvent?.('session-1', { type: 'acp_task_status_changed', active: true });
+      return Promise.resolve(handle);
+    });
+    await expect(
+      supervisor.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        {
+          onAcpEvent: () => {
+            throw new Error('replay failed');
+          },
+        },
+        defaultContext()
+      )
+    ).rejects.toThrow('replay failed');
+    expect(supervisor.getInstalledHandle('session-1')).toBeUndefined();
+    expect(mockChildOf(handle).kill).toHaveBeenCalledWith('SIGTERM');
+  });
+
+  it('keeps fallback candidates invisible until reconciliation and discards partial old replay', async () => {
+    const handle = createTestProcessHandle({
+      providerSessionId: 'new',
+      sessionCreationOutcome: {
+        kind: 'resume_fallback',
+        previousProviderSessionId: 'old',
+        reason: 'load_failed',
+      },
+    });
+    const reconciliation = createDeferred<void>();
+    const onProviderIdentityRollover = vi.fn<
+      NonNullable<AcpRuntimeEventHandlers['onProviderIdentityRollover']>
+    >(() => reconciliation.promise);
+    const onAcpEvent = vi.fn();
+    const { supervisor } = createHarness((params) => {
+      params.handlers.onAcpEvent?.('session-1', { type: 'acp_task_status_changed', active: true });
+      params.discardFailedResumeReplay?.();
+      return Promise.resolve(handle);
+    });
+    const creation = supervisor.getOrCreateClient(
+      'session-1',
+      defaultOptions(),
+      {
+        onProviderIdentityRollover,
+        onAcpEvent,
+      },
+      defaultContext()
+    );
+    await vi.waitFor(() => expect(onProviderIdentityRollover).toHaveBeenCalledOnce());
+    expect(supervisor.getClient('session-1')).toBeUndefined();
+    expect(supervisor.getInstalledHandle('session-1')).toBeUndefined();
+    reconciliation.resolve(undefined);
+    await expect(creation).resolves.toBe(handle);
+    expect(supervisor.getClient('session-1')).toBe(handle);
+    expect(onAcpEvent).not.toHaveBeenCalled();
+    expect(supervisor.isSessionWorking('session-1')).toBe(false);
+  });
+
+  it.each(['stop', 'shutdown'] as const)(
+    'fences a fallback identity callback after %s and kills the candidate',
+    async (termination) => {
+      const handle = createTestProcessHandle({
+        providerSessionId: 'new',
+        sessionCreationOutcome: {
+          kind: 'resume_fallback',
+          previousProviderSessionId: 'old',
+          reason: 'load_unsupported',
+        },
+      });
+      exitChildAfterSigterm(mockChildOf(handle));
+      const reconciliation = createDeferred<void>();
+      const onProviderIdentityRollover = vi.fn<
+        NonNullable<AcpRuntimeEventHandlers['onProviderIdentityRollover']>
+      >(() => reconciliation.promise);
+      const { supervisor, createClient } = createHarness(async () => handle);
+      const creation = supervisor.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        { onProviderIdentityRollover },
+        defaultContext()
+      );
+      const result = creation.catch((error: unknown) => error);
+      await vi.waitFor(() => expect(onProviderIdentityRollover).toHaveBeenCalledOnce());
+      const event = onProviderIdentityRollover.mock.calls[0]?.[0];
+      const stopping =
+        termination === 'stop' ? supervisor.stopClient('session-1') : supervisor.stopAllClients(50);
+      expect(() => event?.assertCurrent()).toThrow();
+      reconciliation.resolve(undefined);
+      expect(await result).toBeInstanceOf(Error);
+      await stopping;
+      expect(supervisor.getClient('session-1')).toBeUndefined();
+      expect(handle.child.signalCode).toBe('SIGTERM');
+      if (termination === 'stop') {
+        const replacement = createTestProcessHandle({ providerSessionId: 'latest' });
+        createClient.mockResolvedValue(replacement);
+        await supervisor.getOrCreateClient(
+          'session-1',
+          defaultOptions(),
+          defaultHandlers(),
+          defaultContext()
+        );
+        expect(() => event?.assertCurrent()).toThrow();
+        expect(supervisor.getClient('session-1')).toBe(replacement);
+      }
+    }
+  );
+
+  it('fails closed when a fallback has no durable reconciliation owner', async () => {
+    const handle = createTestProcessHandle({
+      sessionCreationOutcome: {
+        kind: 'resume_fallback',
+        previousProviderSessionId: 'old',
+        reason: 'load_failed',
+      },
+    });
+    exitChildAfterSigterm(mockChildOf(handle));
+    const { supervisor } = createHarness(async () => handle);
+    await expect(
+      supervisor.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      )
+    ).rejects.toThrow('Missing ACP provider identity reconciliation');
+    expect(supervisor.getClient('session-1')).toBeUndefined();
+    expect(handle.child.signalCode).toBe('SIGTERM');
+  });
+
+  it('rejects creation and kills the candidate when identity persistence fails', async () => {
+    const handle = createTestProcessHandle();
+    exitChildAfterSigterm(mockChildOf(handle));
+    const { supervisor } = createHarness(() => Promise.resolve(handle));
+    await expect(
+      supervisor.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        {
+          onSessionId: () => Promise.reject(new Error('identity persistence failed')),
+        },
+        defaultContext()
+      )
+    ).rejects.toThrow('identity persistence failed');
+    expect(supervisor.getClient('session-1')).toBeUndefined();
+    expect(handle.child.signalCode).toBe('SIGTERM');
+  });
+
+  it('kills a fallback candidate before installation when rollover persistence rejects', async () => {
+    const handle = createTestProcessHandle({
+      providerSessionId: 'new',
+      sessionCreationOutcome: {
+        kind: 'resume_fallback',
+        previousProviderSessionId: 'old',
+        reason: 'load_failed',
+      },
+    });
+    exitChildAfterSigterm(mockChildOf(handle));
+    const { supervisor } = createHarness(() => Promise.resolve(handle));
+    const onSessionId = vi.fn();
+    await expect(
+      supervisor.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        {
+          onProviderIdentityRollover: () => Promise.reject(new Error('rollover failed')),
+          onSessionId,
+        },
+        defaultContext()
+      )
+    ).rejects.toThrow('rollover failed');
+    expect(supervisor.getInstalledHandle('session-1')).toBeUndefined();
+    expect(onSessionId).not.toHaveBeenCalled();
+    expect(handle.child.signalCode).toBe('SIGTERM');
+  });
+
   it('rolls back an installed runtime when the creation callback throws', async () => {
     // Catches a rejected creation leaving its live runtime installed and reusable.
     const handle = createTestProcessHandle();

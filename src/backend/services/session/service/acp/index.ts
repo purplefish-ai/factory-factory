@@ -5,11 +5,13 @@ export { AcpPermissionBridge } from './acp-permission-bridge';
 export { AcpProcessHandle } from './acp-process-handle';
 export type {
   AcpPermissionRequestEvent,
+  AcpProviderIdentityEvent,
   AcpRuntimeErrorEvent,
   AcpRuntimeEvent,
   AcpRuntimeEventHandlers,
   AcpRuntimeExitEvent,
   AcpRuntimePurpose,
+  AcpSessionCreationOutcome,
   AcpSessionUpdateEvent,
   AcpSubagentsChangedEvent,
   AcpTaskStatusChangedEvent,

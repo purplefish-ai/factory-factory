@@ -18,11 +18,13 @@ import type { SessionPromptTurnCompletionService } from './session.prompt-turn-c
 import type { SessionRepository } from './session.repository';
 import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import type { SessionLifecycleGate } from './session-lifecycle-gate';
+import type { SessionProviderIdentityService } from './session-provider-identity.service';
 import type { SessionWorkflowFinalizer } from './session-workflow-finalizer';
 
 const logger = createLogger('session');
 
 type RuntimeExitCoordinatorDependencies = {
+  providerIdentityService: Pick<SessionProviderIdentityService, 'reconcile'>;
   repository: Pick<SessionRepository, 'getSessionById' | 'updateSession'>;
   sessionDomainService: Pick<SessionDomainService, 'markError' | 'markProcessExit'>;
   sessionPermissionService: Pick<SessionPermissionService, 'cancelPendingRequests'>;
@@ -62,7 +64,11 @@ export class SessionRuntimeExitCoordinator {
     return {
       ...runtimeEventHandler,
       ...(input.persistProviderSessionId
-        ? { onSessionId: this.createProviderSessionIdHandler() }
+        ? {
+            onSessionId: this.createProviderSessionIdHandler(),
+            onProviderIdentityRollover: (event) =>
+              this.dependencies.providerIdentityService.reconcile(event),
+          }
         : {}),
       onRuntimeExit: (event) => this.handleExit(event),
       onRuntimeError: (event) => {
@@ -120,6 +126,7 @@ export class SessionRuntimeExitCoordinator {
           providerSessionId,
           error: error instanceof Error ? error.message : String(error),
         });
+        throw error;
       }
     };
   }

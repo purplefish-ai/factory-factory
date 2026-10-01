@@ -138,6 +138,7 @@ function createCaller(requestTrust?: {
         mockFindSessionsByWorkspaceId(...args),
     }),
     sessionDomainService: Object.assign({}, fakeGraph.services.sessionDomainService, {
+      forgetProviderHistoryIdentity: vi.fn(),
       getAllPendingRequests: () => new Map(),
       appendClaudeEvent: (...args: unknown[]) => mockAppendClaudeEvent(...args),
       emitDelta: (...args: unknown[]) => mockEmitDelta(...args),
@@ -230,6 +231,7 @@ function createCaller(requestTrust?: {
     caller,
     sessionLifecycleService: composedSessionLifecycleService,
     runScriptService: composedRunScriptService,
+    sessionDomainService: services.sessionDomainService,
     terminalService: composedTerminalService,
     cliHealthService,
     eventCollector: fakeGraph.lifecycle.eventCollector,
@@ -240,6 +242,7 @@ function createCaller(requestTrust?: {
 describe('workspaceCoreRouter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFindSessionsByWorkspaceId.mockResolvedValue([{ id: 'deleted-session' }]);
     mockResolveProviderForWorkspaceCreation.mockResolvedValue('CLAUDE');
     mockInitializeWorkspaceWorktree.mockResolvedValue(undefined);
     mockCheckWorkspaceById.mockResolvedValue(undefined);
@@ -666,8 +669,14 @@ describe('workspaceCoreRouter', () => {
     mockWorkspaceQueryService.syncAllPRStatuses.mockResolvedValue({ synced: 10 });
     mockWorkspaceQueryService.hasChanges.mockResolvedValue({ hasChanges: true });
 
-    const { caller, sessionLifecycleService, runScriptService, terminalService, eventCollector } =
-      createCaller();
+    const {
+      caller,
+      sessionLifecycleService,
+      runScriptService,
+      terminalService,
+      eventCollector,
+      sessionDomainService,
+    } = createCaller();
 
     const deletion = caller.delete({ id: 'w1' });
     try {
@@ -677,6 +686,9 @@ describe('workspaceCoreRouter', () => {
       worktreeCleanup.resolve();
     }
     await expect(deletion).resolves.toEqual({ deleted: true });
+    expect(sessionDomainService.forgetProviderHistoryIdentity).toHaveBeenCalledWith(
+      'deleted-session'
+    );
     expect(mockCleanupWorkspaceRuntimeResources).toHaveBeenCalledWith(
       'w1',
       expect.objectContaining({
