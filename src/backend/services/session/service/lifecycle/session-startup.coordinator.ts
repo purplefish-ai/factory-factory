@@ -11,6 +11,7 @@ import { AcpBrowseSessionUnavailableError } from '@/backend/services/session/ser
 import type { SessionLifecycleMessageQueueBridge } from '@/backend/services/session/service/bridges';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type { SessionDeltaEvent } from '@/shared/acp-protocol';
+import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import { SessionStatus } from '@/shared/core';
 import type { AcpEventProcessor } from './acp-event-processor';
@@ -348,6 +349,7 @@ export class SessionStartupCoordinator {
       workspaceId: sessionContext.workspaceId,
       workingDir: sessionContext.workingDir,
       provider: session.provider,
+      workflow: session.workflow,
     });
 
     const handlers = this.dependencies.runtimeExitCoordinator.createHandlers({
@@ -395,7 +397,18 @@ export class SessionStartupCoordinator {
         handle,
         { persistSnapshot: false, emitUpdates: false }
       );
+      if (session.workflow === ADVERSARIAL_REVIEW_WORKFLOW) {
+        await this.dependencies.sessionConfigService.applyConfiguredPermissionPreset(
+          sessionId,
+          session,
+          handle,
+          permissionPreset
+        );
+      }
     } catch (error) {
+      if (session.workflow === ADVERSARIAL_REVIEW_WORKFLOW) {
+        await this.dependencies.runtimeManager.stopClient(sessionId);
+      }
       if (registration.isOnlyOperation()) {
         this.dependencies.acpEventProcessor.clearSessionState(sessionId);
       }
@@ -444,6 +457,13 @@ export class SessionStartupCoordinator {
     this.assertStartupAllowed(sessionId, stopGeneration);
     const existingAcp = this.dependencies.runtimeManager.getClient(sessionId);
     if (existingAcp) {
+      if (session.workflow === ADVERSARIAL_REVIEW_WORKFLOW) {
+        await this.dependencies.sessionConfigService.applyConfiguredPermissionPreset(
+          sessionId,
+          session,
+          existingAcp
+        );
+      }
       const isWorking = this.dependencies.runtimeManager.isSessionWorking(sessionId);
       this.dependencies.sessionDomainService.setRuntimeSnapshot(sessionId, {
         phase: isWorking ? 'running' : 'idle',

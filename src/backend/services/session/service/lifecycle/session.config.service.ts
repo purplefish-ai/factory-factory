@@ -8,6 +8,7 @@ import type { SessionDomainService } from '@/backend/services/session/service/se
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { userSettingsService } from '@/backend/services/settings';
 import type { SessionDeltaEvent } from '@/shared/acp-protocol';
+import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import { type ChatBarCapabilities, EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { parseAcpConfigSnapshot, type StoredAcpConfigSnapshot } from './acp-config-snapshot';
 import type { CodexModelCatalogService } from './codex-model-catalog.service';
@@ -19,6 +20,11 @@ import {
   getSelectOptions,
   type SessionProvider,
 } from './session-config-option-helpers';
+import {
+  applyReadOnlyReviewPermissions,
+  assertReadOnlyReviewConfigOption,
+  resolveConfiguredExecutionModeTarget,
+} from './session-permission-policy';
 import { getWorkflowPermissionPreset, isUnattendedWorkflow } from './session-workflow-permissions';
 
 const logger = createLogger('session');
@@ -145,6 +151,11 @@ export class SessionConfigService {
     handle: AcpProcessHandle,
     preResolvedPreset?: SessionPermissionPreset
   ): Promise<void> {
+    if (session.workflow === ADVERSARIAL_REVIEW_WORKFLOW) {
+      await applyReadOnlyReviewPermissions(sessionId, handle, this.runtimeManager);
+      return;
+    }
+
     const executionModeOption = handle.configOptions.find(
       (option) => option.id === 'execution_mode' || option.category === 'permission'
     );
@@ -156,7 +167,7 @@ export class SessionConfigService {
       preResolvedPreset ??
       (await this.resolvePermissionPresetFromSettings(sessionId, session.workflow));
 
-    const targetExecutionMode = this.resolveConfiguredExecutionModeTarget(
+    const targetExecutionMode = resolveConfiguredExecutionModeTarget(
       executionModeOption,
       permissionPreset
     );
@@ -388,6 +399,14 @@ export class SessionConfigService {
     const selectedOption = acpHandle.configOptions.find((option) => option.id === configId);
     const isModeOption = configId === 'mode' || selectedOption?.category === 'mode';
     const isModelOption = configId === 'model' || selectedOption?.category === 'model';
+    if (
+      isModeOption ||
+      configId === 'execution_mode' ||
+      selectedOption?.category === 'permission'
+    ) {
+      const session = await this.repository.getSessionById(sessionId);
+      assertReadOnlyReviewConfigOption(session?.workflow, configId, value, selectedOption);
+    }
 
     const configOptions = isModeOption
       ? await this.runtimeManager.setSessionMode(sessionId, value)
@@ -767,47 +786,6 @@ export class SessionConfigService {
     }
   }
 
-  private resolveConfiguredExecutionModeTarget(
-    executionModeOption: SessionConfigOption,
-    permissionPreset: SessionPermissionPreset
-  ): string | null {
-    const availableValues = getConfigOptionValues(executionModeOption);
-    const preferredValuesByPreset: Record<SessionPermissionPreset, string[]> = {
-      STRICT: [
-        '["on-request","workspace-write"]',
-        '["on-request","read-only"]',
-        '["on-request","danger-full-access"]',
-      ],
-      RELAXED: [
-        '["on-failure","workspace-write"]',
-        '["on-failure","read-only"]',
-        '["on-failure","danger-full-access"]',
-      ],
-      YOLO: [
-        '["never","danger-full-access"]',
-        '["never","workspace-write"]',
-        '["never","read-only"]',
-      ],
-    };
-    const preferredValues = preferredValuesByPreset[permissionPreset];
-    const byValue = this.findModeValue(availableValues, preferredValues);
-    if (byValue) {
-      return byValue;
-    }
-
-    const byName = getSelectOptions(executionModeOption).find((option) => {
-      const name = option.name ?? '';
-      if (permissionPreset === 'STRICT') {
-        return /on request/i.test(name);
-      }
-      if (permissionPreset === 'RELAXED') {
-        return /on failure/i.test(name);
-      }
-      return /yolo|never ask/i.test(name);
-    });
-    return byName?.value ?? null;
-  }
-
   private findModeValue(
     availableModeValues: string[],
     preferredModeValues: string[]
@@ -852,6 +830,12 @@ export class SessionConfigService {
       );
     }
 
+    assertReadOnlyReviewConfigOption(
+      session.workflow,
+      configId,
+      value,
+      snapshot.configOptions.find((option) => option.id === configId)
+    );
     const configOptions = this.updateCachedConfigOptions(snapshot.configOptions, configId, value);
     await this.persistAcpConfigSnapshot(sessionId, {
       provider: snapshot.provider,
