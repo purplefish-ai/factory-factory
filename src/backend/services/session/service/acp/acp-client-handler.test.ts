@@ -114,6 +114,7 @@ describe('AcpClientHandler', () => {
 
     it('forwards to permission bridge when autoApprovePolicy is "none"', async () => {
       const bridge = {
+        resolveAutomaticPermission: vi.fn(),
         waitForUserResponse: vi.fn().mockResolvedValue({
           outcome: { outcome: 'selected', optionId: 'allow_once' },
         }),
@@ -137,6 +138,7 @@ describe('AcpClientHandler', () => {
 
     it('defaults to "none" policy when autoApprovePolicy is not provided', async () => {
       const bridge = {
+        resolveAutomaticPermission: vi.fn(),
         waitForUserResponse: vi.fn().mockResolvedValue({
           outcome: { outcome: 'selected', optionId: 'allow_once' },
         }),
@@ -151,6 +153,7 @@ describe('AcpClientHandler', () => {
 
     it('auto-approves even when permission bridge is present in "all" mode', async () => {
       const bridge = {
+        resolveAutomaticPermission: vi.fn(),
         waitForUserResponse: vi.fn(),
       } as unknown as AcpPermissionBridge;
       const handler = new AcpClientHandler('session-1', onEvent, bridge, onLog, 'all');
@@ -209,6 +212,7 @@ describe('AcpClientHandler', () => {
 
     it('does not auto-approve ExitPlanMode requests even in "all" mode', async () => {
       const bridge = {
+        resolveAutomaticPermission: vi.fn(),
         waitForUserResponse: vi.fn().mockResolvedValue({
           outcome: { outcome: 'selected', optionId: 'plan' },
         }),
@@ -245,6 +249,7 @@ describe('AcpClientHandler', () => {
 
     it('does not auto-approve requestUserInput prompts even in "all" mode', async () => {
       const bridge = {
+        resolveAutomaticPermission: vi.fn(),
         waitForUserResponse: vi.fn().mockResolvedValue({
           outcome: { outcome: 'selected', optionId: 'allow_once' },
         }),

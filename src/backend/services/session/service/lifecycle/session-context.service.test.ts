@@ -114,7 +114,7 @@ describe('SessionContextService', () => {
     { workflow: 'code', fallback: 'STRICT' as const },
     { workflow: 'ratchet', fallback: 'YOLO' as const },
     { workflow: 'auto-iteration', fallback: 'YOLO' as const },
-    { workflow: ADVERSARIAL_REVIEW_WORKFLOW, fallback: 'YOLO' as const },
+    { workflow: ADVERSARIAL_REVIEW_WORKFLOW, fallback: 'STRICT' as const },
   ])(
     'uses the $fallback fallback when $workflow permission settings cannot be read',
     async ({ workflow, fallback }) => {

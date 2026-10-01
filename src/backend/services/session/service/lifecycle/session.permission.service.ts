@@ -6,6 +6,7 @@ import type { SessionDomainService } from '@/backend/services/session/service/se
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type { AskUserQuestion } from '@/shared/acp-protocol';
 import { extractPlanText } from '@/shared/acp-protocol/plan-content';
+import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import { isExitPlanModeRequest, isUserQuestionRequest } from '@/shared/pending-request-types';
 
 export type SessionPermissionServiceDependencies = {
@@ -20,16 +21,28 @@ export class SessionPermissionService {
     this.sessionDomainService = options?.sessionDomainService ?? sessionDomainService;
   }
 
-  createPermissionBridge(sessionId: string): AcpPermissionBridge {
+  createPermissionBridge(sessionId: string, workflow?: string): AcpPermissionBridge {
     const existing = this.acpPermissionBridges.get(sessionId);
     if (existing) {
       return existing;
     }
 
-    const bridge = new AcpPermissionBridge((requestId) => {
-      this.sessionDomainService.clearPendingInteractiveRequestIfMatches(sessionId, requestId);
-      this.sessionDomainService.emitDelta(sessionId, { type: 'permission_cancelled', requestId });
-    });
+    const bridge = new AcpPermissionBridge(
+      (requestId) => {
+        this.sessionDomainService.clearPendingInteractiveRequestIfMatches(sessionId, requestId);
+        this.sessionDomainService.emitDelta(sessionId, { type: 'permission_cancelled', requestId });
+      },
+      workflow === ADVERSARIAL_REVIEW_WORKFLOW
+        ? (params) => {
+            const reject = params.options.find(
+              (option) => option.kind === 'reject_once' || option.kind === 'reject_always'
+            );
+            return reject
+              ? { outcome: { outcome: 'selected', optionId: reject.optionId } }
+              : { outcome: { outcome: 'cancelled' } };
+          }
+        : undefined
+    );
     this.acpPermissionBridges.set(sessionId, bridge);
     return bridge;
   }
@@ -60,6 +73,9 @@ export class SessionPermissionService {
 
   handlePermissionRequest(sessionId: string, event: AcpPermissionRequestEvent): void {
     const { requestId, params } = event;
+    if (this.acpPermissionBridges.get(sessionId)?.resolveAutomaticPermission(params)) {
+      return;
+    }
     const toolInput = (params.toolCall.rawInput as Record<string, unknown>) ?? {};
     const toolName = this.resolveToolName(params.toolCall.title, toolInput);
     const acpOptions = params.options.map((option) => ({
