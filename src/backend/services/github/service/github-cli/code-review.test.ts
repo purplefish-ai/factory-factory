@@ -25,6 +25,34 @@ describe('submitCodeReview', () => {
       return { stdout: '', stderr: '' };
     });
     await expect(submitCodeReview('example/repo', 1, input)).resolves.toBeUndefined();
+    expect(execFileAsync).toHaveBeenCalledExactlyOnceWith(
+      'gh',
+      [
+        'api',
+        '--method',
+        'POST',
+        'repos/example/repo/pulls/1/reviews',
+        '--input',
+        expect.any(String),
+      ],
+      expect.objectContaining({ timeout: expect.any(Number) })
+    );
+  });
+
+  it('maps inline comments into the submitted COMMENT review payload', async () => {
+    const comments = [{ path: 'file.ts', line: 7, side: 'RIGHT' as const, body: 'Inline finding' }];
+    execFileAsync.mockImplementation(async (_command, args: string[]) => {
+      const payload: unknown = JSON.parse(await readFile(args[args.length - 1]!, 'utf8'));
+      expect(payload).toEqual({
+        commit_id: 'abc123',
+        body: input.body,
+        event: 'COMMENT',
+        comments,
+      });
+      return { stdout: '', stderr: '' };
+    });
+    await submitCodeReview('example/repo', 1, { ...input, comments });
+    expect(execFileAsync).toHaveBeenCalledTimes(1);
   });
 
   it.each([
@@ -57,7 +85,9 @@ describe('submitCodeReview', () => {
 
   it('recognizes the explicit rejection when gh includes it in stderr', async () => {
     execFileAsync.mockRejectedValue(
-      new Error('gh: Can not request changes on your own pull request (HTTP 422)')
+      Object.assign(new Error('Command failed'), {
+        stderr: 'gh: Can not request changes on your own pull request (HTTP 422)',
+      })
     );
     await expect(submitCodeReview('example/repo', 1, input)).rejects.toMatchObject({
       isSelfReviewRejection: true,

@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ADVERSARIAL_REVIEW_MARKER } from '@/shared/adversarial-review';
 
+const logger = vi.hoisted(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }));
+vi.mock('@/backend/services/logger.service', () => ({ createLogger: () => logger }));
+
 vi.mock('@/backend/services/github', async () => {
   const { ReviewSubmissionError } = await vi.importActual<
     typeof import('@/backend/services/github')
@@ -146,6 +149,57 @@ describe('adversarial-review fallback delivery', () => {
       'example/repo',
       1,
       expect.stringContaining('Inline bug details')
+    );
+  });
+
+  it('attempts inline fallback posts and reports the error when the summary post fails', async () => {
+    const summaryError = new Error('issue comment failed');
+    vi.mocked(submitCodeReview).mockRejectedValue(new ReviewSubmissionError('self-review', true));
+    vi.mocked(githubCLIService.addPRComment).mockRejectedValue(summaryError);
+    await runReview([
+      { path: 'file.ts', line: 1, side: 'RIGHT', body: 'Inline bug details', severity: 'blocking' },
+    ]);
+    expect(createReviewComment).toHaveBeenCalledWith(
+      'example/repo',
+      1,
+      expect.objectContaining({ body: expect.stringContaining('Inline bug details') })
+    );
+    expect(logger.error).toHaveBeenCalledWith(
+      'Adversarial review turn failed',
+      expect.objectContaining({ errors: [summaryError] }),
+      expect.any(Object)
+    );
+  });
+
+  it('attempts remaining inline findings and preserves both summary and inline errors', async () => {
+    const summaryError = new Error('issue comment failed');
+    const inlineError = new Error('first inline failed');
+    vi.mocked(submitCodeReview).mockRejectedValue(new ReviewSubmissionError('self-review', true));
+    vi.mocked(githubCLIService.addPRComment).mockRejectedValue(summaryError);
+    vi.mocked(createReviewComment)
+      .mockRejectedValueOnce(inlineError)
+      .mockResolvedValueOnce(undefined);
+    await runReview([
+      {
+        path: 'file.ts',
+        line: 1,
+        side: 'RIGHT',
+        body: 'First inline finding',
+        severity: 'blocking',
+      },
+      {
+        path: 'file.ts',
+        line: 1,
+        side: 'RIGHT',
+        body: 'Second inline finding',
+        severity: 'suggestion',
+      },
+    ]);
+    expect(createReviewComment).toHaveBeenCalledTimes(2);
+    expect(logger.error).toHaveBeenCalledWith(
+      'Adversarial review turn failed',
+      expect.objectContaining({ errors: [summaryError, inlineError] }),
+      expect.any(Object)
     );
   });
 

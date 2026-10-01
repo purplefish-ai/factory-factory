@@ -336,15 +336,27 @@ async function postFindingsToGitHub(
     (comment) =>
       `### ${comment.path}:${comment.line} (${comment.side})\n\n${formatCommentBody(comment)}`
   );
-  await githubCLIService.addPRComment(repo, prNumber, [body, ...inlineFindings].join('\n\n'));
+  const postingErrors: unknown[] = [];
+  try {
+    await githubCLIService.addPRComment(repo, prNumber, [body, ...inlineFindings].join('\n\n'));
+  } catch (error) {
+    postingErrors.push(error);
+  }
   for (const comment of validComments) {
-    await createReviewComment(repo, prNumber, {
-      commitId: headSha,
-      path: comment.path,
-      line: comment.line,
-      side: comment.side,
-      body: formatCommentBody(comment),
-    });
+    try {
+      await createReviewComment(repo, prNumber, {
+        commitId: headSha,
+        path: comment.path,
+        line: comment.line,
+        side: comment.side,
+        body: formatCommentBody(comment),
+      });
+    } catch (error) {
+      postingErrors.push(error);
+    }
+  }
+  if (postingErrors.length > 0) {
+    throw new AggregateError(postingErrors, 'Failed to post some adversarial review findings');
   }
 }
 
