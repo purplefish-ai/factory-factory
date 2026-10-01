@@ -145,7 +145,7 @@ describe('atomic provider identity reconciliation in SQLite', () => {
         })
       )
     );
-    expect(results.toSorted()).toEqual([0, 1]);
+    expect([...results].sort()).toEqual([0, 1]);
     const persisted = await accessor.findById(session.id);
     expect(persisted?.providerMetadata).toEqual({
       acpConfigSnapshot: { providerSessionId: persisted?.providerSessionId },
