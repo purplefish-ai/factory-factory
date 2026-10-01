@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { RequestTrustInfo } from './trpc';
 
 const mockGet = vi.hoisted(() => vi.fn());
 const mockUpdate = vi.hoisted(() => vi.fn());
@@ -14,10 +15,14 @@ vi.mock('@/backend/lib/shell', () => ({
 
 import { userSettingsRouter } from './user-settings.trpc';
 
-function createCaller() {
+function createCaller(requestTrust?: RequestTrustInfo) {
   return userSettingsRouter.createCaller({
+    requestTrust,
     appContext: {
       services: {
+        configService: {
+          getCorsConfig: () => ({ allowedOrigins: ['http://localhost:3000'] }),
+        },
         claudeModelCatalogService: {
           getModels: (...args: unknown[]) => mockGetClaudeModels(...args),
         },
@@ -367,6 +372,32 @@ describe('userSettingsRouter', () => {
     await expect(caller.testCustomCommand({ customCommand: 'echo {workspace}' })).rejects.toThrow(
       'Command failed: spawn failed'
     );
+  });
+
+  it.each([
+    { remoteAddress: '203.0.113.10', isLocal: false },
+    { remoteAddress: '203.0.113.10', isLocal: false, origin: 'http://localhost:3000' },
+    { remoteAddress: '127.0.0.1', isLocal: true, origin: 'https://untrusted.example' },
+  ])('rejects custom command execution from untrusted callers: %j', async (requestTrust) => {
+    mockExecCommand.mockResolvedValue({ code: 0, stdout: '', stderr: '' });
+
+    await expect(
+      createCaller(requestTrust).testCustomCommand({ customCommand: 'echo {workspace}' })
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(mockExecCommand).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { remoteAddress: '127.0.0.1', isLocal: true },
+    { remoteAddress: '127.0.0.1', isLocal: true, origin: 'http://localhost:3000' },
+    { remoteAddress: '::1', isLocal: true, origin: 'http://localhost:3000' },
+  ])('allows custom command execution from trusted local callers: %j', async (requestTrust) => {
+    mockExecCommand.mockResolvedValue({ code: 0, stdout: '', stderr: '' });
+
+    await expect(
+      createCaller(requestTrust).testCustomCommand({ customCommand: 'echo {workspace}' })
+    ).resolves.toEqual({ success: true, message: 'Command executed successfully' });
+    expect(mockExecCommand).toHaveBeenCalledExactlyOnceWith('echo', [process.cwd()]);
   });
 
   it('gets and updates workspace order', async () => {
