@@ -54,7 +54,9 @@ and project configuration.
 
 Then:
 
-1. Add a project by selecting a local git repository.
+1. Add a project by selecting a local git repository. If the New Project page
+   cannot load your projects, it shows the error and a Retry button. Retry loads
+   the list again before showing onboarding or the Add Project form.
 2. Create a workspace, or start one from a GitHub or Linear issue.
 3. Choose Claude or Codex and start a session.
 4. Review the agent's changes, use the integrated terminal when needed, and open
