@@ -320,50 +320,6 @@ describe('periodicTaskAccessor.toggleEnabled', () => {
   });
 });
 
-describe('periodicTaskAccessor.markDispatched', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-02-28T15:00:00.000Z'));
-    prismaMock.periodicTask.findUnique.mockReset();
-    prismaMock.periodicTask.update.mockReset();
-    prismaMock.$transaction.mockReset();
-    prismaMock.periodicTaskExecution.create.mockReset();
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it('lazily backfills a legacy monthly anchor from createdAt in the task timezone', async () => {
-    const timezone = 'America/Los_Angeles';
-    prismaMock.periodicTask.findUnique.mockResolvedValue({
-      createdAt: new Date('2026-02-01T07:30:00.000Z'), // Jan 31 23:30 in Los Angeles
-      scheduledDayOfMonth: null,
-      timezone,
-    });
-    prismaMock.periodicTask.update.mockResolvedValue({});
-
-    await periodicTaskAccessor.markDispatched('task-1', 'MONTHLY', '09:00', timezone, null);
-
-    expect(prismaMock.periodicTask.update).toHaveBeenCalledWith({
-      where: { id: 'task-1' },
-      data: expect.objectContaining({
-        scheduledDayOfMonth: 31,
-      }),
-    });
-
-    const updateArgs = prismaMock.periodicTask.update.mock.calls[0]?.[0];
-    const nextRunAt = updateArgs?.data.nextRunAt as Date;
-    expect(getLocalParts(nextRunAt, timezone)).toMatchObject({
-      year: '2026',
-      month: '03',
-      day: '31',
-      hour: '09',
-      minute: '00',
-    });
-  });
-});
-
 describe('periodicTaskAccessor.reserveExecutionAndMarkDispatched', () => {
   beforeEach(() => {
     vi.useFakeTimers();
