@@ -120,6 +120,13 @@ prevent terminal persistence or removal of the in-memory loop.
 Startup sweeps only `RUNNING` to `FAILED` — `PAUSED` is a state the user chose
 and the terminal states are results they have not seen.
 
+Auto-iteration treats the root `.factory-factory/` directory as runtime state:
+it does not count toward implementation changes and is excluded from iteration
+commits and amendments, even when already staged. No-op iterations are recorded
+as `crashed` before committing or measuring again, and rejecting code changes
+preserves the strategy file for the next iteration. Nested directories with the
+same name remain implementation files.
+
 ## Kanban model
 
 The UI has a provider-driven intake column (`GitHub Issues` or `Linear Issues`)
