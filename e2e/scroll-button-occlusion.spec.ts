@@ -89,6 +89,19 @@ for (const viewport of [
     await page.getByRole('button', { name: 'Show question' }).click();
     await expect(chat.getByText('Which local layout should we check?')).toBeVisible();
     await expectReachableAboveComposer(button, composer);
+    const send = chat.getByRole('button', { name: 'Send message' });
+    await expect(send).toBeEnabled();
+    expect(
+      await send.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        return (
+          rect.bottom <= window.innerHeight &&
+          element.contains(
+            document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)
+          )
+        );
+      })
+    ).toBe(true);
     await page.getByRole('button', { name: 'Clear prompt' }).click();
 
     await button.click();

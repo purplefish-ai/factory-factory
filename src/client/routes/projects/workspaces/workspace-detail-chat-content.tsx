@@ -302,10 +302,14 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
           onApprove={props.approvePermission}
           className="min-h-0 shrink overflow-y-auto"
         />
-        <QuestionPrompt
-          question={props.pendingRequest.type === 'question' ? props.pendingRequest.request : null}
-          onAnswer={props.answerQuestion}
-        />
+        <div className="min-h-0 shrink overflow-y-auto">
+          <QuestionPrompt
+            question={
+              props.pendingRequest.type === 'question' ? props.pendingRequest.request : null
+            }
+            onAnswer={props.answerQuestion}
+          />
+        </div>
 
         <div className="flex items-center gap-2 shrink-0">
           <VoiceModeToggle
