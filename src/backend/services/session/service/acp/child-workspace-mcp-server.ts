@@ -18,6 +18,7 @@
 
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
+import { callTrpcMutation, callTrpcQuery } from './mcp-trpc-client';
 
 // ---------------------------------------------------------------------------
 // Types (minimal MCP protocol subset)
@@ -117,58 +118,6 @@ const LIST_PROJECTS_TOOL = {
     required: [],
   },
 };
-
-// ---------------------------------------------------------------------------
-// HTTP helper — calls the internal tRPC HTTP API via a simple POST
-// ---------------------------------------------------------------------------
-
-async function callTrpcMutation(
-  baseUrl: string,
-  path: string,
-  input: unknown
-): Promise<{ result?: unknown; error?: string }> {
-  const url = `${baseUrl}/api/trpc/${path}`;
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ json: input }),
-    });
-    const body = (await res.json()) as {
-      result?: { data?: { json?: unknown } };
-      error?: { json?: { message?: string }; message?: string };
-    };
-    if (!res.ok || body.error) {
-      return { error: body.error?.json?.message ?? body.error?.message ?? `HTTP ${res.status}` };
-    }
-    return { result: body.result?.data?.json };
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : String(err) };
-  }
-}
-
-async function callTrpcQuery(
-  baseUrl: string,
-  path: string,
-  input?: unknown
-): Promise<{ result?: unknown; error?: string }> {
-  const inputParam =
-    input !== undefined ? `?input=${encodeURIComponent(JSON.stringify({ json: input }))}` : '';
-  const url = `${baseUrl}/api/trpc/${path}${inputParam}`;
-  try {
-    const res = await fetch(url, { method: 'GET' });
-    const body = (await res.json()) as {
-      result?: { data?: { json?: unknown } };
-      error?: { json?: { message?: string }; message?: string };
-    };
-    if (!res.ok || body.error) {
-      return { error: body.error?.json?.message ?? body.error?.message ?? `HTTP ${res.status}` };
-    }
-    return { result: body.result?.data?.json };
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : String(err) };
-  }
-}
 
 // ---------------------------------------------------------------------------
 // MCP server main loop

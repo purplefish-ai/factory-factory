@@ -105,9 +105,11 @@ import {
   workspaceRunScriptService,
   workspaceSnapshotStore,
   workspaceStateMachine,
+  workspaceWakeScheduleService,
   worktreeLifecycleService,
 } from './services/workspace';
 import { workspaceGitStateService } from './services/workspace-git-state.service';
+import { workspaceWakeService } from './services/workspace-wake';
 
 export type ApplicationServices = BridgeServices & {
   acpRuntimeManager: typeof acpRuntimeManager;
@@ -286,6 +288,8 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     workspaceRunScriptService,
     workspaceSnapshotStore,
     workspaceStateMachine,
+    workspaceWakeScheduleService,
+    workspaceWakeService,
     worktreeLifecycleService,
     archiveWorkspace,
     cleanupWorkspaceRuntimeResources,

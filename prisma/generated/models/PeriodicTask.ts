@@ -619,10 +619,6 @@ export type PeriodicTaskUpdateOneWithoutWorkspacesNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.PeriodicTaskUpdateToOneWithWhereWithoutWorkspacesInput, Prisma.PeriodicTaskUpdateWithoutWorkspacesInput>, Prisma.PeriodicTaskUncheckedUpdateWithoutWorkspacesInput>
 }
 
-export type EnumPeriodicTaskCadenceFieldUpdateOperationsInput = {
-  set?: $Enums.PeriodicTaskCadence
-}
-
 export type PeriodicTaskCreateNestedOneWithoutExecutionsInput = {
   create?: Prisma.XOR<Prisma.PeriodicTaskCreateWithoutExecutionsInput, Prisma.PeriodicTaskUncheckedCreateWithoutExecutionsInput>
   connectOrCreate?: Prisma.PeriodicTaskCreateOrConnectWithoutExecutionsInput

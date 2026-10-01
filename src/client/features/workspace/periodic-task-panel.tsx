@@ -1,4 +1,5 @@
 import { ArrowSquareOutIcon, CalendarIcon } from '@phosphor-icons/react';
+import { cadenceLabel } from '@/client/lib/cadence-labels';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -26,16 +27,7 @@ export function PeriodicTaskPanel({ periodicTaskId }: PeriodicTaskPanelProps) {
     );
   }
 
-  const cadenceLabel =
-    (
-      {
-        EVERY_MINUTE: 'Every minute',
-        EVERY_FIVE_MINUTES: 'Every 5 minutes',
-        DAILY: 'Daily',
-        WEEKLY: 'Weekly',
-        MONTHLY: 'Monthly',
-      } as Record<string, string>
-    )[task.cadence] ?? task.cadence;
+  const taskCadenceLabel = cadenceLabel(task.cadence);
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -45,7 +37,7 @@ export function PeriodicTaskPanel({ periodicTaskId }: PeriodicTaskPanelProps) {
           <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground" />
           <span className="font-medium text-sm truncate">{task.name}</span>
           <Badge variant="secondary" className="text-[10px] shrink-0">
-            {cadenceLabel}
+            {taskCadenceLabel}
           </Badge>
           <Badge
             variant={task.isEnabled ? 'default' : 'secondary'}

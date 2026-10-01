@@ -83,7 +83,13 @@ describe('workspaceAccessor', () => {
           runScript: { create: {} },
           autoIteration: { create: { mode: undefined, config: undefined } },
         }),
-        include: { ratchet: true, pr: true, runScript: true, autoIteration: true },
+        include: {
+          ratchet: true,
+          pr: true,
+          runScript: true,
+          autoIteration: true,
+          wakeSchedule: true,
+        },
       });
     });
 
@@ -104,7 +110,13 @@ describe('workspaceAccessor', () => {
           runScript: { create: {} },
           autoIteration: { create: { mode: undefined, config: undefined } },
         }),
-        include: { ratchet: true, pr: true, runScript: true, autoIteration: true },
+        include: {
+          ratchet: true,
+          pr: true,
+          runScript: true,
+          autoIteration: true,
+          wakeSchedule: true,
+        },
       });
     });
 
@@ -135,6 +147,7 @@ describe('workspaceAccessor', () => {
         pr: true,
         runScript: true,
         autoIteration: true,
+        wakeSchedule: true,
       },
     });
   });

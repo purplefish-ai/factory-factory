@@ -1,6 +1,6 @@
 {
   "src/backend/interceptors/branch-naming.interceptor.test.ts": 1112,
-  "src/backend/orchestration/domain-bridges.orchestrator.test.ts": 1097,
+  "src/backend/orchestration/domain-bridges.orchestrator.test.ts": 1096,
   "src/backend/orchestration/event-collector.orchestrator.test.ts": 1681,
   "src/backend/orchestration/workspace-init.orchestrator.test.ts": 1895,
   "src/backend/routers/websocket/terminal.handler.test.ts": 1012,
@@ -15,7 +15,7 @@
   "src/backend/services/session/service/chat/chat-message-handlers/handlers/load-session.handler.test.ts": 1576,
   "src/backend/services/session/service/lifecycle/session.config.service.test.ts": 1152,
   "src/backend/services/session/service/lifecycle/session.service.test.ts": 2599,
-  "src/backend/services/workspace/resources/workspace.accessor.ts": 1040,
+  "src/backend/services/workspace/resources/workspace.accessor.ts": 1037,
   "src/backend/services/workspace/service/lifecycle/state-machine.service.test.ts": 1115,
   "src/backend/services/workspace/service/snapshot/workspace-snapshot-store.service.test.ts": 1008,
   "src/cli/proxy.ts": 1022,

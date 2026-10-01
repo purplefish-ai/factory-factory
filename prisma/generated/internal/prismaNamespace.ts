@@ -404,6 +404,7 @@ export const ModelName = {
   WorkspaceRatchet: 'WorkspaceRatchet',
   WorkspaceRunScript: 'WorkspaceRunScript',
   WorkspaceAutoIteration: 'WorkspaceAutoIteration',
+  WorkspaceWakeSchedule: 'WorkspaceWakeSchedule',
   AgentSession: 'AgentSession',
   SessionLifecycleEvent: 'SessionLifecycleEvent',
   TerminalSession: 'TerminalSession',
@@ -427,7 +428,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "project" | "decisionLog" | "workspace" | "workspacePR" | "workspaceRatchet" | "workspaceRunScript" | "workspaceAutoIteration" | "agentSession" | "sessionLifecycleEvent" | "terminalSession" | "closedSession" | "userSettings" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification"
+    modelProps: "project" | "decisionLog" | "workspace" | "workspacePR" | "workspaceRatchet" | "workspaceRunScript" | "workspaceAutoIteration" | "workspaceWakeSchedule" | "agentSession" | "sessionLifecycleEvent" | "terminalSession" | "closedSession" | "userSettings" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -946,6 +947,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         count: {
           args: Prisma.WorkspaceAutoIterationCountArgs<ExtArgs>
           result: runtime.Types.Utils.Optional<Prisma.WorkspaceAutoIterationCountAggregateOutputType> | number
+        }
+      }
+    }
+    WorkspaceWakeSchedule: {
+      payload: Prisma.$WorkspaceWakeSchedulePayload<ExtArgs>
+      fields: Prisma.WorkspaceWakeScheduleFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.WorkspaceWakeScheduleFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceWakeSchedulePayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.WorkspaceWakeScheduleFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceWakeSchedulePayload>
+        }
+        findFirst: {
+          args: Prisma.WorkspaceWakeScheduleFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceWakeSchedulePayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.WorkspaceWakeScheduleFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceWakeSchedulePayload>
+        }
+        findMany: {
+          args: Prisma.WorkspaceWakeScheduleFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceWakeSchedulePayload>[]
+        }
+        create: {
+          args: Prisma.WorkspaceWakeScheduleCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceWakeSchedulePayload>
+        }
+        createMany: {
+          args: Prisma.WorkspaceWakeScheduleCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.WorkspaceWakeScheduleCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceWakeSchedulePayload>[]
+        }
+        delete: {
+          args: Prisma.WorkspaceWakeScheduleDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceWakeSchedulePayload>
+        }
+        update: {
+          args: Prisma.WorkspaceWakeScheduleUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceWakeSchedulePayload>
+        }
+        deleteMany: {
+          args: Prisma.WorkspaceWakeScheduleDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.WorkspaceWakeScheduleUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.WorkspaceWakeScheduleUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceWakeSchedulePayload>[]
+        }
+        upsert: {
+          args: Prisma.WorkspaceWakeScheduleUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceWakeSchedulePayload>
+        }
+        aggregate: {
+          args: Prisma.WorkspaceWakeScheduleAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateWorkspaceWakeSchedule>
+        }
+        groupBy: {
+          args: Prisma.WorkspaceWakeScheduleGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.WorkspaceWakeScheduleGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.WorkspaceWakeScheduleCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.WorkspaceWakeScheduleCountAggregateOutputType> | number
         }
       }
     }
@@ -1706,6 +1781,23 @@ export const WorkspaceAutoIterationScalarFieldEnum = {
 export type WorkspaceAutoIterationScalarFieldEnum = (typeof WorkspaceAutoIterationScalarFieldEnum)[keyof typeof WorkspaceAutoIterationScalarFieldEnum]
 
 
+export const WorkspaceWakeScheduleScalarFieldEnum = {
+  workspaceId: 'workspaceId',
+  enabled: 'enabled',
+  cadence: 'cadence',
+  prompt: 'prompt',
+  scheduledTime: 'scheduledTime',
+  timezone: 'timezone',
+  scheduledDayOfMonth: 'scheduledDayOfMonth',
+  nextWakeAt: 'nextWakeAt',
+  lastWakeAt: 'lastWakeAt',
+  lastOutcome: 'lastOutcome',
+  lastError: 'lastError'
+} as const
+
+export type WorkspaceWakeScheduleScalarFieldEnum = (typeof WorkspaceWakeScheduleScalarFieldEnum)[keyof typeof WorkspaceWakeScheduleScalarFieldEnum]
+
+
 export const AgentSessionScalarFieldEnum = {
   id: 'id',
   workspaceId: 'workspaceId',
@@ -2013,6 +2105,13 @@ export type EnumAutoIterationStatusFieldRefInput<$PrismaModel> = FieldRefInputTy
 
 
 /**
+ * Reference to a field of type 'PeriodicTaskCadence'
+ */
+export type EnumPeriodicTaskCadenceFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'PeriodicTaskCadence'>
+    
+
+
+/**
  * Reference to a field of type 'SessionStatus'
  */
 export type EnumSessionStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'SessionStatus'>
@@ -2058,13 +2157,6 @@ export type EnumSessionPermissionPresetFieldRefInput<$PrismaModel> = FieldRefInp
  * Reference to a field of type 'Float'
  */
 export type FloatFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Float'>
-    
-
-
-/**
- * Reference to a field of type 'PeriodicTaskCadence'
- */
-export type EnumPeriodicTaskCadenceFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'PeriodicTaskCadence'>
     
 
 
@@ -2239,6 +2331,7 @@ export type GlobalOmitConfig = {
   workspaceRatchet?: Prisma.WorkspaceRatchetOmit
   workspaceRunScript?: Prisma.WorkspaceRunScriptOmit
   workspaceAutoIteration?: Prisma.WorkspaceAutoIterationOmit
+  workspaceWakeSchedule?: Prisma.WorkspaceWakeScheduleOmit
   agentSession?: Prisma.AgentSessionOmit
   sessionLifecycleEvent?: Prisma.SessionLifecycleEventOmit
   terminalSession?: Prisma.TerminalSessionOmit

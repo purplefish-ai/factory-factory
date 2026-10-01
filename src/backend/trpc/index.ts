@@ -13,6 +13,7 @@ import { router } from './trpc';
 import { userSettingsRouter } from './user-settings.trpc';
 import { voiceRouter } from './voice.trpc';
 import { workspaceRouter } from './workspace.trpc';
+import { workspaceWakeRouter } from './workspace-wake.trpc';
 
 export const appRouter = router({
   project: projectRouter,
@@ -28,6 +29,7 @@ export const appRouter = router({
   linear: linearRouter,
   autoIteration: autoIterationRouter,
   periodicTask: periodicTaskRouter,
+  workspaceWake: workspaceWakeRouter,
   voice: voiceRouter,
 });
 
