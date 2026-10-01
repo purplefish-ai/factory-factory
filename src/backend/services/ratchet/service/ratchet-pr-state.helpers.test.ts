@@ -217,7 +217,6 @@ describe('fetchPRState', () => {
       computeCIStatus: vi.fn(),
       computePRState: vi.fn(() => 'OPEN' as const),
       getAuthenticatedUsername: vi.fn(),
-      fetchAndComputePRState: vi.fn(),
       coordinatePrFetch: fakeCoordinator(),
       ...overrides,
     };
@@ -478,7 +477,6 @@ describe('fetchPRState', () => {
       computeCIStatus: vi.fn().mockReturnValue(CIStatus.SUCCESS),
       computePRState: vi.fn(() => 'OPEN' as const),
       getAuthenticatedUsername: vi.fn(),
-      fetchAndComputePRState: vi.fn(),
       coordinatePrFetch: fakeCoordinator(),
       ...overrides,
     };

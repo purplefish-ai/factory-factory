@@ -14,6 +14,10 @@ export class SessionStoreRegistry {
     ReturnType<typeof setTimeout>
   >();
 
+  isCurrentStore(sessionId: string, store: SessionStore): boolean {
+    return this.stores.get(sessionId) === store;
+  }
+
   getOrCreate(sessionId: string): SessionStore {
     let store = this.stores.get(sessionId);
     if (!store) {

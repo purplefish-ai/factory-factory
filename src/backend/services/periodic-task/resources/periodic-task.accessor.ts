@@ -450,41 +450,7 @@ export const periodicTaskAccessor = {
     });
   },
 
-  async markDispatched(
-    id: string,
-    cadence: PeriodicTaskCadence,
-    scheduledTime: string | null,
-    timezone: string | null,
-    scheduledDayOfMonth: number | null
-  ): Promise<void> {
-    const data = await buildDispatchedTaskData(id, {
-      cadence,
-      scheduledTime,
-      timezone,
-      scheduledDayOfMonth,
-    });
-
-    await prisma.periodicTask.update({
-      where: { id },
-      data,
-    });
-  },
-
   // ─── Execution CRUD ─────────────────────────────────────────────────────
-
-  async createExecution(input: {
-    periodicTaskId: string;
-    workspaceId: string | null;
-    status: PeriodicTaskExecutionStatus;
-  }): Promise<PeriodicTaskExecution> {
-    return await prisma.periodicTaskExecution.create({
-      data: {
-        periodicTaskId: input.periodicTaskId,
-        workspaceId: input.workspaceId,
-        status: input.status,
-      },
-    });
-  },
 
   async reserveExecutionAndMarkDispatched(
     input: {

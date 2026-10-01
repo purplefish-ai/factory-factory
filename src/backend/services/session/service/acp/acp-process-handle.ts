@@ -6,6 +6,7 @@ import {
   subagentBrowseCapabilitySchema,
 } from '@/shared/acp-protocol/subagents';
 import type { AcpPermissionBridge } from './acp-permission-bridge';
+import type { AcpSessionCreationOutcome } from './acp-runtime-events';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -21,6 +22,7 @@ export class AcpProcessHandle {
   isPromptInFlight: boolean;
   configOptions: SessionConfigOption[];
   readonly createdAt: Date;
+  readonly sessionCreationOutcome: AcpSessionCreationOutcome;
 
   constructor(params: {
     connection: ClientSideConnection;
@@ -28,6 +30,7 @@ export class AcpProcessHandle {
     permissionBridge?: AcpPermissionBridge;
     provider: string;
     providerSessionId: string;
+    sessionCreationOutcome?: AcpSessionCreationOutcome;
     agentCapabilities: Record<string, unknown>;
   }) {
     this.connection = params.connection;
@@ -35,6 +38,7 @@ export class AcpProcessHandle {
     this.permissionBridge = params.permissionBridge;
     this.provider = params.provider;
     this.providerSessionId = params.providerSessionId;
+    this.sessionCreationOutcome = params.sessionCreationOutcome ?? { kind: 'new' };
     this.agentCapabilities = params.agentCapabilities;
     this.isPromptInFlight = false;
     this.configOptions = [];

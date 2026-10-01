@@ -9,6 +9,7 @@ import {
   type ClosedSessionWithWorkspace,
   closedSessionAccessor,
 } from '@/backend/services/session/resources/closed-session.accessor';
+import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type {
   AgentSessionRecord,
   AgentSessionRecordWithWorkspace,
@@ -137,7 +138,10 @@ class SessionDataService {
   }
 
   deleteAgentSession(id: string): Promise<AgentSessionRecord> {
-    return agentSessionAccessor.delete(id).then(toAgentSessionRecord);
+    return agentSessionAccessor.delete(id).then((session) => {
+      sessionDomainService.forgetProviderHistoryIdentity(id);
+      return toAgentSessionRecord(session);
+    });
   }
 
   findAgentSessionsWithPid(): Promise<AgentSessionRecord[]> {

@@ -166,6 +166,7 @@ it.each([false, true])(
             cleanupWorkspaceScopedCaches: () =>
               workspaceActivityService.clearWorkspace(workspaceId),
             createLogger: () => ({ error: vi.fn() }),
+            sessionDataService: { findAgentSessionsByWorkspaceId: async () => [] },
             workspaceDataService: {
               findByIdWithProject: async () => ({ id: workspaceId }),
               delete: async () => {

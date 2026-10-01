@@ -24,6 +24,7 @@ import { sessionAcpEnvironment, sessionContextService } from './session-lifecycl
 import { SessionLifecycleGate } from './session-lifecycle-gate';
 import { SessionNotificationDeliveryService } from './session-notification-delivery.service';
 import { hydrateProviderHistoryIfNeeded } from './session-provider-history-hydrator';
+import { SessionProviderIdentityService } from './session-provider-identity.service';
 import { SessionRuntimeExitCoordinator } from './session-runtime-exit.coordinator';
 import { SessionStartupCoordinator } from './session-startup.coordinator';
 import { SessionTerminationCoordinator } from './session-termination.coordinator';
@@ -129,7 +130,15 @@ const sessionPromptCoordinator = new SessionService({
 
 export const sessionService: SessionPromptService = sessionPromptCoordinator;
 
+const sessionProviderIdentityService = new SessionProviderIdentityService({
+  repository: sessionRepository,
+  sessionDomainService,
+  archive: closedSessionPersistenceService,
+  processor: acpEventProcessor,
+});
+
 const sessionRuntimeExitCoordinator = new SessionRuntimeExitCoordinator({
+  providerIdentityService: sessionProviderIdentityService,
   repository: sessionRepository,
   sessionDomainService,
   sessionPermissionService,

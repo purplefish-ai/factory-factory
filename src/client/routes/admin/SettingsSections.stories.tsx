@@ -40,12 +40,14 @@ function SettingsStoryProvider({
   children,
   settings: initialSettings = {},
   loading = false,
+  refreshDelayMs = 0,
   failRequests = [],
   factoryConfig = null,
 }: {
   children: ReactNode;
   settings?: Partial<typeof defaultSettings>;
   loading?: boolean;
+  refreshDelayMs?: number;
   failRequests?: string[];
   factoryConfig?: FactoryConfig | null;
 }) {
@@ -109,6 +111,14 @@ function SettingsStoryProvider({
         },
       }),
     };
+    const dispatchResponse = (path: string, send: () => void) => {
+      if (path === 'userSettings.get' && refreshDelayMs > 0) {
+        const timer = setTimeout(send, refreshDelayMs);
+        return () => clearTimeout(timer);
+      }
+      send();
+      return;
+    };
     return trpc.createClient({
       links: [
         () =>
@@ -127,8 +137,11 @@ function SettingsStoryProvider({
                 observer.error(new TRPCClientError(`No story fixture for ${op.path}`));
                 return;
               }
-              observer.next({ result: { data: respond(op.input) } });
-              observer.complete();
+              const send = () => {
+                observer.next({ result: { data: respond(op.input) } });
+                observer.complete();
+              };
+              return dispatchResponse(op.path, send);
             }),
       ],
     });
@@ -217,6 +230,14 @@ export const ChatDefaults: Story = {
       })
     );
   },
+};
+
+export const ChatDefaultsSlowRefresh: Story = {
+  render: () => (
+    <SettingsStoryProvider refreshDelayMs={1500}>
+      <ChatProviderDefaultsSection />
+    </SettingsStoryProvider>
+  ),
 };
 
 export const SavedModelOutsideCatalog: Story = {

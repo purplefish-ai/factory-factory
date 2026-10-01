@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
+import { fn } from 'storybook/test';
 import { AppHeaderProvider } from '@/client/components/app-header-context';
 import { AppNavigationDataProvider } from '@/client/hooks/use-app-navigation-data';
 import NewProjectPage from './new';
@@ -8,11 +9,13 @@ const meta = {
   component: NewProjectPage,
   parameters: { layout: 'fullscreen' },
   decorators: [
-    (Story) => (
+    (Story, context) => (
       <AppHeaderProvider>
         <AppNavigationDataProvider
           value={{
             projects: undefined,
+            projectsError: context.parameters.projectsError ?? null,
+            refetchProjects: fn(),
             selectedProjectSlug: '',
             selectProjectSlug: () => undefined,
             selectedProjectId: undefined,
@@ -39,6 +42,17 @@ export const LoadingProjects: Story = {
       description: {
         story:
           'A single loading status is announced; the decorative spinner is hidden from assistive technology.',
+      },
+    },
+  },
+};
+
+export const ProjectsError: Story = {
+  parameters: {
+    projectsError: { message: 'Could not connect to the backend. Please try again.' },
+    docs: {
+      description: {
+        story: 'A failed project list shows an error, retry, and a way back to Projects.',
       },
     },
   },

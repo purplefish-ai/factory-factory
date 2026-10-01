@@ -176,6 +176,26 @@ describe('SessionStartupCoordinator', () => {
     expect(probes).toEqual(['running', 'stopping']);
   });
 
+  it('stops the installed fallback handle if its metadata lookup fails', async () => {
+    const h = createLifecycleHarness({
+      providerSessionId: 'old',
+      sessionCreationOutcome: {
+        kind: 'resume_fallback',
+        previousProviderSessionId: 'old',
+        reason: 'load_failed',
+      },
+    });
+    h.runtimeManager.getOrCreateClient.mockImplementationOnce(() => {
+      h.repository.getSessionById.mockRejectedValue(new Error('metadata unavailable'));
+      return Promise.resolve(h.handle);
+    });
+    await expect(h.service.getOrCreateSessionClient('session-1')).rejects.toThrow(
+      'metadata unavailable'
+    );
+    expect(h.runtimeManager.stopClient).toHaveBeenCalledWith('session-1');
+    expect(h.acpEventProcessor.clearSessionState).toHaveBeenCalledWith('session-1');
+  });
+
   it('builds ACP startup options through the injected environment port', async () => {
     const { service, runtimeManager, acpEnvironment } = createLifecycleHarness({
       workspace: { parentWorkspaceId: 'parent-workspace' },
