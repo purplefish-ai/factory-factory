@@ -152,7 +152,9 @@ export class SessionConfigService {
     preResolvedPreset?: SessionPermissionPreset
   ): Promise<void> {
     if (session.workflow === ADVERSARIAL_REVIEW_WORKFLOW) {
-      await applyReadOnlyReviewPermissions(sessionId, handle, this.runtimeManager);
+      if (await applyReadOnlyReviewPermissions(sessionId, handle, this.runtimeManager)) {
+        await this.persistAndEmitConfigOptions(sessionId, handle);
+      }
       return;
     }
 
@@ -189,19 +191,7 @@ export class SessionConfigService {
         targetExecutionMode
       );
       handle.configOptions = configOptions;
-      await this.persistAcpConfigSnapshot(sessionId, {
-        provider: handle.provider as SessionProvider,
-        providerSessionId: handle.providerSessionId,
-        configOptions,
-      });
-      this.sessionDomainService.emitDelta(sessionId, {
-        type: 'config_options_update',
-        configOptions,
-      } as SessionDeltaEvent);
-      this.sessionDomainService.emitDelta(sessionId, {
-        type: 'chat_capabilities',
-        capabilities: this.buildAcpChatBarCapabilities(handle),
-      });
+      await this.persistAndEmitConfigOptions(sessionId, handle);
     } catch (error) {
       logger.warn('Failed applying configured session permission preset', {
         sessionId,
@@ -211,6 +201,26 @@ export class SessionConfigService {
         error: error instanceof Error ? error.message : String(error),
       });
     }
+  }
+
+  private async persistAndEmitConfigOptions(
+    sessionId: string,
+    handle: AcpProcessHandle
+  ): Promise<void> {
+    const configOptions = handle.configOptions;
+    await this.persistAcpConfigSnapshot(sessionId, {
+      provider: handle.provider as SessionProvider,
+      providerSessionId: handle.providerSessionId,
+      configOptions,
+    });
+    this.sessionDomainService.emitDelta(sessionId, {
+      type: 'config_options_update',
+      configOptions,
+    } as SessionDeltaEvent);
+    this.sessionDomainService.emitDelta(sessionId, {
+      type: 'chat_capabilities',
+      capabilities: this.buildAcpChatBarCapabilities(handle),
+    });
   }
 
   getSessionConfigOptions(sessionId: string): SessionConfigOption[] {

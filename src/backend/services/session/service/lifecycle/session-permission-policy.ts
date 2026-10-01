@@ -15,7 +15,10 @@ export function assertReadOnlyReviewConfigOption(
   }
   const mode = configId === 'mode' || option?.category === 'mode';
   const permission = configId === 'execution_mode' || option?.category === 'permission';
-  if ((mode && value !== 'plan') || (permission && value !== '["never","read-only"]')) {
+  if (
+    (mode && !findModeValue([value], ['plan'])) ||
+    (permission && !findModeValue([value], ['["never","read-only"]']))
+  ) {
     throw new Error('Adversarial review permissions must remain read-only');
   }
 }
@@ -26,7 +29,8 @@ export async function applyReadOnlyReviewPermissions(
   sessionId: string,
   handle: AcpProcessHandle,
   runtime: Pick<AcpRuntimeManager, 'setSessionMode' | 'setConfigOption'>
-): Promise<void> {
+): Promise<boolean> {
+  let didUpdate = false;
   const mode = handle.configOptions.find((option) => option.category === 'mode');
   const planValue = mode && findModeValue(getConfigOptionValues(mode), ['plan']);
   if (!(mode && planValue)) {
@@ -34,12 +38,13 @@ export async function applyReadOnlyReviewPermissions(
   }
   if (mode.currentValue !== planValue) {
     handle.configOptions = await runtime.setSessionMode(sessionId, planValue);
+    didUpdate = true;
   }
   if (handle.configOptions.find((option) => option.id === mode.id)?.currentValue !== planValue) {
     throw new Error('Adversarial review plan mode was not applied');
   }
   if (handle.provider !== 'CODEX') {
-    return;
+    return didUpdate;
   }
 
   const execution = handle.configOptions.find(
@@ -52,6 +57,7 @@ export async function applyReadOnlyReviewPermissions(
   }
   if (execution.currentValue !== readOnlyValue) {
     handle.configOptions = await runtime.setConfigOption(sessionId, execution.id, readOnlyValue);
+    didUpdate = true;
   }
   if (
     handle.configOptions.find((option) => option.id === execution.id)?.currentValue !==
@@ -59,6 +65,7 @@ export async function applyReadOnlyReviewPermissions(
   ) {
     throw new Error('Adversarial review read-only execution was not applied');
   }
+  return didUpdate;
 }
 
 export function resolveConfiguredExecutionModeTarget(

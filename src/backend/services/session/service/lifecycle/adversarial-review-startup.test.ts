@@ -4,6 +4,7 @@ import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionConfigService } from './session.config.service';
 import { createLifecycleHarness } from './session-lifecycle.test-helpers';
+import { assertReadOnlyReviewConfigOption } from './session-permission-policy';
 
 vi.mock('@/backend/services/logger.service', () => ({
   getCurrentProcessEnv: () => ({ NODE_ENV: 'test' }),
@@ -221,6 +222,56 @@ describe('adversarial review startup permissions', () => {
       harness.handle.configOptions.find((option) => option.id === 'execution_mode')?.currentValue
     ).toBe('["never","read-only"]');
     expect(harness.runtimeManager.getOrCreateClient).not.toHaveBeenCalled();
+  });
+
+  it.each(['chat auto-start', 'preloaded auto-start'] as const)(
+    'stops an existing review client when read-only execution fails during %s',
+    async (path) => {
+      const harness = createHarness('CODEX');
+      harness.runtimeManager.getClient.mockReturnValue(harness.handle);
+      harness.runtime.setConfigOption.mockRejectedValue(new Error('sandbox rejected'));
+      await expect(start(harness, path)).rejects.toThrow('sandbox rejected');
+      expect(harness.runtimeManager.stopClient).toHaveBeenCalledWith(harness.session.id);
+      expect(harness.tryDispatchNextMessage).not.toHaveBeenCalled();
+    }
+  );
+
+  it('persists and emits repaired permissions on an existing review client', async () => {
+    const harness = createHarness('CODEX');
+    harness.runtimeManager.getClient.mockReturnValue(harness.handle);
+    const persist = vi.spyOn(harness.config, 'persistAcpConfigSnapshot').mockResolvedValue();
+    await start(harness, 'chat auto-start');
+    expect(persist).toHaveBeenCalledWith(
+      harness.session.id,
+      expect.objectContaining({
+        configOptions: harness.handle.configOptions,
+      })
+    );
+    expect(harness.sessionDomainService.emitDelta).toHaveBeenCalledWith(harness.session.id, {
+      type: 'config_options_update',
+      configOptions: harness.handle.configOptions,
+    });
+    expect(harness.sessionDomainService.emitDelta).toHaveBeenCalledWith(
+      harness.session.id,
+      expect.objectContaining({ type: 'chat_capabilities' })
+    );
+    persist.mockClear();
+    harness.sessionDomainService.emitDelta.mockClear();
+    await start(harness, 'chat auto-start');
+    expect(persist).not.toHaveBeenCalled();
+    expect(harness.sessionDomainService.emitDelta).not.toHaveBeenCalledWith(
+      harness.session.id,
+      expect.objectContaining({ type: 'config_options_update' })
+    );
+  });
+
+  it.each([
+    ['mode', 'PLAN'],
+    ['execution_mode', '[ "never", "read-only" ]'],
+  ])('accepts equivalent safe provider values for %s', (configId, value) => {
+    expect(() =>
+      assertReadOnlyReviewConfigOption(ADVERSARIAL_REVIEW_WORKFLOW, configId, value, undefined)
+    ).not.toThrow();
   });
 
   it('keeps review restrictions when a caller requests non-interactive startup', async () => {

@@ -458,11 +458,16 @@ export class SessionStartupCoordinator {
     const existingAcp = this.dependencies.runtimeManager.getClient(sessionId);
     if (existingAcp) {
       if (session.workflow === ADVERSARIAL_REVIEW_WORKFLOW) {
-        await this.dependencies.sessionConfigService.applyConfiguredPermissionPreset(
-          sessionId,
-          session,
-          existingAcp
-        );
+        try {
+          await this.dependencies.sessionConfigService.applyConfiguredPermissionPreset(
+            sessionId,
+            session,
+            existingAcp
+          );
+        } catch (error) {
+          await this.dependencies.runtimeManager.stopClient(sessionId);
+          throw error;
+        }
       }
       const isWorking = this.dependencies.runtimeManager.isSessionWorking(sessionId);
       this.dependencies.sessionDomainService.setRuntimeSnapshot(sessionId, {
