@@ -87,7 +87,9 @@ function DiffViewer({ diff }: { diff: string }) {
       {files.map((file) => (
         <div key={file.name} className="text-xs">
           <div className="px-3 py-1.5 bg-muted/50 font-mono sticky top-0 flex items-center gap-2">
-            <span className="font-medium truncate">{file.name}</span>
+            <span data-testid="diff-file-name" className="font-medium truncate">
+              {file.name}
+            </span>
             {file.additions > 0 && <span className="text-green-600">+{file.additions}</span>}
             {file.deletions > 0 && <span className="text-red-600">-{file.deletions}</span>}
           </div>
