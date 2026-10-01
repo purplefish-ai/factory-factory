@@ -120,6 +120,7 @@ describe('PRSnapshotService', () => {
         prState: 'NONE',
         prReviewState: null,
         prCiStatus: 'UNKNOWN',
+        prHasMergeConflict: false,
       });
       expect(listener).toHaveBeenCalledOnce();
       expect(listener).toHaveBeenCalledWith({

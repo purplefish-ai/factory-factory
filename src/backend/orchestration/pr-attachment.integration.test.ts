@@ -77,6 +77,7 @@ describe('failed PR attachment recovery', () => {
               state: previousState,
               reviewState: 'CHANGES_REQUESTED',
               ciStatus: 'FAILURE',
+              hasMergeConflict: true,
             },
           },
           ratchet: { create: { enabled: true } },
@@ -98,6 +99,7 @@ describe('failed PR attachment recovery', () => {
         state: 'NONE',
         reviewState: null,
         ciStatus: 'UNKNOWN',
+        hasMergeConflict: false,
         syncedAt: expect.any(Date),
       });
       expect(await workspaceRatchetService.findCandidates()).toEqual(

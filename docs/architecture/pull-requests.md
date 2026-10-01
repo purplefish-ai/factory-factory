@@ -118,10 +118,11 @@ old `pr*` names, so the snapshot wire, the v4 export format and the client are
 unchanged.
 
 Attaching a PR URL still persists the URL when its initial snapshot fetch fails.
-That write clears the cached number, state, review state, and CI status to a
-neutral baseline. Ratchet can then poll the new URL and persist its observations
-without being excluded by the previous PR's terminal state or rejected by its
-cached number. Observations for the old URL remain rejected.
+That write clears the cached number, state, review state, CI status, and merge
+conflict flag to a neutral baseline. Ratchet can then poll the new URL and
+persist its observations without being excluded by the previous PR's terminal
+state or rejected by its cached number. Observations for the old URL remain
+rejected.
 
 A row exists for every workspace, including those with no PR, because discovery
 claims its backoff before a PR exists. `syncedAt` was `prUpdatedAt` on

@@ -213,6 +213,7 @@ class PRSnapshotService extends EventEmitter {
           prState: 'NONE',
           prReviewState: null,
           prCiStatus: 'UNKNOWN',
+          prHasMergeConflict: false,
         });
         this.emit(PR_URL_ATTACHED, {
           workspaceId,
