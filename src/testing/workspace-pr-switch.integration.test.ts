@@ -127,7 +127,7 @@ describe('successful PR switch snapshot publication', () => {
         prUrl: 'https://github.com/org/other/pull/41',
       },
     },
-  ])('clears MERGED before notifying subscribers for $label', ({ overrides }) => {
+  ])('clears MERGED before notifying subscribers for $label', async ({ overrides }) => {
     const fixture = createFixture();
     collector = fixture.collector;
     const pending = deferred<Projection>();
@@ -139,6 +139,9 @@ describe('successful PR switch snapshot publication', () => {
 
     expectOpen(fixture.store);
     pending.resolve({ ...mergedProjection, ratchetState: 'CI_RUNNING' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fixture.store.getByWorkspaceId('ws')!.ratchetState).toBe('CI_RUNNING');
+    expectOpen(fixture.store);
   });
 
   it('remains safe when authoritative projection reads exhaust their retries', async () => {
