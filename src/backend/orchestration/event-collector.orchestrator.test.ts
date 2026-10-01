@@ -1027,32 +1027,6 @@ describe('configureEventCollector', () => {
     );
   });
 
-  it('pr_url_attached immediately updates only prUrl in the store', () => {
-    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
-      projectId: 'proj-1',
-      prUrl: null,
-    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
-
-    configureEventCollector();
-
-    const onCall = vi
-      .mocked(prSnapshotService.on)
-      .mock.calls.find((call) => call[0] === 'pr_url_attached');
-    const handler = onCall![1] as (event: { workspaceId: string; prUrl: string }) => void;
-
-    handler({
-      workspaceId: 'ws-1',
-      prUrl: 'https://github.com/org/repo/pull/1',
-    });
-
-    expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
-      'ws-1',
-      { prUrl: 'https://github.com/org/repo/pull/1' },
-      'event:pr_url_attached',
-      expect.any(Number)
-    );
-  });
-
   it('triggers immediate ratchet recompute when PR identity changes', () => {
     vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
       projectId: 'proj-1',

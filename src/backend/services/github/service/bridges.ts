@@ -25,6 +25,7 @@ export interface GitHubWorkspaceSnapshotUpdate {
   prState?: PRState;
   prReviewState?: string | null;
   prCiStatus?: CIStatus;
+  prHasMergeConflict?: boolean;
   prUpdatedAt?: Date | null;
   prCiFailedAt?: Date | null;
   prCiLastNotifiedAt?: Date | null;

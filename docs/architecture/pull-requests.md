@@ -117,6 +117,19 @@ Everything cached from GitHub about a workspace's PR lives in a 1:1
 old `pr*` names, so the snapshot wire, the v4 export format and the client are
 unchanged.
 
+Attaching a PR URL still persists the URL when its initial snapshot fetch fails.
+That write clears the cached number, state, review state, CI status, and merge
+conflict flag to a neutral baseline. Ratchet can then poll the new URL and
+persist its observations without being excluded by the previous PR's terminal
+state or rejected by its cached number. Observations for the old URL remain
+rejected.
+
+The URL-attached event publishes the neutral PR fields and resets the streamed
+ratchet projection synchronously. It also invalidates pending projection reads:
+a read started for the previous PR cannot restore its cached merge status or
+conflict flag while a replacement read is pending. Archive confirmation
+therefore uses the new attachment's neutral state immediately.
+
 A row exists for every workspace, including those with no PR, because discovery
 claims its backoff before a PR exists. `syncedAt` was `prUpdatedAt` on
 `Workspace`, a name that read as GitHub's PR `updated_at` but always held the
