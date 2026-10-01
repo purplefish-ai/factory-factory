@@ -116,6 +116,10 @@ describe('PRSnapshotService', () => {
       expect(mockUpdate).toHaveBeenCalledWith('w1', {
         prUrl: 'https://github.com/org/repo/pull/1',
         prUpdatedAt: expect.any(Date),
+        prNumber: null,
+        prState: 'NONE',
+        prReviewState: null,
+        prCiStatus: 'UNKNOWN',
       });
       expect(listener).toHaveBeenCalledOnce();
       expect(listener).toHaveBeenCalledWith({

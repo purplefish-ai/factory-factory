@@ -204,10 +204,15 @@ class PRSnapshotService extends EventEmitter {
       // Fetch PR snapshot from GitHub
       const snapshot = await githubCLIService.fetchAndComputePRState(prUrl);
       if (!snapshot) {
-        // Still attach the URL even if we can't fetch details
+        // Attach with a neutral cache so the old PR cannot exclude ratchet
+        // candidates or reject observations for the newly attached PR.
         await this.workspace.recordSnapshot(workspaceId, {
           prUrl,
           prUpdatedAt: new Date(),
+          prNumber: null,
+          prState: 'NONE',
+          prReviewState: null,
+          prCiStatus: 'UNKNOWN',
         });
         this.emit(PR_URL_ATTACHED, {
           workspaceId,
