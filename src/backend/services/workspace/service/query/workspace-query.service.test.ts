@@ -185,7 +185,14 @@ describe('WorkspaceQueryService', () => {
         ciObservation: 'CHECKS_UNKNOWN',
       },
     }));
-    mockGetAllPendingRequests.mockReturnValue(new Map([['w2', { toolName: 'AskUserQuestion' }]]));
+    mockGetAllPendingRequests.mockReturnValue(
+      new Map([
+        [
+          'w2',
+          { toolName: 'AskUserQuestion', input: { questions: [{ question: 'Which approach?' }] } },
+        ],
+      ])
+    );
 
     const { workspaces: result } = await workspaceQueryService.listForProject('proj-1');
 
