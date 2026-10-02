@@ -30,7 +30,13 @@ describe('computePendingRequestType', () => {
     const result = computePendingRequestType(
       ['s1', 's2'],
       new Map([
-        ['s1', { toolName: 'AskUserQuestion' }],
+        [
+          's1',
+          {
+            toolName: 'AskUserQuestion',
+            input: { questions: [{ question: 'What next?', options: [] }] },
+          },
+        ],
         ['s2', { toolName: 'ReadFile' }],
       ])
     );
@@ -67,12 +73,44 @@ describe('computePendingRequestType', () => {
       ['s1', 's2'],
       new Map([
         ['s1', { toolName: 'ReadFile' }],
-        ['s2', { toolName: 'AskUserQuestion' }],
+        [
+          's2',
+          {
+            toolName: 'AskUserQuestion',
+            input: { questions: [{ question: 'What next?', options: [] }] },
+          },
+        ],
       ])
     );
 
     expect(result).toBe('user_question');
   });
+
+  it('keeps a question-shaped MCP permission classified as permission on the board', () => {
+    const requests = new Map([
+      [
+        's1',
+        {
+          toolName: 'AskUserQuestion',
+          rawToolName: 'mcp__survey__poll',
+          input: { questions: [{ question: 'Survey', options: [] }] },
+        },
+      ],
+    ]);
+    expect(computePendingRequestType(['s1'], requests)).toBe('permission_request');
+  });
+
+  it.each([[], [{ prompt: 'Survey' }]].map((questions) => [questions]))(
+    'keeps unusable question input %j classified as permission',
+    (questions) => {
+      expect(
+        computePendingRequestType(
+          ['s1'],
+          new Map([['s1', { toolName: 'AskUserQuestion', input: { questions } }]])
+        )
+      ).toBe('permission_request');
+    }
+  );
 
   it('returns null when no pending requests exist', () => {
     const result = computePendingRequestType(['s1', 's2'], new Map());
