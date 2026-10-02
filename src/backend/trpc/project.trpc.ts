@@ -270,9 +270,10 @@ export const projectRouter = router({
       if (!project) {
         throw new Error(`Project not found: ${input.projectId}`);
       }
+      // Match session loading: project commands take precedence over global commands.
       const dirs = [
-        { dir: join(homedir(), '.claude', 'commands') },
         { dir: join(project.repoPath, '.claude', 'commands'), containmentRoot: project.repoPath },
+        { dir: join(homedir(), '.claude', 'commands') },
       ];
       return { commands: scanSlashCommandDirs(dirs) };
     }),
