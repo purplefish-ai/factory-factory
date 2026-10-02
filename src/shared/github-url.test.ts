@@ -46,6 +46,8 @@ describe('parseGithubUrl', () => {
     'ssh://git@github.com/owner/repo',
     'https://github.com//repo',
     'https://github.com/owner/',
+    'git@github.com:owner',
+    'git@github.com:owner/',
   ])('rejects unsupported URL shapes: %s', (url) => {
     expect(parseGithubUrl(url)).toBeNull();
   });
