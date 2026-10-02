@@ -31,10 +31,9 @@ PR: {{PR_URL}} (#{{PR_NUMBER}})
 - Look for correctness bugs, security vulnerabilities, missed edge cases, and
   logical or architectural gaps — at the line level and in how the change fits
   together as a whole.
-- Where practical, reproduce a suspected bug with a focused test and run the
-  project's relevant verification gate (typecheck/tests/lint) to confirm or rule
-  it out. Running checks is fine; don't let that slide into editing tracked
-  files.
+- Where practical, run the project's existing verification gate
+  (typecheck/tests/lint) to confirm or rule out a suspected bug. Do not write or
+  modify any files to do this — the workspace is read-only.
 - Distinguish what you've confirmed from what you suspect but couldn't verify —
   say which is which, both in `summary` and in each finding's `body`.
 
