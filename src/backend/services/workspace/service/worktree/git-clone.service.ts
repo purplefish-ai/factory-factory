@@ -5,25 +5,16 @@ import { execCommand, gitCommand } from '@/backend/lib/shell';
 import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
 
+export { type GithubRepo, parseGithubUrl } from '@/shared/github-url';
+
 const logger = createLogger('git-clone');
 const GIT_CLONE_TIMEOUT_MS = 10 * 60 * 1000;
-
-export interface GithubRepo {
-  owner: string;
-  repo: string;
-}
 
 export type ExistingCloneStatus = 'valid_repo' | 'not_repo' | 'not_exists';
 
 interface CloneDestination {
   path: string;
   status: ExistingCloneStatus;
-}
-
-const GITHUB_PATH_SEGMENT_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/;
-
-function isValidGithubPathSegment(segment: string): boolean {
-  return GITHUB_PATH_SEGMENT_PATTERN.test(segment);
 }
 
 async function findCaseInsensitiveEntries(directory: string, name: string): Promise<string[]> {
@@ -36,34 +27,6 @@ async function findCaseInsensitiveEntries(directory: string, name: string): Prom
     }
     throw error;
   }
-}
-
-/**
- * Parse a GitHub URL into owner and repo.
- * Accepts:
- * - HTTPS: https://github.com/owner/repo or https://github.com/owner/repo.git
- * - SSH: git@github.com:owner/repo or git@github.com:owner/repo.git
- */
-export function parseGithubUrl(url: string): GithubRepo | null {
-  // Try HTTPS format first
-  let match = url.match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/);
-
-  // Try SSH format if HTTPS didn't match
-  if (!match) {
-    match = url.match(/^git@github\.com:([^/]+)\/([^/]+?)(?:\.git)?\/?$/);
-  }
-
-  if (!match) {
-    return null;
-  }
-
-  const owner = match[1] as string;
-  const repo = match[2] as string;
-  if (!(isValidGithubPathSegment(owner) && isValidGithubPathSegment(repo))) {
-    return null;
-  }
-
-  return { owner, repo };
 }
 
 class GitCloneService {

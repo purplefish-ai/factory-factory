@@ -34,7 +34,7 @@ vi.mock('@/backend/lib/file-helpers', () => ({
   searchFilesRecursive: (...args: unknown[]) => mockSearchFilesRecursive(...args),
 }));
 
-vi.mock('@/backend/services/workspace', () => ({
+vi.mock('@/shared/github-url', () => ({
   parseGithubUrl: (...args: unknown[]) => mockParseGithubUrl(...args),
 }));
 
