@@ -83,7 +83,9 @@ export interface RatchetPRFullDetails {
   mergeStateStatus?: string;
   reviews: Array<{
     submittedAt: string | null;
-    author: { login: string };
+    /** REST chronology for ties/missing times; absent metadata retains feedback. */
+    chronologicalOrder?: number;
+    author: { login: string; isUnknown?: boolean };
     state?: string;
     body?: string;
     url?: string;
@@ -122,14 +124,6 @@ export interface RatchetStatusCheckInput {
   completedAt?: string;
 }
 
-/** PR state as returned by fetchAndComputePRState */
-export interface RatchetPRStateSnapshot {
-  prState: string;
-  prNumber: number;
-  prReviewState: string | null;
-  prCiStatus: CIStatus;
-}
-
 /** PR snapshot capabilities needed by ratchet domain services */
 export interface RatchetPRSnapshotBridge {
   /**
@@ -152,7 +146,6 @@ export interface RatchetPRSnapshotBridge {
     failedAt?: Date | null;
     observedAt?: Date;
   }): Promise<void>;
-  recordCINotification(workspaceId: string, notifiedAt?: Date): Promise<void>;
   recordReviewCheck(workspaceId: string, checkedAt?: Date | null): Promise<void>;
 }
 
@@ -188,7 +181,6 @@ export interface RatchetGitHubBridge {
     reviewDecision: string | null;
   }): PRState;
   getAuthenticatedUsername(signal?: AbortSignal): Promise<string | null>;
-  fetchAndComputePRState(prUrl: string): Promise<RatchetPRStateSnapshot | null>;
   /**
    * Run a PR fetch through the shared coordinator, which skips it when the
    * scheduler's PR sync already fetched this workspace recently or is fetching

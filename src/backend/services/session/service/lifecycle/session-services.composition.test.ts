@@ -116,7 +116,9 @@ describe('session services composition', () => {
       recordLifecycleEvent: false,
     });
 
-    expect(sessionDomainService.clearSession).toHaveBeenCalledWith('session-1');
+    expect(sessionDomainService.clearSession).toHaveBeenCalledWith('session-1', {
+      permanentlyDeleted: true,
+    });
   });
 
   it('wires a lifecycle coordinator to a later workspace bridge without mutating the singleton', async () => {

@@ -45,7 +45,14 @@ vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
     useUtils: () => ({
-      userSettings: { get: { invalidate: vi.fn(), getData: () => mocks.userSettings } },
+      userSettings: {
+        get: {
+          invalidate: vi.fn(),
+          cancel: vi.fn(),
+          setData: vi.fn(),
+          getData: () => mocks.userSettings,
+        },
+      },
     }),
     userSettings: {
       get: { useQuery: () => ({ data: mocks.userSettings, isLoading: false }) },
@@ -159,7 +166,10 @@ describe('ChatProviderDefaultsSection', () => {
     expect(option).toBeDefined();
     flushSync(() => option?.click());
     expect(trigger?.textContent).toBe(selected);
-    flushSync(() => mocks.onUpdateError(new Error('Save rejected'), payload));
+    expect(mocks.updateSettingsMutate).toHaveBeenLastCalledWith(payload);
+    flushSync(() =>
+      mocks.onUpdateError(new Error('Save rejected'), mocks.updateSettingsMutate.mock.calls[0]?.[0])
+    );
     expect(trigger?.textContent).toBe(saved);
     root.unmount();
   });
@@ -179,9 +189,10 @@ describe('ChatProviderDefaultsSection', () => {
       flushSync(() => option?.click());
     }
     flushSync(() =>
-      mocks.onUpdateError(new Error('Earlier save rejected'), {
-        defaultClaudeModel: 'claude-fable-5[1m]',
-      })
+      mocks.onUpdateError(
+        new Error('Earlier save rejected'),
+        mocks.updateSettingsMutate.mock.calls[0]?.[0]
+      )
     );
     expect(trigger?.textContent).toBe('Default — Opus 4.8 (1M)');
     root.unmount();

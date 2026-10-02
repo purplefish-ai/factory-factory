@@ -6,12 +6,13 @@ import type {
   GitHubReview,
   GitHubStatusCheck,
 } from '@/shared/github-types';
-import type { fullPRDetailsSchema } from './schemas';
+import type { fullPRDetailsSchema, reviewItemSchema } from './schemas';
 
 const CHECK_STATUS_VALUES = ['COMPLETED', 'IN_PROGRESS', 'PENDING', 'QUEUED'] as const;
 const CHECK_CONCLUSION_VALUES = [
   'SUCCESS',
   'FAILURE',
+  'STARTUP_FAILURE',
   'SKIPPED',
   'CANCELLED',
   'TIMED_OUT',
@@ -113,9 +114,7 @@ export function mapStatusChecks(
   });
 }
 
-export function mapReviews(
-  reviews: z.infer<typeof fullPRDetailsSchema>['reviews']
-): GitHubReview[] {
+export function mapReviews(reviews: z.infer<typeof reviewItemSchema>[]): GitHubReview[] {
   return reviews.map((review) => ({
     id: review.id,
     author: review.author,

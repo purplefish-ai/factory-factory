@@ -349,16 +349,39 @@ async function postFindingsToGitHub(
   // identity for reviewing its own PR: post the same content through
   // endpoints with no such self-review restriction, anchored to the same
   // commit the diff (and therefore the findings' line numbers) was read at.
-  for (const comment of validComments) {
-    await createReviewComment(repo, prNumber, {
-      commitId: headSha,
-      path: comment.path,
-      line: comment.line,
-      side: comment.side,
-      body: formatCommentBody(comment),
-    });
+  // Ratchet ignores ordinary self-authored inline comments. Publish the full
+  // findings in its authenticated marker summary before any inline post can
+  // fail, so summary-only and cross-file findings still reach the fixer.
+  const inlineFindings = validComments.map(
+    (comment) =>
+      `### ${comment.path}:${comment.line} (${comment.side})\n\n${formatCommentBody(comment)}`
+  );
+  const postingErrors: unknown[] = [];
+  try {
+    await githubCLIService.addPRComment(repo, prNumber, [body, ...inlineFindings].join('\n\n'));
+  } catch (error) {
+    postingErrors.push(error);
   }
-  await githubCLIService.addPRComment(repo, prNumber, body);
+  for (const comment of validComments) {
+    try {
+      await createReviewComment(repo, prNumber, {
+        commitId: headSha,
+        path: comment.path,
+        line: comment.line,
+        side: comment.side,
+        body: formatCommentBody(comment),
+      });
+    } catch (error) {
+      postingErrors.push(error);
+    }
+  }
+  if (postingErrors.length > 0) {
+    const failureDetails = postingErrors.map((error) => toError(error).message).join('; ');
+    throw new AggregateError(
+      postingErrors,
+      `Failed to post some adversarial review findings: ${failureDetails}`
+    );
+  }
 }
 
 function formatCommentBody(comment: AdversarialReviewComment): string {

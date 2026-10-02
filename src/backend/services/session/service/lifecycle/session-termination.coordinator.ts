@@ -74,7 +74,7 @@ export type SessionTerminationCoordinatorDependencies = {
     'clearSession' | 'clearAll'
   >;
   lifecycleEventService: Pick<SessionLifecycleEventService, 'record'>;
-  lifecycleGate: Pick<SessionLifecycleGate, 'reserveStop' | 'reserveShutdown'>;
+  lifecycleGate: Pick<SessionLifecycleGate, 'reserveStop' | 'reserveShutdown' | 'releaseShutdown'>;
   workflowFinalizer: Pick<
     SessionWorkflowFinalizer,
     'finalizeDeliberateStop' | 'clearInactiveSession'
@@ -153,15 +153,20 @@ export class SessionTerminationCoordinator {
     );
     this.dependencies.lifecycleGate.reserveShutdown(activeShutdownSessionIds);
 
-    await this.recordShutdownLifecycleEvents(activeShutdownSessionIds);
-
     try {
-      await this.dependencies.runtimeManager.stopAllClients(timeoutMs);
-    } catch (error) {
-      logger.error('Failed to stop ACP clients during shutdown', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      throw error;
+      await this.recordShutdownLifecycleEvents(activeShutdownSessionIds);
+      try {
+        await this.dependencies.runtimeManager.stopAllClients(timeoutMs);
+      } catch (error) {
+        logger.error('Failed to stop ACP clients during shutdown', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      }
+    } finally {
+      for (const sessionId of activeShutdownSessionIds) {
+        this.dependencies.lifecycleGate.releaseShutdown(sessionId);
+      }
     }
   }
 

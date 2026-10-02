@@ -4,6 +4,58 @@
 
 import type { DiffFile, DiffHunk, DiffLine } from './types';
 
+/** Decode Git's C-quoted paths, including octal UTF-8 bytes. */
+function decodeGitPath(path: string): string {
+  if (!(path.startsWith('"') && path.endsWith('"'))) {
+    return path;
+  }
+  const escapes: Record<string, string> = {
+    a: '\x07',
+    b: '\b',
+    t: '\t',
+    n: '\n',
+    v: '\v',
+    f: '\f',
+    r: '\r',
+    '"': '"',
+    '\\': '\\',
+  };
+  return path
+    .slice(1, -1)
+    .replace(/(?:\\[0-7]{3})+|\\([abtnvfr"\\])/g, (match, escapeCode: string | undefined) => {
+      if (escapeCode) {
+        return escapes[escapeCode] ?? match;
+      }
+      const bytes = match.match(/[0-7]{3}/g) ?? [];
+      try {
+        return new TextDecoder('utf-8', { ignoreBOM: true, fatal: true }).decode(
+          Uint8Array.from(bytes, (byte) => Number.parseInt(byte, 8))
+        );
+      } catch {
+        // Git paths can contain arbitrary bytes. Retain their octal spelling
+        // rather than replacing bytes or guessing a legacy character encoding.
+        return match;
+      }
+    });
+}
+
+function parseDiffFileName(line: string): string {
+  const paths = line.slice('diff --git '.length);
+  // Spaces are legal in unquoted paths. For unchanged names, find the split
+  // whose two paths agree, even if a filename itself contains " b/".
+  if (paths.startsWith('a/')) {
+    for (let split = paths.indexOf(' b/'); split !== -1; split = paths.indexOf(' b/', split + 1)) {
+      const destination = paths.slice(split + 3);
+      if (paths.slice(2, split) === destination) {
+        return destination;
+      }
+    }
+  }
+  const match = paths.match(/^(?:"(?:\\.|[^"\\])*"|a\/.*?) ("(?:\\.|[^"\\])*"|b\/.+)$/);
+  const destination = decodeGitPath(match?.[1] ?? '');
+  return destination.startsWith('b/') ? destination.slice(2) : 'unknown';
+}
+
 /**
  * Checks if a line is a diff header (metadata line).
  * Inside a hunk, --- and +++ are content; diff --git starts the next file.
@@ -123,14 +175,25 @@ export function parseFileDiff(diff: string): DiffFile[] {
       if (currentFile) {
         files.push(currentFile);
       }
-      const match = line.match(/b\/(.+)$/);
       currentFile = {
-        name: match?.[1] || 'unknown',
+        name: parseDiffFileName(line),
         additions: 0,
         deletions: 0,
         hunks: [],
       };
       currentHunk = null;
+    } else if (
+      currentFile &&
+      !currentHunk &&
+      (line.startsWith('rename to ') || line.startsWith('copy to '))
+    ) {
+      // Rename/copy metadata is unprefixed and unambiguous, including paths with spaces.
+      currentFile.name = decodeGitPath(line.slice(line.indexOf(' to ') + 4));
+    } else if (currentFile && !currentHunk && line.startsWith('+++ ')) {
+      const destination = decodeGitPath(line.slice(4).split('\t')[0] ?? '');
+      if (destination.startsWith('b/')) {
+        currentFile.name = destination.slice(2);
+      }
     } else if (line.startsWith('@@') && currentFile) {
       currentHunk = { header: line, lines: [] };
       currentFile.hunks.push(currentHunk);

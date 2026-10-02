@@ -1,5 +1,14 @@
 # Pull Request Automation
 
+## PR detail diffs
+
+The PR detail panel uses `parseFileDiff` in `src/lib/diff/parse.ts` to display
+repository-relative destination filenames. It distinguishes Git's `a/` and `b/`
+prefixes from characters inside paths, decodes Git's quoted paths, and uses
+destination and rename metadata to disambiguate filenames containing spaces.
+Metadata only updates filenames before a hunk; header-like additions and
+deletions inside hunks remain diff content.
+
 ## Auto-Fix (Ratchet)
 
 Automatically watches pull requests and dispatches agents to fix issues
@@ -16,9 +25,10 @@ active. Admin settings control the default ratchet state for new workspaces and
 the global review-trigger mode.
 
 One narrow, deliberate exception to "ordinary comments never trigger Ratchet": a
-review whose body carries the Adversarial Review feature's marker
-(`src/shared/adversarial-review.ts`) is always actionable, regardless of
-`ratchetReviewTriggerMode` — see
+review or fallback conversation summary whose body carries the Adversarial
+Review feature's marker (`src/shared/adversarial-review.ts`) is always
+actionable, regardless of `ratchetReviewTriggerMode`, provided its author
+matches the authenticated GitHub identity — see
 [Adversarial Review](../design/adversarial-review.md). This exists because this
 app's own `gh` identity is also the PR's author, which rules out using GitHub's
 native `REQUEST_CHANGES` review state to signal "actionable" the way a human
@@ -67,6 +77,11 @@ arrive during a read, retries failures at 1s and 2s with a three-attempt budget,
 and suppresses archived workspaces and results arriving after stop. The
 collector keeps the event subscriptions and coalesced snapshot writes;
 reconciliation is the safety net after the worker exhausts its retries.
+Successful PR switches clear the previous ratchet projection in the same
+snapshot publication as the new PR facts. In-flight reads superseded by a newer
+invalidation are discarded before publishing, so neither a delayed read nor
+failed refresh retries can restore the previous PR's merged status or bypass
+archive confirmation for the new open PR.
 
 ### Dispatch tracking
 
@@ -94,10 +109,21 @@ sweep. It is what moves a stuck workspace out of the WORKING column; the
 snapshot key hashes `statusCheckRollup` detail `WorkspacePR` does not store, so
 no reader can re-derive it.
 
+Review summaries superseded by the same author's approval are excluded from
+prompts and review activity. Different valid submission times take precedence;
+same-second or missing times use an explicit ordinal from GitHub's
+[chronologically ordered REST reviews endpoint](https://docs.github.com/en/rest/pulls/reviews#list-reviews-for-a-pull-request),
+including across pages. Ratchet never infers order from its input array or
+opaque review IDs; without enough ordering evidence, it retains the feedback.
+Deleted reviewers retain their feedback under an explicit unknown identity;
+their approvals never supersede another unknown author’s feedback.
+
 Inline review comment fetches retain at most 2,000 comments, ordered by newest
 update first at the API boundary. Hitting that budget drops older activity
 rather than the newest comment or edit used in the dispatch snapshot. Returned
-comments are in ascending update order.
+comments are in ascending update order. Comments from deleted GitHub accounts
+are retained with an empty author login, preserving their feedback and activity
+timestamps without inventing an identity or failing the PR fetch.
 
 Review comments belonging to resolved review threads (GraphQL
 `reviewThreads.isResolved`) are excluded from fixer dispatch prompts and from
@@ -116,6 +142,19 @@ Everything cached from GitHub about a workspace's PR lives in a 1:1
 `workspace-pr.accessor.ts`; reads flatten it back onto the workspace under the
 old `pr*` names, so the snapshot wire, the v4 export format and the client are
 unchanged.
+
+Attaching a PR URL still persists the URL when its initial snapshot fetch fails.
+That write clears the cached number, state, review state, CI status, and merge
+conflict flag to a neutral baseline. Ratchet can then poll the new URL and
+persist its observations without being excluded by the previous PR's terminal
+state or rejected by its cached number. Observations for the old URL remain
+rejected.
+
+The URL-attached event publishes the neutral PR fields and resets the streamed
+ratchet projection synchronously. It also invalidates pending projection reads:
+a read started for the previous PR cannot restore its cached merge status or
+conflict flag while a replacement read is pending. Archive confirmation
+therefore uses the new attachment's neutral state immediately.
 
 A row exists for every workspace, including those with no PR, because discovery
 claims its backoff before a PR exists. `syncedAt` was `prUpdatedAt` on

@@ -227,6 +227,36 @@ describe('session-replay-builder', () => {
     );
   });
 
+  it.each(
+    [[], [{ prompt: 'Survey question' }], [{ question: 'Usable', options: [] }]].map(
+      (questions) => [questions]
+    )
+  )('restores MCP questions %j as actionable permissions', (questions) => {
+    const store = createStore();
+    const request = {
+      requestId: 'mcp-question',
+      toolName: 'AskUserQuestion',
+      rawToolName: 'mcp__survey__poll',
+      toolUseId: 'tool',
+      input: { questions },
+      planContent: null,
+      acpOptions: [{ optionId: 'allow', name: 'Allow', kind: 'allow_once' as const }],
+      timestamp: '2026-02-09T00:00:00.000Z',
+    };
+    store.pendingInteractiveRequest = request;
+    expect(buildReplayEvents(store)).toContainEqual(
+      expect.objectContaining({
+        type: 'permission_request',
+        requestId: 'mcp-question',
+        toolInput: { questions },
+        acpOptions: request.acpOptions,
+      })
+    );
+    expect(buildReplayEvents(store)).not.toContainEqual(
+      expect.objectContaining({ type: 'user_question' })
+    );
+  });
+
   it('builds snapshots from a bounded recent transcript window without mutating the store', () => {
     const store = createStore();
     store.transcript = Array.from({ length: DEFAULT_RENDERER_TRANSCRIPT_LIMIT + 5 }, (_, order) =>

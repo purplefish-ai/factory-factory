@@ -4,6 +4,11 @@ Rejected or failed messages restore their text and attachments only when the
 current session composer is empty. A newer draft or attachment selection is
 preserved, and clearing it later does not replay the earlier recovery.
 
+The new-workspace slash-command palette prefers project command descriptions
+over same-named global commands, matching the workspace-first precedence used
+when loading a Claude session. Commands found only in the global directory
+remain available.
+
 ## ACP runtime
 
 All agent sessions use the Agent Client Protocol (ACP) via
@@ -28,9 +33,12 @@ Session init/load fails unless model/mode select options can be obtained from
 provider `configOptions` or legacy model/mode response fields. Permission
 requests present multi-option selection (`allow_once`, `allow_always`,
 `deny_once`, `deny_always`) and are bridged through ACP permission response
-handlers. Soft cancellation (including voice stop and prompt timeout) resolves
-pending permission requests with a cancelled outcome, dismisses their prompts,
-and keeps the bridge available for later turns.
+handlers. User-question prompts require a non-empty, valid question payload; MCP
+tools retain their raw identity and use normal tool approval even when their
+inputs contain a `questions` array. Free-form provider questions remain
+supported without selection options. Soft cancellation (including voice stop and
+prompt timeout) resolves pending permission requests with a cancelled outcome,
+dismisses their prompts, and keeps the bridge available for later turns.
 
 Approving a Codex plan queues the automatic approval turn with the same
 plan-disabled settings persisted for the session, preventing that turn from
@@ -59,10 +67,12 @@ The chat composer uses generic retry wording for runtime errors; the banner
 provides the specific startup, prompt, or process-exit error.
 
 Admin Claude model options come from an ephemeral, non-persisted Claude ACP
-session with tools disabled; discovery failure falls back to static aliases.
-Claude model names are normalized from provider descriptions at every ACP config
-ingress so Admin and in-chat selectors show explicit family versions while
-preserving raw provider values and configured defaults.
+session with tools disabled; `ClaudeModelCatalogService` coalesces concurrent
+discovery and caches the catalog for 30 seconds like `CodexModelCatalogService`.
+Discovery failure falls back to static aliases. Claude model names are
+normalized from provider descriptions at every ACP config ingress so Admin and
+in-chat selectors show explicit family versions while preserving raw provider
+values and configured defaults.
 
 Admin Codex options and inactive-session chat capabilities share
 `CodexModelCatalogService`. It coalesces concurrent app-server discovery, caches
@@ -83,6 +93,44 @@ override is no longer needed. Offline ACP tests cover turn/cancellation, session
 options, resume, and file audit behavior, including coalesced results stamped
 with the last user UUID and the new UUID array. These checks do not exercise
 live model streaming or prompt persistence.
+
+### Failed provider resume
+
+An active session whose provider cannot load its stored identity explicitly
+reports `resume_fallback` (load failed or load unsupported). Browsing continues
+to fail without creating a replacement. Startup keeps the replacement runtime
+unavailable until the lifecycle owner reconciles it.
+
+The lifecycle owner archives the currently observed transcript through the
+existing closed-session history before clearing provider messages from the
+active chat. Durable stop evidence stays with the AgentSession; provider-owned
+history files are never modified or deleted. With no observed messages, no
+archive is created. The replacement starts a fresh provider conversation, and
+does not have the old conversation as model context.
+
+A dedicated compare-and-set operation changes the existing AgentSession's
+provider identity, matching ACP config snapshot, and `providerIdentityRollovers`
+audit together. It matches the old identity, metadata, and update timestamp;
+ordinary identity writes still enforce immutability. The audit records the
+runtime incarnation, reason, old/new identities, and archived message count. An
+archive or reconciliation failure aborts startup and terminates the candidate,
+preserving the old active transcript and identity. A stop racing a successful
+commit leaves the new durable identity available for the next restart. An
+archive created before a cancelled or failed commit remains available as a
+retained copy.
+
+Runtime incarnation/stop fences reject stale repair callbacks. Failed-load
+replay is discarded before `newSession`; replacement updates stay buffered until
+repair succeeds. History hydration ignores reads started under an older
+identity, even when they finish after rollover, and retry cooldowns reset for
+the new identity. After backend restart, the reconciled column is the
+authoritative history ID.
+
+Startup buffers at most 10,000 ACP events while provider creation and identity
+persistence are pending. Overflow cancels startup and terminates its candidate;
+it never installs a runtime with a silently truncated transcript. Rollover
+fencing rejects further reconciliation after overflow, and a later startup can
+retry.
 
 ### Session prompts
 
@@ -136,7 +184,10 @@ including after a browsing runtime is promoted to active use.
 Graceful server shutdown persists active sessions as `IDLE`, matching explicit
 stops, so deliberately stopped ratchet sessions are not retried as crashes on
 the next boot. Runtime-managed exits without a shutdown reservation still use
-the exit code to determine terminal status.
+the exit code to determine terminal status. Bulk shutdown retains its non-browse
+lifecycle reservations through event recording and runtime shutdown, then
+releases them on every exit path. The supervisor's closed shutdown admission
+remains in effect after gate cleanup.
 
 Startup, termination, runtime exit, notifications, context, and workflow
 finalization each have one coordinator or service.

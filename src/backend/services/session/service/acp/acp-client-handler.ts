@@ -6,6 +6,7 @@ import type {
   SessionNotification,
 } from '@agentclientprotocol/sdk';
 import { createLogger } from '@/backend/services/logger.service';
+import { isUserQuestionRequest } from '@/shared/acp-protocol/question-input';
 import {
   SUBAGENTS_CHANGED_METHOD,
   subagentsChangedParamsSchema,
@@ -40,20 +41,15 @@ function isExitPlanModeApprovalRequest(params: RequestPermissionRequest): boolea
 }
 
 function isUserInputPermissionRequest(params: RequestPermissionRequest): boolean {
-  if (
-    params.toolCall.title === 'AskUserQuestion' ||
-    params.toolCall.title === 'item/tool/requestUserInput'
-  ) {
-    return true;
-  }
-
   const rawInput = params.toolCall.rawInput;
-  if (typeof rawInput !== 'object' || rawInput === null) {
-    return false;
-  }
-
-  const questions = (rawInput as { questions?: unknown }).questions;
-  return Array.isArray(questions);
+  return isUserQuestionRequest({
+    toolName: params.toolCall.title ?? 'ACP Tool',
+    rawToolName: typeof params.toolCall.name === 'string' ? params.toolCall.name : undefined,
+    input:
+      typeof rawInput === 'object' && rawInput !== null && !Array.isArray(rawInput)
+        ? (rawInput as Record<string, unknown>)
+        : undefined,
+  });
 }
 
 function resolveRejectOptionId(params: RequestPermissionRequest): string | null {
@@ -260,6 +256,11 @@ export class AcpClientHandler implements Client {
       toolCallId: params.toolCall.toolCallId,
       options: params.options.map((o) => ({ optionId: o.optionId, kind: o.kind, name: o.name })),
     });
+
+    const automatic = this.permissionBridge?.resolveAutomaticPermission(params);
+    if (automatic) {
+      return Promise.resolve(automatic);
+    }
 
     const isPlanApproval = isExitPlanModeApprovalRequest(params);
     const isUserInputRequest = isUserInputPermissionRequest(params);

@@ -23,9 +23,9 @@ function isWildcardHost(host: string): boolean {
 // ratchet permission preset, which defaults to YOLO (see
 // getWorkflowPermissionPreset). Adversarial review is also non-interactive but
 // is read-only by contract (see docs/design/adversarial-review.md) — it falls
-// through to `defaultWorkspacePermissions` like any other session, and relies
-// on the `plan` startup mode (adversarial-review.orchestrator.ts) to
-// structurally block write tools rather than on being fully trusted.
+// through to `defaultWorkspacePermissions`. Lifecycle startup independently
+// enforces plan mode and Codex read-only execution, and its permission bridge
+// denies permission escalation even if the configured preset is permissive.
 export const sessionContextService = new SessionContextService({
   repository: sessionRepository,
   permissionPresetPort: {

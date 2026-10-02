@@ -155,15 +155,6 @@ class PRSnapshotService extends EventEmitter {
   }
 
   /**
-   * Record that CI failure notification was sent.
-   */
-  async recordCINotification(workspaceId: string, notifiedAt = new Date()): Promise<void> {
-    await this.workspace.recordSnapshot(workspaceId, {
-      prCiLastNotifiedAt: notifiedAt,
-    });
-  }
-
-  /**
    * Record PR review polling checkpoint.
    */
   async recordReviewCheck(workspaceId: string, input: ReviewCheckInput = {}): Promise<void> {
@@ -204,10 +195,16 @@ class PRSnapshotService extends EventEmitter {
       // Fetch PR snapshot from GitHub
       const snapshot = await githubCLIService.fetchAndComputePRState(prUrl);
       if (!snapshot) {
-        // Still attach the URL even if we can't fetch details
+        // Attach with a neutral cache so the old PR cannot exclude ratchet
+        // candidates or reject observations for the newly attached PR.
         await this.workspace.recordSnapshot(workspaceId, {
           prUrl,
           prUpdatedAt: new Date(),
+          prNumber: null,
+          prState: 'NONE',
+          prReviewState: null,
+          prCiStatus: 'UNKNOWN',
+          prHasMergeConflict: false,
         });
         this.emit(PR_URL_ATTACHED, {
           workspaceId,

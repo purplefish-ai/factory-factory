@@ -644,7 +644,10 @@ describe('SnapshotReconciliationService', () => {
 
       const pendingRequests = new Map([
         ['cs-permission', { toolName: 'RequestPermission' }],
-        ['cs-question', { toolName: 'AskUserQuestion' }],
+        [
+          'cs-question',
+          { toolName: 'AskUserQuestion', input: { questions: [{ question: 'Which approach?' }] } },
+        ],
       ]);
       vi.mocked(bridges.session.getAllPendingRequests).mockReturnValue(pendingRequests);
 
@@ -689,7 +692,10 @@ describe('SnapshotReconciliationService', () => {
 
       const pendingRequests = new Map([
         ['cs-permission', { toolName: 'RequestPermission' }],
-        ['cs-question', { toolName: 'AskUserQuestion' }],
+        [
+          'cs-question',
+          { toolName: 'AskUserQuestion', input: { questions: [{ question: 'Which approach?' }] } },
+        ],
         ['cs-plan', { toolName: 'ExitPlanMode' }],
       ]);
       vi.mocked(bridges.session.getAllPendingRequests).mockReturnValue(pendingRequests);

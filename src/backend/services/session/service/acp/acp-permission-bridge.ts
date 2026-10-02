@@ -27,7 +27,18 @@ type ToolUserInputAnswers = Record<string, string[]>;
 export class AcpPermissionBridge {
   private readonly pending = new Map<string, PendingPermission>();
 
-  constructor(private readonly onCancelled?: (requestId: string) => void) {}
+  constructor(
+    private readonly onCancelled?: (requestId: string) => void,
+    private readonly automaticPermission?: (
+      params: RequestPermissionRequest
+    ) => RequestPermissionResponse | undefined
+  ) {}
+
+  resolveAutomaticPermission(
+    params: RequestPermissionRequest
+  ): RequestPermissionResponse | undefined {
+    return this.automaticPermission?.(params);
+  }
 
   /**
    * Called by AcpClientHandler.requestPermission().
@@ -37,6 +48,10 @@ export class AcpPermissionBridge {
     requestId: string,
     params: RequestPermissionRequest
   ): Promise<RequestPermissionResponse> {
+    const automatic = this.resolveAutomaticPermission(params);
+    if (automatic) {
+      return Promise.resolve(automatic);
+    }
     return new Promise<RequestPermissionResponse>((resolve) => {
       const existing = this.pending.get(requestId);
       if (existing) {

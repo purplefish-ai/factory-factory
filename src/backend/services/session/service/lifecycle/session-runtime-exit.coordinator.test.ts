@@ -72,8 +72,10 @@ function createExitCoordinatorHarness(options?: {
     clearInactiveSession: vi.fn(),
   };
   const onSessionExit = vi.fn();
+  const providerIdentityService = { reconcile: vi.fn(async () => undefined) };
   const coordinator = new SessionRuntimeExitCoordinator({
     repository,
+    providerIdentityService,
     sessionDomainService: domain,
     sessionPermissionService: permission,
     acpEventProcessor: processor,
@@ -90,6 +92,7 @@ function createExitCoordinatorHarness(options?: {
 
   return {
     coordinator,
+    providerIdentityService,
     handlers,
     repository,
     domain,
@@ -142,6 +145,33 @@ describe('SessionRuntimeExitCoordinator', () => {
       type: 'provider_session_id',
       providerSessionId: 'provider-session-9',
     });
+  });
+
+  it('routes explicit rollover to the identity lifecycle owner', async () => {
+    const harness = createExitCoordinatorHarness();
+    const event = {
+      sessionId: 'session-1',
+      providerSessionId: 'new',
+      provider: 'CODEX' as const,
+      incarnationId: 'runtime-1',
+      outcome: {
+        kind: 'resume_fallback' as const,
+        previousProviderSessionId: 'old',
+        reason: 'load_failed' as const,
+      },
+      configOptions: [],
+      assertCurrent: vi.fn(),
+    };
+    await harness.handlers.onProviderIdentityRollover?.(event);
+    expect(harness.providerIdentityService.reconcile).toHaveBeenCalledWith(event);
+  });
+
+  it('propagates identity persistence failure to runtime startup', async () => {
+    const harness = createExitCoordinatorHarness();
+    harness.repository.updateSession.mockRejectedValue(new Error('write failed'));
+    await expect(harness.handlers.onSessionId?.('session-1', 'new')).rejects.toThrow(
+      'write failed'
+    );
   });
 
   it('omits provider session persistence for browse runtimes', () => {

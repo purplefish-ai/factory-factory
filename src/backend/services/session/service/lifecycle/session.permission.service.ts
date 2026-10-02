@@ -4,9 +4,13 @@ import {
 } from '@/backend/services/session/service/acp';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
-import type { AskUserQuestion } from '@/shared/acp-protocol';
 import { extractPlanText } from '@/shared/acp-protocol/plan-content';
-import { isExitPlanModeRequest, isUserQuestionRequest } from '@/shared/pending-request-types';
+import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
+import {
+  getAskUserQuestions,
+  isExitPlanModeRequest,
+  isUserQuestionRequest,
+} from '@/shared/pending-request-types';
 
 export type SessionPermissionServiceDependencies = {
   sessionDomainService?: SessionDomainService;
@@ -20,16 +24,28 @@ export class SessionPermissionService {
     this.sessionDomainService = options?.sessionDomainService ?? sessionDomainService;
   }
 
-  createPermissionBridge(sessionId: string): AcpPermissionBridge {
+  createPermissionBridge(sessionId: string, workflow?: string): AcpPermissionBridge {
     const existing = this.acpPermissionBridges.get(sessionId);
     if (existing) {
       return existing;
     }
 
-    const bridge = new AcpPermissionBridge((requestId) => {
-      this.sessionDomainService.clearPendingInteractiveRequestIfMatches(sessionId, requestId);
-      this.sessionDomainService.emitDelta(sessionId, { type: 'permission_cancelled', requestId });
-    });
+    const bridge = new AcpPermissionBridge(
+      (requestId) => {
+        this.sessionDomainService.clearPendingInteractiveRequestIfMatches(sessionId, requestId);
+        this.sessionDomainService.emitDelta(sessionId, { type: 'permission_cancelled', requestId });
+      },
+      workflow === ADVERSARIAL_REVIEW_WORKFLOW
+        ? (params) => {
+            const reject = params.options.find(
+              (option) => option.kind === 'reject_once' || option.kind === 'reject_always'
+            );
+            return reject
+              ? { outcome: { outcome: 'selected', optionId: reject.optionId } }
+              : { outcome: { outcome: 'cancelled' } };
+          }
+        : undefined
+    );
     this.acpPermissionBridges.set(sessionId, bridge);
     return bridge;
   }
@@ -60,16 +76,25 @@ export class SessionPermissionService {
 
   handlePermissionRequest(sessionId: string, event: AcpPermissionRequestEvent): void {
     const { requestId, params } = event;
+    if (this.acpPermissionBridges.get(sessionId)?.resolveAutomaticPermission(params)) {
+      return;
+    }
     const toolInput = (params.toolCall.rawInput as Record<string, unknown>) ?? {};
     const toolName = this.resolveToolName(params.toolCall.title, toolInput);
+    const rawToolName =
+      typeof params.toolCall.name === 'string'
+        ? params.toolCall.name
+        : params.toolCall.title?.startsWith('mcp__')
+          ? params.toolCall.title
+          : undefined;
     const acpOptions = params.options.map((option) => ({
       optionId: option.optionId,
       name: option.name,
       kind: option.kind,
     }));
     const planContent = this.extractPlanContent(toolName, toolInput);
-    const isUserQuestion = isUserQuestionRequest({ toolName, input: toolInput });
-    const questions = isUserQuestion ? this.extractAskUserQuestions(toolInput) : [];
+    const isUserQuestion = isUserQuestionRequest({ toolName, rawToolName, input: toolInput });
+    const questions = isUserQuestion ? getAskUserQuestions(toolInput) : [];
     const pendingInput = isUserQuestion ? { ...toolInput, questions } : toolInput;
 
     if (isUserQuestion) {
@@ -96,59 +121,11 @@ export class SessionPermissionService {
       requestId,
       toolName,
       toolUseId: params.toolCall.toolCallId,
+      ...(rawToolName ? { rawToolName } : {}),
       input: pendingInput,
       planContent,
       acpOptions,
       timestamp: new Date().toISOString(),
-    });
-  }
-
-  private extractAskUserQuestions(input: Record<string, unknown>): AskUserQuestion[] {
-    const questions = input.questions;
-    if (!Array.isArray(questions)) {
-      return [];
-    }
-
-    return questions.flatMap((question): AskUserQuestion[] => {
-      if (!question || typeof question !== 'object') {
-        return [];
-      }
-
-      const record = question as Record<string, unknown>;
-      if (typeof record.question !== 'string') {
-        return [];
-      }
-
-      const options = Array.isArray(record.options)
-        ? record.options.flatMap((option): AskUserQuestion['options'] => {
-            if (!option || typeof option !== 'object') {
-              return [];
-            }
-
-            const optionRecord = option as Record<string, unknown>;
-            if (typeof optionRecord.label !== 'string') {
-              return [];
-            }
-
-            return [
-              {
-                label: optionRecord.label,
-                description:
-                  typeof optionRecord.description === 'string' ? optionRecord.description : '',
-              },
-            ];
-          })
-        : [];
-
-      return [
-        {
-          ...(typeof record.id === 'string' ? { id: record.id } : {}),
-          question: record.question,
-          ...(typeof record.header === 'string' ? { header: record.header } : {}),
-          options,
-          ...(typeof record.multiSelect === 'boolean' ? { multiSelect: record.multiSelect } : {}),
-        },
-      ];
     });
   }
 
@@ -164,6 +141,9 @@ export class SessionPermissionService {
     title: string | null | undefined,
     input: Record<string, unknown>
   ): string {
+    if (title?.startsWith('mcp__')) {
+      return title;
+    }
     const type = input.type;
     if (type === 'AskUserQuestion' || type === 'ExitPlanMode') {
       return type;

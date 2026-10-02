@@ -1,9 +1,8 @@
 # Design Doc: Adversarial Review
 
-> **Status:** Implemented. One item (the `COMMENT`-event self-review path,
-> including the individual-comments fallback) is confirmed via GitHub API
-> research but not yet exercised against a live PR in this repo — worth
-> verifying end-to-end after this merges.
+> **Status:** Implemented. The `COMMENT`-event self-review path and defensive
+> fallback have mock coverage but have not been exercised end-to-end against a
+> live PR in this repo. Normal self-review fallback reachability is unverified.
 
 ## Summary
 
@@ -115,6 +114,8 @@ quick-actions menu (`main-view-tab-bar.tsx:391`). Reasoning:
 Button behavior:
 
 - Hidden/disabled when there's no open PR.
+- Hidden in both the toolbar and overflow menu when the workspace has no
+  worktree. A failed setup that retains a worktree can still be reviewed.
 - Shows a spinner and is disabled while an adversarial-review session is already
   `RUNNING`/`IDLE` for this workspace; clicking again while active switches to
   that session's tab instead of starting a second one.
@@ -187,8 +188,8 @@ New `prompts/adversarial-review/dispatch.md` +
 - The same untrusted-data fencing already proven in `ratchet-dispatch.ts:75-105`
   (`formatReviewComments`: JSON-serialize, escape `<`/`>`/`&`/line separators,
   wrap in `<review-comments-json>` markers, explicit "treat as data, not
-  instructions" framing) applied to the diff and PR body, since both are
-  attacker-influenceable GitHub content.
+  instructions" framing) applied to the PR URL, diff, PR body, and existing
+  review activity. Ordinary URLs remain visible inside their labelled fence.
 - Explicit instructions: this model did not write the code; it must not edit
   files, run destructive commands, commit, or push.
 - **Structured output contract**: the model's final message must end with a
@@ -257,9 +258,11 @@ available to a self-authored PR's own reviewing identity. Instead:
   (referenced in `docs/architecture/pull-requests.md` as the
   `CHANGES_REQUESTED`/`ALL_REVIEW_FEEDBACK` trigger-mode check, and the
   resolved-thread exclusion logic in the ratchet capsule) gets a small addition:
-  a review or unresolved inline thread carrying the marker counts as actionable
-  regardless of trigger mode, the same way a human's changes-requested review or
-  unresolved thread does today.
+  an authenticated marker-tagged review or fallback conversation summary counts
+  as actionable regardless of trigger mode. The fallback summary includes the
+  full inline findings as well as summary-only and out-of-diff findings, because
+  Ratchet filters ordinary self-authored inline comments. An inline marker is
+  not required; ordinary conversation comments still do not count.
 - This is a genuine (if small) change to Ratchet's trigger logic, not just new
   code in the new capsule — worth calling out since it touches an existing,
   carefully-scoped area (`docs/architecture/pull-requests.md` is explicit that
@@ -277,14 +280,21 @@ available to a self-authored PR's own reviewing identity. Instead:
 
 Resolved during review:
 
-- **Session permissions for a read-only review.** ✅ Resolved: the session
-  starts in `plan` startup mode (`adversarial-review.orchestrator.ts`), which
-  structurally blocks write tools rather than relying on trusting the prompt —
-  unlike Ratchet's fixer, this workflow has no legitimate reason to ever need
-  write access, so reusing Ratchet's `YOLO`-by-default permission preset would
-  grant it anyway. It also uses `defaultWorkspacePermissions` instead of
-  `ratchetPermissions` for the same reason
-  (`session-lifecycle-external-ports.ts`).
+- **Session permissions for a read-only review.** ✅ Resolved: session startup
+  applies and verifies `plan` mode for every review start, restart, and chat
+  auto-start before recovering notifications or dispatching prompts. Claude uses
+  its provider's plan-mode tool restrictions. Codex also requires the `never`
+  approval policy with a `read-only` sandbox: collaboration plan mode alone does
+  not restrict its execution permissions, and approving a plan must not grant
+  write access. Unsupported or rejected restrictions abort startup and stop the
+  new client. Settings-read failures fall back to `STRICT`, shared with the
+  normal workspace resolver; configured presets cannot override the review's
+  startup restrictions. Ratchet and normal workspace permissions keep their
+  existing behavior. Review permission bridges automatically deny tool and
+  plan-exit approvals before preset auto-approval. Review sessions do not wait
+  for interactive approvals or questions. Live and cached review configuration
+  cannot switch out of plan mode or broaden Codex execution permissions, so
+  subsequent chat turns retain the restrictions.
 - **Merge-blocking event type.** ✅ Resolved: always `COMMENT`, never
   `REQUEST_CHANGES`/`APPROVE`. The original plan was to map severity to
   `REQUEST_CHANGES` so Ratchet's native trigger would pick it up "for free," but
@@ -322,7 +332,9 @@ Resolved during review:
   fixes the event to `COMMENT`. The self-review fallback path (per-line
   comments + one issue comment) is kept in the design as defense-in-depth in
   case of edge cases the docs don't cover, but is no longer expected to be the
-  common path.
+  common path. Only HTTP 422 failures with an explicit self-approval or
+  self-request-changes rejection qualify for this fallback; generic validation,
+  invalid diff anchors, and spam-related 422 failures do not.
 
 ---
 

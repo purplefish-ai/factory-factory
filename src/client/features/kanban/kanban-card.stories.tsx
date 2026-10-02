@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
+import { useState } from 'react';
 import type { WorkspaceWithKanban } from './kanban-card';
 import { KanbanCard } from './kanban-card';
 
@@ -375,5 +376,23 @@ export const AllPRStates: Story = {
   args: {
     workspace: baseWorkspace,
     projectSlug: 'demo',
+  },
+};
+
+/** A mocked save keeps the inline name read-only until reconciliation completes. */
+export const SlowRename: Story = {
+  args: { workspace: baseWorkspace, projectSlug: 'my-project' },
+  render: function SlowRenameStory(args) {
+    const [workspace, setWorkspace] = useState(args.workspace);
+    return (
+      <KanbanCard
+        {...args}
+        workspace={workspace}
+        onRename={async (_id, name) => {
+          await new Promise<void>((resolve) => setTimeout(resolve, 3000));
+          setWorkspace((current) => ({ ...current, name }));
+        }}
+      />
+    );
   },
 };

@@ -3,7 +3,6 @@ import type {
   ChatMessage,
   PendingInteractiveRequest,
   ToolUseContent,
-  UserQuestionRequest,
 } from '@/lib/chat-protocol';
 import {
   compareTranscriptMessageOrder,
@@ -17,7 +16,7 @@ import {
   updateTokenStatsFromResult,
 } from '@/lib/chat-protocol';
 import { createDebugLogger, DEBUG_CHAT_WS } from '@/lib/debug';
-import { isUserQuestionRequest } from '@/shared/pending-request-types';
+import { getAskUserQuestions, isUserQuestionRequest } from '@/shared/pending-request-types';
 import type { ChatAction, ChatState, PendingRequest } from './types';
 
 // Shared chat debug flag, controlled by DEBUG_CHAT_WS env var.
@@ -534,13 +533,12 @@ export function convertPendingRequest(
   }
 
   if (isUserQuestionRequest(req)) {
-    const input = req.input as { questions?: unknown[] };
     return {
       type: 'question',
       request: {
         requestId: req.requestId,
         toolName: req.toolName,
-        questions: (input.questions ?? []) as UserQuestionRequest['questions'],
+        questions: getAskUserQuestions(req.input),
         ...(Array.isArray(req.acpOptions) ? { acpOptions: req.acpOptions } : {}),
         timestamp: req.timestamp,
       },

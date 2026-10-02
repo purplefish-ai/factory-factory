@@ -65,7 +65,7 @@ import {
   type workspaceSnapshotStore,
   type workspaceStateMachine,
 } from '@/backend/services/workspace';
-import type { CIStatus, PRState } from '@/shared/core';
+import { type CIStatus, type PRState, RatchetState } from '@/shared/core';
 import type { getWorkspaceLinearContext } from './linear-config.helper';
 import { RatchetProjectionWorker } from './ratchet-projection.worker';
 
@@ -152,16 +152,15 @@ function shouldRefreshRatchetForPrSwitch(
     return false;
   }
 
-  const hadPreviouslyLinkedPr =
-    previousSnapshot.prNumber !== null || previousSnapshot.prUrl !== null;
+  const hadPreviouslyLinkedPr = previousSnapshot.prNumber != null || previousSnapshot.prUrl != null;
   if (!hadPreviouslyLinkedPr) {
     return false;
   }
 
   const prNumberChanged =
-    previousSnapshot.prNumber !== null && previousSnapshot.prNumber !== event.prNumber;
+    previousSnapshot.prNumber != null && previousSnapshot.prNumber !== event.prNumber;
   const prUrlChanged =
-    previousSnapshot.prUrl !== null &&
+    previousSnapshot.prUrl != null &&
     event.prUrl !== undefined &&
     event.prUrl !== null &&
     previousSnapshot.prUrl !== event.prUrl;
@@ -629,6 +628,10 @@ function startEventCollectorWithState(state: EventCollectorState): void {
       prNumber: event.prNumber,
       prState: event.prState as PRState,
       prCiStatus: event.prCiStatus as CIStatus,
+      // The cached projection belongs to the previous PR. Clear it in the
+      // same publication as the new PR facts so derived state and the archive
+      // confirmation gate cannot see MERGED while the DB re-read is pending.
+      ...(shouldRefreshRatchet ? { ratchetState: RatchetState.IDLE } : {}),
     };
 
     coalescer.enqueue(event.workspaceId, snapshotUpdate, 'event:pr_snapshot_updated', {
@@ -667,9 +670,22 @@ function startEventCollectorWithState(state: EventCollectorState): void {
   );
 
   const prUrlAttachedHandler = (event: PRUrlAttachedEvent) => {
-    coalescer.enqueue(event.workspaceId, { prUrl: event.prUrl }, 'event:pr_url_attached', {
-      immediate: true,
-    });
+    // No snapshot was fetched for this URL. Publish its neutral cache and drop
+    // the old PR's projection before any subscriber can archive it as merged.
+    coalescer.enqueue(
+      event.workspaceId,
+      {
+        prUrl: event.prUrl,
+        prNumber: null,
+        prState: 'NONE',
+        prCiStatus: 'UNKNOWN',
+        hasMergeConflict: false,
+        ratchetState: 'IDLE',
+      },
+      'event:pr_url_attached',
+      { immediate: true }
+    );
+    ratchetProjection.request(event.workspaceId);
   };
   dependencies.prSnapshotService.on(PR_URL_ATTACHED, prUrlAttachedHandler);
   state.teardownListeners.push(() =>

@@ -3,12 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mockPathExists = vi.fn();
 const mockMkdir = vi.fn();
 const mockRm = vi.fn();
+const mockReaddir = vi.fn();
 const mockExecCommand = vi.fn();
 const mockGitCommand = vi.fn();
 
 vi.mock('node:fs/promises', () => ({
   mkdir: (...args: unknown[]) => mockMkdir(...args),
   rm: (...args: unknown[]) => mockRm(...args),
+  readdir: (...args: unknown[]) => mockReaddir(...args),
 }));
 
 vi.mock('@/backend/lib/file-helpers', () => ({
@@ -102,6 +104,95 @@ describe('parseGithubUrl', () => {
     expect(parseGithubUrl('git@github.com:owner name/repo')).toBeNull();
     expect(parseGithubUrl('git@github.com:owner/repo name')).toBeNull();
   });
+});
+
+describe('GitCloneService.getClonePath', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mockPathExists.mockResolvedValue(true);
+    // Simulate Linux, where multiple differently cased owner paths can coexist.
+    mockReaddir.mockImplementation((path: string) => {
+      if (path === '/repos') {
+        return Promise.resolve(['owner', 'OWNER', 'unrelated']);
+      }
+      return Promise.resolve(['RePo', 'repo']);
+    });
+    mockGitCommand.mockResolvedValue({ code: 0, stdout: '', stderr: '' });
+  });
+
+  it('prefers an existing canonical clone when multiple case variants exist', async () => {
+    await expect(gitCloneService.getClonePath('/repos', 'OwNeR', 'RePo')).resolves.toEqual({
+      path: '/repos/owner/repo',
+      status: 'valid_repo',
+    });
+    expect(mockReaddir).not.toHaveBeenCalledWith('/repos/unrelated');
+    expect(mockGitCommand).toHaveBeenCalledTimes(2);
+  });
+
+  it('searches all owner variants for a valid clone before rejecting non-repos', async () => {
+    mockGitCommand.mockImplementation(async (_args: string[], path: string) => ({
+      code: path === '/repos/owner/RePo' ? 0 : 128,
+      stdout: '',
+      stderr: '',
+    }));
+    await expect(gitCloneService.getClonePath('/repos', 'OWNER', 'REPO')).resolves.toEqual({
+      path: '/repos/owner/RePo',
+      status: 'valid_repo',
+    });
+  });
+
+  it('returns the first conflicting path and its existing non-repository status', async () => {
+    mockGitCommand.mockResolvedValue({ code: 128, stdout: '', stderr: '' });
+    await expect(gitCloneService.getClonePath('/repos', 'OWNER', 'REPO')).resolves.toEqual({
+      path: '/repos/owner/repo',
+      status: 'not_repo',
+    });
+    expect(mockGitCommand).toHaveBeenCalledTimes(4);
+  });
+
+  it('returns a new canonical destination without spawning git', async () => {
+    mockReaddir.mockResolvedValue([]);
+    mockPathExists.mockResolvedValue(false);
+    await expect(gitCloneService.getClonePath('/repos', 'OWNER', 'REPO')).resolves.toEqual({
+      path: '/repos/owner/repo',
+      status: 'not_exists',
+    });
+    expect(mockGitCommand).not.toHaveBeenCalled();
+  });
+
+  it('keeps the selected first candidate status when later candidates disappeared', async () => {
+    mockPathExists.mockImplementation(async (path: string) => path === '/repos/owner/repo');
+    mockGitCommand.mockResolvedValue({ code: 128, stdout: '', stderr: '' });
+    await expect(gitCloneService.getClonePath('/repos', 'OWNER', 'REPO')).resolves.toEqual({
+      path: '/repos/owner/repo',
+      status: 'not_repo',
+    });
+    expect(mockGitCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it('checks the canonical path even when the scan found no candidates', async () => {
+    mockReaddir.mockResolvedValue([]);
+    mockGitCommand.mockResolvedValue({ code: 128, stdout: '', stderr: '' });
+    await expect(gitCloneService.getClonePath('/repos', 'OWNER', 'REPO')).resolves.toEqual({
+      path: '/repos/owner/repo',
+      status: 'not_repo',
+    });
+    expect(mockPathExists).toHaveBeenCalledWith('/repos/owner/repo');
+  });
+
+  it.each(['/repos', '/repos/owner'])(
+    'propagates directory access errors at %s instead of choosing another clone path',
+    async (deniedPath) => {
+      const error = Object.assign(new Error('permission denied'), { code: 'EACCES' });
+      mockReaddir.mockImplementation((path: string) => {
+        if (path === deniedPath) {
+          return Promise.reject(error);
+        }
+        return Promise.resolve(['owner']);
+      });
+      await expect(gitCloneService.getClonePath('/repos', 'owner', 'repo')).rejects.toBe(error);
+    }
+  );
 });
 
 describe('GitCloneService.checkExistingClone', () => {

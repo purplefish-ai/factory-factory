@@ -267,14 +267,14 @@ export function WorkspaceDetailView({
           autoSaveId="workspace-main-panel"
         >
           {/* NOTE: react-resizable-panels v4+ changed its API to use percentage strings. */}
-          <ResizablePanel defaultSize="70%" minSize="30%">
+          <ResizablePanel id="workspace-chat" defaultSize="70%" minSize="30%">
             {mainContent}
           </ResizablePanel>
 
           {rightPanelVisible && (
             <>
               <ResizableHandle />
-              <ResizablePanel defaultSize="30%" minSize="15%" maxSize="50%">
+              <ResizablePanel id="workspace-side" defaultSize="30%" minSize="15%" maxSize="50%">
                 <div className="h-full border-l">{rightPanel}</div>
               </ResizablePanel>
             </>

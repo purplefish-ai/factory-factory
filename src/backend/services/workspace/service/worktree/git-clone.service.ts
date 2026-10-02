@@ -1,60 +1,71 @@
-import { mkdir, rm } from 'node:fs/promises';
+import { mkdir, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathExists } from '@/backend/lib/file-helpers';
 import { execCommand, gitCommand } from '@/backend/lib/shell';
 import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
 
+export { type GithubRepo, parseGithubUrl } from '@/shared/github-url';
+
 const logger = createLogger('git-clone');
 const GIT_CLONE_TIMEOUT_MS = 10 * 60 * 1000;
 
-export interface GithubRepo {
-  owner: string;
-  repo: string;
-}
-
 export type ExistingCloneStatus = 'valid_repo' | 'not_repo' | 'not_exists';
 
-const GITHUB_PATH_SEGMENT_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/;
-
-function isValidGithubPathSegment(segment: string): boolean {
-  return GITHUB_PATH_SEGMENT_PATTERN.test(segment);
+interface CloneDestination {
+  path: string;
+  status: ExistingCloneStatus;
 }
 
-/**
- * Parse a GitHub URL into owner and repo.
- * Accepts:
- * - HTTPS: https://github.com/owner/repo or https://github.com/owner/repo.git
- * - SSH: git@github.com:owner/repo or git@github.com:owner/repo.git
- */
-export function parseGithubUrl(url: string): GithubRepo | null {
-  // Try HTTPS format first
-  let match = url.match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/);
-
-  // Try SSH format if HTTPS didn't match
-  if (!match) {
-    match = url.match(/^git@github\.com:([^/]+)\/([^/]+?)(?:\.git)?\/?$/);
+async function findCaseInsensitiveEntries(directory: string, name: string): Promise<string[]> {
+  try {
+    return (await readdir(directory)).filter((entry) => entry.toLowerCase() === name);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') {
+      return [];
+    }
+    throw error;
   }
-
-  if (!match) {
-    return null;
-  }
-
-  const owner = match[1] as string;
-  const repo = match[2] as string;
-  if (!(isValidGithubPathSegment(owner) && isValidGithubPathSegment(repo))) {
-    return null;
-  }
-
-  return { owner, repo };
 }
 
 class GitCloneService {
   /**
-   * Compute the clone destination path for a GitHub repo.
+   * Reuse existing clone paths regardless of GitHub URL casing. New clones use
+   * lowercase owner/repo paths; existing directories are never renamed.
    */
-  getClonePath(reposDir: string, owner: string, repo: string): string {
-    return join(reposDir, owner, repo);
+  async getClonePath(reposDir: string, owner: string, repo: string): Promise<CloneDestination> {
+    const canonicalPath = join(reposDir, owner.toLowerCase(), repo.toLowerCase());
+    const candidates: string[] = [];
+    for (const existingOwner of await findCaseInsensitiveEntries(reposDir, owner.toLowerCase())) {
+      const ownerPath = join(reposDir, existingOwner);
+      for (const existingRepo of await findCaseInsensitiveEntries(ownerPath, repo.toLowerCase())) {
+        candidates.push(join(ownerPath, existingRepo));
+      }
+    }
+
+    // Stable choice even if older imports already created multiple case variants.
+    // Prefer the canonical clone, then other valid repositories over non-repos.
+    candidates.sort();
+    if (candidates.includes(canonicalPath)) {
+      candidates.splice(candidates.indexOf(canonicalPath), 1);
+      candidates.unshift(canonicalPath);
+    }
+    let firstCandidate: CloneDestination | undefined;
+    for (const candidate of candidates) {
+      const destination = { path: candidate, status: await this.checkExistingClone(candidate) };
+      if (destination.status === 'valid_repo') {
+        return destination;
+      }
+      firstCandidate ??= destination;
+    }
+    // Keep the caller's non-repository guard and reuse the selected path's status.
+    return (
+      firstCandidate ?? {
+        path: canonicalPath,
+        status: await this.checkExistingClone(canonicalPath),
+      }
+    );
   }
 
   /**

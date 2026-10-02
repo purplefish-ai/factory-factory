@@ -78,7 +78,7 @@ export function buildAdversarialReviewDispatchPrompt(
   input: AdversarialReviewDispatchInput
 ): string {
   const replacements: Record<AdversarialReviewDispatchPlaceholder, string> = {
-    '{{PR_URL}}': input.prUrl,
+    '{{PR_URL}}': fenceUntrustedText('PR URL', input.prUrl),
     '{{PR_NUMBER}}': String(input.prNumber),
     '{{PR_DESCRIPTION}}': fenceUntrustedText('PR description', input.prDescription),
     '{{PR_DIFF}}': fenceUntrustedText('PR diff', input.prDiff),

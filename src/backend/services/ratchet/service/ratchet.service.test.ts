@@ -110,7 +110,6 @@ const mockGitHubBridge: RatchetGitHubBridge = {
   computeCIStatus: vi.fn(),
   computePRState: vi.fn(() => 'OPEN' as const),
   getAuthenticatedUsername: vi.fn(),
-  fetchAndComputePRState: vi.fn(),
   coordinatePrFetch: vi.fn(async (_workspaceId, fetch, options) => {
     if (fakeCoordinator.inFlightSkips > 0) {
       fakeCoordinator.inFlightSkips -= 1;
@@ -125,7 +124,6 @@ const mockGitHubBridge: RatchetGitHubBridge = {
 
 const mockSnapshotBridge: RatchetPRSnapshotBridge = {
   recordPrObservation: vi.fn(),
-  recordCINotification: vi.fn(),
   recordReviewCheck: vi.fn(),
 };
 

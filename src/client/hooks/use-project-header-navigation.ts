@@ -8,7 +8,8 @@ import {
 export function useProjectHeaderNavigation() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const { projects, selectedProjectSlug, selectProjectSlug } = useAppNavigationDataContext();
+  const { projects, projectsError, refetchProjects, selectedProjectSlug, selectProjectSlug } =
+    useAppNavigationDataContext();
   const currentProjectSlug = getProjectSlugFromPath(pathname) ?? selectedProjectSlug;
 
   const navigateToProject = useCallback(
@@ -44,6 +45,8 @@ export function useProjectHeaderNavigation() {
   return {
     selectedProjectSlug: currentProjectSlug,
     projects,
+    projectsError,
+    refetchProjects,
     handleProjectChange,
     handleCurrentProjectSelect,
   };

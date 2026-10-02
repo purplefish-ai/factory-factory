@@ -22,6 +22,7 @@ import type { AcpClientOptions } from './types';
 
 const logger = createLogger('acp-runtime-manager');
 const STOP_TIMEOUT_MS = 5000;
+const MAX_STARTUP_EVENTS = 10_000;
 
 export type AcpRuntimeSupervisorDependencies = {
   clientFactory: Pick<AcpClientFactory, 'createClient'>;
@@ -72,7 +73,7 @@ export class AcpRuntimeSupervisor {
 
   getBrowseClient(sessionId: string): AcpProcessHandle | undefined {
     const handle = this.sessions.get(sessionId);
-    return handle?.isRunning() ? handle : undefined;
+    return handle?.isRunning() && !this.pendingCreation.has(sessionId) ? handle : undefined;
   }
 
   getInstalledHandle(sessionId: string): AcpProcessHandle | undefined {
@@ -379,6 +380,35 @@ export class AcpRuntimeSupervisor {
     const stopSignal = this.createSessionStopSignal(sessionId);
     const runtimeHandlers = this.createRuntimeHandlers(handlers, metadata);
     let startupActive = true;
+    let eventsReady = false;
+    let startupError: Error | undefined;
+    let startupHandle: AcpProcessHandle | undefined;
+    let startupCleanup: Promise<void> | undefined;
+    let rejectOverflow!: (error: Error) => void;
+    const overflowSignal = new Promise<never>((_resolve, reject) => {
+      rejectOverflow = reject;
+    });
+    const startupStop = Promise.race([stopSignal.promise, overflowSignal]);
+    void startupStop.catch(() => undefined);
+    const bufferedEvents: Parameters<NonNullable<AcpRuntimeEventHandlers['onAcpEvent']>>[] = [];
+    const dispatchEvent = runtimeHandlers.onAcpEvent;
+    runtimeHandlers.onAcpEvent = (...args) => {
+      if (startupError) {
+        return;
+      }
+      if (eventsReady) {
+        dispatchEvent?.(...args);
+      } else if (bufferedEvents.length >= MAX_STARTUP_EVENTS) {
+        startupError = new Error(`ACP startup event buffer exceeded for session ${sessionId}`);
+        bufferedEvents.length = 0;
+        rejectOverflow(startupError);
+        if (startupHandle) {
+          startupCleanup = this.cleanupInstalledCandidate(sessionId, startupHandle, metadata);
+        }
+      } else {
+        bufferedEvents.push(args);
+      }
+    };
     try {
       const handle = await this.clientFactory.createClient({
         sessionId,
@@ -386,18 +416,56 @@ export class AcpRuntimeSupervisor {
         handlers: runtimeHandlers,
         metadata,
         shutdownSignal,
-        stopSignal,
+        stopSignal: { ...stopSignal, promise: startupStop },
+        discardFailedResumeReplay: () => {
+          bufferedEvents.length = 0;
+        },
         shouldDispatchRuntimeError: (child) =>
           startupActive ||
           (metadata.installed &&
             !this.isCreationCancelled(sessionId, stopGeneration) &&
             this.sessions.get(sessionId)?.child === child),
       });
+      startupHandle = handle;
       startupActive = false;
-      const cancellation = this.getCreationCancellationError(sessionId, stopGeneration);
+      const cancellation =
+        startupError ?? this.getCreationCancellationError(sessionId, stopGeneration);
       if (cancellation) {
         await cleanupFailedAcpClientCreation(handle.child, sessionId);
         throw cancellation;
+      }
+
+      const assertCurrent = () => {
+        if (startupError) {
+          throw startupError;
+        }
+        this.throwIfCreationCancelled(sessionId, stopGeneration);
+        if (this.currentRuntimeBySessionId.get(sessionId) !== metadata || !handle.isRunning()) {
+          throw new Error(`Stale ACP identity reconciliation for session ${sessionId}`);
+        }
+      };
+      if (handle.sessionCreationOutcome.kind === 'resume_fallback') {
+        try {
+          if (!handlers.onProviderIdentityRollover) {
+            throw new Error(
+              `Missing ACP provider identity reconciliation for session ${sessionId}`
+            );
+          }
+          assertCurrent();
+          await handlers.onProviderIdentityRollover({
+            sessionId,
+            providerSessionId: handle.providerSessionId,
+            provider: options.provider,
+            incarnationId: metadata.incarnationId,
+            outcome: handle.sessionCreationOutcome,
+            configOptions: handle.configOptions,
+            assertCurrent,
+          });
+          assertCurrent();
+        } catch (error) {
+          await (startupCleanup ?? cleanupFailedAcpClientCreation(handle.child, sessionId));
+          throw error;
+        }
       }
 
       this.runtimeMetadata.set(handle.child, metadata);
@@ -407,18 +475,25 @@ export class AcpRuntimeSupervisor {
       this.wireChildExitHandler(sessionId, handle.child, handlers, metadata);
       try {
         await this.notifyClientCreated(sessionId, handle, context, handlers);
+        assertCurrent();
+      } catch (error) {
+        await (startupCleanup ?? this.cleanupInstalledCandidate(sessionId, handle, metadata));
+        throw error;
+      }
+      try {
+        eventsReady = true;
+        for (const args of bufferedEvents.splice(0)) {
+          dispatchEvent?.(...args);
+        }
       } catch (error) {
         await this.cleanupInstalledCandidate(sessionId, handle, metadata);
         throw error;
       }
-      const notificationCancellation = this.getCreationCancellationError(sessionId, stopGeneration);
-      if (notificationCancellation) {
-        await this.cleanupInstalledCandidate(sessionId, handle, metadata);
-        throw notificationCancellation;
-      }
       return handle;
     } finally {
       startupActive = false;
+      bufferedEvents.length = 0;
+      eventsReady = true;
       shutdownSignal.dispose();
       stopSignal.dispose();
     }
@@ -606,15 +681,8 @@ export class AcpRuntimeSupervisor {
     if (!handlers.onSessionId) {
       return;
     }
-    try {
-      await handlers.onSessionId(sessionId, handle.providerSessionId);
-    } catch (error) {
-      logger.warn('Failed to handle ACP session ID event', {
-        sessionId,
-        providerSessionId: handle.providerSessionId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+    // Durable identity failures are startup failures: the caller cleans up the candidate.
+    await handlers.onSessionId(sessionId, handle.providerSessionId);
   }
 
   private async stopClientOnce(sessionId: string): Promise<void> {

@@ -34,7 +34,7 @@ vi.mock('@/backend/lib/file-helpers', () => ({
   searchFilesRecursive: (...args: unknown[]) => mockSearchFilesRecursive(...args),
 }));
 
-vi.mock('@/backend/services/workspace', () => ({
+vi.mock('@/shared/github-url', () => ({
   parseGithubUrl: (...args: unknown[]) => mockParseGithubUrl(...args),
 }));
 
@@ -98,7 +98,10 @@ describe('projectRouter', () => {
       authenticated: true,
       user: 'martin',
     });
-    mockGetClonePath.mockReturnValue('/repos/purplefish-ai/factory-factory');
+    mockGetClonePath.mockResolvedValue({
+      path: '/repos/purplefish-ai/factory-factory',
+      status: 'valid_repo',
+    });
     mockCheckExistingClone.mockResolvedValue('valid_repo');
   });
 
@@ -646,14 +649,20 @@ describe('projectRouter', () => {
     ).rejects.toThrow('Invalid GitHub URL');
 
     mockParseGithubUrl.mockReturnValue({ owner: 'purplefish-ai', repo: 'factory-factory' });
-    mockCheckExistingClone.mockResolvedValueOnce('not_repo');
+    mockGetClonePath.mockResolvedValueOnce({
+      path: '/repos/purplefish-ai/factory-factory',
+      status: 'not_repo',
+    });
     await expect(
       caller.createFromGithub({
         githubUrl: 'https://github.com/purplefish-ai/factory-factory',
       })
     ).rejects.toThrow('Directory already exists');
 
-    mockCheckExistingClone.mockResolvedValueOnce('not_exists');
+    mockGetClonePath.mockResolvedValueOnce({
+      path: '/repos/purplefish-ai/factory-factory',
+      status: 'not_exists',
+    });
     mockCloneRepo.mockResolvedValueOnce({ success: false, error: 'clone denied' });
     await expect(
       caller.createFromGithub({
@@ -661,7 +670,10 @@ describe('projectRouter', () => {
       })
     ).rejects.toThrow('Failed to clone repository: clone denied');
 
-    mockCheckExistingClone.mockResolvedValueOnce('not_exists');
+    mockGetClonePath.mockResolvedValueOnce({
+      path: '/repos/purplefish-ai/factory-factory',
+      status: 'not_exists',
+    });
     mockCloneRepo.mockResolvedValueOnce({ success: true });
     mockProjectManagementService.validateRepoPath.mockResolvedValueOnce({
       valid: false,
@@ -673,7 +685,10 @@ describe('projectRouter', () => {
       })
     ).rejects.toThrow('Invalid repository after clone: missing .git');
 
-    mockCheckExistingClone.mockResolvedValueOnce('valid_repo');
+    mockGetClonePath.mockResolvedValueOnce({
+      path: '/repos/purplefish-ai/factory-factory',
+      status: 'valid_repo',
+    });
     mockProjectManagementService.validateRepoPath.mockResolvedValueOnce({ valid: true });
     mockProjectManagementService.create.mockResolvedValueOnce({ id: 'created-from-github' });
     await expect(
@@ -684,6 +699,7 @@ describe('projectRouter', () => {
     ).resolves.toEqual({ id: 'created-from-github' });
 
     expect(mockGetClonePath).toHaveBeenCalledWith('/repos', 'purplefish-ai', 'factory-factory');
+    expect(mockCheckExistingClone).not.toHaveBeenCalled();
     expect(mockProjectManagementService.create).toHaveBeenCalledWith(
       {
         repoPath: '/repos/purplefish-ai/factory-factory',

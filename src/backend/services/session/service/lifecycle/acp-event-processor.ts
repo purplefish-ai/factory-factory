@@ -86,6 +86,7 @@ export class AcpEventProcessor {
   readonly sessionToWorkingDir = new Map<string, string>();
   /** Maps sessionId → provider for slash command caching */
   private readonly sessionToProvider = new Map<string, 'CLAUDE' | 'CODEX'>();
+  private readonly sessionToWorkflow = new Map<string, string>();
   /** Maps sessionId → stable key for the currently executing prompt attempt. */
   private readonly activePromptAttemptKeys = new Map<string, string>();
 
@@ -102,7 +103,10 @@ export class AcpEventProcessor {
   createRuntimeEventHandler(
     sessionId: string
   ): Pick<AcpRuntimeEventHandlers, 'permissionBridge' | 'onAcpEvent'> {
-    const permissionBridge = this.sessionPermissionService.createPermissionBridge(sessionId);
+    const permissionBridge = this.sessionPermissionService.createPermissionBridge(
+      sessionId,
+      this.sessionToWorkflow.get(sessionId)
+    );
 
     return {
       permissionBridge,
@@ -174,11 +178,19 @@ export class AcpEventProcessor {
 
   registerSessionContext(
     sessionId: string,
-    context: { workspaceId: string; workingDir: string; provider: 'CLAUDE' | 'CODEX' }
+    context: {
+      workspaceId: string;
+      workingDir: string;
+      provider: 'CLAUDE' | 'CODEX';
+      workflow?: string;
+    }
   ): void {
     this.sessionToWorkspace.set(sessionId, context.workspaceId);
     this.sessionToWorkingDir.set(sessionId, context.workingDir);
     this.sessionToProvider.set(sessionId, context.provider);
+    if (context.workflow) {
+      this.sessionToWorkflow.set(sessionId, context.workflow);
+    }
   }
 
   setReplaySuppression(sessionId: string, suppress: boolean): void {
@@ -201,6 +213,7 @@ export class AcpEventProcessor {
     this.sessionToWorkspace.delete(sessionId);
     this.sessionToWorkingDir.delete(sessionId);
     this.sessionToProvider.delete(sessionId);
+    this.sessionToWorkflow.delete(sessionId);
   }
 
   clearPendingToolCalls(sessionId: string): void {
