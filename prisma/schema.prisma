@@ -135,6 +135,7 @@ enum WorkspaceMode {
 enum PeriodicTaskCadence {
   EVERY_MINUTE
   EVERY_FIVE_MINUTES
+  EVERY_HOUR
   DAILY
   WEEKLY
   MONTHLY
@@ -258,6 +259,9 @@ model Workspace {
   // Auto-iteration: the mode discriminant and the loop's state — see
   // WorkspaceAutoIteration
   autoIteration       WorkspaceAutoIteration?
+
+  // Self-scheduled recurring wake-up — see WorkspaceWakeSchedule
+  wakeSchedule        WorkspaceWakeSchedule?
 
   // Periodic task link
   periodicTaskId        String?
@@ -489,6 +493,36 @@ model WorkspaceAutoIteration {
 
   // Startup recovery scans `status = 'RUNNING'`; the pre-split column had no
   // index and this one does not need one at this table's size.
+}
+
+/// A workspace's self-scheduled recurring wake-up: resume its own session on a
+/// cadence and send `prompt` as a new turn, instead of Periodic Tasks' model of
+/// spawning a fresh workspace per run. Configured by the agent itself via the
+/// `set_wake_schedule`/`get_wake_schedule`/`clear_wake_schedule` MCP tools
+/// (`workspace-wake-mcp-server.ts`), not the Admin UI.
+///
+/// Row only exists once a schedule has been set -- unlike `WorkspaceRatchet` or
+/// `WorkspaceAutoIteration`, it is not created eagerly with the workspace, since
+/// most workspaces never set one. `clear_wake_schedule` deletes the row rather
+/// than disabling it.
+model WorkspaceWakeSchedule {
+  workspaceId String    @id
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  enabled             Boolean             @default(true)
+  cadence             PeriodicTaskCadence
+  prompt              String // Sent as a new turn to the workspace's own session on wake
+  scheduledTime       String? // HH:MM, for DAILY/WEEKLY/MONTHLY
+  timezone            String? // IANA timezone
+  scheduledDayOfMonth Int?
+
+  nextWakeAt  DateTime?
+  lastWakeAt  DateTime?
+  lastOutcome String? // 'DELIVERED' | 'FAILED' | 'SKIPPED_NO_SESSION'
+  lastError   String?
+
+  // The poll set is `enabled` schedules, due ones first.
+  @@index([nextWakeAt])
 }
 
 model AgentSession {

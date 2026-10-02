@@ -152,6 +152,20 @@ export type WorkspaceRunScript = Prisma.WorkspaceRunScriptModel
  */
 export type WorkspaceAutoIteration = Prisma.WorkspaceAutoIterationModel
 /**
+ * Model WorkspaceWakeSchedule
+ * A workspace's self-scheduled recurring wake-up: resume its own session on a
+ * cadence and send `prompt` as a new turn, instead of Periodic Tasks' model of
+ * spawning a fresh workspace per run. Configured by the agent itself via the
+ * `set_wake_schedule`/`get_wake_schedule`/`clear_wake_schedule` MCP tools
+ * (`workspace-wake-mcp-server.ts`), not the Admin UI.
+ * 
+ * Row only exists once a schedule has been set -- unlike `WorkspaceRatchet` or
+ * `WorkspaceAutoIteration`, it is not created eagerly with the workspace, since
+ * most workspaces never set one. `clear_wake_schedule` deletes the row rather
+ * than disabling it.
+ */
+export type WorkspaceWakeSchedule = Prisma.WorkspaceWakeScheduleModel
+/**
  * Model AgentSession
  * 
  */

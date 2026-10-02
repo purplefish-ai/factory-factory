@@ -92,3 +92,9 @@ dropdown. The workspace right panel shows execution history for
 periodic-task-sourced workspaces.
 
 Service capsule: `src/backend/services/periodic-task/`.
+
+Distinct from the wake schedule (see
+[agent-runtime.md](./agent-runtime.md#wake-schedule)): periodic tasks always
+spawn a fresh workspace and are configured from the Admin UI, while a wake
+schedule resumes the _same_ workspace's own session and is configured by the
+agent itself mid-session via MCP tools.

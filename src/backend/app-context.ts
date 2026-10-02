@@ -34,6 +34,7 @@ import {
 } from './orchestration/workspace-init.orchestrator';
 import { executeStartupScriptPipeline } from './orchestration/workspace-init-script-pipeline';
 import { deliverWorkspaceNotification } from './orchestration/workspace-notification-delivery.orchestrator';
+import { deliverWorkspaceWake } from './orchestration/workspace-wake-delivery.orchestrator';
 import { getQuickAction, listQuickActions } from './prompts/quick-actions';
 import { autoIterationService, insightsService, logbookService } from './services/auto-iteration';
 import { configService } from './services/config.service';
@@ -105,9 +106,11 @@ import {
   workspaceRunScriptService,
   workspaceSnapshotStore,
   workspaceStateMachine,
+  workspaceWakeScheduleService,
   worktreeLifecycleService,
 } from './services/workspace';
 import { workspaceGitStateService } from './services/workspace-git-state.service';
+import { workspaceWakeService } from './services/workspace-wake';
 
 export type ApplicationServices = BridgeServices & {
   acpRuntimeManager: typeof acpRuntimeManager;
@@ -164,6 +167,7 @@ export type ApplicationServices = BridgeServices & {
   cleanupWorkspaceScopedCaches(workspaceId: string): void;
   createChildWorkspace: typeof createChildWorkspace;
   deliverWorkspaceNotification: typeof deliverWorkspaceNotification;
+  deliverWorkspaceWake: typeof deliverWorkspaceWake;
   createWorkspaceCreationService: (
     dependencies: ConstructorParameters<typeof WorkspaceCreationService>[0]
   ) => Pick<WorkspaceCreationService, 'create'>;
@@ -286,6 +290,8 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     workspaceRunScriptService,
     workspaceSnapshotStore,
     workspaceStateMachine,
+    workspaceWakeScheduleService,
+    workspaceWakeService,
     worktreeLifecycleService,
     archiveWorkspace,
     cleanupWorkspaceRuntimeResources,
@@ -297,6 +303,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     },
     createChildWorkspace,
     deliverWorkspaceNotification,
+    deliverWorkspaceWake,
     createWorkspaceCreationService: (creationDependencies) =>
       new WorkspaceCreationService(creationDependencies),
     fireLifecycleNotification,

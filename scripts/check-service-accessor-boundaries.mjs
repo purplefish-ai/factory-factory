@@ -35,6 +35,10 @@ const ACCESSOR_POLICIES = {
     owner: 'workspace',
     module: 'src/backend/services/workspace/resources/workspace-notification.accessor',
   },
+  workspaceWakeScheduleAccessor: {
+    owner: 'workspace',
+    module: 'src/backend/services/workspace/resources/workspace-wake-schedule.accessor',
+  },
   agentSessionAccessor: {
     owner: 'session',
     module: 'src/backend/services/session/resources/agent-session.accessor',

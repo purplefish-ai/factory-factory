@@ -16,6 +16,7 @@ const TRPC_RUNTIME_FILES = discoverProductionTypeScriptFiles(TRPC_ROOT);
 
 const ALLOWED_PURE_BACKEND_IMPORTS = new Map<string, ReadonlySet<string>>([
   ['src/backend/services/github', new Set(['classifyGitHubCLIError'])],
+  ['src/backend/services/session', new Set(['getWorkflowPermissionPreset'])],
   [
     'src/backend/services/workspace',
     new Set([

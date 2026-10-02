@@ -1,4 +1,5 @@
 import {
+  AlarmIcon,
   ArchiveIcon,
   ArrowsClockwiseIcon,
   ChatIcon,
@@ -19,6 +20,7 @@ import {
   WorkspaceStatusBadge,
 } from '@/client/features/workspace';
 import { useInlineWorkspaceRename } from '@/client/hooks/use-inline-workspace-rename';
+import { cadenceLabel } from '@/client/lib/cadence-labels';
 import type { ProjectWorkspace } from '@/client/lib/snapshot-to-workspace';
 import { trpc } from '@/client/lib/trpc';
 import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
@@ -332,7 +334,8 @@ function deriveCardState(workspace: WorkspaceWithKanban) {
     !!issue ||
     !!sessionRuntimeError ||
     workspace.mode === 'AUTO_ITERATION' ||
-    workspace.creationSource === 'CHILD_WORKSPACE';
+    workspace.creationSource === 'CHILD_WORKSPACE' ||
+    workspace.wakeScheduleEnabled;
   return {
     showPR,
     issue,
@@ -342,6 +345,26 @@ function deriveCardState(workspace: WorkspaceWithKanban) {
     showBranch,
     hasMetadata,
   };
+}
+
+function WakeScheduleBadge({ workspace }: { workspace: WorkspaceWithKanban }) {
+  const nextWakeAt = workspace.wakeScheduleNextWakeAt;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <AlarmIcon className="h-3 w-3" />
+          <span>Wakes {cadenceLabel(workspace.wakeScheduleCadence ?? '').toLowerCase()}</span>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent>
+        <p>
+          This workspace wakes its own session on a schedule.
+          {nextWakeAt && ` Next wake: ${new Date(nextWakeAt).toLocaleString()}.`}
+        </p>
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 function AutoIterationBadge({ workspace }: { workspace: WorkspaceWithKanban }) {
@@ -475,6 +498,7 @@ export function KanbanCard({
               </div>
             )}
             {workspace.mode === 'AUTO_ITERATION' && <AutoIterationBadge workspace={workspace} />}
+            {workspace.wakeScheduleEnabled && <WakeScheduleBadge workspace={workspace} />}
             {workspace.creationSource === 'CHILD_WORKSPACE' && (
               <div className="flex items-center gap-1 text-[11px] text-violet-600 dark:text-violet-400">
                 <TreeStructureIcon className="h-3 w-3" />

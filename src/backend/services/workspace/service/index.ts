@@ -30,6 +30,7 @@ export {
   type RunScriptExecutionUpdate,
   workspaceRunScriptService,
 } from './lifecycle/workspace-run-script.service';
+export { workspaceWakeScheduleService } from './lifecycle/workspace-wake-schedule.service';
 export { computePRDiscoveryNextCheckAt } from './pr-discovery-schedule';
 // --- Workspace query/aggregation ---
 export { projectManagementService } from './query/project-management.service';

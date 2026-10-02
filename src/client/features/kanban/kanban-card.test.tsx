@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { KanbanCard, type WorkspaceWithKanban } from './kanban-card';
 
 vi.mock('@phosphor-icons/react', () => ({
+  AlarmIcon: () => null,
   ArchiveIcon: () => null,
   ArrowsClockwiseIcon: () => null,
   ChatIcon: () => null,
@@ -245,6 +246,29 @@ describe('KanbanCard', () => {
 
     expect(chips).toHaveLength(1);
     expect(chips[0]?.textContent).toBe('Needs permission');
+
+    root.unmount();
+    container.remove();
+  });
+
+  it('shows a wake-schedule indicator when the workspace wakes itself', () => {
+    const { container, root } = renderCard({
+      ...baseWorkspace,
+      wakeScheduleEnabled: true,
+      wakeScheduleCadence: 'EVERY_HOUR',
+      wakeScheduleNextWakeAt: new Date('2026-10-01T15:00:00Z'),
+    } as unknown as WorkspaceWithKanban);
+
+    expect(container.textContent).toContain('Wakes every hour');
+
+    root.unmount();
+    container.remove();
+  });
+
+  it('shows no wake-schedule indicator without a schedule', () => {
+    const { container, root } = renderCard(baseWorkspace);
+
+    expect(container.textContent).not.toContain('Wakes');
 
     root.unmount();
     container.remove();

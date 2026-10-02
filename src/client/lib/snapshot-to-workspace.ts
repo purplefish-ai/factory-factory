@@ -27,6 +27,9 @@ function mutationOnlyFieldDefaults() {
     linearIssueIdentifier: null,
     linearIssueUrl: null,
     creationSource: 'MANUAL',
+    wakeScheduleEnabled: false,
+    wakeScheduleCadence: null,
+    wakeScheduleNextWakeAt: null,
   } as const;
 }
 

@@ -109,6 +109,10 @@ function createTestHarness(options: TestHarnessOptions = {}) {
       start: vi.fn(),
       stop: vi.fn(async () => undefined),
     },
+    workspaceWakeService: {
+      start: vi.fn(),
+      stop: vi.fn(async () => undefined),
+    },
     reconciliationService: {
       cleanupOrphans: vi.fn(async () => undefined),
       reconcile: vi.fn(async () => undefined),

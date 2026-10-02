@@ -57,7 +57,9 @@ import {
   type workspaceRunScriptService,
   type workspaceSnapshotStore,
   type workspaceStateMachine,
+  type workspaceWakeScheduleService,
 } from '@/backend/services/workspace';
+import type { workspaceWakeService } from '@/backend/services/workspace-wake';
 import { AutoIterationStatus, SessionStatus } from '@/shared/core';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import type { reconciliationService } from './reconciliation.service';
@@ -65,6 +67,7 @@ import type {
   initializeWorkspaceWorktree,
   recoverStaleProvisioningWorkspace,
 } from './workspace-init.orchestrator';
+import type { deliverWorkspaceWake } from './workspace-wake-delivery.orchestrator';
 
 type SessionDataService = typeof sessionDataService;
 type SessionDomainService = typeof sessionDomainService;
@@ -79,6 +82,7 @@ export type BridgeServices = {
   chatEventForwarderService: typeof chatEventForwarderService;
   chatMessageHandlerService: typeof chatMessageHandlerService;
   createLogger: typeof createLogger;
+  deliverWorkspaceWake: typeof deliverWorkspaceWake;
   fixerSessionService: typeof fixerSessionService;
   getWorkspaceInitPolicy: typeof getWorkspaceInitPolicy;
   githubCLIService: typeof githubCLIService;
@@ -109,6 +113,8 @@ export type BridgeServices = {
   workspaceRunScriptService: typeof workspaceRunScriptService;
   workspaceSnapshotStore: typeof workspaceSnapshotStore;
   workspaceStateMachine: typeof workspaceStateMachine;
+  workspaceWakeScheduleService: typeof workspaceWakeScheduleService;
+  workspaceWakeService: typeof workspaceWakeService;
 };
 
 async function stopSessionBestEffort(
@@ -267,6 +273,7 @@ export function configureDomainBridges(services: BridgeServices): void {
     chatEventForwarderService,
     chatMessageHandlerService,
     createLogger,
+    deliverWorkspaceWake,
     fixerSessionService,
     getWorkspaceInitPolicy,
     githubCLIService,
@@ -296,6 +303,8 @@ export function configureDomainBridges(services: BridgeServices): void {
     workspaceRunScriptService,
     workspaceSnapshotStore,
     workspaceStateMachine,
+    workspaceWakeScheduleService,
+    workspaceWakeService,
   } = services;
   const logger = createLogger('domain-bridges');
 
@@ -690,6 +699,22 @@ export function configureDomainBridges(services: BridgeServices): void {
           initCompletedAt: ws.initCompletedAt,
         };
       },
+    },
+  });
+
+  // === Workspace wake domain bridges ===
+  workspaceWakeService.configure({
+    schedule: {
+      get: (workspaceId) => workspaceWakeScheduleService.get(workspaceId),
+      set: (workspaceId, input) => workspaceWakeScheduleService.set(workspaceId, input),
+      clear: (workspaceId) => workspaceWakeScheduleService.clear(workspaceId),
+      findDue: () => workspaceWakeScheduleService.findDue(),
+      markDispatched: (schedule) => workspaceWakeScheduleService.markDispatched(schedule),
+      recordOutcome: (workspaceId, dispatchedAt, outcome) =>
+        workspaceWakeScheduleService.recordOutcome(workspaceId, dispatchedAt, outcome),
+    },
+    delivery: {
+      deliver: (workspaceId, prompt) => deliverWorkspaceWake(workspaceId, prompt),
     },
   });
 

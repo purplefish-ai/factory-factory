@@ -30,9 +30,7 @@ vi.mock('@/backend/services/ratchet', () => ({
   },
 }));
 
-vi.mock('./reconciliation.service', () => ({
-  reconciliationService: { configure: vi.fn() },
-}));
+vi.mock('./reconciliation.service', () => ({ reconciliationService: { configure: vi.fn() } }));
 
 vi.mock('@/backend/services/workspace', () => ({
   WorkspaceCreationService: class {
@@ -74,7 +72,12 @@ vi.mock('@/backend/services/workspace', () => ({
     on: vi.fn(),
   },
   workspaceStateMachine: { markFailed: vi.fn(), markReady: vi.fn() },
+  workspaceWakeScheduleService: {},
   getWorkspaceInitPolicy: vi.fn(),
+}));
+
+vi.mock('@/backend/services/workspace-wake', () => ({
+  workspaceWakeService: { configure: vi.fn() },
 }));
 
 vi.mock('@/backend/services/session', () => ({
@@ -91,20 +94,14 @@ vi.mock('@/backend/services/session', () => ({
     findAgentSessionsByWorkspaceId: vi.fn(),
     acquireFixerSession: vi.fn(),
   },
-  sessionService: {
-    configure: vi.fn(),
-    sendSessionMessage: vi.fn(),
-    sendAcpMessage: vi.fn(),
-  },
+  sessionService: { configure: vi.fn(), sendSessionMessage: vi.fn(), sendAcpMessage: vi.fn() },
   sessionLifecycleService: {
     configure: vi.fn(),
     getRuntimeSnapshot: vi.fn(),
     stopSession: vi.fn(),
     startSession: vi.fn(),
   },
-  sessionPromptTurnCompletionService: {
-    setHandler: vi.fn(),
-  },
+  sessionPromptTurnCompletionService: { setHandler: vi.fn() },
   sessionDomainService: {
     clearSession: vi.fn(),
     injectCommittedUserMessage: vi.fn(),
@@ -137,9 +134,7 @@ vi.mock('@/backend/services/periodic-task', () => ({
   periodicTaskService: { configure: vi.fn() },
 }));
 
-vi.mock('@/backend/services/run-script', () => ({
-  startupScriptService: { configure: vi.fn() },
-}));
+vi.mock('@/backend/services/run-script', () => ({ startupScriptService: { configure: vi.fn() } }));
 
 vi.mock('@/backend/services/terminal', () => ({
   terminalSessionService: { recoverOrphanedSessions: vi.fn() },
@@ -149,6 +144,8 @@ vi.mock('./workspace-init.orchestrator', () => ({
   initializeWorkspaceWorktree: vi.fn(),
   recoverStaleProvisioningWorkspace: vi.fn(),
 }));
+
+vi.mock('./workspace-wake-delivery.orchestrator', () => ({ deliverWorkspaceWake: vi.fn() }));
 
 // --- Import mocked modules to get references ---
 
@@ -180,13 +177,16 @@ import {
   workspaceRunScriptService,
   workspaceSnapshotStore,
   workspaceStateMachine,
+  workspaceWakeScheduleService,
 } from '@/backend/services/workspace';
+import { workspaceWakeService } from '@/backend/services/workspace-wake';
 import { type BridgeServices, configureDomainBridges } from './domain-bridges.orchestrator';
 import { reconciliationService } from './reconciliation.service';
 import {
   initializeWorkspaceWorktree,
   recoverStaleProvisioningWorkspace,
 } from './workspace-init.orchestrator';
+import { deliverWorkspaceWake } from './workspace-wake-delivery.orchestrator';
 
 // Helper to extract bridge argument from a mocked configure call.
 function getBridge<T>(mockFn: (arg: T) => void): T {
@@ -212,6 +212,7 @@ function createBridgeServices(overrides: Partial<BridgeServices> = {}): BridgeSe
     chatEventForwarderService,
     chatMessageHandlerService,
     createLogger,
+    deliverWorkspaceWake,
     fixerSessionService,
     getWorkspaceInitPolicy,
     githubCLIService,
@@ -241,6 +242,8 @@ function createBridgeServices(overrides: Partial<BridgeServices> = {}): BridgeSe
     workspaceRunScriptService,
     workspaceSnapshotStore,
     workspaceStateMachine,
+    workspaceWakeScheduleService,
+    workspaceWakeService,
     initializeWorkspaceWorktree,
     ...overrides,
   };
