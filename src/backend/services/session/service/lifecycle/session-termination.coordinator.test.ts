@@ -263,6 +263,44 @@ describe('SessionTerminationCoordinator graceful shutdown', () => {
       { sessionId: 'session-fenced', error: 'fenced event failed' }
     );
     expect(harness.runtimeManager.stopAllClients).toHaveBeenCalledWith(5000);
+    expect(harness.lifecycleGate.isSessionStopping('session-active')).toBe(false);
+    expect(harness.lifecycleGate.isSessionStopping('session-fenced')).toBe(false);
+  });
+
+  it('releases reservations if shutdown lifecycle error reporting fails', async () => {
+    const recordingFailure = new Error('lifecycle error reporting failed');
+    const harness = createShutdownHarness(['session-active', 'session-pending']);
+    harness.lifecycleEventService.record.mockRejectedValue(new Error('event failed'));
+    logger.warn.mockImplementationOnce(() => {
+      throw recordingFailure;
+    });
+
+    await expect(harness.coordinator.stopAllClients()).rejects.toBe(recordingFailure);
+
+    expect(harness.runtimeManager.stopAllClients).not.toHaveBeenCalled();
+    expect(harness.lifecycleGate.isSessionStopping('session-active')).toBe(false);
+    expect(harness.lifecycleGate.isSessionStopping('session-pending')).toBe(false);
+  });
+
+  it('holds reservations while runtime shutdown is pending and releases them on success', async () => {
+    const runtimeStop = createDeferred<undefined>();
+    const harness = createShutdownHarness();
+    const browseGeneration = harness.lifecycleGate.getGeneration('session-browse-only');
+    harness.runtimeManager.stopAllClients.mockReturnValue(runtimeStop.promise);
+    const shutdown = harness.coordinator.stopAllClients();
+    await vi.waitFor(() => expect(harness.runtimeManager.stopAllClients).toHaveBeenCalled());
+    expect(harness.lifecycleGate.isSessionStopping('session-active')).toBe(true);
+    expect(harness.lifecycleGate.isSessionStopping('session-browse-only')).toBe(false);
+
+    runtimeStop.resolve(undefined);
+    await shutdown;
+
+    expect(harness.lifecycleGate.isSessionStopping('session-active')).toBe(false);
+    expect(harness.lifecycleGate.isSessionStopping('session-pending')).toBe(false);
+    expect(harness.lifecycleGate.isSessionStopping('session-fenced')).toBe(false);
+    expect(harness.lifecycleGate.isGenerationCurrent('session-browse-only', browseGeneration)).toBe(
+      true
+    );
   });
 
   it('clears the one-second lifecycle recording timeout after early completion', async () => {
@@ -304,7 +342,7 @@ describe('SessionTerminationCoordinator graceful shutdown', () => {
 
   it('forwards the caller timeout and propagates runtime shutdown rejection after logging', async () => {
     const runtimeFailure = new Error('runtime shutdown failed');
-    const harness = createShutdownHarness([]);
+    const harness = createShutdownHarness();
     harness.runtimeManager.stopAllClients.mockRejectedValue(runtimeFailure);
 
     await expect(harness.coordinator.stopAllClients(8765)).rejects.toBe(runtimeFailure);
@@ -313,6 +351,13 @@ describe('SessionTerminationCoordinator graceful shutdown', () => {
     expect(logger.error).toHaveBeenCalledWith('Failed to stop ACP clients during shutdown', {
       error: runtimeFailure.message,
     });
+    for (const sessionId of ['session-active', 'session-pending', 'session-fenced']) {
+      expect(harness.lifecycleGate.isSessionStopping(sessionId)).toBe(false);
+      const stop = harness.lifecycleGate.reserveStop(sessionId);
+      expect(stop).not.toBeNull();
+      stop?.release();
+    }
+    expect(harness.lifecycleGate.isSessionStopping('session-browse-only')).toBe(false);
   });
 });
 
