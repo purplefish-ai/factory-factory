@@ -280,14 +280,21 @@ available to a self-authored PR's own reviewing identity. Instead:
 
 Resolved during review:
 
-- **Session permissions for a read-only review.** ✅ Resolved: the session
-  starts in `plan` startup mode (`adversarial-review.orchestrator.ts`), which
-  structurally blocks write tools rather than relying on trusting the prompt —
-  unlike Ratchet's fixer, this workflow has no legitimate reason to ever need
-  write access, so reusing Ratchet's `YOLO`-by-default permission preset would
-  grant it anyway. It also uses `defaultWorkspacePermissions` instead of
-  `ratchetPermissions` for the same reason
-  (`session-lifecycle-external-ports.ts`).
+- **Session permissions for a read-only review.** ✅ Resolved: session startup
+  applies and verifies `plan` mode for every review start, restart, and chat
+  auto-start before recovering notifications or dispatching prompts. Claude uses
+  its provider's plan-mode tool restrictions. Codex also requires the `never`
+  approval policy with a `read-only` sandbox: collaboration plan mode alone does
+  not restrict its execution permissions, and approving a plan must not grant
+  write access. Unsupported or rejected restrictions abort startup and stop the
+  new client. Settings-read failures fall back to `STRICT`, shared with the
+  normal workspace resolver; configured presets cannot override the review's
+  startup restrictions. Ratchet and normal workspace permissions keep their
+  existing behavior. Review permission bridges automatically deny tool and
+  plan-exit approvals before preset auto-approval. Review sessions do not wait
+  for interactive approvals or questions. Live and cached review configuration
+  cannot switch out of plan mode or broaden Codex execution permissions, so
+  subsequent chat turns retain the restrictions.
 - **Merge-blocking event type.** ✅ Resolved: always `COMMENT`, never
   `REQUEST_CHANGES`/`APPROVE`. The original plan was to map severity to
   `REQUEST_CHANGES` so Ratchet's native trigger would pick it up "for free," but

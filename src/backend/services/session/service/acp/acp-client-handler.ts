@@ -261,6 +261,11 @@ export class AcpClientHandler implements Client {
       options: params.options.map((o) => ({ optionId: o.optionId, kind: o.kind, name: o.name })),
     });
 
+    const automatic = this.permissionBridge?.resolveAutomaticPermission(params);
+    if (automatic) {
+      return Promise.resolve(automatic);
+    }
+
     const isPlanApproval = isExitPlanModeApprovalRequest(params);
     const isUserInputRequest = isUserInputPermissionRequest(params);
     const bypassesAutoApprove = isPlanApproval || isUserInputRequest;

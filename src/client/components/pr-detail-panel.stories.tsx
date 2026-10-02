@@ -128,11 +128,11 @@ const mockChangesRequestedPR: PRWithFullDetails = {
   ],
 };
 
-const mockDiff = `diff --git a/src/auth/login.ts b/src/auth/login.ts
+const mockDiff = `diff --git a/src/lib/login.ts b/src/lib/login.ts
 new file mode 100644
 index 0000000..1234567
 --- /dev/null
-+++ b/src/auth/login.ts
++++ b/src/lib/login.ts
 @@ -0,0 +1,25 @@
 +import { validateCredentials } from './validate';
 +import { createSession } from './session';
@@ -159,10 +159,10 @@ index 0000000..1234567
 +    session,
 +  };
 +}
-diff --git a/src/auth/logout.ts b/src/auth/logout.ts
+diff --git a/web/my b/logout.ts b/web/my b/logout.ts
 index abcdef0..9876543
---- a/src/auth/logout.ts
-+++ b/src/auth/logout.ts
+--- a/web/my b/logout.ts
++++ b/web/my b/logout.ts
 @@ -1,5 +1,12 @@
  import { destroySession } from './session';
 

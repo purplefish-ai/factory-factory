@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+import { AcpClientHandler } from '@/backend/services/session/service/acp/acp-client-handler';
+import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionPermissionService } from './session.permission.service';
 
@@ -15,6 +17,86 @@ describe('SessionPermissionService', () => {
       sessionDomainService: unsafeCoerce(sessionDomain),
     });
   }
+
+  it.each(['ExitPlanMode', 'Bash', 'Edit'])(
+    'denies review %s permission requests without exposing an approval',
+    async (tool) => {
+      const service = createService();
+      const bridge = service.createPermissionBridge('review', ADVERSARIAL_REVIEW_WORKFLOW);
+      const params = unsafeCoerce<Parameters<typeof bridge.waitForUserResponse>[1]>({
+        toolCall: { toolCallId: 'tool-1', title: tool, rawInput: { type: tool, questions: [] } },
+        options: [
+          { optionId: 'acceptEdits', name: 'Approve', kind: 'allow_once' },
+          { optionId: 'plan', name: 'Keep planning', kind: 'reject_once' },
+        ],
+      });
+      service.handlePermissionRequest('review', {
+        type: 'acp_permission_request',
+        requestId: 'req',
+        params,
+      });
+      await expect(bridge.waitForUserResponse('req', params)).resolves.toEqual({
+        outcome: { outcome: 'selected', optionId: 'plan' },
+      });
+      expect(service.respondToPermission('review', 'req', 'acceptEdits')).toBe(false);
+      expect(sessionDomain.setPendingInteractiveRequest).not.toHaveBeenCalled();
+    }
+  );
+
+  it('denies review permissions before YOLO auto-approval on subsequent turns', async () => {
+    const service = createService();
+    const bridge = service.createPermissionBridge('review', ADVERSARIAL_REVIEW_WORKFLOW);
+    const onEvent = vi.fn();
+    const handler = new AcpClientHandler('review', onEvent, bridge, undefined, 'all');
+    for (const tool of ['ExitPlanMode', 'Edit']) {
+      const response = await handler.requestPermission(
+        unsafeCoerce({
+          sessionId: 'review',
+          toolCall: { toolCallId: tool, title: tool },
+          options: [
+            { optionId: 'allow', name: 'Allow', kind: 'allow_always' },
+            { optionId: 'deny', name: 'Deny', kind: 'reject_once' },
+          ],
+        })
+      );
+      expect(response).toEqual({ outcome: { outcome: 'selected', optionId: 'deny' } });
+    }
+    expect(onEvent).not.toHaveBeenCalled();
+    expect(bridge.pendingCount).toBe(0);
+  });
+
+  it('cancels a review permission without a rejection option', async () => {
+    const service = createService();
+    const bridge = service.createPermissionBridge('review', ADVERSARIAL_REVIEW_WORKFLOW);
+    await expect(
+      bridge.waitForUserResponse(
+        'req',
+        unsafeCoerce({
+          toolCall: { title: 'ExitPlanMode' },
+          options: [{ optionId: 'allow', kind: 'allow_once' }],
+        })
+      )
+    ).resolves.toEqual({ outcome: { outcome: 'cancelled' } });
+  });
+
+  it.each(['AskUserQuestion', 'item/tool/requestUserInput'])(
+    'denies %s requests in unattended reviews',
+    async (tool) => {
+      const service = createService();
+      const bridge = service.createPermissionBridge('review', ADVERSARIAL_REVIEW_WORKFLOW);
+      const response = bridge.waitForUserResponse(
+        'question',
+        unsafeCoerce({
+          toolCall: { title: tool, rawInput: { questions: [] } },
+          options: [{ optionId: 'answer', kind: 'allow_once' }],
+        })
+      );
+      expect(service.respondToPermission('review', 'question', 'answer')).toBe(false);
+      await expect(response).resolves.toEqual({
+        outcome: { outcome: 'cancelled' },
+      });
+    }
+  );
 
   it('dismisses cancelled permission prompts while retaining the live bridge', async () => {
     const service = createService();

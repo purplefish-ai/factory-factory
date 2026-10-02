@@ -189,6 +189,14 @@ the initial mobile tab. Archive results arriving after a switch still reconcile
 the originating project cache, but cannot open recovery in the new board, even
 when the user has already switched back to the original project.
 
+Inline workspace renames make the editor read-only and busy through the request
+and cache refresh. Repeated Enter, clicks, and blur events share one save.
+Escape cancels an unsaved edit; after dispatch it closes the editor without
+cancelling the request or allowing another save until completion. Failures close
+the editor and allow a fresh edit to retry. Workspace/project changes and
+departed mounts abandon the editor; late responses reconcile their originating
+caches without closing or resetting a newer edit.
+
 ## Completion notifications
 
 Workspace completion notifications count the distinct sessions that worked in

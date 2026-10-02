@@ -231,6 +231,130 @@ index 1234567..abcdefg 100644
 });
 
 describe('parseFileDiff', () => {
+  it.each([
+    'src/lib/utils.ts',
+    'web/index.ts',
+    'db/schema.sql',
+    '.github/workflows/ci.yml',
+    'sub/nested/file.ts',
+    'b/a/b/file.ts',
+    'lib/a file [1] #2.txt',
+    'web/my b/file.txt',
+    'web/my b/file b/tail.txt',
+  ])('preserves the complete destination path %s', (name) => {
+    expect(parseFileDiff(`diff --git a/${name} b/${name}`)[0]?.name).toBe(name);
+  });
+
+  it.each([
+    ['a/src/lib/old.ts b/web/new.ts', 'web/new.ts'],
+    ['a/old name.ts b/db/new name.ts', 'db/new name.ts'],
+    ['"a/lib/old\\tname.ts" b/web/new.ts', 'web/new.ts'],
+    ['a/lib/old.ts "b/web/new\\tname.ts"', 'web/new\tname.ts'],
+    ['"a/lib/caf\\303\\251.ts" "b/lib/caf\\303\\251.ts"', 'lib/café.ts'],
+    ['"a/lib/quote\\"slash\\\\.ts" "b/lib/quote\\"slash\\\\.ts"', 'lib/quote"slash\\.ts'],
+    ['"a/lib/line\\nfeed.ts" "b/lib/line\\nfeed.ts"', 'lib/line\nfeed.ts'],
+    ['"a/lib/\\357\\273\\277file.ts" "b/lib/\\357\\273\\277file.ts"', 'lib/\uFEFFfile.ts'],
+  ])('reads destination paths from diff --git %s', (paths, name) => {
+    expect(parseFileDiff(`diff --git ${paths}`)[0]?.name).toBe(name);
+  });
+
+  it('uses rename metadata for ambiguous unquoted paths without stripping real prefixes', () => {
+    const diff = `diff --git a/lib/old b/part.ts b/b/new b/part.ts
+similarity index 100%
+rename from lib/old b/part.ts
+rename to b/new b/part.ts`;
+
+    expect(parseFileDiff(diff)[0]).toEqual({
+      name: 'b/new b/part.ts',
+      additions: 0,
+      deletions: 0,
+      hunks: [],
+    });
+  });
+
+  it('uses copy metadata for ambiguous paths without hunks', () => {
+    const diff = `diff --git a/lib/old b/part.ts b/web/new b/part.ts
+similarity index 100%
+copy from lib/old b/part.ts
+copy to web/new b/part.ts`;
+
+    expect(parseFileDiff(diff)[0]?.name).toBe('web/new b/part.ts');
+  });
+
+  it('decodes quoted rename destinations even when there are no hunks', () => {
+    const diff = String.raw`diff --git a/lib/old.ts "b/b/caf\303\251\tnew.ts"
+similarity index 100%
+rename from lib/old.ts
+rename to "b/caf\303\251\tnew.ts"`;
+
+    expect(parseFileDiff(diff)[0]?.name).toBe('b/café\tnew.ts');
+  });
+
+  it.each(['\\351', '\\303\\251\\377'])('preserves undecodable octal bytes %s', (bytes) => {
+    const name = `lib/raw${bytes}.txt`;
+    const diff = `diff --git "a/${name}" "b/${name}"\n+++ "b/${name}"`;
+
+    expect(parseFileDiff(diff)[0]?.name).toBe(name);
+  });
+
+  it('decodes destination markers and keeps literal backslashes distinct from octal escapes', () => {
+    const diff = String.raw`diff --git "a/lib/old\\303.txt" "b/lib/new\\303.txt"
+--- "a/lib/old\\303.txt"
++++ "b/lib/new\\303.txt"
+@@ -1 +1 @@
+-old
++new`;
+
+    expect(parseFileDiff(diff)[0]?.name).toBe('lib/new\\303.txt');
+  });
+
+  it('preserves binary paths containing spaces and repeated destination-like text', () => {
+    const diff = `diff --git a/web/my b/image b/icon.png b/web/my b/image b/icon.png
+Binary files a/web/my b/image b/icon.png and b/web/my b/image b/icon.png differ`;
+
+    expect(parseFileDiff(diff)[0]).toEqual({
+      name: 'web/my b/image b/icon.png',
+      additions: 0,
+      deletions: 0,
+      hunks: [],
+    });
+  });
+
+  it('uses destination markers before hunks and preserves header-like hunk content', () => {
+    const diff = `diff --git a/lib/old b/part.ts b/web/new b/part.ts
+--- a/lib/old b/part.ts\t
++++ b/web/new b/part.ts\t
+@@ -1 +1 @@
+--- a/lib/content.ts
++++ b/lib/content.ts`;
+
+    expect(parseFileDiff(diff)[0]).toMatchObject({
+      name: 'web/new b/part.ts',
+      additions: 1,
+      deletions: 1,
+      hunks: [
+        {
+          lines: [
+            { type: 'del', content: '-- a/lib/content.ts' },
+            { type: 'add', content: '++ b/lib/content.ts' },
+          ],
+        },
+      ],
+    });
+  });
+
+  it('preserves deleted file names and falls back for malformed headers', () => {
+    expect(
+      parseFileDiff(`diff --git a/db/old.sql b/db/old.sql
+deleted file mode 100644
+--- a/db/old.sql
++++ /dev/null
+@@ -1 +0,0 @@
+-old`)[0]?.name
+    ).toBe('db/old.sql');
+    expect(parseFileDiff('diff --git malformed lib/file.ts')[0]?.name).toBe('unknown');
+  });
+
   it('parses a single file with additions and deletions', () => {
     const diff = `diff --git a/test.txt b/test.txt
 @@ -1,3 +1,3 @@

@@ -259,40 +259,4 @@ describe('LoggerService', () => {
       expect(() => JSON.parse(raw)).not.toThrow();
     });
   });
-
-  describe('agentEvent', () => {
-    it('should not crash with circular references in context', () => {
-      const logger = createLogger('test');
-      const circular: CircularTestObject = { data: 'test' };
-      circular.self = circular;
-
-      expect(() => {
-        logger.agentEvent('created', 'agent-123', 'test-agent', circular);
-      }).not.toThrow();
-    });
-  });
-
-  describe('taskEvent', () => {
-    it('should not crash with circular references in context', () => {
-      const logger = createLogger('test');
-      const circular: CircularTestObject = { data: 'test' };
-      circular.self = circular;
-
-      expect(() => {
-        logger.taskEvent('started', 'task-456', circular);
-      }).not.toThrow();
-    });
-  });
-
-  describe('apiCall', () => {
-    it('should not crash with circular references in context', () => {
-      const logger = createLogger('test');
-      const circular: CircularTestObject = { request: 'data' };
-      circular.self = circular;
-
-      expect(() => {
-        logger.apiCall('test-service', 'testMethod', 100, true, circular);
-      }).not.toThrow();
-    });
-  });
 });

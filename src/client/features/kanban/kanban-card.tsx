@@ -11,7 +11,7 @@ import {
   TreeStructureIcon,
   WarningIcon,
 } from '@phosphor-icons/react';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router';
 import { PrStateBadge } from '@/client/components/pr-state-badge';
 import {
@@ -19,6 +19,7 @@ import {
   RatchetToggleButton,
   WorkspaceStatusBadge,
 } from '@/client/features/workspace';
+import { useInlineWorkspaceRename } from '@/client/hooks/use-inline-workspace-rename';
 import { cadenceLabel } from '@/client/lib/cadence-labels';
 import type { ProjectWorkspace } from '@/client/lib/snapshot-to-workspace';
 import { trpc } from '@/client/lib/trpc';
@@ -241,6 +242,7 @@ function CardTitleIcons({
               variant="ghost"
               size="icon"
               className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+              aria-label="Rename workspace"
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -413,42 +415,21 @@ export function KanbanCard({
     hasMetadata,
   } = deriveCardState(workspace);
 
-  const [isEditing, setIsEditing] = useState(false);
-  const [editValue, setEditValue] = useState(workspace.name);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const handleStartEdit = () => {
-    if (isEditing) {
-      return;
-    }
-    setEditValue(workspace.name);
-    setIsEditing(true);
-    setTimeout(() => inputRef.current?.select(), 0);
-  };
-
-  const handleSaveRename = async () => {
-    if (!isEditing) {
-      return;
-    }
-    const trimmed = editValue.trim();
-    if (!trimmed || trimmed === workspace.name || !onRename) {
-      setIsEditing(false);
-      return;
-    }
-    try {
-      await onRename(workspace.id, trimmed);
-      setIsEditing(false);
-    } catch {
-      // Error is surfaced by the mutation's onError handler
-      setIsEditing(false);
-      setEditValue(workspace.name);
-    }
-  };
-
-  const handleCancelRename = () => {
-    setIsEditing(false);
-    setEditValue(workspace.name);
-  };
+  const {
+    isEditing,
+    editValue,
+    setEditValue,
+    isSaving,
+    inputRef,
+    handleStartEdit,
+    handleSaveRename,
+    handleCancelRename,
+  } = useInlineWorkspaceRename({
+    workspaceId: workspace.id,
+    projectId: workspace.projectId,
+    name: workspace.name,
+    onRename,
+  });
 
   return (
     <Link to={`/projects/${projectSlug}/workspaces/${workspace.id}`}>
@@ -467,6 +448,9 @@ export function KanbanCard({
             {isEditing ? (
               <input
                 ref={inputRef}
+                readOnly={isSaving}
+                aria-busy={isSaving}
+                aria-label="Workspace name"
                 value={editValue}
                 onChange={(e) => setEditValue(e.target.value)}
                 onKeyDown={(e) => {
@@ -500,7 +484,7 @@ export function KanbanCard({
               onToggleRatcheting={onToggleRatcheting}
               onArchive={onArchive}
               onOpenQuickChat={onOpenQuickChat}
-              onStartEdit={onRename ? handleStartEdit : undefined}
+              onStartEdit={onRename && !isSaving ? handleStartEdit : undefined}
             />
           </div>
         </CardHeader>

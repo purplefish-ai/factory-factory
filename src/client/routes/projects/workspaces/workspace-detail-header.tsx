@@ -1,5 +1,5 @@
 import { GitPullRequestIcon, InfoIcon, PencilIcon } from '@phosphor-icons/react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import {
   HeaderLeftExtraSlot,
@@ -9,6 +9,7 @@ import {
 } from '@/client/components/app-header-context';
 import { ProjectSelectorDropdown } from '@/client/components/project-selector';
 import { RunScriptButton, RunScriptPortBadge } from '@/client/features/workspace';
+import { useInlineWorkspaceRename } from '@/client/hooks/use-inline-workspace-rename';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import {
@@ -66,36 +67,29 @@ export function WorkspaceDetailHeaderSlot({
     onError: (error) => toast.error(`Failed to rename workspace: ${error.message}`),
   });
 
-  const [isEditing, setIsEditing] = useState(false);
-  const [editValue, setEditValue] = useState(workspace.name);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [attachPrOpen, setAttachPrOpen] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const handleStartEdit = () => {
-    setEditValue(workspace.name);
-    setIsEditing(true);
-    setTimeout(() => inputRef.current?.select(), 0);
-  };
-
-  const handleSaveRename = async () => {
-    const trimmed = editValue.trim();
-    if (!trimmed || trimmed === workspace.name) {
-      setIsEditing(false);
-      return;
-    }
-    try {
-      await renameMutation.mutateAsync({ id: workspaceId, name: trimmed });
+  const {
+    isEditing,
+    editValue,
+    setEditValue,
+    isSaving,
+    inputRef,
+    handleStartEdit,
+    handleSaveRename,
+    handleCancelRename,
+  } = useInlineWorkspaceRename({
+    workspaceId,
+    projectId: workspace.projectId,
+    name: workspace.name,
+    onRename: async (id, name) => {
+      await renameMutation.mutateAsync({ id, name });
       await Promise.all([
         utils.workspace.listForProject.invalidate({ projectId: workspace.projectId }),
-        utils.workspace.get.invalidate({ id: workspaceId }),
+        utils.workspace.get.invalidate({ id }),
       ]);
-      setIsEditing(false);
-    } catch {
-      setIsEditing(false);
-      setEditValue(workspace.name);
-    }
-  };
+    },
+  });
 
   const isArchived = workspace.status === 'ARCHIVED' || workspace.status === 'ARCHIVING';
 
@@ -118,6 +112,9 @@ export function WorkspaceDetailHeaderSlot({
           {isEditing ? (
             <input
               ref={inputRef}
+              readOnly={isSaving}
+              aria-busy={isSaving}
+              aria-label="Workspace name"
               value={editValue}
               onChange={(e) => setEditValue(e.target.value)}
               onKeyDown={(e) => {
@@ -126,8 +123,7 @@ export function WorkspaceDetailHeaderSlot({
                   e.currentTarget.blur();
                 } else if (e.key === 'Escape') {
                   e.preventDefault();
-                  setIsEditing(false);
-                  setEditValue(workspace.name);
+                  handleCancelRename();
                 }
                 e.stopPropagation();
               }}
@@ -153,6 +149,7 @@ export function WorkspaceDetailHeaderSlot({
                   size="icon"
                   className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
                   onClick={handleStartEdit}
+                  disabled={isSaving}
                   aria-label="Rename workspace"
                 >
                   <PencilIcon className="h-3 w-3" />

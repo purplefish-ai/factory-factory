@@ -346,7 +346,6 @@ export function configureDomainBridges(services: BridgeServices): void {
         checks?.map((c) => ({ ...c, conclusion: c.conclusion ?? undefined })) ?? null
       ),
     getAuthenticatedUsername: (signal) => githubCLIService.getAuthenticatedUsername(signal),
-    fetchAndComputePRState: (prUrl) => githubCLIService.fetchAndComputePRState(prUrl),
     coordinatePrFetch: (workspaceId, fetch, options) =>
       prFetchCoordinator.coordinate(workspaceId, fetch, options),
   };
@@ -373,8 +372,6 @@ export function configureDomainBridges(services: BridgeServices): void {
         failedAt,
         observedAt,
       }),
-    recordCINotification: (workspaceId, notifiedAt) =>
-      prSnapshotService.recordCINotification(workspaceId, notifiedAt),
     recordReviewCheck: (workspaceId, checkedAt) =>
       prSnapshotService.recordReviewCheck(workspaceId, { checkedAt }),
   };

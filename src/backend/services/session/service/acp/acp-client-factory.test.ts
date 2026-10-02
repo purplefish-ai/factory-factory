@@ -559,6 +559,7 @@ describe('AcpClientFactory', () => {
     async (permissionPreset, expectedOptionId) => {
       setupSuccessfulSpawn();
       const permissionBridge = {
+        resolveAutomaticPermission: vi.fn(),
         waitForUserResponse: vi.fn().mockResolvedValue({
           outcome: { outcome: 'selected', optionId: 'bridge-choice' },
         }),
