@@ -13,7 +13,7 @@ describe('pending-request-types helpers', () => {
     expect(hasAskUserQuestionInput(null)).toBe(false);
   });
 
-  it('treats AskUserQuestion tool names as user-question requests', () => {
+  it('treats AskUserQuestion requests with usable questions as user-question requests', () => {
     expect(
       isUserQuestionRequest({
         toolName: 'AskUserQuestion',

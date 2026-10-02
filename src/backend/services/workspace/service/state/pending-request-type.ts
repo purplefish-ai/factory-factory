@@ -9,8 +9,7 @@ export type WorkspacePendingRequestType =
 /**
  * Determine the pending request type for a workspace based on its active sessions.
  * Returns 'plan_approval' if any session has a pending ExitPlanMode request,
- * 'user_question' if any session has a pending AskUserQuestion request (or a
- * request payload with usable questions),
+ * 'user_question' if any session has a pending non-MCP request with usable questions,
  * 'permission_request' for any other pending modal permission request,
  * or null if no pending requests.
  */
