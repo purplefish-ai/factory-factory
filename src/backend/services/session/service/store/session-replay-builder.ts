@@ -7,7 +7,7 @@ import {
   resolveSelectedModel,
   trimTranscriptForRenderer,
 } from '@/shared/acp-protocol';
-import { isUserQuestionRequest } from '@/shared/pending-request-types';
+import { getAskUserQuestions, isUserQuestionRequest } from '@/shared/pending-request-types';
 import type { SessionStore } from './session-store.types';
 import { messageSort } from './session-transcript';
 
@@ -129,8 +129,7 @@ export function buildReplayEvents(store: SessionStore): ReplayEventMessage[] {
       replayEvents.push({
         type: 'user_question',
         requestId: store.pendingInteractiveRequest.requestId,
-        questions: ((store.pendingInteractiveRequest.input as { questions?: unknown[] })
-          .questions ?? []) as ReplayEventMessage['questions'],
+        questions: getAskUserQuestions(store.pendingInteractiveRequest.input),
         acpOptions: store.pendingInteractiveRequest.acpOptions,
       });
     } else {

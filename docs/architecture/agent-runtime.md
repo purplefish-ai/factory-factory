@@ -33,9 +33,12 @@ Session init/load fails unless model/mode select options can be obtained from
 provider `configOptions` or legacy model/mode response fields. Permission
 requests present multi-option selection (`allow_once`, `allow_always`,
 `deny_once`, `deny_always`) and are bridged through ACP permission response
-handlers. Soft cancellation (including voice stop and prompt timeout) resolves
-pending permission requests with a cancelled outcome, dismisses their prompts,
-and keeps the bridge available for later turns.
+handlers. User-question prompts require a non-empty, valid question payload; MCP
+tools retain their raw identity and use normal tool approval even when their
+inputs contain a `questions` array. Free-form provider questions remain
+supported without selection options. Soft cancellation (including voice stop and
+prompt timeout) resolves pending permission requests with a cancelled outcome,
+dismisses their prompts, and keeps the bridge available for later turns.
 
 Approving a Codex plan queues the automatic approval turn with the same
 plan-disabled settings persisted for the session, preventing that turn from
