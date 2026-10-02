@@ -2,6 +2,11 @@
 
 ## GitHub
 
+GitHub URL imports use the shared `parseGithubUrl` validator for both the New
+Project form and backend input validation. Invalid owner/repository segments
+show an inline error and cannot be submitted; supported HTTP, HTTPS, and SSH
+URLs keep the existing `.git` suffix and trailing-slash behavior.
+
 Uses the local `gh` CLI's auth — there is no stored GitHub token. Issue fetch
 supports the workspace issue picker (`listIssuesForWorkspace`) and Kanban intake
 (`listIssuesForProject`, assigned to `@me`). Starting from an issue creates a

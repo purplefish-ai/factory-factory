@@ -20,22 +20,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
+import { parseGithubUrl } from '@/shared/github-url';
+
 type ProjectSource = 'local' | 'github';
-
-function parseGithubUrl(url: string): { owner: string; repo: string } | null {
-  // Try HTTPS format first
-  let match = url.match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/);
-
-  // Try SSH format if HTTPS didn't match
-  if (!match) {
-    match = url.match(/^git@github\.com:([^/]+)\/([^/]+?)(?:\.git)?\/?$/);
-  }
-
-  if (!match) {
-    return null;
-  }
-  return { owner: match[1] as string, repo: match[2] as string };
-}
 
 export default function NewProjectPage() {
   const navigate = useNavigate();
