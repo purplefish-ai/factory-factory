@@ -12,12 +12,20 @@ import { workspaceRatchetAccessor } from '@/backend/services/workspace/resources
  * `WorkspaceRatchet` table.
  */
 class WorkspaceRatchetService {
+  restoreOwnership(...args: Parameters<typeof workspaceRatchetAccessor.restoreOwnership>) {
+    return workspaceRatchetAccessor.restoreOwnership(...args);
+  }
+
   findCandidates() {
     return workspaceRatchetAccessor.findWithPRsForRatchet();
   }
 
-  findCandidateById(workspaceId: string) {
-    return workspaceRatchetAccessor.findForRatchetById(workspaceId);
+  findCandidateById(workspaceId: string, prId?: string) {
+    return workspaceRatchetAccessor.findForRatchetById(workspaceId, prId);
+  }
+
+  findCandidatesById(workspaceId: string) {
+    return workspaceRatchetAccessor.findAllForRatchetById(workspaceId);
   }
 
   recordSessionEnd(
@@ -28,23 +36,30 @@ class WorkspaceRatchetService {
     return workspaceRatchetAccessor.recordSessionEnd(workspaceId, sessionId, outcome);
   }
 
-  markDispatchStalled(workspaceId: string, snapshotKey: string) {
-    return workspaceRatchetAccessor.markDispatchStalled(workspaceId, snapshotKey);
+  markDispatchStalled(workspaceId: string, snapshotKey: string, prId?: string) {
+    return workspaceRatchetAccessor.markDispatchStalled(workspaceId, snapshotKey, prId);
   }
 
   recordDispatchIfEnabled(
     workspaceId: string,
-    input: { sessionId: string; snapshotKey: string; retryCount: number }
+    input: {
+      sessionId: string;
+      snapshotKey: string;
+      retryCount: number;
+      prId?: string;
+      expectedRevision?: number;
+      requireExistingOwnership?: boolean;
+    }
   ) {
     return workspaceRatchetAccessor.recordDispatchIfEnabled(workspaceId, input);
   }
 
-  adoptActiveSessionIfEnabled(workspaceId: string, sessionId: string) {
-    return workspaceRatchetAccessor.adoptActiveSessionIfEnabled(workspaceId, sessionId);
+  adoptActiveSessionIfEnabled(workspaceId: string, sessionId: string, prId?: string) {
+    return workspaceRatchetAccessor.adoptActiveSessionIfEnabled(workspaceId, sessionId, prId);
   }
 
-  recordCheckIfEnabled(workspaceId: string, checkedAt: Date) {
-    return workspaceRatchetAccessor.recordCheckIfEnabled(workspaceId, checkedAt);
+  recordCheckIfEnabled(workspaceId: string, checkedAt: Date, prId?: string) {
+    return workspaceRatchetAccessor.recordCheckIfEnabled(workspaceId, checkedAt, prId);
   }
 
   clearActiveSession(workspaceId: string, sessionId: string) {

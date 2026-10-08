@@ -15,6 +15,10 @@ vi.mock('@/backend/services/workspace', () => ({
   },
   workspaceRatchetService: {
     findCandidates: vi.fn(),
+    findCandidatesById: vi.fn(async (id: string) => {
+      const candidate = await workspaceRatchetService.findCandidateById(id);
+      return candidate ? [candidate] : [];
+    }),
     findCandidateById: vi.fn(),
     clearActiveSession: vi.fn(),
     enable: vi.fn(),
@@ -94,12 +98,6 @@ const mockWorkspaceBridge: RatchetWorkspaceBridge = {
   markDispatchStalled: vi.fn().mockResolvedValue(true),
 };
 
-/**
- * State behind `mockGitHubBridge.coordinatePrFetch`, modelling the two reasons
- * the real coordinator declines a fetch: a completed one inside the cooldown
- * window, which `ignoreCooldown` overrides, and a concurrent one in flight,
- * which nothing overrides.
- */
 const fakeCoordinator = { cooldownActive: false, inFlightSkips: 0 };
 
 const mockGitHubBridge: RatchetGitHubBridge = {
@@ -127,19 +125,11 @@ const mockSnapshotBridge: RatchetPRSnapshotBridge = {
   recordReviewCheck: vi.fn(),
 };
 
-/**
- * The service reads its shutdown state off the abort signal the job runner
- * hands each run, so a test that wants to exercise the shutdown branches has
- * to supply a signal rather than set a flag.
- */
 function setRatchetShuttingDown(shuttingDown: boolean): void {
   const controller = new AbortController();
   if (shuttingDown) {
     controller.abort();
   }
-  // Both halves of the guard: `stopped` is the service's own lifecycle, which
-  // an earlier test calling `ratchetService.stop()` leaves set on this module
-  // singleton, and the signal is the per-run abort.
   const internals = unsafeCoerce<{ runSignal: AbortSignal | null; stopped: boolean }>(
     ratchetService
   );
@@ -165,6 +155,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     vi.mocked(workspaceRatchetService.recordDispatchIfEnabled).mockResolvedValue(true);
     vi.mocked(workspaceRatchetService.adoptActiveSessionIfEnabled).mockResolvedValue(true);
     vi.mocked(workspaceRatchetService.recordSessionEnd).mockResolvedValue(true);
+    vi.mocked(workspaceRatchetService.clearActiveSession).mockResolvedValue(true);
     vi.mocked(mockWorkspaceBridge.recordSessionEnd).mockResolvedValue(true);
     vi.mocked(mockSessionBridge.findSessionsByWorkspaceId).mockResolvedValue([] as never);
     vi.mocked(mockSessionBridge.findSessionsByWorkspaceId).mockResolvedValue([]);
@@ -214,8 +205,6 @@ describe('ratchet service (state-change + idle dispatch)', () => {
   });
 
   afterEach(() => {
-    // Listener-registering tests must not leak into later tests even when an
-    // assertion fails before their inline cleanup.
     ratchetService.removeAllListeners();
   });
 
@@ -223,6 +212,10 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     vi.mocked(workspaceRatchetService.findCandidates).mockResolvedValue([
       {
         id: 'ws-1',
+        prId: 'pr-1',
+        prRevision: 0,
+        prHeadRefName: null,
+        ratchetActivePrId: null,
         prUrl: 'https://github.com/example/repo/pull/1',
         prNumber: 1,
         prState: 'OPEN',
@@ -295,14 +288,10 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       action: { type: 'DISABLED', reason: 'Workspace ratcheting disabled' },
       newState: RatchetState.IDLE,
     });
-    // A disabled workspace derives to IDLE, so there is no settling write to make.
     expect(workspaceRatchetService.recordCheckIfEnabled).not.toHaveBeenCalled();
   });
 
   it('reports a disabled workspace as IDLE without writing anything', async () => {
-    // `ratchetState` is projected from `ratchetEnabled`, so a disabled workspace
-    // arrives already IDLE. There is nothing left to settle, which is why the
-    // fromState this used to CAS on cannot exist and no event is emitted.
     const workspace = {
       id: 'ws-disabled-settle',
       prUrl: 'https://github.com/example/repo/pull/2',
@@ -450,16 +439,17 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       sessionId: 'ratchet-session',
       snapshotKey: '2026-01-02T00:00:00Z',
       retryCount: 0,
+      requireExistingOwnership: true,
     });
-    // The check-stamp write carries only the timestamp: the dispatch record is
-    // written atomically inside triggerFixer, and the review cursor by the bridge.
     expect(workspaceRatchetService.recordCheckIfEnabled).toHaveBeenLastCalledWith(
       'ws-change',
-      expect.any(Date)
+      expect.any(Date),
+      undefined
     );
     expect(mockSnapshotBridge.recordReviewCheck).toHaveBeenCalledWith(
       'ws-change',
-      expect.any(Date)
+      expect.any(Date),
+      undefined
     );
   });
 
@@ -522,7 +512,12 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     });
     expect(workspaceRatchetService.recordDispatchIfEnabled).toHaveBeenCalledWith(
       'ws-disable-race-dispatch',
-      { sessionId: 'raced-session', snapshotKey: 'new-snapshot', retryCount: 0 }
+      {
+        sessionId: 'raced-session',
+        snapshotKey: 'new-snapshot',
+        retryCount: 0,
+        requireExistingOwnership: true,
+      }
     );
     expect(mockSessionBridge.stopSession).toHaveBeenCalledWith('raced-session');
     expect(mockSnapshotBridge.recordReviewCheck).not.toHaveBeenCalled();
@@ -635,11 +630,6 @@ describe('ratchet service (state-change + idle dispatch)', () => {
   });
 
   it('marks the dispatch stalled when a settled dispatch achieved nothing', async () => {
-    // CI still failing and the snapshot key is unchanged since a dispatch that
-    // settled COMPLETED, so the ratchet declines to re-dispatch: nothing will
-    // happen here until the PR itself changes.
-    // (arrangement copied from 'does not dispatch when PR state unchanged since
-    // last dispatch', with ratchetDispatchOutcome set to 'COMPLETED')
     const workspace = {
       id: 'ws-1',
       prUrl: 'https://github.com/example/repo/pull/5',
@@ -678,13 +668,12 @@ describe('ratchet service (state-change + idle dispatch)', () => {
 
     expect(mockWorkspaceBridge.markDispatchStalled).toHaveBeenCalledWith(
       'ws-1',
-      '2026-01-02T00:00:00Z'
+      '2026-01-02T00:00:00Z',
+      undefined
     );
   });
 
   it('marks the dispatch stalled when a DIED fixer exhausts its retries', async () => {
-    // arrangement copied from the DIED-retry test at line 1570, with
-    // ratchetDispatchRetryCount set to SERVICE_THRESHOLDS.ratchetDispatchMaxRetries
     const workspace = {
       id: 'ws-1',
       prUrl: 'https://github.com/example/repo/pull/15',
@@ -718,14 +707,14 @@ describe('ratchet service (state-change + idle dispatch)', () => {
 
     await ratchetService.checkWorkspaceById('ws-1');
 
-    expect(mockWorkspaceBridge.markDispatchStalled).toHaveBeenCalledWith('ws-1', 'same-snapshot');
+    expect(mockWorkspaceBridge.markDispatchStalled).toHaveBeenCalledWith(
+      'ws-1',
+      'same-snapshot',
+      undefined
+    );
   });
 
   it('publishes a dispatch-changed event when the stall flag actually flips', async () => {
-    // A stall is by definition nothing changing: the PR observation matches the
-    // cache and the derived ratchet state is unchanged, so neither of the two
-    // paths that normally refresh a snapshot fires. Without this event the
-    // WORKING-to-WAITING move would wait for the next reconciliation sweep.
     const workspace = {
       id: 'ws-1',
       prUrl: 'https://github.com/example/repo/pull/5',
@@ -769,8 +758,6 @@ describe('ratchet service (state-change + idle dispatch)', () => {
   });
 
   it('publishes nothing when the stall flag was already set', async () => {
-    // The ratchet re-reaches this conclusion on every poll for as long as the PR
-    // sits unchanged. Only the first is a transition worth republishing.
     const workspace = {
       id: 'ws-1',
       prUrl: 'https://github.com/example/repo/pull/5',
@@ -814,8 +801,6 @@ describe('ratchet service (state-change + idle dispatch)', () => {
   });
 
   it('does not mark the dispatch stalled when the PR state has changed', async () => {
-    // Same as the first test, but the cached ratchetDispatchSnapshotKey differs
-    // from the key the fetch computes, so a fresh dispatch is warranted.
     const workspace = {
       id: 'ws-1',
       prUrl: 'https://github.com/example/repo/pull/5',
@@ -1117,8 +1102,6 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     expect(result).toMatchObject({
       action: { type: 'ERROR', error: 'Failed to deliver initial ratchet prompt' },
     });
-    // Scoped to the session that failed, so the clear cannot evict a pointer
-    // belonging to a dispatch this path never recorded.
     expect(workspaceRatchetService.clearActiveSession).toHaveBeenCalledWith(
       workspace.id,
       'ratchet-session'
@@ -1314,6 +1297,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         sessionId: 'ratchet-review-session',
         snapshotKey: 'successful-snapshot',
         retryCount: 0,
+        requireExistingOwnership: true,
       }
     );
   });
@@ -1376,10 +1360,6 @@ describe('ratchet service (state-change + idle dispatch)', () => {
   });
 
   it('persists PR state and review decision the check observed, not just CI', async () => {
-    // The projection reads the cache, so an observation the check keeps to itself
-    // is one no later read can derive from. Before the projection this did not
-    // matter — the check wrote its conclusion into a `state` column — which is
-    // exactly how a merge or a new changes-requested review used to reach the app
     // while the cache lagged.
     const workspace = {
       id: 'ws-observation',
@@ -1684,6 +1664,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       sessionId: 'retry-session',
       snapshotKey: 'same-snapshot',
       retryCount: 2,
+      requireExistingOwnership: true,
     });
   });
 
@@ -1743,6 +1724,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       sessionId: 'retry-session',
       snapshotKey: 'clean-snapshot',
       retryCount: 1,
+      requireExistingOwnership: true,
     });
     expect(events).toContainEqual({ workspaceId: 'ws-died-clean' });
   });
@@ -1837,7 +1819,12 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     });
     expect(workspaceRatchetService.recordDispatchIfEnabled).toHaveBeenCalledWith(
       'ws-died-changed',
-      { sessionId: 'fresh-session', snapshotKey: 'new-snapshot', retryCount: 0 }
+      {
+        sessionId: 'fresh-session',
+        snapshotKey: 'new-snapshot',
+        retryCount: 0,
+        requireExistingOwnership: true,
+      }
     );
   });
 
@@ -1953,6 +1940,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       sessionId: 'fresh-pr-session',
       snapshotKey: currentSnapshotKey,
       retryCount: 0,
+      requireExistingOwnership: true,
     });
   });
 
@@ -2820,12 +2808,12 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         }
         return Promise.resolve({
           workspaceId: workspace.id,
+          prId: 'pr-check',
           previousState: RatchetState.IDLE,
           newState: RatchetState.IDLE,
           action: { type: 'WAITING', reason: 'ran after queue' },
         });
       });
-
       const result = await ratchetService.checkAllWorkspaces();
 
       expect(processWorkspaceSpy).toHaveBeenCalledWith(
@@ -2871,12 +2859,12 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         signal.throwIfAborted();
         return {
           workspaceId: workspaceArg.id,
+          prId: 'pr-check',
           previousState: RatchetState.IDLE,
           newState: RatchetState.IDLE,
           action: { type: 'TRIGGERED_FIXER', sessionId: 'session-1', promptSent: true },
         };
       });
-
       const resultPromise = ratchetService.checkAllWorkspaces();
       await new Promise((resolve) => setTimeout(resolve, 10));
       finishCommit();
@@ -3312,12 +3300,12 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         }
         return {
           workspaceId: workspace.id,
+          prId: 'pr-check',
           previousState: RatchetState.IDLE,
           newState: RatchetState.IDLE,
           action: { type: 'WAITING', reason: 'noop' },
         };
       });
-
       const batch = ratchetService.checkAllWorkspaces();
       await vi.waitFor(() => expect(activeBlockers).toBe(3));
       const direct = ratchetService.checkWorkspaceById('queued-target');
@@ -3374,12 +3362,12 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         targetRuns += workspace.id === 'after-timeouts' ? 1 : 0;
         return {
           workspaceId: workspace.id,
+          prId: 'pr-check',
           previousState: RatchetState.IDLE,
           newState: RatchetState.IDLE,
           action: { type: 'WAITING', reason: 'noop' },
         };
       });
-
       const batch = ratchetService.checkAllWorkspaces();
       await vi.waitFor(() => expect(activeTimedOutChecks).toBe(3));
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -3428,12 +3416,12 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         }
         return {
           workspaceId: workspace.id,
+          prId: 'pr-check',
           previousState: RatchetState.IDLE,
           newState: RatchetState.IDLE,
           action: { type: 'WAITING', reason: 'noop' },
         };
       });
-
       const batch = ratchetService.checkAllWorkspaces();
       await vi.waitFor(() => expect(activeBatchChecks).toBe(3));
 
@@ -4325,7 +4313,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       // current snapshot key was dispatched (no prompt was sent for it).
       expect(workspaceRatchetService.adoptActiveSessionIfEnabled).toHaveBeenCalledWith(
         'ws-already-active',
-        'existing-session'
+        'existing-session',
+        undefined
       );
       expect(workspaceRatchetService.recordDispatchIfEnabled).not.toHaveBeenCalled();
       expect(events).toEqual([{ workspaceId: 'ws-already-active' }]);

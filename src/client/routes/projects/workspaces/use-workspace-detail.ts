@@ -51,11 +51,11 @@ export function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
   // Sync PR status once when workspace loads with a PR URL
   const hasSyncedRef = useRef(false);
   useEffect(() => {
-    if (workspace?.prUrl && !hasSyncedRef.current && !syncPRStatus.isPending) {
+    if (workspace?.prs.length && !hasSyncedRef.current && !syncPRStatus.isPending) {
       hasSyncedRef.current = true;
       syncPRStatus.mutate({ workspaceId });
     }
-  }, [workspace?.prUrl, workspaceId, syncPRStatus]);
+  }, [workspace?.prs.length, workspaceId, syncPRStatus]);
 
   const { data: sessions, isLoading: sessionsLoading } = trpc.session.listSessions.useQuery(
     { workspaceId },

@@ -477,7 +477,7 @@ export function resolveRatchetPrContext(
     return null;
   }
 
-  const prNumber = workspace.prNumber ?? prInfo.number;
+  const prNumber = prInfo.number;
   if (!prNumber) {
     logger.warn('Could not determine PR number for ratchet check', {
       workspaceId: workspace.id,
@@ -520,7 +520,7 @@ export async function fetchPRState(params: {
     // concurrent PR sync sees it in flight and skips its own call — and
     // releasing that claim is its `finally`, not this function's obligation.
     const outcome = await github.coordinatePrFetch(
-      workspace.id,
+      { workspaceId: workspace.id, prId: workspace.prId },
       () =>
         fetchPRStateNow({
           workspace,

@@ -49,48 +49,34 @@ dispatch instead of falling back to a second set of instructions.
 
 ### State
 
-The ratchet's mutable state lives in a 1:1 `WorkspaceRatchet` row (`enabled`,
-`lastCheckedAt`, `activeSessionId`, `dispatchSnapshotKey`, `dispatchOutcome`,
-`dispatchRetryCount`), written only by `workspace-ratchet.accessor.ts`; reads
-flatten it back onto the workspace under the old `ratchet*` names.
+A workspace retains all associated PRs in `Workspace.prs`. Each PR has a stable
+ID, URL, GitHub cache, and independent `WorkspacePRRatchet` history.
+`WorkspaceRatchet` owns the workspace toggle, check time, and one active fixer
+slot (`activePrId`, `activeSessionId`). Only the matching session can settle
+that slot. All open PRs are observed; checks visit the least recently checked
+PRs first and continue observing siblings while a fixer is busy. Session
+acquisition and review actions carry the specific PR ID.
 
-`ratchetState` is **not** stored: it is projected by `deriveRatchetState`
-(`src/shared/core/ratchet-state.ts`) from `ratchetEnabled` plus
-`WorkspacePR.state`/`ciStatus`/`reviewState`/`hasMergeConflict`, computed at the
-same accessor boundary that flattens the side tables. The 127-line transition
-table it used to be validated against permitted all 49 of its 49 state pairs and
-is gone, as are the compare-and-swap on `state` and the two settling writes
-(disable, `markPrClosed`) that forced it to `IDLE` — a disabled workspace and a
-closed PR both derive to `IDLE`. `WorkspacePR.hasMergeConflict` was added to
-hold the one input that was previously observed on every fetch but only ever
-stored as the derived `MERGE_CONFLICT` value.
+`deriveWorkspacePRSummary` derives workspace CI, conflict, completion, and stall
+state from the complete active collection. Any open or unsynchronized PR keeps
+the workspace nonterminal. Failure takes precedence over pending checks, and a
+workspace stalls only when all actionable PRs have exhausted their dispatches
+and none is waiting or running. Per-PR state still uses `deriveRatchetState`.
 
-Because the projection reads the cache, a ratchet check persists its whole
-observation (`prState`, `prReviewState`, `prCiStatus`, `hasMergeConflict`) via
-`recordPrObservation` rather than CI alone — otherwise a merge or a new
-changes-requested review would not be visible until the separate PR-sync poller
-caught up.
-
-Live snapshot invalidations go through `RatchetProjectionWorker`, owned by the
-event collector for one start/stop lifetime. It re-reads when invalidations
-arrive during a read, retries failures at 1s and 2s with a three-attempt budget,
-and suppresses archived workspaces and results arriving after stop. The
-collector keeps the event subscriptions and coalesced snapshot writes;
-reconciliation is the safety net after the worker exhausts its retries.
-Successful PR switches clear the previous ratchet projection in the same
-snapshot publication as the new PR facts. In-flight reads superseded by a newer
-invalidation are discarded before publishing, so neither a delayed read nor
-failed refresh retries can restore the previous PR's merged status or bypass
-archive confirmation for the new open PR.
+Snapshot invalidations re-read and publish the collection and summary together
+through `RatchetProjectionWorker`. Its generation guard discards superseded
+reads, with three attempts at 1s and 2s delays and archive/stop suppression.
+Attachments immediately publish a neutral PR alongside existing siblings, so a
+late merged observation cannot bypass archive confirmation. Reconciliation is
+the safety net after retry exhaustion.
 
 ### Dispatch tracking
 
-Each fixer dispatch is tracked via an explicit record on that row (snapshot key
-
-- outcome `RUNNING`/`COMPLETED`/`DIED` + retry count): deliberate stops and
-  clean exits settle as `COMPLETED` (no re-dispatch while the PR state is
-  unchanged), unexpected exits settle as `DIED` and are re-dispatched for the
-  same PR state up to 3 times.
+Each fixer dispatch is tracked on its PR’s `WorkspacePRRatchet` row with a
+snapshot key, outcome (`RUNNING`, `COMPLETED`, or `DIED`), and retry count.
+Deliberate stops and clean exits settle as `COMPLETED` (no re-dispatch while the
+PR state is unchanged). Unexpected exits settle as `DIED` and are re-dispatched
+for the same PR state up to 3 times.
 
 A `dispatchStalled` boolean on the same row records the ratchet's own conclusion
 that it will not act again until the PR changes — set both when a settled
@@ -135,32 +121,45 @@ conditionally settles the matching dispatch as `DIED`.
 
 ## PR cache
 
-Everything cached from GitHub about a workspace's PR lives in a 1:1
-`WorkspacePR` row (`url`, `number`, `state`, `reviewState`, `ciStatus`,
-`hasMergeConflict`, `syncedAt`, `discovery*` scheduling, `ciFailedAt`,
-`ciLastNotifiedAt`, `reviewLast*` cursors), written only by
-`workspace-pr.accessor.ts`; reads flatten it back onto the workspace under the
-old `pr*` names, so the snapshot wire, the v4 export format and the client are
-unchanged.
+Each `WorkspacePR` stores URL, number, title, head/base branches, state, review
+state, CI, merge conflict, sync time, and notification/review cursors. The
+`workspace-pr.accessor.ts` sole writer guards observations by workspace ID, PR
+ID, active association, and revision. Fetches pin that revision before GitHub
+I/O; stale responses cannot modify siblings or resurrect removed associations.
+PR head metadata never renames the workspace’s worktree branch.
 
-Attaching a PR URL still persists the URL when its initial snapshot fetch fails.
-That write clears the cached number, state, review state, CI status, and merge
-conflict flag to a neutral baseline. Ratchet can then poll the new URL and
-persist its observations without being excluded by the previous PR's terminal
-state or rejected by its cached number. Observations for the old URL remain
-rejected.
+Adding a URL is idempotent and retains siblings and their dispatch history.
+Removing a PR sets a tombstone, advances its revision, and releases only its
+fixer slot; it does not close the GitHub PR. Discovery honors tombstones, while
+explicit reattachment clears one and resets its dispatch history and cached
+status before fetching. Failed initial synchronization retains a visible
+unsynchronized association. The compact PR menu contains explicit GitHub,
+review, remove, and add actions.
 
-The URL-attached event publishes the neutral PR fields and resets the streamed
-ratchet projection synchronously. It also invalidates pending projection reads:
-a read started for the previous PR cannot restore its cached merge status or
-conflict flag while a replacement read is pending. Archive confirmation
-therefore uses the new attachment's neutral state immediately.
+Detachment cleanup can be retried using the persisted session’s PR target if
+stopping its runtime fails after the association was removed. Unchanged PR
+collections and summaries do not emit snapshot deltas. Older events resolve to
+an attached PR by URL or an unambiguous PR number before updating the
+collection. Reopened PRs trigger an immediate ratchet check even when the
+workspace has multiple associations. Linear completion waits while any PR is
+nonterminal and retries when the final sibling closes or is removed.
 
-A row exists for every workspace, including those with no PR, because discovery
-claims its backoff before a PR exists. `syncedAt` was `prUpdatedAt` on
-`Workspace`, a name that read as GitHub's PR `updated_at` but always held the
-caller's observation time. Claiming a discovery attempt no longer bumps
-`Workspace.updatedAt`, so polling no longer registers as workspace activity.
+Client compatibility updates merge legacy observations into cached PR
+collections and recompute aggregate status with the same shared flow rules used
+by the backend. Draft observations preserve cached review decisions. Ready
+workspaces missing their worktree path refetch the project list, retrying later
+if the cache still lacks a path after the refetch settles.
+
+`WorkspacePRDiscovery` owns workspace discovery scheduling and backoff,
+including workspaces that already have PRs. Repository batches attach all
+matching URLs under one validated claim, choosing the newest eligible workspace
+when a branch is reused. Activity and branch changes invalidate claims. Every
+attached PR is eligible for status sync, including terminal PRs that may reopen.
+
+Backups export version 5 with the collection, tombstones, cursors, independent
+histories, discovery, and fixer ownership. Version 4 imports normalize into this
+shape, creating no association when the old URL was empty. Validation rejects
+duplicate PR identities and ownership outside the workspace before restoration.
 
 Idle-triggered PR refreshes retain a 30-second cooldown per workspace. At the
 workspace cache limit, only expired cooldowns are removed; if all entries are
@@ -172,8 +171,8 @@ slot. The regular PR sync poll remains the fallback under capacity pressure.
 The scheduler's PR sync and the ratchet both fetch the same workspaces' PRs, so
 both go through `prFetchCoordinator`
 (`src/backend/services/github/service/pr-fetch-coordinator.ts`), which runs the
-fetch inside a workspace-scoped claim and declines to run it at all when another
-caller fetched that workspace within the cooldown or is fetching it right now.
+fetch inside a PR-scoped claim and declines to run it at all when another caller
+fetched that PR within the cooldown or is fetching it right now.
 
 It replaced a registry with a three-call claim protocol (`startFetch`, then
 `register` or `cancelFetch`) plus a token the caller threaded through its own
