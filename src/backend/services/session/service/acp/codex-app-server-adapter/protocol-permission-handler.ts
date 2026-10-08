@@ -88,10 +88,16 @@ function parseToolUserInputAnswersFromPermissionMeta(params: {
     return null;
   }
 
-  const knownQuestionIds = new Set(params.questions.map((question) => question.id));
+  const rawIdByAnswerKey = new Map(
+    params.questions.flatMap((question) => [
+      [question.id, question.id],
+      [question.id.trim() || question.question, question.id],
+    ])
+  );
   const answers: UserInputAnswers = {};
   for (const [questionId, value] of Object.entries(answersRaw)) {
-    if (!knownQuestionIds.has(questionId)) {
+    const rawQuestionId = rawIdByAnswerKey.get(questionId);
+    if (rawQuestionId === undefined) {
       continue;
     }
 
@@ -103,7 +109,7 @@ function parseToolUserInputAnswersFromPermissionMeta(params: {
       continue;
     }
 
-    answers[questionId] = { answers: values };
+    answers[rawQuestionId] = { answers: values };
   }
 
   return answers;

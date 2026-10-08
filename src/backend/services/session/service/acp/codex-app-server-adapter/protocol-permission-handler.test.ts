@@ -1,3 +1,4 @@
+import type { RequestPermissionResponse } from '@agentclientprotocol/sdk';
 import { describe, expect, it, vi } from 'vitest';
 import type { AdapterSession } from './adapter-state';
 import { buildCommandApprovalScopeKey } from './command-metadata';
@@ -56,6 +57,70 @@ describe('protocol-permission-handler', () => {
       expect.objectContaining({ method: 'unsupported/method' })
     );
   });
+
+  it.each([
+    { name: 'padded id', ids: ['  color  '], rawKeys: false },
+    { name: 'raw padded id', ids: ['  color  '], rawKeys: true },
+    { name: 'empty id', ids: [''] },
+    { name: 'whitespace id', ids: ['   '] },
+    { name: 'mixed multi-question ids', ids: ['  color  ', '', '   ', 'plain'] },
+  ])(
+    'restores raw Codex question ids from frontend answer keys for $name',
+    async ({ ids, rawKeys }) => {
+      const session = createSession();
+      const questions = ids.map((id, index) => ({
+        id,
+        header: 'Choice',
+        question: `Question ${index}?`,
+        isOther: false,
+        isSecret: false,
+        options: [{ label: 'Blue', description: 'Color' }],
+      }));
+      const permission = {
+        outcome: { outcome: 'selected', optionId: 'allow_once' },
+        _meta: {
+          factoryFactory: {
+            toolUserInputAnswers: {
+              ...Object.fromEntries(
+                questions.map((question) => [
+                  rawKeys ? question.id : question.id.trim() || question.question,
+                  [' Blue ', '', 42],
+                ])
+              ),
+              unknown: ['ignored'],
+            },
+          },
+        },
+      } satisfies RequestPermissionResponse;
+      const codex = { respondSuccess: vi.fn(), respondError: vi.fn() };
+      const emitSessionUpdate = vi.fn(async () => undefined);
+
+      await handleCodexServerPermissionRequest({
+        request: {
+          id: 3,
+          method: 'item/tool/requestUserInput',
+          params: { threadId: 'thread_1', turnId: 'turn_1', itemId: 'item_1', questions },
+        },
+        sessionIdByThreadId: new Map([['thread_1', session.sessionId]]),
+        sessions: new Map([[session.sessionId, session]]),
+        connection: { requestPermission: vi.fn(async () => permission) },
+        codex,
+        emitSessionUpdate,
+        reportShapeDrift: vi.fn(),
+      });
+
+      const answers = Object.fromEntries(ids.map((id) => [id, { answers: ['Blue'] }]));
+      expect(codex.respondSuccess).toHaveBeenCalledWith(3, { answers });
+      expect(codex.respondError).not.toHaveBeenCalled();
+      expect(emitSessionUpdate).toHaveBeenLastCalledWith(
+        session.sessionId,
+        expect.objectContaining({
+          status: 'completed',
+          rawOutput: { answers },
+        })
+      );
+    }
+  );
 
   it('auto-approves command requests when allow_always scope exists', async () => {
     const session = createSession();
