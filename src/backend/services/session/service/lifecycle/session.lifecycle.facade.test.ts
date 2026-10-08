@@ -6,19 +6,19 @@ import type { SessionDomainService } from '@/backend/services/session/service/se
 import { workspaceNotificationService } from '@/backend/services/workspace';
 import { WorkspaceStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import {
-  SessionLifecycleService,
-  type SessionLifecycleServiceDependencies,
-} from './session.lifecycle.service';
 import type { SessionContextService } from './session-context.service';
+import type { SessionLifecycleGate } from './session-lifecycle-gate';
 import {
   createLifecycleHarness,
   createPendingWorkspaceNotification,
 } from './session-lifecycle.test-helpers';
-import type { SessionLifecycleGate } from './session-lifecycle-gate';
 import type { SessionStartupCoordinator } from './session-startup.coordinator';
 import type { SessionTerminationCoordinator } from './session-termination.coordinator';
 import type { SessionWorkflowFinalizer } from './session-workflow-finalizer';
+import {
+  SessionLifecycleService,
+  type SessionLifecycleServiceDependencies,
+} from './session.lifecycle.service';
 
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({

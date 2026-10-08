@@ -950,29 +950,29 @@ https://raw.githubusercontent.com/openai/codex/main/codex-rs/app-server/README.m
 
 [1]:
   https://github.com/zed-industries/codex-acp
-  "GitHub - zed-industries/codex-acp"
-[2]: https://developers.openai.com/codex/app-server/ "Codex App Server"
+  'GitHub - zed-industries/codex-acp'
+[2]: https://developers.openai.com/codex/app-server/ 'Codex App Server'
 [3]:
   https://agentclientprotocol.com/get-started/introduction
-  "Introduction - Agent Client Protocol"
+  'Introduction - Agent Client Protocol'
 [4]:
   https://agentclientprotocol.com/protocol/initialization
-  "Initialization - Agent Client Protocol"
+  'Initialization - Agent Client Protocol'
 [5]:
   https://agentclientprotocol.com/protocol/session-setup
-  "Session Setup - Agent Client Protocol"
+  'Session Setup - Agent Client Protocol'
 [6]:
   https://agentclientprotocol.com/protocol/prompt-turn
-  "Prompt Turn - Agent Client Protocol"
+  'Prompt Turn - Agent Client Protocol'
 [7]:
   https://agentclientprotocol.com/protocol/session-config-options
-  "Session Config Options - Agent Client Protocol"
+  'Session Config Options - Agent Client Protocol'
 [8]:
   https://agentclientprotocol.com/protocol/content
-  "Content - Agent Client Protocol"
+  'Content - Agent Client Protocol'
 [9]:
   https://agentclientprotocol.com/protocol/tool-calls
-  "Tool Calls - Agent Client Protocol"
+  'Tool Calls - Agent Client Protocol'
 [10]:
   https://raw.githubusercontent.com/openai/codex/main/codex-rs/app-server/README.md
-  "raw.githubusercontent.com"
+  'raw.githubusercontent.com'

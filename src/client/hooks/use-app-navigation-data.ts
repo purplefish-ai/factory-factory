@@ -18,7 +18,7 @@ import { trpc } from '@/client/lib/trpc';
 export function getProjectSlugFromPath(pathname: string): string | null {
   const match = pathname.match(/^\/projects\/([^/]+)/);
   const slug = match?.[1];
-  return slug && slug !== 'new' ? slug : null;
+  return slug && !/^\/projects\/new\/?$/.test(pathname) ? slug : null;
 }
 
 function persistSelectedProjectSlug(slug: string) {

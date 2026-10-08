@@ -12,13 +12,6 @@ import { AcpEventProcessor } from './acp-event-processor';
 import { ClaudeModelCatalogService } from './claude-model-catalog.service';
 import { closedSessionPersistenceService } from './closed-session-persistence.service';
 import { CodexModelCatalogService } from './codex-model-catalog.service';
-import { SessionConfigService } from './session.config.service';
-import { SessionLifecycleService } from './session.lifecycle.service';
-import { SessionPermissionService } from './session.permission.service';
-import { SessionPromptTurnCompletionService } from './session.prompt-turn-completion.service';
-import { sessionRepository } from './session.repository';
-import { SessionRetryService } from './session.retry.service';
-import { SessionService } from './session.service';
 import { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import { sessionAcpEnvironment, sessionContextService } from './session-lifecycle-external-ports';
 import { SessionLifecycleGate } from './session-lifecycle-gate';
@@ -29,6 +22,13 @@ import { SessionRuntimeExitCoordinator } from './session-runtime-exit.coordinato
 import { SessionStartupCoordinator } from './session-startup.coordinator';
 import { SessionTerminationCoordinator } from './session-termination.coordinator';
 import { SessionWorkflowFinalizer } from './session-workflow-finalizer';
+import { SessionConfigService } from './session.config.service';
+import { SessionLifecycleService } from './session.lifecycle.service';
+import { SessionPermissionService } from './session.permission.service';
+import { SessionPromptTurnCompletionService } from './session.prompt-turn-completion.service';
+import { sessionRepository } from './session.repository';
+import { SessionRetryService } from './session.retry.service';
+import { SessionService } from './session.service';
 
 const logger = createLogger('session');
 

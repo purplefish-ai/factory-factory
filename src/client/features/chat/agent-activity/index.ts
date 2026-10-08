@@ -18,9 +18,4 @@ export {
 export { ToolCallGroupRenderer, ToolInfoRenderer } from './tool-renderers';
 
 // Types
-export type {
-  AgentMessage,
-  ChatMessage,
-  ToolCallGroup,
-  ToolCallInfo,
-} from './types';
+export type { AgentMessage, ChatMessage, ToolCallGroup, ToolCallInfo } from './types';

@@ -1,6 +1,5 @@
 import { SubagentTranscriptView } from '@/client/features/subagents';
 import { cn } from '@/lib/utils';
-
 import { ClosedSessionTranscriptView } from './closed-session-transcript-view';
 import { DiffViewer } from './diff-viewer';
 import { FileViewer } from './file-viewer';

@@ -80,23 +80,21 @@ function createCaller(requestTrust?: {
     getRuntimeSnapshot: (...args: unknown[]) => mockSessionRuntimeSnapshot(...args),
   };
   const runScriptService = {
-    stopRunScript: vi.fn(
-      async (): Promise<{ success: boolean; error?: string }> => ({ success: true })
-    ),
+    stopRunScript: vi.fn(async (): Promise<{ success: boolean; error?: string }> => ({
+      success: true,
+    })),
     evictWorkspaceBuffers: vi.fn(),
   };
   const terminalService = {
     destroyWorkspaceTerminals: vi.fn(),
   };
   const cliHealthService = {
-    checkHealth: vi.fn(
-      async (): Promise<CLIHealthStatus> => ({
-        claude: { isInstalled: true },
-        codex: { isInstalled: true, isAuthenticated: true },
-        github: { isInstalled: true, isAuthenticated: true },
-        allHealthy: true,
-      })
-    ),
+    checkHealth: vi.fn(async (): Promise<CLIHealthStatus> => ({
+      claude: { isInstalled: true },
+      codex: { isInstalled: true, isAuthenticated: true },
+      github: { isInstalled: true, isAuthenticated: true },
+      allHealthy: true,
+    })),
   };
   const logger = Object.assign(fakeGraph.services.createLogger('workspace-router-test'), {
     debug: vi.fn(),
@@ -238,6 +236,47 @@ function createCaller(requestTrust?: {
     logger,
   };
 }
+
+describe('workspace provider defaults', () => {
+  it('returns NOT_FOUND without Prisma internals when the workspace was deleted', async () => {
+    const { caller } = createCaller();
+    mockWorkspaceDataService.update.mockRejectedValueOnce(
+      Object.assign(new Error('Invalid prisma.workspace.update(): Workspace record not found'), {
+        code: 'P2025',
+      })
+    );
+    await expect(caller.updateProviderDefaults({ workspaceId: 'deleted' })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+      message: 'Workspace not found: deleted',
+    });
+  });
+
+  it('preserves other update errors', async () => {
+    const { caller } = createCaller();
+    const failure = Object.assign(new Error('Database unavailable'), { code: 'P1001' });
+    mockWorkspaceDataService.update.mockRejectedValueOnce(failure);
+    await expect(caller.updateProviderDefaults({ workspaceId: 'existing' })).rejects.toMatchObject({
+      code: 'INTERNAL_SERVER_ERROR',
+      cause: failure,
+    });
+  });
+
+  it('returns updated defaults for an existing workspace', async () => {
+    const { caller } = createCaller();
+    const updated = { id: 'existing', defaultSessionProvider: 'CODEX' };
+    mockWorkspaceDataService.update.mockResolvedValueOnce(updated);
+    await expect(
+      caller.updateProviderDefaults({
+        workspaceId: 'existing',
+        defaultSessionProvider: 'CODEX',
+      })
+    ).resolves.toEqual(updated);
+    expect(mockWorkspaceDataService.update).toHaveBeenLastCalledWith('existing', {
+      defaultSessionProvider: 'CODEX',
+      ratchetSessionProvider: undefined,
+    });
+  });
+});
 
 describe('workspaceCoreRouter', () => {
   beforeEach(() => {

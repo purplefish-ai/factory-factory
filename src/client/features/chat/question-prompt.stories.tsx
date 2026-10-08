@@ -1,8 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { fn } from 'storybook/test';
-
 import { createUserQuestion } from '@/lib/claude-fixtures';
-
 import { QuestionPrompt } from './question-prompt';
 
 const meta = {

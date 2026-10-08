@@ -1,5 +1,4 @@
 import { SpinnerGapIcon } from '@phosphor-icons/react';
-
 import { cn } from '@/lib/utils';
 
 function Spinner({ className, ...props }: React.ComponentProps<'svg'>) {

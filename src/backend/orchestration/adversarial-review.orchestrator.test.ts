@@ -19,7 +19,7 @@ vi.mock('@/backend/services/github', () => ({
 
 vi.mock('@/backend/services/session', () => ({
   sessionDataService: {
-    createAgentSession: vi.fn(),
+    createAgentSessionWithinWorkspaceLimit: vi.fn(),
     findAgentSessionsByWorkspaceId: vi.fn(),
   },
   sessionDomainService: {
@@ -47,7 +47,8 @@ vi.mock('@/backend/services/workspace', () => ({
   },
 }));
 
-import { getPRHeadCommitSha, githubCLIService } from '@/backend/services/github';
+import { configService } from '@/backend/services/config.service';
+import { getPRDescription, getPRHeadCommitSha, githubCLIService } from '@/backend/services/github';
 import { sessionDataService, sessionLifecycleService } from '@/backend/services/session';
 import { userSettingsService } from '@/backend/services/settings';
 import { workspaceDataService } from '@/backend/services/workspace';
@@ -83,6 +84,7 @@ function mockOpenPrWorkspace() {
     reviewerCodexModel: null,
     postReviewToGitHub: true,
   } as never);
+  vi.mocked(getPRDescription).mockResolvedValue('');
   vi.mocked(githubCLIService.getPRDiff).mockResolvedValue('');
   vi.mocked(githubCLIService.getPRFullDetails).mockResolvedValue({ reviews: [] } as never);
   vi.mocked(githubCLIService.getAuthenticatedUsername).mockResolvedValue('factory-factory[bot]');
@@ -147,21 +149,36 @@ describe('triggerAdversarialReview', () => {
     const result = await triggerAdversarialReview(WORKSPACE_ID);
 
     expect(result).toEqual({ status: 'already_active', sessionId: 'existing-session' });
-    expect(sessionDataService.createAgentSession).not.toHaveBeenCalled();
+    expect(sessionDataService.createAgentSessionWithinWorkspaceLimit).not.toHaveBeenCalled();
+  });
+
+  it('refuses to start a reviewer when the workspace session limit is reached', async () => {
+    mockOpenPrWorkspace();
+    vi.mocked(sessionDataService.createAgentSessionWithinWorkspaceLimit).mockResolvedValue({
+      outcome: 'limit_reached',
+    });
+
+    await expect(triggerAdversarialReview(WORKSPACE_ID)).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: expect.stringContaining('session limit'),
+    });
+    expect(sessionLifecycleService.startSession).not.toHaveBeenCalled();
   });
 
   it('creates and starts a session with the admin-configured reviewer provider/model', async () => {
     mockOpenPrWorkspace();
-    vi.mocked(sessionDataService.createAgentSession).mockResolvedValue({
-      id: 'new-session',
+    vi.mocked(sessionDataService.createAgentSessionWithinWorkspaceLimit).mockResolvedValue({
+      outcome: 'created',
+      session: { id: 'new-session' },
     } as never);
 
     const result = await triggerAdversarialReview(WORKSPACE_ID);
 
     expect(result).toEqual({ status: 'started', sessionId: 'new-session' });
-    expect(sessionDataService.createAgentSession).toHaveBeenCalledWith(
+    expect(sessionDataService.createAgentSessionWithinWorkspaceLimit).toHaveBeenCalledWith(
       expect.objectContaining({
         workspaceId: WORKSPACE_ID,
+        maxSessions: configService.getMaxSessionsPerWorkspace(),
         workflow: 'adversarial_review',
         provider: 'CODEX',
         model: 'default',
@@ -175,8 +192,9 @@ describe('triggerAdversarialReview', () => {
 
   it('serializes concurrent triggers for the same workspace instead of racing', async () => {
     mockOpenPrWorkspace();
-    vi.mocked(sessionDataService.createAgentSession).mockResolvedValue({
-      id: 'new-session',
+    vi.mocked(sessionDataService.createAgentSessionWithinWorkspaceLimit).mockResolvedValue({
+      outcome: 'created',
+      session: { id: 'new-session' },
     } as never);
 
     const [first, second] = await Promise.all([
@@ -186,7 +204,7 @@ describe('triggerAdversarialReview', () => {
 
     expect(first).toEqual({ status: 'started', sessionId: 'new-session' });
     expect(second).toEqual(first);
-    expect(sessionDataService.createAgentSession).toHaveBeenCalledTimes(1);
+    expect(sessionDataService.createAgentSessionWithinWorkspaceLimit).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -4,12 +4,12 @@ import type { AcpProviderIdentityEvent } from '@/backend/services/session/servic
 import { createDeferred } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
 import { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type { closedSessionPersistenceService } from './closed-session-persistence.service';
-import type { SessionRepository } from './session.repository';
 import {
   createLifecycleTestSession,
   createLifecycleTestWorkspace,
 } from './session-lifecycle.test-helpers';
 import { SessionProviderIdentityService } from './session-provider-identity.service';
+import type { SessionRepository } from './session.repository';
 
 function harness() {
   let session = createLifecycleTestSession({

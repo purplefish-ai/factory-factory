@@ -114,6 +114,9 @@ quick-actions menu (`main-view-tab-bar.tsx:391`). Reasoning:
 Button behavior:
 
 - Hidden/disabled when there's no open PR.
+- Refuses a new review when the workspace has reached its configured session
+  limit; close a session before trying again. An existing active review remains
+  available at the limit.
 - Hidden in both the toolbar and overflow menu when the workspace has no
   worktree. A failed setup that retains a worktree can still be reviewed.
 - Shows a spinner and is disabled while an adversarial-review session is already

@@ -8,9 +8,9 @@ import type {
 } from '@/backend/services/session/service/bridges';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type { PersistClosedSessionInput } from './closed-session-persistence.service';
-import type { SessionRepository } from './session.repository';
 import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import { maybeDiscoverPROnSessionEnd } from './session-pr-discovery.service';
+import type { SessionRepository } from './session.repository';
 
 const logger = createLogger('session-workflow-finalizer');
 

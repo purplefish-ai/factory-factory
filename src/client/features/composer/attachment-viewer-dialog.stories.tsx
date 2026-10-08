@@ -1,6 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useState } from 'react';
-
 import { Button } from '@/components/ui/button';
 import type { MessageAttachment } from '@/lib/chat-protocol';
 import { AttachmentViewerDialog } from './attachment-viewer-dialog';

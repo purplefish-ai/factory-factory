@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { SessionLifecycleEventRecord } from '@/backend/services/session/resources/session-lifecycle-event.accessor';
 import { AcpRuntimeQuiescence } from '@/backend/services/session/service/acp/acp-runtime-quiescence';
 import { acpTraceLogger } from '@/backend/services/session/service/logging/acp-trace-logger.service';
 import { createDeferred, createTerminationHarness } from './session-lifecycle.test-helpers';
@@ -244,6 +245,135 @@ describe('SessionTerminationCoordinator graceful shutdown', () => {
     expect(harness.runtimeManager.stopAllClients).toHaveBeenCalledWith(4321);
   });
 
+  it.each([
+    [true, 'event'],
+    [true, 'quiescence'],
+    [false, 'quiescence'],
+  ] as const)(
+    'records one stop when shutdown overlaps recording=%s at %s',
+    async (recordLifecycleEvent, boundary) => {
+      const harness = createShutdownHarness(['session-1']);
+      const pendingEvent = createDeferred<SessionLifecycleEventRecord | null>();
+      const pendingStop = createDeferred<undefined>();
+      if (boundary === 'event') {
+        harness.lifecycleEventService.record.mockReturnValueOnce(pendingEvent.promise);
+      }
+      harness.runtimeManager.stopAndQuiesce.mockReturnValueOnce(pendingStop.promise);
+      const stop = harness.coordinator.stopSession('session-1', {
+        reason: 'USER_STOP',
+        recordLifecycleEvent,
+      });
+      await vi.waitFor(() => {
+        if (boundary === 'event') {
+          expect(harness.lifecycleEventService.record).toHaveBeenCalledOnce();
+        } else {
+          expect(harness.runtimeManager.stopAndQuiesce).toHaveBeenCalledOnce();
+        }
+      });
+
+      const shutdown = harness.coordinator.stopAllClients();
+      if (boundary === 'event') {
+        expect(harness.runtimeManager.stopAllClients).not.toHaveBeenCalled();
+        const input = harness.lifecycleEventService.record.mock.calls[0]?.[0];
+        if (!input) {
+          throw new Error('Expected a pending stop event');
+        }
+        pendingEvent.resolve({ ...input, id: 'stop-event', createdAt: new Date() });
+      }
+      await shutdown;
+
+      expect(harness.lifecycleEventService.record).toHaveBeenCalledOnce();
+      expect(harness.lifecycleEventService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionId: 'session-1',
+          reason: recordLifecycleEvent ? 'USER_STOP' : 'SYSTEM_STOP',
+        })
+      );
+      expect(harness.lifecycleGate.isStopReserved('session-1')).toBe(true);
+      expect(harness.lifecycleGate.isBulkShutdownReserved('session-1')).toBe(false);
+      pendingStop.resolve(undefined);
+      await stop;
+      expect(harness.lifecycleEventService.record).toHaveBeenCalledOnce();
+      expect(harness.lifecycleGate.isSessionStopping('session-1')).toBe(false);
+    }
+  );
+
+  it('waits for a pending durable explicit stop write before shutting down without a duplicate', async () => {
+    vi.useFakeTimers();
+    const harness = createShutdownHarness(['session-1']);
+    const pendingEvent = createDeferred<SessionLifecycleEventRecord | null>();
+    const pendingStop = createDeferred<undefined>();
+    harness.lifecycleEventService.record.mockReturnValueOnce(pendingEvent.promise);
+    harness.runtimeManager.stopAndQuiesce.mockReturnValueOnce(pendingStop.promise);
+    const stop = harness.coordinator.stopSession('session-1', { reason: 'USER_STOP' });
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      const shutdown = harness.coordinator.stopAllClients();
+      await vi.advanceTimersByTimeAsync(100);
+      expect(harness.runtimeManager.stopAllClients).not.toHaveBeenCalled();
+      const input = harness.lifecycleEventService.record.mock.calls[0]?.[0];
+      if (!input) {
+        throw new Error('Expected a pending stop event');
+      }
+      pendingEvent.resolve({ ...input, id: 'stop-event', createdAt: new Date() });
+      await shutdown;
+      expect(harness.lifecycleEventService.record).toHaveBeenCalledOnce();
+      expect(harness.runtimeManager.stopAllClients).toHaveBeenCalledOnce();
+    } finally {
+      pendingEvent.resolve(null);
+      pendingStop.resolve(undefined);
+      await stop;
+      vi.useRealTimers();
+    }
+  });
+
+  it('retries the same stop event during shutdown after explicit persistence returns null', async () => {
+    const harness = createShutdownHarness(['session-1']);
+    const pendingStop = createDeferred<undefined>();
+    harness.runtimeManager.stopAndQuiesce.mockReturnValueOnce(pendingStop.promise);
+    harness.lifecycleEventService.record.mockResolvedValueOnce(null);
+    const stop = harness.coordinator.stopSession('session-1', { reason: 'USER_STOP' });
+    await vi.waitFor(() => expect(harness.runtimeManager.stopAndQuiesce).toHaveBeenCalledOnce());
+    const input = harness.lifecycleEventService.record.mock.calls[0]?.[0];
+
+    await harness.coordinator.stopAllClients();
+
+    expect(harness.lifecycleEventService.record).toHaveBeenCalledTimes(2);
+    expect(harness.lifecycleEventService.record).toHaveBeenNthCalledWith(2, input);
+    pendingStop.resolve(undefined);
+    await stop;
+  });
+
+  it('retries failed pending stop persistence even after shutdown recording times out', async () => {
+    vi.useFakeTimers();
+    const harness = createShutdownHarness(['session-1']);
+    const pendingEvent = createDeferred<null>();
+    const pendingStop = createDeferred<undefined>();
+    harness.lifecycleEventService.record.mockReturnValueOnce(pendingEvent.promise);
+    harness.runtimeManager.stopAndQuiesce.mockReturnValueOnce(pendingStop.promise);
+    const stop = harness.coordinator.stopSession('session-1', { reason: 'USER_STOP' });
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      const input = harness.lifecycleEventService.record.mock.calls[0]?.[0];
+      const shutdown = harness.coordinator.stopAllClients();
+      await vi.advanceTimersByTimeAsync(1000);
+      await shutdown;
+      expect(harness.lifecycleEventService.record).toHaveBeenCalledOnce();
+
+      pendingEvent.resolve(null);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(harness.lifecycleEventService.record).toHaveBeenCalledTimes(2);
+      expect(harness.lifecycleEventService.record).toHaveBeenNthCalledWith(2, input);
+      expect(harness.lifecycleGate.isBulkShutdownReserved('session-1')).toBe(false);
+    } finally {
+      pendingEvent.resolve(null);
+      pendingStop.resolve(undefined);
+      await stop;
+      vi.useRealTimers();
+    }
+  });
+
   it('logs lifecycle recording failures independently and still shuts down the runtime', async () => {
     const harness = createShutdownHarness(['session-active', 'session-fenced']);
     harness.lifecycleEventService.record.mockImplementation(({ sessionId }) =>
@@ -371,9 +501,9 @@ describe('SessionTerminationCoordinator races', () => {
       },
     });
     const originalReserveStop = harness.lifecycleGate.reserveStop.bind(harness.lifecycleGate);
-    vi.spyOn(harness.lifecycleGate, 'reserveStop').mockImplementation((sessionId) => {
+    vi.spyOn(harness.lifecycleGate, 'reserveStop').mockImplementation((...args) => {
       effects.push('reserve-stop');
-      return originalReserveStop(sessionId);
+      return originalReserveStop(...args);
     });
 
     const stop = harness.coordinator.stopSession('session-1');
@@ -469,9 +599,9 @@ describe('SessionTerminationCoordinator races', () => {
       effects.push('close-trace');
     });
     const originalReserveStop = harness.lifecycleGate.reserveStop.bind(harness.lifecycleGate);
-    vi.spyOn(harness.lifecycleGate, 'reserveStop').mockImplementation((sessionId) => {
+    vi.spyOn(harness.lifecycleGate, 'reserveStop').mockImplementation((...args) => {
       effects.push('reserve-stop');
-      const reservation = originalReserveStop(sessionId);
+      const reservation = originalReserveStop(...args);
       if (!reservation) {
         return null;
       }
@@ -630,8 +760,8 @@ describe('SessionTerminationCoordinator races', () => {
     harness.lifecycleEventService.record.mockReturnValueOnce(stopEvent.promise);
     const originalReserveStop = harness.lifecycleGate.reserveStop.bind(harness.lifecycleGate);
     const releases = vi.fn();
-    vi.spyOn(harness.lifecycleGate, 'reserveStop').mockImplementation((sessionId) => {
-      const reservation = originalReserveStop(sessionId);
+    vi.spyOn(harness.lifecycleGate, 'reserveStop').mockImplementation((...args) => {
+      const reservation = originalReserveStop(...args);
       if (!reservation) {
         return null;
       }

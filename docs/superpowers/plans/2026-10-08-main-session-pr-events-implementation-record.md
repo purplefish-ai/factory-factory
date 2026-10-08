@@ -67,3 +67,20 @@ files and 5,971 tests, with one file and four tests skipped. Desktop and mobile
 Storybook previews fit correctly, with keyboard recipient selection verified.
 The Codex schema drift subcheck is skipped locally because installed CLI 0.160.1
 differs from pinned 0.153.4; CI enforces strict schema verification.
+
+## Pull request preparation
+
+Integrated current main (`7622301c`), preserving its shutdown lifecycle and
+deleted-workspace handling while retaining the approved event replacement.
+Adopted main's updated dependency lockfile and lint/format tools. Removed
+modified legacy fixer files because their delivery mechanism is retired.
+
+Added direct transcript and chat routing coverage: queued, committed and
+provider-history-restored CI updates survive grouping and render as PR update
+cards. Receipt markers and human-message removal/rewind controls stay hidden.
+The focused visibility suite passes 14 tests.
+
+After integration, `pnpm check:fix`, `pnpm check` and `pnpm check:prisma-schema`
+(including typecheck) pass. The complete suite passes 534 test files and 6,124
+tests; one file and four tests are skipped. The local Codex schema drift
+limitation remains as documented above.

@@ -27,6 +27,10 @@ Kanban Quick Chat keeps composer attachments in shared chat state, so sending,
 rejection recovery, and session restoration use the same attachments as the full
 workspace chat.
 
+Unified diff parsing removes the terminating stdout newline before splitting
+lines, preserving real blank context lines without fabricating a final row or
+line number in the workspace viewer or PR panel.
+
 ## Run script
 
 Startup output accumulates across factory setup and project startup phases. The
@@ -59,6 +63,12 @@ because `pid` is the only handle on an orphaned run script (`verifyRunning` uses
 `process.kill(pid, 0)`); only `STARTING`/`STOPPING` are cleared at startup.
 `registerInitializedWorktree` writes the worktree columns and the commands in
 one transaction, since they were one statement before the split.
+
+## Provider defaults
+
+Provider-default updates return `NOT_FOUND` when their workspace was deleted,
+including deletion racing the database update, without exposing Prisma error
+messages. Other database errors keep their existing handling.
 
 ## Backup import
 
@@ -196,6 +206,11 @@ cancelling the request or allowing another save until completion. Failures close
 the editor and allow a fresh edit to retry. Workspace/project changes and
 departed mounts abandon the editor; late responses reconcile their originating
 caches without closing or resetting a newer edit.
+
+Project selection treats only `/projects/new` (with an optional trailing slash)
+as the creation route. Deeper routes such as `/projects/new/workspaces` select
+and persist the actual project with slug `new`, keeping sidebar, board, and
+snapshot synchronization aligned with the URL.
 
 ## Completion notifications
 

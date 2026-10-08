@@ -2,8 +2,8 @@ import { createLogger } from '@/backend/services/logger.service';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { PermissionPreset } from '@/backend/services/session/service/acp';
 import type { WorkspaceStatus } from '@/shared/core';
-import type { SessionRepository } from './session.repository';
 import { getWorkflowPermissionPreset } from './session-workflow-permissions';
+import type { SessionRepository } from './session.repository';
 
 const logger = createLogger('session');
 

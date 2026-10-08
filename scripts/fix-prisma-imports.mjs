@@ -10,11 +10,11 @@
  *    explicitly add .js to any bare relative imports that are missing an extension.
  */
 
-import { readdir, readFile, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import { join, dirname, resolve } from "node:path";
+import { existsSync } from 'node:fs';
+import { readdir, readFile, writeFile } from 'node:fs/promises';
+import { join, dirname, resolve } from 'node:path';
 
-const GENERATED_DIR = join("dist", "prisma", "generated");
+const GENERATED_DIR = join('dist', 'prisma', 'generated');
 
 async function walk(dir) {
   const entries = await readdir(dir, { withFileTypes: true });
@@ -23,7 +23,7 @@ async function walk(dir) {
     const full = join(dir, entry.name);
     if (entry.isDirectory()) {
       files.push(...(await walk(full)));
-    } else if (entry.name.endsWith(".js")) {
+    } else if (entry.name.endsWith('.js')) {
       files.push(full);
     }
   }
@@ -34,14 +34,11 @@ const files = await walk(GENERATED_DIR);
 let rewritten = 0;
 
 for (const file of files) {
-  const src = await readFile(file, "utf8");
+  const src = await readFile(file, 'utf8');
   const dir = dirname(file);
 
   // Step 1: rewrite explicit .ts extensions to .js
-  let fixed = src.replace(
-    /(from\s+['"])([^'"]+)\.ts(['"])/g,
-    "$1$2.js$3",
-  );
+  let fixed = src.replace(/(from\s+['"])([^'"]+)\.ts(['"])/g, '$1$2.js$3');
 
   // Step 2: add .js to bare relative imports that have no extension
   // Matches: from "./foo" or from "../foo" (no extension after last segment)
@@ -53,17 +50,17 @@ for (const file of files) {
         return match;
       }
       // Check if the .js file actually exists in dist
-      const candidate = resolve(dir, importPath + ".js");
+      const candidate = resolve(dir, `${importPath}.js`);
       if (existsSync(candidate)) {
         return `${prefix}${importPath}.js${suffix}`;
       }
       // Try index.js
-      const indexCandidate = resolve(dir, importPath, "index.js");
+      const indexCandidate = resolve(dir, importPath, 'index.js');
       if (existsSync(indexCandidate)) {
         return `${prefix}${importPath}/index.js${suffix}`;
       }
       return match;
-    },
+    }
   );
 
   if (fixed !== src) {
@@ -72,6 +69,4 @@ for (const file of files) {
   }
 }
 
-console.log(
-  `fix-prisma-imports: fixed imports in ${rewritten}/${files.length} files`,
-);
+console.log(`fix-prisma-imports: fixed imports in ${rewritten}/${files.length} files`);

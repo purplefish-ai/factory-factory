@@ -3,7 +3,11 @@ import type { ClientSideConnection } from '@agentclientprotocol/sdk';
 import { describe, expect, it } from 'vitest';
 import { SUBAGENTS_CAPABILITY_META_KEY } from '@/shared/acp-protocol/subagents';
 import { AcpProcessHandle } from './acp-process-handle';
-import { createMockChildProcess, exitChildAfterSigterm } from './acp-runtime-manager.test-helpers';
+import {
+  createMockChildProcess,
+  createTestProcessHandle,
+  exitChildAfterSigterm,
+} from './acp-runtime-manager.test-helpers';
 
 function createHandle(agentCapabilities: Record<string, unknown>): AcpProcessHandle {
   return new AcpProcessHandle({
@@ -73,6 +77,22 @@ describe('AcpProcessHandle.getSubagentBrowseCapability', () => {
 });
 
 describe('AcpProcessHandle.isRunning', () => {
+  it.each([
+    [null, null, false, true],
+    [0, null, false, false],
+    [1, null, false, false],
+    [null, 'SIGTERM', false, false],
+    [null, 'SIGKILL', false, false],
+    [null, null, true, false],
+  ] as const)(
+    'reports liveness for exit %s, signal %s, killed %s',
+    (exitCode, signalCode, killed, running) => {
+      const handle = createTestProcessHandle();
+      Object.assign(handle.child, { exitCode, signalCode, killed });
+      expect(handle.isRunning()).toBe(running);
+    }
+  );
+
   it('reports a mock process that exits from SIGTERM as stopped', async () => {
     const child = createMockChildProcess();
     exitChildAfterSigterm(child);

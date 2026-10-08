@@ -7,10 +7,10 @@
  * - Bundling all pure JS dependencies into single files
  */
 
-import * as esbuild from 'esbuild';
 import { existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import * as esbuild from 'esbuild';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, '..');

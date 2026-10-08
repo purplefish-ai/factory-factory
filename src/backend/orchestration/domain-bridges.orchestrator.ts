@@ -1,10 +1,20 @@
+import { toError } from '@/backend/lib/error-utils';
+import type {
+  AutoIterationLogbookBridge,
+  AutoIterationSessionBridge,
+  AutoIterationWorkspaceBridge,
+  autoIterationService,
+  logbookService,
+} from '@/backend/services/auto-iteration';
 import { prObservationService } from '@/backend/services/github';
-import { sessionBackgroundDeliveryService } from '@/backend/services/session';
-import { userSettingsService } from '@/backend/services/settings';
-import { prBackgroundDeliveryPort, wakePRDelivery } from './pr-event-delivery.orchestrator';
-import { setPRMonitoring } from './pr-monitoring.orchestrator';
-import { retireLegacyRatchetSessions } from './pr-monitoring-cutover.orchestrator';
-import { observeMonitoredPR } from './pr-observation.orchestrator';
+import type {
+  githubCLIService,
+  prFetchCoordinator,
+  prSnapshotService,
+} from '@/backend/services/github';
+import type { createLogger } from '@/backend/services/logger.service';
+import type { periodicTaskService } from '@/backend/services/periodic-task';
+import type { ratchetService } from '@/backend/services/ratchet';
 /**
  * Domain Bridge Wiring
  *
@@ -14,24 +24,8 @@ import { observeMonitoredPR } from './pr-observation.orchestrator';
  * Import graph: orchestration -> all 6 domain barrels
  * Domain services never import each other; they receive capabilities via bridges.
  */
-
-import { toError } from '@/backend/lib/error-utils';
-import type {
-  AutoIterationLogbookBridge,
-  AutoIterationSessionBridge,
-  AutoIterationWorkspaceBridge,
-  autoIterationService,
-  logbookService,
-} from '@/backend/services/auto-iteration';
-import type {
-  githubCLIService,
-  prFetchCoordinator,
-  prSnapshotService,
-} from '@/backend/services/github';
-import type { createLogger } from '@/backend/services/logger.service';
-import type { periodicTaskService } from '@/backend/services/periodic-task';
-import type { ratchetService } from '@/backend/services/ratchet';
 import type { startupScriptService } from '@/backend/services/run-script';
+import { sessionBackgroundDeliveryService } from '@/backend/services/session';
 import type {
   acpRuntimeManager,
   chatEventForwarderService,
@@ -42,6 +36,7 @@ import type {
   sessionPromptTurnCompletionService,
   sessionService,
 } from '@/backend/services/session';
+import { userSettingsService } from '@/backend/services/settings';
 import type { terminalSessionService } from '@/backend/services/terminal';
 import {
   deriveWorkspaceFlowState,
@@ -60,6 +55,10 @@ import {
 } from '@/backend/services/workspace';
 import { AutoIterationStatus, SessionStatus } from '@/shared/core';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
+import { prBackgroundDeliveryPort, wakePRDelivery } from './pr-event-delivery.orchestrator';
+import { retireLegacyRatchetSessions } from './pr-monitoring-cutover.orchestrator';
+import { setPRMonitoring } from './pr-monitoring.orchestrator';
+import { observeMonitoredPR } from './pr-observation.orchestrator';
 import type { reconciliationService } from './reconciliation.service';
 import type {
   initializeWorkspaceWorktree,

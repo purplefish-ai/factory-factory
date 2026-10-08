@@ -7,10 +7,8 @@ import {
   SpinnerGapIcon,
 } from '@phosphor-icons/react';
 import { memo, useCallback } from 'react';
-
 import { trpc } from '@/client/lib/trpc';
 import { cn } from '@/lib/utils';
-
 import { useFileTreeExpansion } from './file-tree-context';
 
 // =============================================================================

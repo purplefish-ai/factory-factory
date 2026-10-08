@@ -121,9 +121,9 @@ function commandError(result: ExecResult): string {
 function isDegraded(snapshot: WorkspaceGitStateSnapshot): boolean {
   return Boolean(
     snapshot.status.error ||
-      snapshot.base.statsError ||
-      snapshot.base.changesError ||
-      snapshot.upstream.error
+    snapshot.base.statsError ||
+    snapshot.base.changesError ||
+    snapshot.upstream.error
   );
 }
 

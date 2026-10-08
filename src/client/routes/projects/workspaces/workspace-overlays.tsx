@@ -8,7 +8,6 @@ import {
   XIcon,
 } from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
-
 import { Button } from '@/components/ui/button';
 import { InitOutputPanel } from './init-output-panel';
 import { forgetResumeWorkspace } from './resume-workspace-storage';

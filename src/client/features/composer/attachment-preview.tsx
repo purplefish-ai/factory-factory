@@ -1,6 +1,5 @@
 import { FileTextIcon, XIcon } from '@phosphor-icons/react';
 import { useState } from 'react';
-
 import { Button } from '@/components/ui/button';
 import type { MessageAttachment } from '@/lib/chat-protocol';
 import { formatFileSize, formatLineCount, isTextAttachment } from '@/lib/image-utils';

@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
 const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts'];
-const WORKSPACE_ACCESSOR_REL_PATH = 'src/backend/services/workspace/resources/workspace.accessor.ts';
+const WORKSPACE_ACCESSOR_REL_PATH =
+  'src/backend/services/workspace/resources/workspace.accessor.ts';
 const PRISMA_SCHEMA_REL_PATH = 'prisma/schema.prisma';
 
 const PRISMA_SCALAR_TYPES = new Set([
@@ -54,7 +55,9 @@ const workspaceFieldOwners = {
   ]),
   linearIssueUrl: new Set(['src/backend/services/workspace/service/lifecycle/creation.service.ts']),
   creationSource: new Set(['src/backend/services/workspace/service/lifecycle/creation.service.ts']),
-  creationMetadata: new Set(['src/backend/services/workspace/service/lifecycle/creation.service.ts']),
+  creationMetadata: new Set([
+    'src/backend/services/workspace/service/lifecycle/creation.service.ts',
+  ]),
 
   // The PR cache's thirteen fields are absent here for the same reason as the
   // ratchet's below: they live on their own table, and OWNED_SIDE_TABLES keeps
@@ -68,9 +71,7 @@ const workspaceFieldOwners = {
     'src/backend/services/workspace/service/lifecycle/data.service.ts',
   ]),
 
-  hasHadSessions: new Set([
-    'src/backend/services/workspace/service/lifecycle/data.service.ts',
-  ]),
+  hasHadSessions: new Set(['src/backend/services/workspace/service/lifecycle/data.service.ts']),
 
   worktreePath: new Set([
     'src/backend/services/workspace/service/lifecycle/workspace-run-script.service.ts',
@@ -419,7 +420,10 @@ function checkOwnershipForFields(relPath, fields, violations) {
   }
 }
 
-function collectWorkspaceMutatingMethods(workspaceAccessorText, filePath = WORKSPACE_ACCESSOR_REL_PATH) {
+function collectWorkspaceMutatingMethods(
+  workspaceAccessorText,
+  filePath = WORKSPACE_ACCESSOR_REL_PATH
+) {
   const sourceFile = ts.createSourceFile(
     filePath,
     workspaceAccessorText,
@@ -531,12 +535,13 @@ function checkWorkspaceMutatorCoverage({ rootDir, violations }) {
 const OWNED_SIDE_TABLES = {
   sessionLifecycleEvent:
     'src/backend/services/session/resources/session-lifecycle-event.accessor.ts',
-  workspacePRMonitoring: 'src/backend/services/workspace/resources/workspace-pr-monitoring.accessor.ts',
+  workspacePRMonitoring:
+    'src/backend/services/workspace/resources/workspace-pr-monitoring.accessor.ts',
   workspacePREvent: 'src/backend/services/workspace/resources/workspace-pr-event.accessor.ts',
   workspacePR: 'src/backend/services/workspace/resources/workspace-pr.accessor.ts',
-  workspacePRDiscovery: 'src/backend/services/workspace/resources/workspace-pr-discovery.accessor.ts',
-  workspaceRunScript:
-    'src/backend/services/workspace/resources/workspace-run-script.accessor.ts',
+  workspacePRDiscovery:
+    'src/backend/services/workspace/resources/workspace-pr-discovery.accessor.ts',
+  workspaceRunScript: 'src/backend/services/workspace/resources/workspace-run-script.accessor.ts',
   workspaceAutoIteration:
     'src/backend/services/workspace/resources/workspace-auto-iteration.accessor.ts',
 };
@@ -650,7 +655,12 @@ function checkOwnedSideTableWrites(relPath, sourceFile, violations) {
     // Calls are visited before their arguments, so a creation's payload is
     // already registered by the time this reaches it.
     if (ts.isPropertyAssignment(node) && propertyName(node) === 'data') {
-      checkNestedSideTableMutation(relPath, node.initializer, violations, creationPayloads.has(node));
+      checkNestedSideTableMutation(
+        relPath,
+        node.initializer,
+        violations,
+        creationPayloads.has(node)
+      );
     }
 
     ts.forEachChild(node, visit);

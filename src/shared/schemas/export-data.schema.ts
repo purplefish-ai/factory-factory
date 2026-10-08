@@ -1,9 +1,4 @@
-import {
-  prAssociationBackupSchema,
-  prDiscoveryBackupSchema,
-  prEventBackupSchema,
-  prMonitoringBackupSchema,
-} from './pr-monitoring-backup.schema';
+import { z } from 'zod';
 /**
  * Shared schema for export/import data validation.
  *
@@ -13,8 +8,6 @@ import {
  * Note: Uses string enums instead of Prisma enums to avoid pulling
  * Prisma client into the browser bundle.
  */
-
-import { z } from 'zod';
 import {
   CIStatus as CoreCIStatus,
   IssueProvider as CoreIssueProvider,
@@ -45,6 +38,12 @@ import {
   VOICE_UTTERANCE_END_MS_MIN,
 } from '@/shared/voice-vad';
 import { autoIterationConfigSchema } from './auto-iteration.schema';
+import {
+  prAssociationBackupSchema,
+  prDiscoveryBackupSchema,
+  prEventBackupSchema,
+  prMonitoringBackupSchema,
+} from './pr-monitoring-backup.schema';
 
 function enumValues<const T extends Record<string, string>>(enumObject: T) {
   return Object.values(enumObject) as [T[keyof T], ...T[keyof T][]];

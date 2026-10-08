@@ -54,14 +54,12 @@ function createCaller(options?: { acpRuntimeManager?: SubagentRuntimeManager }) 
     storeInitialMessage: mockSessionDomainService.storeInitialMessage,
   };
   const cliHealthService = {
-    checkHealth: vi.fn(
-      async (): Promise<CLIHealthStatus> => ({
-        claude: { isInstalled: true },
-        codex: { isInstalled: true, isAuthenticated: true },
-        github: { isInstalled: true, isAuthenticated: true },
-        allHealthy: true,
-      })
-    ),
+    checkHealth: vi.fn(async (): Promise<CLIHealthStatus> => ({
+      claude: { isInstalled: true },
+      codex: { isInstalled: true, isAuthenticated: true },
+      github: { isInstalled: true, isAuthenticated: true },
+      allHealthy: true,
+    })),
   };
 
   return {

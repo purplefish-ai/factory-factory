@@ -5,7 +5,6 @@ import { AcpRuntimeQuiescence } from '@/backend/services/session/service/acp/acp
 import { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { workspaceNotificationService } from '@/backend/services/workspace';
 import { SessionStatus } from '@/shared/core';
-import { SessionService } from './session.service';
 import {
   createDeferred,
   createLifecycleHarness,
@@ -16,6 +15,7 @@ import {
   SessionStartupCoordinator,
   type SessionStartupCoordinatorDependencies,
 } from './session-startup.coordinator';
+import { SessionService } from './session.service';
 
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({

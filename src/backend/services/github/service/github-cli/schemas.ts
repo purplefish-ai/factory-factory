@@ -10,6 +10,8 @@ const statusCheckRollupItemSchema = z
     status: z.string().optional(),
     conclusion: z.string().optional(),
     state: z.string().optional(),
+    context: z.string().optional(),
+    targetUrl: z.string().optional(),
     detailsUrl: z.string().optional(),
     startedAt: z.string().optional(),
     completedAt: z.string().optional(),

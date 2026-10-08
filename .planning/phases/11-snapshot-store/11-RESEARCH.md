@@ -534,8 +534,9 @@ describe('WorkspaceSnapshotStore', () => {
   `src/backend/domains/workspace/query/workspace-query.service.ts` -- existing
   `getProjectSummaryState()` output shape (the "target" shape for snapshot
   entries)
-- Codebase analysis: `src/backend/orchestration/domain-bridges.orchestrator.ts`
-  -- bridge wiring pattern
+- Codebase analysis:
+  `src/backend/orchestration/domain-bridges.orchestrator.ts` -- bridge wiring
+  pattern
 - Codebase analysis:
   `src/backend/domains/workspace/lifecycle/activity.service.ts` --
   EventEmitter + in-memory state pattern

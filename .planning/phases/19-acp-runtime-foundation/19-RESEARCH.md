@@ -706,31 +706,31 @@ class AcpRuntimeManager implements ProviderRuntimeManager<AcpProcessHandle, AcpC
 
 ### Primary (HIGH confidence)
 
-- [@agentclientprotocol/sdk v0.14.1](https://www.npmjs.com/package/@agentclientprotocol/sdk)
-  -- npm package, verified 2026-02-13
-- [@zed-industries/claude-code-acp v0.16.1](https://www.npmjs.com/package/@zed-industries/claude-code-acp)
-  -- npm package, verified 2026-02-13
-- [@zed-industries/codex-acp v0.9.2](https://www.npmjs.com/package/@zed-industries/codex-acp)
-  -- npm package, verified 2026-02-13
-- [ACP TypeScript SDK GitHub](https://github.com/agentclientprotocol/typescript-sdk)
-  -- ClientSideConnection API, ndJsonStream, example client
-- [ACP Initialization Spec](https://agentclientprotocol.com/protocol/initialization.md)
-  -- Handshake protocol, capabilities
-- [ACP Session Setup Spec](https://agentclientprotocol.com/protocol/session-setup.md)
-  -- session/new parameters and response
-- [ACP Prompt Turn Spec](https://agentclientprotocol.com/protocol/prompt-turn.md)
-  -- session/prompt, session/update, session/cancel
+- [@agentclientprotocol/sdk v0.14.1](https://www.npmjs.com/package/@agentclientprotocol/sdk) --
+  npm package, verified 2026-02-13
+- [@zed-industries/claude-code-acp v0.16.1](https://www.npmjs.com/package/@zed-industries/claude-code-acp) --
+  npm package, verified 2026-02-13
+- [@zed-industries/codex-acp v0.9.2](https://www.npmjs.com/package/@zed-industries/codex-acp) --
+  npm package, verified 2026-02-13
+- [ACP TypeScript SDK GitHub](https://github.com/agentclientprotocol/typescript-sdk) --
+  ClientSideConnection API, ndJsonStream, example client
+- [ACP Initialization Spec](https://agentclientprotocol.com/protocol/initialization.md) --
+  Handshake protocol, capabilities
+- [ACP Session Setup Spec](https://agentclientprotocol.com/protocol/session-setup.md) --
+  session/new parameters and response
+- [ACP Prompt Turn Spec](https://agentclientprotocol.com/protocol/prompt-turn.md) --
+  session/prompt, session/update, session/cancel
 - [ACP Schema Spec](https://agentclientprotocol.com/protocol/schema.md) --
   ContentBlock types, StopReason, SessionUpdate variants
-- [ACP Transports Spec](https://agentclientprotocol.com/protocol/transports.md)
-  -- stdio transport requirements
+- [ACP Transports Spec](https://agentclientprotocol.com/protocol/transports.md) --
+  stdio transport requirements
 
 ### Secondary (MEDIUM confidence)
 
-- [DeepWiki: claude-code-acp architecture](https://deepwiki.com/zed-industries/claude-code-acp)
-  -- Adapter internals, permission system, event translation
-- [DeepWiki: codex-acp architecture](https://deepwiki.com/zed-industries/codex-acp)
-  -- Rust binary, auth methods, session handling
+- [DeepWiki: claude-code-acp architecture](https://deepwiki.com/zed-industries/claude-code-acp) --
+  Adapter internals, permission system, event translation
+- [DeepWiki: codex-acp architecture](https://deepwiki.com/zed-industries/codex-acp) --
+  Rust binary, auth methods, session handling
 - [claude-code-acp GitHub](https://github.com/zed-industries/claude-code-acp) --
   README, features, CLI usage
 - [codex-acp GitHub](https://github.com/zed-industries/codex-acp) -- README,

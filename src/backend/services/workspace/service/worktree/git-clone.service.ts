@@ -1,9 +1,10 @@
 import { mkdir, readdir, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { pathExists } from '@/backend/lib/file-helpers';
 import { execCommand, gitCommand } from '@/backend/lib/shell';
 import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
+import { parseGithubUrl } from '@/shared/github-url';
 
 export { type GithubRepo, parseGithubUrl } from '@/shared/github-url';
 
@@ -15,6 +16,24 @@ export type ExistingCloneStatus = 'valid_repo' | 'not_repo' | 'not_exists';
 interface CloneDestination {
   path: string;
   status: ExistingCloneStatus;
+}
+
+interface CloneResult {
+  success: boolean;
+  output: string;
+  error?: string;
+}
+
+interface InFlightClone {
+  source: string;
+  result: Promise<CloneResult>;
+}
+
+function cloneSourceIdentity(url: string): string {
+  const github = parseGithubUrl(url);
+  return github
+    ? `github:${github.owner.toLowerCase()}/${github.repo.toLowerCase()}`
+    : `raw:${url}`;
 }
 
 async function findCaseInsensitiveEntries(directory: string, name: string): Promise<string[]> {
@@ -30,12 +49,33 @@ async function findCaseInsensitiveEntries(directory: string, name: string): Prom
 }
 
 class GitCloneService {
+  private readonly clonesInFlight = new Map<string, InFlightClone>();
+  private readonly inspectionsInFlight = new Map<string, Promise<ExistingCloneStatus>>();
+
+  private inspectCloneDestination(destination: string): Promise<ExistingCloneStatus> {
+    const clonePath = resolve(destination);
+    const clone = this.clonesInFlight.get(clonePath);
+    if (clone !== undefined) {
+      return clone.result.then(() => this.inspectCloneDestination(destination));
+    }
+    const existing = this.inspectionsInFlight.get(clonePath);
+    if (existing !== undefined) {
+      return existing;
+    }
+    const inspection = this.checkExistingClone(destination).finally(() => {
+      this.inspectionsInFlight.delete(clonePath);
+    });
+    this.inspectionsInFlight.set(clonePath, inspection);
+    return inspection;
+  }
+
   /**
    * Reuse existing clone paths regardless of GitHub URL casing. New clones use
    * lowercase owner/repo paths; existing directories are never renamed.
    */
   async getClonePath(reposDir: string, owner: string, repo: string): Promise<CloneDestination> {
     const canonicalPath = join(reposDir, owner.toLowerCase(), repo.toLowerCase());
+    await this.clonesInFlight.get(resolve(canonicalPath))?.result;
     const candidates: string[] = [];
     for (const existingOwner of await findCaseInsensitiveEntries(reposDir, owner.toLowerCase())) {
       const ownerPath = join(reposDir, existingOwner);
@@ -53,7 +93,10 @@ class GitCloneService {
     }
     let firstCandidate: CloneDestination | undefined;
     for (const candidate of candidates) {
-      const destination = { path: candidate, status: await this.checkExistingClone(candidate) };
+      const destination = {
+        path: candidate,
+        status: await this.inspectCloneDestination(candidate),
+      };
       if (destination.status === 'valid_repo') {
         return destination;
       }
@@ -63,7 +106,7 @@ class GitCloneService {
     return (
       firstCandidate ?? {
         path: canonicalPath,
-        status: await this.checkExistingClone(canonicalPath),
+        status: await this.inspectCloneDestination(canonicalPath),
       }
     );
   }
@@ -94,14 +137,41 @@ class GitCloneService {
    * Creates parent directories as needed.
    * Accepts both HTTPS and SSH URLs (git handles both formats).
    */
-  async clone(
-    url: string,
-    destination: string
-  ): Promise<{ success: boolean; output: string; error?: string }> {
+  clone(url: string, destination: string): Promise<CloneResult> {
+    const clonePath = resolve(destination);
+    const source = cloneSourceIdentity(url);
+    const existing = this.clonesInFlight.get(clonePath);
+    if (existing !== undefined) {
+      if (existing.source !== source) {
+        return Promise.resolve({
+          success: false,
+          output: '',
+          error: 'A different repository is already being cloned to this destination',
+        });
+      }
+      return existing.result;
+    }
+    const pending = this.performClone(url, clonePath).finally(() => {
+      this.clonesInFlight.delete(clonePath);
+    });
+    this.clonesInFlight.set(clonePath, { source, result: pending });
+    return pending;
+  }
+
+  private async performClone(url: string, destination: string): Promise<CloneResult> {
+    // Keep directory classification stable until its inspection finishes.
+    await this.inspectionsInFlight.get(destination);
     // Ensure parent directory exists
     const parentDir = join(destination, '..');
     await mkdir(parentDir, { recursive: true });
     const destinationExistedBeforeClone = await pathExists(destination);
+    // A caller may have resolved a missing destination before another clone completed.
+    if (
+      destinationExistedBeforeClone &&
+      (await this.checkExistingClone(destination)) === 'valid_repo'
+    ) {
+      return { success: true, output: '' };
+    }
 
     logger.info('Cloning repository', { url, destination });
 
@@ -116,7 +186,10 @@ class GitCloneService {
     });
 
     if (result.code !== 0) {
-      if (!destinationExistedBeforeClone && (await pathExists(destination))) {
+      if (
+        !destinationExistedBeforeClone &&
+        (await this.checkExistingClone(destination)) === 'not_repo'
+      ) {
         await rm(destination, { recursive: true, force: true });
       }
 

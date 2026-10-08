@@ -3,7 +3,6 @@ import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import { getStatusBannerClassName } from '@/client/lib/status-banner-styles';
 import type { AppRouter } from '@/client/lib/trpc';
 import type { SessionProviderValue } from '@/lib/session-provider-selection';
-
 import { MainViewContent } from './main-view-content';
 import { MainViewTabBar } from './main-view-tab-bar';
 import type { WorkspaceSessionRuntimeSummary } from './session-tab-runtime';

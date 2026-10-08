@@ -1,8 +1,8 @@
-import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
 import {
   type WorkspacePRWriteFields,
   workspacePrAccessor,
 } from '@/backend/services/workspace/resources/workspace-pr.accessor';
+import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
 import type {
   PRDiscoveryClaim,
   PRSnapshotFields,
