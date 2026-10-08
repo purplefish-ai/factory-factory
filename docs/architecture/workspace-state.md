@@ -197,6 +197,11 @@ the editor and allow a fresh edit to retry. Workspace/project changes and
 departed mounts abandon the editor; late responses reconcile their originating
 caches without closing or resetting a newer edit.
 
+Project selection treats only `/projects/new` (with an optional trailing slash)
+as the creation route. Deeper routes such as `/projects/new/workspaces` select
+and persist the actual project with slug `new`, keeping sidebar, board, and
+snapshot synchronization aligned with the URL.
+
 ## Completion notifications
 
 Workspace completion notifications count the distinct sessions that worked in
