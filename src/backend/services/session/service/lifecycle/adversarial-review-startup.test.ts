@@ -311,6 +311,25 @@ describe('adversarial review startup permissions', () => {
     );
   });
 
+  it.each([false, true])(
+    'releases the stop fence when review cleanup throws after stop failure=%s',
+    async (stopFails) => {
+      const harness = createHarness('CODEX');
+      harness.runtimeManager.getClient.mockReturnValue(harness.handle);
+      harness.runtime.setConfigOption.mockRejectedValue(new Error('sandbox rejected'));
+      if (stopFails) {
+        harness.runtimeManager.stopClient.mockRejectedValue(new Error('stop rejected'));
+      }
+      harness.acpEventProcessor.clearSessionState.mockImplementation(() => {
+        throw new Error('cleanup rejected');
+      });
+
+      await expect(start(harness, 'chat auto-start')).rejects.toThrow('cleanup rejected');
+      expect(harness.lifecycleGate.isStopReserved(harness.session.id)).toBe(false);
+      expect(harness.lifecycleGate.isSessionStopping(harness.session.id)).toBe(false);
+    }
+  );
+
   it('persists and emits repaired permissions on an existing review client', async () => {
     const harness = createHarness('CODEX');
     harness.runtimeManager.getClient.mockReturnValue(harness.handle);

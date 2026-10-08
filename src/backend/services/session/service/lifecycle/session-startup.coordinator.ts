@@ -492,8 +492,11 @@ export class SessionStartupCoordinator {
               updatedAt: new Date().toISOString(),
             });
           } finally {
-            this.dependencies.acpEventProcessor.clearSessionState(sessionId);
-            stopReservation?.release();
+            try {
+              this.dependencies.acpEventProcessor.clearSessionState(sessionId);
+            } finally {
+              stopReservation?.release();
+            }
           }
           throw error;
         }
