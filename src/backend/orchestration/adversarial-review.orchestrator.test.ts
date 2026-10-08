@@ -128,7 +128,7 @@ describe('triggerAdversarialReview', () => {
       defaultSessionProvider: 'WORKSPACE_DEFAULT',
       ratchetSessionProvider: 'WORKSPACE_DEFAULT',
     });
-    vi.mocked(workspaceDataService.findPRState).mockResolvedValue({} as never);
+    vi.mocked(workspaceDataService.findPRState).mockResolvedValue(null);
 
     await expect(triggerAdversarialReview(WORKSPACE_ID)).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
@@ -185,7 +185,7 @@ describe('triggerAdversarialReview', () => {
 
     const [first, second] = await Promise.all([
       triggerAdversarialReview(WORKSPACE_ID),
-      triggerAdversarialReview(WORKSPACE_ID),
+      triggerAdversarialReview(WORKSPACE_ID, 'pr-1'),
     ]);
 
     expect(first).toEqual({ status: 'started', sessionId: 'new-session' });

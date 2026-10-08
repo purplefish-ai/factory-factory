@@ -316,10 +316,17 @@ const normalizedVersion4Schema = version4Schema.transform((data) => {
         : [],
     });
   });
+  const legacyFixers = new Map(workspaces.map((w) => [w.id, w]));
+  const agentSessions = data.data.agentSessions.map((session) => {
+    const workspace = legacyFixers.get(session.workspaceId);
+    return workspace?.ratchetActiveSessionId === session.id
+      ? { ...session, workspacePrId: workspace.ratchetActivePrId }
+      : session;
+  });
   return {
     ...data,
     meta: { ...data.meta, schemaVersion: 5 as const },
-    data: { ...data.data, workspaces },
+    data: { ...data.data, workspaces, agentSessions },
   };
 });
 

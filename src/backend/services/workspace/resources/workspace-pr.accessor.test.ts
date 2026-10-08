@@ -57,7 +57,11 @@ async function workspace(id: string) {
 it('uses fresh defaults when no PR exists', () => {
   const first = flattenWorkspacePR(null);
   first.prNumber = 99;
-  expect(flattenWorkspacePR(undefined)).toEqual(WORKSPACE_PR_DEFAULTS);
+  const second = flattenWorkspacePR(undefined);
+  expect(second).not.toBe(first);
+  expect(second.prNumber).toBeNull();
+  expect(WORKSPACE_PR_DEFAULTS.prNumber).toBeNull();
+  expect(second).toEqual(WORKSPACE_PR_DEFAULTS);
 });
 it('keeps same-numbered PRs in different repositories independent and duplicate attachment idempotent', async () => {
   await workspace('identity');
@@ -203,10 +207,80 @@ it('projects aggregate CI and state in workspace reads with project metadata', a
 
 it('reports a deterministic historical PR link when periodic work creates several PRs', async () => {
   const row = await workspace('periodic-links');
-  await workspacePrAccessor.attach(row.id, 'https://github.com/org/repo/pull/40');
-  await workspacePrAccessor.attach(row.id, 'https://github.com/org/repo/pull/41');
+  await db.prisma.workspacePR.createMany({
+    data: [
+      {
+        id: 'periodic-z',
+        workspaceId: row.id,
+        url: 'https://github.com/org/repo/pull/40',
+        number: 40,
+      },
+      {
+        id: 'periodic-a',
+        workspaceId: row.id,
+        url: 'https://github.com/org/repo/pull/41',
+        number: 41,
+      },
+      {
+        id: 'periodic-0',
+        workspaceId: row.id,
+        url: 'https://github.com/org/repo/pull/39',
+        number: 39,
+        detachedAt: new Date(),
+      },
+    ],
+  });
   expect(await workspaceAccessor.findStatusSnapshot(row.id)).toMatchObject({
-    prUrl: expect.stringContaining('/pull/'),
+    prUrl: 'https://github.com/org/repo/pull/41',
+    prNumber: 41,
   });
   expect(await workspaceAccessor.findPRContext(row.id)).toMatchObject({ prUrl: null });
+});
+
+it('serializes concurrent duplicate attachment into a single PR and automation row', async () => {
+  await workspace('concurrent-attachment');
+  const results = await Promise.all(
+    Array.from({ length: 8 }, () =>
+      workspacePrAccessor.attach('concurrent-attachment', 'https://github.com/org/repo/pull/88')
+    )
+  );
+  expect(new Set(results.map((r) => r.prId)).size).toBe(1);
+  expect(results.filter((r) => r.created)).toHaveLength(1);
+  expect(await workspacePrAccessor.list('concurrent-attachment')).toHaveLength(1);
+  expect(await db.prisma.workspacePRRatchet.count({ where: { prId: results[0]!.prId } })).toBe(1);
+});
+
+it('respects disabled ratchet state in every project metadata read', async () => {
+  const row = await workspace('disabled-project-summary');
+  const { prId } = await workspacePrAccessor.attach(row.id, 'https://github.com/org/repo/pull/90');
+  await db.prisma.workspaceRatchet.update({
+    where: { workspaceId: row.id },
+    data: { enabled: false },
+  });
+  await db.prisma.workspacePR.update({
+    where: { id: prId },
+    data: { state: 'OPEN', ciStatus: 'FAILURE' },
+  });
+  await db.prisma.workspacePRRatchet.update({
+    where: { prId },
+    data: { dispatchOutcome: 'DIED', dispatchRetryCount: 3, dispatchStalled: true },
+  });
+  const expected = { prSummary: { ratchetState: 'IDLE', dispatchStalled: false } };
+  expect(await workspaceAccessor.findByIdWithProject(row.id)).toMatchObject(expected);
+  expect((await workspaceAccessor.findByIdsWithProject([row.id]))[0]).toMatchObject(expected);
+  await db.prisma.workspace.create({
+    data: { id: 'disabled-child', projectId: 'project', name: 'Child', parentWorkspaceId: row.id },
+  });
+  expect(await workspaceAccessor.findParentWorkspace('disabled-child')).toMatchObject(expected);
+  await db.prisma.workspace.update({ where: { id: row.id }, data: { status: 'NEW' } });
+  expect(
+    (await workspaceAccessor.findNeedingWorktree()).find((w) => w.id === row.id)
+  ).toMatchObject(expected);
+  await db.prisma.workspace.update({
+    where: { id: row.id },
+    data: { status: 'ARCHIVING', updatedAt: new Date('2025-01-01') },
+  });
+  expect(
+    (await workspaceAccessor.findStaleArchivingWithProject()).find((w) => w.id === row.id)
+  ).toMatchObject(expected);
 });

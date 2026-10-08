@@ -357,6 +357,37 @@ describe('SchedulerService', () => {
       );
     });
 
+    it('attaches every matching PR to one workspace in a single discovery call', async () => {
+      mockFindNeedingPRDiscovery.mockResolvedValue([
+        discoveryWorkspace({ id: 'multi-pr', branch: 'feature' }),
+      ]);
+      mockListOpenPRs.mockResolvedValue([
+        {
+          number: 2,
+          url: 'https://github.com/org/repo/pull/2',
+          createdAt: '2026-07-17T11:30:00.000Z',
+          headRefName: 'feature',
+        },
+        {
+          number: 1,
+          url: 'https://github.com/org/repo/pull/1',
+          createdAt: '2026-07-17T11:15:00.000Z',
+          headRefName: 'feature',
+        },
+      ]);
+      await expect(schedulerService.discoverNewPRs()).resolves.toEqual({
+        discovered: 2,
+        checked: 1,
+      });
+      expect(mockAttachDiscoveredPRsAndRefresh.mock.calls).toEqual([
+        [
+          'multi-pr',
+          ['https://github.com/org/repo/pull/1', 'https://github.com/org/repo/pull/2'],
+          expect.objectContaining({ branchName: 'feature', checkedAt, retryCount: 1 }),
+        ],
+      ]);
+    });
+
     it('assigns same-branch PRs to the newest workspace eligible when each was created', async () => {
       mockFindNeedingPRDiscovery.mockResolvedValue([
         discoveryWorkspace({

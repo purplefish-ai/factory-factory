@@ -256,6 +256,7 @@ export type WorkspaceWithSessions = WorkspaceWithAgentSessions;
  */
 type WorkspaceWithProjectInclude = {
   project: true;
+  ratchet: { select: { enabled: true } };
   prs: { include: { automation: true } };
   prDiscovery: true;
   autoIteration: true;
@@ -263,7 +264,7 @@ type WorkspaceWithProjectInclude = {
 
 type WorkspaceWithProject = Omit<
   Prisma.WorkspaceGetPayload<{ include: WorkspaceWithProjectInclude }>,
-  'prs' | 'prDiscovery' | 'autoIteration'
+  'prs' | 'prDiscovery' | 'autoIteration' | 'ratchet'
 > &
   WorkspacePRFields &
   WorkspaceAutoIterationFields & { prs: WorkspacePullRequest[]; prSummary: WorkspacePRSummary };
@@ -271,11 +272,14 @@ type WorkspaceWithProject = Omit<
 function withProjectAndPR(
   row: Prisma.WorkspaceGetPayload<{ include: WorkspaceWithProjectInclude }>
 ): WorkspaceWithProject {
-  const { prs = [], prDiscovery, autoIteration, ...rest } = row;
+  const { prs = [], prDiscovery, autoIteration, ratchet, ...rest } = row;
   const active = prs.filter((pr) => !pr.detachedAt);
 
   const pr = active.length === 1 ? active[0] : null;
-  const summary = deriveWorkspacePRSummary(active.map(serializeWorkspacePR), true);
+  const summary = deriveWorkspacePRSummary(
+    active.map(serializeWorkspacePR),
+    ratchet?.enabled ?? true
+  );
   return {
     ...rest,
     prs: active.map(serializeWorkspacePR),
@@ -714,6 +718,7 @@ class WorkspaceAccessor {
       },
       include: {
         project: true,
+        ratchet: { select: { enabled: true } },
         prs: { include: { automation: true } },
         prDiscovery: true,
         autoIteration: true,
@@ -737,6 +742,7 @@ class WorkspaceAccessor {
       },
       include: {
         project: true,
+        ratchet: { select: { enabled: true } },
         prs: { include: { automation: true } },
         prDiscovery: true,
         autoIteration: true,
@@ -755,6 +761,7 @@ class WorkspaceAccessor {
       where: { id },
       include: {
         project: true,
+        ratchet: { select: { enabled: true } },
         prs: { include: { automation: true } },
         prDiscovery: true,
         autoIteration: true,
@@ -920,6 +927,7 @@ class WorkspaceAccessor {
       },
       include: {
         project: true,
+        ratchet: { select: { enabled: true } },
         prs: { include: { automation: true } },
         prDiscovery: true,
         autoIteration: true,
@@ -969,6 +977,7 @@ class WorkspaceAccessor {
       where: { childWorkspaces: { some: { id: childId } } },
       include: {
         project: true,
+        ratchet: { select: { enabled: true } },
         prs: { include: { automation: true } },
         prDiscovery: true,
         autoIteration: true,

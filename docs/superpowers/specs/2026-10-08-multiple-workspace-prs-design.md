@@ -106,11 +106,14 @@ belongs to that workspace before operating. GitHub fetches use the PR URL's
 repository and number, not the workspace's other attachments.
 
 Conditional observation writes guard PR identity, active association status, and
-the observed cache version. A response for one PR can update only that row,
-never another attachment. A response received after removal cannot recreate the
-association. An attachment or refresh must not overwrite the workspace branch
-from a PR's head branch. Branch metadata belongs to the PR; workspace branch
-changes remain worktree operations.
+the observed association revision. Detachment and explicit reattachment each
+increment that revision; fetches capture it before GitHub I/O and conditional
+writes must match it, so a pre-detach response cannot overwrite a reattached
+association. A response for one PR can update only that row, never another
+attachment. A response received after removal cannot recreate the association.
+An attachment or refresh must not overwrite the workspace branch from a PR's
+head branch. Branch metadata belongs to the PR; workspace branch changes remain
+worktree operations.
 
 Snapshot invalidations reread and publish the whole collection and aggregate
 state together. Preserve the existing worker's cancellation, retry, and archive

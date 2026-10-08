@@ -154,11 +154,29 @@ describe('PRSnapshotService collection targets', () => {
       reason: 'no_pr_url',
     });
     expect(fetchSnapshot).not.toHaveBeenCalled();
+    bridge.findPR.mockResolvedValue(null);
+    expect(await prSnapshotService.refreshPR({ workspaceId: 'w', prId: 'detached' })).toEqual({
+      success: false,
+      reason: 'no_pr_url',
+    });
+    expect(fetchSnapshot).not.toHaveBeenCalled();
   });
   it('refreshes every attached PR, including terminal siblings', async () => {
+    bridge.listPRs.mockResolvedValue([makePR('a'), { ...makePR('b'), state: 'CLOSED' }]);
     expect((await prSnapshotService.refreshWorkspace('w')).success).toBe(true);
     expect(fetchSnapshot.mock.calls).toEqual([[makePR('a').url], [makePR('b').url]]);
   });
+  it.each(['findPRContext', 'listPRs'] as const)(
+    'maps %s read failures to an error result',
+    async (method) => {
+      bridge[method].mockRejectedValue(new Error('database unavailable'));
+      await expect(prSnapshotService.refreshWorkspace('w')).resolves.toEqual({
+        success: false,
+        reason: 'error',
+      });
+      expect(fetchSnapshot).not.toHaveBeenCalled();
+    }
+  );
   it('continues refreshing siblings after a fetch failure', async () => {
     fetchSnapshot.mockResolvedValueOnce(null);
     expect(await prSnapshotService.refreshWorkspace('w')).toEqual({

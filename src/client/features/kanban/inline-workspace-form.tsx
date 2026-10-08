@@ -135,6 +135,7 @@ function createOptimisticWorkingWorkspace(params: {
     status: 'NEW',
     createdAt: params.createdAt ?? new Date(),
     branchName: null,
+    worktreePath: null,
     initErrorMessage: null,
     mode: params.mode ?? 'STANDARD',
     autoIterationStatus: null,

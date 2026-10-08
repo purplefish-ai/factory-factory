@@ -165,12 +165,14 @@ it('does not reclaim an invalidated startup dispatch after detach and reattach',
     'multi',
     'https://github.com/o/r/pull/99'
   );
-  await workspaceRatchetService.recordDispatchIfEnabled('multi', {
-    prId,
-    sessionId: 'startup',
-    snapshotKey: 'old',
-    retryCount: 0,
-  });
+  expect(
+    await workspaceRatchetService.recordDispatchIfEnabled('multi', {
+      prId,
+      sessionId: 'startup',
+      snapshotKey: 'old',
+      retryCount: 0,
+    })
+  ).toBe(true);
   await workspacePrSnapshotService.detach({ workspaceId: 'multi', prId });
   await workspacePrSnapshotService.attach('multi', 'https://github.com/o/r/pull/99');
   expect(

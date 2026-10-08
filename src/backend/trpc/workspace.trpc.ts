@@ -302,6 +302,9 @@ export const workspaceCoreRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: `Workspace not found: ${input.id}` });
       }
       const result = await prSnapshotService.attachAndRefreshPR(input.id, input.prUrl);
+      if (!result.success && result.reason === 'workspace_not_found') {
+        throw new TRPCError({ code: 'NOT_FOUND', message: `Workspace not found: ${input.id}` });
+      }
       if (!result.success && result.reason !== 'fetch_failed') {
         throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to attach PR' });
       }
@@ -319,10 +322,26 @@ export const workspaceCoreRouter = router({
   detachPR: publicProcedure
     .input(z.object({ workspaceId: z.string(), prId: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const { prSnapshotService, sessionLifecycleService } = ctx.appContext.services;
+      const { prSnapshotService, sessionLifecycleService, sessionDataService } =
+        ctx.appContext.services;
       const { removed, sessionId } = await prSnapshotService.detachPR(input);
-      if (removed && sessionId) {
-        await sessionLifecycleService.stopSession(sessionId);
+      // Persisted PR targeting also finds cleanup left unfinished by a failed stop.
+      const sessions = await sessionDataService.findAgentSessionsByWorkspaceId(input.workspaceId);
+      const fixerIds = new Set(
+        sessions
+          .filter(
+            (session) =>
+              session.workspacePrId === input.prId &&
+              session.workflow === 'ratchet' &&
+              (session.status === 'RUNNING' || session.status === 'IDLE')
+          )
+          .map((session) => session.id)
+      );
+      if (sessionId) {
+        fixerIds.add(sessionId);
+      }
+      for (const id of fixerIds) {
+        await sessionLifecycleService.stopSession(id);
       }
       return { removed };
     }),

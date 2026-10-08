@@ -101,19 +101,32 @@ describe('WorkspacePrMenu', () => {
     await key(item('Run review'), 'Enter');
     expect(onReview).toHaveBeenCalledWith('b');
   });
-  it('keeps review disabled for terminal PRs and mutations while pending', async () => {
+  it.each(['MERGED', 'CLOSED', 'NONE'] as const)(
+    'disables review for %s without disabling removal',
+    async (state) => {
+      await render(
+        <WorkspacePrMenu
+          prs={[makePR('a', state)]}
+          onReview={vi.fn()}
+          onRemove={vi.fn()}
+          pending={false}
+        />
+      );
+      await open();
+      const row = Array.from(document.querySelectorAll('[role="menuitem"]')).find((element) =>
+        element.textContent?.includes('Title a')
+      )!;
+      await key(row, 'ArrowRight');
+      await vi.waitFor(() => expect(item('Run review').getAttribute('aria-disabled')).toBe('true'));
+      expect(item('Remove from workspace').getAttribute('aria-disabled')).not.toBe('true');
+    }
+  );
+  it('disables review and removal for an open PR while a mutation is pending', async () => {
     await render(
-      <WorkspacePrMenu
-        prs={[makePR('a', 'MERGED')]}
-        onReview={vi.fn()}
-        onRemove={vi.fn()}
-        pending
-      />
+      <WorkspacePrMenu prs={[makePR('a')]} onReview={vi.fn()} onRemove={vi.fn()} pending />
     );
     await open();
-    const row = Array.from(document.querySelectorAll('[role="menuitem"]')).find((element) =>
-      element.textContent?.includes('Title a')
-    )!;
+    const row = document.querySelector('[role="menuitem"]')!;
     await key(row, 'ArrowRight');
     await vi.waitFor(() => expect(item('Run review').getAttribute('aria-disabled')).toBe('true'));
     expect(item('Remove from workspace').getAttribute('aria-disabled')).toBe('true');

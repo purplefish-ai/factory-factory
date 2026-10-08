@@ -4,7 +4,7 @@ import { CIStatus, PRState } from '@/shared/core';
 export const WorkspacePullRequestSchema = z.object({
   id: z.string(),
   url: z.string(),
-  number: z.number().nullable(),
+  number: z.number().int().positive().nullable(),
   title: z.string().nullable(),
   headRefName: z.string().nullable(),
   baseRefName: z.string().nullable(),

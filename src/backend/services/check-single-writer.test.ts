@@ -256,6 +256,38 @@ describe('check-single-writer', () => {
       expect(result.output).toContain('unauthorized nested update of the workspacePR relation');
     });
 
+    it.each([
+      "{ create: { url: 'https://example.test/pr/1', automation: { create: { dispatchOutcome: 'DIED' } } } }",
+      "{ create: [{ url: 'https://example.test/pr/1', automation: { create: { dispatchOutcome: 'DIED' } } }] }",
+      "{ create: rows.map((row) => ({ url: row.url, automation: { create: { dispatchOutcome: 'DIED' } } })) }",
+    ])('rejects nested PR automation creation from another accessor: %s', (prs) => {
+      const tempRoot = createTempBackend([
+        {
+          relPath: 'src/backend/services/workspace/resources/other.accessor.ts',
+          content: `async function sneak(tx) {
+          await tx.workspace.create({ data: { name: 'x', projectId: 'p', prs: ${prs} } });
+        }`,
+        },
+      ]);
+      const result = runChecker(tempRoot);
+      expect(result.status).toBe(1);
+      expect(result.output).toContain(
+        'unauthorized nested create of the workspacePRRatchet relation'
+      );
+    });
+
+    it('allows backup initialization of nested PR automation history', () => {
+      const tempRoot = createTempBackend([
+        {
+          relPath: 'src/backend/orchestration/data-backup.service.ts',
+          content: `async function restore(tx) {
+          await tx.workspace.create({ data: { name: 'x', projectId: 'p', prs: { create: [{ url: 'https://example.test/pr/1', automation: { create: { dispatchOutcome: 'DIED' } } }] } } });
+        }`,
+        },
+      ]);
+      expect(runChecker(tempRoot).status).toBe(0);
+    });
+
     it('rejects a nested upsert of the ratchet relation', () => {
       const tempRoot = createTempBackend([
         {

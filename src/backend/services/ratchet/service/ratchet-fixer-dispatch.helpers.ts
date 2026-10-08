@@ -212,9 +212,8 @@ async function cleanUpUnrecordedStartedFixer(params: {
   }
 
   try {
-    if (sessionBridge.isSessionRunning(sessionId)) {
-      await sessionBridge.stopSession(sessionId);
-    }
+    // stopSession finalizes transient ratchet sessions even without a runtime.
+    await sessionBridge.stopSession(sessionId);
   } catch (error) {
     logger.warn('Failed to stop unrecorded ratchet fixer during cleanup', {
       workspaceId,
@@ -247,7 +246,7 @@ export async function triggerRatchetFixer(params: {
   let result: AcquireAndDispatchResult | undefined;
   let startedFixerRecorded = false;
   let startedFixerCleaned = false;
-  let claimedSessionId: string | undefined;
+  let acquiredSessionId: string | undefined;
 
   try {
     signal?.throwIfAborted();
@@ -272,6 +271,7 @@ export async function triggerRatchetFixer(params: {
           }
         ),
       beforeStart: ({ sessionId, prompt }) => {
+        acquiredSessionId = sessionId;
         signal?.throwIfAborted();
         return workspaceRatchetService
           .recordDispatchIfEnabled(workspace.id, {
@@ -285,7 +285,6 @@ export async function triggerRatchetFixer(params: {
             if (!claimed) {
               throw new Error('Workspace fixer slot no longer available');
             }
-            claimedSessionId = sessionId;
             sessionBridge.injectCommittedUserMessage(sessionId, prompt);
           });
       },
@@ -327,14 +326,14 @@ export async function triggerRatchetFixer(params: {
       });
     }
 
-    if (claimedSessionId) {
+    if (acquiredSessionId) {
       await cleanUpUnrecordedStartedFixer({
         workspaceId: workspace.id,
-        sessionId: claimedSessionId,
+        sessionId: acquiredSessionId,
         sessionBridge,
         outcome: 'DIED',
       });
-      claimedSessionId = undefined;
+      acquiredSessionId = undefined;
     }
     if (result.status === 'skipped') {
       return { type: 'ERROR', error: result.reason };
@@ -349,10 +348,10 @@ export async function triggerRatchetFixer(params: {
         sessionBridge,
       });
     }
-    if (claimedSessionId && !startedFixerCleaned) {
+    if (acquiredSessionId && !startedFixerCleaned) {
       await cleanUpUnrecordedStartedFixer({
         workspaceId: workspace.id,
-        sessionId: claimedSessionId,
+        sessionId: acquiredSessionId,
         sessionBridge,
         outcome: 'DIED',
       });
@@ -391,7 +390,7 @@ export async function stopActiveRatchetSessionsForTerminalPr(
     await sessionBridge.stopSession(session.id);
     signal.throwIfAborted();
   }
-  if (workspace.ratchetActiveSessionId) {
+  if (workspace.ratchetActivePrId === workspace.prId && workspace.ratchetActiveSessionId) {
     await workspaceRatchetService.recordSessionEnd(
       workspace.id,
       workspace.ratchetActiveSessionId,
@@ -406,6 +405,7 @@ export async function cleanupCachedTerminalOwner(
   signal: AbortSignal
 ): Promise<WorkspaceRatchetResult | null> {
   if (
+    workspace.ratchetActivePrId !== workspace.prId ||
     !workspace.ratchetActiveSessionId ||
     (workspace.prState !== 'MERGED' && workspace.prState !== 'CLOSED')
   ) {

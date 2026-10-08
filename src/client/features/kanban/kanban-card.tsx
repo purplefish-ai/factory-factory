@@ -15,8 +15,8 @@ import { Link } from 'react-router';
 import { PrStateBadge } from '@/client/components/pr-state-badge';
 import {
   ArchiveWorkspaceDialog,
+  ConnectedWorkspacePrMenu,
   RatchetToggleButton,
-  WorkspacePrMenu,
   WorkspaceStatusBadge,
 } from '@/client/features/workspace';
 import { useInlineWorkspaceRename } from '@/client/hooks/use-inline-workspace-rename';
@@ -117,7 +117,14 @@ function IssueAndPullRequestRow({
         </button>
       )}
       {workspace.prs?.length ? (
-        <WorkspacePrMenu prs={workspace.prs} compact />
+        <ConnectedWorkspacePrMenu
+          workspaceId={workspace.id}
+          projectId={workspace.projectId}
+          prs={workspace.prs}
+          reviewEnabled={Boolean(workspace.worktreePath)}
+          readOnly={workspace.status === 'ARCHIVED' || workspace.status === 'ARCHIVING'}
+          compact
+        />
       ) : (
         showPR && (
           <div className="inline-flex items-center gap-1.5">
@@ -140,7 +147,6 @@ function IssueAndPullRequestRow({
     </div>
   );
 }
-
 function BranchRow({ branchName }: { branchName: string | null }) {
   if (!branchName) {
     return null;
@@ -334,6 +340,7 @@ function deriveCardState(workspace: WorkspaceWithKanban) {
     Boolean(workspace.statusReason) ||
     showBranch ||
     showPR ||
+    Boolean(workspace.prs?.length) ||
     !!issue ||
     !!sessionRuntimeError ||
     workspace.mode === 'AUTO_ITERATION' ||

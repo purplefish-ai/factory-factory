@@ -58,6 +58,7 @@ export function WorkspacePrMenu({
           className={compact ? 'h-5 gap-1 px-0 text-[11px]' : 'h-7 gap-1 px-2 text-xs'}
           onClick={(event) => event.stopPropagation()}
           onPointerDown={(event) => event.stopPropagation()}
+          onPointerUp={(event) => event.stopPropagation()}
         >
           <GitPullRequestIcon className="h-3 w-3" />
           <span>
@@ -182,12 +183,14 @@ export function ConnectedWorkspacePrMenu({
   projectId,
   prs,
   readOnly = false,
+  reviewEnabled = true,
   compact = false,
 }: {
   workspaceId: string;
   projectId?: string;
   prs: readonly WorkspacePullRequest[];
   readOnly?: boolean;
+  reviewEnabled?: boolean;
   compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -196,7 +199,13 @@ export function ConnectedWorkspacePrMenu({
   const [error, setError] = useState<string | null>(null);
   const actions = useWorkspacePrActions(workspaceId, projectId);
   return (
-    <>
+    <fieldset
+      className="contents"
+      aria-label="Pull request actions"
+      onKeyDown={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
+      onPointerUp={(event) => event.stopPropagation()}
+    >
       <WorkspacePrMenu
         prs={prs}
         compact={compact}
@@ -211,7 +220,7 @@ export function ConnectedWorkspacePrMenu({
               }
         }
         onRemove={readOnly ? undefined : setRemoveId}
-        onReview={readOnly ? undefined : actions.review}
+        onReview={readOnly || !reviewEnabled ? undefined : actions.review}
       />
       <ConfirmDialog
         open={removeId !== null}
@@ -277,6 +286,6 @@ export function ConnectedWorkspacePrMenu({
           </form>
         </DialogContent>
       </Dialog>
-    </>
+    </fieldset>
   );
 }

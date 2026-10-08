@@ -164,6 +164,7 @@ export function WorkspaceDetailHeaderSlot({
                 projectId={workspace.projectId}
                 prs={workspace.prs}
                 readOnly={isArchived}
+                reviewEnabled={Boolean(workspace.worktreePath)}
               />
             </div>
           )}

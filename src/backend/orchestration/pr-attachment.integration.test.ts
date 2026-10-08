@@ -85,6 +85,9 @@ describe('failed PR attachment recovery', () => {
           ratchet: { create: { enabled: true } },
         },
       });
+      const previousCache = await db.prisma.workspacePR.findUniqueOrThrow({
+        where: { workspaceId_url: { workspaceId, url: previousPrUrl } },
+      });
       vi.spyOn(githubCLIService, 'fetchAndComputePRState').mockResolvedValue(null);
 
       await expect(prSnapshotService.attachAndRefreshPR(workspaceId, nextPrUrl)).resolves.toEqual({
@@ -92,6 +95,13 @@ describe('failed PR attachment recovery', () => {
         reason: 'fetch_failed',
         prId: expect.any(String),
       });
+
+      expect(
+        await db.prisma.workspacePR.findUniqueOrThrow({
+          where: { workspaceId_url: { workspaceId, url: previousPrUrl } },
+        })
+      ).toEqual(previousCache);
+      expect(previousCache.detachedAt).toBeNull();
 
       const neutralCache = await db.prisma.workspacePR.findUniqueOrThrow({
         where: { workspaceId_url: { workspaceId, url: nextPrUrl } },
@@ -123,6 +133,16 @@ describe('failed PR attachment recovery', () => {
           where: { workspaceId_url: { workspaceId, url: nextPrUrl } },
         })
       ).toEqual(neutralCache);
+      expect(
+        await db.prisma.workspacePR.findUniqueOrThrow({
+          where: { workspaceId_url: { workspaceId, url: previousPrUrl } },
+        })
+      ).toMatchObject({
+        detachedAt: null,
+        state: 'MERGED',
+        ciStatus: 'SUCCESS',
+        reviewState: 'APPROVED',
+      });
 
       await prSnapshotService.recordPrObservation(workspaceId, {
         prUrl: nextPrUrl,

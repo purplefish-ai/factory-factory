@@ -48,6 +48,22 @@ it('returns immutable defaults without ownership', () => {
 });
 it('observes each nonterminal PR, orders them fairly, and excludes archived workspaces', async () => {
   const { a, b } = await setup('candidates');
+  await db.prisma.workspacePR.updateMany({
+    where: { workspaceId: 'candidates' },
+    data: { state: 'OPEN' },
+  });
+  await db.prisma.workspacePRRatchet.update({
+    where: { prId: a },
+    data: { lastCheckedAt: new Date('2026-10-08') },
+  });
+  await db.prisma.workspacePRRatchet.update({
+    where: { prId: b },
+    data: { lastCheckedAt: new Date('2026-10-01') },
+  });
+  expect((await workspaceRatchetAccessor.findWithPRsForRatchet()).map((pr) => pr.prId)).toEqual([
+    b,
+    a,
+  ]);
   await db.prisma.workspacePR.update({ where: { id: a }, data: { state: 'MERGED' } });
   expect(await workspaceRatchetAccessor.findWithPRsForRatchet()).toEqual([
     expect.objectContaining({ id: 'candidates', prId: b }),
@@ -222,5 +238,73 @@ it('does not overwrite a dispatch settled while startup was completing', async (
   ).toBe(false);
   expect(await db.prisma.workspacePRRatchet.findUnique({ where: { prId: a } })).toMatchObject({
     dispatchOutcome: 'COMPLETED',
+  });
+});
+
+it('flattens populated ratchet and per-PR dispatch fields', async () => {
+  const { a } = await setup('populated-fields');
+  const checkedAt = new Date('2026-10-01');
+  const ratchet = await db.prisma.workspaceRatchet.update({
+    where: { workspaceId: 'populated-fields' },
+    data: { enabled: false, lastCheckedAt: checkedAt, activeSessionId: 'fixer', activePrId: a },
+  });
+  const dispatch = await db.prisma.workspacePRRatchet.update({
+    where: { prId: a },
+    data: {
+      dispatchSnapshotKey: 'key',
+      dispatchOutcome: 'DIED',
+      dispatchRetryCount: 3,
+      dispatchStalled: true,
+    },
+  });
+  expect(flattenWorkspaceRatchet(ratchet, dispatch)).toEqual({
+    ratchetEnabled: false,
+    ratchetLastCheckedAt: checkedAt,
+    ratchetActiveSessionId: 'fixer',
+    ratchetDispatchSnapshotKey: 'key',
+    ratchetDispatchOutcome: 'DIED',
+    ratchetDispatchRetryCount: 3,
+    ratchetDispatchStalled: true,
+  });
+});
+
+it('projects settled sole-PR dispatch history and disabled snapshots', async () => {
+  const { a, b } = await setup('sole-projection');
+  await db.prisma.workspacePR.update({
+    where: { id: a },
+    data: { number: 10, state: 'OPEN', ciStatus: 'FAILURE', syncedAt: new Date('2026-10-01') },
+  });
+  await db.prisma.workspacePRRatchet.update({
+    where: { prId: a },
+    data: { dispatchOutcome: 'DIED', dispatchRetryCount: 3, dispatchStalled: true },
+  });
+  expect(await workspaceRatchetAccessor.findSnapshotProjection('sole-projection')).toMatchObject({
+    ratchetDispatchOutcome: null,
+    ratchetDispatchRetryCount: 0,
+    prUrl: null,
+    prNumber: null,
+  });
+  await workspacePrAccessor.detach({ workspaceId: 'sole-projection', prId: b });
+  expect(await workspaceRatchetAccessor.findSnapshotProjection('sole-projection')).toMatchObject({
+    ratchetEnabled: true,
+    ratchetState: 'CI_FAILED',
+    ratchetDispatchOutcome: 'DIED',
+    ratchetDispatchRetryCount: 3,
+    ratchetDispatchStalled: true,
+    prUrl: 'https://github.com/o/r/pull/1',
+    prNumber: 10,
+    prCiStatus: 'FAILURE',
+    prUpdatedAt: new Date('2026-10-01'),
+    prs: [{ id: a, ratchet: { dispatchOutcome: 'DIED', dispatchRetryCount: 3 } }],
+  });
+  await db.prisma.workspaceRatchet.update({
+    where: { workspaceId: 'sole-projection' },
+    data: { enabled: false },
+  });
+  expect(await workspaceRatchetAccessor.findSnapshotProjection('sole-projection')).toMatchObject({
+    ratchetEnabled: false,
+    ratchetState: 'IDLE',
+    ratchetDispatchStalled: false,
+    prSummary: { ratchetState: 'IDLE', dispatchStalled: false },
   });
 });

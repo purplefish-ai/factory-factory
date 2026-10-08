@@ -290,6 +290,9 @@ function snapshotFieldValuesEqual(
       right as WorkspaceSessionSummary[]
     );
   }
+  if (field === 'prs' || field === 'prSummary') {
+    return isDeepStrictEqual(left, right);
+  }
   return Object.is(left, right);
 }
 

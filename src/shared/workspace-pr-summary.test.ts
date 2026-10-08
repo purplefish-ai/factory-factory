@@ -54,7 +54,21 @@ it('keeps pending siblings and active fixers out of stalled state', () => {
     deriveWorkspacePRSummary([stalled, pr({ ciStatus: 'PENDING' })], true).dispatchStalled
   ).toBe(false);
   expect(
-    deriveWorkspacePRSummary([stalled, pr({ ciStatus: 'FAILURE' })], true).dispatchStalled
+    deriveWorkspacePRSummary(
+      [
+        stalled,
+        pr({
+          ciStatus: 'FAILURE',
+          ratchet: {
+            lastCheckedAt: null,
+            dispatchOutcome: 'RUNNING',
+            dispatchRetryCount: 3,
+            dispatchStalled: true,
+          },
+        }),
+      ],
+      true
+    ).dispatchStalled
   ).toBe(false);
   expect(deriveWorkspacePRSummary([stalled], false).ratchetState).toBe('IDLE');
 });

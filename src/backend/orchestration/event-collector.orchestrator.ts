@@ -88,6 +88,7 @@ export interface StoreInterface {
         prNumber?: number | null;
         prUrl?: string | null;
         prState?: PRState;
+        prs?: SnapshotUpdateInput['prs'];
       }
     | undefined;
   remove(workspaceId: string): boolean;
@@ -152,6 +153,13 @@ function shouldRefreshRatchetForPrSwitch(
 ): boolean {
   if (!previousSnapshot) {
     return false;
+  }
+
+  const linkedPr = previousSnapshot.prs?.find((pr) =>
+    event.prId ? pr.id === event.prId : event.prUrl && pr.url === event.prUrl
+  );
+  if (linkedPr?.state === 'CLOSED' && event.prState !== 'CLOSED' && event.prState !== 'MERGED') {
+    return true;
   }
 
   const hadPreviouslyLinkedPr = previousSnapshot.prNumber != null || previousSnapshot.prUrl != null;
@@ -298,7 +306,13 @@ class EventCollectorState {
   readonly logger: Logger;
   activeCoalescer: EventCoalescer | null = null;
   lastIdlePrRefreshByWorkspace = new Map<string, number>();
-  linearMergeCompletions = new Map<string, Pick<PRSnapshotUpdatedEvent, 'prNumber' | 'prUrl'>>();
+  linearMergeCompletions = new Map<
+    string,
+    Pick<PRSnapshotUpdatedEvent, 'prNumber' | 'prUrl'> & {
+      status: 'pending' | 'running' | 'completed';
+      retryRequested: boolean;
+    }
+  >();
   teardownListeners: Array<() => void> = [];
   ratchetProjection: RatchetProjectionWorker | null = null;
 
@@ -453,15 +467,22 @@ async function handleLinearIssueCompletedOnMerge(
     (!(previous.prUrl && prIdentity.prUrl) || previous.prUrl === prIdentity.prUrl)
   ) {
     previous.prUrl ??= prIdentity.prUrl;
-    return;
+    if (previous.status !== 'pending') {
+      return;
+    }
   }
-  const attempt = { ...prIdentity };
+  const attempt = {
+    ...prIdentity,
+    status: 'running' as 'pending' | 'running' | 'completed',
+    retryRequested: false,
+  };
   state.linearMergeCompletions.set(workspaceId, attempt);
   let completed = false;
   try {
     const projection =
       await state.dependencies.workspaceDataService.findRatchetProjection(workspaceId);
     if (projection?.prSummary?.hasNonterminal) {
+      attempt.status = 'pending';
       return;
     }
     const ctx = await state.dependencies.getWorkspaceLinearContext(workspaceId);
@@ -476,6 +497,7 @@ async function handleLinearIssueCompletedOnMerge(
     if (!completed) {
       return;
     }
+    attempt.status = 'completed';
     state.logger.info('Marked Linear issue as completed on PR merge', {
       workspaceId,
       linearIssueId: ctx.linearIssueId,
@@ -486,9 +508,32 @@ async function handleLinearIssueCompletedOnMerge(
       error: error instanceof Error ? error.message : String(error),
     });
   } finally {
-    if (!completed && state.linearMergeCompletions.get(workspaceId) === attempt) {
-      state.linearMergeCompletions.delete(workspaceId);
-    }
+    finishLinearCompletionAttempt(state, workspaceId, attempt, completed);
+  }
+}
+
+function finishLinearCompletionAttempt(
+  state: EventCollectorState,
+  workspaceId: string,
+  attempt: NonNullable<ReturnType<EventCollectorState['linearMergeCompletions']['get']>>,
+  completed: boolean
+): void {
+  if (state.linearMergeCompletions.get(workspaceId) !== attempt) {
+    return;
+  }
+  if (attempt.status === 'pending' && attempt.retryRequested) {
+    void handleLinearIssueCompletedOnMerge(state, workspaceId, attempt);
+  } else if (!completed && attempt.status !== 'pending') {
+    state.linearMergeCompletions.delete(workspaceId);
+  }
+}
+
+function retryDeferredLinearCompletion(state: EventCollectorState, workspaceId: string): void {
+  const pending = state.linearMergeCompletions.get(workspaceId);
+  if (pending?.status === 'pending') {
+    void handleLinearIssueCompletedOnMerge(state, workspaceId, pending);
+  } else if (pending?.status === 'running') {
+    pending.retryRequested = true;
   }
 }
 
@@ -656,6 +701,8 @@ function startEventCollectorWithState(state: EventCollectorState): void {
     // Transition linked Linear issue to completed when PR is merged
     if (event.prState === 'MERGED') {
       void handleLinearIssueCompletedOnMerge(state, event.workspaceId, prIdentity);
+    } else if (event.prState === 'CLOSED') {
+      retryDeferredLinearCompletion(state, event.workspaceId);
     }
   };
   dependencies.prSnapshotService.on(PR_SNAPSHOT_UPDATED, prSnapshotUpdatedHandler);
@@ -680,8 +727,10 @@ function startEventCollectorWithState(state: EventCollectorState): void {
     dependencies.prSnapshotService.off(PR_URL_ATTACHED, prUrlAttachedHandler)
   );
 
-  const prDetachedHandler = (event: { workspaceId: string }) =>
+  const prDetachedHandler = (event: { workspaceId: string }) => {
     ratchetProjection.request(event.workspaceId);
+    retryDeferredLinearCompletion(state, event.workspaceId);
+  };
   dependencies.prSnapshotService.on(PR_DETACHED, prDetachedHandler);
   state.teardownListeners.push(() =>
     dependencies.prSnapshotService.off(PR_DETACHED, prDetachedHandler)

@@ -37,7 +37,7 @@ export function deriveWorkspaceSidebarStatus(
 ): WorkspaceSidebarStatus {
   const activityState: WorkspaceSidebarActivityState = input.isWorking ? 'WORKING' : 'IDLE';
 
-  if (!(input.prSummary?.totalCount ?? Number(Boolean(input.prUrl)))) {
+  if (!(input.prSummary?.totalCount || input.prUrl)) {
     return { activityState, ciState: 'NONE' };
   }
 

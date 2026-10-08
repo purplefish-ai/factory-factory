@@ -14,6 +14,9 @@ export type WorkspaceUIState = 'normal' | 'creating';
 
 export interface ServerWorkspace {
   id: string;
+  projectId?: string;
+  worktreePath?: string | null;
+  status?: string;
   name: string;
   createdAt: string | Date;
   branchName?: string | null;

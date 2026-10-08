@@ -23,6 +23,11 @@ import { userSettingsService } from '@/backend/services/settings';
 import { workspaceRatchetService } from '@/backend/services/workspace';
 import { fixerSessionService } from './fixer-session.service';
 import { ratchetService } from './ratchet.service';
+import {
+  cleanupCachedTerminalOwner,
+  stopActiveRatchetSessionsForTerminalPr,
+  triggerRatchetFixer,
+} from './ratchet-fixer-dispatch.helpers';
 
 const candidate = (prId: string): WorkspaceWithPR => ({
   id: 'w',
@@ -177,5 +182,136 @@ it.each(['MERGED', 'CLOSED'] as const)(
     await service.processWorkspace(workspace);
     expect(workspaceRatchetService.recordSessionEnd).toHaveBeenCalledWith('w', 'old', 'COMPLETED');
     expect(fetch).not.toHaveBeenCalled();
+  }
+);
+
+it('does not settle a sibling fixer when cleaning up a terminal PR', async () => {
+  const workspace = {
+    ...candidate('b'),
+    prState: 'MERGED' as const,
+    ratchetActivePrId: 'a',
+    ratchetActiveSessionId: 's-a',
+  };
+  const session = unsafeCoerce<RatchetSessionBridge>({
+    findSessionsByWorkspaceId: vi
+      .fn()
+      .mockResolvedValue([
+        { id: 's-a', workspacePrId: 'a', workflow: 'ratchet', status: 'RUNNING' },
+      ]),
+    isSessionRunning: vi.fn().mockReturnValue(true),
+    stopSession: vi.fn(),
+  });
+  const signal = new AbortController().signal;
+  expect(await cleanupCachedTerminalOwner(session, workspace, signal)).toBeNull();
+  await stopActiveRatchetSessionsForTerminalPr(session, workspace, signal);
+  expect(session.stopSession).not.toHaveBeenCalled();
+  expect(workspaceRatchetService.recordSessionEnd).not.toHaveBeenCalled();
+});
+
+it('releases an acquired idle session when the fixer slot claim is rejected', async () => {
+  vi.mocked(userSettingsService.get).mockResolvedValue({
+    ratchetReplyToPrComments: false,
+  } as never);
+  vi.mocked(workspaceRatchetService.recordDispatchIfEnabled).mockResolvedValue(false);
+  const persistedSessions = new Set(['unused']);
+  const session = unsafeCoerce<RatchetSessionBridge>({
+    isSessionRunning: vi.fn().mockReturnValue(false),
+    injectCommittedUserMessage: vi.fn(),
+    stopSession: vi.fn().mockImplementation((sessionId) => {
+      persistedSessions.delete(sessionId);
+      return Promise.resolve();
+    }),
+  });
+  vi.mocked(fixerSessionService.acquireAndDispatch).mockImplementation(async (input) => {
+    try {
+      await input.beforeStart?.({ sessionId: 'unused', prompt: 'fix' });
+      return { status: 'started', sessionId: 'unused' };
+    } catch (error) {
+      return { status: 'error', error: (error as Error).message };
+    }
+  });
+  const result = await triggerRatchetFixer({
+    workspace: candidate('b'),
+    prStateInfo: unsafeCoerce<PRStateInfo>({ snapshotKey: 'failed-ci' }),
+    retryCount: 0,
+    sessionBridge: session,
+  });
+  expect(result).toEqual({ type: 'ERROR', error: 'Workspace fixer slot no longer available' });
+  expect(persistedSessions.has('unused')).toBe(false);
+  expect(session.injectCommittedUserMessage).not.toHaveBeenCalled();
+});
+
+it('counts only candidates still attached after refresh', async () => {
+  vi.mocked(workspaceRatchetService.findCandidates).mockResolvedValue([
+    candidate('a'),
+    candidate('b'),
+  ]);
+  vi.mocked(workspaceRatchetService.findCandidateById).mockImplementation(async (_id, prId) =>
+    prId === 'a' ? candidate('a') : null
+  );
+  vi.mocked(userSettingsService.get).mockResolvedValue({
+    ratchetReviewTriggerMode: 'CHANGES_REQUESTED',
+  } as never);
+  const service = unsafeCoerce<{
+    runWorkspaceCheckSafely: (workspace: WorkspaceWithPR) => Promise<unknown>;
+  }>(ratchetService);
+  vi.spyOn(service, 'runWorkspaceCheckSafely').mockResolvedValue({
+    workspaceId: 'w',
+    prId: 'a',
+    previousState: 'CI_FAILED',
+    newState: 'CI_FAILED',
+    action: { type: 'WAITING', reason: 'CI running' },
+  });
+  const result = await ratchetService.checkAllWorkspaces();
+  expect(result.checked).toBe(1);
+  expect(result.results.map((row) => row.prId)).toEqual(['a']);
+});
+
+it.each(['disabled', 'shutdown', 'error', 'coordinator_error'] as const)(
+  'includes the PR identity on %s results',
+  async (condition) => {
+    const workspace = { ...candidate('b'), ratchetEnabled: condition !== 'disabled' };
+    ratchetService.configure({
+      session: unsafeCoerce<RatchetSessionBridge>({}),
+      github: unsafeCoerce<RatchetGitHubBridge>({}),
+      snapshot: { recordPrObservation: vi.fn(), recordReviewCheck: vi.fn() },
+      workspace: {
+        findFixerContext: vi.fn(),
+        recordSessionEnd: vi.fn(),
+        markDispatchStalled: vi.fn(),
+      },
+    });
+    const service = unsafeCoerce<{
+      isShuttingDown: boolean;
+      processWorkspace: (workspace: WorkspaceWithPR) => Promise<unknown>;
+      runWorkspaceCheckSafely: (workspace: WorkspaceWithPR) => Promise<unknown>;
+      fetchPRState: (workspace: WorkspaceWithPR) => Promise<unknown>;
+      getAuthenticatedUsernameCached: () => Promise<null>;
+    }>(ratchetService);
+    vi.spyOn(service, 'getAuthenticatedUsernameCached').mockResolvedValue(null);
+    vi.spyOn(service, 'fetchPRState').mockRejectedValue(new Error('fetch failed'));
+    if (condition === 'coordinator_error') {
+      vi.spyOn(service, 'processWorkspace').mockRejectedValue(new Error('coordinator failed'));
+    }
+    vi.spyOn(service, 'isShuttingDown', 'get').mockReturnValue(condition === 'shutdown');
+    vi.mocked(userSettingsService.get).mockResolvedValue({
+      ratchetReviewTriggerMode: 'CHANGES_REQUESTED',
+    } as never);
+    try {
+      const result =
+        condition === 'coordinator_error'
+          ? await service.runWorkspaceCheckSafely(workspace)
+          : await service.processWorkspace(workspace);
+      expect(result).toMatchObject({
+        workspaceId: 'w',
+        prId: 'b',
+        action: {
+          type:
+            condition === 'disabled' ? 'DISABLED' : condition === 'shutdown' ? 'WAITING' : 'ERROR',
+        },
+      });
+    } finally {
+      vi.restoreAllMocks();
+    }
   }
 );

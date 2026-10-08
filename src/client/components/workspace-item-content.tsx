@@ -7,7 +7,7 @@ import {
 } from '@phosphor-icons/react';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
 import { WorkspaceStatusIcon } from '@/client/components/workspace-status-icon';
-import { WorkspacePrMenu } from '@/client/features/workspace';
+import { ConnectedWorkspacePrMenu } from '@/client/features/workspace';
 import { getVisibleWorkspaceStatusReason } from '@/client/lib/workspace-status-reason-display';
 
 function CreationSourceIcon({ creationSource }: { creationSource?: string | null }) {
@@ -111,7 +111,14 @@ export function WorkspaceItemContent({
           </span>
           <span className="shrink-0 justify-self-end">
             {workspace.prs?.length ? (
-              <WorkspacePrMenu prs={workspace.prs} compact />
+              <ConnectedWorkspacePrMenu
+                workspaceId={workspace.id}
+                projectId={workspace.projectId}
+                prs={workspace.prs}
+                reviewEnabled={Boolean(workspace.worktreePath)}
+                readOnly={workspace.status === 'ARCHIVED' || workspace.status === 'ARCHIVING'}
+                compact
+              />
             ) : (
               showPR &&
               workspace.prNumber != null && (

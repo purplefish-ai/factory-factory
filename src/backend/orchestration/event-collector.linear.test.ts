@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { describe, expect, it, vi } from 'vitest';
-import { PR_SNAPSHOT_UPDATED } from '@/backend/services/github';
+import { PR_DETACHED, PR_SNAPSHOT_UPDATED } from '@/backend/services/github';
 import { deriveWorkspaceFlowState, WorkspaceSnapshotStore } from '@/backend/services/workspace';
 import { deriveWorkspaceSidebarStatus } from '@/shared/core';
 import { createEventCollectorOrchestrator } from './event-collector.orchestrator';
@@ -34,6 +34,7 @@ function createHarness(prState: 'OPEN' | 'MERGED' | null = 'OPEN') {
   const getWorkspaceLinearContext = vi
     .fn()
     .mockResolvedValue({ apiKey: 'test-key', linearIssueId: 'issue-1' });
+  const findRatchetProjection = vi.fn().mockResolvedValue(null);
   const collector = createEventCollectorOrchestrator({
     createLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }),
     getWorkspaceLinearContext,
@@ -48,7 +49,7 @@ function createHarness(prState: 'OPEN' | 'MERGED' | null = 'OPEN') {
     sessionDomainService: new EventEmitter(),
     workspaceActivityService: Object.assign(new EventEmitter(), { clearWorkspace: vi.fn() }),
     workspaceStateMachine: new EventEmitter(),
-    workspaceDataService: { findRatchetProjection: vi.fn().mockResolvedValue(null) },
+    workspaceDataService: { findRatchetProjection },
     workspaceSnapshotStore: store,
   } as never);
   collector.start();
@@ -64,10 +65,90 @@ function createHarness(prState: 'OPEN' | 'MERGED' | null = 'OPEN') {
       prReviewState: null,
       ...(prUrl === null ? {} : { prUrl }),
     });
-  return { collector, emitMerge, markIssueCompleted, getWorkspaceLinearContext };
+  return {
+    collector,
+    emitMerge,
+    markIssueCompleted,
+    getWorkspaceLinearContext,
+    findRatchetProjection,
+    prSnapshotService,
+  };
 }
 
 describe('Linear completion on PR merge', () => {
+  it.each(['CLOSED', 'DETACHED'])(
+    'retries deferred completion when the last sibling is %s',
+    async (transition) => {
+      const { collector, emitMerge, markIssueCompleted, findRatchetProjection, prSnapshotService } =
+        createHarness();
+      try {
+        findRatchetProjection.mockResolvedValue({
+          status: 'READY',
+          prSummary: { hasNonterminal: true },
+        });
+        emitMerge();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(markIssueCompleted).not.toHaveBeenCalled();
+        findRatchetProjection.mockResolvedValue({
+          status: 'READY',
+          prSummary: { hasNonterminal: false },
+        });
+        if (transition === 'DETACHED') {
+          prSnapshotService.emit(PR_DETACHED, { workspaceId: 'ws-1', prId: 'b' });
+        } else {
+          prSnapshotService.emit(PR_SNAPSHOT_UPDATED, {
+            workspaceId: 'ws-1',
+            prId: 'b',
+            prNumber: 8,
+            prState: 'CLOSED',
+            prCiStatus: 'SUCCESS',
+            prReviewState: null,
+          });
+        }
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(markIssueCompleted).toHaveBeenCalledExactlyOnceWith('test-key', 'issue-1');
+      } finally {
+        collector.stop();
+      }
+    }
+  );
+  it.each(['CLOSED', 'DETACHED'])(
+    'retries a %s transition during a stale projection read',
+    async (transition) => {
+      const { collector, emitMerge, markIssueCompleted, findRatchetProjection, prSnapshotService } =
+        createHarness();
+      let resolveProjection!: (value: unknown) => void;
+      findRatchetProjection.mockResolvedValueOnce(null).mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveProjection = resolve;
+        })
+      );
+      try {
+        emitMerge();
+        findRatchetProjection.mockResolvedValue({
+          status: 'READY',
+          prSummary: { hasNonterminal: false },
+        });
+        if (transition === 'DETACHED') {
+          prSnapshotService.emit(PR_DETACHED, { workspaceId: 'ws-1', prId: 'b' });
+        } else {
+          prSnapshotService.emit(PR_SNAPSHOT_UPDATED, {
+            workspaceId: 'ws-1',
+            prId: 'b',
+            prNumber: 8,
+            prState: 'CLOSED',
+            prCiStatus: 'SUCCESS',
+            prReviewState: null,
+          });
+        }
+        resolveProjection({ status: 'READY', prSummary: { hasNonterminal: true } });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(markIssueCompleted).toHaveBeenCalledExactlyOnceWith('test-key', 'issue-1');
+      } finally {
+        collector.stop();
+      }
+    }
+  );
   it.each([false, true])(
     'deduplicates unseeded ratchet and poller events (settled: %s)',
     async (settled) => {

@@ -72,13 +72,11 @@ the safety net after retry exhaustion.
 
 ### Dispatch tracking
 
-Each fixer dispatch is tracked on its PR’s `WorkspacePRRatchet` row (snapshot
-key
-
-- outcome `RUNNING`/`COMPLETED`/`DIED` + retry count): deliberate stops and
-  clean exits settle as `COMPLETED` (no re-dispatch while the PR state is
-  unchanged), unexpected exits settle as `DIED` and are re-dispatched for the
-  same PR state up to 3 times.
+Each fixer dispatch is tracked on its PR’s `WorkspacePRRatchet` row with a
+snapshot key, outcome (`RUNNING`, `COMPLETED`, or `DIED`), and retry count.
+Deliberate stops and clean exits settle as `COMPLETED` (no re-dispatch while the
+PR state is unchanged). Unexpected exits settle as `DIED` and are re-dispatched
+for the same PR state up to 3 times.
 
 A `dispatchStalled` boolean on the same row records the ratchet's own conclusion
 that it will not act again until the PR changes — set both when a settled
@@ -137,6 +135,14 @@ explicit reattachment clears one and resets its dispatch history and cached
 status before fetching. Failed initial synchronization retains a visible
 unsynchronized association. The compact PR menu contains explicit GitHub,
 review, remove, and add actions.
+
+Detachment cleanup can be retried using the persisted session’s PR target if
+stopping its runtime fails after the association was removed. Unchanged PR
+collections and summaries do not emit snapshot deltas. Older events resolve to
+an attached PR by URL or an unambiguous PR number before updating the
+collection. Reopened PRs trigger an immediate ratchet check even when the
+workspace has multiple associations. Linear completion waits while any PR is
+nonterminal and retries when the final sibling closes or is removed.
 
 `WorkspacePRDiscovery` owns workspace discovery scheduling and backoff,
 including workspaces that already have PRs. Repository batches attach all

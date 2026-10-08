@@ -331,7 +331,7 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
       where: {
         workspaceId: input.workspaceId,
         workflow: input.workflow,
-        ...(input.workspacePrId ? { workspacePrId: input.workspacePrId } : {}),
+        workspacePrId: input.workspacePrId ?? null,
         provider: input.provider,
         status: { in: ACTIVE_AGENT_SESSION_STATUSES },
       },

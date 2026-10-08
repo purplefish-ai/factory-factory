@@ -166,24 +166,29 @@ class PRSnapshotService extends EventEmitter {
     workspaceId: string,
     explicitPrUrl?: string | null
   ): Promise<PRSnapshotRefreshResult> {
-    if (!(await this.workspace.findPRContext(workspaceId))) {
-      return { success: false, reason: 'workspace_not_found' };
-    }
-    const prs = (await this.workspace.listPRs(workspaceId)).filter(
-      (pr) => !explicitPrUrl || pr.url === explicitPrUrl
-    );
-    if (!prs.length) {
-      return { success: false, reason: 'no_pr_url' };
-    }
-    let result: PRSnapshotRefreshResult = { success: false, reason: 'no_pr_url' };
-    let failed: PRSnapshotRefreshResult | undefined;
-    for (const pr of prs) {
-      result = await this.refreshPR({ workspaceId, prId: pr.id });
-      if (!result.success) {
-        failed = result;
+    try {
+      if (!(await this.workspace.findPRContext(workspaceId))) {
+        return { success: false, reason: 'workspace_not_found' };
       }
+      const prs = (await this.workspace.listPRs(workspaceId)).filter(
+        (pr) => !explicitPrUrl || pr.url === explicitPrUrl
+      );
+      if (!prs.length) {
+        return { success: false, reason: 'no_pr_url' };
+      }
+      let result: PRSnapshotRefreshResult = { success: false, reason: 'no_pr_url' };
+      let failed: PRSnapshotRefreshResult | undefined;
+      for (const pr of prs) {
+        result = await this.refreshPR({ workspaceId, prId: pr.id });
+        if (!result.success) {
+          failed = result;
+        }
+      }
+      return failed ?? result;
+    } catch (error) {
+      logger.error('Failed to refresh workspace PRs', toError(error), { workspaceId });
+      return { success: false, reason: 'error' };
     }
-    return failed ?? result;
   }
   async attachDiscoveredPRAndRefresh(
     workspaceId: string,

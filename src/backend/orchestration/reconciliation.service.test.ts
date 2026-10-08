@@ -419,6 +419,7 @@ describe('workspaceMaintenanceService.findNeedingWorktree', () => {
       include: {
         project: true,
         prs: { include: { automation: true } },
+        ratchet: { select: { enabled: true } },
         prDiscovery: true,
         autoIteration: true,
       },

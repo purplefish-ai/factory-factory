@@ -236,10 +236,8 @@ async function importWorkspaces(
         linearIssueUrl: workspace.linearIssueUrl,
         defaultSessionProvider: workspace.defaultSessionProvider,
         ratchetSessionProvider: workspace.ratchetSessionProvider,
-        // The v4 export carries the PR cache as flat workspace fields; it now
-        // lives in the WorkspacePR row this create brings with it. Discovery
-        // scheduling was never exported, so it restores at its defaults and the
-        // next poll re-derives it.
+        // Version 5 restores the PR collection and discovery schedule. Legacy
+        // v4 input is normalized to a single PR and default discovery scheduling.
         prDiscovery: {
           create: {
             lastCheckedAt: parseDate(workspace.prDiscovery.lastCheckedAt),
@@ -350,6 +348,19 @@ async function importAgentSessions(
       });
       counter.skipped++;
       continue;
+    }
+
+    if (s.workspacePrId !== null) {
+      const pr = await tx.workspacePR.findUnique({ where: { id: s.workspacePrId } });
+      if (!pr || pr.workspaceId !== s.workspaceId) {
+        logger.warn('Skipping agent session due to missing or foreign PR association', {
+          sessionId: s.id,
+          workspaceId: s.workspaceId,
+          workspacePrId: s.workspacePrId,
+        });
+        counter.skipped++;
+        continue;
+      }
     }
 
     await tx.agentSession.create({
@@ -476,7 +487,7 @@ class DataBackupService {
    * Export all data for backup/migration.
    * Exports projects, workspaces, sessions, and user preferences.
    * Excludes cached data (workspaceOrder, cachedSlashCommands) which will rebuild.
-   * Exports in schema version 4 format.
+   * Exports in schema version 5 format.
    */
   async exportData(appVersion: string): Promise<ExportData> {
     logger.info('Exporting database data');
@@ -652,7 +663,7 @@ class DataBackupService {
 
   /**
    * Import data from a backup file.
-   * Accepts strict schema version 4 payloads only.
+   * Accepts version 5 payloads, including normalized version 4 backups.
    * Skips records that already exist (by ID).
    * Returns counts of imported/skipped records.
    * All imports are wrapped in a transaction for atomicity.

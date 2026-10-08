@@ -54,7 +54,7 @@ function validateOwnership(
 ): void {
   const active = workspace.prs.find((pr) => pr.id === workspace.ratchetActivePrId);
   if (
-    workspace.ratchetActivePrId &&
+    (workspace.ratchetActivePrId !== null || workspace.ratchetActiveSessionId !== null) &&
     (!(workspace.ratchetActiveSessionId && active) ||
       active.detachedAt ||
       active.ratchet.activeSessionId !== workspace.ratchetActiveSessionId)

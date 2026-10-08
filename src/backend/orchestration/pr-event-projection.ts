@@ -31,22 +31,39 @@ function projectLegacyEvent(
       };
 }
 
+function resolveEventPrId(
+  previous: WorkspaceSnapshotEntry | undefined,
+  event: PRUrlAttachedEvent | PRSnapshotUpdatedEvent
+): string | undefined {
+  if (event.prId) {
+    return event.prId;
+  }
+  const matches =
+    previous?.prs?.filter((pr) =>
+      event.prUrl ? pr.url === event.prUrl : 'prState' in event && pr.number === event.prNumber
+    ) ?? [];
+  return matches.length === 1 ? matches[0]?.id : undefined;
+}
+
 /** Publish a coherent collection immediately, before the authoritative read. */
 export function projectPrEvent(
   previous: WorkspaceSnapshotEntry | undefined,
   event: PRUrlAttachedEvent | PRSnapshotUpdatedEvent
 ): SnapshotUpdateInput {
   const updated = 'prState' in event;
-  const url =
-    event.prUrl ?? previous?.prs?.find((pr) => pr.id === event.prId)?.url ?? previous?.prUrl;
-  if (!(event.prId && url)) {
+  const prId = resolveEventPrId(previous, event);
+  const url = event.prUrl ?? previous?.prs?.find((pr) => pr.id === prId)?.url ?? previous?.prUrl;
+  if (!(prId && url)) {
+    if (previous?.prs?.length) {
+      return {};
+    }
     return projectLegacyEvent(previous, event);
   }
   const prs = [...(previous?.prs ?? [])];
-  const index = prs.findIndex((pr) => pr.id === event.prId);
+  const index = prs.findIndex((pr) => pr.id === prId);
   const existing = index >= 0 ? prs[index] : undefined;
   const pr: WorkspacePullRequest = {
-    id: event.prId,
+    id: prId,
     url,
     number: null,
     title: null,

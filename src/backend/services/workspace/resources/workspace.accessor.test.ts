@@ -167,6 +167,7 @@ describe('workspaceAccessor', () => {
       where: { id: { in: ['ws-2'] } },
       include: {
         project: true,
+        ratchet: { select: { enabled: true } },
         prs: { include: { automation: true } },
         prDiscovery: true,
         autoIteration: true,
@@ -731,6 +732,7 @@ describe('workspaceAccessor', () => {
         },
         include: {
           project: true,
+          ratchet: { select: { enabled: true } },
           prs: { include: { automation: true } },
           prDiscovery: true,
           autoIteration: true,

@@ -164,6 +164,7 @@ describe('WorkspaceQueryService', () => {
       {
         id: 'w2',
         status: WorkspaceStatus.READY,
+        worktreePath: '/tmp/w2',
         prUrl: 'https://github.com/o/r/pull/2',
         prs: [{ id: 'pr', url: 'https://github.com/o/r/pull/2' }],
         prState: 'OPEN',
@@ -202,6 +203,7 @@ describe('WorkspaceQueryService', () => {
     expect(result).toHaveLength(2);
     expect(result[0]).toMatchObject({
       id: 'w2',
+      worktreePath: '/tmp/w2',
       kanbanColumn: 'WAITING',
       pendingRequestType: 'user_question',
       ratchetButtonAnimated: true,

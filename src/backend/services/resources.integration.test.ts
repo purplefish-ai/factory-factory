@@ -423,7 +423,7 @@ describe('resource accessors integration', () => {
     it('settles ratchet session end only when session id matches', async () => {
       const project = await createProjectFixture();
       const workspace = await createWorkspaceFixture(project.id, {
-        ratchet: { activeSessionId: 'session-1' },
+        ratchet: { activeSessionId: 'session-1', dispatchOutcome: 'RUNNING' },
       });
 
       const mismatch = await workspaceRatchetService.recordSessionEnd(
@@ -434,7 +434,7 @@ describe('resource accessors integration', () => {
       expect(mismatch).toBe(false);
       const unchanged = await findWorkspaceOrThrow(workspace.id);
       expect(unchanged.ratchetActiveSessionId).toBe('session-1');
-      expect(unchanged.ratchetDispatchOutcome).toBe('RUNNING');
+      expect(unchanged.prs[0]?.ratchet.dispatchOutcome).toBe('RUNNING');
 
       const settled = await workspaceRatchetService.recordSessionEnd(
         workspace.id,

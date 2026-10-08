@@ -2808,12 +2808,12 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         }
         return Promise.resolve({
           workspaceId: workspace.id,
+          prId: 'pr-check',
           previousState: RatchetState.IDLE,
           newState: RatchetState.IDLE,
           action: { type: 'WAITING', reason: 'ran after queue' },
         });
       });
-
       const result = await ratchetService.checkAllWorkspaces();
 
       expect(processWorkspaceSpy).toHaveBeenCalledWith(
@@ -2859,12 +2859,12 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         signal.throwIfAborted();
         return {
           workspaceId: workspaceArg.id,
+          prId: 'pr-check',
           previousState: RatchetState.IDLE,
           newState: RatchetState.IDLE,
           action: { type: 'TRIGGERED_FIXER', sessionId: 'session-1', promptSent: true },
         };
       });
-
       const resultPromise = ratchetService.checkAllWorkspaces();
       await new Promise((resolve) => setTimeout(resolve, 10));
       finishCommit();
@@ -3300,12 +3300,12 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         }
         return {
           workspaceId: workspace.id,
+          prId: 'pr-check',
           previousState: RatchetState.IDLE,
           newState: RatchetState.IDLE,
           action: { type: 'WAITING', reason: 'noop' },
         };
       });
-
       const batch = ratchetService.checkAllWorkspaces();
       await vi.waitFor(() => expect(activeBlockers).toBe(3));
       const direct = ratchetService.checkWorkspaceById('queued-target');
@@ -3362,12 +3362,12 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         targetRuns += workspace.id === 'after-timeouts' ? 1 : 0;
         return {
           workspaceId: workspace.id,
+          prId: 'pr-check',
           previousState: RatchetState.IDLE,
           newState: RatchetState.IDLE,
           action: { type: 'WAITING', reason: 'noop' },
         };
       });
-
       const batch = ratchetService.checkAllWorkspaces();
       await vi.waitFor(() => expect(activeTimedOutChecks).toBe(3));
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -3416,12 +3416,12 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         }
         return {
           workspaceId: workspace.id,
+          prId: 'pr-check',
           previousState: RatchetState.IDLE,
           newState: RatchetState.IDLE,
           action: { type: 'WAITING', reason: 'noop' },
         };
       });
-
       const batch = ratchetService.checkAllWorkspaces();
       await vi.waitFor(() => expect(activeBatchChecks).toBe(3));
 

@@ -14,9 +14,13 @@ export function useWorkspacePrActions(workspaceId: string, projectId?: string) {
     onError: (error) => toast.error(error.message),
   });
   const review = trpc.adversarialReview.trigger.useMutation({
-    onSuccess: () => {
+    onSuccess: (result) => {
       void utils.session.listSessions.invalidate({ workspaceId });
-      toast.success('Review started');
+      toast.success(
+        result.status === 'already_active'
+          ? 'Adversarial review is already running'
+          : 'Review started'
+      );
     },
     onError: (error) => toast.error(error.message),
   });

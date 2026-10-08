@@ -36,7 +36,7 @@ function pr(
   return {
     id,
     url,
-    number: 41,
+    number: Number(new URL(url).pathname.split('/').at(-1)),
     title: null,
     headRefName: null,
     baseRefName: null,
@@ -108,7 +108,13 @@ function setup(prs = [pr('a')]) {
   } as unknown as EventCollectorDependencies;
   collector = createEventCollectorOrchestrator(dependencies);
   collector.start();
-  return { store, events, ratchet, read };
+  return {
+    store,
+    events,
+    ratchet,
+    read,
+    checkWorkspaceById: dependencies.ratchetService.checkWorkspaceById,
+  };
 }
 function assertOpen(store: WorkspaceSnapshotStore) {
   const snapshot = store.getByWorkspaceId('ws')!;
@@ -133,7 +139,7 @@ describe('multiple PR snapshot publication', () => {
         workspaceId: 'ws',
         prId: 'b',
         prUrl: url,
-        prNumber: 41,
+        prNumber: Number(new URL(url).pathname.split('/').at(-1)),
         prState: 'OPEN',
         prCiStatus: 'PENDING',
         prReviewState: null,
@@ -141,7 +147,12 @@ describe('multiple PR snapshot publication', () => {
       assertOpen(store);
       expect(store.getByWorkspaceId('ws')?.prs).toEqual([
         pr('a'),
-        expect.objectContaining({ id: 'b', url, state: 'OPEN' }),
+        expect.objectContaining({
+          id: 'b',
+          url,
+          number: url.endsWith('/42') ? 42 : 41,
+          state: 'OPEN',
+        }),
       ]);
       pending.resolve(projection([pr('a'), pr('b', 'OPEN', url)]));
       await vi.advanceTimersByTimeAsync(0);
@@ -192,6 +203,26 @@ describe('multiple PR snapshot publication', () => {
     assertOpen(store);
     expect(store.getByWorkspaceId('ws')?.prs).toHaveLength(1);
   });
+  it('immediately checks ratchet when one of multiple closed PRs reopens', () => {
+    const { store, events, read, checkWorkspaceById } = setup([
+      pr('a', 'CLOSED'),
+      pr('b', 'CLOSED'),
+    ]);
+    read.mockReturnValue(deferred<Projection>().promise);
+    expect(store.getByWorkspaceId('ws')).toMatchObject({ prUrl: null, prNumber: null });
+    events.emit(PR_SNAPSHOT_UPDATED, {
+      workspaceId: 'ws',
+      prId: 'b',
+      prUrl: pr('b').url,
+      prNumber: 42,
+      prState: 'OPEN',
+      prCiStatus: 'PENDING',
+      prReviewState: null,
+    });
+    assertOpen(store);
+    expect(checkWorkspaceById).toHaveBeenCalledWith('ws', { bypassPrFetchCooldown: true });
+  });
+
   it('keeps a workspace active when one PR merges and its sibling is still open', () => {
     const { store, events, read } = setup([pr('a', 'OPEN'), pr('b', 'OPEN')]);
     read.mockReturnValue(deferred<Projection>().promise);

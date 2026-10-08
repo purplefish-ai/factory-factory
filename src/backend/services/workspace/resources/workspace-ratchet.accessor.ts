@@ -192,8 +192,10 @@ class WorkspaceRatchetAccessor {
       ratchetState: summary.ratchetState,
       ratchetDispatchOutcome: row.ratchet?.activeSessionId
         ? ('RUNNING' as RatchetDispatchOutcome)
-        : null,
-      ratchetDispatchRetryCount: 0,
+        : prs.length === 1
+          ? (prs[0]?.ratchet.dispatchOutcome ?? null)
+          : null,
+      ratchetDispatchRetryCount: prs.length === 1 ? (prs[0]?.ratchet.dispatchRetryCount ?? 0) : 0,
       ratchetDispatchStalled: summary.dispatchStalled,
       prHasMergeConflict: summary.hasMergeConflict,
     };

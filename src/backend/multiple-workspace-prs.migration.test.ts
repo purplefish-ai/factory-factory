@@ -45,6 +45,8 @@ it('preserves known PRs, discovery, and active fixer ownership in the collection
     db.exec(`INSERT INTO Project (id, name, slug, repoPath, worktreeBasePath, updatedAt)
       VALUES ('project', 'Project', 'project', '/tmp/repo', '/tmp/worktrees', 1000)`);
     seedLegacyPRs(db);
+    db.exec(`INSERT INTO AgentSession (id, workspaceId, workflow, provider, updatedAt)
+      VALUES ('fixer-1', 'OPEN', 'ratchet', 'CODEX', 1000)`);
     db.close();
     db = undefined;
     runMigrations({ databasePath, migrationsPath, log: () => undefined });
@@ -99,6 +101,9 @@ it('preserves known PRs, discovery, and active fixer ownership in the collection
         )
         .get()
     ).toEqual({ dispatchSnapshotKey: 'snapshot', dispatchRetryCount: 2 });
+    expect(db.prepare("SELECT workspacePrId FROM AgentSession WHERE id = 'fixer-1'").get()).toEqual(
+      { workspacePrId: 'legacy-pr-OPEN' }
+    );
     expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
   } finally {
     db?.close();

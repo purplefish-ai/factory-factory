@@ -3,6 +3,7 @@ import {
   resetPendingRatchetTogglesForTests,
   setPendingRatchetToggle,
 } from '@/client/lib/ratchet-toggle-cache';
+import { projectSnapshotToWorkspace } from '@/client/lib/snapshot-to-workspace';
 import type { UseWebSocketTransportOptions } from '@/hooks/use-websocket-transport';
 import { makeWorkspaceSnapshotEntry as makeEntry } from '@/test-utils/workspace-snapshot';
 import { useProjectSnapshotSync } from './use-project-snapshot-sync';
@@ -69,7 +70,12 @@ describe('useProjectSnapshotSync', () => {
     // care about the unknown-workspace invalidation this file also covers, so
     // seed the cache with that id by default. Tests that specifically exercise
     // an unknown workspace use a different id ('ws-new') that isn't seeded here.
-    mockGetData.mockReturnValue({ workspaces: [{ id: 'ws-1' }], reviewCount: 0 });
+    mockGetData.mockReturnValue({
+      workspaces: [
+        { ...projectSnapshotToWorkspace(makeEntry()), worktreePath: '/tmp/existing-worktree' },
+      ],
+      reviewCount: 0,
+    });
     mockWorkspaceGetSetData.mockReset();
     // Real tRPC `invalidate` returns a promise; the repair path chains .catch()
     // onto it to release its guard when a refetch fails.
@@ -453,9 +459,14 @@ describe('useProjectSnapshotSync', () => {
   describe('cache invalidation strategy', () => {
     it('snapshot_changed and snapshot_removed do not invalidate caches for a known workspace', () => {
       // Seed the list cache with the entry's workspace id so it is already
-      // known; a *known* workspace's deltas never invalidate. An *unknown*
-      // workspace is covered separately below.
-      mockGetData.mockReturnValue({ workspaces: [{ id: 'ws-1' }], reviewCount: 0 });
+      // known and already provisioned; ordinary deltas do not invalidate it.
+      // Unknown workspaces and missing worktree paths are covered below.
+      mockGetData.mockReturnValue({
+        workspaces: [
+          { ...projectSnapshotToWorkspace(makeEntry()), worktreePath: '/tmp/existing-worktree' },
+        ],
+        reviewCount: 0,
+      });
       useProjectSnapshotSync('proj-1');
       const onMessage = capturedOptions!.onMessage!;
 
@@ -470,6 +481,75 @@ describe('useProjectSnapshotSync', () => {
       });
 
       expectNoInvalidations();
+    });
+
+    it.each(['snapshot_changed', 'snapshot_full'] as const)(
+      'refetches the actual worktree path when %s makes a known workspace ready',
+      async (type) => {
+        let cache = {
+          workspaces: [projectSnapshotToWorkspace(makeEntry({ status: 'NEW' }))],
+          reviewCount: 0,
+        };
+        mockGetData.mockImplementation(() => cache);
+        mockSetData.mockImplementation((_key, updater) => {
+          cache = updater(cache);
+        });
+        let finishRefetch!: () => void;
+        mockListInvalidate.mockImplementation(
+          () =>
+            new Promise<void>((resolve) => {
+              finishRefetch = () => {
+                cache = {
+                  ...cache,
+                  workspaces: cache.workspaces.map((workspace) => ({
+                    ...workspace,
+                    worktreePath: '/actual/provisioned/worktree',
+                  })),
+                };
+                resolve();
+              };
+            })
+        );
+        useProjectSnapshotSync('proj-1');
+        const onMessage = capturedOptions!.onMessage!;
+        const ready = makeEntry({ status: 'READY' });
+        onMessage(
+          type === 'snapshot_full'
+            ? { type, projectId: 'proj-1', entries: [ready] }
+            : { type, workspaceId: 'ws-1', entry: ready }
+        );
+        expect(cache.workspaces[0]).toMatchObject({ status: 'READY', worktreePath: null });
+        expect(mockListInvalidate).toHaveBeenCalledWith({ projectId: 'proj-1' });
+        onMessage({ type: 'snapshot_changed', workspaceId: 'ws-1', entry: ready });
+        expect(mockListInvalidate).toHaveBeenCalledTimes(1);
+        finishRefetch();
+        await Promise.resolve();
+        expect(cache.workspaces[0]?.worktreePath).toBe('/actual/provisioned/worktree');
+      }
+    );
+
+    it('retries a failed worktree-path repair on the next ready snapshot', async () => {
+      let cache = {
+        workspaces: [projectSnapshotToWorkspace(makeEntry({ status: 'NEW' }))],
+        reviewCount: 0,
+      };
+      mockGetData.mockImplementation(() => cache);
+      mockSetData.mockImplementation((_key, updater) => {
+        cache = updater(cache);
+      });
+      mockListInvalidate.mockRejectedValueOnce(new Error('network'));
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+      const message = {
+        type: 'snapshot_changed' as const,
+        workspaceId: 'ws-1',
+        entry: makeEntry({ status: 'READY' }),
+      };
+      onMessage(message);
+      await Promise.resolve();
+      await Promise.resolve();
+      onMessage(message);
+      expect(mockListInvalidate).toHaveBeenCalledTimes(2);
     });
 
     it('invalidates the project list once when snapshot_changed introduces an unknown workspace', () => {

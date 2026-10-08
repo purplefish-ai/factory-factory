@@ -19,9 +19,18 @@ const ACCESSOR_POLICIES = {
     owner: 'workspace',
     module: 'src/backend/services/workspace/resources/workspace-ratchet.accessor',
   },
-  workspacePrAggregateAccessor:{owner:'workspace',module:'src/backend/services/workspace/resources/workspace-pr-aggregate.accessor'},
-  workspacePrDiscoveryAccessor: {owner:'workspace',module:'src/backend/services/workspace/resources/workspace-pr-discovery.accessor'},
-  workspacePrRatchetAccessor: {owner:'workspace',module:'src/backend/services/workspace/resources/workspace-pr-ratchet.accessor'},
+  workspacePrAggregateAccessor: {
+    owner: 'workspace',
+    module: 'src/backend/services/workspace/resources/workspace-pr-aggregate.accessor',
+  },
+  workspacePrDiscoveryAccessor: {
+    owner: 'workspace',
+    module: 'src/backend/services/workspace/resources/workspace-pr-discovery.accessor',
+  },
+  workspacePrRatchetAccessor: {
+    owner: 'workspace',
+    module: 'src/backend/services/workspace/resources/workspace-pr-ratchet.accessor',
+  },
   workspacePrAccessor: {
     owner: 'workspace',
     module: 'src/backend/services/workspace/resources/workspace-pr.accessor',

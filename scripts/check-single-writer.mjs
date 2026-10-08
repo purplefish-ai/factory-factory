@@ -575,7 +575,6 @@ const SIDE_TABLE_RELATIONS = {
 const WORKSPACE_CREATION_SIDE_TABLES = new Set([
   'workspacePR',
   'workspacePRDiscovery',
-  'workspacePRRatchet',
   'workspaceRatchet',
   'workspaceRunScript',
   'workspaceAutoIteration',
@@ -686,6 +685,9 @@ function propertyName(assignment) {
 
 function checkNestedSideTableMutation(relPath, dataExpression, violations, insideWorkspaceCreate) {
   if (!ts.isObjectLiteralExpression(dataExpression)) {
+    ts.forEachChild(dataExpression, (child) =>
+      checkNestedSideTableMutation(relPath, child, violations, insideWorkspaceCreate)
+    );
     return;
   }
   for (const property of dataExpression.properties) {
@@ -697,9 +699,6 @@ function checkNestedSideTableMutation(relPath, dataExpression, violations, insid
       continue;
     }
     const owner = OWNED_SIDE_TABLES[table];
-    if (relPath === owner) {
-      continue;
-    }
     for (const operation of property.initializer.properties) {
       if (!ts.isPropertyAssignment(operation) && !ts.isShorthandPropertyAssignment(operation)) {
         continue;
@@ -710,16 +709,26 @@ function checkNestedSideTableMutation(relPath, dataExpression, violations, insid
       if (!key || !NESTED_MUTATION_KEYS.has(key)) {
         continue;
       }
-      if (
+      const allowedCreation =
         insideWorkspaceCreate &&
-        WORKSPACE_CREATION_SIDE_TABLES.has(table) &&
-        NESTED_CREATION_KEYS.has(key)
-      ) {
-        continue;
+        NESTED_CREATION_KEYS.has(key) &&
+        (WORKSPACE_CREATION_SIDE_TABLES.has(table) ||
+          // Restoring a backup initializes saved PR history in the same create.
+          (table === 'workspacePRRatchet' &&
+            relPath === 'src/backend/orchestration/data-backup.service.ts'));
+      if (relPath !== owner && !allowedCreation) {
+        violations.push(
+          `${relPath}: unauthorized nested ${key} of the ${table} relation; ${table} is written only by ${owner}`
+        );
       }
-      violations.push(
-        `${relPath}: unauthorized nested ${key} of the ${table} relation; ${table} is written only by ${owner}`
-      );
+      if (ts.isPropertyAssignment(operation)) {
+        checkNestedSideTableMutation(
+          relPath,
+          operation.initializer,
+          violations,
+          insideWorkspaceCreate
+        );
+      }
     }
   }
 }

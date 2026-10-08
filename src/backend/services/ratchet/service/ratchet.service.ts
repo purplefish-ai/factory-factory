@@ -258,13 +258,13 @@ class RatchetService extends EventEmitter {
 
     if (stateChanges > 0 || actionsTriggered > 0) {
       logger.info('Ratchet check completed', {
-        checked: workspaces.length,
+        checked: results.length,
         stateChanges,
         actionsTriggered,
       });
     }
 
-    return { checked: workspaces.length, stateChanges, actionsTriggered, results };
+    return { checked: results.length, stateChanges, actionsTriggered, results };
   }
 
   async checkWorkspaceById(
@@ -356,6 +356,7 @@ class RatchetService extends EventEmitter {
       });
       return {
         workspaceId: workspace.id,
+        prId: workspace.prId,
         previousState: workspace.ratchetState,
         newState: workspace.ratchetState,
         action: { type: 'ERROR', error: errorMessage },
@@ -383,9 +384,7 @@ class RatchetService extends EventEmitter {
 
     await this.stopActiveRatchetSessionsAfterDisable(workspaceId);
 
-    // `disable` is the whole transition: `deriveRatchetState` reads IDLE for a
-    // workspace that is not ratcheting, so there is no second write to settle and
-    // no window in which the state disagrees with the toggle.
+    // Disabling already projects IDLE, so there is no second state write to settle.
     if (workspace.ratchetState !== RatchetState.IDLE) {
       this.emit(RATCHET_STATE_CHANGED, {
         workspaceId,
@@ -414,6 +413,7 @@ class RatchetService extends EventEmitter {
     if (this.isShuttingDown) {
       return {
         workspaceId: workspace.id,
+        prId: workspace.prId,
         previousState: workspace.ratchetState,
         newState: workspace.ratchetState,
         action: { type: 'WAITING', reason: 'Shutting down' },
@@ -422,13 +422,12 @@ class RatchetService extends EventEmitter {
 
     if (!workspace.ratchetEnabled) {
       const action: RatchetAction = { type: 'DISABLED', reason: 'Workspace ratcheting disabled' };
-      // Nothing to settle: a disabled workspace already derives to IDLE, so the
-      // row this check read is the row every later read will project from. Which
-      // also means `fromState` here is IDLE, and there is no transition to emit.
+      // A disabled workspace already derives to IDLE, with no transition to emit.
       const fromState = workspace.ratchetState;
       this.logWorkspaceRatchetingDecision(workspace, fromState, fromState, action, null);
       return {
         workspaceId: workspace.id,
+        prId: workspace.prId,
         previousState: fromState,
         newState: fromState,
         action,
@@ -468,7 +467,7 @@ class RatchetService extends EventEmitter {
         );
         return {
           workspaceId: workspace.id,
-          ...(workspace.prId ? { prId: workspace.prId } : {}),
+          prId: workspace.prId,
           previousState: workspace.ratchetState,
           newState: workspace.ratchetState,
           action,
@@ -486,7 +485,7 @@ class RatchetService extends EventEmitter {
         );
         return {
           workspaceId: workspace.id,
-          ...(workspace.prId ? { prId: workspace.prId } : {}),
+          prId: workspace.prId,
           previousState: workspace.ratchetState,
           newState: workspace.ratchetState,
           action,
@@ -532,6 +531,7 @@ class RatchetService extends EventEmitter {
       );
       return {
         workspaceId: workspace.id,
+        prId: workspace.prId,
         previousState: workspace.ratchetState,
         newState: workspace.ratchetState,
         action,
@@ -821,6 +821,7 @@ class RatchetService extends EventEmitter {
       );
       return {
         workspaceId: workspace.id,
+        prId: workspace.prId,
         previousState: decisionContext.previousState,
         newState: RatchetState.IDLE,
         action: disabledAction,
@@ -830,7 +831,7 @@ class RatchetService extends EventEmitter {
     if (decisionContext.previousState !== decisionContext.newState) {
       this.emit(RATCHET_STATE_CHANGED, {
         workspaceId: workspace.id,
-        ...(workspace.prId ? { prId: workspace.prId } : {}),
+        prId: workspace.prId,
         fromState: decisionContext.previousState,
         toState: decisionContext.newState,
         prCiStatus: prStateInfo.ciStatus,
@@ -848,7 +849,7 @@ class RatchetService extends EventEmitter {
 
     return {
       workspaceId: workspace.id,
-      ...(workspace.prId ? { prId: workspace.prId } : {}),
+      prId: workspace.prId,
       previousState: decisionContext.previousState,
       newState: decisionContext.newState,
       action,
@@ -987,7 +988,7 @@ class RatchetService extends EventEmitter {
       // Direct private-method callers do not have a coordinator timeout to disable.
     }
   ): Promise<RatchetAction> {
-    const action = await triggerRatchetFixer({
+    return await triggerRatchetFixer({
       workspace,
       prStateInfo,
       retryCount,
@@ -998,7 +999,6 @@ class RatchetService extends EventEmitter {
         this.emit(RATCHET_DISPATCH_CHANGED, event satisfies RatchetDispatchChangedEvent);
       },
     });
-    return action;
   }
 
   private async stopActiveRatchetSessionsAfterDisable(workspaceId: string): Promise<void> {

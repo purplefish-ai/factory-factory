@@ -1,5 +1,5 @@
 import type { PrismaClient } from '@prisma-gen/client';
-import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import {
   clearIntegrationDatabase,
   createIntegrationDatabase,
@@ -24,7 +24,8 @@ beforeAll(async () => {
   database.prisma = db.prisma;
 }, 30_000);
 afterAll(async () => destroyIntegrationDatabase(db));
-it('round-trips independent PR history, tombstones, discovery, and exact fixer ownership', async () => {
+beforeEach(async () => {
+  await clearIntegrationDatabase(db.prisma);
   await db.prisma.project.create({
     data: { id: 'p', name: 'P', slug: 'p', repoPath: '/tmp/p', worktreeBasePath: '/tmp/w' },
   });
@@ -98,6 +99,8 @@ it('round-trips independent PR history, tombstones, discovery, and exact fixer o
       provider: 'CODEX',
     },
   });
+});
+it('round-trips independent PR history, tombstones, discovery, and exact fixer ownership', async () => {
   const exported = await dataBackupService.exportData('test');
   expect(exported.meta.schemaVersion).toBe(5);
   expect(exported.data.workspaces[0]?.prs).toHaveLength(3);
@@ -171,3 +174,84 @@ it('imports a version 4 workspace without inventing an empty PR association', as
     await db.prisma.workspacePRDiscovery.findUnique({ where: { workspaceId: 'no-pr' } })
   ).not.toBeNull();
 });
+
+it.each([
+  { ratchetActivePrId: null, ratchetActiveSessionId: 'fixer-a' },
+  { ratchetActivePrId: 'a', ratchetActiveSessionId: null },
+])('rejects incomplete active fixer ownership: %j', async (ownership) => {
+  const exported = await dataBackupService.exportData('test');
+  const workspace = exported.data.workspaces[0]!;
+  expect(
+    exportDataSchema.safeParse({
+      ...exported,
+      data: { ...exported.data, workspaces: [{ ...workspace, ...ownership }] },
+    }).success
+  ).toBe(false);
+});
+
+it('backfills only the matching legacy fixer session PR target', async () => {
+  const exported = await dataBackupService.exportData('test');
+  const workspace = exported.data.workspaces[0]!;
+  const fixer = exported.data.agentSessions[0]!;
+  const normalized = exportDataSchema.parse({
+    ...exported,
+    meta: { ...exported.meta, schemaVersion: 4 },
+    data: {
+      ...exported.data,
+      workspaces: [
+        {
+          ...workspace,
+          prUrl: 'https://github.com/o/r/pull/42',
+          prNumber: 42,
+          prState: 'OPEN',
+          prReviewState: null,
+          prCiStatus: 'FAILURE',
+          prUpdatedAt: null,
+          prCiFailedAt: null,
+          prCiLastNotifiedAt: null,
+          prReviewLastCheckedAt: null,
+          prReviewLastCommentId: null,
+          ratchetState: 'CI_FAILED',
+          ratchetLastCiRunId: 'a-key',
+        },
+      ],
+      agentSessions: [
+        { ...fixer, workspacePrId: null },
+        { ...fixer, id: 'unrelated', workspacePrId: null },
+      ],
+    },
+  });
+  expect(normalized.data.agentSessions.map((s) => s.workspacePrId)).toEqual(['legacy-pr-w', null]);
+  await clearIntegrationDatabase(db.prisma);
+  await dataBackupService.importData(normalized);
+  expect(await db.prisma.agentSession.findUnique({ where: { id: 'fixer-a' } })).toMatchObject({
+    workspacePrId: 'legacy-pr-w',
+  });
+});
+
+it.each(['missing', 'foreign', 'matching'] as const)(
+  'validates %s local PR association when skipping an existing workspace',
+  async (association) => {
+    const exported = await dataBackupService.exportData('test');
+    await clearIntegrationDatabase(db.prisma);
+    await db.prisma.project.create({
+      data: { id: 'p', name: 'P', slug: 'p', repoPath: '/tmp/p', worktreeBasePath: '/tmp/w' },
+    });
+    await db.prisma.workspace.create({ data: { id: 'w', projectId: 'p', name: 'Local W' } });
+    if (association !== 'missing') {
+      const workspaceId = association === 'matching' ? 'w' : 'other';
+      if (workspaceId === 'other') {
+        await db.prisma.workspace.create({ data: { id: 'other', projectId: 'p', name: 'Other' } });
+      }
+      await db.prisma.workspacePR.create({
+        data: { id: 'a', workspaceId, url: 'https://github.com/o/r/pull/42' },
+      });
+    }
+    const result = await dataBackupService.importData(exportDataSchema.parse(exported));
+    expect(result.workspaces).toEqual({ imported: 0, skipped: 1 });
+    expect(result.agentSessions).toEqual(
+      association === 'matching' ? { imported: 1, skipped: 0 } : { imported: 0, skipped: 1 }
+    );
+    expect(await db.prisma.agentSession.count()).toBe(association === 'matching' ? 1 : 0);
+  }
+);

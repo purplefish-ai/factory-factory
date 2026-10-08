@@ -313,6 +313,7 @@ class WorkspaceQueryService {
           status: w.status,
           createdAt: w.createdAt,
           branchName: w.branchName,
+          worktreePath: w.worktreePath,
           initErrorMessage: w.initErrorMessage,
           mode: w.mode,
           autoIterationStatus: w.autoIterationStatus,
