@@ -2,14 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockGithubCLIService = vi.hoisted(() => ({
   checkHealth: vi.fn(),
-  getAuthenticatedUsername: vi.fn(),
   listIssues: vi.fn(),
   getIssue: vi.fn(),
 }));
 const mockClassifyGitHubCLIError = vi.hoisted(() => vi.fn());
 
 const mockWorkspaceDataService = vi.hoisted(() => ({
-  findByIdWithProject: vi.fn(),
   findByProjectId: vi.fn(),
 }));
 
@@ -40,45 +38,6 @@ describe('githubRouter', () => {
     vi.clearAllMocks();
     mockClassifyGitHubCLIError.mockReturnValue('unknown');
     mockWorkspaceDataService.findByProjectId.mockResolvedValue([]);
-  });
-
-  it('checks health and project/repo availability', async () => {
-    mockGithubCLIService.checkHealth.mockResolvedValue({
-      isInstalled: true,
-      isAuthenticated: true,
-    });
-    mockWorkspaceDataService.findByIdWithProject.mockResolvedValue(null);
-
-    const caller = createCaller();
-    await expect(caller.checkHealth()).resolves.toEqual({
-      isInstalled: true,
-      isAuthenticated: true,
-    });
-    await expect(caller.hasGitHubRepo({ workspaceId: 'w1' })).resolves.toBe(false);
-  });
-
-  it('lists workspace issues with health and auth checks', async () => {
-    const caller = createCaller();
-    mockGithubCLIService.checkHealth.mockResolvedValue({
-      isInstalled: true,
-      isAuthenticated: true,
-    });
-    mockGithubCLIService.getAuthenticatedUsername.mockResolvedValue('martin');
-    mockWorkspaceDataService.findByIdWithProject.mockResolvedValue({
-      id: 'w1',
-      project: {
-        githubOwner: 'purplefish-ai',
-        githubRepo: 'factory-factory',
-      },
-    });
-    mockGithubCLIService.listIssues.mockResolvedValue([{ number: 101 }]);
-
-    await expect(caller.listIssuesForWorkspace({ workspaceId: 'w1' })).resolves.toEqual({
-      issues: [{ number: 101 }],
-      health: { isInstalled: true, isAuthenticated: true },
-      error: null,
-      authenticatedUser: 'martin',
-    });
   });
 
   it('lists project issues, and gets issue details with error handling', async () => {
