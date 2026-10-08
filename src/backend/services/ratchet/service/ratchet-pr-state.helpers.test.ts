@@ -237,7 +237,7 @@ describe('fetchPRState', () => {
 
     expect(result).toEqual({ skipped: true, reason: 'recently_fetched' });
     expect(github.coordinatePrFetch).toHaveBeenCalledWith(
-      'ws-1',
+      { workspaceId: 'ws-1', prId: undefined },
       expect.any(Function),
       expect.objectContaining({ ignoreCooldown: false })
     );
@@ -280,7 +280,7 @@ describe('fetchPRState', () => {
     // The bypass reaches the coordinator as `ignoreCooldown`, and the fetch
     // still runs inside a claim rather than around it.
     expect(github.coordinatePrFetch).toHaveBeenCalledWith(
-      'ws-1',
+      { workspaceId: 'ws-1', prId: undefined },
       expect.any(Function),
       expect.objectContaining({ ignoreCooldown: true })
     );

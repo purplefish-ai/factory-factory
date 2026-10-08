@@ -27,7 +27,7 @@ import {
   exportedAgentSessionSchema,
   exportedProjectSchema,
   exportedUserSettingsSchema,
-  exportedWorkspaceSchema,
+  legacyWorkspaceSchema as exportedWorkspaceSchema,
 } from './export-data.schema';
 
 type DefWithType = {

@@ -21,6 +21,7 @@ export interface CreateAgentSessionInput {
   workspaceId: string;
   name?: string;
   workflow: string;
+  workspacePrId?: string | null;
   model: string;
   provider: SessionProvider;
   providerProjectPath?: string | null;
@@ -60,6 +61,7 @@ const toAgentSessionUpdateData = (
 export interface AcquireFixerAgentSessionInput {
   workspaceId: string;
   workflow: string;
+  workspacePrId?: string;
   sessionName: string;
   maxSessions: number;
   provider: SessionProvider;
@@ -132,6 +134,7 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
         workspaceId: data.workspaceId,
         name: data.name,
         workflow: data.workflow,
+        workspacePrId: data.workspacePrId,
         model: data.model,
         provider: data.provider,
         providerProjectPath: data.providerProjectPath ?? null,
@@ -328,6 +331,7 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
       where: {
         workspaceId: input.workspaceId,
         workflow: input.workflow,
+        workspacePrId: input.workspacePrId ?? null,
         provider: input.provider,
         status: { in: ACTIVE_AGENT_SESSION_STATUSES },
       },
@@ -370,6 +374,7 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
         workspaceId: input.workspaceId,
         workflow: input.workflow,
         name: input.sessionName,
+        workspacePrId: input.workspacePrId,
         model,
         status: SessionStatus.IDLE,
         provider: input.provider,

@@ -19,6 +19,7 @@ interface CiStatusChipProps {
   prState?: PRState | null;
   size?: 'sm' | 'md';
   className?: string;
+  showTooltip?: boolean;
 }
 
 function getCiStatusConfig(ciState: WorkspaceSidebarCiState): {
@@ -69,7 +70,13 @@ function getCiStatusConfig(ciState: WorkspaceSidebarCiState): {
   }
 }
 
-export function CiStatusChip({ ciState, prState, size = 'sm', className }: CiStatusChipProps) {
+export function CiStatusChip({
+  ciState,
+  prState,
+  size = 'sm',
+  className,
+  showTooltip = true,
+}: CiStatusChipProps) {
   if (ciState === 'NONE') {
     return null;
   }
@@ -80,23 +87,28 @@ export function CiStatusChip({ ciState, prState, size = 'sm', className }: CiSta
   const sizeClasses = size === 'sm' ? 'text-[10px] px-1.5 py-0.5' : 'text-xs px-2 py-0.5';
   const iconSize = size === 'sm' ? 'h-2.5 w-2.5' : 'h-3 w-3';
 
+  const Tag = showTooltip ? 'button' : 'span';
+  const chip = (
+    <Tag
+      type={showTooltip ? 'button' : undefined}
+      aria-label={getWorkspaceCiTooltip(ciState, prState ?? null)}
+      className={cn(
+        'inline-flex w-fit items-center gap-1 rounded-sm font-medium uppercase tracking-wide cursor-default',
+        sizeClasses,
+        config.className,
+        className
+      )}
+    >
+      <Icon className={cn(iconSize, ciState === 'RUNNING' && 'animate-pulse')} />
+      <span>{getWorkspaceCiLabel(ciState)}</span>
+    </Tag>
+  );
+  if (!showTooltip) {
+    return chip;
+  }
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          aria-label={getWorkspaceCiTooltip(ciState, prState ?? null)}
-          className={cn(
-            'inline-flex w-fit items-center gap-1 rounded-sm font-medium uppercase tracking-wide cursor-default',
-            sizeClasses,
-            config.className,
-            className
-          )}
-        >
-          <Icon className={cn(iconSize, ciState === 'RUNNING' && 'animate-pulse')} />
-          <span>{getWorkspaceCiLabel(ciState)}</span>
-        </button>
-      </TooltipTrigger>
+      <TooltipTrigger asChild>{chip}</TooltipTrigger>
       <TooltipContent side="right">
         {getWorkspaceCiTooltip(ciState, prState ?? null)}
       </TooltipContent>

@@ -55,34 +55,35 @@ export interface TriggerAdversarialReviewResult {
   sessionId: string;
 }
 
-// Per-workspace acquisition lock: without it, two concurrent triggers can
+// Per-PR acquisition lock: without it, two concurrent triggers can
 // both observe "no active session" before either has created one, starting
-// duplicate reviewers. A second call for the same workspace instead awaits
+// duplicate reviewers. A second call for the same PR instead awaits
 // the first call's own in-flight result rather than repeating its checks.
 const inFlightTriggers = new Map<string, Promise<TriggerAdversarialReviewResult>>();
 
-export function triggerAdversarialReview(
-  workspaceId: string
+export async function triggerAdversarialReview(
+  workspaceId: string,
+  prId?: string
 ): Promise<TriggerAdversarialReviewResult> {
-  const existingTrigger = inFlightTriggers.get(workspaceId);
+  const prState = await workspaceDataService.findPRState(workspaceId, prId);
+  const key = `${workspaceId}:${prState?.prId ?? prId ?? 'missing'}`;
+  const existingTrigger = inFlightTriggers.get(key);
   if (existingTrigger !== undefined) {
     return existingTrigger;
   }
 
-  const trigger = triggerAdversarialReviewLocked(workspaceId).finally(() => {
-    inFlightTriggers.delete(workspaceId);
+  const trigger = triggerAdversarialReviewLocked(workspaceId, prState).finally(() => {
+    inFlightTriggers.delete(key);
   });
-  inFlightTriggers.set(workspaceId, trigger);
+  inFlightTriggers.set(key, trigger);
   return trigger;
 }
 
 async function triggerAdversarialReviewLocked(
-  workspaceId: string
+  workspaceId: string,
+  prState: Awaited<ReturnType<typeof workspaceDataService.findPRState>>
 ): Promise<TriggerAdversarialReviewResult> {
-  const [fixerContext, prState] = await Promise.all([
-    workspaceDataService.findFixerContext(workspaceId),
-    workspaceDataService.findPRState(workspaceId),
-  ]);
+  const fixerContext = await workspaceDataService.findFixerContext(workspaceId);
 
   if (!fixerContext) {
     throw new ApplicationError('NOT_FOUND', `Workspace not found: ${workspaceId}`);
@@ -97,7 +98,7 @@ async function triggerAdversarialReviewLocked(
     );
   }
 
-  const existing = await findActiveAdversarialReviewSession(workspaceId);
+  const existing = await findActiveAdversarialReviewSession(workspaceId, prState.prId);
   if (existing) {
     return { status: 'already_active', sessionId: existing.id };
   }
@@ -121,6 +122,7 @@ async function triggerAdversarialReviewLocked(
 
   const creation = await sessionDataService.createAgentSessionWithinWorkspaceLimit({
     workspaceId,
+    workspacePrId: prState.prId,
     name: `Adversarial Review (${providerLabel})`,
     workflow: ADVERSARIAL_REVIEW_WORKFLOW,
     provider,
@@ -166,13 +168,15 @@ async function triggerAdversarialReviewLocked(
 }
 
 async function findActiveAdversarialReviewSession(
-  workspaceId: string
+  workspaceId: string,
+  prId: string
 ): Promise<{ id: string } | null> {
   const sessions = await sessionDataService.findAgentSessionsByWorkspaceId(workspaceId);
   return (
     sessions.find(
       (session) =>
         session.workflow === ADVERSARIAL_REVIEW_WORKFLOW &&
+        session.workspacePrId === prId &&
         (session.status === SessionStatus.RUNNING || session.status === SessionStatus.IDLE)
     ) ?? null
   );

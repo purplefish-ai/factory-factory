@@ -1,6 +1,7 @@
 import type { KanbanColumn, PRState, RatchetState, WorkspaceSidebarCiState } from '@/shared/core';
 
 interface ArchiveWorkspaceStateLike {
+  prSummary?: { totalCount: number; hasNonterminal: boolean };
   prState?: PRState | null;
   ratchetState?: RatchetState | null;
   kanbanColumn?: KanbanColumn | null;
@@ -33,6 +34,9 @@ export function isWorkspaceDoneOrMerged(
     return false;
   }
 
+  if (workspace.prSummary?.hasNonterminal) {
+    return false;
+  }
   return (
     workspace.prState === 'MERGED' ||
     workspace.prState === 'CLOSED' ||

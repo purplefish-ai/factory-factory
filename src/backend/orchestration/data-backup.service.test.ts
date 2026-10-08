@@ -27,6 +27,7 @@ const mockTx = vi.hoisted(() => ({
     findUnique: vi.fn(),
     create: vi.fn(),
   },
+  workspaceRatchet: { update: vi.fn() },
   workspace: {
     findUnique: vi.fn(),
     create: vi.fn(),
@@ -103,7 +104,13 @@ const mockProject: Project = {
  * `runScript*` workspace fields.
  */
 type WorkspaceForExport = Prisma.WorkspaceGetPayload<{
-  include: { ratchet: true; pr: true; runScript: true; autoIteration: true };
+  include: {
+    ratchet: true;
+    prs: { include: { automation: true } };
+    prDiscovery: true;
+    runScript: true;
+    autoIteration: true;
+  };
 }>;
 
 const mockWorkspace: WorkspaceForExport = {
@@ -130,23 +137,38 @@ const mockWorkspace: WorkspaceForExport = {
   linearIssueUrl: null,
   defaultSessionProvider: WorkspaceProviderSelection.CLAUDE,
   ratchetSessionProvider: WorkspaceProviderSelection.WORKSPACE_DEFAULT,
-  pr: {
-    workspaceId: 'ws-1',
-    url: 'https://github.com/test/repo/pull/1',
-    number: 1,
-    state: PRState.OPEN,
-    reviewState: 'APPROVED',
-    ciStatus: CIStatus.SUCCESS,
-    hasMergeConflict: false,
-    syncedAt: new Date('2025-01-01T00:15:00.000Z'),
-    discoveryLastCheckedAt: null,
-    discoveryRetryCount: 0,
-    discoveryNextCheckAt: null,
-    ciFailedAt: null,
-    ciLastNotifiedAt: null,
-    reviewLastCheckedAt: new Date('2025-01-01T00:20:00.000Z'),
-    reviewLastCommentId: 'comment-123',
-  },
+  prDiscovery: { workspaceId: 'ws-1', lastCheckedAt: null, retryCount: 0, nextCheckAt: null },
+  prs: [
+    {
+      id: 'pr-1',
+      title: null,
+      headRefName: null,
+      baseRefName: null,
+      detachedAt: null,
+      revision: 0,
+      automation: {
+        prId: 'pr-1',
+        lastCheckedAt: null,
+        activeSessionId: 'session-123',
+        dispatchSnapshotKey: 'run-123',
+        dispatchOutcome: null,
+        dispatchRetryCount: 0,
+        dispatchStalled: false,
+      },
+      workspaceId: 'ws-1',
+      url: 'https://github.com/test/repo/pull/1',
+      number: 1,
+      state: PRState.OPEN,
+      reviewState: 'APPROVED',
+      ciStatus: CIStatus.SUCCESS,
+      hasMergeConflict: false,
+      syncedAt: new Date('2025-01-01T00:15:00.000Z'),
+      ciFailedAt: null,
+      ciLastNotifiedAt: null,
+      reviewLastCheckedAt: new Date('2025-01-01T00:20:00.000Z'),
+      reviewLastCommentId: 'comment-123',
+    },
+  ],
   runScript: {
     workspaceId: 'ws-1',
     command: 'npm run dev',
@@ -162,10 +184,7 @@ const mockWorkspace: WorkspaceForExport = {
     enabled: true,
     lastCheckedAt: new Date('2025-01-01T00:25:00.000Z'),
     activeSessionId: 'session-123',
-    dispatchSnapshotKey: 'run-123',
-    dispatchOutcome: null,
-    dispatchRetryCount: 0,
-    dispatchStalled: false,
+    activePrId: 'pr-1',
   },
   hasHadSessions: true,
   autoIteration: {
@@ -196,6 +215,7 @@ const mockAgentSession: AgentSession = {
   workspaceId: 'ws-1',
   name: 'Codex Session',
   workflow: 'followup',
+  workspacePrId: null,
   model: 'sonnet',
   status: 'RUNNING',
   provider: SessionProvider.CODEX,
@@ -257,7 +277,7 @@ const mockUserSettings: UserSettings = {
 function createImportData(
   overrides?: Partial<z.input<typeof exportDataSchema>['data']>
 ): ExportData {
-  return exportDataSchema.parse({
+  const base = exportDataSchema.parse({
     meta: {
       exportedAt: '2025-01-01T00:00:00.000Z',
       version: '1.0.0',
@@ -387,9 +407,9 @@ function createImportData(
         voiceUtteranceEndMs: 2500,
         voiceBargeInSustainedMs: 24,
       },
-      ...overrides,
     },
   });
+  return exportDataSchema.parse({ ...base, data: { ...base.data, ...overrides } });
 }
 
 describe('DataBackupService', () => {
@@ -398,7 +418,7 @@ describe('DataBackupService', () => {
   });
 
   describe('exportData', () => {
-    it('exports v4 format with all fields', async () => {
+    it('exports v5 format with all fields', async () => {
       vi.mocked(prisma.project.findMany).mockResolvedValue([mockProject]);
       vi.mocked(prisma.workspace.findMany).mockResolvedValue([mockWorkspace]);
       vi.mocked(prisma.agentSession.findMany).mockResolvedValue([mockAgentSession]);
@@ -407,7 +427,7 @@ describe('DataBackupService', () => {
 
       const result = await dataBackupService.exportData('1.0.0');
 
-      expect(result.meta.schemaVersion).toBe(4);
+      expect(result.meta.schemaVersion).toBe(5);
       expect(result.data.agentSessions).toHaveLength(1);
       expect(result.data.agentSessions[0]).toEqual(
         expect.objectContaining({
@@ -541,11 +561,15 @@ describe('DataBackupService', () => {
       const parentWorkspace: WorkspaceForExport = {
         ...mockWorkspace,
         id: 'parent-ws',
+        prs: [],
+        ratchet: null,
         name: 'Parent Workspace',
       };
       const childWorkspace: WorkspaceForExport = {
         ...mockWorkspace,
         id: 'child-ws',
+        prs: [],
+        ratchet: null,
         name: 'Child Workspace',
         parentWorkspaceId: parentWorkspace.id,
         createdAt: new Date('2025-01-01T00:01:00.000Z'),
@@ -658,8 +682,6 @@ describe('DataBackupService', () => {
             create: {
               enabled: true,
               lastCheckedAt: new Date('2025-01-01T00:25:00.000Z'),
-              activeSessionId: 'session-123',
-              dispatchSnapshotKey: 'run-123',
             },
           },
         }),
@@ -779,11 +801,17 @@ describe('DataBackupService', () => {
           {
             ...baseWorkspace,
             id: 'child-ws',
+            prs: [],
+            ratchetActivePrId: null,
+            ratchetActiveSessionId: null,
             parentWorkspaceId: 'parent-ws',
           },
           {
             ...baseWorkspace,
             id: 'parent-ws',
+            prs: [],
+            ratchetActivePrId: null,
+            ratchetActiveSessionId: null,
             projectId: 'missing-project',
             parentWorkspaceId: null,
           },
@@ -816,6 +844,9 @@ describe('DataBackupService', () => {
           {
             ...baseWorkspace,
             id: 'child-ws',
+            prs: [],
+            ratchetActivePrId: null,
+            ratchetActiveSessionId: null,
             parentWorkspaceId: '',
           },
         ],

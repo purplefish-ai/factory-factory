@@ -25,6 +25,6 @@ export interface WorkspaceGitHubBridge {
 export interface WorkspacePRSnapshotBridge {
   refreshWorkspace(
     workspaceId: string,
-    prUrl: string
+    prUrl?: string
   ): Promise<{ success: boolean; snapshot?: { prNumber: number; prState: string } }>;
 }

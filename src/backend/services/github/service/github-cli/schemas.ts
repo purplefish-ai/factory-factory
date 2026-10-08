@@ -37,6 +37,9 @@ export const prStatusSchema = z.object({
   reviewDecision: reviewDecisionSchema,
   statusCheckRollup: z.array(statusCheckRollupItemSchema).nullable(),
   headRefName: z.string().optional(),
+  title: z.string().optional(),
+  baseRefName: z.string().optional(),
+  mergeStateStatus: z.string().optional(),
 });
 
 const authorSchema = z.object({

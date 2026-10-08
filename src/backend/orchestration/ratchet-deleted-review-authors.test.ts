@@ -12,6 +12,10 @@ vi.mock('@/backend/services/logger.service', () => ({
 vi.mock('@/backend/services/workspace', () => ({
   workspaceDataService: {},
   workspaceRatchetService: {
+    findCandidatesById: vi.fn(async (id: string) => {
+      const candidate = await workspaceRatchetService.findCandidateById(id);
+      return candidate ? [candidate] : [];
+    }),
     findCandidateById: vi.fn(),
     recordCheckIfEnabled: vi.fn(),
     recordDispatchIfEnabled: vi.fn(),
@@ -158,6 +162,7 @@ describe('Ratchet with deleted inline review authors', () => {
       }
       expect(prompt).not.toContain('Own reply');
       expect(workspaceRatchetService.recordDispatchIfEnabled).toHaveBeenCalledWith(workspace.id, {
+        requireExistingOwnership: true,
         sessionId: 'fixer-session',
         snapshotKey: 'pr:1|ci:SUCCESS|no-changes-requested:2000|merge:clean',
         retryCount: 0,

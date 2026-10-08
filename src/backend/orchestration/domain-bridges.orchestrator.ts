@@ -319,8 +319,8 @@ export function configureDomainBridges(services: BridgeServices): void {
     findFixerContext: (workspaceId: string) => workspaceDataService.findFixerContext(workspaceId),
     recordSessionEnd: (workspaceId: string, sessionId: string, outcome: 'COMPLETED' | 'DIED') =>
       workspaceRatchetService.recordSessionEnd(workspaceId, sessionId, outcome),
-    markDispatchStalled: (workspaceId: string, snapshotKey: string) =>
-      workspaceRatchetService.markDispatchStalled(workspaceId, snapshotKey),
+    markDispatchStalled: (workspaceId: string, snapshotKey: string, prId?: string) =>
+      workspaceRatchetService.markDispatchStalled(workspaceId, snapshotKey, prId),
   };
 
   const ratchetGithubBridge: RatchetGitHubBridge = {
@@ -344,6 +344,8 @@ export function configureDomainBridges(services: BridgeServices): void {
   const ratchetSnapshotBridge: RatchetPRSnapshotBridge = {
     recordPrObservation: ({
       workspaceId,
+      prId,
+      expectedRevision,
       prUrl,
       prNumber,
       ciStatus,
@@ -354,6 +356,8 @@ export function configureDomainBridges(services: BridgeServices): void {
       observedAt,
     }) =>
       prSnapshotService.recordPrObservation(workspaceId, {
+        prId,
+        expectedRevision,
         prUrl,
         prNumber,
         ciStatus,
@@ -363,8 +367,8 @@ export function configureDomainBridges(services: BridgeServices): void {
         failedAt,
         observedAt,
       }),
-    recordReviewCheck: (workspaceId, checkedAt) =>
-      prSnapshotService.recordReviewCheck(workspaceId, { checkedAt }),
+    recordReviewCheck: (workspaceId, checkedAt, prId) =>
+      prSnapshotService.recordReviewCheck(workspaceId, { checkedAt, prId }),
   };
 
   ratchetService.configure({
@@ -407,16 +411,17 @@ export function configureDomainBridges(services: BridgeServices): void {
   // === GitHub domain bridges ===
   prSnapshotService.configure({
     workspace: {
+      listPRs: (id) => workspacePrSnapshotService.list(id),
+      findPR: (target) => workspacePrSnapshotService.find(target),
+      attachPR: (id, url) => workspacePrSnapshotService.attach(id, url),
+      detachPR: (target) => workspacePrSnapshotService.detach(target),
+      attachDiscoveredPRsIfClaimMatches: (id, claim, urls) =>
+        workspacePrSnapshotService.attachDiscoveredPRsIfClaimMatches(id, claim, urls),
       findPRContext: (id) => workspaceDataService.findPRContext(id),
-      recordSnapshot: (id, data) => workspacePrSnapshotService.record(id, data),
       applyPrSnapshotWithDispatchReset: (id, observation) =>
         workspacePrSnapshotService.applyPrSnapshotWithDispatchReset(id, observation),
       applyPrObservationWithDispatchReset: (id, observation) =>
         workspacePrSnapshotService.applyPrObservationWithDispatchReset(id, observation),
-      attachDiscoveredPRIfClaimMatches: (id, url, claim, updatedAt) =>
-        workspacePrSnapshotService.attachDiscoveredPRIfClaimMatches(id, url, claim, updatedAt),
-      updatePRSnapshotIfUrlMatches: (id, url, snapshot, updatedAt) =>
-        workspacePrSnapshotService.updatePRSnapshotIfUrlMatches(id, url, snapshot, updatedAt),
     },
   });
 

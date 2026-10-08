@@ -58,6 +58,7 @@ export type RatchetAction =
 
 export interface WorkspaceRatchetResult {
   workspaceId: string;
+  prId: string;
   previousState: RatchetState;
   newState: RatchetState;
   action: RatchetAction;
