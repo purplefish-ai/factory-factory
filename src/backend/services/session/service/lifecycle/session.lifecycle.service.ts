@@ -1,4 +1,3 @@
-import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import type {
   SessionAutoIterationExitBridge,
@@ -39,7 +38,6 @@ export type SessionLifecycleServiceDependencies = {
     | 'startSession'
     | 'restartSession'
     | 'getOrCreateSessionClient'
-    | 'getOrCreateSessionClientFromRecord'
     | 'ensureSubagentBrowseSession'
   >;
   terminationCoordinator: Pick<
@@ -104,17 +102,6 @@ export class SessionLifecycleService {
   ): Promise<unknown> {
     this.assertConfigured();
     return await this.dependencies.startupCoordinator.getOrCreateSessionClient(sessionId, options);
-  }
-
-  async getOrCreateSessionClientFromRecord(
-    session: AgentSessionRecord,
-    options?: GetOrCreateSessionClientOptions
-  ): Promise<unknown> {
-    this.assertConfigured();
-    return await this.dependencies.startupCoordinator.getOrCreateSessionClientFromRecord(
-      session,
-      options
-    );
   }
 
   async ensureSubagentBrowseSession(sessionId: string): Promise<boolean> {

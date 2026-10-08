@@ -88,7 +88,7 @@ function createHarness(provider: 'CLAUDE' | 'CODEX', workflow = ADVERSARIAL_REVI
   return { ...harness, runtime, config };
 }
 
-const paths = ['start', 'restart', 'chat auto-start', 'preloaded auto-start'] as const;
+const paths = ['start', 'restart', 'chat auto-start'] as const;
 type StartupPath = (typeof paths)[number];
 function start(harness: ReturnType<typeof createHarness>, path: StartupPath) {
   switch (path) {
@@ -98,8 +98,6 @@ function start(harness: ReturnType<typeof createHarness>, path: StartupPath) {
       return harness.service.restartSession(harness.session.id);
     case 'chat auto-start':
       return harness.service.getOrCreateSessionClient(harness.session.id);
-    case 'preloaded auto-start':
-      return harness.service.getOrCreateSessionClientFromRecord(harness.session);
   }
 }
 
@@ -235,7 +233,7 @@ describe('adversarial review startup permissions', () => {
     expect(harness.runtimeManager.getOrCreateClient).not.toHaveBeenCalled();
   });
 
-  it.each(['chat auto-start', 'preloaded auto-start'] as const)(
+  it.each(['chat auto-start'] as const)(
     'stops an existing review client when read-only execution fails during %s',
     async (path) => {
       const harness = createHarness('CODEX');
