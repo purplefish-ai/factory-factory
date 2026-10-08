@@ -37,6 +37,24 @@ async function findCaseInsensitiveEntries(directory: string, name: string): Prom
 
 class GitCloneService {
   private readonly clonesInFlight = new Map<string, Promise<CloneResult>>();
+  private readonly inspectionsInFlight = new Map<string, Promise<ExistingCloneStatus>>();
+
+  private inspectCloneDestination(destination: string): Promise<ExistingCloneStatus> {
+    const clonePath = resolve(destination);
+    const clone = this.clonesInFlight.get(clonePath);
+    if (clone !== undefined) {
+      return clone.then(() => this.inspectCloneDestination(destination));
+    }
+    const existing = this.inspectionsInFlight.get(clonePath);
+    if (existing !== undefined) {
+      return existing;
+    }
+    const inspection = this.checkExistingClone(destination).finally(() => {
+      this.inspectionsInFlight.delete(clonePath);
+    });
+    this.inspectionsInFlight.set(clonePath, inspection);
+    return inspection;
+  }
 
   /**
    * Reuse existing clone paths regardless of GitHub URL casing. New clones use
@@ -62,8 +80,10 @@ class GitCloneService {
     }
     let firstCandidate: CloneDestination | undefined;
     for (const candidate of candidates) {
-      await this.clonesInFlight.get(resolve(candidate));
-      const destination = { path: candidate, status: await this.checkExistingClone(candidate) };
+      const destination = {
+        path: candidate,
+        status: await this.inspectCloneDestination(candidate),
+      };
       if (destination.status === 'valid_repo') {
         return destination;
       }
@@ -73,7 +93,7 @@ class GitCloneService {
     return (
       firstCandidate ?? {
         path: canonicalPath,
-        status: await this.checkExistingClone(canonicalPath),
+        status: await this.inspectCloneDestination(canonicalPath),
       }
     );
   }
@@ -118,6 +138,8 @@ class GitCloneService {
   }
 
   private async performClone(url: string, destination: string): Promise<CloneResult> {
+    // Keep directory classification stable until its inspection finishes.
+    await this.inspectionsInFlight.get(destination);
     // Ensure parent directory exists
     const parentDir = join(destination, '..');
     await mkdir(parentDir, { recursive: true });

@@ -19,8 +19,9 @@ validation and the existing non-repository directory guard still apply.
 
 Concurrent imports targeting the same normalized clone path share one in-flight
 clone result. Clone-path inspection waits for that clone to finish before
-classifying the directory, failed clones can be retried, and cleanup never
-removes a completed repository.
+classifying the directory, including clones started during directory scans. A
+new clone waits for any active inspection of its destination to finish. Failed
+clones can be retried, and cleanup never removes a completed repository.
 
 The New Project authentication badge requires a successful login line and a zero
 exit status from `gh auth status`. Explicit login failures take precedence over
