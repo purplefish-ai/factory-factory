@@ -3,7 +3,11 @@ import {
   type WorkspacePRWriteFields,
   workspacePrAccessor,
 } from '@/backend/services/workspace/resources/workspace-pr.accessor';
-import type { PRDiscoveryClaim, PRSnapshotFields } from '@/backend/services/workspace/types';
+import type {
+  PRDiscoveryClaim,
+  PRSnapshotFields,
+  WorkspacePRIdentity,
+} from '@/backend/services/workspace/types';
 
 /**
  * A PR observation, plus the branch name a refresh may correct when the PR turns
@@ -15,12 +19,30 @@ import type { PRDiscoveryClaim, PRSnapshotFields } from '@/backend/services/work
 type PRSnapshotUpdate = WorkspacePRWriteFields & { branchName?: string | null };
 
 class WorkspacePrSnapshotService {
+  acceptMonitoredObservation(
+    input: Parameters<typeof workspacePrAccessor.acceptMonitoredObservation>[0]
+  ) {
+    return workspacePrAccessor.acceptMonitoredObservation(input);
+  }
+  list(workspaceId: string) {
+    return workspacePrAccessor.list(workspaceId);
+  }
+  find(target: WorkspacePRIdentity) {
+    return workspacePrAccessor.findByIdentity(target);
+  }
+  attach(workspaceId: string, url: string) {
+    return workspacePrAccessor.attach(workspaceId, url);
+  }
+  detach(target: WorkspacePRIdentity) {
+    return workspacePrAccessor.detach(target);
+  }
+  attachDiscoveredPRsIfClaimMatches(workspaceId: string, claim: PRDiscoveryClaim, urls: string[]) {
+    return workspacePrAccessor.attachDiscoveredPRsIfClaimMatches(workspaceId, claim, urls);
+  }
+
   record(workspaceId: string, data: PRSnapshotUpdate): Promise<void> {
-    const { branchName, ...prFields } = data;
-    if (branchName === undefined) {
-      return workspacePrAccessor.write(workspaceId, prFields);
-    }
-    return workspaceAccessor.recordPrSnapshotWithBranchName(workspaceId, branchName, prFields);
+    const { branchName: _branchName, ...prFields } = data;
+    return workspacePrAccessor.write(workspaceId, prFields);
   }
 
   attachDiscoveredPRIfClaimMatches(

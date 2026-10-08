@@ -95,6 +95,7 @@ export const reviewItemSchema = z.object({
 });
 
 export const fullPRDetailsSchema = z.object({
+  headRefOid: z.string().optional(),
   number: z.number(),
   title: z.string(),
   url: z.string(),

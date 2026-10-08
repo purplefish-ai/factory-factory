@@ -80,6 +80,7 @@ vi.mock('@/backend/services/config.service', () => ({ configService: {} }));
 vi.mock('@/backend/services/crypto.service', () => ({ cryptoService: {} }));
 vi.mock('@/backend/services/decision-log', () => ({ decisionLogService: {} }));
 vi.mock('@/backend/services/github', () => ({
+  prObservationService: { configure: vi.fn() },
   checkGithubAuth: vi.fn(),
   githubCLIService: {},
   prFetchCoordinator: {},
@@ -102,7 +103,7 @@ vi.mock('@/backend/services/periodic-task', () => ({
   periodicTaskService: {},
 }));
 vi.mock('@/backend/services/port.service', () => ({ findAvailablePort: vi.fn() }));
-vi.mock('@/backend/services/ratchet', () => ({ fixerSessionService: {}, ratchetService: {} }));
+vi.mock('@/backend/services/ratchet', () => ({ ratchetService: {} }));
 vi.mock('@/backend/services/rate-limiter.service', () => ({ rateLimiter: {} }));
 vi.mock('@/backend/services/run-script', () => ({
   createRunScriptService: vi.fn(() => ({})),
@@ -116,6 +117,8 @@ vi.mock('@/backend/services/server-instance.service', () => ({
   serverInstanceService: {},
 }));
 vi.mock('@/backend/services/session', () => ({
+  sessionBackgroundDeliveryService: { configure: vi.fn() },
+  findPRDeliveryReceipt: vi.fn(),
   acpRuntimeManager: {},
   acpTraceLogger: {},
   chatEventForwarderService: {},
@@ -140,6 +143,7 @@ vi.mock('@/backend/services/terminal', () => ({
   terminalSessionService: {},
 }));
 vi.mock('@/backend/services/workspace', () => ({
+  workspacePRMonitoringService: { get: vi.fn(), listConfigs: vi.fn() },
   computePendingRequestType: (...args: unknown[]) =>
     applicationGraphMocks.computePendingRequestType(...args),
   deriveWorkspaceFlowStateFromWorkspace: (...args: unknown[]) =>
@@ -156,7 +160,6 @@ vi.mock('@/backend/services/workspace', () => ({
   workspaceNotificationService: {},
   workspacePrSnapshotService: {},
   workspaceQueryService: {},
-  workspaceRatchetService: {},
   workspaceRelationshipsService: {},
   workspaceRunScriptService: {},
   workspaceSnapshotStore: {},
@@ -225,7 +228,7 @@ import { linearClientService, linearStateSyncService } from '@/backend/services/
 import { createLogger, getLogFilePath } from '@/backend/services/logger.service';
 import { periodicTaskService } from '@/backend/services/periodic-task';
 import { findAvailablePort } from '@/backend/services/port.service';
-import { fixerSessionService, ratchetService } from '@/backend/services/ratchet';
+import { ratchetService } from '@/backend/services/ratchet';
 import { rateLimiter } from '@/backend/services/rate-limiter.service';
 import {
   createRunScriptService,
@@ -269,7 +272,6 @@ import {
   workspaceNotificationService,
   workspacePrSnapshotService,
   workspaceQueryService,
-  workspaceRatchetService,
   workspaceRelationshipsService,
   workspaceRunScriptService,
   workspaceSnapshotStore,
@@ -368,7 +370,6 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     codexModelCatalogService,
     findAvailablePort,
     fireLifecycleNotification,
-    fixerSessionService,
     getLogFilePath,
     getQuickAction,
     getWorkspaceLinearContext,
@@ -425,7 +426,6 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     workspaceNotificationService,
     workspacePrSnapshotService,
     workspaceQueryService,
-    workspaceRatchetService,
     workspaceRelationshipsService,
     workspaceRunScriptService,
     workspaceSnapshotStore,

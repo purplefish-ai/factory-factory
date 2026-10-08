@@ -548,7 +548,7 @@ export function createServer(application: Application, requestedPort?: number): 
         reconciliationService.startPeriodicCleanup();
         rateLimiter.start();
         schedulerService.start();
-        ratchetService.start();
+        await ratchetService.start();
         periodicTaskService.start();
         startupComplete = true;
 

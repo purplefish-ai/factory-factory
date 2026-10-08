@@ -34,7 +34,7 @@ const createWorkspace = (overrides?: Partial<Workspace>): Workspace =>
     githubIssueNumber: null,
     githubIssueUrl: null,
     defaultSessionProvider: 'WORKSPACE_DEFAULT',
-    ratchetSessionProvider: 'WORKSPACE_DEFAULT',
+
     prNumber: null,
     prState: 'NONE',
     prReviewState: null,
@@ -78,7 +78,7 @@ describe('sessionProviderResolverService', () => {
       defaultClaudeReasoningEffort: null,
       defaultCodexReasoningEffort: null,
       defaultWorkspacePermissions: 'STRICT',
-      ratchetPermissions: 'YOLO',
+      autoIterationPermissions: 'YOLO',
       reviewerSessionProvider: 'CODEX',
       reviewerClaudeModel: null,
       reviewerCodexModel: null,

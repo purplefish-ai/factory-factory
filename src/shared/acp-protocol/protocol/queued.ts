@@ -1,3 +1,4 @@
+import type { PRDeliveryRequest } from '../../pr-monitoring';
 /**
  * Attachment data for uploaded files in chat.
  */
@@ -15,6 +16,7 @@ export interface MessageAttachment {
  * This type is shared between frontend and backend.
  */
 export interface QueuedMessage {
+  source?: { type: 'pr_event'; request: PRDeliveryRequest };
   id: string;
   text: string;
   timestamp: string;

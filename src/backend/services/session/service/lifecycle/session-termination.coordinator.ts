@@ -16,6 +16,7 @@ import type { SessionPermissionService } from './session.permission.service';
 import type { SessionPromptTurnCompletionService } from './session.prompt-turn-completion.service';
 import type { SessionRepository } from './session.repository';
 import type { SessionRetryService } from './session.retry.service';
+import { sessionBackgroundDeliveryService } from './session-background-delivery.service';
 import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import type { SessionLifecycleGate } from './session-lifecycle-gate';
 import type { SessionWorkflowFinalizer } from './session-workflow-finalizer';
@@ -103,6 +104,9 @@ export class SessionTerminationCoordinator {
 
     const stopInvocationId = randomUUID();
     try {
+      if (options?.reason === 'USER_STOP') {
+        await sessionBackgroundDeliveryService.userStop(sessionId);
+      }
       await this.stopSessionWithBarrier(sessionId, stopInvocationId, options);
     } finally {
       stopReservation.release();

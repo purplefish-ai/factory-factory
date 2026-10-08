@@ -29,6 +29,7 @@ import { SessionStatus, WorkspaceMode } from '@/shared/core';
 import { autoIterationConfigSchema } from '@/shared/schemas/auto-iteration.schema';
 import { AttachmentSchema } from '@/shared/websocket';
 import { getWorkspaceLinearContext } from './linear-config.helper';
+import { bindIssueMonitoringSession } from './pr-monitoring.orchestrator';
 import type { WorkspaceWithProject } from './types';
 import { GitHubUsernameCache } from './workspace-init-github-username-cache';
 import {
@@ -419,6 +420,8 @@ async function startDefaultAgentSession(workspaceId: string): Promise<string | n
         messageToEnqueue.attachments
       );
     }
+
+    await bindIssueMonitoringSession(workspaceId, session.id);
 
     // Trigger queue dispatch after init/session start so messages queued during
     // workspace provisioning are picked up immediately when dispatch is allowed.

@@ -1,3 +1,4 @@
+import { sessionBackgroundDeliveryService } from '../lifecycle/session-background-delivery.service';
 /**
  * Chat Message Handlers Service
  *
@@ -275,7 +276,11 @@ export class ChatMessageHandlerService {
           : 'done';
       }
       await this.dispatchPeekedMessage(dbSessionId, peeked, stopGeneration);
-      return 'done';
+      return peeked.source &&
+        this.isDispatchGenerationCurrent(dbSessionId, stopGeneration) &&
+        sessionDomainService.peekNextMessage(dbSessionId)?.id !== peeked.id
+        ? 'continue'
+        : 'done';
     } finally {
       if (claim.status === 'claimed') {
         claim.release();
@@ -297,8 +302,25 @@ export class ChatMessageHandlerService {
       return;
     }
 
+    if (!(await this.prepareBackgroundForDispatch(dbSessionId, peeked, stopGeneration))) {
+      return;
+    }
     const clientResult = await this.resolveClientForDispatch(dbSessionId, peeked);
     if (!clientResult) {
+      if (peeked.source) {
+        await sessionBackgroundDeliveryService.fail(
+          peeked,
+          new Error('Required existing conversation could not be restored')
+        );
+      }
+      return;
+    }
+    if (peeked.source && !(await sessionBackgroundDeliveryService.validate(peeked))) {
+      await sessionBackgroundDeliveryService.fail(
+        peeked,
+        new Error('PR delivery invalidated before dispatch')
+      );
+      sessionDomainService.removeQueuedMessage(dbSessionId, peeked.id);
       return;
     }
 
@@ -306,6 +328,13 @@ export class ChatMessageHandlerService {
       return;
     }
 
+    if (peeked.source && sessionDomainService.peekNextMessage(dbSessionId)?.id !== peeked.id) {
+      await sessionBackgroundDeliveryService.fail(
+        peeked,
+        new Error('Turn in progress: human message queued during preparation')
+      );
+      return;
+    }
     // NOW dequeue — client is ready, we're about to dispatch.
     const msg = sessionDomainService.dequeueNext(dbSessionId, { emitSnapshot: false });
     if (!msg) {
@@ -316,8 +345,42 @@ export class ChatMessageHandlerService {
       await this.dispatchMessage(dbSessionId, msg, clientResult.client, stopGeneration);
       this.turnInProgressRetryAttempts.delete(dbSessionId);
     } catch (error) {
+      if (msg.source) {
+        await sessionBackgroundDeliveryService.fail(msg, error);
+      }
       this.handleDispatchError(dbSessionId, msg, error, stopGeneration);
     }
+  }
+
+  private async prepareBackgroundForDispatch(
+    dbSessionId: string,
+    peeked: QueuedMessage,
+    stopGeneration: number
+  ): Promise<boolean> {
+    if (peeked.source) {
+      if (
+        acpRuntimeManager.isSessionWorking(dbSessionId) ||
+        sessionDomainService.getPendingInteractiveRequest(dbSessionId)
+      ) {
+        return false;
+      }
+      const prepared = await sessionBackgroundDeliveryService.prepare(dbSessionId, peeked);
+      if (prepared.status === 'discard') {
+        sessionDomainService.removeQueuedMessage(dbSessionId, peeked.id);
+        return false;
+      }
+      if (prepared.status !== 'ready') {
+        return false;
+      }
+      if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
+        await sessionBackgroundDeliveryService.fail(
+          peeked,
+          new Error('Session stopped before dispatch')
+        );
+        return false;
+      }
+    }
+    return true;
   }
 
   /**
@@ -520,12 +583,17 @@ export class ChatMessageHandlerService {
     }
 
     try {
-      await this.lifecycle.startup.getOrCreateSessionClient(dbSessionId, {
-        thinkingEnabled: msg.settings.thinkingEnabled,
-        planModeEnabled: msg.settings.planModeEnabled,
-        model: msg.settings.selectedModel ?? undefined,
-        reasoningEffort: msg.settings.reasoningEffort ?? undefined,
-      });
+      await this.lifecycle.startup.getOrCreateSessionClient(
+        dbSessionId,
+        msg.source
+          ? { resumePolicy: 'require_existing' }
+          : {
+              thinkingEnabled: msg.settings.thinkingEnabled,
+              planModeEnabled: msg.settings.planModeEnabled,
+              model: msg.settings.selectedModel ?? undefined,
+              reasoningEffort: msg.settings.reasoningEffort ?? undefined,
+            }
+      );
       return true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -598,7 +666,11 @@ export class ChatMessageHandlerService {
         newState: MessageState.COMMITTED,
         userMessage: dispatchedUserMessage,
       });
-      await this.lifecycle.notificationDelivery.acknowledgeSuccessfulDispatch(msg.id);
+      if (msg.source) {
+        await sessionBackgroundDeliveryService.complete(msg);
+      } else {
+        await this.lifecycle.notificationDelivery.acknowledgeSuccessfulDispatch(msg.id);
+      }
     } catch (error) {
       if (isCompactCommand && compactionClient) {
         compactionClient.endCompaction();
@@ -621,6 +693,17 @@ export class ChatMessageHandlerService {
     client: unknown,
     stopGeneration: number
   ): Promise<boolean> {
+    if (msg.source) {
+      const valid = await sessionBackgroundDeliveryService.validate(msg);
+      if (!(valid && this.isDispatchGenerationCurrent(dbSessionId, stopGeneration))) {
+        await sessionBackgroundDeliveryService.fail(
+          msg,
+          new Error('PR delivery invalidated before provider enqueue')
+        );
+        return false;
+      }
+      return true;
+    }
     try {
       if (msg.settings.planModeEnabled) {
         await sessionConfigService.setSessionCollaborationMode(dbSessionId, 'plan');

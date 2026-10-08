@@ -1,3 +1,4 @@
+import type { SessionConfigOption } from '@agentclientprotocol/sdk';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AcpBrowseSessionUnavailableError } from '@/backend/services/session/service/acp/acp-runtime-manager';
 import { AcpRuntimeQuiescence } from '@/backend/services/session/service/acp/acp-runtime-quiescence';
@@ -75,6 +76,75 @@ describe('SessionStartupCoordinator', () => {
     vi.mocked(workspaceNotificationService.markDelivered).mockResolvedValue();
   });
 
+  it.each(['CLAUDE', 'CODEX'] as const)(
+    'restores the existing %s config without applying current defaults',
+    async (provider) => {
+      const mode = {
+        id: 'mode',
+        name: 'Mode',
+        type: 'select' as const,
+        currentValue: 'plan',
+        options: [
+          { value: 'plan', name: 'Plan' },
+          { value: 'code', name: 'Code' },
+        ],
+      };
+      const thinking = {
+        id: 'thinking',
+        name: 'Thinking',
+        type: 'boolean' as const,
+        currentValue: true,
+      };
+      const options: SessionConfigOption[] = [mode, thinking];
+      const harness = createLifecycleHarness({
+        provider,
+        session: {
+          providerSessionId: 'existing',
+          providerMetadata: {
+            acpConfigSnapshot: {
+              provider,
+              providerSessionId: 'existing',
+              configOptions: [mode, thinking],
+            },
+          },
+        },
+      });
+      harness.handle.configOptions = [
+        { ...mode, currentValue: 'code' },
+        { ...thinking, currentValue: false },
+      ];
+      Object.defineProperty(harness.handle, 'connection', {
+        value: { setSessionConfigOption: vi.fn().mockResolvedValue({ configOptions: options }) },
+        configurable: true,
+      });
+      await createStartupCoordinator(harness).getOrCreateSessionClient('session-1', {
+        resumePolicy: 'require_existing',
+      });
+      expect(harness.runtimeManager.getOrCreateClient).toHaveBeenCalledWith(
+        'session-1',
+        expect.objectContaining({
+          provider,
+          resumeProviderSessionId: 'existing',
+          resumePolicy: 'require_existing',
+        }),
+        expect.anything(),
+        expect.anything()
+      );
+      expect(harness.handle.configOptions).toEqual(options);
+      expect(harness.sessionConfigService.applyConfiguredReasoningEffort).not.toHaveBeenCalled();
+      expect(harness.sessionConfigService.applyConfiguredPermissionPreset).not.toHaveBeenCalled();
+    }
+  );
+  it('rejects an unavailable existing configuration before any background turn', async () => {
+    const harness = createLifecycleHarness({ session: { providerSessionId: 'existing' } });
+    await expect(
+      createStartupCoordinator(harness).getOrCreateSessionClient('session-1', {
+        resumePolicy: 'require_existing',
+      })
+    ).rejects.toThrow('Missing existing ACP configuration');
+    expect(harness.sendSessionMessage).not.toHaveBeenCalled();
+    expect(harness.runtimeManager.stopClient).toHaveBeenCalled();
+  });
   it('reconciles a newly created client to durable and in-memory running state', async () => {
     const harness = createLifecycleHarness();
     const coordinator = createStartupCoordinator(harness);

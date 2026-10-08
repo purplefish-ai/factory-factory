@@ -1,5 +1,4 @@
 import { vi } from 'vitest';
-import { SERVICE_THRESHOLDS } from '@/backend/services/constants';
 import type { WorkspaceSnapshotEntry } from '@/backend/services/workspace';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import type { ReconciliationBridges } from './snapshot-reconciliation.orchestrator';
@@ -23,9 +22,13 @@ export function createMockWorkspace(
     prUpdatedAt: new Date('2026-01-02T00:00:00Z'),
     ratchetEnabled: true,
     ratchetState: 'IDLE',
-    ratchetDispatchOutcome: 'DIED',
-    ratchetDispatchRetryCount: SERVICE_THRESHOLDS.ratchetDispatchMaxRetries,
-    ratchetDispatchStalled: true,
+    prMonitoring: {
+      enabled: true,
+      recipientSessionId: 'main',
+      bindingRevision: 1,
+      pauseReason: 'DELIVERY_FAILED',
+      pendingEventCount: 0,
+    },
     prHasMergeConflict: false,
     mode: 'STANDARD',
     autoIterationStatus: null,
@@ -89,12 +92,16 @@ export function createSnapshotEntry(
     prUpdatedAt: '2026-01-02T00:00:00Z',
     ratchetEnabled: true,
     ratchetState: 'IDLE',
-    ratchetDispatchStalled: true,
+    prMonitoring: {
+      enabled: true,
+      recipientSessionId: 'main',
+      bindingRevision: 1,
+      pauseReason: 'DELIVERY_FAILED',
+      pendingEventCount: 0,
+    },
     hasMergeConflict: false,
     mode: 'STANDARD',
     autoIterationStatus: null,
-    ratchetDispatchOutcome: 'DIED',
-    ratchetDispatchRetryCount: SERVICE_THRESHOLDS.ratchetDispatchMaxRetries,
     runScriptStatus: 'IDLE',
     hasHadSessions: true,
     isWorking: false,

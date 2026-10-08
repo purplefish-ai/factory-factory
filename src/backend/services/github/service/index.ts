@@ -27,8 +27,14 @@ export {
   type PRStatusFromGitHub,
   type ReviewRequestedPR,
 } from './github-cli.service';
+export {
+  buildReviewSummariesForPrompt,
+  computeLatestReviewActivityAtMs,
+  isIgnoredReviewAuthor,
+} from './pr-actionable-review';
 // --- PR fetch coordinator ---
 export { type CoordinatedFetch, prFetchCoordinator } from './pr-fetch-coordinator';
+export { prObservationService } from './pr-observation.service';
 // --- PR snapshot ---
 export {
   type AttachAndRefreshResult,

@@ -25,6 +25,7 @@ import type { SessionContextService } from './session-context.service';
 import type { SessionAcpEnvironmentPort } from './session-lifecycle.types';
 import { type SessionLifecycleGate, SessionStartupCancelledError } from './session-lifecycle-gate';
 import type { SessionNotificationDeliveryService } from './session-notification-delivery.service';
+import { restorePRResumeConfig } from './session-pr-resume-config';
 import type { SessionRuntimeExitCoordinator } from './session-runtime-exit.coordinator';
 import type { StopSessionOptions } from './session-termination.coordinator';
 
@@ -33,6 +34,7 @@ const logger = createLogger('session');
 export type SessionStartupModePreset = 'non_interactive' | 'plan';
 
 export type GetOrCreateSessionClientOptions = {
+  resumePolicy?: 'allow_fallback' | 'require_existing';
   thinkingEnabled?: boolean;
   model?: string;
   reasoningEffort?: string;
@@ -299,7 +301,7 @@ export class SessionStartupCoordinator {
       await this.getOrCreateAcpSessionClient(session.id, options, session, lease.generation);
     this.dependencies.lifecycleGate.establishStartup(lease);
     this.assertStartupAllowed(session.id, lease.generation);
-    if (!hadClient) {
+    if (!hadClient && options.resumePolicy !== 'require_existing') {
       await this.applyConfiguredPermissionPreset(session.id, session, handle, resolvedPreset);
       this.assertStartupAllowed(session.id, lease.generation);
       await this.dispatchQueuedNotificationsIfNeeded(session.id, dispatchableNotificationCount);
@@ -328,7 +330,11 @@ export class SessionStartupCoordinator {
 
   private async createAcpClient(
     sessionId: string,
-    options: { model?: string; purpose?: 'active' | 'browse' },
+    options: {
+      model?: string;
+      purpose?: 'active' | 'browse';
+      resumePolicy?: 'allow_fallback' | 'require_existing';
+    },
     session: AgentSessionRecord,
     permissionPreset: PermissionPreset | undefined,
     stopGeneration: number,
@@ -369,6 +375,7 @@ export class SessionStartupCoordinator {
       permissionPreset,
       sessionId,
       resumeProviderSessionId: session.providerSessionId ?? undefined,
+      resumePolicy: options.resumePolicy,
       mcpServers: this.dependencies.acpEnvironment.getMcpServers({
         workspaceId: sessionContext.workspaceId,
         parentWorkspaceId: sessionContext.parentWorkspaceId,
@@ -392,11 +399,17 @@ export class SessionStartupCoordinator {
       if (browseOnly) {
         return { handle, dispatchableNotificationCount: 0 };
       }
-      await this.dependencies.sessionConfigService.applyConfiguredReasoningEffort(
-        sessionId,
-        handle,
-        { persistSnapshot: false, emitUpdates: false }
-      );
+      if (options.resumePolicy === 'require_existing') {
+        await restorePRResumeConfig(session, handle, () =>
+          this.assertStartupAllowed(sessionId, stopGeneration)
+        );
+      } else {
+        await this.dependencies.sessionConfigService.applyConfiguredReasoningEffort(
+          sessionId,
+          handle,
+          { persistSnapshot: false, emitUpdates: false }
+        );
+      }
       if (session.workflow === ADVERSARIAL_REVIEW_WORKFLOW) {
         await this.dependencies.sessionConfigService.applyConfiguredPermissionPreset(
           sessionId,
@@ -462,7 +475,7 @@ export class SessionStartupCoordinator {
 
   private async getOrCreateAcpSessionClient(
     sessionId: string,
-    options: { model?: string },
+    options: GetOrCreateSessionClientOptions,
     session: AgentSessionRecord,
     stopGeneration: number
   ): Promise<{
@@ -512,7 +525,10 @@ export class SessionStartupCoordinator {
       activity: 'IDLE',
       updatedAt: new Date().toISOString(),
     });
-    const resolvedPreset = await this.dependencies.contextService.resolvePermissionPreset(session);
+    const resolvedPreset =
+      options.resumePolicy === 'require_existing'
+        ? undefined
+        : await this.dependencies.contextService.resolvePermissionPreset(session);
     this.assertStartupAllowed(sessionId, stopGeneration);
 
     return await this.dependencies.runtimeManager.runClientCreationOperation(

@@ -91,7 +91,7 @@ describe('deriveWorkspaceStatusReason', () => {
       deriveWorkspaceStatusReason(
         makeInput({ flowPhase: 'RATCHET_VERIFY', prState: 'OPEN', ratchetEnabled: true })
       )
-    ).toMatchObject({ code: 'CHECKING_PR', tone: 'working', needsUser: false });
+    ).toMatchObject({ code: 'CHECKING_PR', tone: 'waiting', needsUser: false });
   });
 
   it('falls back to awaiting the next prompt for an idle workspace with sessions', () => {
@@ -117,7 +117,7 @@ describe('deriveWorkspaceStatusReason', () => {
       deriveWorkspaceStatusReason(
         makeInput({ flowPhase: 'RATCHET_FIXING', ratchetState: 'REVIEW_PENDING' })
       ).label
-    ).toBe('Fixing review comments');
+    ).toBe('Review feedback awaiting action');
   });
 
   it('shows active agent work before passive PR state', () => {
@@ -184,7 +184,7 @@ describe('deriveWorkspaceStatusReason', () => {
           prState: 'OPEN',
         })
       )
-    ).toMatchObject({ code: 'FIXING_MERGE_CONFLICT', tone: 'working', needsUser: false });
+    ).toMatchObject({ code: 'MERGE_CONFLICT', tone: 'attention', needsUser: true });
   });
 
   it('reports a conflicted PR as needing a human when the ratchet is off', () => {
@@ -235,7 +235,7 @@ describe('deriveWorkspaceStatusReason', () => {
           prState: 'OPEN',
         })
       )
-    ).toMatchObject({ code: 'RATCHET_STALLED', tone: 'attention', needsUser: true });
+    ).toMatchObject({ code: 'PR_DELIVERY_ERROR', tone: 'attention', needsUser: true });
   });
 
   it('lets a merged PR outrank a pending permission request', () => {

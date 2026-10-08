@@ -29,15 +29,17 @@ export function QueuedMessages({ messages, onRemove }: QueuedMessagesProps) {
             <div className="flex-1 text-sm truncate text-muted-foreground" title={msg.text}>
               {msg.text}
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity"
-              onClick={() => onRemove(msg.id)}
-              aria-label="Remove queued message"
-            >
-              <XIcon className="h-3 w-3" />
-            </Button>
+            {!msg.id.startsWith('pr-event-') && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={() => onRemove(msg.id)}
+                aria-label="Remove queued message"
+              >
+                <XIcon className="h-3 w-3" />
+              </Button>
+            )}
           </div>
         ))}
       </div>

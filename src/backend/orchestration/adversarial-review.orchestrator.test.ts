@@ -64,9 +64,9 @@ function mockOpenPrWorkspace() {
     id: WORKSPACE_ID,
     worktreePath: '/tmp/worktree',
     defaultSessionProvider: 'WORKSPACE_DEFAULT',
-    ratchetSessionProvider: 'WORKSPACE_DEFAULT',
   });
   vi.mocked(workspaceDataService.findPRState).mockResolvedValue({
+    prId: 'pr1',
     prUrl: 'https://github.com/example/repo/pull/42',
     prNumber: 42,
     prState: 'OPEN',
@@ -111,7 +111,6 @@ describe('triggerAdversarialReview', () => {
       id: WORKSPACE_ID,
       worktreePath: null,
       defaultSessionProvider: 'WORKSPACE_DEFAULT',
-      ratchetSessionProvider: 'WORKSPACE_DEFAULT',
     });
     vi.mocked(workspaceDataService.findPRState).mockResolvedValue(null);
 
@@ -125,13 +124,8 @@ describe('triggerAdversarialReview', () => {
       id: WORKSPACE_ID,
       worktreePath: '/tmp/worktree',
       defaultSessionProvider: 'WORKSPACE_DEFAULT',
-      ratchetSessionProvider: 'WORKSPACE_DEFAULT',
     });
-    vi.mocked(workspaceDataService.findPRState).mockResolvedValue({
-      prUrl: null,
-      prNumber: null,
-      prState: 'NONE',
-    });
+    vi.mocked(workspaceDataService.findPRState).mockResolvedValue(null);
 
     await expect(triggerAdversarialReview(WORKSPACE_ID)).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',

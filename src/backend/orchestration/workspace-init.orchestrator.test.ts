@@ -1,3 +1,5 @@
+vi.mock('./pr-monitoring.orchestrator', () => ({ bindIssueMonitoringSession: vi.fn() }));
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SessionStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
@@ -136,8 +138,6 @@ import {
   initializeWorkspaceWorktree,
   recoverStaleProvisioningWorkspace,
 } from './workspace-init.orchestrator';
-
-// --- Test Helpers ---
 
 const WORKSPACE_ID = 'ws-1';
 

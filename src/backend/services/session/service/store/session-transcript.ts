@@ -112,6 +112,20 @@ export function buildTranscriptFromHistory(history: HistoryMessage[]): ChatMessa
     const messageBaseId = historyMsg.uuid ?? buildDeterministicHistoryId(historyMsg, index);
     const messageId = `${messageBaseId}-${order}`;
 
+    if (
+      historyMsg.type === 'user' &&
+      /^<!-- factory-factory-pr-event:[^\n]+ -->/.test(historyMsg.content)
+    ) {
+      transcript.push({
+        id: messageId,
+        source: 'agent',
+        message: { type: 'pr_update', text: historyMsg.content },
+        timestamp: historyMsg.timestamp,
+        order,
+      });
+      order += 1;
+      continue;
+    }
     if (historyMsg.type === 'user') {
       transcript.push({
         id: messageId,
@@ -355,6 +369,10 @@ export function commitSentUserMessageWithOrder(
     timestamp: message.timestamp,
     order,
   };
+  if (message.source?.type === 'pr_event') {
+    transcriptMessage.source = 'agent';
+    transcriptMessage.message = { type: 'pr_update', text: message.text };
+  }
   upsertTranscriptMessage(store, transcriptMessage);
 
   if (store.nextOrder <= order) {

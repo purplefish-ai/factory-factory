@@ -46,6 +46,7 @@ function projectSnapshotToLiveFields(entry: WorkspaceSnapshotEntry) {
     prCiStatus: entry.prCiStatus,
     ratchetEnabled: entry.ratchetEnabled,
     ratchetState: entry.ratchetState,
+    prMonitoring: entry.prMonitoring,
     runScriptStatus: entry.runScriptStatus,
     sessionSummaries: entry.sessionSummaries,
     pendingRequestType: entry.pendingRequestType,
@@ -85,8 +86,5 @@ export function mergeProjectSnapshotIntoWorkspaceDetail(
     ...projectSnapshotToLiveFields(entry),
     prUpdatedAt: entry.prUpdatedAt ? new Date(entry.prUpdatedAt) : null,
     hasHadSessions: entry.hasHadSessions,
-    ratchetDispatchOutcome: entry.ratchetDispatchOutcome,
-    ratchetDispatchRetryCount: entry.ratchetDispatchRetryCount,
-    ratchetDispatchStalled: entry.ratchetDispatchStalled,
   };
 }

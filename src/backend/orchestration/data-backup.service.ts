@@ -1,3 +1,4 @@
+import { exportPRBackupState, restorePRBackupState } from './data-backup-pr-events';
 /**
  * Data Backup Service
  *
@@ -71,11 +72,11 @@ const parseAutoIterationConfigForExport = (value: unknown) =>
  */
 function exportedRatchetState(workspace: WorkspaceForExport): RatchetState {
   return deriveRatchetState({
-    ratchetEnabled: workspace.ratchet?.enabled ?? true,
-    prState: workspace.pr?.state ?? 'NONE',
-    prCiStatus: workspace.pr?.ciStatus ?? 'UNKNOWN',
-    prHasMergeConflict: workspace.pr?.hasMergeConflict ?? false,
-    prReviewState: workspace.pr?.reviewState ?? null,
+    ratchetEnabled: workspace.prMonitoring?.enabled ?? false,
+    prState: workspace.prs[0]?.state ?? 'NONE',
+    prCiStatus: workspace.prs[0]?.ciStatus ?? 'UNKNOWN',
+    prHasMergeConflict: workspace.prs[0]?.hasMergeConflict ?? false,
+    prReviewState: workspace.prs[0]?.reviewState ?? null,
   });
 }
 
@@ -177,9 +178,61 @@ async function importProjects(
   return counter;
 }
 
+function importedPRs(workspace: ExportedWorkspace) {
+  return workspace.prs.length
+    ? workspace.prs.map((pr) => ({
+        ...pr,
+        syncedAt: parseDate(pr.syncedAt),
+        detachedAt: parseDate(pr.detachedAt),
+        ciFailedAt: parseDate(pr.ciFailedAt),
+        ciLastNotifiedAt: parseDate(pr.ciLastNotifiedAt),
+        reviewLastCheckedAt: parseDate(pr.reviewLastCheckedAt),
+        observation: pr.observation ?? undefined,
+      }))
+    : workspace.prUrl
+      ? [
+          {
+            id: `legacy-pr-${workspace.id}`,
+            url: workspace.prUrl,
+
+            number: workspace.prNumber,
+            state: workspace.prState,
+            reviewState: workspace.prReviewState,
+            ciStatus: workspace.prCiStatus,
+            // A v4 file predating the projection never carried a conflict flag —
+            // `ratchetState: 'MERGE_CONFLICT'` was the only place a conflict was
+            // recorded, so that is what it restores from.
+            hasMergeConflict: workspace.ratchetState === 'MERGE_CONFLICT',
+            syncedAt: parseDate(workspace.prUpdatedAt),
+            ciFailedAt: parseDate(workspace.prCiFailedAt),
+            ciLastNotifiedAt: parseDate(workspace.prCiLastNotifiedAt),
+            reviewLastCheckedAt: parseDate(workspace.prReviewLastCheckedAt),
+            reviewLastCommentId: workspace.prReviewLastCommentId,
+          },
+        ]
+      : [];
+}
+
+async function parentWorkspaceExists(workspace: ExportedWorkspace, tx: TransactionClient) {
+  if (workspace.parentWorkspaceId !== null) {
+    const parentWorkspace = await tx.workspace.findUnique({
+      where: { id: workspace.parentWorkspaceId },
+    });
+    if (!parentWorkspace) {
+      logger.warn('Skipping workspace due to missing parent workspace', {
+        workspaceId: workspace.id,
+        parentWorkspaceId: workspace.parentWorkspaceId,
+      });
+      return false;
+    }
+  }
+  return true;
+}
+
 async function importWorkspaces(
   workspaces: ExportedWorkspace[],
-  tx: TransactionClient
+  tx: TransactionClient,
+  importedWorkspaceIds: string[]
 ): Promise<ImportCounter> {
   const counter: ImportCounter = { imported: 0, skipped: 0 };
   const orderedWorkspaces = [...workspaces].sort(
@@ -203,18 +256,9 @@ async function importWorkspaces(
       continue;
     }
 
-    if (workspace.parentWorkspaceId !== null) {
-      const parentWorkspace = await tx.workspace.findUnique({
-        where: { id: workspace.parentWorkspaceId },
-      });
-      if (!parentWorkspace) {
-        logger.warn('Skipping workspace due to missing parent workspace', {
-          workspaceId: workspace.id,
-          parentWorkspaceId: workspace.parentWorkspaceId,
-        });
-        counter.skipped++;
-        continue;
-      }
+    if (!(await parentWorkspaceExists(workspace, tx))) {
+      counter.skipped++;
+      continue;
     }
 
     await tx.workspace.create({
@@ -244,45 +288,24 @@ async function importWorkspaces(
         linearIssueIdentifier: workspace.linearIssueIdentifier,
         linearIssueUrl: workspace.linearIssueUrl,
         defaultSessionProvider: workspace.defaultSessionProvider,
-        ratchetSessionProvider: workspace.ratchetSessionProvider,
         // The v4 export carries the PR cache as flat workspace fields; it now
         // lives in the WorkspacePR row this create brings with it. Discovery
         // scheduling was never exported, so it restores at its defaults and the
         // next poll re-derives it.
-        pr: {
-          create: {
-            url: workspace.prUrl,
-            number: workspace.prNumber,
-            state: workspace.prState,
-            reviewState: workspace.prReviewState,
-            ciStatus: workspace.prCiStatus,
-            // A v4 file predating the projection never carried a conflict flag —
-            // `ratchetState: 'MERGE_CONFLICT'` was the only place a conflict was
-            // recorded, so that is what it restores from.
-            hasMergeConflict: workspace.ratchetState === 'MERGE_CONFLICT',
-            syncedAt: parseDate(workspace.prUpdatedAt),
-            ciFailedAt: parseDate(workspace.prCiFailedAt),
-            ciLastNotifiedAt: parseDate(workspace.prCiLastNotifiedAt),
-            reviewLastCheckedAt: parseDate(workspace.prReviewLastCheckedAt),
-            reviewLastCommentId: workspace.prReviewLastCommentId,
-          },
+        prDiscovery: {
+          create: workspace.prDiscovery
+            ? {
+                lastCheckedAt: parseDate(workspace.prDiscovery.lastCheckedAt),
+                retryCount: workspace.prDiscovery.retryCount,
+                nextCheckAt: parseDate(workspace.prDiscovery.nextCheckAt),
+              }
+            : {},
         },
-        // Phase 3+ ratchet fields, restored into the WorkspaceRatchet row this
-        // create brings with it. A workspace without one would be invisible to
-        // the ratchet's row-guarded writes.
-        //
+        prs: { create: importedPRs(workspace) },
         // `ratchetState` is not among them: it is derived from the PR row above,
         // so restoring it would create a second copy to disagree with. It is still
         // read on the way in — for the conflict flag — and recomputed on the way
         // out, because the v4 format requires the field.
-        ratchet: {
-          create: {
-            enabled: workspace.ratchetEnabled,
-            lastCheckedAt: parseDate(workspace.ratchetLastCheckedAt),
-            activeSessionId: workspace.ratchetActiveSessionId,
-            dispatchSnapshotKey: workspace.ratchetLastCiRunId,
-          },
-        },
         // The v4 export carries six of the seven run-script fields as flat
         // workspace fields; they now live in the WorkspaceRunScript row this
         // create brings with it. `postRunCommand` was never exported, so it
@@ -318,6 +341,7 @@ async function importWorkspaces(
         updatedAt: new Date(workspace.updatedAt),
       },
     });
+    importedWorkspaceIds.push(workspace.id);
     counter.imported++;
   }
 
@@ -354,11 +378,11 @@ async function importAgentSessions(
         name: s.name,
         workflow: s.workflow,
         model: s.model,
-        status: s.status,
+        status: s.status === 'RUNNING' ? 'IDLE' : s.status,
         provider: s.provider,
         providerSessionId: s.providerSessionId,
         providerProjectPath: s.providerProjectPath,
-        providerProcessPid: s.providerProcessPid,
+        providerProcessPid: null,
         providerMetadata:
           s.providerMetadata != null ? (s.providerMetadata as Prisma.InputJsonValue) : undefined,
         createdAt: new Date(s.createdAt),
@@ -441,7 +465,7 @@ async function importUserSettings(
       defaultClaudeReasoningEffort: settings.defaultClaudeReasoningEffort,
       defaultCodexReasoningEffort: settings.defaultCodexReasoningEffort,
       defaultWorkspacePermissions: settings.defaultWorkspacePermissions,
-      ratchetPermissions: settings.ratchetPermissions,
+      autoIterationPermissions: settings.autoIterationPermissions ?? settings.ratchetPermissions,
       // Adversarial review settings
       reviewerSessionProvider: settings.reviewerSessionProvider,
       reviewerClaudeModel: settings.reviewerClaudeModel,
@@ -483,7 +507,7 @@ class DataBackupService {
       meta: {
         exportedAt: new Date().toISOString(),
         version: appVersion,
-        schemaVersion: 4,
+        schemaVersion: 6,
       },
       data: {
         projects: projects.map((p) => ({
@@ -505,6 +529,7 @@ class DataBackupService {
           updatedAt: p.updatedAt.toISOString(),
         })),
         workspaces: workspaces.map((w) => ({
+          ...exportPRBackupState(w),
           id: w.id,
           projectId: w.projectId,
           parentWorkspaceId: w.parentWorkspaceId,
@@ -533,28 +558,27 @@ class DataBackupService {
           linearIssueIdentifier: w.linearIssueIdentifier,
           linearIssueUrl: w.linearIssueUrl,
           defaultSessionProvider: w.defaultSessionProvider,
-          ratchetSessionProvider: w.ratchetSessionProvider,
           // Flattened out of WorkspacePR: the v4 export format carries the PR
           // cache as workspace fields, and `prUpdatedAt` keeps the name it has in
           // files already on disk even though the column is now `syncedAt`.
-          prUrl: w.pr?.url ?? null,
-          prNumber: w.pr?.number ?? null,
-          prState: w.pr?.state ?? 'NONE',
-          prReviewState: w.pr?.reviewState ?? null,
-          prCiStatus: w.pr?.ciStatus ?? 'UNKNOWN',
-          prUpdatedAt: toISOString(w.pr?.syncedAt ?? null),
-          prCiFailedAt: toISOString(w.pr?.ciFailedAt ?? null),
-          prCiLastNotifiedAt: toISOString(w.pr?.ciLastNotifiedAt ?? null),
-          prReviewLastCheckedAt: toISOString(w.pr?.reviewLastCheckedAt ?? null),
-          prReviewLastCommentId: w.pr?.reviewLastCommentId ?? null,
+          prUrl: w.prs[0]?.url ?? null,
+          prNumber: w.prs[0]?.number ?? null,
+          prState: w.prs[0]?.state ?? 'NONE',
+          prReviewState: w.prs[0]?.reviewState ?? null,
+          prCiStatus: w.prs[0]?.ciStatus ?? 'UNKNOWN',
+          prUpdatedAt: toISOString(w.prs[0]?.syncedAt ?? null),
+          prCiFailedAt: toISOString(w.prs[0]?.ciFailedAt ?? null),
+          prCiLastNotifiedAt: toISOString(w.prs[0]?.ciLastNotifiedAt ?? null),
+          prReviewLastCheckedAt: toISOString(w.prs[0]?.reviewLastCheckedAt ?? null),
+          prReviewLastCommentId: w.prs[0]?.reviewLastCommentId ?? null,
           // Phase 3+ ratchet tracking fields. Flattened out of WorkspaceRatchet:
           // the v4 export format carries them as workspace fields, and
           // `ratchetLastCiRunId` keeps the name it has in files already on disk.
-          ratchetEnabled: w.ratchet?.enabled ?? true,
+          ratchetEnabled: w.prMonitoring?.enabled ?? false,
           ratchetState: exportedRatchetState(w),
-          ratchetLastCheckedAt: toISOString(w.ratchet?.lastCheckedAt ?? null),
-          ratchetActiveSessionId: w.ratchet?.activeSessionId ?? null,
-          ratchetLastCiRunId: w.ratchet?.dispatchSnapshotKey ?? null,
+          ratchetLastCheckedAt: toISOString(w.prMonitoring?.lastCheckedAt ?? null),
+          ratchetActiveSessionId: null,
+          ratchetLastCiRunId: null,
           hasHadSessions: w.hasHadSessions,
           createdAt: w.createdAt.toISOString(),
           updatedAt: w.updatedAt.toISOString(),
@@ -599,7 +623,7 @@ class DataBackupService {
               defaultClaudeReasoningEffort: userSettings.defaultClaudeReasoningEffort,
               defaultCodexReasoningEffort: userSettings.defaultCodexReasoningEffort,
               defaultWorkspacePermissions: userSettings.defaultWorkspacePermissions,
-              ratchetPermissions: userSettings.ratchetPermissions,
+              autoIterationPermissions: userSettings.autoIterationPermissions,
               // Adversarial review settings
               reviewerSessionProvider: userSettings.reviewerSessionProvider,
               reviewerClaudeModel: userSettings.reviewerClaudeModel,
@@ -646,8 +670,10 @@ class DataBackupService {
     // Import in dependency order within a transaction for atomicity
     const results = await dataBackupAccessor.runInTransaction(async (tx) => {
       const projects = await importProjects(input.data.projects, tx);
-      const workspaces = await importWorkspaces(input.data.workspaces, tx);
+      const importedWorkspaceIds: string[] = [];
+      const workspaces = await importWorkspaces(input.data.workspaces, tx, importedWorkspaceIds);
       const agentSessions = await importAgentSessions(input.data.agentSessions, tx);
+      await restorePRBackupState(input.data.workspaces, importedWorkspaceIds, tx);
       const terminalSessions = await importTerminalSessions(input.data.terminalSessions, tx);
       const userSettings = await importUserSettings(input.data.userSettings, tx);
 

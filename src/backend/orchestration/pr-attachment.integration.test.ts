@@ -1,11 +1,7 @@
 import type { PrismaClient } from '@prisma-gen/client';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { githubCLIService, prSnapshotService } from '@/backend/services/github';
-import {
-  workspaceDataService,
-  workspacePrSnapshotService,
-  workspaceRatchetService,
-} from '@/backend/services/workspace';
+import { workspaceDataService, workspacePrSnapshotService } from '@/backend/services/workspace';
 import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,
@@ -32,6 +28,12 @@ beforeAll(async () => {
   testDatabase.prisma = db.prisma;
   prSnapshotService.configure({
     workspace: {
+      listPRs: (id) => workspacePrSnapshotService.list(id),
+      findPR: (target) => workspacePrSnapshotService.find(target),
+      attachPR: (id, url) => workspacePrSnapshotService.attach(id, url),
+      detachPR: (target) => workspacePrSnapshotService.detach(target),
+      attachDiscoveredPRsIfClaimMatches: (id, claim, urls) =>
+        workspacePrSnapshotService.attachDiscoveredPRsIfClaimMatches(id, claim, urls),
       findPRContext: (id) => workspaceDataService.findPRContext(id),
       recordSnapshot: (id, data) => workspacePrSnapshotService.record(id, data),
       applyPrSnapshotWithDispatchReset: (id, observation) =>
@@ -61,7 +63,7 @@ afterAll(async () => {
 
 describe('failed PR attachment recovery', () => {
   it.each(['OPEN', 'MERGED', 'CLOSED'] as const)(
-    'clears a previous %s PR and accepts ratchet observations for the new URL',
+    'preserves a previous %s PR and isolates observations for a newly attached URL',
     async (previousState) => {
       const workspaceId = `pr-${previousState}`;
       await db.prisma.workspace.create({
@@ -70,7 +72,7 @@ describe('failed PR attachment recovery', () => {
           name: workspaceId,
           projectId: 'pr-project',
           status: 'READY',
-          pr: {
+          prs: {
             create: {
               url: previousPrUrl,
               number: 1,
@@ -80,7 +82,7 @@ describe('failed PR attachment recovery', () => {
               hasMergeConflict: true,
             },
           },
-          ratchet: { create: { enabled: true } },
+          prMonitoring: { create: { enabled: true } },
         },
       });
       vi.spyOn(githubCLIService, 'fetchAndComputePRState').mockResolvedValue(null);
@@ -91,7 +93,7 @@ describe('failed PR attachment recovery', () => {
       });
 
       const neutralCache = await db.prisma.workspacePR.findUniqueOrThrow({
-        where: { workspaceId },
+        where: { workspaceId_url: { workspaceId, url: nextPrUrl } },
       });
       expect(neutralCache).toMatchObject({
         url: nextPrUrl,
@@ -100,12 +102,8 @@ describe('failed PR attachment recovery', () => {
         reviewState: null,
         ciStatus: 'UNKNOWN',
         hasMergeConflict: false,
-        syncedAt: expect.any(Date),
+        syncedAt: null,
       });
-      expect(await workspaceRatchetService.findCandidates()).toEqual(
-        expect.arrayContaining([expect.objectContaining({ id: workspaceId, prUrl: nextPrUrl })])
-      );
-
       // A late observation from the old PR must still be rejected.
       await prSnapshotService.recordPrObservation(workspaceId, {
         prUrl: previousPrUrl,
@@ -115,9 +113,11 @@ describe('failed PR attachment recovery', () => {
         reviewState: 'APPROVED',
         hasMergeConflict: false,
       });
-      expect(await db.prisma.workspacePR.findUniqueOrThrow({ where: { workspaceId } })).toEqual(
-        neutralCache
-      );
+      expect(
+        await db.prisma.workspacePR.findUniqueOrThrow({
+          where: { workspaceId_url: { workspaceId, url: nextPrUrl } },
+        })
+      ).toEqual(neutralCache);
 
       await prSnapshotService.recordPrObservation(workspaceId, {
         prUrl: nextPrUrl,
@@ -128,7 +128,9 @@ describe('failed PR attachment recovery', () => {
         hasMergeConflict: true,
       });
       expect(
-        await db.prisma.workspacePR.findUniqueOrThrow({ where: { workspaceId } })
+        await db.prisma.workspacePR.findUniqueOrThrow({
+          where: { workspaceId_url: { workspaceId, url: nextPrUrl } },
+        })
       ).toMatchObject({
         url: nextPrUrl,
         state: 'OPEN',

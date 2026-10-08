@@ -9,6 +9,7 @@ export * from './file-tree';
 export * from './file-viewer';
 export * from './main-view-content';
 export * from './main-view-tab-bar';
+export { type PRRecipientChoice, PRRecipientPicker } from './pr-recipient-picker';
 export * from './quick-actions-menu';
 export * from './ratchet-state';
 export * from './ratchet-toggle-button';

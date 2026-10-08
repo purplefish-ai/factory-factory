@@ -55,7 +55,7 @@ describe('createUserInputHandler', () => {
       message: { type: 'user_input', text: 'hello' } as never,
     });
 
-    await Promise.resolve();
+    await vi.waitFor(() => expect(deps.sessionService.sendSessionMessage).toHaveBeenCalled());
     expect(deps.sessionService.sendSessionMessage).toHaveBeenCalledWith('session-1', 'hello');
     expect(ws.send).not.toHaveBeenCalled();
   });
@@ -73,7 +73,7 @@ describe('createUserInputHandler', () => {
       message: { type: 'user_input', content } as never,
     });
 
-    await Promise.resolve();
+    await vi.waitFor(() => expect(deps.sessionService.sendSessionMessage).toHaveBeenCalled());
     expect(deps.sessionService.sendSessionMessage).toHaveBeenCalledWith('session-2', content);
     expect(ws.send).not.toHaveBeenCalled();
   });

@@ -77,8 +77,6 @@ const WorkspaceStatusReasonSchema = z.object({
   needsUser: z.boolean(),
 });
 
-const RatchetDispatchOutcomeSchema = z.enum(['RUNNING', 'COMPLETED', 'DIED']);
-
 export const WorkspaceSnapshotEntrySchema = z.object({
   workspaceId: z.string(),
   projectId: z.string(),
@@ -97,9 +95,21 @@ export const WorkspaceSnapshotEntrySchema = z.object({
   hasMergeConflict: z.boolean(),
   ratchetEnabled: z.boolean(),
   ratchetState: z.nativeEnum(RatchetState),
-  ratchetDispatchOutcome: RatchetDispatchOutcomeSchema.nullable(),
-  ratchetDispatchRetryCount: z.number().int().nonnegative(),
-  ratchetDispatchStalled: z.boolean(),
+  prMonitoring: z
+    .object({
+      enabled: z.boolean(),
+      recipientSessionId: z.string().nullable(),
+      bindingRevision: z.number().int().nonnegative(),
+      pauseReason: z.string().nullable(),
+      pendingEventCount: z.number().int().nonnegative(),
+    })
+    .default({
+      enabled: false,
+      recipientSessionId: null,
+      bindingRevision: 0,
+      pauseReason: null,
+      pendingEventCount: 0,
+    }),
   runScriptStatus: z.nativeEnum(RunScriptStatus),
   hasHadSessions: z.boolean(),
   mode: z.nativeEnum(WorkspaceMode),

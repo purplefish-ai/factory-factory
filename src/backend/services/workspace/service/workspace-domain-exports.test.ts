@@ -16,10 +16,10 @@ import {
   workspaceDataService,
   workspaceMaintenanceService,
   workspaceNotificationService,
+  workspacePRMonitoringService,
   workspacePrSnapshotService,
   // Query
   workspaceQueryService,
-  workspaceRatchetService,
   workspaceRelationshipsService,
   workspaceRunScriptService,
   workspaceSnapshotStore,
@@ -68,7 +68,7 @@ describe('Workspace domain exports', () => {
   it.each([
     ['workspaceAutoIterationService', workspaceAutoIterationService],
     ['workspacePrSnapshotService', workspacePrSnapshotService],
-    ['workspaceRatchetService', workspaceRatchetService],
+    ['workspacePRMonitoringService', workspacePRMonitoringService],
     ['workspaceRunScriptService', workspaceRunScriptService],
     ['workspaceRelationshipsService', workspaceRelationshipsService],
     ['workspaceMaintenanceService', workspaceMaintenanceService],

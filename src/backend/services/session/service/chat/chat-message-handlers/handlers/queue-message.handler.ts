@@ -8,8 +8,10 @@ import {
   buildQueuedMessage,
 } from '@/backend/services/session/service/chat/chat-message-handlers/utils';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { PR_EVENT_MESSAGE_ID_PREFIX } from '@/shared/pr-monitoring';
 import type { QueueMessageInput } from '@/shared/websocket';
 import { WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX } from '@/shared/workspace-notifications';
+import { sessionBackgroundDeliveryService } from '../../../lifecycle/session-background-delivery.service';
 
 function validateAttachments(attachments: QueueMessageInput['attachments']): string | null {
   if (!attachments?.length) {
@@ -39,7 +41,11 @@ function validateQueueMessageInput(
     return 'Missing message id';
   }
 
-  if (message.id.startsWith(WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX)) {
+  if (
+    message.source !== undefined ||
+    message.id.startsWith(PR_EVENT_MESSAGE_ID_PREFIX) ||
+    message.id.startsWith(WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX)
+  ) {
     return 'Reserved message id';
   }
 
@@ -62,6 +68,7 @@ export function createQueueMessageHandler(
       return;
     }
 
+    await sessionBackgroundDeliveryService.userResume(sessionId);
     const messageId = message.id;
     const queuedMsg = buildQueuedMessage(messageId, message, text ?? '');
     const result = sessionDomainService.enqueue(sessionId, queuedMsg);

@@ -23,6 +23,7 @@ export interface AcpClientOptions {
   sessionId: string; // FF database session ID for logging
   /** Stored provider session ID for session resume via loadSession */
   resumeProviderSessionId?: string;
+  resumePolicy?: 'allow_fallback' | 'require_existing';
   /** MCP servers to register with the agent session */
   mcpServers?: AcpMcpServerConfig[];
 }

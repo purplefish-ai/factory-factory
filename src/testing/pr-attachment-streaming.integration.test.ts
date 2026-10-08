@@ -121,9 +121,13 @@ describe('failed PR attachment streaming', () => {
         status: 'READY',
         ratchetEnabled: true,
         ratchetState: previousState === 'MERGED' ? 'MERGED' : 'IDLE',
-        ratchetDispatchOutcome: null,
-        ratchetDispatchRetryCount: 0,
-        ratchetDispatchStalled: false,
+        prMonitoring: {
+          enabled: true,
+          recipientSessionId: 'main',
+          bindingRevision: 1,
+          pauseReason: null,
+          pendingEventCount: 0,
+        },
         prHasMergeConflict: true,
       });
       await vi.advanceTimersByTimeAsync(0);

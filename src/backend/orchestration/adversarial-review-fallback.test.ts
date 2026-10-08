@@ -60,6 +60,7 @@ describe('adversarial-review fallback delivery', () => {
       worktreePath: '/tmp/worktree',
     } as never);
     vi.mocked(workspaceDataService.findPRState).mockResolvedValue({
+      prId: 'pr1',
       prUrl: 'https://github.com/example/repo/pull/1',
       prNumber: 1,
       prState: 'OPEN',

@@ -14,7 +14,14 @@ export type DataBackupTransactionClient = Prisma.TransactionClient;
  * v4 format carries as flat `ratchet*` workspace fields.
  */
 export type WorkspaceForExport = Prisma.WorkspaceGetPayload<{
-  include: { ratchet: true; pr: true; runScript: true; autoIteration: true };
+  include: {
+    prMonitoring: true;
+    prEvents: true;
+    prDiscovery: true;
+    prs: true;
+    runScript: true;
+    autoIteration: true;
+  };
 }>;
 
 export interface DataBackupSnapshot {
@@ -31,7 +38,14 @@ class DataBackupAccessor {
       prisma.project.findMany({ orderBy: { createdAt: 'asc' } }),
       prisma.workspace.findMany({
         orderBy: { createdAt: 'asc' },
-        include: { ratchet: true, pr: true, runScript: true, autoIteration: true },
+        include: {
+          prMonitoring: true,
+          prEvents: true,
+          prDiscovery: true,
+          prs: true,
+          runScript: true,
+          autoIteration: true,
+        },
       }),
       prisma.agentSession.findMany({ orderBy: { createdAt: 'asc' } }),
       prisma.terminalSession.findMany({ orderBy: { createdAt: 'asc' } }),

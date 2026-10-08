@@ -87,53 +87,6 @@ describe('check-single-writer', () => {
     expect(result.output).toContain('unauthorized write of workspace field "hasHadSessions"');
   });
 
-  // The PR aggregate mutators now write one Workspace column -- the branch name a
-  // refresh may correct. The rest of what they carry lands on WorkspacePR, which
-  // this checker does not police because nothing else can name those columns.
-  it('checks ownership through public PR aggregate dispatch-reset mutators', () => {
-    const tempRoot = createTempBackend([
-      {
-        relPath: 'src/backend/services/session/service/lifecycle/session.service.ts',
-        content: `
-          async function writeSnapshots(workspaceAccessor) {
-            await workspaceAccessor.applyPrSnapshotWithDispatchReset('ws', {
-              prNumber: 1,
-              prUpdatedAt: new Date(),
-              branchName: 'feature/actual-head',
-            });
-          }
-        `,
-      },
-    ]);
-
-    const result = runChecker(tempRoot);
-
-    expect(result.status).toBe(1);
-    expect(result.output).toContain('unauthorized write of workspace field "branchName"');
-  });
-
-  it('allows workspace PR snapshot capability dispatch-reset writes', () => {
-    const tempRoot = createTempBackend([
-      {
-        relPath:
-          'src/backend/services/workspace/service/lifecycle/workspace-pr-snapshot.service.ts',
-        content: `
-          async function writeSnapshots(workspaceAccessor) {
-            await workspaceAccessor.applyPrSnapshotWithDispatchReset('ws', {
-              prNumber: 1,
-              prUpdatedAt: new Date(),
-              branchName: 'feature/actual-head',
-            });
-          }
-        `,
-      },
-    ]);
-
-    const result = runChecker(tempRoot);
-
-    expect(result.status).toBe(0);
-  });
-
   describe('owned side tables', () => {
     // These tables were split off Workspace, so the field-ownership table cannot
     // police them. dep-cruiser lets any file under services/*/resources/ import
@@ -157,14 +110,14 @@ describe('check-single-writer', () => {
       expect(result.output).toContain('unauthorized write to workspacePR via updateMany()');
     });
 
-    it('rejects a WorkspaceRatchet write from outside its accessor', () => {
+    it('rejects a WorkspacePRMonitoring write from outside its accessor', () => {
       const tempRoot = createTempBackend([
         {
           relPath: 'src/backend/services/ratchet/resources/ratchet.accessor.ts',
           content: `
             import { prisma } from '@/backend/db';
             async function disable(id) {
-              await prisma.workspaceRatchet.update({ where: { workspaceId: id }, data: { enabled: false } });
+              await prisma.workspacePRMonitoring.update({ where: { workspaceId: id }, data: { enabled: false } });
             }
           `,
         },
@@ -173,7 +126,7 @@ describe('check-single-writer', () => {
       const result = runChecker(tempRoot);
 
       expect(result.status).toBe(1);
-      expect(result.output).toContain('unauthorized write to workspaceRatchet via update()');
+      expect(result.output).toContain('unauthorized write to workspacePRMonitoring via update()');
     });
 
     // Prisma exposes nine writes per model, not seven. These two were missing
@@ -237,14 +190,14 @@ describe('check-single-writer', () => {
       expect(result.status).toBe(0);
     });
 
-    it('rejects a nested update of the pr relation', () => {
+    it('rejects a nested update of the prs relation', () => {
       const tempRoot = createTempBackend([
         {
           relPath: 'src/backend/services/workspace/resources/other.accessor.ts',
           content: `
             import { prisma } from '@/backend/db';
             async function sneak(id) {
-              await prisma.workspace.update({ where: { id }, data: { pr: { update: { state: 'MERGED' } } } });
+              await prisma.workspace.update({ where: { id }, data: { prs: { update: { state: 'MERGED' } } } });
             }
           `,
         },
@@ -256,13 +209,13 @@ describe('check-single-writer', () => {
       expect(result.output).toContain('unauthorized nested update of the workspacePR relation');
     });
 
-    it('rejects a nested upsert of the ratchet relation', () => {
+    it('rejects a nested upsert of the prMonitoring relation', () => {
       const tempRoot = createTempBackend([
         {
           relPath: 'src/backend/orchestration/some.orchestrator.ts',
           content: `
             async function sneak(tx, id) {
-              await tx.workspace.update({ where: { id }, data: { ratchet: { upsert: { create: {}, update: {} } } } });
+              await tx.workspace.update({ where: { id }, data: { prMonitoring: { upsert: { create: {}, update: {} } } } });
             }
           `,
         },
@@ -272,7 +225,7 @@ describe('check-single-writer', () => {
 
       expect(result.status).toBe(1);
       expect(result.output).toContain(
-        'unauthorized nested upsert of the workspaceRatchet relation'
+        'unauthorized nested upsert of the workspacePRMonitoring relation'
       );
     });
 
@@ -289,8 +242,8 @@ describe('check-single-writer', () => {
                 data: {
                   projectId,
                   name: 'x',
-                  pr: { create: { url: null } },
-                  ratchet: { create: { enabled: true } },
+                  prs: { create: { url: null } },
+                  prMonitoring: { create: { enabled: true } },
                   runScript: { create: { command: 'pnpm dev' } },
                 },
               });
@@ -344,7 +297,7 @@ describe('check-single-writer', () => {
               });
               await tx.workspace.update({
                 where: { id },
-                data: { pr: { create: { url: 'https://example.test/pr/1' } } },
+                data: { prs: { create: { url: 'https://example.test/pr/1' } } },
               });
             }
           `,
@@ -375,7 +328,7 @@ describe('check-single-writer', () => {
                   description: label(
                     await tx.workspace.update({
                       where: { id },
-                      data: { pr: { create: { url: 'https://example.test/pr/1' } } },
+                      data: { prs: { create: { url: 'https://example.test/pr/1' } } },
                     })
                   ),
                 },
@@ -416,7 +369,7 @@ describe('check-single-writer', () => {
       expect(result.status).toBe(0);
     });
 
-    // `pr: { url: null }` under `where:` is a relation filter, not a write. The
+    // `prs: { url: null }` under `where:` is a relation filter, not a write. The
     // PR accessor's own compare-and-swaps depend on those.
     it('allows relation filters that name a side table in a where clause', () => {
       const tempRoot = createTempBackend([
@@ -426,7 +379,7 @@ describe('check-single-writer', () => {
             import { prisma } from '@/backend/db';
             async function read(id) {
               return await prisma.workspace.findMany({
-                where: { id, pr: { url: null }, ratchet: { enabled: true } },
+                where: { id, prs: { url: null }, prMonitoring: { enabled: true } },
               });
             }
           `,

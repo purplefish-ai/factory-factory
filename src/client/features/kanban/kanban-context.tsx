@@ -364,6 +364,7 @@ export function KanbanProvider({
       }}
     >
       {children}
+      {toggleRatchetingMutation.recipientPicker}
     </KanbanContext.Provider>
   );
 }

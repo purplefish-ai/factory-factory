@@ -45,6 +45,11 @@ export { SessionPermissionService } from './lifecycle/session.permission.service
 export { buildChildWorkspaceContext } from './lifecycle/session.prompt-builder';
 export { sessionRepository } from './lifecycle/session.repository';
 export { SessionService } from './lifecycle/session.service';
+export {
+  type PRBackgroundDeliveryPort,
+  sessionBackgroundDeliveryService,
+} from './lifecycle/session-background-delivery.service';
+export { findPRDeliveryReceipt } from './lifecycle/session-pr-receipt';
 export type { SessionPromptService } from './lifecycle/session-services';
 export {
   acpEventProcessor,

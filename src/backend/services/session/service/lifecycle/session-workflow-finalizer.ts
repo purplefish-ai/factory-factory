@@ -225,9 +225,10 @@ export class SessionWorkflowFinalizer {
     let persistence = this.transientSessionPersistenceOperations.get(sessionId);
     if (!persistence) {
       persistence = this.persistClosedSessionIfAvailable(sessionId).then((persisted) => {
-        if (persisted) {
-          this.persistedTransientSessionIds.add(sessionId);
+        if (!persisted) {
+          throw new Error('Legacy session transcript could not be archived');
         }
+        this.persistedTransientSessionIds.add(sessionId);
       });
       this.transientSessionPersistenceOperations.set(sessionId, persistence);
     }

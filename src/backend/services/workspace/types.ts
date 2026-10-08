@@ -17,7 +17,6 @@ export interface PRSnapshotFields {
 export interface WorkspaceProviderSelectionSnapshot {
   id: string;
   defaultSessionProvider: WorkspaceProviderSelection;
-  ratchetSessionProvider: WorkspaceProviderSelection;
 }
 
 export interface WorkspaceFixerContext extends WorkspaceProviderSelectionSnapshot {
@@ -34,4 +33,9 @@ export interface WorkspaceStatusSnapshot {
 export interface WorkspacePRContext {
   branchName: string | null;
   prUrl: string | null;
+}
+
+export interface WorkspacePRIdentity {
+  workspaceId: string;
+  prId: string;
 }

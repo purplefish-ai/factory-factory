@@ -74,12 +74,10 @@ class WorkspaceDataService {
     id: string,
     data: {
       defaultSessionProvider?: WorkspaceProviderSelection;
-      ratchetSessionProvider?: WorkspaceProviderSelection;
     }
   ) {
     return workspaceAccessor.update(id, {
       defaultSessionProvider: data.defaultSessionProvider,
-      ratchetSessionProvider: data.ratchetSessionProvider,
     });
   }
 

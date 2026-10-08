@@ -67,9 +67,6 @@ const workspaceFieldOwners = {
   defaultSessionProvider: new Set([
     'src/backend/services/workspace/service/lifecycle/data.service.ts',
   ]),
-  ratchetSessionProvider: new Set([
-    'src/backend/services/workspace/service/lifecycle/data.service.ts',
-  ]),
 
   hasHadSessions: new Set([
     'src/backend/services/workspace/service/lifecycle/data.service.ts',
@@ -151,7 +148,6 @@ const workspaceMutationRules = {
     ],
   },
   markHasHadSessions: { type: 'static', fields: ['hasHadSessions'] },
-  applyPrAggregateUpdateWithDispatchReset: { type: 'static', fields: ['branchName'] },
   recordPrSnapshotWithBranchName: { type: 'static', fields: ['branchName'] },
   setBranchNameAndClearDiscoverySchedule: {
     type: 'static',
@@ -172,11 +168,11 @@ const workspaceMutationRules = {
 const workspaceMutationAliasRules = {
   applyPrSnapshotWithDispatchReset: {
     type: 'static',
-    fields: workspaceMutationRules.applyPrAggregateUpdateWithDispatchReset.fields,
+    fields: [],
   },
   applyPrObservationWithDispatchReset: {
     type: 'static',
-    fields: workspaceMutationRules.applyPrAggregateUpdateWithDispatchReset.fields,
+    fields: [],
   },
 };
 
@@ -535,8 +531,10 @@ function checkWorkspaceMutatorCoverage({ rootDir, violations }) {
 const OWNED_SIDE_TABLES = {
   sessionLifecycleEvent:
     'src/backend/services/session/resources/session-lifecycle-event.accessor.ts',
+  workspacePRMonitoring: 'src/backend/services/workspace/resources/workspace-pr-monitoring.accessor.ts',
+  workspacePREvent: 'src/backend/services/workspace/resources/workspace-pr-event.accessor.ts',
   workspacePR: 'src/backend/services/workspace/resources/workspace-pr.accessor.ts',
-  workspaceRatchet: 'src/backend/services/workspace/resources/workspace-ratchet.accessor.ts',
+  workspacePRDiscovery: 'src/backend/services/workspace/resources/workspace-pr-discovery.accessor.ts',
   workspaceRunScript:
     'src/backend/services/workspace/resources/workspace-run-script.accessor.ts',
   workspaceAutoIteration:
@@ -563,8 +561,11 @@ const SIDE_TABLE_WRITE_METHODS = new Set([
 
 /** The relation field each owned side table hangs off `Workspace` under. */
 const SIDE_TABLE_RELATIONS = {
-  pr: 'workspacePR',
-  ratchet: 'workspaceRatchet',
+  prMonitoring: 'workspacePRMonitoring',
+  prEvents: 'workspacePREvent',
+  events: 'workspacePREvent',
+  prs: 'workspacePR',
+  prDiscovery: 'workspacePRDiscovery',
   runScript: 'workspaceRunScript',
   sessionLifecycleEvents: 'sessionLifecycleEvent',
   autoIteration: 'workspaceAutoIteration',
@@ -572,8 +573,9 @@ const SIDE_TABLE_RELATIONS = {
 
 /** Paired rows that are initialized as part of every workspace creation. */
 const WORKSPACE_CREATION_SIDE_TABLES = new Set([
+  'workspacePRMonitoring',
   'workspacePR',
-  'workspaceRatchet',
+  'workspacePRDiscovery',
   'workspaceRunScript',
   'workspaceAutoIteration',
 ]);

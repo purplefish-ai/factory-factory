@@ -96,9 +96,7 @@ export class RatchetProjectionWorker {
       this.dependencies.publish(workspaceId, {
         ratchetEnabled: workspace.ratchetEnabled,
         ratchetState: workspace.ratchetState,
-        ratchetDispatchOutcome: workspace.ratchetDispatchOutcome,
-        ratchetDispatchRetryCount: workspace.ratchetDispatchRetryCount,
-        ratchetDispatchStalled: workspace.ratchetDispatchStalled,
+        prMonitoring: workspace.prMonitoring,
         hasMergeConflict: workspace.prHasMergeConflict,
       });
       return true;

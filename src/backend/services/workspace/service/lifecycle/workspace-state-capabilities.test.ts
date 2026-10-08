@@ -1,12 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
-import { workspaceRatchetAccessor } from '@/backend/services/workspace/resources/workspace-ratchet.accessor';
 import {
   AUTO_ITERATION_STATUS_CHANGED,
   type AutoIterationStatusChangedEvent,
   workspaceAutoIterationService,
 } from './workspace-auto-iteration.service';
-import { workspaceRatchetService } from './workspace-ratchet.service';
 import { workspaceRunScriptService } from './workspace-run-script.service';
 
 vi.mock('@/backend/services/workspace/resources/workspace.accessor', () => ({
@@ -20,12 +18,6 @@ vi.mock('@/backend/services/workspace/resources/workspace.accessor', () => ({
     registerInitializedWorktree: vi.fn(),
     setRunScriptCommands: vi.fn(),
     update: vi.fn(),
-  },
-}));
-
-vi.mock('@/backend/services/workspace/resources/workspace-ratchet.accessor', () => ({
-  workspaceRatchetAccessor: {
-    recordDispatchIfEnabled: vi.fn(),
   },
 }));
 
@@ -157,18 +149,6 @@ describe('workspace state capabilities', () => {
       runScriptPort: undefined,
       runScriptStartedAt: undefined,
     });
-  });
-
-  it('records ratchet dispatch only while ratcheting remains enabled', async () => {
-    vi.mocked(workspaceRatchetAccessor.recordDispatchIfEnabled).mockResolvedValue(true);
-
-    await expect(
-      workspaceRatchetService.recordDispatchIfEnabled('ws-1', {
-        sessionId: 'session-1',
-        snapshotKey: 'snapshot-1',
-        retryCount: 2,
-      })
-    ).resolves.toBe(true);
   });
 
   it('registers an initialized worktree and its run-script commands atomically', async () => {

@@ -348,12 +348,14 @@ describe('workspaceCoreRouter', () => {
       providerProjectPath: null,
     });
 
+    mockSetWorkspaceRatcheting.mockResolvedValue({ status: 'updated', bindingRevision: 1 });
     await expect(
       caller.toggleRatcheting({ workspaceId: 'w-created', enabled: true })
-    ).resolves.toEqual({
-      id: 'w-created',
+    ).resolves.toEqual({ status: 'updated', bindingRevision: 1 });
+    expect(mockSetWorkspaceRatcheting).toHaveBeenCalledWith('w-created', true, {
+      workspaceId: 'w-created',
+      enabled: true,
     });
-    expect(mockSetWorkspaceRatcheting).toHaveBeenCalledWith('w-created', true);
     expect(mockCheckWorkspaceById).toHaveBeenCalledWith('w-created');
 
     await expect(caller.archive({ id: 'w-created' })).resolves.toEqual({ archived: true });

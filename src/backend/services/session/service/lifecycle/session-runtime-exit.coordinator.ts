@@ -16,6 +16,7 @@ import type { AcpEventProcessor } from './acp-event-processor';
 import type { SessionPermissionService } from './session.permission.service';
 import type { SessionPromptTurnCompletionService } from './session.prompt-turn-completion.service';
 import type { SessionRepository } from './session.repository';
+import { sessionBackgroundDeliveryService } from './session-background-delivery.service';
 import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import type { SessionLifecycleGate } from './session-lifecycle-gate';
 import type { SessionProviderIdentityService } from './session-provider-identity.service';
@@ -92,6 +93,9 @@ export class SessionRuntimeExitCoordinator {
       if (event.purpose === 'browse') {
         this.dependencies.acpEventProcessor.clearSessionState(event.sessionId);
         return;
+      }
+      if (!deliberate && event.exitCode !== 0) {
+        await sessionBackgroundDeliveryService.runtimeFailure(event.sessionId);
       }
       this.prepareRuntimeExit(event.sessionId, event.exitCode);
       await this.handleActiveExit(event, deliberate, stopWillPersistIdle, bulkShutdownReserved);

@@ -22,8 +22,6 @@ function makeEntry(overrides: Partial<WorkspaceSnapshotEntry> = {}): WorkspaceSn
     prUpdatedAt: '2026-01-14T12:00:00Z',
     ratchetEnabled: true,
     ratchetState: 'IDLE',
-    ratchetDispatchOutcome: 'DIED',
-    ratchetDispatchRetryCount: 2,
     runScriptStatus: 'IDLE',
     hasHadSessions: true,
     isWorking: true,
@@ -132,8 +130,6 @@ describe('workspace snapshot cache projections', () => {
     );
 
     expect(detail?.prUpdatedAt).toEqual(new Date('2026-02-02T12:00:00Z'));
-    expect(detail?.ratchetDispatchOutcome).toBe('DIED');
-    expect(detail?.ratchetDispatchRetryCount).toBe(2);
     expect(detail?.hasHadSessions).toBe(true);
   });
 

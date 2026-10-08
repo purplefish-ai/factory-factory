@@ -1,3 +1,9 @@
+import {
+  prAssociationBackupSchema,
+  prDiscoveryBackupSchema,
+  prEventBackupSchema,
+  prMonitoringBackupSchema,
+} from './pr-monitoring-backup.schema';
 /**
  * Shared schema for export/import data validation.
  *
@@ -79,6 +85,10 @@ const exportedProjectSchema = z.object({
 });
 
 const exportedWorkspaceSchema = z.object({
+  prs: z.array(prAssociationBackupSchema).optional().default([]),
+  prDiscovery: prDiscoveryBackupSchema.nullable().optional().default(null),
+  prMonitoring: prMonitoringBackupSchema.nullable().optional().default(null),
+  prEvents: z.array(prEventBackupSchema).optional().default([]),
   id: z.string(),
   projectId: z.string(),
   parentWorkspaceId: z.string().nullable().optional().default(null),
@@ -110,7 +120,7 @@ const exportedWorkspaceSchema = z.object({
   linearIssueIdentifier: z.string().nullable(),
   linearIssueUrl: z.string().nullable(),
   defaultSessionProvider: WorkspaceProviderSelection,
-  ratchetSessionProvider: WorkspaceProviderSelection,
+  ratchetSessionProvider: WorkspaceProviderSelection.optional(),
   prNumber: z.number().nullable(),
   prState: PRState,
   prReviewState: z.string().nullable(),
@@ -174,7 +184,8 @@ const exportedUserSettingsSchema = z.object({
   defaultClaudeReasoningEffort: z.string().nullable().optional().default(null),
   defaultCodexReasoningEffort: z.string().nullable().optional().default(null),
   defaultWorkspacePermissions: SessionPermissionPreset.optional().default('STRICT'),
-  ratchetPermissions: SessionPermissionPreset.optional().default('YOLO'),
+  ratchetPermissions: SessionPermissionPreset.optional(),
+  autoIterationPermissions: SessionPermissionPreset.optional(),
   // Adversarial review settings
   reviewerSessionProvider: SessionProvider.optional().default('CODEX'),
   reviewerClaudeModel: z.string().nullable().optional().default(null),
@@ -220,7 +231,7 @@ export const exportDataSchema = z.object({
   meta: z.object({
     exportedAt: z.string(),
     version: z.string(),
-    schemaVersion: z.literal(4),
+    schemaVersion: z.union([z.literal(4), z.literal(5), z.literal(6)]),
   }),
   data: z.object({
     projects: z.array(exportedProjectSchema),

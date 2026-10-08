@@ -1,6 +1,5 @@
 import {
   type AgentSession,
-  type Prisma,
   type Project,
   SessionProvider,
   type TerminalSession,
@@ -23,6 +22,7 @@ import type { ExportData } from '@/shared/schemas/export-data.schema';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 
 const mockTx = vi.hoisted(() => ({
+  workspacePRMonitoring: { upsert: vi.fn() },
   project: {
     findUnique: vi.fn(),
     create: vi.fn(),
@@ -102,9 +102,7 @@ const mockProject: Project = {
  * run-script group, which the v4 format carries as flat `ratchet*`, `pr*` and
  * `runScript*` workspace fields.
  */
-type WorkspaceForExport = Prisma.WorkspaceGetPayload<{
-  include: { ratchet: true; pr: true; runScript: true; autoIteration: true };
-}>;
+type WorkspaceForExport = import('@/backend/services/settings').WorkspaceForExport;
 
 const mockWorkspace: WorkspaceForExport = {
   id: 'ws-1',
@@ -129,24 +127,32 @@ const mockWorkspace: WorkspaceForExport = {
   linearIssueIdentifier: null,
   linearIssueUrl: null,
   defaultSessionProvider: WorkspaceProviderSelection.CLAUDE,
-  ratchetSessionProvider: WorkspaceProviderSelection.WORKSPACE_DEFAULT,
-  pr: {
-    workspaceId: 'ws-1',
-    url: 'https://github.com/test/repo/pull/1',
-    number: 1,
-    state: PRState.OPEN,
-    reviewState: 'APPROVED',
-    ciStatus: CIStatus.SUCCESS,
-    hasMergeConflict: false,
-    syncedAt: new Date('2025-01-01T00:15:00.000Z'),
-    discoveryLastCheckedAt: null,
-    discoveryRetryCount: 0,
-    discoveryNextCheckAt: null,
-    ciFailedAt: null,
-    ciLastNotifiedAt: null,
-    reviewLastCheckedAt: new Date('2025-01-01T00:20:00.000Z'),
-    reviewLastCommentId: 'comment-123',
-  },
+
+  prs: [
+    {
+      id: 'pr1',
+      title: null,
+      headRefName: null,
+      baseRefName: null,
+      revision: 0,
+      detachedAt: null,
+      observation: null,
+      observationEpoch: 0,
+      transitionSequence: 0,
+      workspaceId: 'ws-1',
+      url: 'https://github.com/test/repo/pull/1',
+      number: 1,
+      state: PRState.OPEN,
+      reviewState: 'APPROVED',
+      ciStatus: CIStatus.SUCCESS,
+      hasMergeConflict: false,
+      syncedAt: new Date('2025-01-01T00:15:00.000Z'),
+      ciFailedAt: null,
+      ciLastNotifiedAt: null,
+      reviewLastCheckedAt: new Date('2025-01-01T00:20:00.000Z'),
+      reviewLastCommentId: 'comment-123',
+    },
+  ],
   runScript: {
     workspaceId: 'ws-1',
     command: 'npm run dev',
@@ -157,16 +163,18 @@ const mockWorkspace: WorkspaceForExport = {
     startedAt: new Date('2025-01-01T00:10:00.000Z'),
     status: RunScriptStatus.RUNNING,
   },
-  ratchet: {
+  prMonitoring: {
     workspaceId: 'ws-1',
+    legacySessionIds: [],
     enabled: true,
+    recipientSessionId: null,
+    bindingRevision: 0,
+    eventEpoch: 1,
+    deliveryPauseReason: null,
     lastCheckedAt: new Date('2025-01-01T00:25:00.000Z'),
-    activeSessionId: 'session-123',
-    dispatchSnapshotKey: 'run-123',
-    dispatchOutcome: null,
-    dispatchRetryCount: 0,
-    dispatchStalled: false,
   },
+  prEvents: [],
+  prDiscovery: null,
   hasHadSessions: true,
   autoIteration: {
     workspaceId: 'ws-1',
@@ -235,7 +243,7 @@ const mockUserSettings: UserSettings = {
   defaultClaudeReasoningEffort: null,
   defaultCodexReasoningEffort: 'high',
   defaultWorkspacePermissions: 'STRICT',
-  ratchetPermissions: 'YOLO',
+  autoIterationPermissions: 'YOLO',
   // Non-default values — an export/import test that only ever exercises
   // defaults can't tell a real persisted preference from a value the
   // schema's default happened to backfill (see the voiceModeEnabled et al.
@@ -314,7 +322,7 @@ function createImportData(
           linearIssueIdentifier: null,
           linearIssueUrl: null,
           defaultSessionProvider: WorkspaceProviderSelection.CLAUDE,
-          ratchetSessionProvider: WorkspaceProviderSelection.WORKSPACE_DEFAULT,
+
           prNumber: 1,
           prState: PRState.OPEN,
           prReviewState: 'APPROVED',
@@ -374,7 +382,7 @@ function createImportData(
         defaultClaudeModel: 'sonnet',
         defaultCodexModel: 'gpt-5-codex',
         defaultWorkspacePermissions: 'STRICT',
-        ratchetPermissions: 'YOLO',
+        autoIterationPermissions: 'YOLO',
         // Non-default so the import test below actually exercises restoring
         // a persisted preference, not just the schema's own default.
         reviewerSessionProvider: SessionProvider.CLAUDE,
@@ -407,7 +415,7 @@ describe('DataBackupService', () => {
 
       const result = await dataBackupService.exportData('1.0.0');
 
-      expect(result.meta.schemaVersion).toBe(4);
+      expect(result.meta.schemaVersion).toBe(6);
       expect(result.data.agentSessions).toHaveLength(1);
       expect(result.data.agentSessions[0]).toEqual(
         expect.objectContaining({
@@ -425,7 +433,7 @@ describe('DataBackupService', () => {
           defaultClaudeModel: 'sonnet',
           defaultCodexModel: 'gpt-5-codex',
           defaultWorkspacePermissions: 'STRICT',
-          ratchetPermissions: 'YOLO',
+          autoIterationPermissions: 'YOLO',
           reviewerSessionProvider: SessionProvider.CLAUDE,
           reviewerClaudeModel: 'opus',
           reviewerCodexModel: 'gpt-5-codex-high',
@@ -456,7 +464,7 @@ describe('DataBackupService', () => {
           defaultClaudeModel: 'sonnet',
           defaultCodexModel: 'default',
           defaultWorkspacePermissions: 'STRICT',
-          ratchetPermissions: 'YOLO',
+          autoIterationPermissions: 'YOLO',
         },
       });
 
@@ -654,14 +662,6 @@ describe('DataBackupService', () => {
           },
           // The v4 format's flat ratchet fields land in the nested row, and
           // `ratchetLastCiRunId` restores as `dispatchSnapshotKey`.
-          ratchet: {
-            create: {
-              enabled: true,
-              lastCheckedAt: new Date('2025-01-01T00:25:00.000Z'),
-              activeSessionId: 'session-123',
-              dispatchSnapshotKey: 'run-123',
-            },
-          },
         }),
       });
 
@@ -716,7 +716,7 @@ describe('DataBackupService', () => {
           defaultClaudeModel: 'sonnet',
           defaultCodexModel: 'gpt-5-codex',
           defaultWorkspacePermissions: 'STRICT',
-          ratchetPermissions: 'YOLO',
+          autoIterationPermissions: 'YOLO',
           voiceModeEnabled: true,
           voiceTtsModel: 'aura-2-apollo-en',
           voiceTtsSpeed: 0.72,

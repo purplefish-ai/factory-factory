@@ -3,7 +3,10 @@ export const prismaModelNames = [
   'DecisionLog',
   'Workspace',
   'WorkspacePR',
-  'WorkspaceRatchet',
+  'WorkspacePRMonitoring',
+  'WorkspacePREvent',
+  'WorkspacePRDiscovery',
+
   'WorkspaceRunScript',
   'WorkspaceAutoIteration',
   'WorkspaceNotification',
@@ -104,7 +107,10 @@ export const serviceRegistry = {
       'Project',
       'Workspace',
       'WorkspacePR',
-      'WorkspaceRatchet',
+      'WorkspacePRMonitoring',
+      'WorkspacePREvent',
+      'WorkspacePRDiscovery',
+
       'WorkspaceRunScript',
       'WorkspaceAutoIteration',
       'WorkspaceNotification',

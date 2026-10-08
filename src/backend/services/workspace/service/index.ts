@@ -22,8 +22,8 @@ export {
   type AutoIterationStatusChangedEvent,
   workspaceAutoIterationService,
 } from './lifecycle/workspace-auto-iteration.service';
+export { workspacePRMonitoringService } from './lifecycle/workspace-pr-monitoring.service';
 export { workspacePrSnapshotService } from './lifecycle/workspace-pr-snapshot.service';
-export { workspaceRatchetService } from './lifecycle/workspace-ratchet.service';
 export { workspaceRelationshipsService } from './lifecycle/workspace-relationships.service';
 export {
   type RunScriptExecutionState,

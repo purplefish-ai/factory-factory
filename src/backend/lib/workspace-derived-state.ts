@@ -8,6 +8,7 @@ import type {
   WorkspaceStatus,
 } from '@/shared/core';
 import { kanbanColumnForStatusReason } from '@/shared/kanban-column-projection';
+import type { PRMonitoringProjection } from '@/shared/pr-monitoring';
 import type { WorkspaceCiObservation, WorkspaceFlowPhase } from '@/shared/workspace-flow-state';
 import type { WorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import {
@@ -36,6 +37,7 @@ export interface WorkspaceDerivedStateInput {
   ratchetEnabled: boolean;
   hasMergeConflict: boolean;
   dispatchStalled: boolean;
+  prMonitoring?: PRMonitoringProjection;
   mode: WorkspaceMode;
   autoIterationStatus: AutoIterationStatus | null;
   flowState: WorkspaceDerivedFlowState;
@@ -84,6 +86,7 @@ export function assembleWorkspaceDerivedState(
     ratchetEnabled: input.ratchetEnabled,
     hasMergeConflict: input.hasMergeConflict,
     dispatchStalled: input.dispatchStalled,
+    prMonitoring: input.prMonitoring,
     mode: input.mode,
     autoIterationStatus: input.autoIterationStatus,
   });

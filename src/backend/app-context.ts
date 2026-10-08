@@ -49,7 +49,7 @@ import { linearClientService, linearStateSyncService } from './services/linear';
 import { createLogger, getLogFilePath } from './services/logger.service';
 import { periodicTaskService } from './services/periodic-task';
 import { findAvailablePort } from './services/port.service';
-import { fixerSessionService, ratchetService } from './services/ratchet';
+import { ratchetService } from './services/ratchet';
 import { rateLimiter } from './services/rate-limiter.service';
 import {
   createRunScriptService,
@@ -100,7 +100,6 @@ import {
   workspaceNotificationService,
   workspacePrSnapshotService,
   workspaceQueryService,
-  workspaceRatchetService,
   workspaceRelationshipsService,
   workspaceRunScriptService,
   workspaceSnapshotStore,
@@ -237,7 +236,6 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     healthService,
     initializeWorkspaceWorktree,
     insightsService,
-    fixerSessionService,
     getWorkspaceInitPolicy,
     githubCLIService,
     logbookService,
@@ -281,7 +279,6 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     workspaceNotificationService,
     workspacePrSnapshotService,
     workspaceQueryService,
-    workspaceRatchetService,
     workspaceRelationshipsService,
     workspaceRunScriptService,
     workspaceSnapshotStore,

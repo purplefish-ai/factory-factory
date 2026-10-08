@@ -105,21 +105,6 @@ class SessionDataService {
       : result;
   }
 
-  async acquireFixerSession(data: {
-    workspaceId: string;
-    workflow: string;
-    sessionName: string;
-    maxSessions: number;
-    provider?: SessionProvider;
-    providerProjectPath: string | null;
-  }) {
-    const defaults = await sessionProviderResolverService.resolveSessionDefaults({
-      workspaceId: data.workspaceId,
-      explicitProvider: data.provider,
-    });
-    return agentSessionAccessor.acquireFixerSession({ ...data, ...defaults });
-  }
-
   updateAgentSession(
     id: string,
     data: {

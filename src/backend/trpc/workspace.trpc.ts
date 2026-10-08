@@ -162,7 +162,8 @@ export const workspaceCoreRouter = router({
         isSessionStarting: hasStartingSessionSummary(sessionSummaries),
         ratchetEnabled: workspace.ratchetEnabled,
         hasMergeConflict: workspace.prHasMergeConflict,
-        dispatchStalled: workspace.ratchetDispatchStalled,
+        dispatchStalled: Boolean(workspace.prMonitoring?.pauseReason),
+        prMonitoring: workspace.prMonitoring,
         mode: workspace.mode,
         autoIterationStatus: workspace.autoIterationStatus,
         flowState,
@@ -326,29 +327,23 @@ export const workspaceCoreRouter = router({
       z.object({
         workspaceId: z.string(),
         enabled: z.boolean(),
+        recipientSessionId: z.string().optional(),
+        expectedBindingRevision: z.number().int().nonnegative().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const logger = getLogger(ctx);
-      const { ratchetService, workspaceDataService } = ctx.appContext.services;
-      await ratchetService.setWorkspaceRatcheting(input.workspaceId, input.enabled);
-      const updatedWorkspace = await workspaceDataService.findById(input.workspaceId);
-      if (!updatedWorkspace) {
-        throw new Error(`Workspace not found: ${input.workspaceId}`);
+      const { ratchetService } = ctx.appContext.services;
+      const result = await ratchetService.setWorkspaceRatcheting(
+        input.workspaceId,
+        input.enabled,
+        input
+      );
+      if (result.status === 'updated' && input.enabled) {
+        void ratchetService
+          .checkWorkspaceById(input.workspaceId)
+          .catch((error) => getLogger(ctx).warn('Background PR check failed', { error }));
       }
-
-      // Do not block the toggle response on external GitHub checks.
-      // Run an immediate ratchet check in the background.
-      if (input.enabled) {
-        void ratchetService.checkWorkspaceById(input.workspaceId).catch((error) => {
-          logger.warn('Background ratchet check failed after enabling workspace ratcheting', {
-            workspaceId: input.workspaceId,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        });
-      }
-
-      return updatedWorkspace;
+      return result;
     }),
 
   // Update workspace provider defaults (session + ratchet).
@@ -357,13 +352,11 @@ export const workspaceCoreRouter = router({
       z.object({
         workspaceId: z.string(),
         defaultSessionProvider: z.nativeEnum(WorkspaceProviderSelection).optional(),
-        ratchetSessionProvider: z.nativeEnum(WorkspaceProviderSelection).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       const updated = await ctx.appContext.services.workspaceDataService.update(input.workspaceId, {
         defaultSessionProvider: input.defaultSessionProvider,
-        ratchetSessionProvider: input.ratchetSessionProvider,
       });
       return updated;
     }),

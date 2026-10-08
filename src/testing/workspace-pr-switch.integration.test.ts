@@ -23,9 +23,13 @@ const mergedProjection = {
   status: 'READY',
   ratchetEnabled: true,
   ratchetState: 'MERGED',
-  ratchetDispatchOutcome: null,
-  ratchetDispatchRetryCount: 0,
-  ratchetDispatchStalled: false,
+  prMonitoring: {
+    enabled: true,
+    recipientSessionId: 'main',
+    bindingRevision: 1,
+    pauseReason: null,
+    pendingEventCount: 0,
+  },
   prHasMergeConflict: false,
 } satisfies Projection;
 

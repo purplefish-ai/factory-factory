@@ -30,6 +30,7 @@ export interface ChatMessageHandlerConfigService {
 }
 
 export interface ChatClientStartOptions {
+  resumePolicy?: 'allow_fallback' | 'require_existing';
   thinkingEnabled?: boolean;
   planModeEnabled?: boolean;
   model?: string;

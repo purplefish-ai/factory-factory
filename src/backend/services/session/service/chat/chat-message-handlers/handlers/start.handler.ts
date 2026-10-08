@@ -11,6 +11,7 @@ import { sessionLifecycleService } from '@/backend/services/session/service/life
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { WorkspaceStatus } from '@/shared/core';
 import type { StartMessageInput } from '@/shared/websocket';
+import { sessionBackgroundDeliveryService } from '../../../lifecycle/session-background-delivery.service';
 
 const logger = createLogger('chat-message-handlers');
 
@@ -39,6 +40,7 @@ export function createStartHandler(deps: {
     }
 
     try {
+      await sessionBackgroundDeliveryService.userResume(sessionId);
       await deps.startupService.getOrCreateSessionClient(sessionId, {
         thinkingEnabled: message.thinkingEnabled,
         planModeEnabled: message.planModeEnabled,

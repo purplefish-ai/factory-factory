@@ -55,7 +55,9 @@ export const ModelName = {
   DecisionLog: 'DecisionLog',
   Workspace: 'Workspace',
   WorkspacePR: 'WorkspacePR',
-  WorkspaceRatchet: 'WorkspaceRatchet',
+  WorkspacePRMonitoring: 'WorkspacePRMonitoring',
+  WorkspacePREvent: 'WorkspacePREvent',
+  WorkspacePRDiscovery: 'WorkspacePRDiscovery',
   WorkspaceRunScript: 'WorkspaceRunScript',
   WorkspaceAutoIteration: 'WorkspaceAutoIteration',
   AgentSession: 'AgentSession',
@@ -138,7 +140,6 @@ export const WorkspaceScalarFieldEnum = {
   linearIssueIdentifier: 'linearIssueIdentifier',
   linearIssueUrl: 'linearIssueUrl',
   defaultSessionProvider: 'defaultSessionProvider',
-  ratchetSessionProvider: 'ratchetSessionProvider',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt',
   periodicTaskId: 'periodicTaskId',
@@ -150,38 +151,75 @@ export type WorkspaceScalarFieldEnum = (typeof WorkspaceScalarFieldEnum)[keyof t
 
 
 export const WorkspacePRScalarFieldEnum = {
+  id: 'id',
   workspaceId: 'workspaceId',
   url: 'url',
   number: 'number',
+  title: 'title',
+  headRefName: 'headRefName',
+  baseRefName: 'baseRefName',
   state: 'state',
   reviewState: 'reviewState',
   ciStatus: 'ciStatus',
   hasMergeConflict: 'hasMergeConflict',
   syncedAt: 'syncedAt',
-  discoveryLastCheckedAt: 'discoveryLastCheckedAt',
-  discoveryRetryCount: 'discoveryRetryCount',
-  discoveryNextCheckAt: 'discoveryNextCheckAt',
+  detachedAt: 'detachedAt',
+  revision: 'revision',
   ciFailedAt: 'ciFailedAt',
   ciLastNotifiedAt: 'ciLastNotifiedAt',
   reviewLastCheckedAt: 'reviewLastCheckedAt',
-  reviewLastCommentId: 'reviewLastCommentId'
+  reviewLastCommentId: 'reviewLastCommentId',
+  observation: 'observation',
+  transitionSequence: 'transitionSequence',
+  observationEpoch: 'observationEpoch'
 } as const
 
 export type WorkspacePRScalarFieldEnum = (typeof WorkspacePRScalarFieldEnum)[keyof typeof WorkspacePRScalarFieldEnum]
 
 
-export const WorkspaceRatchetScalarFieldEnum = {
+export const WorkspacePRMonitoringScalarFieldEnum = {
   workspaceId: 'workspaceId',
   enabled: 'enabled',
-  lastCheckedAt: 'lastCheckedAt',
-  activeSessionId: 'activeSessionId',
-  dispatchSnapshotKey: 'dispatchSnapshotKey',
-  dispatchOutcome: 'dispatchOutcome',
-  dispatchRetryCount: 'dispatchRetryCount',
-  dispatchStalled: 'dispatchStalled'
+  recipientSessionId: 'recipientSessionId',
+  bindingRevision: 'bindingRevision',
+  eventEpoch: 'eventEpoch',
+  deliveryPauseReason: 'deliveryPauseReason',
+  legacySessionIds: 'legacySessionIds',
+  lastCheckedAt: 'lastCheckedAt'
 } as const
 
-export type WorkspaceRatchetScalarFieldEnum = (typeof WorkspaceRatchetScalarFieldEnum)[keyof typeof WorkspaceRatchetScalarFieldEnum]
+export type WorkspacePRMonitoringScalarFieldEnum = (typeof WorkspacePRMonitoringScalarFieldEnum)[keyof typeof WorkspacePRMonitoringScalarFieldEnum]
+
+
+export const WorkspacePREventScalarFieldEnum = {
+  id: 'id',
+  workspaceId: 'workspaceId',
+  prId: 'prId',
+  kind: 'kind',
+  deduplicationKey: 'deduplicationKey',
+  payload: 'payload',
+  state: 'state',
+  attempts: 'attempts',
+  deliveryId: 'deliveryId',
+  deliverySessionId: 'deliverySessionId',
+  deliveryBindingRevision: 'deliveryBindingRevision',
+  deliveryText: 'deliveryText',
+  claimedAt: 'claimedAt',
+  deliveredAt: 'deliveredAt',
+  createdAt: 'createdAt'
+} as const
+
+export type WorkspacePREventScalarFieldEnum = (typeof WorkspacePREventScalarFieldEnum)[keyof typeof WorkspacePREventScalarFieldEnum]
+
+
+export const WorkspacePRDiscoveryScalarFieldEnum = {
+  workspaceId: 'workspaceId',
+  lastCheckedAt: 'lastCheckedAt',
+  retryCount: 'retryCount',
+  nextCheckAt: 'nextCheckAt'
+} as const
+
+export type WorkspacePRDiscoveryScalarFieldEnum = (typeof WorkspacePRDiscoveryScalarFieldEnum)[keyof typeof WorkspacePRDiscoveryScalarFieldEnum]
 
 
 export const WorkspaceRunScriptScalarFieldEnum = {
@@ -290,7 +328,7 @@ export const UserSettingsScalarFieldEnum = {
   defaultClaudeReasoningEffort: 'defaultClaudeReasoningEffort',
   defaultCodexReasoningEffort: 'defaultCodexReasoningEffort',
   defaultWorkspacePermissions: 'defaultWorkspacePermissions',
-  ratchetPermissions: 'ratchetPermissions',
+  autoIterationPermissions: 'autoIterationPermissions',
   reviewerSessionProvider: 'reviewerSessionProvider',
   reviewerClaudeModel: 'reviewerClaudeModel',
   reviewerCodexModel: 'reviewerCodexModel',
@@ -371,6 +409,13 @@ export const NullableJsonNullValueInput = {
 } as const
 
 export type NullableJsonNullValueInput = (typeof NullableJsonNullValueInput)[keyof typeof NullableJsonNullValueInput]
+
+
+export const JsonNullValueInput = {
+  JsonNull: JsonNull
+} as const
+
+export type JsonNullValueInput = (typeof JsonNullValueInput)[keyof typeof JsonNullValueInput]
 
 
 export const JsonNullValueFilter = {

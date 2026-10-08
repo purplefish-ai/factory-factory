@@ -14,25 +14,7 @@ import type * as Prisma from "../internal/prismaNamespace"
 
 /**
  * Model WorkspacePR
- * What GitHub last told us about the workspace's pull request, plus the
- * bookkeeping for finding that PR and for the notifications we derive from it.
- * 
- * This is a cache, not a source of truth: every field here is either a copy of
- * GitHub state or a cursor into it, and losing the whole row costs one refresh.
- * It is split out of `Workspace` because that distinction was invisible while
- * the columns sat beside the workspace's own durable identity, and because the
- * compare-and-swap writes that attach and refresh a PR need to guard a row no
- * other concern writes.
- * 
- * Field names drop the `pr` prefix the columns carried on `Workspace`, where it
- * was doing the work this model's name now does. The flat `pr*` names are still
- * what every caller sees: `workspacePrAccessor` maps between the two, so the
- * split stops at the accessor.
- * 
- * Exactly one row per workspace, created with the workspace, so the writes that
- * run before a PR exists — discovery claims and their backoff — have a row to
- * guard. Reads substitute defaults if a row is ever missing rather than making
- * every caller handle the null.
+ * Each association retains its own GitHub cache. Detached rows suppress discovery.
  */
 export type WorkspacePRModel = runtime.Types.Result.DefaultSelection<Prisma.$WorkspacePRPayload>
 
@@ -46,132 +28,172 @@ export type AggregateWorkspacePR = {
 
 export type WorkspacePRAvgAggregateOutputType = {
   number: number | null
-  discoveryRetryCount: number | null
+  revision: number | null
+  transitionSequence: number | null
+  observationEpoch: number | null
 }
 
 export type WorkspacePRSumAggregateOutputType = {
   number: number | null
-  discoveryRetryCount: number | null
+  revision: number | null
+  transitionSequence: number | null
+  observationEpoch: number | null
 }
 
 export type WorkspacePRMinAggregateOutputType = {
+  id: string | null
   workspaceId: string | null
   url: string | null
   number: number | null
+  title: string | null
+  headRefName: string | null
+  baseRefName: string | null
   state: $Enums.PRState | null
   reviewState: string | null
   ciStatus: $Enums.CIStatus | null
   hasMergeConflict: boolean | null
   syncedAt: Date | null
-  discoveryLastCheckedAt: Date | null
-  discoveryRetryCount: number | null
-  discoveryNextCheckAt: Date | null
+  detachedAt: Date | null
+  revision: number | null
   ciFailedAt: Date | null
   ciLastNotifiedAt: Date | null
   reviewLastCheckedAt: Date | null
   reviewLastCommentId: string | null
+  transitionSequence: number | null
+  observationEpoch: number | null
 }
 
 export type WorkspacePRMaxAggregateOutputType = {
+  id: string | null
   workspaceId: string | null
   url: string | null
   number: number | null
+  title: string | null
+  headRefName: string | null
+  baseRefName: string | null
   state: $Enums.PRState | null
   reviewState: string | null
   ciStatus: $Enums.CIStatus | null
   hasMergeConflict: boolean | null
   syncedAt: Date | null
-  discoveryLastCheckedAt: Date | null
-  discoveryRetryCount: number | null
-  discoveryNextCheckAt: Date | null
+  detachedAt: Date | null
+  revision: number | null
   ciFailedAt: Date | null
   ciLastNotifiedAt: Date | null
   reviewLastCheckedAt: Date | null
   reviewLastCommentId: string | null
+  transitionSequence: number | null
+  observationEpoch: number | null
 }
 
 export type WorkspacePRCountAggregateOutputType = {
+  id: number
   workspaceId: number
   url: number
   number: number
+  title: number
+  headRefName: number
+  baseRefName: number
   state: number
   reviewState: number
   ciStatus: number
   hasMergeConflict: number
   syncedAt: number
-  discoveryLastCheckedAt: number
-  discoveryRetryCount: number
-  discoveryNextCheckAt: number
+  detachedAt: number
+  revision: number
   ciFailedAt: number
   ciLastNotifiedAt: number
   reviewLastCheckedAt: number
   reviewLastCommentId: number
+  observation: number
+  transitionSequence: number
+  observationEpoch: number
   _all: number
 }
 
 
 export type WorkspacePRAvgAggregateInputType = {
   number?: true
-  discoveryRetryCount?: true
+  revision?: true
+  transitionSequence?: true
+  observationEpoch?: true
 }
 
 export type WorkspacePRSumAggregateInputType = {
   number?: true
-  discoveryRetryCount?: true
+  revision?: true
+  transitionSequence?: true
+  observationEpoch?: true
 }
 
 export type WorkspacePRMinAggregateInputType = {
+  id?: true
   workspaceId?: true
   url?: true
   number?: true
+  title?: true
+  headRefName?: true
+  baseRefName?: true
   state?: true
   reviewState?: true
   ciStatus?: true
   hasMergeConflict?: true
   syncedAt?: true
-  discoveryLastCheckedAt?: true
-  discoveryRetryCount?: true
-  discoveryNextCheckAt?: true
+  detachedAt?: true
+  revision?: true
   ciFailedAt?: true
   ciLastNotifiedAt?: true
   reviewLastCheckedAt?: true
   reviewLastCommentId?: true
+  transitionSequence?: true
+  observationEpoch?: true
 }
 
 export type WorkspacePRMaxAggregateInputType = {
+  id?: true
   workspaceId?: true
   url?: true
   number?: true
+  title?: true
+  headRefName?: true
+  baseRefName?: true
   state?: true
   reviewState?: true
   ciStatus?: true
   hasMergeConflict?: true
   syncedAt?: true
-  discoveryLastCheckedAt?: true
-  discoveryRetryCount?: true
-  discoveryNextCheckAt?: true
+  detachedAt?: true
+  revision?: true
   ciFailedAt?: true
   ciLastNotifiedAt?: true
   reviewLastCheckedAt?: true
   reviewLastCommentId?: true
+  transitionSequence?: true
+  observationEpoch?: true
 }
 
 export type WorkspacePRCountAggregateInputType = {
+  id?: true
   workspaceId?: true
   url?: true
   number?: true
+  title?: true
+  headRefName?: true
+  baseRefName?: true
   state?: true
   reviewState?: true
   ciStatus?: true
   hasMergeConflict?: true
   syncedAt?: true
-  discoveryLastCheckedAt?: true
-  discoveryRetryCount?: true
-  discoveryNextCheckAt?: true
+  detachedAt?: true
+  revision?: true
   ciFailedAt?: true
   ciLastNotifiedAt?: true
   reviewLastCheckedAt?: true
   reviewLastCommentId?: true
+  observation?: true
+  transitionSequence?: true
+  observationEpoch?: true
   _all?: true
 }
 
@@ -262,21 +284,27 @@ export type WorkspacePRGroupByArgs<ExtArgs extends runtime.Types.Extensions.Inte
 }
 
 export type WorkspacePRGroupByOutputType = {
+  id: string
   workspaceId: string
-  url: string | null
+  url: string
   number: number | null
+  title: string | null
+  headRefName: string | null
+  baseRefName: string | null
   state: $Enums.PRState
   reviewState: string | null
   ciStatus: $Enums.CIStatus
   hasMergeConflict: boolean
   syncedAt: Date | null
-  discoveryLastCheckedAt: Date | null
-  discoveryRetryCount: number
-  discoveryNextCheckAt: Date | null
+  detachedAt: Date | null
+  revision: number
   ciFailedAt: Date | null
   ciLastNotifiedAt: Date | null
   reviewLastCheckedAt: Date | null
   reviewLastCommentId: string | null
+  observation: runtime.JsonValue | null
+  transitionSequence: number
+  observationEpoch: number
   _count: WorkspacePRCountAggregateOutputType | null
   _avg: WorkspacePRAvgAggregateOutputType | null
   _sum: WorkspacePRSumAggregateOutputType | null
@@ -303,81 +331,109 @@ export type WorkspacePRWhereInput = {
   AND?: Prisma.WorkspacePRWhereInput | Prisma.WorkspacePRWhereInput[]
   OR?: Prisma.WorkspacePRWhereInput[]
   NOT?: Prisma.WorkspacePRWhereInput | Prisma.WorkspacePRWhereInput[]
+  id?: Prisma.StringFilter<"WorkspacePR"> | string
   workspaceId?: Prisma.StringFilter<"WorkspacePR"> | string
-  url?: Prisma.StringNullableFilter<"WorkspacePR"> | string | null
+  url?: Prisma.StringFilter<"WorkspacePR"> | string
   number?: Prisma.IntNullableFilter<"WorkspacePR"> | number | null
+  title?: Prisma.StringNullableFilter<"WorkspacePR"> | string | null
+  headRefName?: Prisma.StringNullableFilter<"WorkspacePR"> | string | null
+  baseRefName?: Prisma.StringNullableFilter<"WorkspacePR"> | string | null
   state?: Prisma.EnumPRStateFilter<"WorkspacePR"> | $Enums.PRState
   reviewState?: Prisma.StringNullableFilter<"WorkspacePR"> | string | null
   ciStatus?: Prisma.EnumCIStatusFilter<"WorkspacePR"> | $Enums.CIStatus
   hasMergeConflict?: Prisma.BoolFilter<"WorkspacePR"> | boolean
   syncedAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
-  discoveryLastCheckedAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
-  discoveryRetryCount?: Prisma.IntFilter<"WorkspacePR"> | number
-  discoveryNextCheckAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
+  detachedAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
+  revision?: Prisma.IntFilter<"WorkspacePR"> | number
   ciFailedAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
   ciLastNotifiedAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
   reviewLastCheckedAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
   reviewLastCommentId?: Prisma.StringNullableFilter<"WorkspacePR"> | string | null
+  observation?: Prisma.JsonNullableFilter<"WorkspacePR">
+  transitionSequence?: Prisma.IntFilter<"WorkspacePR"> | number
+  observationEpoch?: Prisma.IntFilter<"WorkspacePR"> | number
   workspace?: Prisma.XOR<Prisma.WorkspaceScalarRelationFilter, Prisma.WorkspaceWhereInput>
+  events?: Prisma.WorkspacePREventListRelationFilter
 }
 
 export type WorkspacePROrderByWithRelationInput = {
+  id?: Prisma.SortOrder
   workspaceId?: Prisma.SortOrder
-  url?: Prisma.SortOrderInput | Prisma.SortOrder
+  url?: Prisma.SortOrder
   number?: Prisma.SortOrderInput | Prisma.SortOrder
+  title?: Prisma.SortOrderInput | Prisma.SortOrder
+  headRefName?: Prisma.SortOrderInput | Prisma.SortOrder
+  baseRefName?: Prisma.SortOrderInput | Prisma.SortOrder
   state?: Prisma.SortOrder
   reviewState?: Prisma.SortOrderInput | Prisma.SortOrder
   ciStatus?: Prisma.SortOrder
   hasMergeConflict?: Prisma.SortOrder
   syncedAt?: Prisma.SortOrderInput | Prisma.SortOrder
-  discoveryLastCheckedAt?: Prisma.SortOrderInput | Prisma.SortOrder
-  discoveryRetryCount?: Prisma.SortOrder
-  discoveryNextCheckAt?: Prisma.SortOrderInput | Prisma.SortOrder
+  detachedAt?: Prisma.SortOrderInput | Prisma.SortOrder
+  revision?: Prisma.SortOrder
   ciFailedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   ciLastNotifiedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   reviewLastCheckedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   reviewLastCommentId?: Prisma.SortOrderInput | Prisma.SortOrder
+  observation?: Prisma.SortOrderInput | Prisma.SortOrder
+  transitionSequence?: Prisma.SortOrder
+  observationEpoch?: Prisma.SortOrder
   workspace?: Prisma.WorkspaceOrderByWithRelationInput
+  events?: Prisma.WorkspacePREventOrderByRelationAggregateInput
 }
 
 export type WorkspacePRWhereUniqueInput = Prisma.AtLeast<{
-  workspaceId?: string
+  id?: string
+  workspaceId_url?: Prisma.WorkspacePRWorkspaceIdUrlCompoundUniqueInput
   AND?: Prisma.WorkspacePRWhereInput | Prisma.WorkspacePRWhereInput[]
   OR?: Prisma.WorkspacePRWhereInput[]
   NOT?: Prisma.WorkspacePRWhereInput | Prisma.WorkspacePRWhereInput[]
-  url?: Prisma.StringNullableFilter<"WorkspacePR"> | string | null
+  workspaceId?: Prisma.StringFilter<"WorkspacePR"> | string
+  url?: Prisma.StringFilter<"WorkspacePR"> | string
   number?: Prisma.IntNullableFilter<"WorkspacePR"> | number | null
+  title?: Prisma.StringNullableFilter<"WorkspacePR"> | string | null
+  headRefName?: Prisma.StringNullableFilter<"WorkspacePR"> | string | null
+  baseRefName?: Prisma.StringNullableFilter<"WorkspacePR"> | string | null
   state?: Prisma.EnumPRStateFilter<"WorkspacePR"> | $Enums.PRState
   reviewState?: Prisma.StringNullableFilter<"WorkspacePR"> | string | null
   ciStatus?: Prisma.EnumCIStatusFilter<"WorkspacePR"> | $Enums.CIStatus
   hasMergeConflict?: Prisma.BoolFilter<"WorkspacePR"> | boolean
   syncedAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
-  discoveryLastCheckedAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
-  discoveryRetryCount?: Prisma.IntFilter<"WorkspacePR"> | number
-  discoveryNextCheckAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
+  detachedAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
+  revision?: Prisma.IntFilter<"WorkspacePR"> | number
   ciFailedAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
   ciLastNotifiedAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
   reviewLastCheckedAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
   reviewLastCommentId?: Prisma.StringNullableFilter<"WorkspacePR"> | string | null
+  observation?: Prisma.JsonNullableFilter<"WorkspacePR">
+  transitionSequence?: Prisma.IntFilter<"WorkspacePR"> | number
+  observationEpoch?: Prisma.IntFilter<"WorkspacePR"> | number
   workspace?: Prisma.XOR<Prisma.WorkspaceScalarRelationFilter, Prisma.WorkspaceWhereInput>
-}, "workspaceId">
+  events?: Prisma.WorkspacePREventListRelationFilter
+}, "id" | "workspaceId_url">
 
 export type WorkspacePROrderByWithAggregationInput = {
+  id?: Prisma.SortOrder
   workspaceId?: Prisma.SortOrder
-  url?: Prisma.SortOrderInput | Prisma.SortOrder
+  url?: Prisma.SortOrder
   number?: Prisma.SortOrderInput | Prisma.SortOrder
+  title?: Prisma.SortOrderInput | Prisma.SortOrder
+  headRefName?: Prisma.SortOrderInput | Prisma.SortOrder
+  baseRefName?: Prisma.SortOrderInput | Prisma.SortOrder
   state?: Prisma.SortOrder
   reviewState?: Prisma.SortOrderInput | Prisma.SortOrder
   ciStatus?: Prisma.SortOrder
   hasMergeConflict?: Prisma.SortOrder
   syncedAt?: Prisma.SortOrderInput | Prisma.SortOrder
-  discoveryLastCheckedAt?: Prisma.SortOrderInput | Prisma.SortOrder
-  discoveryRetryCount?: Prisma.SortOrder
-  discoveryNextCheckAt?: Prisma.SortOrderInput | Prisma.SortOrder
+  detachedAt?: Prisma.SortOrderInput | Prisma.SortOrder
+  revision?: Prisma.SortOrder
   ciFailedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   ciLastNotifiedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   reviewLastCheckedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   reviewLastCommentId?: Prisma.SortOrderInput | Prisma.SortOrder
+  observation?: Prisma.SortOrderInput | Prisma.SortOrder
+  transitionSequence?: Prisma.SortOrder
+  observationEpoch?: Prisma.SortOrder
   _count?: Prisma.WorkspacePRCountOrderByAggregateInput
   _avg?: Prisma.WorkspacePRAvgOrderByAggregateInput
   _max?: Prisma.WorkspacePRMaxOrderByAggregateInput
@@ -389,146 +445,297 @@ export type WorkspacePRScalarWhereWithAggregatesInput = {
   AND?: Prisma.WorkspacePRScalarWhereWithAggregatesInput | Prisma.WorkspacePRScalarWhereWithAggregatesInput[]
   OR?: Prisma.WorkspacePRScalarWhereWithAggregatesInput[]
   NOT?: Prisma.WorkspacePRScalarWhereWithAggregatesInput | Prisma.WorkspacePRScalarWhereWithAggregatesInput[]
+  id?: Prisma.StringWithAggregatesFilter<"WorkspacePR"> | string
   workspaceId?: Prisma.StringWithAggregatesFilter<"WorkspacePR"> | string
-  url?: Prisma.StringNullableWithAggregatesFilter<"WorkspacePR"> | string | null
+  url?: Prisma.StringWithAggregatesFilter<"WorkspacePR"> | string
   number?: Prisma.IntNullableWithAggregatesFilter<"WorkspacePR"> | number | null
+  title?: Prisma.StringNullableWithAggregatesFilter<"WorkspacePR"> | string | null
+  headRefName?: Prisma.StringNullableWithAggregatesFilter<"WorkspacePR"> | string | null
+  baseRefName?: Prisma.StringNullableWithAggregatesFilter<"WorkspacePR"> | string | null
   state?: Prisma.EnumPRStateWithAggregatesFilter<"WorkspacePR"> | $Enums.PRState
   reviewState?: Prisma.StringNullableWithAggregatesFilter<"WorkspacePR"> | string | null
   ciStatus?: Prisma.EnumCIStatusWithAggregatesFilter<"WorkspacePR"> | $Enums.CIStatus
   hasMergeConflict?: Prisma.BoolWithAggregatesFilter<"WorkspacePR"> | boolean
   syncedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"WorkspacePR"> | Date | string | null
-  discoveryLastCheckedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"WorkspacePR"> | Date | string | null
-  discoveryRetryCount?: Prisma.IntWithAggregatesFilter<"WorkspacePR"> | number
-  discoveryNextCheckAt?: Prisma.DateTimeNullableWithAggregatesFilter<"WorkspacePR"> | Date | string | null
+  detachedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"WorkspacePR"> | Date | string | null
+  revision?: Prisma.IntWithAggregatesFilter<"WorkspacePR"> | number
   ciFailedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"WorkspacePR"> | Date | string | null
   ciLastNotifiedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"WorkspacePR"> | Date | string | null
   reviewLastCheckedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"WorkspacePR"> | Date | string | null
   reviewLastCommentId?: Prisma.StringNullableWithAggregatesFilter<"WorkspacePR"> | string | null
+  observation?: Prisma.JsonNullableWithAggregatesFilter<"WorkspacePR">
+  transitionSequence?: Prisma.IntWithAggregatesFilter<"WorkspacePR"> | number
+  observationEpoch?: Prisma.IntWithAggregatesFilter<"WorkspacePR"> | number
 }
 
 export type WorkspacePRCreateInput = {
-  url?: string | null
+  id?: string
+  url: string
   number?: number | null
+  title?: string | null
+  headRefName?: string | null
+  baseRefName?: string | null
   state?: $Enums.PRState
   reviewState?: string | null
   ciStatus?: $Enums.CIStatus
   hasMergeConflict?: boolean
   syncedAt?: Date | string | null
-  discoveryLastCheckedAt?: Date | string | null
-  discoveryRetryCount?: number
-  discoveryNextCheckAt?: Date | string | null
+  detachedAt?: Date | string | null
+  revision?: number
   ciFailedAt?: Date | string | null
   ciLastNotifiedAt?: Date | string | null
   reviewLastCheckedAt?: Date | string | null
   reviewLastCommentId?: string | null
-  workspace: Prisma.WorkspaceCreateNestedOneWithoutPrInput
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: number
+  observationEpoch?: number
+  workspace: Prisma.WorkspaceCreateNestedOneWithoutPrsInput
+  events?: Prisma.WorkspacePREventCreateNestedManyWithoutPrInput
 }
 
 export type WorkspacePRUncheckedCreateInput = {
+  id?: string
   workspaceId: string
-  url?: string | null
+  url: string
   number?: number | null
+  title?: string | null
+  headRefName?: string | null
+  baseRefName?: string | null
   state?: $Enums.PRState
   reviewState?: string | null
   ciStatus?: $Enums.CIStatus
   hasMergeConflict?: boolean
   syncedAt?: Date | string | null
-  discoveryLastCheckedAt?: Date | string | null
-  discoveryRetryCount?: number
-  discoveryNextCheckAt?: Date | string | null
+  detachedAt?: Date | string | null
+  revision?: number
   ciFailedAt?: Date | string | null
   ciLastNotifiedAt?: Date | string | null
   reviewLastCheckedAt?: Date | string | null
   reviewLastCommentId?: string | null
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: number
+  observationEpoch?: number
+  events?: Prisma.WorkspacePREventUncheckedCreateNestedManyWithoutPrInput
 }
 
 export type WorkspacePRUpdateInput = {
-  url?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  url?: Prisma.StringFieldUpdateOperationsInput | string
   number?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  title?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  headRefName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  baseRefName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   state?: Prisma.EnumPRStateFieldUpdateOperationsInput | $Enums.PRState
   reviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   ciStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   hasMergeConflict?: Prisma.BoolFieldUpdateOperationsInput | boolean
   syncedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  discoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  discoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
-  discoveryNextCheckAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  detachedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  revision?: Prisma.IntFieldUpdateOperationsInput | number
   ciFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   ciLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   reviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   reviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrNestedInput
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: Prisma.IntFieldUpdateOperationsInput | number
+  observationEpoch?: Prisma.IntFieldUpdateOperationsInput | number
+  workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrsNestedInput
+  events?: Prisma.WorkspacePREventUpdateManyWithoutPrNestedInput
 }
 
 export type WorkspacePRUncheckedUpdateInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
-  url?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  url?: Prisma.StringFieldUpdateOperationsInput | string
   number?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  title?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  headRefName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  baseRefName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   state?: Prisma.EnumPRStateFieldUpdateOperationsInput | $Enums.PRState
   reviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   ciStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   hasMergeConflict?: Prisma.BoolFieldUpdateOperationsInput | boolean
   syncedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  discoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  discoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
-  discoveryNextCheckAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  detachedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  revision?: Prisma.IntFieldUpdateOperationsInput | number
   ciFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   ciLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   reviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   reviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: Prisma.IntFieldUpdateOperationsInput | number
+  observationEpoch?: Prisma.IntFieldUpdateOperationsInput | number
+  events?: Prisma.WorkspacePREventUncheckedUpdateManyWithoutPrNestedInput
 }
 
 export type WorkspacePRCreateManyInput = {
+  id?: string
   workspaceId: string
-  url?: string | null
+  url: string
   number?: number | null
+  title?: string | null
+  headRefName?: string | null
+  baseRefName?: string | null
   state?: $Enums.PRState
   reviewState?: string | null
   ciStatus?: $Enums.CIStatus
   hasMergeConflict?: boolean
   syncedAt?: Date | string | null
-  discoveryLastCheckedAt?: Date | string | null
-  discoveryRetryCount?: number
-  discoveryNextCheckAt?: Date | string | null
+  detachedAt?: Date | string | null
+  revision?: number
   ciFailedAt?: Date | string | null
   ciLastNotifiedAt?: Date | string | null
   reviewLastCheckedAt?: Date | string | null
   reviewLastCommentId?: string | null
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: number
+  observationEpoch?: number
 }
 
 export type WorkspacePRUpdateManyMutationInput = {
-  url?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  url?: Prisma.StringFieldUpdateOperationsInput | string
   number?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  title?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  headRefName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  baseRefName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   state?: Prisma.EnumPRStateFieldUpdateOperationsInput | $Enums.PRState
   reviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   ciStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   hasMergeConflict?: Prisma.BoolFieldUpdateOperationsInput | boolean
   syncedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  discoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  discoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
-  discoveryNextCheckAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  detachedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  revision?: Prisma.IntFieldUpdateOperationsInput | number
   ciFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   ciLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   reviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   reviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: Prisma.IntFieldUpdateOperationsInput | number
+  observationEpoch?: Prisma.IntFieldUpdateOperationsInput | number
 }
 
 export type WorkspacePRUncheckedUpdateManyInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
-  url?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  url?: Prisma.StringFieldUpdateOperationsInput | string
   number?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  title?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  headRefName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  baseRefName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   state?: Prisma.EnumPRStateFieldUpdateOperationsInput | $Enums.PRState
   reviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   ciStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   hasMergeConflict?: Prisma.BoolFieldUpdateOperationsInput | boolean
   syncedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  discoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  discoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
-  discoveryNextCheckAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  detachedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  revision?: Prisma.IntFieldUpdateOperationsInput | number
   ciFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   ciLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   reviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   reviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: Prisma.IntFieldUpdateOperationsInput | number
+  observationEpoch?: Prisma.IntFieldUpdateOperationsInput | number
+}
+
+export type WorkspacePRListRelationFilter = {
+  every?: Prisma.WorkspacePRWhereInput
+  some?: Prisma.WorkspacePRWhereInput
+  none?: Prisma.WorkspacePRWhereInput
+}
+
+export type WorkspacePROrderByRelationAggregateInput = {
+  _count?: Prisma.SortOrder
+}
+
+export type WorkspacePRWorkspaceIdUrlCompoundUniqueInput = {
+  workspaceId: string
+  url: string
+}
+
+export type WorkspacePRCountOrderByAggregateInput = {
+  id?: Prisma.SortOrder
+  workspaceId?: Prisma.SortOrder
+  url?: Prisma.SortOrder
+  number?: Prisma.SortOrder
+  title?: Prisma.SortOrder
+  headRefName?: Prisma.SortOrder
+  baseRefName?: Prisma.SortOrder
+  state?: Prisma.SortOrder
+  reviewState?: Prisma.SortOrder
+  ciStatus?: Prisma.SortOrder
+  hasMergeConflict?: Prisma.SortOrder
+  syncedAt?: Prisma.SortOrder
+  detachedAt?: Prisma.SortOrder
+  revision?: Prisma.SortOrder
+  ciFailedAt?: Prisma.SortOrder
+  ciLastNotifiedAt?: Prisma.SortOrder
+  reviewLastCheckedAt?: Prisma.SortOrder
+  reviewLastCommentId?: Prisma.SortOrder
+  observation?: Prisma.SortOrder
+  transitionSequence?: Prisma.SortOrder
+  observationEpoch?: Prisma.SortOrder
+}
+
+export type WorkspacePRAvgOrderByAggregateInput = {
+  number?: Prisma.SortOrder
+  revision?: Prisma.SortOrder
+  transitionSequence?: Prisma.SortOrder
+  observationEpoch?: Prisma.SortOrder
+}
+
+export type WorkspacePRMaxOrderByAggregateInput = {
+  id?: Prisma.SortOrder
+  workspaceId?: Prisma.SortOrder
+  url?: Prisma.SortOrder
+  number?: Prisma.SortOrder
+  title?: Prisma.SortOrder
+  headRefName?: Prisma.SortOrder
+  baseRefName?: Prisma.SortOrder
+  state?: Prisma.SortOrder
+  reviewState?: Prisma.SortOrder
+  ciStatus?: Prisma.SortOrder
+  hasMergeConflict?: Prisma.SortOrder
+  syncedAt?: Prisma.SortOrder
+  detachedAt?: Prisma.SortOrder
+  revision?: Prisma.SortOrder
+  ciFailedAt?: Prisma.SortOrder
+  ciLastNotifiedAt?: Prisma.SortOrder
+  reviewLastCheckedAt?: Prisma.SortOrder
+  reviewLastCommentId?: Prisma.SortOrder
+  transitionSequence?: Prisma.SortOrder
+  observationEpoch?: Prisma.SortOrder
+}
+
+export type WorkspacePRMinOrderByAggregateInput = {
+  id?: Prisma.SortOrder
+  workspaceId?: Prisma.SortOrder
+  url?: Prisma.SortOrder
+  number?: Prisma.SortOrder
+  title?: Prisma.SortOrder
+  headRefName?: Prisma.SortOrder
+  baseRefName?: Prisma.SortOrder
+  state?: Prisma.SortOrder
+  reviewState?: Prisma.SortOrder
+  ciStatus?: Prisma.SortOrder
+  hasMergeConflict?: Prisma.SortOrder
+  syncedAt?: Prisma.SortOrder
+  detachedAt?: Prisma.SortOrder
+  revision?: Prisma.SortOrder
+  ciFailedAt?: Prisma.SortOrder
+  ciLastNotifiedAt?: Prisma.SortOrder
+  reviewLastCheckedAt?: Prisma.SortOrder
+  reviewLastCommentId?: Prisma.SortOrder
+  transitionSequence?: Prisma.SortOrder
+  observationEpoch?: Prisma.SortOrder
+}
+
+export type WorkspacePRSumOrderByAggregateInput = {
+  number?: Prisma.SortOrder
+  revision?: Prisma.SortOrder
+  transitionSequence?: Prisma.SortOrder
+  observationEpoch?: Prisma.SortOrder
 }
 
 export type WorkspacePRNullableScalarRelationFilter = {
@@ -536,100 +743,46 @@ export type WorkspacePRNullableScalarRelationFilter = {
   isNot?: Prisma.WorkspacePRWhereInput | null
 }
 
-export type WorkspacePRCountOrderByAggregateInput = {
-  workspaceId?: Prisma.SortOrder
-  url?: Prisma.SortOrder
-  number?: Prisma.SortOrder
-  state?: Prisma.SortOrder
-  reviewState?: Prisma.SortOrder
-  ciStatus?: Prisma.SortOrder
-  hasMergeConflict?: Prisma.SortOrder
-  syncedAt?: Prisma.SortOrder
-  discoveryLastCheckedAt?: Prisma.SortOrder
-  discoveryRetryCount?: Prisma.SortOrder
-  discoveryNextCheckAt?: Prisma.SortOrder
-  ciFailedAt?: Prisma.SortOrder
-  ciLastNotifiedAt?: Prisma.SortOrder
-  reviewLastCheckedAt?: Prisma.SortOrder
-  reviewLastCommentId?: Prisma.SortOrder
+export type WorkspacePRCreateNestedManyWithoutWorkspaceInput = {
+  create?: Prisma.XOR<Prisma.WorkspacePRCreateWithoutWorkspaceInput, Prisma.WorkspacePRUncheckedCreateWithoutWorkspaceInput> | Prisma.WorkspacePRCreateWithoutWorkspaceInput[] | Prisma.WorkspacePRUncheckedCreateWithoutWorkspaceInput[]
+  connectOrCreate?: Prisma.WorkspacePRCreateOrConnectWithoutWorkspaceInput | Prisma.WorkspacePRCreateOrConnectWithoutWorkspaceInput[]
+  createMany?: Prisma.WorkspacePRCreateManyWorkspaceInputEnvelope
+  connect?: Prisma.WorkspacePRWhereUniqueInput | Prisma.WorkspacePRWhereUniqueInput[]
 }
 
-export type WorkspacePRAvgOrderByAggregateInput = {
-  number?: Prisma.SortOrder
-  discoveryRetryCount?: Prisma.SortOrder
+export type WorkspacePRUncheckedCreateNestedManyWithoutWorkspaceInput = {
+  create?: Prisma.XOR<Prisma.WorkspacePRCreateWithoutWorkspaceInput, Prisma.WorkspacePRUncheckedCreateWithoutWorkspaceInput> | Prisma.WorkspacePRCreateWithoutWorkspaceInput[] | Prisma.WorkspacePRUncheckedCreateWithoutWorkspaceInput[]
+  connectOrCreate?: Prisma.WorkspacePRCreateOrConnectWithoutWorkspaceInput | Prisma.WorkspacePRCreateOrConnectWithoutWorkspaceInput[]
+  createMany?: Prisma.WorkspacePRCreateManyWorkspaceInputEnvelope
+  connect?: Prisma.WorkspacePRWhereUniqueInput | Prisma.WorkspacePRWhereUniqueInput[]
 }
 
-export type WorkspacePRMaxOrderByAggregateInput = {
-  workspaceId?: Prisma.SortOrder
-  url?: Prisma.SortOrder
-  number?: Prisma.SortOrder
-  state?: Prisma.SortOrder
-  reviewState?: Prisma.SortOrder
-  ciStatus?: Prisma.SortOrder
-  hasMergeConflict?: Prisma.SortOrder
-  syncedAt?: Prisma.SortOrder
-  discoveryLastCheckedAt?: Prisma.SortOrder
-  discoveryRetryCount?: Prisma.SortOrder
-  discoveryNextCheckAt?: Prisma.SortOrder
-  ciFailedAt?: Prisma.SortOrder
-  ciLastNotifiedAt?: Prisma.SortOrder
-  reviewLastCheckedAt?: Prisma.SortOrder
-  reviewLastCommentId?: Prisma.SortOrder
+export type WorkspacePRUpdateManyWithoutWorkspaceNestedInput = {
+  create?: Prisma.XOR<Prisma.WorkspacePRCreateWithoutWorkspaceInput, Prisma.WorkspacePRUncheckedCreateWithoutWorkspaceInput> | Prisma.WorkspacePRCreateWithoutWorkspaceInput[] | Prisma.WorkspacePRUncheckedCreateWithoutWorkspaceInput[]
+  connectOrCreate?: Prisma.WorkspacePRCreateOrConnectWithoutWorkspaceInput | Prisma.WorkspacePRCreateOrConnectWithoutWorkspaceInput[]
+  upsert?: Prisma.WorkspacePRUpsertWithWhereUniqueWithoutWorkspaceInput | Prisma.WorkspacePRUpsertWithWhereUniqueWithoutWorkspaceInput[]
+  createMany?: Prisma.WorkspacePRCreateManyWorkspaceInputEnvelope
+  set?: Prisma.WorkspacePRWhereUniqueInput | Prisma.WorkspacePRWhereUniqueInput[]
+  disconnect?: Prisma.WorkspacePRWhereUniqueInput | Prisma.WorkspacePRWhereUniqueInput[]
+  delete?: Prisma.WorkspacePRWhereUniqueInput | Prisma.WorkspacePRWhereUniqueInput[]
+  connect?: Prisma.WorkspacePRWhereUniqueInput | Prisma.WorkspacePRWhereUniqueInput[]
+  update?: Prisma.WorkspacePRUpdateWithWhereUniqueWithoutWorkspaceInput | Prisma.WorkspacePRUpdateWithWhereUniqueWithoutWorkspaceInput[]
+  updateMany?: Prisma.WorkspacePRUpdateManyWithWhereWithoutWorkspaceInput | Prisma.WorkspacePRUpdateManyWithWhereWithoutWorkspaceInput[]
+  deleteMany?: Prisma.WorkspacePRScalarWhereInput | Prisma.WorkspacePRScalarWhereInput[]
 }
 
-export type WorkspacePRMinOrderByAggregateInput = {
-  workspaceId?: Prisma.SortOrder
-  url?: Prisma.SortOrder
-  number?: Prisma.SortOrder
-  state?: Prisma.SortOrder
-  reviewState?: Prisma.SortOrder
-  ciStatus?: Prisma.SortOrder
-  hasMergeConflict?: Prisma.SortOrder
-  syncedAt?: Prisma.SortOrder
-  discoveryLastCheckedAt?: Prisma.SortOrder
-  discoveryRetryCount?: Prisma.SortOrder
-  discoveryNextCheckAt?: Prisma.SortOrder
-  ciFailedAt?: Prisma.SortOrder
-  ciLastNotifiedAt?: Prisma.SortOrder
-  reviewLastCheckedAt?: Prisma.SortOrder
-  reviewLastCommentId?: Prisma.SortOrder
-}
-
-export type WorkspacePRSumOrderByAggregateInput = {
-  number?: Prisma.SortOrder
-  discoveryRetryCount?: Prisma.SortOrder
-}
-
-export type WorkspacePRCreateNestedOneWithoutWorkspaceInput = {
-  create?: Prisma.XOR<Prisma.WorkspacePRCreateWithoutWorkspaceInput, Prisma.WorkspacePRUncheckedCreateWithoutWorkspaceInput>
-  connectOrCreate?: Prisma.WorkspacePRCreateOrConnectWithoutWorkspaceInput
-  connect?: Prisma.WorkspacePRWhereUniqueInput
-}
-
-export type WorkspacePRUncheckedCreateNestedOneWithoutWorkspaceInput = {
-  create?: Prisma.XOR<Prisma.WorkspacePRCreateWithoutWorkspaceInput, Prisma.WorkspacePRUncheckedCreateWithoutWorkspaceInput>
-  connectOrCreate?: Prisma.WorkspacePRCreateOrConnectWithoutWorkspaceInput
-  connect?: Prisma.WorkspacePRWhereUniqueInput
-}
-
-export type WorkspacePRUpdateOneWithoutWorkspaceNestedInput = {
-  create?: Prisma.XOR<Prisma.WorkspacePRCreateWithoutWorkspaceInput, Prisma.WorkspacePRUncheckedCreateWithoutWorkspaceInput>
-  connectOrCreate?: Prisma.WorkspacePRCreateOrConnectWithoutWorkspaceInput
-  upsert?: Prisma.WorkspacePRUpsertWithoutWorkspaceInput
-  disconnect?: Prisma.WorkspacePRWhereInput | boolean
-  delete?: Prisma.WorkspacePRWhereInput | boolean
-  connect?: Prisma.WorkspacePRWhereUniqueInput
-  update?: Prisma.XOR<Prisma.XOR<Prisma.WorkspacePRUpdateToOneWithWhereWithoutWorkspaceInput, Prisma.WorkspacePRUpdateWithoutWorkspaceInput>, Prisma.WorkspacePRUncheckedUpdateWithoutWorkspaceInput>
-}
-
-export type WorkspacePRUncheckedUpdateOneWithoutWorkspaceNestedInput = {
-  create?: Prisma.XOR<Prisma.WorkspacePRCreateWithoutWorkspaceInput, Prisma.WorkspacePRUncheckedCreateWithoutWorkspaceInput>
-  connectOrCreate?: Prisma.WorkspacePRCreateOrConnectWithoutWorkspaceInput
-  upsert?: Prisma.WorkspacePRUpsertWithoutWorkspaceInput
-  disconnect?: Prisma.WorkspacePRWhereInput | boolean
-  delete?: Prisma.WorkspacePRWhereInput | boolean
-  connect?: Prisma.WorkspacePRWhereUniqueInput
-  update?: Prisma.XOR<Prisma.XOR<Prisma.WorkspacePRUpdateToOneWithWhereWithoutWorkspaceInput, Prisma.WorkspacePRUpdateWithoutWorkspaceInput>, Prisma.WorkspacePRUncheckedUpdateWithoutWorkspaceInput>
+export type WorkspacePRUncheckedUpdateManyWithoutWorkspaceNestedInput = {
+  create?: Prisma.XOR<Prisma.WorkspacePRCreateWithoutWorkspaceInput, Prisma.WorkspacePRUncheckedCreateWithoutWorkspaceInput> | Prisma.WorkspacePRCreateWithoutWorkspaceInput[] | Prisma.WorkspacePRUncheckedCreateWithoutWorkspaceInput[]
+  connectOrCreate?: Prisma.WorkspacePRCreateOrConnectWithoutWorkspaceInput | Prisma.WorkspacePRCreateOrConnectWithoutWorkspaceInput[]
+  upsert?: Prisma.WorkspacePRUpsertWithWhereUniqueWithoutWorkspaceInput | Prisma.WorkspacePRUpsertWithWhereUniqueWithoutWorkspaceInput[]
+  createMany?: Prisma.WorkspacePRCreateManyWorkspaceInputEnvelope
+  set?: Prisma.WorkspacePRWhereUniqueInput | Prisma.WorkspacePRWhereUniqueInput[]
+  disconnect?: Prisma.WorkspacePRWhereUniqueInput | Prisma.WorkspacePRWhereUniqueInput[]
+  delete?: Prisma.WorkspacePRWhereUniqueInput | Prisma.WorkspacePRWhereUniqueInput[]
+  connect?: Prisma.WorkspacePRWhereUniqueInput | Prisma.WorkspacePRWhereUniqueInput[]
+  update?: Prisma.WorkspacePRUpdateWithWhereUniqueWithoutWorkspaceInput | Prisma.WorkspacePRUpdateWithWhereUniqueWithoutWorkspaceInput[]
+  updateMany?: Prisma.WorkspacePRUpdateManyWithWhereWithoutWorkspaceInput | Prisma.WorkspacePRUpdateManyWithWhereWithoutWorkspaceInput[]
+  deleteMany?: Prisma.WorkspacePRScalarWhereInput | Prisma.WorkspacePRScalarWhereInput[]
 }
 
 export type EnumPRStateFieldUpdateOperationsInput = {
@@ -640,38 +793,68 @@ export type EnumCIStatusFieldUpdateOperationsInput = {
   set?: $Enums.CIStatus
 }
 
+export type WorkspacePRCreateNestedOneWithoutEventsInput = {
+  create?: Prisma.XOR<Prisma.WorkspacePRCreateWithoutEventsInput, Prisma.WorkspacePRUncheckedCreateWithoutEventsInput>
+  connectOrCreate?: Prisma.WorkspacePRCreateOrConnectWithoutEventsInput
+  connect?: Prisma.WorkspacePRWhereUniqueInput
+}
+
+export type WorkspacePRUpdateOneWithoutEventsNestedInput = {
+  create?: Prisma.XOR<Prisma.WorkspacePRCreateWithoutEventsInput, Prisma.WorkspacePRUncheckedCreateWithoutEventsInput>
+  connectOrCreate?: Prisma.WorkspacePRCreateOrConnectWithoutEventsInput
+  upsert?: Prisma.WorkspacePRUpsertWithoutEventsInput
+  disconnect?: Prisma.WorkspacePRWhereInput | boolean
+  delete?: Prisma.WorkspacePRWhereInput | boolean
+  connect?: Prisma.WorkspacePRWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.WorkspacePRUpdateToOneWithWhereWithoutEventsInput, Prisma.WorkspacePRUpdateWithoutEventsInput>, Prisma.WorkspacePRUncheckedUpdateWithoutEventsInput>
+}
+
 export type WorkspacePRCreateWithoutWorkspaceInput = {
-  url?: string | null
+  id?: string
+  url: string
   number?: number | null
+  title?: string | null
+  headRefName?: string | null
+  baseRefName?: string | null
   state?: $Enums.PRState
   reviewState?: string | null
   ciStatus?: $Enums.CIStatus
   hasMergeConflict?: boolean
   syncedAt?: Date | string | null
-  discoveryLastCheckedAt?: Date | string | null
-  discoveryRetryCount?: number
-  discoveryNextCheckAt?: Date | string | null
+  detachedAt?: Date | string | null
+  revision?: number
   ciFailedAt?: Date | string | null
   ciLastNotifiedAt?: Date | string | null
   reviewLastCheckedAt?: Date | string | null
   reviewLastCommentId?: string | null
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: number
+  observationEpoch?: number
+  events?: Prisma.WorkspacePREventCreateNestedManyWithoutPrInput
 }
 
 export type WorkspacePRUncheckedCreateWithoutWorkspaceInput = {
-  url?: string | null
+  id?: string
+  url: string
   number?: number | null
+  title?: string | null
+  headRefName?: string | null
+  baseRefName?: string | null
   state?: $Enums.PRState
   reviewState?: string | null
   ciStatus?: $Enums.CIStatus
   hasMergeConflict?: boolean
   syncedAt?: Date | string | null
-  discoveryLastCheckedAt?: Date | string | null
-  discoveryRetryCount?: number
-  discoveryNextCheckAt?: Date | string | null
+  detachedAt?: Date | string | null
+  revision?: number
   ciFailedAt?: Date | string | null
   ciLastNotifiedAt?: Date | string | null
   reviewLastCheckedAt?: Date | string | null
   reviewLastCommentId?: string | null
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: number
+  observationEpoch?: number
+  events?: Prisma.WorkspacePREventUncheckedCreateNestedManyWithoutPrInput
 }
 
 export type WorkspacePRCreateOrConnectWithoutWorkspaceInput = {
@@ -679,131 +862,396 @@ export type WorkspacePRCreateOrConnectWithoutWorkspaceInput = {
   create: Prisma.XOR<Prisma.WorkspacePRCreateWithoutWorkspaceInput, Prisma.WorkspacePRUncheckedCreateWithoutWorkspaceInput>
 }
 
-export type WorkspacePRUpsertWithoutWorkspaceInput = {
-  update: Prisma.XOR<Prisma.WorkspacePRUpdateWithoutWorkspaceInput, Prisma.WorkspacePRUncheckedUpdateWithoutWorkspaceInput>
-  create: Prisma.XOR<Prisma.WorkspacePRCreateWithoutWorkspaceInput, Prisma.WorkspacePRUncheckedCreateWithoutWorkspaceInput>
-  where?: Prisma.WorkspacePRWhereInput
+export type WorkspacePRCreateManyWorkspaceInputEnvelope = {
+  data: Prisma.WorkspacePRCreateManyWorkspaceInput | Prisma.WorkspacePRCreateManyWorkspaceInput[]
 }
 
-export type WorkspacePRUpdateToOneWithWhereWithoutWorkspaceInput = {
-  where?: Prisma.WorkspacePRWhereInput
+export type WorkspacePRUpsertWithWhereUniqueWithoutWorkspaceInput = {
+  where: Prisma.WorkspacePRWhereUniqueInput
+  update: Prisma.XOR<Prisma.WorkspacePRUpdateWithoutWorkspaceInput, Prisma.WorkspacePRUncheckedUpdateWithoutWorkspaceInput>
+  create: Prisma.XOR<Prisma.WorkspacePRCreateWithoutWorkspaceInput, Prisma.WorkspacePRUncheckedCreateWithoutWorkspaceInput>
+}
+
+export type WorkspacePRUpdateWithWhereUniqueWithoutWorkspaceInput = {
+  where: Prisma.WorkspacePRWhereUniqueInput
   data: Prisma.XOR<Prisma.WorkspacePRUpdateWithoutWorkspaceInput, Prisma.WorkspacePRUncheckedUpdateWithoutWorkspaceInput>
 }
 
-export type WorkspacePRUpdateWithoutWorkspaceInput = {
-  url?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+export type WorkspacePRUpdateManyWithWhereWithoutWorkspaceInput = {
+  where: Prisma.WorkspacePRScalarWhereInput
+  data: Prisma.XOR<Prisma.WorkspacePRUpdateManyMutationInput, Prisma.WorkspacePRUncheckedUpdateManyWithoutWorkspaceInput>
+}
+
+export type WorkspacePRScalarWhereInput = {
+  AND?: Prisma.WorkspacePRScalarWhereInput | Prisma.WorkspacePRScalarWhereInput[]
+  OR?: Prisma.WorkspacePRScalarWhereInput[]
+  NOT?: Prisma.WorkspacePRScalarWhereInput | Prisma.WorkspacePRScalarWhereInput[]
+  id?: Prisma.StringFilter<"WorkspacePR"> | string
+  workspaceId?: Prisma.StringFilter<"WorkspacePR"> | string
+  url?: Prisma.StringFilter<"WorkspacePR"> | string
+  number?: Prisma.IntNullableFilter<"WorkspacePR"> | number | null
+  title?: Prisma.StringNullableFilter<"WorkspacePR"> | string | null
+  headRefName?: Prisma.StringNullableFilter<"WorkspacePR"> | string | null
+  baseRefName?: Prisma.StringNullableFilter<"WorkspacePR"> | string | null
+  state?: Prisma.EnumPRStateFilter<"WorkspacePR"> | $Enums.PRState
+  reviewState?: Prisma.StringNullableFilter<"WorkspacePR"> | string | null
+  ciStatus?: Prisma.EnumCIStatusFilter<"WorkspacePR"> | $Enums.CIStatus
+  hasMergeConflict?: Prisma.BoolFilter<"WorkspacePR"> | boolean
+  syncedAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
+  detachedAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
+  revision?: Prisma.IntFilter<"WorkspacePR"> | number
+  ciFailedAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
+  ciLastNotifiedAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
+  reviewLastCheckedAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
+  reviewLastCommentId?: Prisma.StringNullableFilter<"WorkspacePR"> | string | null
+  observation?: Prisma.JsonNullableFilter<"WorkspacePR">
+  transitionSequence?: Prisma.IntFilter<"WorkspacePR"> | number
+  observationEpoch?: Prisma.IntFilter<"WorkspacePR"> | number
+}
+
+export type WorkspacePRCreateWithoutEventsInput = {
+  id?: string
+  url: string
+  number?: number | null
+  title?: string | null
+  headRefName?: string | null
+  baseRefName?: string | null
+  state?: $Enums.PRState
+  reviewState?: string | null
+  ciStatus?: $Enums.CIStatus
+  hasMergeConflict?: boolean
+  syncedAt?: Date | string | null
+  detachedAt?: Date | string | null
+  revision?: number
+  ciFailedAt?: Date | string | null
+  ciLastNotifiedAt?: Date | string | null
+  reviewLastCheckedAt?: Date | string | null
+  reviewLastCommentId?: string | null
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: number
+  observationEpoch?: number
+  workspace: Prisma.WorkspaceCreateNestedOneWithoutPrsInput
+}
+
+export type WorkspacePRUncheckedCreateWithoutEventsInput = {
+  id?: string
+  workspaceId: string
+  url: string
+  number?: number | null
+  title?: string | null
+  headRefName?: string | null
+  baseRefName?: string | null
+  state?: $Enums.PRState
+  reviewState?: string | null
+  ciStatus?: $Enums.CIStatus
+  hasMergeConflict?: boolean
+  syncedAt?: Date | string | null
+  detachedAt?: Date | string | null
+  revision?: number
+  ciFailedAt?: Date | string | null
+  ciLastNotifiedAt?: Date | string | null
+  reviewLastCheckedAt?: Date | string | null
+  reviewLastCommentId?: string | null
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: number
+  observationEpoch?: number
+}
+
+export type WorkspacePRCreateOrConnectWithoutEventsInput = {
+  where: Prisma.WorkspacePRWhereUniqueInput
+  create: Prisma.XOR<Prisma.WorkspacePRCreateWithoutEventsInput, Prisma.WorkspacePRUncheckedCreateWithoutEventsInput>
+}
+
+export type WorkspacePRUpsertWithoutEventsInput = {
+  update: Prisma.XOR<Prisma.WorkspacePRUpdateWithoutEventsInput, Prisma.WorkspacePRUncheckedUpdateWithoutEventsInput>
+  create: Prisma.XOR<Prisma.WorkspacePRCreateWithoutEventsInput, Prisma.WorkspacePRUncheckedCreateWithoutEventsInput>
+  where?: Prisma.WorkspacePRWhereInput
+}
+
+export type WorkspacePRUpdateToOneWithWhereWithoutEventsInput = {
+  where?: Prisma.WorkspacePRWhereInput
+  data: Prisma.XOR<Prisma.WorkspacePRUpdateWithoutEventsInput, Prisma.WorkspacePRUncheckedUpdateWithoutEventsInput>
+}
+
+export type WorkspacePRUpdateWithoutEventsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  url?: Prisma.StringFieldUpdateOperationsInput | string
   number?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  title?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  headRefName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  baseRefName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   state?: Prisma.EnumPRStateFieldUpdateOperationsInput | $Enums.PRState
   reviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   ciStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   hasMergeConflict?: Prisma.BoolFieldUpdateOperationsInput | boolean
   syncedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  discoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  discoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
-  discoveryNextCheckAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  detachedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  revision?: Prisma.IntFieldUpdateOperationsInput | number
   ciFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   ciLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   reviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   reviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: Prisma.IntFieldUpdateOperationsInput | number
+  observationEpoch?: Prisma.IntFieldUpdateOperationsInput | number
+  workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrsNestedInput
+}
+
+export type WorkspacePRUncheckedUpdateWithoutEventsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
+  url?: Prisma.StringFieldUpdateOperationsInput | string
+  number?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  title?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  headRefName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  baseRefName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  state?: Prisma.EnumPRStateFieldUpdateOperationsInput | $Enums.PRState
+  reviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ciStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
+  hasMergeConflict?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  syncedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  detachedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  revision?: Prisma.IntFieldUpdateOperationsInput | number
+  ciFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  ciLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  reviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  reviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: Prisma.IntFieldUpdateOperationsInput | number
+  observationEpoch?: Prisma.IntFieldUpdateOperationsInput | number
+}
+
+export type WorkspacePRCreateManyWorkspaceInput = {
+  id?: string
+  url: string
+  number?: number | null
+  title?: string | null
+  headRefName?: string | null
+  baseRefName?: string | null
+  state?: $Enums.PRState
+  reviewState?: string | null
+  ciStatus?: $Enums.CIStatus
+  hasMergeConflict?: boolean
+  syncedAt?: Date | string | null
+  detachedAt?: Date | string | null
+  revision?: number
+  ciFailedAt?: Date | string | null
+  ciLastNotifiedAt?: Date | string | null
+  reviewLastCheckedAt?: Date | string | null
+  reviewLastCommentId?: string | null
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: number
+  observationEpoch?: number
+}
+
+export type WorkspacePRUpdateWithoutWorkspaceInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  url?: Prisma.StringFieldUpdateOperationsInput | string
+  number?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  title?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  headRefName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  baseRefName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  state?: Prisma.EnumPRStateFieldUpdateOperationsInput | $Enums.PRState
+  reviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ciStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
+  hasMergeConflict?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  syncedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  detachedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  revision?: Prisma.IntFieldUpdateOperationsInput | number
+  ciFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  ciLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  reviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  reviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: Prisma.IntFieldUpdateOperationsInput | number
+  observationEpoch?: Prisma.IntFieldUpdateOperationsInput | number
+  events?: Prisma.WorkspacePREventUpdateManyWithoutPrNestedInput
 }
 
 export type WorkspacePRUncheckedUpdateWithoutWorkspaceInput = {
-  url?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  url?: Prisma.StringFieldUpdateOperationsInput | string
   number?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  title?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  headRefName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  baseRefName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   state?: Prisma.EnumPRStateFieldUpdateOperationsInput | $Enums.PRState
   reviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   ciStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   hasMergeConflict?: Prisma.BoolFieldUpdateOperationsInput | boolean
   syncedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  discoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  discoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
-  discoveryNextCheckAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  detachedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  revision?: Prisma.IntFieldUpdateOperationsInput | number
   ciFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   ciLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   reviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   reviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: Prisma.IntFieldUpdateOperationsInput | number
+  observationEpoch?: Prisma.IntFieldUpdateOperationsInput | number
+  events?: Prisma.WorkspacePREventUncheckedUpdateManyWithoutPrNestedInput
+}
+
+export type WorkspacePRUncheckedUpdateManyWithoutWorkspaceInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  url?: Prisma.StringFieldUpdateOperationsInput | string
+  number?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  title?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  headRefName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  baseRefName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  state?: Prisma.EnumPRStateFieldUpdateOperationsInput | $Enums.PRState
+  reviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ciStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
+  hasMergeConflict?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  syncedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  detachedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  revision?: Prisma.IntFieldUpdateOperationsInput | number
+  ciFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  ciLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  reviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  reviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: Prisma.IntFieldUpdateOperationsInput | number
+  observationEpoch?: Prisma.IntFieldUpdateOperationsInput | number
 }
 
 
+/**
+ * Count Type WorkspacePRCountOutputType
+ */
+
+export type WorkspacePRCountOutputType = {
+  events: number
+}
+
+export type WorkspacePRCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  events?: boolean | WorkspacePRCountOutputTypeCountEventsArgs
+}
+
+/**
+ * WorkspacePRCountOutputType without action
+ */
+export type WorkspacePRCountOutputTypeDefaultArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the WorkspacePRCountOutputType
+   */
+  select?: Prisma.WorkspacePRCountOutputTypeSelect<ExtArgs> | null
+}
+
+/**
+ * WorkspacePRCountOutputType without action
+ */
+export type WorkspacePRCountOutputTypeCountEventsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.WorkspacePREventWhereInput
+}
+
 
 export type WorkspacePRSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
+  id?: boolean
   workspaceId?: boolean
   url?: boolean
   number?: boolean
+  title?: boolean
+  headRefName?: boolean
+  baseRefName?: boolean
   state?: boolean
   reviewState?: boolean
   ciStatus?: boolean
   hasMergeConflict?: boolean
   syncedAt?: boolean
-  discoveryLastCheckedAt?: boolean
-  discoveryRetryCount?: boolean
-  discoveryNextCheckAt?: boolean
+  detachedAt?: boolean
+  revision?: boolean
   ciFailedAt?: boolean
   ciLastNotifiedAt?: boolean
   reviewLastCheckedAt?: boolean
   reviewLastCommentId?: boolean
+  observation?: boolean
+  transitionSequence?: boolean
+  observationEpoch?: boolean
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
+  events?: boolean | Prisma.WorkspacePR$eventsArgs<ExtArgs>
+  _count?: boolean | Prisma.WorkspacePRCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["workspacePR"]>
 
 export type WorkspacePRSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
+  id?: boolean
   workspaceId?: boolean
   url?: boolean
   number?: boolean
+  title?: boolean
+  headRefName?: boolean
+  baseRefName?: boolean
   state?: boolean
   reviewState?: boolean
   ciStatus?: boolean
   hasMergeConflict?: boolean
   syncedAt?: boolean
-  discoveryLastCheckedAt?: boolean
-  discoveryRetryCount?: boolean
-  discoveryNextCheckAt?: boolean
+  detachedAt?: boolean
+  revision?: boolean
   ciFailedAt?: boolean
   ciLastNotifiedAt?: boolean
   reviewLastCheckedAt?: boolean
   reviewLastCommentId?: boolean
+  observation?: boolean
+  transitionSequence?: boolean
+  observationEpoch?: boolean
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["workspacePR"]>
 
 export type WorkspacePRSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
+  id?: boolean
   workspaceId?: boolean
   url?: boolean
   number?: boolean
+  title?: boolean
+  headRefName?: boolean
+  baseRefName?: boolean
   state?: boolean
   reviewState?: boolean
   ciStatus?: boolean
   hasMergeConflict?: boolean
   syncedAt?: boolean
-  discoveryLastCheckedAt?: boolean
-  discoveryRetryCount?: boolean
-  discoveryNextCheckAt?: boolean
+  detachedAt?: boolean
+  revision?: boolean
   ciFailedAt?: boolean
   ciLastNotifiedAt?: boolean
   reviewLastCheckedAt?: boolean
   reviewLastCommentId?: boolean
+  observation?: boolean
+  transitionSequence?: boolean
+  observationEpoch?: boolean
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["workspacePR"]>
 
 export type WorkspacePRSelectScalar = {
+  id?: boolean
   workspaceId?: boolean
   url?: boolean
   number?: boolean
+  title?: boolean
+  headRefName?: boolean
+  baseRefName?: boolean
   state?: boolean
   reviewState?: boolean
   ciStatus?: boolean
   hasMergeConflict?: boolean
   syncedAt?: boolean
-  discoveryLastCheckedAt?: boolean
-  discoveryRetryCount?: boolean
-  discoveryNextCheckAt?: boolean
+  detachedAt?: boolean
+  revision?: boolean
   ciFailedAt?: boolean
   ciLastNotifiedAt?: boolean
   reviewLastCheckedAt?: boolean
   reviewLastCommentId?: boolean
+  observation?: boolean
+  transitionSequence?: boolean
+  observationEpoch?: boolean
 }
 
-export type WorkspacePROmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"workspaceId" | "url" | "number" | "state" | "reviewState" | "ciStatus" | "hasMergeConflict" | "syncedAt" | "discoveryLastCheckedAt" | "discoveryRetryCount" | "discoveryNextCheckAt" | "ciFailedAt" | "ciLastNotifiedAt" | "reviewLastCheckedAt" | "reviewLastCommentId", ExtArgs["result"]["workspacePR"]>
+export type WorkspacePROmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "workspaceId" | "url" | "number" | "title" | "headRefName" | "baseRefName" | "state" | "reviewState" | "ciStatus" | "hasMergeConflict" | "syncedAt" | "detachedAt" | "revision" | "ciFailedAt" | "ciLastNotifiedAt" | "reviewLastCheckedAt" | "reviewLastCommentId" | "observation" | "transitionSequence" | "observationEpoch", ExtArgs["result"]["workspacePR"]>
 export type WorkspacePRInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
+  events?: boolean | Prisma.WorkspacePR$eventsArgs<ExtArgs>
+  _count?: boolean | Prisma.WorkspacePRCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type WorkspacePRIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
@@ -816,23 +1264,30 @@ export type $WorkspacePRPayload<ExtArgs extends runtime.Types.Extensions.Interna
   name: "WorkspacePR"
   objects: {
     workspace: Prisma.$WorkspacePayload<ExtArgs>
+    events: Prisma.$WorkspacePREventPayload<ExtArgs>[]
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
+    id: string
     workspaceId: string
-    url: string | null
+    url: string
     number: number | null
+    title: string | null
+    headRefName: string | null
+    baseRefName: string | null
     state: $Enums.PRState
     reviewState: string | null
     ciStatus: $Enums.CIStatus
     hasMergeConflict: boolean
     syncedAt: Date | null
-    discoveryLastCheckedAt: Date | null
-    discoveryRetryCount: number
-    discoveryNextCheckAt: Date | null
+    detachedAt: Date | null
+    revision: number
     ciFailedAt: Date | null
     ciLastNotifiedAt: Date | null
     reviewLastCheckedAt: Date | null
     reviewLastCommentId: string | null
+    observation: runtime.JsonValue | null
+    transitionSequence: number
+    observationEpoch: number
   }, ExtArgs["result"]["workspacePR"]>
   composites: {}
 }
@@ -916,8 +1371,8 @@ export interface WorkspacePRDelegate<ExtArgs extends runtime.Types.Extensions.In
    * // Get first 10 WorkspacePRS
    * const workspacePRS = await prisma.workspacePR.findMany({ take: 10 })
    * 
-   * // Only select the `workspaceId`
-   * const workspacePRWithWorkspaceIdOnly = await prisma.workspacePR.findMany({ select: { workspaceId: true } })
+   * // Only select the `id`
+   * const workspacePRWithIdOnly = await prisma.workspacePR.findMany({ select: { id: true } })
    * 
    */
   findMany<T extends WorkspacePRFindManyArgs>(args?: Prisma.SelectSubset<T, WorkspacePRFindManyArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$WorkspacePRPayload<ExtArgs>, T, "findMany", GlobalOmitOptions>>
@@ -961,9 +1416,9 @@ export interface WorkspacePRDelegate<ExtArgs extends runtime.Types.Extensions.In
    *   ]
    * })
    * 
-   * // Create many WorkspacePRS and only return the `workspaceId`
-   * const workspacePRWithWorkspaceIdOnly = await prisma.workspacePR.createManyAndReturn({
-   *   select: { workspaceId: true },
+   * // Create many WorkspacePRS and only return the `id`
+   * const workspacePRWithIdOnly = await prisma.workspacePR.createManyAndReturn({
+   *   select: { id: true },
    *   data: [
    *     // ... provide data here
    *   ]
@@ -1052,9 +1507,9 @@ export interface WorkspacePRDelegate<ExtArgs extends runtime.Types.Extensions.In
    *   ]
    * })
    * 
-   * // Update zero or more WorkspacePRS and only return the `workspaceId`
-   * const workspacePRWithWorkspaceIdOnly = await prisma.workspacePR.updateManyAndReturn({
-   *   select: { workspaceId: true },
+   * // Update zero or more WorkspacePRS and only return the `id`
+   * const workspacePRWithIdOnly = await prisma.workspacePR.updateManyAndReturn({
+   *   select: { id: true },
    *   where: {
    *     // ... provide filter here
    *   },
@@ -1228,6 +1683,7 @@ readonly fields: WorkspacePRFieldRefs;
 export interface Prisma__WorkspacePRClient<T, Null = never, ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
   readonly [Symbol.toStringTag]: "PrismaPromise"
   workspace<T extends Prisma.WorkspaceDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.WorkspaceDefaultArgs<ExtArgs>>): Prisma.Prisma__WorkspaceClient<runtime.Types.Result.GetResult<Prisma.$WorkspacePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
+  events<T extends Prisma.WorkspacePR$eventsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.WorkspacePR$eventsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$WorkspacePREventPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1257,21 +1713,27 @@ export interface Prisma__WorkspacePRClient<T, Null = never, ExtArgs extends runt
  * Fields of the WorkspacePR model
  */
 export interface WorkspacePRFieldRefs {
+  readonly id: Prisma.FieldRef<"WorkspacePR", 'String'>
   readonly workspaceId: Prisma.FieldRef<"WorkspacePR", 'String'>
   readonly url: Prisma.FieldRef<"WorkspacePR", 'String'>
   readonly number: Prisma.FieldRef<"WorkspacePR", 'Int'>
+  readonly title: Prisma.FieldRef<"WorkspacePR", 'String'>
+  readonly headRefName: Prisma.FieldRef<"WorkspacePR", 'String'>
+  readonly baseRefName: Prisma.FieldRef<"WorkspacePR", 'String'>
   readonly state: Prisma.FieldRef<"WorkspacePR", 'PRState'>
   readonly reviewState: Prisma.FieldRef<"WorkspacePR", 'String'>
   readonly ciStatus: Prisma.FieldRef<"WorkspacePR", 'CIStatus'>
   readonly hasMergeConflict: Prisma.FieldRef<"WorkspacePR", 'Boolean'>
   readonly syncedAt: Prisma.FieldRef<"WorkspacePR", 'DateTime'>
-  readonly discoveryLastCheckedAt: Prisma.FieldRef<"WorkspacePR", 'DateTime'>
-  readonly discoveryRetryCount: Prisma.FieldRef<"WorkspacePR", 'Int'>
-  readonly discoveryNextCheckAt: Prisma.FieldRef<"WorkspacePR", 'DateTime'>
+  readonly detachedAt: Prisma.FieldRef<"WorkspacePR", 'DateTime'>
+  readonly revision: Prisma.FieldRef<"WorkspacePR", 'Int'>
   readonly ciFailedAt: Prisma.FieldRef<"WorkspacePR", 'DateTime'>
   readonly ciLastNotifiedAt: Prisma.FieldRef<"WorkspacePR", 'DateTime'>
   readonly reviewLastCheckedAt: Prisma.FieldRef<"WorkspacePR", 'DateTime'>
   readonly reviewLastCommentId: Prisma.FieldRef<"WorkspacePR", 'String'>
+  readonly observation: Prisma.FieldRef<"WorkspacePR", 'Json'>
+  readonly transitionSequence: Prisma.FieldRef<"WorkspacePR", 'Int'>
+  readonly observationEpoch: Prisma.FieldRef<"WorkspacePR", 'Int'>
 }
     
 
@@ -1668,6 +2130,30 @@ export type WorkspacePRDeleteManyArgs<ExtArgs extends runtime.Types.Extensions.I
    * Limit how many WorkspacePRS to delete.
    */
   limit?: number
+}
+
+/**
+ * WorkspacePR.events
+ */
+export type WorkspacePR$eventsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the WorkspacePREvent
+   */
+  select?: Prisma.WorkspacePREventSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the WorkspacePREvent
+   */
+  omit?: Prisma.WorkspacePREventOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.WorkspacePREventInclude<ExtArgs> | null
+  where?: Prisma.WorkspacePREventWhereInput
+  orderBy?: Prisma.WorkspacePREventOrderByWithRelationInput | Prisma.WorkspacePREventOrderByWithRelationInput[]
+  cursor?: Prisma.WorkspacePREventWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.WorkspacePREventScalarFieldEnum | Prisma.WorkspacePREventScalarFieldEnum[]
 }
 
 /**
