@@ -58,3 +58,21 @@ it('keeps pending siblings and active fixers out of stalled state', () => {
   ).toBe(false);
   expect(deriveWorkspacePRSummary([stalled], false).ratchetState).toBe('IDLE');
 });
+
+it('preserves exhausted comment-only work and defers stalls while siblings wait', () => {
+  const stalled = pr({
+    ratchet: {
+      lastCheckedAt: null,
+      dispatchOutcome: 'DIED',
+      dispatchRetryCount: 3,
+      dispatchStalled: true,
+    },
+  });
+  expect(deriveWorkspacePRSummary([stalled], true).dispatchStalled).toBe(true);
+  expect(
+    deriveWorkspacePRSummary([stalled, pr({ ciStatus: 'PENDING' })], true).dispatchStalled
+  ).toBe(false);
+  expect(
+    deriveWorkspacePRSummary([stalled, pr({ ciStatus: 'FAILURE' })], true).dispatchStalled
+  ).toBe(false);
+});

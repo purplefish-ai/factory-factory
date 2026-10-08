@@ -71,14 +71,14 @@ export function WorkspacePrMenu({
       <DropdownMenuContent
         align="end"
         collisionPadding={8}
-        className="w-80 max-w-[calc(100vw-1rem)]"
+        className="flex flex-col overflow-hidden w-80 max-w-[calc(100vw-1rem)]"
         onClick={(event) => event.stopPropagation()}
       >
-        <DropdownMenuLabel className="text-xs text-muted-foreground">
+        <DropdownMenuLabel className="shrink-0 text-xs text-muted-foreground">
           Pull requests
         </DropdownMenuLabel>
         {!ordered.length && <p className="px-2 py-3 text-xs text-muted-foreground">No PRs yet</p>}
-        <div className="max-h-80 overflow-y-auto">
+        <div className="min-h-0 max-h-80 overflow-y-auto">
           {ordered.map((pr) => (
             <WorkspacePrMenuRow
               key={pr.id}
@@ -92,7 +92,7 @@ export function WorkspacePrMenu({
         {onAdd && (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuItem disabled={pending} onSelect={onAdd}>
+            <DropdownMenuItem className="shrink-0" disabled={pending} onSelect={onAdd}>
               <PlusIcon />
               Add PR
             </DropdownMenuItem>

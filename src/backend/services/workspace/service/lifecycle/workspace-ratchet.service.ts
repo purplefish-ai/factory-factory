@@ -48,6 +48,7 @@ class WorkspaceRatchetService {
       retryCount: number;
       prId?: string;
       expectedRevision?: number;
+      requireExistingOwnership?: boolean;
     }
   ) {
     return workspaceRatchetAccessor.recordDispatchIfEnabled(workspaceId, input);

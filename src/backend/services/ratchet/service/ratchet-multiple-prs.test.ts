@@ -11,6 +11,7 @@ vi.mock('@/backend/services/workspace', () => ({
     recordCheckIfEnabled: vi.fn(),
     recordDispatchIfEnabled: vi.fn(),
     clearActiveSession: vi.fn(),
+    recordSessionEnd: vi.fn(),
   },
 }));
 vi.mock('@/backend/services/settings', () => ({ userSettingsService: { get: vi.fn() } }));
@@ -138,3 +139,43 @@ it('observes both PRs, dispatches one fixer, and advances the sibling after owne
     expect.objectContaining({ workspacePrId: 'b' })
   );
 });
+
+it.each(['MERGED', 'CLOSED'] as const)(
+  'cleans up cached %s ownership without a live fixer or GitHub fetch',
+  async (state) => {
+    vi.mocked(userSettingsService.get).mockResolvedValue({
+      ratchetReviewTriggerMode: 'CHANGES_REQUESTED',
+    } as never);
+    const workspace = {
+      ...candidate('a'),
+      prState: state,
+      ratchetActivePrId: 'a',
+      ratchetActiveSessionId: 'old',
+    };
+    const session = unsafeCoerce<RatchetSessionBridge>({
+      findSessionsByWorkspaceId: vi.fn().mockResolvedValue([]),
+      isSessionRunning: vi.fn().mockReturnValue(false),
+      stopSession: vi.fn(),
+    });
+    ratchetService.configure({
+      session,
+      github: unsafeCoerce<RatchetGitHubBridge>({
+        getAuthenticatedUsername: vi.fn().mockResolvedValue(null),
+      }),
+      snapshot: { recordPrObservation: vi.fn(), recordReviewCheck: vi.fn() },
+      workspace: {
+        findFixerContext: vi.fn(),
+        recordSessionEnd: vi.fn(),
+        markDispatchStalled: vi.fn(),
+      },
+    });
+    const service = unsafeCoerce<{
+      fetchPRState: (workspace: WorkspaceWithPR) => Promise<PRStateInfo | null>;
+      processWorkspace: (workspace: WorkspaceWithPR) => Promise<unknown>;
+    }>(ratchetService);
+    const fetch = vi.spyOn(service, 'fetchPRState').mockResolvedValue(null);
+    await service.processWorkspace(workspace);
+    expect(workspaceRatchetService.recordSessionEnd).toHaveBeenCalledWith('w', 'old', 'COMPLETED');
+    expect(fetch).not.toHaveBeenCalled();
+  }
+);

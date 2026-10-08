@@ -131,14 +131,20 @@ class WorkspaceRatchetAccessor {
       where: {
         status: 'READY',
         ratchet: { enabled: true },
-        prs: { some: { detachedAt: null, state: { notIn: ['CLOSED', 'MERGED'] } } },
+        OR: [
+          { prs: { some: { detachedAt: null, state: { notIn: ['CLOSED', 'MERGED'] } } } },
+          { ratchet: { activeSessionId: { not: null } } },
+        ],
       },
       select: candidateSelect,
       orderBy: { ratchet: { lastCheckedAt: 'asc' } },
     });
     return rows
       .flatMap(candidates)
-      .filter((pr) => pr.prState !== 'CLOSED' && pr.prState !== 'MERGED');
+      .filter(
+        (pr) =>
+          (pr.prState !== 'CLOSED' && pr.prState !== 'MERGED') || Boolean(pr.ratchetActiveSessionId)
+      );
   }
   async findForRatchetById(id: string, prId?: string): Promise<WorkspaceForRatchet | null> {
     const row = await prisma.workspace.findFirst({
@@ -222,6 +228,7 @@ class WorkspaceRatchetAccessor {
       retryCount: number;
       prId?: string;
       expectedRevision?: number;
+      requireExistingOwnership?: boolean;
     }
   ): Promise<boolean> {
     return await prisma.$transaction(async (tx) => {
@@ -246,10 +253,12 @@ class WorkspaceRatchetAccessor {
         where: {
           workspaceId,
           enabled: true,
-          OR: [
-            { activeSessionId: null },
-            { activeSessionId: dispatch.sessionId, activePrId: pr.id },
-          ],
+          OR: dispatch.requireExistingOwnership
+            ? [{ activeSessionId: dispatch.sessionId, activePrId: pr.id }]
+            : [
+                { activeSessionId: null },
+                { activeSessionId: dispatch.sessionId, activePrId: pr.id },
+              ],
         },
         data: { activeSessionId: dispatch.sessionId, activePrId: pr.id },
       });

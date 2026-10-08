@@ -38,7 +38,8 @@ import {
 import { checkRatchetCandidates } from './ratchet-batch.helpers';
 import { logWorkspaceRatchetingDecision as logWorkspaceRatchetingDecisionHelper } from './ratchet-decision-logging.helpers';
 import {
-  stopActiveRatchetSessionsForMergedPr,
+  cleanupCachedTerminalOwner,
+  stopActiveRatchetSessionsForTerminalPr,
   triggerRatchetFixer,
 } from './ratchet-fixer-dispatch.helpers';
 import type { AuthenticatedUsernameCache } from './ratchet-pr-state.helpers';
@@ -436,6 +437,11 @@ class RatchetService extends EventEmitter {
 
     try {
       signal.throwIfAborted();
+      const terminalResult = await cleanupCachedTerminalOwner(this.session, workspace, signal);
+      if (terminalResult) {
+        this.emit(RATCHET_DISPATCH_CHANGED, { workspaceId: workspace.id });
+        return terminalResult;
+      }
       const effectiveReviewTriggerMode =
         reviewTriggerMode ?? (await userSettingsService.get()).ratchetReviewTriggerMode;
       signal.throwIfAborted();
@@ -489,8 +495,8 @@ class RatchetService extends EventEmitter {
 
       const prStateInfo = prStateResult;
       signal.throwIfAborted();
-      if (prStateInfo.prState === 'MERGED') {
-        await stopActiveRatchetSessionsForMergedPr(this.session, workspace, signal);
+      if (prStateInfo.prState === 'MERGED' || prStateInfo.prState === 'CLOSED') {
+        await stopActiveRatchetSessionsForTerminalPr(this.session, workspace, signal);
         signal.throwIfAborted();
       }
       const decisionContext = await this.buildRatchetDecisionContext(
@@ -562,10 +568,8 @@ class RatchetService extends EventEmitter {
       workspace,
       prStateInfo
     );
-    const hasStateChangedSinceLastDispatch = this.hasStateChangedSinceLastDispatch(
-      workspace,
-      prStateInfo
-    );
+    const hasStateChangedSinceLastDispatch =
+      workspace.ratchetDispatchSnapshotKey !== prStateInfo.snapshotKey;
     const isCleanPrWithNoNewReviewActivity = shouldSkipCleanPRHelper(workspace, prStateInfo);
 
     // ratchetEnabled is guaranteed here: the poll query filters on it and
@@ -849,13 +853,6 @@ class RatchetService extends EventEmitter {
       newState: decisionContext.newState,
       action,
     };
-  }
-
-  private hasStateChangedSinceLastDispatch(
-    workspace: WorkspaceWithPR,
-    prStateInfo: PRStateInfo
-  ): boolean {
-    return workspace.ratchetDispatchSnapshotKey !== prStateInfo.snapshotKey;
   }
 
   /**

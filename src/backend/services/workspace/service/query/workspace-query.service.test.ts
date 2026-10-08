@@ -659,8 +659,6 @@ describe('WorkspaceQueryService', () => {
     await workspaceQueryService.listForProject('p1');
     await workspaceQueryService.listForProject('p1');
 
-    // The first warm is still in flight; polling the board must not pile up
-    // another git recompute behind it on every refetch.
     expect(mockGetWorkspaceGitStats).toHaveBeenCalledTimes(1);
 
     releaseRecompute?.();
@@ -793,6 +791,7 @@ describe('WorkspaceQueryService', () => {
       prUrl: 'https://github.com/o/r/pull/1',
       prs: [{ id: 'pr', url: 'https://github.com/o/r/pull/1' }],
     });
+    mockFindById.mockResolvedValueOnce({ id: 'w1', prState: 'OPEN' });
     mockRefreshWorkspace.mockResolvedValueOnce({
       success: true,
       snapshot: { prNumber: 1, prState: 'OPEN' },

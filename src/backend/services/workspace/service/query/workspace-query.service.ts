@@ -390,7 +390,11 @@ class WorkspaceQueryService {
       prState: prResult.snapshot.prState,
     });
 
-    return { success: true, prState: prResult.snapshot.prState, previousPrState };
+    const refreshedWorkspace = await workspaceAccessor.findById(workspaceId);
+    if (!refreshedWorkspace) {
+      throw new Error('Workspace not found');
+    }
+    return { success: true, prState: refreshedWorkspace.prState, previousPrState };
   }
 
   async syncAllPRStatuses(projectId: string) {

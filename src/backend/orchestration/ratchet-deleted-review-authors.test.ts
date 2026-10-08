@@ -162,6 +162,7 @@ describe('Ratchet with deleted inline review authors', () => {
       }
       expect(prompt).not.toContain('Own reply');
       expect(workspaceRatchetService.recordDispatchIfEnabled).toHaveBeenCalledWith(workspace.id, {
+        requireExistingOwnership: true,
         sessionId: 'fixer-session',
         snapshotKey: 'pr:1|ci:SUCCESS|no-changes-requested:2000|merge:clean',
         retryCount: 0,

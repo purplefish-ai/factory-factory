@@ -159,3 +159,34 @@ it('rejects a refresh started before detach and reattach', async () => {
     await workspacePrSnapshotService.find({ workspaceId: 'multi', prId: attached.prId })
   ).toMatchObject({ state: 'NONE' });
 });
+
+it('does not reclaim an invalidated startup dispatch after detach and reattach', async () => {
+  const { prId } = await workspacePrSnapshotService.attach(
+    'multi',
+    'https://github.com/o/r/pull/99'
+  );
+  await workspaceRatchetService.recordDispatchIfEnabled('multi', {
+    prId,
+    sessionId: 'startup',
+    snapshotKey: 'old',
+    retryCount: 0,
+  });
+  await workspacePrSnapshotService.detach({ workspaceId: 'multi', prId });
+  await workspacePrSnapshotService.attach('multi', 'https://github.com/o/r/pull/99');
+  expect(
+    await workspaceRatchetService.recordDispatchIfEnabled('multi', {
+      prId,
+      sessionId: 'startup',
+      snapshotKey: 'old',
+      retryCount: 0,
+      requireExistingOwnership: true,
+    })
+  ).toBe(false);
+  expect(
+    await db.prisma.workspaceRatchet.findUnique({ where: { workspaceId: 'multi' } })
+  ).toMatchObject({ activePrId: null, activeSessionId: null });
+  expect(await db.prisma.workspacePRRatchet.findUnique({ where: { prId } })).toMatchObject({
+    dispatchOutcome: null,
+    activeSessionId: null,
+  });
+});

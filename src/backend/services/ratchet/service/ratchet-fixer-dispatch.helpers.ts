@@ -6,7 +6,12 @@ import { workspaceRatchetService } from '@/backend/services/workspace';
 import { SessionStatus } from '@/shared/core';
 import type { RatchetSessionBridge } from './bridges';
 import { type AcquireAndDispatchResult, fixerSessionService } from './fixer-session.service';
-import type { PRStateInfo, RatchetAction, WorkspaceWithPR } from './ratchet.types';
+import type {
+  PRStateInfo,
+  RatchetAction,
+  WorkspaceRatchetResult,
+  WorkspaceWithPR,
+} from './ratchet.types';
 
 const logger = createLogger('ratchet');
 
@@ -87,6 +92,7 @@ async function handleStartedFixerResult(params: {
     prId: workspace.prId,
     snapshotKey: prStateInfo.snapshotKey,
     retryCount,
+    requireExistingOwnership: true,
   });
   if (recorded) {
     onRecorded();
@@ -360,7 +366,7 @@ export async function triggerRatchetFixer(params: {
   }
 }
 
-export async function stopActiveRatchetSessionsForMergedPr(
+export async function stopActiveRatchetSessionsForTerminalPr(
   sessionBridge: RatchetSessionBridge,
   workspace: WorkspaceWithPR,
   signal: AbortSignal
@@ -385,4 +391,32 @@ export async function stopActiveRatchetSessionsForMergedPr(
     await sessionBridge.stopSession(session.id);
     signal.throwIfAborted();
   }
+  if (workspace.ratchetActiveSessionId) {
+    await workspaceRatchetService.recordSessionEnd(
+      workspace.id,
+      workspace.ratchetActiveSessionId,
+      'COMPLETED'
+    );
+  }
+}
+
+export async function cleanupCachedTerminalOwner(
+  sessionBridge: RatchetSessionBridge,
+  workspace: WorkspaceWithPR,
+  signal: AbortSignal
+): Promise<WorkspaceRatchetResult | null> {
+  if (
+    !workspace.ratchetActiveSessionId ||
+    (workspace.prState !== 'MERGED' && workspace.prState !== 'CLOSED')
+  ) {
+    return null;
+  }
+  await stopActiveRatchetSessionsForTerminalPr(sessionBridge, workspace, signal);
+  return {
+    workspaceId: workspace.id,
+    prId: workspace.prId,
+    previousState: workspace.ratchetState,
+    newState: workspace.prState === 'MERGED' ? 'MERGED' : 'IDLE',
+    action: { type: 'COMPLETED' },
+  };
 }

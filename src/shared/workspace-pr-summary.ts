@@ -59,7 +59,11 @@ export function deriveWorkspacePRSummary(
     : RatchetState.IDLE;
   const actionable = active.filter(
     (pr) =>
-      pr.ciStatus === 'FAILURE' || pr.hasMergeConflict || pr.reviewState === 'CHANGES_REQUESTED'
+      pr.ciStatus === 'FAILURE' ||
+      pr.hasMergeConflict ||
+      pr.reviewState === 'CHANGES_REQUESTED' ||
+      pr.ratchet.dispatchStalled ||
+      (pr.ratchet.dispatchOutcome === 'DIED' && pr.ratchet.dispatchRetryCount >= 3)
   );
   const waiting = active.some(
     (pr) =>

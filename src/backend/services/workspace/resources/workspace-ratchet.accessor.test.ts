@@ -181,3 +181,46 @@ it('marks stalls only for the exact dispatch and resets settled records with a C
     dispatchStalled: false,
   });
 });
+
+it.each(['MERGED', 'CLOSED'] as const)(
+  'retains a terminal %s fixer owner for restart cleanup',
+  async (state) => {
+    const id = `terminal-${state}`;
+    const { a } = await setup(id);
+    await workspaceRatchetAccessor.recordDispatchIfEnabled(id, {
+      prId: a,
+      sessionId: 'old',
+      snapshotKey: 'old',
+      retryCount: 0,
+    });
+    await db.prisma.workspacePR.update({ where: { id: a }, data: { state } });
+    expect(await workspaceRatchetAccessor.findWithPRsForRatchet()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id, prId: a, ratchetActiveSessionId: 'old' }),
+      ])
+    );
+  }
+);
+
+it('does not overwrite a dispatch settled while startup was completing', async () => {
+  const { a } = await setup('startup-completed');
+  await workspaceRatchetAccessor.recordDispatchIfEnabled('startup-completed', {
+    prId: a,
+    sessionId: 'old',
+    snapshotKey: 'old',
+    retryCount: 0,
+  });
+  await workspaceRatchetAccessor.recordSessionEnd('startup-completed', 'old', 'COMPLETED');
+  expect(
+    await workspaceRatchetAccessor.recordDispatchIfEnabled('startup-completed', {
+      prId: a,
+      sessionId: 'old',
+      snapshotKey: 'old',
+      retryCount: 0,
+      requireExistingOwnership: true,
+    })
+  ).toBe(false);
+  expect(await db.prisma.workspacePRRatchet.findUnique({ where: { prId: a } })).toMatchObject({
+    dispatchOutcome: 'COMPLETED',
+  });
+});
