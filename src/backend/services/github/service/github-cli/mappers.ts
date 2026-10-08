@@ -87,18 +87,27 @@ function normalizeReviewState(state: string): GitHubReview['state'] {
     : 'PENDING';
 }
 
+function mapStatusContext(check: {
+  context: string;
+  state: string;
+  targetUrl?: string;
+  detailsUrl?: string;
+}): GitHubStatusCheck {
+  return {
+    __typename: 'StatusContext',
+    name: check.context,
+    status: normalizeStatusContextStatus(check.state),
+    conclusion: normalizeStatusContextConclusion(check.state),
+    detailsUrl: check.targetUrl ?? check.detailsUrl,
+  };
+}
+
 export function mapStatusChecks(
   checks: NonNullable<z.infer<typeof fullPRDetailsSchema>['statusCheckRollup']>
 ): GitHubStatusCheck[] {
   return checks.map((check) => {
     if ('context' in check) {
-      return {
-        __typename: 'StatusContext',
-        name: check.context,
-        status: normalizeStatusContextStatus(check.state),
-        conclusion: normalizeStatusContextConclusion(check.state),
-        detailsUrl: check.targetUrl ?? check.detailsUrl,
-      };
+      return mapStatusContext(check);
     }
 
     return {
@@ -155,12 +164,20 @@ export function computeCIStatus(
     status?: string;
     conclusion?: string;
     state?: string;
+    context?: string;
+    targetUrl?: string;
     detailsUrl?: string;
     startedAt?: string;
     completedAt?: string;
   }> | null
 ): CIStatus {
-  return deriveCiStatusFromCheckRollup(statusCheckRollup);
+  return deriveCiStatusFromCheckRollup(
+    statusCheckRollup?.map((check) =>
+      check.context !== undefined && check.state !== undefined
+        ? mapStatusContext({ ...check, context: check.context, state: check.state })
+        : check
+    ) ?? null
+  );
 }
 
 /**
