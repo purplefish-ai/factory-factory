@@ -44,6 +44,10 @@ function createDeferred<T>(): {
   return { promise, resolve };
 }
 
+async function drainAsyncWork(): Promise<void> {
+  await new Promise<void>((resolve) => setImmediate(resolve));
+}
+
 describe('parseGithubUrl', () => {
   it('parses a valid GitHub HTTPS URL', () => {
     expect(parseGithubUrl('https://github.com/purplefish-ai/factory-factory')).toEqual({
@@ -284,10 +288,7 @@ describe('GitCloneService.clone', () => {
         stdout: '',
         stderr: 'fatal: destination path already exists',
       });
-    mockPathExists
-      .mockResolvedValueOnce(false)
-      .mockResolvedValueOnce(false)
-      .mockResolvedValue(true);
+    mockPathExists.mockResolvedValueOnce(false).mockResolvedValue(true);
     const first = gitCloneService.clone('source', '/tmp/repos/owner/repo');
     const second = gitCloneService.clone('source', '/tmp/repos/owner/./repo');
     await vi.waitFor(() => expect(mockExecCommand).toHaveBeenCalled());
@@ -300,6 +301,43 @@ describe('GitCloneService.clone', () => {
     expect(mockRm).not.toHaveBeenCalled();
   });
 
+  it('rejects a different source targeting an in-flight clone destination', async () => {
+    const completed = createDeferred<{ code: number; stdout: string; stderr: string }>();
+    mockExecCommand.mockImplementation(() => completed.promise);
+    const first = gitCloneService.clone('https://github.com/owner/first', '/tmp/source-conflict');
+    await vi.waitFor(() => expect(mockExecCommand).toHaveBeenCalledTimes(1));
+    const second = gitCloneService.clone('https://github.com/owner/second', '/tmp/source-conflict');
+    completed.resolve({ code: 0, stdout: '', stderr: 'Cloned first repository' });
+    expect(await second).toMatchObject({
+      success: false,
+      error: expect.stringContaining('different repository'),
+    });
+    expect(await first).toEqual({ success: true, output: 'Cloned first repository' });
+    expect(mockExecCommand).toHaveBeenCalledTimes(1);
+    expect(mockRm).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'git@github.com:owner/repo',
+    'http://github.com/owner/repo/',
+    'https://github.com/owner/repo.git',
+  ])('shares an equivalent GitHub source spelled %s', async (url) => {
+    const completed = createDeferred<{ code: number; stdout: string; stderr: string }>();
+    mockExecCommand.mockImplementation(() => completed.promise);
+    const first = gitCloneService.clone(
+      'https://github.com/OWNER/REPO.git',
+      '/tmp/equivalent-source'
+    );
+    const second = gitCloneService.clone(url, '/tmp/equivalent-source');
+    await vi.waitFor(() => expect(mockExecCommand).toHaveBeenCalledTimes(1));
+    completed.resolve({ code: 0, stdout: '', stderr: '' });
+    expect(await Promise.all([first, second])).toEqual([
+      { success: true, output: '' },
+      { success: true, output: '' },
+    ]);
+    expect(mockExecCommand).toHaveBeenCalledTimes(1);
+  });
+
   it('waits for an in-flight clone before inspecting its destination for another import', async () => {
     const completed = createDeferred<{ code: number; stdout: string; stderr: string }>();
     mockExecCommand.mockImplementation(() => completed.promise);
@@ -307,20 +345,13 @@ describe('GitCloneService.clone', () => {
     const clone = gitCloneService.clone('source', '/repos/owner/repo');
     await vi.waitFor(() => expect(mockExecCommand).toHaveBeenCalledTimes(1));
     mockPathExists.mockResolvedValue(true);
-    let completedScan = false;
-    const scan = gitCloneService.getClonePath('/repos', 'OWNER', 'REPO').then((result) => {
-      completedScan = true;
-      return result;
-    });
-    // Flush queued filesystem and git promises without completing the clone.
-    for (let i = 0; i < 10; i++) {
-      await Promise.resolve();
-    }
-    const inspectedBeforeCloneCompleted = completedScan;
+    const scan = gitCloneService.getClonePath('/repos', 'OWNER', 'REPO');
+    await drainAsyncWork();
+    const scannedBeforeCloneCompleted = mockReaddir.mock.calls.length > 0;
     mockGitCommand.mockResolvedValue({ code: 0, stdout: '', stderr: '' });
     completed.resolve({ code: 0, stdout: '', stderr: '' });
     await clone;
-    expect(inspectedBeforeCloneCompleted).toBe(false);
+    expect(scannedBeforeCloneCompleted).toBe(false);
     expect(await scan).toEqual({ path: '/repos/owner/repo', status: 'valid_repo' });
   });
 
@@ -358,18 +389,12 @@ describe('GitCloneService.clone', () => {
       stderr: '',
     }));
     scanBoundary.resolve([]);
-    let inspectedBeforeCloneCompleted = false;
-    const result = scan.then((destination) => {
-      inspectedBeforeCloneCompleted = !cloneCompleted;
-      return destination;
-    });
-    for (let i = 0; i < 10; i++) {
-      await Promise.resolve();
-    }
+    await drainAsyncWork();
+    const inspectedBeforeCloneCompleted = mockGitCommand.mock.calls.length > 0;
     cloneCompleted = true;
     completed.resolve({ code: 0, stdout: '', stderr: '' });
     await clone;
-    expect(await result).toEqual({ path: '/repos/owner/repo', status: 'valid_repo' });
+    expect(await scan).toEqual({ path: '/repos/owner/repo', status: 'valid_repo' });
     expect(inspectedBeforeCloneCompleted).toBe(false);
   });
 
@@ -409,9 +434,7 @@ describe('GitCloneService.clone', () => {
     const scan = gitCloneService.getClonePath('/repos', 'owner', 'repo');
     await inspectionEntered.promise;
     const clone = gitCloneService.clone('source', '/repos/owner/repo');
-    for (let i = 0; i < 10; i++) {
-      await Promise.resolve();
-    }
+    await drainAsyncWork();
     const admittedDuringInspection = cloneStarted;
     existsBoundary.resolve(cloneStarted);
     const destination = await scan;

@@ -4,6 +4,7 @@ import { pathExists } from '@/backend/lib/file-helpers';
 import { execCommand, gitCommand } from '@/backend/lib/shell';
 import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
+import { parseGithubUrl } from '@/shared/github-url';
 
 export { type GithubRepo, parseGithubUrl } from '@/shared/github-url';
 
@@ -23,6 +24,18 @@ interface CloneResult {
   error?: string;
 }
 
+interface InFlightClone {
+  source: string;
+  result: Promise<CloneResult>;
+}
+
+function cloneSourceIdentity(url: string): string {
+  const github = parseGithubUrl(url);
+  return github
+    ? `github:${github.owner.toLowerCase()}/${github.repo.toLowerCase()}`
+    : `raw:${url}`;
+}
+
 async function findCaseInsensitiveEntries(directory: string, name: string): Promise<string[]> {
   try {
     return (await readdir(directory)).filter((entry) => entry.toLowerCase() === name);
@@ -36,14 +49,14 @@ async function findCaseInsensitiveEntries(directory: string, name: string): Prom
 }
 
 class GitCloneService {
-  private readonly clonesInFlight = new Map<string, Promise<CloneResult>>();
+  private readonly clonesInFlight = new Map<string, InFlightClone>();
   private readonly inspectionsInFlight = new Map<string, Promise<ExistingCloneStatus>>();
 
   private inspectCloneDestination(destination: string): Promise<ExistingCloneStatus> {
     const clonePath = resolve(destination);
     const clone = this.clonesInFlight.get(clonePath);
     if (clone !== undefined) {
-      return clone.then(() => this.inspectCloneDestination(destination));
+      return clone.result.then(() => this.inspectCloneDestination(destination));
     }
     const existing = this.inspectionsInFlight.get(clonePath);
     if (existing !== undefined) {
@@ -62,7 +75,7 @@ class GitCloneService {
    */
   async getClonePath(reposDir: string, owner: string, repo: string): Promise<CloneDestination> {
     const canonicalPath = join(reposDir, owner.toLowerCase(), repo.toLowerCase());
-    await this.clonesInFlight.get(resolve(canonicalPath));
+    await this.clonesInFlight.get(resolve(canonicalPath))?.result;
     const candidates: string[] = [];
     for (const existingOwner of await findCaseInsensitiveEntries(reposDir, owner.toLowerCase())) {
       const ownerPath = join(reposDir, existingOwner);
@@ -126,14 +139,22 @@ class GitCloneService {
    */
   clone(url: string, destination: string): Promise<CloneResult> {
     const clonePath = resolve(destination);
+    const source = cloneSourceIdentity(url);
     const existing = this.clonesInFlight.get(clonePath);
     if (existing !== undefined) {
-      return existing;
+      if (existing.source !== source) {
+        return Promise.resolve({
+          success: false,
+          output: '',
+          error: 'A different repository is already being cloned to this destination',
+        });
+      }
+      return existing.result;
     }
     const pending = this.performClone(url, clonePath).finally(() => {
       this.clonesInFlight.delete(clonePath);
     });
-    this.clonesInFlight.set(clonePath, pending);
+    this.clonesInFlight.set(clonePath, { source, result: pending });
     return pending;
   }
 
