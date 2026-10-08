@@ -60,6 +60,8 @@ because `pid` is the only handle on an orphaned run script (`verifyRunning` uses
 `registerInitializedWorktree` writes the worktree columns and the commands in
 one transaction, since they were one statement before the split.
 
+## Provider defaults
+
 Provider-default updates return `NOT_FOUND` when their workspace was deleted,
 including deletion racing the database update, without exposing Prisma error
 messages. Other database errors keep their existing handling.
