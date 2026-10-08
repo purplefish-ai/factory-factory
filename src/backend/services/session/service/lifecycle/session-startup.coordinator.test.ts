@@ -576,20 +576,6 @@ describe('SessionStartupCoordinator', () => {
     expect(generationAfterFailure).toBeGreaterThan(sentinelGeneration);
   });
 
-  it('releases the stop generation when record-based client creation fails', async () => {
-    const { service, session, runtimeManager } = createLifecycleHarness();
-    runtimeManager.getOrCreateClient.mockRejectedValueOnce(new Error('spawn failed'));
-    const generationBeforeFailure = service.getStopGeneration('session-1');
-
-    await expect(service.getOrCreateSessionClientFromRecord(session as never)).rejects.toThrow(
-      'spawn failed'
-    );
-
-    const sentinelGeneration = service.getStopGeneration('sentinel-session');
-    expect(sentinelGeneration).toBeGreaterThan(generationBeforeFailure);
-    expect(service.getStopGeneration('session-1')).toBeGreaterThan(sentinelGeneration);
-  });
-
   it('does not release a stop generation still owned by a concurrent startup', async () => {
     let resolveFirstPreset!: (preset: 'STRICT') => void;
     const firstPreset = new Promise<'STRICT'>((resolve) => {

@@ -193,16 +193,6 @@ export class SessionStartupCoordinator {
     });
   }
 
-  async getOrCreateSessionClientFromRecord(
-    session: AgentSessionRecord,
-    options?: GetOrCreateSessionClientOptions
-  ): Promise<unknown> {
-    return await this.dependencies.lifecycleGate.runStartup(session.id, async (lease) => {
-      this.assertStartupAllowed(session.id, lease.generation);
-      return await this.getOrCreateFromRecord(session, options ?? {}, lease);
-    });
-  }
-
   async ensureSubagentBrowseSession(sessionId: string): Promise<boolean> {
     return await this.dependencies.lifecycleGate
       .runStartup(sessionId, async (lease) => {
