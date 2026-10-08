@@ -186,7 +186,9 @@ stops, so deliberately stopped ratchet sessions are not retried as crashes on
 the next boot. Runtime-managed exits without a shutdown reservation still use
 the exit code to determine terminal status. Bulk shutdown retains its non-browse
 lifecycle reservations through event recording and runtime shutdown, then
-releases them on every exit path. The supervisor's closed shutdown admission
+releases them on every exit path. A concurrent explicit stop that owns lifecycle
+recording suppresses the duplicate shutdown event; stops that suppress their own
+event still receive shutdown history. The supervisor's closed shutdown admission
 remains in effect after gate cleanup.
 
 Startup, termination, runtime exit, notifications, context, and workflow

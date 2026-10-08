@@ -16,7 +16,7 @@ export class SessionStartupCancelledError extends Error {
 }
 
 export class SessionLifecycleGate {
-  private readonly stoppingSessions = new Set<string>();
+  private readonly stoppingSessions = new Map<string, boolean>();
   private readonly shutdownSessions = new Set<string>();
   private stopGenerationCounter = 0;
   private readonly stopGenerations = new Map<string, number>();
@@ -56,13 +56,16 @@ export class SessionLifecycleGate {
     }
   }
 
-  reserveStop(sessionId: string): { generation: number; release(): void } | null {
+  reserveStop(
+    sessionId: string,
+    recordLifecycleEvent = false
+  ): { generation: number; release(): void } | null {
     if (this.stoppingSessions.has(sessionId) || this.shutdownSessions.has(sessionId)) {
       return null;
     }
 
     const generation = this.advanceGeneration(sessionId);
-    this.stoppingSessions.add(sessionId);
+    this.stoppingSessions.set(sessionId, recordLifecycleEvent);
     let released = false;
     return {
       generation,
@@ -102,6 +105,10 @@ export class SessionLifecycleGate {
 
   isStopReserved(sessionId: string): boolean {
     return this.stoppingSessions.has(sessionId);
+  }
+
+  isStopLifecycleEventReserved(sessionId: string): boolean {
+    return this.stoppingSessions.get(sessionId) === true;
   }
 
   isBulkShutdownReserved(sessionId: string): boolean {

@@ -74,7 +74,10 @@ export type SessionTerminationCoordinatorDependencies = {
     'clearSession' | 'clearAll'
   >;
   lifecycleEventService: Pick<SessionLifecycleEventService, 'record'>;
-  lifecycleGate: Pick<SessionLifecycleGate, 'reserveStop' | 'reserveShutdown' | 'releaseShutdown'>;
+  lifecycleGate: Pick<
+    SessionLifecycleGate,
+    'reserveStop' | 'reserveShutdown' | 'releaseShutdown' | 'isStopLifecycleEventReserved'
+  >;
   workflowFinalizer: Pick<
     SessionWorkflowFinalizer,
     'finalizeDeliberateStop' | 'clearInactiveSession'
@@ -95,7 +98,10 @@ export class SessionTerminationCoordinator {
   }
 
   async stopSession(sessionId: string, options?: StopSessionOptions): Promise<void> {
-    const stopReservation = this.dependencies.lifecycleGate.reserveStop(sessionId);
+    const stopReservation = this.dependencies.lifecycleGate.reserveStop(
+      sessionId,
+      options?.recordLifecycleEvent !== false
+    );
     if (!stopReservation) {
       logger.debug('Session stop already in progress', { sessionId });
       return;
@@ -323,6 +329,9 @@ export class SessionTerminationCoordinator {
   }
 
   private async recordShutdownLifecycleEvent(sessionId: string): Promise<void> {
+    if (this.dependencies.lifecycleGate.isStopLifecycleEventReserved(sessionId)) {
+      return;
+    }
     const session = await this.loadSessionForStop(sessionId);
     const workspaceId =
       session?.workspaceId ?? this.dependencies.acpEventProcessor.getWorkspaceId(sessionId);
