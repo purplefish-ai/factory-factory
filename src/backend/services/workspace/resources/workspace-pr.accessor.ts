@@ -1,40 +1,15 @@
-import type { Prisma, WorkspacePR } from '@prisma-gen/client';
+import type { Prisma, WorkspacePR, WorkspacePRRatchet } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
-import type { PRDiscoveryClaim, PRSnapshotFields } from '@/backend/services/workspace/types';
+import type { PRDiscoveryClaim, WorkspacePRIdentity } from '@/backend/services/workspace/types';
 import type { CIStatus, PRState } from '@/shared/core';
+import type { WorkspacePullRequest } from '@/shared/workspace-pr';
+import { workspacePrDiscoveryAccessor } from './workspace-pr-discovery.accessor';
+import { workspacePrRatchetAccessor } from './workspace-pr-ratchet.accessor';
 
-/**
- * Persistence for `WorkspacePR`, the cached view of a workspace's pull request.
- *
- * This file is the only writer of that table after creation -- the row is
- * created, empty, with its workspace by `workspaceAccessor.create`. Before the
- * split these thirteen
- * columns sat on `Workspace`, and `scripts/check-single-writer.mjs` was what
- * stopped four different services writing them; now the type system is, because
- * no other accessor can name the columns.
- *
- * Callers still speak in the flat `pr*` names the columns had. Those names are
- * threaded through service bridges, the snapshot wire and the v4 export format,
- * so they stay; the mapping to the unprefixed column names happens here and
- * nowhere else.
- *
- * Two writes span this table and `Workspace` — correcting a branch name
- * alongside a PR refresh, and clearing the discovery schedule when a branch is
- * renamed. Those take a transaction from the caller so the pair still lands
- * atomically, the same arrangement `workspaceRatchetAccessor` uses for the
- * dispatch reset.
- */
-
-/**
- * The PR cache as callers above the accessor see it: flattened onto the
- * workspace shape they already consumed, so the table split stops here.
- *
- * `prUpdatedAt` is the one name that lies. It never held GitHub's PR
- * `updated_at` — every caller passes its own observation time — so the column is
- * `syncedAt`. The caller-facing name is unchanged because it reaches the
- * snapshot wire and the export format, which cannot be renamed independently.
- */
 export interface WorkspacePRFields {
+  title?: string | null;
+  headRefName?: string | null;
+  baseRefName?: string | null;
   prUrl: string | null;
   prNumber: number | null;
   prState: PRState;
@@ -83,7 +58,7 @@ export const WORKSPACE_PR_DEFAULTS: WorkspacePRFields = {
 };
 
 /** The persisted row, as joined onto a workspace read. */
-export type WorkspacePRRow = WorkspacePR;
+export type WorkspacePRRow = WorkspacePR & { automation?: WorkspacePRRatchet | null };
 
 /** Flatten a joined PR row onto the caller-facing field names. */
 export function flattenWorkspacePR(pr: WorkspacePR | null | undefined): WorkspacePRFields {
@@ -98,9 +73,9 @@ export function flattenWorkspacePR(pr: WorkspacePR | null | undefined): Workspac
     prCiStatus: pr.ciStatus,
     prHasMergeConflict: pr.hasMergeConflict,
     prUpdatedAt: pr.syncedAt,
-    prDiscoveryLastCheckedAt: pr.discoveryLastCheckedAt,
-    prDiscoveryRetryCount: pr.discoveryRetryCount,
-    prDiscoveryNextCheckAt: pr.discoveryNextCheckAt,
+    prDiscoveryLastCheckedAt: null,
+    prDiscoveryRetryCount: 0,
+    prDiscoveryNextCheckAt: null,
     prCiFailedAt: pr.ciFailedAt,
     prCiLastNotifiedAt: pr.ciLastNotifiedAt,
     prReviewLastCheckedAt: pr.reviewLastCheckedAt,
@@ -118,8 +93,14 @@ export type WorkspacePRWriteFields = Partial<WorkspacePRFields>;
  */
 function toColumns(fields: WorkspacePRWriteFields): Prisma.WorkspacePRUpdateInput {
   const columns: Prisma.WorkspacePRUpdateInput = {};
-  if (fields.prUrl !== undefined) {
-    columns.url = fields.prUrl;
+  if (fields.title !== undefined) {
+    columns.title = fields.title;
+  }
+  if (fields.headRefName !== undefined) {
+    columns.headRefName = fields.headRefName;
+  }
+  if (fields.baseRefName !== undefined) {
+    columns.baseRefName = fields.baseRefName;
   }
   if (fields.prNumber !== undefined) {
     columns.number = fields.prNumber;
@@ -139,15 +120,6 @@ function toColumns(fields: WorkspacePRWriteFields): Prisma.WorkspacePRUpdateInpu
   if (fields.prUpdatedAt !== undefined) {
     columns.syncedAt = fields.prUpdatedAt;
   }
-  if (fields.prDiscoveryLastCheckedAt !== undefined) {
-    columns.discoveryLastCheckedAt = fields.prDiscoveryLastCheckedAt;
-  }
-  if (fields.prDiscoveryRetryCount !== undefined) {
-    columns.discoveryRetryCount = fields.prDiscoveryRetryCount;
-  }
-  if (fields.prDiscoveryNextCheckAt !== undefined) {
-    columns.discoveryNextCheckAt = fields.prDiscoveryNextCheckAt;
-  }
   if (fields.prCiFailedAt !== undefined) {
     columns.ciFailedAt = fields.prCiFailedAt;
   }
@@ -163,8 +135,10 @@ function toColumns(fields: WorkspacePRWriteFields): Prisma.WorkspacePRUpdateInpu
   return columns;
 }
 
-/** The aggregate fields a refresh compares against before writing. */
+export type WorkspacePRRecord = Prisma.WorkspacePRGetPayload<{ include: { automation: true } }>;
 export interface PRAggregateGuard {
+  prId: string;
+  revision: number;
   prUrl: string | null;
   prNumber: number | null;
   prState: PRState;
@@ -174,320 +148,185 @@ export interface PRAggregateGuard {
   prUpdatedAt: Date | null;
 }
 
-/** A workspace-and-project row carrying the flattened PR cache. */
-export type WorkspacePRCandidate = Omit<
-  Prisma.WorkspaceGetPayload<{ include: { project: true; pr: true } }>,
-  'pr'
-> &
-  WorkspacePRFields;
-
-function withPR(
-  row: Prisma.WorkspaceGetPayload<{ include: { project: true; pr: true } }>
-): WorkspacePRCandidate {
-  const { pr, ...workspace } = row;
-  return { ...workspace, ...flattenWorkspacePR(pr) };
+export function serializeWorkspacePR(pr: WorkspacePRRow): WorkspacePullRequest {
+  return {
+    id: pr.id,
+    url: pr.url,
+    number: pr.number,
+    title: pr.title,
+    headRefName: pr.headRefName,
+    baseRefName: pr.baseRefName,
+    state: pr.state,
+    reviewState: pr.reviewState,
+    ciStatus: pr.ciStatus,
+    hasMergeConflict: pr.hasMergeConflict,
+    syncedAt: pr.syncedAt?.toISOString() ?? null,
+    ratchet: {
+      lastCheckedAt: pr.automation?.lastCheckedAt?.toISOString() ?? null,
+      dispatchOutcome: pr.automation?.dispatchOutcome ?? null,
+      dispatchRetryCount: pr.automation?.dispatchRetryCount ?? 0,
+      dispatchStalled: pr.automation?.dispatchStalled ?? false,
+    },
+  };
 }
 
 class WorkspacePRAccessor {
-  /**
-   * READY workspaces with a PR whose cache is stale, oldest sync first.
-   *
-   * The `status` filter is on `Workspace` and the rest on `WorkspacePR`, so this
-   * is a join where it used to be a single covering index. At this table's size
-   * that is not a cost worth an index to avoid.
-   */
-  async findNeedingSync(staleThresholdMinutes = 5): Promise<WorkspacePRCandidate[]> {
-    const staleThreshold = new Date(Date.now() - staleThresholdMinutes * 60 * 1000);
-
-    const rows = await prisma.workspace.findMany({
-      where: {
-        status: 'READY',
-        pr: {
-          url: { not: null },
-          OR: [{ syncedAt: null }, { syncedAt: { lt: staleThreshold } }],
-        },
-      },
-      include: { project: true, pr: true },
-      orderBy: { pr: { syncedAt: 'asc' } }, // Oldest first
+  list(workspaceId: string): Promise<WorkspacePRRecord[]> {
+    return prisma.workspacePR.findMany({
+      where: { workspaceId, detachedAt: null },
+      include: { automation: true },
+      orderBy: { id: 'asc' },
     });
-    return rows.map(withPR);
   }
-
-  /**
-   * READY workspaces with a branch, no PR yet, and a discovery check due.
-   */
-  async findNeedingDiscovery(limit: number, dueAt = new Date()): Promise<WorkspacePRCandidate[]> {
-    const rows = await prisma.workspace.findMany({
-      where: {
-        status: 'READY',
-        branchName: { not: null },
-        project: {
-          githubOwner: { not: null },
-          githubRepo: { not: null },
-        },
-        pr: {
-          url: null,
-          OR: [{ discoveryNextCheckAt: null }, { discoveryNextCheckAt: { lte: dueAt } }],
-        },
-      },
-      include: { project: true, pr: true },
-      orderBy: [{ pr: { discoveryNextCheckAt: 'asc' } }, { updatedAt: 'desc' }],
-      take: limit,
+  findByIdentity(target: WorkspacePRIdentity): Promise<WorkspacePRRecord | null> {
+    return prisma.workspacePR.findFirst({
+      where: { id: target.prId, workspaceId: target.workspaceId, detachedAt: null },
+      include: { automation: true },
     });
-    return rows.map(withPR);
   }
-
-  /**
-   * Claim a due PR discovery candidate using the values observed by the caller.
-   * Concurrent activity or eligibility changes win by making this update a no-op.
-   *
-   * The status, branch and activity guards are relation filters because those
-   * columns stayed on `Workspace`; the retry and schedule guards are this row's.
-   * One consequence of the split: claiming no longer bumps `Workspace.updatedAt`,
-   * so a discovery poll no longer registers as workspace activity — it never
-   * should have, and the CAS is unaffected because the retry count still moves.
-   */
-  async claimDiscoveryAttempt(
-    workspaceId: string,
-    attempt: {
-      branchName: string;
-      expectedUpdatedAt: Date;
-      expectedRetryCount: number;
-      expectedNextCheckAt: Date | null;
-      checkedAt: Date;
-      nextCheckAt: Date;
-    }
-  ): Promise<boolean> {
-    const result = await prisma.workspacePR.updateMany({
-      where: {
-        workspaceId,
-        url: null,
-        discoveryRetryCount: attempt.expectedRetryCount,
-        discoveryNextCheckAt: attempt.expectedNextCheckAt,
-        workspace: {
-          status: 'READY',
-          branchName: attempt.branchName,
-          updatedAt: attempt.expectedUpdatedAt,
-        },
-      },
-      data: {
-        discoveryLastCheckedAt: attempt.checkedAt,
-        discoveryRetryCount: { increment: 1 },
-        discoveryNextCheckAt: attempt.nextCheckAt,
-      },
+  async attach(workspaceId: string, url: string) {
+    return await prisma.$transaction(async (tx) => {
+      const existing = await tx.workspacePR.findUnique({
+        where: { workspaceId_url: { workspaceId, url } },
+      });
+      if (existing) {
+        if (existing.detachedAt) {
+          await tx.workspacePR.update({
+            where: { id: existing.id },
+            data: {
+              detachedAt: null,
+              state: 'NONE',
+              reviewState: null,
+              ciStatus: 'UNKNOWN',
+              hasMergeConflict: false,
+              syncedAt: null,
+              revision: { increment: 1 },
+            },
+          });
+          await workspacePrRatchetAccessor.reset(tx, existing.id);
+        }
+        return { prId: existing.id, created: false, reattached: existing.detachedAt !== null };
+      }
+      const pr = await tx.workspacePR.create({ data: { workspaceId, url } });
+      await workspacePrRatchetAccessor.create(tx, pr.id);
+      return { prId: pr.id, created: true, reattached: false };
+    });
+  }
+  detach(target: WorkspacePRIdentity) {
+    return prisma.$transaction((tx) => this.detachInTransaction(tx, target));
+  }
+  async detachInTransaction(tx: Prisma.TransactionClient, target: WorkspacePRIdentity) {
+    const result = await tx.workspacePR.updateMany({
+      where: { id: target.prId, workspaceId: target.workspaceId, detachedAt: null },
+      data: { detachedAt: new Date(), revision: { increment: 1 } },
     });
     return result.count > 0;
   }
-
-  /**
-   * Atomically attach a discovered PR only while the claim that produced it is
-   * still current. A concurrent reset, branch rename, status change, or PR
-   * attachment makes this update a no-op.
-   */
-  async attachDiscoveredPRIfClaimMatches(
+  async attachDiscoveredPRsIfClaimMatches(
     workspaceId: string,
-    prUrl: string,
     claim: PRDiscoveryClaim,
-    prUpdatedAt: Date
-  ): Promise<boolean> {
-    const result = await prisma.workspacePR.updateMany({
+    urls: string[]
+  ) {
+    return await prisma.$transaction(async (tx) => {
+      if (!(await workspacePrDiscoveryAccessor.claimMatches(tx, workspaceId, claim))) {
+        return [];
+      }
+      const ids: string[] = [];
+      for (const url of urls) {
+        if (await tx.workspacePR.findUnique({ where: { workspaceId_url: { workspaceId, url } } })) {
+          continue;
+        }
+        const pr = await tx.workspacePR.create({
+          data: { workspaceId, url, headRefName: claim.branchName },
+        });
+        await workspacePrRatchetAccessor.create(tx, pr.id);
+        ids.push(pr.id);
+      }
+      return ids;
+    });
+  }
+  async findNeedingSync(staleThresholdMinutes = 5) {
+    const rows = await prisma.workspacePR.findMany({
       where: {
-        workspaceId,
-        url: null,
-        discoveryLastCheckedAt: claim.checkedAt,
-        discoveryRetryCount: claim.retryCount,
-        discoveryNextCheckAt: claim.nextCheckAt,
-        workspace: { status: 'READY', branchName: claim.branchName },
+        detachedAt: null,
+        workspace: { status: 'READY' },
+        OR: [
+          { syncedAt: null },
+          { syncedAt: { lt: new Date(Date.now() - staleThresholdMinutes * 60_000) } },
+        ],
       },
-      data: { url: prUrl, syncedAt: prUpdatedAt },
+      include: { workspace: { include: { project: true } } },
+      orderBy: { syncedAt: 'asc' },
     });
-    return result.count > 0;
+    return rows.map(({ workspace, ...pr }) => ({
+      ...workspace,
+      prId: pr.id,
+      ...flattenWorkspacePR(pr),
+    }));
   }
-
-  /** Atomically update snapshot fields only while the expected PR remains attached. */
-  async updateSnapshotIfUrlMatches(
-    workspaceId: string,
-    prUrl: string,
-    snapshot: PRSnapshotFields,
-    prUpdatedAt: Date
-  ): Promise<boolean> {
-    const result = await prisma.workspacePR.updateMany({
-      where: { workspaceId, url: prUrl },
-      data: {
-        number: snapshot.prNumber,
-        state: snapshot.prState,
-        reviewState: snapshot.prReviewState,
-        ciStatus: snapshot.prCiStatus,
-        syncedAt: prUpdatedAt,
-      },
-    });
-    return result.count > 0;
+  findNeedingDiscovery(limit: number, dueAt = new Date()) {
+    return workspacePrDiscoveryAccessor.findNeedingDiscovery(limit, dueAt);
   }
-
-  /** Make an eligible workspace immediately due for PR discovery again. */
-  async resetDiscoveryBackoff(workspaceId: string): Promise<boolean> {
-    const result = await prisma.workspacePR.updateMany({
-      where: {
-        workspaceId,
-        url: null,
-        workspace: { status: 'READY', branchName: { not: null } },
-      },
-      data: {
-        discoveryLastCheckedAt: null,
-        discoveryRetryCount: 0,
-        discoveryNextCheckAt: null,
-      },
-    });
-    return result.count > 0;
+  claimDiscoveryAttempt(
+    ...args: Parameters<typeof workspacePrDiscoveryAccessor.claimDiscoveryAttempt>
+  ) {
+    return workspacePrDiscoveryAccessor.claimDiscoveryAttempt(...args);
   }
-
-  /**
-   * Clear the discovery schedule so the next poll re-checks immediately. Runs in
-   * the caller's transaction because its only caller changes the branch name in
-   * the same breath, and a branch rename with a stale backoff would keep
-   * discovery pointed at the old branch until the backoff expired.
-   */
-  async clearDiscoverySchedule(
-    transaction: Prisma.TransactionClient,
-    workspaceId: string
-  ): Promise<void> {
-    const result = await transaction.workspacePR.updateMany({
-      where: { workspaceId },
-      data: {
-        discoveryLastCheckedAt: null,
-        discoveryRetryCount: 0,
-        discoveryNextCheckAt: null,
-      },
-    });
-    // Same reasoning as `writeInTransaction`: this is half of a pair, and the
-    // other half is the branch rename that makes the old backoff wrong.
-    if (result.count === 0) {
-      throw new Error(`WorkspacePR row not found for workspace: ${workspaceId}`);
-    }
+  resetDiscoveryBackoff(workspaceId: string) {
+    return workspacePrDiscoveryAccessor.resetDiscoveryBackoff(workspaceId);
   }
-
-  /**
-   * Unconditionally write the supplied subset of the PR cache.
-   *
-   * Throws if no row matched. A row exists for every workspace, so the only way
-   * to miss is a workspace deleted between an observation being fetched and
-   * persisted — which is what the pre-split write did too, by way of
-   * `prisma.workspace.update` raising on a missing row. Preserved deliberately:
-   * `updateMany` would otherwise report success for a discarded observation, and
-   * the PR sync scheduler counts those failures.
-   */
-  async write(workspaceId: string, fields: WorkspacePRWriteFields): Promise<void> {
-    const data = toColumns(fields);
-    if (Object.keys(data).length === 0) {
-      return;
-    }
-    const result = await prisma.workspacePR.updateMany({ where: { workspaceId }, data });
-    if (result.count === 0) {
-      throw new Error(`WorkspacePR row not found for workspace: ${workspaceId}`);
-    }
+  clearDiscoverySchedule(tx: Prisma.TransactionClient, workspaceId: string) {
+    return workspacePrDiscoveryAccessor.clearDiscoverySchedule(tx, workspaceId);
   }
-
-  /**
-   * As `write`, in the caller's transaction — including the missing-row throw,
-   * which matters more here than it does there. Its caller pairs this with a
-   * `branchName` update, so swallowing a zero-row PR update would commit the
-   * rename with no PR cache write beside it. The throw rolls the transaction back
-   * instead.
-   */
-  async writeInTransaction(
-    transaction: Prisma.TransactionClient,
-    workspaceId: string,
-    fields: WorkspacePRWriteFields
-  ): Promise<void> {
-    const data = toColumns(fields);
-    if (Object.keys(data).length === 0) {
-      return;
-    }
-    const result = await transaction.workspacePR.updateMany({ where: { workspaceId }, data });
-    if (result.count === 0) {
-      throw new Error(`WorkspacePR row not found for workspace: ${workspaceId}`);
-    }
-  }
-
-  /**
-   * Read the aggregate a refresh compares against, inside the caller's
-   * transaction so the value it returns is the one `applyAggregateIfUnchanged`
-   * guards on.
-   */
   async readAggregate(
-    transaction: Prisma.TransactionClient,
-    workspaceId: string
+    tx: Prisma.TransactionClient,
+    workspaceId: string,
+    prId?: string
   ): Promise<PRAggregateGuard | null> {
-    const row = await transaction.workspacePR.findUnique({
-      where: { workspaceId },
-      select: {
-        url: true,
-        number: true,
-        state: true,
-        reviewState: true,
-        ciStatus: true,
-        hasMergeConflict: true,
-        syncedAt: true,
-      },
+    const rows = await tx.workspacePR.findMany({
+      where: { workspaceId, detachedAt: null, ...(prId ? { id: prId } : {}) },
+      take: 2,
     });
-    if (!row) {
+    if (rows.length !== 1 || !rows[0]) {
       return null;
     }
-    return {
-      prUrl: row.url,
-      prNumber: row.number,
-      prState: row.state,
-      prReviewState: row.reviewState,
-      prCiStatus: row.ciStatus,
-      prHasMergeConflict: row.hasMergeConflict,
-      prUpdatedAt: row.syncedAt,
-    };
+    const row = rows[0];
+    return { prId: row.id, revision: row.revision, ...flattenWorkspacePR(row) };
   }
-
-  /**
-   * The minimal PR identity + state needed to decide whether a workspace has
-   * an open PR to act on (e.g. adversarial review), without pulling in the
-   * rest of the cached aggregate.
-   */
-  async findPRState(
-    workspaceId: string
-  ): Promise<{ prUrl: string | null; prNumber: number | null; prState: PRState } | null> {
-    const row = await prisma.workspacePR.findUnique({
-      where: { workspaceId },
-      select: { url: true, number: true, state: true },
-    });
+  async write(workspaceId: string, fields: WorkspacePRWriteFields, prId?: string): Promise<void> {
+    await prisma.$transaction((tx) => this.writeInTransaction(tx, workspaceId, fields, prId));
+  }
+  async writeInTransaction(
+    tx: Prisma.TransactionClient,
+    workspaceId: string,
+    fields: WorkspacePRWriteFields,
+    prId?: string
+  ) {
+    const row = await this.readAggregate(tx, workspaceId, prId);
     if (!row) {
-      return null;
+      throw new Error(`Explicit PR identity required for workspace: ${workspaceId}`);
     }
-    return { prUrl: row.url, prNumber: row.number, prState: row.state };
+    await this.applyAggregateIfUnchanged(tx, workspaceId, row, fields);
   }
-
-  /**
-   * Write a refreshed aggregate, compare-and-swap on the aggregate the caller
-   * read. A concurrent refresh that already moved the cache wins and this is a
-   * no-op, which is what tells the caller not to reset a settled dispatch.
-   */
   async applyAggregateIfUnchanged(
-    transaction: Prisma.TransactionClient,
+    tx: Prisma.TransactionClient,
     workspaceId: string,
     guard: PRAggregateGuard,
     fields: WorkspacePRWriteFields
-  ): Promise<boolean> {
-    const result = await transaction.workspacePR.updateMany({
-      where: {
-        workspaceId,
-        url: guard.prUrl,
-        number: guard.prNumber,
-        state: guard.prState,
-        reviewState: guard.prReviewState,
-        hasMergeConflict: guard.prHasMergeConflict,
-        ciStatus: guard.prCiStatus,
-        syncedAt: guard.prUpdatedAt,
-      },
-      data: toColumns(fields),
+  ) {
+    const result = await tx.workspacePR.updateMany({
+      where: { id: guard.prId, workspaceId, detachedAt: null, revision: guard.revision },
+      data: { ...toColumns(fields), revision: { increment: 1 } },
     });
     return result.count > 0;
   }
+  async findPRState(workspaceId: string, prId?: string) {
+    const rows = await prisma.workspacePR.findMany({
+      where: { workspaceId, detachedAt: null, ...(prId ? { id: prId } : {}) },
+      take: 2,
+    });
+    const row = rows.length === 1 ? rows[0] : undefined;
+    return row ? { prId: row.id, prUrl: row.url, prNumber: row.number, prState: row.state } : null;
+  }
 }
-
 export const workspacePrAccessor = new WorkspacePRAccessor();

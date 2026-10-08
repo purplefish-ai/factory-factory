@@ -109,6 +109,8 @@ type DriftComparableField =
   | 'status'
   | 'name'
   | 'branchName'
+  | 'prs'
+  | 'prSummary'
   | 'prState'
   | 'prCiStatus'
   | 'prNumber'
@@ -123,7 +125,7 @@ type DriftComparableField =
 
 const DRIFT_FIELD_GROUPS: { group: string; fields: DriftComparableField[] }[] = [
   { group: 'workspace', fields: ['status', 'name', 'branchName'] },
-  { group: 'pr', fields: ['prState', 'prCiStatus', 'prNumber'] },
+  { group: 'pr', fields: ['prs', 'prSummary', 'prState', 'prCiStatus', 'prNumber'] },
   {
     group: 'ratchet',
     fields: [
@@ -250,6 +252,8 @@ export class SnapshotReconciliationService {
       hasHadSessions: ws.hasHadSessions,
       mode: ws.mode,
       autoIterationStatus: ws.autoIterationStatus,
+      prs: ws.prs,
+      prSummary: ws.prSummary,
       prUrl: ws.prUrl,
       prNumber: ws.prNumber,
       prState: ws.prState,

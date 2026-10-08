@@ -1,3 +1,4 @@
+import { z } from 'zod';
 /**
  * Shared schema for export/import data validation.
  *
@@ -7,8 +8,6 @@
  * Note: Uses string enums instead of Prisma enums to avoid pulling
  * Prisma client into the browser bundle.
  */
-
-import { z } from 'zod';
 import {
   CIStatus as CoreCIStatus,
   IssueProvider as CoreIssueProvider,
@@ -38,7 +37,9 @@ import {
   VOICE_UTTERANCE_END_MS_MAX,
   VOICE_UTTERANCE_END_MS_MIN,
 } from '@/shared/voice-vad';
+import { WorkspacePullRequestSchema } from '@/shared/workspace-pr';
 import { autoIterationConfigSchema } from './auto-iteration.schema';
+import { validateBackupPRs } from './export-data-pr-validation';
 
 function enumValues<const T extends Record<string, string>>(enumObject: T) {
   return Object.values(enumObject) as [T[keyof T], ...T[keyof T][]];
@@ -78,7 +79,7 @@ const exportedProjectSchema = z.object({
   updatedAt: z.string(),
 });
 
-const exportedWorkspaceSchema = z.object({
+const legacyWorkspaceSchema = z.object({
   id: z.string(),
   projectId: z.string(),
   parentWorkspaceId: z.string().nullable().optional().default(null),
@@ -134,11 +135,49 @@ const exportedWorkspaceSchema = z.object({
   updatedAt: z.string(),
 });
 
+const exportedPRSchema = WorkspacePullRequestSchema.extend({
+  detachedAt: z.string().nullable(),
+  revision: z.number().int().nonnegative(),
+  ciFailedAt: z.string().nullable(),
+  ciLastNotifiedAt: z.string().nullable(),
+  reviewLastCheckedAt: z.string().nullable(),
+  reviewLastCommentId: z.string().nullable(),
+  ratchet: WorkspacePullRequestSchema.shape.ratchet.extend({
+    activeSessionId: z.string().nullable(),
+    dispatchSnapshotKey: z.string().nullable(),
+  }),
+});
+const exportedWorkspaceSchema = legacyWorkspaceSchema
+  .omit({
+    prUrl: true,
+    prNumber: true,
+    prState: true,
+    prReviewState: true,
+    prCiStatus: true,
+    prUpdatedAt: true,
+    prCiFailedAt: true,
+    prCiLastNotifiedAt: true,
+    prReviewLastCheckedAt: true,
+    prReviewLastCommentId: true,
+    ratchetLastCiRunId: true,
+    ratchetState: true,
+  })
+  .extend({
+    prs: z.array(exportedPRSchema),
+    ratchetActivePrId: z.string().nullable(),
+    prDiscovery: z.object({
+      lastCheckedAt: z.string().nullable(),
+      retryCount: z.number().int().nonnegative(),
+      nextCheckAt: z.string().nullable(),
+    }),
+  });
+
 const exportedAgentSessionSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
   name: z.string().nullable(),
   workflow: z.string(),
+  workspacePrId: z.string().nullable().optional().default(null),
   model: z.string(),
   status: SessionStatus,
   provider: SessionProvider,
@@ -216,11 +255,11 @@ const exportedUserSettingsSchema = z.object({
     .default(DEFAULT_VOICE_BARGE_IN_SUSTAINED_MS),
 });
 
-export const exportDataSchema = z.object({
+const version5Schema = z.object({
   meta: z.object({
     exportedAt: z.string(),
     version: z.string(),
-    schemaVersion: z.literal(4),
+    schemaVersion: z.literal(5),
   }),
   data: z.object({
     projects: z.array(exportedProjectSchema),
@@ -231,12 +270,81 @@ export const exportDataSchema = z.object({
   }),
 });
 
+const version4Schema = version5Schema.extend({
+  meta: version5Schema.shape.meta.extend({ schemaVersion: z.literal(4) }),
+  data: version5Schema.shape.data.extend({ workspaces: z.array(legacyWorkspaceSchema) }),
+});
+const normalizedVersion4Schema = version4Schema.transform((data) => {
+  const workspaces = data.data.workspaces.map((w) => {
+    const id = `legacy-pr-${w.id}`;
+    return exportedWorkspaceSchema.parse({
+      ...w,
+      ratchetActiveSessionId: w.prUrl ? w.ratchetActiveSessionId : null,
+      ratchetActivePrId: w.prUrl && w.ratchetActiveSessionId ? id : null,
+      prDiscovery: { lastCheckedAt: null, retryCount: 0, nextCheckAt: null },
+      prs: w.prUrl
+        ? [
+            {
+              id,
+              url: w.prUrl,
+              number: w.prNumber,
+              title: null,
+              headRefName: null,
+              baseRefName: null,
+              state: w.prState,
+              reviewState: w.prReviewState,
+              ciStatus: w.prCiStatus,
+              hasMergeConflict: w.ratchetState === 'MERGE_CONFLICT',
+              syncedAt: w.prUpdatedAt,
+              detachedAt: null,
+              revision: 0,
+              ciFailedAt: w.prCiFailedAt,
+              ciLastNotifiedAt: w.prCiLastNotifiedAt,
+              reviewLastCheckedAt: w.prReviewLastCheckedAt,
+              reviewLastCommentId: w.prReviewLastCommentId,
+              ratchet: {
+                lastCheckedAt: w.ratchetLastCheckedAt,
+                activeSessionId: w.ratchetActiveSessionId,
+                dispatchSnapshotKey: w.ratchetLastCiRunId,
+                dispatchOutcome: w.ratchetActiveSessionId ? 'RUNNING' : null,
+                dispatchRetryCount: 0,
+                dispatchStalled: false,
+              },
+            },
+          ]
+        : [],
+    });
+  });
+  const legacyFixers = new Map(workspaces.map((w) => [w.id, w]));
+  const agentSessions = data.data.agentSessions.map((session) => {
+    const workspace = legacyFixers.get(session.workspaceId);
+    return workspace?.ratchetActiveSessionId === session.id
+      ? { ...session, workspacePrId: workspace.ratchetActivePrId }
+      : session;
+  });
+  return {
+    ...data,
+    meta: { ...data.meta, schemaVersion: 5 as const },
+    data: { ...data.data, workspaces, agentSessions },
+  };
+});
+
+export type ExportDataV5 = z.infer<typeof version5Schema>;
+export const exportDataV5Schema = version5Schema.superRefine(validateBackupPRs);
+export const exportDataV4Schema = version4Schema;
+export const exportDataSchema = z
+  .union([exportDataV5Schema, normalizedVersion4Schema])
+  .superRefine(validateBackupPRs);
+export function normalizeExportData(input: unknown): ExportDataV5 {
+  return exportDataSchema.parse(input);
+}
 export {
   exportedAgentSessionSchema,
   exportedProjectSchema,
   exportedTerminalSessionSchema,
   exportedUserSettingsSchema,
   exportedWorkspaceSchema,
+  legacyWorkspaceSchema,
 };
 
 export type ExportData = z.infer<typeof exportDataSchema>;

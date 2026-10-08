@@ -73,16 +73,19 @@ export class PRFetchCoordinator {
   private readonly lastFetchedAt = new Map<string, number>();
   private readonly inFlightClaims = new Map<string, InFlightFetchClaim>();
   private nextClaimToken = 0;
+  private readonly membership = new Map<string, string>();
 
   /**
    * Run `fetch` unless this workspace was fetched recently or is being fetched
    * right now, in which case skip it and say so.
    */
   async coordinate<T>(
-    workspaceId: string,
+    target: string | { workspaceId: string; prId: string },
     fetch: () => Promise<T>,
     options?: CoordinateOptions<T>
   ): Promise<CoordinatedFetch<T>> {
+    const workspaceId = typeof target === 'string' ? target : target.prId;
+    const owner = typeof target === 'string' ? target : target.workspaceId;
     const now = Date.now();
     this.pruneExpiredInFlight(now);
 
@@ -94,6 +97,7 @@ export class PRFetchCoordinator {
     }
 
     const claimToken = this.claim(workspaceId, now);
+    this.membership.set(workspaceId, owner);
     try {
       const value = await fetch();
       if (options?.countsAsFetched?.(value) ?? true) {
@@ -115,8 +119,14 @@ export class PRFetchCoordinator {
    */
   removeWorkspace(workspaceId: string): void {
     this.pruneExpiredInFlight(Date.now());
-    this.lastFetchedAt.delete(workspaceId);
-    this.inFlightClaims.delete(workspaceId);
+    for (const [key, owner] of this.membership) {
+      if (owner !== workspaceId) {
+        continue;
+      }
+      this.lastFetchedAt.delete(key);
+      this.inFlightClaims.delete(key);
+      this.membership.delete(key);
+    }
   }
 
   /**
@@ -136,6 +146,7 @@ export class PRFetchCoordinator {
   clear(): void {
     this.lastFetchedAt.clear();
     this.inFlightClaims.clear();
+    this.membership.clear();
   }
 
   private isWithinCooldown(workspaceId: string, now: number, cooldownMs?: number): boolean {
@@ -163,6 +174,9 @@ export class PRFetchCoordinator {
   private release(workspaceId: string, claimToken: number): void {
     if (this.inFlightClaims.get(workspaceId)?.claimToken === claimToken) {
       this.inFlightClaims.delete(workspaceId);
+      if (!this.lastFetchedAt.has(workspaceId)) {
+        this.membership.delete(workspaceId);
+      }
     }
   }
 
@@ -178,6 +192,9 @@ export class PRFetchCoordinator {
     for (const [workspaceId, claim] of this.inFlightClaims) {
       if (now - claim.startedAt >= SERVICE_CACHE_TTL_MS.workspacePrFetchInFlight) {
         this.inFlightClaims.delete(workspaceId);
+        if (!this.lastFetchedAt.has(workspaceId)) {
+          this.membership.delete(workspaceId);
+        }
       }
     }
   }
@@ -205,6 +222,7 @@ export class PRFetchCoordinator {
     if (oldestWorkspaceId !== undefined) {
       this.lastFetchedAt.delete(oldestWorkspaceId);
       this.inFlightClaims.delete(oldestWorkspaceId);
+      this.membership.delete(oldestWorkspaceId);
     }
   }
 

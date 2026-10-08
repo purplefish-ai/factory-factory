@@ -27,7 +27,8 @@ Enforced by dependency-cruiser and ownership checks:
   [background jobs](../../../docs/architecture/background-jobs.md).
 - Application `gh` calls go through `GitHubCLIService` for the shared rate
   budget.
-- Side-table accessors (`WorkspacePR`, `WorkspaceRatchet`, `WorkspaceRunScript`,
-  `WorkspaceAutoIteration`) flatten rows onto the workspace on read, preserving
-  wire field names. Read
+- Side-table accessors own Prisma writes. `WorkspacePR` exposes a collection;
+  `WorkspacePRRatchet` owns each PR’s history, `WorkspaceRatchet` the shared
+  fixer slot, and `WorkspacePRDiscovery` the discovery schedule. Other side
+  tables flatten their rows onto workspace reads. Read
   [workspace state](../../../docs/architecture/workspace-state.md).

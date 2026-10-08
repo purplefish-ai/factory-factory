@@ -375,6 +375,7 @@ export function createLifecycleTestSession(
     createdAt: new Date('2026-07-15T00:00:00.000Z'),
     updatedAt: new Date('2026-07-15T00:00:00.000Z'),
     ...overrides,
+    workspacePrId: overrides.workspacePrId ?? null,
   };
 }
 

@@ -94,6 +94,13 @@ export class RatchetProjectionWorker {
         return true;
       }
       this.dependencies.publish(workspaceId, {
+        prs: workspace.prs,
+        prSummary: workspace.prSummary,
+        prUrl: workspace.prUrl,
+        prNumber: workspace.prNumber,
+        prState: workspace.prState,
+        prCiStatus: workspace.prCiStatus,
+        prUpdatedAt: workspace.prUpdatedAt?.toISOString() ?? null,
         ratchetEnabled: workspace.ratchetEnabled,
         ratchetState: workspace.ratchetState,
         ratchetDispatchOutcome: workspace.ratchetDispatchOutcome,
