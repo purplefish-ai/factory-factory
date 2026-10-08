@@ -37,6 +37,11 @@ both PR sync and Ratchet classify startup failures as failing CI, including when
 other checks are still running. Sidebar and Kanban projections therefore agree
 on the cached CI status.
 
+Legacy status contexts retain their context names and target URLs through PR
+snapshot parsing and use the same normalization as Ratchet. Contexts pointing at
+GitHub Actions runs therefore use the latest run attempt in both paths, keeping
+the cached CI status consistent after reruns.
+
 CLI authentication checks normally use cached health. Closing the setup terminal
 in admin settings or project onboarding, or choosing Recheck, forces a fresh
 check through both the aggregate CLI cache and GitHub's own cache. Forced checks
