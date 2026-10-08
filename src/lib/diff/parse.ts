@@ -118,6 +118,10 @@ function createContextLine(line: string, oldLine: number, newLine: number): Diff
   };
 }
 
+function splitDiffLines(diff: string): string[] {
+  return (diff.endsWith('\n') ? diff.slice(0, -1) : diff).split('\n');
+}
+
 /**
  * Parse a unified diff into detailed line-by-line format with line numbers.
  * Used by the workspace diff viewer for precise line-level navigation.
@@ -126,7 +130,7 @@ function createContextLine(line: string, oldLine: number, newLine: number): Diff
  * @returns Array of parsed diff lines with line number tracking
  */
 export function parseDetailedDiff(diff: string): DiffLine[] {
-  const lines = (diff.endsWith('\n') ? diff.slice(0, -1) : diff).split('\n');
+  const lines = splitDiffLines(diff);
   const result: DiffLine[] = [];
 
   let oldLine = 0;
@@ -166,7 +170,7 @@ export function parseDetailedDiff(diff: string): DiffLine[] {
  */
 export function parseFileDiff(diff: string): DiffFile[] {
   const files: DiffFile[] = [];
-  const lines = (diff.endsWith('\n') ? diff.slice(0, -1) : diff).split('\n');
+  const lines = splitDiffLines(diff);
   let currentFile: DiffFile | null = null;
   let currentHunk: DiffHunk | null = null;
 
