@@ -194,7 +194,14 @@ class SchedulerService {
             return claimed
               ? {
                   ...candidate,
-                  claim: { branchName, checkedAt, retryCount, nextCheckAt },
+                  claim: {
+                    branchName,
+                    checkedAt,
+                    retryCount,
+                    nextCheckAt,
+                    githubOwner: workspace.project.githubOwner ?? group.owner,
+                    githubRepo: workspace.project.githubRepo ?? group.repo,
+                  },
                 }
               : null;
           })
@@ -239,14 +246,13 @@ class SchedulerService {
   ): Promise<{ discovered: number; failed: boolean }> {
     try {
       const prs = await githubCLIService.listOpenPRs(group.owner, group.repo);
-      const unmatched = new Set(group.candidates);
       let discovered = 0;
 
       for (const pr of [...prs].sort(
         (left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime()
       )) {
         const prCreatedAt = new Date(pr.createdAt).getTime();
-        const candidate = [...unmatched]
+        const candidate = [...group.candidates]
           .filter(
             (item) =>
               item.branchName === pr.headRefName &&
@@ -261,7 +267,6 @@ class SchedulerService {
           continue;
         }
 
-        unmatched.delete(candidate);
         const result = await prSnapshotService.attachDiscoveredPRAndRefresh(
           candidate.workspace.id,
           pr.url,

@@ -14,6 +14,8 @@ export interface PREventDraft {
 export interface ClaimedPRDelivery {
   deliveryId: string;
   sessionId: string;
+  deliveryProvider?: string | null;
+  deliveryProviderSessionId?: string | null;
   bindingRevision: number;
   eventIds: string[];
   text: string;
@@ -77,6 +79,7 @@ export function reducePRObservation(input: {
   eventEpoch: number;
   pendingEvents: readonly PREventSummary[];
   deliveredEvents: readonly PREventSummary[];
+  inFlightEvents?: readonly PREventSummary[];
   hashIdentity?: (identity: string) => string;
 }) {
   const { target, previous, current, eventEpoch, pendingEvents, deliveredEvents } = input;
@@ -84,7 +87,7 @@ export function reducePRObservation(input: {
   const supersededEventIds: string[] = [];
   let nextTransitionSequence = input.transitionSequence;
   const prefix = `${target.prId}:epoch:${eventEpoch}:`;
-  const known = [...pendingEvents, ...deliveredEvents];
+  const known = [...pendingEvents, ...deliveredEvents, ...(input.inFlightEvents ?? [])];
   const add = (payload: PRMonitoringEventPayload, identity: string) => {
     const deduplicationKey = `${prefix}${input.hashIdentity ? input.hashIdentity(identity) : identity}`;
     if (!known.some((e) => e.deduplicationKey === deduplicationKey)) {
@@ -147,12 +150,13 @@ function eventIsSuperseded(
   }
   return (
     payload.kind === 'REVIEW_FEEDBACK' &&
-    current.reviewsComplete &&
     payload.reviews.some(
       (r) =>
-        !current.actionableReviews.some(
-          (c) => c.identity === r.identity && c.contentHash === r.contentHash
-        )
+        current.resolvedReviewIds?.includes(r.identity) ||
+        (current.reviewsComplete &&
+          !current.actionableReviews.some(
+            (c) => c.identity === r.identity && c.contentHash === r.contentHash
+          ))
     )
   );
 }
@@ -236,7 +240,12 @@ function addConflictTransition(
   const { previous, current, target, deliveredEvents } = input;
   if (current.hasMergeConflict !== (previous?.hasMergeConflict ?? false)) {
     sequence++;
-    if (current.hasMergeConflict || deliveredEvents.some((e) => e.kind === 'CONFLICT_DETECTED')) {
+    if (
+      current.hasMergeConflict ||
+      [...deliveredEvents, ...(input.inFlightEvents ?? [])].some(
+        (e) => e.kind === 'CONFLICT_DETECTED'
+      )
+    ) {
       add(
         {
           kind: current.hasMergeConflict ? 'CONFLICT_DETECTED' : 'CONFLICT_CLEARED',

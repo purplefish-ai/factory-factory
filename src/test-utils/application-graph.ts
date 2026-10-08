@@ -1,4 +1,5 @@
 import { type Mock, vi } from 'vitest';
+import { defaultPRMonitoringServices } from '@/backend/orchestration/pr-monitoring-dependencies';
 
 const hoistedApplicationGraphMocks = vi.hoisted(() => ({
   computePendingRequestType: vi.fn(),
@@ -343,6 +344,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
   }) satisfies typeof chatEventForwarderService;
 
   const services = {
+    ...defaultPRMonitoringServices,
     acpRuntimeManager: graphAcpRuntimeManager,
     acpTraceLogger,
     autoIterationService,

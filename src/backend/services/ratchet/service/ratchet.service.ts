@@ -137,6 +137,9 @@ export class RatchetService extends EventEmitter {
       return { checked: 0, stateChanges: 0, actionsTriggered: 0, results: [] };
     }
     const workspaces = await workspacePRMonitoringService.listEnabled();
+    if (this.stopped || signal?.aborted) {
+      return { checked: 0, stateChanges: 0, actionsTriggered: 0, results: [] };
+    }
     const results = await Promise.all(
       workspaces.map((config) => this.limit(() => this.check(config, signal)))
     );
@@ -154,12 +157,21 @@ export class RatchetService extends EventEmitter {
     const config = (await workspacePRMonitoringService.listEnabled()).find(
       (c) => c.workspaceId === workspaceId
     );
-    return config ? await this.check(config) : null;
+    return !this.stopped && config ? await this.check(config) : null;
   }
   private check(
     config: Awaited<ReturnType<typeof workspacePRMonitoringService.listEnabled>>[number],
     parentSignal?: AbortSignal
   ): Promise<WorkspaceRatchetResult> {
+    const previousState = aggregateState(config.workspace.prs);
+    if (this.stopped || parentSignal?.aborted) {
+      return Promise.resolve({
+        workspaceId: config.workspaceId,
+        previousState,
+        newState: previousState,
+        action: { type: 'WAITING', reason: 'PR monitoring stopped' },
+      });
+    }
     const existing = this.checking.get(config.workspaceId);
     if (existing !== undefined) {
       return existing;
@@ -171,7 +183,6 @@ export class RatchetService extends EventEmitter {
       AbortSignal.timeout(SERVICE_TIMEOUT_MS.ratchetWorkspaceCheck),
       ...(parentSignal ? [parentSignal] : []),
     ]);
-    const previousState = aggregateState(config.workspace.prs);
     const bridge = this.bridge;
     if (!bridge) {
       return Promise.reject(new Error('PR monitoring bridge is not configured'));
@@ -181,10 +192,15 @@ export class RatchetService extends EventEmitter {
         await this.observeAssociations(config, bridge, signal);
         signal.throwIfAborted();
         await workspacePRMonitoringService.markChecked(config.workspaceId);
+        signal.throwIfAborted();
         const queued = await workspacePRMonitoringService.listPending(config.workspaceId);
+        signal.throwIfAborted();
         await bridge.wake(config.workspaceId);
+        signal.throwIfAborted();
         this.emit(RATCHET_DISPATCH_CHANGED, { workspaceId: config.workspaceId });
+        signal.throwIfAborted();
         const newState = aggregateState(await workspacePrSnapshotService.list(config.workspaceId));
+        signal.throwIfAborted();
         this.emitStateChange(config.workspaceId, previousState, newState);
         return {
           workspaceId: config.workspaceId,

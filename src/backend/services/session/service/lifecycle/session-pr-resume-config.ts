@@ -20,6 +20,19 @@ export async function restorePRResumeConfig(
       throw new Error(`Existing configuration option is unavailable: ${option.id}`);
     }
     if (active.currentValue !== option.currentValue) {
+      if (option.category === 'mode' && option.type === 'select') {
+        await handle.connection.setSessionMode({
+          sessionId: handle.providerSessionId,
+          modeId: option.currentValue,
+        });
+        handle.configOptions = handle.configOptions.map((cached) =>
+          cached.type === 'select' && cached.id === option.id
+            ? { ...cached, currentValue: option.currentValue }
+            : cached
+        );
+        assertStartupAllowed();
+        continue;
+      }
       const restored = await handle.connection.setSessionConfigOption({
         sessionId: handle.providerSessionId,
         configId: option.id,

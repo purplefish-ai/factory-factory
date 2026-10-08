@@ -694,6 +694,12 @@ function propertyName(assignment) {
 }
 
 function checkNestedSideTableMutation(relPath, dataExpression, violations, insideWorkspaceCreate) {
+  if (ts.isArrayLiteralExpression(dataExpression)) {
+    for (const element of dataExpression.elements) {
+      checkNestedSideTableMutation(relPath, element, violations, false);
+    }
+    return;
+  }
   if (!ts.isObjectLiteralExpression(dataExpression)) {
     return;
   }
@@ -706,9 +712,6 @@ function checkNestedSideTableMutation(relPath, dataExpression, violations, insid
       continue;
     }
     const owner = OWNED_SIDE_TABLES[table];
-    if (relPath === owner) {
-      continue;
-    }
     for (const operation of property.initializer.properties) {
       if (!ts.isPropertyAssignment(operation) && !ts.isShorthandPropertyAssignment(operation)) {
         continue;
@@ -719,16 +722,19 @@ function checkNestedSideTableMutation(relPath, dataExpression, violations, insid
       if (!key || !NESTED_MUTATION_KEYS.has(key)) {
         continue;
       }
-      if (
+      const exemptCreation =
         insideWorkspaceCreate &&
         WORKSPACE_CREATION_SIDE_TABLES.has(table) &&
-        NESTED_CREATION_KEYS.has(key)
-      ) {
-        continue;
+        NESTED_CREATION_KEYS.has(key);
+      if (relPath !== owner && !exemptCreation) {
+        violations.push(
+          `${relPath}: unauthorized nested ${key} of the ${table} relation; ${table} is written only by ${owner}`
+        );
       }
-      violations.push(
-        `${relPath}: unauthorized nested ${key} of the ${table} relation; ${table} is written only by ${owner}`
-      );
+      // Creating a paired PR does not grant ownership of its event ledger.
+      if (ts.isPropertyAssignment(operation)) {
+        checkNestedSideTableMutation(relPath, operation.initializer, violations, false);
+      }
     }
   }
 }

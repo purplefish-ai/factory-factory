@@ -41,6 +41,7 @@ beforeAll(async () => {
       workspaceId: 'w',
       workflow: 'implement',
       provider: 'CLAUDE',
+      providerSessionId: 'original',
       model: 'sonnet',
     },
   });
@@ -50,6 +51,7 @@ beforeAll(async () => {
       workspaceId: 'other',
       workflow: 'implement',
       provider: 'CLAUDE',
+      providerSessionId: 'original',
       model: 'sonnet',
     },
   });
@@ -150,6 +152,59 @@ describe('durable monitoring', () => {
       'DELIVERED'
     );
   });
+  it('commits the enablement control atomically with a binding and deduplicates retries', async () => {
+    const before = await workspacePrMonitoringAccessor.get('w');
+    if (!before) {
+      throw new Error('Missing config');
+    }
+    const input = {
+      workspaceId: 'w',
+      enabled: true,
+      recipientSessionId: 'main',
+      expectedBindingRevision: before.bindingRevision,
+      replyToPrComments: false,
+    };
+    await workspacePrMonitoringAccessor.setBinding(input);
+    await workspacePrMonitoringAccessor.setBinding(input);
+    const control = await db.prisma.workspacePREvent.findMany({
+      where: { workspaceId: 'w', deduplicationKey: `enabled:${before.bindingRevision}` },
+    });
+    expect(control).toHaveLength(1);
+    expect(control[0]?.payload).toMatchObject({
+      kind: 'MONITORING_ENABLED',
+      replyToPrComments: false,
+    });
+    await workspacePrMonitoringAccessor.pause('main', 'USER_STOPPED');
+    expect((await workspacePrMonitoringAccessor.get('w'))?.deliveryPauseReason).toBe(
+      'USER_STOPPED'
+    );
+    expect(
+      await db.prisma.workspacePREvent.findUnique({ where: { id: control[0]!.id } })
+    ).not.toBeNull();
+    await workspacePrMonitoringAccessor.resume('main');
+  });
+  it('preserves a user stop across legacy retirement and rejects stale completion', async () => {
+    const config = await workspacePrMonitoringAccessor.get('w');
+    if (!config) {
+      throw new Error('Missing config');
+    }
+    await workspacePrMonitoringAccessor.pauseWorkspace('w', 'LEGACY_FIXER', config.bindingRevision);
+    await workspacePrMonitoringAccessor.pause('main', 'USER_STOPPED');
+    await workspacePrMonitoringAccessor.completeLegacyRetirement('w', config.bindingRevision + 1);
+    expect((await workspacePrMonitoringAccessor.get('w'))?.deliveryPauseReason).toBe(
+      'LEGACY_FIXER_USER_STOPPED'
+    );
+    await workspacePrMonitoringAccessor.resume('main');
+    expect((await workspacePrMonitoringAccessor.get('w'))?.deliveryPauseReason).toBe(
+      'LEGACY_FIXER_USER_STOPPED'
+    );
+    await workspacePrMonitoringAccessor.completeLegacyRetirement('w', config.bindingRevision + 2);
+    expect((await workspacePrMonitoringAccessor.get('w'))?.deliveryPauseReason).toBe(
+      'USER_STOPPED'
+    );
+    await workspacePrMonitoringAccessor.resume('main');
+    expect((await workspacePrMonitoringAccessor.get('w'))?.deliveryPauseReason).toBeNull();
+  });
   it('preserves config when recipient is deleted and cascades workspace events', async () => {
     await db.prisma.agentSession.delete({ where: { id: 'main' } });
     expect((await workspacePrMonitoringAccessor.get('w'))?.recipientSessionId).toBeNull();
@@ -179,6 +234,8 @@ describe('durable monitoring', () => {
         attempts: 3,
         deliveryId: 'frozen',
         deliverySessionId: 'foreign',
+        deliveryProvider: 'CLAUDE',
+        deliveryProviderSessionId: 'original',
         deliveryText: 'exact original text',
         deliveryBindingRevision: 0,
       },

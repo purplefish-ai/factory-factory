@@ -16,7 +16,7 @@ export function createUserInputHandler(deps: {
 }): ChatMessageHandler<UserInputMessage> {
   const { acpRuntimeManager, sessionService } = deps;
 
-  return async ({ ws, sessionId, message }) => {
+  return ({ ws, sessionId, message }) => {
     const rawContent = message.content || message.text;
     if (!rawContent) {
       return;
@@ -31,9 +31,11 @@ export function createUserInputHandler(deps: {
       typeof rawContent === 'string' ? rawContent : (rawContent as AgentContentItem[]);
 
     if (acpRuntimeManager.isSessionRunning(sessionId)) {
-      await sessionBackgroundDeliveryService.userResume(sessionId);
       void sessionService.sendSessionMessage(sessionId, messageContent).catch((error) => {
         logger.error('Failed to send message to provider', { sessionId, error });
+      });
+      void sessionBackgroundDeliveryService.userResume(sessionId).catch((error) => {
+        logger.warn('Failed to resume PR delivery after human input', { sessionId, error });
       });
       return;
     }

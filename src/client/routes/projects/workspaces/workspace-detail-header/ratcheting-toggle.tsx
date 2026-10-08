@@ -7,46 +7,13 @@ import type { WorkspaceHeaderWorkspace } from './types';
 export function RatchetingToggle({
   workspace,
   workspaceId,
-  renderAsMenuItem = false,
 }: {
   workspace: WorkspaceHeaderWorkspace;
   workspaceId: string;
-  renderAsMenuItem?: boolean;
 }) {
   const toggleRatcheting = useToggleRatcheting(workspace.projectId);
 
   const workspaceRatchetEnabled = workspace.ratchetEnabled ?? false;
-
-  if (renderAsMenuItem) {
-    return (
-      <>
-        {toggleRatcheting.recipientPicker}
-        <DropdownMenuItem
-          onSelect={() => {
-            toggleRatcheting.mutate({ workspaceId, enabled: !workspaceRatchetEnabled });
-          }}
-          disabled={toggleRatcheting.isPending}
-        >
-          {toggleRatcheting.isPending ? (
-            <SpinnerGapIcon className="h-4 w-4 animate-spin" />
-          ) : (
-            <LightningIcon className="h-4 w-4" />
-          )}
-          {workspaceRatchetEnabled ? 'Turn off PR updates' : 'Turn on PR updates'}
-        </DropdownMenuItem>
-        {workspaceRatchetEnabled && (
-          <DropdownMenuItem
-            disabled={toggleRatcheting.isPending}
-            onSelect={() =>
-              toggleRatcheting.mutate({ workspaceId, enabled: true, recipientSessionId: null })
-            }
-          >
-            Change PR update conversation
-          </DropdownMenuItem>
-        )}
-      </>
-    );
-  }
 
   return (
     <>
@@ -60,6 +27,45 @@ export function RatchetingToggle({
           toggleRatcheting.mutate({ workspaceId, enabled });
         }}
       />
+    </>
+  );
+}
+
+export function RatchetingMenuItems({
+  workspace,
+  workspaceId,
+  toggleRatcheting,
+}: {
+  workspace: WorkspaceHeaderWorkspace;
+  workspaceId: string;
+  toggleRatcheting: ReturnType<typeof useToggleRatcheting>;
+}) {
+  const workspaceRatchetEnabled = workspace.ratchetEnabled ?? false;
+  return (
+    <>
+      <DropdownMenuItem
+        onSelect={() => {
+          toggleRatcheting.mutate({ workspaceId, enabled: !workspaceRatchetEnabled });
+        }}
+        disabled={toggleRatcheting.isPending}
+      >
+        {toggleRatcheting.isPending ? (
+          <SpinnerGapIcon className="h-4 w-4 animate-spin" />
+        ) : (
+          <LightningIcon className="h-4 w-4" />
+        )}
+        {workspaceRatchetEnabled ? 'Turn off PR updates' : 'Turn on PR updates'}
+      </DropdownMenuItem>
+      {workspaceRatchetEnabled && (
+        <DropdownMenuItem
+          disabled={toggleRatcheting.isPending}
+          onSelect={() =>
+            toggleRatcheting.mutate({ workspaceId, enabled: true, recipientSessionId: null })
+          }
+        >
+          Change PR update conversation
+        </DropdownMenuItem>
+      )}
     </>
   );
 }

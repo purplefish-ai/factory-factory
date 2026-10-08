@@ -15,6 +15,7 @@ vi.mock('@/backend/services/session/service/session-domain.service', () => ({
   },
 }));
 
+import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
 import { createQueueMessageHandler } from './queue-message.handler';
 
 describe('createQueueMessageHandler', () => {
@@ -193,4 +194,32 @@ describe('createQueueMessageHandler', () => {
     );
     expect(tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
   });
+});
+
+it('acknowledges and dispatches human input when delivery resume fails', async () => {
+  const resume = vi
+    .spyOn(sessionBackgroundDeliveryService, 'userResume')
+    .mockRejectedValue(new Error('database unavailable'));
+  mocks.enqueue.mockReturnValue({ position: 0 });
+  const dispatch = vi.fn();
+  try {
+    await expect(
+      createQueueMessageHandler({
+        tryDispatchNextMessage: dispatch,
+        setManualDispatchResume: vi.fn(),
+      })({
+        ws: { send: vi.fn() } as never,
+        sessionId: 'session-1',
+        workingDir: '/tmp',
+        message: { type: 'queue_message', id: 'human', text: 'continue' } as never,
+      })
+    ).resolves.toBeUndefined();
+    expect(mocks.emitDelta).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({ id: 'human', newState: MessageState.ACCEPTED })
+    );
+    expect(dispatch).toHaveBeenCalledWith('session-1');
+  } finally {
+    resume.mockRestore();
+  }
 });

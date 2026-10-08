@@ -26,3 +26,61 @@ it('rejects corrupt event JSON and invented receipt states', () => {
     }).success
   ).toBe(false);
 });
+const frozenEvent = {
+  id: 'e',
+  workspaceId: 'w',
+  prId: null,
+  kind: 'MONITORING_ENABLED',
+  deduplicationKey: 'key',
+  payload: {
+    kind: 'MONITORING_ENABLED',
+    workspaceId: 'w',
+    bindingRevision: 1,
+    replyToPrComments: false,
+  },
+  state: 'PENDING',
+  attempts: 0,
+  deliveryId: 'delivery',
+  deliverySessionId: 'main',
+  deliveryBindingRevision: 1,
+  claimedAt: null,
+  deliveredAt: null,
+  createdAt: '2026-10-08T00:00:00.000Z',
+};
+it('limits restored frozen delivery text to 16 KiB in UTF-8 bytes', () => {
+  expect(
+    prEventBackupSchema.safeParse({ ...frozenEvent, deliveryText: 'x'.repeat(16_384) }).success
+  ).toBe(true);
+  expect(
+    prEventBackupSchema.safeParse({ ...frozenEvent, deliveryText: '🦊'.repeat(4096) }).success
+  ).toBe(true);
+  expect(prEventBackupSchema.safeParse({ ...frozenEvent, deliveryText: null }).success).toBe(true);
+  expect(
+    prEventBackupSchema.safeParse({ ...frozenEvent, deliveryText: 'x'.repeat(16_385) }).success
+  ).toBe(false);
+  expect(
+    prEventBackupSchema.safeParse({ ...frozenEvent, deliveryText: '🦊'.repeat(4097) }).success
+  ).toBe(false);
+});
+
+it('preserves frozen provider identity while accepting older backups without it', () => {
+  const oldBackup = { ...frozenEvent, deliveryText: 'frozen' };
+  expect(prEventBackupSchema.safeParse(oldBackup).success).toBe(true);
+  const identified = {
+    ...oldBackup,
+    deliveryProvider: 'claude',
+    deliveryProviderSessionId: 'original-provider-session',
+  };
+  expect(prEventBackupSchema.safeParse(identified).success).toBe(true);
+  expect(prEventBackupSchema.parse(identified)).toMatchObject({
+    deliveryProvider: 'claude',
+    deliveryProviderSessionId: 'original-provider-session',
+  });
+  expect(
+    prEventBackupSchema.safeParse({
+      ...oldBackup,
+      deliveryProvider: null,
+      deliveryProviderSessionId: null,
+    }).success
+  ).toBe(true);
+});

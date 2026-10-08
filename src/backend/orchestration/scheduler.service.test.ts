@@ -252,6 +252,8 @@ describe('SchedulerService', () => {
         'ws-2',
         'https://github.com/Owner/Repo/pull/2',
         {
+          githubOwner: 'owner',
+          githubRepo: 'repo',
           branchName: 'two',
           checkedAt,
           retryCount: 2,
@@ -356,7 +358,28 @@ describe('SchedulerService', () => {
       );
     });
 
-    it('matches same-branch PRs one-to-one in chronological workspace order', async () => {
+    it('continues discovery for every matching URL after an already-known PR', async () => {
+      mockFindNeedingPRDiscovery.mockResolvedValue([discoveryWorkspace({ id: 'ws-1' })]);
+      mockListOpenPRs.mockResolvedValue(
+        [1, 2].map((number) => ({
+          number,
+          url: `https://github.com/org/repo/pull/${number}`,
+          createdAt: '2026-07-17T11:30:00.000Z',
+          headRefName: 'feature',
+        }))
+      );
+      mockAttachDiscoveredPRAndRefresh
+        .mockResolvedValueOnce({ success: false, reason: 'claim_stale' })
+        .mockResolvedValueOnce({ success: true, snapshot: { prNumber: 2 } });
+      expect(await schedulerService.discoverNewPRs()).toEqual({ discovered: 1, checked: 1 });
+      expect(mockAttachDiscoveredPRAndRefresh).toHaveBeenLastCalledWith(
+        'ws-1',
+        'https://github.com/org/repo/pull/2',
+        expect.objectContaining({ githubOwner: 'org', githubRepo: 'repo' })
+      );
+    });
+
+    it('matches each PR to the newest eligible workspace for its branch', async () => {
       mockFindNeedingPRDiscovery.mockResolvedValue([
         discoveryWorkspace({
           id: 'newer-workspace',

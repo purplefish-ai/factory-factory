@@ -1,0 +1,101 @@
+import { RATCHET_DISPATCH_CHANGED } from '@/backend/services/ratchet';
+import type { PRBackgroundDeliveryPort } from '@/backend/services/session';
+import type { ClaimedPRDelivery } from '@/shared/pr-monitoring';
+import { recoverPRDeliveries } from './pr-delivery-recovery';
+import {
+  preparePRDelivery,
+  guardPRDelivery,
+  wakePRDelivery,
+} from './pr-event-delivery.orchestrator';
+import {
+  defaultPRMonitoringServices,
+  type PRMonitoringServices,
+} from './pr-monitoring-dependencies';
+export function createPRBackgroundDeliveryPort(
+  services: PRMonitoringServices
+): PRBackgroundDeliveryPort {
+  const {
+    workspacePRMonitoringService,
+    sessionDataService,
+    ratchetService,
+    sessionBackgroundDeliveryService,
+  } = services;
+  return {
+    prepare: (input) => preparePRDelivery(input, services),
+    async validate(delivery: ClaimedPRDelivery) {
+      const session = await sessionDataService.findAgentSessionById(delivery.sessionId);
+      if (
+        !(session && delivery.deliveryProviderSessionId) ||
+        delivery.deliveryProvider !== session.provider ||
+        delivery.deliveryProviderSessionId !== session.providerSessionId
+      ) {
+        return false;
+      }
+      const events = await workspacePRMonitoringService.listPending(session.workspaceId);
+      const event = events.find((e) => e.deliveryId === delivery.deliveryId);
+      return (
+        !!event &&
+        (await guardPRDelivery(
+          delivery.sessionId,
+          {
+            workspaceId: event.workspaceId,
+            prId: event.prId,
+            bindingRevision: delivery.bindingRevision,
+          },
+          services
+        )) === 'ready'
+      );
+    },
+    async complete(delivery) {
+      await workspacePRMonitoringService.settleDelivery({ ...delivery, result: 'delivered' });
+      const session = await sessionDataService.findAgentSessionById(delivery.sessionId);
+      if (session) {
+        ratchetService.emit(RATCHET_DISPATCH_CHANGED, { workspaceId: session.workspaceId });
+      }
+    },
+    async fail(delivery, error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (
+        message.includes('A turn is already in progress') ||
+        message.includes('human message queued during preparation')
+      ) {
+        await workspacePRMonitoringService.deferBusy(delivery.deliveryId);
+        return;
+      }
+      await workspacePRMonitoringService.settleDelivery({ ...delivery, result: 'retry' });
+      const session = await sessionDataService.findAgentSessionById(delivery.sessionId);
+      if (session && (delivery.attempt >= 3 || message.includes('existing conversation'))) {
+        await workspacePRMonitoringService.pauseWorkspace(
+          session.workspaceId,
+          message.includes('existing conversation') ? 'RESUME_FAILED' : 'DELIVERY_FAILED',
+          delivery.bindingRevision
+        );
+      }
+    },
+    recover: (sessionId) => recoverPRDeliveries(sessionId, undefined, services),
+    async pause(sessionId, reason) {
+      const session = await sessionDataService.findAgentSessionById(sessionId);
+      const config = session ? await workspacePRMonitoringService.get(session.workspaceId) : null;
+      await workspacePRMonitoringService.pause(sessionId, reason);
+      if (session) {
+        ratchetService.emit(RATCHET_DISPATCH_CHANGED, { workspaceId: session.workspaceId });
+      }
+      if (config?.recipientSessionId === sessionId) {
+        sessionBackgroundDeliveryService.invalidate(config.workspaceId, config.bindingRevision);
+      }
+    },
+    async resume(sessionId) {
+      const session = await sessionDataService.findAgentSessionById(sessionId);
+      const previous = session ? await workspacePRMonitoringService.get(session.workspaceId) : null;
+      await workspacePRMonitoringService.resume(sessionId);
+      if (previous?.recipientSessionId === sessionId) {
+        sessionBackgroundDeliveryService.invalidate(previous.workspaceId, previous.bindingRevision);
+      }
+      if (session) {
+        ratchetService.emit(RATCHET_DISPATCH_CHANGED, { workspaceId: session.workspaceId });
+        await wakePRDelivery(session.workspaceId, services);
+      }
+    },
+  };
+}
+export const prBackgroundDeliveryPort = createPRBackgroundDeliveryPort(defaultPRMonitoringServices);

@@ -95,7 +95,14 @@ export class SessionRuntimeExitCoordinator {
         return;
       }
       if (!deliberate && event.exitCode !== 0) {
-        await sessionBackgroundDeliveryService.runtimeFailure(event.sessionId);
+        try {
+          await sessionBackgroundDeliveryService.runtimeFailure(event.sessionId);
+        } catch (error) {
+          logger.warn('Failed to fence PR delivery on runtime failure', {
+            sessionId: event.sessionId,
+            error,
+          });
+        }
       }
       this.prepareRuntimeExit(event.sessionId, event.exitCode);
       await this.handleActiveExit(event, deliberate, stopWillPersistIdle, bulkShutdownReserved);

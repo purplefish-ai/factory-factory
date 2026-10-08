@@ -19,7 +19,12 @@ interface RetryWaiter {
 }
 
 interface RatchetProjectionDependencies {
-  read: typeof workspaceDataService.findRatchetProjection;
+  read(workspaceId: string): Promise<
+    | (NonNullable<Awaited<ReturnType<typeof workspaceDataService.findRatchetProjection>>> & {
+        snapshotFields?: SnapshotUpdateInput;
+      })
+    | null
+  >;
   publish(workspaceId: string, fields: SnapshotUpdateInput): void;
   logger: Pick<ReturnType<typeof createLogger>, 'warn'>;
 }
@@ -98,6 +103,7 @@ export class RatchetProjectionWorker {
         ratchetState: workspace.ratchetState,
         prMonitoring: workspace.prMonitoring,
         hasMergeConflict: workspace.prHasMergeConflict,
+        ...workspace.snapshotFields,
       });
       return true;
     } catch (error) {

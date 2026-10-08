@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { describe, expect, it, vi } from 'vitest';
-import { PR_SNAPSHOT_UPDATED } from '@/backend/services/github';
+import { PR_SNAPSHOT_UPDATED, PR_URL_ATTACHED } from '@/backend/services/github';
 import { deriveWorkspaceFlowState, WorkspaceSnapshotStore } from '@/backend/services/workspace';
 import { deriveWorkspaceSidebarStatus } from '@/shared/core';
 import { createEventCollectorOrchestrator } from './event-collector.orchestrator';
@@ -34,6 +34,7 @@ function createHarness(prState: 'OPEN' | 'MERGED' | null = 'OPEN') {
   const getWorkspaceLinearContext = vi
     .fn()
     .mockResolvedValue({ apiKey: 'test-key', linearIssueId: 'issue-1' });
+  const findById = vi.fn().mockResolvedValue(null);
   const collector = createEventCollectorOrchestrator({
     createLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }),
     getWorkspaceLinearContext,
@@ -48,23 +49,36 @@ function createHarness(prState: 'OPEN' | 'MERGED' | null = 'OPEN') {
     sessionDomainService: new EventEmitter(),
     workspaceActivityService: Object.assign(new EventEmitter(), { clearWorkspace: vi.fn() }),
     workspaceStateMachine: new EventEmitter(),
-    workspaceDataService: { findRatchetProjection: vi.fn().mockResolvedValue(null) },
+    workspaceDataService: {
+      findById,
+      findRatchetProjection: vi.fn().mockImplementation(async () => await findById()),
+    },
     workspaceSnapshotStore: store,
   } as never);
   collector.start();
   const emitMerge = (
     prNumber = 7,
-    prUrl: string | null = `https://github.com/org/repo/pull/${prNumber}`
+    prUrl: string | null = `https://github.com/org/repo/pull/${prNumber}`,
+    prId?: string
   ) =>
     prSnapshotService.emit(PR_SNAPSHOT_UPDATED, {
       workspaceId: 'ws-1',
+      prId,
       prNumber,
       prState: 'MERGED',
       prCiStatus: 'SUCCESS',
       prReviewState: null,
       ...(prUrl === null ? {} : { prUrl }),
     });
-  return { collector, emitMerge, markIssueCompleted, getWorkspaceLinearContext };
+  return {
+    collector,
+    emitMerge,
+    markIssueCompleted,
+    getWorkspaceLinearContext,
+    store,
+    findById,
+    prSnapshotService,
+  };
 }
 
 describe('Linear completion on PR merge', () => {
@@ -222,4 +236,80 @@ describe('Linear completion on PR merge', () => {
       collector.stop();
     }
   });
+});
+
+it('refreshes primary and aggregate facts without completing an issue for a merged sibling', async () => {
+  const { collector, emitMerge, markIssueCompleted, findById, store } = createHarness();
+  findById.mockResolvedValue({
+    status: 'READY',
+    prUrl: 'https://github.com/org/repo/pull/7',
+    prNumber: 7,
+    prState: 'OPEN',
+    prCiStatus: 'FAILURE',
+    prUpdatedAt: new Date('2026-10-08T00:00:00Z'),
+    ratchetState: 'CI_FAILED',
+    ratchetEnabled: true,
+    prHasMergeConflict: false,
+    prMonitoring: {
+      enabled: true,
+      recipientSessionId: 'main',
+      bindingRevision: 1,
+      pauseReason: null,
+      pendingEventCount: 1,
+    },
+  });
+  try {
+    emitMerge(8, 'https://github.com/org/repo/pull/8', 'merged-sibling');
+    expect(store.getByWorkspaceId('ws-1')?.prNumber).toBe(7);
+    await vi.waitFor(() => expect(store.getByWorkspaceId('ws-1')?.prCiStatus).toBe('FAILURE'));
+    expect(store.getByWorkspaceId('ws-1')).toMatchObject({
+      prState: 'OPEN',
+      prNumber: 7,
+      ratchetState: 'CI_FAILED',
+    });
+    expect(markIssueCompleted).not.toHaveBeenCalled();
+    findById.mockResolvedValue({
+      status: 'READY',
+      prUrl: 'https://github.com/org/repo/pull/7',
+      prNumber: 7,
+      prState: 'MERGED',
+      prCiStatus: 'SUCCESS',
+      prUpdatedAt: null,
+      ratchetState: 'MERGED',
+      ratchetEnabled: true,
+      prHasMergeConflict: false,
+    });
+    emitMerge(7, 'https://github.com/org/repo/pull/7', 'last-open-pr');
+    await vi.waitFor(() =>
+      expect(markIssueCompleted).toHaveBeenCalledExactlyOnceWith('test-key', 'issue-1')
+    );
+  } finally {
+    collector.stop();
+  }
+});
+it('keeps the authoritative primary when a second association is attached', async () => {
+  const { collector, findById, store, prSnapshotService } = createHarness();
+  findById.mockResolvedValue({
+    status: 'READY',
+    prUrl: 'https://github.com/org/repo/pull/7',
+    prNumber: 7,
+    prState: 'OPEN',
+    prCiStatus: 'FAILURE',
+    prUpdatedAt: null,
+    ratchetState: 'CI_FAILED',
+    ratchetEnabled: true,
+    prHasMergeConflict: false,
+  });
+  try {
+    prSnapshotService.emit(PR_URL_ATTACHED, {
+      workspaceId: 'ws-1',
+      prId: 'new-sibling',
+      prUrl: 'https://github.com/org/repo/pull/8',
+    });
+    expect(store.getByWorkspaceId('ws-1')?.prUrl).toBe('https://github.com/org/repo/pull/7');
+    await vi.waitFor(() => expect(store.getByWorkspaceId('ws-1')?.prCiStatus).toBe('FAILURE'));
+    expect(store.getByWorkspaceId('ws-1')?.prNumber).toBe(7);
+  } finally {
+    collector.stop();
+  }
 });

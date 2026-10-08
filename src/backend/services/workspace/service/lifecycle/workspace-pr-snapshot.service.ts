@@ -1,7 +1,10 @@
 import {
   type WorkspacePRWriteFields,
+  flattenWorkspacePR,
+  selectActiveWorkspacePR,
   workspacePrAccessor,
 } from '@/backend/services/workspace/resources/workspace-pr.accessor';
+import { derivePRCollectionState } from '@/backend/services/workspace/resources/workspace-ratchet.accessor';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
 import type {
   PRDiscoveryClaim,
@@ -16,9 +19,20 @@ import type {
  * The branch name is the workspace's own column and everything else is the PR
  * cache, which is why `record` writes them in a transaction.
  */
-type PRSnapshotUpdate = WorkspacePRWriteFields & { branchName?: string | null };
+type PRSnapshotUpdate = WorkspacePRWriteFields & {
+  branchName?: string | null;
+  prId?: string;
+  expectedRevision?: number;
+};
 
 class WorkspacePrSnapshotService {
+  projectCollection(prs: Awaited<ReturnType<typeof workspacePrAccessor.list>>, enabled: boolean) {
+    const attached = prs.filter((pr) => !pr.detachedAt);
+    return {
+      ...flattenWorkspacePR(selectActiveWorkspacePR(attached)),
+      ratchetState: derivePRCollectionState(attached, enabled),
+    };
+  }
   acceptMonitoredObservation(
     input: Parameters<typeof workspacePrAccessor.acceptMonitoredObservation>[0]
   ) {
@@ -41,8 +55,8 @@ class WorkspacePrSnapshotService {
   }
 
   record(workspaceId: string, data: PRSnapshotUpdate): Promise<void> {
-    const { branchName: _branchName, ...prFields } = data;
-    return workspacePrAccessor.write(workspaceId, prFields);
+    const { branchName: _branchName, prId, expectedRevision, ...prFields } = data;
+    return workspacePrAccessor.write(workspaceId, prFields, prId, expectedRevision);
   }
 
   attachDiscoveredPRIfClaimMatches(

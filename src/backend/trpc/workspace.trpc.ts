@@ -327,7 +327,7 @@ export const workspaceCoreRouter = router({
       z.object({
         workspaceId: z.string(),
         enabled: z.boolean(),
-        recipientSessionId: z.string().optional(),
+        recipientSessionId: z.string().nullable().optional(),
         expectedBindingRevision: z.number().int().nonnegative().optional(),
       })
     )

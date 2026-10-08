@@ -17,6 +17,7 @@ vi.mock('@/backend/services/session/service/lifecycle/session-core-services', ()
   },
 }));
 
+import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
 import { createStartHandler } from './start.handler';
 
 describe('createStartHandler', () => {
@@ -85,4 +86,23 @@ describe('createStartHandler', () => {
       );
     }
   );
+});
+
+it('keeps the PR delivery fence when explicit startup fails', async () => {
+  const resume = vi.spyOn(sessionBackgroundDeliveryService, 'userResume').mockResolvedValue();
+  mocks.getSessionOptions.mockResolvedValue({ workspaceStatus: 'READY' });
+  const startup = vi.fn().mockRejectedValue(new Error('provider unavailable'));
+  try {
+    await createStartHandler({
+      startupService: { getSessionClient: vi.fn(), getOrCreateSessionClient: startup },
+    })({
+      ws: { send: vi.fn() } as never,
+      sessionId: 'session-1',
+      workingDir: '/tmp',
+      message: { type: 'start' } as never,
+    });
+    expect(resume).not.toHaveBeenCalled();
+  } finally {
+    resume.mockRestore();
+  }
 });

@@ -102,7 +102,7 @@ class WorkspacePrEventAccessor {
   }
   listForPR(tx: Prisma.TransactionClient, prId: string) {
     return tx.workspacePREvent.findMany({
-      where: { prId, state: { in: ['PENDING', 'DELIVERED'] } },
+      where: { prId, state: { in: ['PENDING', 'DISPATCHING', 'DELIVERED'] } },
     });
   }
   supersede(tx: Prisma.TransactionClient, ids: string[]) {
@@ -157,11 +157,31 @@ class WorkspacePrEventAccessor {
       ) {
         return null;
       }
+      const session = await tx.agentSession.findFirst({
+        where: { id: input.sessionId, workspaceId: request.workspaceId },
+      });
+      if (
+        !session ||
+        rows.some(
+          (row) =>
+            row.deliveryId &&
+            (!row.deliveryProviderSessionId ||
+              row.deliveryProvider !== session.provider ||
+              row.deliveryProviderSessionId !== session.providerSessionId)
+        )
+      ) {
+        return null;
+      }
+      const identity = {
+        deliveryProvider: session.provider,
+        deliveryProviderSessionId: session.providerSessionId,
+      };
       const attempt = Math.max(...rows.map((e) => e.attempts)) + 1;
       const updated = await tx.workspacePREvent.updateMany({
         where: { id: { in: input.eventIds }, state: 'PENDING' },
         data: {
           state: 'DISPATCHING',
+          ...identity,
           attempts: attempt,
           deliveryId: input.deliveryId,
           deliverySessionId: input.sessionId,
@@ -173,7 +193,7 @@ class WorkspacePrEventAccessor {
       if (updated.count !== rows.length) {
         throw new Error('Lost event claim');
       }
-      return { ...input, bindingRevision: request.bindingRevision, attempt };
+      return { ...input, ...identity, bindingRevision: request.bindingRevision, attempt };
     });
   }
   async settleDelivery(input: {
@@ -221,6 +241,12 @@ class WorkspacePrEventAccessor {
         deliverySessionId: sessionId,
         state: { in: ['PENDING', 'DISPATCHING'] },
       },
+      data: { state: 'CANCELLED' },
+    });
+  }
+  cancelForPR(tx: Prisma.TransactionClient, prId: string) {
+    return tx.workspacePREvent.updateMany({
+      where: { prId, state: 'PENDING', deliveryId: null },
       data: { state: 'CANCELLED' },
     });
   }

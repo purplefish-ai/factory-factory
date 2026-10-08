@@ -10,26 +10,82 @@ export async function findPRDeliveryReceipt(
   sessionId: string,
   deliveryId: string
 ): Promise<'delivered' | 'absent' | 'unavailable'> {
-  const session = await sessionDataService.findAgentSessionById(sessionId);
-  if (!(session?.providerSessionId && session.workspace.worktreePath)) {
-    if (session) {
-      return 'unavailable';
+  try {
+    const session = await sessionDataService.findAgentSessionById(sessionId);
+    const live = session ? await findLiveReceipt(session, deliveryId) : 'absent';
+    if (live === 'delivered') {
+      return live;
     }
-    return findArchivedReceipt(sessionId, deliveryId);
+    const rollovers = session ? await findRolloverReceipt(session, deliveryId) : 'absent';
+    if (rollovers === 'delivered') {
+      return rollovers;
+    }
+    const archived = await findArchivedReceipt(sessionId, deliveryId, !session);
+    if (archived === 'delivered') {
+      return archived;
+    }
+    return [live, rollovers, archived].includes('unavailable') ? 'unavailable' : 'absent';
+  } catch {
+    return 'unavailable';
   }
-  return loadReceipt(
+}
+
+type ReceiptSession = NonNullable<
+  Awaited<ReturnType<typeof sessionDataService.findAgentSessionById>>
+>;
+
+async function findLiveReceipt(session: ReceiptSession, deliveryId: string) {
+  if (!(session.providerSessionId && session.workspace.worktreePath)) {
+    return 'unavailable' as const;
+  }
+  return await loadReceipt(
     session.provider,
     session.providerSessionId,
     session.workspace.worktreePath,
     deliveryId
   );
 }
-async function findArchivedReceipt(
-  sessionId: string,
+
+async function findRolloverReceipt(
+  session: ReceiptSession,
   deliveryId: string
 ): Promise<'delivered' | 'absent' | 'unavailable'> {
+  const rollovers = z
+    .object({
+      providerIdentityRollovers: z
+        .array(z.object({ previousProviderSessionId: z.string().min(1) }))
+        .optional(),
+    })
+    .safeParse(session.providerMetadata ?? {});
+  if (!rollovers.success) {
+    return 'unavailable';
+  }
+  if (!session.workspace.worktreePath) {
+    return 'unavailable';
+  }
+  let unavailable = false;
+  for (const rollover of rollovers.data.providerIdentityRollovers ?? []) {
+    const receipt = await loadReceipt(
+      session.provider,
+      rollover.previousProviderSessionId,
+      session.workspace.worktreePath,
+      deliveryId
+    );
+    if (receipt === 'delivered') {
+      return receipt;
+    }
+    unavailable ||= receipt === 'unavailable';
+  }
+  return unavailable ? 'unavailable' : 'absent';
+}
+
+async function findArchivedReceipt(
+  sessionId: string,
+  deliveryId: string,
+  unavailableWhenEmpty = true
+): Promise<'delivered' | 'absent' | 'unavailable'> {
   const archives = await closedSessionAccessor.findBySessionIdWithWorkspace(sessionId);
-  let unavailable = archives.length === 0;
+  let unavailable = unavailableWhenEmpty && archives.length === 0;
   for (const archive of archives) {
     try {
       if (!archive.workspace.worktreePath) {
@@ -75,21 +131,25 @@ async function loadReceipt(
   workingDir: string,
   deliveryId: string
 ): Promise<'delivered' | 'absent' | 'unavailable'> {
-  const input = {
-    providerSessionId,
-    workingDir,
-  };
-  const result =
-    provider === 'CLAUDE'
-      ? await claudeSessionHistoryLoaderService.loadSessionHistory(input)
-      : await codexSessionHistoryLoaderService.loadSessionHistory(input);
-  if (result.status !== 'loaded') {
+  try {
+    const input = {
+      providerSessionId,
+      workingDir,
+    };
+    const result =
+      provider === 'CLAUDE'
+        ? await claudeSessionHistoryLoaderService.loadSessionHistory(input)
+        : await codexSessionHistoryLoaderService.loadSessionHistory(input);
+    if (result.status !== 'loaded') {
+      return 'unavailable';
+    }
+    const marker = prEventMarker(deliveryId);
+    return result.history.some(
+      (message) => message.type === 'user' && message.content.split('\n').includes(marker)
+    )
+      ? 'delivered'
+      : 'absent';
+  } catch {
     return 'unavailable';
   }
-  const marker = prEventMarker(deliveryId);
-  return result.history.some(
-    (message) => message.type === 'user' && message.content.split('\n').includes(marker)
-  )
-    ? 'delivered'
-    : 'absent';
 }

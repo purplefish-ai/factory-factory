@@ -23,8 +23,16 @@ export const prEventBackupSchema = z
     attempts: z.number().int().nonnegative(),
     deliveryId: z.string().nullable(),
     deliverySessionId: z.string().nullable(),
+    deliveryProvider: z.string().nullable().optional(),
+    deliveryProviderSessionId: z.string().nullable().optional(),
     deliveryBindingRevision: z.number().int().nonnegative().nullable(),
-    deliveryText: z.string().nullable(),
+    deliveryText: z
+      .string()
+      .refine(
+        (text) => new TextEncoder().encode(text).byteLength <= 16_384,
+        'Frozen delivery text exceeds 16 KiB'
+      )
+      .nullable(),
     claimedAt: date.nullable(),
     deliveredAt: date.nullable(),
     createdAt: date,

@@ -232,6 +232,27 @@ describe('check-single-writer', () => {
     // All three rows are created with their workspace and have to be, or the
     // row-guarded writes would skip it. Restoring a backup creates them the same
     // way, before any accessor could reach the rows.
+    it.each(['object', 'array'] as const)(
+      'rejects nested event creation inside exempt PR creation (%s)',
+      (shape) => {
+        const pr =
+          "{ url: 'https://github.com/org/repo/pull/1', events: { create: { kind: 'CI_FAILED' } } }";
+        const tempRoot = createTempBackend([
+          {
+            relPath: 'src/backend/services/workspace/resources/other.accessor.ts',
+            content: `async function sneak(prisma) {
+            await prisma.workspace.create({ data: { prs: { create: ${shape === 'array' ? `[${pr}]` : pr} } } });
+          }`,
+          },
+        ]);
+        const result = runChecker(tempRoot);
+        expect(result.status).toBe(1);
+        expect(result.output).toContain(
+          'unauthorized nested create of the workspacePREvent relation'
+        );
+      }
+    );
+
     it('allows nested creation of all three rows alongside a workspace', () => {
       const tempRoot = createTempBackend([
         {

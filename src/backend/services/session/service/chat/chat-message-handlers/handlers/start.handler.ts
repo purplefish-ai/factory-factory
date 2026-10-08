@@ -40,12 +40,14 @@ export function createStartHandler(deps: {
     }
 
     try {
-      await sessionBackgroundDeliveryService.userResume(sessionId);
       await deps.startupService.getOrCreateSessionClient(sessionId, {
         thinkingEnabled: message.thinkingEnabled,
         planModeEnabled: message.planModeEnabled,
         model: getValidModel(message),
         reasoningEffort: getValidReasoningEffort(message),
+      });
+      void sessionBackgroundDeliveryService.userResume(sessionId).catch((error) => {
+        logger.warn('Failed to resume PR delivery after session startup', { sessionId, error });
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);

@@ -1,4 +1,4 @@
-import type { WorkspacePR, WorkspacePRMonitoring } from '@prisma-gen/client';
+import type { Prisma, WorkspacePR, WorkspacePRMonitoring } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
 import { deriveRatchetState, type RatchetState } from '@/shared/core';
 
@@ -54,6 +54,10 @@ export function derivePRCollectionState(
     ) ?? 'IDLE'
   );
 }
+export const pendingPREventWhere = {
+  state: { in: ['PENDING', 'DISPATCHING'] },
+  OR: [{ prId: null }, { pr: { detachedAt: null } }],
+} satisfies Prisma.WorkspacePREventWhereInput;
 class WorkspaceRatchetAccessor {
   async findSnapshotProjection(workspaceId: string) {
     const row = await prisma.workspace.findUnique({
@@ -62,7 +66,7 @@ class WorkspaceRatchetAccessor {
         status: true,
         prMonitoring: true,
         prs: { where: { detachedAt: null } },
-        _count: { select: { prEvents: { where: { state: { in: ['PENDING', 'DISPATCHING'] } } } } },
+        _count: { select: { prEvents: { where: pendingPREventWhere } } },
       },
     });
     if (!row) {

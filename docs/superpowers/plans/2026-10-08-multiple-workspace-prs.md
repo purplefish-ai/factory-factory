@@ -33,6 +33,7 @@ prerequisites; it must not be used to build separate fixer sessions.
 ```bash
 pnpm test src/backend/multiple-workspace-prs.migration.test.ts \
   src/backend/orchestration/multiple-pr-attachment.integration.test.ts \
+  src/backend/orchestration/pr-attachment.integration.test.ts \
   src/backend/services/workspace/resources/workspace-pr.accessor.test.ts
 ```
 

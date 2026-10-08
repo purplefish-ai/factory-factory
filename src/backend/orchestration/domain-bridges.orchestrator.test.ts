@@ -148,7 +148,12 @@ vi.mock('./workspace-init.orchestrator', () => ({
 
 // --- Import mocked modules to get references ---
 
-import { githubCLIService, prFetchCoordinator, prSnapshotService } from '@/backend/services/github';
+import {
+  githubCLIService,
+  prFetchCoordinator,
+  prSnapshotService,
+  prObservationService,
+} from '@/backend/services/github';
 import { createLogger } from '@/backend/services/logger.service';
 import { periodicTaskService } from '@/backend/services/periodic-task';
 import { ratchetService } from '@/backend/services/ratchet';
@@ -177,6 +182,7 @@ import {
   workspaceStateMachine,
 } from '@/backend/services/workspace';
 import { type BridgeServices, configureDomainBridges } from './domain-bridges.orchestrator';
+import { defaultPRMonitoringServices } from './pr-monitoring-dependencies';
 import { reconciliationService } from './reconciliation.service';
 import {
   initializeWorkspaceWorktree,
@@ -202,10 +208,9 @@ function createAutoIterationServiceMock(): AutoIterationServiceBridge {
 
 function createBridgeServices(overrides: Partial<BridgeServices> = {}): BridgeServices {
   return {
-    acpRuntimeManager,
+    ...defaultPRMonitoringServices,
     autoIterationService,
     chatEventForwarderService,
-    chatMessageHandlerService,
     createLogger,
     getWorkspaceInitPolicy,
     githubCLIService,
@@ -216,9 +221,6 @@ function createBridgeServices(overrides: Partial<BridgeServices> = {}): BridgeSe
     ratchetService,
     recoverStaleProvisioningWorkspace,
     reconciliationService,
-    sessionDataService,
-    sessionDomainService,
-    sessionLifecycleService,
     sessionPromptTurnCompletionService,
     sessionService,
     startupScriptService,
@@ -961,4 +963,38 @@ describe('configureDomainBridges', () => {
       expect(workspaceQueryService.configure).toHaveBeenCalledTimes(2);
     });
   });
+});
+
+it('wires PR monitoring through the injected graph rather than global instances', async () => {
+  const monitoring = {
+    ...defaultPRMonitoringServices.workspacePRMonitoringService,
+    listConfigs: vi.fn(async () => []),
+    get: vi.fn(async () => null),
+  };
+  const observer = { ...prObservationService, configure: vi.fn() };
+  const background = {
+    ...defaultPRMonitoringServices.sessionBackgroundDeliveryService,
+    configure: vi.fn(),
+  };
+  const settings = {
+    ...defaultPRMonitoringServices.userSettingsService,
+    get: vi.fn(async () => ({ ratchetReviewTriggerMode: 'all' })),
+  };
+  configureDomainBridges(
+    createBridgeServices({
+      workspacePRMonitoringService:
+        monitoring as unknown as BridgeServices['workspacePRMonitoringService'],
+      prObservationService: observer as unknown as BridgeServices['prObservationService'],
+      sessionBackgroundDeliveryService:
+        background as unknown as BridgeServices['sessionBackgroundDeliveryService'],
+      userSettingsService: settings as unknown as BridgeServices['userSettingsService'],
+    })
+  );
+  await getBridge(vi.mocked(ratchetService.configure)).retireLegacy?.();
+  await getBridge(vi.mocked(ratchetService.configure)).wake('custom-workspace');
+  expect(monitoring.listConfigs).toHaveBeenCalledOnce();
+  expect(monitoring.get).toHaveBeenCalledWith('custom-workspace');
+  expect(background.configure).toHaveBeenCalledOnce();
+  await getBridge(observer.configure).readPolicy();
+  expect(settings.get).toHaveBeenCalledOnce();
 });

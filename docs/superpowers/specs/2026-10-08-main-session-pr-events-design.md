@@ -68,9 +68,14 @@ turns without changing or answering the request. Events remain pending while
 another workspace session is modifying the shared worktree.
 
 Deleting or closing the recipient leaves monitoring awaiting a new explicit
-binding; do not select another conversation automatically. Rebinding invalidates
-unstarted queue entries for the old target and revalidates current pending facts
-for the new one. It cannot transfer a turn already in progress.
+binding; do not select another conversation automatically. Persist its provider
+identity and provider-owned transcript reference before deleting the live
+session row. Preserve the frozen delivery's original session identity until
+every in-flight or uncertain send has been receipt-reconciled, including through
+user-requested conversation rollover. Never resend an uncertain frozen group to
+a new binding before checking the original provider history. Rebinding
+invalidates unstarted queue entries for the old target and revalidates current
+pending facts for the new one. It cannot transfer a turn already in progress.
 
 Disabling monitoring invalidates pending automated messages and prevents new
 event turns. It does not stop the main session or interrupt a turn already
@@ -125,8 +130,8 @@ feedback can be delivered while CI is pending; it need not wait for terminal CI.
 Use workspace-owned persistence with two responsibilities:
 
 - `WorkspacePRMonitoring`: enabled flag, recipient session ID, binding revision,
-  explicit delivery pause, and check bookkeeping. This replaces the workspace
-  fixer ownership record.
+  monitoring event epoch, explicit delivery pause, and check bookkeeping. This
+  replaces the workspace fixer ownership record.
 - `WorkspacePREvent`: PR association, event kind, observation/head identity,
   deduplication key, validated payload, timestamps, and delivery state. This
   replaces per-PR fixer dispatch history with event delivery history.
@@ -138,7 +143,12 @@ monitoring configuration. Validate persisted JSON with specific Zod schemas.
 
 Persist accepted cache changes and new events atomically at the workspace
 resource boundary. A unique `(prId, deduplicationKey)` constraint makes repeated
-polls and concurrent callers idempotent. CI keys include head SHA, check/run
+polls and concurrent callers idempotent. Increment the monitoring event epoch on
+each disabled-to-enabled transition or enabled recipient change and include it
+in every event key. Persist each association's observation epoch so the first
+acceptance in the new epoch seeds currently actionable facts, even when the
+prior epoch delivered identical content. A newly selected recipient receives
+current actionable facts in its new epoch. CI keys include head SHA, check/run
 identity, rerun attempt where available, and outcome. If a provider lacks a
 native ID, derive a stable identity from its reported check details and run
 timestamps; never substitute the poll timestamp. Review keys include feedback
@@ -153,9 +163,12 @@ in-memory enqueue is never a delivery acknowledgement.
 Group related pending updates into one bounded message per PR when the session
 can dispatch, retaining the member event IDs. Refresh/revalidate before sending:
 discard old-head CI failures, resolved/superseded review feedback, cleared
-conflicts, and updates for terminal or detached PRs. If failure and recovery
-both happened before any delivery, retain the current facts without starting an
-obsolete fix turn. Already delivered history remains unchanged.
+conflicts, and fix updates for terminal or detached PRs. Preserve the final
+`PR_MERGED` or `PR_CLOSED` transition notice for a still-attached terminal PR;
+terminal state must cancel obsolete fixes without discarding that notice. If
+failure and recovery both happened before any delivery, retain the current facts
+without starting an obsolete fix turn. Already delivered history remains
+unchanged.
 
 Use oldest pending creation time, then PR ID and event ID, for deterministic
 ordering across PRs. No global debounce timer is necessary: coalesce pending
@@ -199,6 +212,9 @@ containing the marker can confirm an interrupted or uncertain send before retry.
 If neither confirms receipt, retain the event for bounded retry in the same
 conversation and expose repeated transport failures for explicit recovery. Do
 not promise exactly-once execution across a crash at the provider boundary.
+Explicit resume atomically clears the recoverable pause and renews the exhausted
+retry allowance. It preserves the frozen delivery ID, text, original receipt
+identity and group members; unrelated newly observed events remain separate.
 
 Successful delivery means the agent received the facts, not that it fixed them.
 An unchanged red CI state does not keep reprompting the agent after delivery.

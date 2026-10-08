@@ -122,7 +122,11 @@ export class SessionTerminationCoordinator {
     const stopInvocationId = randomUUID();
     try {
       if (options?.reason === 'USER_STOP') {
-        await sessionBackgroundDeliveryService.userStop(sessionId);
+        try {
+          await sessionBackgroundDeliveryService.userStop(sessionId);
+        } catch (error) {
+          logger.warn('Failed to pause PR delivery before user stop', { sessionId, error });
+        }
       }
       await this.stopSessionWithBarrier(sessionId, stopInvocationId, completeEvent, options);
     } finally {

@@ -406,6 +406,39 @@ describe('DataBackupService', () => {
   });
 
   describe('exportData', () => {
+    it('exports an attached open sibling and aggregate state for compatibility readers', async () => {
+      const pr = mockWorkspace.prs[0]!;
+      vi.mocked(prisma.project.findMany).mockResolvedValue([mockProject]);
+      const workspace: WorkspaceForExport = {
+        ...mockWorkspace,
+        prs: [
+          { ...pr, id: 'detached', detachedAt: new Date(), state: PRState.MERGED },
+          { ...pr, id: 'merged', state: PRState.MERGED },
+          {
+            ...pr,
+            id: 'open',
+            number: 2,
+            url: 'https://github.com/test/repo/pull/2',
+            ciStatus: CIStatus.FAILURE,
+            state: PRState.OPEN,
+          },
+        ],
+      };
+      vi.mocked(prisma.workspace.findMany).mockResolvedValue([workspace]);
+      vi.mocked(prisma.agentSession.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.terminalSession.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.userSettings.findFirst).mockResolvedValue(null);
+      const exported = await dataBackupService.exportData('1');
+      expect(exported.data.workspaces[0]).toMatchObject({
+        prUrl: 'https://github.com/test/repo/pull/2',
+        prNumber: 2,
+        prState: 'OPEN',
+        prCiStatus: 'FAILURE',
+        ratchetState: 'CI_FAILED',
+      });
+      expect(exported.data.workspaces[0]?.prs).toHaveLength(3);
+    });
+
     it('exports v4 format with all fields', async () => {
       vi.mocked(prisma.project.findMany).mockResolvedValue([mockProject]);
       vi.mocked(prisma.workspace.findMany).mockResolvedValue([mockWorkspace]);
@@ -642,6 +675,15 @@ describe('DataBackupService', () => {
       expect(result.agentSessions.imported).toBe(1);
       expect(result.terminalSessions.imported).toBe(1);
       expect(result.userSettings.imported).toBe(true);
+
+      expect(mockTx.workspacePRMonitoring.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({
+            legacySessionIds: ['session-123'],
+            deliveryPauseReason: 'LEGACY_FIXER',
+          }),
+        })
+      );
 
       expect(mockTx.workspace.create).toHaveBeenCalledWith({
         data: expect.objectContaining({

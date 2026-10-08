@@ -144,6 +144,13 @@ function createOptimisticWorkingWorkspace(params: {
     prState: 'NONE',
     prCiStatus: 'UNKNOWN',
     ratchetEnabled: params.ratchetEnabled,
+    prMonitoring: {
+      enabled: params.ratchetEnabled,
+      recipientSessionId: null,
+      bindingRevision: 0,
+      pauseReason: null,
+      pendingEventCount: 0,
+    },
     ratchetState: 'IDLE',
     runScriptStatus: 'IDLE',
     githubIssueNumber: null,

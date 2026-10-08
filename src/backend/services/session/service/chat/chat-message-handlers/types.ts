@@ -49,6 +49,11 @@ export interface ChatMessageHandlerStartupService {
 }
 
 export interface ChatMessageHandlerNotificationDeliveryService {
+  recoverPending(input: {
+    sessionId: string;
+    workspaceId: string;
+    assertAllowed(): void;
+  }): Promise<{ dispatchableCount: number }>;
   claimForDispatch(sessionId: string, messageId: string): NotificationDispatchClaim;
   isAlreadyDelivered(notificationId: string): Promise<boolean>;
   acknowledgeSuccessfulDispatch(messageId: string): Promise<void>;

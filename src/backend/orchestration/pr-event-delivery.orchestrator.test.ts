@@ -13,6 +13,11 @@ const mocks = vi.hoisted(() => ({
   otherReady: vi.fn(),
   pause: vi.fn(),
   cancel: vi.fn(),
+  invalidate: vi.fn(),
+  enqueue: vi.fn(),
+  dispatch: vi.fn(),
+  resume: vi.fn(),
+  active: vi.fn(),
 }));
 vi.mock('@/backend/services/workspace', () => ({
   workspacePRMonitoringService: {
@@ -21,6 +26,8 @@ vi.mock('@/backend/services/workspace', () => ({
     claimDelivery: mocks.claim,
     recoverClaim: mocks.recover,
     pauseWorkspace: mocks.pause,
+    pause: mocks.pause,
+    resume: mocks.resume,
     cancelRecoveredDelivery: mocks.cancel,
   },
   workspacePrSnapshotService: { find: vi.fn(async () => ({ id: 'p' })) },
@@ -29,8 +36,12 @@ vi.mock('@/backend/services/session', () => ({
   acpRuntimeManager: { isSessionWorking: mocks.busy },
   sessionDataService: { findAgentSessionById: mocks.session },
   sessionDomainService: { getPendingInteractiveRequest: mocks.interaction },
-  chatMessageHandlerService: {},
-  sessionBackgroundDeliveryService: {},
+  chatMessageHandlerService: { tryDispatchNextMessage: mocks.dispatch },
+  sessionBackgroundDeliveryService: {
+    invalidate: mocks.invalidate,
+    enqueue: mocks.enqueue,
+    isDeliveryActive: mocks.active,
+  },
   findPRDeliveryReceipt: mocks.receipt,
 }));
 vi.mock('@/backend/services/settings', () => ({
@@ -41,11 +52,9 @@ vi.mock('./pr-observation.orchestrator', () => ({
   recipientCanDispatch: mocks.otherReady,
 }));
 
-import {
-  prBackgroundDeliveryPort,
-  preparePRDelivery,
-  recoverPRDeliveries,
-} from './pr-event-delivery.orchestrator';
+import { recoverPRDeliveries } from './pr-delivery-recovery';
+import { prBackgroundDeliveryPort } from './pr-event-delivery-port';
+import { preparePRDelivery } from './pr-event-delivery.orchestrator';
 
 const config = {
   enabled: true,
@@ -55,6 +64,8 @@ const config = {
   deliveryPauseReason: null as string | null,
 };
 beforeEach(() => {
+  vi.resetAllMocks();
+  config.recipientSessionId = 'main';
   config.bindingRevision = 1;
   config.deliveryPauseReason = null;
   mocks.get.mockImplementation(async () => ({ ...config }));
@@ -62,9 +73,12 @@ beforeEach(() => {
     id: 'main',
     workspaceId: 'w',
     workflow: 'implement',
+    provider: 'CLAUDE',
+    providerSessionId: 'original',
     workspace: { status: 'READY' },
   });
   mocks.busy.mockReturnValue(false);
+  mocks.dispatch.mockResolvedValue(undefined);
   mocks.interaction.mockReturnValue(null);
   mocks.otherReady.mockResolvedValue(true);
   mocks.pending.mockResolvedValue([
@@ -75,6 +89,8 @@ beforeEach(() => {
       state: 'DISPATCHING',
       deliveryId: 'delivery',
       deliverySessionId: 'main',
+      deliveryProvider: 'CLAUDE',
+      deliveryProviderSessionId: 'original',
     },
   ]);
 });
@@ -122,6 +138,8 @@ it('rechecks the binding after the asynchronous final recipient guard', async ()
       bindingRevision: 1,
       eventIds: ['event'],
       text: 'frozen',
+      deliveryProvider: 'CLAUDE',
+      deliveryProviderSessionId: 'original',
       attempt: 1,
     })
   ).toBe(false);
@@ -140,4 +158,108 @@ it('cancels an old frozen delivery only after provider history proves absence', 
   await recoverPRDeliveries('main');
   expect(mocks.cancel).toHaveBeenCalledWith('delivery', 'main');
   config.recipientSessionId = 'main';
+});
+it('rechecks another working session in the final dispatch guard', async () => {
+  mocks.otherReady.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+  expect(
+    await prBackgroundDeliveryPort.validate({
+      deliveryId: 'delivery',
+      sessionId: 'main',
+      bindingRevision: 1,
+      eventIds: ['event'],
+      text: 'frozen',
+      deliveryProvider: 'CLAUDE',
+      deliveryProviderSessionId: 'original',
+      attempt: 1,
+    })
+  ).toBe(false);
+});
+it('forces a fresh observation before freezing a PR update', async () => {
+  await preparePRDelivery({
+    sessionId: 'main',
+    request: { workspaceId: 'w', prId: 'p', bindingRevision: 1 },
+  });
+  expect(mocks.observe).toHaveBeenCalledWith(
+    { workspaceId: 'w', prId: 'p' },
+    undefined,
+    { force: true },
+    expect.anything()
+  );
+});
+it('does not invalidate the bound recipient when an unrelated session stops', async () => {
+  config.recipientSessionId = 'different-main';
+  await prBackgroundDeliveryPort.pause('main', 'USER_STOPPED');
+  expect(mocks.invalidate).not.toHaveBeenCalled();
+  config.recipientSessionId = 'main';
+});
+
+it('rejects a frozen retry after provider conversation identity changes', async () => {
+  mocks.pending.mockResolvedValue([
+    {
+      id: 'event',
+      workspaceId: 'w',
+      prId: 'p',
+      state: 'PENDING',
+      deliveryId: 'delivery',
+      deliverySessionId: 'main',
+      deliveryProvider: 'CLAUDE',
+      deliveryProviderSessionId: 'old-conversation',
+    },
+  ]);
+  expect(
+    await preparePRDelivery({
+      sessionId: 'main',
+      request: { workspaceId: 'w', prId: 'p', bindingRevision: 1 },
+    })
+  ).toMatchObject({ status: 'blocked' });
+  expect(mocks.claim).not.toHaveBeenCalled();
+  expect(mocks.pause).toHaveBeenCalledWith('w', 'RECEIPT_UNAVAILABLE', 1);
+});
+it('revalidates the frozen provider conversation after startup', async () => {
+  expect(
+    await prBackgroundDeliveryPort.validate({
+      deliveryId: 'delivery',
+      sessionId: 'main',
+      bindingRevision: 1,
+      eventIds: ['event'],
+      text: 'frozen',
+      attempt: 1,
+      deliveryProvider: 'CLAUDE',
+      deliveryProviderSessionId: 'old-conversation',
+    })
+  ).toBe(false);
+});
+
+it('does not reset a claim if a provider turn starts during receipt lookup', async () => {
+  mocks.receipt.mockImplementation(() => {
+    mocks.busy.mockReturnValue(true);
+    return Promise.resolve('absent');
+  });
+  await recoverPRDeliveries('main');
+  expect(mocks.recover).not.toHaveBeenCalled();
+  expect(mocks.cancel).not.toHaveBeenCalled();
+});
+
+it('re-enqueues durable pending events under the resumed binding revision', async () => {
+  config.deliveryPauseReason = 'USER_STOPPED';
+  mocks.resume.mockImplementation(() => {
+    config.bindingRevision = 2;
+    config.deliveryPauseReason = null;
+    return Promise.resolve();
+  });
+  mocks.receipt.mockResolvedValue('absent');
+  await prBackgroundDeliveryPort.resume('main');
+  expect(mocks.invalidate).toHaveBeenCalledWith('w', 1);
+  expect(mocks.enqueue).toHaveBeenCalledWith('main', {
+    workspaceId: 'w',
+    prId: 'p',
+    bindingRevision: 2,
+  });
+  expect(mocks.dispatch).toHaveBeenCalledWith('main');
+});
+it('keeps an active source claim fenced while its cold runtime is starting', async () => {
+  mocks.active.mockReturnValue(true);
+  await recoverPRDeliveries('main');
+  expect(mocks.receipt).not.toHaveBeenCalled();
+  expect(mocks.recover).not.toHaveBeenCalled();
 });

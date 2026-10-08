@@ -324,6 +324,7 @@ class WorkspaceQueryService {
           prCiStatus: w.prCiStatus,
           ratchetEnabled: w.ratchetEnabled,
           ratchetState: w.ratchetState,
+          prMonitoring: w.prMonitoring,
           runScriptStatus: w.runScriptStatus,
           githubIssueNumber: w.githubIssueNumber,
           githubIssueUrl: w.githubIssueUrl,

@@ -58,7 +58,13 @@ class PRObservationService {
     const [details, comments, resolved] = await Promise.all([
       githubCLIService.getPRFullDetails(repository, number, signal),
       githubCLIService.getReviewComments(repository, number, undefined, signal, incomplete),
-      githubCLIService.getResolvedReviewCommentIds(repository, number, signal, incomplete),
+      githubCLIService
+        .getResolvedReviewCommentIds(repository, number, signal, incomplete)
+        .catch(() => {
+          signal?.throwIfAborted();
+          reviewsComplete = false;
+          return new Set<number>();
+        }),
     ]);
     signal?.throwIfAborted();
     if (!details.headRefOid) {
@@ -133,6 +139,7 @@ class PRObservationService {
       checks,
       actionableReviews,
       reviewsComplete,
+      resolvedReviewIds: [...resolved].map((id) => `comment:${id}`),
     });
   }
 }

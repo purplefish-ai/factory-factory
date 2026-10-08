@@ -1,22 +1,37 @@
-import {
-  PR_SNAPSHOT_UPDATED,
-  prObservationService,
-  prSnapshotService,
-} from '@/backend/services/github';
-import { acpRuntimeManager, sessionDataService } from '@/backend/services/session';
-import {
-  workspacePRMonitoringService,
-  workspacePrSnapshotService,
-} from '@/backend/services/workspace';
+import { PR_SNAPSHOT_UPDATED } from '@/backend/services/github';
 import type { PRTarget } from '@/shared/pr-monitoring';
-
-const recent = new Map<string, { revision: number; epoch: number; checkedAt: number }>();
-const observing = new Map<string, Promise<boolean>>();
+import {
+  defaultPRMonitoringServices,
+  type PRMonitoringServices,
+} from './pr-monitoring-dependencies';
+const states = new WeakMap<
+  object,
+  {
+    recent: Map<string, { revision: number; epoch: number; checkedAt: number }>;
+    observing: Map<string, Promise<boolean>>;
+  }
+>();
+function observationState(services: PRMonitoringServices) {
+  let state = states.get(services.workspacePRMonitoringService);
+  if (!state) {
+    state = { recent: new Map(), observing: new Map() };
+    states.set(services.workspacePRMonitoringService, state);
+  }
+  return state;
+}
 export async function observeMonitoredPR(
   target: PRTarget,
   signal?: AbortSignal,
-  options?: { force?: boolean }
+  options?: { force?: boolean },
+  services: PRMonitoringServices = defaultPRMonitoringServices
 ): Promise<boolean> {
+  const {
+    workspacePrSnapshotService,
+    workspacePRMonitoringService,
+    prObservationService,
+    prSnapshotService,
+  } = services;
+  const { recent, observing } = observationState(services);
   const key = `${target.workspaceId}:${target.prId}`;
   const existing = observing.get(key);
   if (existing !== undefined) {
@@ -79,8 +94,24 @@ export async function observeMonitoredPR(
 }
 export async function recipientCanDispatch(
   workspaceId: string,
-  sessionId: string
+  sessionId: string,
+  services: PRMonitoringServices = defaultPRMonitoringServices
 ): Promise<boolean> {
-  const sessions = await sessionDataService.findAgentSessionsByWorkspaceId(workspaceId);
-  return !sessions.some((s) => s.id !== sessionId && acpRuntimeManager.isSessionWorking(s.id));
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const sessions = await Promise.race([
+      services.sessionDataService.findAgentSessionsByWorkspaceId(workspaceId),
+      new Promise<null>((resolve) => {
+        timeout = setTimeout(() => resolve(null), 5000);
+      }),
+    ]);
+    return (
+      !!sessions &&
+      !sessions.some((s) => s.id !== sessionId && services.acpRuntimeManager.isSessionWorking(s.id))
+    );
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
 }

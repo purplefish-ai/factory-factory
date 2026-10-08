@@ -85,10 +85,20 @@ describe('workspaceAccessor', () => {
         }),
         include: {
           prMonitoring: true,
-          prs: true,
+          prs: { where: { detachedAt: null } },
           prDiscovery: true,
           runScript: true,
           autoIteration: true,
+          _count: {
+            select: {
+              prEvents: {
+                where: {
+                  state: { in: ['PENDING', 'DISPATCHING'] },
+                  OR: [{ prId: null }, { pr: { detachedAt: null } }],
+                },
+              },
+            },
+          },
         },
       });
     });
@@ -112,10 +122,20 @@ describe('workspaceAccessor', () => {
         }),
         include: {
           prMonitoring: true,
-          prs: true,
+          prs: { where: { detachedAt: null } },
           prDiscovery: true,
           runScript: true,
           autoIteration: true,
+          _count: {
+            select: {
+              prEvents: {
+                where: {
+                  state: { in: ['PENDING', 'DISPATCHING'] },
+                  OR: [{ prId: null }, { pr: { detachedAt: null } }],
+                },
+              },
+            },
+          },
         },
       });
     });
@@ -144,10 +164,20 @@ describe('workspaceAccessor', () => {
         agentSessions: true,
         terminalSessions: true,
         prMonitoring: true,
-        prs: true,
+        prs: { where: { detachedAt: null } },
         prDiscovery: true,
         runScript: true,
         autoIteration: true,
+        _count: {
+          select: {
+            prEvents: {
+              where: {
+                state: { in: ['PENDING', 'DISPATCHING'] },
+                OR: [{ prId: null }, { pr: { detachedAt: null } }],
+              },
+            },
+          },
+        },
       },
     });
   });
@@ -165,7 +195,12 @@ describe('workspaceAccessor', () => {
 
     expect(mockFindMany).toHaveBeenNthCalledWith(1, {
       where: { id: { in: ['ws-2'] } },
-      include: { project: true, prs: true, prDiscovery: true, autoIteration: true },
+      include: {
+        project: true,
+        prs: { where: { detachedAt: null } },
+        prDiscovery: true,
+        autoIteration: true,
+      },
     });
   });
 
@@ -200,7 +235,7 @@ describe('workspaceAccessor', () => {
         expect.objectContaining({
           include: expect.objectContaining({
             prMonitoring: true,
-            prs: true,
+            prs: { where: { detachedAt: null } },
             prDiscovery: true,
             runScript: true,
             autoIteration: true,
@@ -287,7 +322,12 @@ describe('workspaceAccessor', () => {
           status: 'ARCHIVING',
           updatedAt: { lt: expect.any(Date) },
         },
-        include: { project: true, prs: true, prDiscovery: true, autoIteration: true },
+        include: {
+          project: true,
+          prs: { where: { detachedAt: null } },
+          prDiscovery: true,
+          autoIteration: true,
+        },
         orderBy: { updatedAt: 'asc' },
       });
 

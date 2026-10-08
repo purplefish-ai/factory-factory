@@ -6,7 +6,6 @@ import type {
   autoIterationService,
   logbookService,
 } from '@/backend/services/auto-iteration';
-import { prObservationService } from '@/backend/services/github';
 import type {
   githubCLIService,
   prFetchCoordinator,
@@ -25,7 +24,6 @@ import type { ratchetService } from '@/backend/services/ratchet';
  * Domain services never import each other; they receive capabilities via bridges.
  */
 import type { startupScriptService } from '@/backend/services/run-script';
-import { sessionBackgroundDeliveryService } from '@/backend/services/session';
 import type {
   acpRuntimeManager,
   chatEventForwarderService,
@@ -36,7 +34,6 @@ import type {
   sessionPromptTurnCompletionService,
   sessionService,
 } from '@/backend/services/session';
-import { userSettingsService } from '@/backend/services/settings';
 import type { terminalSessionService } from '@/backend/services/terminal';
 import {
   deriveWorkspaceFlowState,
@@ -55,7 +52,8 @@ import {
 } from '@/backend/services/workspace';
 import { AutoIterationStatus, SessionStatus } from '@/shared/core';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
-import { prBackgroundDeliveryPort, wakePRDelivery } from './pr-event-delivery.orchestrator';
+import { createPRBackgroundDeliveryPort } from './pr-event-delivery-port';
+import { wakePRDelivery } from './pr-event-delivery.orchestrator';
 import { retireLegacyRatchetSessions } from './pr-monitoring-cutover.orchestrator';
 import { setPRMonitoring } from './pr-monitoring.orchestrator';
 import { observeMonitoredPR } from './pr-observation.orchestrator';
@@ -73,7 +71,8 @@ type AutoIterationRollbackReason =
   | 'auto_iteration_startup_failed_after_create'
   | 'auto_iteration_recycle_failed_after_create';
 
-export type BridgeServices = {
+import type { PRMonitoringServices } from './pr-monitoring-dependencies';
+export type BridgeServices = PRMonitoringServices & {
   autoIterationService: typeof autoIterationService;
   chatEventForwarderService: typeof chatEventForwarderService;
   chatMessageHandlerService: typeof chatMessageHandlerService;
@@ -293,14 +292,15 @@ export function configureDomainBridges(services: BridgeServices): void {
   } = services;
   const logger = createLogger('domain-bridges');
 
+  const { prObservationService, sessionBackgroundDeliveryService, userSettingsService } = services;
   // === Ratchet domain bridges ===
   ratchetService.configure({
-    retireLegacy: retireLegacyRatchetSessions,
-    observe: observeMonitoredPR,
-    wake: wakePRDelivery,
-    setMonitoring: setPRMonitoring,
+    retireLegacy: () => retireLegacyRatchetSessions(services),
+    observe: (target, signal) => observeMonitoredPR(target, signal, undefined, services),
+    wake: (workspaceId) => wakePRDelivery(workspaceId, services),
+    setMonitoring: (input) => setPRMonitoring(input, services),
   });
-  sessionBackgroundDeliveryService.configure(prBackgroundDeliveryPort);
+  sessionBackgroundDeliveryService.configure(createPRBackgroundDeliveryPort(services));
   prObservationService.configure({
     findPR: (target) => workspacePrSnapshotService.find(target),
     readPolicy: async () => ({
@@ -336,7 +336,7 @@ export function configureDomainBridges(services: BridgeServices): void {
 
   // === GitHub domain bridges ===
   prSnapshotService.configure({
-    observe: (target, options) => observeMonitoredPR(target, undefined, options),
+    observe: (target, options) => observeMonitoredPR(target, undefined, options, services),
     workspace: {
       listPRs: (id) => workspacePrSnapshotService.list(id),
       findPR: (target) => workspacePrSnapshotService.find(target),

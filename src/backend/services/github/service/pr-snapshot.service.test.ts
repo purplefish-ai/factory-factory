@@ -70,6 +70,8 @@ it('does not attach discovery results when their claim is stale', async () => {
   expect(
     await prSnapshotService.attachDiscoveredPRAndRefresh('w', url, {
       branchName: 'branch',
+      githubOwner: 'org',
+      githubRepo: 'repo',
       checkedAt: new Date(),
       retryCount: 1,
       nextCheckAt: new Date(),
@@ -81,4 +83,24 @@ it('detaches only the explicit target', async () => {
   bridge.detachPR.mockResolvedValue(true);
   expect(await prSnapshotService.detachPR({ workspaceId: 'w', prId: 'p' })).toBe(true);
   expect(bridge.detachPR).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'w', prId: 'p' });
+});
+it('returns an error result when listing associations fails', async () => {
+  bridge.listPRs.mockRejectedValueOnce(new Error('database unavailable'));
+  await expect(prSnapshotService.refreshWorkspace('w')).resolves.toEqual({
+    success: false,
+    reason: 'error',
+  });
+});
+it('returns an error result when a discovery attachment fails', async () => {
+  bridge.attachDiscoveredPRsIfClaimMatches.mockRejectedValueOnce(new Error('database unavailable'));
+  await expect(
+    prSnapshotService.attachDiscoveredPRAndRefresh('w', url, {
+      branchName: 'branch',
+      githubOwner: 'org',
+      githubRepo: 'repo',
+      checkedAt: new Date(),
+      retryCount: 1,
+      nextCheckAt: new Date(),
+    })
+  ).resolves.toEqual({ success: false, reason: 'error' });
 });

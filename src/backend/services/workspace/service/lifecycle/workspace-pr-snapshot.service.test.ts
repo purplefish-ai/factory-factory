@@ -45,6 +45,8 @@ describe('workspacePrSnapshotService', () => {
 
   it('guards discovered PR attachment with the current discovery claim', async () => {
     const claim = {
+      githubOwner: 'org',
+      githubRepo: 'repo',
       branchName: 'feature/discovery',
       checkedAt: new Date('2026-07-17T12:00:00.000Z'),
       retryCount: 2,

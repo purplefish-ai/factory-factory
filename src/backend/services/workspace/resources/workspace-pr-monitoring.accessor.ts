@@ -10,6 +10,7 @@ export interface PRBindingInput {
   recipientSessionId: string | null;
   enabled: boolean;
   expectedBindingRevision: number;
+  replyToPrComments?: boolean;
 }
 async function validateRecipient(tx: Prisma.TransactionClient, input: PRBindingInput) {
   if (input.recipientSessionId) {
@@ -20,6 +21,27 @@ async function validateRecipient(tx: Prisma.TransactionClient, input: PRBindingI
       throw new Error('Select an ordinary session in this workspace');
     }
   }
+}
+async function insertEnableControl(
+  tx: Prisma.TransactionClient,
+  input: PRBindingInput,
+  bindingRevision: number
+) {
+  if (!(input.enabled && input.recipientSessionId) || input.replyToPrComments === undefined) {
+    return;
+  }
+  await workspacePrEventAccessor.insert(tx, input.workspaceId, null, [
+    {
+      kind: 'MONITORING_ENABLED',
+      deduplicationKey: `enabled:${bindingRevision}`,
+      payload: {
+        kind: 'MONITORING_ENABLED',
+        workspaceId: input.workspaceId,
+        bindingRevision,
+        replyToPrComments: input.replyToPrComments,
+      },
+    },
+  ]);
 }
 class WorkspacePrMonitoringAccessor {
   async restoreBackup(
@@ -61,6 +83,7 @@ class WorkspacePrMonitoringAccessor {
         config.enabled === input.enabled &&
         config.recipientSessionId === input.recipientSessionId
       ) {
+        await insertEnableControl(tx, input, config.bindingRevision);
         return { applied: true, bindingRevision: config.bindingRevision };
       }
       const result = await tx.workspacePRMonitoring.updateMany({
@@ -77,6 +100,7 @@ class WorkspacePrMonitoringAccessor {
       });
       if (result.count) {
         await workspacePrEventAccessor.cancelInTransaction(tx, input.workspaceId);
+        await insertEnableControl(tx, input, config.bindingRevision + 1);
       }
       return {
         applied: result.count === 1,
@@ -85,12 +109,28 @@ class WorkspacePrMonitoringAccessor {
     });
   }
   pause(sessionId: string, reason: string) {
-    return prisma.workspacePRMonitoring.updateMany({
-      where: {
-        recipientSessionId: sessionId,
-        OR: [{ deliveryPauseReason: null }, { deliveryPauseReason: { not: 'LEGACY_FIXER' } }],
-      },
-      data: { deliveryPauseReason: reason, bindingRevision: { increment: 1 } },
+    return prisma.$transaction(async (tx) => {
+      const configs = await tx.workspacePRMonitoring.findMany({
+        where: { recipientSessionId: sessionId },
+      });
+      let count = 0;
+      for (const config of configs) {
+        const paused = await tx.workspacePRMonitoring.updateMany({
+          where: {
+            workspaceId: config.workspaceId,
+            recipientSessionId: sessionId,
+            bindingRevision: config.bindingRevision,
+          },
+          data: {
+            deliveryPauseReason: config.deliveryPauseReason?.startsWith('LEGACY_FIXER')
+              ? `LEGACY_FIXER_${reason}`
+              : reason,
+            bindingRevision: { increment: 1 },
+          },
+        });
+        count += paused.count;
+      }
+      return { count };
     });
   }
   async resume(sessionId: string) {
@@ -126,9 +166,24 @@ class WorkspacePrMonitoringAccessor {
     }
   }
   pauseWorkspace(workspaceId: string, reason: string, expectedBindingRevision: number) {
-    return prisma.workspacePRMonitoring.updateMany({
-      where: { workspaceId, bindingRevision: expectedBindingRevision },
-      data: { deliveryPauseReason: reason, bindingRevision: { increment: 1 } },
+    return prisma.$transaction(async (tx) => {
+      const config = await tx.workspacePRMonitoring.findFirst({
+        where: { workspaceId, bindingRevision: expectedBindingRevision },
+      });
+      if (!config) {
+        return { count: 0 };
+      }
+      const existing = config.deliveryPauseReason;
+      const pauseReason =
+        reason === 'LEGACY_FIXER' && existing && !existing.startsWith('LEGACY_FIXER')
+          ? `LEGACY_FIXER_${existing}`
+          : existing?.startsWith('LEGACY_FIXER')
+            ? existing
+            : reason;
+      return tx.workspacePRMonitoring.updateMany({
+        where: { workspaceId, bindingRevision: expectedBindingRevision },
+        data: { deliveryPauseReason: pauseReason, bindingRevision: { increment: 1 } },
+      });
     });
   }
   markChecked(workspaceId: string) {
@@ -146,10 +201,26 @@ class WorkspacePrMonitoringAccessor {
       include: { workspace: { include: { project: true, prs: { where: { detachedAt: null } } } } },
     });
   }
-  completeLegacyRetirement(workspaceId: string) {
-    return prisma.workspacePRMonitoring.updateMany({
-      where: { workspaceId, deliveryPauseReason: 'LEGACY_FIXER' },
-      data: { deliveryPauseReason: null, bindingRevision: { increment: 1 } },
+  completeLegacyRetirement(workspaceId: string, expectedBindingRevision: number) {
+    return prisma.$transaction(async (tx) => {
+      const config = await tx.workspacePRMonitoring.findFirst({
+        where: { workspaceId, bindingRevision: expectedBindingRevision },
+      });
+      if (!config?.deliveryPauseReason?.startsWith('LEGACY_FIXER')) {
+        return { count: 0 };
+      }
+      const remainingPause =
+        config.deliveryPauseReason === 'LEGACY_FIXER'
+          ? null
+          : config.deliveryPauseReason.slice('LEGACY_FIXER_'.length);
+      return tx.workspacePRMonitoring.updateMany({
+        where: {
+          workspaceId,
+          bindingRevision: expectedBindingRevision,
+          deliveryPauseReason: config.deliveryPauseReason,
+        },
+        data: { deliveryPauseReason: remainingPause, bindingRevision: { increment: 1 } },
+      });
     });
   }
 }

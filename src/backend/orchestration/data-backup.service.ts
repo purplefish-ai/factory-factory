@@ -12,7 +12,7 @@ import {
   dataBackupAccessor,
   type WorkspaceForExport,
 } from '@/backend/services/settings/resources/data-backup.accessor';
-import { deriveRatchetState, type RatchetState } from '@/shared/core';
+import { workspacePrSnapshotService } from '@/backend/services/workspace';
 import { autoIterationConfigSchema } from '@/shared/schemas/auto-iteration.schema';
 import type {
   ExportData,
@@ -61,22 +61,18 @@ const parseDate = (str: string | null): Date | null => (str ? new Date(str) : nu
 const parseAutoIterationConfigForExport = (value: unknown) =>
   value == null ? null : autoIterationConfigSchema.parse(value);
 
-/** Strip the encrypted API key from issueTrackerConfig for safe export. */
-/**
- * The `ratchetState` a v4 export file has to carry.
- *
- * Required at `schemaVersion: 4`, so it is still written — but computed now, not
- * read: nothing stores it. It is also the only field that carries the conflict
- * flag to a reader of this file predating `WorkspacePR.hasMergeConflict`.
- */
-function exportedRatchetState(workspace: WorkspaceForExport): RatchetState {
-  return deriveRatchetState({
-    ratchetEnabled: workspace.prMonitoring?.enabled ?? false,
-    prState: workspace.prs[0]?.state ?? 'NONE',
-    prCiStatus: workspace.prs[0]?.ciStatus ?? 'UNKNOWN',
-    prHasMergeConflict: workspace.prs[0]?.hasMergeConflict ?? false,
-    prReviewState: workspace.prs[0]?.reviewState ?? null,
-  });
+function exportedPRFields(workspace: WorkspaceForExport) {
+  const fields = workspacePrSnapshotService.projectCollection(
+    workspace.prs,
+    workspace.prMonitoring?.enabled ?? false
+  );
+  return {
+    ...fields,
+    prUpdatedAt: toISOString(fields.prUpdatedAt),
+    prCiFailedAt: toISOString(fields.prCiFailedAt),
+    prCiLastNotifiedAt: toISOString(fields.prCiLastNotifiedAt),
+    prReviewLastCheckedAt: toISOString(fields.prReviewLastCheckedAt),
+  };
 }
 
 /**
@@ -560,21 +556,11 @@ class DataBackupService {
           // Flattened out of WorkspacePR: the v4 export format carries the PR
           // cache as workspace fields, and `prUpdatedAt` keeps the name it has in
           // files already on disk even though the column is now `syncedAt`.
-          prUrl: w.prs[0]?.url ?? null,
-          prNumber: w.prs[0]?.number ?? null,
-          prState: w.prs[0]?.state ?? 'NONE',
-          prReviewState: w.prs[0]?.reviewState ?? null,
-          prCiStatus: w.prs[0]?.ciStatus ?? 'UNKNOWN',
-          prUpdatedAt: toISOString(w.prs[0]?.syncedAt ?? null),
-          prCiFailedAt: toISOString(w.prs[0]?.ciFailedAt ?? null),
-          prCiLastNotifiedAt: toISOString(w.prs[0]?.ciLastNotifiedAt ?? null),
-          prReviewLastCheckedAt: toISOString(w.prs[0]?.reviewLastCheckedAt ?? null),
-          prReviewLastCommentId: w.prs[0]?.reviewLastCommentId ?? null,
+          ...exportedPRFields(w),
           // Phase 3+ ratchet tracking fields. Flattened out of WorkspaceRatchet:
           // the v4 export format carries them as workspace fields, and
           // `ratchetLastCiRunId` keeps the name it has in files already on disk.
           ratchetEnabled: w.prMonitoring?.enabled ?? false,
-          ratchetState: exportedRatchetState(w),
           ratchetLastCheckedAt: toISOString(w.prMonitoring?.lastCheckedAt ?? null),
           ratchetActiveSessionId: null,
           ratchetLastCiRunId: null,

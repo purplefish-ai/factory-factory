@@ -40,6 +40,7 @@ export const prObservationSchema = z.strictObject({
   checks: z.array(prCheckSchema),
   actionableReviews: z.array(prReviewSchema),
   reviewsComplete: z.boolean(),
+  resolvedReviewIds: z.array(z.string()).optional(),
 });
 const facts = { target: prTargetSchema, observation: prObservationSchema };
 export const prMonitoringEventPayloadSchema = z.discriminatedUnion('kind', [

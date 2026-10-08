@@ -7,6 +7,8 @@ import type { workspacePrSnapshotService } from '@/backend/services/workspace';
 import type { CIStatus, PRState } from '@/shared/core';
 
 export interface GitHubPRDiscoveryClaim {
+  githubOwner: string;
+  githubRepo: string;
   branchName: string;
   checkedAt: Date;
   retryCount: number;

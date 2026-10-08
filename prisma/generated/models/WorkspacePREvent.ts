@@ -46,6 +46,8 @@ export type WorkspacePREventMinAggregateOutputType = {
   attempts: number | null
   deliveryId: string | null
   deliverySessionId: string | null
+  deliveryProvider: string | null
+  deliveryProviderSessionId: string | null
   deliveryBindingRevision: number | null
   deliveryText: string | null
   claimedAt: Date | null
@@ -63,6 +65,8 @@ export type WorkspacePREventMaxAggregateOutputType = {
   attempts: number | null
   deliveryId: string | null
   deliverySessionId: string | null
+  deliveryProvider: string | null
+  deliveryProviderSessionId: string | null
   deliveryBindingRevision: number | null
   deliveryText: string | null
   claimedAt: Date | null
@@ -81,6 +85,8 @@ export type WorkspacePREventCountAggregateOutputType = {
   attempts: number
   deliveryId: number
   deliverySessionId: number
+  deliveryProvider: number
+  deliveryProviderSessionId: number
   deliveryBindingRevision: number
   deliveryText: number
   claimedAt: number
@@ -110,6 +116,8 @@ export type WorkspacePREventMinAggregateInputType = {
   attempts?: true
   deliveryId?: true
   deliverySessionId?: true
+  deliveryProvider?: true
+  deliveryProviderSessionId?: true
   deliveryBindingRevision?: true
   deliveryText?: true
   claimedAt?: true
@@ -127,6 +135,8 @@ export type WorkspacePREventMaxAggregateInputType = {
   attempts?: true
   deliveryId?: true
   deliverySessionId?: true
+  deliveryProvider?: true
+  deliveryProviderSessionId?: true
   deliveryBindingRevision?: true
   deliveryText?: true
   claimedAt?: true
@@ -145,6 +155,8 @@ export type WorkspacePREventCountAggregateInputType = {
   attempts?: true
   deliveryId?: true
   deliverySessionId?: true
+  deliveryProvider?: true
+  deliveryProviderSessionId?: true
   deliveryBindingRevision?: true
   deliveryText?: true
   claimedAt?: true
@@ -250,6 +262,8 @@ export type WorkspacePREventGroupByOutputType = {
   attempts: number
   deliveryId: string | null
   deliverySessionId: string | null
+  deliveryProvider: string | null
+  deliveryProviderSessionId: string | null
   deliveryBindingRevision: number | null
   deliveryText: string | null
   claimedAt: Date | null
@@ -291,6 +305,8 @@ export type WorkspacePREventWhereInput = {
   attempts?: Prisma.IntFilter<"WorkspacePREvent"> | number
   deliveryId?: Prisma.StringNullableFilter<"WorkspacePREvent"> | string | null
   deliverySessionId?: Prisma.StringNullableFilter<"WorkspacePREvent"> | string | null
+  deliveryProvider?: Prisma.StringNullableFilter<"WorkspacePREvent"> | string | null
+  deliveryProviderSessionId?: Prisma.StringNullableFilter<"WorkspacePREvent"> | string | null
   deliveryBindingRevision?: Prisma.IntNullableFilter<"WorkspacePREvent"> | number | null
   deliveryText?: Prisma.StringNullableFilter<"WorkspacePREvent"> | string | null
   claimedAt?: Prisma.DateTimeNullableFilter<"WorkspacePREvent"> | Date | string | null
@@ -311,6 +327,8 @@ export type WorkspacePREventOrderByWithRelationInput = {
   attempts?: Prisma.SortOrder
   deliveryId?: Prisma.SortOrderInput | Prisma.SortOrder
   deliverySessionId?: Prisma.SortOrderInput | Prisma.SortOrder
+  deliveryProvider?: Prisma.SortOrderInput | Prisma.SortOrder
+  deliveryProviderSessionId?: Prisma.SortOrderInput | Prisma.SortOrder
   deliveryBindingRevision?: Prisma.SortOrderInput | Prisma.SortOrder
   deliveryText?: Prisma.SortOrderInput | Prisma.SortOrder
   claimedAt?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -336,6 +354,8 @@ export type WorkspacePREventWhereUniqueInput = Prisma.AtLeast<{
   attempts?: Prisma.IntFilter<"WorkspacePREvent"> | number
   deliveryId?: Prisma.StringNullableFilter<"WorkspacePREvent"> | string | null
   deliverySessionId?: Prisma.StringNullableFilter<"WorkspacePREvent"> | string | null
+  deliveryProvider?: Prisma.StringNullableFilter<"WorkspacePREvent"> | string | null
+  deliveryProviderSessionId?: Prisma.StringNullableFilter<"WorkspacePREvent"> | string | null
   deliveryBindingRevision?: Prisma.IntNullableFilter<"WorkspacePREvent"> | number | null
   deliveryText?: Prisma.StringNullableFilter<"WorkspacePREvent"> | string | null
   claimedAt?: Prisma.DateTimeNullableFilter<"WorkspacePREvent"> | Date | string | null
@@ -356,6 +376,8 @@ export type WorkspacePREventOrderByWithAggregationInput = {
   attempts?: Prisma.SortOrder
   deliveryId?: Prisma.SortOrderInput | Prisma.SortOrder
   deliverySessionId?: Prisma.SortOrderInput | Prisma.SortOrder
+  deliveryProvider?: Prisma.SortOrderInput | Prisma.SortOrder
+  deliveryProviderSessionId?: Prisma.SortOrderInput | Prisma.SortOrder
   deliveryBindingRevision?: Prisma.SortOrderInput | Prisma.SortOrder
   deliveryText?: Prisma.SortOrderInput | Prisma.SortOrder
   claimedAt?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -382,6 +404,8 @@ export type WorkspacePREventScalarWhereWithAggregatesInput = {
   attempts?: Prisma.IntWithAggregatesFilter<"WorkspacePREvent"> | number
   deliveryId?: Prisma.StringNullableWithAggregatesFilter<"WorkspacePREvent"> | string | null
   deliverySessionId?: Prisma.StringNullableWithAggregatesFilter<"WorkspacePREvent"> | string | null
+  deliveryProvider?: Prisma.StringNullableWithAggregatesFilter<"WorkspacePREvent"> | string | null
+  deliveryProviderSessionId?: Prisma.StringNullableWithAggregatesFilter<"WorkspacePREvent"> | string | null
   deliveryBindingRevision?: Prisma.IntNullableWithAggregatesFilter<"WorkspacePREvent"> | number | null
   deliveryText?: Prisma.StringNullableWithAggregatesFilter<"WorkspacePREvent"> | string | null
   claimedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"WorkspacePREvent"> | Date | string | null
@@ -398,6 +422,8 @@ export type WorkspacePREventCreateInput = {
   attempts?: number
   deliveryId?: string | null
   deliverySessionId?: string | null
+  deliveryProvider?: string | null
+  deliveryProviderSessionId?: string | null
   deliveryBindingRevision?: number | null
   deliveryText?: string | null
   claimedAt?: Date | string | null
@@ -418,6 +444,8 @@ export type WorkspacePREventUncheckedCreateInput = {
   attempts?: number
   deliveryId?: string | null
   deliverySessionId?: string | null
+  deliveryProvider?: string | null
+  deliveryProviderSessionId?: string | null
   deliveryBindingRevision?: number | null
   deliveryText?: string | null
   claimedAt?: Date | string | null
@@ -434,6 +462,8 @@ export type WorkspacePREventUpdateInput = {
   attempts?: Prisma.IntFieldUpdateOperationsInput | number
   deliveryId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliverySessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  deliveryProvider?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  deliveryProviderSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliveryBindingRevision?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   deliveryText?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   claimedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -454,6 +484,8 @@ export type WorkspacePREventUncheckedUpdateInput = {
   attempts?: Prisma.IntFieldUpdateOperationsInput | number
   deliveryId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliverySessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  deliveryProvider?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  deliveryProviderSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliveryBindingRevision?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   deliveryText?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   claimedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -472,6 +504,8 @@ export type WorkspacePREventCreateManyInput = {
   attempts?: number
   deliveryId?: string | null
   deliverySessionId?: string | null
+  deliveryProvider?: string | null
+  deliveryProviderSessionId?: string | null
   deliveryBindingRevision?: number | null
   deliveryText?: string | null
   claimedAt?: Date | string | null
@@ -488,6 +522,8 @@ export type WorkspacePREventUpdateManyMutationInput = {
   attempts?: Prisma.IntFieldUpdateOperationsInput | number
   deliveryId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliverySessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  deliveryProvider?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  deliveryProviderSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliveryBindingRevision?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   deliveryText?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   claimedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -506,6 +542,8 @@ export type WorkspacePREventUncheckedUpdateManyInput = {
   attempts?: Prisma.IntFieldUpdateOperationsInput | number
   deliveryId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliverySessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  deliveryProvider?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  deliveryProviderSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliveryBindingRevision?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   deliveryText?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   claimedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -544,6 +582,8 @@ export type WorkspacePREventCountOrderByAggregateInput = {
   attempts?: Prisma.SortOrder
   deliveryId?: Prisma.SortOrder
   deliverySessionId?: Prisma.SortOrder
+  deliveryProvider?: Prisma.SortOrder
+  deliveryProviderSessionId?: Prisma.SortOrder
   deliveryBindingRevision?: Prisma.SortOrder
   deliveryText?: Prisma.SortOrder
   claimedAt?: Prisma.SortOrder
@@ -566,6 +606,8 @@ export type WorkspacePREventMaxOrderByAggregateInput = {
   attempts?: Prisma.SortOrder
   deliveryId?: Prisma.SortOrder
   deliverySessionId?: Prisma.SortOrder
+  deliveryProvider?: Prisma.SortOrder
+  deliveryProviderSessionId?: Prisma.SortOrder
   deliveryBindingRevision?: Prisma.SortOrder
   deliveryText?: Prisma.SortOrder
   claimedAt?: Prisma.SortOrder
@@ -583,6 +625,8 @@ export type WorkspacePREventMinOrderByAggregateInput = {
   attempts?: Prisma.SortOrder
   deliveryId?: Prisma.SortOrder
   deliverySessionId?: Prisma.SortOrder
+  deliveryProvider?: Prisma.SortOrder
+  deliveryProviderSessionId?: Prisma.SortOrder
   deliveryBindingRevision?: Prisma.SortOrder
   deliveryText?: Prisma.SortOrder
   claimedAt?: Prisma.SortOrder
@@ -688,6 +732,8 @@ export type WorkspacePREventCreateWithoutWorkspaceInput = {
   attempts?: number
   deliveryId?: string | null
   deliverySessionId?: string | null
+  deliveryProvider?: string | null
+  deliveryProviderSessionId?: string | null
   deliveryBindingRevision?: number | null
   deliveryText?: string | null
   claimedAt?: Date | string | null
@@ -706,6 +752,8 @@ export type WorkspacePREventUncheckedCreateWithoutWorkspaceInput = {
   attempts?: number
   deliveryId?: string | null
   deliverySessionId?: string | null
+  deliveryProvider?: string | null
+  deliveryProviderSessionId?: string | null
   deliveryBindingRevision?: number | null
   deliveryText?: string | null
   claimedAt?: Date | string | null
@@ -752,6 +800,8 @@ export type WorkspacePREventScalarWhereInput = {
   attempts?: Prisma.IntFilter<"WorkspacePREvent"> | number
   deliveryId?: Prisma.StringNullableFilter<"WorkspacePREvent"> | string | null
   deliverySessionId?: Prisma.StringNullableFilter<"WorkspacePREvent"> | string | null
+  deliveryProvider?: Prisma.StringNullableFilter<"WorkspacePREvent"> | string | null
+  deliveryProviderSessionId?: Prisma.StringNullableFilter<"WorkspacePREvent"> | string | null
   deliveryBindingRevision?: Prisma.IntNullableFilter<"WorkspacePREvent"> | number | null
   deliveryText?: Prisma.StringNullableFilter<"WorkspacePREvent"> | string | null
   claimedAt?: Prisma.DateTimeNullableFilter<"WorkspacePREvent"> | Date | string | null
@@ -768,6 +818,8 @@ export type WorkspacePREventCreateWithoutPrInput = {
   attempts?: number
   deliveryId?: string | null
   deliverySessionId?: string | null
+  deliveryProvider?: string | null
+  deliveryProviderSessionId?: string | null
   deliveryBindingRevision?: number | null
   deliveryText?: string | null
   claimedAt?: Date | string | null
@@ -786,6 +838,8 @@ export type WorkspacePREventUncheckedCreateWithoutPrInput = {
   attempts?: number
   deliveryId?: string | null
   deliverySessionId?: string | null
+  deliveryProvider?: string | null
+  deliveryProviderSessionId?: string | null
   deliveryBindingRevision?: number | null
   deliveryText?: string | null
   claimedAt?: Date | string | null
@@ -828,6 +882,8 @@ export type WorkspacePREventCreateManyWorkspaceInput = {
   attempts?: number
   deliveryId?: string | null
   deliverySessionId?: string | null
+  deliveryProvider?: string | null
+  deliveryProviderSessionId?: string | null
   deliveryBindingRevision?: number | null
   deliveryText?: string | null
   claimedAt?: Date | string | null
@@ -844,6 +900,8 @@ export type WorkspacePREventUpdateWithoutWorkspaceInput = {
   attempts?: Prisma.IntFieldUpdateOperationsInput | number
   deliveryId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliverySessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  deliveryProvider?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  deliveryProviderSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliveryBindingRevision?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   deliveryText?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   claimedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -862,6 +920,8 @@ export type WorkspacePREventUncheckedUpdateWithoutWorkspaceInput = {
   attempts?: Prisma.IntFieldUpdateOperationsInput | number
   deliveryId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliverySessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  deliveryProvider?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  deliveryProviderSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliveryBindingRevision?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   deliveryText?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   claimedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -879,6 +939,8 @@ export type WorkspacePREventUncheckedUpdateManyWithoutWorkspaceInput = {
   attempts?: Prisma.IntFieldUpdateOperationsInput | number
   deliveryId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliverySessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  deliveryProvider?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  deliveryProviderSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliveryBindingRevision?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   deliveryText?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   claimedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -896,6 +958,8 @@ export type WorkspacePREventCreateManyPrInput = {
   attempts?: number
   deliveryId?: string | null
   deliverySessionId?: string | null
+  deliveryProvider?: string | null
+  deliveryProviderSessionId?: string | null
   deliveryBindingRevision?: number | null
   deliveryText?: string | null
   claimedAt?: Date | string | null
@@ -912,6 +976,8 @@ export type WorkspacePREventUpdateWithoutPrInput = {
   attempts?: Prisma.IntFieldUpdateOperationsInput | number
   deliveryId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliverySessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  deliveryProvider?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  deliveryProviderSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliveryBindingRevision?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   deliveryText?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   claimedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -930,6 +996,8 @@ export type WorkspacePREventUncheckedUpdateWithoutPrInput = {
   attempts?: Prisma.IntFieldUpdateOperationsInput | number
   deliveryId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliverySessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  deliveryProvider?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  deliveryProviderSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliveryBindingRevision?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   deliveryText?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   claimedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -947,6 +1015,8 @@ export type WorkspacePREventUncheckedUpdateManyWithoutPrInput = {
   attempts?: Prisma.IntFieldUpdateOperationsInput | number
   deliveryId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliverySessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  deliveryProvider?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  deliveryProviderSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliveryBindingRevision?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   deliveryText?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   claimedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -967,6 +1037,8 @@ export type WorkspacePREventSelect<ExtArgs extends runtime.Types.Extensions.Inte
   attempts?: boolean
   deliveryId?: boolean
   deliverySessionId?: boolean
+  deliveryProvider?: boolean
+  deliveryProviderSessionId?: boolean
   deliveryBindingRevision?: boolean
   deliveryText?: boolean
   claimedAt?: boolean
@@ -987,6 +1059,8 @@ export type WorkspacePREventSelectCreateManyAndReturn<ExtArgs extends runtime.Ty
   attempts?: boolean
   deliveryId?: boolean
   deliverySessionId?: boolean
+  deliveryProvider?: boolean
+  deliveryProviderSessionId?: boolean
   deliveryBindingRevision?: boolean
   deliveryText?: boolean
   claimedAt?: boolean
@@ -1007,6 +1081,8 @@ export type WorkspacePREventSelectUpdateManyAndReturn<ExtArgs extends runtime.Ty
   attempts?: boolean
   deliveryId?: boolean
   deliverySessionId?: boolean
+  deliveryProvider?: boolean
+  deliveryProviderSessionId?: boolean
   deliveryBindingRevision?: boolean
   deliveryText?: boolean
   claimedAt?: boolean
@@ -1027,6 +1103,8 @@ export type WorkspacePREventSelectScalar = {
   attempts?: boolean
   deliveryId?: boolean
   deliverySessionId?: boolean
+  deliveryProvider?: boolean
+  deliveryProviderSessionId?: boolean
   deliveryBindingRevision?: boolean
   deliveryText?: boolean
   claimedAt?: boolean
@@ -1034,7 +1112,7 @@ export type WorkspacePREventSelectScalar = {
   createdAt?: boolean
 }
 
-export type WorkspacePREventOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "workspaceId" | "prId" | "kind" | "deduplicationKey" | "payload" | "state" | "attempts" | "deliveryId" | "deliverySessionId" | "deliveryBindingRevision" | "deliveryText" | "claimedAt" | "deliveredAt" | "createdAt", ExtArgs["result"]["workspacePREvent"]>
+export type WorkspacePREventOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "workspaceId" | "prId" | "kind" | "deduplicationKey" | "payload" | "state" | "attempts" | "deliveryId" | "deliverySessionId" | "deliveryProvider" | "deliveryProviderSessionId" | "deliveryBindingRevision" | "deliveryText" | "claimedAt" | "deliveredAt" | "createdAt", ExtArgs["result"]["workspacePREvent"]>
 export type WorkspacePREventInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
   pr?: boolean | Prisma.WorkspacePREvent$prArgs<ExtArgs>
@@ -1065,6 +1143,8 @@ export type $WorkspacePREventPayload<ExtArgs extends runtime.Types.Extensions.In
     attempts: number
     deliveryId: string | null
     deliverySessionId: string | null
+    deliveryProvider: string | null
+    deliveryProviderSessionId: string | null
     deliveryBindingRevision: number | null
     deliveryText: string | null
     claimedAt: Date | null
@@ -1505,6 +1585,8 @@ export interface WorkspacePREventFieldRefs {
   readonly attempts: Prisma.FieldRef<"WorkspacePREvent", 'Int'>
   readonly deliveryId: Prisma.FieldRef<"WorkspacePREvent", 'String'>
   readonly deliverySessionId: Prisma.FieldRef<"WorkspacePREvent", 'String'>
+  readonly deliveryProvider: Prisma.FieldRef<"WorkspacePREvent", 'String'>
+  readonly deliveryProviderSessionId: Prisma.FieldRef<"WorkspacePREvent", 'String'>
   readonly deliveryBindingRevision: Prisma.FieldRef<"WorkspacePREvent", 'Int'>
   readonly deliveryText: Prisma.FieldRef<"WorkspacePREvent", 'String'>
   readonly claimedAt: Prisma.FieldRef<"WorkspacePREvent", 'DateTime'>

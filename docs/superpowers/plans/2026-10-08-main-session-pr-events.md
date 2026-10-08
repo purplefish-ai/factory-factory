@@ -151,20 +151,25 @@ present in this worktree; stage only task-owned changes.
 - [ ] **Add monitoring and event models in the additive migration.** Config
       stores `enabled`, `recipientSessionId`, `bindingRevision`, `eventEpoch`,
       nullable `deliveryPauseReason`, and `lastCheckedAt`. `eventEpoch`
-      increments only on disabled-to-enabled transitions; binding revision
-      changes on target, enable, pause, or resume changes. Copy old
-      enabled/check values into config without selecting an ambiguous recipient;
-      retain legacy tables until cutover. Event rows store workspace/nullable PR
-      FK, kind, dedup key, payload, timestamps, state, attempt count, and
-      nullable delivery ID/session/revision/text/claim time. Index foreign keys
-      and pending delivery queries. Add uniqueness on `(prId, deduplicationKey)`
-      and `(workspaceId, deduplicationKey)` for null-PR control-event
-      deduplication. Use states `PENDING`, `DISPATCHING`, `DELIVERED`,
-      `SUPERSEDED`, and `CANCELLED`. Exhausted transport retries retain a
-      pending frozen group and pause the config; they do not create a sixth
-      receipt state.
+      increments on disabled-to-enabled transitions or enabled recipient
+      changes; binding revision changes on target, enable, pause, or resume
+      changes. Copy old enabled/check values into config without selecting an
+      ambiguous recipient; retain legacy tables until cutover. Event rows store
+      workspace/nullable PR FK, kind, dedup key, payload, timestamps, state,
+      attempt count, and nullable delivery ID/session/provider/provider-session
+      identity/revision/text/claim time. Index foreign keys and pending delivery
+      queries. Add uniqueness on `(prId, deduplicationKey)` and
+      `(workspaceId, deduplicationKey)` for null-PR control-event deduplication.
+      Use states `PENDING`, `DISPATCHING`, `DELIVERED`, `SUPERSEDED`, and
+      `CANCELLED`. Exhausted transport retries retain a pending frozen group and
+      pause the config; they do not create a sixth receipt state. Explicit
+      resume clears the recoverable pause and resets exhausted attempt counts in
+      the same transaction, preserving the frozen delivery ID, text, members and
+      original receipt identity.
 - [ ] **Implement sole-writer operations and atomic acceptance.** Add a nullable
-      validated observation baseline and transition sequence to each PR. The
+      validated observation baseline, observation epoch and transition sequence
+      to each PR. Include the monitoring epoch in all deduplication keys and
+      seed currently actionable facts on first acceptance in a new epoch. The
       existing PR accessor owns their writes. It composes sibling event resource
       transaction helpers so accepted cache + baseline + event inserts commit
       together. Rejected revisions insert nothing. Claims freeze the exact
@@ -240,19 +245,22 @@ present in this worktree; stage only task-owned changes.
       once after enable or attachment. Cancel obsolete pending events, never
       alter delivered history. Review feedback can emit while CI is pending.
       Initial green and ordinary PR conversation comments emit nothing. Terminal
-      PRs cancel their pending fixes but can retain one terminal information
-      event.
+      PRs cancel their pending fixes and preserve one final terminal information
+      event; dispatch revalidation exempts the terminal notice while still
+      cancelling stale fix events and notices for detached PRs.
 - [ ] **Implement the formatter and persist frozen delivery text.** Include
       exact PR/repository/head/branch, observation time, changed facts, and
-      links. Escape review JSON as the old prompt does and identify it as
-      untrusted. Start enable controls with the spec's short keep-the-PRs-moving
-      instruction plus the current reply policy; later messages carry changed
-      facts. Use a 16,384 UTF-8 byte application cap, reserving space for
-      marker, identity, links, and an explicit omitted-count notice. Truncate
-      whole feedback/check items first, preserving Unicode boundaries and every
-      member event ID in the ledger; large bodies can be inspected via their
-      links. This cap is a new application bound, not a claim about provider
-      limits.
+      links. Escape every GitHub-controlled header and feedback field, including
+      branch names, and identify that content as untrusted. Include a bounded
+      check summary for CI recovery as well as failure. Start enable controls
+      with the spec's short keep-the-PRs-moving instruction plus the current
+      reply policy; later messages carry changed facts. Use a 16,384 UTF-8 byte
+      application cap, reserving space for marker, identity, links, and an
+      explicit omitted-count notice. Enforce the same UTF-8 byte cap on restored
+      frozen delivery text. Truncate whole feedback/check items first,
+      preserving Unicode boundaries and every member event ID in the ledger;
+      large bodies can be inspected via their links. This cap is a new
+      application bound, not a claim about provider limits.
 - [ ] **Apply the latest trusted reply policy on review-feedback batches.** A
       preference change takes effect at the next review delivery, with a short
       policy line rather than repeating the enable workflow instruction.
@@ -321,7 +329,10 @@ present in this worktree; stage only task-owned changes.
       missing identity, failed load, or unsupported load before `newSession`.
       Propagate the option through lifecycle composition; an already-running
       conversation uses its existing client. Ordinary user-requested rollover
-      retains its existing behavior.
+      retains its existing behavior, preserving the old provider identity and
+      transcript until any uncertain PR deliveries have been receipt-reconciled.
+      Closing/deleting the recipient persists that identity before removing the
+      live row; a new binding must not inherit an unreconciled frozen send.
 - [ ] **Implement receipt-aware failure/recovery.** Confirm a delivery on normal
       prompt completion or an exact marker in provider-owned history. Local
       optimistic transcript commits alone are not evidence. Preserve the frozen
@@ -330,7 +341,9 @@ present in this worktree; stage only task-owned changes.
       transport error until explicit recovery. Stop generation changes leave
       durable work pending and cannot schedule another send. A retry group
       retains its original members; newly observed events wait for a subsequent
-      group rather than changing the provider-visible marker/text.
+      group rather than changing the provider-visible marker/text. Explicit
+      resume atomically renews exhausted retries with pause clearing while
+      retaining the frozen group and reconciling its original receipt identity.
 - [ ] **Run all focused tests, including existing parent/child notification
       regressions and normal user startup fallback; expect success.** Commit
       with subject `Deliver PR updates through the existing session queue`.
@@ -510,9 +523,12 @@ present in this worktree; stage only task-owned changes.
       active ordinary chat session ID when enabling there. Workspace controls
       use the saved binding/sole candidate, opening
       `ConfirmDialog`/`AlertDialog` based selection for multiple candidates.
-      Show the saved recipient and why delivery is blocked. Replace fixer
-      descriptions/provider/permission controls with queued-PR-update copy,
-      retaining enable/review/reply preferences.
+      Keep the mutation and recipient dialog mounted outside mobile dropdown
+      content so closing the menu cannot discard the selection response. Clear
+      an exhausted selection on mutation error so a fresh attempt reloads its
+      binding revision. Show the saved recipient and why delivery is blocked.
+      Replace fixer descriptions/provider/permission controls with
+      queued-PR-update copy, retaining enable/review/reply preferences.
 - [ ] **Implement settings migration and remove obsolete fields.** Copy
       auto-iteration permissions before dropping the shared old permission
       column. Drop separate ratchet provider selectors and old fixer
@@ -526,12 +542,14 @@ present in this worktree; stage only task-owned changes.
       durable delivery metadata and markers on startup/reconnect; update one
       card per delivery rather than append one each poll. Preserve snapshot
       worker retries, stale-read invalidation, and archive suppression.
-      Permission/plan/ question/lifecycle status wins; queued/watching
-      monitoring is working, needs-recipient/paused/error and
-      delivered-but-still-red facts are waiting. Remove `RATCHET_STALLED` and
-      fixer-outcome inputs. An old failed check alone must not claim that the
-      agent is fixing it. Keep aggregate PR/CI/conflict and multi-PR archive
-      calculations independent of selected chat tabs.
+      Permission/plan/question/lifecycle status wins; an active session turn is
+      working. Queued/watching monitoring alone does not establish an active
+      turn: queued delivery, the compatibility `CHECKING_PR` fallback,
+      needs-recipient/paused/error and delivered-but-still-red facts are
+      waiting. Remove `RATCHET_STALLED` and fixer-outcome inputs. An old failed
+      check alone must not claim that the agent is fixing it. Keep aggregate
+      PR/CI/conflict and multi-PR archive calculations independent of selected
+      chat tabs.
 - [ ] **Run UI/settings/status/snapshot tests and visually verify desktop,
       mobile, keyboard focus, truncation, and scroll.** Commit with subject
       `Show PR event delivery in chat and workspace controls`.

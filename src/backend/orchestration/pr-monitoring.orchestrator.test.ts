@@ -63,6 +63,7 @@ it('binds the unique ordinary conversation and emits one trusted enable control'
     enabled: true,
     expectedBindingRevision: 2,
     recipientSessionId: 'a',
+    replyToPrComments: false,
   });
   expect(mocks.control).toHaveBeenCalledExactlyOnceWith('w', 3, false);
   expect(mocks.invalidate).toHaveBeenCalledExactlyOnceWith('w', 2);
@@ -88,5 +89,18 @@ it('binds the issue-start conversation explicitly rather than choosing a recent 
     enabled: true,
     expectedBindingRevision: 2,
     recipientSessionId: 'a',
+    replyToPrComments: false,
   });
+});
+
+it('repairs a missing enable control when the same enabled binding is retried', async () => {
+  mocks.get.mockResolvedValue({ enabled: true, recipientSessionId: 'a', bindingRevision: 3 });
+  mocks.setBinding.mockResolvedValue({ applied: true, bindingRevision: 3 });
+  await setPRMonitoring({
+    workspaceId: 'w',
+    enabled: true,
+    recipientSessionId: 'a',
+    expectedBindingRevision: 3,
+  });
+  expect(mocks.control).toHaveBeenCalledExactlyOnceWith('w', 3, false);
 });

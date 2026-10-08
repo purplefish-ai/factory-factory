@@ -1,32 +1,30 @@
 import { randomUUID } from 'node:crypto';
 import { buildPREventMessage } from '@/backend/prompts/pr-event';
 import { createLogger } from '@/backend/services/logger.service';
-import { RATCHET_DISPATCH_CHANGED, ratchetService } from '@/backend/services/ratchet';
-import {
-  acpRuntimeManager,
-  chatMessageHandlerService,
-  findPRDeliveryReceipt,
-  type PRBackgroundDeliveryPort,
-  sessionBackgroundDeliveryService,
-  sessionDataService,
-  sessionDomainService,
-} from '@/backend/services/session';
-import { userSettingsService } from '@/backend/services/settings';
-import {
-  workspacePRMonitoringService,
-  workspacePrSnapshotService,
-} from '@/backend/services/workspace';
-import {
-  type ClaimedPRDelivery,
-  isPRMonitoringRecipient,
-  type PRDeliveryRequest,
-} from '@/shared/pr-monitoring';
+import type { PRBackgroundDeliveryPort } from '@/backend/services/session';
+import { isPRMonitoringRecipient, type PRDeliveryRequest } from '@/shared/pr-monitoring';
 import { prMonitoringEventPayloadSchema } from '@/shared/schemas/pr-event.schema';
+import { recoverPRDeliveries } from './pr-delivery-recovery';
+import {
+  defaultPRMonitoringServices,
+  type PRMonitoringServices,
+} from './pr-monitoring-dependencies';
 import { observeMonitoredPR, recipientCanDispatch } from './pr-observation.orchestrator';
 
 const logger = createLogger('pr-event-delivery');
 
-async function guard(sessionId: string, request: PRDeliveryRequest) {
+export async function guardPRDelivery(
+  sessionId: string,
+  request: PRDeliveryRequest,
+  services: PRMonitoringServices
+) {
+  const {
+    workspacePRMonitoringService,
+    sessionDataService,
+    sessionDomainService,
+    acpRuntimeManager,
+    workspacePrSnapshotService,
+  } = services;
   const [config, session] = await Promise.all([
     workspacePRMonitoringService.get(request.workspaceId),
     sessionDataService.findAgentSessionById(sessionId),
@@ -46,7 +44,7 @@ async function guard(sessionId: string, request: PRDeliveryRequest) {
     config.deliveryPauseReason ||
     sessionDomainService.getPendingInteractiveRequest(sessionId) ||
     acpRuntimeManager.isSessionWorking(sessionId) ||
-    !(await recipientCanDispatch(request.workspaceId, sessionId))
+    !(await recipientCanDispatch(request.workspaceId, sessionId, services))
   ) {
     return 'blocked';
   }
@@ -59,6 +57,11 @@ async function guard(sessionId: string, request: PRDeliveryRequest) {
   ) {
     return 'discard';
   }
+  const finalRecipientAllowed = await recipientCanDispatch(
+    request.workspaceId,
+    sessionId,
+    services
+  );
   const [finalConfig, finalSession] = await Promise.all([
     workspacePRMonitoringService.get(request.workspaceId),
     sessionDataService.findAgentSessionById(sessionId),
@@ -67,11 +70,15 @@ async function guard(sessionId: string, request: PRDeliveryRequest) {
     !finalConfig?.enabled ||
     finalConfig.bindingRevision !== request.bindingRevision ||
     finalConfig.recipientSessionId !== sessionId ||
-    finalSession?.workspace.status !== 'READY'
+    !finalSession ||
+    finalSession.workspaceId !== request.workspaceId ||
+    !isPRMonitoringRecipient(finalSession) ||
+    finalSession.workspace.status !== 'READY'
   ) {
     return 'discard';
   }
   if (
+    !finalRecipientAllowed ||
     finalConfig.deliveryPauseReason ||
     sessionDomainService.getPendingInteractiveRequest(sessionId) ||
     acpRuntimeManager.isSessionWorking(sessionId)
@@ -80,27 +87,32 @@ async function guard(sessionId: string, request: PRDeliveryRequest) {
   }
   return 'ready';
 }
-export async function preparePRDelivery({
-  sessionId,
-  request,
-}: {
-  sessionId: string;
-  request: PRDeliveryRequest;
-}): ReturnType<PRBackgroundDeliveryPort['prepare']> {
-  const initialGuard = await guard(sessionId, request);
+export async function preparePRDelivery(
+  {
+    sessionId,
+    request,
+  }: {
+    sessionId: string;
+    request: PRDeliveryRequest;
+  },
+  services: PRMonitoringServices = defaultPRMonitoringServices
+): ReturnType<PRBackgroundDeliveryPort['prepare']> {
+  const { workspacePRMonitoringService, userSettingsService } = services;
+  const initialGuard = await guardPRDelivery(sessionId, request, services);
   if (initialGuard !== 'ready') {
-    return initialGuard === 'discard'
-      ? { status: 'discard' }
-      : { status: 'blocked', reason: 'Recipient is paused or busy' };
+    return blockedGuardResult(initialGuard);
   }
   if (request.prId) {
-    await observeMonitoredPR({ workspaceId: request.workspaceId, prId: request.prId });
+    await observeMonitoredPR(
+      { workspaceId: request.workspaceId, prId: request.prId },
+      undefined,
+      { force: true },
+      services
+    );
   }
-  const finalGuard = await guard(sessionId, request);
+  const finalGuard = await guardPRDelivery(sessionId, request, services);
   if (finalGuard !== 'ready') {
-    return finalGuard === 'discard'
-      ? { status: 'discard' }
-      : { status: 'blocked', reason: 'Recipient is paused or busy' };
+    return blockedGuardResult(finalGuard);
   }
   const pending = await workspacePRMonitoringService.listPending(request.workspaceId, request.prId);
   const first = pending[0];
@@ -114,7 +126,13 @@ export async function preparePRDelivery({
   if (events.some((e) => e.deliverySessionId && e.deliverySessionId !== sessionId)) {
     return { status: 'blocked', reason: 'Previous recipient delivery needs receipt recovery' };
   }
-  if (await pauseExhaustedDelivery(events, request)) {
+  if (!(await validateFrozenRetry(first, sessionId, request, services))) {
+    return {
+      status: 'blocked',
+      reason: 'Frozen PR update belongs to a different or unknown conversation',
+    };
+  }
+  if (await pauseExhaustedDelivery(events, request, services)) {
     return { status: 'blocked', reason: 'PR update transport failed three times' };
   }
   const settings = await userSettingsService.get();
@@ -145,7 +163,15 @@ export async function preparePRDelivery({
   });
   return delivery ? { status: 'ready', delivery } : { status: 'discard' };
 }
-export async function wakePRDelivery(workspaceId: string): Promise<void> {
+export async function wakePRDelivery(
+  workspaceId: string,
+  services: PRMonitoringServices = defaultPRMonitoringServices
+): Promise<void> {
+  const {
+    workspacePRMonitoringService,
+    sessionBackgroundDeliveryService,
+    chatMessageHandlerService,
+  } = services;
   let config = await workspacePRMonitoringService.get(workspaceId);
   if (!(config?.enabled && config.recipientSessionId) || config.deliveryPauseReason) {
     return;
@@ -154,7 +180,7 @@ export async function wakePRDelivery(workspaceId: string): Promise<void> {
   for (const sessionId of new Set(
     previousClaims.map((e) => e.deliverySessionId).filter((id): id is string => !!id)
   )) {
-    await recoverPRDeliveries(sessionId, workspaceId);
+    await recoverPRDeliveries(sessionId, workspaceId, services);
   }
   config = await workspacePRMonitoringService.get(workspaceId);
   if (!(config?.enabled && config.recipientSessionId) || config.deliveryPauseReason) {
@@ -174,102 +200,40 @@ export async function wakePRDelivery(workspaceId: string): Promise<void> {
       .catch((error) => logger.warn('PR queue dispatch deferred', { workspaceId, error }));
   }
 }
-export async function recoverPRDeliveries(sessionId: string, workspaceId?: string) {
-  const session = await sessionDataService.findAgentSessionById(sessionId);
-  const targetWorkspaceId = session?.workspaceId ?? workspaceId;
-  if (!targetWorkspaceId) {
-    return;
+async function validateFrozenRetry(
+  event: PendingPREvent,
+  sessionId: string,
+  request: PRDeliveryRequest,
+  services: PRMonitoringServices
+) {
+  if (!event.deliveryId) {
+    return true;
   }
-  const config = await workspacePRMonitoringService.get(targetWorkspaceId);
-  const events = await workspacePRMonitoringService.listPending(targetWorkspaceId);
-  for (const deliveryId of new Set(
-    events.filter((e) => e.deliverySessionId === sessionId && e.deliveryId).map((e) => e.deliveryId)
-  )) {
-    if (!deliveryId || acpRuntimeManager.isSessionWorking(sessionId)) {
-      continue;
-    }
-    const receipt = await findPRDeliveryReceipt(sessionId, deliveryId);
-    if (receipt === 'unavailable') {
-      if (config && !config.deliveryPauseReason) {
-        await workspacePRMonitoringService.pauseWorkspace(
-          targetWorkspaceId,
-          'RECEIPT_UNAVAILABLE',
-          config.bindingRevision
-        );
-      }
-      continue;
-    }
-    if (receipt === 'absent' && config?.recipientSessionId !== sessionId) {
-      await workspacePRMonitoringService.cancelRecoveredDelivery(deliveryId, sessionId);
-      continue;
-    }
-    await workspacePRMonitoringService.recoverClaim(deliveryId, receipt === 'delivered');
+  const session = await services.sessionDataService.findAgentSessionById(sessionId);
+  if (
+    session &&
+    event.deliveryProviderSessionId &&
+    event.deliveryProvider === session.provider &&
+    event.deliveryProviderSessionId === session.providerSessionId
+  ) {
+    return true;
   }
+  await services.workspacePRMonitoringService.pauseWorkspace(
+    request.workspaceId,
+    'RECEIPT_UNAVAILABLE',
+    request.bindingRevision
+  );
+  return false;
 }
-export const prBackgroundDeliveryPort: PRBackgroundDeliveryPort = {
-  prepare: preparePRDelivery,
-  async validate(delivery: ClaimedPRDelivery) {
-    const events = await workspacePRMonitoringService.listPending(
-      (await sessionDataService.findAgentSessionById(delivery.sessionId))?.workspaceId ?? ''
-    );
-    const event = events.find((e) => e.deliveryId === delivery.deliveryId);
-    return (
-      !!event &&
-      (await guard(delivery.sessionId, {
-        workspaceId: event.workspaceId,
-        prId: event.prId,
-        bindingRevision: delivery.bindingRevision,
-      })) === 'ready'
-    );
-  },
-  async complete(delivery) {
-    await workspacePRMonitoringService.settleDelivery({ ...delivery, result: 'delivered' });
-    const session = await sessionDataService.findAgentSessionById(delivery.sessionId);
-    if (session) {
-      ratchetService.emit(RATCHET_DISPATCH_CHANGED, { workspaceId: session.workspaceId });
-    }
-  },
-  async fail(delivery, error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (
-      message.includes('A turn is already in progress') ||
-      message.includes('human message queued during preparation')
-    ) {
-      await workspacePRMonitoringService.deferBusy(delivery.deliveryId);
-      return;
-    }
-    await workspacePRMonitoringService.settleDelivery({ ...delivery, result: 'retry' });
-    const session = await sessionDataService.findAgentSessionById(delivery.sessionId);
-    if (session && (delivery.attempt >= 3 || message.includes('existing conversation'))) {
-      await workspacePRMonitoringService.pauseWorkspace(
-        session.workspaceId,
-        message.includes('existing conversation') ? 'RESUME_FAILED' : 'DELIVERY_FAILED',
-        delivery.bindingRevision
-      );
-    }
-  },
-  recover: recoverPRDeliveries,
-  async pause(sessionId, reason) {
-    const session = await sessionDataService.findAgentSessionById(sessionId);
-    const config = session ? await workspacePRMonitoringService.get(session.workspaceId) : null;
-    await workspacePRMonitoringService.pause(sessionId, reason);
-    if (session) {
-      ratchetService.emit(RATCHET_DISPATCH_CHANGED, { workspaceId: session.workspaceId });
-    }
-    if (config) {
-      sessionBackgroundDeliveryService.invalidate(config.workspaceId, config.bindingRevision);
-    }
-  },
-  async resume(sessionId) {
-    await workspacePRMonitoringService.resume(sessionId);
-    const session = await sessionDataService.findAgentSessionById(sessionId);
-    if (session) {
-      ratchetService.emit(RATCHET_DISPATCH_CHANGED, { workspaceId: session.workspaceId });
-    }
-  },
-};
-
-async function pauseExhaustedDelivery(events: { attempts: number }[], request: PRDeliveryRequest) {
+type PendingPREvent = Awaited<
+  ReturnType<PRMonitoringServices['workspacePRMonitoringService']['listPending']>
+>[number];
+async function pauseExhaustedDelivery(
+  events: { attempts: number }[],
+  request: PRDeliveryRequest,
+  services: PRMonitoringServices
+) {
+  const { workspacePRMonitoringService } = services;
   if (events.some((e) => e.attempts >= 3)) {
     await workspacePRMonitoringService.pauseWorkspace(
       request.workspaceId,
@@ -282,10 +246,18 @@ async function pauseExhaustedDelivery(events: { attempts: number }[], request: P
 }
 
 function selectDeliveryEvents(
-  pending: Awaited<ReturnType<typeof workspacePRMonitoringService.listPending>>,
-  first: Awaited<ReturnType<typeof workspacePRMonitoringService.listPending>>[number]
+  pending: Awaited<ReturnType<PRMonitoringServices['workspacePRMonitoringService']['listPending']>>,
+  first: Awaited<
+    ReturnType<PRMonitoringServices['workspacePRMonitoringService']['listPending']>
+  >[number]
 ) {
   return first.deliveryId
     ? pending.filter((e) => e.deliveryId === first.deliveryId)
     : pending.filter((e) => !e.deliveryId && e.state === 'PENDING');
+}
+
+function blockedGuardResult(guard: 'discard' | 'blocked') {
+  return guard === 'discard'
+    ? { status: 'discard' as const }
+    : { status: 'blocked' as const, reason: 'Recipient is paused or busy' };
 }

@@ -46,6 +46,13 @@ export const baseWorkspace: WorkspaceWithKanban = {
   prState: 'NONE',
   prCiStatus: 'UNKNOWN',
   ratchetEnabled: true,
+  prMonitoring: {
+    enabled: true,
+    recipientSessionId: null,
+    bindingRevision: 0,
+    pauseReason: null,
+    pendingEventCount: 0,
+  },
   ratchetState: 'IDLE',
   runScriptStatus: 'IDLE',
   githubIssueNumber: null,

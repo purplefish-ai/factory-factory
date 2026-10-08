@@ -198,34 +198,46 @@ class PRSnapshotService extends EventEmitter {
     workspaceId: string,
     explicitPrUrl?: string | null
   ): Promise<PRSnapshotRefreshResult> {
-    const prs = (await this.workspace.listPRs(workspaceId)).filter(
-      (pr) => !explicitPrUrl || pr.url === explicitPrUrl
-    );
-    if (!prs.length) {
-      return { success: false, reason: 'no_pr_url' };
-    }
-    let result: PRSnapshotRefreshResult = { success: false, reason: 'no_pr_url' };
-    let failed: PRSnapshotRefreshResult | undefined;
-    for (const pr of prs) {
-      result = await this.refreshPR({ workspaceId, prId: pr.id });
-      if (!result.success) {
-        failed = result;
+    try {
+      const prs = (await this.workspace.listPRs(workspaceId)).filter(
+        (pr) => !explicitPrUrl || pr.url === explicitPrUrl
+      );
+      if (!prs.length) {
+        return { success: false, reason: 'no_pr_url' };
       }
+      let result: PRSnapshotRefreshResult = { success: false, reason: 'no_pr_url' };
+      let failed: PRSnapshotRefreshResult | undefined;
+      for (const pr of prs) {
+        result = await this.refreshPR({ workspaceId, prId: pr.id });
+        if (!result.success) {
+          failed = result;
+        }
+      }
+      return failed ?? result;
+    } catch (error) {
+      logger.error('Failed to refresh workspace PRs', toError(error), { workspaceId });
+      return { success: false, reason: 'error' };
     }
-    return failed ?? result;
   }
   async attachDiscoveredPRAndRefresh(
     workspaceId: string,
     prUrl: string,
     claim: GitHubPRDiscoveryClaim
   ): Promise<AttachAndRefreshResult> {
-    const ids = await this.workspace.attachDiscoveredPRsIfClaimMatches(workspaceId, claim, [prUrl]);
-    const prId = ids[0];
-    if (!prId) {
-      return { success: false, reason: 'claim_stale' };
+    try {
+      const ids = await this.workspace.attachDiscoveredPRsIfClaimMatches(workspaceId, claim, [
+        prUrl,
+      ]);
+      const prId = ids[0];
+      if (!prId) {
+        return { success: false, reason: 'claim_stale' };
+      }
+      this.emit(PR_URL_ATTACHED, { workspaceId, prId, prUrl } satisfies PRUrlAttachedEvent);
+      return await this.refreshPR({ workspaceId, prId });
+    } catch (error) {
+      logger.error('Failed to attach discovered PR', toError(error), { workspaceId, prUrl });
+      return { success: false, reason: 'error' };
     }
-    this.emit(PR_URL_ATTACHED, { workspaceId, prId, prUrl } satisfies PRUrlAttachedEvent);
-    return await this.refreshPR({ workspaceId, prId });
   }
   async attachDiscoveredPRsAndRefresh(
     workspaceId: string,

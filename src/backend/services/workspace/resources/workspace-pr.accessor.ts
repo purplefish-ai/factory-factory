@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { Prisma as PrismaValues } from '@prisma-gen/client';
 import type { Prisma, WorkspacePR } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
 import type {
@@ -91,6 +92,26 @@ export function flattenWorkspacePR(pr: WorkspacePR | null | undefined): Workspac
     prReviewLastCommentId: pr.reviewLastCommentId,
   };
 }
+
+export function selectActiveWorkspacePR<T extends { state: PRState }>(prs: T[]): T | undefined {
+  return prs.find((pr) => pr.state !== 'MERGED' && pr.state !== 'CLOSED') ?? prs[0];
+}
+
+const reattachmentFields = {
+  detachedAt: null,
+  state: 'NONE',
+  number: null,
+  reviewState: null,
+  ciStatus: 'UNKNOWN',
+  hasMergeConflict: false,
+  syncedAt: null,
+  ciFailedAt: null,
+  ciLastNotifiedAt: null,
+  reviewLastCheckedAt: null,
+  reviewLastCommentId: null,
+  observation: PrismaValues.DbNull,
+  revision: { increment: 1 },
+} satisfies Prisma.WorkspacePRUpdateInput;
 
 /** The subset of the PR cache a caller may write in one unconditional update. */
 export type WorkspacePRWriteFields = Partial<WorkspacePRFields>;
@@ -211,6 +232,9 @@ class WorkspacePRAccessor {
         eventEpoch: config.eventEpoch,
         pendingEvents: events.filter((e) => e.state === 'PENDING' && !e.deliveryId),
         deliveredEvents: events.filter((e) => e.state === 'DELIVERED'),
+        inFlightEvents: events.filter(
+          (e) => (e.state === 'DISPATCHING' || e.state === 'PENDING') && Boolean(e.deliveryId)
+        ),
       });
       const updated = await tx.workspacePR.updateMany({
         where: { id: row.id, revision: input.expectedPrRevision, detachedAt: null },
@@ -231,7 +255,11 @@ class WorkspacePRAccessor {
                   actionableReviews: [
                     ...observation.actionableReviews,
                     ...baseline.actionableReviews.filter(
-                      (r) => !observation.actionableReviews.some((c) => c.identity === r.identity)
+                      (r) =>
+                        !(
+                          observation.resolvedReviewIds?.includes(r.identity) ||
+                          observation.actionableReviews.some((c) => c.identity === r.identity)
+                        )
                     ),
                   ],
                 }
@@ -278,7 +306,7 @@ class WorkspacePRAccessor {
         if (existing.detachedAt) {
           await tx.workspacePR.update({
             where: { id: existing.id },
-            data: { detachedAt: null, revision: { increment: 1 } },
+            data: reattachmentFields,
           });
         }
         return { prId: existing.id, created: false, reattached: existing.detachedAt !== null };
@@ -288,12 +316,17 @@ class WorkspacePRAccessor {
       return { prId: pr.id, created: true, reattached: false };
     });
   }
-  async detach(target: WorkspacePRIdentity) {
-    const result = await prisma.workspacePR.updateMany({
-      where: { id: target.prId, workspaceId: target.workspaceId, detachedAt: null },
-      data: { detachedAt: new Date(), revision: { increment: 1 } },
+  detach(target: WorkspacePRIdentity) {
+    return prisma.$transaction(async (tx) => {
+      const result = await tx.workspacePR.updateMany({
+        where: { id: target.prId, workspaceId: target.workspaceId, detachedAt: null },
+        data: { detachedAt: new Date(), revision: { increment: 1 } },
+      });
+      if (result.count) {
+        await workspacePrEventAccessor.cancelForPR(tx, target.prId);
+      }
+      return result.count > 0;
     });
-    return result.count > 0;
   }
   attachDiscoveredPRsIfClaimMatches(workspaceId: string, claim: PRDiscoveryClaim, urls: string[]) {
     return prisma.$transaction(async (tx) => {
@@ -302,7 +335,14 @@ class WorkspacePRAccessor {
       }
       const ids: string[] = [];
       for (const url of urls) {
-        if (await tx.workspacePR.findUnique({ where: { workspaceId_url: { workspaceId, url } } })) {
+        const existing = await tx.workspacePR.findUnique({
+          where: { workspaceId_url: { workspaceId, url } },
+        });
+        if (existing) {
+          if (existing.detachedAt) {
+            await tx.workspacePR.update({ where: { id: existing.id }, data: reattachmentFields });
+            ids.push(existing.id);
+          }
           continue;
         }
         const pr = await tx.workspacePR.create({
@@ -370,18 +410,29 @@ class WorkspacePRAccessor {
     const row = rows[0];
     return { prId: row.id, revision: row.revision, ...flattenWorkspacePR(row) };
   }
-  async write(workspaceId: string, fields: WorkspacePRWriteFields, prId?: string): Promise<void> {
-    await prisma.$transaction((tx) => this.writeInTransaction(tx, workspaceId, fields, prId));
+  async write(
+    workspaceId: string,
+    fields: WorkspacePRWriteFields,
+    prId?: string,
+    expectedRevision?: number
+  ): Promise<void> {
+    await prisma.$transaction((tx) =>
+      this.writeInTransaction(tx, workspaceId, fields, prId, expectedRevision)
+    );
   }
   async writeInTransaction(
     tx: Prisma.TransactionClient,
     workspaceId: string,
     fields: WorkspacePRWriteFields,
-    prId?: string
+    prId?: string,
+    expectedRevision?: number
   ) {
     const row = await this.readAggregate(tx, workspaceId, prId);
     if (!row) {
       throw new Error(`Explicit PR identity required for workspace: ${workspaceId}`);
+    }
+    if (expectedRevision !== undefined && row.revision !== expectedRevision) {
+      return;
     }
     await this.applyAggregateIfUnchanged(tx, workspaceId, row, fields);
   }
@@ -412,9 +463,9 @@ class WorkspacePRAccessor {
   async findPRState(workspaceId: string, prId?: string) {
     const rows = await prisma.workspacePR.findMany({
       where: { workspaceId, detachedAt: null, ...(prId ? { id: prId } : {}) },
-      take: 2,
+      orderBy: { id: 'asc' },
     });
-    const row = rows.length === 1 ? rows[0] : undefined;
+    const row = selectActiveWorkspacePR(rows);
     return row ? { prId: row.id, prUrl: row.url, prNumber: row.number, prState: row.state } : null;
   }
 }

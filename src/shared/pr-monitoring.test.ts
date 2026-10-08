@@ -178,3 +178,47 @@ it('reports a delivered CI failure recovering through pending exactly once', () 
     reduce({ ...success, headSha: 'new-head' }, pending, { deliveredEvents: [failed] }).events
   ).toEqual([]);
 });
+
+it('reports conflict clearance after a frozen in-flight detection', () => {
+  const conflict = { ...redObservation, hasMergeConflict: true };
+  const detected = {
+    ...reduce(conflict).events.find((e) => e.kind === 'CONFLICT_DETECTED')!,
+    id: 'frozen',
+  };
+  expect(
+    reduce(redObservation, conflict, { inFlightEvents: [detected] }).events.map((e) => e.kind)
+  ).toContain('CONFLICT_CLEARED');
+  expect(
+    reduce(redObservation, conflict, { pendingEvents: [detected] }).events.map((e) => e.kind)
+  ).not.toContain('CONFLICT_CLEARED');
+});
+
+it('supersedes explicitly resolved review feedback despite incomplete pagination', () => {
+  const review = {
+    identity: 'comment:123',
+    contentHash: 'hash',
+    author: 'reviewer',
+    body: 'fix',
+    path: null,
+    line: null,
+    url: redObservation.url,
+    activityAt: redObservation.observedAt,
+  };
+  const previous = { ...redObservation, actionableReviews: [review] };
+  const event = {
+    ...reduce(previous).events.find((e) => e.kind === 'REVIEW_FEEDBACK')!,
+    id: 'resolved',
+  };
+  expect(
+    reduce(
+      {
+        ...previous,
+        actionableReviews: [],
+        reviewsComplete: false,
+        resolvedReviewIds: ['comment:123'],
+      },
+      previous,
+      { pendingEvents: [event] }
+    ).supersededEventIds
+  ).toContain('resolved');
+});

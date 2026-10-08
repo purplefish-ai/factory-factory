@@ -202,6 +202,8 @@ export const WorkspacePREventScalarFieldEnum = {
   attempts: 'attempts',
   deliveryId: 'deliveryId',
   deliverySessionId: 'deliverySessionId',
+  deliveryProvider: 'deliveryProvider',
+  deliveryProviderSessionId: 'deliveryProviderSessionId',
   deliveryBindingRevision: 'deliveryBindingRevision',
   deliveryText: 'deliveryText',
   claimedAt: 'claimedAt',

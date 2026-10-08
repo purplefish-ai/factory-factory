@@ -346,6 +346,8 @@ model WorkspacePREvent {
   attempts Int @default(0)
   deliveryId String?
   deliverySessionId String?
+  deliveryProvider String?
+  deliveryProviderSessionId String?
   deliveryBindingRevision Int?
   deliveryText String?
   claimedAt DateTime?
@@ -545,6 +547,7 @@ model ClosedSession {
 
   @@index([workspaceId])
   @@index([completedAt])
+  @@index([sessionId, completedAt])
 }
 
 model UserSettings {

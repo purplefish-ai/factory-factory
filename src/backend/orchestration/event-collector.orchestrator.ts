@@ -299,6 +299,7 @@ class EventCollectorState {
   linearMergeCompletions = new Map<string, Pick<PRSnapshotUpdatedEvent, 'prNumber' | 'prUrl'>>();
   teardownListeners: Array<() => void> = [];
   ratchetProjection: RatchetProjectionWorker | null = null;
+  prProjection: RatchetProjectionWorker | null = null;
 
   constructor(readonly dependencies: Readonly<EventCollectorDependencies>) {
     this.logger = dependencies.createLogger('event-collector');
@@ -525,6 +526,38 @@ function startEventCollectorWithState(state: EventCollectorState): void {
     logger: state.logger,
   });
   state.ratchetProjection = ratchetProjection;
+  const prProjection = new RatchetProjectionWorker({
+    read: async (workspaceId) => {
+      const [workspace, projection] = await Promise.all([
+        dependencies.workspaceDataService.findById(workspaceId),
+        dependencies.workspaceDataService.findRatchetProjection(workspaceId),
+      ]);
+      return workspace && projection
+        ? {
+            ...projection,
+            snapshotFields: {
+              prUrl: workspace.prUrl,
+              prNumber: workspace.prNumber,
+              prState: workspace.prState,
+              prCiStatus: workspace.prCiStatus,
+              prUpdatedAt: workspace.prUpdatedAt?.toISOString() ?? null,
+            },
+          }
+        : null;
+    },
+    publish: (workspaceId, fields) => {
+      coalescer.enqueue(workspaceId, fields, 'projection:pr_authoritative', { immediate: true });
+      // A merged sibling is not workspace completion while the selected PR is open.
+      if (fields.prState === 'MERGED' && fields.prNumber != null) {
+        void handleLinearIssueCompletedOnMerge(state, workspaceId, {
+          prNumber: fields.prNumber,
+          prUrl: fields.prUrl,
+        });
+      }
+    },
+    logger: state.logger,
+  });
+  state.prProjection = prProjection;
   state.lastIdlePrRefreshByWorkspace.clear();
 
   const refreshPrSnapshotOnIdle = (workspaceId: string): void => {
@@ -570,6 +603,7 @@ function startEventCollectorWithState(state: EventCollectorState): void {
   const workspaceStateChangedHandler = (event: WorkspaceStateChangedEvent) => {
     if (event.toStatus === 'ARCHIVED') {
       ratchetProjection.setArchived(event.workspaceId, true);
+      prProjection.setArchived(event.workspaceId, true);
       // Immediate removal for UI feedback -- no coalescing delay
       removeWorkspaceWithState(state, event.workspaceId);
       void Promise.allSettled([
@@ -599,6 +633,7 @@ function startEventCollectorWithState(state: EventCollectorState): void {
       return;
     }
     ratchetProjection.setArchived(event.workspaceId, false);
+    prProjection.setArchived(event.workspaceId, false);
     coalescer.enqueue(
       event.workspaceId,
       buildWorkspaceStateChangeFields(event),
@@ -613,6 +648,10 @@ function startEventCollectorWithState(state: EventCollectorState): void {
 
   // 2. PR snapshot updates
   const prSnapshotUpdatedHandler = (event: PRSnapshotUpdatedEvent) => {
+    if (event.prId) {
+      prProjection.request(event.workspaceId);
+      return;
+    }
     const previousSnapshot = dependencies.workspaceSnapshotStore.getByWorkspaceId(
       event.workspaceId
     );
@@ -670,6 +709,10 @@ function startEventCollectorWithState(state: EventCollectorState): void {
   );
 
   const prUrlAttachedHandler = (event: PRUrlAttachedEvent) => {
+    if (event.prId) {
+      prProjection.request(event.workspaceId);
+      return;
+    }
     // No snapshot was fetched for this URL. Publish its neutral cache and drop
     // the old PR's projection before any subscriber can archive it as merged.
     coalescer.enqueue(
@@ -882,6 +925,8 @@ function stopEventCollectorWithState(state: EventCollectorState): void {
   }
   state.ratchetProjection?.stop();
   state.ratchetProjection = null;
+  state.prProjection?.stop();
+  state.prProjection = null;
 
   if (state.activeCoalescer) {
     state.activeCoalescer.flushAll();

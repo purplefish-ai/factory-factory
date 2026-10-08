@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SessionStatus } from '@/shared/core';
+import { sessionBackgroundDeliveryService } from './session-background-delivery.service';
 import { createLifecycleTestSession } from './session-lifecycle.test-helpers';
 import { SessionRuntimeExitCoordinator } from './session-runtime-exit.coordinator';
 
@@ -413,4 +414,21 @@ describe('SessionRuntimeExitCoordinator', () => {
 
     expect(mockTraceClose).toHaveBeenCalledWith('session-1');
   });
+});
+
+it('finalizes a failed runtime even when delivery fencing fails', async () => {
+  const pause = vi
+    .spyOn(sessionBackgroundDeliveryService, 'runtimeFailure')
+    .mockRejectedValue(new Error('database unavailable'));
+  const harness = createExitCoordinatorHarness();
+  try {
+    await expect(harness.coordinator.handleExit(runtimeExit())).resolves.toBeUndefined();
+    expect(harness.repository.updateSession).toHaveBeenCalledWith('session-1', {
+      status: SessionStatus.FAILED,
+    });
+    expect(harness.workflowFinalizer.finalizeRuntimeExit).toHaveBeenCalled();
+    expect(harness.permission.cancelPendingRequests).toHaveBeenCalledWith('session-1');
+  } finally {
+    pause.mockRestore();
+  }
 });

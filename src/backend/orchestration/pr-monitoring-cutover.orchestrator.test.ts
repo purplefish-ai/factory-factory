@@ -1,4 +1,4 @@
-import { expect, it, vi } from 'vitest';
+import { beforeEach, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   configs: vi.fn(),
@@ -26,6 +26,7 @@ vi.mock('@/backend/services/session', () => ({
 }));
 
 import { retireLegacyRatchetSessions } from './pr-monitoring-cutover.orchestrator';
+beforeEach(() => mocks.pause.mockResolvedValue({ count: 1 }));
 
 it('retires only legacy fixers after confirming their closed transcripts', async () => {
   mocks.configs.mockResolvedValue([{ workspaceId: 'w', bindingRevision: 3 }]);
@@ -38,7 +39,34 @@ it('retires only legacy fixers after confirming their closed transcripts', async
   const result = await retireLegacyRatchetSessions();
   expect(mocks.stop).toHaveBeenCalledExactlyOnceWith('fixer', expect.anything());
   expect(result).toEqual({ retired: 1, blockedWorkspaceIds: [] });
-  expect(mocks.retired).toHaveBeenCalledExactlyOnceWith('w');
+  expect(mocks.retired).toHaveBeenCalledExactlyOnceWith('w', 4);
+});
+it('persists a fence when exact legacy transcripts are missing without live fixers', async () => {
+  mocks.configs.mockResolvedValue([
+    { workspaceId: 'w', bindingRevision: 3, legacySessionIds: ['gone'] },
+  ]);
+  mocks.sessions.mockResolvedValue([]);
+  mocks.closed.mockResolvedValue([]);
+  expect((await retireLegacyRatchetSessions()).blockedWorkspaceIds).toEqual(['w']);
+  expect(mocks.pause).toHaveBeenCalledWith('w', 'LEGACY_FIXER', 3);
+});
+it('does not retire on a lost fence CAS', async () => {
+  mocks.configs.mockResolvedValue([{ workspaceId: 'w', bindingRevision: 3 }]);
+  mocks.sessions.mockResolvedValue([{ id: 'fixer', workflow: 'ratchet' }]);
+  mocks.pause.mockResolvedValue({ count: 0 });
+  expect((await retireLegacyRatchetSessions()).blockedWorkspaceIds).toEqual(['w']);
+  expect(mocks.stop).not.toHaveBeenCalled();
+  expect(mocks.retired).not.toHaveBeenCalled();
+});
+it('isolates corrupt retention metadata to the affected workspace', async () => {
+  mocks.configs.mockResolvedValue([
+    { workspaceId: 'bad', bindingRevision: 3, legacySessionIds: { bad: true } },
+    { workspaceId: 'good', bindingRevision: 0, legacySessionIds: [] },
+  ]);
+  mocks.sessions.mockResolvedValue([]);
+  expect(await retireLegacyRatchetSessions()).toEqual({ retired: 0, blockedWorkspaceIds: ['bad'] });
+  expect(mocks.pause).toHaveBeenCalledWith('bad', 'LEGACY_FIXER', 3);
+  expect(mocks.retired).toHaveBeenCalledWith('good', 0);
 });
 it('keeps delivery blocked when a legacy transcript was not retained', async () => {
   mocks.configs.mockResolvedValue([{ workspaceId: 'w', bindingRevision: 3 }]);

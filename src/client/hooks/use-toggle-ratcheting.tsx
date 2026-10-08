@@ -33,7 +33,10 @@ export function useToggleRatcheting(projectId: string): UseToggleRatchetingRetur
         setSelection(null);
       }
     },
-    onError: (error) => toast.error(`Failed to update PR monitoring: ${error.message}`),
+    onError: (error) => {
+      setSelection(null);
+      toast.error(`Failed to update PR monitoring: ${error.message}`);
+    },
     onSettled: (_data, _error, input) => {
       utils.workspace.get.invalidate({ id: input.workspaceId });
       utils.workspace.listForProject.invalidate({ projectId });

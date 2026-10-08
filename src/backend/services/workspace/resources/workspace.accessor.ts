@@ -12,6 +12,7 @@ import {
 } from '@/backend/services/workspace/resources/workspace-auto-iteration.accessor';
 import {
   flattenWorkspacePR,
+  selectActiveWorkspacePR,
   type PRAggregateGuard,
   type WorkspacePRFields,
   type WorkspacePRRow,
@@ -21,6 +22,7 @@ import {
 import {
   derivePRCollectionState,
   flattenWorkspaceRatchet,
+  pendingPREventWhere,
   type WorkspaceRatchetFields,
   type WorkspaceRatchetRow,
 } from '@/backend/services/workspace/resources/workspace-ratchet.accessor';
@@ -224,7 +226,7 @@ function prIdentityChanged(
 /** Flatten side-table inputs at the read boundary; Ratchet state is derived, never stored. */
 type Flattened<T> = Omit<
   T,
-  'prMonitoring' | 'prs' | 'prDiscovery' | 'runScript' | 'autoIteration'
+  'prMonitoring' | 'prs' | 'prDiscovery' | 'runScript' | 'autoIteration' | '_count'
 > &
   WorkspaceRatchetFields &
   WorkspacePRFields &
@@ -238,15 +240,13 @@ function flatten<
     prDiscovery?: WorkspacePRDiscovery | null;
     runScript?: WorkspaceRunScriptRow | null;
     autoIteration?: WorkspaceAutoIteration | null;
+    _count?: { prEvents: number };
   },
 >(row: T): Flattened<T> {
-  const { prMonitoring, prs = [], prDiscovery, runScript, autoIteration, ...rest } = row;
+  const { prMonitoring, prs = [], prDiscovery, runScript, autoIteration, _count, ...rest } = row;
   const attachedPRs = prs.filter((pr) => !pr.detachedAt);
-  const pr =
-    attachedPRs.find((pr) => pr.state !== 'MERGED' && pr.state !== 'CLOSED') ??
-    attachedPRs[0] ??
-    null;
-  const ratchetFields = flattenWorkspaceRatchet(prMonitoring);
+  const pr = selectActiveWorkspacePR(attachedPRs) ?? null;
+  const ratchetFields = flattenWorkspaceRatchet(prMonitoring, _count?.prEvents ?? 0);
   const prFields = { ...flattenWorkspacePR(pr), ...flattenPRDiscovery(prDiscovery) };
   return {
     ...rest,
@@ -264,19 +264,14 @@ function flatten<
 /** Included on every read that has to reproduce the old flat workspace shape. */
 const sideTables = {
   prMonitoring: true,
-  prs: true,
+  prs: { where: { detachedAt: null } },
   prDiscovery: true,
   runScript: true,
   autoIteration: true,
+  _count: { select: { prEvents: { where: pendingPREventWhere } } },
 } satisfies Prisma.WorkspaceInclude;
 
-type SideTableInclude = {
-  prMonitoring: true;
-  prs: true;
-  prDiscovery: true;
-  runScript: true;
-  autoIteration: true;
-};
+type SideTableInclude = typeof sideTables;
 
 /** A bare workspace row with its side-table fields flattened on. */
 export type WorkspaceWithRatchet = Flattened<
@@ -303,12 +298,13 @@ export type WorkspaceWithSessions = WorkspaceWithAgentSessions;
  * use. `autoIteration` is here because workspace init branches on `mode` to
  * decide whether to start a default session or leave the loop to manage its own.
  */
-type WorkspaceWithProjectInclude = {
-  project: true;
-  prs: true;
-  prDiscovery: true;
-  autoIteration: true;
-};
+const projectAndPR = {
+  project: true,
+  prs: { where: { detachedAt: null } },
+  prDiscovery: true,
+  autoIteration: true,
+} satisfies Prisma.WorkspaceInclude;
+type WorkspaceWithProjectInclude = typeof projectAndPR;
 
 type WorkspaceWithProject = Omit<
   Prisma.WorkspaceGetPayload<{ include: WorkspaceWithProjectInclude }>,
@@ -322,10 +318,7 @@ function withProjectAndPR(
 ): WorkspaceWithProject {
   const { prs = [], prDiscovery, autoIteration, ...rest } = row;
   const attachedPRs = prs.filter((pr) => !pr.detachedAt);
-  const pr =
-    attachedPRs.find((pr) => pr.state !== 'MERGED' && pr.state !== 'CLOSED') ??
-    attachedPRs[0] ??
-    null;
+  const pr = selectActiveWorkspacePR(attachedPRs) ?? null;
   return {
     ...rest,
     ...flattenWorkspacePR(pr),
@@ -446,7 +439,7 @@ class WorkspaceAccessor {
       select: {
         status: true,
         initCompletedAt: true,
-        prs: { where: { detachedAt: null }, select: { url: true, number: true } },
+        prs: { where: { detachedAt: null }, select: { url: true, number: true, state: true } },
       },
     });
     if (!row) {
@@ -455,17 +448,22 @@ class WorkspaceAccessor {
     return {
       status: row.status,
       initCompletedAt: row.initCompletedAt,
-      prUrl: row.prs[0]?.url ?? null,
-      prNumber: row.prs[0]?.number ?? null,
+      prUrl: selectActiveWorkspacePR(row.prs)?.url ?? null,
+      prNumber: selectActiveWorkspacePR(row.prs)?.number ?? null,
     };
   }
 
   async findPRContext(id: string): Promise<WorkspacePRContext | null> {
     const row = await prisma.workspace.findUnique({
       where: { id },
-      select: { branchName: true, prs: { where: { detachedAt: null }, select: { url: true } } },
+      select: {
+        branchName: true,
+        prs: { where: { detachedAt: null }, select: { url: true, state: true } },
+      },
     });
-    return row ? { branchName: row.branchName, prUrl: row.prs[0]?.url ?? null } : null;
+    return row
+      ? { branchName: row.branchName, prUrl: selectActiveWorkspacePR(row.prs)?.url ?? null }
+      : null;
   }
 
   /**
@@ -750,7 +748,7 @@ class WorkspaceAccessor {
           },
         ],
       },
-      include: { project: true, prs: true, prDiscovery: true, autoIteration: true },
+      include: projectAndPR,
       orderBy: { createdAt: 'asc' },
     });
     return rows.map(withProjectAndPR);
@@ -768,7 +766,7 @@ class WorkspaceAccessor {
         status: 'ARCHIVING',
         updatedAt: { lt: staleThreshold },
       },
-      include: { project: true, prs: true, prDiscovery: true, autoIteration: true },
+      include: projectAndPR,
       orderBy: { updatedAt: 'asc' },
     });
     return rows.map(withProjectAndPR);
@@ -781,7 +779,7 @@ class WorkspaceAccessor {
   async findByIdWithProject(id: string): Promise<WorkspaceWithProject | null> {
     const row = await prisma.workspace.findUnique({
       where: { id },
-      include: { project: true, prs: true, prDiscovery: true, autoIteration: true },
+      include: projectAndPR,
     });
     return row ? withProjectAndPR(row) : null;
   }
@@ -987,7 +985,7 @@ class WorkspaceAccessor {
       where: {
         id: { in: ids },
       },
-      include: { project: true, prs: true, prDiscovery: true, autoIteration: true },
+      include: projectAndPR,
     });
     return rows.map(withProjectAndPR);
   }
@@ -1031,7 +1029,7 @@ class WorkspaceAccessor {
   async findParentWorkspace(childId: string): Promise<WorkspaceWithProject | null> {
     const row = await prisma.workspace.findFirst({
       where: { childWorkspaces: { some: { id: childId } } },
-      include: { project: true, prs: true, prDiscovery: true, autoIteration: true },
+      include: projectAndPR,
     });
     return row ? withProjectAndPR(row) : null;
   }

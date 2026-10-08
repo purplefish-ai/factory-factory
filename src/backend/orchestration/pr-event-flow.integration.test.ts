@@ -39,7 +39,8 @@ vi.mock('@/backend/services/settings', () => ({
   userSettingsService: { get: vi.fn(async () => ({ ratchetReplyToPrComments: true })) },
 }));
 
-import { prBackgroundDeliveryPort, preparePRDelivery } from './pr-event-delivery.orchestrator';
+import { prBackgroundDeliveryPort } from './pr-event-delivery-port';
+import { preparePRDelivery } from './pr-event-delivery.orchestrator';
 
 let db: IntegrationDatabase;
 beforeAll(async () => {
@@ -149,7 +150,7 @@ it('defers a busy main session, then freezes one bounded update and reuses it on
   if (prepared.status !== 'ready') {
     throw new Error('Expected delivery');
   }
-  expect(prepared.delivery.text).toContain('org/repo #2');
+  expect(prepared.delivery.text).toContain('PR update: "org/repo" #2');
   expect(Buffer.byteLength(prepared.delivery.text)).toBeLessThanOrEqual(16_384);
   await prBackgroundDeliveryPort.fail(prepared.delivery, new Error('temporary transport failure'));
   const retry = await preparePRDelivery({ sessionId: 'main', request });

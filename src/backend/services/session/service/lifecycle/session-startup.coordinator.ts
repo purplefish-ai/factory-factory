@@ -111,6 +111,7 @@ export class SessionStartupCoordinator {
         throw new Error(`Session not found: ${sessionId}`);
       }
       this.assertStartupAllowed(sessionId, stopGeneration);
+      this.assertWorkflowCanStart(session);
 
       const existingClient = this.dependencies.runtimeManager.getClient(sessionId);
       if (existingClient) {
@@ -148,6 +149,11 @@ export class SessionStartupCoordinator {
   }
 
   async restartSession(sessionId: string, options?: StartSessionOptions): Promise<void> {
+    const session = await this.dependencies.repository.getSessionById(sessionId);
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+    this.assertWorkflowCanStart(session);
     const isRunning = this.dependencies.runtimeManager.isSessionRunning(sessionId);
     const isStopInProgress = this.dependencies.runtimeManager.isStopInProgress(sessionId);
 
@@ -400,6 +406,7 @@ export class SessionStartupCoordinator {
         return { handle, dispatchableNotificationCount: 0 };
       }
       if (options.resumePolicy === 'require_existing') {
+        this.assertExistingConversation(session, handle, true);
         await restorePRResumeConfig(session, handle, () =>
           this.assertStartupAllowed(sessionId, stopGeneration)
         );
@@ -447,6 +454,9 @@ export class SessionStartupCoordinator {
     });
 
     this.assertStartupAllowed(sessionId, stopGeneration);
+    if (options.resumePolicy === 'require_existing') {
+      return { handle, dispatchableNotificationCount: 0 };
+    }
     const { dispatchableCount } = await this.dependencies.notificationDelivery.recoverPending({
       sessionId,
       workspaceId: sessionContext.workspaceId,
@@ -484,8 +494,12 @@ export class SessionStartupCoordinator {
     dispatchableNotificationCount: number;
   }> {
     this.assertStartupAllowed(sessionId, stopGeneration);
+    this.assertWorkflowCanStart(session);
     const existingAcp = this.dependencies.runtimeManager.getClient(sessionId);
     if (existingAcp) {
+      if (options.resumePolicy === 'require_existing') {
+        this.assertExistingConversation(session, existingAcp, false);
+      }
       if (session.workflow === ADVERSARIAL_REVIEW_WORKFLOW) {
         try {
           await this.dependencies.sessionConfigService.applyConfiguredPermissionPreset(
@@ -580,6 +594,28 @@ export class SessionStartupCoordinator {
         return { handle, resolvedPreset, dispatchableNotificationCount };
       }
     );
+  }
+
+  private assertWorkflowCanStart(session: AgentSessionRecord): void {
+    if (session.workflow === 'ratchet') {
+      throw new Error('Legacy ratchet sessions cannot be started');
+    }
+  }
+
+  private assertExistingConversation(
+    session: AgentSessionRecord,
+    handle: AcpProcessHandle,
+    cold: boolean
+  ): void {
+    if (
+      !session.providerSessionId ||
+      handle.provider !== session.provider ||
+      handle.providerSessionId !== session.providerSessionId ||
+      handle.sessionCreationOutcome.kind === 'resume_fallback' ||
+      (cold && handle.sessionCreationOutcome.kind !== 'resumed')
+    ) {
+      throw new Error('Required existing conversation could not be restored');
+    }
   }
 
   private async dispatchQueuedNotificationsIfNeeded(

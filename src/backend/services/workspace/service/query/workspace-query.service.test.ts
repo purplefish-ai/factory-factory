@@ -145,6 +145,34 @@ describe('WorkspaceQueryService', () => {
     });
   });
 
+  it('returns the durable PR monitoring projection in collection results', async () => {
+    const workspace = {
+      ...makeWorkspaceRow('w-monitoring', null),
+      prMonitoring: {
+        enabled: true,
+        recipientSessionId: 'main',
+        bindingRevision: 4,
+        pauseReason: 'USER_STOPPED',
+        pendingEventCount: 2,
+      },
+    };
+    mockFindByProjectIdWithSessions.mockResolvedValue([workspace]);
+    mockProjectFindById.mockResolvedValue({ id: 'p1', defaultBranch: 'main' });
+    mockGetAllPendingRequests.mockReturnValue(new Map());
+    mockGithubCheckHealth.mockResolvedValue({ isInstalled: false, isAuthenticated: false });
+    mockDeriveWorkspaceRuntimeState.mockReturnValue(defaultRuntimeState(workspace));
+    const result = await workspaceQueryService.listForProject('p1');
+    expect(result.workspaces[0]).toMatchObject({
+      prMonitoring: {
+        enabled: true,
+        recipientSessionId: 'main',
+        bindingRevision: 4,
+        pauseReason: 'USER_STOPPED',
+        pendingEventCount: 2,
+      },
+    });
+  });
+
   it('listForProject applies runtime-derived reasons, newest first', async () => {
     mockFindByProjectIdWithSessions.mockResolvedValue([
       {
@@ -305,10 +333,7 @@ describe('WorkspaceQueryService', () => {
   });
 
   it('treats an alive-but-idle session as working, matching the snapshot store', async () => {
-    // hasWorkingSessionSummary is true for runtimePhase 'running' even when no
-    // prompt is in flight. The snapshot store and reconciliation use that
-    // predicate, so this query must too — a narrower one (prompt-in-flight
-    // only) would report WAITING here while the live board reported WORKING.
+    // Running between prompts must match the live board's WORKING state.
     mockFindByProjectIdWithSessions.mockResolvedValue([
       {
         id: 'w-alive',
@@ -360,10 +385,7 @@ describe('WorkspaceQueryService', () => {
   });
 
   it('findWorkspaceIdsInKanbanColumn matches a column only live session state produces', async () => {
-    // A READY workspace with no PR is WAITING by its persisted fields alone; it
-    // is WORKING only because a session is live. Filtering used to run against
-    // the persisted cachedKanbanColumn in SQL, which dropped this workspace
-    // from the result (and so from bulk archive) before derivation ever ran.
+    // SQL column filtering previously dropped this live WORKING workspace.
     mockFindByProjectIdWithSessions.mockResolvedValue([
       {
         id: 'w-live',
@@ -597,15 +619,7 @@ describe('WorkspaceQueryService', () => {
     expect(mockGithubListReviewRequests).not.toHaveBeenCalled();
   });
 
-  /**
-   * The board's first paint must not wait on git. Computing a worktree's diff
-   * stats costs several `git` spawns, and a project with dozens of live
-   * workspaces used to serialize all of them behind this one query — the
-   * Kanban sat on its loading state for as long as that took. The stats are a
-   * reconciliation field: the snapshot poll recomputes them and streams them
-   * into the very same client cache, so the list serves whatever is already
-   * cached and warms the misses in the background.
-   */
+  // Serve cached stats immediately; reconciliation streams the background warm.
   it('listForProject serves cached git stats without awaiting a recompute', async () => {
     mockProjectFindById.mockResolvedValue({ id: 'p1', defaultBranch: 'main' });
     mockFindByProjectIdWithSessions.mockResolvedValue([

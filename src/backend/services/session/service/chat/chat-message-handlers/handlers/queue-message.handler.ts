@@ -1,3 +1,4 @@
+import { createLogger } from '@/backend/services/logger.service';
 import { validateAttachment } from '@/backend/services/session/service/chat/chat-message-handlers/attachment-processing';
 import type {
   ChatMessageHandler,
@@ -12,6 +13,8 @@ import { sessionDomainService } from '@/backend/services/session/service/session
 import { PR_EVENT_MESSAGE_ID_PREFIX } from '@/shared/pr-monitoring';
 import type { QueueMessageInput } from '@/shared/websocket';
 import { WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX } from '@/shared/workspace-notifications';
+
+const logger = createLogger('chat-message-handlers');
 
 function validateAttachments(attachments: QueueMessageInput['attachments']): string | null {
   if (!attachments?.length) {
@@ -68,7 +71,6 @@ export function createQueueMessageHandler(
       return;
     }
 
-    await sessionBackgroundDeliveryService.userResume(sessionId);
     const messageId = message.id;
     const queuedMsg = buildQueuedMessage(messageId, message, text ?? '');
     const result = sessionDomainService.enqueue(sessionId, queuedMsg);
@@ -83,6 +85,9 @@ export function createQueueMessageHandler(
       buildAcceptedMessageStateChange(messageId, queuedMsg, result.position)
     );
 
+    void sessionBackgroundDeliveryService.userResume(sessionId).catch((error) => {
+      logger.warn('Failed to resume PR delivery after queued human input', { sessionId, error });
+    });
     await deps.tryDispatchNextMessage(sessionId);
   };
 }

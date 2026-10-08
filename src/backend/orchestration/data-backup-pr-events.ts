@@ -65,8 +65,8 @@ export async function restorePRBackupState(
       recipientSessionId: null,
       bindingRevision: 0,
       eventEpoch: workspace.ratchetEnabled ? 1 : 0,
-      deliveryPauseReason: null,
-      legacySessionIds: [],
+      deliveryPauseReason: workspace.ratchetActiveSessionId ? ('LEGACY_FIXER' as const) : null,
+      legacySessionIds: workspace.ratchetActiveSessionId ? [workspace.ratchetActiveSessionId] : [],
       lastCheckedAt: workspace.ratchetLastCheckedAt,
     };
     await workspacePRMonitoringService.restoreConfigBackup(tx, workspace.id, config);

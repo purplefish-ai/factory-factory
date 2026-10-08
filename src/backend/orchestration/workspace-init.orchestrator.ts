@@ -368,6 +368,18 @@ async function resolveInitialAutoMessageContent(
   return null;
 }
 
+async function bindInitialMonitoringSession(workspaceId: string, sessionId: string): Promise<void> {
+  try {
+    await bindIssueMonitoringSession(workspaceId, sessionId);
+  } catch (error) {
+    logger.warn('Failed to bind initial PR monitoring conversation', {
+      workspaceId,
+      sessionId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 async function startDefaultAgentSession(workspaceId: string): Promise<string | null> {
   try {
     const sessions = await sessionDataService.findAgentSessionsByWorkspaceId(workspaceId, {
@@ -421,7 +433,7 @@ async function startDefaultAgentSession(workspaceId: string): Promise<string | n
       );
     }
 
-    await bindIssueMonitoringSession(workspaceId, session.id);
+    await bindInitialMonitoringSession(workspaceId, session.id);
 
     // Trigger queue dispatch after init/session start so messages queued during
     // workspace provisioning are picked up immediately when dispatch is allowed.
@@ -450,6 +462,7 @@ export async function retryQueuedDispatchAfterWorkspaceReady(
   try {
     // Prefer the specific session we just started; it may now be RUNNING.
     if (startedSessionId) {
+      await bindInitialMonitoringSession(workspaceId, startedSessionId);
       await chatMessageHandlerService.tryDispatchNextMessage(startedSessionId);
       return;
     }
@@ -460,6 +473,7 @@ export async function retryQueuedDispatchAfterWorkspaceReady(
     });
     const runningSession = runningSessions[0];
     if (runningSession) {
+      await bindInitialMonitoringSession(workspaceId, runningSession.id);
       await chatMessageHandlerService.tryDispatchNextMessage(runningSession.id);
       return;
     }
@@ -473,6 +487,7 @@ export async function retryQueuedDispatchAfterWorkspaceReady(
       return;
     }
 
+    await bindInitialMonitoringSession(workspaceId, idleSession.id);
     await chatMessageHandlerService.tryDispatchNextMessage(idleSession.id);
   } catch (error) {
     logger.warn('Failed to retry queued dispatch after workspace became ready', {

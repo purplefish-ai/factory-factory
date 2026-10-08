@@ -80,15 +80,8 @@ export class SessionBackgroundDeliveryService {
       this.forgetToken(message.id);
     }
     if (result.status === 'ready') {
-      const originalId = message.id;
-      message.id = `${PR_EVENT_MESSAGE_ID_PREFIX}${result.delivery.deliveryId}`;
       message.text = result.delivery.text;
       this.deliveries.set(message.id, result.delivery);
-      for (const [key, token] of this.tokens) {
-        if (token.messageId === originalId) {
-          this.tokens.set(key, { ...token, messageId: message.id });
-        }
-      }
     }
     return result;
   }
@@ -99,6 +92,14 @@ export class SessionBackgroundDeliveryService {
       }
     }
   }
+  isDeliveryActive(deliveryId: string): boolean {
+    for (const delivery of this.deliveries.values()) {
+      if (delivery.deliveryId === deliveryId) {
+        return true;
+      }
+    }
+    return false;
+  }
   async validate(message: QueuedMessage) {
     const delivery = this.deliveries.get(message.id);
     return !!delivery && !!this.port && (await this.port.validate(delivery));
@@ -106,16 +107,22 @@ export class SessionBackgroundDeliveryService {
   async complete(message: QueuedMessage) {
     const delivery = this.deliveries.get(message.id);
     if (delivery && this.port) {
-      await this.port.complete(delivery);
-      this.deliveries.delete(message.id);
-      this.forgetToken(message.id);
+      try {
+        await this.port.complete(delivery);
+      } finally {
+        this.deliveries.delete(message.id);
+        this.forgetToken(message.id);
+      }
     }
   }
   async fail(message: QueuedMessage, error: unknown) {
     const delivery = this.deliveries.get(message.id);
     if (delivery && this.port) {
-      await this.port.fail(delivery, error);
-      this.deliveries.delete(message.id);
+      try {
+        await this.port.fail(delivery, error);
+      } finally {
+        this.deliveries.delete(message.id);
+      }
     }
   }
   recover(sessionId: string) {
