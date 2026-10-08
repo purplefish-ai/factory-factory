@@ -243,7 +243,7 @@ export class SessionRuntimeExitCoordinator {
     event: AcpRuntimeExitEvent,
     deliberate: boolean
   ): Promise<void> {
-    if (deliberate) {
+    if (deliberate || event.exitCode === 0) {
       return;
     }
 
