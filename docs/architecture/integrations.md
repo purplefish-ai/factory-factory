@@ -17,6 +17,16 @@ casing differs, preserving the existing path and local changes. New clones use
 lowercase owner/repository paths, matching GitHub's case-insensitive names. URL
 validation and the existing non-repository directory guard still apply.
 
+Concurrent imports targeting the same normalized clone path share one in-flight
+clone result. Clone-path inspection waits for that clone to finish before
+classifying the directory, including clones started during directory scans. A
+new clone waits for any active inspection of its destination to finish. Failed
+clones can be retried, and cleanup never removes a completed repository.
+Coordination is in-process and uses lexically resolved paths; filesystem aliases
+such as symlinks to the same directory are not coordinated. Equivalent GitHub
+HTTPS and SSH URLs share a clone, while a different source targeting an
+in-flight destination returns an error without disturbing the active clone.
+
 The New Project authentication badge requires a successful login line and a zero
 exit status from `gh auth status`. Explicit login failures take precedence over
 success lines, including mixed valid/invalid accounts and older CLI versions
