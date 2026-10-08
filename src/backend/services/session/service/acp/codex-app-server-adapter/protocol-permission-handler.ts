@@ -71,6 +71,24 @@ function buildToolUserInputPermissionOptions(
   return mappedOptions;
 }
 
+function resolveQuestionIdForAnswer(
+  questions: ToolUserInputQuestion[],
+  answerKey: string
+): string | undefined {
+  if (questions.some((question) => question.id === answerKey)) {
+    return answerKey;
+  }
+  const matchingIds = new Set(
+    questions
+      .filter((question) => (question.id.trim() || question.question) === answerKey)
+      .map((question) => question.id)
+  );
+  if (matchingIds.size > 1) {
+    throw new Error(`Ambiguous structured answer key: ${answerKey}`);
+  }
+  return matchingIds.values().next().value;
+}
+
 function parseToolUserInputAnswersFromPermissionMeta(params: {
   questions: ToolUserInputQuestion[];
   permission: RequestPermissionResponse;
@@ -88,10 +106,13 @@ function parseToolUserInputAnswersFromPermissionMeta(params: {
     return null;
   }
 
-  const knownQuestionIds = new Set(params.questions.map((question) => question.id));
   const answers: UserInputAnswers = {};
   for (const [questionId, value] of Object.entries(answersRaw)) {
-    if (!knownQuestionIds.has(questionId)) {
+    const rawQuestionId = resolveQuestionIdForAnswer(params.questions, questionId);
+    if (rawQuestionId === undefined) {
+      continue;
+    }
+    if (questionId !== rawQuestionId && Object.hasOwn(answersRaw, rawQuestionId)) {
       continue;
     }
 
@@ -103,7 +124,7 @@ function parseToolUserInputAnswersFromPermissionMeta(params: {
       continue;
     }
 
-    answers[questionId] = { answers: values };
+    answers[rawQuestionId] = { answers: values };
   }
 
   return answers;
@@ -116,6 +137,10 @@ function buildToolUserInputAnswers(params: {
 }): UserInputAnswers {
   if (params.selectedOptionId === null || params.selectedOptionId === 'reject_once') {
     return {};
+  }
+
+  if (new Set(params.questions.map((question) => question.id)).size !== params.questions.length) {
+    throw new Error('Duplicate question IDs in requestUserInput');
   }
 
   const parsedAnswers = parseToolUserInputAnswersFromPermissionMeta({

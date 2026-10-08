@@ -36,9 +36,14 @@ requests present multi-option selection (`allow_once`, `allow_always`,
 handlers. User-question prompts require a non-empty, valid question payload; MCP
 tools retain their raw identity and use normal tool approval even when their
 inputs contain a `questions` array. Free-form provider questions remain
-supported without selection options. Soft cancellation (including voice stop and
-prompt timeout) resolves pending permission requests with a cancelled outcome,
-dismisses their prompts, and keeps the bridge available for later turns.
+supported without selection options. Codex question answers are mapped from the
+composer's trimmed ID or question-text fallback to the original provider ID,
+including empty and whitespace-only IDs. Exact provider IDs take precedence over
+normalized aliases; ambiguous aliases fail instead of assigning an answer to the
+wrong question. Duplicate provider IDs are rejected before answer mapping. Soft
+cancellation (including voice stop and prompt timeout) resolves pending
+permission requests with a cancelled outcome, dismisses their prompts, and keeps
+the bridge available for later turns.
 
 When reapplying read-only permissions to an existing reviewer fails, teardown
 reserves a lifecycle stop to cancel concurrent starts. A cancelled start cannot
