@@ -28,7 +28,10 @@ it('preserves legacy monitoring without inventing a recipient and fences active 
     db = new Database(databasePath);
     db.exec(`INSERT INTO Project(id,name,slug,repoPath,worktreeBasePath,updatedAt) VALUES('project','Project','project','/tmp/repo','/tmp/worktrees',1000);
       INSERT INTO Workspace(id,projectId,name,updatedAt) VALUES('w','project','W',1000);
-      INSERT INTO WorkspaceRatchet(workspaceId,enabled,activeSessionId,lastCheckedAt) VALUES('w',true,'legacy-fixer',1000);`);
+      INSERT INTO WorkspaceRatchet(workspaceId,enabled,activeSessionId,lastCheckedAt) VALUES('w',true,'legacy-fixer',1000);
+      INSERT INTO Workspace(id,projectId,name,updatedAt) VALUES('sole','project','Sole',1000),('ambiguous','project','Ambiguous',1000),('automation','project','Automation',1000);
+      INSERT INTO WorkspaceRatchet(workspaceId,enabled) VALUES('sole',true),('ambiguous',true),('automation',true);
+      INSERT INTO AgentSession(id,workspaceId,workflow,model,provider,updatedAt) VALUES('main','sole','implement','sonnet','CLAUDE',1000),('fixer','sole','ratchet','sonnet','CLAUDE',1000),('a','ambiguous','implement','sonnet','CLAUDE',1000),('b','ambiguous','implement','gpt','CODEX',1000),('auto','automation','auto-iteration','sonnet','CLAUDE',1000);`);
     db.close();
     db = undefined;
     cpSync(join(source, migration), join(migrationsPath, migration), { recursive: true });
@@ -43,7 +46,7 @@ it('preserves legacy monitoring without inventing a recipient and fences active 
     expect(
       db
         .prepare(
-          'SELECT enabled,recipientSessionId,eventEpoch,deliveryPauseReason,lastCheckedAt FROM WorkspacePRMonitoring'
+          "SELECT enabled,recipientSessionId,eventEpoch,deliveryPauseReason,lastCheckedAt FROM WorkspacePRMonitoring WHERE workspaceId='w'"
         )
         .get()
     ).toEqual({
@@ -53,6 +56,17 @@ it('preserves legacy monitoring without inventing a recipient and fences active 
       deliveryPauseReason: 'LEGACY_FIXER',
       lastCheckedAt: 1000,
     });
+    expect(
+      db
+        .prepare(
+          "SELECT workspaceId,recipientSessionId FROM WorkspacePRMonitoring WHERE workspaceId!='w' ORDER BY workspaceId"
+        )
+        .all()
+    ).toEqual([
+      { workspaceId: 'ambiguous', recipientSessionId: null },
+      { workspaceId: 'automation', recipientSessionId: null },
+      { workspaceId: 'sole', recipientSessionId: 'main' },
+    ]);
     expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
   } finally {
     db?.close();

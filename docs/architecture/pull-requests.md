@@ -90,18 +90,29 @@ in the same conversation. A recipient change first recovers old claims; only
 proven absence allows cancelling an old frozen delivery. It never retargets that
 frozen message into a new conversation.
 
+Closing a conversation retains its provider session ID in archived transcript
+metadata. Receipt recovery reads that identity and checks provider-owned
+history, including after another conversation is selected. If history is
+unavailable, restore the provider history files and archived identity, then
+explicitly resume the selected conversation. Local transcript messages cannot
+prove receipt.
+
 Transport attempts stop after three failures. User stop and runtime failure
 persist a pause and invalidate queued requests; explicit user continuation
-clears recoverable pauses. The chat renders PR updates as noneditable cards.
-Snapshots expose enablement, recipient, pause reason and pending count. Queued
-updates, paused delivery, and idle red CI do not imply live agent work.
+clears recoverable pauses and renews the bounded retry allowance while
+preserving the original frozen delivery ID and text. The chat renders PR updates
+as noneditable cards. Snapshots expose enablement, recipient, pause reason and
+pending count. Queued updates, paused delivery, and idle red CI do not imply
+live agent work.
 
 ### Migration and backups
 
 The cutover retains exact legacy fixer IDs and all session/transcript rows,
 retires and archives each legacy fixer, and fences delivery until retention is
 confirmed. It drops old fixer dispatch tables and the Ratchet provider override.
-The former permission default migrates to `autoIterationPermissions` for the
+Existing enabled workspaces bind their sole ordinary conversation during
+migration. Ambiguous workspaces require an explicit recipient selection. The
+former permission default migrates to `autoIterationPermissions` for the
 independent auto-iteration workflow. Main conversation settings remain intact.
 
 Version-6 backups preserve every PR association, normalized observation,

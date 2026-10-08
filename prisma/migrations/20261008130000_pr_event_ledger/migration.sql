@@ -14,6 +14,18 @@ CREATE TABLE "WorkspacePRMonitoring" (
 );
 INSERT INTO "WorkspacePRMonitoring" ("workspaceId", "enabled", "eventEpoch", "lastCheckedAt", "deliveryPauseReason")
  SELECT "workspaceId", "enabled", CASE WHEN "enabled" THEN 1 ELSE 0 END, "lastCheckedAt", CASE WHEN "activeSessionId" IS NOT NULL THEN 'LEGACY_FIXER' ELSE NULL END FROM "WorkspaceRatchet";
+-- Preserve continuity only when the ordinary recipient is unambiguous.
+UPDATE "WorkspacePRMonitoring"
+ SET "recipientSessionId" = (
+   SELECT MIN("id") FROM "AgentSession"
+   WHERE "workspaceId" = "WorkspacePRMonitoring"."workspaceId"
+     AND "workflow" NOT IN ('ratchet', 'auto-iteration', 'adversarial_review')
+ )
+ WHERE "enabled" = true AND (
+   SELECT COUNT(*) FROM "AgentSession"
+   WHERE "workspaceId" = "WorkspacePRMonitoring"."workspaceId"
+     AND "workflow" NOT IN ('ratchet', 'auto-iteration', 'adversarial_review')
+ ) = 1;
 CREATE INDEX "WorkspacePRMonitoring_recipientSessionId_idx" ON "WorkspacePRMonitoring"("recipientSessionId");
 CREATE TABLE "WorkspacePREvent" (
  "id" TEXT NOT NULL PRIMARY KEY, "workspaceId" TEXT NOT NULL, "prId" TEXT,

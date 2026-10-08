@@ -109,14 +109,19 @@ class WorkspacePrMonitoringAccessor {
       },
     });
     for (const config of configs) {
-      await prisma.workspacePRMonitoring.updateMany({
-        where: {
-          workspaceId: config.workspaceId,
-          recipientSessionId: sessionId,
-          bindingRevision: config.bindingRevision,
-          deliveryPauseReason: config.deliveryPauseReason,
-        },
-        data: { deliveryPauseReason: null, bindingRevision: { increment: 1 } },
+      await prisma.$transaction(async (tx) => {
+        const resumed = await tx.workspacePRMonitoring.updateMany({
+          where: {
+            workspaceId: config.workspaceId,
+            recipientSessionId: sessionId,
+            bindingRevision: config.bindingRevision,
+            deliveryPauseReason: config.deliveryPauseReason,
+          },
+          data: { deliveryPauseReason: null, bindingRevision: { increment: 1 } },
+        });
+        if (resumed.count) {
+          await workspacePrEventAccessor.renewRetryAllowance(tx, config.workspaceId);
+        }
       });
     }
   }

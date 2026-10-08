@@ -176,21 +176,31 @@ function addCITransition(
         `CI_FAILED:${current.headSha}:${sequence}:${signature}`
       );
     }
-  } else if (
-    current.ciStatus === 'SUCCESS' &&
-    previous?.ciStatus === 'FAILURE' &&
-    deliveredEvents.some(
-      (e) =>
-        e.kind === 'CI_FAILED' &&
-        e.payload.kind !== 'MONITORING_ENABLED' &&
-        e.payload.observation.headSha === current.headSha
-    )
-  ) {
+  } else if (current.ciStatus === 'SUCCESS') {
+    const failure = deliveredEvents
+      .filter(
+        (e) =>
+          e.kind === 'CI_FAILED' &&
+          e.payload.kind !== 'MONITORING_ENABLED' &&
+          e.payload.observation.headSha === current.headSha
+      )
+      .sort((a, b) => {
+        if (a.payload.kind === 'MONITORING_ENABLED' || b.payload.kind === 'MONITORING_ENABLED') {
+          return 0;
+        }
+        return a.payload.observation.observedAt.localeCompare(b.payload.observation.observedAt);
+      })
+      .at(-1);
+    if (!failure) {
+      return sequence;
+    }
+    const identity = `CI_RECOVERED:${current.headSha}:${failure.deduplicationKey ?? failure.id}`;
+    const key = `${target.prId}:epoch:${input.eventEpoch}:${input.hashIdentity ? input.hashIdentity(identity) : identity}`;
+    if ([...input.pendingEvents, ...deliveredEvents].some((e) => e.deduplicationKey === key)) {
+      return sequence;
+    }
     sequence++;
-    add(
-      { kind: 'CI_RECOVERED', target, observation: current },
-      `CI_RECOVERED:${current.headSha}:${sequence}:${prFailureSignature(previous)}`
-    );
+    add({ kind: 'CI_RECOVERED', target, observation: current }, identity);
   }
   return sequence;
 }

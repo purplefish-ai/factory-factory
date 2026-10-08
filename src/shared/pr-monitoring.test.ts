@@ -163,3 +163,18 @@ it('seeds current failures once per monitoring epoch and distinguishes sibling P
       ?.deduplicationKey
   ).not.toBe(first.deduplicationKey);
 });
+it('reports a delivered CI failure recovering through pending exactly once', () => {
+  const failed = { ...reduce(redObservation).events[0]!, id: 'delivered-failure' };
+  const pending = { ...redObservation, ciStatus: 'PENDING' as const };
+  const success = { ...redObservation, ciStatus: 'SUCCESS' as const };
+  const recovered = reduce(success, pending, { deliveredEvents: [failed] });
+  expect(recovered.events.map((e) => e.kind)).toEqual(['CI_RECOVERED']);
+  const recovery = { ...recovered.events[0]!, id: 'recovered' };
+  expect(
+    reduce(success, success, { deliveredEvents: [failed], pendingEvents: [recovery] }).events
+  ).toEqual([]);
+  expect(reduce(success, success, { deliveredEvents: [failed, recovery] }).events).toEqual([]);
+  expect(
+    reduce({ ...success, headSha: 'new-head' }, pending, { deliveredEvents: [failed] }).events
+  ).toEqual([]);
+});

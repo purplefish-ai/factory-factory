@@ -55,4 +55,19 @@ it('observes every association and wakes the main queue once without creating fi
   expect(mocks.register).toHaveBeenCalledWith(
     expect.objectContaining({ name: 'pr-event-poll', intervalMs: 120_000 })
   );
+  observe.mockClear().mockImplementation((target) => {
+    if (target.prId === 'p1') {
+      return Promise.reject(new Error('Repository is inaccessible'));
+    }
+    return Promise.resolve(true);
+  });
+  wake.mockClear();
+  await ratchetService.checkAllWorkspaces();
+  expect(observe.mock.calls.map((c) => c[0].prId)).toEqual(['p1', 'p2']);
+  expect(wake).toHaveBeenCalledExactlyOnceWith('w');
+  observe.mockClear().mockRejectedValue(new Error('HTTP 429 rate limit'));
+  wake.mockClear();
+  await ratchetService.checkAllWorkspaces();
+  expect(observe).toHaveBeenCalledTimes(1);
+  expect(wake).toHaveBeenCalledExactlyOnceWith('w');
 });

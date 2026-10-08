@@ -156,4 +156,51 @@ describe('durable monitoring', () => {
     await db.prisma.workspace.delete({ where: { id: 'w' } });
     expect(await db.prisma.workspacePREvent.count()).toBe(0);
   });
+  it('renews exhausted retries on explicit resume without changing frozen delivery identity', async () => {
+    await db.prisma.workspacePRMonitoring.create({
+      data: {
+        workspaceId: 'other',
+        enabled: true,
+        recipientSessionId: 'foreign',
+        deliveryPauseReason: 'DELIVERY_FAILED',
+      },
+    });
+    const event = await db.prisma.workspacePREvent.create({
+      data: {
+        workspaceId: 'other',
+        kind: 'MONITORING_ENABLED',
+        deduplicationKey: 'exhausted',
+        payload: {
+          kind: 'MONITORING_ENABLED',
+          workspaceId: 'other',
+          bindingRevision: 0,
+          replyToPrComments: true,
+        },
+        attempts: 3,
+        deliveryId: 'frozen',
+        deliverySessionId: 'foreign',
+        deliveryText: 'exact original text',
+        deliveryBindingRevision: 0,
+      },
+    });
+    await workspacePrMonitoringAccessor.resume('foreign');
+    expect(await db.prisma.workspacePREvent.findUnique({ where: { id: event.id } })).toMatchObject({
+      attempts: 0,
+      state: 'PENDING',
+      deliveryId: 'frozen',
+      deliverySessionId: 'foreign',
+      deliveryText: 'exact original text',
+    });
+    expect(
+      await workspacePrEventAccessor.claimDelivery(
+        { workspaceId: 'other', prId: null, bindingRevision: 1 },
+        {
+          deliveryId: 'frozen',
+          sessionId: 'foreign',
+          eventIds: [event.id],
+          text: 'exact original text',
+        }
+      )
+    ).toMatchObject({ attempt: 1 });
+  });
 });

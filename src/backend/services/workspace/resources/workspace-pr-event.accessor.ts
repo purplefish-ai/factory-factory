@@ -202,6 +202,12 @@ class WorkspacePrEventAccessor {
       data: { state: 'PENDING', attempts: { decrement: 1 } },
     });
   }
+  renewRetryAllowance(tx: Prisma.TransactionClient, workspaceId: string) {
+    return tx.workspacePREvent.updateMany({
+      where: { workspaceId, state: { in: ['PENDING', 'DISPATCHING'] }, attempts: { gte: 3 } },
+      data: { attempts: 0 },
+    });
+  }
   recoverClaim(deliveryId: string, delivered: boolean) {
     return prisma.workspacePREvent.updateMany({
       where: { deliveryId, state: delivered ? { in: ['PENDING', 'DISPATCHING'] } : 'DISPATCHING' },

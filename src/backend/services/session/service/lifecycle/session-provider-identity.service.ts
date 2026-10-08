@@ -53,6 +53,7 @@ export class SessionProviderIdentityService {
           name: session.name,
           workflow: session.workflow,
           provider: session.provider,
+          ...(session.providerSessionId ? { providerSessionId: session.providerSessionId } : {}),
           model: session.model,
           startedAt: session.createdAt,
           messages,

@@ -178,10 +178,7 @@ export class RatchetService extends EventEmitter {
     }
     const run = (async () => {
       try {
-        for (const pr of config.workspace.prs) {
-          signal.throwIfAborted();
-          await bridge.observe({ workspaceId: config.workspaceId, prId: pr.id }, signal);
-        }
+        await this.observeAssociations(config, bridge, signal);
         signal.throwIfAborted();
         await workspacePRMonitoringService.markChecked(config.workspaceId);
         const queued = await workspacePRMonitoringService.listPending(config.workspaceId);
@@ -223,6 +220,30 @@ export class RatchetService extends EventEmitter {
     })();
     this.checking.set(config.workspaceId, run);
     return run;
+  }
+  private async observeAssociations(
+    config: Awaited<ReturnType<typeof workspacePRMonitoringService.listEnabled>>[number],
+    bridge: MonitoringBridge,
+    signal: AbortSignal
+  ) {
+    for (const pr of config.workspace.prs) {
+      signal.throwIfAborted();
+      try {
+        await bridge.observe({ workspaceId: config.workspaceId, prId: pr.id }, signal);
+      } catch (error) {
+        signal.throwIfAborted();
+        const rateLimited = this.backoff.handleError(
+          error,
+          logger,
+          'PR monitoring',
+          { workspaceId: config.workspaceId, prUrl: pr.url },
+          SERVICE_INTERVAL_MS.ratchetPoll
+        );
+        if (rateLimited) {
+          break;
+        }
+      }
+    }
   }
   private emitStateChange(
     workspaceId: string,
