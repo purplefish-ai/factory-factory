@@ -149,8 +149,9 @@ Each task was committed atomically:
 
 - **Found during:** Task 1
 - **Issue:** Old registry.ts shim created its own `new ProcessRegistry()`
-  instance while new process.ts imported `processRegistry` from new registry.ts
-  -- two separate Map instances would cause registration/lookup to fail
+  instance while new process.ts imported `processRegistry` from new
+  registry.ts -- two separate Map instances would cause registration/lookup to
+  fail
 - **Fix:** Updated old registry.ts shim to import and use `processRegistry` from
   the new location instead of creating a private instance
 - **Files modified:** src/backend/claude/registry.ts,

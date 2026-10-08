@@ -1,6 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { fn } from 'storybook/test';
-
 import type { MessageAttachment } from '@/lib/chat-protocol';
 import { AttachmentPreview } from './attachment-preview';
 

@@ -1,16 +1,16 @@
 import { createLogger } from '@/backend/services/logger.service';
 import type { RatchetState } from '@/shared/core';
+import {
+  buildFailedCheckDiagnostics,
+  buildReviewTimestampDiagnostics,
+  buildSnapshotDiagnostics,
+} from './ratchet-pr-state.helpers';
 import type {
   PRStateInfo,
   RatchetAction,
   RatchetDecisionContext,
   WorkspaceWithPR,
 } from './ratchet.types';
-import {
-  buildFailedCheckDiagnostics,
-  buildReviewTimestampDiagnostics,
-  buildSnapshotDiagnostics,
-} from './ratchet-pr-state.helpers';
 
 const logger = createLogger('ratchet');
 

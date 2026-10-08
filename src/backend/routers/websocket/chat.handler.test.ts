@@ -9,12 +9,12 @@ import type { WebSocket, WebSocketServer } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
 import { SessionEventBus, sessionEventBus } from '@/backend/services/session';
-import { createChatUpgradeHandler } from './chat.handler';
 import {
   type ChatConnectionRegistry,
   disposeChatTransportForApplication,
   getChatConnectionRegistryForApplication,
 } from './chat-connection-registry';
+import { createChatUpgradeHandler } from './chat.handler';
 
 const allowedOrigin = 'http://localhost:3000';
 const testApplications = new Set<AppContext>();

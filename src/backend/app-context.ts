@@ -27,12 +27,12 @@ import {
   persistChildNotification,
   persistParentNotification,
 } from './orchestration/workspace-children.orchestrator';
+import { executeStartupScriptPipeline } from './orchestration/workspace-init-script-pipeline';
 import {
   initializeWorkspaceWorktree,
   recoverStaleProvisioningWorkspace,
   retryQueuedDispatchAfterWorkspaceReady,
 } from './orchestration/workspace-init.orchestrator';
-import { executeStartupScriptPipeline } from './orchestration/workspace-init-script-pipeline';
 import { deliverWorkspaceNotification } from './orchestration/workspace-notification-delivery.orchestrator';
 import { getQuickAction, listQuickActions } from './prompts/quick-actions';
 import { autoIterationService, insightsService, logbookService } from './services/auto-iteration';

@@ -8,11 +8,9 @@ import {
 } from '@phosphor-icons/react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
-
 import { trpc } from '@/client/lib/trpc';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
-
 import { FileChangeItem, type FileChangeKind } from './file-change-item';
 import { useWorkspacePanel } from './workspace-panel-context';
 

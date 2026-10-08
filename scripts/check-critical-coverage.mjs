@@ -76,7 +76,10 @@ const perFileThresholds = [
   { file: 'src/backend/services/run-script/service/startup-script.service.ts', threshold: 75 },
   { file: 'src/backend/services/run-script/service/run-script.service.ts', threshold: 50 },
   { file: 'src/backend/services/run-script/service/run-script-proxy.service.ts', threshold: 70 },
-  { file: 'src/backend/services/workspace/service/query/workspace-query.service.ts', threshold: 85 },
+  {
+    file: 'src/backend/services/workspace/service/query/workspace-query.service.ts',
+    threshold: 85,
+  },
   { file: 'src/backend/services/session/service/session-domain.service.ts', threshold: 90 },
   { file: 'src/backend/trpc/workspace/init.trpc.ts', threshold: 85 },
   { file: 'src/backend/trpc/workspace/ide.trpc.ts', threshold: 90 },
@@ -119,7 +122,9 @@ for (const group of groups) {
   const ok = pct >= group.threshold;
 
   const status = ok ? 'PASS' : 'FAIL';
-  console.log(`[coverage] ${status} ${group.name}: ${formatPct(pct)} (threshold ${group.threshold}%)`);
+  console.log(
+    `[coverage] ${status} ${group.name}: ${formatPct(pct)} (threshold ${group.threshold}%)`
+  );
 
   if (!ok) {
     hasFailure = true;
@@ -131,7 +136,9 @@ for (const item of perFileThresholds) {
   const pct = entry.lines.pct;
   const ok = pct >= item.threshold;
   const status = ok ? 'PASS' : 'FAIL';
-  console.log(`[coverage] ${status} ${item.file}: ${formatPct(pct)} (threshold ${item.threshold}%)`);
+  console.log(
+    `[coverage] ${status} ${item.file}: ${formatPct(pct)} (threshold ${item.threshold}%)`
+  );
 
   if (!ok) {
     hasFailure = true;

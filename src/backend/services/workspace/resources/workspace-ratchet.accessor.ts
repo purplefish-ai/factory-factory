@@ -7,8 +7,8 @@ import type {
 import { prisma } from '@/backend/db';
 import { type CIStatus, deriveRatchetState, type PRState, type RatchetState } from '@/shared/core';
 import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
-import { flattenWorkspacePR, serializeWorkspacePR } from './workspace-pr.accessor';
 import { type PRDispatchGuard, workspacePrRatchetAccessor } from './workspace-pr-ratchet.accessor';
+import { flattenWorkspacePR, serializeWorkspacePR } from './workspace-pr.accessor';
 
 export interface WorkspaceRatchetFields {
   ratchetEnabled: boolean;

@@ -1,4 +1,4 @@
-import { WorkspacePullRequestSchema } from '@/shared/workspace-pr';
+import { z } from 'zod';
 /**
  * Shared schema for export/import data validation.
  *
@@ -8,8 +8,6 @@ import { WorkspacePullRequestSchema } from '@/shared/workspace-pr';
  * Note: Uses string enums instead of Prisma enums to avoid pulling
  * Prisma client into the browser bundle.
  */
-
-import { z } from 'zod';
 import {
   CIStatus as CoreCIStatus,
   IssueProvider as CoreIssueProvider,
@@ -39,6 +37,7 @@ import {
   VOICE_UTTERANCE_END_MS_MAX,
   VOICE_UTTERANCE_END_MS_MIN,
 } from '@/shared/voice-vad';
+import { WorkspacePullRequestSchema } from '@/shared/workspace-pr';
 import { autoIterationConfigSchema } from './auto-iteration.schema';
 import { validateBackupPRs } from './export-data-pr-validation';
 

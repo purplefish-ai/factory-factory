@@ -215,9 +215,8 @@ echo "version=$VERSION" >> "$GITHUB_OUTPUT"
     expect(recordFinalizationStep.if).toBe(
       githubExpression("github.event_name == 'workflow_dispatch'")
     );
-    expect(
-      recordFinalizationStep.run
-    ).toBe(`echo "After npm approval, finalize this package with:" >> "$GITHUB_STEP_SUMMARY"
+    expect(recordFinalizationStep.run)
+      .toBe(`echo "After npm approval, finalize this package with:" >> "$GITHUB_STEP_SUMMARY"
 echo "staging_run_id: $GITHUB_RUN_ID" >> "$GITHUB_STEP_SUMMARY"
 echo "staged commit: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
 `);

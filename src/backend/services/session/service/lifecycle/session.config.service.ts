@@ -12,7 +12,6 @@ import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import { type ChatBarCapabilities, EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { parseAcpConfigSnapshot, type StoredAcpConfigSnapshot } from './acp-config-snapshot';
 import type { CodexModelCatalogService } from './codex-model-catalog.service';
-import type { SessionRepository } from './session.repository';
 import {
   buildCapabilitiesFromConfigOptions,
   buildCodexConfigOptionsWithModelCatalog,
@@ -26,6 +25,7 @@ import {
   resolveConfiguredExecutionModeTarget,
 } from './session-permission-policy';
 import { getWorkflowPermissionPreset, isUnattendedWorkflow } from './session-workflow-permissions';
+import type { SessionRepository } from './session.repository';
 
 const logger = createLogger('session');
 

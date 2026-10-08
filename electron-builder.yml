@@ -42,15 +42,15 @@ files:
   - node_modules/.pnpm/file-uri-to-path@*/**/*
   - node_modules/.pnpm/node-addon-api@*/**/*
   # Exclude dev/build dependencies
-  - "!**/node_modules/.pnpm/*storybook*/**"
-  - "!**/node_modules/.pnpm/*vite*/**"
-  - "!**/node_modules/.pnpm/*vitest*/**"
-  - "!**/node_modules/.pnpm/*typescript*/**"
-  - "!**/node_modules/.pnpm/*biome*/**"
-  - "!**/node_modules/.pnpm/*esbuild*/**"
-  - "!**/node_modules/.pnpm/*tailwindcss*/**"
-  - "!**/node_modules/.pnpm/*postcss*/**"
-  - "!**/node_modules/.pnpm/*next*/**"
+  - '!**/node_modules/.pnpm/*storybook*/**'
+  - '!**/node_modules/.pnpm/*vite*/**'
+  - '!**/node_modules/.pnpm/*vitest*/**'
+  - '!**/node_modules/.pnpm/*typescript*/**'
+  - '!**/node_modules/.pnpm/*biome*/**'
+  - '!**/node_modules/.pnpm/*esbuild*/**'
+  - '!**/node_modules/.pnpm/*tailwindcss*/**'
+  - '!**/node_modules/.pnpm/*postcss*/**'
+  - '!**/node_modules/.pnpm/*next*/**'
 extraResources:
   - from: prisma/migrations
     to: prisma/migrations
@@ -84,7 +84,7 @@ asarUnpack:
   # Frontend must be unpacked for Express static serving
   - dist/client/**/*
 mac:
-  minimumSystemVersion: "13.0"
+  minimumSystemVersion: '13.0'
   category: public.app-category.developer-tools
   target: [dmg, zip]
 win:

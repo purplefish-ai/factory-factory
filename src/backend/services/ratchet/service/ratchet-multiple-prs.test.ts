@@ -22,12 +22,12 @@ vi.mock('./fixer-session.service', () => ({
 import { userSettingsService } from '@/backend/services/settings';
 import { workspaceRatchetService } from '@/backend/services/workspace';
 import { fixerSessionService } from './fixer-session.service';
-import { ratchetService } from './ratchet.service';
 import {
   cleanupCachedTerminalOwner,
   stopActiveRatchetSessionsForTerminalPr,
   triggerRatchetFixer,
 } from './ratchet-fixer-dispatch.helpers';
+import { ratchetService } from './ratchet.service';
 
 const candidate = (prId: string): WorkspaceWithPR => ({
   id: 'w',

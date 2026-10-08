@@ -1,8 +1,8 @@
+import type { RunScriptExecutionUpdate } from '@/backend/services/workspace/resources/workspace-run-script.accessor';
 import {
   type RunScriptExecutionState,
   workspaceAccessor,
 } from '@/backend/services/workspace/resources/workspace.accessor';
-import type { RunScriptExecutionUpdate } from '@/backend/services/workspace/resources/workspace-run-script.accessor';
 import type { RunScriptStatus } from '@/shared/core';
 
 class WorkspaceRunScriptService {

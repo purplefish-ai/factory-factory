@@ -1,5 +1,5 @@
-import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
 import { workspacePrAccessor } from '@/backend/services/workspace/resources/workspace-pr.accessor';
+import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
 import type { PRDiscoveryClaim, WorkspacePRIdentity } from '@/backend/services/workspace/types';
 
 class WorkspacePrSnapshotService {

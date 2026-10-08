@@ -1,5 +1,5 @@
-import type { WorkspacePullRequest } from '@/shared/workspace-pr';
-import type { WorkspacePRSummary } from '@/shared/workspace-pr-summary';
+import { EventEmitter } from 'node:events';
+import { isDeepStrictEqual } from 'node:util';
 /**
  * Workspace Snapshot Store Service
  *
@@ -16,9 +16,6 @@ import type { WorkspacePRSummary } from '@/shared/workspace-pr-summary';
  * functions are injected via configure() at startup through the orchestration
  * layer.
  */
-
-import { EventEmitter } from 'node:events';
-import { isDeepStrictEqual } from 'node:util';
 import type { RatchetDispatchOutcome } from '@prisma-gen/client';
 import { assembleWorkspaceDerivedState } from '@/backend/lib/workspace-derived-state';
 import { SERVICE_CACHE_TTL_MS } from '@/backend/services/constants';
@@ -38,6 +35,8 @@ import {
   hasStartingSessionSummary,
 } from '@/shared/session-runtime';
 import type { WorkspaceCiObservation, WorkspaceFlowPhase } from '@/shared/workspace-flow-state';
+import type { WorkspacePullRequest } from '@/shared/workspace-pr';
+import type { WorkspacePRSummary } from '@/shared/workspace-pr-summary';
 import type { WorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import type { SnapshotFieldGroup, WorkspaceSnapshotEntry } from '@/shared/workspace-snapshot';
 import type { WorkspaceStatusReason } from '@/shared/workspace-status-reason';

@@ -4,7 +4,6 @@ import { useCallback, useMemo } from 'react';
 import type { Layout, LayoutChangedMeta } from 'react-resizable-panels';
 import { Group, Panel, Separator } from 'react-resizable-panels';
 import { z } from 'zod';
-
 import { cn } from '@/lib/utils';
 
 type ResizablePanelGroupProps = Omit<ComponentProps<typeof Group>, 'orientation'> & {

@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SessionDomainService } from '@/backend/services/session';
 import { PromptTimeoutError } from '@/backend/services/session/service/acp';
 import { AcpEventProcessor } from './acp-event-processor';
-import { SessionService } from './session.service';
 import { SessionLifecycleEventService } from './session-lifecycle-event.service';
+import { SessionService } from './session.service';
 
 function createPromptService() {
   const runtimeManager = {

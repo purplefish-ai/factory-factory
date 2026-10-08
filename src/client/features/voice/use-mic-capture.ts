@@ -362,7 +362,8 @@ interface CaptureAttemptResult {
 }
 
 interface CaptureAttemptDeps
-  extends TranscriptHandlerDeps,
+  extends
+    TranscriptHandlerDeps,
     Omit<PcmForwarderDeps, 'speechDetectorRef'>,
     Omit<DisconnectHandlerDeps, 'isStale'> {
   mintGrantToken: { mutateAsync: () => Promise<{ accessToken: string }> };

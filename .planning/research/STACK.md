@@ -33,8 +33,8 @@ three packages are Apache-2.0 licensed.
 
 ### Transitive Dependencies (Brought by claude-code-acp)
 
-These are NOT direct dependencies of Factory Factory. Listed for awareness only
--- they come in through `@zed-industries/claude-code-acp`:
+These are NOT direct dependencies of Factory Factory. Listed for awareness
+only -- they come in through `@zed-industries/claude-code-acp`:
 
 | Package                          | Version  | What It Is                                                                                                    |
 | -------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------- |
@@ -393,26 +393,26 @@ Zod conflicts.
 
 ## Sources
 
-- [@agentclientprotocol/sdk on npm](https://www.npmjs.com/package/@agentclientprotocol/sdk)
-  -- v0.14.1 verified 2026-02-13
-- [@zed-industries/claude-code-acp on npm](https://www.npmjs.com/package/@zed-industries/claude-code-acp)
-  -- v0.16.1 verified 2026-02-13
-- [@zed-industries/codex-acp on npm](https://www.npmjs.com/package/@zed-industries/codex-acp)
-  -- v0.9.2 verified 2026-02-13
-- [ACP TypeScript SDK GitHub](https://github.com/agentclientprotocol/typescript-sdk)
-  -- ClientSideConnection API and examples
+- [@agentclientprotocol/sdk on npm](https://www.npmjs.com/package/@agentclientprotocol/sdk) --
+  v0.14.1 verified 2026-02-13
+- [@zed-industries/claude-code-acp on npm](https://www.npmjs.com/package/@zed-industries/claude-code-acp) --
+  v0.16.1 verified 2026-02-13
+- [@zed-industries/codex-acp on npm](https://www.npmjs.com/package/@zed-industries/codex-acp) --
+  v0.9.2 verified 2026-02-13
+- [ACP TypeScript SDK GitHub](https://github.com/agentclientprotocol/typescript-sdk) --
+  ClientSideConnection API and examples
 - [ACP Protocol Overview](https://agentclientprotocol.com/protocol/overview) --
   Protocol lifecycle and message types
-- [ClientSideConnection API Reference](https://agentclientprotocol.github.io/typescript-sdk/classes/ClientSideConnection.html)
-  -- Full method signatures
-- [ACP SDK Example Client](https://github.com/agentclientprotocol/typescript-sdk/tree/main/src/examples)
-  -- Subprocess spawn pattern
+- [ClientSideConnection API Reference](https://agentclientprotocol.github.io/typescript-sdk/classes/ClientSideConnection.html) --
+  Full method signatures
+- [ACP SDK Example Client](https://github.com/agentclientprotocol/typescript-sdk/tree/main/src/examples) --
+  Subprocess spawn pattern
 - [claude-code-acp GitHub](https://github.com/zed-industries/claude-code-acp) --
   Adapter features and configuration
 - [codex-acp GitHub](https://github.com/zed-industries/codex-acp) -- Adapter
   features, auth methods, platform binaries
-- [ACP Protocol Specification](https://github.com/agentclientprotocol/agent-client-protocol)
-  -- Schema and JSON-RPC method definitions
+- [ACP Protocol Specification](https://github.com/agentclientprotocol/agent-client-protocol) --
+  Schema and JSON-RPC method definitions
 - [Zed ACP Announcement](https://zed.dev/acp) -- Protocol origin and ecosystem
   context
 - Factory Factory issue #996 -- Scope definition for ACP-only cutover

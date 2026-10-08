@@ -1,0 +1,109 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "react", "jsx-a11y"],
+  "jsPlugins": [
+    {
+      "name": "factory",
+      "specifier": "./lint-rules/factory.mjs"
+    }
+  ],
+  "categories": {
+    "correctness": "off"
+  },
+  "ignorePatterns": ["prisma/generated/**"],
+  "rules": {
+    "no-unused-vars": [
+      "error",
+      {
+        "args": "all",
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_",
+        "caughtErrorsIgnorePattern": "^_",
+        "caughtErrors": "all"
+      }
+    ],
+    "no-unused-private-class-members": "error",
+    "prefer-const": [
+      "error",
+      {
+        "ignoreReadBeforeAssign": true
+      }
+    ],
+    "typescript/consistent-type-imports": [
+      "error",
+      {
+        "fixStyle": "inline-type-imports",
+        "disallowTypeAnnotations": false
+      }
+    ],
+    "typescript/no-non-null-assertion": "error",
+    "curly": ["error", "all"],
+    "no-lonely-if": "error",
+    "typescript/prefer-enum-initializers": "error",
+    "prefer-exponentiation-operator": "error",
+    "typescript/prefer-for-of": "error",
+    "react/jsx-fragments": ["error", "syntax"],
+    "unicorn/prefer-node-protocol": "error",
+    "unicorn/prefer-number-properties": "error",
+    "unicorn/numeric-separators-style": [
+      "error",
+      {
+        "number": {
+          "minimumDigits": 5,
+          "groupLength": 3,
+          "fractionGroupLength": 3
+        }
+      }
+    ],
+    "react/self-closing-comp": "error",
+    "operator-assignment": ["error", "always"],
+    "typescript/prefer-function-type": "error",
+    "prefer-template": "error",
+    "typescript/no-explicit-any": "error",
+    "eqeqeq": [
+      "error",
+      "always",
+      {
+        "null": "ignore"
+      }
+    ],
+    "no-console": "error",
+    "no-var": "error",
+    "no-empty": "error",
+    "no-misleading-character-class": "error",
+    "react/no-array-index-key": "error",
+    "typescript/no-unsafe-declaration-merging": "error",
+    "typescript/no-this-alias": "error",
+    "typescript/no-unnecessary-type-constraint": "error",
+    "unicorn/prefer-array-flat-map": "error",
+    "react/no-danger": "error",
+    "jsx-a11y/no-autofocus": "off",
+    "jsx-a11y/label-has-associated-control": "off",
+    "factory/no-await-import": "error",
+    "factory/no-native-dialogs": "error",
+    "factory/no-next-directives": "error",
+    "factory/no-zod-any": "error",
+    "factory/no-unsafe-json-parse-cast": "error",
+    "factory/no-unsafe-resolver-cast": "error"
+  },
+  "overrides": [
+    {
+      "files": [
+        "src/backend/services/logger.service.ts",
+        "src/lib/debug.ts",
+        "src/cli/**/*.ts",
+        "scripts/**/*.{ts,mjs}",
+        "electron/**/*.ts"
+      ],
+      "rules": {
+        "no-console": "off"
+      }
+    },
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx", "**/*.stories.tsx"],
+      "rules": {
+        "typescript/no-non-null-assertion": "off"
+      }
+    }
+  ]
+}

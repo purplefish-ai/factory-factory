@@ -387,11 +387,20 @@ export const workspaceCoreRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const updated = await ctx.appContext.services.workspaceDataService.update(input.workspaceId, {
-        defaultSessionProvider: input.defaultSessionProvider,
-        ratchetSessionProvider: input.ratchetSessionProvider,
-      });
-      return updated;
+      try {
+        return await ctx.appContext.services.workspaceDataService.update(input.workspaceId, {
+          defaultSessionProvider: input.defaultSessionProvider,
+          ratchetSessionProvider: input.ratchetSessionProvider,
+        });
+      } catch (error) {
+        if (error && typeof error === 'object' && 'code' in error && error.code === 'P2025') {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: `Workspace not found: ${input.workspaceId}`,
+          });
+        }
+        throw error;
+      }
     }),
 
   // Archive a workspace

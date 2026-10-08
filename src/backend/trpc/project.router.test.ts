@@ -555,15 +555,49 @@ describe('projectRouter', () => {
     ).rejects.toThrow('Cannot have both startupScriptCommand and startupScriptPath set');
   });
 
-  it('archives and validates repo paths via passthrough routes', async () => {
+  it('archives projects without returning encrypted Linear credentials', async () => {
+    const issueTrackerConfig = {
+      linear: {
+        apiKey: 'iv:authTag:ciphertext',
+        teamId: 'team-1',
+        teamName: 'Platform',
+        viewerName: 'Martina',
+      },
+    };
+    mockProjectManagementService.archive.mockResolvedValue({
+      id: 'p1',
+      isArchived: true,
+      issueTrackerConfig,
+    });
+    const result = await createCaller().archive({ id: 'p1' });
+    expect(result).toEqual({
+      id: 'p1',
+      isArchived: true,
+      issueTrackerConfig: {
+        linear: { teamId: 'team-1', teamName: 'Platform', viewerName: 'Martina', hasApiKey: true },
+      },
+    });
+    expect(result.issueTrackerConfig?.linear).not.toHaveProperty('apiKey');
+    expect(issueTrackerConfig.linear.apiKey).toBe('iv:authTag:ciphertext');
+  });
+
+  it('archives projects without configuration and validates repo paths', async () => {
     const caller = createCaller();
-    mockProjectManagementService.archive.mockResolvedValue({ ok: true });
+    mockProjectManagementService.archive.mockResolvedValue({
+      id: 'p1',
+      isArchived: true,
+      issueTrackerConfig: null,
+    });
     mockProjectManagementService.validateRepoPath.mockResolvedValue({
       valid: true,
       error: undefined,
     });
 
-    await expect(caller.archive({ id: 'p1' })).resolves.toEqual({ ok: true });
+    await expect(caller.archive({ id: 'p1' })).resolves.toEqual({
+      id: 'p1',
+      isArchived: true,
+      issueTrackerConfig: null,
+    });
     await expect(caller.validateRepoPath({ repoPath: '/repo/path' })).resolves.toEqual({
       valid: true,
       error: undefined,

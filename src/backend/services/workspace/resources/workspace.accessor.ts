@@ -47,13 +47,13 @@ import type {
 import type { WorkspacePullRequest } from '@/shared/workspace-pr';
 import type { WorkspacePRSummary } from '@/shared/workspace-pr-summary';
 import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
-import { serializeWorkspacePR } from './workspace-pr.accessor';
 import {
   type PrAggregatePersistenceResult,
   type PrObservationPersistenceInput,
   type PrSnapshotPersistenceInput,
   workspacePrAggregateAccessor,
 } from './workspace-pr-aggregate.accessor';
+import { serializeWorkspacePR } from './workspace-pr.accessor';
 
 export type {
   PrAggregatePersistenceResult,

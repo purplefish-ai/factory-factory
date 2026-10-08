@@ -1,6 +1,5 @@
 import type { RefObject, UIEvent } from 'react';
 import { useCallback, useEffect } from 'react';
-
 import type { ScrollMode } from './scroll-state';
 import { useWorkspacePanel } from './workspace-panel-context';
 

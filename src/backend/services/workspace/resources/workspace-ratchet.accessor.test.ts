@@ -5,8 +5,8 @@ import {
   destroyIntegrationDatabase,
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
-import { workspacePrAccessor } from './workspace-pr.accessor';
 import { workspacePrRatchetAccessor } from './workspace-pr-ratchet.accessor';
+import { workspacePrAccessor } from './workspace-pr.accessor';
 import {
   flattenWorkspaceRatchet,
   WORKSPACE_RATCHET_DEFAULTS,

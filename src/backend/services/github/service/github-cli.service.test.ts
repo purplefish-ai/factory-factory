@@ -33,8 +33,8 @@ vi.mock('@/backend/services/logger.service', () => ({
 
 import { execFile } from 'node:child_process';
 import { deriveCiStatusFromCheckRollup } from '@/shared/core';
-import { classifyError } from './github-cli/errors';
 import { githubCLIService } from './github-cli.service';
+import { classifyError } from './github-cli/errors';
 
 vi.mocked(execFile).mockImplementation(mockExecFile as never);
 

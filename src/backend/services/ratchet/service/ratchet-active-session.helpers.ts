@@ -2,8 +2,8 @@ import type { RatchetDispatchOutcome, SessionProvider } from '@prisma-gen/client
 import { createLogger } from '@/backend/services/logger.service';
 import { SessionStatus } from '@/shared/core';
 import type { RatchetSessionBridge, RatchetWorkspaceBridge } from './bridges';
-import type { ActiveFixerCheckResult, WorkspaceWithPR } from './ratchet.types';
 import { ratchetProviderResolverService } from './ratchet-provider-resolver.service';
+import type { ActiveFixerCheckResult, WorkspaceWithPR } from './ratchet.types';
 
 const logger = createLogger('ratchet');
 

@@ -5,13 +5,13 @@ import {
   destroyIntegrationDatabase,
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
-import { workspaceAccessor } from './workspace.accessor';
+import { workspacePrDiscoveryAccessor } from './workspace-pr-discovery.accessor';
 import {
   flattenWorkspacePR,
   WORKSPACE_PR_DEFAULTS,
   workspacePrAccessor,
 } from './workspace-pr.accessor';
-import { workspacePrDiscoveryAccessor } from './workspace-pr-discovery.accessor';
+import { workspaceAccessor } from './workspace.accessor';
 
 const database = vi.hoisted(() => ({ prisma: undefined as PrismaClient | undefined }));
 vi.mock('@/backend/db', () => ({

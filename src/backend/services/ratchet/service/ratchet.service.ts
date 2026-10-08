@@ -19,18 +19,6 @@ import type {
   RatchetSessionBridge,
   RatchetWorkspaceBridge,
 } from './bridges';
-import type {
-  ActiveFixerCheckResult,
-  PRStateFetchResult,
-  PRStateFetchSkipped,
-  PRStateInfo,
-  RatchetAction,
-  RatchetCheckResult,
-  RatchetDecision,
-  RatchetDecisionContext,
-  WorkspaceRatchetResult,
-  WorkspaceWithPR,
-} from './ratchet.types';
 import {
   checkActiveFixerSession as checkActiveFixerSessionHelper,
   hasActiveSession as hasActiveSessionHelper,
@@ -55,6 +43,18 @@ import {
   RatchetWorkspaceCheckCoordinator,
   type WorkspaceCheckScheduler,
 } from './ratchet-workspace-check-coordinator';
+import type {
+  ActiveFixerCheckResult,
+  PRStateFetchResult,
+  PRStateFetchSkipped,
+  PRStateInfo,
+  RatchetAction,
+  RatchetCheckResult,
+  RatchetDecision,
+  RatchetDecisionContext,
+  WorkspaceRatchetResult,
+  WorkspaceWithPR,
+} from './ratchet.types';
 
 const logger = createLogger('ratchet');
 const RATCHET_WORKSPACE_CONCURRENCY = 3;

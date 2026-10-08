@@ -1,9 +1,7 @@
 import { ArrowsClockwiseIcon } from '@phosphor-icons/react';
 import { useCallback, useState } from 'react';
-
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-
 import { FileTree } from './file-tree';
 import { FileTreeProvider } from './file-tree-context';
 import { useWorkspacePanel } from './workspace-panel-context';

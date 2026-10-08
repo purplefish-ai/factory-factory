@@ -24,8 +24,8 @@ import {
   setPendingInteractiveRequest,
 } from './store/session-queue';
 import { SessionRuntimeMachine } from './store/session-runtime-machine';
-import type { RecentMessageRejection, SessionStore } from './store/session-store.types';
 import { SessionStoreRegistry } from './store/session-store-registry';
+import type { RecentMessageRejection, SessionStore } from './store/session-store.types';
 import {
   appendClaudeEvent,
   commitSentUserMessageWithOrder,

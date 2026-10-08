@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { SessionStartupLease } from './session-lifecycle.types';
 import { SessionLifecycleGate, SessionStartupCancelledError } from './session-lifecycle-gate';
+import type { SessionStartupLease } from './session-lifecycle.types';
 
 function createDeferred(): {
   promise: Promise<void>;
