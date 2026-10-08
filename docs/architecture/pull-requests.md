@@ -144,6 +144,12 @@ collection. Reopened PRs trigger an immediate ratchet check even when the
 workspace has multiple associations. Linear completion waits while any PR is
 nonterminal and retries when the final sibling closes or is removed.
 
+Client compatibility updates merge legacy observations into cached PR
+collections and recompute aggregate status with the same shared flow rules used
+by the backend. Draft observations preserve cached review decisions. Ready
+workspaces missing their worktree path refetch the project list, retrying later
+if the cache still lacks a path after the refetch settles.
+
 `WorkspacePRDiscovery` owns workspace discovery scheduling and backoff,
 including workspaces that already have PRs. Repository batches attach all
 matching URLs under one validated claim, choosing the newest eligible workspace

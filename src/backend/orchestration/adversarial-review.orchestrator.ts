@@ -57,7 +57,7 @@ export interface TriggerAdversarialReviewResult {
 
 // Per-PR acquisition lock: without it, two concurrent triggers can
 // both observe "no active session" before either has created one, starting
-// duplicate reviewers. A second call for the same workspace instead awaits
+// duplicate reviewers. A second call for the same PR instead awaits
 // the first call's own in-flight result rather than repeating its checks.
 const inFlightTriggers = new Map<string, Promise<TriggerAdversarialReviewResult>>();
 

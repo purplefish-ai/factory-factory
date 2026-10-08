@@ -528,29 +528,34 @@ describe('useProjectSnapshotSync', () => {
       }
     );
 
-    it('retries a failed worktree-path repair on the next ready snapshot', async () => {
-      let cache = {
-        workspaces: [projectSnapshotToWorkspace(makeEntry({ status: 'NEW' }))],
-        reviewCount: 0,
-      };
-      mockGetData.mockImplementation(() => cache);
-      mockSetData.mockImplementation((_key, updater) => {
-        cache = updater(cache);
-      });
-      mockListInvalidate.mockRejectedValueOnce(new Error('network'));
-      useProjectSnapshotSync('proj-1');
-      const onMessage = capturedOptions!.onMessage!;
-      const message = {
-        type: 'snapshot_changed' as const,
-        workspaceId: 'ws-1',
-        entry: makeEntry({ status: 'READY' }),
-      };
-      onMessage(message);
-      await Promise.resolve();
-      await Promise.resolve();
-      onMessage(message);
-      expect(mockListInvalidate).toHaveBeenCalledTimes(2);
-    });
+    it.each(['rejects', 'resolves without updating the cache'] as const)(
+      'retries a worktree-path repair when invalidation %s',
+      async (result) => {
+        let cache = {
+          workspaces: [projectSnapshotToWorkspace(makeEntry({ status: 'NEW' }))],
+          reviewCount: 0,
+        };
+        mockGetData.mockImplementation(() => cache);
+        mockSetData.mockImplementation((_key, updater) => {
+          cache = updater(cache);
+        });
+        mockListInvalidate.mockImplementationOnce(() =>
+          result === 'rejects' ? Promise.reject(new Error('network')) : Promise.resolve()
+        );
+        useProjectSnapshotSync('proj-1');
+        const onMessage = capturedOptions!.onMessage!;
+        const message = {
+          type: 'snapshot_changed' as const,
+          workspaceId: 'ws-1',
+          entry: makeEntry({ status: 'READY' }),
+        };
+        onMessage(message);
+        await Promise.resolve();
+        await Promise.resolve();
+        onMessage(message);
+        expect(mockListInvalidate).toHaveBeenCalledTimes(2);
+      }
+    );
 
     it('invalidates the project list once when snapshot_changed introduces an unknown workspace', () => {
       useProjectSnapshotSync('proj-1');

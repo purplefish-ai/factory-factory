@@ -180,11 +180,25 @@ function healReadyWorktreePaths(
   for (const entry of missingPaths) {
     repairedWorkspaceIds.add(entry.workspaceId);
   }
-  void utils.workspace.listForProject.invalidate({ projectId }).catch(() => {
-    for (const entry of missingPaths) {
-      repairedWorkspaceIds.delete(entry.workspaceId);
+  void utils.workspace.listForProject.invalidate({ projectId }).then(
+    () => {
+      const refreshedById = new Map(
+        utils.workspace.listForProject
+          .getData({ projectId })
+          ?.workspaces.map((workspace) => [workspace.id, workspace])
+      );
+      for (const entry of missingPaths) {
+        if (!refreshedById.get(entry.workspaceId)?.worktreePath) {
+          repairedWorkspaceIds.delete(entry.workspaceId);
+        }
+      }
+    },
+    () => {
+      for (const entry of missingPaths) {
+        repairedWorkspaceIds.delete(entry.workspaceId);
+      }
     }
-  });
+  );
 }
 
 function applySnapshotFullMessage(

@@ -74,15 +74,19 @@ async function render(node: ReactNode, onParentClick?: () => void) {
     root.render(
       <MemoryRouter>
         <TooltipProvider>
-          <a
-            href="/workspace"
-            onClick={(event) => {
-              event.preventDefault();
-              onParentClick?.();
-            }}
-          >
-            {node}
-          </a>
+          {onParentClick ? (
+            <a
+              href="/workspace"
+              onClick={(event) => {
+                event.preventDefault();
+                onParentClick();
+              }}
+            >
+              {node}
+            </a>
+          ) : (
+            node
+          )}
         </TooltipProvider>
       </MemoryRouter>
     )

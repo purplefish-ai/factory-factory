@@ -97,15 +97,15 @@ describe('workspace snapshot cache projections', () => {
         prState: 'OPEN',
         prCiStatus: 'SUCCESS',
         ratchetEnabled: true,
-        ratchetState: 'IDLE',
+        ratchetState: 'READY',
         runScriptStatus: 'IDLE',
         isWorking: true,
         sessionSummaries: entry.sessionSummaries,
         pendingRequestType: 'plan_approval',
-        kanbanColumn: 'WORKING',
+        kanbanColumn: 'WAITING',
         sidebarStatus: entry.sidebarStatus,
         ratchetButtonAnimated: false,
-        flowPhase: 'CI_WAIT',
+        flowPhase: 'READY',
         ciObservation: 'CHECKS_PASSED',
         statusReason: entry.statusReason,
       });
@@ -150,29 +150,53 @@ describe('workspace snapshot cache projections', () => {
     }
   });
 
-  it('preserves the cached PR identity and metadata when a legacy event lacks a collection', () => {
-    const original = projectSnapshotToWorkspace(makeEntry());
-    const existing = {
-      ...original,
-      prs: [
-        { ...original.prs[0]!, id: 'attached-pr', title: 'Cached title', headRefName: 'feat/pr' },
-      ],
-    };
-    const entry = makeEntry({ prs: [], prCiStatus: 'FAILURE', prState: 'CHANGES_REQUESTED' });
-    const listed = projectSnapshotToWorkspace(entry, existing);
-    const detail = mergeProjectSnapshotIntoWorkspaceDetail(entry, seedDetail(existing));
-    for (const projection of [listed, detail]) {
-      expect(projection?.prs[0]).toMatchObject({
-        id: 'attached-pr',
-        title: 'Cached title',
-        headRefName: 'feat/pr',
-        state: 'CHANGES_REQUESTED',
-        ciStatus: 'FAILURE',
-        reviewState: 'CHANGES_REQUESTED',
-      });
-      expect(projection?.prSummary).toMatchObject({ totalCount: 1, ciStatus: 'FAILURE' });
+  it.each([undefined, []])(
+    'preserves cached PR identity and metadata with legacy collection %j',
+    (prs) => {
+      const original = projectSnapshotToWorkspace(makeEntry());
+      const existing = {
+        ...original,
+        prs: [
+          { ...original.prs[0]!, id: 'attached-pr', title: 'Cached title', headRefName: 'feat/pr' },
+        ],
+      };
+      const entry = makeEntry({ prs, prCiStatus: 'FAILURE', prState: 'CHANGES_REQUESTED' });
+      const listed = projectSnapshotToWorkspace(entry, existing);
+      const detail = mergeProjectSnapshotIntoWorkspaceDetail(entry, seedDetail(existing));
+      for (const projection of [listed, detail]) {
+        expect(projection?.prs[0]).toMatchObject({
+          id: 'attached-pr',
+          title: 'Cached title',
+          headRefName: 'feat/pr',
+          state: 'CHANGES_REQUESTED',
+          ciStatus: 'FAILURE',
+          reviewState: 'CHANGES_REQUESTED',
+        });
+        expect(projection?.prSummary).toMatchObject({ totalCount: 1, ciStatus: 'FAILURE' });
+      }
     }
-  });
+  );
+
+  it.each([
+    ['CHANGES_REQUESTED', 'REVIEW_PENDING'],
+    ['APPROVED', 'READY'],
+  ] as const)(
+    'preserves the cached %s review decision for a legacy DRAFT observation',
+    (reviewState, ratchetState) => {
+      const original = projectSnapshotToWorkspace(makeEntry());
+      const existing: ProjectWorkspace = {
+        ...original,
+        prs: [{ ...original.prs[0]!, state: 'DRAFT', reviewState }],
+      };
+      const entry = makeEntry({ prs: undefined, prState: 'DRAFT', prCiStatus: 'SUCCESS' });
+      const listed = projectSnapshotToWorkspace(entry, existing);
+      const detail = mergeProjectSnapshotIntoWorkspaceDetail(entry, seedDetail(existing));
+      for (const projection of [listed, detail]) {
+        expect(projection?.prs[0]).toMatchObject({ state: 'DRAFT', reviewState });
+        expect(projection?.prSummary.ratchetState).toBe(ratchetState);
+      }
+    }
+  );
 
   it.each([
     ['cached-empty', 'https://github.com/org/repo/pull/42', 42, ['attached-a', 'attached-b']],
@@ -233,6 +257,181 @@ describe('workspace snapshot cache projections', () => {
       }
     }
   );
+
+  function legacyMergeWithSibling(overrides: Partial<WorkspaceSnapshotEntry> = {}) {
+    const original = projectSnapshotToWorkspace(makeEntry());
+    const existing: ProjectWorkspace = {
+      ...original,
+      prs: [
+        { ...original.prs[0]!, id: 'merged-pr' },
+        {
+          ...original.prs[0]!,
+          id: 'open-pr',
+          url: 'https://github.com/org/repo/pull/43',
+          number: 43,
+          ciStatus: 'PENDING',
+        },
+      ],
+    };
+    const entry = makeEntry({
+      prs: undefined,
+      prState: 'MERGED',
+      prCiStatus: 'SUCCESS',
+      ratchetState: 'MERGED',
+      flowPhase: 'MERGED',
+      ciObservation: 'CHECKS_PASSED',
+      isWorking: false,
+      pendingRequestType: null,
+      kanbanColumn: 'DONE',
+      sidebarStatus: { activityState: 'IDLE', ciState: 'MERGED' },
+      statusReason: { code: 'MERGED', label: 'Merged', tone: 'success', needsUser: false },
+      ...overrides,
+    });
+    return { existing, entry };
+  }
+
+  it.each([
+    ['PENDING', 'CI_RUNNING', 'CI_WAIT', 'CHECKS_PENDING', 'WAITING_FOR_CI', 'RUNNING', true],
+    [
+      'FAILURE',
+      'CI_FAILED',
+      'RATCHET_FIXING',
+      'CHECKS_FAILED',
+      'FIXING_CI_FAILURES',
+      'FAILING',
+      false,
+    ],
+  ] as const)(
+    'keeps aggregate UI nonterminal when a legacy merge leaves a %s sibling',
+    (ciStatus, ratchetState, flowPhase, ciObservation, reasonCode, sidebarCi, animated) => {
+      const { existing, entry } = legacyMergeWithSibling();
+      existing.prs[1]!.ciStatus = ciStatus;
+      const listed = projectSnapshotToWorkspace(entry, existing);
+      const detail = mergeProjectSnapshotIntoWorkspaceDetail(entry, seedDetail(existing));
+      for (const projection of [listed, detail]) {
+        expect(projection).toMatchObject({
+          prUrl: null,
+          prNumber: null,
+          prState: 'OPEN',
+          prCiStatus: ciStatus,
+          ratchetState,
+          isWorking: false,
+          flowPhase,
+          ciObservation,
+          ratchetButtonAnimated: animated,
+          statusReason: { code: reasonCode },
+          kanbanColumn: 'WORKING',
+          sidebarStatus: { activityState: 'IDLE', ciState: sidebarCi },
+          prSummary: { totalCount: 2, hasNonterminal: true },
+        });
+        expect(projection?.prs.map((pr) => pr.state)).toEqual(['MERGED', 'OPEN']);
+      }
+    }
+  );
+
+  it.each([
+    [{ status: 'FAILED' }, 'SETUP_FAILED', 'WAITING'],
+    [{ status: 'ARCHIVING' }, 'ARCHIVING', null],
+    [{ status: 'NEW' }, 'SETTING_UP', 'WORKING'],
+    [{ pendingRequestType: 'permission_request' }, 'NEEDS_PERMISSION', 'WAITING'],
+    [{ isWorking: true }, 'AGENT_WORKING', 'WORKING'],
+    [
+      {
+        statusReason: {
+          code: 'SESSION_ERROR',
+          label: 'Session error',
+          tone: 'danger',
+          needsUser: true,
+        },
+      },
+      'SESSION_ERROR',
+      'WAITING',
+    ],
+    [
+      {
+        statusReason: {
+          code: 'STARTING_SESSION',
+          label: 'Starting session',
+          tone: 'working',
+          needsUser: false,
+        },
+      },
+      'STARTING_SESSION',
+      'WORKING',
+    ],
+    [{ mode: 'AUTO_ITERATION', autoIterationStatus: 'RUNNING' }, 'AUTO_ITERATING', 'WORKING'],
+  ] as const)(
+    'preserves non-PR signals %j while correcting legacy aggregate status',
+    (overrides, reasonCode, column) => {
+      const { existing, entry } = legacyMergeWithSibling(overrides);
+      const listed = projectSnapshotToWorkspace(entry, existing);
+      const detail = mergeProjectSnapshotIntoWorkspaceDetail(entry, seedDetail(existing));
+      for (const projection of [listed, detail]) {
+        expect(projection).toMatchObject({
+          prState: 'OPEN',
+          flowPhase: 'CI_WAIT',
+          statusReason: { code: reasonCode },
+          kanbanColumn: column,
+          isWorking: 'isWorking' in overrides ? overrides.isWorking : false,
+        });
+      }
+    }
+  );
+
+  it.each([
+    ['error', 'SESSION_ERROR', 'WAITING'],
+    ['starting', 'STARTING_SESSION', 'WORKING'],
+  ] as const)(
+    'retains a %s session signal hidden by the stale merged status',
+    (phase, reasonCode, column) => {
+      const { existing, entry } = legacyMergeWithSibling({
+        sessionSummaries: [
+          {
+            sessionId: 'session-1',
+            name: null,
+            workflow: null,
+            model: null,
+            provider: 'CODEX',
+            persistedStatus: phase === 'error' ? 'FAILED' : 'IDLE',
+            runtimePhase: phase,
+            processState: phase === 'error' ? 'stopped' : 'alive',
+            activity: 'IDLE',
+            updatedAt: '2026-01-15T09:55:00Z',
+            lastExit: null,
+            errorMessage: phase === 'error' ? 'Session crashed' : undefined,
+          },
+        ],
+      });
+      for (const projection of [
+        projectSnapshotToWorkspace(entry, existing),
+        mergeProjectSnapshotIntoWorkspaceDetail(entry, seedDetail(existing)),
+      ]) {
+        expect(projection).toMatchObject({
+          statusReason: { code: reasonCode },
+          kanbanColumn: column,
+        });
+      }
+    }
+  );
+
+  it('projects aggregate conflict and stalled dispatch flags into the detail cache', () => {
+    const { existing, entry } = legacyMergeWithSibling();
+    existing.prs[1]!.ciStatus = 'FAILURE';
+    existing.prs[1]!.hasMergeConflict = true;
+    existing.prs[1]!.ratchet = {
+      lastCheckedAt: null,
+      dispatchOutcome: 'DIED',
+      dispatchRetryCount: 3,
+      dispatchStalled: true,
+    };
+    const detail = mergeProjectSnapshotIntoWorkspaceDetail(entry, seedDetail(existing));
+    expect(detail).toMatchObject({
+      prHasMergeConflict: true,
+      ratchetDispatchStalled: true,
+      statusReason: { code: 'RATCHET_STALLED' },
+      kanbanColumn: 'WAITING',
+    });
+  });
 
   it('gives a newly synthesized PR a distinct identity from a cached legacy PR', () => {
     const existing = projectSnapshotToWorkspace(makeEntry());
