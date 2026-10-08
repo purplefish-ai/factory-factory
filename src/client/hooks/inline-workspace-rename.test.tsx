@@ -46,6 +46,7 @@ vi.mock('@/client/routes/projects/workspaces/workspace-detail-header/index', () 
   WorkspaceBranchLink: () => null,
 }));
 vi.mock('@/client/features/workspace', () => ({
+  ConnectedWorkspacePrMenu: () => null,
   RunScriptButton: () => null,
   RunScriptPortBadge: () => null,
   ArchiveWorkspaceDialog: () => null,

@@ -4,6 +4,7 @@ import { SessionStatus } from '@/shared/core';
 
 const mockCreate = vi.fn();
 const mockFindUnique = vi.fn();
+const mockFindFirst = vi.fn();
 const mockFindMany = vi.fn();
 const mockCount = vi.fn();
 const mockUpdate = vi.fn();
@@ -15,6 +16,7 @@ vi.mock('@/backend/db', () => ({
     agentSession: {
       create: (...args: unknown[]) => mockCreate(...args),
       findUnique: (...args: unknown[]) => mockFindUnique(...args),
+      findFirst: (...args: unknown[]) => mockFindFirst(...args),
       findMany: (...args: unknown[]) => mockFindMany(...args),
       count: (...args: unknown[]) => mockCount(...args),
       update: (...args: unknown[]) => mockUpdate(...args),
@@ -31,6 +33,38 @@ describe('agentSessionAccessor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
+
+  it.each([undefined, 'pr-a'])(
+    'keeps fixer acquisition scoped to PR %s, with omitted IDs limited to workspace sessions',
+    async (workspacePrId) => {
+      const sessions = [
+        { id: 'pr-fixer', workspacePrId: 'pr-a', status: SessionStatus.IDLE },
+        { id: 'workspace-fixer', workspacePrId: null, status: SessionStatus.IDLE },
+      ];
+      mockFindFirst.mockImplementation(({ where }) =>
+        Promise.resolve(
+          sessions.find(
+            (row) => where.workspacePrId === undefined || row.workspacePrId === where.workspacePrId
+          ) ?? null
+        )
+      );
+      const result = await agentSessionAccessor.acquireFixerSession({
+        workspaceId: 'w',
+        workflow: 'ratchet',
+        workspacePrId,
+        sessionName: 'Ratchet',
+        maxSessions: 5,
+        provider: 'CLAUDE',
+        model: 'opus',
+        providerProjectPath: null,
+      });
+      expect(result).toEqual({
+        outcome: 'existing',
+        sessionId: workspacePrId ? 'pr-fixer' : 'workspace-fixer',
+        status: SessionStatus.IDLE,
+      });
+    }
+  );
 
   it('create persists the resolved provider and model', async () => {
     mockCreate.mockResolvedValue({ id: 'session-1' });

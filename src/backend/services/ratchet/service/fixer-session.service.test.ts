@@ -364,6 +364,34 @@ describe('FixerSessionService', () => {
     expect(mockSessionBridge.acquireFixerSession).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps concurrent acquisitions for different PR targets separate', async () => {
+    vi.mocked(mockWorkspaceBridge.findFixerContext).mockResolvedValue({
+      worktreePath: '/tmp/w',
+    } as never);
+    vi.mocked(configService.getMaxSessionsPerWorkspace).mockReturnValue(5);
+    vi.mocked(mockSessionBridge.acquireFixerSession).mockImplementation(async (input) => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      return { outcome: 'created', sessionId: input.workspacePrId ?? 'missing' };
+    });
+    vi.mocked(mockSessionBridge.startSession).mockResolvedValue(undefined);
+    const results = await Promise.all(
+      ['a', 'b'].map((workspacePrId) =>
+        fixerSessionService.acquireAndDispatch({
+          workspaceId: 'w1',
+          workspacePrId,
+          workflow: 'ratchet',
+          sessionName: 'Ratchet',
+          runningIdleAction: 'restart',
+          buildPrompt: () => workspacePrId,
+        })
+      )
+    );
+    expect(
+      results.map((result) => (result.status === 'started' ? result.sessionId : null))
+    ).toEqual(['a', 'b']);
+    expect(mockSessionBridge.acquireFixerSession).toHaveBeenCalledTimes(2);
+  });
+
   it('returns latest active session for workflow', async () => {
     vi.mocked(mockSessionBridge.findSessionsByWorkspaceId).mockResolvedValue([
       {

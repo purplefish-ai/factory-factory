@@ -68,15 +68,15 @@ overrides:
   webpack: 5.111.1
   yaml: 2.9.1
 
-# Security fixes pending upstream dependency range updates.
+  # Security fixes pending upstream dependency range updates.
   http-cache-semantics: 4.3.0
   # Mermaid 12 still requests the older vulnerable KaTeX line.
   katex: 0.18.2
   source-map-js: 1.2.2
   proxy-addr: 2.0.8
   postcss-selector-parser: 7.1.6
-  "@modelcontextprotocol/sdk": 1.32.1
-  "@electron/get>global-agent": 4.1.3
+  '@modelcontextprotocol/sdk': 1.32.1
+  '@electron/get>global-agent': 4.1.3
 
 # Remove these local mitigations once upstream publishes fixed releases.
 patchedDependencies:

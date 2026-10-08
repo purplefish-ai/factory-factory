@@ -38,6 +38,7 @@ export type AgentSessionMinAggregateOutputType = {
   id: string | null
   workspaceId: string | null
   name: string | null
+  workspacePrId: string | null
   workflow: string | null
   model: string | null
   status: $Enums.SessionStatus | null
@@ -53,6 +54,7 @@ export type AgentSessionMaxAggregateOutputType = {
   id: string | null
   workspaceId: string | null
   name: string | null
+  workspacePrId: string | null
   workflow: string | null
   model: string | null
   status: $Enums.SessionStatus | null
@@ -68,6 +70,7 @@ export type AgentSessionCountAggregateOutputType = {
   id: number
   workspaceId: number
   name: number
+  workspacePrId: number
   workflow: number
   model: number
   status: number
@@ -94,6 +97,7 @@ export type AgentSessionMinAggregateInputType = {
   id?: true
   workspaceId?: true
   name?: true
+  workspacePrId?: true
   workflow?: true
   model?: true
   status?: true
@@ -109,6 +113,7 @@ export type AgentSessionMaxAggregateInputType = {
   id?: true
   workspaceId?: true
   name?: true
+  workspacePrId?: true
   workflow?: true
   model?: true
   status?: true
@@ -124,6 +129,7 @@ export type AgentSessionCountAggregateInputType = {
   id?: true
   workspaceId?: true
   name?: true
+  workspacePrId?: true
   workflow?: true
   model?: true
   status?: true
@@ -227,6 +233,7 @@ export type AgentSessionGroupByOutputType = {
   id: string
   workspaceId: string
   name: string | null
+  workspacePrId: string | null
   workflow: string
   model: string
   status: $Enums.SessionStatus
@@ -266,6 +273,7 @@ export type AgentSessionWhereInput = {
   id?: Prisma.StringFilter<"AgentSession"> | string
   workspaceId?: Prisma.StringFilter<"AgentSession"> | string
   name?: Prisma.StringNullableFilter<"AgentSession"> | string | null
+  workspacePrId?: Prisma.StringNullableFilter<"AgentSession"> | string | null
   workflow?: Prisma.StringFilter<"AgentSession"> | string
   model?: Prisma.StringFilter<"AgentSession"> | string
   status?: Prisma.EnumSessionStatusFilter<"AgentSession"> | $Enums.SessionStatus
@@ -283,6 +291,7 @@ export type AgentSessionOrderByWithRelationInput = {
   id?: Prisma.SortOrder
   workspaceId?: Prisma.SortOrder
   name?: Prisma.SortOrderInput | Prisma.SortOrder
+  workspacePrId?: Prisma.SortOrderInput | Prisma.SortOrder
   workflow?: Prisma.SortOrder
   model?: Prisma.SortOrder
   status?: Prisma.SortOrder
@@ -303,6 +312,7 @@ export type AgentSessionWhereUniqueInput = Prisma.AtLeast<{
   NOT?: Prisma.AgentSessionWhereInput | Prisma.AgentSessionWhereInput[]
   workspaceId?: Prisma.StringFilter<"AgentSession"> | string
   name?: Prisma.StringNullableFilter<"AgentSession"> | string | null
+  workspacePrId?: Prisma.StringNullableFilter<"AgentSession"> | string | null
   workflow?: Prisma.StringFilter<"AgentSession"> | string
   model?: Prisma.StringFilter<"AgentSession"> | string
   status?: Prisma.EnumSessionStatusFilter<"AgentSession"> | $Enums.SessionStatus
@@ -320,6 +330,7 @@ export type AgentSessionOrderByWithAggregationInput = {
   id?: Prisma.SortOrder
   workspaceId?: Prisma.SortOrder
   name?: Prisma.SortOrderInput | Prisma.SortOrder
+  workspacePrId?: Prisma.SortOrderInput | Prisma.SortOrder
   workflow?: Prisma.SortOrder
   model?: Prisma.SortOrder
   status?: Prisma.SortOrder
@@ -344,6 +355,7 @@ export type AgentSessionScalarWhereWithAggregatesInput = {
   id?: Prisma.StringWithAggregatesFilter<"AgentSession"> | string
   workspaceId?: Prisma.StringWithAggregatesFilter<"AgentSession"> | string
   name?: Prisma.StringNullableWithAggregatesFilter<"AgentSession"> | string | null
+  workspacePrId?: Prisma.StringNullableWithAggregatesFilter<"AgentSession"> | string | null
   workflow?: Prisma.StringWithAggregatesFilter<"AgentSession"> | string
   model?: Prisma.StringWithAggregatesFilter<"AgentSession"> | string
   status?: Prisma.EnumSessionStatusWithAggregatesFilter<"AgentSession"> | $Enums.SessionStatus
@@ -359,6 +371,7 @@ export type AgentSessionScalarWhereWithAggregatesInput = {
 export type AgentSessionCreateInput = {
   id?: string
   name?: string | null
+  workspacePrId?: string | null
   workflow: string
   model?: string
   status?: $Enums.SessionStatus
@@ -376,6 +389,7 @@ export type AgentSessionUncheckedCreateInput = {
   id?: string
   workspaceId: string
   name?: string | null
+  workspacePrId?: string | null
   workflow: string
   model?: string
   status?: $Enums.SessionStatus
@@ -391,6 +405,7 @@ export type AgentSessionUncheckedCreateInput = {
 export type AgentSessionUpdateInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workspacePrId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   workflow?: Prisma.StringFieldUpdateOperationsInput | string
   model?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumSessionStatusFieldUpdateOperationsInput | $Enums.SessionStatus
@@ -408,6 +423,7 @@ export type AgentSessionUncheckedUpdateInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workspacePrId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   workflow?: Prisma.StringFieldUpdateOperationsInput | string
   model?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumSessionStatusFieldUpdateOperationsInput | $Enums.SessionStatus
@@ -424,6 +440,7 @@ export type AgentSessionCreateManyInput = {
   id?: string
   workspaceId: string
   name?: string | null
+  workspacePrId?: string | null
   workflow: string
   model?: string
   status?: $Enums.SessionStatus
@@ -439,6 +456,7 @@ export type AgentSessionCreateManyInput = {
 export type AgentSessionUpdateManyMutationInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workspacePrId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   workflow?: Prisma.StringFieldUpdateOperationsInput | string
   model?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumSessionStatusFieldUpdateOperationsInput | $Enums.SessionStatus
@@ -455,6 +473,7 @@ export type AgentSessionUncheckedUpdateManyInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workspacePrId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   workflow?: Prisma.StringFieldUpdateOperationsInput | string
   model?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumSessionStatusFieldUpdateOperationsInput | $Enums.SessionStatus
@@ -481,6 +500,7 @@ export type AgentSessionCountOrderByAggregateInput = {
   id?: Prisma.SortOrder
   workspaceId?: Prisma.SortOrder
   name?: Prisma.SortOrder
+  workspacePrId?: Prisma.SortOrder
   workflow?: Prisma.SortOrder
   model?: Prisma.SortOrder
   status?: Prisma.SortOrder
@@ -501,6 +521,7 @@ export type AgentSessionMaxOrderByAggregateInput = {
   id?: Prisma.SortOrder
   workspaceId?: Prisma.SortOrder
   name?: Prisma.SortOrder
+  workspacePrId?: Prisma.SortOrder
   workflow?: Prisma.SortOrder
   model?: Prisma.SortOrder
   status?: Prisma.SortOrder
@@ -516,6 +537,7 @@ export type AgentSessionMinOrderByAggregateInput = {
   id?: Prisma.SortOrder
   workspaceId?: Prisma.SortOrder
   name?: Prisma.SortOrder
+  workspacePrId?: Prisma.SortOrder
   workflow?: Prisma.SortOrder
   model?: Prisma.SortOrder
   status?: Prisma.SortOrder
@@ -584,6 +606,7 @@ export type EnumSessionProviderFieldUpdateOperationsInput = {
 export type AgentSessionCreateWithoutWorkspaceInput = {
   id?: string
   name?: string | null
+  workspacePrId?: string | null
   workflow: string
   model?: string
   status?: $Enums.SessionStatus
@@ -599,6 +622,7 @@ export type AgentSessionCreateWithoutWorkspaceInput = {
 export type AgentSessionUncheckedCreateWithoutWorkspaceInput = {
   id?: string
   name?: string | null
+  workspacePrId?: string | null
   workflow: string
   model?: string
   status?: $Enums.SessionStatus
@@ -643,6 +667,7 @@ export type AgentSessionScalarWhereInput = {
   id?: Prisma.StringFilter<"AgentSession"> | string
   workspaceId?: Prisma.StringFilter<"AgentSession"> | string
   name?: Prisma.StringNullableFilter<"AgentSession"> | string | null
+  workspacePrId?: Prisma.StringNullableFilter<"AgentSession"> | string | null
   workflow?: Prisma.StringFilter<"AgentSession"> | string
   model?: Prisma.StringFilter<"AgentSession"> | string
   status?: Prisma.EnumSessionStatusFilter<"AgentSession"> | $Enums.SessionStatus
@@ -658,6 +683,7 @@ export type AgentSessionScalarWhereInput = {
 export type AgentSessionCreateManyWorkspaceInput = {
   id?: string
   name?: string | null
+  workspacePrId?: string | null
   workflow: string
   model?: string
   status?: $Enums.SessionStatus
@@ -673,6 +699,7 @@ export type AgentSessionCreateManyWorkspaceInput = {
 export type AgentSessionUpdateWithoutWorkspaceInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workspacePrId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   workflow?: Prisma.StringFieldUpdateOperationsInput | string
   model?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumSessionStatusFieldUpdateOperationsInput | $Enums.SessionStatus
@@ -688,6 +715,7 @@ export type AgentSessionUpdateWithoutWorkspaceInput = {
 export type AgentSessionUncheckedUpdateWithoutWorkspaceInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workspacePrId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   workflow?: Prisma.StringFieldUpdateOperationsInput | string
   model?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumSessionStatusFieldUpdateOperationsInput | $Enums.SessionStatus
@@ -703,6 +731,7 @@ export type AgentSessionUncheckedUpdateWithoutWorkspaceInput = {
 export type AgentSessionUncheckedUpdateManyWithoutWorkspaceInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workspacePrId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   workflow?: Prisma.StringFieldUpdateOperationsInput | string
   model?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumSessionStatusFieldUpdateOperationsInput | $Enums.SessionStatus
@@ -721,6 +750,7 @@ export type AgentSessionSelect<ExtArgs extends runtime.Types.Extensions.Internal
   id?: boolean
   workspaceId?: boolean
   name?: boolean
+  workspacePrId?: boolean
   workflow?: boolean
   model?: boolean
   status?: boolean
@@ -738,6 +768,7 @@ export type AgentSessionSelectCreateManyAndReturn<ExtArgs extends runtime.Types.
   id?: boolean
   workspaceId?: boolean
   name?: boolean
+  workspacePrId?: boolean
   workflow?: boolean
   model?: boolean
   status?: boolean
@@ -755,6 +786,7 @@ export type AgentSessionSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.
   id?: boolean
   workspaceId?: boolean
   name?: boolean
+  workspacePrId?: boolean
   workflow?: boolean
   model?: boolean
   status?: boolean
@@ -772,6 +804,7 @@ export type AgentSessionSelectScalar = {
   id?: boolean
   workspaceId?: boolean
   name?: boolean
+  workspacePrId?: boolean
   workflow?: boolean
   model?: boolean
   status?: boolean
@@ -784,7 +817,7 @@ export type AgentSessionSelectScalar = {
   updatedAt?: boolean
 }
 
-export type AgentSessionOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "workspaceId" | "name" | "workflow" | "model" | "status" | "provider" | "providerSessionId" | "providerProjectPath" | "providerProcessPid" | "providerMetadata" | "createdAt" | "updatedAt", ExtArgs["result"]["agentSession"]>
+export type AgentSessionOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "workspaceId" | "name" | "workspacePrId" | "workflow" | "model" | "status" | "provider" | "providerSessionId" | "providerProjectPath" | "providerProcessPid" | "providerMetadata" | "createdAt" | "updatedAt", ExtArgs["result"]["agentSession"]>
 export type AgentSessionInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
 }
@@ -804,6 +837,7 @@ export type $AgentSessionPayload<ExtArgs extends runtime.Types.Extensions.Intern
     id: string
     workspaceId: string
     name: string | null
+    workspacePrId: string | null
     workflow: string
     model: string
     status: $Enums.SessionStatus
@@ -1241,6 +1275,7 @@ export interface AgentSessionFieldRefs {
   readonly id: Prisma.FieldRef<"AgentSession", 'String'>
   readonly workspaceId: Prisma.FieldRef<"AgentSession", 'String'>
   readonly name: Prisma.FieldRef<"AgentSession", 'String'>
+  readonly workspacePrId: Prisma.FieldRef<"AgentSession", 'String'>
   readonly workflow: Prisma.FieldRef<"AgentSession", 'String'>
   readonly model: Prisma.FieldRef<"AgentSession", 'String'>
   readonly status: Prisma.FieldRef<"AgentSession", 'SessionStatus'>

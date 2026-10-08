@@ -22,6 +22,7 @@ export interface RatchetSessionSummary {
   status: SessionStatus;
   provider: SessionProvider;
   createdAt: Date;
+  workspacePrId?: string | null;
 }
 
 export type RatchetFixerSessionAcquisition =
@@ -35,6 +36,7 @@ export interface RatchetSessionBridge {
   acquireFixerSession(input: {
     workspaceId: string;
     workflow: string;
+    workspacePrId?: string;
     sessionName: string;
     maxSessions: number;
     provider?: SessionProvider;
@@ -67,7 +69,7 @@ export interface RatchetWorkspaceBridge {
     sessionId: string,
     outcome: 'COMPLETED' | 'DIED'
   ): Promise<boolean>;
-  markDispatchStalled(workspaceId: string, snapshotKey: string): Promise<boolean>;
+  markDispatchStalled(workspaceId: string, snapshotKey: string, prId?: string): Promise<boolean>;
 }
 
 // --- GitHub bridge ---
@@ -136,6 +138,8 @@ export interface RatchetPRSnapshotBridge {
    */
   recordPrObservation(input: {
     workspaceId: string;
+    prId?: string;
+    expectedRevision?: number;
     prUrl: string;
     prNumber: number;
     ciStatus: CIStatus;
@@ -146,7 +150,7 @@ export interface RatchetPRSnapshotBridge {
     failedAt?: Date | null;
     observedAt?: Date;
   }): Promise<void>;
-  recordReviewCheck(workspaceId: string, checkedAt?: Date | null): Promise<void>;
+  recordReviewCheck(workspaceId: string, checkedAt?: Date | null, prId?: string): Promise<void>;
 }
 
 /** GitHub capabilities needed by ratchet domain */
@@ -191,7 +195,7 @@ export interface RatchetGitHubBridge {
    * throwing releases the claim — neither is the caller's to remember.
    */
   coordinatePrFetch(
-    workspaceId: string,
+    workspaceId: string | { workspaceId: string; prId: string },
     fetch: () => Promise<PRStateInfo>,
     options?: RatchetCoordinateOptions
   ): Promise<RatchetCoordinatedFetch>;

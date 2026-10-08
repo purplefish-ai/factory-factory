@@ -24,6 +24,8 @@ import {
   WORKSPACE_STATUS_REASON_CODES,
   WORKSPACE_STATUS_REASON_TONES,
 } from '@/shared/workspace-status-reason';
+import { WorkspacePullRequestSchema } from './workspace-pr';
+import { WorkspacePRSummarySchema } from './workspace-pr-summary';
 
 const SnapshotFieldGroupSchema = z.enum([
   'workspace',
@@ -89,6 +91,8 @@ export const WorkspaceSnapshotEntrySchema = z.object({
   status: z.nativeEnum(WorkspaceStatus),
   createdAt: z.string(),
   branchName: z.string().nullable(),
+  prs: z.array(WorkspacePullRequestSchema).optional(),
+  prSummary: WorkspacePRSummarySchema.optional(),
   prUrl: z.string().nullable(),
   prNumber: z.number().nullable(),
   prState: z.nativeEnum(PRState),

@@ -10,7 +10,6 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import type { WorkspaceHeaderWorkspace, WorkspacePrChipProps } from './types';
-import { hasVisiblePullRequest, isWorkspaceClosed, isWorkspaceMerged } from './utils';
 
 type WorkspacePrActionProps = {
   workspace: WorkspaceHeaderWorkspace;
@@ -58,7 +57,16 @@ export function WorkspacePrAction({
   isCreatingSession,
   handleQuickAction,
 }: WorkspacePrActionProps) {
-  if (hasChanges && !running && workspace.prState === 'NONE') {
+  if (
+    hasChanges &&
+    !running &&
+    !workspace.prs.some(
+      (pr) =>
+        pr.state !== 'MERGED' &&
+        pr.state !== 'CLOSED' &&
+        (!pr.headRefName || pr.headRefName === workspace.branchName)
+    )
+  ) {
     return (
       <Tooltip>
         <TooltipTrigger asChild>
@@ -80,18 +88,6 @@ export function WorkspacePrAction({
         </TooltipTrigger>
         <TooltipContent>Create a pull request for this branch</TooltipContent>
       </Tooltip>
-    );
-  }
-
-  if (hasVisiblePullRequest(workspace)) {
-    const variant = isWorkspaceMerged(workspace)
-      ? 'merged'
-      : isWorkspaceClosed(workspace)
-        ? 'closed'
-        : 'default';
-
-    return (
-      <WorkspacePrChip prUrl={workspace.prUrl} prNumber={workspace.prNumber} variant={variant} />
     );
   }
 
@@ -130,7 +126,7 @@ export function WorkspaceIssueLink({ workspace }: { workspace: WorkspaceHeaderWo
 }
 
 export function WorkspaceCiStatus({ workspace }: { workspace: WorkspaceHeaderWorkspace }) {
-  if (!workspace.prUrl) {
+  if (!workspace.prSummary.totalCount) {
     return null;
   }
 

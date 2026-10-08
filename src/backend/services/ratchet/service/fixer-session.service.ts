@@ -12,6 +12,7 @@ export type RunningIdleSessionAction = 'send_message' | 'restart' | 'already_act
 export interface AcquireAndDispatchInput {
   workspaceId: string;
   workflow: string;
+  workspacePrId?: string;
   sessionName: string;
   buildPrompt: () => string | Promise<string>;
   runningIdleAction: RunningIdleSessionAction;
@@ -67,7 +68,7 @@ class FixerSessionService {
   }
 
   async acquireAndDispatch(input: AcquireAndDispatchInput): Promise<AcquireAndDispatchResult> {
-    const key = `${input.workspaceId}:${input.workflow}`;
+    const key = `${input.workspaceId}:${input.workflow}:${input.workspacePrId ?? 'workspace'}`;
     const pending = this.pendingAcquisitions.get(key);
     if (pending !== undefined) {
       logger.debug('Fixer acquisition already in progress', {
@@ -153,6 +154,7 @@ class FixerSessionService {
     const acquisition = await this.session.acquireFixerSession({
       workspaceId: input.workspaceId,
       workflow: input.workflow,
+      workspacePrId: input.workspacePrId,
       sessionName: input.sessionName,
       maxSessions: configService.getMaxSessionsPerWorkspace(),
       provider,

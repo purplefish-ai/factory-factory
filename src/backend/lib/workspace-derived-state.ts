@@ -9,6 +9,7 @@ import type {
 } from '@/shared/core';
 import { kanbanColumnForStatusReason } from '@/shared/kanban-column-projection';
 import type { WorkspaceCiObservation, WorkspaceFlowPhase } from '@/shared/workspace-flow-state';
+import type { WorkspacePRSummary } from '@/shared/workspace-pr-summary';
 import type { WorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import {
   deriveWorkspaceStatusReason,
@@ -24,6 +25,7 @@ export interface WorkspaceDerivedFlowState {
 
 export interface WorkspaceDerivedStateInput {
   lifecycle: WorkspaceStatus;
+  prSummary?: WorkspacePRSummary;
   prUrl: string | null;
   prState: PRState;
   prCiStatus: CIStatus;
@@ -44,6 +46,7 @@ export interface WorkspaceDerivedStateInput {
 export interface WorkspaceDerivedStateFns {
   deriveSidebarStatus: (input: {
     isWorking: boolean;
+    prSummary?: WorkspacePRSummary;
     prUrl: string | null;
     prState: PRState | null;
     prCiStatus: CIStatus | null;
@@ -92,6 +95,7 @@ export function assembleWorkspaceDerivedState(
     isWorking,
     sidebarStatus: fns.deriveSidebarStatus({
       isWorking,
+      prSummary: input.prSummary,
       prUrl: input.prUrl,
       prState: input.prState,
       prCiStatus: input.prCiStatus,

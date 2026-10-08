@@ -4,8 +4,9 @@
  * header/session runtime) React Query cache entries.
  *
  * Merge strategy — one strategy per cache per message:
- * - snapshot_changed / snapshot_removed deltas are pure setData patches;
- *   they never trigger invalidation refetches.
+ * - Ordinary snapshot_changed / snapshot_removed deltas patch caches directly.
+ *   Ready workspaces missing a cached worktree path refetch the project list
+ *   once so PR review actions can use the actual provisioned path.
  * - snapshot_full is the (re)connect baseline. Any baseline after a
  *   project's first follows a gap (network reconnect, or a switch away and
  *   back) during which deltas were dropped, and snapshot entries don't carry
@@ -153,11 +154,59 @@ function invalidateForUnknownWorkspaces(
   });
 }
 
+/** Snapshots carry readiness but omit the worktree path required for PR review. */
+function healReadyWorktreePaths(
+  utils: TrpcUtils,
+  projectId: string,
+  entries: readonly WorkspaceSnapshotEntry[],
+  knownWorkspaceIds: Set<string>,
+  repairedWorkspaceIds: Set<string>
+): void {
+  const cachedById = new Map(
+    utils.workspace.listForProject
+      .getData({ projectId })
+      ?.workspaces.map((workspace) => [workspace.id, workspace])
+  );
+  const missingPaths = entries.filter(
+    (entry) =>
+      entry.status === 'READY' &&
+      knownWorkspaceIds.has(entry.workspaceId) &&
+      !cachedById.get(entry.workspaceId)?.worktreePath &&
+      !repairedWorkspaceIds.has(entry.workspaceId)
+  );
+  if (!missingPaths.length) {
+    return;
+  }
+  for (const entry of missingPaths) {
+    repairedWorkspaceIds.add(entry.workspaceId);
+  }
+  void utils.workspace.listForProject.invalidate({ projectId }).then(
+    () => {
+      const refreshedById = new Map(
+        utils.workspace.listForProject
+          .getData({ projectId })
+          ?.workspaces.map((workspace) => [workspace.id, workspace])
+      );
+      for (const entry of missingPaths) {
+        if (!refreshedById.get(entry.workspaceId)?.worktreePath) {
+          repairedWorkspaceIds.delete(entry.workspaceId);
+        }
+      }
+    },
+    () => {
+      for (const entry of missingPaths) {
+        repairedWorkspaceIds.delete(entry.workspaceId);
+      }
+    }
+  );
+}
+
 function applySnapshotFullMessage(
   utils: TrpcUtils,
   message: SnapshotFullMessage,
   pendingRequests: Map<string, PendingRequestType>,
-  alreadyInvalidated: Set<string>
+  alreadyInvalidated: Set<string>,
+  repairedWorktreePaths: Set<string>
 ): void {
   const entries = message.entries.map(overridePendingRatchetToggle);
 
@@ -187,6 +236,14 @@ function applySnapshotFullMessage(
     alreadyInvalidated
   );
 
+  healReadyWorktreePaths(
+    utils,
+    message.projectId,
+    entries,
+    knownWorkspaceIds,
+    repairedWorktreePaths
+  );
+
   for (const entry of entries) {
     utils.workspace.get.setData({ id: entry.workspaceId }, (prev) =>
       mergeProjectSnapshotIntoWorkspaceDetail(entry, prev)
@@ -199,7 +256,8 @@ function applySnapshotChangedMessage(
   projectId: string,
   message: SnapshotChangedMessage,
   pendingRequests: Map<string, PendingRequestType>,
-  alreadyInvalidated: Set<string>
+  alreadyInvalidated: Set<string>,
+  repairedWorktreePaths: Set<string>
 ): void {
   const entry = overridePendingRatchetToggle(message.entry);
 
@@ -224,6 +282,8 @@ function applySnapshotChangedMessage(
   });
 
   invalidateForUnknownWorkspaces(utils, projectId, [entry], knownWorkspaceIds, alreadyInvalidated);
+
+  healReadyWorktreePaths(utils, projectId, [entry], knownWorkspaceIds, repairedWorktreePaths);
 
   utils.workspace.get.setData({ id: entry.workspaceId }, (prev) =>
     mergeProjectSnapshotIntoWorkspaceDetail(entry, prev)
@@ -277,6 +337,7 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
   // at one refetch per workspace id, so a burst of snapshot messages for the
   // same newly-introduced workspace doesn't trigger a refetch storm.
   const invalidatedForUnknownWorkspaceRef = useRef<Set<string>>(new Set());
+  const repairedWorktreePathsRef = useRef<Set<string>>(new Set());
 
   const url = projectId ? buildWebSocketUrl('/snapshots', { projectId }) : null;
 
@@ -288,7 +349,8 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
             utils,
             message,
             previousPendingRequestsRef.current,
-            invalidatedForUnknownWorkspaceRef.current
+            invalidatedForUnknownWorkspaceRef.current,
+            repairedWorktreePathsRef.current
           );
           if (baselineProjectsRef.current.has(message.projectId)) {
             healWorkspaceCachesAfterReconnect(utils, message.projectId);
@@ -307,7 +369,8 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
             projectId,
             message,
             previousPendingRequestsRef.current,
-            invalidatedForUnknownWorkspaceRef.current
+            invalidatedForUnknownWorkspaceRef.current,
+            repairedWorktreePathsRef.current
           );
           break;
         }

@@ -58,46 +58,24 @@ export type DecisionLog = Prisma.DecisionLogModel
 export type Workspace = Prisma.WorkspaceModel
 /**
  * Model WorkspacePR
- * What GitHub last told us about the workspace's pull request, plus the
- * bookkeeping for finding that PR and for the notifications we derive from it.
- * 
- * This is a cache, not a source of truth: every field here is either a copy of
- * GitHub state or a cursor into it, and losing the whole row costs one refresh.
- * It is split out of `Workspace` because that distinction was invisible while
- * the columns sat beside the workspace's own durable identity, and because the
- * compare-and-swap writes that attach and refresh a PR need to guard a row no
- * other concern writes.
- * 
- * Field names drop the `pr` prefix the columns carried on `Workspace`, where it
- * was doing the work this model's name now does. The flat `pr*` names are still
- * what every caller sees: `workspacePrAccessor` maps between the two, so the
- * split stops at the accessor.
- * 
- * Exactly one row per workspace, created with the workspace, so the writes that
- * run before a PR exists — discovery claims and their backoff — have a row to
- * guard. Reads substitute defaults if a row is ever missing rather than making
- * every caller handle the null.
+ * Each association retains its own GitHub cache. Detached rows suppress discovery.
  */
 export type WorkspacePR = Prisma.WorkspacePRModel
 /**
+ * Model WorkspacePRDiscovery
+ * Discovery belongs to the workspace even before its first PR exists.
+ */
+export type WorkspacePRDiscovery = Prisma.WorkspacePRDiscoveryModel
+/**
  * Model WorkspaceRatchet
- * What the ratchet decides for one workspace: whether it is watching the PR,
- * and the last fixer dispatch it made.
- * 
- * Deliberately not the ratchet's *state*. `RatchetState` is a projection of the
- * PR observation on `WorkspacePR` (see `deriveRatchetState`), so it is computed
- * at read time and there is nothing here to keep in step with the PR cache.
- * What remains is genuinely mutable: a user-owned toggle and a dispatch record
- * with real concurrency, whose conditional writes guard `enabled` alongside the
- * field they set — which is why the toggle lives next to the dispatch record
- * rather than back on `Workspace`.
- * 
- * Exactly one row per workspace, created with the workspace. Reads go through
- * `workspaceRatchetAccessor`, which substitutes these defaults if a row is
- * ever missing (a pre-split backup restored, say) rather than making every
- * caller handle the null.
+ * The workspace toggle and the single fixer slot shared by all of its PRs.
  */
 export type WorkspaceRatchet = Prisma.WorkspaceRatchetModel
+/**
+ * Model WorkspacePRRatchet
+ * Independent dispatch deduplication, retry budget, and progress for one PR.
+ */
+export type WorkspacePRRatchet = Prisma.WorkspacePRRatchetModel
 /**
  * Model WorkspaceRunScript
  * The workspace's dev server: the commands `factory-factory.json` declares for

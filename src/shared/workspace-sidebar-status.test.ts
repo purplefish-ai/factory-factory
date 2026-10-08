@@ -2,6 +2,18 @@ import { describe, expect, it } from 'vitest';
 import { deriveWorkspaceSidebarStatus, getWorkspaceCiTooltip } from './workspace-sidebar-status';
 
 describe('workspace-sidebar-status', () => {
+  it('retains a legacy PR when its collection summary has not caught up', () => {
+    expect(
+      deriveWorkspaceSidebarStatus({
+        isWorking: false,
+        prSummary: { totalCount: 0, hasNonterminal: false },
+        prUrl: 'https://github.com/o/r/pull/1',
+        prState: 'OPEN',
+        prCiStatus: 'FAILURE',
+        ratchetState: 'CI_FAILED',
+      }).ciState
+    ).toBe('FAILING');
+  });
   it('marks activity as working when isWorking is true', () => {
     const result = deriveWorkspaceSidebarStatus({
       isWorking: true,
