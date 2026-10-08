@@ -20,6 +20,19 @@ export const Mermaid: Story = {
   args: { content: '```mermaid\ngraph LR\n  Workspace --> Session\n  Session --> Result\n```' },
 };
 
+export const MermaidClass: Story = {
+  args: {
+    content: '```mermaid\nclassDiagram\n  Workspace "1" --> "*" Session\n  Session --> Result\n```',
+  },
+};
+
+export const MermaidState: Story = {
+  args: {
+    content:
+      '```mermaid\nstateDiagram-v2\n  [*] --> Ready\n  Ready --> Running\n  Running --> Complete\n  Complete --> [*]\n```',
+  },
+};
+
 export const InvalidMermaid: Story = {
   args: { content: '```mermaid\nthis is not a diagram\n```' },
 };

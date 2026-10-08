@@ -67,3 +67,6 @@ overrides:
   valibot: 1.5.0
   webpack: 5.111.1
   yaml: 2.9.1
+
+  # Mermaid 12 still requests the older vulnerable KaTeX line.
+  katex: 0.18.2
