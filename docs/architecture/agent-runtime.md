@@ -61,7 +61,9 @@ that existing result still completes exactly one occurrence of the tool ID.
 Normal user turns have a fixed four-hour deadline; auto-iteration keeps its
 separate configured deadline. Explicit stops, closes, workspace archives,
 provider failures, prompt timeouts, and unexpected process exits record distinct
-typed reasons.
+typed reasons. Clean process exits (code `0`) complete the session without an
+unexpected-exit lifecycle row; nonzero or signal exits retain that stop
+evidence.
 
 The chat composer uses generic retry wording for runtime errors; the banner
 provides the specific startup, prompt, or process-exit error.

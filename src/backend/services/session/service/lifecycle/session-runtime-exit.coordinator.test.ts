@@ -234,7 +234,7 @@ describe('SessionRuntimeExitCoordinator', () => {
     expect(harness.domain.markError).toHaveBeenCalledWith('session-1', 'promoted runtime failed');
   });
 
-  it('records the process-exit snapshot and successful persisted status', async () => {
+  it('completes clean unmanaged exits without unexpected-exit history', async () => {
     const harness = createExitCoordinatorHarness();
 
     await harness.coordinator.handleExit(runtimeExit({ exitCode: 0 }));
@@ -243,6 +243,10 @@ describe('SessionRuntimeExitCoordinator', () => {
     expect(harness.repository.updateSession).toHaveBeenCalledWith('session-1', {
       status: SessionStatus.COMPLETED,
     });
+    expect(harness.lifecycleEvents.record).not.toHaveBeenCalled();
+    expect(harness.workflowFinalizer.finalizeRuntimeExit).toHaveBeenCalledWith(
+      expect.objectContaining({ exitCode: 0, deliberate: false })
+    );
   });
 
   it('continues durable exit effects after the persisted status update fails', async () => {
