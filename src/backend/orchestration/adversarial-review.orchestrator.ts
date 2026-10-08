@@ -13,6 +13,7 @@ import {
   type AdversarialReviewFindings,
   parseAdversarialReviewFindings,
 } from '@/backend/prompts/adversarial-review-findings.schema';
+import { configService } from '@/backend/services/config.service';
 import {
   createReviewComment,
   getPRDescription,
@@ -118,13 +119,21 @@ async function triggerAdversarialReviewLocked(
       : (settings.reviewerCodexModel ?? 'default');
   const providerLabel = provider === 'CLAUDE' ? 'Claude' : 'Codex';
 
-  const session = await sessionDataService.createAgentSession({
+  const creation = await sessionDataService.createAgentSessionWithinWorkspaceLimit({
     workspaceId,
     name: `Adversarial Review (${providerLabel})`,
     workflow: ADVERSARIAL_REVIEW_WORKFLOW,
     provider,
     model,
+    maxSessions: configService.getMaxSessionsPerWorkspace(),
   });
+  if (creation.outcome === 'limit_reached') {
+    throw new ApplicationError(
+      'PRECONDITION_FAILED',
+      'Workspace session limit reached; close a session before reviewing'
+    );
+  }
+  const session = creation.session;
 
   // `plan` mode structurally blocks write tools (not just the permission
   // preset, which non-interactive sessions can't be prompted to approve
