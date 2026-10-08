@@ -2,8 +2,8 @@ import type {
   ChatMessageHandler,
   HandlerRegistryDependencies,
 } from '@/backend/services/session/service/chat/chat-message-handlers/types';
+import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
 import type { ResumeQueuedMessagesInput } from '@/shared/websocket';
-import { sessionBackgroundDeliveryService } from '../../../lifecycle/session-background-delivery.service';
 
 export function createResumeQueuedMessagesHandler(
   deps: HandlerRegistryDependencies

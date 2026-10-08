@@ -7,11 +7,11 @@ import {
   buildAcceptedMessageStateChange,
   buildQueuedMessage,
 } from '@/backend/services/session/service/chat/chat-message-handlers/utils';
+import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { PR_EVENT_MESSAGE_ID_PREFIX } from '@/shared/pr-monitoring';
 import type { QueueMessageInput } from '@/shared/websocket';
 import { WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX } from '@/shared/workspace-notifications';
-import { sessionBackgroundDeliveryService } from '../../../lifecycle/session-background-delivery.service';
 
 function validateAttachments(attachments: QueueMessageInput['attachments']): string | null {
   if (!attachments?.length) {

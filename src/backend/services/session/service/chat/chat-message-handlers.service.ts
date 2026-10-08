@@ -12,6 +12,7 @@ import { createLogger } from '@/backend/services/logger.service';
 import { acpRuntimeManager } from '@/backend/services/session/service/acp';
 import type { SessionInitPolicyBridge } from '@/backend/services/session/service/bridges';
 import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
+import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
 import {
   sessionConfigService,
   sessionPermissionService,
@@ -28,7 +29,6 @@ import {
   resolveSelectedModel,
 } from '@/shared/acp-protocol';
 import type { ChatMessageInput } from '@/shared/websocket';
-import { sessionBackgroundDeliveryService } from '../lifecycle/session-background-delivery.service';
 import {
   PermanentAttachmentError,
   processAttachmentsAndBuildContent,

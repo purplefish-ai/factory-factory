@@ -76,7 +76,7 @@ vi.mock('./chat-message-handlers/registry', () => ({
   createChatMessageHandlerRegistry: () => ({}),
 }));
 
-import { sessionBackgroundDeliveryService } from '../lifecycle/session-background-delivery.service';
+import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
 import { ChatMessageHandlerService } from './chat-message-handlers.service';
 
 const chatMessageHandlerService = new ChatMessageHandlerService();

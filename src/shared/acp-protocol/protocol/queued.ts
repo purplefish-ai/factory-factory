@@ -1,4 +1,4 @@
-import type { PRDeliveryRequest } from '../../pr-monitoring';
+import type { PRDeliveryRequest } from '@/shared/pr-monitoring';
 /**
  * Attachment data for uploaded files in chat.
  */

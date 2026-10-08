@@ -7,16 +7,16 @@ const mocks = vi.hoisted(() => ({
   read: vi.fn(),
 }));
 vi.mock('node:fs/promises', () => ({ readFile: mocks.read }));
-vi.mock('../../resources/closed-session.accessor', () => ({
+vi.mock('@/backend/services/session/resources/closed-session.accessor', () => ({
   closedSessionAccessor: { findBySessionIdWithWorkspace: mocks.archives },
 }));
-vi.mock('../data/session-data.service', () => ({
+vi.mock('@/backend/services/session/service/data/session-data.service', () => ({
   sessionDataService: { findAgentSessionById: mocks.session },
 }));
-vi.mock('../data/session-history-loader.service', () => ({
+vi.mock('@/backend/services/session/service/data/session-history-loader.service', () => ({
   claudeSessionHistoryLoaderService: { loadSessionHistory: mocks.history },
 }));
-vi.mock('../data/codex-session-history-loader.service', () => ({
+vi.mock('@/backend/services/session/service/data/codex-session-history-loader.service', () => ({
   codexSessionHistoryLoaderService: { loadSessionHistory: mocks.history },
 }));
 

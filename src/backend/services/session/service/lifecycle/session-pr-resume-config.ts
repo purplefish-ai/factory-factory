@@ -1,5 +1,5 @@
-import type { AgentSessionRecord } from '../../resources/agent-session.accessor';
-import type { AcpProcessHandle } from '../acp';
+import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
+import type { AcpProcessHandle } from '@/backend/services/session/service/acp';
 import { parseAcpConfigSnapshot } from './acp-config-snapshot';
 export async function restorePRResumeConfig(
   session: AgentSessionRecord,

@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { sessionDomainService } from '../session-domain.service';
+import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { SessionBackgroundDeliveryService } from './session-background-delivery.service';
 
 const request = { workspaceId: 'w', prId: 'p', bindingRevision: 1 };

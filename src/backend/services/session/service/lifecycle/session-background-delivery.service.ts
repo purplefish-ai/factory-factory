@@ -1,3 +1,4 @@
+import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type { QueuedMessage } from '@/shared/acp-protocol';
 import {
   type ClaimedPRDelivery,
@@ -5,7 +6,6 @@ import {
   type PRDeliveryRequest,
 } from '@/shared/pr-monitoring';
 import { prDeliveryRequestSchema } from '@/shared/schemas/pr-event.schema';
-import { sessionDomainService } from '../session-domain.service';
 export interface PRBackgroundDeliveryPort {
   prepare(input: {
     sessionId: string;

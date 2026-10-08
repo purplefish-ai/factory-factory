@@ -4,9 +4,9 @@ import type {
   ChatMessageHandlerPromptService,
   ChatMessageHandlerRuntimeManager,
 } from '@/backend/services/session/service/chat/chat-message-handlers/types';
+import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
 import type { AgentContentItem } from '@/shared/acp-protocol';
 import type { UserInputMessage } from '@/shared/websocket';
-import { sessionBackgroundDeliveryService } from '../../../lifecycle/session-background-delivery.service';
 
 const logger = createLogger('chat-message-handlers');
 
