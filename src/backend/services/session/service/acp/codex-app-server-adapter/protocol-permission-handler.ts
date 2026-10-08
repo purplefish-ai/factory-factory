@@ -139,6 +139,10 @@ function buildToolUserInputAnswers(params: {
     return {};
   }
 
+  if (new Set(params.questions.map((question) => question.id)).size !== params.questions.length) {
+    throw new Error('Duplicate question IDs in requestUserInput');
+  }
+
   const parsedAnswers = parseToolUserInputAnswersFromPermissionMeta({
     questions: params.questions,
     permission: params.permission,

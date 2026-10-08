@@ -64,13 +64,16 @@ describe('protocol-permission-handler', () => {
     { name: 'raw id before alias collision', ids: ['color', ' color '], rawKeys: true },
     { name: 'raw id after alias collision', ids: [' color ', 'color'], rawKeys: true },
     { name: 'raw answer plus alias', ids: [' color '], rawKeys: true, bothKeys: true },
+    { name: 'duplicate empty ids', ids: ['', ''], duplicateIds: true },
+    { name: 'duplicate whitespace ids', ids: ['   ', '   '], duplicateIds: true },
+    { name: 'duplicate nonempty ids', ids: ['color', 'color'], duplicateIds: true },
     { name: 'ambiguous aliases', ids: [' color ', 'color '], ambiguous: true },
     { name: 'empty id', ids: [''] },
     { name: 'whitespace id', ids: ['   '] },
     { name: 'mixed multi-question ids', ids: ['  color  ', '', '   ', 'plain'] },
   ])(
     'maps question answers without misattribution for $name',
-    async ({ ids, rawKeys, ambiguous, bothKeys }) => {
+    async ({ ids, rawKeys, ambiguous, bothKeys, duplicateIds }) => {
       const session = createSession();
       const questions = ids.map((id, index) => ({
         id,
@@ -114,13 +117,17 @@ describe('protocol-permission-handler', () => {
         reportShapeDrift: vi.fn(),
       });
 
-      if (ambiguous) {
+      if (ambiguous || duplicateIds) {
         expect(codex.respondSuccess).not.toHaveBeenCalled();
         expect(codex.respondError).toHaveBeenCalledWith(
           3,
           expect.objectContaining({
             message: 'Failed to map requestUserInput answers',
-            data: { error: 'Ambiguous structured answer key: color' },
+            data: {
+              error: duplicateIds
+                ? 'Duplicate question IDs in requestUserInput'
+                : 'Ambiguous structured answer key: color',
+            },
           })
         );
         expect(emitSessionUpdate).toHaveBeenLastCalledWith(

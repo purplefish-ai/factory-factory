@@ -40,9 +40,10 @@ supported without selection options. Codex question answers are mapped from the
 composer's trimmed ID or question-text fallback to the original provider ID,
 including empty and whitespace-only IDs. Exact provider IDs take precedence over
 normalized aliases; ambiguous aliases fail instead of assigning an answer to the
-wrong question. Soft cancellation (including voice stop and prompt timeout)
-resolves pending permission requests with a cancelled outcome, dismisses their
-prompts, and keeps the bridge available for later turns.
+wrong question. Duplicate provider IDs are rejected before answer mapping. Soft
+cancellation (including voice stop and prompt timeout) resolves pending
+permission requests with a cancelled outcome, dismisses their prompts, and keeps
+the bridge available for later turns.
 
 Approving a Codex plan queues the automatic approval turn with the same
 plan-disabled settings persisted for the session, preventing that turn from
