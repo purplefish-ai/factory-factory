@@ -1,4 +1,8 @@
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import {
+  SessionResumeFences,
+  sessionResumeFences,
+} from '@/backend/services/session/service/session-resume-fence';
 import type { QueuedMessage } from '@/shared/acp-protocol';
 import {
   type ClaimedPRDelivery,
@@ -29,7 +33,7 @@ export class SessionBackgroundDeliveryService {
     { sessionId: string; messageId: string; request: PRDeliveryRequest }
   >();
   private deliveries = new Map<string, ClaimedPRDelivery>();
-  private pauseGenerations = new Map<string, number>();
+  constructor(private readonly resumeFences = new SessionResumeFences()) {}
   configure(port: PRBackgroundDeliveryPort) {
     this.port = port;
   }
@@ -132,18 +136,14 @@ export class SessionBackgroundDeliveryService {
     return this.port?.recover(sessionId) ?? Promise.resolve();
   }
   captureResumeGuard(sessionId: string): () => boolean {
-    const generation = this.pauseGenerations.get(sessionId) ?? 0;
-    return () => (this.pauseGenerations.get(sessionId) ?? 0) === generation;
-  }
-  private fenceResumes(sessionId: string): void {
-    this.pauseGenerations.set(sessionId, (this.pauseGenerations.get(sessionId) ?? 0) + 1);
+    return this.resumeFences.capture(sessionId);
   }
   async userStop(sessionId: string) {
-    this.fenceResumes(sessionId);
+    this.resumeFences.advance(sessionId);
     await this.port?.pause(sessionId, 'USER_STOPPED');
   }
   async runtimeFailure(sessionId: string) {
-    this.fenceResumes(sessionId);
+    this.resumeFences.advance(sessionId);
     await this.port?.pause(sessionId, 'SESSION_FAILED');
   }
   async userResume(sessionId: string, isCurrent = this.captureResumeGuard(sessionId)) {
@@ -153,4 +153,6 @@ export class SessionBackgroundDeliveryService {
     await this.port?.resume(sessionId, isCurrent);
   }
 }
-export const sessionBackgroundDeliveryService = new SessionBackgroundDeliveryService();
+export const sessionBackgroundDeliveryService = new SessionBackgroundDeliveryService(
+  sessionResumeFences
+);

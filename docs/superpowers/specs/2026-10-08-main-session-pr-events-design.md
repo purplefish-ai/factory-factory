@@ -69,7 +69,9 @@ another workspace session is modifying the shared worktree.
 
 Capture resume authorization before asynchronous human-input or startup work. A
 later stop or runtime failure invalidates it through persistence and queue
-wakeup, so an earlier detached resume cannot clear the newer pause.
+wakeup, so an earlier detached resume cannot clear the newer pause. Permanent
+deletion releases the in-memory fence while previously captured guards remain
+invalid; ordinary transcript-store eviction retains it.
 
 Deleting or closing the recipient leaves monitoring awaiting a new explicit
 binding; do not select another conversation automatically. Persist its provider

@@ -1,6 +1,9 @@
 import { expect, it } from 'vitest';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
-import { SessionBackgroundDeliveryService } from './session-background-delivery.service';
+import {
+  SessionBackgroundDeliveryService,
+  sessionBackgroundDeliveryService,
+} from './session-background-delivery.service';
 
 const request = { workspaceId: 'w', prId: 'p', bindingRevision: 1 };
 const settings = {
@@ -165,6 +168,10 @@ it.each(['userStop', 'runtimeFailure'] as const)(
   async (pauseMethod) => {
     const service = new SessionBackgroundDeliveryService();
     let release!: () => void;
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
     const pending = new Promise<void>((resolve) => {
       release = resolve;
     });
@@ -180,6 +187,7 @@ it.each(['userStop', 'runtimeFailure'] as const)(
         return Promise.resolve();
       },
       resume: async (_id, isCurrent?: () => boolean) => {
+        entered();
         await pending;
         if (!isCurrent || isCurrent()) {
           pauseReason = null;
@@ -187,12 +195,27 @@ it.each(['userStop', 'runtimeFailure'] as const)(
       },
     });
     const resume = service.userResume('concurrent-resume');
+    await started;
     await service[pauseMethod]('concurrent-resume');
     release();
     await resume;
     expect(pauseReason).toBe(pauseMethod === 'userStop' ? 'USER_STOPPED' : 'SESSION_FAILED');
   }
 );
+
+it('releases a deleted session fence without reviving previously captured resume authorization', () => {
+  const sessionId = 'deleted-resume-fence';
+  const prior = sessionBackgroundDeliveryService.captureResumeGuard(sessionId);
+  sessionDomainService.clearSession(sessionId);
+  expect(prior()).toBe(true);
+  sessionDomainService.clearSession(sessionId, { permanentlyDeleted: true });
+  expect(prior()).toBe(false);
+  const replacement = sessionBackgroundDeliveryService.captureResumeGuard(sessionId);
+  expect(replacement()).toBe(true);
+  expect(prior()).toBe(false);
+  sessionDomainService.clearSession(sessionId, { permanentlyDeleted: true });
+  expect(replacement()).toBe(false);
+});
 it('retains a newly queued token when the prior delivery with its stable ID completes', async () => {
   const service = new SessionBackgroundDeliveryService();
   const sessionId = 'stable-token-completion';
