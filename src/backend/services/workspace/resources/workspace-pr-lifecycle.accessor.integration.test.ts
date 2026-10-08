@@ -7,6 +7,8 @@ import {
 } from '@/backend/testing/integration-db';
 import { redObservation } from '@/shared/pr-monitoring.test-helpers';
 import { workspacePrDiscoveryAccessor } from './workspace-pr-discovery.accessor';
+import { workspacePrEventAccessor } from './workspace-pr-event.accessor';
+import { workspacePrMonitoringAccessor } from './workspace-pr-monitoring.accessor';
 import { workspacePrAccessor } from './workspace-pr.accessor';
 import { workspaceRatchetAccessor } from './workspace-ratchet.accessor';
 import { workspaceAccessor } from './workspace.accessor';
@@ -296,4 +298,95 @@ it('records conflict clearance while its detection delivery is frozen in flight'
   expect(
     await db.prisma.workspacePREvent.findMany({ where: { prId: 'p', kind: 'CONFLICT_CLEARED' } })
   ).toHaveLength(1);
+});
+
+it('keeps events unclaimed until the recipient has a provider conversation identity', async () => {
+  await db.prisma.agentSession.create({
+    data: {
+      id: 'main',
+      workspaceId: 'w',
+      workflow: 'implement',
+      provider: 'CLAUDE',
+      model: 'sonnet',
+    },
+  });
+  const binding = await workspacePrMonitoringAccessor.setBinding({
+    workspaceId: 'w',
+    enabled: true,
+    recipientSessionId: 'main',
+    expectedBindingRevision: 0,
+    replyToPrComments: true,
+  });
+  const event = (await workspacePrEventAccessor.listPending('w', null))[0];
+  if (!event) {
+    throw new Error('Missing control event');
+  }
+  const request = { workspaceId: 'w', prId: null, bindingRevision: binding.bindingRevision };
+  const delivery = {
+    deliveryId: 'delivery',
+    sessionId: 'main',
+    eventIds: [event.id],
+    text: 'frozen',
+  };
+  expect(await workspacePrEventAccessor.claimDelivery(request, delivery)).toBeNull();
+  expect(await db.prisma.workspacePREvent.findUnique({ where: { id: event.id } })).toMatchObject({
+    state: 'PENDING',
+    attempts: 0,
+    deliveryId: null,
+    deliveryText: null,
+    deliveryProviderSessionId: null,
+  });
+  await db.prisma.agentSession.update({
+    where: { id: 'main' },
+    data: { providerSessionId: 'conversation' },
+  });
+  expect(await workspacePrEventAccessor.claimDelivery(request, delivery)).toMatchObject({
+    attempt: 1,
+  });
+  expect(await db.prisma.workspacePREvent.findUnique({ where: { id: event.id } })).toMatchObject({
+    state: 'DISPATCHING',
+    attempts: 1,
+    deliveryProviderSessionId: 'conversation',
+  });
+});
+it('preserves a newer user stop when the resume guard expires before its transaction update', async () => {
+  await db.prisma.agentSession.create({
+    data: {
+      id: 'main',
+      workspaceId: 'w',
+      workflow: 'implement',
+      provider: 'CLAUDE',
+      model: 'sonnet',
+      providerSessionId: 'conversation',
+    },
+  });
+  await db.prisma.workspacePRMonitoring.update({
+    where: { workspaceId: 'w' },
+    data: { recipientSessionId: 'main', bindingRevision: 4, deliveryPauseReason: 'USER_STOPPED' },
+  });
+  await db.prisma.workspacePREvent.create({
+    data: {
+      id: 'retry',
+      workspaceId: 'w',
+      kind: 'MONITORING_ENABLED',
+      deduplicationKey: 'retry',
+      attempts: 3,
+      payload: {
+        kind: 'MONITORING_ENABLED',
+        workspaceId: 'w',
+        bindingRevision: 4,
+        replyToPrComments: true,
+      },
+    },
+  });
+  let remainingCurrentChecks = 2;
+  const isCurrent = () => remainingCurrentChecks-- > 0;
+  await workspacePrMonitoringAccessor.resume('main', isCurrent);
+  expect(await workspacePrMonitoringAccessor.get('w')).toMatchObject({
+    deliveryPauseReason: 'USER_STOPPED',
+    bindingRevision: 4,
+  });
+  expect(await db.prisma.workspacePREvent.findUnique({ where: { id: 'retry' } })).toMatchObject({
+    attempts: 3,
+  });
 });

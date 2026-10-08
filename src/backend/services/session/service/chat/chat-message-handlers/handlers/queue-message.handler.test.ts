@@ -214,6 +214,7 @@ it('acknowledges and dispatches human input when delivery resume fails', async (
         message: { type: 'queue_message', id: 'human', text: 'continue' } as never,
       })
     ).resolves.toBeUndefined();
+    expect(resume).toHaveBeenCalledWith('session-1', expect.any(Function));
     expect(mocks.emitDelta).toHaveBeenCalledWith(
       'session-1',
       expect.objectContaining({ id: 'human', newState: MessageState.ACCEPTED })

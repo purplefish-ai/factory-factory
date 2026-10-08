@@ -9,7 +9,11 @@ export function createResumeQueuedMessagesHandler(
   deps: HandlerRegistryDependencies
 ): ChatMessageHandler<ResumeQueuedMessagesInput> {
   return async ({ sessionId }) => {
-    await sessionBackgroundDeliveryService.userResume(sessionId);
+    const isCurrent = sessionBackgroundDeliveryService.captureResumeGuard(sessionId);
+    await sessionBackgroundDeliveryService.userResume(sessionId, isCurrent);
+    if (!isCurrent()) {
+      return;
+    }
     deps.setManualDispatchResume(sessionId, true);
     await deps.tryDispatchNextMessage(sessionId);
   };

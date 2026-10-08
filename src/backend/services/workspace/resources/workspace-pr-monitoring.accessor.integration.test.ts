@@ -153,10 +153,19 @@ describe('durable monitoring', () => {
     );
   });
   it('commits the enablement control atomically with a binding and deduplicates retries', async () => {
+    const current = await workspacePrMonitoringAccessor.get('w');
+    const disabled = await workspacePrMonitoringAccessor.setBinding({
+      workspaceId: 'w',
+      enabled: false,
+      recipientSessionId: null,
+      expectedBindingRevision: current?.bindingRevision ?? 0,
+    });
+    expect(disabled.applied).toBe(true);
     const before = await workspacePrMonitoringAccessor.get('w');
     if (!before) {
       throw new Error('Missing config');
     }
+    expect(before).toMatchObject({ enabled: false, recipientSessionId: null });
     const input = {
       workspaceId: 'w',
       enabled: true,
@@ -164,14 +173,25 @@ describe('durable monitoring', () => {
       expectedBindingRevision: before.bindingRevision,
       replyToPrComments: false,
     };
-    await workspacePrMonitoringAccessor.setBinding(input);
-    await workspacePrMonitoringAccessor.setBinding(input);
+    const enabled = await workspacePrMonitoringAccessor.setBinding(input);
+    expect(enabled).toEqual({ applied: true, bindingRevision: before.bindingRevision + 1 });
+    expect(await workspacePrMonitoringAccessor.get('w')).toMatchObject({
+      enabled: true,
+      recipientSessionId: 'main',
+      bindingRevision: enabled.bindingRevision,
+    });
+    const retry = await workspacePrMonitoringAccessor.setBinding({
+      ...input,
+      expectedBindingRevision: enabled.bindingRevision,
+    });
+    expect(retry).toEqual(enabled);
     const control = await db.prisma.workspacePREvent.findMany({
-      where: { workspaceId: 'w', deduplicationKey: `enabled:${before.bindingRevision}` },
+      where: { workspaceId: 'w', deduplicationKey: `enabled:${enabled.bindingRevision}` },
     });
     expect(control).toHaveLength(1);
     expect(control[0]?.payload).toMatchObject({
       kind: 'MONITORING_ENABLED',
+      bindingRevision: enabled.bindingRevision,
       replyToPrComments: false,
     });
     await workspacePrMonitoringAccessor.pause('main', 'USER_STOPPED');

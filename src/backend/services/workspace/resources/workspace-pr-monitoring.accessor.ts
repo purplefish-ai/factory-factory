@@ -133,7 +133,10 @@ class WorkspacePrMonitoringAccessor {
       return { count };
     });
   }
-  async resume(sessionId: string) {
+  async resume(sessionId: string, isCurrent?: () => boolean) {
+    if (isCurrent?.() === false) {
+      return;
+    }
     const configs = await prisma.workspacePRMonitoring.findMany({
       where: {
         recipientSessionId: sessionId,
@@ -148,8 +151,14 @@ class WorkspacePrMonitoringAccessor {
         },
       },
     });
+    if (isCurrent?.() === false) {
+      return;
+    }
     for (const config of configs) {
       await prisma.$transaction(async (tx) => {
+        if (isCurrent?.() === false) {
+          return;
+        }
         const resumed = await tx.workspacePRMonitoring.updateMany({
           where: {
             workspaceId: config.workspaceId,

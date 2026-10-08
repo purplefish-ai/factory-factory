@@ -71,6 +71,7 @@ export function createQueueMessageHandler(
       return;
     }
 
+    const isCurrent = sessionBackgroundDeliveryService.captureResumeGuard(sessionId);
     const messageId = message.id;
     const queuedMsg = buildQueuedMessage(messageId, message, text ?? '');
     const result = sessionDomainService.enqueue(sessionId, queuedMsg);
@@ -85,7 +86,7 @@ export function createQueueMessageHandler(
       buildAcceptedMessageStateChange(messageId, queuedMsg, result.position)
     );
 
-    void sessionBackgroundDeliveryService.userResume(sessionId).catch((error) => {
+    void sessionBackgroundDeliveryService.userResume(sessionId, isCurrent).catch((error) => {
       logger.warn('Failed to resume PR delivery after queued human input', { sessionId, error });
     });
     await deps.tryDispatchNextMessage(sessionId);

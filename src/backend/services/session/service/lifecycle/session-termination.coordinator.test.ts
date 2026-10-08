@@ -808,6 +808,7 @@ it('stops the runtime even when persisting the user delivery pause fails', async
     await expect(
       harness.coordinator.stopSession('session-running', { reason: 'USER_STOP' })
     ).resolves.toBeUndefined();
+    expect(pause).toHaveBeenCalledWith('session-running');
     expect(harness.runtimeManager.stopAndQuiesce).toHaveBeenCalledWith('session-running');
   } finally {
     pause.mockRestore();

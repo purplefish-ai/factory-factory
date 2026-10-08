@@ -423,6 +423,7 @@ it('finalizes a failed runtime even when delivery fencing fails', async () => {
   const harness = createExitCoordinatorHarness();
   try {
     await expect(harness.coordinator.handleExit(runtimeExit())).resolves.toBeUndefined();
+    expect(pause).toHaveBeenCalledWith('session-1');
     expect(harness.repository.updateSession).toHaveBeenCalledWith('session-1', {
       status: SessionStatus.FAILED,
     });

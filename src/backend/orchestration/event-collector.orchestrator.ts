@@ -146,7 +146,7 @@ export type EventCollectorDependencies = {
 
 function shouldRefreshRatchetForPrSwitch(
   previousSnapshot: ReturnType<StoreInterface['getByWorkspaceId']>,
-  event: PRSnapshotUpdatedEvent
+  event: { prNumber?: number | null; prUrl?: string | null; prState?: string }
 ): boolean {
   if (!previousSnapshot) {
     return false;
@@ -167,9 +167,21 @@ function shouldRefreshRatchetForPrSwitch(
   // The ratchet poll query excludes prState CLOSED, so a reopened PR needs an
   // immediate check here to resume ratcheting as soon as the reopen is synced.
   // A reopened PR can land on any non-CLOSED state (OPEN/DRAFT/APPROVED/...).
-  const prReopened = previousSnapshot.prState === 'CLOSED' && event.prState !== 'CLOSED';
+  const prReopened =
+    previousSnapshot.prState === 'CLOSED' && event.prState != null && event.prState !== 'CLOSED';
 
   return prNumberChanged || prUrlChanged || prReopened;
+}
+
+function requestImmediateRatchetCheck(state: EventCollectorState, workspaceId: string): void {
+  void state.dependencies.ratchetService
+    .checkWorkspaceById(workspaceId, { bypassPrFetchCooldown: true })
+    .catch((error) => {
+      state.logger.warn('Failed immediate ratchet refresh after PR switch', {
+        workspaceId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
 }
 
 /**
@@ -546,7 +558,12 @@ function startEventCollectorWithState(state: EventCollectorState): void {
         : null;
     },
     publish: (workspaceId, fields) => {
+      const previous = dependencies.workspaceSnapshotStore.getByWorkspaceId(workspaceId);
+      const shouldRefreshRatchet = shouldRefreshRatchetForPrSwitch(previous, fields);
       coalescer.enqueue(workspaceId, fields, 'projection:pr_authoritative', { immediate: true });
+      if (shouldRefreshRatchet) {
+        requestImmediateRatchetCheck(state, workspaceId);
+      }
       // A merged sibling is not workspace completion while the selected PR is open.
       if (fields.prState === 'MERGED' && fields.prNumber != null) {
         void handleLinearIssueCompletedOnMerge(state, workspaceId, {
@@ -688,14 +705,7 @@ function startEventCollectorWithState(state: EventCollectorState): void {
       // Bypass the PR-fetch cooldown: this event was emitted by a sync that
       // just registered its own fetch, so a plain check would be deduped into
       // a no-op and the "immediate" refresh would wait for the next poll.
-      void dependencies.ratchetService
-        .checkWorkspaceById(event.workspaceId, { bypassPrFetchCooldown: true })
-        .catch((error) => {
-          state.logger.warn('Failed immediate ratchet refresh after PR switch', {
-            workspaceId: event.workspaceId,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        });
+      requestImmediateRatchetCheck(state, event.workspaceId);
     }
 
     // Transition linked Linear issue to completed when PR is merged

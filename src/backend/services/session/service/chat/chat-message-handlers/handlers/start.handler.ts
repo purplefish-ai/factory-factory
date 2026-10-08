@@ -19,6 +19,7 @@ export function createStartHandler(deps: {
   startupService: ChatMessageHandlerStartupService;
 }): ChatMessageHandler<StartMessageInput> {
   return async ({ ws, sessionId, message }) => {
+    const isCurrent = sessionBackgroundDeliveryService.captureResumeGuard(sessionId);
     const sessionOpts = await sessionLifecycleService.getSessionOptions(sessionId);
     if (!sessionOpts) {
       logger.error('[Chat WS] Failed to get session options', { sessionId });
@@ -46,7 +47,7 @@ export function createStartHandler(deps: {
         model: getValidModel(message),
         reasoningEffort: getValidReasoningEffort(message),
       });
-      void sessionBackgroundDeliveryService.userResume(sessionId).catch((error) => {
+      void sessionBackgroundDeliveryService.userResume(sessionId, isCurrent).catch((error) => {
         logger.warn('Failed to resume PR delivery after session startup', { sessionId, error });
       });
     } catch (error) {

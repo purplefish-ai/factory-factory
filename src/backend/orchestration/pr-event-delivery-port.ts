@@ -65,11 +65,14 @@ export function createPRBackgroundDeliveryPort(
       await workspacePRMonitoringService.settleDelivery({ ...delivery, result: 'retry' });
       const session = await sessionDataService.findAgentSessionById(delivery.sessionId);
       if (session && (delivery.attempt >= 3 || message.includes('existing conversation'))) {
-        await workspacePRMonitoringService.pauseWorkspace(
+        const paused = await workspacePRMonitoringService.pauseWorkspace(
           session.workspaceId,
           message.includes('existing conversation') ? 'RESUME_FAILED' : 'DELIVERY_FAILED',
           delivery.bindingRevision
         );
+        if (paused.count) {
+          ratchetService.emit(RATCHET_DISPATCH_CHANGED, { workspaceId: session.workspaceId });
+        }
       }
     },
     recover: (sessionId) => recoverPRDeliveries(sessionId, undefined, services),
@@ -84,16 +87,28 @@ export function createPRBackgroundDeliveryPort(
         sessionBackgroundDeliveryService.invalidate(config.workspaceId, config.bindingRevision);
       }
     },
-    async resume(sessionId) {
+    async resume(sessionId, isCurrent = () => true) {
+      if (!isCurrent()) {
+        return;
+      }
       const session = await sessionDataService.findAgentSessionById(sessionId);
+      if (!isCurrent()) {
+        return;
+      }
       const previous = session ? await workspacePRMonitoringService.get(session.workspaceId) : null;
-      await workspacePRMonitoringService.resume(sessionId);
+      if (!isCurrent()) {
+        return;
+      }
+      await workspacePRMonitoringService.resume(sessionId, isCurrent);
+      if (!isCurrent()) {
+        return;
+      }
       if (previous?.recipientSessionId === sessionId) {
         sessionBackgroundDeliveryService.invalidate(previous.workspaceId, previous.bindingRevision);
       }
       if (session) {
         ratchetService.emit(RATCHET_DISPATCH_CHANGED, { workspaceId: session.workspaceId });
-        await wakePRDelivery(session.workspaceId, services);
+        await wakePRDelivery(session.workspaceId, services, isCurrent);
       }
     },
   };

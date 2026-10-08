@@ -26,6 +26,7 @@ import {
 } from '@/backend/services/workspace';
 import { type MessageAttachment, MessageState, resolveSelectedModel } from '@/shared/acp-protocol';
 import { SessionStatus, WorkspaceMode } from '@/shared/core';
+import { isPRMonitoringRecipient } from '@/shared/pr-monitoring';
 import { autoIterationConfigSchema } from '@/shared/schemas/auto-iteration.schema';
 import { AttachmentSchema } from '@/shared/websocket';
 import { getWorkspaceLinearContext } from './linear-config.helper';
@@ -469,9 +470,8 @@ export async function retryQueuedDispatchAfterWorkspaceReady(
 
     const runningSessions = await sessionDataService.findAgentSessionsByWorkspaceId(workspaceId, {
       status: SessionStatus.RUNNING,
-      limit: 1,
     });
-    const runningSession = runningSessions[0];
+    const runningSession = runningSessions.find(isPRMonitoringRecipient);
     if (runningSession) {
       await bindInitialMonitoringSession(workspaceId, runningSession.id);
       await chatMessageHandlerService.tryDispatchNextMessage(runningSession.id);
@@ -480,9 +480,8 @@ export async function retryQueuedDispatchAfterWorkspaceReady(
 
     const idleSessions = await sessionDataService.findAgentSessionsByWorkspaceId(workspaceId, {
       status: SessionStatus.IDLE,
-      limit: 1,
     });
-    const idleSession = idleSessions[0];
+    const idleSession = idleSessions.find(isPRMonitoringRecipient);
     if (!idleSession) {
       return;
     }

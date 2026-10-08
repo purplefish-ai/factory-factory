@@ -161,7 +161,7 @@ class WorkspacePrEventAccessor {
         where: { id: input.sessionId, workspaceId: request.workspaceId },
       });
       if (
-        !session ||
+        !session?.providerSessionId ||
         rows.some(
           (row) =>
             row.deliveryId &&

@@ -85,6 +85,12 @@ it('preserves CI and conflicts when the auxiliary resolved-thread lookup fails',
   });
 });
 it('carries resolved comment identities even when review comment pages are incomplete', async () => {
+  prObservationService.configure({
+    findPR: async () => ({ url: redObservation.url }),
+    readPolicy: async () => ({ reviewTriggerMode: 'CHANGES_REQUESTED' }),
+  });
+  vi.spyOn(githubCLIService, 'getAuthenticatedUsername').mockResolvedValue('me');
+
   vi.spyOn(githubCLIService, 'getPRFullDetails').mockResolvedValue({
     number: 1,
     title: 'PR',

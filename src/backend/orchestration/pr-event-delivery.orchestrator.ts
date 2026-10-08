@@ -165,7 +165,8 @@ export async function preparePRDelivery(
 }
 export async function wakePRDelivery(
   workspaceId: string,
-  services: PRMonitoringServices = defaultPRMonitoringServices
+  services: PRMonitoringServices = defaultPRMonitoringServices,
+  isCurrent: () => boolean = () => true
 ): Promise<void> {
   const {
     workspacePRMonitoringService,
@@ -173,20 +174,35 @@ export async function wakePRDelivery(
     chatMessageHandlerService,
   } = services;
   let config = await workspacePRMonitoringService.get(workspaceId);
-  if (!(config?.enabled && config.recipientSessionId) || config.deliveryPauseReason) {
+  if (
+    !(isCurrent() && config?.enabled && config.recipientSessionId) ||
+    config.deliveryPauseReason
+  ) {
     return;
   }
   const previousClaims = await workspacePRMonitoringService.listPending(workspaceId);
+  if (!isCurrent()) {
+    return;
+  }
   for (const sessionId of new Set(
     previousClaims.map((e) => e.deliverySessionId).filter((id): id is string => !!id)
   )) {
     await recoverPRDeliveries(sessionId, workspaceId, services);
+    if (!isCurrent()) {
+      return;
+    }
   }
   config = await workspacePRMonitoringService.get(workspaceId);
-  if (!(config?.enabled && config.recipientSessionId) || config.deliveryPauseReason) {
+  if (
+    !(isCurrent() && config?.enabled && config.recipientSessionId) ||
+    config.deliveryPauseReason
+  ) {
     return;
   }
   const pending = await workspacePRMonitoringService.listPending(workspaceId);
+  if (!isCurrent()) {
+    return;
+  }
   for (const prId of new Set(pending.map((e) => e.prId))) {
     sessionBackgroundDeliveryService.enqueue(config.recipientSessionId, {
       workspaceId,

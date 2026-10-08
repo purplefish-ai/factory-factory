@@ -18,6 +18,8 @@ const mocks = vi.hoisted(() => ({
   dispatch: vi.fn(),
   resume: vi.fn(),
   active: vi.fn(),
+  settle: vi.fn(),
+  emit: vi.fn(),
 }));
 vi.mock('@/backend/services/workspace', () => ({
   workspacePRMonitoringService: {
@@ -29,8 +31,13 @@ vi.mock('@/backend/services/workspace', () => ({
     pause: mocks.pause,
     resume: mocks.resume,
     cancelRecoveredDelivery: mocks.cancel,
+    settleDelivery: mocks.settle,
   },
   workspacePrSnapshotService: { find: vi.fn(async () => ({ id: 'p' })) },
+}));
+vi.mock('@/backend/services/ratchet', () => ({
+  ratchetService: { emit: mocks.emit },
+  RATCHET_DISPATCH_CHANGED: 'ratchet_dispatch_changed',
 }));
 vi.mock('@/backend/services/session', () => ({
   acpRuntimeManager: { isSessionWorking: mocks.busy },
@@ -81,6 +88,7 @@ beforeEach(() => {
   mocks.dispatch.mockResolvedValue(undefined);
   mocks.interaction.mockReturnValue(null);
   mocks.otherReady.mockResolvedValue(true);
+  mocks.pause.mockResolvedValue({ count: 1 });
   mocks.pending.mockResolvedValue([
     {
       id: 'event',
@@ -262,4 +270,49 @@ it('keeps an active source claim fenced while its cold runtime is starting', asy
   await recoverPRDeliveries('main');
   expect(mocks.receipt).not.toHaveBeenCalled();
   expect(mocks.recover).not.toHaveBeenCalled();
+});
+
+it.each([1, 0])(
+  'publishes a failed delivery pause only when its fence applies (count %s)',
+  async (count) => {
+    mocks.pause.mockResolvedValue({ count });
+    await prBackgroundDeliveryPort.fail(
+      {
+        deliveryId: 'delivery',
+        sessionId: 'main',
+        bindingRevision: 1,
+        eventIds: ['event'],
+        text: 'frozen',
+        attempt: 3,
+      },
+      new Error('transport failure')
+    );
+    expect(mocks.pause).toHaveBeenCalledWith('w', 'DELIVERY_FAILED', 1);
+    expect(mocks.emit.mock.calls).toEqual(
+      count ? [['ratchet_dispatch_changed', { workspaceId: 'w' }]] : []
+    );
+  }
+);
+
+it('keeps a newer user stop fenced when resume becomes stale during a binding read', async () => {
+  let current = true;
+  mocks.get.mockImplementation(() => {
+    current = false;
+    return Promise.resolve({ ...config, deliveryPauseReason: 'USER_STOPPED' });
+  });
+  await prBackgroundDeliveryPort.resume('main', () => current);
+  expect(mocks.resume).not.toHaveBeenCalled();
+  expect(mocks.enqueue).not.toHaveBeenCalled();
+});
+
+it('does not enqueue resumed PR updates when a stop arrives during the wake read', async () => {
+  let current = true;
+  mocks.pending.mockImplementation(() => {
+    current = false;
+    return Promise.resolve([{ id: 'event', workspaceId: 'w', prId: 'p', state: 'PENDING' }]);
+  });
+  await prBackgroundDeliveryPort.resume('main', () => current);
+  expect(mocks.resume).toHaveBeenCalledWith('main', expect.any(Function));
+  expect(mocks.enqueue).not.toHaveBeenCalled();
+  expect(mocks.dispatch).not.toHaveBeenCalled();
 });

@@ -159,3 +159,65 @@ it.each(['complete', 'fail'] as const)(
     expect(service.isDeliveryActive(delivery.deliveryId)).toBe(false);
   }
 );
+
+it.each(['userStop', 'runtimeFailure'] as const)(
+  'keeps a newer %s pause when an earlier resume finishes late',
+  async (pauseMethod) => {
+    const service = new SessionBackgroundDeliveryService();
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let pauseReason: string | null = 'RESUME_FAILED';
+    service.configure({
+      prepare: () => Promise.resolve({ status: 'discard' }),
+      validate: () => Promise.resolve(false),
+      complete: () => Promise.resolve(),
+      fail: () => Promise.resolve(),
+      recover: () => Promise.resolve(),
+      pause: (_id, reason) => {
+        pauseReason = reason;
+        return Promise.resolve();
+      },
+      resume: async (_id, isCurrent?: () => boolean) => {
+        await pending;
+        if (!isCurrent || isCurrent()) {
+          pauseReason = null;
+        }
+      },
+    });
+    const resume = service.userResume('concurrent-resume');
+    await service[pauseMethod]('concurrent-resume');
+    release();
+    await resume;
+    expect(pauseReason).toBe(pauseMethod === 'userStop' ? 'USER_STOPPED' : 'SESSION_FAILED');
+  }
+);
+it('retains a newly queued token when the prior delivery with its stable ID completes', async () => {
+  const service = new SessionBackgroundDeliveryService();
+  const sessionId = 'stable-token-completion';
+  const delivery = {
+    deliveryId: 'old-delivery',
+    sessionId,
+    bindingRevision: 1,
+    eventIds: ['old'],
+    text: 'old facts',
+    attempt: 1,
+  };
+  service.configure({
+    prepare: () => Promise.resolve({ status: 'ready', delivery }),
+    validate: () => Promise.resolve(true),
+    complete: () => Promise.resolve(),
+    fail: () => Promise.resolve(),
+    recover: () => Promise.resolve(),
+    pause: () => Promise.resolve(),
+    resume: () => Promise.resolve(),
+  });
+  service.enqueue(sessionId, request);
+  const old = sessionDomainService.dequeueNext(sessionId)!;
+  await service.prepare(sessionId, old);
+  service.enqueue(sessionId, request);
+  await service.complete(old);
+  service.enqueue(sessionId, request);
+  expect(sessionDomainService.getQueueLength(sessionId)).toBe(1);
+});

@@ -58,7 +58,17 @@ it.each(['CLAUDE', 'CODEX'] as const)(
       type: 'boolean' as const,
       currentValue: true,
     };
-    const options: SessionConfigOption[] = [mode, thinking];
+    const effort = {
+      id: 'effort',
+      name: 'Effort',
+      type: 'select' as const,
+      currentValue: 'high',
+      options: [
+        { value: 'high', name: 'High' },
+        { value: 'low', name: 'Low' },
+      ],
+    };
+    const options: SessionConfigOption[] = [mode, effort, thinking];
     const harness = createLifecycleHarness({
       provider,
       session: {
@@ -67,19 +77,38 @@ it.each(['CLAUDE', 'CODEX'] as const)(
           acpConfigSnapshot: {
             provider,
             providerSessionId: 'existing',
-            configOptions: [mode, thinking],
+            configOptions: [mode, effort, thinking],
           },
         },
       },
     });
     harness.handle.configOptions = [
       { ...mode, currentValue: 'code' },
+      { ...effort, currentValue: 'low' },
       { ...thinking, currentValue: false },
     ];
+    const setSessionConfigOption = vi
+      .fn()
+      .mockImplementation(({ configId, value }: { configId: string; value: string | boolean }) =>
+        Promise.resolve({
+          configOptions: harness.handle.configOptions.map((option) => {
+            if (option.id !== configId) {
+              return option;
+            }
+            if (option.type === 'boolean' && typeof value === 'boolean') {
+              return { ...option, currentValue: value };
+            }
+            if (option.type === 'select' && typeof value === 'string') {
+              return { ...option, currentValue: value };
+            }
+            throw new Error('Invalid option type');
+          }),
+        })
+      );
     Object.defineProperty(harness.handle, 'connection', {
       value: {
         setSessionMode: vi.fn().mockResolvedValue({}),
-        setSessionConfigOption: vi.fn().mockResolvedValue({ configOptions: options }),
+        setSessionConfigOption,
       },
       configurable: true,
     });
@@ -97,6 +126,12 @@ it.each(['CLAUDE', 'CODEX'] as const)(
       expect.anything()
     );
     expect(harness.handle.configOptions).toEqual(options);
+    expect(setSessionConfigOption).toHaveBeenCalledWith({
+      sessionId: 'existing',
+      configId: 'thinking',
+      type: 'boolean',
+      value: true,
+    });
     expect(harness.sessionConfigService.applyConfiguredReasoningEffort).not.toHaveBeenCalled();
     expect(harness.sessionConfigService.applyConfiguredPermissionPreset).not.toHaveBeenCalled();
   }

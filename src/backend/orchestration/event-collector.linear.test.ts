@@ -5,7 +5,7 @@ import { deriveWorkspaceFlowState, WorkspaceSnapshotStore } from '@/backend/serv
 import { deriveWorkspaceSidebarStatus } from '@/shared/core';
 import { createEventCollectorOrchestrator } from './event-collector.orchestrator';
 
-function createHarness(prState: 'OPEN' | 'MERGED' | null = 'OPEN') {
+function createHarness(prState: 'OPEN' | 'MERGED' | 'CLOSED' | null = 'OPEN') {
   const store = new WorkspaceSnapshotStore();
   store.configure({
     deriveFlowState: (input) =>
@@ -35,6 +35,7 @@ function createHarness(prState: 'OPEN' | 'MERGED' | null = 'OPEN') {
     .fn()
     .mockResolvedValue({ apiKey: 'test-key', linearIssueId: 'issue-1' });
   const findById = vi.fn().mockResolvedValue(null);
+  const checkWorkspaceById = vi.fn().mockResolvedValue(null);
   const collector = createEventCollectorOrchestrator({
     createLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }),
     getWorkspaceLinearContext,
@@ -42,7 +43,7 @@ function createHarness(prState: 'OPEN' | 'MERGED' | null = 'OPEN') {
     prSnapshotService,
     prFetchCoordinator: { removeWorkspace: vi.fn() },
     ratchetService: Object.assign(new EventEmitter(), {
-      checkWorkspaceById: vi.fn().mockResolvedValue(null),
+      checkWorkspaceById,
     }),
     runScriptStateMachine: new EventEmitter(),
     workspaceAutoIterationService: new EventEmitter(),
@@ -78,6 +79,7 @@ function createHarness(prState: 'OPEN' | 'MERGED' | null = 'OPEN') {
     store,
     findById,
     prSnapshotService,
+    checkWorkspaceById,
   };
 }
 
@@ -237,6 +239,46 @@ describe('Linear completion on PR merge', () => {
     }
   });
 });
+
+it.each(['switch', 'reopen'] as const)(
+  'immediately observes an authoritative PR %s from an association event',
+  async (change) => {
+    const { collector, findById, prSnapshotService, checkWorkspaceById, store } = createHarness(
+      change === 'reopen' ? 'CLOSED' : 'OPEN'
+    );
+    const prNumber = change === 'switch' ? 8 : 7;
+    findById.mockResolvedValue({
+      status: 'READY',
+      prNumber,
+      prUrl: `https://github.com/org/repo/pull/${prNumber}`,
+      prState: 'OPEN',
+      prCiStatus: 'FAILURE',
+      prUpdatedAt: null,
+      ratchetState: 'CI_FAILED',
+      ratchetEnabled: true,
+      prHasMergeConflict: false,
+    });
+    try {
+      prSnapshotService.emit(PR_SNAPSHOT_UPDATED, {
+        workspaceId: 'ws-1',
+        prId: 'selected',
+        prNumber,
+        prUrl: `https://github.com/org/repo/pull/${prNumber}`,
+        prState: 'OPEN',
+        prCiStatus: 'FAILURE',
+        prReviewState: null,
+      });
+      await vi.waitFor(() =>
+        expect(checkWorkspaceById).toHaveBeenCalledExactlyOnceWith('ws-1', {
+          bypassPrFetchCooldown: true,
+        })
+      );
+      expect(store.getByWorkspaceId('ws-1')).toMatchObject({ prNumber, prState: 'OPEN' });
+    } finally {
+      collector.stop();
+    }
+  }
+);
 
 it('refreshes primary and aggregate facts without completing an issue for a merged sibling', async () => {
   const { collector, emitMerge, markIssueCompleted, findById, store } = createHarness();

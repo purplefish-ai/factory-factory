@@ -20,7 +20,7 @@ export interface PRBackgroundDeliveryPort {
   fail(delivery: ClaimedPRDelivery, error: unknown): Promise<void>;
   recover(sessionId: string): Promise<void>;
   pause(sessionId: string, reason: 'USER_STOPPED' | 'SESSION_FAILED'): Promise<void>;
-  resume(sessionId: string): Promise<void>;
+  resume(sessionId: string, isCurrent?: () => boolean): Promise<void>;
 }
 export class SessionBackgroundDeliveryService {
   private port: PRBackgroundDeliveryPort | null = null;
@@ -29,6 +29,7 @@ export class SessionBackgroundDeliveryService {
     { sessionId: string; messageId: string; request: PRDeliveryRequest }
   >();
   private deliveries = new Map<string, ClaimedPRDelivery>();
+  private pauseGenerations = new Map<string, number>();
   configure(port: PRBackgroundDeliveryPort) {
     this.port = port;
   }
@@ -111,7 +112,9 @@ export class SessionBackgroundDeliveryService {
         await this.port.complete(delivery);
       } finally {
         this.deliveries.delete(message.id);
-        this.forgetToken(message.id);
+        if (!sessionDomainService.hasQueuedMessage(delivery.sessionId, message.id)) {
+          this.forgetToken(message.id);
+        }
       }
     }
   }
@@ -128,14 +131,26 @@ export class SessionBackgroundDeliveryService {
   recover(sessionId: string) {
     return this.port?.recover(sessionId) ?? Promise.resolve();
   }
+  captureResumeGuard(sessionId: string): () => boolean {
+    const generation = this.pauseGenerations.get(sessionId) ?? 0;
+    return () => (this.pauseGenerations.get(sessionId) ?? 0) === generation;
+  }
+  private fenceResumes(sessionId: string): void {
+    this.pauseGenerations.set(sessionId, (this.pauseGenerations.get(sessionId) ?? 0) + 1);
+  }
   async userStop(sessionId: string) {
+    this.fenceResumes(sessionId);
     await this.port?.pause(sessionId, 'USER_STOPPED');
   }
   async runtimeFailure(sessionId: string) {
+    this.fenceResumes(sessionId);
     await this.port?.pause(sessionId, 'SESSION_FAILED');
   }
-  async userResume(sessionId: string) {
-    await this.port?.resume(sessionId);
+  async userResume(sessionId: string, isCurrent = this.captureResumeGuard(sessionId)) {
+    if (!isCurrent()) {
+      return;
+    }
+    await this.port?.resume(sessionId, isCurrent);
   }
 }
 export const sessionBackgroundDeliveryService = new SessionBackgroundDeliveryService();

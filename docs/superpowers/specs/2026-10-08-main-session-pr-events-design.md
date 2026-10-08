@@ -67,6 +67,10 @@ recovery. A pending permission request, question, or plan approval blocks event
 turns without changing or answering the request. Events remain pending while
 another workspace session is modifying the shared worktree.
 
+Capture resume authorization before asynchronous human-input or startup work. A
+later stop or runtime failure invalidates it through persistence and queue
+wakeup, so an earlier detached resume cannot clear the newer pause.
+
 Deleting or closing the recipient leaves monitoring awaiting a new explicit
 binding; do not select another conversation automatically. Persist its provider
 identity and provider-owned transcript reference before deleting the live
@@ -215,6 +219,9 @@ not promise exactly-once execution across a crash at the provider boundary.
 Explicit resume atomically clears the recoverable pause and renews the exhausted
 retry allowance. It preserves the frozen delivery ID, text, original receipt
 identity and group members; unrelated newly observed events remain separate.
+Claim only after the recipient has a persisted provider conversation identity.
+Completing a delivery retains any newer queued token sharing its stable message
+ID, preserving coalescing while new observations arrive during a turn.
 
 Successful delivery means the agent received the facts, not that it fixed them.
 An unchanged red CI state does not keep reprompting the agent after delivery.
