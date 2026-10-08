@@ -481,6 +481,7 @@ export class SessionStartupCoordinator {
             existingAcp
           );
         } catch (error) {
+          const stopReservation = this.dependencies.lifecycleGate.reserveStop(sessionId);
           try {
             await this.dependencies.runtimeManager.stopClient(sessionId);
             this.dependencies.sessionDomainService.setRuntimeSnapshot(sessionId, {
@@ -492,10 +493,12 @@ export class SessionStartupCoordinator {
             });
           } finally {
             this.dependencies.acpEventProcessor.clearSessionState(sessionId);
+            stopReservation?.release();
           }
           throw error;
         }
       }
+      this.assertStartupAllowed(sessionId, stopGeneration);
       const isWorking = this.dependencies.runtimeManager.isSessionWorking(sessionId);
       this.dependencies.sessionDomainService.setRuntimeSnapshot(sessionId, {
         phase: isWorking ? 'running' : 'idle',

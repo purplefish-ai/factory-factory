@@ -40,6 +40,10 @@ supported without selection options. Soft cancellation (including voice stop and
 prompt timeout) resolves pending permission requests with a cancelled outcome,
 dismisses their prompts, and keeps the bridge available for later turns.
 
+When reapplying read-only permissions to an existing reviewer fails, teardown
+reserves a lifecycle stop to cancel concurrent starts. A cancelled start cannot
+publish an alive runtime snapshot for the stopped client.
+
 Approving a Codex plan queues the automatic approval turn with the same
 plan-disabled settings persisted for the session, preventing that turn from
 re-entering plan mode.
