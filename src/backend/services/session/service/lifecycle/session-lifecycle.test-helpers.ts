@@ -301,7 +301,11 @@ export function createTerminationHarness(
     clearAll: vi.fn<() => void>(),
   };
   const lifecycleEventService = {
-    record: vi.fn<SessionLifecycleEventService['record']>(async () => null),
+    record: vi.fn<SessionLifecycleEventService['record']>(async (input) => ({
+      ...input,
+      id: `event:${input.dedupeKey}`,
+      createdAt: input.createdAt ?? new Date(),
+    })),
   } satisfies Pick<SessionLifecycleEventService, 'record'>;
   const workflowFinalizer = {
     finalizeDeliberateStop: vi.fn(async () => undefined),
@@ -629,7 +633,11 @@ export function createLifecycleHarness(
     | 'handleAcpLog'
   >;
   const lifecycleEventService = {
-    record: vi.fn<SessionLifecycleEventService['record']>(async () => null),
+    record: vi.fn<SessionLifecycleEventService['record']>(async (input) => ({
+      ...input,
+      id: `event:${input.dedupeKey}`,
+      createdAt: input.createdAt ?? new Date(),
+    })),
     hydrate: vi.fn(async () => undefined),
   } satisfies Pick<SessionLifecycleEventService, 'record' | 'hydrate'>;
   const notificationService = {
