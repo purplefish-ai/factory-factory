@@ -71,6 +71,24 @@ function buildToolUserInputPermissionOptions(
   return mappedOptions;
 }
 
+function resolveQuestionIdForAnswer(
+  questions: ToolUserInputQuestion[],
+  answerKey: string
+): string | undefined {
+  if (questions.some((question) => question.id === answerKey)) {
+    return answerKey;
+  }
+  const matchingIds = new Set(
+    questions
+      .filter((question) => (question.id.trim() || question.question) === answerKey)
+      .map((question) => question.id)
+  );
+  if (matchingIds.size > 1) {
+    throw new Error(`Ambiguous structured answer key: ${answerKey}`);
+  }
+  return matchingIds.values().next().value;
+}
+
 function parseToolUserInputAnswersFromPermissionMeta(params: {
   questions: ToolUserInputQuestion[];
   permission: RequestPermissionResponse;
@@ -88,16 +106,13 @@ function parseToolUserInputAnswersFromPermissionMeta(params: {
     return null;
   }
 
-  const rawIdByAnswerKey = new Map(
-    params.questions.flatMap((question) => [
-      [question.id, question.id],
-      [question.id.trim() || question.question, question.id],
-    ])
-  );
   const answers: UserInputAnswers = {};
   for (const [questionId, value] of Object.entries(answersRaw)) {
-    const rawQuestionId = rawIdByAnswerKey.get(questionId);
+    const rawQuestionId = resolveQuestionIdForAnswer(params.questions, questionId);
     if (rawQuestionId === undefined) {
+      continue;
+    }
+    if (questionId !== rawQuestionId && Object.hasOwn(answersRaw, rawQuestionId)) {
       continue;
     }
 

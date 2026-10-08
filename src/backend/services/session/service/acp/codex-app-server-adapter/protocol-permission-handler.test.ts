@@ -61,12 +61,16 @@ describe('protocol-permission-handler', () => {
   it.each([
     { name: 'padded id', ids: ['  color  '], rawKeys: false },
     { name: 'raw padded id', ids: ['  color  '], rawKeys: true },
+    { name: 'raw id before alias collision', ids: ['color', ' color '], rawKeys: true },
+    { name: 'raw id after alias collision', ids: [' color ', 'color'], rawKeys: true },
+    { name: 'raw answer plus alias', ids: [' color '], rawKeys: true, bothKeys: true },
+    { name: 'ambiguous aliases', ids: [' color ', 'color '], ambiguous: true },
     { name: 'empty id', ids: [''] },
     { name: 'whitespace id', ids: ['   '] },
     { name: 'mixed multi-question ids', ids: ['  color  ', '', '   ', 'plain'] },
   ])(
-    'restores raw Codex question ids from frontend answer keys for $name',
-    async ({ ids, rawKeys }) => {
+    'maps question answers without misattribution for $name',
+    async ({ ids, rawKeys, ambiguous, bothKeys }) => {
       const session = createSession();
       const questions = ids.map((id, index) => ({
         id,
@@ -82,11 +86,12 @@ describe('protocol-permission-handler', () => {
           factoryFactory: {
             toolUserInputAnswers: {
               ...Object.fromEntries(
-                questions.map((question) => [
+                questions.map((question, index) => [
                   rawKeys ? question.id : question.id.trim() || question.question,
-                  [' Blue ', '', 42],
+                  [` Answer ${index} `, '', 42],
                 ])
               ),
+              ...(bothKeys ? { color: ['Alias answer'] } : {}),
               unknown: ['ignored'],
             },
           },
@@ -109,7 +114,24 @@ describe('protocol-permission-handler', () => {
         reportShapeDrift: vi.fn(),
       });
 
-      const answers = Object.fromEntries(ids.map((id) => [id, { answers: ['Blue'] }]));
+      if (ambiguous) {
+        expect(codex.respondSuccess).not.toHaveBeenCalled();
+        expect(codex.respondError).toHaveBeenCalledWith(
+          3,
+          expect.objectContaining({
+            message: 'Failed to map requestUserInput answers',
+            data: { error: 'Ambiguous structured answer key: color' },
+          })
+        );
+        expect(emitSessionUpdate).toHaveBeenLastCalledWith(
+          session.sessionId,
+          expect.objectContaining({ status: 'failed' })
+        );
+        return;
+      }
+      const answers = Object.fromEntries(
+        ids.map((id, index) => [id, { answers: [`Answer ${index}`] }])
+      );
       expect(codex.respondSuccess).toHaveBeenCalledWith(3, { answers });
       expect(codex.respondError).not.toHaveBeenCalled();
       expect(emitSessionUpdate).toHaveBeenLastCalledWith(
