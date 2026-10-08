@@ -27,6 +27,10 @@ Kanban Quick Chat keeps composer attachments in shared chat state, so sending,
 rejection recovery, and session restoration use the same attachments as the full
 workspace chat.
 
+Unified diff parsing removes the terminating stdout newline before splitting
+lines, preserving real blank context lines without fabricating a final row or
+line number in the workspace viewer or PR panel.
+
 ## Run script
 
 Startup output accumulates across factory setup and project startup phases. The
