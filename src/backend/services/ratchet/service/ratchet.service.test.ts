@@ -15,6 +15,10 @@ vi.mock('@/backend/services/workspace', () => ({
   },
   workspaceRatchetService: {
     findCandidates: vi.fn(),
+    findCandidatesById: vi.fn(async (id: string) => {
+      const candidate = await workspaceRatchetService.findCandidateById(id);
+      return candidate ? [candidate] : [];
+    }),
     findCandidateById: vi.fn(),
     clearActiveSession: vi.fn(),
     enable: vi.fn(),
@@ -94,12 +98,6 @@ const mockWorkspaceBridge: RatchetWorkspaceBridge = {
   markDispatchStalled: vi.fn().mockResolvedValue(true),
 };
 
-/**
- * State behind `mockGitHubBridge.coordinatePrFetch`, modelling the two reasons
- * the real coordinator declines a fetch: a completed one inside the cooldown
- * window, which `ignoreCooldown` overrides, and a concurrent one in flight,
- * which nothing overrides.
- */
 const fakeCoordinator = { cooldownActive: false, inFlightSkips: 0 };
 
 const mockGitHubBridge: RatchetGitHubBridge = {
@@ -127,19 +125,11 @@ const mockSnapshotBridge: RatchetPRSnapshotBridge = {
   recordReviewCheck: vi.fn(),
 };
 
-/**
- * The service reads its shutdown state off the abort signal the job runner
- * hands each run, so a test that wants to exercise the shutdown branches has
- * to supply a signal rather than set a flag.
- */
 function setRatchetShuttingDown(shuttingDown: boolean): void {
   const controller = new AbortController();
   if (shuttingDown) {
     controller.abort();
   }
-  // Both halves of the guard: `stopped` is the service's own lifecycle, which
-  // an earlier test calling `ratchetService.stop()` leaves set on this module
-  // singleton, and the signal is the per-run abort.
   const internals = unsafeCoerce<{ runSignal: AbortSignal | null; stopped: boolean }>(
     ratchetService
   );
@@ -165,6 +155,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     vi.mocked(workspaceRatchetService.recordDispatchIfEnabled).mockResolvedValue(true);
     vi.mocked(workspaceRatchetService.adoptActiveSessionIfEnabled).mockResolvedValue(true);
     vi.mocked(workspaceRatchetService.recordSessionEnd).mockResolvedValue(true);
+    vi.mocked(workspaceRatchetService.clearActiveSession).mockResolvedValue(true);
     vi.mocked(mockWorkspaceBridge.recordSessionEnd).mockResolvedValue(true);
     vi.mocked(mockSessionBridge.findSessionsByWorkspaceId).mockResolvedValue([] as never);
     vi.mocked(mockSessionBridge.findSessionsByWorkspaceId).mockResolvedValue([]);
@@ -214,8 +205,6 @@ describe('ratchet service (state-change + idle dispatch)', () => {
   });
 
   afterEach(() => {
-    // Listener-registering tests must not leak into later tests even when an
-    // assertion fails before their inline cleanup.
     ratchetService.removeAllListeners();
   });
 
@@ -223,6 +212,10 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     vi.mocked(workspaceRatchetService.findCandidates).mockResolvedValue([
       {
         id: 'ws-1',
+        prId: 'pr-1',
+        prRevision: 0,
+        prHeadRefName: null,
+        ratchetActivePrId: null,
         prUrl: 'https://github.com/example/repo/pull/1',
         prNumber: 1,
         prState: 'OPEN',
@@ -295,12 +288,10 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       action: { type: 'DISABLED', reason: 'Workspace ratcheting disabled' },
       newState: RatchetState.IDLE,
     });
-    // A disabled workspace derives to IDLE, so there is no settling write to make.
     expect(workspaceRatchetService.recordCheckIfEnabled).not.toHaveBeenCalled();
   });
 
   it('reports a disabled workspace as IDLE without writing anything', async () => {
-    // `ratchetState` is projected from `ratchetEnabled`, so a disabled workspace
     // arrives already IDLE. There is nothing left to settle, which is why the
     // fromState this used to CAS on cannot exist and no event is emitted.
     const workspace = {
@@ -455,11 +446,13 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     // written atomically inside triggerFixer, and the review cursor by the bridge.
     expect(workspaceRatchetService.recordCheckIfEnabled).toHaveBeenLastCalledWith(
       'ws-change',
-      expect.any(Date)
+      expect.any(Date),
+      undefined
     );
     expect(mockSnapshotBridge.recordReviewCheck).toHaveBeenCalledWith(
       'ws-change',
-      expect.any(Date)
+      expect.any(Date),
+      undefined
     );
   });
 
@@ -678,7 +671,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
 
     expect(mockWorkspaceBridge.markDispatchStalled).toHaveBeenCalledWith(
       'ws-1',
-      '2026-01-02T00:00:00Z'
+      '2026-01-02T00:00:00Z',
+      undefined
     );
   });
 
@@ -718,7 +712,11 @@ describe('ratchet service (state-change + idle dispatch)', () => {
 
     await ratchetService.checkWorkspaceById('ws-1');
 
-    expect(mockWorkspaceBridge.markDispatchStalled).toHaveBeenCalledWith('ws-1', 'same-snapshot');
+    expect(mockWorkspaceBridge.markDispatchStalled).toHaveBeenCalledWith(
+      'ws-1',
+      'same-snapshot',
+      undefined
+    );
   });
 
   it('publishes a dispatch-changed event when the stall flag actually flips', async () => {
@@ -4325,7 +4323,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       // current snapshot key was dispatched (no prompt was sent for it).
       expect(workspaceRatchetService.adoptActiveSessionIfEnabled).toHaveBeenCalledWith(
         'ws-already-active',
-        'existing-session'
+        'existing-session',
+        undefined
       );
       expect(workspaceRatchetService.recordDispatchIfEnabled).not.toHaveBeenCalled();
       expect(events).toEqual([{ workspaceId: 'ws-already-active' }]);

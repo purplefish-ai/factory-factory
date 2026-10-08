@@ -35,8 +35,12 @@ import {
   checkActiveFixerSession as checkActiveFixerSessionHelper,
   hasActiveSession as hasActiveSessionHelper,
 } from './ratchet-active-session.helpers';
+import { checkRatchetCandidates } from './ratchet-batch.helpers';
 import { logWorkspaceRatchetingDecision as logWorkspaceRatchetingDecisionHelper } from './ratchet-decision-logging.helpers';
-import { triggerRatchetFixer } from './ratchet-fixer-dispatch.helpers';
+import {
+  stopActiveRatchetSessionsForMergedPr,
+  triggerRatchetFixer,
+} from './ratchet-fixer-dispatch.helpers';
 import type { AuthenticatedUsernameCache } from './ratchet-pr-state.helpers';
 import {
   determineRatchetState as determineRatchetStateHelper,
@@ -54,6 +58,7 @@ import {
 const logger = createLogger('ratchet');
 const RATCHET_WORKSPACE_CONCURRENCY = 3;
 const ratchetWorkspaceLimit = pLimit(RATCHET_WORKSPACE_CONCURRENCY);
+
 const scheduleRatchetBatchCheck: WorkspaceCheckScheduler = (task) => ratchetWorkspaceLimit(task);
 
 const RECENTLY_FETCHED_REASON: PRStateFetchSkipped['reason'] = 'recently_fetched';
@@ -74,6 +79,7 @@ export interface RatchetDispatchChangedEvent {
 
 export interface RatchetStateChangedEvent {
   workspaceId: string;
+  prId?: string;
   fromState: RatchetState;
   toState: RatchetState;
   /** Fresh CI status observed from GitHub during this ratchet poll. */
@@ -122,7 +128,6 @@ class RatchetService extends EventEmitter {
     jobRunner.register({
       name: RATCHET_POLL_JOB,
       intervalMs: SERVICE_INTERVAL_MS.ratchetPoll,
-      // The loop polled once before its first sleep, and still does.
       runImmediately: true,
       run: (signal) => this.runCycle(signal),
       computeDelay: (base) => this.nextPollDelay(base),
@@ -208,7 +213,6 @@ class RatchetService extends EventEmitter {
     } catch (err) {
       logger.error('Ratchet check failed', toError(err));
     } finally {
-      // Scoped to this run; see the note in `scheduler.service.ts`.
       this.runSignal = null;
     }
   }
@@ -239,14 +243,12 @@ class RatchetService extends EventEmitter {
 
     const userSettings = await userSettingsService.get();
 
-    const results = await Promise.all(
-      workspaces.map((workspace) =>
-        this.runWorkspaceCheckSafely(
-          workspace,
-          undefined,
-          scheduleRatchetBatchCheck,
-          userSettings.ratchetReviewTriggerMode
-        )
+    const results = await checkRatchetCandidates(workspaces, (fresh) =>
+      this.runWorkspaceCheckSafely(
+        fresh,
+        undefined,
+        scheduleRatchetBatchCheck,
+        userSettings.ratchetReviewTriggerMode
       )
     );
 
@@ -272,33 +274,32 @@ class RatchetService extends EventEmitter {
       return null;
     }
 
-    const workspace = await workspaceRatchetService.findCandidateById(workspaceId);
-    if (!workspace) {
-      return null;
-    }
-
-    const userSettings = await userSettingsService.get();
-    const reviewTriggerMode = userSettings.ratchetReviewTriggerMode;
-
-    const result = await this.runWorkspaceCheckSafely(
-      workspace,
-      opts,
-      undefined,
-      reviewTriggerMode
-    );
-
-    // A bypassed check can still come back dedup-skipped: the coordinator may
-    // have joined a normal check that was already in flight, or another
-    // service's fetch was actively in flight. Rerun once now that the
-    // concurrent work has settled so the bypass actually applies.
-    if (opts?.bypassPrFetchCooldown && isRecentlyFetchedWaitResult(result)) {
-      const freshWorkspace = await workspaceRatchetService.findCandidateById(workspaceId);
-      if (!freshWorkspace) {
-        return result;
+    const candidates = await workspaceRatchetService.findCandidatesById(workspaceId);
+    const settings = await userSettingsService.get();
+    let result: WorkspaceRatchetResult | null = null;
+    for (const candidate of candidates) {
+      const fresh = await workspaceRatchetService.findCandidateById(workspaceId, candidate.prId);
+      if (!fresh) {
+        continue;
       }
-      return this.runWorkspaceCheckSafely(freshWorkspace, opts, undefined, reviewTriggerMode);
+      result = await this.runWorkspaceCheckSafely(
+        fresh,
+        opts,
+        undefined,
+        settings.ratchetReviewTriggerMode
+      );
+      if (opts?.bypassPrFetchCooldown && isRecentlyFetchedWaitResult(result)) {
+        const retry = await workspaceRatchetService.findCandidateById(workspaceId, candidate.prId);
+        if (retry) {
+          result = await this.runWorkspaceCheckSafely(
+            retry,
+            opts,
+            undefined,
+            settings.ratchetReviewTriggerMode
+          );
+        }
+      }
     }
-
     return result;
   }
 
@@ -347,6 +348,8 @@ class RatchetService extends EventEmitter {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.warn('Ratchet workspace check failed', {
         workspaceId: workspace.id,
+        prId: workspace.prId,
+        expectedRevision: workspace.prRevision,
         prUrl: workspace.prUrl,
         error: errorMessage,
       });
@@ -377,8 +380,6 @@ class RatchetService extends EventEmitter {
 
     await workspaceRatchetService.disable(workspaceId);
 
-    // Stops every running ratchet-workflow session, including the one the
-    // (now cleared) active-session pointer named.
     await this.stopActiveRatchetSessionsAfterDisable(workspaceId);
 
     // `disable` is the whole transition: `deriveRatchetState` reads IDLE for a
@@ -461,6 +462,7 @@ class RatchetService extends EventEmitter {
         );
         return {
           workspaceId: workspace.id,
+          ...(workspace.prId ? { prId: workspace.prId } : {}),
           previousState: workspace.ratchetState,
           newState: workspace.ratchetState,
           action,
@@ -478,6 +480,7 @@ class RatchetService extends EventEmitter {
         );
         return {
           workspaceId: workspace.id,
+          ...(workspace.prId ? { prId: workspace.prId } : {}),
           previousState: workspace.ratchetState,
           newState: workspace.ratchetState,
           action,
@@ -487,7 +490,7 @@ class RatchetService extends EventEmitter {
       const prStateInfo = prStateResult;
       signal.throwIfAborted();
       if (prStateInfo.prState === 'MERGED') {
-        await this.stopActiveRatchetSessionsForMergedPr(workspace.id, signal);
+        await stopActiveRatchetSessionsForMergedPr(this.session, workspace, signal);
         signal.throwIfAborted();
       }
       const decisionContext = await this.buildRatchetDecisionContext(
@@ -599,6 +602,15 @@ class RatchetService extends EventEmitter {
     signal: AbortSignal = new AbortController().signal
   ): Promise<RatchetDecision> {
     signal.throwIfAborted();
+    if (
+      context.workspace.ratchetActivePrId &&
+      context.workspace.ratchetActivePrId !== context.workspace.prId
+    ) {
+      return {
+        type: 'RETURN_ACTION',
+        action: { type: 'WAITING', reason: 'Another PR has an active fixer' },
+      };
+    }
     if (context.prStateInfo.prState === 'MERGED') {
       return { type: 'RETURN_ACTION', action: { type: 'COMPLETED' } };
     }
@@ -697,7 +709,8 @@ class RatchetService extends EventEmitter {
   private async recordDispatchStalled(context: RatchetDecisionContext): Promise<void> {
     const marked = await this.workspace.markDispatchStalled(
       context.workspace.id,
-      context.prStateInfo.snapshotKey
+      context.prStateInfo.snapshotKey,
+      context.workspace.prId
     );
     if (marked) {
       this.emit(RATCHET_DISPATCH_CHANGED, {
@@ -813,6 +826,7 @@ class RatchetService extends EventEmitter {
     if (decisionContext.previousState !== decisionContext.newState) {
       this.emit(RATCHET_STATE_CHANGED, {
         workspaceId: workspace.id,
+        ...(workspace.prId ? { prId: workspace.prId } : {}),
         fromState: decisionContext.previousState,
         toState: decisionContext.newState,
         prCiStatus: prStateInfo.ciStatus,
@@ -830,6 +844,7 @@ class RatchetService extends EventEmitter {
 
     return {
       workspaceId: workspace.id,
+      ...(workspace.prId ? { prId: workspace.prId } : {}),
       previousState: decisionContext.previousState,
       newState: decisionContext.newState,
       action,
@@ -864,17 +879,15 @@ class RatchetService extends EventEmitter {
     const dispatched = action.type === 'TRIGGERED_FIXER' && action.promptSent;
 
     signal.throwIfAborted();
-    const updated = await workspaceRatchetService.recordCheckIfEnabled(workspace.id, now);
+    const updated = await workspaceRatchetService.recordCheckIfEnabled(
+      workspace.id,
+      now,
+      workspace.prId
+    );
     signal.throwIfAborted();
 
     if (!updated) {
       return 'disabled';
-    }
-
-    if (dispatched) {
-      signal.throwIfAborted();
-      await this.snapshot.recordReviewCheck(workspace.id, now);
-      signal.throwIfAborted();
     }
 
     // Persist the whole observation, not just CI.
@@ -894,6 +907,8 @@ class RatchetService extends EventEmitter {
       signal.throwIfAborted();
       await this.snapshot.recordPrObservation({
         workspaceId: workspace.id,
+        prId: workspace.prId,
+        expectedRevision: workspace.prRevision,
         prUrl: workspace.prUrl,
         prNumber: prStateInfo.prNumber,
         ciStatus: prStateInfo.ciStatus,
@@ -902,6 +917,12 @@ class RatchetService extends EventEmitter {
         hasMergeConflict: prStateInfo.hasMergeConflict,
         observedAt: now,
       });
+      signal.throwIfAborted();
+    }
+
+    if (dispatched) {
+      signal.throwIfAborted();
+      await this.snapshot.recordReviewCheck(workspace.id, now, workspace.prId);
       signal.throwIfAborted();
     }
 
@@ -981,29 +1002,6 @@ class RatchetService extends EventEmitter {
       },
     });
     return action;
-  }
-
-  private async stopActiveRatchetSessionsForMergedPr(
-    workspaceId: string,
-    signal: AbortSignal
-  ): Promise<void> {
-    signal.throwIfAborted();
-    const sessions = await this.session.findSessionsByWorkspaceId(workspaceId);
-    signal.throwIfAborted();
-    const activeRatchetSessions = sessions.filter(
-      (session) =>
-        session.workflow === 'ratchet' &&
-        (session.status === SessionStatus.RUNNING || session.status === SessionStatus.IDLE)
-    );
-
-    for (const session of activeRatchetSessions) {
-      signal.throwIfAborted();
-      if (!this.session.isSessionRunning(session.id)) {
-        continue;
-      }
-      await this.session.stopSession(session.id);
-      signal.throwIfAborted();
-    }
   }
 
   private async stopActiveRatchetSessionsAfterDisable(workspaceId: string): Promise<void> {

@@ -13,7 +13,7 @@ import {
   dataBackupAccessor,
   type WorkspaceForExport,
 } from '@/backend/services/settings/resources/data-backup.accessor';
-import { deriveRatchetState, type RatchetState } from '@/shared/core';
+import { workspaceRatchetService } from '@/backend/services/workspace';
 import { autoIterationConfigSchema } from '@/shared/schemas/auto-iteration.schema';
 import type {
   ExportData,
@@ -60,24 +60,6 @@ const toISOString = (date: Date | null): string | null => (date ? date.toISOStri
 const parseDate = (str: string | null): Date | null => (str ? new Date(str) : null);
 const parseAutoIterationConfigForExport = (value: unknown) =>
   value == null ? null : autoIterationConfigSchema.parse(value);
-
-/** Strip the encrypted API key from issueTrackerConfig for safe export. */
-/**
- * The `ratchetState` a v4 export file has to carry.
- *
- * Required at `schemaVersion: 4`, so it is still written — but computed now, not
- * read: nothing stores it. It is also the only field that carries the conflict
- * flag to a reader of this file predating `WorkspacePR.hasMergeConflict`.
- */
-function exportedRatchetState(workspace: WorkspaceForExport): RatchetState {
-  return deriveRatchetState({
-    ratchetEnabled: workspace.ratchet?.enabled ?? true,
-    prState: workspace.pr?.state ?? 'NONE',
-    prCiStatus: workspace.pr?.ciStatus ?? 'UNKNOWN',
-    prHasMergeConflict: workspace.pr?.hasMergeConflict ?? false,
-    prReviewState: workspace.pr?.reviewState ?? null,
-  });
-}
 
 /**
  * The six run-script fields a v4 export file carries, flattened out of
@@ -177,6 +159,24 @@ async function importProjects(
   return counter;
 }
 
+async function hasImportedParent(
+  tx: TransactionClient,
+  workspace: ExportedWorkspace
+): Promise<boolean> {
+  if (workspace.parentWorkspaceId === null) {
+    return true;
+  }
+  const parent = await tx.workspace.findUnique({ where: { id: workspace.parentWorkspaceId } });
+  if (parent) {
+    return true;
+  }
+  logger.warn('Skipping workspace due to missing parent workspace', {
+    workspaceId: workspace.id,
+    parentWorkspaceId: workspace.parentWorkspaceId,
+  });
+  return false;
+}
+
 async function importWorkspaces(
   workspaces: ExportedWorkspace[],
   tx: TransactionClient
@@ -203,18 +203,9 @@ async function importWorkspaces(
       continue;
     }
 
-    if (workspace.parentWorkspaceId !== null) {
-      const parentWorkspace = await tx.workspace.findUnique({
-        where: { id: workspace.parentWorkspaceId },
-      });
-      if (!parentWorkspace) {
-        logger.warn('Skipping workspace due to missing parent workspace', {
-          workspaceId: workspace.id,
-          parentWorkspaceId: workspace.parentWorkspaceId,
-        });
-        counter.skipped++;
-        continue;
-      }
+    if (!(await hasImportedParent(tx, workspace))) {
+      counter.skipped++;
+      continue;
     }
 
     await tx.workspace.create({
@@ -249,38 +240,41 @@ async function importWorkspaces(
         // lives in the WorkspacePR row this create brings with it. Discovery
         // scheduling was never exported, so it restores at its defaults and the
         // next poll re-derives it.
-        pr: {
+        prDiscovery: {
           create: {
-            url: workspace.prUrl,
-            number: workspace.prNumber,
-            state: workspace.prState,
-            reviewState: workspace.prReviewState,
-            ciStatus: workspace.prCiStatus,
-            // A v4 file predating the projection never carried a conflict flag —
-            // `ratchetState: 'MERGE_CONFLICT'` was the only place a conflict was
-            // recorded, so that is what it restores from.
-            hasMergeConflict: workspace.ratchetState === 'MERGE_CONFLICT',
-            syncedAt: parseDate(workspace.prUpdatedAt),
-            ciFailedAt: parseDate(workspace.prCiFailedAt),
-            ciLastNotifiedAt: parseDate(workspace.prCiLastNotifiedAt),
-            reviewLastCheckedAt: parseDate(workspace.prReviewLastCheckedAt),
-            reviewLastCommentId: workspace.prReviewLastCommentId,
+            lastCheckedAt: parseDate(workspace.prDiscovery.lastCheckedAt),
+            retryCount: workspace.prDiscovery.retryCount,
+            nextCheckAt: parseDate(workspace.prDiscovery.nextCheckAt),
           },
         },
-        // Phase 3+ ratchet fields, restored into the WorkspaceRatchet row this
-        // create brings with it. A workspace without one would be invisible to
-        // the ratchet's row-guarded writes.
-        //
-        // `ratchetState` is not among them: it is derived from the PR row above,
-        // so restoring it would create a second copy to disagree with. It is still
-        // read on the way in — for the conflict flag — and recomputed on the way
-        // out, because the v4 format requires the field.
+        prs: {
+          create: workspace.prs.map((pr) => ({
+            id: pr.id,
+            url: pr.url,
+            number: pr.number,
+            title: pr.title,
+            headRefName: pr.headRefName,
+            baseRefName: pr.baseRefName,
+            state: pr.state,
+            reviewState: pr.reviewState,
+            ciStatus: pr.ciStatus,
+            hasMergeConflict: pr.hasMergeConflict,
+            syncedAt: parseDate(pr.syncedAt),
+            detachedAt: parseDate(pr.detachedAt),
+            revision: pr.revision,
+            ciFailedAt: parseDate(pr.ciFailedAt),
+            ciLastNotifiedAt: parseDate(pr.ciLastNotifiedAt),
+            reviewLastCheckedAt: parseDate(pr.reviewLastCheckedAt),
+            reviewLastCommentId: pr.reviewLastCommentId,
+            automation: {
+              create: { ...pr.ratchet, lastCheckedAt: parseDate(pr.ratchet.lastCheckedAt) },
+            },
+          })),
+        },
         ratchet: {
           create: {
             enabled: workspace.ratchetEnabled,
             lastCheckedAt: parseDate(workspace.ratchetLastCheckedAt),
-            activeSessionId: workspace.ratchetActiveSessionId,
-            dispatchSnapshotKey: workspace.ratchetLastCiRunId,
           },
         },
         // The v4 export carries six of the seven run-script fields as flat
@@ -318,6 +312,17 @@ async function importWorkspaces(
         updatedAt: new Date(workspace.updatedAt),
       },
     });
+    if (
+      workspace.ratchetActivePrId &&
+      workspace.prs.some((pr) => pr.id === workspace.ratchetActivePrId && !pr.detachedAt)
+    ) {
+      await workspaceRatchetService.restoreOwnership(
+        tx,
+        workspace.id,
+        workspace.ratchetActivePrId,
+        workspace.ratchetActiveSessionId
+      );
+    }
     counter.imported++;
   }
 
@@ -353,6 +358,7 @@ async function importAgentSessions(
         workspaceId: s.workspaceId,
         name: s.name,
         workflow: s.workflow,
+        workspacePrId: s.workspacePrId,
         model: s.model,
         status: s.status,
         provider: s.provider,
@@ -483,7 +489,7 @@ class DataBackupService {
       meta: {
         exportedAt: new Date().toISOString(),
         version: appVersion,
-        schemaVersion: 4,
+        schemaVersion: 5,
       },
       data: {
         projects: projects.map((p) => ({
@@ -534,27 +540,42 @@ class DataBackupService {
           linearIssueUrl: w.linearIssueUrl,
           defaultSessionProvider: w.defaultSessionProvider,
           ratchetSessionProvider: w.ratchetSessionProvider,
-          // Flattened out of WorkspacePR: the v4 export format carries the PR
-          // cache as workspace fields, and `prUpdatedAt` keeps the name it has in
-          // files already on disk even though the column is now `syncedAt`.
-          prUrl: w.pr?.url ?? null,
-          prNumber: w.pr?.number ?? null,
-          prState: w.pr?.state ?? 'NONE',
-          prReviewState: w.pr?.reviewState ?? null,
-          prCiStatus: w.pr?.ciStatus ?? 'UNKNOWN',
-          prUpdatedAt: toISOString(w.pr?.syncedAt ?? null),
-          prCiFailedAt: toISOString(w.pr?.ciFailedAt ?? null),
-          prCiLastNotifiedAt: toISOString(w.pr?.ciLastNotifiedAt ?? null),
-          prReviewLastCheckedAt: toISOString(w.pr?.reviewLastCheckedAt ?? null),
-          prReviewLastCommentId: w.pr?.reviewLastCommentId ?? null,
-          // Phase 3+ ratchet tracking fields. Flattened out of WorkspaceRatchet:
-          // the v4 export format carries them as workspace fields, and
-          // `ratchetLastCiRunId` keeps the name it has in files already on disk.
+          prs: w.prs.map((pr) => ({
+            id: pr.id,
+            url: pr.url,
+            number: pr.number,
+            title: pr.title,
+            headRefName: pr.headRefName,
+            baseRefName: pr.baseRefName,
+            state: pr.state,
+            reviewState: pr.reviewState,
+            ciStatus: pr.ciStatus,
+            hasMergeConflict: pr.hasMergeConflict,
+            syncedAt: toISOString(pr.syncedAt),
+            detachedAt: toISOString(pr.detachedAt),
+            revision: pr.revision,
+            ciFailedAt: toISOString(pr.ciFailedAt),
+            ciLastNotifiedAt: toISOString(pr.ciLastNotifiedAt),
+            reviewLastCheckedAt: toISOString(pr.reviewLastCheckedAt),
+            reviewLastCommentId: pr.reviewLastCommentId,
+            ratchet: {
+              lastCheckedAt: toISOString(pr.automation?.lastCheckedAt ?? null),
+              activeSessionId: pr.automation?.activeSessionId ?? null,
+              dispatchSnapshotKey: pr.automation?.dispatchSnapshotKey ?? null,
+              dispatchOutcome: pr.automation?.dispatchOutcome ?? null,
+              dispatchRetryCount: pr.automation?.dispatchRetryCount ?? 0,
+              dispatchStalled: pr.automation?.dispatchStalled ?? false,
+            },
+          })),
+          prDiscovery: {
+            lastCheckedAt: toISOString(w.prDiscovery?.lastCheckedAt ?? null),
+            retryCount: w.prDiscovery?.retryCount ?? 0,
+            nextCheckAt: toISOString(w.prDiscovery?.nextCheckAt ?? null),
+          },
           ratchetEnabled: w.ratchet?.enabled ?? true,
-          ratchetState: exportedRatchetState(w),
           ratchetLastCheckedAt: toISOString(w.ratchet?.lastCheckedAt ?? null),
           ratchetActiveSessionId: w.ratchet?.activeSessionId ?? null,
-          ratchetLastCiRunId: w.ratchet?.dispatchSnapshotKey ?? null,
+          ratchetActivePrId: w.ratchet?.activePrId ?? null,
           hasHadSessions: w.hasHadSessions,
           createdAt: w.createdAt.toISOString(),
           updatedAt: w.updatedAt.toISOString(),
@@ -564,6 +585,7 @@ class DataBackupService {
           workspaceId: s.workspaceId,
           name: s.name,
           workflow: s.workflow,
+          workspacePrId: s.workspacePrId,
           model: s.model,
           status: s.status,
           provider: s.provider,

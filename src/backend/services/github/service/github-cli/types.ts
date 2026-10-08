@@ -22,6 +22,9 @@ export interface PRStatusFromGitHub {
     completedAt?: string;
   }> | null;
   headRefName?: string;
+  title?: string;
+  baseRefName?: string;
+  mergeStateStatus?: string;
 }
 
 export interface PRInfo {

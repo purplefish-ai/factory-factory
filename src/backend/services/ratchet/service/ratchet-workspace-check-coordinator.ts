@@ -23,7 +23,8 @@ export class RatchetWorkspaceCheckCoordinator {
     runner: (signal: AbortSignal, commitSideEffects: () => void) => Promise<WorkspaceRatchetResult>,
     schedule: WorkspaceCheckScheduler = runImmediately
   ): Promise<WorkspaceRatchetResult> {
-    const existing = this.inFlightWorkspaceChecks.get(workspace.id);
+    const key = workspace.prId ? `${workspace.id}:${workspace.prId}` : workspace.id;
+    const existing = this.inFlightWorkspaceChecks.get(key);
     if (existing) {
       return this.withTimeout(existing);
     }
@@ -46,12 +47,12 @@ export class RatchetWorkspaceCheckCoordinator {
         inFlight.timeoutDisabled = true;
       });
     }).finally(() => {
-      if (this.inFlightWorkspaceChecks.get(workspace.id) === inFlight) {
-        this.inFlightWorkspaceChecks.delete(workspace.id);
+      if (this.inFlightWorkspaceChecks.get(key) === inFlight) {
+        this.inFlightWorkspaceChecks.delete(key);
       }
     });
     inFlight.promise = promise;
-    this.inFlightWorkspaceChecks.set(workspace.id, inFlight);
+    this.inFlightWorkspaceChecks.set(key, inFlight);
     return this.withTimeout(inFlight);
   }
 

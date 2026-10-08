@@ -105,14 +105,16 @@ async function createProjectFixture(overrides: Partial<Prisma.ProjectUncheckedCr
 async function createWorkspaceFixture(
   projectId: string,
   overrides: Partial<Prisma.WorkspaceUncheckedCreateInput> & {
-    ratchet?: Prisma.WorkspaceRatchetCreateWithoutWorkspaceInput;
-    pr?: Prisma.WorkspacePRCreateWithoutWorkspaceInput;
+    ratchet?: Prisma.WorkspaceRatchetCreateWithoutWorkspaceInput &
+      Partial<Prisma.WorkspacePRRatchetCreateWithoutPrInput>;
+    pr?: Omit<Prisma.WorkspacePRCreateWithoutWorkspaceInput, 'url'> & { url?: string | null };
     runScript?: Prisma.WorkspaceRunScriptCreateWithoutWorkspaceInput;
     autoIteration?: Prisma.WorkspaceAutoIterationCreateWithoutWorkspaceInput;
   } = {}
 ) {
   const { ratchet, pr, runScript, autoIteration, ...workspaceOverrides } = overrides;
-  return await prisma.workspace.create({
+  const fixturePrId = nextId('pr');
+  const workspace = await prisma.workspace.create({
     data: {
       projectId,
       name: nextId('workspace'),
@@ -120,12 +122,47 @@ async function createWorkspaceFixture(
       ...workspaceOverrides,
       // Mirrors workspaceAccessor.create: every workspace gets all four
       // side-table rows, so the row-guarded writes under test have one to guard.
-      ratchet: { create: ratchet ?? {} },
-      pr: { create: pr ?? {} },
+      ratchet: {
+        create: {
+          enabled: ratchet?.enabled,
+          lastCheckedAt: ratchet?.lastCheckedAt,
+          activeSessionId: ratchet?.activeSessionId,
+          activePrId: null,
+        },
+      },
+      prDiscovery: { create: {} },
+      prs: {
+        create:
+          pr || ratchet?.activeSessionId
+            ? [
+                {
+                  ...pr,
+                  id: fixturePrId,
+                  url: pr?.url ?? 'https://github.com/o/r/pull/42',
+                  automation: {
+                    create: {
+                      activeSessionId: ratchet?.activeSessionId,
+                      dispatchOutcome: ratchet?.dispatchOutcome,
+                      dispatchSnapshotKey: ratchet?.dispatchSnapshotKey,
+                      dispatchRetryCount: ratchet?.dispatchRetryCount,
+                      dispatchStalled: ratchet?.dispatchStalled,
+                    },
+                  },
+                },
+              ]
+            : [],
+      },
       runScript: { create: runScript ?? {} },
       autoIteration: { create: autoIteration ?? {} },
     },
   });
+  if (ratchet?.activeSessionId) {
+    await prisma.workspaceRatchet.update({
+      where: { workspaceId: workspace.id },
+      data: { activePrId: fixturePrId },
+    });
+  }
+  return workspace;
 }
 
 function createGitRepository(remoteUrl?: string): string {
@@ -397,7 +434,7 @@ describe('resource accessors integration', () => {
       expect(mismatch).toBe(false);
       const unchanged = await findWorkspaceOrThrow(workspace.id);
       expect(unchanged.ratchetActiveSessionId).toBe('session-1');
-      expect(unchanged.ratchetDispatchOutcome).toBeNull();
+      expect(unchanged.ratchetDispatchOutcome).toBe('RUNNING');
 
       const settled = await workspaceRatchetService.recordSessionEnd(
         workspace.id,
@@ -407,7 +444,7 @@ describe('resource accessors integration', () => {
       expect(settled).toBe(true);
       const cleared = await findWorkspaceOrThrow(workspace.id);
       expect(cleared.ratchetActiveSessionId).toBeNull();
-      expect(cleared.ratchetDispatchOutcome).toBe('DIED');
+      expect(cleared.prs[0]?.ratchet.dispatchOutcome).toBe('DIED');
     });
 
     it('resets settled Ratchet ownership only for changed PR aggregates', async () => {

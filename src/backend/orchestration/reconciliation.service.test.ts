@@ -416,7 +416,12 @@ describe('workspaceMaintenanceService.findNeedingWorktree', () => {
           },
         ],
       },
-      include: { project: true, pr: true, autoIteration: true },
+      include: {
+        project: true,
+        prs: { include: { automation: true } },
+        prDiscovery: true,
+        autoIteration: true,
+      },
       orderBy: { createdAt: 'asc' },
     });
   });

@@ -25,6 +25,7 @@ export interface WorkspaceSidebarStatus {
 
 export interface WorkspaceSidebarStatusInput {
   isWorking: boolean;
+  prSummary?: { totalCount: number; hasNonterminal: boolean };
   prUrl: string | null;
   prState: PRState | null;
   prCiStatus: CIStatus | null;
@@ -36,7 +37,7 @@ export function deriveWorkspaceSidebarStatus(
 ): WorkspaceSidebarStatus {
   const activityState: WorkspaceSidebarActivityState = input.isWorking ? 'WORKING' : 'IDLE';
 
-  if (!input.prUrl) {
+  if (!(input.prSummary?.totalCount ?? Number(Boolean(input.prUrl)))) {
     return { activityState, ciState: 'NONE' };
   }
 

@@ -1,5 +1,6 @@
 import type { inferRouterOutputs } from '@trpc/server';
 import type { AppRouter } from '@/client/lib/trpc';
+import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
 import type { WorkspaceSnapshotEntry } from '@/shared/workspace-snapshot';
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
@@ -40,6 +41,8 @@ function projectSnapshotToLiveFields(entry: WorkspaceSnapshotEntry) {
     mode: entry.mode,
     createdAt: new Date(entry.createdAt),
     branchName: entry.branchName,
+    prs: entry.prs ?? [],
+    prSummary: entry.prSummary ?? deriveWorkspacePRSummary(entry.prs ?? [], entry.ratchetEnabled),
     prUrl: entry.prUrl,
     prNumber: entry.prNumber,
     prState: entry.prState,

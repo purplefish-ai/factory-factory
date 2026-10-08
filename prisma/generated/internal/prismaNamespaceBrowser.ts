@@ -55,7 +55,9 @@ export const ModelName = {
   DecisionLog: 'DecisionLog',
   Workspace: 'Workspace',
   WorkspacePR: 'WorkspacePR',
+  WorkspacePRDiscovery: 'WorkspacePRDiscovery',
   WorkspaceRatchet: 'WorkspaceRatchet',
+  WorkspacePRRatchet: 'WorkspacePRRatchet',
   WorkspaceRunScript: 'WorkspaceRunScript',
   WorkspaceAutoIteration: 'WorkspaceAutoIteration',
   AgentSession: 'AgentSession',
@@ -150,17 +152,20 @@ export type WorkspaceScalarFieldEnum = (typeof WorkspaceScalarFieldEnum)[keyof t
 
 
 export const WorkspacePRScalarFieldEnum = {
+  id: 'id',
   workspaceId: 'workspaceId',
   url: 'url',
   number: 'number',
+  title: 'title',
+  headRefName: 'headRefName',
+  baseRefName: 'baseRefName',
   state: 'state',
   reviewState: 'reviewState',
   ciStatus: 'ciStatus',
   hasMergeConflict: 'hasMergeConflict',
   syncedAt: 'syncedAt',
-  discoveryLastCheckedAt: 'discoveryLastCheckedAt',
-  discoveryRetryCount: 'discoveryRetryCount',
-  discoveryNextCheckAt: 'discoveryNextCheckAt',
+  detachedAt: 'detachedAt',
+  revision: 'revision',
   ciFailedAt: 'ciFailedAt',
   ciLastNotifiedAt: 'ciLastNotifiedAt',
   reviewLastCheckedAt: 'reviewLastCheckedAt',
@@ -170,9 +175,29 @@ export const WorkspacePRScalarFieldEnum = {
 export type WorkspacePRScalarFieldEnum = (typeof WorkspacePRScalarFieldEnum)[keyof typeof WorkspacePRScalarFieldEnum]
 
 
+export const WorkspacePRDiscoveryScalarFieldEnum = {
+  workspaceId: 'workspaceId',
+  lastCheckedAt: 'lastCheckedAt',
+  retryCount: 'retryCount',
+  nextCheckAt: 'nextCheckAt'
+} as const
+
+export type WorkspacePRDiscoveryScalarFieldEnum = (typeof WorkspacePRDiscoveryScalarFieldEnum)[keyof typeof WorkspacePRDiscoveryScalarFieldEnum]
+
+
 export const WorkspaceRatchetScalarFieldEnum = {
   workspaceId: 'workspaceId',
   enabled: 'enabled',
+  lastCheckedAt: 'lastCheckedAt',
+  activeSessionId: 'activeSessionId',
+  activePrId: 'activePrId'
+} as const
+
+export type WorkspaceRatchetScalarFieldEnum = (typeof WorkspaceRatchetScalarFieldEnum)[keyof typeof WorkspaceRatchetScalarFieldEnum]
+
+
+export const WorkspacePRRatchetScalarFieldEnum = {
+  prId: 'prId',
   lastCheckedAt: 'lastCheckedAt',
   activeSessionId: 'activeSessionId',
   dispatchSnapshotKey: 'dispatchSnapshotKey',
@@ -181,7 +206,7 @@ export const WorkspaceRatchetScalarFieldEnum = {
   dispatchStalled: 'dispatchStalled'
 } as const
 
-export type WorkspaceRatchetScalarFieldEnum = (typeof WorkspaceRatchetScalarFieldEnum)[keyof typeof WorkspaceRatchetScalarFieldEnum]
+export type WorkspacePRRatchetScalarFieldEnum = (typeof WorkspacePRRatchetScalarFieldEnum)[keyof typeof WorkspacePRRatchetScalarFieldEnum]
 
 
 export const WorkspaceRunScriptScalarFieldEnum = {
@@ -214,6 +239,7 @@ export const AgentSessionScalarFieldEnum = {
   id: 'id',
   workspaceId: 'workspaceId',
   name: 'name',
+  workspacePrId: 'workspacePrId',
   workflow: 'workflow',
   model: 'model',
   status: 'status',

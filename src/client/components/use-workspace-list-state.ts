@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CIStatus, PRState, RatchetState, RunScriptStatus } from '@/shared/core';
 import type { SessionSummary } from '@/shared/session-runtime';
+import type { WorkspacePullRequest } from '@/shared/workspace-pr';
+import type { WorkspacePRSummary } from '@/shared/workspace-pr-summary';
 import type { WorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import type { WorkspaceStatusReason } from '@/shared/workspace-status-reason';
 
@@ -15,6 +17,8 @@ export interface ServerWorkspace {
   name: string;
   createdAt: string | Date;
   branchName?: string | null;
+  prs?: WorkspacePullRequest[];
+  prSummary?: WorkspacePRSummary;
   prUrl?: string | null;
   prNumber?: number | null;
   prState?: PRState | null;

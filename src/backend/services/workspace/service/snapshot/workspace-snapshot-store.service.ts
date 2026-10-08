@@ -1,3 +1,5 @@
+import type { WorkspacePullRequest } from '@/shared/workspace-pr';
+import type { WorkspacePRSummary } from '@/shared/workspace-pr-summary';
 /**
  * Workspace Snapshot Store Service
  *
@@ -66,6 +68,8 @@ export interface SnapshotUpdateInput {
   autoIterationStatus?: AutoIterationStatus | null;
 
   // PR fields (group: 'pr')
+  prs?: WorkspacePullRequest[];
+  prSummary?: WorkspacePRSummary;
   prUrl?: string | null;
   prNumber?: number | null;
   prState?: PRState;
@@ -107,6 +111,7 @@ export interface SnapshotUpdateInput {
  */
 export interface SnapshotDerivationFns {
   deriveFlowState: (input: {
+    prSummary?: WorkspacePRSummary;
     prUrl: string | null;
     prState: PRState;
     prCiStatus: CIStatus;
@@ -122,6 +127,7 @@ export interface SnapshotDerivationFns {
   };
   deriveSidebarStatus: (input: {
     isWorking: boolean;
+    prSummary?: WorkspacePRSummary;
     prUrl: string | null;
     prState: PRState | null;
     prCiStatus: CIStatus | null;
@@ -168,6 +174,8 @@ const WORKSPACE_FIELDS = [
   'autoIterationStatus',
 ] as const;
 const PR_FIELDS = [
+  'prs',
+  'prSummary',
   'prUrl',
   'prNumber',
   'prState',
@@ -449,6 +457,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
   private recomputeDerivedState(entry: WorkspaceSnapshotEntry): boolean {
     const sessionIsWorking = this.rawSessionIsWorkingByWorkspaceId.get(entry.workspaceId) ?? false;
     const flowState = this.derive.deriveFlowState({
+      prSummary: entry.prSummary,
       prUrl: entry.prUrl,
       prState: entry.prState,
       prCiStatus: entry.prCiStatus,
@@ -459,6 +468,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     const derivedState = assembleWorkspaceDerivedState(
       {
         lifecycle: entry.status,
+        prSummary: entry.prSummary,
         prUrl: entry.prUrl,
         prState: entry.prState,
         prCiStatus: entry.prCiStatus,

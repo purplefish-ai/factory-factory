@@ -1,9 +1,11 @@
 import { CIStatus, PRState, RatchetState } from '@/shared/core';
 import type { WorkspaceCiObservation, WorkspaceFlowPhase } from '@/shared/workspace-flow-state';
+import type { WorkspacePRSummary } from '@/shared/workspace-pr-summary';
 
 export type { WorkspaceCiObservation, WorkspaceFlowPhase } from '@/shared/workspace-flow-state';
 
 export interface WorkspaceFlowStateInput {
+  prSummary?: WorkspacePRSummary;
   prUrl: string | null;
   prState: PRState;
   prCiStatus: CIStatus;
@@ -14,7 +16,13 @@ export interface WorkspaceFlowStateInput {
 
 export type WorkspaceFlowStateSource = Pick<
   WorkspaceFlowStateInput,
-  'prUrl' | 'prState' | 'prCiStatus' | 'prUpdatedAt' | 'ratchetEnabled' | 'ratchetState'
+  | 'prSummary'
+  | 'prUrl'
+  | 'prState'
+  | 'prCiStatus'
+  | 'prUpdatedAt'
+  | 'ratchetEnabled'
+  | 'ratchetState'
 >;
 
 export interface WorkspaceFlowState {
@@ -75,7 +83,7 @@ function deriveWorkspaceCiObservation(input: WorkspaceFlowStateInput): Workspace
  * - With ratchet enabled, an active PR stays WORKING until ratchet verifies it is READY/MERGED.
  */
 export function deriveWorkspaceFlowState(input: WorkspaceFlowStateInput): WorkspaceFlowState {
-  const activePr = hasActivePr(input.prUrl, input.prState);
+  const activePr = input.prSummary?.hasNonterminal ?? hasActivePr(input.prUrl, input.prState);
   const ciObservation = deriveWorkspaceCiObservation(input);
 
   if (input.prState === PRState.MERGED) {
@@ -151,6 +159,7 @@ export function deriveWorkspaceFlowStateFromWorkspace(
   workspace: WorkspaceFlowStateSource
 ): WorkspaceFlowState {
   return deriveWorkspaceFlowState({
+    prSummary: workspace.prSummary,
     prUrl: workspace.prUrl,
     prState: workspace.prState,
     prCiStatus: workspace.prCiStatus,

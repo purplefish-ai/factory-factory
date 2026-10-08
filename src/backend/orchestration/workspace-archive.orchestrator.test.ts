@@ -64,6 +64,9 @@ function makeWorkspace(overrides: Partial<WorkspaceWithProject> = {}): Workspace
       githubRepo: 'repo',
     },
     ...overrides,
+    prs:
+      overrides.prs ??
+      (overrides.prUrl ? [{ id: 'pr-1', url: overrides.prUrl, state: overrides.prState }] : []),
   });
 }
 

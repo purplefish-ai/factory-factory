@@ -3,6 +3,7 @@ import { buildRatchetDispatchPrompt } from '@/backend/prompts/ratchet-dispatch';
 import { createLogger } from '@/backend/services/logger.service';
 import { userSettingsService } from '@/backend/services/settings';
 import { workspaceRatchetService } from '@/backend/services/workspace';
+import { SessionStatus } from '@/shared/core';
 import type { RatchetSessionBridge } from './bridges';
 import { type AcquireAndDispatchResult, fixerSessionService } from './fixer-session.service';
 import type { PRStateInfo, RatchetAction, WorkspaceWithPR } from './ratchet.types';
@@ -27,6 +28,7 @@ async function stopUnrecordedFixerSession(params: {
     workspaceId,
     sessionId,
   });
+  await workspaceRatchetService.clearActiveSession(workspaceId, sessionId);
   if (sessionBridge.isSessionRunning(sessionId)) {
     await sessionBridge.stopSession(sessionId);
   }
@@ -82,6 +84,7 @@ async function handleStartedFixerResult(params: {
   commitSideEffects();
   const recorded = await workspaceRatchetService.recordDispatchIfEnabled(workspace.id, {
     sessionId: result.sessionId,
+    prId: workspace.prId,
     snapshotKey: prStateInfo.snapshotKey,
     retryCount,
   });
@@ -163,7 +166,8 @@ async function handleAlreadyActiveFixerResult(params: {
   commitSideEffects();
   const adopted = await workspaceRatchetService.adoptActiveSessionIfEnabled(
     workspace.id,
-    result.sessionId
+    result.sessionId,
+    workspace.prId
   );
   if (adopted) {
     onDispatchChanged?.({ workspaceId: workspace.id });
@@ -184,10 +188,15 @@ async function cleanUpUnrecordedStartedFixer(params: {
   workspaceId: string;
   sessionId: string;
   sessionBridge: RatchetSessionBridge;
+  outcome?: 'COMPLETED' | 'DIED';
 }): Promise<void> {
   const { workspaceId, sessionId, sessionBridge } = params;
   try {
-    await workspaceRatchetService.recordSessionEnd(workspaceId, sessionId, 'COMPLETED');
+    await workspaceRatchetService.recordSessionEnd(
+      workspaceId,
+      sessionId,
+      params.outcome ?? 'COMPLETED'
+    );
   } catch (error) {
     logger.warn('Failed to settle unrecorded ratchet fixer during cleanup', {
       workspaceId,
@@ -232,6 +241,7 @@ export async function triggerRatchetFixer(params: {
   let result: AcquireAndDispatchResult | undefined;
   let startedFixerRecorded = false;
   let startedFixerCleaned = false;
+  let claimedSessionId: string | undefined;
 
   try {
     signal?.throwIfAborted();
@@ -240,6 +250,7 @@ export async function triggerRatchetFixer(params: {
     result = await fixerSessionService.acquireAndDispatch({
       workspaceId: workspace.id,
       workflow: RATCHET_WORKFLOW,
+      workspacePrId: workspace.prId,
       sessionName: 'Ratchet',
       runningIdleAction: 'restart',
       dispatchMode: 'start_empty_and_send',
@@ -250,12 +261,27 @@ export async function triggerRatchetFixer(params: {
           prStateInfo.reviewComments,
           {
             hasMergeConflict: prStateInfo.hasMergeConflict,
+            headRefName: workspace.prHeadRefName,
             replyToPrComments: userSettings.ratchetReplyToPrComments,
           }
         ),
       beforeStart: ({ sessionId, prompt }) => {
         signal?.throwIfAborted();
-        sessionBridge.injectCommittedUserMessage(sessionId, prompt);
+        return workspaceRatchetService
+          .recordDispatchIfEnabled(workspace.id, {
+            prId: workspace.prId,
+            expectedRevision: workspace.prRevision,
+            sessionId,
+            snapshotKey: prStateInfo.snapshotKey,
+            retryCount,
+          })
+          .then((claimed) => {
+            if (!claimed) {
+              throw new Error('Workspace fixer slot no longer available');
+            }
+            claimedSessionId = sessionId;
+            sessionBridge.injectCommittedUserMessage(sessionId, prompt);
+          });
       },
       afterStart: () => {
         commitSideEffects();
@@ -295,6 +321,15 @@ export async function triggerRatchetFixer(params: {
       });
     }
 
+    if (claimedSessionId) {
+      await cleanUpUnrecordedStartedFixer({
+        workspaceId: workspace.id,
+        sessionId: claimedSessionId,
+        sessionBridge,
+        outcome: 'DIED',
+      });
+      claimedSessionId = undefined;
+    }
     if (result.status === 'skipped') {
       return { type: 'ERROR', error: result.reason };
     }
@@ -308,11 +343,46 @@ export async function triggerRatchetFixer(params: {
         sessionBridge,
       });
     }
+    if (claimedSessionId && !startedFixerCleaned) {
+      await cleanUpUnrecordedStartedFixer({
+        workspaceId: workspace.id,
+        sessionId: claimedSessionId,
+        sessionBridge,
+        outcome: 'DIED',
+      });
+    }
     signal?.throwIfAborted();
     const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error('Failed to trigger ratchet fixer', toError(error), {
       workspaceId: workspace.id,
     });
     return { type: 'ERROR', error: errorMessage };
+  }
+}
+
+export async function stopActiveRatchetSessionsForMergedPr(
+  sessionBridge: RatchetSessionBridge,
+  workspace: WorkspaceWithPR,
+  signal: AbortSignal
+): Promise<void> {
+  signal.throwIfAborted();
+  const sessions = await sessionBridge.findSessionsByWorkspaceId(workspace.id);
+  signal.throwIfAborted();
+  const activeRatchetSessions = sessions.filter(
+    (session) =>
+      session.workflow === 'ratchet' &&
+      (session.workspacePrId === workspace.prId ||
+        (workspace.ratchetActivePrId === workspace.prId &&
+          session.id === workspace.ratchetActiveSessionId)) &&
+      (session.status === SessionStatus.RUNNING || session.status === SessionStatus.IDLE)
+  );
+
+  for (const session of activeRatchetSessions) {
+    signal.throwIfAborted();
+    if (!sessionBridge.isSessionRunning(session.id)) {
+      continue;
+    }
+    await sessionBridge.stopSession(session.id);
+    signal.throwIfAborted();
   }
 }

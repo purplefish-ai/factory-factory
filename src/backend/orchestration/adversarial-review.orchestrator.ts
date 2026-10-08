@@ -61,26 +61,29 @@ export interface TriggerAdversarialReviewResult {
 const inFlightTriggers = new Map<string, Promise<TriggerAdversarialReviewResult>>();
 
 export function triggerAdversarialReview(
-  workspaceId: string
+  workspaceId: string,
+  prId?: string
 ): Promise<TriggerAdversarialReviewResult> {
-  const existingTrigger = inFlightTriggers.get(workspaceId);
+  const key = `${workspaceId}:${prId ?? 'sole'}`;
+  const existingTrigger = inFlightTriggers.get(key);
   if (existingTrigger !== undefined) {
     return existingTrigger;
   }
 
-  const trigger = triggerAdversarialReviewLocked(workspaceId).finally(() => {
-    inFlightTriggers.delete(workspaceId);
+  const trigger = triggerAdversarialReviewLocked(workspaceId, prId).finally(() => {
+    inFlightTriggers.delete(key);
   });
-  inFlightTriggers.set(workspaceId, trigger);
+  inFlightTriggers.set(key, trigger);
   return trigger;
 }
 
 async function triggerAdversarialReviewLocked(
-  workspaceId: string
+  workspaceId: string,
+  prId?: string
 ): Promise<TriggerAdversarialReviewResult> {
   const [fixerContext, prState] = await Promise.all([
     workspaceDataService.findFixerContext(workspaceId),
-    workspaceDataService.findPRState(workspaceId),
+    workspaceDataService.findPRState(workspaceId, prId),
   ]);
 
   if (!fixerContext) {
@@ -96,7 +99,7 @@ async function triggerAdversarialReviewLocked(
     );
   }
 
-  const existing = await findActiveAdversarialReviewSession(workspaceId);
+  const existing = await findActiveAdversarialReviewSession(workspaceId, prState.prId);
   if (existing) {
     return { status: 'already_active', sessionId: existing.id };
   }
@@ -120,6 +123,7 @@ async function triggerAdversarialReviewLocked(
 
   const session = await sessionDataService.createAgentSession({
     workspaceId,
+    workspacePrId: prState.prId,
     name: `Adversarial Review (${providerLabel})`,
     workflow: ADVERSARIAL_REVIEW_WORKFLOW,
     provider,
@@ -157,13 +161,15 @@ async function triggerAdversarialReviewLocked(
 }
 
 async function findActiveAdversarialReviewSession(
-  workspaceId: string
+  workspaceId: string,
+  prId: string
 ): Promise<{ id: string } | null> {
   const sessions = await sessionDataService.findAgentSessionsByWorkspaceId(workspaceId);
   return (
     sessions.find(
       (session) =>
         session.workflow === ADVERSARIAL_REVIEW_WORKFLOW &&
+        session.workspacePrId === prId &&
         (session.status === SessionStatus.RUNNING || session.status === SessionStatus.IDLE)
     ) ?? null
   );

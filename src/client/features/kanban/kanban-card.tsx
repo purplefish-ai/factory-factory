@@ -16,6 +16,7 @@ import { PrStateBadge } from '@/client/components/pr-state-badge';
 import {
   ArchiveWorkspaceDialog,
   RatchetToggleButton,
+  WorkspacePrMenu,
   WorkspaceStatusBadge,
 } from '@/client/features/workspace';
 import { useInlineWorkspaceRename } from '@/client/hooks/use-inline-workspace-rename';
@@ -92,7 +93,7 @@ function IssueAndPullRequestRow({
   issue: IssueLink | null;
   showPR: boolean;
 }) {
-  if (!(issue || showPR)) {
+  if (!(issue || showPR || workspace.prs?.length)) {
     return null;
   }
 
@@ -115,22 +116,26 @@ function IssueAndPullRequestRow({
           <span>{issue.label}</span>
         </button>
       )}
-      {showPR && (
-        <div className="inline-flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              window.open(workspace.prUrl as string, '_blank', 'noopener,noreferrer');
-            }}
-            className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
-          >
-            <GitPullRequestIcon className="h-3 w-3 shrink-0" />
-            <span>#{workspace.prNumber}</span>
-          </button>
-          <PrStateBadge prState={workspace.prState} size="sm" />
-        </div>
+      {workspace.prs?.length ? (
+        <WorkspacePrMenu prs={workspace.prs} compact />
+      ) : (
+        showPR && (
+          <div className="inline-flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                window.open(workspace.prUrl as string, '_blank', 'noopener,noreferrer');
+              }}
+              className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
+            >
+              <GitPullRequestIcon className="h-3 w-3 shrink-0" />
+              <span>#{workspace.prNumber}</span>
+            </button>
+            <PrStateBadge prState={workspace.prState} size="sm" />
+          </div>
+        )
       )}
     </div>
   );

@@ -78,7 +78,7 @@ describe('Linear completion on PR merge', () => {
           await vi.waitFor(() => expect(markIssueCompleted).toHaveBeenCalledTimes(1));
         }
         emitMerge();
-        await Promise.resolve();
+        await new Promise((resolve) => setTimeout(resolve, 0));
         expect(markIssueCompleted).toHaveBeenCalledExactlyOnceWith('test-key', 'issue-1');
       } finally {
         collector.stop();
@@ -92,7 +92,7 @@ describe('Linear completion on PR merge', () => {
       emitMerge(7, null);
       emitMerge();
       emitMerge(7, 'https://github.com/org/other/pull/7');
-      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
       expect(markIssueCompleted).toHaveBeenCalledTimes(2);
     } finally {
       collector.stop();
@@ -104,7 +104,7 @@ describe('Linear completion on PR merge', () => {
     try {
       emitMerge(7, null);
       emitMerge(7, 'https://github.com/org/other/pull/7');
-      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
       expect(markIssueCompleted).toHaveBeenCalledTimes(2);
     } finally {
       collector.stop();
@@ -116,7 +116,7 @@ describe('Linear completion on PR merge', () => {
     try {
       emitMerge();
       emitMerge();
-      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
       expect(markIssueCompleted).toHaveBeenCalledExactlyOnceWith('test-key', 'issue-1');
     } finally {
       collector.stop();
@@ -127,7 +127,7 @@ describe('Linear completion on PR merge', () => {
     const { collector, emitMerge, markIssueCompleted } = createHarness('MERGED');
     try {
       emitMerge();
-      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
       expect(markIssueCompleted).toHaveBeenCalledExactlyOnceWith('test-key', 'issue-1');
     } finally {
       collector.stop();
@@ -165,7 +165,7 @@ describe('Linear completion on PR merge', () => {
         emitMerge();
         await vi.waitFor(() => expect(markIssueCompleted).toHaveBeenCalledTimes(2));
         emitMerge();
-        await Promise.resolve();
+        await new Promise((resolve) => setTimeout(resolve, 0));
         expect(markIssueCompleted).toHaveBeenCalledTimes(2);
       } finally {
         collector.stop();
@@ -185,12 +185,12 @@ describe('Linear completion on PR merge', () => {
       emitMerge();
       await vi.waitFor(() => expect(markIssueCompleted).toHaveBeenCalledTimes(1));
       emitMerge();
-      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
       expect(markIssueCompleted).toHaveBeenCalledTimes(1);
       resolve(true);
-      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
       emitMerge();
-      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
       expect(markIssueCompleted).toHaveBeenCalledTimes(1);
     } finally {
       collector.stop();
@@ -216,7 +216,7 @@ describe('Linear completion on PR merge', () => {
     try {
       emitMerge(8);
       emitMerge(8);
-      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
       expect(markIssueCompleted).toHaveBeenCalledExactlyOnceWith('test-key', 'issue-1');
     } finally {
       collector.stop();

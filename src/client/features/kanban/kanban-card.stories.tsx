@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useState } from 'react';
+import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
 import type { WorkspaceWithKanban } from './kanban-card';
 import { KanbanCard } from './kanban-card';
 
@@ -41,6 +42,8 @@ export const baseWorkspace: WorkspaceWithKanban = {
   autoIterationStatus: null,
   autoIterationConfig: null,
   autoIterationProgress: null,
+  prs: [],
+  prSummary: deriveWorkspacePRSummary([], true),
   prUrl: null,
   prNumber: null,
   prState: 'NONE',

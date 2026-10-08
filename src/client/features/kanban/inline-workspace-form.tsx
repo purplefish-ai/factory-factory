@@ -47,6 +47,7 @@ import type { MessageAttachment } from '@/lib/chat-protocol';
 import { SUPPORTED_IMAGE_TYPES, SUPPORTED_TEXT_EXTENSIONS } from '@/lib/image-utils';
 import { cn } from '@/lib/utils';
 import { kanbanColumnForStatusReason } from '@/shared/kanban-column-projection';
+import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
 import {
   generateUniqueWorkspaceName,
   generateWorkspaceNameFromPrompt,
@@ -139,6 +140,8 @@ function createOptimisticWorkingWorkspace(params: {
     autoIterationStatus: null,
     autoIterationConfig: null,
     autoIterationProgress: null,
+    prs: [],
+    prSummary: deriveWorkspacePRSummary([], true),
     prUrl: null,
     prNumber: null,
     prState: 'NONE',

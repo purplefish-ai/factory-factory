@@ -187,6 +187,7 @@ class WorkspaceQueryService {
         const derivedState = assembleWorkspaceDerivedState(
           {
             lifecycle: workspace.status,
+            prSummary: workspace.prSummary,
             prUrl: workspace.prUrl,
             prState: workspace.prState,
             prCiStatus: workspace.prCiStatus,
@@ -317,6 +318,8 @@ class WorkspaceQueryService {
           autoIterationStatus: w.autoIterationStatus,
           autoIterationConfig: w.autoIterationConfig,
           autoIterationProgress: w.autoIterationProgress,
+          prs: w.prs,
+          prSummary: w.prSummary,
           prUrl: w.prUrl,
           prNumber: w.prNumber,
           prState: w.prState,
@@ -370,13 +373,13 @@ class WorkspaceQueryService {
       throw new Error('Workspace not found');
     }
 
-    if (!workspace.prUrl) {
+    if (!workspace.prs.length) {
       await workspacePrAccessor.resetDiscoveryBackoff(workspaceId);
       return { success: false, reason: 'no_pr_url' as const };
     }
 
     const previousPrState = workspace.prState;
-    const prResult = await this.prSnapshot.refreshWorkspace(workspaceId, workspace.prUrl);
+    const prResult = await this.prSnapshot.refreshWorkspace(workspaceId);
     if (!(prResult.success && prResult.snapshot)) {
       return { success: false, reason: 'fetch_failed' as const };
     }
@@ -403,9 +406,7 @@ class WorkspaceQueryService {
         excludeStatuses: [WorkspaceStatus.ARCHIVING, WorkspaceStatus.ARCHIVED],
       });
 
-      const workspacesWithPRs = workspaces.filter(
-        (w): w is typeof w & { prUrl: string } => w.prUrl !== null
-      );
+      const workspacesWithPRs = workspaces.filter((w) => w.prs.length > 0);
 
       if (workspacesWithPRs.length === 0) {
         this.prStatusSyncProjectsInFlight.delete(projectId);
@@ -415,7 +416,7 @@ class WorkspaceQueryService {
       // Fire-and-forget: results are pushed to clients via WebSocket as each call completes.
       Promise.all(
         workspacesWithPRs.map((workspace) =>
-          gitConcurrencyLimit(() => this.prSnapshot.refreshWorkspace(workspace.id, workspace.prUrl))
+          gitConcurrencyLimit(() => this.prSnapshot.refreshWorkspace(workspace.id))
         )
       )
         .then(() => logger.info('Batch PR status sync completed', { projectId }))

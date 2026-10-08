@@ -7,6 +7,7 @@ import {
 } from '@phosphor-icons/react';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
 import { WorkspaceStatusIcon } from '@/client/components/workspace-status-icon';
+import { WorkspacePrMenu } from '@/client/features/workspace';
 import { getVisibleWorkspaceStatusReason } from '@/client/lib/workspace-status-reason-display';
 
 function CreationSourceIcon({ creationSource }: { creationSource?: string | null }) {
@@ -47,6 +48,16 @@ function PrLink({ prNumber, onOpenPr }: { prNumber: number; onOpenPr?: () => voi
   return <span className="flex items-center gap-0.5">{content}</span>;
 }
 
+function hasPullRequests(workspace: ServerWorkspace) {
+  return (
+    Boolean(workspace.prs?.length) ||
+    (workspace.prState !== 'NONE' &&
+      workspace.prState != null &&
+      workspace.prNumber != null &&
+      workspace.prUrl != null)
+  );
+}
+
 export function WorkspaceItemContent({
   workspace,
   onOpenPr,
@@ -57,11 +68,7 @@ export function WorkspaceItemContent({
   onOpenIssue?: () => void;
 }) {
   const showBranch = Boolean(workspace.branchName);
-  const showPR =
-    workspace.prState !== 'NONE' &&
-    workspace.prState != null &&
-    workspace.prNumber != null &&
-    workspace.prUrl != null;
+  const showPR = hasPullRequests(workspace);
   const showStats =
     workspace.gitStats && (workspace.gitStats.additions > 0 || workspace.gitStats.deletions > 0);
   const hasMetaRow = showBranch || showPR || showStats;
@@ -103,8 +110,13 @@ export function WorkspaceItemContent({
             )}
           </span>
           <span className="shrink-0 justify-self-end">
-            {showPR && workspace.prNumber != null && (
-              <PrLink prNumber={workspace.prNumber} onOpenPr={onOpenPr} />
+            {workspace.prs?.length ? (
+              <WorkspacePrMenu prs={workspace.prs} compact />
+            ) : (
+              showPR &&
+              workspace.prNumber != null && (
+                <PrLink prNumber={workspace.prNumber} onOpenPr={onOpenPr} />
+              )
             )}
           </span>
         </div>

@@ -22,6 +22,7 @@ import {
 } from '@/backend/lib/session-summaries';
 import { SERVICE_LIMITS } from '@/backend/services/constants';
 import {
+  PR_DETACHED,
   PR_SNAPSHOT_UPDATED,
   PR_URL_ATTACHED,
   type PRSnapshotUpdatedEvent,
@@ -65,8 +66,9 @@ import {
   type workspaceSnapshotStore,
   type workspaceStateMachine,
 } from '@/backend/services/workspace';
-import { type CIStatus, type PRState, RatchetState } from '@/shared/core';
+import type { PRState } from '@/shared/core';
 import type { getWorkspaceLinearContext } from './linear-config.helper';
+import { projectPrEvent } from './pr-event-projection';
 import { RatchetProjectionWorker } from './ratchet-projection.worker';
 
 // ---------------------------------------------------------------------------
@@ -457,6 +459,11 @@ async function handleLinearIssueCompletedOnMerge(
   state.linearMergeCompletions.set(workspaceId, attempt);
   let completed = false;
   try {
+    const projection =
+      await state.dependencies.workspaceDataService.findRatchetProjection(workspaceId);
+    if (projection?.prSummary?.hasNonterminal) {
+      return;
+    }
     const ctx = await state.dependencies.getWorkspaceLinearContext(workspaceId);
     if (!ctx) {
       return;
@@ -623,27 +630,14 @@ function startEventCollectorWithState(state: EventCollectorState): void {
         event.prUrl ??
         (previousSnapshot?.prNumber === event.prNumber ? previousSnapshot.prUrl : undefined),
     };
-    const snapshotUpdate: SnapshotUpdateInput = {
-      ...(event.prUrl !== undefined ? { prUrl: event.prUrl } : {}),
-      prNumber: event.prNumber,
-      prState: event.prState as PRState,
-      prCiStatus: event.prCiStatus as CIStatus,
-      // The cached projection belongs to the previous PR. Clear it in the
-      // same publication as the new PR facts so derived state and the archive
-      // confirmation gate cannot see MERGED while the DB re-read is pending.
-      ...(shouldRefreshRatchet ? { ratchetState: RatchetState.IDLE } : {}),
-    };
-
-    coalescer.enqueue(event.workspaceId, snapshotUpdate, 'event:pr_snapshot_updated', {
-      immediate: true,
-    });
-
-    // Every field this event carries is an input to `deriveRatchetState`, so a PR
-    // change is a ratchet-state change; re-project rather than patching a copy.
-    // Before the projection this refresh was conditional on the dispatch record
-    // moving, which is why a snapshot could show `prState: MERGED` next to a
-    // `ratchetState` from the previous ratchet poll.
+    // PR events invalidate the entire collection; publish one authoritative projection.
     ratchetProjection.request(event.workspaceId);
+    coalescer.enqueue(
+      event.workspaceId,
+      projectPrEvent(previousSnapshot, event),
+      'event:pr_snapshot_updated',
+      { immediate: true }
+    );
 
     if (shouldRefreshRatchet) {
       // Bypass the PR-fetch cooldown: this event was emitted by a sync that
@@ -670,31 +664,32 @@ function startEventCollectorWithState(state: EventCollectorState): void {
   );
 
   const prUrlAttachedHandler = (event: PRUrlAttachedEvent) => {
-    // No snapshot was fetched for this URL. Publish its neutral cache and drop
-    // the old PR's projection before any subscriber can archive it as merged.
+    ratchetProjection.request(event.workspaceId);
     coalescer.enqueue(
       event.workspaceId,
-      {
-        prUrl: event.prUrl,
-        prNumber: null,
-        prState: 'NONE',
-        prCiStatus: 'UNKNOWN',
-        hasMergeConflict: false,
-        ratchetState: 'IDLE',
-      },
+      projectPrEvent(
+        dependencies.workspaceSnapshotStore.getByWorkspaceId(event.workspaceId),
+        event
+      ),
       'event:pr_url_attached',
       { immediate: true }
     );
-    ratchetProjection.request(event.workspaceId);
   };
   dependencies.prSnapshotService.on(PR_URL_ATTACHED, prUrlAttachedHandler);
   state.teardownListeners.push(() =>
     dependencies.prSnapshotService.off(PR_URL_ATTACHED, prUrlAttachedHandler)
   );
 
+  const prDetachedHandler = (event: { workspaceId: string }) =>
+    ratchetProjection.request(event.workspaceId);
+  dependencies.prSnapshotService.on(PR_DETACHED, prDetachedHandler);
+  state.teardownListeners.push(() =>
+    dependencies.prSnapshotService.off(PR_DETACHED, prDetachedHandler)
+  );
+
   // 3. Ratchet state changes
   const ratchetStateChangedHandler = (event: RatchetStateChangedEvent) => {
-    if (event.prCiStatus !== undefined) {
+    if (event.prCiStatus !== undefined && !event.prId) {
       coalescer.enqueue(
         event.workspaceId,
         { prCiStatus: event.prCiStatus },

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { workspaceDataService } from '@/backend/services/workspace';
+import { prProjectionDefaults } from '@/backend/testing/pr-projection-fixture';
 import { RatchetProjectionWorker } from './ratchet-projection.worker';
 
 type Projection = Awaited<ReturnType<typeof workspaceDataService.findRatchetProjection>>;
@@ -15,6 +16,7 @@ function deferred<T>() {
 }
 
 const readyProjection = {
+  ...prProjectionDefaults,
   status: 'READY',
   ratchetEnabled: true,
   ratchetState: 'CI_FAILED',
@@ -43,6 +45,7 @@ describe('RatchetProjectionWorker', () => {
 
   it('retries a failed authoritative projection without another invalidation', async () => {
     read.mockRejectedValueOnce(new Error('read failed')).mockResolvedValue({
+      ...prProjectionDefaults,
       status: 'READY',
       ratchetEnabled: true,
       ratchetState: 'CI_FAILED',
@@ -81,6 +84,7 @@ describe('RatchetProjectionWorker', () => {
   it('backs off when an invalidation arrives during a failed projection read', async () => {
     const pendingRead = deferred<Projection>();
     read.mockReturnValueOnce(pendingRead.promise).mockResolvedValue({
+      ...prProjectionDefaults,
       status: 'READY',
       ratchetEnabled: true,
       ratchetState: 'CI_FAILED',
@@ -143,6 +147,8 @@ describe('RatchetProjectionWorker', () => {
 
     expect(read).toHaveBeenCalledTimes(2);
     expect(publish).toHaveBeenLastCalledWith('ws', {
+      ...prProjectionDefaults,
+      prUpdatedAt: null,
       ratchetEnabled: true,
       ratchetState: 'CI_FAILED',
       ratchetDispatchOutcome: 'DIED',

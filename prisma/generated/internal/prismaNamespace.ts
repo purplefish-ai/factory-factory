@@ -401,7 +401,9 @@ export const ModelName = {
   DecisionLog: 'DecisionLog',
   Workspace: 'Workspace',
   WorkspacePR: 'WorkspacePR',
+  WorkspacePRDiscovery: 'WorkspacePRDiscovery',
   WorkspaceRatchet: 'WorkspaceRatchet',
+  WorkspacePRRatchet: 'WorkspacePRRatchet',
   WorkspaceRunScript: 'WorkspaceRunScript',
   WorkspaceAutoIteration: 'WorkspaceAutoIteration',
   AgentSession: 'AgentSession',
@@ -427,7 +429,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "project" | "decisionLog" | "workspace" | "workspacePR" | "workspaceRatchet" | "workspaceRunScript" | "workspaceAutoIteration" | "agentSession" | "sessionLifecycleEvent" | "terminalSession" | "closedSession" | "userSettings" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification"
+    modelProps: "project" | "decisionLog" | "workspace" | "workspacePR" | "workspacePRDiscovery" | "workspaceRatchet" | "workspacePRRatchet" | "workspaceRunScript" | "workspaceAutoIteration" | "agentSession" | "sessionLifecycleEvent" | "terminalSession" | "closedSession" | "userSettings" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -727,6 +729,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    WorkspacePRDiscovery: {
+      payload: Prisma.$WorkspacePRDiscoveryPayload<ExtArgs>
+      fields: Prisma.WorkspacePRDiscoveryFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.WorkspacePRDiscoveryFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRDiscoveryPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.WorkspacePRDiscoveryFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRDiscoveryPayload>
+        }
+        findFirst: {
+          args: Prisma.WorkspacePRDiscoveryFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRDiscoveryPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.WorkspacePRDiscoveryFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRDiscoveryPayload>
+        }
+        findMany: {
+          args: Prisma.WorkspacePRDiscoveryFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRDiscoveryPayload>[]
+        }
+        create: {
+          args: Prisma.WorkspacePRDiscoveryCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRDiscoveryPayload>
+        }
+        createMany: {
+          args: Prisma.WorkspacePRDiscoveryCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.WorkspacePRDiscoveryCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRDiscoveryPayload>[]
+        }
+        delete: {
+          args: Prisma.WorkspacePRDiscoveryDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRDiscoveryPayload>
+        }
+        update: {
+          args: Prisma.WorkspacePRDiscoveryUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRDiscoveryPayload>
+        }
+        deleteMany: {
+          args: Prisma.WorkspacePRDiscoveryDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.WorkspacePRDiscoveryUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.WorkspacePRDiscoveryUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRDiscoveryPayload>[]
+        }
+        upsert: {
+          args: Prisma.WorkspacePRDiscoveryUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRDiscoveryPayload>
+        }
+        aggregate: {
+          args: Prisma.WorkspacePRDiscoveryAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateWorkspacePRDiscovery>
+        }
+        groupBy: {
+          args: Prisma.WorkspacePRDiscoveryGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.WorkspacePRDiscoveryGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.WorkspacePRDiscoveryCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.WorkspacePRDiscoveryCountAggregateOutputType> | number
+        }
+      }
+    }
     WorkspaceRatchet: {
       payload: Prisma.$WorkspaceRatchetPayload<ExtArgs>
       fields: Prisma.WorkspaceRatchetFieldRefs
@@ -798,6 +874,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         count: {
           args: Prisma.WorkspaceRatchetCountArgs<ExtArgs>
           result: runtime.Types.Utils.Optional<Prisma.WorkspaceRatchetCountAggregateOutputType> | number
+        }
+      }
+    }
+    WorkspacePRRatchet: {
+      payload: Prisma.$WorkspacePRRatchetPayload<ExtArgs>
+      fields: Prisma.WorkspacePRRatchetFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.WorkspacePRRatchetFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRRatchetPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.WorkspacePRRatchetFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRRatchetPayload>
+        }
+        findFirst: {
+          args: Prisma.WorkspacePRRatchetFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRRatchetPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.WorkspacePRRatchetFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRRatchetPayload>
+        }
+        findMany: {
+          args: Prisma.WorkspacePRRatchetFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRRatchetPayload>[]
+        }
+        create: {
+          args: Prisma.WorkspacePRRatchetCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRRatchetPayload>
+        }
+        createMany: {
+          args: Prisma.WorkspacePRRatchetCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.WorkspacePRRatchetCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRRatchetPayload>[]
+        }
+        delete: {
+          args: Prisma.WorkspacePRRatchetDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRRatchetPayload>
+        }
+        update: {
+          args: Prisma.WorkspacePRRatchetUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRRatchetPayload>
+        }
+        deleteMany: {
+          args: Prisma.WorkspacePRRatchetDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.WorkspacePRRatchetUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.WorkspacePRRatchetUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRRatchetPayload>[]
+        }
+        upsert: {
+          args: Prisma.WorkspacePRRatchetUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRRatchetPayload>
+        }
+        aggregate: {
+          args: Prisma.WorkspacePRRatchetAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateWorkspacePRRatchet>
+        }
+        groupBy: {
+          args: Prisma.WorkspacePRRatchetGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.WorkspacePRRatchetGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.WorkspacePRRatchetCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.WorkspacePRRatchetCountAggregateOutputType> | number
         }
       }
     }
@@ -1646,17 +1796,20 @@ export type WorkspaceScalarFieldEnum = (typeof WorkspaceScalarFieldEnum)[keyof t
 
 
 export const WorkspacePRScalarFieldEnum = {
+  id: 'id',
   workspaceId: 'workspaceId',
   url: 'url',
   number: 'number',
+  title: 'title',
+  headRefName: 'headRefName',
+  baseRefName: 'baseRefName',
   state: 'state',
   reviewState: 'reviewState',
   ciStatus: 'ciStatus',
   hasMergeConflict: 'hasMergeConflict',
   syncedAt: 'syncedAt',
-  discoveryLastCheckedAt: 'discoveryLastCheckedAt',
-  discoveryRetryCount: 'discoveryRetryCount',
-  discoveryNextCheckAt: 'discoveryNextCheckAt',
+  detachedAt: 'detachedAt',
+  revision: 'revision',
   ciFailedAt: 'ciFailedAt',
   ciLastNotifiedAt: 'ciLastNotifiedAt',
   reviewLastCheckedAt: 'reviewLastCheckedAt',
@@ -1666,9 +1819,29 @@ export const WorkspacePRScalarFieldEnum = {
 export type WorkspacePRScalarFieldEnum = (typeof WorkspacePRScalarFieldEnum)[keyof typeof WorkspacePRScalarFieldEnum]
 
 
+export const WorkspacePRDiscoveryScalarFieldEnum = {
+  workspaceId: 'workspaceId',
+  lastCheckedAt: 'lastCheckedAt',
+  retryCount: 'retryCount',
+  nextCheckAt: 'nextCheckAt'
+} as const
+
+export type WorkspacePRDiscoveryScalarFieldEnum = (typeof WorkspacePRDiscoveryScalarFieldEnum)[keyof typeof WorkspacePRDiscoveryScalarFieldEnum]
+
+
 export const WorkspaceRatchetScalarFieldEnum = {
   workspaceId: 'workspaceId',
   enabled: 'enabled',
+  lastCheckedAt: 'lastCheckedAt',
+  activeSessionId: 'activeSessionId',
+  activePrId: 'activePrId'
+} as const
+
+export type WorkspaceRatchetScalarFieldEnum = (typeof WorkspaceRatchetScalarFieldEnum)[keyof typeof WorkspaceRatchetScalarFieldEnum]
+
+
+export const WorkspacePRRatchetScalarFieldEnum = {
+  prId: 'prId',
   lastCheckedAt: 'lastCheckedAt',
   activeSessionId: 'activeSessionId',
   dispatchSnapshotKey: 'dispatchSnapshotKey',
@@ -1677,7 +1850,7 @@ export const WorkspaceRatchetScalarFieldEnum = {
   dispatchStalled: 'dispatchStalled'
 } as const
 
-export type WorkspaceRatchetScalarFieldEnum = (typeof WorkspaceRatchetScalarFieldEnum)[keyof typeof WorkspaceRatchetScalarFieldEnum]
+export type WorkspacePRRatchetScalarFieldEnum = (typeof WorkspacePRRatchetScalarFieldEnum)[keyof typeof WorkspacePRRatchetScalarFieldEnum]
 
 
 export const WorkspaceRunScriptScalarFieldEnum = {
@@ -1710,6 +1883,7 @@ export const AgentSessionScalarFieldEnum = {
   id: 'id',
   workspaceId: 'workspaceId',
   name: 'name',
+  workspacePrId: 'workspacePrId',
   workflow: 'workflow',
   model: 'model',
   status: 'status',
@@ -2236,7 +2410,9 @@ export type GlobalOmitConfig = {
   decisionLog?: Prisma.DecisionLogOmit
   workspace?: Prisma.WorkspaceOmit
   workspacePR?: Prisma.WorkspacePROmit
+  workspacePRDiscovery?: Prisma.WorkspacePRDiscoveryOmit
   workspaceRatchet?: Prisma.WorkspaceRatchetOmit
+  workspacePRRatchet?: Prisma.WorkspacePRRatchetOmit
   workspaceRunScript?: Prisma.WorkspaceRunScriptOmit
   workspaceAutoIteration?: Prisma.WorkspaceAutoIterationOmit
   agentSession?: Prisma.AgentSessionOmit

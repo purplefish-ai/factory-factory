@@ -12,6 +12,10 @@ vi.mock('@/backend/services/logger.service', () => ({
 vi.mock('@/backend/services/workspace', () => ({
   workspaceDataService: {},
   workspaceRatchetService: {
+    findCandidatesById: vi.fn(async (id: string) => {
+      const candidate = await workspaceRatchetService.findCandidateById(id);
+      return candidate ? [candidate] : [];
+    }),
     findCandidateById: vi.fn(),
     recordCheckIfEnabled: vi.fn(),
     recordDispatchIfEnabled: vi.fn(),

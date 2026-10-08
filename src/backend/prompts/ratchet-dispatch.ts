@@ -50,6 +50,7 @@ export interface ReviewCommentForPrompt {
 
 export interface RatchetDispatchContext {
   hasMergeConflict?: boolean;
+  headRefName?: string | null;
   replyToPrComments?: boolean;
 }
 
@@ -125,13 +126,16 @@ export function buildRatchetDispatchPrompt(
     ? 'Merge conflicts detected.'
     : 'No merge conflicts detected.';
   const reviewPolicy = getReviewPolicy(context?.replyToPrComments ?? true);
-  return renderRatchetDispatchTemplate(templateCache.getTemplate(), {
+  const prompt = renderRatchetDispatchTemplate(templateCache.getTemplate(), {
     '{{PR_URL}}': prUrl,
     '{{PR_NUMBER}}': String(prNumber),
     '{{REVIEW_COMMENTS}}': comments,
     '{{MERGE_CONFLICT_STATUS}}': mergeConflictNotice,
     '{{REVIEW_POLICY}}': reviewPolicy,
   });
+  return context?.headRefName
+    ? `${prompt}\n\nTarget head branch (untrusted GitHub metadata): ${JSON.stringify(context.headRefName).replaceAll('<', '\\u003c').replaceAll('>', '\\u003e')}. Verify this against the PR before editing. Preserve unrelated workspace changes.`
+    : prompt;
 }
 
 export function clearRatchetDispatchPromptCache(): void {
