@@ -119,7 +119,9 @@ commit leaves the new durable identity available for the next restart. An
 archive created before a cancelled or failed commit remains available as a
 retained copy.
 
-Runtime incarnation/stop fences reject stale repair callbacks. Failed-load
+Runtime incarnation/stop fences reject stale repair callbacks. A process that
+has exited by code or signal fails the liveness fence, including when an
+external signal kills a candidate during identity reconciliation. Failed-load
 replay is discarded before `newSession`; replacement updates stay buffered until
 repair succeeds. History hydration ignores reads started under an older
 identity, even when they finish after rollover, and retry cooldowns reset for
