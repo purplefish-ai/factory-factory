@@ -24,7 +24,10 @@ vi.mock('@/backend/services/github', async () => {
   };
 });
 vi.mock('@/backend/services/session', () => ({
-  sessionDataService: { createAgentSession: vi.fn(), findAgentSessionsByWorkspaceId: vi.fn() },
+  sessionDataService: {
+    createAgentSessionWithinWorkspaceLimit: vi.fn(),
+    findAgentSessionsByWorkspaceId: vi.fn(),
+  },
   sessionDomainService: { getTranscriptSnapshot: vi.fn() },
   sessionLifecycleService: { startSession: vi.fn(), stopSession: vi.fn() },
   sessionService: { sendSessionMessage: vi.fn() },
@@ -70,8 +73,9 @@ describe('adversarial-review fallback delivery', () => {
       number: 1,
     });
     vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([]);
-    vi.mocked(sessionDataService.createAgentSession).mockResolvedValue({
-      id: 'review-session',
+    vi.mocked(sessionDataService.createAgentSessionWithinWorkspaceLimit).mockResolvedValue({
+      outcome: 'created',
+      session: { id: 'review-session' },
     } as never);
     vi.mocked(userSettingsService.get).mockResolvedValue({
       reviewerSessionProvider: 'CODEX',
