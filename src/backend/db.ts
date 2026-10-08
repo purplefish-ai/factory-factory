@@ -1,8 +1,8 @@
 import 'dotenv/config';
 import { existsSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
 import { PrismaClient } from '@prisma-gen/client';
+import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
 import { configService } from './services/config.service';
 
 declare global {

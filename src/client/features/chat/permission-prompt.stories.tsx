@@ -1,12 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { fn } from 'storybook/test';
-
 import {
   createPermissionRequest,
   createPlanApprovalRequest,
   SAMPLE_FILE_PATHS,
 } from '@/lib/claude-fixtures';
-
 import { PermissionPrompt, PermissionPromptExpanded } from './permission-prompt';
 
 const meta = {

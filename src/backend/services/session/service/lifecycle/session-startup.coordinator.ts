@@ -15,18 +15,18 @@ import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import { SessionStatus } from '@/shared/core';
 import type { AcpEventProcessor } from './acp-event-processor';
+import type { SessionContextService } from './session-context.service';
+import { type SessionLifecycleGate, SessionStartupCancelledError } from './session-lifecycle-gate';
+import type { SessionAcpEnvironmentPort } from './session-lifecycle.types';
+import type { SessionNotificationDeliveryService } from './session-notification-delivery.service';
+import type { SessionRuntimeExitCoordinator } from './session-runtime-exit.coordinator';
+import type { StopSessionOptions } from './session-termination.coordinator';
 import type {
   PersistAcpConfigSnapshotParams,
   SessionConfigService,
 } from './session.config.service';
 import { toErrorMessage } from './session.error-message';
 import type { SessionRepository } from './session.repository';
-import type { SessionContextService } from './session-context.service';
-import type { SessionAcpEnvironmentPort } from './session-lifecycle.types';
-import { type SessionLifecycleGate, SessionStartupCancelledError } from './session-lifecycle-gate';
-import type { SessionNotificationDeliveryService } from './session-notification-delivery.service';
-import type { SessionRuntimeExitCoordinator } from './session-runtime-exit.coordinator';
-import type { StopSessionOptions } from './session-termination.coordinator';
 
 const logger = createLogger('session');
 

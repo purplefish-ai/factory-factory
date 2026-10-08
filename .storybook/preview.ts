@@ -3,7 +3,6 @@ import React from 'react';
 import { MemoryRouter } from 'react-router';
 import { TRPCProvider } from '@/client/lib/providers';
 import { TooltipProvider } from '@/components/ui/tooltip';
-
 import '../src/client/globals.css';
 
 const preview: Preview = {

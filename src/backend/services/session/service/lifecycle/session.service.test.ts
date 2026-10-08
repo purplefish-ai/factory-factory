@@ -93,7 +93,6 @@ import type { AcpProcessHandle, AcpRuntimeEvent } from '@/backend/services/sessi
 import { acpRuntimeManager } from '@/backend/services/session/service/acp';
 import { workspaceDataService } from '@/backend/services/workspace';
 import { closedSessionPersistenceService } from './closed-session-persistence.service';
-import { sessionRepository } from './session.repository';
 import { createDeferred } from './session-lifecycle.test-helpers';
 import {
   acpEventProcessor,
@@ -101,6 +100,7 @@ import {
   sessionPromptTurnCompletionService,
   sessionService,
 } from './session-services';
+import { sessionRepository } from './session.repository';
 
 const activeRuntime = {
   incarnationId: '11111111-1111-4111-8111-111111111111',

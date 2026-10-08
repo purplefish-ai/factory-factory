@@ -9,8 +9,8 @@ consolidate terminal service into `src/backend/domains/terminal/`
 Phase 6 consolidates one source file
 (`src/backend/services/terminal.service.ts`, 544 lines) into the existing
 `src/backend/domains/terminal/` directory which currently has a placeholder
-`index.ts`. This is the simplest domain consolidation in the SRP refactor series
--- a single file with a clean class-based singleton, no intra-domain
+`index.ts`. This is the simplest domain consolidation in the SRP refactor
+series -- a single file with a clean class-based singleton, no intra-domain
 dependencies, and straightforward external consumers.
 
 The terminal service manages PTY instances via `node-pty` (lazy-loaded with

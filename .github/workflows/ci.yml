@@ -15,7 +15,7 @@ jobs:
     permissions:
       contents: read
     env:
-      DATABASE_URL: "file:./test.db"
+      DATABASE_URL: 'file:./test.db'
     steps:
       - uses: actions/checkout@v5
 
@@ -25,8 +25,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: "26.8.1"
-          cache: "pnpm"
+          node-version: '26.8.1'
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -53,8 +53,8 @@ jobs:
       - name: Check ambiguous relative imports
         run: pnpm check:imports
 
-      - name: Enforce Biome ignore budget
-        run: pnpm check:biome-ignores
+      - name: Enforce inline lint suppression policy
+        run: pnpm check:lint-suppressions
 
       - name: Run Knip (unused files & dependencies)
         run: pnpm knip --include files,dependencies,unlisted
@@ -68,7 +68,7 @@ jobs:
     permissions:
       contents: read
     env:
-      DATABASE_URL: "file:./test.db"
+      DATABASE_URL: 'file:./test.db'
     steps:
       - uses: actions/checkout@v5
 
@@ -78,8 +78,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: "26.8.1"
-          cache: "pnpm"
+          node-version: '26.8.1'
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -96,7 +96,7 @@ jobs:
     permissions:
       contents: read
     env:
-      DATABASE_URL: "file:./test.db"
+      DATABASE_URL: 'file:./test.db'
     steps:
       - uses: actions/checkout@v5
 
@@ -106,8 +106,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: "26.8.1"
-          cache: "pnpm"
+          node-version: '26.8.1'
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -125,7 +125,7 @@ jobs:
       contents: read
       pull-requests: write
     env:
-      DATABASE_URL: "file:./test.db"
+      DATABASE_URL: 'file:./test.db'
     steps:
       - uses: actions/checkout@v5
 
@@ -135,8 +135,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: "26.8.1"
-          cache: "pnpm"
+          node-version: '26.8.1'
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

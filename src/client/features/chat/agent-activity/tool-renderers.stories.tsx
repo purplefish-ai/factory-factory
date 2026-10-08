@@ -334,10 +334,8 @@ export const ToolResultLongOutput: Story = {
   args: {
     message: createToolResultClaudeMessage(
       'toolu_789',
-      SAMPLE_BASH_OUTPUTS.npmInstall +
-        '\n\n' +
-        'Additional packages installed:\n' +
-        '  - typescript@5.0.0\n'.repeat(50)
+      `${SAMPLE_BASH_OUTPUTS.npmInstall}\n\n` +
+        `Additional packages installed:\n${'  - typescript@5.0.0\n'.repeat(50)}`
     ),
     defaultOpen: true,
   },

@@ -8,10 +8,10 @@ import type { AgentContentItem } from '@/shared/acp-protocol';
 import { SessionLifecycleEventKind, SessionLifecycleEventReason } from '@/shared/core';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import type { AcpEventProcessor } from './acp-event-processor';
-import { toErrorMessage, toProviderFailureChatMessage } from './session.error-message';
-import type { SessionPromptTurnCompletionService } from './session.prompt-turn-completion.service';
 import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import type { SessionLifecycleGate } from './session-lifecycle-gate';
+import { toErrorMessage, toProviderFailureChatMessage } from './session.error-message';
+import type { SessionPromptTurnCompletionService } from './session.prompt-turn-completion.service';
 
 const logger = createLogger('session');
 const DEFAULT_USER_PROMPT_TIMEOUT_MS = 4 * 60 * 60 * 1000;

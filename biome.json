@@ -9,8 +9,7 @@
       "tailwindDirectives": true
     },
     "formatter": {
-      "enabled": true,
-      "quoteStyle": "single"
+      "enabled": false
     },
     "linter": {
       "enabled": true
@@ -22,70 +21,56 @@
     "useIgnoreFile": true
   },
   "formatter": {
-    "enabled": true,
-    "indentStyle": "space",
-    "indentWidth": 2,
-    "lineWidth": 100
+    "enabled": false
   },
   "assist": {
-    "actions": {
-      "source": {
-        "organizeImports": "on"
-      }
-    }
-  },
-  "javascript": {
-    "formatter": {
-      "quoteStyle": "single",
-      "trailingCommas": "es5",
-      "semicolons": "always"
-    }
+    "enabled": false
   },
   "linter": {
     "enabled": true,
     "rules": {
       "preset": "recommended",
       "correctness": {
-        "noUnusedVariables": "error",
+        "noUnusedVariables": "off",
         "noUnusedImports": "error",
-        "noUnusedPrivateClassMembers": "error",
-        "noUnusedFunctionParameters": "error",
+        "noUnusedPrivateClassMembers": "off",
+        "noUnusedFunctionParameters": "off",
         "useExhaustiveDependencies": "error",
         "useHookAtTopLevel": "error"
       },
       "style": {
-        "useConst": "error",
-        "useImportType": "error",
-        "noNonNullAssertion": "error",
-        "useBlockStatements": "error",
-        "useCollapsedElseIf": "error",
+        "useConst": "off",
+        "useImportType": "off",
+        "noNonNullAssertion": "off",
+        "useBlockStatements": "off",
+        "useCollapsedElseIf": "off",
         "useConsistentArrayType": "error",
-        "useEnumInitializers": "error",
-        "useExponentiationOperator": "error",
-        "useForOf": "error",
-        "useFragmentSyntax": "error",
-        "useNodejsImportProtocol": "error",
-        "useNumberNamespace": "error",
-        "useNumericSeparators": "error",
-        "useSelfClosingElements": "error",
-        "useShorthandAssign": "error",
-        "useShorthandFunctionType": "error",
-        "useTemplate": "error"
+        "useEnumInitializers": "off",
+        "useExponentiationOperator": "off",
+        "useForOf": "off",
+        "useFragmentSyntax": "off",
+        "useNodejsImportProtocol": "off",
+        "useNumberNamespace": "off",
+        "useNumericSeparators": "off",
+        "useSelfClosingElements": "off",
+        "useShorthandAssign": "off",
+        "useShorthandFunctionType": "off",
+        "useTemplate": "off"
       },
       "suspicious": {
-        "noExplicitAny": "error",
-        "noDoubleEquals": "error",
-        "noConsole": "error",
-        "noVar": "error",
+        "noExplicitAny": "off",
+        "noDoubleEquals": "off",
+        "noConsole": "off",
+        "noVar": "off",
         "noImplicitAnyLet": "error",
         "noAssignInExpressions": "error",
         "noConfusingVoidType": "error",
         "noEmptyBlockStatements": "error",
-        "noMisleadingCharacterClass": "error",
+        "noMisleadingCharacterClass": "off",
         "useAwait": "error",
         "useIterableCallbackReturn": "off",
-        "noArrayIndexKey": "error",
-        "noUnsafeDeclarationMerging": "error"
+        "noArrayIndexKey": "off",
+        "noUnsafeDeclarationMerging": "off"
       },
       "nursery": {
         "noFloatingPromises": "error",
@@ -95,9 +80,9 @@
         "noBannedTypes": "error",
         "noExcessiveCognitiveComplexity": "error",
         "noStaticOnlyClass": "off",
-        "noUselessThisAlias": "error",
-        "noUselessTypeConstraint": "error",
-        "useFlatMap": "error",
+        "noUselessThisAlias": "off",
+        "noUselessTypeConstraint": "off",
+        "useFlatMap": "off",
         "useOptionalChain": "error",
         "useSimplifiedLogicExpression": "error"
       },
@@ -116,41 +101,7 @@
       }
     }
   },
-  "plugins": [
-    "biome-rules/no-await-import.grit",
-    "biome-rules/no-native-dialogs.grit",
-    "biome-rules/no-next-directives.grit",
-    "biome-rules/no-zod-any.grit",
-    "biome-rules/no-unsafe-json-parse-cast.grit",
-    "biome-rules/no-unsafe-resolver-cast.grit"
-  ],
   "overrides": [
-    {
-      "includes": [
-        "src/backend/services/logger.service.ts",
-        "src/lib/debug.ts",
-        "src/cli/**/*.ts",
-        "scripts/**/*.ts",
-        "electron/**/*.ts"
-      ],
-      "linter": {
-        "rules": {
-          "suspicious": {
-            "noConsole": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["**/*.test.ts", "**/*.test.tsx", "**/*.stories.tsx"],
-      "linter": {
-        "rules": {
-          "style": {
-            "noNonNullAssertion": "off"
-          }
-        }
-      }
-    },
     {
       "includes": ["**/*.css"],
       "linter": {

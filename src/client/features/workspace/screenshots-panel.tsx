@@ -3,7 +3,6 @@ import { useCallback } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-
 import { useWorkspacePanel } from './workspace-panel-context';
 
 // =============================================================================

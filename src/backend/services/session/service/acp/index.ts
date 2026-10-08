@@ -16,15 +16,8 @@ export type {
   AcpSubagentsChangedEvent,
   AcpTaskStatusChangedEvent,
 } from './acp-runtime-events';
-export {
-  AcpRuntimeManager,
-  acpRuntimeManager,
-  PromptTimeoutError,
-} from './acp-runtime-manager';
-export {
-  type AcpClientCreationOperation,
-  AcpRuntimeQuiescence,
-} from './acp-runtime-quiescence';
+export { AcpRuntimeManager, acpRuntimeManager, PromptTimeoutError } from './acp-runtime-manager';
+export { type AcpClientCreationOperation, AcpRuntimeQuiescence } from './acp-runtime-quiescence';
 export {
   type ClaudeModelCatalogEntry,
   fetchClaudeModelCatalogFromAcp,

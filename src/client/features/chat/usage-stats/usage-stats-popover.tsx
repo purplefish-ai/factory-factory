@@ -6,7 +6,6 @@ import {
   LightningIcon,
   StackIcon,
 } from '@phosphor-icons/react';
-
 import { Progress } from '@/components/ui/progress';
 import type { TokenStats } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';

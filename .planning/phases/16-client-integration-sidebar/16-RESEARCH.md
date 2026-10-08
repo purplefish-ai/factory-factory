@@ -536,12 +536,14 @@ AppSidebar
 - **Codebase analysis:** `src/frontend/components/app-sidebar.tsx` -- sidebar
   component with 2s `getProjectSummaryState` polling (line 299), project
   selection, workspace list consumption
-- **Codebase analysis:** `src/frontend/components/use-workspace-list-state.ts`
-  -- `ServerWorkspace` type definition (lines 11-38), `WorkspaceListItem`
-  extends it with `uiState`, sorting logic, optimistic create/archive states
-- **Codebase analysis:** `src/frontend/components/workspace-sidebar-items.tsx`
-  -- sidebar item components that consume `WorkspaceListItem` fields (status
-  dot, ratchet toggle, PR button, CI badge, git stats)
+- **Codebase analysis:**
+  `src/frontend/components/use-workspace-list-state.ts` -- `ServerWorkspace`
+  type definition (lines 11-38), `WorkspaceListItem` extends it with `uiState`,
+  sorting logic, optimistic create/archive states
+- **Codebase analysis:**
+  `src/frontend/components/workspace-sidebar-items.tsx` -- sidebar item
+  components that consume `WorkspaceListItem` fields (status dot, ratchet
+  toggle, PR button, CI badge, git stats)
 - **Codebase analysis:** `src/hooks/use-websocket-transport.ts` --
   `useWebSocketTransport` hook with reconnection, queuePolicy, connected state
   (used by chat, terminal, dev-logs)
@@ -572,11 +574,12 @@ AppSidebar
 
 ### Secondary (MEDIUM confidence)
 
-- **Codebase analysis:** `src/frontend/components/app-sidebar.tsx` lines 335-345
-  -- `setData` usage pattern for optimistic cache updates (workspace ordering)
+- **Codebase analysis:** `src/frontend/components/app-sidebar.tsx` lines
+  335-345 -- `setData` usage pattern for optimistic cache updates (workspace
+  ordering)
 - **Codebase analysis:**
-  `src/client/routes/projects/workspaces/use-workspace-detail.ts` lines 183-192
-  -- `setData` usage pattern for optimistic cache updates (session list)
+  `src/client/routes/projects/workspaces/use-workspace-detail.ts` lines
+  183-192 -- `setData` usage pattern for optimistic cache updates (session list)
 - **Codebase analysis:** 7 call sites of `getProjectSummaryState.invalidate()`
   across the codebase -- shows which mutations trigger sidebar refreshes; these
   will still work alongside WS updates

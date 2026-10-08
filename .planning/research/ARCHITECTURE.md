@@ -768,12 +768,12 @@ Based on dependency analysis, build in this order:
   transport specification
 - [ACP TypeScript SDK](https://github.com/agentclientprotocol/typescript-sdk) --
   Official ACP TypeScript SDK
-- [Claude Agent SDK TypeScript V1 Reference](https://platform.claude.com/docs/en/agent-sdk/typescript)
-  -- Complete V1 API reference with all types
-- [Claude Agent SDK TypeScript V2 Preview](https://platform.claude.com/docs/en/agent-sdk/typescript-v2-preview)
-  -- V2 session-based API
-- [Claude Code ACP Issue #6686](https://github.com/anthropics/claude-code/issues/6686)
-  -- ACP support discussion and community implementations
+- [Claude Agent SDK TypeScript V1 Reference](https://platform.claude.com/docs/en/agent-sdk/typescript) --
+  Complete V1 API reference with all types
+- [Claude Agent SDK TypeScript V2 Preview](https://platform.claude.com/docs/en/agent-sdk/typescript-v2-preview) --
+  V2 session-based API
+- [Claude Code ACP Issue #6686](https://github.com/anthropics/claude-code/issues/6686) --
+  ACP support discussion and community implementations
 - [ACP Schema](https://agentclientprotocol.com/protocol/schema) -- Content block
   and session update type definitions
 - [ACP Session Setup](https://agentclientprotocol.com/protocol/session-setup) --

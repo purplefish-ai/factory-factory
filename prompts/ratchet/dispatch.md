@@ -1,7 +1,7 @@
-Fetch the current review feedback, CI results, and merge status for {{PR_URL}}
-(PR #{{PR_NUMBER}}). Address actionable feedback, fix failing checks, and
-resolve merge conflicts. Use your judgment about which changes are warranted and
-keep them focused on this PR.
+Fetch the current review feedback, CI results, and merge status
+for {{PR_URL}} (PR #{{PR_NUMBER}}). Address actionable feedback, fix failing
+checks, and resolve merge conflicts. Use your judgment about which changes are
+warranted and keep them focused on this PR.
 
 Work autonomously and follow repository instructions. Update from the PR's base
 branch when needed, verify your changes, then commit and push them, including

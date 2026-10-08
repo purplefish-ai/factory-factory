@@ -17,11 +17,11 @@ files** in `src/backend/claude/` (including the `claude/index.ts` barrel shim).
 These shims currently re-export from domain modules and are marked
 `@deprecated`. Consumers fall into 5 categories: (1) `app-context.ts` -- 20
 imports from services shims, (2) tRPC routers -- ~25 imports across 9 files, (3)
-WebSocket handlers -- ~5 imports across 3 files, (4) interceptors/prompts/agents
--- ~12 imports across 6 files, (5) domain-internal imports of infrastructure
-services (logger, config, constants, etc.) -- ~60 imports that are legitimate
-and should NOT be changed. Additionally, there are ~15 imports from
-`src/backend/claude/` shims across external consumers.
+WebSocket handlers -- ~5 imports across 3 files, (4)
+interceptors/prompts/agents -- ~12 imports across 6 files, (5) domain-internal
+imports of infrastructure services (logger, config, constants, etc.) -- ~60
+imports that are legitimate and should NOT be changed. Additionally, there are
+~15 imports from `src/backend/claude/` shims across external consumers.
 
 The key distinction the planner must honor: **infrastructure services stay in
 `src/backend/services/`** and those imports are correct. Only imports that go
@@ -620,8 +620,8 @@ ratchet bridge.
 ### Primary (HIGH confidence)
 
 - Direct codebase analysis of all 50+ files involved
-- `npx dependency-cruiser --config .dependency-cruiser.cjs src/backend --output-type err`
-  -- 0 violations confirmed
+- `npx dependency-cruiser --config .dependency-cruiser.cjs src/backend --output-type err` --
+  0 violations confirmed
 - All shim files read and verified as `@deprecated` re-export shims
 - All domain barrel files read and verified as complete public APIs
 - All consumer files read and import paths catalogued

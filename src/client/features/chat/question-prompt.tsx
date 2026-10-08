@@ -1,7 +1,6 @@
 import { CaretLeftIcon, CaretRightIcon, QuestionIcon } from '@phosphor-icons/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { withOccurrenceKeys } from '@/client/lib/list-keys';
-
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { PromptCard } from '@/components/ui/prompt-card';
