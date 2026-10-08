@@ -305,15 +305,15 @@ interface ConfigOption {
 
 ## Sources
 
-- [Agent Client Protocol specification](https://agentclientprotocol.com/protocol/overview)
-  -- protocol overview, session lifecycle, tool calls, permissions (HIGH
+- [Agent Client Protocol specification](https://agentclientprotocol.com/protocol/overview) --
+  protocol overview, session lifecycle, tool calls, permissions (HIGH
   confidence)
-- [ACP Initialization spec](https://agentclientprotocol.com/protocol/initialization)
-  -- capability negotiation, version exchange (HIGH confidence)
-- [ACP Prompt Turn spec](https://agentclientprotocol.com/protocol/prompt-turn)
-  -- prompt flow, stop reasons, cancellation (HIGH confidence)
-- [ACP Session Config Options](https://agentclientprotocol.com/protocol/session-config-options)
-  -- config option structure, categories, set flow (HIGH confidence)
+- [ACP Initialization spec](https://agentclientprotocol.com/protocol/initialization) --
+  capability negotiation, version exchange (HIGH confidence)
+- [ACP Prompt Turn spec](https://agentclientprotocol.com/protocol/prompt-turn) --
+  prompt flow, stop reasons, cancellation (HIGH confidence)
+- [ACP Session Config Options](https://agentclientprotocol.com/protocol/session-config-options) --
+  config option structure, categories, set flow (HIGH confidence)
 - [ACP Tool Calls spec](https://agentclientprotocol.com/protocol/tool-calls) --
   permission requests, option kinds, status lifecycle (HIGH confidence)
 - [ACP Session Modes](https://agentclientprotocol.com/protocol/session-modes) --
@@ -322,10 +322,10 @@ interface ConfigOption {
   session/new, session/load parameters and responses (HIGH confidence)
 - [ACP Schema](https://agentclientprotocol.com/protocol/schema) -- full type
   definitions (HIGH confidence)
-- [ClientSideConnection API](https://agentclientprotocol.github.io/typescript-sdk/classes/ClientSideConnection.html)
-  -- TypeScript SDK v0.14.1 (HIGH confidence)
-- [claude-code-acp repository](https://github.com/zed-industries/claude-code-acp)
-  -- adapter architecture, permission hierarchy, event translation (HIGH
+- [ClientSideConnection API](https://agentclientprotocol.github.io/typescript-sdk/classes/ClientSideConnection.html) --
+  TypeScript SDK v0.14.1 (HIGH confidence)
+- [claude-code-acp repository](https://github.com/zed-industries/claude-code-acp) --
+  adapter architecture, permission hierarchy, event translation (HIGH
   confidence)
 - [codex-acp repository](https://github.com/zed-industries/codex-acp) -- Rust
   adapter, terminal handling, auth methods (MEDIUM confidence)
@@ -333,8 +333,8 @@ interface ConfigOption {
   adapter design rationale (MEDIUM confidence)
 - [Zed blog: Codex is Live](https://zed.dev/blog/codex-is-live-in-zed) -- Codex
   terminal architecture (MEDIUM confidence)
-- [DeepWiki: claude-code-acp](https://deepwiki.com/zed-industries/claude-code-acp)
-  -- detailed architecture, type mappings, permission system (MEDIUM confidence)
+- [DeepWiki: claude-code-acp](https://deepwiki.com/zed-industries/claude-code-acp) --
+  detailed architecture, type mappings, permission system (MEDIUM confidence)
 - Factory Factory codebase: `src/backend/domains/session/` -- existing protocol
   stack, permissions, event forwarding, runtime managers (HIGH confidence --
   direct inspection)

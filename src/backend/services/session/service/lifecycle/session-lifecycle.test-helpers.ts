@@ -13,15 +13,10 @@ import { SessionStatus, WorkspaceStatus } from '@/shared/core';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type { AcpEventProcessor } from './acp-event-processor';
-import type { SessionConfigService } from './session.config.service';
-import { SessionLifecycleService } from './session.lifecycle.service';
-import type { SessionPermissionService } from './session.permission.service';
-import type { SessionRepository } from './session.repository';
-import { SessionRetryService } from './session.retry.service';
 import { SessionContextService, type SessionPermissionPresetPort } from './session-context.service';
-import type { SessionAcpEnvironmentPort } from './session-lifecycle.types';
 import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import { SessionLifecycleGate } from './session-lifecycle-gate';
+import type { SessionAcpEnvironmentPort } from './session-lifecycle.types';
 import { SessionNotificationDeliveryService } from './session-notification-delivery.service';
 import { SessionRuntimeExitCoordinator } from './session-runtime-exit.coordinator';
 import { SessionStartupCoordinator } from './session-startup.coordinator';
@@ -30,6 +25,11 @@ import {
   type SessionTerminationCoordinatorDependencies,
 } from './session-termination.coordinator';
 import { SessionWorkflowFinalizer } from './session-workflow-finalizer';
+import type { SessionConfigService } from './session.config.service';
+import { SessionLifecycleService } from './session.lifecycle.service';
+import type { SessionPermissionService } from './session.permission.service';
+import type { SessionRepository } from './session.repository';
+import { SessionRetryService } from './session.retry.service';
 
 export type Deferred<T> = {
   promise: Promise<T>;

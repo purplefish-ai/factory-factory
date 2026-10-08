@@ -13,12 +13,12 @@ import { createLogger } from '@/backend/services/logger.service';
 import { acpRuntimeManager } from '@/backend/services/session/service/acp';
 import type { SessionInitPolicyBridge } from '@/backend/services/session/service/bridges';
 import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
-import { toErrorMessage } from '@/backend/services/session/service/lifecycle/session.error-message';
 import {
   sessionConfigService,
   sessionPermissionService,
   sessionService,
 } from '@/backend/services/session/service/lifecycle/session-core-services';
+import { toErrorMessage } from '@/backend/services/session/service/lifecycle/session.error-message';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { VOICE_MODE_BREVITY_INSTRUCTION } from '@/backend/services/session/service/voice/voice-mode-instructions';
 import {

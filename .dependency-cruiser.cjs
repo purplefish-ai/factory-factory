@@ -4,7 +4,8 @@ module.exports = {
     {
       name: 'no-circular',
       severity: 'error',
-      comment: 'Circular dependencies cause subtle runtime issues and make the codebase harder to reason about',
+      comment:
+        'Circular dependencies cause subtle runtime issues and make the codebase harder to reason about',
       from: {},
       to: { circular: true },
     },
@@ -22,7 +23,8 @@ module.exports = {
     {
       name: 'frontend-trpc-only-imports-backend-trpc',
       severity: 'error',
-      comment: 'src/client/lib/trpc.ts may only import backend tRPC types, not other backend modules',
+      comment:
+        'src/client/lib/trpc.ts may only import backend tRPC types, not other backend modules',
       from: { path: '^src/client/lib/trpc\\.ts$' },
       to: {
         path: '^src/backend/',
@@ -124,8 +126,7 @@ module.exports = {
       from: { path: '^src/backend/orchestration/data-backup\\.service\\.ts$' },
       to: {
         path: '^src/backend/services/[^/]+/(?!index\\.ts$).+',
-        pathNot:
-          '^src/backend/services/settings/resources/data-backup\\.accessor\\.ts$',
+        pathNot: '^src/backend/services/settings/resources/data-backup\\.accessor\\.ts$',
       },
     },
     {
@@ -142,7 +143,7 @@ module.exports = {
     {
       name: 'no-cross-service-resource-imports',
       severity: 'error',
-      comment: 'Service business logic must not import another service\'s resources.',
+      comment: "Service business logic must not import another service's resources.",
       from: { path: '^src/backend/services/([^/]+)/service/' },
       to: {
         path: '^src/backend/services/([^/]+)/resources/',
@@ -152,7 +153,8 @@ module.exports = {
     {
       name: 'no-service-resources-importing-app-layers',
       severity: 'error',
-      comment: 'Resources must remain pure data access and not depend on service/trpc/router/orchestration layers.',
+      comment:
+        'Resources must remain pure data access and not depend on service/trpc/router/orchestration layers.',
       from: { path: '^src/backend/services/[^/]+/resources/' },
       to: { path: '^src/backend/(services/[^/]+/service|orchestration|routers|trpc|agents)/' },
     },

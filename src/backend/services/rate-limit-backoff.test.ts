@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { isRateLimitMessage, RateLimitBackoff } from './rate-limit-backoff';
 
 const mockLogger = {

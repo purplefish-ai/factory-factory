@@ -1,5 +1,11 @@
 import type { createLogger } from '@/backend/services/logger.service';
 import { AutoIterationStatus } from '@/shared/core';
+import {
+  createFailedResumeRunningLoop,
+  createInitialRunningLoop,
+  getPromptTimeoutMs,
+  type RunningLoop,
+} from './auto-iteration-loop-state';
 import type {
   AgentLogbookEntry,
   AutoIterationConfig,
@@ -8,12 +14,6 @@ import type {
   IterationPhase,
   TestCommandResult,
 } from './auto-iteration.types';
-import {
-  createFailedResumeRunningLoop,
-  createInitialRunningLoop,
-  getPromptTimeoutMs,
-  type RunningLoop,
-} from './auto-iteration-loop-state';
 import type {
   AutoIterationLogbookBridge,
   AutoIterationSessionBridge,

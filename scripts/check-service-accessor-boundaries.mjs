@@ -74,7 +74,10 @@ const ACCESSOR_POLICIES = {
 };
 
 const POLICY_BY_MODULE = new Map(
-  Object.entries(ACCESSOR_POLICIES).map(([binding, policy]) => [policy.module, { binding, ...policy }])
+  Object.entries(ACCESSOR_POLICIES).map(([binding, policy]) => [
+    policy.module,
+    { binding, ...policy },
+  ])
 );
 
 const CROSS_OWNER_EXCEPTIONS = new Set([
@@ -145,8 +148,8 @@ function importedNames(importDeclaration) {
     return [];
   }
 
-  return clause.namedBindings.elements.map((element) =>
-    (element.propertyName ?? element.name).text
+  return clause.namedBindings.elements.map(
+    (element) => (element.propertyName ?? element.name).text
   );
 }
 
@@ -155,8 +158,8 @@ function exportedNames(exportDeclaration) {
     return [];
   }
 
-  return exportDeclaration.exportClause.elements.map((element) =>
-    (element.propertyName ?? element.name).text
+  return exportDeclaration.exportClause.elements.map(
+    (element) => (element.propertyName ?? element.name).text
   );
 }
 
@@ -263,7 +266,6 @@ function parseModuleRecords(sourceFiles, rootDir) {
           }
         }
 
-
         if (
           ts.isExpressionStatement(statement) &&
           ts.isBinaryExpression(statement.expression) &&
@@ -363,9 +365,7 @@ function allAccessorBindings(moduleExports) {
 
 function checkCapsuleBarrelExportChains(sourceFiles, rootDir, violations) {
   const records = parseModuleRecords(sourceFiles, rootDir);
-  const exportsByModule = new Map(
-    [...records.keys()].map((modulePath) => [modulePath, new Map()])
-  );
+  const exportsByModule = new Map([...records.keys()].map((modulePath) => [modulePath, new Map()]));
 
   for (const [binding, policy] of Object.entries(ACCESSOR_POLICIES)) {
     const modulePath = resolveSourceModule(policy.module, records);
@@ -388,9 +388,7 @@ function checkCapsuleBarrelExportChains(sourceFiles, rootDir, violations) {
 
       for (const importedBinding of record.imports) {
         const importedModule = resolveSourceModule(importedBinding.modulePath, records);
-        const accessorBindings = exportsByModule
-          .get(importedModule)
-          ?.get(importedBinding.imported);
+        const accessorBindings = exportsByModule.get(importedModule)?.get(importedBinding.imported);
         mergeAccessorBindings(localBindings, importedBinding.local, accessorBindings);
       }
 
@@ -423,9 +421,7 @@ function checkCapsuleBarrelExportChains(sourceFiles, rootDir, violations) {
 
       for (const reExport of record.namedReExports) {
         const reExportedModule = resolveSourceModule(reExport.modulePath, records);
-        const accessorBindings = exportsByModule
-          .get(reExportedModule)
-          ?.get(reExport.imported);
+        const accessorBindings = exportsByModule.get(reExportedModule)?.get(reExport.imported);
         if (mergeAccessorBindings(moduleExports, reExport.exported, accessorBindings)) {
           changed = true;
         }

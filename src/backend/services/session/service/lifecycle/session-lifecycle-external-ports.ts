@@ -2,10 +2,10 @@ import { configService } from '@/backend/services/config.service';
 import { serverInstanceService } from '@/backend/services/server-instance.service';
 import { getChildWorkspaceMcpServerConfig } from '@/backend/services/session/service/acp/child-workspace-mcp-server';
 import { userSettingsService } from '@/backend/services/settings';
-import { sessionRepository } from './session.repository';
 import { SessionContextService } from './session-context.service';
 import type { SessionAcpEnvironmentPort } from './session-lifecycle.types';
 import { getWorkflowPermissionPreset } from './session-workflow-permissions';
+import { sessionRepository } from './session.repository';
 
 function isWildcardHost(host: string): boolean {
   if (host === '0.0.0.0') {

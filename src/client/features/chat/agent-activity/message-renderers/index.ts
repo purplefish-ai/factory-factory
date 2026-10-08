@@ -16,7 +16,4 @@ export {
 } from './stream-event-renderer';
 
 // Thinking completion context
-export {
-  ThinkingCompletionProvider,
-  useIsThinkingInProgress,
-} from './thinking-completion-context';
+export { ThinkingCompletionProvider, useIsThinkingInProgress } from './thinking-completion-context';

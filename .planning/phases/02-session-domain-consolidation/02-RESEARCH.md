@@ -254,8 +254,8 @@ layer compiles before proceeding.
 6. **Session history** (`claude/session.ts`) -- standalone, depends on types
 7. **Session store** (`services/session-store/*`) -- depends on claude/session
 8. **Session domain service** -- already in place, update internal imports
-9. **Lifecycle services** (`session.service.ts`, `session.repository.ts`, etc.)
-   -- depends on client + domain
+9. **Lifecycle services** (`session.service.ts`, `session.repository.ts`,
+   etc.) -- depends on client + domain
 10. **Chat services** (`chat-connection.service.ts`,
     `chat-event-forwarder.service.ts`, `chat-message-handlers.service.ts` +
     handlers) -- depends on client + domain

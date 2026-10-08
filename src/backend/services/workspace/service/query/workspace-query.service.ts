@@ -4,8 +4,8 @@ import { buildWorkspaceSessionSummaries } from '@/backend/lib/session-summaries'
 import { assembleWorkspaceDerivedState } from '@/backend/lib/workspace-derived-state';
 import { createLogger } from '@/backend/services/logger.service';
 import { projectAccessor } from '@/backend/services/workspace/resources/project.accessor';
-import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
 import { workspacePrAccessor } from '@/backend/services/workspace/resources/workspace-pr.accessor';
+import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
 import type {
   WorkspaceGitHubBridge,
   WorkspacePRSnapshotBridge,

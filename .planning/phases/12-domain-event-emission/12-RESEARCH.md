@@ -681,10 +681,12 @@ Collector) will use this mapping.
 - Codebase analysis:
   `src/backend/domains/run-script/run-script-state-machine.service.ts` --
   run-script state transitions, lines 66-281
-- Codebase analysis: `src/backend/services/workspace-snapshot-store.service.ts`
-  -- snapshot field groups and update input types, lines 37-166
-- Codebase analysis: `src/backend/orchestration/domain-bridges.orchestrator.ts`
-  -- bridge wiring pattern, lines 1-154
+- Codebase analysis:
+  `src/backend/services/workspace-snapshot-store.service.ts` -- snapshot field
+  groups and update input types, lines 37-166
+- Codebase analysis:
+  `src/backend/orchestration/domain-bridges.orchestrator.ts` -- bridge wiring
+  pattern, lines 1-154
 - Codebase analysis: `.dependency-cruiser.cjs` -- no-cross-domain-imports rule
   enforcement
 - Codebase analysis: `src/backend/domains/*/index.ts` -- barrel file export

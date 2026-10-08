@@ -80,23 +80,21 @@ function createCaller(requestTrust?: {
     getRuntimeSnapshot: (...args: unknown[]) => mockSessionRuntimeSnapshot(...args),
   };
   const runScriptService = {
-    stopRunScript: vi.fn(
-      async (): Promise<{ success: boolean; error?: string }> => ({ success: true })
-    ),
+    stopRunScript: vi.fn(async (): Promise<{ success: boolean; error?: string }> => ({
+      success: true,
+    })),
     evictWorkspaceBuffers: vi.fn(),
   };
   const terminalService = {
     destroyWorkspaceTerminals: vi.fn(),
   };
   const cliHealthService = {
-    checkHealth: vi.fn(
-      async (): Promise<CLIHealthStatus> => ({
-        claude: { isInstalled: true },
-        codex: { isInstalled: true, isAuthenticated: true },
-        github: { isInstalled: true, isAuthenticated: true },
-        allHealthy: true,
-      })
-    ),
+    checkHealth: vi.fn(async (): Promise<CLIHealthStatus> => ({
+      claude: { isInstalled: true },
+      codex: { isInstalled: true, isAuthenticated: true },
+      github: { isInstalled: true, isAuthenticated: true },
+      allHealthy: true,
+    })),
   };
   const logger = Object.assign(fakeGraph.services.createLogger('workspace-router-test'), {
     debug: vi.fn(),

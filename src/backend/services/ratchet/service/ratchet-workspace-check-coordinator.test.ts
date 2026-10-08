@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { WorkspaceRatchetResult, WorkspaceWithPR } from './ratchet.types';
 import { RatchetWorkspaceCheckCoordinator } from './ratchet-workspace-check-coordinator';
+import type { WorkspaceRatchetResult, WorkspaceWithPR } from './ratchet.types';
 
 describe('RatchetWorkspaceCheckCoordinator', () => {
   beforeEach(() => {

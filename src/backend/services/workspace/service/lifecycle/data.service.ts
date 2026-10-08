@@ -1,7 +1,7 @@
 import type { Workspace, WorkspaceProviderSelection } from '@prisma-gen/client';
-import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
 import { workspacePrAccessor } from '@/backend/services/workspace/resources/workspace-pr.accessor';
 import { workspaceRatchetAccessor } from '@/backend/services/workspace/resources/workspace-ratchet.accessor';
+import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
 
 class WorkspaceDataService {
   findById(id: string) {

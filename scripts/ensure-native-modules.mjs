@@ -10,7 +10,15 @@
  */
 
 import { execSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  writeFileSync,
+} from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -37,7 +45,9 @@ const NATIVE_MODULES = [
 function findModulePath(moduleName) {
   if (moduleName === 'better-sqlite3') {
     // Only Prisma's driver is ABI-specific; the direct v13 copy ships N-API binaries.
-    const adapterPath = realpathSync(join(ROOT, 'node_modules', '@prisma', 'adapter-better-sqlite3'));
+    const adapterPath = realpathSync(
+      join(ROOT, 'node_modules', '@prisma', 'adapter-better-sqlite3')
+    );
     const adapterRequire = createRequire(join(adapterPath, 'package.json'));
     return join(dirname(adapterRequire.resolve('better-sqlite3/package.json')), 'build', 'Release');
   }
@@ -48,7 +58,7 @@ function findModulePath(moduleName) {
   }
 
   const entries = readdirSync(pnpmDir);
-  const match = entries.find(e => e.startsWith(`${moduleName}@`));
+  const match = entries.find((e) => e.startsWith(`${moduleName}@`));
   if (!match) {
     return null;
   }
@@ -192,7 +202,9 @@ function rebuild(target) {
     // The direct v13 driver uses N-API, but Prisma still owns an ABI-specific v12.
     // Resolve the adapter symlink so electron-rebuild scans its pnpm siblings,
     // instead of discovering only the root's direct dependencies a second time.
-    const adapterPath = realpathSync(join(ROOT, 'node_modules', '@prisma', 'adapter-better-sqlite3'));
+    const adapterPath = realpathSync(
+      join(ROOT, 'node_modules', '@prisma', 'adapter-better-sqlite3')
+    );
     // A constant shell command supports Windows pnpm.cmd without interpolating paths.
     execSync('pnpm exec electron-rebuild -f -m . -o better-sqlite3', {
       cwd: adapterPath,
@@ -220,7 +232,9 @@ function main() {
   const targetMarker = getMarkerValue(target);
 
   if (!force && currentMarker === targetMarker) {
-    console.log(`Native modules already built for ${target}${target === 'node' ? ` (ABI ${NODE_ABI_VERSION})` : ''}`);
+    console.log(
+      `Native modules already built for ${target}${target === 'node' ? ` (ABI ${NODE_ABI_VERSION})` : ''}`
+    );
     return;
   }
 
@@ -233,7 +247,8 @@ function main() {
   if (currentMarker && !cacheExists(target)) {
     // Only cache if current binaries match the current marker's target type
     const currentIsNode = currentMarker.startsWith('node');
-    const currentIsElectron = currentMarker === 'electron' || currentMarker.startsWith('electron-v');
+    const currentIsElectron =
+      currentMarker === 'electron' || currentMarker.startsWith('electron-v');
     if ((currentIsNode || currentIsElectron) && !cacheExistsForMarker(currentMarker)) {
       copyToCacheWithMarker(currentMarker);
     }
@@ -248,7 +263,9 @@ function main() {
   }
 
   setCurrentMarker(target);
-  console.log(`Native modules ready for ${target}${target === 'node' ? ` (ABI ${NODE_ABI_VERSION})` : ''}`);
+  console.log(
+    `Native modules ready for ${target}${target === 'node' ? ` (ABI ${NODE_ABI_VERSION})` : ''}`
+  );
 }
 
 main();

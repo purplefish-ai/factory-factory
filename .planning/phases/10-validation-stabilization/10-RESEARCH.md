@@ -157,8 +157,8 @@ non-domain) services go in `services/`. Domain logic goes in `domains/{name}/`.
 | Test coverage verification      | Manual test inventory          | `pnpm test:coverage` (vitest + v8)    | Already configured in vitest.config.ts              |
 
 **Key insight:** All validation tooling is already configured and working. Phase
-10's job is to run them systematically, record results, and update documentation
--- not to build new tooling.
+10's job is to run them systematically, record results, and update
+documentation -- not to build new tooling.
 
 ## Common Pitfalls
 

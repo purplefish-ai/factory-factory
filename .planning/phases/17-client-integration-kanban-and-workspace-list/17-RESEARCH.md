@@ -538,11 +538,11 @@ WorkspacesListPage (when viewMode === 'list')
 - **Codebase analysis:** `src/client/routes/projects/workspaces/list.tsx` --
   WorkspacesListPage with board/list view toggle, `workspace.list` query at 15s
 - **Codebase analysis:**
-  `src/client/routes/projects/workspaces/components/workspaces-table-view.tsx`
-  -- Table view consuming full Workspace model with sessions
+  `src/client/routes/projects/workspaces/components/workspaces-table-view.tsx` --
+  Table view consuming full Workspace model with sessions
 - **Codebase analysis:**
-  `src/client/routes/projects/workspaces/components/workspaces-board-view.tsx`
-  -- Board view wrapping KanbanProvider
+  `src/client/routes/projects/workspaces/components/workspaces-board-view.tsx` --
+  Board view wrapping KanbanProvider
 - **Codebase analysis:**
   `src/backend/services/workspace-snapshot-store.service.ts` --
   `WorkspaceSnapshotEntry` type (lines 74-123), fields available
@@ -550,8 +550,9 @@ WorkspacesListPage (when viewMode === 'list')
   `src/backend/domains/workspace/query/workspace-query.service.ts` --
   `listWithKanbanState` return shape (lines 260-275):
   `{ ...workspace, kanbanColumn, isWorking, ratchetButtonAnimated, flowPhase, ciObservation, isArchived: false, pendingRequestType }`
-- **Codebase analysis:** `src/frontend/components/use-workspace-list-state.ts`
-  -- `ServerWorkspace` type used by sidebar
+- **Codebase analysis:**
+  `src/frontend/components/use-workspace-list-state.ts` -- `ServerWorkspace`
+  type used by sidebar
 - **Codebase analysis:** `src/frontend/components/app-sidebar.tsx` -- Where
   `useProjectSnapshotSync` is mounted, `getProjectSummaryState` at 30s
   safety-net

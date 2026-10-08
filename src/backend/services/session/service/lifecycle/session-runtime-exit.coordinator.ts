@@ -13,13 +13,13 @@ import {
   SessionStatus,
 } from '@/shared/core';
 import type { AcpEventProcessor } from './acp-event-processor';
-import type { SessionPermissionService } from './session.permission.service';
-import type { SessionPromptTurnCompletionService } from './session.prompt-turn-completion.service';
-import type { SessionRepository } from './session.repository';
 import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import type { SessionLifecycleGate } from './session-lifecycle-gate';
 import type { SessionProviderIdentityService } from './session-provider-identity.service';
 import type { SessionWorkflowFinalizer } from './session-workflow-finalizer';
+import type { SessionPermissionService } from './session.permission.service';
+import type { SessionPromptTurnCompletionService } from './session.prompt-turn-completion.service';
+import type { SessionRepository } from './session.repository';
 
 const logger = createLogger('session');
 

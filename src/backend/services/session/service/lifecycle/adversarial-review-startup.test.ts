@@ -2,10 +2,10 @@ import type { SessionConfigOption } from '@agentclientprotocol/sdk';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import { SessionConfigService } from './session.config.service';
-import { createDeferred, createLifecycleHarness } from './session-lifecycle.test-helpers';
 import { SessionStartupCancelledError } from './session-lifecycle-gate';
+import { createDeferred, createLifecycleHarness } from './session-lifecycle.test-helpers';
 import { assertReadOnlyReviewConfigOption } from './session-permission-policy';
+import { SessionConfigService } from './session.config.service';
 
 vi.mock('@/backend/services/logger.service', () => ({
   getCurrentProcessEnv: () => ({ NODE_ENV: 'test' }),

@@ -198,12 +198,12 @@ import {
   persistChildNotification,
   persistParentNotification,
 } from '@/backend/orchestration/workspace-children.orchestrator';
+import { executeStartupScriptPipeline } from '@/backend/orchestration/workspace-init-script-pipeline';
 import {
   initializeWorkspaceWorktree,
   recoverStaleProvisioningWorkspace,
   retryQueuedDispatchAfterWorkspaceReady,
 } from '@/backend/orchestration/workspace-init.orchestrator';
-import { executeStartupScriptPipeline } from '@/backend/orchestration/workspace-init-script-pipeline';
 import { deliverWorkspaceNotification } from '@/backend/orchestration/workspace-notification-delivery.orchestrator';
 import { getQuickAction, listQuickActions } from '@/backend/prompts/quick-actions';
 import {

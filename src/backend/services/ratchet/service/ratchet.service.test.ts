@@ -58,6 +58,12 @@ vi.mock('@/backend/services/logger.service', () => ({
 import { userSettingsService } from '@/backend/services/settings';
 import { workspaceDataService, workspaceRatchetService } from '@/backend/services/workspace';
 import { fixerSessionService } from './fixer-session.service';
+import { buildRatchetingLogContext } from './ratchet-decision-logging.helpers';
+import {
+  computeDispatchSnapshotKey,
+  computeLatestReviewActivityAtMs,
+  determineRatchetState,
+} from './ratchet-pr-state.helpers';
 import {
   RATCHET_DISPATCH_CHANGED,
   RATCHET_STATE_CHANGED,
@@ -68,12 +74,6 @@ import {
   ratchetService,
   type WorkspaceRatchetResult,
 } from './ratchet.service';
-import { buildRatchetingLogContext } from './ratchet-decision-logging.helpers';
-import {
-  computeDispatchSnapshotKey,
-  computeLatestReviewActivityAtMs,
-  determineRatchetState,
-} from './ratchet-pr-state.helpers';
 
 const mockSessionBridge: RatchetSessionBridge = {
   findSessionById: vi.fn(),

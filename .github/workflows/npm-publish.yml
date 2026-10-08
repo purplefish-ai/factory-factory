@@ -8,17 +8,17 @@ on:
       dry_run:
         description: "Dry run (don't actually publish)"
         required: false
-        default: "false"
+        default: 'false'
         type: boolean
       finalize_release:
-        description: "Finalize after approving the staged package on npm"
+        description: 'Finalize after approving the staged package on npm'
         required: false
-        default: "false"
+        default: 'false'
         type: boolean
       staging_run_id:
-        description: "Run ID that staged the approved npm package"
+        description: 'Run ID that staged the approved npm package'
         required: false
-        default: ""
+        default: ''
         type: string
 
 jobs:
@@ -29,11 +29,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: ["26.8.1"]
+        node-version: ['26.8.1']
     permissions:
       contents: read
     env:
-      DATABASE_URL: "file:./test.db"
+      DATABASE_URL: 'file:./test.db'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -109,7 +109,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "26.8.1"
+          node-version: '26.8.1'
           package-manager-cache: false
 
       - name: Install npm CLI
@@ -177,7 +177,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "26.8.1"
+          node-version: '26.8.1'
           package-manager-cache: false
 
       - name: Verify package is published on npm

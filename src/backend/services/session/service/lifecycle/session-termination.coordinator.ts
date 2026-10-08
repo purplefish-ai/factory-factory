@@ -12,16 +12,16 @@ import {
 } from '@/shared/core';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import type { AcpEventProcessor } from './acp-event-processor';
-import type { SessionPermissionService } from './session.permission.service';
-import type { SessionPromptTurnCompletionService } from './session.prompt-turn-completion.service';
-import type { SessionRepository } from './session.repository';
-import type { SessionRetryService } from './session.retry.service';
 import type {
   RecordLifecycleEventInput,
   SessionLifecycleEventService,
 } from './session-lifecycle-event.service';
 import type { SessionLifecycleGate } from './session-lifecycle-gate';
 import type { SessionWorkflowFinalizer } from './session-workflow-finalizer';
+import type { SessionPermissionService } from './session.permission.service';
+import type { SessionPromptTurnCompletionService } from './session.prompt-turn-completion.service';
+import type { SessionRepository } from './session.repository';
+import type { SessionRetryService } from './session.retry.service';
 
 const logger = createLogger('session');
 const SHUTDOWN_LIFECYCLE_RECORD_TIMEOUT_MS = 1000;

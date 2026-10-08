@@ -14,7 +14,6 @@ vi.mock('@/backend/services/logger.service', () => ({
 
 import { CIStatus, RatchetState } from '@/shared/core';
 import type { RatchetGitHubBridge } from './bridges';
-import type { PRStateInfo } from './ratchet.types';
 import {
   buildFailedCheckDiagnostics,
   buildReviewSummariesForPrompt,
@@ -25,6 +24,7 @@ import {
   fetchPRState,
   shouldSkipCleanPR,
 } from './ratchet-pr-state.helpers';
+import type { PRStateInfo } from './ratchet.types';
 
 interface FakeCoordinatorState {
   /** A completed fetch inside the cooldown window; `ignoreCooldown` overrides it. */
