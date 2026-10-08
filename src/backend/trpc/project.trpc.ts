@@ -369,8 +369,12 @@ export const projectRouter = router({
     }),
 
   // Archive a project (soft delete)
-  archive: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
-    return ctx.appContext.services.projectManagementService.archive(input.id);
+  archive: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
+    const project = await ctx.appContext.services.projectManagementService.archive(input.id);
+    return {
+      ...project,
+      issueTrackerConfig: sanitizeIssueTrackerConfig(project.issueTrackerConfig),
+    };
   }),
 
   // Validate repo path
