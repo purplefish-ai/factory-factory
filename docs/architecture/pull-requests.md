@@ -81,6 +81,12 @@ deliberately reads pending, in-flight, and delivered fact history for
 deduplication and recovery semantics; it does not choose a session, destination,
 or prompt.
 
+Unclaimed enable controls and review-feedback messages use the current trusted
+reply preference at delivery. A control's captured `replyToPrComments` records
+the enable-time setting and remains in compatible payloads; it does not override
+a later preference change. After a delivery is claimed, retries reuse its frozen
+text and identity.
+
 The reducer emits changed CI failures, recovery after a delivered failure,
 actionable review additions or edits, conflict transitions, and merge/close
 transitions. Check details, head SHA, and transition sequence distinguish reruns

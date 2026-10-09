@@ -35,6 +35,8 @@ export function buildPRMonitoringMessage(
 export function buildPRMonitoringControlMessage(
   input: MessagePolicy & { control: PRMonitoringControlPayload }
 ): string {
+  // The control snapshot records enable-time policy; unclaimed messages use current policy.
+  // After claiming, retries reuse frozen delivery text instead of rendering again.
   return `${prEventMarker(input.deliveryId)}\nKeep the associated PRs moving in this conversation. Fix actionable CI failures, review feedback, and merge conflicts as updates arrive. Queue work after the current turn. Do not merge automatically.\n${input.replyToPrComments ? 'Reply to relevant PR comments after addressing them.' : 'Do not post replies to PR comments.'}`;
 }
 
