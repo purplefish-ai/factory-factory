@@ -79,6 +79,7 @@ export type ProviderIdentityExpectation = Pick<
 >;
 
 export interface AgentSessionAccessor {
+  runWorkspaceAcquisition<T>(workspaceId: string, operation: () => Promise<T>): Promise<T>;
   updateIfProviderIdentity(
     id: string,
     expected: ProviderIdentityExpectation,
@@ -127,7 +128,7 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
   createWithinWorkspaceLimit(
     data: CreateLimitedAgentSessionInput
   ): Promise<LimitedAgentSessionCreation> {
-    return this.enqueueWorkspaceAcquisition(data.workspaceId, () =>
+    return this.runWorkspaceAcquisition(data.workspaceId, () =>
       this.doCreateWithinWorkspaceLimit(data)
     );
   }
@@ -262,10 +263,7 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
     return result.count;
   }
 
-  private async enqueueWorkspaceAcquisition<T>(
-    workspaceId: string,
-    operation: () => Promise<T>
-  ): Promise<T> {
+  async runWorkspaceAcquisition<T>(workspaceId: string, operation: () => Promise<T>): Promise<T> {
     const prev = this.workspaceAcquisitionQueue.get(workspaceId) ?? Promise.resolve();
     const current = prev
       .catch(() => {

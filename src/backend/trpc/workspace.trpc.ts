@@ -13,6 +13,7 @@ import {
   deriveWorkspaceFlowStateFromWorkspace,
 } from '@/backend/services/workspace';
 import { KanbanColumn } from '@/shared/core';
+import { prDeliveryModeSchema } from '@/shared/pr-monitoring';
 import { autoIterationConfigSchema } from '@/shared/schemas/auto-iteration.schema';
 import {
   findWorkspaceSessionRuntimeError,
@@ -336,6 +337,8 @@ export const workspaceCoreRouter = router({
         workspaceId: z.string(),
         enabled: z.boolean(),
         recipientSessionId: z.string().nullable().optional(),
+        deliveryMode: prDeliveryModeSchema.optional(),
+        resume: z.boolean().optional(),
         expectedBindingRevision: z.number().int().nonnegative().optional(),
       })
     )

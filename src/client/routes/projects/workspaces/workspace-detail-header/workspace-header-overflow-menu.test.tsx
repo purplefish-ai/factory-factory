@@ -62,7 +62,11 @@ afterEach(async () => {
   await act(() => root.unmount());
   container.remove();
 });
-async function openMenu() {
+async function openMenu(
+  mode: 'MAIN' | 'DEDICATED' = 'MAIN',
+  enabled = false,
+  pauseReason: string | null = null
+) {
   await act(() =>
     root.render(
       <TooltipProvider>
@@ -72,7 +76,8 @@ async function openMenu() {
               id: 'w',
               projectId: 'p',
               name: 'Workspace',
-              ratchetEnabled: false,
+              ratchetEnabled: enabled,
+              prMonitoring: { deliveryMode: mode, pauseReason, bindingRevision: 3 },
             } as WorkspaceHeaderWorkspace
           }
           workspaceId="w"
@@ -91,7 +96,8 @@ async function openMenu() {
       .dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0, ctrlKey: false }))
   );
   const item = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
-    (candidate) => candidate.textContent?.includes('Turn on PR updates')
+    (candidate) =>
+      candidate.textContent?.includes(enabled ? 'Turn off PR updates' : 'Turn on PR updates')
   );
   expect(item).toBeDefined();
   return item!;
@@ -120,3 +126,51 @@ it('clears an exhausted recipient selection when the binding mutation fails', as
   expect(document.querySelector('[role="dialog"]')).toBeNull();
   expect(document.body.textContent).not.toContain('Choose the main conversation');
 });
+
+it('selects a dedicated destination while monitoring stays off and retains the main preference', async () => {
+  await openMenu();
+  const destination = document.querySelector<HTMLElement>(
+    '[role="menuitemradio"][data-state="unchecked"]'
+  )!;
+  expect(destination.textContent).toContain('Dedicated conversation per PR');
+  await act(() => destination.click());
+  expect(mocks.mutate).toHaveBeenCalledWith({
+    workspaceId: 'w',
+    enabled: false,
+    deliveryMode: 'DEDICATED',
+    expectedBindingRevision: 3,
+  });
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+});
+it('shows the current dedicated destination and preserves it when switching monitoring off', async () => {
+  const item = await openMenu('DEDICATED', true);
+  expect(
+    document.querySelector('[role="menuitemradio"][aria-checked="true"]')?.textContent
+  ).toContain('Dedicated conversation per PR');
+  expect(document.body.textContent).not.toContain('Change PR update conversation');
+  await act(() => item.click());
+  expect(mocks.mutate).toHaveBeenCalledWith({
+    workspaceId: 'w',
+    enabled: false,
+    deliveryMode: 'DEDICATED',
+  });
+});
+
+it.each(['MAIN', 'DEDICATED'] as const)(
+  'resumes paused %s updates from the mobile menu with the current revision',
+  async (mode) => {
+    await openMenu(mode, true, 'SESSION_FAILED');
+    const resume = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
+      (item) => item.textContent === 'Resume PR updates'
+    )!;
+    expect(resume).toBeDefined();
+    await act(() => resume.click());
+    expect(mocks.mutate).toHaveBeenCalledWith({
+      workspaceId: 'w',
+      enabled: true,
+      resume: true,
+      deliveryMode: mode,
+      expectedBindingRevision: 3,
+    });
+  }
+);

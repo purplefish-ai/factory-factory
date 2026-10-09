@@ -1,9 +1,14 @@
 import { z } from 'zod';
-import { prMonitoringEventPayloadSchema, prObservationSchema } from './pr-event.schema';
+import {
+  prDeliveryModeSchema,
+  prMonitoringEventPayloadSchema,
+  prObservationSchema,
+} from './pr-event.schema';
 
 const date = z.iso.datetime();
 export const prMonitoringBackupSchema = z.strictObject({
   enabled: z.boolean(),
+  deliveryMode: prDeliveryModeSchema.default('MAIN'),
   recipientSessionId: z.string().nullable(),
   bindingRevision: z.number().int().nonnegative(),
   eventEpoch: z.number().int().nonnegative(),
@@ -39,6 +44,7 @@ export const prEventBackupSchema = z
   })
   .refine((e) => e.kind === e.payload.kind, 'Event kind disagrees with payload');
 export const prAssociationBackupSchema = z.strictObject({
+  dedicatedSession: z.strictObject({ sessionId: z.string().nullable() }).nullable().optional(),
   id: z.string().min(1),
   url: z.url(),
   number: z.number().int().nullable(),

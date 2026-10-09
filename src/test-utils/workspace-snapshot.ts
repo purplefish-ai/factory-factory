@@ -22,6 +22,7 @@ export function makeWorkspaceSnapshotEntry(
     ratchetEnabled: false,
     ratchetState: 'IDLE',
     prMonitoring: {
+      deliveryMode: 'MAIN',
       enabled: false,
       recipientSessionId: null,
       bindingRevision: 0,

@@ -26,6 +26,7 @@ it('reports a queued update as waiting until the recipient is actually working',
     deriveWorkspaceStatusReason({
       ...base,
       prMonitoring: {
+        deliveryMode: 'MAIN',
         enabled: true,
         recipientSessionId: 'main',
         bindingRevision: 1,
@@ -44,6 +45,7 @@ it('reports a stopped recipient and an absent recipient without promising work',
     deriveWorkspaceStatusReason({
       ...base,
       prMonitoring: {
+        deliveryMode: 'MAIN',
         enabled: true,
         recipientSessionId: 'main',
         bindingRevision: 1,
@@ -56,6 +58,7 @@ it('reports a stopped recipient and an absent recipient without promising work',
     deriveWorkspaceStatusReason({
       ...base,
       prMonitoring: {
+        deliveryMode: 'MAIN',
         enabled: true,
         recipientSessionId: null,
         bindingRevision: 1,
@@ -64,4 +67,20 @@ it('reports a stopped recipient and an absent recipient without promising work',
       },
     })
   ).toMatchObject({ code: 'PR_RECIPIENT_REQUIRED', needsUser: true });
+});
+
+it('does not require a main recipient when dedicated updates are queued', () => {
+  expect(
+    deriveWorkspaceStatusReason({
+      ...base,
+      prMonitoring: {
+        deliveryMode: 'DEDICATED',
+        enabled: true,
+        recipientSessionId: null,
+        bindingRevision: 1,
+        pauseReason: null,
+        pendingEventCount: 1,
+      },
+    })
+  ).toMatchObject({ code: 'PR_UPDATE_QUEUED', tone: 'waiting' });
 });

@@ -4,6 +4,7 @@ export const prismaModelNames = [
   'Workspace',
   'WorkspacePR',
   'WorkspacePRMonitoring',
+  'WorkspacePRDedicatedSession',
   'WorkspacePREvent',
   'WorkspacePRDiscovery',
 
@@ -99,7 +100,12 @@ type ServiceDefinition = {
 export const serviceRegistry = {
   session: {
     dependsOn: ['workspace', 'settings', 'terminal', 'github'],
-    ownsModels: ['AgentSession', 'ClosedSession', 'SessionLifecycleEvent'],
+    ownsModels: [
+      'AgentSession',
+      'ClosedSession',
+      'SessionLifecycleEvent',
+      'WorkspacePRDedicatedSession',
+    ],
   },
   workspace: {
     dependsOn: ['settings', 'auto-iteration'],

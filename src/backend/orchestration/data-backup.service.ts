@@ -181,7 +181,7 @@ async function importProjects(
 
 function importedPRs(workspace: ExportedWorkspace) {
   return workspace.prs.length
-    ? workspace.prs.map((pr) => ({
+    ? workspace.prs.map(({ dedicatedSession: _dedicatedSession, ...pr }) => ({
         ...pr,
         syncedAt: parseDate(pr.syncedAt),
         detachedAt: parseDate(pr.detachedAt),

@@ -408,6 +408,7 @@ describe('workspace snapshot cache projections', () => {
   it('projects aggregate conflict and queued PR updates into the detail cache', () => {
     const { existing, entry } = legacyMergeWithSibling({
       prMonitoring: {
+        deliveryMode: 'MAIN',
         enabled: true,
         recipientSessionId: 'main-session',
         bindingRevision: 1,

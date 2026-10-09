@@ -24,6 +24,19 @@ vi.mock('@/backend/services/session', () => ({
   acpRuntimeManager: { isSessionWorking: () => state.busy },
   sessionDomainService: { getPendingInteractiveRequest: () => null },
   sessionDataService: {
+    findPRDedicatedSession: async ({
+      workspaceId,
+      prId,
+    }: {
+      workspaceId: string;
+      prId: string;
+    }) => {
+      const bound = await state.prisma?.workspacePRDedicatedSession.findUnique({
+        where: { prId },
+        include: { session: { include: { workspace: true } } },
+      });
+      return bound?.session?.workspaceId === workspaceId ? bound.session : null;
+    },
     findAgentSessionById: (id: string) =>
       state.prisma?.agentSession.findUnique({ where: { id }, include: { workspace: true } }),
   },
@@ -172,4 +185,70 @@ it('defers a busy main session, then freezes one bounded update and reuses it on
     providerSessionId: 'existing-main',
   });
   expect(await db.prisma.agentSession.count()).toBe(1);
+});
+
+it('delivers a dedicated PR batch through the same ledger and guards sibling recipients', async () => {
+  await db.prisma.agentSession.create({
+    data: {
+      id: 'dedicated',
+      workspaceId: 'w',
+      workspacePrId: 'p',
+      workflow: 'pr-monitoring',
+      model: 'custom',
+      provider: 'CODEX',
+      providerSessionId: 'dedicated-provider',
+    },
+  });
+  await db.prisma.workspacePRDedicatedSession.create({
+    data: { prId: 'p', sessionId: 'dedicated' },
+  });
+  await db.prisma.workspacePRMonitoring.update({
+    where: { workspaceId: 'w' },
+    data: {
+      enabled: true,
+      deliveryMode: 'DEDICATED',
+      bindingRevision: 100,
+      deliveryPauseReason: null,
+    },
+  });
+  await db.prisma.workspacePREvent.deleteMany({ where: { workspaceId: 'w' } });
+  await db.prisma.workspacePREvent.create({
+    data: {
+      id: 'dedicated-event',
+      workspaceId: 'w',
+      prId: 'p',
+      kind: 'CI_FAILED',
+      deduplicationKey: 'dedicated-event',
+      payload: {
+        kind: 'CI_FAILED',
+        target: { workspaceId: 'w', prId: 'p' },
+        observation: redObservation,
+      },
+    },
+  });
+  const request = {
+    workspaceId: 'w',
+    prId: 'p',
+    bindingRevision: 100,
+    deliveryMode: 'DEDICATED' as const,
+  };
+  expect(await preparePRDelivery({ sessionId: 'main', request })).toEqual({ status: 'discard' });
+  const result = await preparePRDelivery({ sessionId: 'dedicated', request });
+  expect(result.status).toBe('ready');
+  if (result.status !== 'ready') {
+    throw new Error('expected dedicated claim');
+  }
+  expect(result.delivery.text).toContain('dedicated conversation');
+  expect(result.delivery.deliveryProviderSessionId).toBe('dedicated-provider');
+  expect(await prBackgroundDeliveryPort.validate(result.delivery)).toBe(true);
+  await db.prisma.workspacePRMonitoring.update({
+    where: { workspaceId: 'w' },
+    data: { deliveryMode: 'MAIN', bindingRevision: 101 },
+  });
+  expect(await prBackgroundDeliveryPort.validate(result.delivery)).toBe(false);
+  const frozen = await db.prisma.workspacePREvent.findUniqueOrThrow({
+    where: { id: 'dedicated-event' },
+  });
+  expect(frozen.deliveryText).toBe(result.delivery.text);
+  expect(frozen.deliverySessionId).toBe('dedicated');
 });

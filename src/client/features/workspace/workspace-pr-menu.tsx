@@ -2,6 +2,7 @@ import { CaretDownIcon, GitPullRequestIcon, PlusIcon } from '@phosphor-icons/rea
 import { useState } from 'react';
 import { CiStatusChip } from '@/client/components/ci-status-chip';
 import { PrStateBadge } from '@/client/components/pr-state-badge';
+import { useToggleRatcheting } from '@/client/hooks/use-toggle-ratcheting';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
@@ -25,7 +26,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
+import { PRDeliveryMode, type PRMonitoringProjection } from '@/shared/pr-monitoring';
 import type { WorkspacePullRequest } from '@/shared/workspace-pr';
+import { PRMonitoringMenuItems, type PRMonitoringMenuProps } from './pr-monitoring-menu-items';
 import { useWorkspacePrActions } from './use-workspace-pr-actions';
 
 export function WorkspacePrMenu({
@@ -35,6 +38,7 @@ export function WorkspacePrMenu({
   onReview,
   pending = false,
   compact = false,
+  monitoring,
 }: {
   prs: readonly WorkspacePullRequest[];
   onAdd?: () => void;
@@ -42,6 +46,7 @@ export function WorkspacePrMenu({
   onReview?: (prId: string) => void;
   pending?: boolean;
   compact?: boolean;
+  monitoring?: PRMonitoringMenuProps;
 }) {
   const ordered = [...prs].sort(
     (a, b) =>
@@ -90,6 +95,7 @@ export function WorkspacePrMenu({
             />
           ))}
         </div>
+        {monitoring && <PRMonitoringMenuItems {...monitoring} />}
         {onAdd && (
           <>
             <DropdownMenuSeparator />
@@ -178,11 +184,79 @@ function WorkspacePrMenuRow({
   );
 }
 
+function ConnectedPRMonitoringMenu({
+  workspaceId,
+  projectId,
+  prs,
+  monitoring,
+  compact,
+  actions,
+  onAdd,
+  onRemove,
+}: {
+  workspaceId: string;
+  projectId?: string;
+  prs: readonly WorkspacePullRequest[];
+  monitoring: PRMonitoringProjection;
+  compact: boolean;
+  actions: Omit<ReturnType<typeof useWorkspacePrActions>, 'review'> & {
+    review?: (id: string) => void;
+  };
+  onAdd(): void;
+  onRemove(id: string): void;
+}) {
+  const toggle = useToggleRatcheting(projectId);
+  const deliveryMode = monitoring.deliveryMode ?? PRDeliveryMode.MAIN;
+  return (
+    <>
+      {toggle.recipientPicker}
+      <WorkspacePrMenu
+        prs={prs}
+        compact={compact}
+        pending={actions.pending}
+        onAdd={onAdd}
+        onRemove={onRemove}
+        onReview={actions.review}
+        monitoring={{
+          enabled: monitoring.enabled,
+          deliveryMode,
+          pending: toggle.isPending,
+          pauseReason: monitoring.pauseReason,
+          onResume: () =>
+            toggle.mutate({
+              workspaceId,
+              enabled: true,
+              resume: true,
+              deliveryMode,
+              expectedBindingRevision: monitoring.bindingRevision,
+            }),
+          onToggle: (enabled) => toggle.mutate({ workspaceId, enabled, deliveryMode }),
+          onDeliveryMode: (mode) =>
+            toggle.mutate({
+              workspaceId,
+              enabled: monitoring.enabled,
+              deliveryMode: mode,
+              expectedBindingRevision: monitoring.bindingRevision,
+            }),
+          onChangeRecipient: () =>
+            toggle.mutate({
+              workspaceId,
+              enabled: true,
+              deliveryMode: PRDeliveryMode.MAIN,
+              recipientSessionId: null,
+            }),
+        }}
+      />
+    </>
+  );
+}
+
 export function ConnectedWorkspacePrMenu({
   workspaceId,
   projectId,
   prs,
   readOnly = false,
+  monitoring,
   reviewEnabled = true,
   compact = false,
 }: {
@@ -190,6 +264,7 @@ export function ConnectedWorkspacePrMenu({
   projectId?: string;
   prs: readonly WorkspacePullRequest[];
   readOnly?: boolean;
+  monitoring?: PRMonitoringProjection;
   reviewEnabled?: boolean;
   compact?: boolean;
 }) {
@@ -198,6 +273,11 @@ export function ConnectedWorkspacePrMenu({
   const [url, setUrl] = useState('');
   const [error, setError] = useState<string | null>(null);
   const actions = useWorkspacePrActions(workspaceId, projectId);
+  const openAdd = () => {
+    setUrl('');
+    setError(null);
+    setOpen(true);
+  };
   return (
     <fieldset
       className="contents"
@@ -206,22 +286,27 @@ export function ConnectedWorkspacePrMenu({
       onClick={(event) => event.stopPropagation()}
       onPointerUp={(event) => event.stopPropagation()}
     >
-      <WorkspacePrMenu
-        prs={prs}
-        compact={compact}
-        pending={actions.pending}
-        onAdd={
-          readOnly
-            ? undefined
-            : () => {
-                setUrl('');
-                setError(null);
-                setOpen(true);
-              }
-        }
-        onRemove={readOnly ? undefined : setRemoveId}
-        onReview={readOnly || !reviewEnabled ? undefined : actions.review}
-      />
+      {monitoring && !readOnly ? (
+        <ConnectedPRMonitoringMenu
+          workspaceId={workspaceId}
+          projectId={projectId}
+          prs={prs}
+          compact={compact}
+          monitoring={monitoring}
+          actions={{ ...actions, review: reviewEnabled ? actions.review : undefined }}
+          onAdd={openAdd}
+          onRemove={setRemoveId}
+        />
+      ) : (
+        <WorkspacePrMenu
+          prs={prs}
+          compact={compact}
+          pending={actions.pending}
+          onAdd={readOnly ? undefined : openAdd}
+          onRemove={readOnly ? undefined : setRemoveId}
+          onReview={readOnly || !reviewEnabled ? undefined : actions.review}
+        />
+      )}
       <ConfirmDialog
         open={removeId !== null}
         onOpenChange={(value) => {
@@ -244,7 +329,7 @@ export function ConnectedWorkspacePrMenu({
           <DialogHeader>
             <DialogTitle>Add PR</DialogTitle>
             <DialogDescription>
-              Link a GitHub PR to receive updates in the selected conversation.
+              Link a GitHub PR to receive updates in this workspace.
             </DialogDescription>
           </DialogHeader>
           <form

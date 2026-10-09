@@ -1,18 +1,13 @@
 import type { Prisma, WorkspacePRMonitoring } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
+import { prDeliveryModeSchema, type PRMonitoringProjection } from '@/shared/pr-monitoring';
 import { projectWorkspacePRCollection } from './workspace-pr.accessor';
 
 /** The legacy toggle name is retained at the API boundary for existing clients. */
 export interface WorkspaceRatchetFields {
   ratchetEnabled: boolean;
   ratchetLastCheckedAt: Date | null;
-  prMonitoring: {
-    enabled: boolean;
-    recipientSessionId: string | null;
-    bindingRevision: number;
-    pauseReason: string | null;
-    pendingEventCount: number;
-  };
+  prMonitoring: PRMonitoringProjection;
 }
 export type WorkspaceRatchetRow = WorkspacePRMonitoring;
 export function flattenWorkspaceRatchet(
@@ -24,6 +19,7 @@ export function flattenWorkspaceRatchet(
     ratchetLastCheckedAt: config?.lastCheckedAt ?? null,
     prMonitoring: {
       enabled: config?.enabled ?? false,
+      deliveryMode: prDeliveryModeSchema.parse(config?.deliveryMode ?? 'MAIN'),
       recipientSessionId: config?.recipientSessionId ?? null,
       bindingRevision: config?.bindingRevision ?? 0,
       pauseReason: config?.deliveryPauseReason ?? null,

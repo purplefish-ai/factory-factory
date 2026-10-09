@@ -1,3 +1,4 @@
+import { sessionDataService } from '@/backend/services/session';
 import type { DataBackupTransactionClient, WorkspaceForExport } from '@/backend/services/settings';
 import { workspacePRMonitoringService } from '@/backend/services/workspace';
 import type { ExportData } from '@/shared/schemas/export-data.schema';
@@ -16,6 +17,7 @@ export function exportPRBackupState(workspace: WorkspaceForExport) {
     prs: workspace.prs.map(({ workspaceId: _workspaceId, ...pr }) =>
       prAssociationBackupSchema.parse({
         ...pr,
+        dedicatedSession: pr.dedicatedSession ? { sessionId: pr.dedicatedSession.sessionId } : null,
         syncedAt: iso(pr.syncedAt),
         detachedAt: iso(pr.detachedAt),
         ciFailedAt: iso(pr.ciFailedAt),
@@ -33,6 +35,7 @@ export function exportPRBackupState(workspace: WorkspaceForExport) {
     prMonitoring: workspace.prMonitoring
       ? prMonitoringBackupSchema.parse({
           enabled: workspace.prMonitoring.enabled,
+          deliveryMode: workspace.prMonitoring.deliveryMode,
           recipientSessionId: workspace.prMonitoring.recipientSessionId,
           bindingRevision: workspace.prMonitoring.bindingRevision,
           eventEpoch: workspace.prMonitoring.eventEpoch,
@@ -51,6 +54,24 @@ export function exportPRBackupState(workspace: WorkspaceForExport) {
     ),
   };
 }
+async function restoreDedicatedBindings(
+  workspace: ExportData['data']['workspaces'][number],
+  tx: DataBackupTransactionClient
+) {
+  for (const pr of workspace.prs) {
+    if (
+      pr.dedicatedSession &&
+      !(await sessionDataService.restorePRDedicatedSession(tx, {
+        workspaceId: workspace.id,
+        prId: pr.id,
+        sessionId: pr.dedicatedSession.sessionId,
+      }))
+    ) {
+      throw new Error('Imported dedicated session binding is invalid');
+    }
+  }
+}
+
 export async function restorePRBackupState(
   workspaces: ExportData['data']['workspaces'],
   importedWorkspaceIds: string[],
@@ -62,6 +83,7 @@ export async function restorePRBackupState(
     }
     const config = workspace.prMonitoring ?? {
       enabled: workspace.ratchetEnabled,
+      deliveryMode: 'MAIN' as const,
       recipientSessionId: null,
       bindingRevision: 0,
       eventEpoch: workspace.ratchetEnabled ? 1 : 0,
@@ -69,6 +91,7 @@ export async function restorePRBackupState(
       legacySessionIds: workspace.ratchetActiveSessionId ? [workspace.ratchetActiveSessionId] : [],
       lastCheckedAt: workspace.ratchetLastCheckedAt,
     };
+    await restoreDedicatedBindings(workspace, tx);
     await workspacePRMonitoringService.restoreConfigBackup(tx, workspace.id, config);
     await workspacePRMonitoringService.restoreEventsBackup(tx, workspace.id, workspace.prEvents);
   }

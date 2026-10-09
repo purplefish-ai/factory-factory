@@ -23,6 +23,7 @@ export function createMockWorkspace(
     ratchetEnabled: true,
     ratchetState: 'IDLE',
     prMonitoring: {
+      deliveryMode: 'MAIN',
       enabled: true,
       recipientSessionId: 'main',
       bindingRevision: 1,
@@ -93,6 +94,7 @@ export function createSnapshotEntry(
     ratchetEnabled: true,
     ratchetState: 'IDLE',
     prMonitoring: {
+      deliveryMode: 'MAIN',
       enabled: true,
       recipientSessionId: 'main',
       bindingRevision: 1,

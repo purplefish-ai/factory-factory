@@ -313,6 +313,7 @@ model WorkspacePR {
   transitionSequence Int @default(0)
   observationEpoch Int @default(0)
   events WorkspacePREvent[]
+  dedicatedSession WorkspacePRDedicatedSession?
   @@unique([workspaceId, url])
   @@index([workspaceId, detachedAt])
   @@index([syncedAt])
@@ -323,6 +324,7 @@ model WorkspacePRMonitoring {
   workspaceId String @id
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   enabled Boolean @default(false)
+  deliveryMode String @default("MAIN")
   recipientSessionId String?
   recipient AgentSession? @relation("PRMonitoringRecipient", fields: [recipientSessionId], references: [id], onDelete: SetNull)
   bindingRevision Int @default(0)
@@ -331,6 +333,13 @@ model WorkspacePRMonitoring {
   legacySessionIds Json @default("[]")
   lastCheckedAt DateTime?
   @@index([recipientSessionId])
+}
+
+model WorkspacePRDedicatedSession {
+  prId String @id
+  pr WorkspacePR @relation(fields: [prId], references: [id], onDelete: Cascade)
+  sessionId String? @unique
+  session AgentSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
 }
 
 model WorkspacePREvent {
@@ -473,6 +482,7 @@ model WorkspaceAutoIteration {
 }
 
 model AgentSession {
+  dedicatedPRBinding WorkspacePRDedicatedSession?
   prMonitoringBindings WorkspacePRMonitoring[] @relation("PRMonitoringRecipient")
   id                  String        @id @default(cuid())
   workspaceId         String

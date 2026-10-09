@@ -47,6 +47,7 @@ function projection(
     ratchetEnabled: true,
     ratchetState: prSummary.ratchetState,
     prMonitoring: {
+      deliveryMode: 'MAIN',
       enabled: true,
       recipientSessionId: 'main',
       bindingRevision: 1,

@@ -124,6 +124,7 @@ describe('failed PR attachment streaming', () => {
         ratchetEnabled: true,
         ratchetState: previousState === 'MERGED' ? 'MERGED' : 'IDLE',
         prMonitoring: {
+          deliveryMode: 'MAIN',
           enabled: true,
           recipientSessionId: 'main',
           bindingRevision: 1,

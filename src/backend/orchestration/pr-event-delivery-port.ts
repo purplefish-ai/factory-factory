@@ -1,6 +1,7 @@
 import { RATCHET_DISPATCH_CHANGED } from '@/backend/services/ratchet';
 import type { PRBackgroundDeliveryPort } from '@/backend/services/session';
 import type { ClaimedPRDelivery } from '@/shared/pr-monitoring';
+import { isCurrentPRRecipient } from './pr-delivery-recipient';
 import { recoverPRDeliveries } from './pr-delivery-recovery';
 import {
   preparePRDelivery,
@@ -14,12 +15,7 @@ import {
 export function createPRBackgroundDeliveryPort(
   services: PRMonitoringServices
 ): PRBackgroundDeliveryPort {
-  const {
-    workspacePRMonitoringService,
-    sessionDataService,
-    ratchetService,
-    sessionBackgroundDeliveryService,
-  } = services;
+  const { workspacePRMonitoringService, sessionDataService, ratchetService } = services;
   return {
     prepare: (input) => preparePRDelivery(input, services),
     async validate(delivery: ClaimedPRDelivery) {
@@ -31,6 +27,7 @@ export function createPRBackgroundDeliveryPort(
       ) {
         return false;
       }
+      const config = await workspacePRMonitoringService.get(session.workspaceId);
       const events = await workspacePRMonitoringService.listPending(session.workspaceId);
       const event = events.find((e) => e.deliveryId === delivery.deliveryId);
       return (
@@ -41,6 +38,7 @@ export function createPRBackgroundDeliveryPort(
             workspaceId: event.workspaceId,
             prId: event.prId,
             bindingRevision: delivery.bindingRevision,
+            deliveryMode: config?.deliveryMode,
           },
           services
         )) === 'ready'
@@ -83,9 +81,7 @@ export function createPRBackgroundDeliveryPort(
       if (session) {
         ratchetService.emit(RATCHET_DISPATCH_CHANGED, { workspaceId: session.workspaceId });
       }
-      if (config?.recipientSessionId === sessionId) {
-        sessionBackgroundDeliveryService.invalidate(config.workspaceId, config.bindingRevision);
-      }
+      await invalidateRecipient(config, session, services);
     },
     async resume(sessionId, isCurrent = () => true) {
       if (!isCurrent()) {
@@ -103,9 +99,7 @@ export function createPRBackgroundDeliveryPort(
       if (!isCurrent()) {
         return;
       }
-      if (previous?.recipientSessionId === sessionId) {
-        sessionBackgroundDeliveryService.invalidate(previous.workspaceId, previous.bindingRevision);
-      }
+      await invalidateRecipient(previous, session, services);
       if (session) {
         ratchetService.emit(RATCHET_DISPATCH_CHANGED, { workspaceId: session.workspaceId });
         await wakePRDelivery(session.workspaceId, services, isCurrent);
@@ -114,3 +108,20 @@ export function createPRBackgroundDeliveryPort(
   };
 }
 export const prBackgroundDeliveryPort = createPRBackgroundDeliveryPort(defaultPRMonitoringServices);
+
+async function invalidateRecipient(
+  config: Awaited<ReturnType<PRMonitoringServices['workspacePRMonitoringService']['get']>>,
+  session: Awaited<ReturnType<PRMonitoringServices['sessionDataService']['findAgentSessionById']>>,
+  services: PRMonitoringServices
+) {
+  if (
+    config &&
+    session &&
+    (await isCurrentPRRecipient(config, session, session.workspacePrId ?? null, services))
+  ) {
+    services.sessionBackgroundDeliveryService.invalidate(
+      session.workspaceId,
+      config.bindingRevision
+    );
+  }
+}

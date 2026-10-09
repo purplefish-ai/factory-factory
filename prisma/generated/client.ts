@@ -67,6 +67,11 @@ export type WorkspacePR = Prisma.WorkspacePRModel
  */
 export type WorkspacePRMonitoring = Prisma.WorkspacePRMonitoringModel
 /**
+ * Model WorkspacePRDedicatedSession
+ * 
+ */
+export type WorkspacePRDedicatedSession = Prisma.WorkspacePRDedicatedSessionModel
+/**
  * Model WorkspacePREvent
  * 
  */

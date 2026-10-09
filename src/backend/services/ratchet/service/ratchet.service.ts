@@ -9,7 +9,7 @@ import {
   workspacePrSnapshotService,
 } from '@/backend/services/workspace';
 import { type CIStatus, deriveRatchetState, RatchetState } from '@/shared/core';
-import type { PRTarget } from '@/shared/pr-monitoring';
+import type { PRTarget, PRDeliveryMode } from '@/shared/pr-monitoring';
 
 const logger = createLogger('ratchet');
 const POLL_JOB = 'pr-event-poll';
@@ -55,6 +55,8 @@ interface MonitoringBridge {
     workspaceId: string;
     enabled: boolean;
     recipientSessionId?: string | null;
+    deliveryMode?: PRDeliveryMode;
+    resume?: boolean;
     expectedBindingRevision: number;
   }): Promise<
     | { status: 'updated'; bindingRevision: number }
@@ -278,7 +280,12 @@ export class RatchetService extends EventEmitter {
   async setWorkspaceRatcheting(
     workspaceId: string,
     enabled: boolean,
-    options?: { recipientSessionId?: string | null; expectedBindingRevision?: number }
+    options?: {
+      recipientSessionId?: string | null;
+      expectedBindingRevision?: number;
+      deliveryMode?: PRDeliveryMode;
+      resume?: boolean;
+    }
   ) {
     if (!this.bridge) {
       throw new Error('PR monitoring bridge is not configured');
@@ -288,6 +295,8 @@ export class RatchetService extends EventEmitter {
       workspaceId,
       enabled,
       recipientSessionId: options?.recipientSessionId,
+      deliveryMode: options?.deliveryMode,
+      resume: options?.resume,
       expectedBindingRevision: options?.expectedBindingRevision ?? config?.bindingRevision ?? 0,
     });
     if (result.status === 'updated') {

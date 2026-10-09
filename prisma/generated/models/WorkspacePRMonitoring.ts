@@ -39,6 +39,7 @@ export type WorkspacePRMonitoringSumAggregateOutputType = {
 export type WorkspacePRMonitoringMinAggregateOutputType = {
   workspaceId: string | null
   enabled: boolean | null
+  deliveryMode: string | null
   recipientSessionId: string | null
   bindingRevision: number | null
   eventEpoch: number | null
@@ -49,6 +50,7 @@ export type WorkspacePRMonitoringMinAggregateOutputType = {
 export type WorkspacePRMonitoringMaxAggregateOutputType = {
   workspaceId: string | null
   enabled: boolean | null
+  deliveryMode: string | null
   recipientSessionId: string | null
   bindingRevision: number | null
   eventEpoch: number | null
@@ -59,6 +61,7 @@ export type WorkspacePRMonitoringMaxAggregateOutputType = {
 export type WorkspacePRMonitoringCountAggregateOutputType = {
   workspaceId: number
   enabled: number
+  deliveryMode: number
   recipientSessionId: number
   bindingRevision: number
   eventEpoch: number
@@ -82,6 +85,7 @@ export type WorkspacePRMonitoringSumAggregateInputType = {
 export type WorkspacePRMonitoringMinAggregateInputType = {
   workspaceId?: true
   enabled?: true
+  deliveryMode?: true
   recipientSessionId?: true
   bindingRevision?: true
   eventEpoch?: true
@@ -92,6 +96,7 @@ export type WorkspacePRMonitoringMinAggregateInputType = {
 export type WorkspacePRMonitoringMaxAggregateInputType = {
   workspaceId?: true
   enabled?: true
+  deliveryMode?: true
   recipientSessionId?: true
   bindingRevision?: true
   eventEpoch?: true
@@ -102,6 +107,7 @@ export type WorkspacePRMonitoringMaxAggregateInputType = {
 export type WorkspacePRMonitoringCountAggregateInputType = {
   workspaceId?: true
   enabled?: true
+  deliveryMode?: true
   recipientSessionId?: true
   bindingRevision?: true
   eventEpoch?: true
@@ -200,6 +206,7 @@ export type WorkspacePRMonitoringGroupByArgs<ExtArgs extends runtime.Types.Exten
 export type WorkspacePRMonitoringGroupByOutputType = {
   workspaceId: string
   enabled: boolean
+  deliveryMode: string
   recipientSessionId: string | null
   bindingRevision: number
   eventEpoch: number
@@ -234,6 +241,7 @@ export type WorkspacePRMonitoringWhereInput = {
   NOT?: Prisma.WorkspacePRMonitoringWhereInput | Prisma.WorkspacePRMonitoringWhereInput[]
   workspaceId?: Prisma.StringFilter<"WorkspacePRMonitoring"> | string
   enabled?: Prisma.BoolFilter<"WorkspacePRMonitoring"> | boolean
+  deliveryMode?: Prisma.StringFilter<"WorkspacePRMonitoring"> | string
   recipientSessionId?: Prisma.StringNullableFilter<"WorkspacePRMonitoring"> | string | null
   bindingRevision?: Prisma.IntFilter<"WorkspacePRMonitoring"> | number
   eventEpoch?: Prisma.IntFilter<"WorkspacePRMonitoring"> | number
@@ -247,6 +255,7 @@ export type WorkspacePRMonitoringWhereInput = {
 export type WorkspacePRMonitoringOrderByWithRelationInput = {
   workspaceId?: Prisma.SortOrder
   enabled?: Prisma.SortOrder
+  deliveryMode?: Prisma.SortOrder
   recipientSessionId?: Prisma.SortOrderInput | Prisma.SortOrder
   bindingRevision?: Prisma.SortOrder
   eventEpoch?: Prisma.SortOrder
@@ -263,6 +272,7 @@ export type WorkspacePRMonitoringWhereUniqueInput = Prisma.AtLeast<{
   OR?: Prisma.WorkspacePRMonitoringWhereInput[]
   NOT?: Prisma.WorkspacePRMonitoringWhereInput | Prisma.WorkspacePRMonitoringWhereInput[]
   enabled?: Prisma.BoolFilter<"WorkspacePRMonitoring"> | boolean
+  deliveryMode?: Prisma.StringFilter<"WorkspacePRMonitoring"> | string
   recipientSessionId?: Prisma.StringNullableFilter<"WorkspacePRMonitoring"> | string | null
   bindingRevision?: Prisma.IntFilter<"WorkspacePRMonitoring"> | number
   eventEpoch?: Prisma.IntFilter<"WorkspacePRMonitoring"> | number
@@ -276,6 +286,7 @@ export type WorkspacePRMonitoringWhereUniqueInput = Prisma.AtLeast<{
 export type WorkspacePRMonitoringOrderByWithAggregationInput = {
   workspaceId?: Prisma.SortOrder
   enabled?: Prisma.SortOrder
+  deliveryMode?: Prisma.SortOrder
   recipientSessionId?: Prisma.SortOrderInput | Prisma.SortOrder
   bindingRevision?: Prisma.SortOrder
   eventEpoch?: Prisma.SortOrder
@@ -295,6 +306,7 @@ export type WorkspacePRMonitoringScalarWhereWithAggregatesInput = {
   NOT?: Prisma.WorkspacePRMonitoringScalarWhereWithAggregatesInput | Prisma.WorkspacePRMonitoringScalarWhereWithAggregatesInput[]
   workspaceId?: Prisma.StringWithAggregatesFilter<"WorkspacePRMonitoring"> | string
   enabled?: Prisma.BoolWithAggregatesFilter<"WorkspacePRMonitoring"> | boolean
+  deliveryMode?: Prisma.StringWithAggregatesFilter<"WorkspacePRMonitoring"> | string
   recipientSessionId?: Prisma.StringNullableWithAggregatesFilter<"WorkspacePRMonitoring"> | string | null
   bindingRevision?: Prisma.IntWithAggregatesFilter<"WorkspacePRMonitoring"> | number
   eventEpoch?: Prisma.IntWithAggregatesFilter<"WorkspacePRMonitoring"> | number
@@ -305,6 +317,7 @@ export type WorkspacePRMonitoringScalarWhereWithAggregatesInput = {
 
 export type WorkspacePRMonitoringCreateInput = {
   enabled?: boolean
+  deliveryMode?: string
   bindingRevision?: number
   eventEpoch?: number
   deliveryPauseReason?: string | null
@@ -317,6 +330,7 @@ export type WorkspacePRMonitoringCreateInput = {
 export type WorkspacePRMonitoringUncheckedCreateInput = {
   workspaceId: string
   enabled?: boolean
+  deliveryMode?: string
   recipientSessionId?: string | null
   bindingRevision?: number
   eventEpoch?: number
@@ -327,6 +341,7 @@ export type WorkspacePRMonitoringUncheckedCreateInput = {
 
 export type WorkspacePRMonitoringUpdateInput = {
   enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  deliveryMode?: Prisma.StringFieldUpdateOperationsInput | string
   bindingRevision?: Prisma.IntFieldUpdateOperationsInput | number
   eventEpoch?: Prisma.IntFieldUpdateOperationsInput | number
   deliveryPauseReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -339,6 +354,7 @@ export type WorkspacePRMonitoringUpdateInput = {
 export type WorkspacePRMonitoringUncheckedUpdateInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  deliveryMode?: Prisma.StringFieldUpdateOperationsInput | string
   recipientSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   bindingRevision?: Prisma.IntFieldUpdateOperationsInput | number
   eventEpoch?: Prisma.IntFieldUpdateOperationsInput | number
@@ -350,6 +366,7 @@ export type WorkspacePRMonitoringUncheckedUpdateInput = {
 export type WorkspacePRMonitoringCreateManyInput = {
   workspaceId: string
   enabled?: boolean
+  deliveryMode?: string
   recipientSessionId?: string | null
   bindingRevision?: number
   eventEpoch?: number
@@ -360,6 +377,7 @@ export type WorkspacePRMonitoringCreateManyInput = {
 
 export type WorkspacePRMonitoringUpdateManyMutationInput = {
   enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  deliveryMode?: Prisma.StringFieldUpdateOperationsInput | string
   bindingRevision?: Prisma.IntFieldUpdateOperationsInput | number
   eventEpoch?: Prisma.IntFieldUpdateOperationsInput | number
   deliveryPauseReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -370,6 +388,7 @@ export type WorkspacePRMonitoringUpdateManyMutationInput = {
 export type WorkspacePRMonitoringUncheckedUpdateManyInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  deliveryMode?: Prisma.StringFieldUpdateOperationsInput | string
   recipientSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   bindingRevision?: Prisma.IntFieldUpdateOperationsInput | number
   eventEpoch?: Prisma.IntFieldUpdateOperationsInput | number
@@ -386,6 +405,7 @@ export type WorkspacePRMonitoringNullableScalarRelationFilter = {
 export type WorkspacePRMonitoringCountOrderByAggregateInput = {
   workspaceId?: Prisma.SortOrder
   enabled?: Prisma.SortOrder
+  deliveryMode?: Prisma.SortOrder
   recipientSessionId?: Prisma.SortOrder
   bindingRevision?: Prisma.SortOrder
   eventEpoch?: Prisma.SortOrder
@@ -402,6 +422,7 @@ export type WorkspacePRMonitoringAvgOrderByAggregateInput = {
 export type WorkspacePRMonitoringMaxOrderByAggregateInput = {
   workspaceId?: Prisma.SortOrder
   enabled?: Prisma.SortOrder
+  deliveryMode?: Prisma.SortOrder
   recipientSessionId?: Prisma.SortOrder
   bindingRevision?: Prisma.SortOrder
   eventEpoch?: Prisma.SortOrder
@@ -412,6 +433,7 @@ export type WorkspacePRMonitoringMaxOrderByAggregateInput = {
 export type WorkspacePRMonitoringMinOrderByAggregateInput = {
   workspaceId?: Prisma.SortOrder
   enabled?: Prisma.SortOrder
+  deliveryMode?: Prisma.SortOrder
   recipientSessionId?: Prisma.SortOrder
   bindingRevision?: Prisma.SortOrder
   eventEpoch?: Prisma.SortOrder
@@ -510,6 +532,7 @@ export type WorkspacePRMonitoringUncheckedUpdateManyWithoutRecipientNestedInput 
 
 export type WorkspacePRMonitoringCreateWithoutWorkspaceInput = {
   enabled?: boolean
+  deliveryMode?: string
   bindingRevision?: number
   eventEpoch?: number
   deliveryPauseReason?: string | null
@@ -520,6 +543,7 @@ export type WorkspacePRMonitoringCreateWithoutWorkspaceInput = {
 
 export type WorkspacePRMonitoringUncheckedCreateWithoutWorkspaceInput = {
   enabled?: boolean
+  deliveryMode?: string
   recipientSessionId?: string | null
   bindingRevision?: number
   eventEpoch?: number
@@ -546,6 +570,7 @@ export type WorkspacePRMonitoringUpdateToOneWithWhereWithoutWorkspaceInput = {
 
 export type WorkspacePRMonitoringUpdateWithoutWorkspaceInput = {
   enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  deliveryMode?: Prisma.StringFieldUpdateOperationsInput | string
   bindingRevision?: Prisma.IntFieldUpdateOperationsInput | number
   eventEpoch?: Prisma.IntFieldUpdateOperationsInput | number
   deliveryPauseReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -556,6 +581,7 @@ export type WorkspacePRMonitoringUpdateWithoutWorkspaceInput = {
 
 export type WorkspacePRMonitoringUncheckedUpdateWithoutWorkspaceInput = {
   enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  deliveryMode?: Prisma.StringFieldUpdateOperationsInput | string
   recipientSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   bindingRevision?: Prisma.IntFieldUpdateOperationsInput | number
   eventEpoch?: Prisma.IntFieldUpdateOperationsInput | number
@@ -566,6 +592,7 @@ export type WorkspacePRMonitoringUncheckedUpdateWithoutWorkspaceInput = {
 
 export type WorkspacePRMonitoringCreateWithoutRecipientInput = {
   enabled?: boolean
+  deliveryMode?: string
   bindingRevision?: number
   eventEpoch?: number
   deliveryPauseReason?: string | null
@@ -577,6 +604,7 @@ export type WorkspacePRMonitoringCreateWithoutRecipientInput = {
 export type WorkspacePRMonitoringUncheckedCreateWithoutRecipientInput = {
   workspaceId: string
   enabled?: boolean
+  deliveryMode?: string
   bindingRevision?: number
   eventEpoch?: number
   deliveryPauseReason?: string | null
@@ -615,6 +643,7 @@ export type WorkspacePRMonitoringScalarWhereInput = {
   NOT?: Prisma.WorkspacePRMonitoringScalarWhereInput | Prisma.WorkspacePRMonitoringScalarWhereInput[]
   workspaceId?: Prisma.StringFilter<"WorkspacePRMonitoring"> | string
   enabled?: Prisma.BoolFilter<"WorkspacePRMonitoring"> | boolean
+  deliveryMode?: Prisma.StringFilter<"WorkspacePRMonitoring"> | string
   recipientSessionId?: Prisma.StringNullableFilter<"WorkspacePRMonitoring"> | string | null
   bindingRevision?: Prisma.IntFilter<"WorkspacePRMonitoring"> | number
   eventEpoch?: Prisma.IntFilter<"WorkspacePRMonitoring"> | number
@@ -626,6 +655,7 @@ export type WorkspacePRMonitoringScalarWhereInput = {
 export type WorkspacePRMonitoringCreateManyRecipientInput = {
   workspaceId: string
   enabled?: boolean
+  deliveryMode?: string
   bindingRevision?: number
   eventEpoch?: number
   deliveryPauseReason?: string | null
@@ -635,6 +665,7 @@ export type WorkspacePRMonitoringCreateManyRecipientInput = {
 
 export type WorkspacePRMonitoringUpdateWithoutRecipientInput = {
   enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  deliveryMode?: Prisma.StringFieldUpdateOperationsInput | string
   bindingRevision?: Prisma.IntFieldUpdateOperationsInput | number
   eventEpoch?: Prisma.IntFieldUpdateOperationsInput | number
   deliveryPauseReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -646,6 +677,7 @@ export type WorkspacePRMonitoringUpdateWithoutRecipientInput = {
 export type WorkspacePRMonitoringUncheckedUpdateWithoutRecipientInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  deliveryMode?: Prisma.StringFieldUpdateOperationsInput | string
   bindingRevision?: Prisma.IntFieldUpdateOperationsInput | number
   eventEpoch?: Prisma.IntFieldUpdateOperationsInput | number
   deliveryPauseReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -656,6 +688,7 @@ export type WorkspacePRMonitoringUncheckedUpdateWithoutRecipientInput = {
 export type WorkspacePRMonitoringUncheckedUpdateManyWithoutRecipientInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  deliveryMode?: Prisma.StringFieldUpdateOperationsInput | string
   bindingRevision?: Prisma.IntFieldUpdateOperationsInput | number
   eventEpoch?: Prisma.IntFieldUpdateOperationsInput | number
   deliveryPauseReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -668,6 +701,7 @@ export type WorkspacePRMonitoringUncheckedUpdateManyWithoutRecipientInput = {
 export type WorkspacePRMonitoringSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   workspaceId?: boolean
   enabled?: boolean
+  deliveryMode?: boolean
   recipientSessionId?: boolean
   bindingRevision?: boolean
   eventEpoch?: boolean
@@ -681,6 +715,7 @@ export type WorkspacePRMonitoringSelect<ExtArgs extends runtime.Types.Extensions
 export type WorkspacePRMonitoringSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   workspaceId?: boolean
   enabled?: boolean
+  deliveryMode?: boolean
   recipientSessionId?: boolean
   bindingRevision?: boolean
   eventEpoch?: boolean
@@ -694,6 +729,7 @@ export type WorkspacePRMonitoringSelectCreateManyAndReturn<ExtArgs extends runti
 export type WorkspacePRMonitoringSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   workspaceId?: boolean
   enabled?: boolean
+  deliveryMode?: boolean
   recipientSessionId?: boolean
   bindingRevision?: boolean
   eventEpoch?: boolean
@@ -707,6 +743,7 @@ export type WorkspacePRMonitoringSelectUpdateManyAndReturn<ExtArgs extends runti
 export type WorkspacePRMonitoringSelectScalar = {
   workspaceId?: boolean
   enabled?: boolean
+  deliveryMode?: boolean
   recipientSessionId?: boolean
   bindingRevision?: boolean
   eventEpoch?: boolean
@@ -715,7 +752,7 @@ export type WorkspacePRMonitoringSelectScalar = {
   lastCheckedAt?: boolean
 }
 
-export type WorkspacePRMonitoringOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"workspaceId" | "enabled" | "recipientSessionId" | "bindingRevision" | "eventEpoch" | "deliveryPauseReason" | "legacySessionIds" | "lastCheckedAt", ExtArgs["result"]["workspacePRMonitoring"]>
+export type WorkspacePRMonitoringOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"workspaceId" | "enabled" | "deliveryMode" | "recipientSessionId" | "bindingRevision" | "eventEpoch" | "deliveryPauseReason" | "legacySessionIds" | "lastCheckedAt", ExtArgs["result"]["workspacePRMonitoring"]>
 export type WorkspacePRMonitoringInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
   recipient?: boolean | Prisma.WorkspacePRMonitoring$recipientArgs<ExtArgs>
@@ -738,6 +775,7 @@ export type $WorkspacePRMonitoringPayload<ExtArgs extends runtime.Types.Extensio
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     workspaceId: string
     enabled: boolean
+    deliveryMode: string
     recipientSessionId: string | null
     bindingRevision: number
     eventEpoch: number
@@ -1171,6 +1209,7 @@ export interface Prisma__WorkspacePRMonitoringClient<T, Null = never, ExtArgs ex
 export interface WorkspacePRMonitoringFieldRefs {
   readonly workspaceId: Prisma.FieldRef<"WorkspacePRMonitoring", 'String'>
   readonly enabled: Prisma.FieldRef<"WorkspacePRMonitoring", 'Boolean'>
+  readonly deliveryMode: Prisma.FieldRef<"WorkspacePRMonitoring", 'String'>
   readonly recipientSessionId: Prisma.FieldRef<"WorkspacePRMonitoring", 'String'>
   readonly bindingRevision: Prisma.FieldRef<"WorkspacePRMonitoring", 'Int'>
   readonly eventEpoch: Prisma.FieldRef<"WorkspacePRMonitoring", 'Int'>

@@ -53,3 +53,41 @@ export const Mobile: Story = {
 };
 export const Pending: Story = { ...Multiple, args: { ...Multiple.args, pending: true } };
 export const Compact: Story = { ...Multiple, args: { ...Multiple.args, compact: true } };
+
+const monitoring = {
+  enabled: true,
+  deliveryMode: 'MAIN' as const,
+  pending: false,
+  onToggle: () => undefined,
+  onDeliveryMode: () => undefined,
+  onChangeRecipient: () => undefined,
+};
+export const MainConversation: Story = { args: { prs: [pr(42)], monitoring } };
+export const DedicatedConversations: Story = {
+  args: { prs: [pr(42), pr(43)], monitoring: { ...monitoring, deliveryMode: 'DEDICATED' } },
+};
+export const ChangingDestination: Story = {
+  args: { prs: [pr(42)], monitoring: { ...monitoring, pending: true } },
+};
+export const MobileDedicated: Story = {
+  ...DedicatedConversations,
+  globals: { viewport: { value: 'mobile1', isRotated: false } },
+};
+
+export const PausedMainConversation: Story = {
+  args: {
+    prs: [pr(42)],
+    monitoring: { ...monitoring, pauseReason: 'USER_STOPPED', onResume: () => undefined },
+  },
+};
+export const PausedDedicatedConversations: Story = {
+  args: {
+    prs: [pr(42), pr(43)],
+    monitoring: {
+      ...monitoring,
+      deliveryMode: 'DEDICATED',
+      pauseReason: 'SESSION_FAILED',
+      onResume: () => undefined,
+    },
+  },
+};

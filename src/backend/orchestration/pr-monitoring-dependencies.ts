@@ -1,3 +1,4 @@
+import { configService } from '@/backend/services/config.service';
 import { prObservationService, prSnapshotService } from '@/backend/services/github';
 import { ratchetService } from '@/backend/services/ratchet';
 import {
@@ -16,6 +17,7 @@ import {
 } from '@/backend/services/workspace';
 
 export type PRMonitoringServices = {
+  configService: typeof configService;
   prObservationService: typeof prObservationService;
   prSnapshotService: typeof prSnapshotService;
   ratchetService: typeof ratchetService;
@@ -31,6 +33,9 @@ export type PRMonitoringServices = {
   workspacePrSnapshotService: typeof workspacePrSnapshotService;
 };
 export const defaultPRMonitoringServices: PRMonitoringServices = {
+  get configService() {
+    return configService;
+  },
   get prObservationService() {
     return prObservationService;
   },

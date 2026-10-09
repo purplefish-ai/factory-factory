@@ -11,6 +11,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { PRDeliveryMode } from '@/shared/pr-monitoring';
 import { RatchetingMenuItems } from './ratcheting-toggle';
 import type { WorkspaceHeaderWorkspace } from './types';
 
@@ -19,7 +20,18 @@ const workspace = {
   projectId: 'mock-project',
   ratchetEnabled: false,
 } as WorkspaceHeaderWorkspace;
-function MobileRecipientFlow() {
+function MobileRecipientFlow({
+  deliveryMode = PRDeliveryMode.MAIN,
+  enabled = false,
+}: {
+  deliveryMode?: PRDeliveryMode;
+  enabled?: boolean;
+}) {
+  const displayedWorkspace = {
+    ...workspace,
+    ratchetEnabled: enabled,
+    prMonitoring: { deliveryMode },
+  } as WorkspaceHeaderWorkspace;
   const monitoring = useToggleRatcheting(workspace.projectId);
   return (
     <>
@@ -30,7 +42,7 @@ function MobileRecipientFlow() {
         </DropdownMenuTrigger>
         <DropdownMenuContent>
           <RatchetingMenuItems
-            workspace={workspace}
+            workspace={displayedWorkspace}
             workspaceId={workspace.id}
             toggleRatcheting={monitoring}
           />
@@ -58,18 +70,19 @@ const meta = {
                     .parse(op.input);
                   observer.next({
                     result: {
-                      data: input.recipientSessionId
-                        ? {
-                            status: 'enabled',
-                          }
-                        : {
-                            status: 'recipient_required',
-                            bindingRevision: 1,
-                            candidates: [
-                              { id: 'main', name: 'Implementation', provider: 'claude' },
-                              { id: 'other', name: 'Follow-up', provider: 'codex' },
-                            ],
-                          },
+                      data:
+                        input.recipientSessionId || input.deliveryMode === PRDeliveryMode.DEDICATED
+                          ? {
+                              status: 'enabled',
+                            }
+                          : {
+                              status: 'recipient_required',
+                              bindingRevision: 1,
+                              candidates: [
+                                { id: 'main', name: 'Implementation', provider: 'claude' },
+                                { id: 'other', name: 'Follow-up', provider: 'codex' },
+                              ],
+                            },
                     },
                   });
                   observer.complete();
@@ -90,3 +103,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const MobileRecipientSelection: Story = {};
+
+export const MobileDedicatedDestination: Story = {
+  args: { deliveryMode: PRDeliveryMode.DEDICATED, enabled: true },
+};

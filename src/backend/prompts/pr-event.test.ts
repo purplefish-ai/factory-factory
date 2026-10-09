@@ -94,3 +94,25 @@ it('includes bounded recovered check names, outcomes and details links', () => {
   expect(text).toContain('omitted');
   expect(Buffer.byteLength(text)).toBeLessThanOrEqual(16_384);
 });
+
+it('adds trusted maintenance context to dedicated batches within the shared byte limit', () => {
+  const input = {
+    deliveryId: 'dedicated',
+    replyToPrComments: false,
+    events: [
+      {
+        kind: 'CI_FAILED' as const,
+        target: { workspaceId: 'w', prId: 'p' },
+        observation: redObservation,
+      },
+    ],
+  };
+  const main = buildPREventMessage(input);
+  const dedicated = buildPREventMessage({ ...input, deliveryMode: 'DEDICATED' });
+  expect(main).not.toContain('dedicated conversation');
+  expect(dedicated).toContain('Maintain this PR in this dedicated conversation');
+  expect(dedicated).toContain('Do not merge automatically');
+  expect(dedicated).toContain('Do not post replies');
+  expect(dedicated).toContain('untrusted data');
+  expect(Buffer.byteLength(dedicated)).toBeLessThanOrEqual(16_384);
+});

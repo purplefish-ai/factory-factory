@@ -354,6 +354,7 @@ export type WorkspacePRWhereInput = {
   observationEpoch?: Prisma.IntFilter<"WorkspacePR"> | number
   workspace?: Prisma.XOR<Prisma.WorkspaceScalarRelationFilter, Prisma.WorkspaceWhereInput>
   events?: Prisma.WorkspacePREventListRelationFilter
+  dedicatedSession?: Prisma.XOR<Prisma.WorkspacePRDedicatedSessionNullableScalarRelationFilter, Prisma.WorkspacePRDedicatedSessionWhereInput> | null
 }
 
 export type WorkspacePROrderByWithRelationInput = {
@@ -380,6 +381,7 @@ export type WorkspacePROrderByWithRelationInput = {
   observationEpoch?: Prisma.SortOrder
   workspace?: Prisma.WorkspaceOrderByWithRelationInput
   events?: Prisma.WorkspacePREventOrderByRelationAggregateInput
+  dedicatedSession?: Prisma.WorkspacePRDedicatedSessionOrderByWithRelationInput
 }
 
 export type WorkspacePRWhereUniqueInput = Prisma.AtLeast<{
@@ -410,6 +412,7 @@ export type WorkspacePRWhereUniqueInput = Prisma.AtLeast<{
   observationEpoch?: Prisma.IntFilter<"WorkspacePR"> | number
   workspace?: Prisma.XOR<Prisma.WorkspaceScalarRelationFilter, Prisma.WorkspaceWhereInput>
   events?: Prisma.WorkspacePREventListRelationFilter
+  dedicatedSession?: Prisma.XOR<Prisma.WorkspacePRDedicatedSessionNullableScalarRelationFilter, Prisma.WorkspacePRDedicatedSessionWhereInput> | null
 }, "id" | "workspaceId_url">
 
 export type WorkspacePROrderByWithAggregationInput = {
@@ -491,6 +494,7 @@ export type WorkspacePRCreateInput = {
   observationEpoch?: number
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrsInput
   events?: Prisma.WorkspacePREventCreateNestedManyWithoutPrInput
+  dedicatedSession?: Prisma.WorkspacePRDedicatedSessionCreateNestedOneWithoutPrInput
 }
 
 export type WorkspacePRUncheckedCreateInput = {
@@ -516,6 +520,7 @@ export type WorkspacePRUncheckedCreateInput = {
   transitionSequence?: number
   observationEpoch?: number
   events?: Prisma.WorkspacePREventUncheckedCreateNestedManyWithoutPrInput
+  dedicatedSession?: Prisma.WorkspacePRDedicatedSessionUncheckedCreateNestedOneWithoutPrInput
 }
 
 export type WorkspacePRUpdateInput = {
@@ -541,6 +546,7 @@ export type WorkspacePRUpdateInput = {
   observationEpoch?: Prisma.IntFieldUpdateOperationsInput | number
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrsNestedInput
   events?: Prisma.WorkspacePREventUpdateManyWithoutPrNestedInput
+  dedicatedSession?: Prisma.WorkspacePRDedicatedSessionUpdateOneWithoutPrNestedInput
 }
 
 export type WorkspacePRUncheckedUpdateInput = {
@@ -566,6 +572,7 @@ export type WorkspacePRUncheckedUpdateInput = {
   transitionSequence?: Prisma.IntFieldUpdateOperationsInput | number
   observationEpoch?: Prisma.IntFieldUpdateOperationsInput | number
   events?: Prisma.WorkspacePREventUncheckedUpdateManyWithoutPrNestedInput
+  dedicatedSession?: Prisma.WorkspacePRDedicatedSessionUncheckedUpdateOneWithoutPrNestedInput
 }
 
 export type WorkspacePRCreateManyInput = {
@@ -738,6 +745,11 @@ export type WorkspacePRSumOrderByAggregateInput = {
   observationEpoch?: Prisma.SortOrder
 }
 
+export type WorkspacePRScalarRelationFilter = {
+  is?: Prisma.WorkspacePRWhereInput
+  isNot?: Prisma.WorkspacePRWhereInput
+}
+
 export type WorkspacePRNullableScalarRelationFilter = {
   is?: Prisma.WorkspacePRWhereInput | null
   isNot?: Prisma.WorkspacePRWhereInput | null
@@ -793,6 +805,20 @@ export type EnumCIStatusFieldUpdateOperationsInput = {
   set?: $Enums.CIStatus
 }
 
+export type WorkspacePRCreateNestedOneWithoutDedicatedSessionInput = {
+  create?: Prisma.XOR<Prisma.WorkspacePRCreateWithoutDedicatedSessionInput, Prisma.WorkspacePRUncheckedCreateWithoutDedicatedSessionInput>
+  connectOrCreate?: Prisma.WorkspacePRCreateOrConnectWithoutDedicatedSessionInput
+  connect?: Prisma.WorkspacePRWhereUniqueInput
+}
+
+export type WorkspacePRUpdateOneRequiredWithoutDedicatedSessionNestedInput = {
+  create?: Prisma.XOR<Prisma.WorkspacePRCreateWithoutDedicatedSessionInput, Prisma.WorkspacePRUncheckedCreateWithoutDedicatedSessionInput>
+  connectOrCreate?: Prisma.WorkspacePRCreateOrConnectWithoutDedicatedSessionInput
+  upsert?: Prisma.WorkspacePRUpsertWithoutDedicatedSessionInput
+  connect?: Prisma.WorkspacePRWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.WorkspacePRUpdateToOneWithWhereWithoutDedicatedSessionInput, Prisma.WorkspacePRUpdateWithoutDedicatedSessionInput>, Prisma.WorkspacePRUncheckedUpdateWithoutDedicatedSessionInput>
+}
+
 export type WorkspacePRCreateNestedOneWithoutEventsInput = {
   create?: Prisma.XOR<Prisma.WorkspacePRCreateWithoutEventsInput, Prisma.WorkspacePRUncheckedCreateWithoutEventsInput>
   connectOrCreate?: Prisma.WorkspacePRCreateOrConnectWithoutEventsInput
@@ -831,6 +857,7 @@ export type WorkspacePRCreateWithoutWorkspaceInput = {
   transitionSequence?: number
   observationEpoch?: number
   events?: Prisma.WorkspacePREventCreateNestedManyWithoutPrInput
+  dedicatedSession?: Prisma.WorkspacePRDedicatedSessionCreateNestedOneWithoutPrInput
 }
 
 export type WorkspacePRUncheckedCreateWithoutWorkspaceInput = {
@@ -855,6 +882,7 @@ export type WorkspacePRUncheckedCreateWithoutWorkspaceInput = {
   transitionSequence?: number
   observationEpoch?: number
   events?: Prisma.WorkspacePREventUncheckedCreateNestedManyWithoutPrInput
+  dedicatedSession?: Prisma.WorkspacePRDedicatedSessionUncheckedCreateNestedOneWithoutPrInput
 }
 
 export type WorkspacePRCreateOrConnectWithoutWorkspaceInput = {
@@ -909,6 +937,122 @@ export type WorkspacePRScalarWhereInput = {
   observationEpoch?: Prisma.IntFilter<"WorkspacePR"> | number
 }
 
+export type WorkspacePRCreateWithoutDedicatedSessionInput = {
+  id?: string
+  url: string
+  number?: number | null
+  title?: string | null
+  headRefName?: string | null
+  baseRefName?: string | null
+  state?: $Enums.PRState
+  reviewState?: string | null
+  ciStatus?: $Enums.CIStatus
+  hasMergeConflict?: boolean
+  syncedAt?: Date | string | null
+  detachedAt?: Date | string | null
+  revision?: number
+  ciFailedAt?: Date | string | null
+  ciLastNotifiedAt?: Date | string | null
+  reviewLastCheckedAt?: Date | string | null
+  reviewLastCommentId?: string | null
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: number
+  observationEpoch?: number
+  workspace: Prisma.WorkspaceCreateNestedOneWithoutPrsInput
+  events?: Prisma.WorkspacePREventCreateNestedManyWithoutPrInput
+}
+
+export type WorkspacePRUncheckedCreateWithoutDedicatedSessionInput = {
+  id?: string
+  workspaceId: string
+  url: string
+  number?: number | null
+  title?: string | null
+  headRefName?: string | null
+  baseRefName?: string | null
+  state?: $Enums.PRState
+  reviewState?: string | null
+  ciStatus?: $Enums.CIStatus
+  hasMergeConflict?: boolean
+  syncedAt?: Date | string | null
+  detachedAt?: Date | string | null
+  revision?: number
+  ciFailedAt?: Date | string | null
+  ciLastNotifiedAt?: Date | string | null
+  reviewLastCheckedAt?: Date | string | null
+  reviewLastCommentId?: string | null
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: number
+  observationEpoch?: number
+  events?: Prisma.WorkspacePREventUncheckedCreateNestedManyWithoutPrInput
+}
+
+export type WorkspacePRCreateOrConnectWithoutDedicatedSessionInput = {
+  where: Prisma.WorkspacePRWhereUniqueInput
+  create: Prisma.XOR<Prisma.WorkspacePRCreateWithoutDedicatedSessionInput, Prisma.WorkspacePRUncheckedCreateWithoutDedicatedSessionInput>
+}
+
+export type WorkspacePRUpsertWithoutDedicatedSessionInput = {
+  update: Prisma.XOR<Prisma.WorkspacePRUpdateWithoutDedicatedSessionInput, Prisma.WorkspacePRUncheckedUpdateWithoutDedicatedSessionInput>
+  create: Prisma.XOR<Prisma.WorkspacePRCreateWithoutDedicatedSessionInput, Prisma.WorkspacePRUncheckedCreateWithoutDedicatedSessionInput>
+  where?: Prisma.WorkspacePRWhereInput
+}
+
+export type WorkspacePRUpdateToOneWithWhereWithoutDedicatedSessionInput = {
+  where?: Prisma.WorkspacePRWhereInput
+  data: Prisma.XOR<Prisma.WorkspacePRUpdateWithoutDedicatedSessionInput, Prisma.WorkspacePRUncheckedUpdateWithoutDedicatedSessionInput>
+}
+
+export type WorkspacePRUpdateWithoutDedicatedSessionInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  url?: Prisma.StringFieldUpdateOperationsInput | string
+  number?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  title?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  headRefName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  baseRefName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  state?: Prisma.EnumPRStateFieldUpdateOperationsInput | $Enums.PRState
+  reviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ciStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
+  hasMergeConflict?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  syncedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  detachedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  revision?: Prisma.IntFieldUpdateOperationsInput | number
+  ciFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  ciLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  reviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  reviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: Prisma.IntFieldUpdateOperationsInput | number
+  observationEpoch?: Prisma.IntFieldUpdateOperationsInput | number
+  workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrsNestedInput
+  events?: Prisma.WorkspacePREventUpdateManyWithoutPrNestedInput
+}
+
+export type WorkspacePRUncheckedUpdateWithoutDedicatedSessionInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
+  url?: Prisma.StringFieldUpdateOperationsInput | string
+  number?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  title?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  headRefName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  baseRefName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  state?: Prisma.EnumPRStateFieldUpdateOperationsInput | $Enums.PRState
+  reviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ciStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
+  hasMergeConflict?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  syncedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  detachedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  revision?: Prisma.IntFieldUpdateOperationsInput | number
+  ciFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  ciLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  reviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  reviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: Prisma.IntFieldUpdateOperationsInput | number
+  observationEpoch?: Prisma.IntFieldUpdateOperationsInput | number
+  events?: Prisma.WorkspacePREventUncheckedUpdateManyWithoutPrNestedInput
+}
+
 export type WorkspacePRCreateWithoutEventsInput = {
   id?: string
   url: string
@@ -931,6 +1075,7 @@ export type WorkspacePRCreateWithoutEventsInput = {
   transitionSequence?: number
   observationEpoch?: number
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrsInput
+  dedicatedSession?: Prisma.WorkspacePRDedicatedSessionCreateNestedOneWithoutPrInput
 }
 
 export type WorkspacePRUncheckedCreateWithoutEventsInput = {
@@ -955,6 +1100,7 @@ export type WorkspacePRUncheckedCreateWithoutEventsInput = {
   observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   transitionSequence?: number
   observationEpoch?: number
+  dedicatedSession?: Prisma.WorkspacePRDedicatedSessionUncheckedCreateNestedOneWithoutPrInput
 }
 
 export type WorkspacePRCreateOrConnectWithoutEventsInput = {
@@ -995,6 +1141,7 @@ export type WorkspacePRUpdateWithoutEventsInput = {
   transitionSequence?: Prisma.IntFieldUpdateOperationsInput | number
   observationEpoch?: Prisma.IntFieldUpdateOperationsInput | number
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrsNestedInput
+  dedicatedSession?: Prisma.WorkspacePRDedicatedSessionUpdateOneWithoutPrNestedInput
 }
 
 export type WorkspacePRUncheckedUpdateWithoutEventsInput = {
@@ -1019,6 +1166,7 @@ export type WorkspacePRUncheckedUpdateWithoutEventsInput = {
   observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   transitionSequence?: Prisma.IntFieldUpdateOperationsInput | number
   observationEpoch?: Prisma.IntFieldUpdateOperationsInput | number
+  dedicatedSession?: Prisma.WorkspacePRDedicatedSessionUncheckedUpdateOneWithoutPrNestedInput
 }
 
 export type WorkspacePRCreateManyWorkspaceInput = {
@@ -1066,6 +1214,7 @@ export type WorkspacePRUpdateWithoutWorkspaceInput = {
   transitionSequence?: Prisma.IntFieldUpdateOperationsInput | number
   observationEpoch?: Prisma.IntFieldUpdateOperationsInput | number
   events?: Prisma.WorkspacePREventUpdateManyWithoutPrNestedInput
+  dedicatedSession?: Prisma.WorkspacePRDedicatedSessionUpdateOneWithoutPrNestedInput
 }
 
 export type WorkspacePRUncheckedUpdateWithoutWorkspaceInput = {
@@ -1090,6 +1239,7 @@ export type WorkspacePRUncheckedUpdateWithoutWorkspaceInput = {
   transitionSequence?: Prisma.IntFieldUpdateOperationsInput | number
   observationEpoch?: Prisma.IntFieldUpdateOperationsInput | number
   events?: Prisma.WorkspacePREventUncheckedUpdateManyWithoutPrNestedInput
+  dedicatedSession?: Prisma.WorkspacePRDedicatedSessionUncheckedUpdateOneWithoutPrNestedInput
 }
 
 export type WorkspacePRUncheckedUpdateManyWithoutWorkspaceInput = {
@@ -1170,6 +1320,7 @@ export type WorkspacePRSelect<ExtArgs extends runtime.Types.Extensions.InternalA
   observationEpoch?: boolean
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
   events?: boolean | Prisma.WorkspacePR$eventsArgs<ExtArgs>
+  dedicatedSession?: boolean | Prisma.WorkspacePR$dedicatedSessionArgs<ExtArgs>
   _count?: boolean | Prisma.WorkspacePRCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["workspacePR"]>
 
@@ -1251,6 +1402,7 @@ export type WorkspacePROmit<ExtArgs extends runtime.Types.Extensions.InternalArg
 export type WorkspacePRInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
   events?: boolean | Prisma.WorkspacePR$eventsArgs<ExtArgs>
+  dedicatedSession?: boolean | Prisma.WorkspacePR$dedicatedSessionArgs<ExtArgs>
   _count?: boolean | Prisma.WorkspacePRCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type WorkspacePRIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
@@ -1265,6 +1417,7 @@ export type $WorkspacePRPayload<ExtArgs extends runtime.Types.Extensions.Interna
   objects: {
     workspace: Prisma.$WorkspacePayload<ExtArgs>
     events: Prisma.$WorkspacePREventPayload<ExtArgs>[]
+    dedicatedSession: Prisma.$WorkspacePRDedicatedSessionPayload<ExtArgs> | null
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -1684,6 +1837,7 @@ export interface Prisma__WorkspacePRClient<T, Null = never, ExtArgs extends runt
   readonly [Symbol.toStringTag]: "PrismaPromise"
   workspace<T extends Prisma.WorkspaceDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.WorkspaceDefaultArgs<ExtArgs>>): Prisma.Prisma__WorkspaceClient<runtime.Types.Result.GetResult<Prisma.$WorkspacePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
   events<T extends Prisma.WorkspacePR$eventsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.WorkspacePR$eventsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$WorkspacePREventPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  dedicatedSession<T extends Prisma.WorkspacePR$dedicatedSessionArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.WorkspacePR$dedicatedSessionArgs<ExtArgs>>): Prisma.Prisma__WorkspacePRDedicatedSessionClient<runtime.Types.Result.GetResult<Prisma.$WorkspacePRDedicatedSessionPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -2154,6 +2308,25 @@ export type WorkspacePR$eventsArgs<ExtArgs extends runtime.Types.Extensions.Inte
   take?: number
   skip?: number
   distinct?: Prisma.WorkspacePREventScalarFieldEnum | Prisma.WorkspacePREventScalarFieldEnum[]
+}
+
+/**
+ * WorkspacePR.dedicatedSession
+ */
+export type WorkspacePR$dedicatedSessionArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the WorkspacePRDedicatedSession
+   */
+  select?: Prisma.WorkspacePRDedicatedSessionSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the WorkspacePRDedicatedSession
+   */
+  omit?: Prisma.WorkspacePRDedicatedSessionOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.WorkspacePRDedicatedSessionInclude<ExtArgs> | null
+  where?: Prisma.WorkspacePRDedicatedSessionWhereInput
 }
 
 /**

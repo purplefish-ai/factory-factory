@@ -394,6 +394,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
       ratchetState: 'IDLE' as RatchetState,
       prMonitoring: {
         enabled: false,
+        deliveryMode: 'MAIN',
         recipientSessionId: null,
         bindingRevision: 0,
         pauseReason: null,

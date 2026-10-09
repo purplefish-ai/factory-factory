@@ -402,6 +402,7 @@ export const ModelName = {
   Workspace: 'Workspace',
   WorkspacePR: 'WorkspacePR',
   WorkspacePRMonitoring: 'WorkspacePRMonitoring',
+  WorkspacePRDedicatedSession: 'WorkspacePRDedicatedSession',
   WorkspacePREvent: 'WorkspacePREvent',
   WorkspacePRDiscovery: 'WorkspacePRDiscovery',
   WorkspaceRunScript: 'WorkspaceRunScript',
@@ -429,7 +430,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "project" | "decisionLog" | "workspace" | "workspacePR" | "workspacePRMonitoring" | "workspacePREvent" | "workspacePRDiscovery" | "workspaceRunScript" | "workspaceAutoIteration" | "agentSession" | "sessionLifecycleEvent" | "terminalSession" | "closedSession" | "userSettings" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification"
+    modelProps: "project" | "decisionLog" | "workspace" | "workspacePR" | "workspacePRMonitoring" | "workspacePRDedicatedSession" | "workspacePREvent" | "workspacePRDiscovery" | "workspaceRunScript" | "workspaceAutoIteration" | "agentSession" | "sessionLifecycleEvent" | "terminalSession" | "closedSession" | "userSettings" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -800,6 +801,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         count: {
           args: Prisma.WorkspacePRMonitoringCountArgs<ExtArgs>
           result: runtime.Types.Utils.Optional<Prisma.WorkspacePRMonitoringCountAggregateOutputType> | number
+        }
+      }
+    }
+    WorkspacePRDedicatedSession: {
+      payload: Prisma.$WorkspacePRDedicatedSessionPayload<ExtArgs>
+      fields: Prisma.WorkspacePRDedicatedSessionFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.WorkspacePRDedicatedSessionFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRDedicatedSessionPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.WorkspacePRDedicatedSessionFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRDedicatedSessionPayload>
+        }
+        findFirst: {
+          args: Prisma.WorkspacePRDedicatedSessionFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRDedicatedSessionPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.WorkspacePRDedicatedSessionFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRDedicatedSessionPayload>
+        }
+        findMany: {
+          args: Prisma.WorkspacePRDedicatedSessionFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRDedicatedSessionPayload>[]
+        }
+        create: {
+          args: Prisma.WorkspacePRDedicatedSessionCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRDedicatedSessionPayload>
+        }
+        createMany: {
+          args: Prisma.WorkspacePRDedicatedSessionCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.WorkspacePRDedicatedSessionCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRDedicatedSessionPayload>[]
+        }
+        delete: {
+          args: Prisma.WorkspacePRDedicatedSessionDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRDedicatedSessionPayload>
+        }
+        update: {
+          args: Prisma.WorkspacePRDedicatedSessionUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRDedicatedSessionPayload>
+        }
+        deleteMany: {
+          args: Prisma.WorkspacePRDedicatedSessionDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.WorkspacePRDedicatedSessionUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.WorkspacePRDedicatedSessionUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRDedicatedSessionPayload>[]
+        }
+        upsert: {
+          args: Prisma.WorkspacePRDedicatedSessionUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRDedicatedSessionPayload>
+        }
+        aggregate: {
+          args: Prisma.WorkspacePRDedicatedSessionAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateWorkspacePRDedicatedSession>
+        }
+        groupBy: {
+          args: Prisma.WorkspacePRDedicatedSessionGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.WorkspacePRDedicatedSessionGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.WorkspacePRDedicatedSessionCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.WorkspacePRDedicatedSessionCountAggregateOutputType> | number
         }
       }
     }
@@ -1824,6 +1899,7 @@ export type WorkspacePRScalarFieldEnum = (typeof WorkspacePRScalarFieldEnum)[key
 export const WorkspacePRMonitoringScalarFieldEnum = {
   workspaceId: 'workspaceId',
   enabled: 'enabled',
+  deliveryMode: 'deliveryMode',
   recipientSessionId: 'recipientSessionId',
   bindingRevision: 'bindingRevision',
   eventEpoch: 'eventEpoch',
@@ -1833,6 +1909,14 @@ export const WorkspacePRMonitoringScalarFieldEnum = {
 } as const
 
 export type WorkspacePRMonitoringScalarFieldEnum = (typeof WorkspacePRMonitoringScalarFieldEnum)[keyof typeof WorkspacePRMonitoringScalarFieldEnum]
+
+
+export const WorkspacePRDedicatedSessionScalarFieldEnum = {
+  prId: 'prId',
+  sessionId: 'sessionId'
+} as const
+
+export type WorkspacePRDedicatedSessionScalarFieldEnum = (typeof WorkspacePRDedicatedSessionScalarFieldEnum)[keyof typeof WorkspacePRDedicatedSessionScalarFieldEnum]
 
 
 export const WorkspacePREventScalarFieldEnum = {
@@ -2426,6 +2510,7 @@ export type GlobalOmitConfig = {
   workspace?: Prisma.WorkspaceOmit
   workspacePR?: Prisma.WorkspacePROmit
   workspacePRMonitoring?: Prisma.WorkspacePRMonitoringOmit
+  workspacePRDedicatedSession?: Prisma.WorkspacePRDedicatedSessionOmit
   workspacePREvent?: Prisma.WorkspacePREventOmit
   workspacePRDiscovery?: Prisma.WorkspacePRDiscoveryOmit
   workspaceRunScript?: Prisma.WorkspaceRunScriptOmit

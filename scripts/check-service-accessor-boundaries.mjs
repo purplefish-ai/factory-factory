@@ -51,6 +51,10 @@ const ACCESSOR_POLICIES = {
     owner: 'workspace',
     module: 'src/backend/services/workspace/resources/workspace-notification.accessor',
   },
+  prDedicatedSessionAccessor: {
+    owner: 'session',
+    module: 'src/backend/services/session/resources/pr-dedicated-session.accessor',
+  },
   agentSessionAccessor: {
     owner: 'session',
     module: 'src/backend/services/session/resources/agent-session.accessor',

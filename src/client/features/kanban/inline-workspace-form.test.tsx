@@ -345,6 +345,7 @@ describe('InlineWorkspaceForm', () => {
       worktreePath: null,
       name: 'New Workspace',
       prMonitoring: {
+        deliveryMode: 'MAIN',
         enabled: true,
         recipientSessionId: null,
         bindingRevision: 0,

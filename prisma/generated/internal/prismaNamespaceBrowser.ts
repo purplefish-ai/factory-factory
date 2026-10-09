@@ -56,6 +56,7 @@ export const ModelName = {
   Workspace: 'Workspace',
   WorkspacePR: 'WorkspacePR',
   WorkspacePRMonitoring: 'WorkspacePRMonitoring',
+  WorkspacePRDedicatedSession: 'WorkspacePRDedicatedSession',
   WorkspacePREvent: 'WorkspacePREvent',
   WorkspacePRDiscovery: 'WorkspacePRDiscovery',
   WorkspaceRunScript: 'WorkspaceRunScript',
@@ -180,6 +181,7 @@ export type WorkspacePRScalarFieldEnum = (typeof WorkspacePRScalarFieldEnum)[key
 export const WorkspacePRMonitoringScalarFieldEnum = {
   workspaceId: 'workspaceId',
   enabled: 'enabled',
+  deliveryMode: 'deliveryMode',
   recipientSessionId: 'recipientSessionId',
   bindingRevision: 'bindingRevision',
   eventEpoch: 'eventEpoch',
@@ -189,6 +191,14 @@ export const WorkspacePRMonitoringScalarFieldEnum = {
 } as const
 
 export type WorkspacePRMonitoringScalarFieldEnum = (typeof WorkspacePRMonitoringScalarFieldEnum)[keyof typeof WorkspacePRMonitoringScalarFieldEnum]
+
+
+export const WorkspacePRDedicatedSessionScalarFieldEnum = {
+  prId: 'prId',
+  sessionId: 'sessionId'
+} as const
+
+export type WorkspacePRDedicatedSessionScalarFieldEnum = (typeof WorkspacePRDedicatedSessionScalarFieldEnum)[keyof typeof WorkspacePRDedicatedSessionScalarFieldEnum]
 
 
 export const WorkspacePREventScalarFieldEnum = {

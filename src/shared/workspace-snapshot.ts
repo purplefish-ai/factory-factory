@@ -24,6 +24,7 @@ import {
   WORKSPACE_STATUS_REASON_CODES,
   WORKSPACE_STATUS_REASON_TONES,
 } from '@/shared/workspace-status-reason';
+import { prDeliveryModeSchema } from './schemas/pr-event.schema';
 import { WorkspacePullRequestSchema } from './workspace-pr';
 import { WorkspacePRSummarySchema } from './workspace-pr-summary';
 
@@ -102,6 +103,7 @@ export const WorkspaceSnapshotEntrySchema = z.object({
   prMonitoring: z
     .object({
       enabled: z.boolean(),
+      deliveryMode: prDeliveryModeSchema.default('MAIN'),
       recipientSessionId: z.string().nullable(),
       bindingRevision: z.number().int().nonnegative(),
       pauseReason: z.string().nullable(),
@@ -109,6 +111,7 @@ export const WorkspaceSnapshotEntrySchema = z.object({
     })
     .default({
       enabled: false,
+      deliveryMode: 'MAIN',
       recipientSessionId: null,
       bindingRevision: 0,
       pauseReason: null,

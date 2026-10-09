@@ -65,3 +65,13 @@ it('accepts titled observations and legacy payloads without title metadata', () 
     })
   ).toMatchObject({ observation: redObservation });
 });
+it('keeps old queue requests valid and validates explicit delivery destinations', () => {
+  const request = { workspaceId: 'w', prId: 'p', bindingRevision: 1 };
+  expect(prDeliveryRequestSchema.parse(request)).toEqual(request);
+  expect(prDeliveryRequestSchema.parse({ ...request, deliveryMode: 'DEDICATED' })).toMatchObject({
+    deliveryMode: 'DEDICATED',
+  });
+  expect(prDeliveryRequestSchema.safeParse({ ...request, deliveryMode: 'OTHER' }).success).toBe(
+    false
+  );
+});

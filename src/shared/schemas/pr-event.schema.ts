@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+export const prDeliveryModeSchema = z.enum(['MAIN', 'DEDICATED']);
+
 export const prTargetSchema = z.strictObject({
   workspaceId: z.string().min(1),
   prId: z.string().min(1),
@@ -64,6 +66,7 @@ export const prMonitoringEventPayloadSchema = z.discriminatedUnion('kind', [
   }),
 ]);
 export const prDeliveryRequestSchema = z.strictObject({
+  deliveryMode: prDeliveryModeSchema.optional(),
   workspaceId: z.string().min(1),
   prId: z.string().min(1).nullable(),
   bindingRevision: z.number().int().nonnegative(),

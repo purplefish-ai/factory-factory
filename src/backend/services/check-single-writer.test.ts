@@ -88,6 +88,32 @@ describe('check-single-writer', () => {
   });
 
   describe('owned side tables', () => {
+    it.each([
+      `tx.workspacePRDedicatedSession.upsert({ where: { prId: 'p' }, create: { prId: 'p' }, update: {} });`,
+      `tx.workspacePR.update({ where: { id: 'p' }, data: { dedicatedSession: { create: { sessionId: 's' } } } });`,
+      `tx.agentSession.update({ where: { id: 's' }, data: { dedicatedPRBinding: { connect: { prId: 'p' } } } });`,
+    ])('keeps dedicated binding mutations exclusively in the session resource: %s', (mutation) => {
+      const tempRoot = createTempBackend([
+        {
+          relPath: 'src/backend/services/workspace/resources/other.accessor.ts',
+          content: `function change(tx) { ${mutation} }`,
+        },
+      ]);
+      const result = runChecker(tempRoot);
+      expect(result.status).toBe(1);
+      expect(result.output).toContain(
+        'workspacePRDedicatedSession is written only by src/backend/services/session/resources/pr-dedicated-session.accessor.ts'
+      );
+    });
+    it('allows the dedicated session resource to write its own mapping', () => {
+      const tempRoot = createTempBackend([
+        {
+          relPath: 'src/backend/services/session/resources/pr-dedicated-session.accessor.ts',
+          content: `function change(tx) { tx.workspacePRDedicatedSession.upsert({ where: { prId: 'p' }, create: { prId: 'p' }, update: {} }); }`,
+        },
+      ]);
+      expect(runChecker(tempRoot).status).toBe(0);
+    });
     // These tables were split off Workspace, so the field-ownership table cannot
     // police them. dep-cruiser lets any file under services/*/resources/ import
     // prisma, so without this rule a second accessor could write them freely.

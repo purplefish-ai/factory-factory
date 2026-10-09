@@ -533,6 +533,8 @@ function checkWorkspaceMutatorCoverage({ rootDir, violations }) {
  * that gap for the workspace side tables and other single-writer models.
  */
 const OWNED_SIDE_TABLES = {
+  workspacePRDedicatedSession:
+    'src/backend/services/session/resources/pr-dedicated-session.accessor.ts',
   sessionLifecycleEvent:
     'src/backend/services/session/resources/session-lifecycle-event.accessor.ts',
   workspacePRMonitoring:
@@ -566,6 +568,8 @@ const SIDE_TABLE_WRITE_METHODS = new Set([
 
 /** The relation field each owned side table hangs off `Workspace` under. */
 const SIDE_TABLE_RELATIONS = {
+  dedicatedSession: 'workspacePRDedicatedSession',
+  dedicatedPRBinding: 'workspacePRDedicatedSession',
   prMonitoring: 'workspacePRMonitoring',
   prEvents: 'workspacePREvent',
   events: 'workspacePREvent',

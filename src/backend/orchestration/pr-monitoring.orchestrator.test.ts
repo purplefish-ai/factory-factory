@@ -104,3 +104,41 @@ it('repairs a missing enable control when the same enabled binding is retried', 
   });
   expect(mocks.control).toHaveBeenCalledExactlyOnceWith('w', 3, false);
 });
+
+it('enables dedicated delivery without selecting a main recipient or emitting a control', async () => {
+  await setPRMonitoring({
+    workspaceId: 'w',
+    enabled: true,
+    deliveryMode: 'DEDICATED',
+    expectedBindingRevision: 2,
+  });
+  expect(mocks.sessions).not.toHaveBeenCalled();
+  expect(mocks.setBinding).toHaveBeenCalledWith(
+    expect.objectContaining({ deliveryMode: 'DEDICATED', recipientSessionId: null })
+  );
+  expect(mocks.control).not.toHaveBeenCalled();
+  expect(mocks.wake).toHaveBeenCalledWith('w', expect.anything());
+});
+it('does not bind an issue conversation while dedicated delivery is enabled', async () => {
+  mocks.get.mockResolvedValue({
+    enabled: true,
+    deliveryMode: 'DEDICATED',
+    recipientSessionId: null,
+    bindingRevision: 2,
+  });
+  await bindIssueMonitoringSession('w', 'a');
+  expect(mocks.setBinding).not.toHaveBeenCalled();
+});
+
+it('forwards an explicit workspace resume with its destination and revision', async () => {
+  await setPRMonitoring({
+    workspaceId: 'w',
+    enabled: true,
+    deliveryMode: 'DEDICATED',
+    resume: true,
+    expectedBindingRevision: 2,
+  });
+  expect(mocks.setBinding).toHaveBeenCalledWith(
+    expect.objectContaining({ resume: true, deliveryMode: 'DEDICATED', expectedBindingRevision: 2 })
+  );
+});

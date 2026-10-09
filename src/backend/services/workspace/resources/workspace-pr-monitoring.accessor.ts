@@ -1,16 +1,24 @@
-import type { Prisma } from '@prisma-gen/client';
+import type { Prisma, WorkspacePRMonitoring } from '@prisma-gen/client';
 import type { z } from 'zod';
 import { prisma } from '@/backend/db';
-import { isPRMonitoringRecipient } from '@/shared/pr-monitoring';
+import {
+  canResumePRMonitoring,
+  isPRMonitoringRecipient,
+  PR_DEDICATED_WORKFLOW,
+  prDeliveryModeSchema,
+  type PRDeliveryMode,
+} from '@/shared/pr-monitoring';
 import { prMonitoringBackupSchema } from '@/shared/schemas/pr-monitoring-backup.schema';
 import { workspacePrEventAccessor } from './workspace-pr-event.accessor';
 
 export interface PRBindingInput {
   workspaceId: string;
-  recipientSessionId: string | null;
+  recipientSessionId?: string | null;
+  deliveryMode?: PRDeliveryMode;
   enabled: boolean;
   expectedBindingRevision: number;
   replyToPrComments?: boolean;
+  resume?: boolean;
 }
 async function validateRecipient(tx: Prisma.TransactionClient, input: PRBindingInput) {
   if (input.recipientSessionId) {
@@ -27,7 +35,11 @@ async function insertEnableControl(
   input: PRBindingInput,
   bindingRevision: number
 ) {
-  if (!(input.enabled && input.recipientSessionId) || input.replyToPrComments === undefined) {
+  if (
+    input.deliveryMode === 'DEDICATED' ||
+    !(input.enabled && input.recipientSessionId) ||
+    input.replyToPrComments === undefined
+  ) {
     return;
   }
   await workspacePrEventAccessor.insert(tx, input.workspaceId, null, [
@@ -43,6 +55,59 @@ async function insertEnableControl(
     },
   ]);
 }
+function resolveBinding(input: PRBindingInput, config: WorkspacePRMonitoring) {
+  const deliveryMode = prDeliveryModeSchema.parse(input.deliveryMode ?? config.deliveryMode);
+  const recipientSessionId =
+    deliveryMode === 'DEDICATED'
+      ? (input.recipientSessionId ?? config.recipientSessionId)
+      : input.recipientSessionId === undefined
+        ? config.recipientSessionId
+        : input.recipientSessionId;
+  return { ...input, deliveryMode, recipientSessionId };
+}
+
+function bindingTransition(input: PRBindingInput, config: WorkspacePRMonitoring) {
+  const effective = resolveBinding(input, config);
+  const { deliveryMode, recipientSessionId } = effective;
+  const modeChanged = config.deliveryMode !== deliveryMode;
+  const bindingChanged =
+    config.enabled !== input.enabled ||
+    config.recipientSessionId !== recipientSessionId ||
+    modeChanged;
+  const shouldResume = input.resume === true && canResumePRMonitoring(config.deliveryPauseReason);
+  const renewEpoch =
+    modeChanged ||
+    (input.enabled && (!config.enabled || config.recipientSessionId !== recipientSessionId));
+  const data: Prisma.WorkspacePRMonitoringUncheckedUpdateManyInput = {
+    enabled: input.enabled,
+    ...(shouldResume ? { deliveryPauseReason: null } : {}),
+    recipientSessionId,
+    deliveryMode,
+    bindingRevision: { increment: 1 },
+    ...(renewEpoch ? { eventEpoch: { increment: 1 } } : {}),
+  };
+  return { effective, bindingChanged, shouldResume, data };
+}
+
+/** Only a recipient of the current destination can stop or resume monitoring. */
+function recipientWhere(sessionId: string): Prisma.WorkspacePRMonitoringWhereInput {
+  return {
+    OR: [
+      { deliveryMode: 'MAIN', recipientSessionId: sessionId },
+      {
+        deliveryMode: 'DEDICATED',
+        workspace: {
+          agentSessions: { some: { id: sessionId, workflow: PR_DEDICATED_WORKFLOW } },
+          prs: { some: { detachedAt: null, dedicatedSession: { sessionId } } },
+        },
+      },
+    ],
+  };
+}
+function normalizeConfig<T extends { deliveryMode: string }>(config: T) {
+  return { ...config, deliveryMode: prDeliveryModeSchema.parse(config.deliveryMode) };
+}
+
 class WorkspacePrMonitoringAccessor {
   async restoreBackup(
     tx: Prisma.TransactionClient,
@@ -65,12 +130,12 @@ class WorkspacePrMonitoringAccessor {
       update: data,
     });
   }
-  get(workspaceId: string) {
-    return prisma.workspacePRMonitoring.findUnique({ where: { workspaceId } });
+  async get(workspaceId: string) {
+    const row = await prisma.workspacePRMonitoring.findUnique({ where: { workspaceId } });
+    return row ? normalizeConfig(row) : null;
   }
   setBinding(input: PRBindingInput) {
     return prisma.$transaction(async (tx) => {
-      await validateRecipient(tx, input);
       const config = await tx.workspacePRMonitoring.upsert({
         where: { workspaceId: input.workspaceId },
         create: { workspaceId: input.workspaceId },
@@ -79,28 +144,28 @@ class WorkspacePrMonitoringAccessor {
       if (config.bindingRevision !== input.expectedBindingRevision) {
         return { applied: false, bindingRevision: config.bindingRevision };
       }
-      if (
-        config.enabled === input.enabled &&
-        config.recipientSessionId === input.recipientSessionId
-      ) {
-        await insertEnableControl(tx, input, config.bindingRevision);
+      const { effective, bindingChanged, shouldResume, data } = bindingTransition(input, config);
+      await validateRecipient(tx, effective);
+      if (!(bindingChanged || shouldResume)) {
+        await insertEnableControl(tx, effective, config.bindingRevision);
         return { applied: true, bindingRevision: config.bindingRevision };
       }
       const result = await tx.workspacePRMonitoring.updateMany({
-        where: { workspaceId: input.workspaceId, bindingRevision: input.expectedBindingRevision },
-        data: {
-          enabled: input.enabled,
-          recipientSessionId: input.recipientSessionId,
-          bindingRevision: { increment: 1 },
-          ...(input.enabled &&
-          (!config.enabled || config.recipientSessionId !== input.recipientSessionId)
-            ? { eventEpoch: { increment: 1 } }
-            : {}),
+        where: {
+          workspaceId: input.workspaceId,
+          bindingRevision: input.expectedBindingRevision,
+          deliveryPauseReason: config.deliveryPauseReason,
         },
+        data,
       });
       if (result.count) {
-        await workspacePrEventAccessor.cancelInTransaction(tx, input.workspaceId);
-        await insertEnableControl(tx, input, config.bindingRevision + 1);
+        if (bindingChanged) {
+          await workspacePrEventAccessor.cancelInTransaction(tx, input.workspaceId);
+          await insertEnableControl(tx, effective, config.bindingRevision + 1);
+        }
+        if (shouldResume) {
+          await workspacePrEventAccessor.renewRetryAllowance(tx, input.workspaceId);
+        }
       }
       return {
         applied: result.count === 1,
@@ -111,14 +176,14 @@ class WorkspacePrMonitoringAccessor {
   pause(sessionId: string, reason: string) {
     return prisma.$transaction(async (tx) => {
       const configs = await tx.workspacePRMonitoring.findMany({
-        where: { recipientSessionId: sessionId },
+        where: recipientWhere(sessionId),
       });
       let count = 0;
       for (const config of configs) {
         const paused = await tx.workspacePRMonitoring.updateMany({
           where: {
             workspaceId: config.workspaceId,
-            recipientSessionId: sessionId,
+            ...recipientWhere(sessionId),
             bindingRevision: config.bindingRevision,
           },
           data: {
@@ -139,22 +204,17 @@ class WorkspacePrMonitoringAccessor {
     }
     const configs = await prisma.workspacePRMonitoring.findMany({
       where: {
-        recipientSessionId: sessionId,
-        deliveryPauseReason: {
-          in: [
-            'USER_STOPPED',
-            'SESSION_FAILED',
-            'RESUME_FAILED',
-            'DELIVERY_FAILED',
-            'RECEIPT_UNAVAILABLE',
-          ],
-        },
+        ...recipientWhere(sessionId),
+        deliveryPauseReason: { not: null },
       },
     });
     if (isCurrent?.() === false) {
       return;
     }
     for (const config of configs) {
+      if (!canResumePRMonitoring(config.deliveryPauseReason)) {
+        continue;
+      }
       await prisma.$transaction(async (tx) => {
         if (isCurrent?.() === false) {
           return;
@@ -162,7 +222,7 @@ class WorkspacePrMonitoringAccessor {
         const resumed = await tx.workspacePRMonitoring.updateMany({
           where: {
             workspaceId: config.workspaceId,
-            recipientSessionId: sessionId,
+            ...recipientWhere(sessionId),
             bindingRevision: config.bindingRevision,
             deliveryPauseReason: config.deliveryPauseReason,
           },
@@ -202,13 +262,17 @@ class WorkspacePrMonitoringAccessor {
     });
   }
   listConfigs() {
-    return prisma.workspacePRMonitoring.findMany();
+    return prisma.workspacePRMonitoring.findMany().then((rows) => rows.map(normalizeConfig));
   }
   listEnabled() {
-    return prisma.workspacePRMonitoring.findMany({
-      where: { enabled: true, workspace: { status: 'READY' } },
-      include: { workspace: { include: { project: true, prs: { where: { detachedAt: null } } } } },
-    });
+    return prisma.workspacePRMonitoring
+      .findMany({
+        where: { enabled: true, workspace: { status: 'READY' } },
+        include: {
+          workspace: { include: { project: true, prs: { where: { detachedAt: null } } } },
+        },
+      })
+      .then((rows) => rows.map(normalizeConfig));
   }
   completeLegacyRetirement(workspaceId: string, expectedBindingRevision: number) {
     return prisma.$transaction(async (tx) => {

@@ -11,7 +11,7 @@ it('preserves enabled binding, durable pause, revisions and check time', () => {
     deliveryPauseReason: 'USER_STOPPED',
     lastCheckedAt: '2026-10-08T00:00:00.000Z',
   };
-  expect(prMonitoringBackupSchema.parse(config)).toEqual(config);
+  expect(prMonitoringBackupSchema.parse(config)).toEqual({ ...config, deliveryMode: 'MAIN' });
 });
 it('rejects corrupt event JSON and invented receipt states', () => {
   expect(
@@ -83,4 +83,23 @@ it('preserves frozen provider identity while accepting older backups without it'
       deliveryProviderSessionId: null,
     }).success
   ).toBe(true);
+});
+
+it('defaults old monitoring backups to main and preserves dedicated destinations', () => {
+  const config = {
+    enabled: true,
+    recipientSessionId: 'main',
+    bindingRevision: 4,
+    eventEpoch: 2,
+    deliveryPauseReason: null,
+    lastCheckedAt: null,
+  };
+  expect(prMonitoringBackupSchema.parse(config)).toMatchObject({ deliveryMode: 'MAIN' });
+  expect(prMonitoringBackupSchema.parse({ ...config, deliveryMode: 'DEDICATED' })).toMatchObject({
+    deliveryMode: 'DEDICATED',
+    recipientSessionId: 'main',
+  });
+  expect(prMonitoringBackupSchema.safeParse({ ...config, deliveryMode: 'UNKNOWN' }).success).toBe(
+    false
+  );
 });

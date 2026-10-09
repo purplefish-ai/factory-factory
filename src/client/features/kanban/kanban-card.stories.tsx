@@ -52,6 +52,7 @@ export const baseWorkspace: WorkspaceWithKanban = {
   prCiStatus: 'UNKNOWN',
   ratchetEnabled: true,
   prMonitoring: {
+    deliveryMode: 'MAIN',
     enabled: true,
     recipientSessionId: null,
     bindingRevision: 0,

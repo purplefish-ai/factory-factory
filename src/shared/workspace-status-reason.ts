@@ -190,7 +190,7 @@ function deriveMonitoringReason(input: WorkspaceStatusReasonInput): OptionalWork
   if (!config?.enabled) {
     return null;
   }
-  if (!config.recipientSessionId) {
+  if ((config.deliveryMode ?? 'MAIN') === 'MAIN' && !config.recipientSessionId) {
     return reason('PR_RECIPIENT_REQUIRED', 'Choose main conversation', 'attention', true);
   }
   if (config.pauseReason) {

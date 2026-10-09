@@ -61,6 +61,7 @@ describe('WorkspaceCreationService', () => {
     prReviewLastCommentId: null,
     ratchetEnabled: true,
     prMonitoring: {
+      deliveryMode: 'MAIN',
       enabled: true,
       recipientSessionId: null,
       bindingRevision: 0,

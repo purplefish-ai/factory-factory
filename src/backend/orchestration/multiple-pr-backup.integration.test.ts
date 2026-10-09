@@ -351,3 +351,79 @@ it.each(['missing', 'foreign', 'matching'] as const)(
     expect(await db.prisma.agentSession.count()).toBe(association === 'matching' ? 1 : 0);
   }
 );
+
+it('roundtrips dedicated mode and PR-session bindings in additive version 6 backups', async () => {
+  await db.prisma.agentSession.create({
+    data: {
+      id: 'dedicated',
+      workspaceId: 'w',
+      workspacePrId: 'a',
+      workflow: 'pr-monitoring',
+      provider: 'CLAUDE',
+      providerSessionId: 'same-conversation',
+    },
+  });
+  await db.prisma.agentSession.create({
+    data: {
+      id: 'main-pref',
+      workspaceId: 'w',
+      workflow: 'implement',
+      provider: 'CLAUDE',
+      providerSessionId: 'main-pref-provider',
+    },
+  });
+  await db.prisma.workspacePRDedicatedSession.create({ data: { prId: 'b', sessionId: null } });
+  await db.prisma.workspacePRDedicatedSession.create({
+    data: { prId: 'a', sessionId: 'dedicated' },
+  });
+  await db.prisma.workspacePRMonitoring.create({
+    data: {
+      workspaceId: 'w',
+      enabled: true,
+      deliveryMode: 'DEDICATED',
+      recipientSessionId: 'main-pref',
+      bindingRevision: 7,
+      eventEpoch: 5,
+    },
+  });
+  const exported = await dataBackupService.exportData('test');
+  expect(exported.meta.schemaVersion).toBe(6);
+  expect(exported.data.workspaces[0]?.prMonitoring).toMatchObject({ deliveryMode: 'DEDICATED' });
+  expect(exported.data.workspaces[0]?.prs.find((pr) => pr.id === 'a')).toMatchObject({
+    dedicatedSession: { sessionId: 'dedicated' },
+  });
+  await clearIntegrationDatabase(db.prisma);
+  await dataBackupService.importData(exportDataSchema.parse(exported));
+  expect(
+    await db.prisma.workspacePRDedicatedSession.findUnique({ where: { prId: 'a' } })
+  ).toMatchObject({ sessionId: 'dedicated' });
+  expect(
+    await db.prisma.workspacePRDedicatedSession.findUnique({ where: { prId: 'b' } })
+  ).toMatchObject({ sessionId: null });
+  expect(await db.prisma.agentSession.findUnique({ where: { id: 'dedicated' } })).toMatchObject({
+    providerSessionId: 'same-conversation',
+    workflow: 'pr-monitoring',
+  });
+  expect(
+    await db.prisma.workspacePRMonitoring.findUnique({ where: { workspaceId: 'w' } })
+  ).toMatchObject({ deliveryMode: 'DEDICATED', bindingRevision: 7, eventEpoch: 5 });
+});
+it('rejects dedicated backup bindings to a foreign or ordinary session', async () => {
+  const exported = await dataBackupService.exportData('test');
+  const workspace = exported.data.workspaces[0]!;
+  const invalid = {
+    ...exported,
+    data: {
+      ...exported.data,
+      workspaces: [
+        {
+          ...workspace,
+          prs: workspace.prs.map((pr) =>
+            pr.id === 'a' ? { ...pr, dedicatedSession: { sessionId: 'fixer-a' } } : pr
+          ),
+        },
+      ],
+    },
+  };
+  expect(exportDataSchema.safeParse(invalid).success).toBe(false);
+});

@@ -1,4 +1,4 @@
-import type { PRMonitoringEventPayload } from '@/shared/pr-monitoring';
+import type { PRMonitoringEventPayload, PRDeliveryMode } from '@/shared/pr-monitoring';
 import { prEventMarker } from '@/shared/pr-monitoring';
 
 const MAX_BYTES = 16_384;
@@ -9,6 +9,7 @@ export function buildPREventMessage(input: {
   deliveryId: string;
   events: readonly PRMonitoringEventPayload[];
   replyToPrComments: boolean;
+  deliveryMode?: PRDeliveryMode;
 }): string {
   const marker = prEventMarker(input.deliveryId);
   const control = input.events.find((e) => e.kind === 'MONITORING_ENABLED');
@@ -25,8 +26,10 @@ export function buildPREventMessage(input: {
     throw new Error('Batch must belong to one PR');
   }
   const observation = event.observation;
+  const maintenanceContext = dedicatedContext(input);
   const headers = [
     marker,
+    ...maintenanceContext,
     `PR update: ${untrusted(observation.repository)} #${observation.number}`,
     untrusted(observation.url),
     `Head: ${untrusted(observation.headSha)} (${untrusted(observation.headBranch)} → ${untrusted(observation.baseBranch)})`,
@@ -70,4 +73,15 @@ export function buildPREventMessage(input: {
     throw new Error('PR identity exceeds event message limit');
   }
   return text;
+}
+
+function dedicatedContext(input: { deliveryMode?: PRDeliveryMode; replyToPrComments: boolean }) {
+  return input.deliveryMode === 'DEDICATED'
+    ? [
+        'Maintain this PR in this dedicated conversation. Verify actionable CI failures, review feedback, and merge conflicts against the code, fix them with focused regression tests, run relevant repository checks, commit and push the fixes. Reuse this conversation for subsequent updates. Do not merge automatically.',
+        input.replyToPrComments
+          ? 'Reply to relevant PR comments after addressing them.'
+          : 'Do not post replies to PR comments.',
+      ]
+    : [];
 }

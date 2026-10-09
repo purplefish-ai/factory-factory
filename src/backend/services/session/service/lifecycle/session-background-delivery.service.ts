@@ -39,7 +39,7 @@ export class SessionBackgroundDeliveryService {
   }
   enqueue(sessionId: string, rawRequest: PRDeliveryRequest): { queued: boolean; reason?: string } {
     const request = prDeliveryRequestSchema.parse(rawRequest);
-    const key = `${sessionId}:${request.workspaceId}:${request.prId ?? 'control'}:${request.bindingRevision}`;
+    const key = `${sessionId}:${request.workspaceId}:${request.prId ?? 'control'}:${request.bindingRevision}:${request.deliveryMode ?? 'MAIN'}`;
     const existing = this.tokens.get(key);
     if (existing && sessionDomainService.hasQueuedMessage(sessionId, existing.messageId)) {
       return { queued: true };

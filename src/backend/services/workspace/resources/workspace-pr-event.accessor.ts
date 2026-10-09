@@ -1,7 +1,14 @@
-import type { Prisma } from '@prisma-gen/client';
+import type { AgentSession, Prisma } from '@prisma-gen/client';
 import type { z } from 'zod';
 import { prisma } from '@/backend/db';
-import type { ClaimedPRDelivery, PRDeliveryRequest, PREventDraft } from '@/shared/pr-monitoring';
+import {
+  isPRMonitoringRecipient,
+  PR_DEDICATED_WORKFLOW,
+  prDeliveryModeSchema,
+  type ClaimedPRDelivery,
+  type PRDeliveryRequest,
+  type PREventDraft,
+} from '@/shared/pr-monitoring';
 import { prMonitoringEventPayloadSchema } from '@/shared/schemas/pr-event.schema';
 import { prEventBackupSchema } from '@/shared/schemas/pr-monitoring-backup.schema';
 
@@ -14,6 +21,41 @@ function validateImportedTarget(event: z.infer<typeof prEventBackupSchema>, work
     throw new Error('Imported event payload target is invalid');
   }
 }
+async function authorizedRecipient(
+  tx: Prisma.TransactionClient,
+  request: PRDeliveryRequest,
+  session: AgentSession,
+  mainRecipientId: string | null
+): Promise<boolean> {
+  if (
+    request.prId &&
+    !(await tx.workspacePR.findFirst({
+      where: { id: request.prId, workspaceId: request.workspaceId, detachedAt: null },
+    }))
+  ) {
+    return false;
+  }
+  if ((request.deliveryMode ?? 'MAIN') === 'MAIN') {
+    return session.id === mainRecipientId && isPRMonitoringRecipient(session);
+  }
+  if (
+    !request.prId ||
+    session.workflow !== PR_DEDICATED_WORKFLOW ||
+    session.workspacePrId !== request.prId
+  ) {
+    return false;
+  }
+  return Boolean(
+    await tx.workspacePRDedicatedSession.findFirst({
+      where: {
+        prId: request.prId,
+        sessionId: session.id,
+        pr: { workspaceId: request.workspaceId, detachedAt: null },
+      },
+    })
+  );
+}
+
 class WorkspacePrEventAccessor {
   async restoreBackup(
     tx: Prisma.TransactionClient,
@@ -76,7 +118,13 @@ class WorkspacePrEventAccessor {
   addEnabledControl(workspaceId: string, bindingRevision: number, replyToPrComments: boolean) {
     return prisma.$transaction(async (tx) => {
       const config = await tx.workspacePRMonitoring.findFirst({
-        where: { workspaceId, bindingRevision, enabled: true, recipientSessionId: { not: null } },
+        where: {
+          workspaceId,
+          bindingRevision,
+          enabled: true,
+          deliveryMode: 'MAIN',
+          recipientSessionId: { not: null },
+        },
       });
       if (!config) {
         return [];
@@ -115,12 +163,13 @@ class WorkspacePrEventAccessor {
     request: PRDeliveryRequest,
     input: Omit<ClaimedPRDelivery, 'bindingRevision' | 'attempt'>
   ): Promise<ClaimedPRDelivery | null> {
+    const deliveryMode = prDeliveryModeSchema.parse(request.deliveryMode ?? 'MAIN');
     return prisma.$transaction(async (tx) => {
       const config = await tx.workspacePRMonitoring.findFirst({
         where: {
           workspaceId: request.workspaceId,
           enabled: true,
-          recipientSessionId: input.sessionId,
+          deliveryMode,
           bindingRevision: request.bindingRevision,
           deliveryPauseReason: null,
           workspace: { status: 'READY' },
@@ -129,12 +178,15 @@ class WorkspacePrEventAccessor {
       if (!(config && input.eventIds.length)) {
         return null;
       }
-      if (
-        request.prId &&
-        !(await tx.workspacePR.findFirst({
-          where: { id: request.prId, workspaceId: request.workspaceId, detachedAt: null },
-        }))
-      ) {
+      // A durable claim holds the workspace until prompt completion or receipt recovery.
+      const competing = await tx.workspacePREvent.findFirst({
+        where: {
+          workspaceId: request.workspaceId,
+          state: 'DISPATCHING',
+          OR: [{ deliveryId: null }, { deliveryId: { not: input.deliveryId } }],
+        },
+      });
+      if (competing) {
         return null;
       }
       const rows = await tx.workspacePREvent.findMany({
@@ -170,6 +222,9 @@ class WorkspacePrEventAccessor {
               row.deliveryProviderSessionId !== session.providerSessionId)
         )
       ) {
+        return null;
+      }
+      if (!(await authorizedRecipient(tx, request, session, config.recipientSessionId))) {
         return null;
       }
       const identity = {

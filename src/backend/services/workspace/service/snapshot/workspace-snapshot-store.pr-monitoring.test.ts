@@ -22,6 +22,7 @@ function makeUpdate(overrides: Partial<SnapshotUpdateInput> = {}): SnapshotUpdat
     ratchetEnabled: false,
     ratchetState: 'IDLE',
     prMonitoring: {
+      deliveryMode: 'MAIN',
       enabled: true,
       recipientSessionId: 'main',
       bindingRevision: 1,
@@ -69,6 +70,7 @@ describe('PR monitoring projection', () => {
       {
         ratchetState: 'CI_FAILED',
         prMonitoring: {
+          deliveryMode: 'MAIN',
           enabled: true,
           recipientSessionId: 'main',
           bindingRevision: 1,

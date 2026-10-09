@@ -9,21 +9,30 @@ destination and rename metadata to disambiguate filenames containing spaces.
 Metadata only updates filenames before a hunk; header-like additions and
 deletions inside hunks remain diff content.
 
-## PR updates in the main conversation
+## PR event delivery destinations
 
 PR monitoring replaces the former Ratchet fixer workflow. The two-minute
 `pr-event-poll` job observes every attached PR and queues actionable updates in
-a bound ordinary conversation. It never creates a fixer session. Human messages
-retain FIFO priority; a background update waits for an idle recipient, no
-interactive request, and no working agent in the workspace. An update arriving
-mid-turn stays queued for the next turn.
+either a bound ordinary conversation (MAIN, the default) or one reusable
+dedicated conversation per PR (DEDICATED). This is one event pipeline with a
+destination setting, replacing the former fixer engine. Human messages retain
+FIFO priority; a background update waits for an idle recipient, no interactive
+request, and no working agent in the workspace. An update arriving mid-turn
+stays queued for the next turn.
 
-Enablement is workspace-scoped. A unique ordinary conversation can be bound
-automatically; multiple candidates require an explicit choice. Auxiliary
-Ratchet, auto-iteration, and adversarial-review sessions are ineligible. Issue
-starts bind their created conversation after its initial human message is
-queued. The workspace menu allows changing the recipient. Binding changes use a
-revision compare-and-swap and invalidate queued requests for the old revision.
+Enablement and delivery destination are workspace-scoped. In MAIN mode, a unique
+ordinary conversation can be bound automatically; multiple candidates require an
+explicit choice. Auxiliary Ratchet, PR-monitoring, auto-iteration, and
+adversarial-review sessions are ineligible as main recipients. Issue starts bind
+their created conversation after its initial human message is queued. The
+workspace menu allows changing the destination or main recipient. DEDICATED mode
+creates a normal workspace conversation lazily when that PR has pending events,
+using workspace provider/model defaults and the normal session limit.
+`WorkspacePRDedicatedSession`, owned by the session service, binds one
+`pr-monitoring` conversation to each PR. Later events reuse its saved provider
+identity and settings. Switching back to MAIN retains the selected main
+conversation. Binding changes use a revision compare-and-swap and invalidate
+queued requests for the old revision.
 
 Each `WorkspacePR` association has its own ID, URL, revision, complete
 normalized observation, epoch, and transition sequence. `WorkspacePRDiscovery`
@@ -32,10 +41,12 @@ owns branch lookup scheduling separately. An observation and its
 identity and revision. Attaching or merging one PR preserves sibling
 associations and events.
 
-`WorkspacePRMonitoring` owns enablement, recipient, binding revision, epoch, and
-delivery pause. Turning monitoring off cancels unclaimed events while facts
-continue to refresh. Re-enabling or changing recipients starts an observation
-epoch and queues one trusted enablement control. Collection projections report
+`WorkspacePRMonitoring` owns enablement, delivery mode, main recipient
+preference, binding revision, epoch, and delivery pause. Turning monitoring off
+cancels unclaimed events while facts continue to refresh. Re-enabling or
+changing destinations/recipients starts an observation epoch. MAIN queues one
+trusted enablement control; DEDICATED batches carry concise maintenance
+instructions in the same bounded event message. Collection projections report
 MERGED only when every attached PR is merged; an open sibling remains visible.
 Workspace snapshots include the plain `prs` collection and its `prSummary`. The
 PR menu offers per-association refresh, review, and detachment. Detaching one
@@ -77,8 +88,10 @@ The session queue carries a backend-owned `pr_event` source. Browser messages
 cannot supply it or reserved message IDs. Preparation refreshes facts and checks
 eligibility before freezing a bounded message (16 KiB UTF-8), event IDs,
 delivery UUID, recipient, binding revision, and attempt. The final guard runs
-again immediately before provider submission. Review data is escaped, explicitly
-untrusted, and includes PR links and omission counts.
+again immediately before provider submission. A transactional workspace-wide
+claim permits only one PR delivery at a time, including across dedicated
+conversations. Review data is escaped, explicitly untrusted, and includes PR
+links and omission counts.
 
 Cold delivery requires resuming the exact stored Claude/Codex conversation.
 Failed or unsupported resume cannot fall back to a new conversation. Saved ACP
@@ -104,10 +117,13 @@ prove receipt.
 Transport attempts stop after three failures. User stop and runtime failure
 persist a pause and invalidate queued requests; explicit user continuation
 clears recoverable pauses and renews the bounded retry allowance while
-preserving the original frozen delivery ID and text. The chat renders PR updates
-as noneditable cards. Snapshots expose enablement, recipient, pause reason and
-pending count. Queued updates, paused delivery, and idle red CI do not imply
-live agent work.
+preserving the original frozen delivery ID and text. The PR menu also offers
+explicit **Resume PR updates** for recoverable pauses, including when no
+dedicated conversation exists yet. Changing destinations alone preserves a
+pause; resuming uses the binding revision and retains frozen recipients. The
+chat renders PR updates as noneditable cards. Snapshots expose enablement,
+delivery mode, recipient, pause reason and pending count. Queued updates, paused
+delivery, and idle red CI do not imply live agent work.
 
 ### Migration and backups
 
@@ -126,3 +142,8 @@ retained legacy IDs and pause delivery until cutover completes; operational
 fixer ownership is not restored. Restored process IDs are never trusted as live
 runtimes; provider identity is retained for receipt recovery. Invalid restored
 recipients are unbound and require selection.
+
+The delivery-mode migration is additive: existing monitoring defaults to MAIN.
+Version 6 backups retain the destination and dedicated PR/session bindings;
+older backups default to MAIN. Binding restoration validates the workspace, PR
+and `pr-monitoring` workflow after the sessions have been restored.

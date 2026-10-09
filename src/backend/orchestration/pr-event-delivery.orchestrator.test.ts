@@ -20,6 +20,8 @@ const mocks = vi.hoisted(() => ({
   active: vi.fn(),
   settle: vi.fn(),
   emit: vi.fn(),
+  dedicated: vi.fn(),
+  ensureDedicated: vi.fn(),
 }));
 vi.mock('@/backend/services/workspace', () => ({
   workspacePRMonitoringService: {
@@ -41,7 +43,10 @@ vi.mock('@/backend/services/ratchet', () => ({
 }));
 vi.mock('@/backend/services/session', () => ({
   acpRuntimeManager: { isSessionWorking: mocks.busy },
-  sessionDataService: { findAgentSessionById: mocks.session },
+  sessionDataService: {
+    findAgentSessionById: mocks.session,
+    findPRDedicatedSession: mocks.dedicated,
+  },
   sessionDomainService: { getPendingInteractiveRequest: mocks.interaction },
   chatMessageHandlerService: { tryDispatchNextMessage: mocks.dispatch },
   sessionBackgroundDeliveryService: {
@@ -59,12 +64,21 @@ vi.mock('./pr-observation.orchestrator', () => ({
   recipientCanDispatch: mocks.otherReady,
 }));
 
+vi.mock('./pr-dedicated-session.orchestrator', () => ({
+  ensureDedicatedPRRecipient: mocks.ensureDedicated,
+}));
 import { recoverPRDeliveries } from './pr-delivery-recovery';
 import { prBackgroundDeliveryPort } from './pr-event-delivery-port';
-import { preparePRDelivery } from './pr-event-delivery.orchestrator';
+import {
+  preparePRDelivery,
+  wakePRDelivery,
+  guardPRDelivery,
+} from './pr-event-delivery.orchestrator';
+import { defaultPRMonitoringServices } from './pr-monitoring-dependencies';
 
 const config = {
   enabled: true,
+  deliveryMode: 'MAIN' as 'MAIN' | 'DEDICATED',
   workspaceId: 'w',
   recipientSessionId: 'main',
   bindingRevision: 1,
@@ -73,6 +87,7 @@ const config = {
 beforeEach(() => {
   vi.resetAllMocks();
   config.recipientSessionId = 'main';
+  config.deliveryMode = 'MAIN';
   config.bindingRevision = 1;
   config.deliveryPauseReason = null;
   mocks.get.mockImplementation(async () => ({ ...config }));
@@ -159,6 +174,7 @@ it('recovers frozen claims in the old recipient before waking a new recipient', 
   await recoverPRDeliveries('main');
   expect(mocks.recover).toHaveBeenCalledWith('delivery', true);
   config.recipientSessionId = 'main';
+  config.deliveryMode = 'MAIN';
 });
 it('cancels an old frozen delivery only after provider history proves absence', async () => {
   config.recipientSessionId = 'new-main';
@@ -166,6 +182,7 @@ it('cancels an old frozen delivery only after provider history proves absence', 
   await recoverPRDeliveries('main');
   expect(mocks.cancel).toHaveBeenCalledWith('delivery', 'main');
   config.recipientSessionId = 'main';
+  config.deliveryMode = 'MAIN';
 });
 it('rechecks another working session in the final dispatch guard', async () => {
   mocks.otherReady.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
@@ -199,6 +216,7 @@ it('does not invalidate the bound recipient when an unrelated session stops', as
   await prBackgroundDeliveryPort.pause('main', 'USER_STOPPED');
   expect(mocks.invalidate).not.toHaveBeenCalled();
   config.recipientSessionId = 'main';
+  config.deliveryMode = 'MAIN';
 });
 
 it('rejects a frozen retry after provider conversation identity changes', async () => {
@@ -315,4 +333,76 @@ it('does not enqueue resumed PR updates when a stop arrives during the wake read
   expect(mocks.resume).toHaveBeenCalledWith('main', expect.any(Function));
   expect(mocks.enqueue).not.toHaveBeenCalled();
   expect(mocks.dispatch).not.toHaveBeenCalled();
+});
+
+it('routes each PR to its reusable dedicated conversation without main controls', async () => {
+  config.deliveryMode = 'DEDICATED';
+  mocks.pending.mockResolvedValue([
+    { id: 'e1', prId: 'p' },
+    { id: 'e2', prId: 'q' },
+  ]);
+  mocks.ensureDedicated.mockImplementation(async ({ prId }) => ({ id: `dedicated-${prId}` }));
+  await wakePRDelivery('w');
+  expect(mocks.enqueue).toHaveBeenCalledWith('dedicated-p', {
+    workspaceId: 'w',
+    prId: 'p',
+    bindingRevision: 1,
+    deliveryMode: 'DEDICATED',
+  });
+  expect(mocks.enqueue).toHaveBeenCalledWith('dedicated-q', {
+    workspaceId: 'w',
+    prId: 'q',
+    bindingRevision: 1,
+    deliveryMode: 'DEDICATED',
+  });
+  expect(mocks.dispatch).not.toHaveBeenCalledWith('main');
+});
+it('rejects dedicated delivery to the conversation bound to a different PR', async () => {
+  config.deliveryMode = 'DEDICATED';
+  mocks.session.mockResolvedValue({
+    id: 'dedicated',
+    workspaceId: 'w',
+    workspacePrId: 'q',
+    workflow: 'pr-monitoring',
+    workspace: { status: 'READY' },
+  });
+  mocks.dedicated.mockResolvedValue(null);
+  expect(
+    await guardPRDelivery(
+      'dedicated',
+      { workspaceId: 'w', prId: 'p', bindingRevision: 1, deliveryMode: 'DEDICATED' },
+      defaultPRMonitoringServices
+    )
+  ).toBe('discard');
+});
+it('keeps a proven-absent frozen claim for its still-bound dedicated recipient', async () => {
+  config.deliveryMode = 'DEDICATED';
+  config.recipientSessionId = 'preferred-main';
+  mocks.session.mockResolvedValue({
+    id: 'main',
+    workspaceId: 'w',
+    workspacePrId: 'p',
+    workflow: 'pr-monitoring',
+  });
+  mocks.dedicated.mockResolvedValue({
+    id: 'main',
+    workspaceId: 'w',
+    workspacePrId: 'p',
+    workflow: 'pr-monitoring',
+  });
+  mocks.receipt.mockResolvedValue('absent');
+  await recoverPRDeliveries('main');
+  expect(mocks.cancel).not.toHaveBeenCalled();
+  expect(mocks.recover).toHaveBeenCalledWith('delivery', false);
+});
+it('does not enqueue a dedicated recipient after the mode changes during creation', async () => {
+  config.deliveryMode = 'DEDICATED';
+  mocks.pending.mockResolvedValue([{ id: 'e1', prId: 'p' }]);
+  mocks.ensureDedicated.mockImplementation(() => {
+    config.deliveryMode = 'MAIN';
+    config.bindingRevision++;
+    return Promise.resolve({ id: 'dedicated' });
+  });
+  await wakePRDelivery('w');
+  expect(mocks.enqueue).not.toHaveBeenCalled();
 });

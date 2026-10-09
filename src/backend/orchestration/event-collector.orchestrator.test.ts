@@ -806,11 +806,9 @@ describe('configureEventCollector', () => {
   });
 
   it('a resolved merge conflict reaches the snapshot store on the live PR event, not only reconciliation', async () => {
-    // pr_snapshot_updated does not carry hasMergeConflict itself -- only the
-    // authoritative ratchet re-projection it triggers reads the fresh
-    // `prHasMergeConflict` off the DB row. Before this fix, the projection
-    // a rebase that cleared the conflict only reached the board on the
-    // 60-second snapshot reconciliation sweep.
+    // PR events trigger a DB projection to read fresh prHasMergeConflict.
+    // Previously, a resolved conflict reached the board only through the
+    // 60-second reconciliation sweep.
     vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
       projectId: 'proj-1',
     } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
@@ -820,6 +818,7 @@ describe('configureEventCollector', () => {
       ratchetEnabled: true,
       ratchetState: 'CI_RUNNING',
       prMonitoring: {
+        deliveryMode: 'MAIN',
         enabled: true,
         recipientSessionId: 'main',
         bindingRevision: 1,
@@ -1590,6 +1589,7 @@ describe('per-graph event collector lifecycle', () => {
       ratchetEnabled: true,
       ratchetState: 'CI_FAILED',
       prMonitoring: {
+        deliveryMode: 'MAIN',
         enabled: true,
         recipientSessionId: 'main',
         bindingRevision: 1,

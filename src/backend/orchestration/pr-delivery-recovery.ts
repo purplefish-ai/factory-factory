@@ -1,3 +1,4 @@
+import { isCurrentPRRecipient } from './pr-delivery-recipient';
 import {
   defaultPRMonitoringServices,
   type PRMonitoringServices,
@@ -49,7 +50,16 @@ async function settleRecoveredDelivery(
     }
     return;
   }
-  if (receipt === 'absent' && config?.recipientSessionId !== sessionId) {
+  const session =
+    receipt === 'absent' ? await services.sessionDataService.findAgentSessionById(sessionId) : null;
+  const stillBound =
+    config &&
+    session &&
+    (await isCurrentPRRecipient(config, session, session.workspacePrId ?? null, services));
+  if (receipt !== 'delivered' && isDeliveryActive(sessionId, deliveryId, services)) {
+    return;
+  }
+  if (receipt === 'absent' && !stillBound) {
     await workspacePRMonitoringService.cancelRecoveredDelivery(deliveryId, sessionId);
     return;
   }

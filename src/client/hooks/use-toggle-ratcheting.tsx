@@ -1,10 +1,16 @@
 import { type ReactNode, useState } from 'react';
 import { toast } from 'sonner';
-import { type PRRecipientChoice, PRRecipientPicker } from '@/client/features/workspace';
+import {
+  type PRRecipientChoice,
+  PRRecipientPicker,
+} from '@/client/features/workspace/pr-recipient-picker';
 import { trpc } from '@/client/lib/trpc';
+import { PRDeliveryMode } from '@/shared/pr-monitoring';
 export interface ToggleRatchetingInput {
   workspaceId: string;
   enabled: boolean;
+  resume?: boolean;
+  deliveryMode?: PRDeliveryMode;
   recipientSessionId?: string | null;
   expectedBindingRevision?: number;
 }
@@ -14,20 +20,28 @@ export interface UseToggleRatchetingReturn {
   isPending: boolean;
   recipientPicker: ReactNode;
 }
-export function useToggleRatcheting(projectId: string): UseToggleRatchetingReturn {
+export function useToggleRatcheting(projectId?: string): UseToggleRatchetingReturn {
   const utils = trpc.useUtils();
   const [selection, setSelection] = useState<{
     workspaceId: string;
     bindingRevision: number;
+    deliveryMode: PRDeliveryMode;
+    resume?: boolean;
     candidates: PRRecipientChoice[];
   } | null>(null);
   const mutation = trpc.workspace.toggleRatcheting.useMutation({
     onSuccess: (result, input) => {
-      if (result.status === 'recipient_required') {
+      if (
+        result.status === 'recipient_required' &&
+        input.enabled &&
+        (input.deliveryMode ?? PRDeliveryMode.MAIN) === PRDeliveryMode.MAIN
+      ) {
         setSelection({
           workspaceId: input.workspaceId,
           bindingRevision: result.bindingRevision,
+          deliveryMode: input.deliveryMode ?? PRDeliveryMode.MAIN,
           candidates: result.candidates,
+          resume: input.resume,
         });
       } else {
         setSelection(null);
@@ -39,7 +53,9 @@ export function useToggleRatcheting(projectId: string): UseToggleRatchetingRetur
     },
     onSettled: (_data, _error, input) => {
       utils.workspace.get.invalidate({ id: input.workspaceId });
-      utils.workspace.listForProject.invalidate({ projectId });
+      if (projectId) {
+        utils.workspace.listForProject.invalidate({ projectId });
+      }
     },
   });
   return {
@@ -55,6 +71,8 @@ export function useToggleRatcheting(projectId: string): UseToggleRatchetingRetur
           mutation.mutate({
             workspaceId: selection.workspaceId,
             enabled: true,
+            deliveryMode: selection.deliveryMode,
+            ...(selection.resume === undefined ? {} : { resume: selection.resume }),
             recipientSessionId,
             expectedBindingRevision: selection.bindingRevision,
           })

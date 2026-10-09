@@ -149,6 +149,7 @@ function createOptimisticWorkingWorkspace(params: {
     prCiStatus: 'UNKNOWN',
     ratchetEnabled: params.ratchetEnabled,
     prMonitoring: {
+      deliveryMode: 'MAIN',
       enabled: params.ratchetEnabled,
       recipientSessionId: null,
       bindingRevision: 0,

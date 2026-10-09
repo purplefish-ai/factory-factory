@@ -1,4 +1,5 @@
 import type { z } from 'zod';
+import { PR_DEDICATED_WORKFLOW } from '@/shared/pr-monitoring';
 
 interface Backup {
   data: {
@@ -7,13 +8,44 @@ interface Backup {
       prs: readonly {
         id: string;
         url: string;
+        dedicatedSession?: { sessionId: string | null } | null;
       }[];
     }[];
-    agentSessions: readonly { workspaceId: string; workspacePrId: string | null }[];
+    agentSessions: readonly {
+      id: string;
+      workflow: string;
+      workspaceId: string;
+      workspacePrId: string | null;
+    }[];
   };
 }
+function validateDedicatedBindings(data: Backup, ctx: z.RefinementCtx) {
+  for (const [index, workspace] of data.data.workspaces.entries()) {
+    for (const [prIndex, pr] of workspace.prs.entries()) {
+      const sessionId = pr.dedicatedSession?.sessionId;
+      if (!sessionId) {
+        continue;
+      }
+      const session = data.data.agentSessions.find((row) => row.id === sessionId);
+      if (
+        !session ||
+        session.workspaceId !== workspace.id ||
+        session.workspacePrId !== pr.id ||
+        session.workflow !== PR_DEDICATED_WORKFLOW
+      ) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['data', 'workspaces', index, 'prs', prIndex, 'dedicatedSession'],
+          message: 'Dedicated conversation must belong to this PR and workspace',
+        });
+      }
+    }
+  }
+}
+
 /** PR identities must be unambiguous before restoring any database rows. */
 export function validateBackupPRs(data: Backup, ctx: z.RefinementCtx): void {
+  validateDedicatedBindings(data, ctx);
   const ids = new Set<string>();
   const ownership = new Map<string, string>();
   for (const [index, workspace] of data.data.workspaces.entries()) {

@@ -41,6 +41,7 @@ describe('authoritative Ratchet projection integration', () => {
       'ws-1',
       {
         prMonitoring: {
+          deliveryMode: 'MAIN',
           enabled: true,
           recipientSessionId: 'main',
           bindingRevision: 1,
@@ -58,6 +59,7 @@ describe('authoritative Ratchet projection integration', () => {
       'ws-1',
       {
         prMonitoring: {
+          deliveryMode: 'MAIN',
           enabled: true,
           recipientSessionId: 'main',
           bindingRevision: 1,

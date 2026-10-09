@@ -1,4 +1,4 @@
-import { isPRMonitoringRecipient } from '@/shared/pr-monitoring';
+import { isPRMonitoringRecipient, type PRDeliveryMode } from '@/shared/pr-monitoring';
 import { wakePRDelivery } from './pr-event-delivery.orchestrator';
 import {
   defaultPRMonitoringServices,
@@ -9,6 +9,8 @@ export async function setPRMonitoring(
   input: {
     workspaceId: string;
     enabled: boolean;
+    deliveryMode?: PRDeliveryMode;
+    resume?: boolean;
     recipientSessionId?: string | null;
     expectedBindingRevision: number;
   },
@@ -21,11 +23,12 @@ export async function setPRMonitoring(
     userSettingsService,
   } = services;
   const previous = await workspacePRMonitoringService.get(input.workspaceId);
+  const deliveryMode = input.deliveryMode ?? previous?.deliveryMode ?? 'MAIN';
   let recipientSessionId =
     input.recipientSessionId === undefined
       ? (previous?.recipientSessionId ?? null)
       : input.recipientSessionId;
-  if (input.enabled && !recipientSessionId) {
+  if (input.enabled && deliveryMode === 'MAIN' && !recipientSessionId) {
     const sessions = (
       await sessionDataService.findAgentSessionsByWorkspaceId(input.workspaceId)
     ).filter(isPRMonitoringRecipient);
@@ -50,7 +53,7 @@ export async function setPRMonitoring(
   if (previous && previous.bindingRevision !== result.bindingRevision) {
     sessionBackgroundDeliveryService.invalidate(input.workspaceId, previous.bindingRevision);
   }
-  if (input.enabled && recipientSessionId) {
+  if (shouldAddControl(input, deliveryMode, recipientSessionId)) {
     await workspacePRMonitoringService.addEnabledControl(
       input.workspaceId,
       result.bindingRevision,
@@ -66,7 +69,7 @@ export async function bindIssueMonitoringSession(
   services: PRMonitoringServices = defaultPRMonitoringServices
 ) {
   const config = await services.workspacePRMonitoringService.get(workspaceId);
-  if (config?.enabled && !config.recipientSessionId) {
+  if (config?.enabled && (config.deliveryMode ?? 'MAIN') === 'MAIN' && !config.recipientSessionId) {
     await setPRMonitoring(
       {
         workspaceId,
@@ -77,4 +80,12 @@ export async function bindIssueMonitoringSession(
       services
     );
   }
+}
+
+function shouldAddControl(
+  input: { enabled: boolean; resume?: boolean },
+  mode: PRDeliveryMode,
+  recipient: string | null
+) {
+  return input.enabled && !input.resume && mode === 'MAIN' && !!recipient;
 }

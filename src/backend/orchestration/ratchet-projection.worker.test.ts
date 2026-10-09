@@ -21,6 +21,7 @@ const readyProjection = {
   ratchetEnabled: true,
   ratchetState: 'CI_FAILED',
   prMonitoring: {
+    deliveryMode: 'MAIN',
     enabled: true,
     recipientSessionId: 'main',
     bindingRevision: 1,
@@ -54,6 +55,7 @@ describe('RatchetProjectionWorker', () => {
       ratchetEnabled: true,
       ratchetState: 'CI_FAILED',
       prMonitoring: {
+        deliveryMode: 'MAIN',
         enabled: true,
         recipientSessionId: 'main',
         bindingRevision: 1,
@@ -97,6 +99,7 @@ describe('RatchetProjectionWorker', () => {
       ratchetEnabled: true,
       ratchetState: 'CI_FAILED',
       prMonitoring: {
+        deliveryMode: 'MAIN',
         enabled: true,
         recipientSessionId: 'main',
         bindingRevision: 1,
@@ -164,6 +167,7 @@ describe('RatchetProjectionWorker', () => {
       ratchetEnabled: true,
       ratchetState: 'CI_FAILED',
       prMonitoring: {
+        deliveryMode: 'MAIN',
         enabled: true,
         recipientSessionId: 'main',
         bindingRevision: 1,

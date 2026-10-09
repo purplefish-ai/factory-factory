@@ -131,6 +131,7 @@ const mockWorkspace: WorkspaceForExport = {
   prs: [
     {
       id: 'pr1',
+      dedicatedSession: null,
       title: null,
       headRefName: null,
       baseRefName: null,
@@ -164,6 +165,7 @@ const mockWorkspace: WorkspaceForExport = {
     status: RunScriptStatus.RUNNING,
   },
   prMonitoring: {
+    deliveryMode: 'MAIN',
     workspaceId: 'ws-1',
     legacySessionIds: [],
     enabled: true,

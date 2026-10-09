@@ -21,6 +21,9 @@ const actions = vi.hoisted(() => ({
   remove: vi.fn().mockResolvedValue(true),
   review: vi.fn(),
 }));
+vi.mock('@/client/hooks/use-toggle-ratcheting', () => ({
+  useToggleRatcheting: () => ({ mutate: vi.fn(), isPending: false, recipientPicker: null }),
+}));
 vi.mock('./use-workspace-pr-actions', () => ({
   useWorkspacePrActions: () => ({ ...actions, pending: false }),
 }));

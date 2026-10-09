@@ -9,12 +9,16 @@ import {
   type ClosedSessionWithWorkspace,
   closedSessionAccessor,
 } from '@/backend/services/session/resources/closed-session.accessor';
+import { prDedicatedSessionAccessor } from '@/backend/services/session/resources/pr-dedicated-session.accessor';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type {
+  AcquirePRDedicatedSessionInput,
+  PRDedicatedSessionAcquisition,
   AgentSessionRecord,
   AgentSessionRecordWithWorkspace,
 } from '@/backend/services/session/types';
 import type { SessionStatus } from '@/shared/core';
+import type { PRTarget } from '@/shared/pr-monitoring';
 import { sessionProviderResolverService } from './session-provider-resolver.service';
 
 function toAgentSessionRecord(session: PersistenceAgentSessionRecord): AgentSessionRecord {
@@ -106,6 +110,41 @@ class SessionDataService {
     return result.outcome === 'created'
       ? { ...result, session: toAgentSessionRecord(result.session) }
       : result;
+  }
+
+  async acquirePRDedicatedSession(
+    input: AcquirePRDedicatedSessionInput
+  ): Promise<PRDedicatedSessionAcquisition> {
+    if (input.isCurrent?.() === false) {
+      return { outcome: 'unavailable' as const };
+    }
+    const workspace = await prDedicatedSessionAccessor.findWorkspace(input);
+    if (!workspace || input.isCurrent?.() === false) {
+      return { outcome: 'unavailable' as const };
+    }
+    const defaults = await sessionProviderResolverService.resolveSessionDefaults({
+      workspace,
+      workspaceId: input.workspaceId,
+      explicitProvider: input.provider,
+      explicitModel: input.model,
+    });
+    if (input.isCurrent?.() === false) {
+      return { outcome: 'unavailable' as const };
+    }
+    const result = await prDedicatedSessionAccessor.acquire({ ...input, ...defaults });
+    return 'session' in result
+      ? { ...result, session: toAgentSessionRecord(result.session) }
+      : result;
+  }
+  async findPRDedicatedSession(target: PRTarget): Promise<AgentSessionRecord | null> {
+    const session = await prDedicatedSessionAccessor.find(target);
+    return session ? toAgentSessionRecord(session) : null;
+  }
+  restorePRDedicatedSession(
+    tx: Prisma.TransactionClient,
+    input: PRTarget & { sessionId: string | null }
+  ) {
+    return prDedicatedSessionAccessor.restore(tx, input);
   }
 
   updateAgentSession(

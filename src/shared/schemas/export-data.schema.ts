@@ -318,6 +318,7 @@ function normalizePublishedVersion5(data: z.infer<typeof publishedVersion5Schema
           ratchetActiveSessionId: null,
           prMonitoring: {
             enabled: workspace.ratchetEnabled,
+            deliveryMode: 'MAIN' as const,
             recipientSessionId: null,
             bindingRevision: 0,
             eventEpoch: workspace.ratchetEnabled ? 1 : 0,
@@ -374,6 +375,7 @@ function normalizeLegacyAndCurrent(data: z.infer<typeof legacyAndCurrentSchema>)
       prs,
       prMonitoring: workspace.prMonitoring ?? {
         enabled: workspace.ratchetEnabled,
+        deliveryMode: 'MAIN' as const,
         recipientSessionId: null,
         bindingRevision: 0,
         eventEpoch: workspace.ratchetEnabled ? 1 : 0,
