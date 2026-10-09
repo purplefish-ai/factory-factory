@@ -26,8 +26,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import { PRDeliveryMode, type PRMonitoringProjection } from '@/shared/pr-monitoring';
+import type { PRMonitoringProjection } from '@/shared/pr-monitoring';
 import type { WorkspacePullRequest } from '@/shared/workspace-pr';
+import { createPRMonitoringMenuProps } from './pr-monitoring-menu-actions';
 import { PRMonitoringMenuItems, type PRMonitoringMenuProps } from './pr-monitoring-menu-items';
 import { useWorkspacePrActions } from './use-workspace-pr-actions';
 
@@ -77,14 +78,14 @@ export function WorkspacePrMenu({
       <DropdownMenuContent
         align="end"
         collisionPadding={8}
-        className="flex flex-col overflow-hidden w-80 max-w-[calc(100vw-1rem)]"
+        className="w-80 max-w-[calc(100vw-1rem)]"
         onClick={(event) => event.stopPropagation()}
       >
         <DropdownMenuLabel className="shrink-0 text-xs text-muted-foreground">
           Pull requests
         </DropdownMenuLabel>
         {!ordered.length && <p className="px-2 py-3 text-xs text-muted-foreground">No PRs yet</p>}
-        <div className="min-h-0 max-h-80 overflow-y-auto">
+        <div>
           {ordered.map((pr) => (
             <WorkspacePrMenuRow
               key={pr.id}
@@ -206,7 +207,6 @@ function ConnectedPRMonitoringMenu({
   onRemove(id: string): void;
 }) {
   const toggle = useToggleRatcheting(projectId);
-  const deliveryMode = monitoring.deliveryMode ?? PRDeliveryMode.MAIN;
   return (
     <>
       {toggle.recipientPicker}
@@ -217,35 +217,7 @@ function ConnectedPRMonitoringMenu({
         onAdd={onAdd}
         onRemove={onRemove}
         onReview={actions.review}
-        monitoring={{
-          enabled: monitoring.enabled,
-          deliveryMode,
-          pending: toggle.isPending,
-          pauseReason: monitoring.pauseReason,
-          onResume: () =>
-            toggle.mutate({
-              workspaceId,
-              enabled: true,
-              resume: true,
-              deliveryMode,
-              expectedBindingRevision: monitoring.bindingRevision,
-            }),
-          onToggle: (enabled) => toggle.mutate({ workspaceId, enabled }),
-          onDeliveryMode: (mode) =>
-            toggle.mutate({
-              workspaceId,
-              enabled: monitoring.enabled,
-              deliveryMode: mode,
-              expectedBindingRevision: monitoring.bindingRevision,
-            }),
-          onChangeRecipient: () =>
-            toggle.mutate({
-              workspaceId,
-              enabled: true,
-              deliveryMode: PRDeliveryMode.MAIN,
-              recipientSessionId: null,
-            }),
-        }}
+        monitoring={createPRMonitoringMenuProps(workspaceId, monitoring, toggle)}
       />
     </>
   );

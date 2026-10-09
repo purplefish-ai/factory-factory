@@ -406,3 +406,57 @@ it('does not enqueue a dedicated recipient after the mode changes during creatio
   await wakePRDelivery('w');
   expect(mocks.enqueue).not.toHaveBeenCalled();
 });
+
+it('retains an authorized queue request when a concurrent workspace claim wins', async () => {
+  mocks.pending.mockResolvedValue([
+    { id: 'event', prId: 'p', state: 'PENDING', deliveryText: 'frozen text', attempts: 0 },
+  ]);
+  mocks.claim.mockResolvedValue(null);
+  expect(
+    await preparePRDelivery({
+      sessionId: 'main',
+      request: {
+        workspaceId: 'w',
+        prId: 'p',
+        bindingRevision: 1,
+      },
+    })
+  ).toMatchObject({ status: 'blocked' });
+  expect(mocks.claim).toHaveBeenCalledOnce();
+});
+
+it('wakes sibling PR requests as soon as a completed claim settles', async () => {
+  mocks.pending.mockResolvedValue([{ id: 'event-q', prId: 'q', state: 'PENDING' }]);
+  await prBackgroundDeliveryPort.complete({
+    deliveryId: 'done',
+    sessionId: 'main',
+    bindingRevision: 1,
+    eventIds: ['event-p'],
+    text: 'done',
+    attempt: 1,
+  });
+  expect(mocks.settle).toHaveBeenCalledWith(expect.objectContaining({ result: 'delivered' }));
+  expect(mocks.enqueue).toHaveBeenCalledWith('main', {
+    workspaceId: 'w',
+    prId: 'q',
+    bindingRevision: 1,
+  });
+  expect(mocks.dispatch).toHaveBeenCalledWith('main');
+});
+
+it('keeps a delivered claim settled when waking its sibling fails', async () => {
+  mocks.pending.mockRejectedValue(new Error('wake read unavailable'));
+  await expect(
+    prBackgroundDeliveryPort.complete({
+      deliveryId: 'done',
+      sessionId: 'main',
+      bindingRevision: 1,
+      eventIds: ['event-p'],
+      text: 'done',
+      attempt: 1,
+    })
+  ).resolves.toBeUndefined();
+  expect(mocks.settle).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ result: 'delivered' })
+  );
+});

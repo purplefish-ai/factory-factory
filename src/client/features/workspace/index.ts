@@ -9,6 +9,7 @@ export * from './file-tree';
 export * from './file-viewer';
 export * from './main-view-content';
 export * from './main-view-tab-bar';
+export * from './pr-monitoring-menu-actions';
 export * from './pr-monitoring-menu-items';
 export { type PRRecipientChoice, PRRecipientPicker } from './pr-recipient-picker';
 export * from './quick-actions-menu';

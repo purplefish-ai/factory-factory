@@ -408,7 +408,7 @@ it('roundtrips dedicated mode and PR-session bindings in additive version 6 back
     await db.prisma.workspacePRMonitoring.findUnique({ where: { workspaceId: 'w' } })
   ).toMatchObject({ deliveryMode: 'DEDICATED', bindingRevision: 7, eventEpoch: 5 });
 });
-it('rejects dedicated backup bindings to a foreign or ordinary session', async () => {
+it('rejects dedicated backup bindings to a non-dedicated same-PR session', async () => {
   const exported = await dataBackupService.exportData('test');
   const workspace = exported.data.workspaces[0]!;
   const invalid = {
@@ -427,6 +427,72 @@ it('rejects dedicated backup bindings to a foreign or ordinary session', async (
   };
   expect(exportDataSchema.safeParse(invalid).success).toBe(false);
 });
+
+it.each(['another PR', 'another workspace'] as const)(
+  'rejects dedicated backup bindings to a valid dedicated session owned by %s',
+  async (owner) => {
+    const workspaceId = owner === 'another PR' ? 'w' : 'foreign-workspace';
+    const prId = owner === 'another PR' ? 'b' : 'foreign-pr';
+    if (owner === 'another workspace') {
+      await db.prisma.workspace.create({
+        data: {
+          id: workspaceId,
+          projectId: 'p',
+          name: 'Foreign workspace',
+          prs: { create: { id: prId, url: 'https://github.com/foreign/repo/pull/1' } },
+        },
+      });
+    }
+    await db.prisma.agentSession.create({
+      data: {
+        id: 'foreign-dedicated',
+        workspaceId,
+        workspacePrId: prId,
+        workflow: 'pr-monitoring',
+        provider: 'CLAUDE',
+        providerSessionId: 'foreign-conversation',
+      },
+    });
+    await db.prisma.workspacePRDedicatedSession.create({
+      data: { prId, sessionId: 'foreign-dedicated' },
+    });
+    const exported = await dataBackupService.exportData('test');
+    expect(exportDataSchema.safeParse(exported).success).toBe(true);
+    const workspaceIndex = exported.data.workspaces.findIndex((workspace) => workspace.id === 'w');
+    const prIndex = exported.data.workspaces[workspaceIndex]!.prs.findIndex((pr) => pr.id === 'a');
+    const invalid = {
+      ...exported,
+      data: {
+        ...exported.data,
+        workspaces: exported.data.workspaces.map((workspace) =>
+          workspace.id === 'w'
+            ? {
+                ...workspace,
+                prs: workspace.prs.map((pr) =>
+                  pr.id === 'a'
+                    ? {
+                        ...pr,
+                        dedicatedSession: { sessionId: 'foreign-dedicated' },
+                      }
+                    : pr
+                ),
+              }
+            : workspace
+        ),
+      },
+    };
+    const result = exportDataSchema.safeParse(invalid);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues).toContainEqual(
+        expect.objectContaining({
+          path: ['data', 'workspaces', workspaceIndex, 'prs', prIndex, 'dedicatedSession'],
+          message: 'Dedicated conversation must belong to this PR and workspace',
+        })
+      );
+    }
+  }
+);
 
 it.each([false, true])(
   'rejects empty dedicated backup IDs before writing, including an empty ordinary session: %s',

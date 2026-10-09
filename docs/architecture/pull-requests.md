@@ -34,6 +34,10 @@ its saved provider identity and settings. Switching back to MAIN retains the
 selected main conversation. Binding changes use a revision compare-and-swap and
 invalidate queued requests for the old revision.
 
+An existing dedicated conversation receives its queued chat card even while
+another session is working. Creating a new provider conversation waits for an
+idle workspace; session idle transitions wake pending PR delivery immediately.
+
 Each `WorkspacePR` association has its own ID, URL, revision, complete
 normalized observation, epoch, and transition sequence. `WorkspacePRDiscovery`
 owns branch lookup scheduling separately. An observation and its
@@ -91,8 +95,9 @@ eligibility before freezing a bounded message (16 KiB UTF-8), event IDs,
 delivery UUID, recipient, binding revision, and attempt. The final guard runs
 again immediately before provider submission. A transactional workspace-wide
 claim permits only one PR delivery at a time, including across dedicated
-conversations. Review data is escaped, explicitly untrusted, and includes PR
-links and omission counts.
+conversations. A competing claim retains its queued card and retries when the
+active delivery settles. Review data is escaped, explicitly untrusted, and
+includes PR links and omission counts.
 
 Cold delivery requires resuming the exact stored Claude/Codex conversation.
 Failed or unsupported resume cannot fall back to a new conversation. Saved ACP

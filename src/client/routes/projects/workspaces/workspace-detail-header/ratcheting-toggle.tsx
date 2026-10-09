@@ -1,5 +1,9 @@
 import { CaretDownIcon } from '@phosphor-icons/react';
-import { PRMonitoringMenuItems, RatchetToggleButton } from '@/client/features/workspace';
+import {
+  createPRMonitoringMenuProps,
+  PRMonitoringMenuItems,
+  RatchetToggleButton,
+} from '@/client/features/workspace';
 import { useToggleRatcheting } from '@/client/hooks/use-toggle-ratcheting';
 import { Button } from '@/components/ui/button';
 import {
@@ -60,40 +64,13 @@ export function RatchetingMenuItems({
   workspaceId: string;
   toggleRatcheting: ReturnType<typeof useToggleRatcheting>;
 }) {
-  const mode = workspace.prMonitoring?.deliveryMode ?? PRDeliveryMode.MAIN;
-  const enabled = workspace.ratchetEnabled ?? false;
   return (
     <PRMonitoringMenuItems
-      enabled={enabled}
-      deliveryMode={mode}
-      pending={toggleRatcheting.isPending}
-      pauseReason={workspace.prMonitoring?.pauseReason}
-      onResume={() =>
-        toggleRatcheting.mutate({
-          workspaceId,
-          enabled: true,
-          resume: true,
-          deliveryMode: mode,
-          expectedBindingRevision: workspace.prMonitoring?.bindingRevision,
-        })
-      }
-      onToggle={(nextEnabled) => toggleRatcheting.mutate({ workspaceId, enabled: nextEnabled })}
-      onDeliveryMode={(deliveryMode) =>
-        toggleRatcheting.mutate({
-          workspaceId,
-          enabled,
-          deliveryMode,
-          expectedBindingRevision: workspace.prMonitoring?.bindingRevision,
-        })
-      }
-      onChangeRecipient={() =>
-        toggleRatcheting.mutate({
-          workspaceId,
-          enabled: true,
-          deliveryMode: PRDeliveryMode.MAIN,
-          recipientSessionId: null,
-        })
-      }
+      {...createPRMonitoringMenuProps(
+        workspaceId,
+        { ...workspace.prMonitoring, enabled: workspace.ratchetEnabled ?? false },
+        toggleRatcheting
+      )}
     />
   );
 }

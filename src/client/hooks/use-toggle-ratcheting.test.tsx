@@ -41,13 +41,13 @@ vi.mock('@/client/features/workspace/pr-recipient-picker', () => ({
     candidates: PRRecipientChoice[];
     onSelect(id: string): void;
   }) => (
-    <>
+    <div data-testid="recipient-picker">
       {candidates.map((candidate) => (
         <button key={candidate.id} onClick={() => onSelect(candidate.id)}>
           Choose {candidate.name ?? candidate.id}
         </button>
       ))}
-    </>
+    </div>
   ),
 }));
 let root: Root;
@@ -103,7 +103,7 @@ it('does not request an existing recipient for dedicated mode', async () => {
       }
     )
   );
-  expect(document.querySelector('button')).toBeNull();
+  expect(document.querySelector('[data-testid="recipient-picker"]')).toBeNull();
 });
 
 it('preserves the explicit resume request through MAIN recipient selection', async () => {
@@ -137,5 +137,17 @@ it('does not open a recipient picker when choosing MAIN while monitoring is off'
       { workspaceId: 'w', enabled: false, deliveryMode: 'MAIN' }
     )
   );
+  expect(document.querySelector('[data-testid="recipient-picker"]')).toBeNull();
+});
+
+it('renders the picker marker even when MAIN has no available candidates', async () => {
+  await act(() => root.render(<Harness />));
+  await act(() =>
+    mocks.options!.onSuccess(
+      { status: 'recipient_required', bindingRevision: 9, candidates: [] },
+      { workspaceId: 'w', enabled: true, deliveryMode: 'MAIN' }
+    )
+  );
+  expect(document.querySelector('[data-testid="recipient-picker"]')).not.toBeNull();
   expect(document.querySelector('button')).toBeNull();
 });

@@ -358,11 +358,16 @@ export function configureDomainBridges(services: BridgeServices): void {
   });
 
   // === Session domain bridges ===
+  const markSessionIdle = (workspaceId: string, sessionId: string, generation?: number) => {
+    workspaceActivityService.markSessionIdle(workspaceId, sessionId, generation);
+    void wakePRDelivery(workspaceId, services).catch((error) => {
+      logger.warn('PR delivery wake deferred after session became idle', { workspaceId, error });
+    });
+  };
   chatEventForwarderService.configure({
     workspace: {
       markSessionRunning: (wsId, sId) => workspaceActivityService.markSessionRunning(wsId, sId),
-      markSessionIdle: (wsId, sId, generation) =>
-        workspaceActivityService.markSessionIdle(wsId, sId, generation),
+      markSessionIdle,
       on: (event, handler) => workspaceActivityService.on(event, handler),
     },
   });
@@ -370,8 +375,7 @@ export function configureDomainBridges(services: BridgeServices): void {
   const sessionWorkspaceBridge = {
     markSessionRunning: (wsId: string, sId: string) =>
       workspaceActivityService.markSessionRunning(wsId, sId),
-    markSessionIdle: (wsId: string, sId: string, generation?: number) =>
-      workspaceActivityService.markSessionIdle(wsId, sId, generation),
+    markSessionIdle,
     recordRatchetSessionEnd: (
       _workspaceId: string,
       _sessionId: string,

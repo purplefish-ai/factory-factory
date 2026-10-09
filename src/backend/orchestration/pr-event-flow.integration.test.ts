@@ -1,5 +1,6 @@
 import type { PrismaClient } from '@prisma-gen/client';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import { sessionBackgroundDeliveryService } from '@/backend/services/session';
 import {
   workspacePRMonitoringService,
   workspacePrSnapshotService,
@@ -40,8 +41,8 @@ vi.mock('@/backend/services/session', () => ({
     findAgentSessionById: (id: string) =>
       state.prisma?.agentSession.findUnique({ where: { id }, include: { workspace: true } }),
   },
-  sessionBackgroundDeliveryService: {},
-  chatMessageHandlerService: {},
+  sessionBackgroundDeliveryService: { enqueue: vi.fn() },
+  chatMessageHandlerService: { tryDispatchNextMessage: vi.fn(async () => undefined) },
   findPRDeliveryReceipt: vi.fn(),
 }));
 vi.mock('./pr-observation.orchestrator', () => ({
@@ -251,4 +252,76 @@ it('delivers a dedicated PR batch through the same ledger and guards sibling rec
   });
   expect(frozen.deliveryText).toBe(result.delivery.text);
   expect(frozen.deliverySessionId).toBe('dedicated');
+});
+
+it('retains a competing dedicated request and wakes it after the workspace claim settles', async () => {
+  const workspaceId = 'competing';
+  await db.prisma.workspace.create({
+    data: {
+      id: workspaceId,
+      projectId: 'project',
+      name: 'Competing PRs',
+      status: 'READY',
+      prMonitoring: { create: { enabled: true, deliveryMode: 'DEDICATED', bindingRevision: 1 } },
+    },
+  });
+  const recipients = ['first', 'second'];
+  for (const name of recipients) {
+    const prId = `competing-${name}`;
+    const observation = {
+      ...redObservation,
+      number: name === 'first' ? 101 : 102,
+      url: `https://github.com/org/repo/pull/${name === 'first' ? 101 : 102}`,
+    };
+    await db.prisma.workspacePR.create({ data: { id: prId, workspaceId, url: observation.url } });
+    await db.prisma.agentSession.create({
+      data: {
+        id: prId,
+        workspaceId,
+        workspacePrId: prId,
+        workflow: 'pr-monitoring',
+        provider: 'CODEX',
+        providerSessionId: `${prId}-provider`,
+      },
+    });
+    await db.prisma.workspacePRDedicatedSession.create({ data: { prId, sessionId: prId } });
+    await db.prisma.workspacePREvent.create({
+      data: {
+        id: `${prId}-event`,
+        workspaceId,
+        prId,
+        kind: 'CI_FAILED',
+        deduplicationKey: prId,
+        payload: { kind: 'CI_FAILED', target: { workspaceId, prId }, observation },
+      },
+    });
+  }
+  const inputs = recipients.map((name) => ({
+    sessionId: `competing-${name}`,
+    request: {
+      workspaceId,
+      prId: `competing-${name}`,
+      bindingRevision: 1,
+      deliveryMode: 'DEDICATED' as const,
+    },
+  }));
+  const results = await Promise.all(inputs.map((input) => preparePRDelivery(input)));
+  expect(results.map((result) => result.status).sort()).toEqual(['blocked', 'ready']);
+  const winner = results.find((result) => result.status === 'ready');
+  const waiting = inputs[results.findIndex((result) => result.status === 'blocked')]!;
+  if (winner?.status !== 'ready') {
+    throw new Error('Expected a single workspace claim');
+  }
+  expect(
+    await workspacePRMonitoringService.listPending(workspaceId, waiting.request.prId)
+  ).toMatchObject([{ state: 'PENDING', attempts: 0, deliveryId: null }]);
+  await prBackgroundDeliveryPort.complete(winner.delivery);
+  expect(sessionBackgroundDeliveryService.enqueue).toHaveBeenCalledWith(
+    waiting.sessionId,
+    waiting.request
+  );
+  expect(await preparePRDelivery(waiting)).toMatchObject({
+    status: 'ready',
+    delivery: { attempt: 1 },
+  });
 });

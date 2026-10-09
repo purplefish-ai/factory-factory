@@ -21,6 +21,13 @@ async function current(target: Target, services: PRMonitoringServices, isCurrent
     !config.deliveryPauseReason
   );
 }
+function isBoundDedicatedSession(target: Target, session: AgentSessionRecord): boolean {
+  return (
+    session.workspaceId === target.workspaceId &&
+    session.workspacePrId === target.prId &&
+    session.workflow === PR_DEDICATED_WORKFLOW
+  );
+}
 async function acquireForPending(
   target: Target,
   services: PRMonitoringServices,
@@ -37,6 +44,13 @@ async function acquireForPending(
     )
   ) {
     return null;
+  }
+  const bound = await services.sessionDataService.findPRDedicatedSession(target);
+  if (!(await current(target, services, isCurrent))) {
+    return null;
+  }
+  if (bound?.providerSessionId) {
+    return isBoundDedicatedSession(target, bound) ? bound : null;
   }
   if (
     !(
@@ -57,6 +71,31 @@ async function acquireForPending(
     return null;
   }
   return acquired.session;
+}
+async function recoverConcurrentStartup(
+  target: Target,
+  acquired: AgentSessionRecord,
+  services: PRMonitoringServices,
+  isCurrent: () => boolean
+): Promise<AgentSessionRecord | null> {
+  if (!(await current(target, services, isCurrent))) {
+    return null;
+  }
+  const bound = await services.sessionDataService.findPRDedicatedSession(target);
+  if (!((await current(target, services, isCurrent)) && bound)) {
+    return null;
+  }
+  const runtime = services.acpRuntimeManager.getClient(bound.id);
+  return bound.id === acquired.id &&
+    isBoundDedicatedSession(target, bound) &&
+    bound.provider === acquired.provider &&
+    bound.providerSessionId &&
+    runtime?.provider === bound.provider &&
+    runtime.providerSessionId === bound.providerSessionId &&
+    runtime.sessionCreationOutcome.kind !== 'resume_fallback' &&
+    runtime.isRunning()
+    ? bound
+    : null;
 }
 async function bootstrapSession(
   target: Target,
@@ -92,6 +131,10 @@ async function bootstrapSession(
       },
     });
   } catch (error) {
+    const concurrent = await recoverConcurrentStartup(target, acquired, services, valid);
+    if (concurrent) {
+      return concurrent;
+    }
     logger.warn('Failed to bootstrap dedicated PR conversation', { ...target, sessionId, error });
     if (await current(target, services, valid)) {
       await services.workspacePRMonitoringService.pauseWorkspace(

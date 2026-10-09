@@ -1,3 +1,4 @@
+import { createLogger } from '@/backend/services/logger.service';
 import { RATCHET_DISPATCH_CHANGED } from '@/backend/services/ratchet';
 import type { PRBackgroundDeliveryPort } from '@/backend/services/session';
 import type { ClaimedPRDelivery } from '@/shared/pr-monitoring';
@@ -12,6 +13,7 @@ import {
   defaultPRMonitoringServices,
   type PRMonitoringServices,
 } from './pr-monitoring-dependencies';
+const logger = createLogger('pr-event-delivery-port');
 export function createPRBackgroundDeliveryPort(
   services: PRMonitoringServices
 ): PRBackgroundDeliveryPort {
@@ -49,6 +51,12 @@ export function createPRBackgroundDeliveryPort(
       const session = await sessionDataService.findAgentSessionById(delivery.sessionId);
       if (session) {
         ratchetService.emit(RATCHET_DISPATCH_CHANGED, { workspaceId: session.workspaceId });
+        await wakePRDelivery(session.workspaceId, services).catch((error) => {
+          logger.warn('PR delivery wake deferred after claim settlement', {
+            workspaceId: session.workspaceId,
+            error,
+          });
+        });
       }
     },
     async fail(delivery, error) {

@@ -145,10 +145,16 @@ it('shows checked destination, description and disables controls while changing 
   await open();
   const selected = document.querySelector('[role="menuitemradio"][aria-checked="true"]')!;
   expect(selected.textContent).toContain('Dedicated conversation per PR');
-  expect(selected.getAttribute('aria-disabled')).toBe('true');
+  const destinations = [...document.querySelectorAll('[role="menuitemradio"]')];
+  expect(destinations).toHaveLength(2);
+  for (const destination of destinations) {
+    expect(destination.getAttribute('aria-disabled')).toBe('true');
+  }
   expect(document.body.textContent).toContain('reuses it for that PR');
   expect(document.body.textContent).not.toContain('Change PR update conversation');
-  await key(selected, 'Enter');
+  const alternate = destinations.find((destination) => destination !== selected)!;
+  expect(alternate.textContent).toContain('Main conversation');
+  await key(alternate, 'Enter');
   expect(onDeliveryMode).not.toHaveBeenCalled();
 });
 

@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import type { WorkspacePullRequest } from '@/shared/workspace-pr';
 import { WorkspacePrMenu } from './workspace-pr-menu';
@@ -89,5 +90,32 @@ export const PausedDedicatedConversations: Story = {
       pauseReason: 'SESSION_FAILED',
       onResume: () => undefined,
     },
+  },
+};
+
+export const ShortViewport: Story = {
+  args: {
+    prs: Array.from({ length: 20 }, (_, index) => pr(index + 1)),
+    monitoring: { ...monitoring, pauseReason: 'USER_STOPPED', onResume: () => undefined },
+  },
+  play: async ({ canvasElement }) => {
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'PRs (20)' }));
+    const body = within(canvasElement.ownerDocument.body);
+    const menu = await body.findByRole('menu');
+    await expect(getComputedStyle(menu).overflowY).toBe('auto');
+    for (const control of [
+      body.getByRole('menuitem', { name: /^Resume PR updates$/ }),
+      body.getByRole('menuitemradio', { name: /^Main conversation$/ }),
+      body.getByRole('menuitemradio', { name: /^Dedicated conversation per PR$/ }),
+      body.getByRole('menuitem', { name: /^Add PR$/ }),
+    ]) {
+      control.scrollIntoView({ block: 'center' });
+      await waitFor(() => {
+        const menuBounds = menu.getBoundingClientRect();
+        const controlBounds = control.getBoundingClientRect();
+        expect(controlBounds.top).toBeGreaterThanOrEqual(menuBounds.top);
+        expect(controlBounds.bottom).toBeLessThanOrEqual(menuBounds.bottom);
+      });
+    }
   },
 };

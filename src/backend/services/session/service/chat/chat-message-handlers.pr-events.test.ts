@@ -370,4 +370,53 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     validate.mockRestore();
     fail.mockRestore();
   });
+
+  it('dispatches a new PR batch with the same queue ID after a completion wake races the active dispatcher', async () => {
+    const first: QueuedMessage = {
+      ...queuedMessage,
+      id: 'pr-event-queued',
+      text: 'first batch',
+      source: { type: 'pr_event', request: { workspaceId: 'w', prId: 'p', bindingRevision: 1 } },
+    };
+    const second: QueuedMessage = { ...first, text: 'second batch' };
+    const queue = [first];
+    mockSessionDomainService.peekNextMessage.mockImplementation(() => queue[0]);
+    mockSessionDomainService.dequeueNext.mockImplementation(() => queue.shift());
+    mockSessionDomainService.getPendingInteractiveRequest.mockReturnValue(null);
+    mockSessionService.getSessionClient.mockReturnValue({ providerSessionId: 'existing' });
+    const prepare = vi.spyOn(sessionBackgroundDeliveryService, 'prepare').mockResolvedValue({
+      status: 'ready',
+      delivery: {
+        deliveryId: 'd',
+        sessionId: 's1',
+        bindingRevision: 1,
+        eventIds: ['e'],
+        text: 'facts',
+        attempt: 1,
+      },
+    });
+    const validate = vi.spyOn(sessionBackgroundDeliveryService, 'validate').mockResolvedValue(true);
+    let completions = 0;
+    const complete = vi
+      .spyOn(sessionBackgroundDeliveryService, 'complete')
+      .mockImplementation(async () => {
+        if (completions++ === 0) {
+          await Promise.resolve();
+          queue.push(second);
+          await chatMessageHandlerService.tryDispatchNextMessage('s1');
+        }
+      });
+    try {
+      await chatMessageHandlerService.tryDispatchNextMessage('s1');
+      expect(mockSessionService.sendSessionMessage.mock.calls).toEqual([
+        ['s1', 'first batch'],
+        ['s1', 'second batch'],
+      ]);
+      expect(queue).toEqual([]);
+    } finally {
+      prepare.mockRestore();
+      validate.mockRestore();
+      complete.mockRestore();
+    }
+  });
 });

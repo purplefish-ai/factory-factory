@@ -146,7 +146,17 @@ export async function preparePRDelivery(
     eventIds: events.map((e) => e.id),
     text,
   });
-  return delivery ? { status: 'ready', delivery } : { status: 'discard' };
+  if (delivery) {
+    return { status: 'ready', delivery };
+  }
+  const remaining = await workspacePRMonitoringService.listPending(
+    request.workspaceId,
+    request.prId
+  );
+  const guard = await guardPRDelivery(sessionId, request, services);
+  return remaining.length && guard !== 'discard'
+    ? { status: 'blocked', reason: 'Waiting for the workspace PR delivery claim' }
+    : { status: 'discard' };
 }
 type MonitoringConfig = Awaited<
   ReturnType<PRMonitoringServices['workspacePRMonitoringService']['get']>

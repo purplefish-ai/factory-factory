@@ -6,8 +6,6 @@ import {
 } from '@/backend/services/auto-iteration';
 import { AutoIterationStatus, SessionStatus } from '@/shared/core';
 
-// --- Module mocks (inline vi.fn() - no top-level variable references) ---
-
 const mockLogger = vi.hoisted(() => ({
   info: vi.fn(),
   debug: vi.fn(),
@@ -144,8 +142,6 @@ vi.mock('./workspace-init.orchestrator', () => ({
   recoverStaleProvisioningWorkspace: vi.fn(),
 }));
 
-// --- Import mocked modules to get references ---
-
 import {
   githubCLIService,
   prFetchCoordinator,
@@ -187,7 +183,6 @@ import {
   recoverStaleProvisioningWorkspace,
 } from './workspace-init.orchestrator';
 
-// Helper to extract bridge argument from a mocked configure call.
 function getBridge<T>(mockFn: (arg: T) => void): T {
   return vi.mocked(mockFn).mock.calls[0]![0];
 }
@@ -878,6 +873,9 @@ describe('configureDomainBridges', () => {
 
       bridge.workspace.markSessionIdle('ws1', 's1', 12);
       expect(workspaceActivityService.markSessionIdle).toHaveBeenCalledWith('ws1', 's1', 12);
+      expect(defaultPRMonitoringServices.workspacePRMonitoringService.get).toHaveBeenCalledWith(
+        'ws1'
+      );
     });
 
     it('chatEventForwarder workspace bridge delegates on', () => {
@@ -911,6 +909,9 @@ describe('configureDomainBridges', () => {
 
       bridge.workspace.markSessionIdle('ws1', 's1', 12);
       expect(workspaceActivityService.markSessionIdle).toHaveBeenCalledWith('ws1', 's1', 12);
+      expect(defaultPRMonitoringServices.workspacePRMonitoringService.get).toHaveBeenCalledWith(
+        'ws1'
+      );
     });
 
     it('session lifecycle message queue bridge delegates pending dispatch to chat handlers', async () => {

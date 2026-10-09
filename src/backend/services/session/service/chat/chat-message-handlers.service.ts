@@ -277,7 +277,7 @@ export class ChatMessageHandlerService {
       await this.dispatchPeekedMessage(dbSessionId, peeked, stopGeneration);
       return peeked.source &&
         this.isDispatchGenerationCurrent(dbSessionId, stopGeneration) &&
-        sessionDomainService.peekNextMessage(dbSessionId)?.id !== peeked.id
+        sessionDomainService.peekNextMessage(dbSessionId) !== peeked
         ? 'continue'
         : 'done';
     } finally {
