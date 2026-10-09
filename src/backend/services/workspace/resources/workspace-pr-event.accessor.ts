@@ -305,6 +305,12 @@ class WorkspacePrEventAccessor {
       data: { state: 'CANCELLED' },
     });
   }
+  cancelUnclaimedControls(tx: Prisma.TransactionClient, workspaceId: string) {
+    return tx.workspacePREvent.updateMany({
+      where: { workspaceId, kind: 'MONITORING_ENABLED', state: 'PENDING', deliveryId: null },
+      data: { state: 'CANCELLED' },
+    });
+  }
   cancelInTransaction(tx: Prisma.TransactionClient, workspaceId: string) {
     return tx.workspacePREvent.updateMany({
       where: { workspaceId, state: 'PENDING', deliveryId: null },

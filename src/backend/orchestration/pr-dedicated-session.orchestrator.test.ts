@@ -167,3 +167,28 @@ it('discards a completed bootstrap after a binding change', async () => {
   expect(await ensureDedicatedPRRecipient(target, h.services, () => true)).toBeNull();
   expect(h.pause).not.toHaveBeenCalled();
 });
+
+it('lets a current wake complete bootstrap when an earlier coalesced wake is cancelled', async () => {
+  const h = harness();
+  let firstCurrent = true;
+  let release!: () => void;
+  h.start.mockImplementation(
+    (_id, options) =>
+      new Promise<void>((resolve, reject) => {
+        release = () => {
+          void options.assertCurrent().then(() => {
+            h.session.providerSessionId = 'original';
+            resolve();
+          }, reject);
+        };
+      })
+  );
+  const first = ensureDedicatedPRRecipient(target, h.services, () => firstCurrent);
+  await vi.waitFor(() => expect(h.start).toHaveBeenCalled());
+  const second = ensureDedicatedPRRecipient(target, h.services, () => true);
+  firstCurrent = false;
+  release();
+  expect(await first).toBeNull();
+  expect(await second).toMatchObject({ providerSessionId: 'original' });
+  expect(h.start).toHaveBeenCalledTimes(1);
+});

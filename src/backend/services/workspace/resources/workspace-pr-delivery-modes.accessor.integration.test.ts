@@ -470,3 +470,184 @@ it('rejects stale explicit resume and preserves nonrecoverable pauses through di
     deliveryPauseReason: 'LEGACY_FIXER_USER_STOPPED',
   });
 });
+
+async function recoveryAndReviewFacts() {
+  const review = {
+    identity: 'comment:7',
+    contentHash: 'hash',
+    body: 'Please fix',
+    url: 'https://github.com/org/repo/pull/1#discussion_r7',
+    author: 'reviewer',
+    path: null,
+    line: null,
+    activityAt: redObservation.observedAt,
+  };
+  return await db.prisma.$transaction((tx) =>
+    workspacePrEventAccessor.insert(tx, 'w', 'p', [
+      {
+        kind: 'CI_RECOVERED',
+        deduplicationKey: 'recovered',
+        payload: {
+          kind: 'CI_RECOVERED',
+          target: { workspaceId: 'w', prId: 'p' },
+          observation: { ...redObservation, ciStatus: 'SUCCESS' },
+        },
+      },
+      {
+        kind: 'REVIEW_FEEDBACK',
+        deduplicationKey: 'review',
+        payload: {
+          kind: 'REVIEW_FEEDBACK',
+          target: { workspaceId: 'w', prId: 'p' },
+          observation: redObservation,
+          reviews: [review],
+        },
+      },
+    ])
+  );
+}
+it('preserves unclaimed recovery and review facts through mode-only switches while replacing controls', async () => {
+  const [controlId] = await workspacePrEventAccessor.addEnabledControl('w', 0, true);
+  const eventIds = await recoveryAndReviewFacts();
+  await switchDedicated();
+  expect(await workspacePrEventAccessor.listPending('w', 'p')).toHaveLength(2);
+  expect(await db.prisma.workspacePREvent.findUnique({ where: { id: controlId } })).toMatchObject({
+    state: 'CANCELLED',
+  });
+  await workspacePrMonitoringAccessor.setBinding({
+    workspaceId: 'w',
+    enabled: true,
+    deliveryMode: 'MAIN',
+    expectedBindingRevision: 1,
+    replyToPrComments: false,
+  });
+  expect(await workspacePrEventAccessor.listPending('w', 'p')).toHaveLength(2);
+  expect(await workspacePrEventAccessor.listPending('w', null)).toHaveLength(1);
+  expect(
+    await workspacePrEventAccessor.claimDelivery(
+      { workspaceId: 'w', prId: 'p', bindingRevision: 2 },
+      {
+        deliveryId: 'rerouted',
+        sessionId: 'main',
+        eventIds,
+        text: 'Queued facts',
+      }
+    )
+  ).toMatchObject({ eventIds, sessionId: 'main', attempt: 1 });
+});
+it('rejects incomplete dispatching backup claims before persisting a workspace lock', async () => {
+  const event = {
+    id: 'invalid-claim',
+    workspaceId: 'w',
+    prId: null,
+    kind: 'MONITORING_ENABLED',
+    deduplicationKey: 'invalid-claim',
+    payload: {
+      kind: 'MONITORING_ENABLED' as const,
+      workspaceId: 'w',
+      bindingRevision: 0,
+      replyToPrComments: true,
+    },
+    state: 'DISPATCHING' as const,
+    attempts: 1,
+    deliveryId: null,
+    deliverySessionId: 'main',
+    deliveryBindingRevision: 0,
+    deliveryText: 'frozen',
+    deliveryProvider: 'CLAUDE',
+    deliveryProviderSessionId: 'main-provider',
+    claimedAt: null,
+    deliveredAt: null,
+    createdAt: '2026-10-08T00:00:00.000Z',
+  };
+  await expect(
+    db.prisma.$transaction((tx) => workspacePrEventAccessor.restoreBackup(tx, 'w', [event]))
+  ).rejects.toThrow();
+  expect(await db.prisma.workspacePREvent.count()).toBe(0);
+});
+
+it('preserves facts when a dedicated-to-main switch also binds a missing main preference', async () => {
+  await switchDedicated();
+  await db.prisma.workspacePRMonitoring.update({
+    where: { workspaceId: 'w' },
+    data: { recipientSessionId: null },
+  });
+  const frozenId = await fact();
+  expect(
+    await workspacePrEventAccessor.claimDelivery(
+      {
+        workspaceId: 'w',
+        prId: 'p',
+        bindingRevision: 1,
+        deliveryMode: 'DEDICATED',
+      },
+      {
+        deliveryId: 'old-dedicated',
+        sessionId: 'dedicated',
+        eventIds: [frozenId],
+        text: 'frozen text',
+      }
+    )
+  ).not.toBeNull();
+  const eventIds = await recoveryAndReviewFacts();
+  const [oldControl] = await db.prisma.$transaction((tx) =>
+    workspacePrEventAccessor.insert(tx, 'w', null, [
+      {
+        kind: 'MONITORING_ENABLED',
+        deduplicationKey: 'old-control',
+        payload: {
+          kind: 'MONITORING_ENABLED',
+          workspaceId: 'w',
+          bindingRevision: 1,
+          replyToPrComments: true,
+        },
+      },
+    ])
+  );
+  expect(
+    await workspacePrMonitoringAccessor.setBinding({
+      workspaceId: 'w',
+      enabled: true,
+      deliveryMode: 'MAIN',
+      recipientSessionId: 'main',
+      expectedBindingRevision: 1,
+      replyToPrComments: false,
+    })
+  ).toEqual({ applied: true, bindingRevision: 2 });
+  for (const id of eventIds) {
+    expect(await db.prisma.workspacePREvent.findUnique({ where: { id } })).toMatchObject({
+      state: 'PENDING',
+      deliveryId: null,
+    });
+  }
+  expect(await db.prisma.workspacePREvent.findUnique({ where: { id: oldControl } })).toMatchObject({
+    state: 'CANCELLED',
+  });
+  expect(await workspacePrEventAccessor.listPending('w', null)).toHaveLength(1);
+  expect(await db.prisma.workspacePREvent.findUnique({ where: { id: frozenId } })).toMatchObject({
+    state: 'DISPATCHING',
+    deliveryId: 'old-dedicated',
+    deliverySessionId: 'dedicated',
+    deliveryProvider: 'CODEX',
+    deliveryProviderSessionId: 'dedicated-provider',
+    deliveryText: 'frozen text',
+    deliveryBindingRevision: 1,
+  });
+  await workspacePrEventAccessor.settleDelivery({
+    deliveryId: 'old-dedicated',
+    sessionId: 'dedicated',
+    bindingRevision: 1,
+    result: 'delivered',
+  });
+  expect(
+    await workspacePrEventAccessor.claimDelivery(
+      { workspaceId: 'w', prId: 'p', bindingRevision: 2 },
+      {
+        deliveryId: 'new-main',
+        sessionId: 'main',
+        eventIds,
+        text: 'Queued facts',
+      }
+    )
+  ).toMatchObject({ eventIds, sessionId: 'main', attempt: 1 });
+});

@@ -53,6 +53,9 @@ class PRDedicatedSessionAccessor {
     tx: Prisma.TransactionClient,
     input: PRTarget & { sessionId: string | null }
   ): Promise<boolean> {
+    if (input.sessionId === '') {
+      return false;
+    }
     const pr = await tx.workspacePR.findFirst({
       where: { id: input.prId, workspaceId: input.workspaceId },
     });

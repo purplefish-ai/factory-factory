@@ -103,3 +103,23 @@ it('defaults old monitoring backups to main and preserves dedicated destinations
     false
   );
 });
+
+it.each(['deliveryId', 'deliverySessionId', 'deliveryBindingRevision', 'deliveryText'] as const)(
+  'rejects a dispatching backup without recoverable %s',
+  (field) => {
+    expect(
+      prEventBackupSchema.safeParse({
+        ...frozenEvent,
+        state: 'DISPATCHING',
+        deliveryText: 'frozen',
+        [field]: null,
+      }).success
+    ).toBe(false);
+  }
+);
+it('accepts complete dispatching metadata from older backups without provider fields', () => {
+  expect(
+    prEventBackupSchema.safeParse({ ...frozenEvent, state: 'DISPATCHING', deliveryText: 'frozen' })
+      .success
+  ).toBe(true);
+});

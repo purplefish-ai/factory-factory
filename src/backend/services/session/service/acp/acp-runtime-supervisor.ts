@@ -473,6 +473,7 @@ export class AcpRuntimeSupervisor {
       this.recordClientPurpose(sessionId, options);
       this.wireChildExitHandler(sessionId, handle.child, handlers, metadata);
       try {
+        handlers.onRuntimeCreated?.(handle);
         await this.notifyClientCreated(sessionId, handle, context, handlers);
         assertCurrent();
       } catch (error) {

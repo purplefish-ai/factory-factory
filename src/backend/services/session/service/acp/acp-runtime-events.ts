@@ -1,6 +1,8 @@
 import type { RequestPermissionRequest, SessionNotification } from '@agentclientprotocol/sdk';
 import type { SubagentsChangedParams } from '@/shared/acp-protocol/subagents';
 import type { AcpPermissionBridge } from './acp-permission-bridge';
+import type { AcpSessionCreationOutcome } from './acp-session-creation-outcome';
+export type { AcpSessionCreationOutcome } from './acp-session-creation-outcome';
 
 export type AcpRuntimePurpose = 'active' | 'browse';
 
@@ -19,15 +21,6 @@ export type AcpRuntimeErrorEvent = Readonly<{
   purpose: AcpRuntimePurpose;
 }>;
 
-export type AcpSessionCreationOutcome =
-  | { kind: 'new' }
-  | { kind: 'resumed' }
-  | {
-      kind: 'resume_fallback';
-      previousProviderSessionId: string;
-      reason: 'load_failed' | 'load_unsupported';
-    };
-
 export type AcpProviderIdentityEvent = Readonly<{
   sessionId: string;
   providerSessionId: string;
@@ -40,6 +33,8 @@ export type AcpProviderIdentityEvent = Readonly<{
 }>;
 
 export type AcpRuntimeEventHandlers = {
+  /** Emitted only for this caller's newly installed candidate, never a reused runtime. */
+  onRuntimeCreated?: (handle: import('./acp-process-handle').AcpProcessHandle) => void;
   onProviderIdentityRollover?: (event: AcpProviderIdentityEvent) => Promise<void>;
   onSessionId?: (sessionId: string, providerSessionId: string) => Promise<void>;
   onRuntimeExit?: (event: AcpRuntimeExitEvent) => Promise<void>;

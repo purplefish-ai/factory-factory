@@ -214,3 +214,50 @@ it('does not treat a detached PR binding as an active recipient', async () => {
   await db.prisma.workspacePR.update({ where: { id: 'a' }, data: { detachedAt: new Date() } });
   expect(await prDedicatedSessionAccessor.find({ workspaceId: 'w', prId: 'a' })).toBeNull();
 });
+
+it('serializes actual adapter transactions across different workspace acquisition queues', async () => {
+  await db.prisma.workspace.create({
+    data: {
+      id: 'other',
+      projectId: 'project',
+      name: 'Other',
+      status: 'READY',
+      worktreePath: '/tmp/other',
+      prs: { create: { id: 'other-pr', url: 'https://github.com/o/r/pull/3' } },
+      prMonitoring: { create: { enabled: true, deliveryMode: 'DEDICATED', bindingRevision: 4 } },
+    },
+  });
+  const result = await Promise.all([
+    prDedicatedSessionAccessor.acquire(input),
+    prDedicatedSessionAccessor.acquire({ ...input, workspaceId: 'other', prId: 'other-pr' }),
+  ]);
+  expect(result.map((item) => item.outcome)).toEqual(['created', 'created']);
+  expect(await db.prisma.agentSession.count()).toBe(2);
+  expect(await db.prisma.workspacePRDedicatedSession.count()).toBe(2);
+});
+it.each([false, true])(
+  'rejects empty restored session ID even when an ordinary empty ID exists: %s',
+  async (existing) => {
+    if (existing) {
+      await db.prisma.agentSession.create({
+        data: {
+          id: '',
+          workspaceId: 'w',
+          workflow: 'implement',
+          provider: 'CLAUDE',
+          model: 'sonnet',
+        },
+      });
+    }
+    expect(
+      await db.prisma.$transaction((tx) =>
+        prDedicatedSessionAccessor.restore(tx, {
+          workspaceId: 'w',
+          prId: 'a',
+          sessionId: '',
+        })
+      )
+    ).toBe(false);
+    expect(await db.prisma.workspacePRDedicatedSession.count()).toBe(0);
+  }
+);

@@ -27,9 +27,7 @@ export function RatchetingToggle({
         state={workspace.ratchetState}
         animated={workspace.ratchetButtonAnimated ?? false}
         disabled={toggleRatcheting.isPending}
-        onToggle={(enabled) =>
-          toggleRatcheting.mutate({ workspaceId, enabled, deliveryMode: mode })
-        }
+        onToggle={(enabled) => toggleRatcheting.mutate({ workspaceId, enabled })}
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -79,9 +77,7 @@ export function RatchetingMenuItems({
           expectedBindingRevision: workspace.prMonitoring?.bindingRevision,
         })
       }
-      onToggle={(nextEnabled) =>
-        toggleRatcheting.mutate({ workspaceId, enabled: nextEnabled, deliveryMode: mode })
-      }
+      onToggle={(nextEnabled) => toggleRatcheting.mutate({ workspaceId, enabled: nextEnabled })}
       onDeliveryMode={(deliveryMode) =>
         toggleRatcheting.mutate({
           workspaceId,

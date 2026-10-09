@@ -427,3 +427,77 @@ it('rejects dedicated backup bindings to a foreign or ordinary session', async (
   };
   expect(exportDataSchema.safeParse(invalid).success).toBe(false);
 });
+
+it.each([false, true])(
+  'rejects empty dedicated backup IDs before writing, including an empty ordinary session: %s',
+  async (existing) => {
+    const exported = await dataBackupService.exportData('test');
+    const workspace = exported.data.workspaces[0]!;
+    const invalid = {
+      ...exported,
+      data: {
+        ...exported.data,
+        agentSessions: existing
+          ? [{ ...exported.data.agentSessions[0]!, id: '', workflow: 'implement' }]
+          : [],
+        workspaces: [
+          {
+            ...workspace,
+            prs: workspace.prs.map((pr) =>
+              pr.id === 'a' ? { ...pr, dedicatedSession: { sessionId: '' } } : pr
+            ),
+          },
+        ],
+      },
+    };
+    expect(exportDataSchema.safeParse(invalid).success).toBe(false);
+  }
+);
+
+it('rejects and rolls back imported dispatching events without a delivery identity', async () => {
+  const exported = await dataBackupService.exportData('test');
+  const workspace = exported.data.workspaces[0]!;
+  const invalid = {
+    ...exported,
+    data: {
+      ...exported.data,
+      workspaces: [
+        {
+          ...workspace,
+          prEvents: [
+            {
+              id: 'bad-claim',
+              workspaceId: 'w',
+              prId: null,
+              kind: 'MONITORING_ENABLED',
+              deduplicationKey: 'bad-claim',
+              payload: {
+                kind: 'MONITORING_ENABLED' as const,
+                workspaceId: 'w',
+                bindingRevision: 0,
+                replyToPrComments: false,
+              },
+              state: 'DISPATCHING' as const,
+              attempts: 1,
+              deliveryId: null,
+              deliverySessionId: 'fixer-a',
+              deliveryBindingRevision: 0,
+              deliveryText: 'frozen',
+              claimedAt: null,
+              deliveredAt: null,
+              createdAt: '2026-10-08T00:00:00.000Z',
+            },
+          ],
+        },
+      ],
+    },
+  };
+  expect(exportDataSchema.safeParse(invalid).success).toBe(false);
+  await clearIntegrationDatabase(db.prisma);
+  await expect(dataBackupService.importData(invalid)).rejects.toThrow(
+    'complete frozen delivery metadata'
+  );
+  expect(await db.prisma.workspacePREvent.count()).toBe(0);
+  expect(await db.prisma.workspace.count()).toBe(0);
+  expect(await db.prisma.project.count()).toBe(0);
+});

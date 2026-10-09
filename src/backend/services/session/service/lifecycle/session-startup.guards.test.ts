@@ -3,11 +3,18 @@ import { SessionStartupCancelledError } from '@/backend/services/session/service
 import {
   createDeferred,
   createLifecycleHarness,
+  createPendingWorkspaceNotification,
 } from '@/backend/services/session/service/lifecycle/session-lifecycle.test-helpers';
+import { workspaceNotificationService } from '@/backend/services/workspace';
 
 beforeEach(() => vi.clearAllMocks());
 function guardHarness() {
   const harness = createLifecycleHarness();
+  harness.runtimeManager.getOrCreateClient.mockImplementation((_id, _options, handlers) => {
+    handlers.onRuntimeCreated?.(harness.handle);
+    harness.runtimeManager.getClient.mockReturnValue(harness.handle);
+    return Promise.resolve(harness.handle);
+  });
   let valid = true;
   const assertCurrent = () =>
     valid ? Promise.resolve() : Promise.reject(new SessionStartupCancelledError());
@@ -48,7 +55,13 @@ it('rechecks monitoring after environment resolution before spawning the provide
 it('stops a candidate created after the monitoring revision changed without persisting identity', async () => {
   const h = guardHarness();
   const pending = createDeferred<typeof h.handle>();
-  h.runtimeManager.getOrCreateClient.mockReturnValueOnce(pending.promise);
+  h.runtimeManager.getOrCreateClient.mockImplementationOnce((_id, _options, handlers) =>
+    pending.promise.then((handle) => {
+      handlers.onRuntimeCreated?.(handle);
+      h.runtimeManager.getClient.mockReturnValue(handle);
+      return handle;
+    })
+  );
   const started = h.service
     .startSession('session-1', { initialPrompt: '', assertCurrent: h.assertCurrent })
     .catch((error: unknown) => error);
@@ -89,6 +102,9 @@ it('cleans up a guarded startup cancelled during the final running write', async
   expect(await started).toBeInstanceOf(SessionStartupCancelledError);
   expect(h.runtimeManager.stopClient).toHaveBeenCalledWith('session-1');
   expect(h.sendSessionMessage).not.toHaveBeenCalled();
+  expect(h.repository.updateSessionIfStatus).toHaveBeenCalledWith('session-1', { status: 'IDLE' }, [
+    'RUNNING',
+  ]);
 });
 it('stops guarded startup after permission application before any initial turn', async () => {
   const h = guardHarness();
@@ -125,4 +141,84 @@ it('cancels after reasoning configuration before persisting the provider snapsho
   expect(h.runtimeManager.stopClient).toHaveBeenCalledWith('session-1');
   expect(h.sessionConfigService.persistAcpConfigSnapshot).not.toHaveBeenCalled();
   expect(h.sendSessionMessage).not.toHaveBeenCalled();
+});
+
+it('does not stop a concurrent runtime reused during guarded acquisition', async () => {
+  const h = guardHarness();
+  h.runtimeManager.getClient.mockReturnValueOnce(undefined).mockReturnValue(h.handle);
+  h.sessionConfigService.applyConfiguredPermissionPreset.mockImplementation(() => {
+    h.invalidate();
+    return Promise.resolve();
+  });
+  await expect(
+    h.service.startSession('session-1', {
+      initialPrompt: '',
+      assertCurrent: h.assertCurrent,
+    })
+  ).rejects.toBeInstanceOf(SessionStartupCancelledError);
+  expect(h.runtimeManager.getOrCreateClient).not.toHaveBeenCalled();
+  expect(h.runtimeManager.stopAndQuiesce).not.toHaveBeenCalled();
+  expect(h.runtimeManager.stopClient).not.toHaveBeenCalled();
+});
+
+it('retains a runtime after a valid ordinary startup has reused it and finished', async () => {
+  const h = guardHarness();
+  const pending = createDeferred<void>();
+  h.sessionConfigService.applyConfiguredPermissionPreset.mockReturnValueOnce(pending.promise);
+  const guarded = h.service
+    .startSession('session-1', {
+      initialPrompt: '',
+      assertCurrent: h.assertCurrent,
+    })
+    .catch((error: unknown) => error);
+  await vi.waitFor(() =>
+    expect(h.sessionConfigService.applyConfiguredPermissionPreset).toHaveBeenCalled()
+  );
+  const reused = await h.service.getOrCreateSessionClient('session-1');
+  expect(reused).toBe(h.handle);
+  h.invalidate();
+  pending.resolve(undefined);
+  expect(await guarded).toBeInstanceOf(SessionStartupCancelledError);
+  expect(h.runtimeManager.stopAndQuiesce).not.toHaveBeenCalled();
+  expect(h.runtimeManager.stopClient).not.toHaveBeenCalled();
+});
+
+it('passes the destination fence into notification recovery before cards are appended', async () => {
+  const h = guardHarness();
+  vi.spyOn(workspaceNotificationService, 'listPendingForDelivery').mockImplementation(() => {
+    h.invalidate();
+    return Promise.resolve([createPendingWorkspaceNotification()]);
+  });
+  await expect(
+    h.service.startSession('session-1', {
+      initialPrompt: '',
+      assertCurrent: h.assertCurrent,
+    })
+  ).rejects.toBeInstanceOf(SessionStartupCancelledError);
+  expect(h.sessionDomainService.enqueue).not.toHaveBeenCalled();
+  expect(h.sessionDomainService.appendClaudeEvent).not.toHaveBeenCalled();
+});
+it('keeps established runtime context when its original startup is cancelled during configuration', async () => {
+  const h = guardHarness();
+  const pending = createDeferred<void>();
+  h.sessionConfigService.applyConfiguredReasoningEffort.mockReturnValueOnce(pending.promise);
+  const guarded = h.service
+    .startSession('session-1', {
+      initialPrompt: '',
+      assertCurrent: h.assertCurrent,
+    })
+    .catch((error: unknown) => error);
+  await vi.waitFor(() =>
+    expect(h.sessionConfigService.applyConfiguredReasoningEffort).toHaveBeenCalled()
+  );
+  expect(await h.service.getOrCreateSessionClient('session-1')).toBe(h.handle);
+  h.invalidate();
+  pending.resolve(undefined);
+  expect(await guarded).toBeInstanceOf(SessionStartupCancelledError);
+  expect(h.runtimeManager.stopClient).not.toHaveBeenCalled();
+  expect(h.acpEventProcessor.clearSessionState).not.toHaveBeenCalled();
+  expect(h.sessionDomainService.setRuntimeSnapshot).toHaveBeenLastCalledWith(
+    'session-1',
+    expect.objectContaining({ phase: 'idle', processState: 'alive' })
+  );
 });

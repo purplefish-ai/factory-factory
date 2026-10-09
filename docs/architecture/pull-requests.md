@@ -27,12 +27,12 @@ adversarial-review sessions are ineligible as main recipients. Issue starts bind
 their created conversation after its initial human message is queued. The
 workspace menu allows changing the destination or main recipient. DEDICATED mode
 creates a normal workspace conversation lazily when that PR has pending events,
-using workspace provider/model defaults and the normal session limit.
-`WorkspacePRDedicatedSession`, owned by the session service, binds one
-`pr-monitoring` conversation to each PR. Later events reuse its saved provider
-identity and settings. Switching back to MAIN retains the selected main
-conversation. Binding changes use a revision compare-and-swap and invalidate
-queued requests for the old revision.
+using the workspace's provider selection, normal user model defaults, and the
+normal session limit. `WorkspacePRDedicatedSession`, owned by the session
+service, binds one `pr-monitoring` conversation to each PR. Later events reuse
+its saved provider identity and settings. Switching back to MAIN retains the
+selected main conversation. Binding changes use a revision compare-and-swap and
+invalidate queued requests for the old revision.
 
 Each `WorkspacePR` association has its own ID, URL, revision, complete
 normalized observation, epoch, and transition sequence. `WorkspacePRDiscovery`
@@ -67,7 +67,8 @@ actionable review additions or edits, conflict transitions, and merge/close
 transitions. Check details, head SHA, and transition sequence distinguish reruns
 and recurrences. An unchanged red observation never sends another prompt merely
 because the agent left CI red. Unfrozen obsolete facts are superseded; frozen
-retry messages keep the original text and UUID.
+retry messages keep the original text and UUID. A destination-only switch
+preserves queued facts so the new recipient can receive them.
 
 Review policy defaults to `CHANGES_REQUESTED`: changes-requested review bodies
 and unresolved inline threads. `ALL_REVIEW_FEEDBACK` also includes commented

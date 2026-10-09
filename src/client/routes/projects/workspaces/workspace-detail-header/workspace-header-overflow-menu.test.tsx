@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { ToggleRatchetingInput } from '@/client/hooks/use-toggle-ratcheting';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { RatchetingToggle } from './ratcheting-toggle';
 import type { WorkspaceHeaderWorkspace } from './types';
 import { WorkspaceHeaderOverflowMenu } from './workspace-header-overflow-menu';
 
@@ -152,7 +153,6 @@ it('shows the current dedicated destination and preserves it when switching moni
   expect(mocks.mutate).toHaveBeenCalledWith({
     workspaceId: 'w',
     enabled: false,
-    deliveryMode: 'DEDICATED',
   });
 });
 
@@ -172,5 +172,38 @@ it.each(['MAIN', 'DEDICATED'] as const)(
       deliveryMode: mode,
       expectedBindingRevision: 3,
     });
+  }
+);
+
+it('enables monitoring from a stale mobile destination without overwriting the saved mode', async () => {
+  const toggle = await openMenu('MAIN', false);
+  await act(() => toggle.click());
+  expect(mocks.mutate).toHaveBeenCalledWith({ workspaceId: 'w', enabled: true });
+});
+it.each(['MAIN', 'DEDICATED'] as const)(
+  'enables monitoring from a stale desktop %s destination without changing it',
+  async (deliveryMode) => {
+    await act(() =>
+      root.render(
+        <TooltipProvider>
+          <RatchetingToggle
+            workspaceId="w"
+            workspace={
+              {
+                id: 'w',
+                projectId: 'p',
+                ratchetEnabled: false,
+                ratchetState: 'IDLE',
+                prMonitoring: { deliveryMode, bindingRevision: 3 },
+              } as WorkspaceHeaderWorkspace
+            }
+          />
+        </TooltipProvider>
+      )
+    );
+    await act(() =>
+      document.querySelector<HTMLButtonElement>('[aria-label="Enable PR updates"]')!.click()
+    );
+    expect(mocks.mutate).toHaveBeenCalledWith({ workspaceId: 'w', enabled: true });
   }
 );

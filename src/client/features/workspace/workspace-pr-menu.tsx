@@ -230,7 +230,7 @@ function ConnectedPRMonitoringMenu({
               deliveryMode,
               expectedBindingRevision: monitoring.bindingRevision,
             }),
-          onToggle: (enabled) => toggle.mutate({ workspaceId, enabled, deliveryMode }),
+          onToggle: (enabled) => toggle.mutate({ workspaceId, enabled }),
           onDeliveryMode: (mode) =>
             toggle.mutate({
               workspaceId,

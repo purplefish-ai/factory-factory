@@ -16,8 +16,9 @@ dedicated mode is selected. Only main mode requires an ordinary recipient.
 
 The workspace PR menu exposes both destinations. Main mode keeps the existing
 recipient picker. Dedicated mode describes its automatic per-PR conversations
-and uses normal workspace provider, model and permissions defaults. It does not
-add separate Ratchet provider or permission settings.
+and uses workspace provider selection, normal user model defaults, and normal
+session permissions. It does not add separate Ratchet provider or permission
+settings.
 
 `WorkspacePRDedicatedSession` binds a PR ID to a nullable AgentSession ID. The
 session capsule owns this table and atomically acquires its conversation under

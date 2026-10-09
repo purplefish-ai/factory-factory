@@ -6,7 +6,8 @@ import { PR_DEDICATED_WORKFLOW, type PRTarget } from '@/shared/pr-monitoring';
 
 const logger = createLogger('pr-dedicated-session');
 type Target = PRTarget & { bindingRevision: number };
-const bootstrapping = new Map<string, Promise<AgentSessionRecord | null>>();
+type Bootstrap = { guards: Set<() => boolean>; promise: Promise<AgentSessionRecord | null> };
+const bootstrapping = new Map<string, Bootstrap>();
 async function current(target: Target, services: PRMonitoringServices, isCurrent: () => boolean) {
   if (!isCurrent()) {
     return false;
@@ -136,20 +137,28 @@ export async function ensureDedicatedPRRecipient(
     return null;
   }
   const key = `${target.workspaceId}:${target.prId}:${target.bindingRevision}`;
-  let pending = bootstrapping.get(key);
-  if (!pending) {
-    pending = resolveRecipient(target, services, isCurrent)
+  let shared = bootstrapping.get(key);
+  if (!shared) {
+    const guards = new Set([isCurrent]);
+    const promise = resolveRecipient(target, services, () => [...guards].some((guard) => guard()))
       .catch((error: unknown) => {
         logger.warn('Failed to acquire dedicated PR conversation', { ...target, error });
         return null;
       })
       .finally(() => {
-        if (bootstrapping.get(key) === pending) {
+        if (bootstrapping.get(key)?.promise === promise) {
           bootstrapping.delete(key);
         }
       });
-    bootstrapping.set(key, pending);
+    shared = { guards, promise };
+    bootstrapping.set(key, shared);
+  } else {
+    shared.guards.add(isCurrent);
   }
-  const session = await pending;
-  return isCurrent() ? session : null;
+  try {
+    const session = await shared.promise;
+    return isCurrent() ? session : null;
+  } finally {
+    shared.guards.delete(isCurrent);
+  }
 }

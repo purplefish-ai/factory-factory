@@ -23,7 +23,7 @@ function validateDedicatedBindings(data: Backup, ctx: z.RefinementCtx) {
   for (const [index, workspace] of data.data.workspaces.entries()) {
     for (const [prIndex, pr] of workspace.prs.entries()) {
       const sessionId = pr.dedicatedSession?.sessionId;
-      if (!sessionId) {
+      if (sessionId === null || sessionId === undefined) {
         continue;
       }
       const session = data.data.agentSessions.find((row) => row.id === sessionId);

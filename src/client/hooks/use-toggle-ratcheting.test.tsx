@@ -2,13 +2,18 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import type { PRRecipientChoice } from '@/client/features/workspace/pr-recipient-picker';
 import { useToggleRatcheting, type ToggleRatchetingInput } from './use-toggle-ratcheting';
 
 const mocks = vi.hoisted(() => ({
   mutate: vi.fn(),
   options: null as null | {
     onSuccess(
-      result: { status: 'recipient_required'; bindingRevision: number; candidates: [] },
+      result: {
+        status: 'recipient_required';
+        bindingRevision: number;
+        candidates: PRRecipientChoice[];
+      },
       input: ToggleRatchetingInput
     ): void;
   },
@@ -29,8 +34,20 @@ vi.mock('@/client/lib/trpc', () => ({
   },
 }));
 vi.mock('@/client/features/workspace/pr-recipient-picker', () => ({
-  PRRecipientPicker: ({ onSelect }: { onSelect(id: string): void }) => (
-    <button onClick={() => onSelect('main')}>Choose main</button>
+  PRRecipientPicker: ({
+    candidates,
+    onSelect,
+  }: {
+    candidates: PRRecipientChoice[];
+    onSelect(id: string): void;
+  }) => (
+    <>
+      {candidates.map((candidate) => (
+        <button key={candidate.id} onClick={() => onSelect(candidate.id)}>
+          Choose {candidate.name ?? candidate.id}
+        </button>
+      ))}
+    </>
   ),
 }));
 let root: Root;
@@ -53,7 +70,11 @@ it('preserves MAIN destination and the new revision when choosing a recipient', 
   await act(() => root.render(<Harness />));
   await act(() =>
     mocks.options!.onSuccess(
-      { status: 'recipient_required', bindingRevision: 7, candidates: [] },
+      {
+        status: 'recipient_required',
+        bindingRevision: 7,
+        candidates: [{ id: 'main-7', name: 'Implementation', provider: 'claude' }],
+      },
       {
         workspaceId: 'w',
         enabled: true,
@@ -66,7 +87,7 @@ it('preserves MAIN destination and the new revision when choosing a recipient', 
     workspaceId: 'w',
     enabled: true,
     deliveryMode: 'MAIN',
-    recipientSessionId: 'main',
+    recipientSessionId: 'main-7',
     expectedBindingRevision: 7,
   });
 });
@@ -89,7 +110,11 @@ it('preserves the explicit resume request through MAIN recipient selection', asy
   await act(() => root.render(<Harness />));
   await act(() =>
     mocks.options!.onSuccess(
-      { status: 'recipient_required', bindingRevision: 9, candidates: [] },
+      {
+        status: 'recipient_required',
+        bindingRevision: 9,
+        candidates: [{ id: 'main-9', name: 'Follow-up', provider: 'codex' }],
+      },
       { workspaceId: 'w', enabled: true, deliveryMode: 'MAIN', resume: true }
     )
   );
@@ -99,7 +124,7 @@ it('preserves the explicit resume request through MAIN recipient selection', asy
     enabled: true,
     deliveryMode: 'MAIN',
     resume: true,
-    recipientSessionId: 'main',
+    recipientSessionId: 'main-9',
     expectedBindingRevision: 9,
   });
 });

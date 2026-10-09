@@ -31,6 +31,11 @@ function createHarness(provider: 'CLAUDE' | 'CODEX', workflow = ADVERSARIAL_REVI
     session: { workflow },
     getPermissionPreset: () => Promise.reject(new Error('settings unavailable')),
   });
+  harness.runtimeManager.getOrCreateClient.mockImplementation((_id, _options, handlers) => {
+    handlers.onRuntimeCreated?.(harness.handle);
+    harness.runtimeManager.getClient.mockReturnValue(harness.handle);
+    return Promise.resolve(harness.handle);
+  });
   harness.handle.configOptions = [
     {
       id: 'mode',

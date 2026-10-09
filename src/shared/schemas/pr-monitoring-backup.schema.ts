@@ -26,8 +26,8 @@ export const prEventBackupSchema = z
     payload: prMonitoringEventPayloadSchema,
     state: z.enum(['PENDING', 'DISPATCHING', 'DELIVERED', 'SUPERSEDED', 'CANCELLED']),
     attempts: z.number().int().nonnegative(),
-    deliveryId: z.string().nullable(),
-    deliverySessionId: z.string().nullable(),
+    deliveryId: z.string().min(1).nullable(),
+    deliverySessionId: z.string().min(1).nullable(),
     deliveryProvider: z.string().nullable().optional(),
     deliveryProviderSessionId: z.string().nullable().optional(),
     deliveryBindingRevision: z.number().int().nonnegative().nullable(),
@@ -42,9 +42,23 @@ export const prEventBackupSchema = z
     deliveredAt: date.nullable(),
     createdAt: date,
   })
-  .refine((e) => e.kind === e.payload.kind, 'Event kind disagrees with payload');
+  .refine((e) => e.kind === e.payload.kind, 'Event kind disagrees with payload')
+  .refine(
+    (event) =>
+      event.state !== 'DISPATCHING' ||
+      Boolean(
+        event.deliveryId &&
+        event.deliverySessionId &&
+        event.deliveryText &&
+        event.deliveryBindingRevision !== null
+      ),
+    'Dispatching event requires complete frozen delivery metadata'
+  );
 export const prAssociationBackupSchema = z.strictObject({
-  dedicatedSession: z.strictObject({ sessionId: z.string().nullable() }).nullable().optional(),
+  dedicatedSession: z
+    .strictObject({ sessionId: z.string().min(1).nullable() })
+    .nullable()
+    .optional(),
   id: z.string().min(1),
   url: z.url(),
   number: z.number().int().nullable(),

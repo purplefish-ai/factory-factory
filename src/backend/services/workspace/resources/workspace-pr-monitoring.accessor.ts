@@ -70,10 +70,11 @@ function bindingTransition(input: PRBindingInput, config: WorkspacePRMonitoring)
   const effective = resolveBinding(input, config);
   const { deliveryMode, recipientSessionId } = effective;
   const modeChanged = config.deliveryMode !== deliveryMode;
-  const bindingChanged =
-    config.enabled !== input.enabled ||
-    config.recipientSessionId !== recipientSessionId ||
-    modeChanged;
+  const recipientChanged = config.recipientSessionId !== recipientSessionId;
+  const preservePendingFacts = modeChanged && config.enabled && input.enabled;
+  const cancelPendingFacts =
+    config.enabled !== input.enabled || (recipientChanged && !preservePendingFacts);
+  const bindingChanged = cancelPendingFacts || modeChanged;
   const shouldResume = input.resume === true && canResumePRMonitoring(config.deliveryPauseReason);
   const renewEpoch =
     modeChanged ||
@@ -86,7 +87,26 @@ function bindingTransition(input: PRBindingInput, config: WorkspacePRMonitoring)
     bindingRevision: { increment: 1 },
     ...(renewEpoch ? { eventEpoch: { increment: 1 } } : {}),
   };
-  return { effective, bindingChanged, shouldResume, data };
+  return { effective, bindingChanged, cancelPendingFacts, shouldResume, data };
+}
+
+async function updateBindingEvents(
+  tx: Prisma.TransactionClient,
+  transition: ReturnType<typeof bindingTransition>,
+  bindingRevision: number
+) {
+  const { effective, bindingChanged, cancelPendingFacts, shouldResume } = transition;
+  if (bindingChanged) {
+    if (cancelPendingFacts) {
+      await workspacePrEventAccessor.cancelInTransaction(tx, effective.workspaceId);
+    } else {
+      await workspacePrEventAccessor.cancelUnclaimedControls(tx, effective.workspaceId);
+    }
+    await insertEnableControl(tx, effective, bindingRevision);
+  }
+  if (shouldResume) {
+    await workspacePrEventAccessor.renewRetryAllowance(tx, effective.workspaceId);
+  }
 }
 
 /** Only a recipient of the current destination can stop or resume monitoring. */
@@ -144,7 +164,8 @@ class WorkspacePrMonitoringAccessor {
       if (config.bindingRevision !== input.expectedBindingRevision) {
         return { applied: false, bindingRevision: config.bindingRevision };
       }
-      const { effective, bindingChanged, shouldResume, data } = bindingTransition(input, config);
+      const transition = bindingTransition(input, config);
+      const { effective, bindingChanged, shouldResume, data } = transition;
       await validateRecipient(tx, effective);
       if (!(bindingChanged || shouldResume)) {
         await insertEnableControl(tx, effective, config.bindingRevision);
@@ -159,13 +180,7 @@ class WorkspacePrMonitoringAccessor {
         data,
       });
       if (result.count) {
-        if (bindingChanged) {
-          await workspacePrEventAccessor.cancelInTransaction(tx, input.workspaceId);
-          await insertEnableControl(tx, effective, config.bindingRevision + 1);
-        }
-        if (shouldResume) {
-          await workspacePrEventAccessor.renewRetryAllowance(tx, input.workspaceId);
-        }
+        await updateBindingEvents(tx, transition, config.bindingRevision + 1);
       }
       return {
         applied: result.count === 1,
