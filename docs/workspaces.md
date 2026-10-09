@@ -145,12 +145,12 @@ terminal PR — an archiving workspace with a merged PR still reads as
 
 `deriveRatchetTroubleReason` (6) is where the old per-read exhausted-retry rule
 now lives, as persisted state rather than a recomputation: `dispatchStalled` on
-the `WorkspaceRatchet` row is set when a settled dispatch achieved nothing for
-an unchanged snapshot key, or when a `DIED` fixer exhausts its retries
-(`SERVICE_THRESHOLDS.ratchetDispatchMaxRetries`, currently 3), and cleared by
-`resetSettledDispatch` (a PR aggregate change) or `disable`. While it is set,
-Ratchet-enabled workspaces report `RATCHET_STALLED` (`WAITING`) instead of
-whatever the CI/review flow would otherwise select. A live merge conflict
+the PR's `WorkspacePRRatchet` row is set when a settled dispatch achieved
+nothing for an unchanged snapshot key, or when a `DIED` fixer exhausts its
+retries (`SERVICE_THRESHOLDS.ratchetDispatchMaxRetries`, currently 3), and
+cleared by `resetSettledDispatch` (a PR aggregate change) or `disable`. While it
+is set, Ratchet-enabled workspaces report `RATCHET_STALLED` (`WAITING`) instead
+of whatever the CI/review flow would otherwise select. A live merge conflict
 reports through the same function ahead of the flow check:
 `FIXING_MERGE_CONFLICT` (`WORKING`) while Ratchet is enabled and working it,
 `MERGE_CONFLICT` (`WAITING`) when Ratchet cannot act on its own.
@@ -170,23 +170,27 @@ in SQL, because live session state is not in the database.
 
 ## Where the PR Cache Lives
 
-Everything the app knows about a workspace's pull request is a 1:1 `WorkspacePR`
-row rather than thirteen columns on `Workspace`: `url`, `number`, `state`,
-`reviewState`, `ciStatus`, `syncedAt`, the three `discovery*` scheduling fields,
-`ciFailedAt`, `ciLastNotifiedAt`, and the two `reviewLast*` cursor fields.
-`workspace-pr.accessor.ts` is the only writer.
+Everything the app knows about a workspace's pull requests lives in a
+`WorkspacePR` collection — one row per attached PR — rather than columns on
+`Workspace`. Each row stores `url`, `number`, head/base branches, `state`,
+`reviewState`, `ciStatus`, `hasMergeConflict`, `syncedAt`, `ciFailedAt`,
+`ciLastNotifiedAt`, and the `reviewLast*` cursors. `workspace-pr.accessor.ts` is
+the only writer.
 
 The split says something the old layout hid: this is a cache, not a source of
 truth. Every field is a copy of GitHub state or a cursor into it, and losing the
 whole row costs one refresh. Sitting beside the workspace's own durable
 identity, that was invisible.
 
-A row is created with every workspace, including workspaces with no PR, because
-PR discovery claims its backoff on this row before any PR exists.
+PR discovery scheduling lives on a separate per-workspace `WorkspacePRDiscovery`
+row, created with the workspace, because discovery claims its backoff before any
+PR exists; `WorkspacePR` rows are added when PRs attach and tombstoned (via
+`detachedAt`) on detach.
 
 Reads flatten the row back onto the workspace under the old `pr*` names, so
-derived state, the snapshot stream, the v4 backup format and the client see the
-shape they always did. `syncedAt` is the one rename: on `Workspace` it was
+derived state, the snapshot stream and the client see the shape they always did
+for the active PR; the snapshot wire also carries the `prs` collection and an
+aggregate `prSummary`. `syncedAt` is the one rename: on `Workspace` it was
 `prUpdatedAt`, which read as GitHub's PR `updated_at` but always held the
 caller's own observation time.
 
@@ -195,13 +199,14 @@ Two consequences worth knowing:
 - **Discovery polling no longer counts as workspace activity.** Claiming a
   discovery attempt used to write a `Workspace` column, which bumped `updatedAt`
   and floated PR-less workspaces to the top of any `updatedAt`-ordered list on
-  every poll. The claim now writes only its own row. The compare-and-swap is
-  unaffected — the retry count still moves — and the guards on `status`,
-  `branchName` and `updatedAt` are relation filters.
+  every poll. The claim now writes only its own row (`WorkspacePRDiscovery`).
+  The compare-and-swap is unaffected — the retry count still moves — and the
+  guards on `status`, `branchName` and `updatedAt` are relation filters.
 - **Three composite indexes are gone.** `[status, prUrl]`,
   `[status, prUrl, prDiscoveryNextCheckAt]` and `[status, prUpdatedAt]` cannot
-  span two tables. The PR-sync and PR-discovery queries are now joins, filtering
-  `status` on `Workspace` and the rest against indexes on `WorkspacePR`.
+  span tables. The PR-sync and PR-discovery queries are now joins, filtering
+  `status` on `Workspace` and the rest against indexes on `WorkspacePR` and
+  `WorkspacePRDiscovery`.
 
 ## Where Ratchet State Lives
 
@@ -298,24 +303,29 @@ field and the two writers cannot race.
   used to ask two tables — `pr.state != CLOSED` and `ratchet.state != MERGED` —
   for the same fact.
 
-The rest of the row is genuinely mutable and still stored: `enabled`,
-`lastCheckedAt`, `activeSessionId`, `dispatchSnapshotKey`, `dispatchOutcome`,
-`dispatchRetryCount`. `workspace-ratchet.accessor.ts` is the only writer,
-enforced by the owned-side-table rule in `check-single-writer`. `enabled` stays
-next to the dispatch record because every conditional ratchet write guards on it
-in the same statement it writes.
+What is shared across PRs lives on `WorkspaceRatchet`: the workspace toggle
+(`enabled`), the check time, and one active fixer slot (`activePrId`,
+`activeSessionId`). The per-PR dispatch tuple — snapshot key, outcome, retry
+count, `dispatchStalled` — lives on `WorkspacePRRatchet` rows, one per attached
+PR. `workspace-ratchet.accessor.ts` writes the shared row and
+`workspace-pr-ratchet.accessor.ts` the per-PR rows, both enforced by the
+owned-side-table rule in `check-single-writer`. `enabled` stays next to the
+active slot because every conditional ratchet write guards on it in the same
+statement it writes.
 
-Reads flatten the row back onto the workspace under the old `ratchet*` names, so
-derived state, the snapshot stream and the client see the shape they always did.
-`dispatchSnapshotKey` is the one rename: on `Workspace` it was
+Reads flatten the shared row back onto the workspace under the old `ratchet*`
+names (`enabled`, `lastCheckedAt`, `activeSessionId`, `activePrId`), and the
+active PR's per-PR dispatch fields flatten under the `ratchetDispatch*` names,
+so derived state, the snapshot stream and the client see the shape they always
+did. `dispatchSnapshotKey` is the one rename: on `Workspace` it was
 `ratchetLastCiRunId`, whose schema comment described it as a misnomer kept to
 avoid a migration. It holds the full dispatch snapshot key — PR number, CI
 signature, review activity, merge conflict — not a CI run id.
 
-A row is created with every workspace, so no workspace can exist that the
-row-guarded writes would silently skip. The backup format still carries the
-fields flat, under the old names, because it is required at `schemaVersion: 4`
-with no migration path.
+`WorkspaceRatchet` is created with every workspace, so no workspace can exist
+that its row-guarded writes would silently skip; `WorkspacePRRatchet` is created
+with each `WorkspacePR`. Backups export the per-PR collection and dispatch
+histories at `schemaVersion: 5`; version 4 imports normalize into that shape.
 
 ## Cached and Live State Propagation
 
