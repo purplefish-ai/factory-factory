@@ -15,23 +15,56 @@ import {
   type workspaceDataService,
 } from '@/backend/services/workspace';
 import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
-import { deriveWorkspaceSidebarStatus, type PRState } from '@/shared/core';
+import { deriveWorkspaceSidebarStatus, type CIStatus, type PRState } from '@/shared/core';
+import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
 
 type Projection = Awaited<ReturnType<typeof workspaceDataService.findRatchetProjection>>;
 
-const mergedProjection = {
-  status: 'READY',
-  ratchetEnabled: true,
-  ratchetState: 'MERGED',
-  prMonitoring: {
-    enabled: true,
-    recipientSessionId: 'main',
-    bindingRevision: 1,
-    pauseReason: null,
-    pendingEventCount: 0,
-  },
-  prHasMergeConflict: false,
-} satisfies Projection;
+function projection(
+  prState: PRState,
+  prCiStatus: CIStatus,
+  prNumber: number,
+  prUrl: string
+): NonNullable<Projection> {
+  const prs = [
+    {
+      id: 'pr',
+      url: prUrl,
+      number: prNumber,
+      title: null,
+      headRefName: null,
+      baseRefName: null,
+      state: prState,
+      reviewState: null,
+      ciStatus: prCiStatus,
+      hasMergeConflict: false,
+      syncedAt: null,
+    },
+  ];
+  const prSummary = deriveWorkspacePRSummary(prs, true);
+  return {
+    status: 'READY',
+    ratchetEnabled: true,
+    ratchetState: prSummary.ratchetState,
+    prMonitoring: {
+      enabled: true,
+      recipientSessionId: 'main',
+      bindingRevision: 1,
+      pauseReason: null,
+      pendingEventCount: 0,
+    },
+    prs,
+    prSummary,
+    prUrl,
+    prNumber,
+    prState: prSummary.state,
+    prCiStatus: prSummary.ciStatus,
+    prUpdatedAt: null,
+    prHasMergeConflict: prSummary.hasMergeConflict,
+  };
+}
+const mergedProjection = projection('MERGED', 'SUCCESS', 41, 'https://github.com/org/repo/pull/41');
+const openProjection = projection('OPEN', 'PENDING', 42, 'https://github.com/org/repo/pull/42');
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -143,7 +176,14 @@ describe('successful PR switch snapshot publication', () => {
     emitOpen(fixture.prs, overrides);
 
     expectOpen(fixture.store);
-    pending.resolve({ ...mergedProjection, ratchetState: 'CI_RUNNING' });
+    pending.resolve(
+      projection(
+        'OPEN',
+        'PENDING',
+        overrides.prNumber ?? 42,
+        overrides.prUrl ?? 'https://github.com/org/repo/pull/42'
+      )
+    );
     await vi.advanceTimersByTimeAsync(0);
     expect(fixture.store.getByWorkspaceId('ws')!.ratchetState).toBe('CI_RUNNING');
     expectOpen(fixture.store);
@@ -181,7 +221,7 @@ describe('successful PR switch snapshot publication', () => {
     expect(publishedRatchetStates).not.toContain('MERGED');
     expectOpen(fixture.store);
 
-    newRead.resolve({ ...mergedProjection, ratchetState: 'CI_RUNNING' });
+    newRead.resolve(openProjection);
     await vi.advanceTimersByTimeAsync(0);
     expect(fixture.store.getByWorkspaceId('ws')!.ratchetState).toBe('CI_RUNNING');
     expectOpen(fixture.store);

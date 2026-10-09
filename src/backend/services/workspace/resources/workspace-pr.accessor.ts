@@ -13,6 +13,8 @@ import {
   prMonitoringEventPayloadSchema,
   prObservationSchema,
 } from '@/shared/schemas/pr-event.schema';
+import type { WorkspacePullRequest } from '@/shared/workspace-pr';
+import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
 import { workspacePrDiscoveryAccessor } from './workspace-pr-discovery.accessor';
 import { workspacePrEventAccessor } from './workspace-pr-event.accessor';
 
@@ -90,6 +92,38 @@ export function flattenWorkspacePR(pr: WorkspacePR | null | undefined): Workspac
     prCiLastNotifiedAt: pr.ciLastNotifiedAt,
     prReviewLastCheckedAt: pr.reviewLastCheckedAt,
     prReviewLastCommentId: pr.reviewLastCommentId,
+  };
+}
+
+/** Collection facts are authoritative; the scalar link selects an active association. */
+export function projectWorkspacePRCollection(rows: WorkspacePRRow[], enabled: boolean) {
+  const attached = rows.filter((pr) => !pr.detachedAt);
+  const prs = attached.map(serializeWorkspacePR);
+  const prSummary = deriveWorkspacePRSummary(prs, enabled);
+  return {
+    ...flattenWorkspacePR(selectActiveWorkspacePR(attached)),
+    prs,
+    prSummary,
+    prState: prSummary.state,
+    prCiStatus: prSummary.ciStatus,
+    prHasMergeConflict: prSummary.hasMergeConflict,
+    ratchetState: prSummary.ratchetState,
+  };
+}
+
+export function serializeWorkspacePR(pr: WorkspacePRRow): WorkspacePullRequest {
+  return {
+    id: pr.id,
+    url: pr.url,
+    number: pr.number,
+    title: pr.title,
+    headRefName: pr.headRefName,
+    baseRefName: pr.baseRefName,
+    state: pr.state,
+    reviewState: pr.reviewState,
+    ciStatus: pr.ciStatus,
+    hasMergeConflict: pr.hasMergeConflict,
+    syncedAt: pr.syncedAt?.toISOString() ?? null,
   };
 }
 
@@ -194,6 +228,7 @@ class WorkspacePRAccessor {
     expectedEventEpoch: number;
   }) {
     const observation = prObservationSchema.parse(input.observation);
+    const titleFields = observation.title !== undefined ? { title: observation.title } : {};
     return prisma.$transaction(async (tx) => {
       const row = await tx.workspacePR.findFirst({
         where: {
@@ -240,6 +275,7 @@ class WorkspacePRAccessor {
         where: { id: row.id, revision: input.expectedPrRevision, detachedAt: null },
         data: {
           number: observation.number,
+          ...titleFields,
           headRefName: observation.headBranch,
           baseRefName: observation.baseBranch,
           state: observation.prState,

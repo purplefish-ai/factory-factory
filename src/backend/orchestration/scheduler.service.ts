@@ -131,7 +131,9 @@ class SchedulerService {
     }
 
     const results = await Promise.all(
-      workspaces.map((workspace) => ghLimit(() => this.syncSinglePR(workspace.id, workspace.prUrl)))
+      workspaces.map((workspace) =>
+        ghLimit(() => this.syncSinglePR(workspace.id, workspace.prUrl, workspace.prId))
+      )
     );
 
     const synced = results.filter((r) => r.success).length;
@@ -246,6 +248,7 @@ class SchedulerService {
   ): Promise<{ discovered: number; failed: boolean }> {
     try {
       const prs = await githubCLIService.listOpenPRs(group.owner, group.repo);
+      const matches = new Map<ClaimedPRDiscoveryCandidate, string[]>();
       let discovered = 0;
 
       for (const pr of [...prs].sort(
@@ -267,21 +270,16 @@ class SchedulerService {
           continue;
         }
 
-        const result = await prSnapshotService.attachDiscoveredPRAndRefresh(
+        const urls = matches.get(candidate) ?? [];
+        urls.push(pr.url);
+        matches.set(candidate, urls);
+      }
+      for (const [candidate, urls] of matches) {
+        discovered += await prSnapshotService.attachDiscoveredPRsAndRefresh(
           candidate.workspace.id,
-          pr.url,
+          urls,
           candidate.claim
         );
-        if (result.success || result.reason === 'fetch_failed') {
-          discovered += 1;
-        } else {
-          logger.warn('Discovered PR but failed to attach snapshot', {
-            workspaceId: candidate.workspace.id,
-            branchName: candidate.branchName,
-            prUrl: pr.url,
-            reason: result.reason,
-          });
-        }
       }
 
       return { discovered, failed: false };
@@ -324,7 +322,8 @@ class SchedulerService {
    */
   private async syncSinglePR(
     workspaceId: string,
-    prUrl: string | null
+    prUrl: string | null,
+    prId: string
   ): Promise<{ success: boolean; reason?: string }> {
     if (this.isShuttingDown) {
       return { success: false, reason: 'shutdown' };
@@ -337,8 +336,8 @@ class SchedulerService {
 
     try {
       const outcome = await prFetchCoordinator.coordinate(
-        workspaceId,
-        () => prSnapshotService.refreshWorkspace(workspaceId, prUrl),
+        { workspaceId, prId },
+        () => prSnapshotService.refreshPR({ workspaceId, prId }),
         // A refresh reports failure as a value rather than an exception, and a
         // failed one must not start a cooldown or the retry waits it out.
         { countsAsFetched: (result) => result.success }

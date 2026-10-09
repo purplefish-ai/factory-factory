@@ -53,6 +53,7 @@ export const workspaceChildrenRouter = router({
         const derivedState = assembleWorkspaceDerivedState(
           {
             lifecycle: child.status,
+            prSummary: child.prSummary,
             prUrl: child.prUrl,
             prState: child.prState,
             prCiStatus: child.prCiStatus,
@@ -81,6 +82,8 @@ export const workspaceChildrenRouter = router({
           name: child.name,
           description: child.description,
           status: child.status,
+          prs: child.prs,
+          prSummary: child.prSummary,
           prState: child.prState,
           prUrl: child.prUrl,
           kanbanColumn: derivedState.kanbanColumn,

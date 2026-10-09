@@ -38,6 +38,7 @@ import {
   VOICE_UTTERANCE_END_MS_MIN,
 } from '@/shared/voice-vad';
 import { autoIterationConfigSchema } from './auto-iteration.schema';
+import { validateBackupPRs, validateLegacyFixerOwnership } from './export-data-pr-validation';
 import {
   prAssociationBackupSchema,
   prDiscoveryBackupSchema,
@@ -148,6 +149,7 @@ const exportedAgentSessionSchema = z.object({
   workspaceId: z.string(),
   name: z.string().nullable(),
   workflow: z.string(),
+  workspacePrId: z.string().nullable().optional().default(null),
   model: z.string(),
   status: SessionStatus,
   provider: SessionProvider,
@@ -226,7 +228,7 @@ const exportedUserSettingsSchema = z.object({
     .default(DEFAULT_VOICE_BARGE_IN_SUSTAINED_MS),
 });
 
-export const exportDataSchema = z.object({
+const legacyAndCurrentSchema = z.object({
   meta: z.object({
     exportedAt: z.string(),
     version: z.string(),
@@ -240,6 +242,186 @@ export const exportDataSchema = z.object({
     userSettings: exportedUserSettingsSchema.nullable(),
   }),
 });
+
+const legacyPRSchema = prAssociationBackupSchema.extend({
+  ratchet: z.object({
+    lastCheckedAt: z.string().nullable(),
+    activeSessionId: z.string().nullable(),
+    dispatchSnapshotKey: z.string().nullable(),
+    dispatchOutcome: z.enum(['RUNNING', 'COMPLETED', 'DIED']).nullable(),
+    dispatchRetryCount: z.number().int().nonnegative(),
+    dispatchStalled: z.boolean(),
+  }),
+});
+const publishedVersion5Schema = legacyAndCurrentSchema
+  .extend({
+    meta: legacyAndCurrentSchema.shape.meta.extend({ schemaVersion: z.literal(5) }),
+    data: legacyAndCurrentSchema.shape.data.extend({
+      workspaces: z.array(
+        exportedWorkspaceSchema
+          .omit({
+            prUrl: true,
+            prNumber: true,
+            prState: true,
+            prReviewState: true,
+            prCiStatus: true,
+            prUpdatedAt: true,
+            prCiFailedAt: true,
+            prCiLastNotifiedAt: true,
+            prReviewLastCheckedAt: true,
+            prReviewLastCommentId: true,
+            ratchetLastCiRunId: true,
+            ratchetState: true,
+          })
+          .extend({
+            prs: z.array(legacyPRSchema),
+            ratchetActivePrId: z.string().nullable(),
+          })
+      ),
+    }),
+  })
+  .superRefine(validateLegacyFixerOwnership);
+
+function normalizePublishedVersion5(data: z.infer<typeof publishedVersion5Schema>) {
+  return {
+    ...data,
+    meta: { ...data.meta, schemaVersion: 6 as const },
+    data: {
+      ...data.data,
+      workspaces: data.data.workspaces.map((workspace) => {
+        const legacySessionIds = [
+          ...new Set([
+            ...(workspace.ratchetActiveSessionId ? [workspace.ratchetActiveSessionId] : []),
+            ...workspace.prs.flatMap((pr) =>
+              pr.ratchet.activeSessionId ? [pr.ratchet.activeSessionId] : []
+            ),
+            ...data.data.agentSessions
+              .filter((s) => s.workspaceId === workspace.id && s.workflow === 'ratchet')
+              .map((s) => s.id),
+          ]),
+        ];
+        return exportedWorkspaceSchema.parse({
+          ...workspace,
+          prs: workspace.prs.map(({ ratchet: _ratchet, ...pr }) => pr),
+          prUrl: null,
+          prNumber: null,
+          prState: 'NONE',
+          prReviewState: null,
+          prCiStatus: 'UNKNOWN',
+          prUpdatedAt: null,
+          prCiFailedAt: null,
+          prCiLastNotifiedAt: null,
+          prReviewLastCheckedAt: null,
+          prReviewLastCommentId: null,
+          ratchetLastCiRunId: null,
+          ratchetState: 'IDLE',
+          ratchetActiveSessionId: null,
+          prMonitoring: {
+            enabled: workspace.ratchetEnabled,
+            recipientSessionId: null,
+            bindingRevision: 0,
+            eventEpoch: workspace.ratchetEnabled ? 1 : 0,
+            deliveryPauseReason: legacySessionIds.length ? 'LEGACY_FIXER' : null,
+            legacySessionIds,
+            lastCheckedAt: workspace.ratchetLastCheckedAt,
+          },
+        });
+      }),
+    },
+  };
+}
+function normalizeLegacyAndCurrent(data: z.infer<typeof legacyAndCurrentSchema>) {
+  if (data.meta.schemaVersion === 6) {
+    return { ...data, meta: { ...data.meta, schemaVersion: 6 as const } };
+  }
+  const workspaces = data.data.workspaces.map((workspace) => {
+    const legacySessionIds = [
+      ...new Set([
+        ...(workspace.ratchetActiveSessionId ? [workspace.ratchetActiveSessionId] : []),
+        ...data.data.agentSessions
+          .filter((s) => s.workspaceId === workspace.id && s.workflow === 'ratchet')
+          .map((s) => s.id),
+      ]),
+    ];
+    const prs =
+      data.meta.schemaVersion === 4
+        ? workspace.prUrl
+          ? [
+              prAssociationBackupSchema.parse({
+                id: `legacy-pr-${workspace.id}`,
+                url: workspace.prUrl,
+                number: workspace.prNumber,
+                title: null,
+                headRefName: null,
+                baseRefName: null,
+                state: workspace.prState,
+                reviewState: workspace.prReviewState,
+                ciStatus: workspace.prCiStatus,
+                hasMergeConflict: workspace.ratchetState === 'MERGE_CONFLICT',
+                syncedAt: workspace.prUpdatedAt,
+                detachedAt: null,
+                revision: 0,
+                ciFailedAt: workspace.prCiFailedAt,
+                ciLastNotifiedAt: workspace.prCiLastNotifiedAt,
+                reviewLastCheckedAt: workspace.prReviewLastCheckedAt,
+                reviewLastCommentId: workspace.prReviewLastCommentId,
+              }),
+            ]
+          : []
+        : workspace.prs;
+    return {
+      ...workspace,
+      prs,
+      prMonitoring: workspace.prMonitoring ?? {
+        enabled: workspace.ratchetEnabled,
+        recipientSessionId: null,
+        bindingRevision: 0,
+        eventEpoch: workspace.ratchetEnabled ? 1 : 0,
+        deliveryPauseReason: legacySessionIds.length ? 'LEGACY_FIXER' : null,
+        legacySessionIds,
+        lastCheckedAt: workspace.ratchetLastCheckedAt,
+      },
+    };
+  });
+  const agentSessions = data.data.agentSessions.map((session) => {
+    const workspace = workspaces.find((w) => w.id === session.workspaceId);
+    return data.meta.schemaVersion === 4 && workspace?.ratchetActiveSessionId === session.id
+      ? { ...session, workspacePrId: workspace.prs[0]?.id ?? null }
+      : session;
+  });
+  return {
+    ...data,
+    meta: { ...data.meta, schemaVersion: 6 as const },
+    data: { ...data.data, workspaces, agentSessions },
+  };
+}
+function safelyNormalize<T, R>(
+  input: T,
+  ctx: z.RefinementCtx,
+  normalize: (input: T) => R
+): R | typeof z.NEVER {
+  try {
+    return normalize(input);
+  } catch (error) {
+    if (!(error instanceof z.ZodError)) {
+      throw error;
+    }
+    for (const issue of error.issues) {
+      ctx.addIssue({ ...issue });
+    }
+    return z.NEVER;
+  }
+}
+export const exportDataSchema = z
+  .union([
+    publishedVersion5Schema.transform((input, ctx) =>
+      safelyNormalize(input, ctx, normalizePublishedVersion5)
+    ),
+    legacyAndCurrentSchema.transform((input, ctx) =>
+      safelyNormalize(input, ctx, normalizeLegacyAndCurrent)
+    ),
+  ])
+  .superRefine(validateBackupPRs);
 
 export {
   exportedAgentSessionSchema,

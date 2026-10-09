@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SnapshotUpdateInput } from '@/backend/services/workspace';
+import { prProjectionDefaults } from '@/backend/testing/pr-projection-fixture';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -11,10 +12,6 @@ function deferred<T>() {
   });
   return { promise, resolve, reject };
 }
-
-// ---------------------------------------------------------------------------
-// Mock store helper type
-// ---------------------------------------------------------------------------
 
 interface MockStore {
   upsert: ReturnType<
@@ -39,8 +36,6 @@ function createMockStore(): MockStore {
   };
 }
 
-// --- Module mocks ---
-
 vi.mock('@/backend/services/workspace', () => ({
   WORKSPACE_STATE_CHANGED: 'workspace_state_changed',
   workspaceStateMachine: { on: vi.fn(), off: vi.fn() },
@@ -60,6 +55,7 @@ vi.mock('@/backend/services/workspace', () => ({
 vi.mock('@/backend/services/github', () => ({
   PR_SNAPSHOT_UPDATED: 'pr_snapshot_updated',
   PR_URL_ATTACHED: 'pr_url_attached',
+  PR_DETACHED: 'pr_detached',
   prSnapshotService: {
     on: vi.fn(),
     off: vi.fn(),
@@ -188,10 +184,6 @@ function stopEventCollector(): void {
   activeEventCollector = null;
 }
 
-// ---------------------------------------------------------------------------
-// Unit Tests: EventCoalescer
-// ---------------------------------------------------------------------------
-
 describe('EventCoalescer', () => {
   let mockStore: MockStore;
 
@@ -248,10 +240,8 @@ describe('EventCoalescer', () => {
 
     coalescer.enqueue('ws-1', { isWorking: true }, 'event:workspace_active');
 
-    // Before final timer fires
     expect(mockStore.upsert).not.toHaveBeenCalled();
 
-    // Advance past the coalescing window from last enqueue
     vi.advanceTimersByTime(150);
 
     expect(mockStore.upsert).toHaveBeenCalledTimes(1);
@@ -355,7 +345,6 @@ describe('EventCoalescer', () => {
     coalescer.enqueue('ws-2', { isWorking: true }, 'event:workspace_active');
     expect(coalescer.pendingCount).toBe(2);
 
-    // Another event for ws-1 does not increase count
     coalescer.enqueue('ws-1', { ratchetState: 'IDLE' as const }, 'event:ratchet_state_changed');
     expect(coalescer.pendingCount).toBe(2);
 
@@ -784,6 +773,7 @@ describe('configureEventCollector', () => {
       projectId: 'proj-1',
     } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
     vi.mocked(workspaceDataService.findRatchetProjection).mockResolvedValue({
+      ...prProjectionDefaults,
       status: 'READY',
       ratchetEnabled: true,
       ratchetState: 'MERGED',
@@ -825,6 +815,7 @@ describe('configureEventCollector', () => {
       projectId: 'proj-1',
     } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
     vi.mocked(workspaceDataService.findRatchetProjection).mockResolvedValue({
+      ...prProjectionDefaults,
       status: 'READY',
       ratchetEnabled: true,
       ratchetState: 'CI_RUNNING',
@@ -872,6 +863,7 @@ describe('configureEventCollector', () => {
       projectId: 'proj-1',
     } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
     vi.mocked(workspaceDataService.findRatchetProjection).mockResolvedValue({
+      ...prProjectionDefaults,
       status: 'READY',
       ratchetEnabled: true,
       ratchetState: 'CI_FAILED',
@@ -904,6 +896,7 @@ describe('configureEventCollector', () => {
       projectId: 'proj-1',
     } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
     vi.mocked(workspaceDataService.findRatchetProjection).mockResolvedValue({
+      ...prProjectionDefaults,
       status: 'READY',
       ratchetEnabled: true,
       ratchetState: 'CI_RUNNING',
@@ -966,6 +959,7 @@ describe('configureEventCollector', () => {
       toStatus: 'ARCHIVED',
     });
     pendingRead.resolve({
+      ...prProjectionDefaults,
       status: 'READY',
       ratchetEnabled: true,
       ratchetState: 'CI_FAILED',
@@ -1591,6 +1585,7 @@ describe('per-graph event collector lifecycle', () => {
     const pendingRead =
       deferred<Awaited<ReturnType<typeof workspaceDataService.findRatchetProjection>>>();
     const projection = {
+      ...prProjectionDefaults,
       status: 'READY',
       ratchetEnabled: true,
       ratchetState: 'CI_FAILED',

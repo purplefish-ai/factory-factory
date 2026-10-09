@@ -1,6 +1,6 @@
-import type { Prisma, WorkspacePR, WorkspacePRMonitoring } from '@prisma-gen/client';
+import type { Prisma, WorkspacePRMonitoring } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
-import { deriveRatchetState, type RatchetState } from '@/shared/core';
+import { projectWorkspacePRCollection } from './workspace-pr.accessor';
 
 /** The legacy toggle name is retained at the API boundary for existing clients. */
 export interface WorkspaceRatchetFields {
@@ -32,28 +32,6 @@ export function flattenWorkspaceRatchet(
   };
 }
 export const WORKSPACE_RATCHET_DEFAULTS = flattenWorkspaceRatchet(null);
-export function derivePRCollectionState(
-  prs: Pick<WorkspacePR, 'state' | 'ciStatus' | 'hasMergeConflict' | 'reviewState'>[],
-  enabled = true
-): RatchetState {
-  const states = prs.map((pr) =>
-    deriveRatchetState({
-      ratchetEnabled: enabled,
-      prState: pr.state,
-      prCiStatus: pr.ciStatus,
-      prHasMergeConflict: pr.hasMergeConflict,
-      prReviewState: pr.reviewState,
-    })
-  );
-  if (states.length && states.every((s) => s === 'MERGED')) {
-    return 'MERGED';
-  }
-  return (
-    (['MERGE_CONFLICT', 'CI_FAILED', 'REVIEW_PENDING', 'CI_RUNNING', 'READY'] as const).find((s) =>
-      states.includes(s)
-    ) ?? 'IDLE'
-  );
-}
 export const pendingPREventWhere = {
   state: { in: ['PENDING', 'DISPATCHING'] },
   OR: [{ prId: null }, { pr: { detachedAt: null } }],
@@ -76,11 +54,29 @@ class WorkspaceRatchetAccessor {
       row.prMonitoring,
       row._count.prEvents
     );
+    const {
+      prs,
+      prSummary,
+      prUrl,
+      prNumber,
+      prState,
+      prCiStatus,
+      prUpdatedAt,
+      ratchetState,
+      prHasMergeConflict,
+    } = projectWorkspacePRCollection(row.prs, row.prMonitoring?.enabled ?? false);
     return {
       status: row.status,
       ...fields,
-      ratchetState: derivePRCollectionState(row.prs, row.prMonitoring?.enabled ?? false),
-      prHasMergeConflict: row.prs.some((pr) => pr.hasMergeConflict),
+      prs,
+      prSummary,
+      prUrl,
+      prNumber,
+      prState,
+      prCiStatus,
+      prUpdatedAt,
+      ratchetState,
+      prHasMergeConflict,
     };
   }
 }

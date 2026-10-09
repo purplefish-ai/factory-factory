@@ -72,7 +72,6 @@ class GitHubCLIService {
   // When set, all exec() calls will fail immediately until this timestamp.
   private rateLimitedUntil: number | null = null;
 
-  /** Clear all caches — used in tests to prevent cross-test contamination. */
   clearCaches(): void {
     this.cachedHealth = null;
     this.healthRefreshInFlight = null;
@@ -81,13 +80,6 @@ class GitHubCLIService {
     this.rateLimitedUntil = null;
   }
 
-  /**
-   * Execute a read-only gh CLI command with concurrency limiting and singleflight dedup.
-   * Identical in-flight calls share a single process.
-   *
-   * Fast-fails immediately when a rate limit was detected recently, preventing
-   * calls from piling up in the queue and blocking user-facing requests.
-   */
   private exec(args: string[], options?: ReadExecOptions): Promise<ExecResult> {
     if (this.rateLimitedUntil !== null && Date.now() < this.rateLimitedUntil) {
       return Promise.reject(new Error('GitHub API rate limit exceeded, backing off'));
@@ -273,7 +265,7 @@ class GitHubCLIService {
           '--repo',
           `${prInfo.owner}/${prInfo.repo}`,
           '--json',
-          'number,state,isDraft,reviewDecision,statusCheckRollup,headRefName',
+          'number,state,isDraft,reviewDecision,statusCheckRollup,headRefName,title,baseRefName,mergeStateStatus',
         ],
         { timeout: GH_TIMEOUT_MS.default }
       );
@@ -309,6 +301,9 @@ class GitHubCLIService {
     prReviewState: string | null;
     prCiStatus: CIStatus;
     headRefName: string | null;
+    title?: string | null;
+    baseRefName?: string | null;
+    prHasMergeConflict?: boolean;
   } | null> {
     const status = await this.getPRStatus(prUrl);
     if (!status) {
@@ -321,6 +316,9 @@ class GitHubCLIService {
       prReviewState: status.reviewDecision,
       prCiStatus: this.computeCIStatus(status.statusCheckRollup),
       headRefName: status.headRefName ?? null,
+      title: status.title ?? null,
+      baseRefName: status.baseRefName ?? null,
+      prHasMergeConflict: status.mergeStateStatus === 'DIRTY',
     };
   }
 

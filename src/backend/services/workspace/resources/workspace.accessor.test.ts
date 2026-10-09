@@ -197,6 +197,7 @@ describe('workspaceAccessor', () => {
       where: { id: { in: ['ws-2'] } },
       include: {
         project: true,
+        prMonitoring: { select: { enabled: true } },
         prs: { where: { detachedAt: null } },
         prDiscovery: true,
         autoIteration: true,
@@ -324,6 +325,7 @@ describe('workspaceAccessor', () => {
         },
         include: {
           project: true,
+          prMonitoring: { select: { enabled: true } },
           prs: { where: { detachedAt: null } },
           prDiscovery: true,
           autoIteration: true,

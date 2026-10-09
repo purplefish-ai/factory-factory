@@ -20,6 +20,7 @@ export interface CreateAgentSessionInput {
   workspaceId: string;
   name?: string;
   workflow: string;
+  workspacePrId?: string | null;
   model: string;
   provider: SessionProvider;
   providerProjectPath?: string | null;
@@ -115,6 +116,7 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
         workspaceId: data.workspaceId,
         name: data.name,
         workflow: data.workflow,
+        workspacePrId: data.workspacePrId,
         model: data.model,
         provider: data.provider,
         providerProjectPath: data.providerProjectPath ?? null,

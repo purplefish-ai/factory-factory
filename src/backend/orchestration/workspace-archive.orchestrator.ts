@@ -113,12 +113,13 @@ async function handleGitHubIssueOnArchive(
   }
 
   // Only add a comment if there's a merged PR
-  if (!(workspace.prState === 'MERGED' && workspace.prUrl)) {
+  const merged = workspace.prs.filter((pr) => pr.state === 'MERGED');
+  if (!merged.length) {
     return;
   }
 
   try {
-    const comment = `This workspace has been archived. The associated PR was merged: ${workspace.prUrl}`;
+    const comment = `This workspace has been archived. The associated PR was merged: ${merged.map((pr) => pr.url).join(', ')}`;
     await githubCLIService.addIssueComment(
       project.githubOwner,
       project.githubRepo,

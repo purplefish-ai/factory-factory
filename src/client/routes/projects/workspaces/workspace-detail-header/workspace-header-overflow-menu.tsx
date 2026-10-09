@@ -21,7 +21,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { AdversarialReviewButton } from './adversarial-review-button';
 import { ArchiveActionButton } from './archive-action-button';
 import { OpenDevAppAction } from './open-dev-app-action';
 import { OpenInIdeAction } from './open-in-ide-action';
@@ -222,11 +221,6 @@ export function WorkspaceHeaderOverflowMenu({
             workspace={workspace}
             workspaceId={workspaceId}
             toggleRatcheting={toggleRatcheting}
-          />
-          <AdversarialReviewButton
-            workspace={workspace}
-            workspaceId={workspaceId}
-            renderAsMenuItem
           />
           <WorkspaceBranchLink workspace={workspace} renderAsMenuItem />
           <OpenInIdeAction

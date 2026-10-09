@@ -151,6 +151,7 @@ export const workspaceCoreRouter = router({
     const derivedState = assembleWorkspaceDerivedState(
       {
         lifecycle: workspace.status,
+        prSummary: workspace.prSummary,
         prUrl: workspace.prUrl,
         prState: workspace.prState,
         prCiStatus: workspace.prCiStatus,
@@ -302,23 +303,30 @@ export const workspaceCoreRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: `Workspace not found: ${input.id}` });
       }
       const result = await prSnapshotService.attachAndRefreshPR(input.id, input.prUrl);
-      if (!result.success) {
-        if (result.reason === 'workspace_not_found') {
-          throw new TRPCError({ code: 'NOT_FOUND', message: `Workspace not found: ${input.id}` });
-        }
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message:
-            result.reason === 'fetch_failed'
-              ? `PR was associated but snapshot fetch failed for: ${input.prUrl}`
-              : `Failed to attach PR: ${input.prUrl}`,
-        });
+      if (!result.success && result.reason === 'workspace_not_found') {
+        throw new TRPCError({ code: 'NOT_FOUND', message: `Workspace not found: ${input.id}` });
+      }
+      // A retained association succeeds even when its initial GitHub refresh fails.
+      if (!result.success && result.reason !== 'fetch_failed' && !result.prId) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to attach PR' });
       }
       const updatedWorkspace = await workspaceDataService.findById(input.id);
       if (!updatedWorkspace) {
         throw new TRPCError({ code: 'NOT_FOUND', message: `Workspace not found: ${input.id}` });
       }
-      return updatedWorkspace;
+      return {
+        ...updatedWorkspace,
+        attachedPrId: result.prId,
+        prSyncStatus: result.success ? ('synced' as const) : ('pending' as const),
+      };
+    }),
+
+  detachPR: publicProcedure
+    .input(z.object({ workspaceId: z.string(), prId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const { prSnapshotService } = ctx.appContext.services;
+      const { removed } = await prSnapshotService.detachPR(input);
+      return { removed };
     }),
 
   // Toggle workspace-level ratcheting

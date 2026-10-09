@@ -544,6 +544,9 @@ describe('backup import trust boundary', () => {
     });
     mockImportData.mockResolvedValue({ imported: 0 });
     await expect(caller.importData(input)).resolves.toMatchObject({ success: true });
-    expect(mockImportData).toHaveBeenCalledWith(input);
+    expect(mockImportData).toHaveBeenCalledWith({
+      ...input,
+      meta: { ...input.meta, schemaVersion: 6 },
+    });
   });
 });

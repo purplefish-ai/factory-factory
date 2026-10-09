@@ -90,6 +90,8 @@ it('round trips every PR, pause and frozen delivery without treating legacy hash
       attempts: 1,
       deliveryId: 'frozen-id',
       deliverySessionId: 'main',
+      deliveryProvider: 'CLAUDE',
+      deliveryProviderSessionId: 'existing-conversation',
       deliveryBindingRevision: 7,
       deliveryText: '<!-- factory-factory-pr-event:frozen-id -->\nKeep PRs moving',
     },
@@ -109,6 +111,8 @@ it('round trips every PR, pause and frozen delivery without treating legacy hash
   expect(await db.prisma.workspacePREvent.findUnique({ where: { id: 'event' } })).toMatchObject({
     state: 'DISPATCHING',
     deliveryId: 'frozen-id',
+    deliveryProvider: 'CLAUDE',
+    deliveryProviderSessionId: 'existing-conversation',
     deliveryText: '<!-- factory-factory-pr-event:frozen-id -->\nKeep PRs moving',
   });
   expect(await db.prisma.agentSession.findUnique({ where: { id: 'main' } })).toMatchObject({

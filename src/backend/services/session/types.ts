@@ -12,6 +12,7 @@ export interface AgentSessionRecord {
   workspaceId: string;
   name: string | null;
   workflow: string;
+  workspacePrId?: string | null;
   model: string;
   status: SessionStatus;
   provider: SessionProvider;

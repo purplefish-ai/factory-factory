@@ -1898,6 +1898,7 @@ export const AgentSessionScalarFieldEnum = {
   id: 'id',
   workspaceId: 'workspaceId',
   name: 'name',
+  workspacePrId: 'workspacePrId',
   workflow: 'workflow',
   model: 'model',
   status: 'status',

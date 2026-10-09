@@ -1,10 +1,8 @@
 import {
   type WorkspacePRWriteFields,
-  flattenWorkspacePR,
-  selectActiveWorkspacePR,
+  projectWorkspacePRCollection,
   workspacePrAccessor,
 } from '@/backend/services/workspace/resources/workspace-pr.accessor';
-import { derivePRCollectionState } from '@/backend/services/workspace/resources/workspace-ratchet.accessor';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
 import type {
   PRDiscoveryClaim,
@@ -27,11 +25,7 @@ type PRSnapshotUpdate = WorkspacePRWriteFields & {
 
 class WorkspacePrSnapshotService {
   projectCollection(prs: Awaited<ReturnType<typeof workspacePrAccessor.list>>, enabled: boolean) {
-    const attached = prs.filter((pr) => !pr.detachedAt);
-    return {
-      ...flattenWorkspacePR(selectActiveWorkspacePR(attached)),
-      ratchetState: derivePRCollectionState(attached, enabled),
-    };
+    return projectWorkspacePRCollection(prs, enabled);
   }
   acceptMonitoredObservation(
     input: Parameters<typeof workspacePrAccessor.acceptMonitoredObservation>[0]
@@ -48,7 +42,7 @@ class WorkspacePrSnapshotService {
     return workspacePrAccessor.attach(workspaceId, url);
   }
   detach(target: WorkspacePRIdentity) {
-    return workspacePrAccessor.detach(target);
+    return workspaceAccessor.detachPR(target);
   }
   attachDiscoveredPRsIfClaimMatches(workspaceId: string, claim: PRDiscoveryClaim, urls: string[]) {
     return workspacePrAccessor.attachDiscoveredPRsIfClaimMatches(workspaceId, claim, urls);

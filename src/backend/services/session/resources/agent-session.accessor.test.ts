@@ -54,13 +54,27 @@ describe('agentSessionAccessor', () => {
     });
   });
 
+  it('create retains the PR target of an auxiliary review session', async () => {
+    mockCreate.mockResolvedValue({ id: 'pr-review' });
+    await agentSessionAccessor.create({
+      workspaceId: 'workspace-1',
+      workflow: 'adversarial-review',
+      workspacePrId: 'pr-1',
+      provider: 'CLAUDE',
+      model: 'opus',
+    });
+    expect(mockCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({ workspacePrId: 'pr-1' }),
+    });
+  });
+
   it('create preserves explicit provider and nullable project path', async () => {
     mockCreate.mockResolvedValue({ id: 'session-2' });
 
     await agentSessionAccessor.create({
       workspaceId: 'workspace-1',
       name: 'Chat 1',
-      workflow: 'ratchet-fixer',
+      workflow: 'adversarial-review',
       model: 'gpt-5-codex',
       provider: 'CODEX',
       providerProjectPath: '/tmp/workspace',
@@ -70,7 +84,7 @@ describe('agentSessionAccessor', () => {
       data: {
         workspaceId: 'workspace-1',
         name: 'Chat 1',
-        workflow: 'ratchet-fixer',
+        workflow: 'adversarial-review',
         model: 'gpt-5-codex',
         provider: 'CODEX',
         providerProjectPath: '/tmp/workspace',

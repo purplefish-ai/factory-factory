@@ -342,6 +342,7 @@ describe('InlineWorkspaceForm', () => {
     expect(mocks.workspaceListCache?.workspaces).toHaveLength(2);
     expect(mocks.workspaceListCache?.workspaces[0]).toMatchObject({
       id: context.optimisticWorkspaceId,
+      worktreePath: null,
       name: 'New Workspace',
       prMonitoring: {
         enabled: true,

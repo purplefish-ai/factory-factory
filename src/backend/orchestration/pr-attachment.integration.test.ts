@@ -90,6 +90,7 @@ describe('failed PR attachment recovery', () => {
       await expect(prSnapshotService.attachAndRefreshPR(workspaceId, nextPrUrl)).resolves.toEqual({
         success: false,
         reason: 'fetch_failed',
+        prId: expect.any(String),
       });
 
       const neutralCache = await db.prisma.workspacePR.findUniqueOrThrow({

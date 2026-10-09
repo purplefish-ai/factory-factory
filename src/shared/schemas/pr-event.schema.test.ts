@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { redObservation } from '@/shared/pr-monitoring.test-helpers';
 import {
   prDeliveryRequestSchema,
   prMonitoringEventPayloadSchema,
@@ -46,4 +47,21 @@ describe('PR event boundaries', () => {
       }).success
     ).toBe(false);
   });
+});
+
+it('accepts titled observations and legacy payloads without title metadata', () => {
+  expect(prObservationSchema.parse({ ...redObservation, title: 'Updated title' })).toMatchObject({
+    title: 'Updated title',
+  });
+  expect(prObservationSchema.parse({ ...redObservation, title: null })).toMatchObject({
+    title: null,
+  });
+  expect(prObservationSchema.parse(redObservation)).not.toHaveProperty('title');
+  expect(
+    prMonitoringEventPayloadSchema.parse({
+      kind: 'CI_FAILED',
+      target: { workspaceId: 'w', prId: 'p' },
+      observation: redObservation,
+    })
+  ).toMatchObject({ observation: redObservation });
 });

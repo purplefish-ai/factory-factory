@@ -28,18 +28,10 @@ export type PRSnapshotRefreshResult =
       reason: 'workspace_not_found' | 'no_pr_url' | 'fetch_failed' | 'stale_observation' | 'error';
     };
 
-export type AttachAndRefreshResult =
-  | { success: true; snapshot: SnapshotData }
-  | {
-      success: false;
-      reason:
-        | 'workspace_not_found'
-        | 'fetch_failed'
-        | 'claim_stale'
-        | 'no_pr_url'
-        | 'stale_observation'
-        | 'error';
-    };
+export type AttachAndRefreshResult = (
+  | PRSnapshotRefreshResult
+  | { success: false; reason: 'claim_stale' }
+) & { prId?: string };
 
 export const PR_SNAPSHOT_UPDATED = 'pr_snapshot_updated' as const;
 export const PR_URL_ATTACHED = 'pr_url_attached' as const;
@@ -131,15 +123,18 @@ class PRSnapshotService extends EventEmitter {
           prUrl,
         } satisfies PRUrlAttachedEvent);
       }
-      return await this.refreshPR({ workspaceId, prId: attached.prId });
+      return {
+        ...(await this.refreshPR({ workspaceId, prId: attached.prId })),
+        prId: attached.prId,
+      };
     } catch (error) {
       logger.error('Failed to attach PR', toError(error), { workspaceId, prUrl });
       return { success: false, reason: 'error' };
     }
   }
-  async detachPR(target: { workspaceId: string; prId: string }): Promise<boolean> {
+  async detachPR(target: { workspaceId: string; prId: string }) {
     const removed = await this.workspace.detachPR(target);
-    if (removed) {
+    if (removed.removed) {
       this.emit(PR_DETACHED, target);
     }
     return removed;
@@ -199,6 +194,9 @@ class PRSnapshotService extends EventEmitter {
     explicitPrUrl?: string | null
   ): Promise<PRSnapshotRefreshResult> {
     try {
+      if (!(await this.workspace.findPRContext(workspaceId))) {
+        return { success: false, reason: 'workspace_not_found' };
+      }
       const prs = (await this.workspace.listPRs(workspaceId)).filter(
         (pr) => !explicitPrUrl || pr.url === explicitPrUrl
       );
@@ -233,7 +231,7 @@ class PRSnapshotService extends EventEmitter {
         return { success: false, reason: 'claim_stale' };
       }
       this.emit(PR_URL_ATTACHED, { workspaceId, prId, prUrl } satisfies PRUrlAttachedEvent);
-      return await this.refreshPR({ workspaceId, prId });
+      return { ...(await this.refreshPR({ workspaceId, prId })), prId };
     } catch (error) {
       logger.error('Failed to attach discovered PR', toError(error), { workspaceId, prUrl });
       return { success: false, reason: 'error' };

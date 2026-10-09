@@ -49,7 +49,10 @@ it('keeps an attachment visible when the subsequent observation fails', async ()
   observe.mockResolvedValue(false);
   const listener = vi.fn();
   prSnapshotService.on(PR_URL_ATTACHED, listener);
-  expect(await prSnapshotService.attachAndRefreshPR('w', url)).toMatchObject({ success: false });
+  expect(await prSnapshotService.attachAndRefreshPR('w', url)).toMatchObject({
+    success: false,
+    prId: 'p',
+  });
   expect(listener).toHaveBeenCalledWith({ workspaceId: 'w', prId: 'p', prUrl: url });
 });
 it('routes manual refresh through the same full observation pipeline', async () => {
@@ -80,8 +83,11 @@ it('does not attach discovery results when their claim is stale', async () => {
   expect(observe).not.toHaveBeenCalled();
 });
 it('detaches only the explicit target', async () => {
-  bridge.detachPR.mockResolvedValue(true);
-  expect(await prSnapshotService.detachPR({ workspaceId: 'w', prId: 'p' })).toBe(true);
+  bridge.detachPR.mockResolvedValue({ removed: true, dispatchReleased: false });
+  expect(await prSnapshotService.detachPR({ workspaceId: 'w', prId: 'p' })).toEqual({
+    removed: true,
+    dispatchReleased: false,
+  });
   expect(bridge.detachPR).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'w', prId: 'p' });
 });
 it('returns an error result when listing associations fails', async () => {

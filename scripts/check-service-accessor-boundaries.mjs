@@ -23,9 +23,9 @@ const ACCESSOR_POLICIES = {
     owner: 'workspace',
     module: 'src/backend/services/workspace/resources/workspace-pr-discovery.accessor',
   },
-  workspacePrRatchetAccessor: {
+  workspacePrAggregateAccessor: {
     owner: 'workspace',
-    module: 'src/backend/services/workspace/resources/workspace-pr-ratchet.accessor',
+    module: 'src/backend/services/workspace/resources/workspace-pr-aggregate.accessor',
   },
   workspacePrMonitoringAccessor: {
     owner: 'workspace',

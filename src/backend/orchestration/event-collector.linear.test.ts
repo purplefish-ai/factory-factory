@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { describe, expect, it, vi } from 'vitest';
-import { PR_SNAPSHOT_UPDATED, PR_URL_ATTACHED } from '@/backend/services/github';
+import { PR_DETACHED, PR_SNAPSHOT_UPDATED, PR_URL_ATTACHED } from '@/backend/services/github';
 import { deriveWorkspaceFlowState, WorkspaceSnapshotStore } from '@/backend/services/workspace';
 import { deriveWorkspaceSidebarStatus } from '@/shared/core';
 import { createEventCollectorOrchestrator } from './event-collector.orchestrator';
@@ -35,6 +35,7 @@ function createHarness(prState: 'OPEN' | 'MERGED' | 'CLOSED' | null = 'OPEN') {
     .fn()
     .mockResolvedValue({ apiKey: 'test-key', linearIssueId: 'issue-1' });
   const findById = vi.fn().mockResolvedValue(null);
+  const findRatchetProjection = vi.fn().mockImplementation(async () => await findById());
   const checkWorkspaceById = vi.fn().mockResolvedValue(null);
   const collector = createEventCollectorOrchestrator({
     createLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }),
@@ -52,7 +53,7 @@ function createHarness(prState: 'OPEN' | 'MERGED' | 'CLOSED' | null = 'OPEN') {
     workspaceStateMachine: new EventEmitter(),
     workspaceDataService: {
       findById,
-      findRatchetProjection: vi.fn().mockImplementation(async () => await findById()),
+      findRatchetProjection,
     },
     workspaceSnapshotStore: store,
   } as never);
@@ -78,12 +79,103 @@ function createHarness(prState: 'OPEN' | 'MERGED' | 'CLOSED' | null = 'OPEN') {
     getWorkspaceLinearContext,
     store,
     findById,
+    findRatchetProjection,
     prSnapshotService,
     checkWorkspaceById,
   };
 }
 
 describe('Linear completion on PR merge', () => {
+  it.each(['CLOSED', 'DETACHED'])(
+    'completes after sibling detachment but preserves a closed sibling (%s)',
+    async (transition) => {
+      const { collector, emitMerge, markIssueCompleted, findRatchetProjection, prSnapshotService } =
+        createHarness();
+      try {
+        findRatchetProjection.mockResolvedValue({
+          status: 'READY',
+          prState: 'OPEN',
+          prSummary: { hasNonterminal: true },
+        });
+        emitMerge();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(markIssueCompleted).not.toHaveBeenCalled();
+        findRatchetProjection.mockResolvedValue({
+          status: 'READY',
+          prState: transition === 'DETACHED' ? 'MERGED' : 'CLOSED',
+          prSummary: { hasNonterminal: false },
+        });
+        if (transition === 'DETACHED') {
+          prSnapshotService.emit(PR_DETACHED, { workspaceId: 'ws-1', prId: 'b' });
+        } else {
+          prSnapshotService.emit(PR_SNAPSHOT_UPDATED, {
+            workspaceId: 'ws-1',
+            prId: 'b',
+            prNumber: 8,
+            prState: 'CLOSED',
+            prCiStatus: 'SUCCESS',
+            prReviewState: null,
+          });
+        }
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        if (transition === 'DETACHED') {
+          expect(markIssueCompleted).toHaveBeenCalledExactlyOnceWith('test-key', 'issue-1');
+        } else {
+          expect(markIssueCompleted).not.toHaveBeenCalled();
+        }
+        expect(findRatchetProjection).toHaveBeenCalledWith('ws-1');
+      } finally {
+        collector.stop();
+      }
+    }
+  );
+  it.each(['CLOSED', 'DETACHED'])(
+    'retries a %s transition during a stale projection read',
+    async (transition) => {
+      const { collector, emitMerge, markIssueCompleted, findRatchetProjection, prSnapshotService } =
+        createHarness();
+      let resolveProjection!: (value: unknown) => void;
+      findRatchetProjection.mockResolvedValueOnce(null).mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveProjection = resolve;
+        })
+      );
+      try {
+        emitMerge();
+        findRatchetProjection.mockResolvedValue({
+          status: 'READY',
+          prState: transition === 'DETACHED' ? 'MERGED' : 'CLOSED',
+          prSummary: { hasNonterminal: false },
+        });
+        if (transition === 'DETACHED') {
+          prSnapshotService.emit(PR_DETACHED, { workspaceId: 'ws-1', prId: 'b' });
+        } else {
+          prSnapshotService.emit(PR_SNAPSHOT_UPDATED, {
+            workspaceId: 'ws-1',
+            prId: 'b',
+            prNumber: 8,
+            prState: 'CLOSED',
+            prCiStatus: 'SUCCESS',
+            prReviewState: null,
+          });
+        }
+        resolveProjection({
+          status: 'READY',
+          prState: 'OPEN',
+          prSummary: { hasNonterminal: true },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        if (transition === 'DETACHED') {
+          expect(markIssueCompleted).toHaveBeenCalledExactlyOnceWith('test-key', 'issue-1');
+        } else {
+          expect(markIssueCompleted).not.toHaveBeenCalled();
+        }
+        expect(findRatchetProjection).toHaveBeenCalledWith('ws-1');
+      } finally {
+        collector.stop();
+      }
+    }
+  );
   it.each([false, true])(
     'deduplicates unseeded ratchet and poller events (settled: %s)',
     async (settled) => {
@@ -94,7 +186,7 @@ describe('Linear completion on PR merge', () => {
           await vi.waitFor(() => expect(markIssueCompleted).toHaveBeenCalledTimes(1));
         }
         emitMerge();
-        await Promise.resolve();
+        await new Promise((resolve) => setTimeout(resolve, 0));
         expect(markIssueCompleted).toHaveBeenCalledExactlyOnceWith('test-key', 'issue-1');
       } finally {
         collector.stop();
@@ -108,7 +200,7 @@ describe('Linear completion on PR merge', () => {
       emitMerge(7, null);
       emitMerge();
       emitMerge(7, 'https://github.com/org/other/pull/7');
-      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
       expect(markIssueCompleted).toHaveBeenCalledTimes(2);
     } finally {
       collector.stop();
@@ -120,7 +212,7 @@ describe('Linear completion on PR merge', () => {
     try {
       emitMerge(7, null);
       emitMerge(7, 'https://github.com/org/other/pull/7');
-      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
       expect(markIssueCompleted).toHaveBeenCalledTimes(2);
     } finally {
       collector.stop();
@@ -132,7 +224,7 @@ describe('Linear completion on PR merge', () => {
     try {
       emitMerge();
       emitMerge();
-      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
       expect(markIssueCompleted).toHaveBeenCalledExactlyOnceWith('test-key', 'issue-1');
     } finally {
       collector.stop();
@@ -143,7 +235,7 @@ describe('Linear completion on PR merge', () => {
     const { collector, emitMerge, markIssueCompleted } = createHarness('MERGED');
     try {
       emitMerge();
-      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
       expect(markIssueCompleted).toHaveBeenCalledExactlyOnceWith('test-key', 'issue-1');
     } finally {
       collector.stop();
@@ -181,7 +273,7 @@ describe('Linear completion on PR merge', () => {
         emitMerge();
         await vi.waitFor(() => expect(markIssueCompleted).toHaveBeenCalledTimes(2));
         emitMerge();
-        await Promise.resolve();
+        await new Promise((resolve) => setTimeout(resolve, 0));
         expect(markIssueCompleted).toHaveBeenCalledTimes(2);
       } finally {
         collector.stop();
@@ -201,12 +293,12 @@ describe('Linear completion on PR merge', () => {
       emitMerge();
       await vi.waitFor(() => expect(markIssueCompleted).toHaveBeenCalledTimes(1));
       emitMerge();
-      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
       expect(markIssueCompleted).toHaveBeenCalledTimes(1);
       resolve(true);
-      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
       emitMerge();
-      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
       expect(markIssueCompleted).toHaveBeenCalledTimes(1);
     } finally {
       collector.stop();
@@ -232,7 +324,7 @@ describe('Linear completion on PR merge', () => {
     try {
       emitMerge(8);
       emitMerge(8);
-      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
       expect(markIssueCompleted).toHaveBeenCalledExactlyOnceWith('test-key', 'issue-1');
     } finally {
       collector.stop();
@@ -351,6 +443,34 @@ it('keeps the authoritative primary when a second association is attached', asyn
     expect(store.getByWorkspaceId('ws-1')?.prUrl).toBe('https://github.com/org/repo/pull/7');
     await vi.waitFor(() => expect(store.getByWorkspaceId('ws-1')?.prCiStatus).toBe('FAILURE'));
     expect(store.getByWorkspaceId('ws-1')?.prNumber).toBe(7);
+  } finally {
+    collector.stop();
+  }
+});
+
+it('completes an association-aware merge after its final open sibling is detached', async () => {
+  const { collector, emitMerge, markIssueCompleted, findById, store, prSnapshotService } =
+    createHarness();
+  const projection = {
+    status: 'READY',
+    prUrl: 'https://github.com/org/repo/pull/7',
+    prNumber: 7,
+    prCiStatus: 'SUCCESS',
+    prUpdatedAt: null,
+    ratchetEnabled: true,
+    prHasMergeConflict: false,
+  };
+  findById.mockResolvedValue({ ...projection, prState: 'OPEN', ratchetState: 'READY' });
+  try {
+    emitMerge(7, projection.prUrl, 'merged-association');
+    await vi.waitFor(() => expect(store.getByWorkspaceId('ws-1')?.prCiStatus).toBe('SUCCESS'));
+    expect(markIssueCompleted).not.toHaveBeenCalled();
+    findById.mockResolvedValue({ ...projection, prState: 'MERGED', ratchetState: 'MERGED' });
+    prSnapshotService.emit(PR_DETACHED, { workspaceId: 'ws-1', prId: 'open-sibling' });
+    await vi.waitFor(() =>
+      expect(markIssueCompleted).toHaveBeenCalledExactlyOnceWith('test-key', 'issue-1')
+    );
+    expect(store.getByWorkspaceId('ws-1')?.prState).toBe('MERGED');
   } finally {
     collector.stop();
   }

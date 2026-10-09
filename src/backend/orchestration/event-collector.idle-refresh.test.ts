@@ -9,6 +9,7 @@ import {
 vi.mock('@/backend/services/github', () => ({
   PR_SNAPSHOT_UPDATED: 'pr_snapshot_updated',
   PR_URL_ATTACHED: 'pr_url_attached',
+  PR_DETACHED: 'pr_detached',
 }));
 vi.mock('@/backend/services/ratchet', () => ({
   RATCHET_DISPATCH_CHANGED: 'ratchet_dispatch_changed',

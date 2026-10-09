@@ -390,3 +390,45 @@ it('preserves a newer user stop when the resume guard expires before its transac
     attempts: 3,
   });
 });
+
+it('persists monitored titles in the PR collection while keeping legacy observations compatible', async () => {
+  await createPR('p', { title: 'Old cached title' });
+  const observation = { ...redObservation, title: 'Updated title' };
+  expect(
+    await workspacePrAccessor.acceptMonitoredObservation({
+      target: { workspaceId: 'w', prId: 'p' },
+      expectedPrRevision: 0,
+      expectedEventEpoch: 0,
+      observation,
+    })
+  ).toMatchObject({ applied: true });
+  expect(await workspaceAccessor.findById('w')).toMatchObject({
+    prs: [expect.objectContaining({ id: 'p', title: 'Updated title' })],
+  });
+  expect(await workspacePrAccessor.findByIdentity({ workspaceId: 'w', prId: 'p' })).toMatchObject({
+    observation: { title: 'Updated title' },
+  });
+  expect(
+    await workspacePrAccessor.acceptMonitoredObservation({
+      target: { workspaceId: 'w', prId: 'p' },
+      expectedPrRevision: 1,
+      expectedEventEpoch: 0,
+      observation: redObservation,
+    })
+  ).toMatchObject({ applied: true });
+  expect(await workspacePrAccessor.findByIdentity({ workspaceId: 'w', prId: 'p' })).toMatchObject({
+    title: 'Updated title',
+  });
+  const cleared = { ...redObservation, title: null };
+  expect(
+    await workspacePrAccessor.acceptMonitoredObservation({
+      target: { workspaceId: 'w', prId: 'p' },
+      expectedPrRevision: 2,
+      expectedEventEpoch: 0,
+      observation: cleared,
+    })
+  ).toMatchObject({ applied: true });
+  expect(await workspacePrAccessor.findByIdentity({ workspaceId: 'w', prId: 'p' })).toMatchObject({
+    title: null,
+  });
+});

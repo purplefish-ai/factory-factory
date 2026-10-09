@@ -200,6 +200,7 @@ const mockAutoIterationConfig = {
 };
 
 const mockAgentSession: AgentSession = {
+  workspacePrId: null,
   id: 'session-1',
   workspaceId: 'ws-1',
   name: 'Codex Session',
@@ -582,11 +583,13 @@ describe('DataBackupService', () => {
       const parentWorkspace: WorkspaceForExport = {
         ...mockWorkspace,
         id: 'parent-ws',
+        prs: mockWorkspace.prs.map((pr) => ({ ...pr, id: 'parent-pr', workspaceId: 'parent-ws' })),
         name: 'Parent Workspace',
       };
       const childWorkspace: WorkspaceForExport = {
         ...mockWorkspace,
         id: 'child-ws',
+        prs: mockWorkspace.prs.map((pr) => ({ ...pr, id: 'child-pr', workspaceId: 'child-ws' })),
         name: 'Child Workspace',
         parentWorkspaceId: parentWorkspace.id,
         createdAt: new Date('2025-01-01T00:01:00.000Z'),

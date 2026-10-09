@@ -44,3 +44,6 @@ CREATE INDEX "WorkspacePRRatchet_lastCheckedAt_idx" ON "WorkspacePRRatchet"("las
 CREATE INDEX "WorkspaceRatchet_lastCheckedAt_idx" ON "WorkspaceRatchet"("lastCheckedAt");
 CREATE INDEX "WorkspaceRatchet_activePrId_idx" ON "WorkspaceRatchet"("activePrId");
 PRAGMA foreign_keys=ON;
+
+ALTER TABLE "AgentSession" ADD COLUMN "workspacePrId" TEXT;
+UPDATE "AgentSession" SET "workspacePrId" = (SELECT "activePrId" FROM "WorkspaceRatchet" WHERE "activeSessionId" = "AgentSession"."id") WHERE "workflow" = 'ratchet';

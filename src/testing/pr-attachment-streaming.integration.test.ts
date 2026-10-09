@@ -12,6 +12,7 @@ import {
   WorkspaceSnapshotStore,
   type workspaceDataService,
 } from '@/backend/services/workspace';
+import { prProjectionDefaults } from '@/backend/testing/pr-projection-fixture';
 import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 
@@ -118,6 +119,7 @@ describe('failed PR attachment streaming', () => {
       assertNeutral();
 
       oldRead.resolve({
+        ...prProjectionDefaults,
         status: 'READY',
         ratchetEnabled: true,
         ratchetState: previousState === 'MERGED' ? 'MERGED' : 'IDLE',

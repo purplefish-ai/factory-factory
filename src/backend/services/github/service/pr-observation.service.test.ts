@@ -134,3 +134,39 @@ it('carries resolved comment identities even when review comment pages are incom
     resolvedReviewIds: ['comment:9'],
   });
 });
+
+it('carries the GitHub title into the normalized monitoring observation', async () => {
+  prObservationService.configure({
+    findPR: async () => ({ url: redObservation.url }),
+    readPolicy: async () => ({ reviewTriggerMode: 'CHANGES_REQUESTED' }),
+  });
+  vi.spyOn(githubCLIService, 'getAuthenticatedUsername').mockResolvedValue('me');
+  vi.spyOn(githubCLIService, 'getReviewComments').mockResolvedValue([]);
+  vi.spyOn(githubCLIService, 'getResolvedReviewCommentIds').mockResolvedValue(new Set());
+  vi.spyOn(githubCLIService, 'getPRFullDetails').mockResolvedValue({
+    number: 1,
+    title: 'Update title from GitHub',
+    url: redObservation.url,
+    author: { login: 'me' },
+    repository: { name: 'repo', nameWithOwner: 'org/repo' },
+    createdAt: redObservation.observedAt,
+    updatedAt: redObservation.observedAt,
+    isDraft: false,
+    state: 'OPEN',
+    reviewDecision: null,
+    statusCheckRollup: null,
+    reviews: [],
+    comments: [],
+    labels: [],
+    additions: 0,
+    deletions: 0,
+    changedFiles: 0,
+    headRefName: 'feature',
+    headRefOid: 'sha',
+    baseRefName: 'main',
+    mergeStateStatus: 'UNKNOWN',
+  });
+  await expect(prObservationService.fetch({ workspaceId: 'w', prId: 'p' })).resolves.toMatchObject({
+    title: 'Update title from GitHub',
+  });
+});

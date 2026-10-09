@@ -38,6 +38,7 @@ export { prObservationService } from './pr-observation.service';
 // --- PR snapshot ---
 export {
   type AttachAndRefreshResult,
+  PR_DETACHED,
   PR_SNAPSHOT_UPDATED,
   PR_URL_ATTACHED,
   type PRSnapshotRefreshResult,

@@ -123,6 +123,7 @@ class PRObservationService {
     ];
     return prObservationSchema.parse({
       url: association.url,
+      title: details.title,
       repository,
       number,
       headSha: details.headRefOid,

@@ -67,7 +67,13 @@ function exportedPRFields(workspace: WorkspaceForExport) {
     workspace.prMonitoring?.enabled ?? false
   );
   return {
-    ...fields,
+    prUrl: fields.prUrl,
+    prNumber: fields.prNumber,
+    prState: fields.prState,
+    prReviewState: fields.prReviewState,
+    prCiStatus: fields.prCiStatus,
+    ratchetState: fields.ratchetState,
+    prReviewLastCommentId: fields.prReviewLastCommentId,
     prUpdatedAt: toISOString(fields.prUpdatedAt),
     prCiFailedAt: toISOString(fields.prCiFailedAt),
     prCiLastNotifiedAt: toISOString(fields.prCiLastNotifiedAt),
@@ -366,12 +372,26 @@ async function importAgentSessions(
       continue;
     }
 
+    if (s.workspacePrId !== null) {
+      const pr = await tx.workspacePR.findUnique({ where: { id: s.workspacePrId } });
+      if (!pr || pr.workspaceId !== s.workspaceId) {
+        logger.warn('Skipping agent session due to missing or foreign PR association', {
+          sessionId: s.id,
+          workspaceId: s.workspaceId,
+          workspacePrId: s.workspacePrId,
+        });
+        counter.skipped++;
+        continue;
+      }
+    }
+
     await tx.agentSession.create({
       data: {
         id: s.id,
         workspaceId: s.workspaceId,
         name: s.name,
         workflow: s.workflow,
+        workspacePrId: s.workspacePrId,
         model: s.model,
         status: s.status === 'RUNNING' ? 'IDLE' : s.status,
         provider: s.provider,
@@ -489,7 +509,7 @@ class DataBackupService {
    * Export all data for backup/migration.
    * Exports projects, workspaces, sessions, and user preferences.
    * Excludes cached data (workspaceOrder, cachedSlashCommands) which will rebuild.
-   * Exports in schema version 4 format.
+   * Exports the version 6 PR event ledger format.
    */
   async exportData(appVersion: string): Promise<ExportData> {
     logger.info('Exporting database data');
@@ -573,6 +593,7 @@ class DataBackupService {
           workspaceId: s.workspaceId,
           name: s.name,
           workflow: s.workflow,
+          workspacePrId: s.workspacePrId,
           model: s.model,
           status: s.status,
           provider: s.provider,
@@ -639,7 +660,7 @@ class DataBackupService {
 
   /**
    * Import data from a backup file.
-   * Accepts strict schema version 4 payloads only.
+   * Accepts normalized versions 4, 5, and 6 payloads.
    * Skips records that already exist (by ID).
    * Returns counts of imported/skipped records.
    * All imports are wrapped in a transaction for atomicity.

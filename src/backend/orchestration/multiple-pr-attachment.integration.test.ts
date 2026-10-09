@@ -88,3 +88,34 @@ it('adds another PR without replacing its sibling or changing the workspace bran
     branchName: 'workspace-branch',
   });
 });
+
+it('rejects a refresh started before detach and reattach', async () => {
+  const attached = await workspacePrSnapshotService.attach(
+    'multi',
+    'https://github.com/other/repo/pull/8'
+  );
+  let resolve!: (
+    value: Awaited<ReturnType<typeof githubCLIService.fetchAndComputePRState>>
+  ) => void;
+  vi.spyOn(githubCLIService, 'fetchAndComputePRState').mockImplementationOnce(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      })
+  );
+  const refresh = prSnapshotService.refreshPR({ workspaceId: 'multi', prId: attached.prId });
+  await vi.waitFor(() => expect(resolve).toBeTypeOf('function'));
+  await workspacePrSnapshotService.detach({ workspaceId: 'multi', prId: attached.prId });
+  await workspacePrSnapshotService.attach('multi', 'https://github.com/other/repo/pull/8');
+  resolve({
+    prNumber: 8,
+    prState: 'MERGED',
+    prCiStatus: 'SUCCESS',
+    prReviewState: null,
+    headRefName: 'old',
+  });
+  expect(await refresh).toEqual({ success: false, reason: 'stale_observation' });
+  expect(
+    await workspacePrSnapshotService.find({ workspaceId: 'multi', prId: attached.prId })
+  ).toMatchObject({ state: 'NONE' });
+});

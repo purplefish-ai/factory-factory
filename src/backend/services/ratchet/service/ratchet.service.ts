@@ -21,6 +21,7 @@ export interface RatchetDispatchChangedEvent {
 }
 export interface RatchetStateChangedEvent {
   workspaceId: string;
+  prId?: string;
   fromState: RatchetState;
   toState: RatchetState;
   prCiStatus?: CIStatus;

@@ -37,6 +37,10 @@ delivery pause. Turning monitoring off cancels unclaimed events while facts
 continue to refresh. Re-enabling or changing recipients starts an observation
 epoch and queues one trusted enablement control. Collection projections report
 MERGED only when every attached PR is merged; an open sibling remains visible.
+Workspace snapshots include the plain `prs` collection and its `prSummary`. The
+PR menu offers per-association refresh, review, and detachment. Detaching one
+association cancels its pending events while leaving sibling monitoring and the
+main conversation intact.
 
 ### Observations and events
 
@@ -117,6 +121,8 @@ independent auto-iteration workflow. Main conversation settings remain intact.
 
 Version-6 backups preserve every PR association, normalized observation,
 monitoring binding/pause, and event including frozen delivery metadata. Versions
-4 and 5 remain accepted. Restored process IDs are never trusted as live
+4 and 5 remain accepted. Published version-5 fixer identities normalize into
+retained legacy IDs and pause delivery until cutover completes; operational
+fixer ownership is not restored. Restored process IDs are never trusted as live
 runtimes; provider identity is retained for receipt recovery. Invalid restored
 recipients are unbound and require selection.

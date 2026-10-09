@@ -5,6 +5,28 @@ import Database from 'better-sqlite3';
 import { expect, it } from 'vitest';
 import { runMigrations } from './migrate';
 
+function seedLegacyPRs(db: Database.Database) {
+  for (const [number, state] of [
+    [null, 'NONE'],
+    [1, 'OPEN'],
+    [2, 'MERGED'],
+    [3, 'CLOSED'],
+  ] as const) {
+    db.prepare(
+      `INSERT INTO Workspace (id, projectId, name, updatedAt) VALUES (?, 'project', ?, 1000)`
+    ).run(state, state);
+    db.prepare(`INSERT INTO WorkspacePR (workspaceId, url, number, state, ciStatus, discoveryRetryCount, reviewLastCommentId)
+        VALUES (?, ?, ?, ?, 'FAILURE', 4, 'comment-1')`).run(
+      state,
+      number ? `https://github.com/org/repo/pull/${number}` : null,
+      number,
+      state
+    );
+    db.prepare(`INSERT INTO WorkspaceRatchet (workspaceId, activeSessionId, dispatchSnapshotKey, dispatchOutcome, dispatchRetryCount)
+        VALUES (?, ?, 'snapshot', 'RUNNING', 2)`).run(state, state === 'OPEN' ? 'fixer-1' : null);
+  }
+}
+
 it('preserves known PRs, discovery, and active fixer ownership in the collection migration', () => {
   const dir = mkdtempSync(join(tmpdir(), 'ff-multiple-prs-'));
   const databasePath = join(dir, 'migration.db');
@@ -18,29 +40,19 @@ it('preserves known PRs, discovery, and active fixer ownership in the collection
         cpSync(join(migrationsPath, name), join(oldMigrations, name), { recursive: true });
       }
     }
-    runMigrations({
-      databasePath,
-      migrationsPath: oldMigrations,
-      log: () => {
-        /* Silence fixture migration logs. */
-      },
-    });
+    runMigrations({ databasePath, migrationsPath: oldMigrations, log: () => undefined });
     db = new Database(databasePath);
     db.exec(`INSERT INTO Project (id, name, slug, repoPath, worktreeBasePath, updatedAt)
       VALUES ('project', 'Project', 'project', '/tmp/repo', '/tmp/worktrees', 1000)`);
-    seedHistoricalPRs(db);
+    seedLegacyPRs(db);
+    db.exec(`INSERT INTO AgentSession (id, workspaceId, workflow, provider, updatedAt)
+      VALUES ('fixer-1', 'OPEN', 'ratchet', 'CODEX', 1000)`);
     db.close();
     db = undefined;
     cpSync(join(migrationsPath, migrationName), join(oldMigrations, migrationName), {
       recursive: true,
     });
-    runMigrations({
-      databasePath,
-      migrationsPath: oldMigrations,
-      log: () => {
-        /* Silence fixture migration logs. */
-      },
-    });
+    runMigrations({ databasePath, migrationsPath: oldMigrations, log: () => undefined });
     db = new Database(databasePath);
     expect(db.prepare('PRAGMA table_info(WorkspacePR)').all()).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: 'id' })])
@@ -92,31 +104,12 @@ it('preserves known PRs, discovery, and active fixer ownership in the collection
         )
         .get()
     ).toEqual({ dispatchSnapshotKey: 'snapshot', dispatchRetryCount: 2 });
+    expect(db.prepare("SELECT workspacePrId FROM AgentSession WHERE id = 'fixer-1'").get()).toEqual(
+      { workspacePrId: 'legacy-pr-OPEN' }
+    );
     expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
   } finally {
     db?.close();
     rmSync(dir, { recursive: true, force: true });
   }
 });
-
-function seedHistoricalPRs(db: Database.Database) {
-  for (const [state, number] of [
-    ['NONE', null],
-    ['OPEN', 1],
-    ['MERGED', 2],
-    ['CLOSED', 3],
-  ] as const) {
-    db.prepare(
-      `INSERT INTO Workspace (id, projectId, name, updatedAt) VALUES (?, 'project', ?, 1000)`
-    ).run(state, state);
-    db.prepare(`INSERT INTO WorkspacePR (workspaceId, url, number, state, ciStatus, discoveryRetryCount, reviewLastCommentId)
-        VALUES (?, ?, ?, ?, 'FAILURE', 4, 'comment-1')`).run(
-      state,
-      number === null ? null : `https://github.com/org/repo/pull/${number}`,
-      number,
-      state
-    );
-    db.prepare(`INSERT INTO WorkspaceRatchet (workspaceId, activeSessionId, dispatchSnapshotKey, dispatchOutcome, dispatchRetryCount)
-        VALUES (?, ?, 'snapshot', 'RUNNING', 2)`).run(state, state === 'OPEN' ? 'fixer-1' : null);
-  }
-}

@@ -27,6 +27,7 @@ export const prReviewSchema = z.strictObject({
 });
 export const prObservationSchema = z.strictObject({
   url: z.url(),
+  title: z.string().nullable().optional(),
   repository: z.string().min(1),
   number: z.number().int().positive(),
   headSha: z.string().min(1),
