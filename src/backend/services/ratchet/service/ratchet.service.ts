@@ -300,7 +300,11 @@ export class RatchetService extends EventEmitter {
       expectedBindingRevision: options?.expectedBindingRevision ?? config?.bindingRevision ?? 0,
     });
     if (result.status === 'updated') {
-      this.emit(RATCHET_TOGGLED, { workspaceId, enabled, ratchetState: RatchetState.IDLE });
+      if (enabled !== (config?.enabled ?? false)) {
+        this.emit(RATCHET_TOGGLED, { workspaceId, enabled, ratchetState: RatchetState.IDLE });
+      } else {
+        this.emit(RATCHET_DISPATCH_CHANGED, { workspaceId });
+      }
     }
     return result;
   }

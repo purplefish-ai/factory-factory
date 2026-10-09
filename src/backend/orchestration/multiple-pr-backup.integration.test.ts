@@ -567,3 +567,50 @@ it('rejects and rolls back imported dispatching events without a delivery identi
   expect(await db.prisma.workspace.count()).toBe(0);
   expect(await db.prisma.project.count()).toBe(0);
 });
+
+it.each(['deliveryProvider', 'deliveryProviderSessionId'] as const)(
+  'rejects and rolls back a dispatching backup without frozen %s',
+  async (field) => {
+    await db.prisma.workspacePREvent.create({
+      data: {
+        id: 'frozen-event',
+        workspaceId: 'w',
+        kind: 'MONITORING_ENABLED',
+        deduplicationKey: 'frozen-event',
+        payload: {
+          kind: 'MONITORING_ENABLED',
+          workspaceId: 'w',
+          bindingRevision: 0,
+          replyToPrComments: false,
+        },
+        state: 'DISPATCHING',
+        attempts: 1,
+        deliveryId: 'frozen-delivery',
+        deliverySessionId: 'fixer-a',
+        deliveryBindingRevision: 0,
+        deliveryText: 'frozen',
+        deliveryProvider: 'CODEX',
+        deliveryProviderSessionId: 'existing-conversation',
+      },
+    });
+    const exported = await dataBackupService.exportData('test');
+    const invalid = {
+      ...exported,
+      data: {
+        ...exported.data,
+        workspaces: exported.data.workspaces.map((workspace) => ({
+          ...workspace,
+          prEvents: workspace.prEvents.map((event) => ({ ...event, [field]: null })),
+        })),
+      },
+    };
+    expect(exportDataSchema.safeParse(invalid).success).toBe(false);
+    await clearIntegrationDatabase(db.prisma);
+    await expect(dataBackupService.importData(invalid)).rejects.toThrow(
+      'complete frozen delivery metadata'
+    );
+    expect(await db.prisma.workspacePREvent.count()).toBe(0);
+    expect(await db.prisma.workspace.count()).toBe(0);
+    expect(await db.prisma.project.count()).toBe(0);
+  }
+);

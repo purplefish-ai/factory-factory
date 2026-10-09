@@ -42,6 +42,7 @@ it('keeps monitoring toggles independent from the rendered mode and guards expli
     enabled: true,
     deliveryMode: 'MAIN',
     recipientSessionId: null,
+    expectedBindingRevision: 7,
   });
 });
 it('defaults legacy menu projections to MAIN', () => {

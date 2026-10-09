@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   markChecked: vi.fn(),
   register: vi.fn(),
   snapshot: vi.fn(),
+  get: vi.fn(),
 }));
 vi.mock('@/backend/services/job-runner.service', () => ({
   jobRunner: { register: mocks.register, start: vi.fn(), stop: vi.fn() },
@@ -15,13 +16,19 @@ vi.mock('@/backend/services/workspace', () => ({
   workspacePrSnapshotService: { list: mocks.snapshot },
 }));
 
-import { RatchetService, RATCHET_DISPATCH_CHANGED, RATCHET_STATE_CHANGED } from './ratchet.service';
+import {
+  RatchetService,
+  RATCHET_DISPATCH_CHANGED,
+  RATCHET_STATE_CHANGED,
+  RATCHET_TOGGLED,
+} from './ratchet.service';
 
 beforeEach(() => {
   mocks.listEnabled.mockReset();
   mocks.listPending.mockReset().mockResolvedValue([]);
   mocks.markChecked.mockReset().mockResolvedValue(undefined);
   mocks.snapshot.mockReset().mockResolvedValue([]);
+  mocks.get.mockReset().mockResolvedValue({ enabled: true, bindingRevision: 7 });
 });
 
 it('observes every association and wakes the main queue once without creating fixer sessions', async () => {
@@ -114,6 +121,59 @@ it.each(['all', 'single'] as const)(
     expect(wake).not.toHaveBeenCalled();
   }
 );
+
+it.each([
+  { deliveryMode: 'DEDICATED' as const },
+  { resume: true },
+  { recipientSessionId: 'replacement' },
+])('refreshes monitoring projection without a false state reset for %j', async (options) => {
+  const service = new RatchetService();
+  const setMonitoring = vi.fn().mockResolvedValue({ status: 'updated', bindingRevision: 8 });
+  service.configure({ observe: vi.fn(), wake: vi.fn(), setMonitoring });
+  const toggled = vi.fn(),
+    changed = vi.fn();
+  service.on(RATCHET_TOGGLED, toggled);
+  service.on(RATCHET_DISPATCH_CHANGED, changed);
+  await service.setWorkspaceRatcheting('w', true, { ...options, expectedBindingRevision: 7 });
+  expect(toggled).not.toHaveBeenCalled();
+  expect(changed).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'w' });
+});
+
+it.each([false, true])('publishes only an actual enablement transition to %s', async (enabled) => {
+  mocks.get.mockResolvedValue({ enabled: !enabled, bindingRevision: 7 });
+  const service = new RatchetService();
+  const setMonitoring = vi.fn().mockResolvedValue({ status: 'updated', bindingRevision: 8 });
+  service.configure({ observe: vi.fn(), wake: vi.fn(), setMonitoring });
+  const toggled = vi.fn(),
+    changed = vi.fn();
+  service.on(RATCHET_TOGGLED, toggled);
+  service.on(RATCHET_DISPATCH_CHANGED, changed);
+  await service.setWorkspaceRatcheting('w', enabled);
+  expect(toggled).toHaveBeenCalledExactlyOnceWith({
+    workspaceId: 'w',
+    enabled,
+    ratchetState: 'IDLE',
+  });
+  expect(changed).not.toHaveBeenCalled();
+});
+
+it('preserves the displayed revision rather than substituting the latest one', async () => {
+  const service = new RatchetService();
+  const setMonitoring = vi.fn().mockRejectedValue(new Error('revision changed'));
+  service.configure({ observe: vi.fn(), wake: vi.fn(), setMonitoring });
+  const toggled = vi.fn(),
+    changed = vi.fn();
+  service.on(RATCHET_TOGGLED, toggled);
+  service.on(RATCHET_DISPATCH_CHANGED, changed);
+  await expect(
+    service.setWorkspaceRatcheting('w', true, { expectedBindingRevision: 6 })
+  ).rejects.toThrow('revision changed');
+  expect(setMonitoring).toHaveBeenCalledWith(
+    expect.objectContaining({ expectedBindingRevision: 6 })
+  );
+  expect(toggled).not.toHaveBeenCalled();
+  expect(changed).not.toHaveBeenCalled();
+});
 it.each(['markChecked', 'listPending', 'wake', 'snapshot'] as const)(
   'does not continue delivery or publish state after stopping during %s',
   async (stage) => {

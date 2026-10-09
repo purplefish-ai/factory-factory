@@ -63,7 +63,7 @@ it('limits restored frozen delivery text to 16 KiB in UTF-8 bytes', () => {
   ).toBe(false);
 });
 
-it('preserves frozen provider identity while accepting older backups without it', () => {
+it('preserves frozen provider identity while accepting older non-dispatching backups without it', () => {
   const oldBackup = { ...frozenEvent, deliveryText: 'frozen' };
   expect(prEventBackupSchema.safeParse(oldBackup).success).toBe(true);
   const identified = {
@@ -112,14 +112,39 @@ it.each(['deliveryId', 'deliverySessionId', 'deliveryBindingRevision', 'delivery
         ...frozenEvent,
         state: 'DISPATCHING',
         deliveryText: 'frozen',
+        deliveryProvider: 'CLAUDE',
+        deliveryProviderSessionId: 'conversation',
         [field]: null,
       }).success
     ).toBe(false);
   }
 );
-it('accepts complete dispatching metadata from older backups without provider fields', () => {
+it('accepts complete dispatching metadata with frozen provider identity', () => {
   expect(
-    prEventBackupSchema.safeParse({ ...frozenEvent, state: 'DISPATCHING', deliveryText: 'frozen' })
-      .success
+    prEventBackupSchema.safeParse({
+      ...frozenEvent,
+      state: 'DISPATCHING',
+      deliveryText: 'frozen',
+      deliveryProvider: 'CLAUDE',
+      deliveryProviderSessionId: 'conversation',
+    }).success
   ).toBe(true);
 });
+
+it.each(['deliveryProvider', 'deliveryProviderSessionId'] as const)(
+  'rejects a dispatching backup without frozen %s',
+  (field) => {
+    for (const value of [undefined, null, '']) {
+      expect(
+        prEventBackupSchema.safeParse({
+          ...frozenEvent,
+          state: 'DISPATCHING',
+          deliveryText: 'frozen',
+          deliveryProvider: 'CLAUDE',
+          deliveryProviderSessionId: 'conversation',
+          [field]: value,
+        }).success
+      ).toBe(false);
+    }
+  }
+);

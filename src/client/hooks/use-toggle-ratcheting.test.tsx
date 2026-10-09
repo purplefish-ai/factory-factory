@@ -7,6 +7,8 @@ import { useToggleRatcheting, type ToggleRatchetingInput } from './use-toggle-ra
 
 const mocks = vi.hoisted(() => ({
   mutate: vi.fn(),
+  invalidateDetail: vi.fn(),
+  invalidateList: vi.fn(),
   options: null as null | {
     onSuccess(
       result: {
@@ -16,12 +18,17 @@ const mocks = vi.hoisted(() => ({
       },
       input: ToggleRatchetingInput
     ): void;
+    onError(error: Error): void;
+    onSettled(data: unknown, error: Error | null, input: ToggleRatchetingInput): void;
   },
 }));
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
     useUtils: () => ({
-      workspace: { get: { invalidate: vi.fn() }, listForProject: { invalidate: vi.fn() } },
+      workspace: {
+        get: { invalidate: mocks.invalidateDetail },
+        listForProject: { invalidate: mocks.invalidateList },
+      },
     }),
     workspace: {
       toggleRatcheting: {
@@ -53,7 +60,7 @@ vi.mock('@/client/features/workspace/pr-recipient-picker', () => ({
 let root: Root;
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
-  mocks.mutate.mockReset();
+  vi.clearAllMocks();
   const host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);
@@ -79,6 +86,7 @@ it('preserves MAIN destination and the new revision when choosing a recipient', 
         workspaceId: 'w',
         enabled: true,
         deliveryMode: 'MAIN',
+        expectedBindingRevision: 7,
       }
     )
   );
@@ -150,4 +158,43 @@ it('renders the picker marker even when MAIN has no available candidates', async
   );
   expect(document.querySelector('[data-testid="recipient-picker"]')).not.toBeNull();
   expect(document.querySelector('button')).toBeNull();
+});
+
+it('keeps the captured revision when choosing from a stale picker and reloads settings on rejection', async () => {
+  await act(() => root.render(<Harness />));
+  const input = {
+    workspaceId: 'w',
+    enabled: true,
+    deliveryMode: 'MAIN' as const,
+    recipientSessionId: null,
+    expectedBindingRevision: 7,
+  };
+  await act(() =>
+    mocks.options!.onSuccess(
+      {
+        status: 'recipient_required',
+        bindingRevision: 7,
+        candidates: [{ id: 'chosen', name: 'Implementation', provider: 'claude' }],
+      },
+      input
+    )
+  );
+  // New settings may be saved while this dialog remains open; selection must keep its original CAS.
+  await act(() => document.querySelector('button')!.click());
+  const selectedInput = {
+    workspaceId: 'w',
+    enabled: true,
+    deliveryMode: 'MAIN' as const,
+    recipientSessionId: 'chosen',
+    expectedBindingRevision: 7,
+  };
+  expect(mocks.mutate).toHaveBeenCalledExactlyOnceWith(selectedInput);
+  const error = new Error('PR monitoring changed; refresh and retry');
+  await act(() => {
+    mocks.options!.onError(error);
+    mocks.options!.onSettled(undefined, error, selectedInput);
+  });
+  expect(document.querySelector('[data-testid="recipient-picker"]')).toBeNull();
+  expect(mocks.invalidateDetail).toHaveBeenCalledWith({ id: 'w' });
+  expect(mocks.invalidateList).toHaveBeenCalledWith({ projectId: 'p' });
 });

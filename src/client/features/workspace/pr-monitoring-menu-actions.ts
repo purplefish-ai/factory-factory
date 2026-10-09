@@ -38,6 +38,7 @@ export function createPRMonitoringMenuProps(
         enabled: true,
         deliveryMode: PRDeliveryMode.MAIN,
         recipientSessionId: null,
+        expectedBindingRevision: monitoring.bindingRevision,
       }),
   };
 }

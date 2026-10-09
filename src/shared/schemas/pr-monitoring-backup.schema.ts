@@ -49,6 +49,8 @@ export const prEventBackupSchema = z
       Boolean(
         event.deliveryId &&
         event.deliverySessionId &&
+        event.deliveryProvider &&
+        event.deliveryProviderSessionId &&
         event.deliveryText &&
         event.deliveryBindingRevision !== null
       ),

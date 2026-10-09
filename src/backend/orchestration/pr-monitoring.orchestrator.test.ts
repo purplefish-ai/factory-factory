@@ -142,3 +142,79 @@ it('forwards an explicit workspace resume with its destination and revision', as
     expect.objectContaining({ resume: true, deliveryMode: 'DEDICATED', expectedBindingRevision: 2 })
   );
 });
+
+const newerSettings = [
+  { enabled: false, deliveryMode: 'MAIN' as const },
+  { enabled: true, deliveryMode: 'DEDICATED' as const },
+];
+it.each(newerSettings)(
+  'rejects stale recipient changes before loading candidates for %j',
+  async (settings) => {
+    const current = { ...settings, recipientSessionId: 'new-recipient', bindingRevision: 3 };
+    mocks.get.mockResolvedValue(current);
+    await expect(
+      setPRMonitoring({
+        workspaceId: 'w',
+        enabled: true,
+        deliveryMode: 'MAIN',
+        recipientSessionId: null,
+        expectedBindingRevision: 2,
+      })
+    ).rejects.toThrow('refresh and retry');
+    expect(mocks.sessions).not.toHaveBeenCalled();
+    expect(mocks.setBinding).not.toHaveBeenCalled();
+    expect(mocks.invalidate).not.toHaveBeenCalled();
+    expect(mocks.control).not.toHaveBeenCalled();
+    expect(mocks.wake).not.toHaveBeenCalled();
+    expect(current).toMatchObject(settings);
+  }
+);
+it.each(newerSettings)(
+  'rejects candidate discovery overtaken by newer settings %j',
+  async (settings) => {
+    let current = {
+      enabled: true,
+      deliveryMode: 'MAIN' as 'MAIN' | 'DEDICATED',
+      recipientSessionId: null as string | null,
+      bindingRevision: 2,
+    };
+    mocks.get.mockImplementation(async () => current);
+    let entered!: () => void;
+    const discovering = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let release!: (sessions: { id: string; workflow: string; provider: string }[]) => void;
+    const discovery = new Promise<{ id: string; workflow: string; provider: string }[]>(
+      (resolve) => {
+        release = resolve;
+      }
+    );
+    mocks.sessions.mockImplementation(() => {
+      entered();
+      return discovery;
+    });
+    const request = setPRMonitoring({
+      workspaceId: 'w',
+      enabled: true,
+      deliveryMode: 'MAIN',
+      recipientSessionId: null,
+      expectedBindingRevision: 2,
+    });
+    await discovering;
+    current = { ...settings, recipientSessionId: 'new-recipient', bindingRevision: 3 };
+    release([
+      { id: 'a', workflow: 'code', provider: 'CLAUDE' },
+      { id: 'b', workflow: 'code', provider: 'CODEX' },
+    ]);
+    await expect(request).rejects.toThrow('refresh and retry');
+    expect(mocks.setBinding).not.toHaveBeenCalled();
+    expect(mocks.invalidate).not.toHaveBeenCalled();
+    expect(mocks.control).not.toHaveBeenCalled();
+    expect(mocks.wake).not.toHaveBeenCalled();
+    expect(current).toMatchObject({
+      ...settings,
+      recipientSessionId: 'new-recipient',
+      bindingRevision: 3,
+    });
+  }
+);

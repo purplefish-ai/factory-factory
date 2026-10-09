@@ -149,6 +149,9 @@ fixer ownership is not restored. Restored process IDs are never trusted as live
 runtimes; provider identity is retained for receipt recovery. Invalid restored
 recipients are unbound and require selection.
 
+In-flight backup deliveries must include their frozen delivery ID, text,
+recipient, binding revision, provider, and provider conversation identity.
+
 The delivery-mode migration is additive: existing monitoring defaults to MAIN.
 Version 6 backups retain the destination and dedicated PR/session bindings;
 older backups default to MAIN. Binding restoration validates the workspace, PR
