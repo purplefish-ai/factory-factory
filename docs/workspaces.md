@@ -178,9 +178,10 @@ Everything the app knows about a workspace's pull requests lives in a
 the only writer.
 
 The split says something the old layout hid: this is a cache, not a source of
-truth. Every field is a copy of GitHub state or a cursor into it, and losing the
-whole row costs one refresh. Sitting beside the workspace's own durable
-identity, that was invisible.
+truth. Every field is a copy of GitHub state or a cursor into it — except
+`ciLastNotifiedAt`, application-owned bookkeeping for CI-failure notifications —
+and losing the whole row costs one refresh. Sitting beside the workspace's own
+durable identity, that was invisible.
 
 PR discovery scheduling lives on a separate per-workspace `WorkspacePRDiscovery`
 row, created with the workspace, because discovery claims its backoff before any
@@ -314,10 +315,12 @@ active slot because every conditional ratchet write guards on it in the same
 statement it writes.
 
 Reads flatten the shared row back onto the workspace under the old `ratchet*`
-names (`enabled`, `lastCheckedAt`, `activeSessionId`, `activePrId`), and the
-active PR's per-PR dispatch fields flatten under the `ratchetDispatch*` names,
-so derived state, the snapshot stream and the client see the shape they always
-did. `dispatchSnapshotKey` is the one rename: on `Workspace` it was
+names (`enabled`, `lastCheckedAt`, `activeSessionId`, `activePrId`). When
+exactly one PR is attached, its per-PR dispatch fields flatten under the
+`ratchetDispatch*` names; with multiple PRs, `prSummary` supplies aggregate
+state rather than projecting the active fixer's dispatch fields, so derived
+state, the snapshot stream and the client see the shape they always did.
+`dispatchSnapshotKey` is the one rename: on `Workspace` it was
 `ratchetLastCiRunId`, whose schema comment described it as a misnomer kept to
 avoid a migration. It holds the full dispatch snapshot key — PR number, CI
 signature, review activity, merge conflict — not a CI run id.
