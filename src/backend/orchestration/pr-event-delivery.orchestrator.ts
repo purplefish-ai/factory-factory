@@ -1,24 +1,22 @@
 import { randomUUID } from 'node:crypto';
-import { buildPREventMessage } from '@/backend/prompts/pr-event';
+import { buildPRMonitoringMessage } from '@/backend/prompts/pr-event';
 import { createLogger } from '@/backend/services/logger.service';
 import type { PRBackgroundDeliveryPort } from '@/backend/services/session';
 import { type PRDeliveryRequest } from '@/shared/pr-monitoring';
 import { prMonitoringEventPayloadSchema } from '@/shared/schemas/pr-event.schema';
 import { ensureDedicatedPRRecipient } from './pr-dedicated-session.orchestrator';
+import { defaultPRDeliveryPorts } from './pr-delivery-dependencies';
+import { recipientCanDispatch } from './pr-delivery-readiness';
 import { isCurrentPRRecipient } from './pr-delivery-recipient';
 import { recoverPRDeliveries } from './pr-delivery-recovery';
-import {
-  defaultPRMonitoringServices,
-  type PRMonitoringServices,
-} from './pr-monitoring-dependencies';
-import { observeMonitoredPR, recipientCanDispatch } from './pr-observation.orchestrator';
+import type { PRDeliveryPorts } from './pr-monitoring-ports';
 
 const logger = createLogger('pr-event-delivery');
 
 export async function guardPRDelivery(
   sessionId: string,
   request: PRDeliveryRequest,
-  services: PRMonitoringServices
+  services: PRDeliveryPorts
 ) {
   const {
     workspacePRMonitoringService,
@@ -79,7 +77,7 @@ export async function preparePRDelivery(
     sessionId: string;
     request: PRDeliveryRequest;
   },
-  services: PRMonitoringServices = defaultPRMonitoringServices
+  services: PRDeliveryPorts = defaultPRDeliveryPorts
 ): ReturnType<PRBackgroundDeliveryPort['prepare']> {
   const { workspacePRMonitoringService, userSettingsService } = services;
   const initialGuard = await guardPRDelivery(sessionId, request, services);
@@ -87,12 +85,7 @@ export async function preparePRDelivery(
     return blockedGuardResult(initialGuard);
   }
   if (request.prId) {
-    await observeMonitoredPR(
-      { workspaceId: request.workspaceId, prId: request.prId },
-      undefined,
-      { force: true },
-      services
-    );
+    await services.refreshObservation({ workspaceId: request.workspaceId, prId: request.prId });
   }
   const finalGuard = await guardPRDelivery(sessionId, request, services);
   if (finalGuard !== 'ready') {
@@ -125,7 +118,7 @@ export async function preparePRDelivery(
   try {
     text =
       first.deliveryText ??
-      buildPREventMessage({
+      buildPRMonitoringMessage({
         deliveryId,
         events: events.map((e) => prMonitoringEventPayloadSchema.parse(e.payload)),
         replyToPrComments: settings.ratchetReplyToPrComments,
@@ -158,9 +151,7 @@ export async function preparePRDelivery(
     ? { status: 'blocked', reason: 'Waiting for the workspace PR delivery claim' }
     : { status: 'discard' };
 }
-type MonitoringConfig = Awaited<
-  ReturnType<PRMonitoringServices['workspacePRMonitoringService']['get']>
->;
+type MonitoringConfig = Awaited<ReturnType<PRDeliveryPorts['workspacePRMonitoringService']['get']>>;
 function matchesBinding(
   config: MonitoringConfig,
   request: PRDeliveryRequest
@@ -174,7 +165,7 @@ function matchesBinding(
 async function readAuthorizedRecipient(
   sessionId: string,
   request: PRDeliveryRequest,
-  services: PRMonitoringServices
+  services: PRDeliveryPorts
 ) {
   const [config, session] = await Promise.all([
     services.workspacePRMonitoringService.get(request.workspaceId),
@@ -200,7 +191,7 @@ function canWake(config: MonitoringConfig) {
 }
 export async function wakePRDelivery(
   workspaceId: string,
-  services: PRMonitoringServices = defaultPRMonitoringServices,
+  services: PRDeliveryPorts = defaultPRDeliveryPorts,
   isCurrent: () => boolean = () => true
 ): Promise<void> {
   const monitoring = services.workspacePRMonitoringService;
@@ -228,7 +219,7 @@ export async function wakePRDelivery(
 async function queueRecipients(
   workspaceId: string,
   config: NonNullable<MonitoringConfig>,
-  services: PRMonitoringServices,
+  services: PRDeliveryPorts,
   isCurrent: () => boolean
 ) {
   const pending = await services.workspacePRMonitoringService.listPending(workspaceId);
@@ -271,7 +262,7 @@ async function resolveRecipient(
   workspaceId: string,
   prId: string | null,
   config: NonNullable<MonitoringConfig>,
-  services: PRMonitoringServices,
+  services: PRDeliveryPorts,
   isCurrent: () => boolean
 ) {
   if ((config.deliveryMode ?? 'MAIN') === 'MAIN') {
@@ -291,7 +282,7 @@ async function validateFrozenRetry(
   event: PendingPREvent,
   sessionId: string,
   request: PRDeliveryRequest,
-  services: PRMonitoringServices
+  services: PRDeliveryPorts
 ) {
   if (!event.deliveryId) {
     return true;
@@ -313,12 +304,12 @@ async function validateFrozenRetry(
   return false;
 }
 type PendingPREvent = Awaited<
-  ReturnType<PRMonitoringServices['workspacePRMonitoringService']['listPending']>
+  ReturnType<PRDeliveryPorts['workspacePRMonitoringService']['listPending']>
 >[number];
 async function pauseExhaustedDelivery(
   events: { attempts: number }[],
   request: PRDeliveryRequest,
-  services: PRMonitoringServices
+  services: PRDeliveryPorts
 ) {
   const { workspacePRMonitoringService } = services;
   if (events.some((e) => e.attempts >= 3)) {
@@ -333,10 +324,8 @@ async function pauseExhaustedDelivery(
 }
 
 function selectDeliveryEvents(
-  pending: Awaited<ReturnType<PRMonitoringServices['workspacePRMonitoringService']['listPending']>>,
-  first: Awaited<
-    ReturnType<PRMonitoringServices['workspacePRMonitoringService']['listPending']>
-  >[number]
+  pending: Awaited<ReturnType<PRDeliveryPorts['workspacePRMonitoringService']['listPending']>>,
+  first: Awaited<ReturnType<PRDeliveryPorts['workspacePRMonitoringService']['listPending']>>[number]
 ) {
   return first.deliveryId
     ? pending.filter((e) => e.deliveryId === first.deliveryId)

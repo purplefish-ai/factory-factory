@@ -45,9 +45,10 @@ vi.mock('@/backend/services/session', () => ({
   chatMessageHandlerService: { tryDispatchNextMessage: vi.fn(async () => undefined) },
   findPRDeliveryReceipt: vi.fn(),
 }));
+
+vi.mock('./pr-delivery-readiness', () => ({ recipientCanDispatch: vi.fn(async () => true) }));
 vi.mock('./pr-observation.orchestrator', () => ({
   observeMonitoredPR: vi.fn(async () => true),
-  recipientCanDispatch: vi.fn(async () => true),
 }));
 vi.mock('@/backend/services/settings', () => ({
   userSettingsService: { get: vi.fn(async () => ({ ratchetReplyToPrComments: true })) },

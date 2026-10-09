@@ -46,7 +46,7 @@ export const prObservationSchema = z.strictObject({
   resolvedReviewIds: z.array(z.string()).optional(),
 });
 const facts = { target: prTargetSchema, observation: prObservationSchema };
-export const prMonitoringEventPayloadSchema = z.discriminatedUnion('kind', [
+export const prFactPayloadSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('CI_FAILED'), ...facts }),
   z.strictObject({ kind: z.literal('CI_RECOVERED'), ...facts }),
   z.strictObject({
@@ -58,12 +58,17 @@ export const prMonitoringEventPayloadSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('CONFLICT_CLEARED'), ...facts }),
   z.strictObject({ kind: z.literal('PR_MERGED'), ...facts }),
   z.strictObject({ kind: z.literal('PR_CLOSED'), ...facts }),
-  z.strictObject({
-    kind: z.literal('MONITORING_ENABLED'),
-    workspaceId: z.string().min(1),
-    bindingRevision: z.number().int().nonnegative(),
-    replyToPrComments: z.boolean(),
-  }),
+]);
+export const prMonitoringControlPayloadSchema = z.strictObject({
+  kind: z.literal('MONITORING_ENABLED'),
+  workspaceId: z.string().min(1),
+  bindingRevision: z.number().int().nonnegative(),
+  replyToPrComments: z.boolean(),
+});
+// The durable ledger keeps its existing wire format for backups and frozen retries.
+export const prMonitoringEventPayloadSchema = z.union([
+  prFactPayloadSchema,
+  prMonitoringControlPayloadSchema,
 ]);
 export const prDeliveryRequestSchema = z.strictObject({
   deliveryMode: prDeliveryModeSchema.optional(),
@@ -73,5 +78,7 @@ export const prDeliveryRequestSchema = z.strictObject({
 });
 export type PRTarget = z.infer<typeof prTargetSchema>;
 export type PRObservation = z.infer<typeof prObservationSchema>;
+export type PRFactPayload = z.infer<typeof prFactPayloadSchema>;
+export type PRMonitoringControlPayload = z.infer<typeof prMonitoringControlPayloadSchema>;
 export type PRMonitoringEventPayload = z.infer<typeof prMonitoringEventPayloadSchema>;
 export type PRDeliveryRequest = z.infer<typeof prDeliveryRequestSchema>;

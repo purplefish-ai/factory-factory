@@ -1,4 +1,5 @@
 import { isPRMonitoringRecipient, type PRDeliveryMode } from '@/shared/pr-monitoring';
+import { createPRDeliveryPorts } from './pr-delivery-dependencies';
 import { wakePRDelivery } from './pr-event-delivery.orchestrator';
 import {
   defaultPRMonitoringServices,
@@ -63,7 +64,7 @@ export async function setPRMonitoring(
       settings?.ratchetReplyToPrComments ?? false
     );
   }
-  await wakePRDelivery(input.workspaceId, services);
+  await wakePRDelivery(input.workspaceId, createPRDeliveryPorts(services));
   return { status: 'updated' as const, bindingRevision: result.bindingRevision };
 }
 async function resolvePRMonitoringRecipient(

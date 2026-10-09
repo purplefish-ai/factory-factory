@@ -1,5 +1,5 @@
 import { isPRMonitoringRecipient, PR_DEDICATED_WORKFLOW } from '@/shared/pr-monitoring';
-import type { PRMonitoringServices } from './pr-monitoring-dependencies';
+import type { PRRecipientPorts } from './pr-monitoring-ports';
 
 type MonitoringConfig = { recipientSessionId: string | null; deliveryMode?: string };
 type Recipient = {
@@ -13,7 +13,7 @@ export async function isCurrentPRRecipient(
   config: MonitoringConfig,
   session: Recipient,
   prId: string | null,
-  services: PRMonitoringServices
+  services: PRRecipientPorts
 ): Promise<boolean> {
   if ((config.deliveryMode ?? 'MAIN') === 'MAIN') {
     return config.recipientSessionId === session.id && isPRMonitoringRecipient(session);

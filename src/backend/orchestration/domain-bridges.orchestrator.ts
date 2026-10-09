@@ -52,6 +52,7 @@ import {
 } from '@/backend/services/workspace';
 import { AutoIterationStatus, SessionStatus } from '@/shared/core';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
+import { createPRDeliveryPorts } from './pr-delivery-dependencies';
 import { createPRBackgroundDeliveryPort } from './pr-event-delivery-port';
 import { wakePRDelivery } from './pr-event-delivery.orchestrator';
 import { retireLegacyRatchetSessions } from './pr-monitoring-cutover.orchestrator';
@@ -293,14 +294,15 @@ export function configureDomainBridges(services: BridgeServices): void {
   const logger = createLogger('domain-bridges');
 
   const { prObservationService, sessionBackgroundDeliveryService, userSettingsService } = services;
+  const deliveryPorts = createPRDeliveryPorts(services);
   // === Ratchet domain bridges ===
   ratchetService.configure({
     retireLegacy: () => retireLegacyRatchetSessions(services),
     observe: (target, signal) => observeMonitoredPR(target, signal, undefined, services),
-    wake: (workspaceId) => wakePRDelivery(workspaceId, services),
+    wake: (workspaceId) => wakePRDelivery(workspaceId, deliveryPorts),
     setMonitoring: (input) => setPRMonitoring(input, services),
   });
-  sessionBackgroundDeliveryService.configure(createPRBackgroundDeliveryPort(services));
+  sessionBackgroundDeliveryService.configure(createPRBackgroundDeliveryPort(deliveryPorts));
   prObservationService.configure({
     findPR: (target) => workspacePrSnapshotService.find(target),
     readPolicy: async () => ({
@@ -360,7 +362,7 @@ export function configureDomainBridges(services: BridgeServices): void {
   // === Session domain bridges ===
   const markSessionIdle = (workspaceId: string, sessionId: string, generation?: number) => {
     workspaceActivityService.markSessionIdle(workspaceId, sessionId, generation);
-    void wakePRDelivery(workspaceId, services).catch((error) => {
+    void wakePRDelivery(workspaceId, deliveryPorts).catch((error) => {
       logger.warn('PR delivery wake deferred after session became idle', { workspaceId, error });
     });
   };

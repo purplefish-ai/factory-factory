@@ -1,6 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { ensureDedicatedPRRecipient } from '@/backend/orchestration/pr-dedicated-session.orchestrator';
-import type { PRMonitoringServices } from '@/backend/orchestration/pr-monitoring-dependencies';
+import type { PRDedicatedSessionPorts } from '@/backend/orchestration/pr-monitoring-ports';
 import type { AgentSessionRecord } from '@/backend/services/session';
 
 const target = { workspaceId: 'w', prId: 'a', bindingRevision: 4 };
@@ -56,7 +56,7 @@ function harness() {
     },
     sessionLifecycleService: { startSession: start },
     acpRuntimeManager: { isSessionWorking: working, getClient },
-  } as unknown as PRMonitoringServices;
+  } as unknown as PRDedicatedSessionPorts;
   return {
     session,
     services,

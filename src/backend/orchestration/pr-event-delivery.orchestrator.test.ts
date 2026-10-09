@@ -48,6 +48,7 @@ vi.mock('@/backend/services/session', () => ({
     findPRDedicatedSession: mocks.dedicated,
   },
   sessionDomainService: { getPendingInteractiveRequest: mocks.interaction },
+  sessionLifecycleService: {},
   chatMessageHandlerService: { tryDispatchNextMessage: mocks.dispatch },
   sessionBackgroundDeliveryService: {
     invalidate: mocks.invalidate,
@@ -59,14 +60,16 @@ vi.mock('@/backend/services/session', () => ({
 vi.mock('@/backend/services/settings', () => ({
   userSettingsService: { get: vi.fn(async () => ({ ratchetReplyToPrComments: true })) },
 }));
+
+vi.mock('./pr-delivery-readiness', () => ({ recipientCanDispatch: mocks.otherReady }));
 vi.mock('./pr-observation.orchestrator', () => ({
   observeMonitoredPR: mocks.observe,
-  recipientCanDispatch: mocks.otherReady,
 }));
 
 vi.mock('./pr-dedicated-session.orchestrator', () => ({
   ensureDedicatedPRRecipient: mocks.ensureDedicated,
 }));
+import { defaultPRDeliveryPorts } from './pr-delivery-dependencies';
 import { recoverPRDeliveries } from './pr-delivery-recovery';
 import { prBackgroundDeliveryPort } from './pr-event-delivery-port';
 import {
@@ -74,7 +77,6 @@ import {
   wakePRDelivery,
   guardPRDelivery,
 } from './pr-event-delivery.orchestrator';
-import { defaultPRMonitoringServices } from './pr-monitoring-dependencies';
 
 const config = {
   enabled: true,
@@ -210,6 +212,40 @@ it('forces a fresh observation before freezing a PR update', async () => {
     { force: true },
     expect.anything()
   );
+});
+it('awaits the injected refresh and rechecks authorization before reading pending events', async () => {
+  const refreshObservation = vi.fn(() => {
+    config.bindingRevision++;
+    return Promise.resolve(true);
+  });
+  const services = { ...defaultPRDeliveryPorts, refreshObservation };
+  expect(
+    await preparePRDelivery(
+      {
+        sessionId: 'main',
+        request: { workspaceId: 'w', prId: 'p', bindingRevision: 1 },
+      },
+      services
+    )
+  ).toEqual({ status: 'discard' });
+  expect(refreshObservation).toHaveBeenCalledWith({ workspaceId: 'w', prId: 'p' });
+  expect(mocks.observe).not.toHaveBeenCalled();
+  expect(mocks.pending).not.toHaveBeenCalled();
+  expect(mocks.claim).not.toHaveBeenCalled();
+});
+it('does not freeze or claim events when the injected refresh fails', async () => {
+  const refreshObservation = vi.fn(() => Promise.reject(new Error('GitHub unavailable')));
+  await expect(
+    preparePRDelivery(
+      {
+        sessionId: 'main',
+        request: { workspaceId: 'w', prId: 'p', bindingRevision: 1 },
+      },
+      { ...defaultPRDeliveryPorts, refreshObservation }
+    )
+  ).rejects.toThrow('GitHub unavailable');
+  expect(mocks.pending).not.toHaveBeenCalled();
+  expect(mocks.claim).not.toHaveBeenCalled();
 });
 it('does not invalidate the bound recipient when an unrelated session stops', async () => {
   config.recipientSessionId = 'different-main';
@@ -371,7 +407,7 @@ it('rejects dedicated delivery to the conversation bound to a different PR', asy
     await guardPRDelivery(
       'dedicated',
       { workspaceId: 'w', prId: 'p', bindingRevision: 1, deliveryMode: 'DEDICATED' },
-      defaultPRMonitoringServices
+      defaultPRDeliveryPorts
     )
   ).toBe('discard');
 });

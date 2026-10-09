@@ -1,14 +1,18 @@
-import type { PRMonitoringServices } from '@/backend/orchestration/pr-monitoring-dependencies';
-import { recipientCanDispatch } from '@/backend/orchestration/pr-observation.orchestrator';
+import type { PRDedicatedSessionPorts } from '@/backend/orchestration/pr-monitoring-ports';
 import { createLogger } from '@/backend/services/logger.service';
 import { SessionStartupCancelledError, type AgentSessionRecord } from '@/backend/services/session';
 import { PR_DEDICATED_WORKFLOW, type PRTarget } from '@/shared/pr-monitoring';
+import { recipientCanDispatch } from './pr-delivery-readiness';
 
 const logger = createLogger('pr-dedicated-session');
 type Target = PRTarget & { bindingRevision: number };
 type Bootstrap = { guards: Set<() => boolean>; promise: Promise<AgentSessionRecord | null> };
 const bootstrapping = new Map<string, Bootstrap>();
-async function current(target: Target, services: PRMonitoringServices, isCurrent: () => boolean) {
+async function current(
+  target: Target,
+  services: PRDedicatedSessionPorts,
+  isCurrent: () => boolean
+) {
   if (!isCurrent()) {
     return false;
   }
@@ -30,7 +34,7 @@ function isBoundDedicatedSession(target: Target, session: AgentSessionRecord): b
 }
 async function acquireForPending(
   target: Target,
-  services: PRMonitoringServices,
+  services: PRDedicatedSessionPorts,
   isCurrent: () => boolean
 ): Promise<AgentSessionRecord | null> {
   if (!(await current(target, services, isCurrent))) {
@@ -75,7 +79,7 @@ async function acquireForPending(
 async function recoverConcurrentStartup(
   target: Target,
   acquired: AgentSessionRecord,
-  services: PRMonitoringServices,
+  services: PRDedicatedSessionPorts,
   isCurrent: () => boolean
 ): Promise<AgentSessionRecord | null> {
   if (!(await current(target, services, isCurrent))) {
@@ -100,7 +104,7 @@ async function recoverConcurrentStartup(
 async function bootstrapSession(
   target: Target,
   acquired: AgentSessionRecord,
-  services: PRMonitoringServices,
+  services: PRDedicatedSessionPorts,
   isCurrent: () => boolean
 ): Promise<AgentSessionRecord | null> {
   const sessionId = acquired.id;
@@ -160,7 +164,7 @@ async function bootstrapSession(
 }
 async function resolveRecipient(
   target: Target,
-  services: PRMonitoringServices,
+  services: PRDedicatedSessionPorts,
   isCurrent: () => boolean
 ) {
   const acquired = await acquireForPending(target, services, isCurrent);
@@ -173,7 +177,7 @@ async function resolveRecipient(
 }
 export async function ensureDedicatedPRRecipient(
   target: Target,
-  services: PRMonitoringServices,
+  services: PRDedicatedSessionPorts,
   isCurrent: () => boolean
 ): Promise<AgentSessionRecord | null> {
   if (!isCurrent()) {

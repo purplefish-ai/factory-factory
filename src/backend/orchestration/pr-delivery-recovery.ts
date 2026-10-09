@@ -1,12 +1,10 @@
+import { defaultPRDeliveryPorts } from './pr-delivery-dependencies';
 import { isCurrentPRRecipient } from './pr-delivery-recipient';
-import {
-  defaultPRMonitoringServices,
-  type PRMonitoringServices,
-} from './pr-monitoring-dependencies';
+import type { PRDeliveryRecoveryPorts } from './pr-monitoring-ports';
 export async function recoverPRDeliveries(
   sessionId: string,
   workspaceId?: string,
-  services: PRMonitoringServices = defaultPRMonitoringServices
+  services: PRDeliveryRecoveryPorts = defaultPRDeliveryPorts
 ) {
   const { sessionDataService, workspacePRMonitoringService, findPRDeliveryReceipt } = services;
   const session = await sessionDataService.findAgentSessionById(sessionId);
@@ -32,8 +30,8 @@ async function settleRecoveredDelivery(
   targetWorkspaceId: string,
   sessionId: string,
   deliveryId: string,
-  receipt: Awaited<ReturnType<PRMonitoringServices['findPRDeliveryReceipt']>>,
-  services: PRMonitoringServices
+  receipt: Awaited<ReturnType<PRDeliveryRecoveryPorts['findPRDeliveryReceipt']>>,
+  services: PRDeliveryRecoveryPorts
 ) {
   const { workspacePRMonitoringService } = services;
   const config = await workspacePRMonitoringService.get(targetWorkspaceId);
@@ -65,7 +63,11 @@ async function settleRecoveredDelivery(
   }
   await workspacePRMonitoringService.recoverClaim(deliveryId, receipt === 'delivered');
 }
-function isDeliveryActive(sessionId: string, deliveryId: string, services: PRMonitoringServices) {
+function isDeliveryActive(
+  sessionId: string,
+  deliveryId: string,
+  services: PRDeliveryRecoveryPorts
+) {
   return (
     services.acpRuntimeManager.isSessionWorking(sessionId) ||
     services.sessionBackgroundDeliveryService.isDeliveryActive?.(deliveryId)

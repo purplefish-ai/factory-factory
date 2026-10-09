@@ -1,9 +1,7 @@
 import { PR_SNAPSHOT_UPDATED } from '@/backend/services/github';
 import type { PRTarget } from '@/shared/pr-monitoring';
-import {
-  defaultPRMonitoringServices,
-  type PRMonitoringServices,
-} from './pr-monitoring-dependencies';
+import { defaultPRMonitoringServices } from './pr-monitoring-dependencies';
+import type { PRObservationPorts } from './pr-monitoring-ports';
 const states = new WeakMap<
   object,
   {
@@ -11,7 +9,7 @@ const states = new WeakMap<
     observing: Map<string, Promise<boolean>>;
   }
 >();
-function observationState(services: PRMonitoringServices) {
+function observationState(services: PRObservationPorts) {
   let state = states.get(services.workspacePRMonitoringService);
   if (!state) {
     state = { recent: new Map(), observing: new Map() };
@@ -23,7 +21,7 @@ export async function observeMonitoredPR(
   target: PRTarget,
   signal?: AbortSignal,
   options?: { force?: boolean },
-  services: PRMonitoringServices = defaultPRMonitoringServices
+  services: PRObservationPorts = defaultPRMonitoringServices
 ): Promise<boolean> {
   const {
     workspacePrSnapshotService,
@@ -90,28 +88,5 @@ export async function observeMonitoredPR(
     if (observing.get(key) === pending) {
       observing.delete(key);
     }
-  }
-}
-export async function recipientCanDispatch(
-  workspaceId: string,
-  sessionId: string,
-  services: PRMonitoringServices = defaultPRMonitoringServices
-): Promise<boolean> {
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  try {
-    const sessions = await Promise.race([
-      services.sessionDataService.findAgentSessionsByWorkspaceId(workspaceId),
-      new Promise<null>((resolve) => {
-        timeout = setTimeout(() => resolve(null), 5000);
-      }),
-    ]);
-    return (
-      !!sessions &&
-      !sessions.some((s) => s.id !== sessionId && services.acpRuntimeManager.isSessionWorking(s.id))
-    );
-  } catch {
-    return false;
-  } finally {
-    clearTimeout(timeout);
   }
 }

@@ -66,6 +66,21 @@ GitHub owns process-wide spawn limits, in-flight read deduplication, and rate
 limit backoff. Watcher concurrency remains bounded at three workspaces, with a
 90-second timeout and shutdown cancellation.
 
+Observation depends on four method-level ports: normalized fetching, PR/config
+reads, atomic observation acceptance, and snapshot notifications. It has no
+session or delivery dependencies. Delivery receives a `refreshObservation`
+callback from composition wiring and awaits it before claiming events, then
+rechecks the recipient binding. Recipient readiness belongs to delivery.
+
+`prFactPayloadSchema` validates GitHub-derived facts; the transition reducer
+accepts and emits only those facts. `prMonitoringControlPayloadSchema` validates
+backend-owned enable instructions separately, with a separate message builder.
+The ledger retains its compatible payload union, but rendering rejects mixed
+control/fact batches instead of silently omitting facts. The reducer
+deliberately reads pending, in-flight, and delivered fact history for
+deduplication and recovery semantics; it does not choose a session, destination,
+or prompt.
+
 The reducer emits changed CI failures, recovery after a delivered failure,
 actionable review additions or edits, conflict transitions, and merge/close
 transitions. Check details, head SHA, and transition sequence distinguish reruns

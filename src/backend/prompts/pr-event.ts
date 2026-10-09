@@ -1,28 +1,52 @@
-import type { PRMonitoringEventPayload, PRDeliveryMode } from '@/shared/pr-monitoring';
+import type {
+  PRFactPayload,
+  PRMonitoringControlPayload,
+  PRMonitoringEventPayload,
+  PRDeliveryMode,
+} from '@/shared/pr-monitoring';
 import { prEventMarker } from '@/shared/pr-monitoring';
 
 const MAX_BYTES = 16_384;
 function untrusted(value: unknown): string {
   return JSON.stringify(value).replaceAll('<', '\\u003c').replaceAll('>', '\\u003e');
 }
-export function buildPREventMessage(input: {
+type MessagePolicy = {
   deliveryId: string;
-  events: readonly PRMonitoringEventPayload[];
   replyToPrComments: boolean;
   deliveryMode?: PRDeliveryMode;
-}): string {
-  const marker = prEventMarker(input.deliveryId);
+};
+
+export function buildPRMonitoringMessage(
+  input: MessagePolicy & { events: readonly PRMonitoringEventPayload[] }
+): string {
   const control = input.events.find((e) => e.kind === 'MONITORING_ENABLED');
   if (control) {
-    return `${marker}\nKeep the associated PRs moving in this conversation. Fix actionable CI failures, review feedback, and merge conflicts as updates arrive. Queue work after the current turn. Do not merge automatically.\n${input.replyToPrComments ? 'Reply to relevant PR comments after addressing them.' : 'Do not post replies to PR comments.'}`;
+    if (input.events.length !== 1) {
+      throw new Error('Monitoring controls must be delivered separately from PR facts');
+    }
+    return buildPRMonitoringControlMessage({ ...input, control });
   }
-  const event = input.events.find((e) => e.kind !== 'MONITORING_ENABLED');
+  return buildPREventMessage({
+    ...input,
+    events: input.events.filter((e) => e.kind !== 'MONITORING_ENABLED'),
+  });
+}
+
+export function buildPRMonitoringControlMessage(
+  input: MessagePolicy & { control: PRMonitoringControlPayload }
+): string {
+  return `${prEventMarker(input.deliveryId)}\nKeep the associated PRs moving in this conversation. Fix actionable CI failures, review feedback, and merge conflicts as updates arrive. Queue work after the current turn. Do not merge automatically.\n${input.replyToPrComments ? 'Reply to relevant PR comments after addressing them.' : 'Do not post replies to PR comments.'}`;
+}
+
+export function buildPREventMessage(
+  input: MessagePolicy & { events: readonly PRFactPayload[] }
+): string {
+  const marker = prEventMarker(input.deliveryId);
+  const event = input.events[0];
   if (!event) {
     throw new Error('Empty PR event batch');
   }
-  if (
-    input.events.some((e) => e.kind !== 'MONITORING_ENABLED' && e.target.prId !== event.target.prId)
-  ) {
+  if (input.events.some((e) => e.target.prId !== event.target.prId)) {
     throw new Error('Batch must belong to one PR');
   }
   const observation = event.observation;

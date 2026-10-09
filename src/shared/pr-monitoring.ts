@@ -3,10 +3,12 @@ export const PRDeliveryMode = { MAIN: 'MAIN', DEDICATED: 'DEDICATED' } as const;
 export type PRDeliveryMode = (typeof PRDeliveryMode)[keyof typeof PRDeliveryMode];
 export const PR_DEDICATED_WORKFLOW = 'pr-monitoring';
 
-import type { PRMonitoringEventPayload } from './schemas/pr-event.schema';
+import type { PRFactPayload, PRMonitoringEventPayload } from './schemas/pr-event.schema';
 
 export type {
   PRDeliveryRequest,
+  PRFactPayload,
+  PRMonitoringControlPayload,
   PRMonitoringEventPayload,
   PRObservation,
   PRTarget,
@@ -15,6 +17,10 @@ export interface PREventDraft {
   kind: PRMonitoringEventPayload['kind'];
   deduplicationKey: string;
   payload: PRMonitoringEventPayload;
+}
+export interface PRFactDraft extends PREventDraft {
+  kind: PRFactPayload['kind'];
+  payload: PRFactPayload;
 }
 export interface ClaimedPRDelivery {
   deliveryId: string;
@@ -60,8 +66,8 @@ export function isPRMonitoringRecipient(session: {
 import type { PRObservation, PRTarget } from './schemas/pr-event.schema';
 export interface PREventSummary {
   id: string;
-  kind: PRMonitoringEventPayload['kind'];
-  payload: PRMonitoringEventPayload;
+  kind: PRFactPayload['kind'];
+  payload: PRFactPayload;
   deduplicationKey?: string;
 }
 const failures = new Set([
@@ -101,12 +107,12 @@ export function reducePRObservation(input: {
   hashIdentity?: (identity: string) => string;
 }) {
   const { target, previous, current, eventEpoch, pendingEvents, deliveredEvents } = input;
-  const events: PREventDraft[] = [];
+  const events: PRFactDraft[] = [];
   const supersededEventIds: string[] = [];
   let nextTransitionSequence = input.transitionSequence;
   const prefix = `${target.prId}:epoch:${eventEpoch}:`;
   const known = [...pendingEvents, ...deliveredEvents, ...(input.inFlightEvents ?? [])];
-  const add = (payload: PRMonitoringEventPayload, identity: string) => {
+  const add = (payload: PRFactPayload, identity: string) => {
     const deduplicationKey = `${prefix}${input.hashIdentity ? input.hashIdentity(identity) : identity}`;
     if (!known.some((e) => e.deduplicationKey === deduplicationKey)) {
       events.push({ kind: payload.kind, deduplicationKey, payload });
@@ -147,9 +153,6 @@ function eventIsSuperseded(
   terminal: boolean
 ): boolean {
   const payload = event.payload;
-  if (payload.kind === 'MONITORING_ENABLED') {
-    return false;
-  }
   if (payload.observation.headSha !== current.headSha) {
     return true;
   }
@@ -180,7 +183,7 @@ function eventIsSuperseded(
 }
 function addCITransition(
   input: Parameters<typeof reducePRObservation>[0],
-  add: (payload: PRMonitoringEventPayload, identity: string) => void,
+  add: (payload: PRFactPayload, identity: string) => void,
   sequence: number
 ) {
   const { previous, current, target, deliveredEvents } = input;
@@ -200,16 +203,8 @@ function addCITransition(
     }
   } else if (current.ciStatus === 'SUCCESS') {
     const failure = deliveredEvents
-      .filter(
-        (e) =>
-          e.kind === 'CI_FAILED' &&
-          e.payload.kind !== 'MONITORING_ENABLED' &&
-          e.payload.observation.headSha === current.headSha
-      )
+      .filter((e) => e.kind === 'CI_FAILED' && e.payload.observation.headSha === current.headSha)
       .sort((a, b) => {
-        if (a.payload.kind === 'MONITORING_ENABLED' || b.payload.kind === 'MONITORING_ENABLED') {
-          return 0;
-        }
         return a.payload.observation.observedAt.localeCompare(b.payload.observation.observedAt);
       })
       .at(-1);
@@ -229,7 +224,7 @@ function addCITransition(
 
 function addReviewTransitions(
   input: Parameters<typeof reducePRObservation>[0],
-  add: (payload: PRMonitoringEventPayload, identity: string) => void,
+  add: (payload: PRFactPayload, identity: string) => void,
   sequence: number
 ) {
   const { previous, current, target } = input;
@@ -252,7 +247,7 @@ function addReviewTransitions(
 
 function addConflictTransition(
   input: Parameters<typeof reducePRObservation>[0],
-  add: (payload: PRMonitoringEventPayload, identity: string) => void,
+  add: (payload: PRFactPayload, identity: string) => void,
   sequence: number
 ) {
   const { previous, current, target, deliveredEvents } = input;

@@ -2,6 +2,7 @@ import { createLogger } from '@/backend/services/logger.service';
 import { RATCHET_DISPATCH_CHANGED } from '@/backend/services/ratchet';
 import type { PRBackgroundDeliveryPort } from '@/backend/services/session';
 import type { ClaimedPRDelivery } from '@/shared/pr-monitoring';
+import { defaultPRDeliveryPorts } from './pr-delivery-dependencies';
 import { isCurrentPRRecipient } from './pr-delivery-recipient';
 import { recoverPRDeliveries } from './pr-delivery-recovery';
 import {
@@ -9,13 +10,10 @@ import {
   guardPRDelivery,
   wakePRDelivery,
 } from './pr-event-delivery.orchestrator';
-import {
-  defaultPRMonitoringServices,
-  type PRMonitoringServices,
-} from './pr-monitoring-dependencies';
+import type { PRDeliveryPorts } from './pr-monitoring-ports';
 const logger = createLogger('pr-event-delivery-port');
 export function createPRBackgroundDeliveryPort(
-  services: PRMonitoringServices
+  services: PRDeliveryPorts
 ): PRBackgroundDeliveryPort {
   const { workspacePRMonitoringService, sessionDataService, ratchetService } = services;
   return {
@@ -115,12 +113,12 @@ export function createPRBackgroundDeliveryPort(
     },
   };
 }
-export const prBackgroundDeliveryPort = createPRBackgroundDeliveryPort(defaultPRMonitoringServices);
+export const prBackgroundDeliveryPort = createPRBackgroundDeliveryPort(defaultPRDeliveryPorts);
 
 async function invalidateRecipient(
-  config: Awaited<ReturnType<PRMonitoringServices['workspacePRMonitoringService']['get']>>,
-  session: Awaited<ReturnType<PRMonitoringServices['sessionDataService']['findAgentSessionById']>>,
-  services: PRMonitoringServices
+  config: Awaited<ReturnType<PRDeliveryPorts['workspacePRMonitoringService']['get']>>,
+  session: Awaited<ReturnType<PRDeliveryPorts['sessionDataService']['findAgentSessionById']>>,
+  services: PRDeliveryPorts
 ) {
   if (
     config &&

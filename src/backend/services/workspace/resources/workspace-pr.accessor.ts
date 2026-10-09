@@ -9,10 +9,7 @@ import type {
 } from '@/backend/services/workspace/types';
 import type { CIStatus, PRState } from '@/shared/core';
 import { type PRObservation, type PRTarget, reducePRObservation } from '@/shared/pr-monitoring';
-import {
-  prMonitoringEventPayloadSchema,
-  prObservationSchema,
-} from '@/shared/schemas/pr-event.schema';
+import { prFactPayloadSchema, prObservationSchema } from '@/shared/schemas/pr-event.schema';
 import type { WorkspacePullRequest } from '@/shared/workspace-pr';
 import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
 import { workspacePrDiscoveryAccessor } from './workspace-pr-discovery.accessor';
@@ -255,7 +252,7 @@ class WorkspacePRAccessor {
       const events = rows
         .filter((e) => e.deduplicationKey.startsWith(`${row.id}:epoch:${config.eventEpoch}:`))
         .map((e) => {
-          const payload = prMonitoringEventPayloadSchema.parse(e.payload);
+          const payload = prFactPayloadSchema.parse(e.payload);
           return { ...e, kind: payload.kind, payload };
         });
       const reduction = reducePRObservation({

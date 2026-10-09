@@ -1,6 +1,24 @@
 import { expect, it } from 'vitest';
 import { redObservation } from '@/shared/pr-monitoring.test-helpers';
-import { buildPREventMessage } from './pr-event';
+import { buildPREventMessage, buildPRMonitoringMessage } from './pr-event';
+
+it('rejects a mixed control and fact batch instead of hiding the CI failure', () => {
+  expect(() =>
+    buildPRMonitoringMessage({
+      deliveryId: 'mixed',
+      replyToPrComments: false,
+      events: [
+        {
+          kind: 'MONITORING_ENABLED',
+          workspaceId: 'w',
+          bindingRevision: 1,
+          replyToPrComments: false,
+        },
+        { kind: 'CI_FAILED', target: { workspaceId: 'w', prId: 'p' }, observation: redObservation },
+      ],
+    })
+  ).toThrow('Monitoring controls must be delivered separately from PR facts');
+});
 
 it('bounds UTF-8 feedback and retains identity, marker and omitted count', () => {
   const review = {
@@ -32,7 +50,7 @@ it('bounds UTF-8 feedback and retains identity, marker and omitted count', () =>
   expect(text).toContain('Do not post');
 });
 it('uses the workflow instruction only for trusted enable controls', () => {
-  const text = buildPREventMessage({
+  const text = buildPRMonitoringMessage({
     deliveryId: 'control',
     events: [
       { kind: 'MONITORING_ENABLED', workspaceId: 'w', bindingRevision: 1, replyToPrComments: true },
