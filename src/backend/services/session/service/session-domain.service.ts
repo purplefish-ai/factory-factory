@@ -438,23 +438,6 @@ export class SessionDomainService extends EventEmitter {
     this.publisher.forwardSnapshot(store, { reason: 'queue_cleared' });
   }
 
-  markStarting(sessionId: string): void {
-    this.transitionRuntime(sessionId, {
-      phase: 'starting',
-      processState: 'alive',
-      activity: 'IDLE',
-    });
-  }
-
-  markStopping(sessionId: string): void {
-    const store = this.registry.getOrCreateActive(sessionId);
-    this.transitionRuntime(sessionId, {
-      phase: 'stopping',
-      processState: store.runtime.processState,
-      activity: store.runtime.activity,
-    });
-  }
-
   markRunning(sessionId: string): void {
     this.transitionRuntime(sessionId, {
       phase: 'running',
