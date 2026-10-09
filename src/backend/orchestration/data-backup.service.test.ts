@@ -1,6 +1,5 @@
 import {
   type AgentSession,
-  type Prisma,
   type Project,
   SessionProvider,
   type TerminalSession,
@@ -23,11 +22,11 @@ import type { ExportData } from '@/shared/schemas/export-data.schema';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 
 const mockTx = vi.hoisted(() => ({
+  workspacePRMonitoring: { upsert: vi.fn() },
   project: {
     findUnique: vi.fn(),
     create: vi.fn(),
   },
-  workspaceRatchet: { update: vi.fn() },
   workspace: {
     findUnique: vi.fn(),
     create: vi.fn(),
@@ -103,15 +102,7 @@ const mockProject: Project = {
  * run-script group, which the v4 format carries as flat `ratchet*`, `pr*` and
  * `runScript*` workspace fields.
  */
-type WorkspaceForExport = Prisma.WorkspaceGetPayload<{
-  include: {
-    ratchet: true;
-    prs: { include: { automation: true } };
-    prDiscovery: true;
-    runScript: true;
-    autoIteration: true;
-  };
-}>;
+type WorkspaceForExport = import('@/backend/services/settings').WorkspaceForExport;
 
 const mockWorkspace: WorkspaceForExport = {
   id: 'ws-1',
@@ -136,25 +127,19 @@ const mockWorkspace: WorkspaceForExport = {
   linearIssueIdentifier: null,
   linearIssueUrl: null,
   defaultSessionProvider: WorkspaceProviderSelection.CLAUDE,
-  ratchetSessionProvider: WorkspaceProviderSelection.WORKSPACE_DEFAULT,
-  prDiscovery: { workspaceId: 'ws-1', lastCheckedAt: null, retryCount: 0, nextCheckAt: null },
+
   prs: [
     {
-      id: 'pr-1',
+      id: 'pr1',
+      dedicatedSession: null,
       title: null,
       headRefName: null,
       baseRefName: null,
-      detachedAt: null,
       revision: 0,
-      automation: {
-        prId: 'pr-1',
-        lastCheckedAt: null,
-        activeSessionId: 'session-123',
-        dispatchSnapshotKey: 'run-123',
-        dispatchOutcome: null,
-        dispatchRetryCount: 0,
-        dispatchStalled: false,
-      },
+      detachedAt: null,
+      observation: null,
+      observationEpoch: 0,
+      transitionSequence: 0,
       workspaceId: 'ws-1',
       url: 'https://github.com/test/repo/pull/1',
       number: 1,
@@ -179,13 +164,19 @@ const mockWorkspace: WorkspaceForExport = {
     startedAt: new Date('2025-01-01T00:10:00.000Z'),
     status: RunScriptStatus.RUNNING,
   },
-  ratchet: {
+  prMonitoring: {
+    deliveryMode: 'MAIN',
     workspaceId: 'ws-1',
+    legacySessionIds: [],
     enabled: true,
+    recipientSessionId: null,
+    bindingRevision: 0,
+    eventEpoch: 1,
+    deliveryPauseReason: null,
     lastCheckedAt: new Date('2025-01-01T00:25:00.000Z'),
-    activeSessionId: 'session-123',
-    activePrId: 'pr-1',
   },
+  prEvents: [],
+  prDiscovery: null,
   hasHadSessions: true,
   autoIteration: {
     workspaceId: 'ws-1',
@@ -211,11 +202,11 @@ const mockAutoIterationConfig = {
 };
 
 const mockAgentSession: AgentSession = {
+  workspacePrId: null,
   id: 'session-1',
   workspaceId: 'ws-1',
   name: 'Codex Session',
   workflow: 'followup',
-  workspacePrId: null,
   model: 'sonnet',
   status: 'RUNNING',
   provider: SessionProvider.CODEX,
@@ -255,7 +246,7 @@ const mockUserSettings: UserSettings = {
   defaultClaudeReasoningEffort: null,
   defaultCodexReasoningEffort: 'high',
   defaultWorkspacePermissions: 'STRICT',
-  ratchetPermissions: 'YOLO',
+  autoIterationPermissions: 'YOLO',
   // Non-default values — an export/import test that only ever exercises
   // defaults can't tell a real persisted preference from a value the
   // schema's default happened to backfill (see the voiceModeEnabled et al.
@@ -277,7 +268,7 @@ const mockUserSettings: UserSettings = {
 function createImportData(
   overrides?: Partial<z.input<typeof exportDataSchema>['data']>
 ): ExportData {
-  const base = exportDataSchema.parse({
+  return exportDataSchema.parse({
     meta: {
       exportedAt: '2025-01-01T00:00:00.000Z',
       version: '1.0.0',
@@ -334,7 +325,7 @@ function createImportData(
           linearIssueIdentifier: null,
           linearIssueUrl: null,
           defaultSessionProvider: WorkspaceProviderSelection.CLAUDE,
-          ratchetSessionProvider: WorkspaceProviderSelection.WORKSPACE_DEFAULT,
+
           prNumber: 1,
           prState: PRState.OPEN,
           prReviewState: 'APPROVED',
@@ -394,7 +385,7 @@ function createImportData(
         defaultClaudeModel: 'sonnet',
         defaultCodexModel: 'gpt-5-codex',
         defaultWorkspacePermissions: 'STRICT',
-        ratchetPermissions: 'YOLO',
+        autoIterationPermissions: 'YOLO',
         // Non-default so the import test below actually exercises restoring
         // a persisted preference, not just the schema's own default.
         reviewerSessionProvider: SessionProvider.CLAUDE,
@@ -407,9 +398,9 @@ function createImportData(
         voiceUtteranceEndMs: 2500,
         voiceBargeInSustainedMs: 24,
       },
+      ...overrides,
     },
   });
-  return exportDataSchema.parse({ ...base, data: { ...base.data, ...overrides } });
 }
 
 describe('DataBackupService', () => {
@@ -418,7 +409,40 @@ describe('DataBackupService', () => {
   });
 
   describe('exportData', () => {
-    it('exports v5 format with all fields', async () => {
+    it('exports an attached open sibling and aggregate state for compatibility readers', async () => {
+      const pr = mockWorkspace.prs[0]!;
+      vi.mocked(prisma.project.findMany).mockResolvedValue([mockProject]);
+      const workspace: WorkspaceForExport = {
+        ...mockWorkspace,
+        prs: [
+          { ...pr, id: 'detached', detachedAt: new Date(), state: PRState.MERGED },
+          { ...pr, id: 'merged', state: PRState.MERGED },
+          {
+            ...pr,
+            id: 'open',
+            number: 2,
+            url: 'https://github.com/test/repo/pull/2',
+            ciStatus: CIStatus.FAILURE,
+            state: PRState.OPEN,
+          },
+        ],
+      };
+      vi.mocked(prisma.workspace.findMany).mockResolvedValue([workspace]);
+      vi.mocked(prisma.agentSession.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.terminalSession.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.userSettings.findFirst).mockResolvedValue(null);
+      const exported = await dataBackupService.exportData('1');
+      expect(exported.data.workspaces[0]).toMatchObject({
+        prUrl: 'https://github.com/test/repo/pull/2',
+        prNumber: 2,
+        prState: 'OPEN',
+        prCiStatus: 'FAILURE',
+        ratchetState: 'CI_FAILED',
+      });
+      expect(exported.data.workspaces[0]?.prs).toHaveLength(3);
+    });
+
+    it('exports v4 format with all fields', async () => {
       vi.mocked(prisma.project.findMany).mockResolvedValue([mockProject]);
       vi.mocked(prisma.workspace.findMany).mockResolvedValue([mockWorkspace]);
       vi.mocked(prisma.agentSession.findMany).mockResolvedValue([mockAgentSession]);
@@ -427,7 +451,7 @@ describe('DataBackupService', () => {
 
       const result = await dataBackupService.exportData('1.0.0');
 
-      expect(result.meta.schemaVersion).toBe(5);
+      expect(result.meta.schemaVersion).toBe(6);
       expect(result.data.agentSessions).toHaveLength(1);
       expect(result.data.agentSessions[0]).toEqual(
         expect.objectContaining({
@@ -445,7 +469,7 @@ describe('DataBackupService', () => {
           defaultClaudeModel: 'sonnet',
           defaultCodexModel: 'gpt-5-codex',
           defaultWorkspacePermissions: 'STRICT',
-          ratchetPermissions: 'YOLO',
+          autoIterationPermissions: 'YOLO',
           reviewerSessionProvider: SessionProvider.CLAUDE,
           reviewerClaudeModel: 'opus',
           reviewerCodexModel: 'gpt-5-codex-high',
@@ -476,7 +500,7 @@ describe('DataBackupService', () => {
           defaultClaudeModel: 'sonnet',
           defaultCodexModel: 'default',
           defaultWorkspacePermissions: 'STRICT',
-          ratchetPermissions: 'YOLO',
+          autoIterationPermissions: 'YOLO',
         },
       });
 
@@ -561,15 +585,13 @@ describe('DataBackupService', () => {
       const parentWorkspace: WorkspaceForExport = {
         ...mockWorkspace,
         id: 'parent-ws',
-        prs: [],
-        ratchet: null,
+        prs: mockWorkspace.prs.map((pr) => ({ ...pr, id: 'parent-pr', workspaceId: 'parent-ws' })),
         name: 'Parent Workspace',
       };
       const childWorkspace: WorkspaceForExport = {
         ...mockWorkspace,
         id: 'child-ws',
-        prs: [],
-        ratchet: null,
+        prs: mockWorkspace.prs.map((pr) => ({ ...pr, id: 'child-pr', workspaceId: 'child-ws' })),
         name: 'Child Workspace',
         parentWorkspaceId: parentWorkspace.id,
         createdAt: new Date('2025-01-01T00:01:00.000Z'),
@@ -659,6 +681,15 @@ describe('DataBackupService', () => {
       expect(result.terminalSessions.imported).toBe(1);
       expect(result.userSettings.imported).toBe(true);
 
+      expect(mockTx.workspacePRMonitoring.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({
+            legacySessionIds: ['session-123'],
+            deliveryPauseReason: 'LEGACY_FIXER',
+          }),
+        })
+      );
+
       expect(mockTx.workspace.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           id: 'ws-1',
@@ -678,12 +709,6 @@ describe('DataBackupService', () => {
           },
           // The v4 format's flat ratchet fields land in the nested row, and
           // `ratchetLastCiRunId` restores as `dispatchSnapshotKey`.
-          ratchet: {
-            create: {
-              enabled: true,
-              lastCheckedAt: new Date('2025-01-01T00:25:00.000Z'),
-            },
-          },
         }),
       });
 
@@ -738,7 +763,7 @@ describe('DataBackupService', () => {
           defaultClaudeModel: 'sonnet',
           defaultCodexModel: 'gpt-5-codex',
           defaultWorkspacePermissions: 'STRICT',
-          ratchetPermissions: 'YOLO',
+          autoIterationPermissions: 'YOLO',
           voiceModeEnabled: true,
           voiceTtsModel: 'aura-2-apollo-en',
           voiceTtsSpeed: 0.72,
@@ -801,17 +826,11 @@ describe('DataBackupService', () => {
           {
             ...baseWorkspace,
             id: 'child-ws',
-            prs: [],
-            ratchetActivePrId: null,
-            ratchetActiveSessionId: null,
             parentWorkspaceId: 'parent-ws',
           },
           {
             ...baseWorkspace,
             id: 'parent-ws',
-            prs: [],
-            ratchetActivePrId: null,
-            ratchetActiveSessionId: null,
             projectId: 'missing-project',
             parentWorkspaceId: null,
           },
@@ -844,9 +863,6 @@ describe('DataBackupService', () => {
           {
             ...baseWorkspace,
             id: 'child-ws',
-            prs: [],
-            ratchetActivePrId: null,
-            ratchetActiveSessionId: null,
             parentWorkspaceId: '',
           },
         ],

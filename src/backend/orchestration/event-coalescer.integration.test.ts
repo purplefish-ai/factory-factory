@@ -8,7 +8,7 @@ describe('authoritative Ratchet projection integration', () => {
     vi.useRealTimers();
   });
 
-  it('moves a stalled auto-fix back to WORKING once the ratchet resumes', () => {
+  it('keeps a resumed queued PR update waiting until a session starts working', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(1000));
 
@@ -39,20 +39,38 @@ describe('authoritative Ratchet projection integration', () => {
 
     coalescer.enqueue(
       'ws-1',
-      { ratchetDispatchStalled: true },
+      {
+        prMonitoring: {
+          deliveryMode: 'MAIN',
+          enabled: true,
+          recipientSessionId: 'main',
+          bindingRevision: 1,
+          pauseReason: 'DELIVERY_FAILED',
+          pendingEventCount: 0,
+        },
+      },
       'projection:ratchet_authoritative',
       { immediate: true }
     );
-    expect(store.getByWorkspaceId('ws-1')?.statusReason.code).toBe('RATCHET_STALLED');
+    expect(store.getByWorkspaceId('ws-1')?.statusReason.code).toBe('PR_DELIVERY_ERROR');
     expect(store.getByWorkspaceId('ws-1')?.kanbanColumn).toBe('WAITING');
 
     coalescer.enqueue(
       'ws-1',
-      { prCiStatus: 'PENDING', ratchetDispatchStalled: false },
+      {
+        prMonitoring: {
+          deliveryMode: 'MAIN',
+          enabled: true,
+          recipientSessionId: 'main',
+          bindingRevision: 1,
+          pauseReason: null,
+          pendingEventCount: 1,
+        },
+      },
       'projection:ratchet_authoritative',
       { immediate: true }
     );
 
-    expect(store.getByWorkspaceId('ws-1')?.kanbanColumn).toBe('WORKING');
+    expect(store.getByWorkspaceId('ws-1')?.kanbanColumn).toBe('WAITING');
   });
 });

@@ -41,7 +41,7 @@ vi.mock('@/backend/services/settings', () => ({
   userSettingsService: {
     get: vi.fn(async () => ({
       defaultWorkspacePermissions: 'STRICT',
-      ratchetPermissions: 'YOLO',
+      autoIterationPermissions: 'YOLO',
     })),
   },
 }));

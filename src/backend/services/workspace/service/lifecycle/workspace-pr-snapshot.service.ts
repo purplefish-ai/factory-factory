@@ -1,8 +1,37 @@
-import { workspacePrAccessor } from '@/backend/services/workspace/resources/workspace-pr.accessor';
+import {
+  type WorkspacePRWriteFields,
+  projectWorkspacePRCollection,
+  workspacePrAccessor,
+} from '@/backend/services/workspace/resources/workspace-pr.accessor';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
-import type { PRDiscoveryClaim, WorkspacePRIdentity } from '@/backend/services/workspace/types';
+import type {
+  PRDiscoveryClaim,
+  PRSnapshotFields,
+  WorkspacePRIdentity,
+} from '@/backend/services/workspace/types';
+
+/**
+ * A PR observation, plus the branch name a refresh may correct when the PR turns
+ * out to have been opened from a different head branch.
+ *
+ * The branch name is the workspace's own column and everything else is the PR
+ * cache, which is why `record` writes them in a transaction.
+ */
+type PRSnapshotUpdate = WorkspacePRWriteFields & {
+  branchName?: string | null;
+  prId?: string;
+  expectedRevision?: number;
+};
 
 class WorkspacePrSnapshotService {
+  projectCollection(prs: Awaited<ReturnType<typeof workspacePrAccessor.list>>, enabled: boolean) {
+    return projectWorkspacePRCollection(prs, enabled);
+  }
+  acceptMonitoredObservation(
+    input: Parameters<typeof workspacePrAccessor.acceptMonitoredObservation>[0]
+  ) {
+    return workspacePrAccessor.acceptMonitoredObservation(input);
+  }
   list(workspaceId: string) {
     return workspacePrAccessor.list(workspaceId);
   }
@@ -17,6 +46,39 @@ class WorkspacePrSnapshotService {
   }
   attachDiscoveredPRsIfClaimMatches(workspaceId: string, claim: PRDiscoveryClaim, urls: string[]) {
     return workspacePrAccessor.attachDiscoveredPRsIfClaimMatches(workspaceId, claim, urls);
+  }
+
+  record(workspaceId: string, data: PRSnapshotUpdate): Promise<void> {
+    const { branchName: _branchName, prId, expectedRevision, ...prFields } = data;
+    return workspacePrAccessor.write(workspaceId, prFields, prId, expectedRevision);
+  }
+
+  attachDiscoveredPRIfClaimMatches(
+    workspaceId: string,
+    prUrl: string,
+    claim: PRDiscoveryClaim,
+    prUpdatedAt: Date
+  ): Promise<boolean> {
+    return workspacePrAccessor.attachDiscoveredPRIfClaimMatches(
+      workspaceId,
+      prUrl,
+      claim,
+      prUpdatedAt
+    );
+  }
+
+  updatePRSnapshotIfUrlMatches(
+    workspaceId: string,
+    prUrl: string,
+    snapshot: PRSnapshotFields,
+    prUpdatedAt: Date
+  ): Promise<boolean> {
+    return workspacePrAccessor.updateSnapshotIfUrlMatches(
+      workspaceId,
+      prUrl,
+      snapshot,
+      prUpdatedAt
+    );
   }
 
   applyPrSnapshotWithDispatchReset(

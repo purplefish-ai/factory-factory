@@ -20,6 +20,10 @@ const actions = vi.hoisted(() => ({
   add: vi.fn().mockResolvedValue({ success: true }),
   remove: vi.fn().mockResolvedValue(true),
   review: vi.fn(),
+  toggle: vi.fn(),
+}));
+vi.mock('@/client/hooks/use-toggle-ratcheting', () => ({
+  useToggleRatcheting: () => ({ mutate: actions.toggle, isPending: false, recipientPicker: null }),
 }));
 vi.mock('./use-workspace-pr-actions', () => ({
   useWorkspacePrActions: () => ({ ...actions, pending: false }),
@@ -50,12 +54,6 @@ const pr: WorkspacePullRequest = {
   ciStatus: 'SUCCESS',
   hasMergeConflict: false,
   syncedAt: null,
-  ratchet: {
-    lastCheckedAt: null,
-    dispatchOutcome: null,
-    dispatchRetryCount: 0,
-    dispatchStalled: false,
-  },
 };
 let root: Root;
 beforeEach(() => {
@@ -244,3 +242,26 @@ describe('workspace PR actions across surfaces', () => {
     await key(document.querySelector('[role="menu"]')!, 'Escape');
   });
 });
+
+it.each(['MAIN', 'DEDICATED'] as const)(
+  'toggles monitoring without submitting a potentially stale %s destination',
+  async (deliveryMode) => {
+    await render(
+      <ConnectedWorkspacePrMenu
+        workspaceId="ws-1"
+        prs={[pr]}
+        monitoring={{
+          enabled: false,
+          deliveryMode,
+          bindingRevision: 3,
+          pauseReason: null,
+          recipientSessionId: 'main',
+          pendingEventCount: 0,
+        }}
+      />
+    );
+    await openMenu();
+    await key(item('Turn on PR updates'), 'Enter');
+    expect(actions.toggle).toHaveBeenCalledWith({ workspaceId: 'ws-1', enabled: true });
+  }
+);

@@ -1,7 +1,6 @@
 import { prisma } from '@/backend/db';
 import type { CIStatus, PRState } from '@/shared/core';
 import { type PRAggregateGuard, workspacePrAccessor } from './workspace-pr.accessor';
-import { workspaceRatchetAccessor } from './workspace-ratchet.accessor';
 export interface PrSnapshotPersistenceInput {
   prId?: string;
   expectedRevision?: number;
@@ -77,36 +76,6 @@ type PrAggregatePersistenceInput = Partial<{
   baseRefName?: string | null;
 };
 
-/**
- * Whether an observation moves the PR aggregate, which is what makes a settled
- * ratchet dispatch stale.
- *
- * A field the observation omits cannot have changed, so it is skipped rather
- * than compared against `undefined`. `prUpdatedAt` is deliberately not here: it
- * moves on every refresh, and counting it would reset the dispatch every time
- * the poller ran.
- */
-function prAggregateChanged(
-  current: PRAggregateGuard,
-  observation: PrAggregatePersistenceInput
-): boolean {
-  const compared: Array<keyof Omit<PRAggregateGuard, 'prId' | 'revision'>> = [
-    'prUrl',
-    'prNumber',
-    'prState',
-    'prReviewState',
-    'prCiStatus',
-    // A conflict appearing or clearing changes the PR state a fixer was
-    // dispatched for, so it invalidates a settled dispatch like any other
-    // aggregate field. It joins the guard as well as the comparison, so the two
-    // writers of this column cannot race each other.
-    'prHasMergeConflict',
-  ];
-  return compared.some(
-    (field) => observation[field] !== undefined && current[field] !== observation[field]
-  );
-}
-
 function prIdentityChanged(
   current: PRAggregateGuard,
   expected?: PrObservationIdentityGuard
@@ -144,15 +113,6 @@ class WorkspacePrAggregateAccessor {
       if (prIdentityChanged(current, expectedPr)) {
         return { applied: false, dispatchReset: false };
       }
-      const dispatch = await workspaceRatchetAccessor.readDispatchGuard(
-        transaction,
-        workspaceId,
-        current.prId
-      );
-      const shouldReset =
-        prAggregateChanged(current, observation) &&
-        (dispatch?.dispatchOutcome === 'COMPLETED' || dispatch?.dispatchOutcome === 'DIED');
-
       const applied = await workspacePrAccessor.applyAggregateIfUnchanged(
         transaction,
         workspaceId,
@@ -166,18 +126,7 @@ class WorkspacePrAggregateAccessor {
       // Attached PR metadata never changes the workspace branch.
       void branchName;
 
-      // Only once the aggregate write has landed, and only for a dispatch that
-      // has not moved on since it was read.
-      const dispatchReset =
-        shouldReset && dispatch
-          ? await workspaceRatchetAccessor.resetSettledDispatch(
-              transaction,
-              workspaceId,
-              dispatch,
-              current.prId
-            )
-          : false;
-      return { applied: true, dispatchReset };
+      return { applied: true, dispatchReset: false };
     });
   }
 }

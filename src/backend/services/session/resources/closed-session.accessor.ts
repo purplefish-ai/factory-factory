@@ -20,6 +20,13 @@ export interface CreateClosedSessionInput {
 }
 
 class PrismaClosedSessionAccessor {
+  findBySessionIdWithWorkspace(sessionId: string): Promise<ClosedSessionWithWorkspace[]> {
+    return prisma.closedSession.findMany({
+      where: { sessionId },
+      orderBy: { completedAt: 'desc' },
+      include: { workspace: { select: { id: true, worktreePath: true } } },
+    });
+  }
   findByWorkspaceId(workspaceId: string, limit: number): Promise<ClosedSessionRecord[]> {
     return prisma.closedSession.findMany({
       where: { workspaceId },

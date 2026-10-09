@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionLifecycleEventRecord } from '@/backend/services/session/resources/session-lifecycle-event.accessor';
 import { AcpRuntimeQuiescence } from '@/backend/services/session/service/acp/acp-runtime-quiescence';
 import { acpTraceLogger } from '@/backend/services/session/service/logging/acp-trace-logger.service';
+import { sessionBackgroundDeliveryService } from './session-background-delivery.service';
 import { createDeferred, createTerminationHarness } from './session-lifecycle.test-helpers';
 import { SessionTerminationCoordinator } from './session-termination.coordinator';
 
@@ -29,7 +30,7 @@ vi.mock('@/backend/services/settings', () => ({
   userSettingsService: {
     get: vi.fn(async () => ({
       defaultWorkspacePermissions: 'STRICT',
-      ratchetPermissions: 'YOLO',
+      autoIterationPermissions: 'YOLO',
     })),
   },
 }));
@@ -796,4 +797,20 @@ describe('SessionTerminationCoordinator races', () => {
     expect(harness.acpEventProcessor.clearSessionState).toHaveBeenCalledTimes(1);
     expect(releases).toHaveBeenCalledTimes(1);
   });
+});
+
+it('stops the runtime even when persisting the user delivery pause fails', async () => {
+  const pause = vi
+    .spyOn(sessionBackgroundDeliveryService, 'userStop')
+    .mockRejectedValue(new Error('database unavailable'));
+  const harness = createTerminationHarness();
+  try {
+    await expect(
+      harness.coordinator.stopSession('session-running', { reason: 'USER_STOP' })
+    ).resolves.toBeUndefined();
+    expect(pause).toHaveBeenCalledWith('session-running');
+    expect(harness.runtimeManager.stopAndQuiesce).toHaveBeenCalledWith('session-running');
+  } finally {
+    pause.mockRestore();
+  }
 });

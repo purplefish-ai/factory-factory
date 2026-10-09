@@ -275,6 +275,9 @@ export class AcpClientFactory {
       return { ...resumed, outcome: { kind: 'resumed' } };
     }
 
+    if (options.resumePolicy === 'require_existing') {
+      throw new Error('Cannot restore the existing provider conversation for PR monitoring');
+    }
     if (browseOnly) {
       throw new AcpBrowseSessionUnavailableError(
         storedId

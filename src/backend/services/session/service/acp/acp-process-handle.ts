@@ -6,7 +6,7 @@ import {
   subagentBrowseCapabilitySchema,
 } from '@/shared/acp-protocol/subagents';
 import type { AcpPermissionBridge } from './acp-permission-bridge';
-import type { AcpSessionCreationOutcome } from './acp-runtime-events';
+import type { AcpSessionCreationOutcome } from './acp-session-creation-outcome';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

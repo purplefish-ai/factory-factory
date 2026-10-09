@@ -44,12 +44,13 @@ import {
   githubCLIService,
   prFetchCoordinator,
   prSnapshotService,
+  prObservationService,
 } from './services/github';
 import { linearClientService, linearStateSyncService } from './services/linear';
 import { createLogger, getLogFilePath } from './services/logger.service';
 import { periodicTaskService } from './services/periodic-task';
 import { findAvailablePort } from './services/port.service';
-import { fixerSessionService, ratchetService } from './services/ratchet';
+import { ratchetService } from './services/ratchet';
 import { rateLimiter } from './services/rate-limiter.service';
 import {
   createRunScriptService,
@@ -73,6 +74,8 @@ import {
   codexModelCatalogService,
   type SessionFileLogger,
   sessionDataService,
+  sessionBackgroundDeliveryService,
+  findPRDeliveryReceipt,
   sessionDomainService,
   sessionEventBus,
   sessionFileLogger,
@@ -99,8 +102,8 @@ import {
   workspaceMaintenanceService,
   workspaceNotificationService,
   workspacePrSnapshotService,
+  workspacePRMonitoringService,
   workspaceQueryService,
-  workspaceRatchetService,
   workspaceRelationshipsService,
   workspaceRunScriptService,
   workspaceSnapshotStore,
@@ -237,7 +240,6 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     healthService,
     initializeWorkspaceWorktree,
     insightsService,
-    fixerSessionService,
     getWorkspaceInitPolicy,
     githubCLIService,
     logbookService,
@@ -248,6 +250,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     projectManagementService,
     prFetchCoordinator,
     prSnapshotService,
+    prObservationService,
     ratchetService,
     rateLimiter,
     recoverStaleProvisioningWorkspace,
@@ -258,6 +261,8 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     schedulerService,
     serverInstanceService,
     sessionDataService,
+    sessionBackgroundDeliveryService,
+    findPRDeliveryReceipt,
     sessionDomainService,
     sessionEventBus,
     sessionFileLogger,
@@ -271,6 +276,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     terminalService,
     terminalSessionService,
     userSettingsQueryService: userSettingsService,
+    userSettingsService,
     voiceNarrationService,
     workspaceActivityService,
     workspaceAutoIterationService,
@@ -280,8 +286,8 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     workspaceGitStateService,
     workspaceNotificationService,
     workspacePrSnapshotService,
+    workspacePRMonitoringService,
     workspaceQueryService,
-    workspaceRatchetService,
     workspaceRelationshipsService,
     workspaceRunScriptService,
     workspaceSnapshotStore,

@@ -27,12 +27,6 @@ it('suppresses identical PR collection reconciliations but publishes nested PR c
     ciStatus: 'SUCCESS',
     hasMergeConflict: false,
     syncedAt: null,
-    ratchet: {
-      lastCheckedAt: null,
-      dispatchOutcome: null,
-      dispatchRetryCount: 0,
-      dispatchStalled: false,
-    },
   };
   const prs = [pr];
   const update = { projectId: 'p', prs, prSummary: deriveWorkspacePRSummary(prs, true) };
@@ -42,8 +36,8 @@ it('suppresses identical PR collection reconciliations but publishes nested PR c
   store.upsert('w', structuredClone(update), 'reconciliation', 2);
   expect(changed).not.toHaveBeenCalled();
   const next = structuredClone(update);
-  next.prs[0]!.ratchet.dispatchRetryCount = 2;
+  next.prs[0]!.title = 'Updated title';
   store.upsert('w', next, 'reconciliation', 3);
   expect(changed).toHaveBeenCalledTimes(1);
-  expect(store.getByWorkspaceId('w')?.prs?.[0]?.ratchet.dispatchRetryCount).toBe(2);
+  expect(store.getByWorkspaceId('w')?.prs?.[0]?.title).toBe('Updated title');
 });

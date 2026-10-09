@@ -207,6 +207,38 @@ describe('session-transcript', () => {
     expect(store.transcript[0]?.order).toBe(5);
   });
 
+  it('keeps CI events as visible PR updates when committed and restored from provider history', () => {
+    const store = createStore();
+    const text = '<!-- factory-factory-pr-event:ci-delivery -->\nCI_FAILED: test failed';
+    const timestamp = '2026-10-08T00:00:00.000Z';
+    commitSentUserMessageWithOrder(
+      store,
+      {
+        id: 'pr-event-ci-delivery',
+        text,
+        timestamp,
+        source: { type: 'pr_event', request: { workspaceId: 'w', prId: 'p', bindingRevision: 1 } },
+        settings: {
+          selectedModel: null,
+          reasoningEffort: null,
+          thinkingEnabled: false,
+          planModeEnabled: false,
+        },
+      },
+      0
+    );
+    expect(store.transcript[0]).toMatchObject({
+      source: 'agent',
+      message: { type: 'pr_update', text },
+    });
+    const restored = buildTranscriptFromHistory([
+      { type: 'user', uuid: 'provider-user-id', content: text, timestamp },
+      { type: 'user', content: 'My next request', timestamp },
+    ]);
+    expect(restored[0]).toMatchObject({ source: 'agent', message: { type: 'pr_update', text } });
+    expect(restored[1]).toMatchObject({ source: 'user', text: 'My next request' });
+  });
+
   it('upserts duplicate tool_use content_block_start events by tool id', () => {
     const store = createStore();
     const options = createAppendOptions();

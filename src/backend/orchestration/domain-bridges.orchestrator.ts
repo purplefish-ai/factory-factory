@@ -1,13 +1,3 @@
-/**
- * Domain Bridge Wiring
- *
- * Single entry point that configures all cross-domain bridges at application startup.
- * Must be called BEFORE any domain service is used.
- *
- * Import graph: orchestration -> all 6 domain barrels
- * Domain services never import each other; they receive capabilities via bridges.
- */
-
 import { toError } from '@/backend/lib/error-utils';
 import type {
   AutoIterationLogbookBridge,
@@ -23,13 +13,16 @@ import type {
 } from '@/backend/services/github';
 import type { createLogger } from '@/backend/services/logger.service';
 import type { periodicTaskService } from '@/backend/services/periodic-task';
-import type {
-  fixerSessionService,
-  RatchetGitHubBridge,
-  RatchetPRSnapshotBridge,
-  RatchetSessionBridge,
-  ratchetService,
-} from '@/backend/services/ratchet';
+import type { ratchetService } from '@/backend/services/ratchet';
+/**
+ * Domain Bridge Wiring
+ *
+ * Single entry point that configures all cross-domain bridges at application startup.
+ * Must be called BEFORE any domain service is used.
+ *
+ * Import graph: orchestration -> all 6 domain barrels
+ * Domain services never import each other; they receive capabilities via bridges.
+ */
 import type { startupScriptService } from '@/backend/services/run-script';
 import type {
   acpRuntimeManager,
@@ -53,13 +46,18 @@ import {
   type workspaceMaintenanceService,
   type workspacePrSnapshotService,
   type workspaceQueryService,
-  type workspaceRatchetService,
   type workspaceRunScriptService,
   type workspaceSnapshotStore,
   type workspaceStateMachine,
 } from '@/backend/services/workspace';
 import { AutoIterationStatus, SessionStatus } from '@/shared/core';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
+import { createPRDeliveryPorts } from './pr-delivery-dependencies';
+import { createPRBackgroundDeliveryPort } from './pr-event-delivery-port';
+import { wakePRDelivery } from './pr-event-delivery.orchestrator';
+import { retireLegacyRatchetSessions } from './pr-monitoring-cutover.orchestrator';
+import { setPRMonitoring } from './pr-monitoring.orchestrator';
+import { observeMonitoredPR } from './pr-observation.orchestrator';
 import type { reconciliationService } from './reconciliation.service';
 import type {
   initializeWorkspaceWorktree,
@@ -74,12 +72,12 @@ type AutoIterationRollbackReason =
   | 'auto_iteration_startup_failed_after_create'
   | 'auto_iteration_recycle_failed_after_create';
 
-export type BridgeServices = {
+import type { PRMonitoringServices } from './pr-monitoring-dependencies';
+export type BridgeServices = PRMonitoringServices & {
   autoIterationService: typeof autoIterationService;
   chatEventForwarderService: typeof chatEventForwarderService;
   chatMessageHandlerService: typeof chatMessageHandlerService;
   createLogger: typeof createLogger;
-  fixerSessionService: typeof fixerSessionService;
   getWorkspaceInitPolicy: typeof getWorkspaceInitPolicy;
   githubCLIService: typeof githubCLIService;
   initializeWorkspaceWorktree: typeof initializeWorkspaceWorktree;
@@ -105,7 +103,6 @@ export type BridgeServices = {
   workspaceMaintenanceService: typeof workspaceMaintenanceService;
   workspacePrSnapshotService: typeof workspacePrSnapshotService;
   workspaceQueryService: typeof workspaceQueryService;
-  workspaceRatchetService: typeof workspaceRatchetService;
   workspaceRunScriptService: typeof workspaceRunScriptService;
   workspaceSnapshotStore: typeof workspaceSnapshotStore;
   workspaceStateMachine: typeof workspaceStateMachine;
@@ -267,13 +264,11 @@ export function configureDomainBridges(services: BridgeServices): void {
     chatEventForwarderService,
     chatMessageHandlerService,
     createLogger,
-    fixerSessionService,
     getWorkspaceInitPolicy,
     githubCLIService,
     initializeWorkspaceWorktree,
     logbookService,
     periodicTaskService,
-    prFetchCoordinator,
     prSnapshotService,
     ratchetService,
     recoverStaleProvisioningWorkspace,
@@ -292,94 +287,27 @@ export function configureDomainBridges(services: BridgeServices): void {
     workspaceMaintenanceService,
     workspacePrSnapshotService,
     workspaceQueryService,
-    workspaceRatchetService,
     workspaceRunScriptService,
     workspaceSnapshotStore,
     workspaceStateMachine,
   } = services;
   const logger = createLogger('domain-bridges');
 
+  const { prObservationService, sessionBackgroundDeliveryService, userSettingsService } = services;
+  const deliveryPorts = createPRDeliveryPorts(services);
   // === Ratchet domain bridges ===
-  const ratchetSessionBridge: RatchetSessionBridge = {
-    findSessionById: (sessionId) => sessionDataService.findAgentSessionById(sessionId),
-    findSessionsByWorkspaceId: (workspaceId) =>
-      sessionDataService.findAgentSessionsByWorkspaceId(workspaceId),
-    acquireFixerSession: (input) => sessionDataService.acquireFixerSession(input),
-    isSessionRunning: (id) => acpRuntimeManager.isSessionRunning(id),
-    isSessionWorking: (id) => acpRuntimeManager.isSessionWorking(id),
-    stopSession: (id) => sessionLifecycleService.stopSession(id),
-    startSession: (id, opts) => sessionLifecycleService.startSession(id, opts),
-    restartSession: (id, opts) => sessionLifecycleService.restartSession(id, opts),
-    sendSessionMessage: (id, message) => sessionService.sendSessionMessage(id, message),
-    injectCommittedUserMessage: (id, msg) =>
-      sessionDomainService.injectCommittedUserMessage(id, msg),
-  };
-
-  const ratchetWorkspaceBridge = {
-    findFixerContext: (workspaceId: string) => workspaceDataService.findFixerContext(workspaceId),
-    recordSessionEnd: (workspaceId: string, sessionId: string, outcome: 'COMPLETED' | 'DIED') =>
-      workspaceRatchetService.recordSessionEnd(workspaceId, sessionId, outcome),
-    markDispatchStalled: (workspaceId: string, snapshotKey: string, prId?: string) =>
-      workspaceRatchetService.markDispatchStalled(workspaceId, snapshotKey, prId),
-  };
-
-  const ratchetGithubBridge: RatchetGitHubBridge = {
-    extractPRInfo: (url) => githubCLIService.extractPRInfo(url),
-    getPRFullDetails: (repo, pr, signal) => githubCLIService.getPRFullDetails(repo, pr, signal),
-    computePRState: ({ state, isDraft, reviewDecision }) =>
-      githubCLIService.computePRState({ state, isDraft, reviewDecision }),
-    getReviewComments: (repo, pr, since, signal) =>
-      githubCLIService.getReviewComments(repo, pr, since, signal),
-    getResolvedReviewCommentIds: (repo, pr, signal) =>
-      githubCLIService.getResolvedReviewCommentIds(repo, pr, signal),
-    computeCIStatus: (checks) =>
-      githubCLIService.computeCIStatus(
-        checks?.map((c) => ({ ...c, conclusion: c.conclusion ?? undefined })) ?? null
-      ),
-    getAuthenticatedUsername: (signal) => githubCLIService.getAuthenticatedUsername(signal),
-    coordinatePrFetch: (workspaceId, fetch, options) =>
-      prFetchCoordinator.coordinate(workspaceId, fetch, options),
-  };
-
-  const ratchetSnapshotBridge: RatchetPRSnapshotBridge = {
-    recordPrObservation: ({
-      workspaceId,
-      prId,
-      expectedRevision,
-      prUrl,
-      prNumber,
-      ciStatus,
-      prState,
-      reviewState,
-      hasMergeConflict,
-      failedAt,
-      observedAt,
-    }) =>
-      prSnapshotService.recordPrObservation(workspaceId, {
-        prId,
-        expectedRevision,
-        prUrl,
-        prNumber,
-        ciStatus,
-        prState,
-        reviewState,
-        hasMergeConflict,
-        failedAt,
-        observedAt,
-      }),
-    recordReviewCheck: (workspaceId, checkedAt, prId) =>
-      prSnapshotService.recordReviewCheck(workspaceId, { checkedAt, prId }),
-  };
-
   ratchetService.configure({
-    session: ratchetSessionBridge,
-    github: ratchetGithubBridge,
-    snapshot: ratchetSnapshotBridge,
-    workspace: ratchetWorkspaceBridge,
+    retireLegacy: () => retireLegacyRatchetSessions(services),
+    observe: (target, signal) => observeMonitoredPR(target, signal, undefined, services),
+    wake: (workspaceId) => wakePRDelivery(workspaceId, deliveryPorts),
+    setMonitoring: (input) => setPRMonitoring(input, services),
   });
-  fixerSessionService.configure({
-    session: ratchetSessionBridge,
-    workspace: ratchetWorkspaceBridge,
+  sessionBackgroundDeliveryService.configure(createPRBackgroundDeliveryPort(deliveryPorts));
+  prObservationService.configure({
+    findPR: (target) => workspacePrSnapshotService.find(target),
+    readPolicy: async () => ({
+      reviewTriggerMode: (await userSettingsService.get()).ratchetReviewTriggerMode,
+    }),
   });
   reconciliationService.configure({
     workspace: {
@@ -410,6 +338,7 @@ export function configureDomainBridges(services: BridgeServices): void {
 
   // === GitHub domain bridges ===
   prSnapshotService.configure({
+    observe: (target, options) => observeMonitoredPR(target, undefined, options, services),
     workspace: {
       listPRs: (id) => workspacePrSnapshotService.list(id),
       findPR: (target) => workspacePrSnapshotService.find(target),
@@ -418,19 +347,29 @@ export function configureDomainBridges(services: BridgeServices): void {
       attachDiscoveredPRsIfClaimMatches: (id, claim, urls) =>
         workspacePrSnapshotService.attachDiscoveredPRsIfClaimMatches(id, claim, urls),
       findPRContext: (id) => workspaceDataService.findPRContext(id),
+      recordSnapshot: (id, data) => workspacePrSnapshotService.record(id, data),
       applyPrSnapshotWithDispatchReset: (id, observation) =>
         workspacePrSnapshotService.applyPrSnapshotWithDispatchReset(id, observation),
       applyPrObservationWithDispatchReset: (id, observation) =>
         workspacePrSnapshotService.applyPrObservationWithDispatchReset(id, observation),
+      attachDiscoveredPRIfClaimMatches: (id, url, claim, updatedAt) =>
+        workspacePrSnapshotService.attachDiscoveredPRIfClaimMatches(id, url, claim, updatedAt),
+      updatePRSnapshotIfUrlMatches: (id, url, snapshot, updatedAt) =>
+        workspacePrSnapshotService.updatePRSnapshotIfUrlMatches(id, url, snapshot, updatedAt),
     },
   });
 
   // === Session domain bridges ===
+  const markSessionIdle = (workspaceId: string, sessionId: string, generation?: number) => {
+    workspaceActivityService.markSessionIdle(workspaceId, sessionId, generation);
+    void wakePRDelivery(workspaceId, deliveryPorts).catch((error) => {
+      logger.warn('PR delivery wake deferred after session became idle', { workspaceId, error });
+    });
+  };
   chatEventForwarderService.configure({
     workspace: {
       markSessionRunning: (wsId, sId) => workspaceActivityService.markSessionRunning(wsId, sId),
-      markSessionIdle: (wsId, sId, generation) =>
-        workspaceActivityService.markSessionIdle(wsId, sId, generation),
+      markSessionIdle,
       on: (event, handler) => workspaceActivityService.on(event, handler),
     },
   });
@@ -438,13 +377,12 @@ export function configureDomainBridges(services: BridgeServices): void {
   const sessionWorkspaceBridge = {
     markSessionRunning: (wsId: string, sId: string) =>
       workspaceActivityService.markSessionRunning(wsId, sId),
-    markSessionIdle: (wsId: string, sId: string, generation?: number) =>
-      workspaceActivityService.markSessionIdle(wsId, sId, generation),
+    markSessionIdle,
     recordRatchetSessionEnd: (
-      workspaceId: string,
-      sessionId: string,
-      outcome: 'COMPLETED' | 'DIED'
-    ) => ratchetService.recordSessionEnd(workspaceId, sessionId, outcome),
+      _workspaceId: string,
+      _sessionId: string,
+      _outcome: 'COMPLETED' | 'DIED'
+    ) => Promise.resolve(),
     resetPRDiscoveryBackoff: (workspaceId: string) =>
       workspaceDataService.resetPRDiscoveryBackoff(workspaceId),
   };

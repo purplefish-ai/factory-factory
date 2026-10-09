@@ -393,6 +393,19 @@ describe('SessionWorkflowFinalizer', () => {
     expect(harness.domain.clearSession).toHaveBeenCalledOnce();
   });
 
+  it('retains a legacy fixer when its closed transcript cannot be archived', async () => {
+    const harness = createFinalizerHarness({
+      session: createLifecycleTestSession({ workflow: 'ratchet' }),
+      workspace: null,
+    });
+    await harness.finalizer.finalizeDeliberateStop({
+      session: harness.session,
+      sessionId: 'session-1',
+      cleanupTransientRatchetSession: true,
+    });
+    expect(harness.repository.deleteSession).not.toHaveBeenCalled();
+  });
+
   it('delegates stale-running recovery to the session repository', async () => {
     const harness: FinalizerHarness = createFinalizerHarness();
 

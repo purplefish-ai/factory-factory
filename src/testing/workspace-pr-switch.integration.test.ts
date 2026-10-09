@@ -1,4 +1,4 @@
-// Cross-layer regressions: complete collections through live snapshots and archive gating.
+// Cross-layer regression: backend publication through the client archive gate.
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -6,74 +6,76 @@ import {
   type EventCollectorDependencies,
   type EventCollectorOrchestrator,
 } from '@/backend/orchestration/event-collector.orchestrator';
-import { PR_SNAPSHOT_UPDATED, PR_URL_ATTACHED } from '@/backend/services/github';
+import { PR_SNAPSHOT_UPDATED, type PRSnapshotUpdatedEvent } from '@/backend/services/github';
 import { RATCHET_DISPATCH_CHANGED } from '@/backend/services/ratchet';
 import {
   deriveWorkspaceFlowState,
+  SNAPSHOT_CHANGED,
   WorkspaceSnapshotStore,
   type workspaceDataService,
 } from '@/backend/services/workspace';
 import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
-import { deriveWorkspaceSidebarStatus } from '@/shared/core';
-import type { WorkspacePullRequest } from '@/shared/workspace-pr';
+import { deriveWorkspaceSidebarStatus, type CIStatus, type PRState } from '@/shared/core';
 import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
 
 type Projection = Awaited<ReturnType<typeof workspaceDataService.findRatchetProjection>>;
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  return {
-    promise: new Promise<T>((done) => {
-      resolve = done;
-    }),
-    resolve: (value: T) => resolve(value),
-  };
-}
-function pr(
-  id: string,
-  state: WorkspacePullRequest['state'] = 'MERGED',
-  url = `https://github.com/org/repo/pull/${id === 'a' ? 41 : 42}`
-): WorkspacePullRequest {
-  return {
-    id,
-    url,
-    number: Number(new URL(url).pathname.split('/').at(-1)),
-    title: null,
-    headRefName: null,
-    baseRefName: null,
-    state,
-    reviewState: null,
-    ciStatus: state === 'MERGED' ? 'SUCCESS' : 'PENDING',
-    hasMergeConflict: false,
-    syncedAt: null,
-    ratchet: {
-      lastCheckedAt: null,
-      dispatchOutcome: null,
-      dispatchRetryCount: 0,
-      dispatchStalled: false,
+
+function projection(
+  prState: PRState,
+  prCiStatus: CIStatus,
+  prNumber: number,
+  prUrl: string
+): NonNullable<Projection> {
+  const prs = [
+    {
+      id: 'pr',
+      url: prUrl,
+      number: prNumber,
+      title: null,
+      headRefName: null,
+      baseRefName: null,
+      state: prState,
+      reviewState: null,
+      ciStatus: prCiStatus,
+      hasMergeConflict: false,
+      syncedAt: null,
     },
-  };
-}
-function projection(prs: WorkspacePullRequest[]): NonNullable<Projection> {
-  const summary = deriveWorkspacePRSummary(prs, true);
+  ];
+  const prSummary = deriveWorkspacePRSummary(prs, true);
   return {
     status: 'READY',
-    prs,
-    prSummary: summary,
-    prUrl: prs.length === 1 ? prs[0]!.url : null,
-    prNumber: prs.length === 1 ? prs[0]!.number : null,
-    prState: summary.state,
-    prCiStatus: summary.ciStatus,
-    prUpdatedAt: null,
-    prHasMergeConflict: summary.hasMergeConflict,
     ratchetEnabled: true,
-    ratchetState: summary.ratchetState,
-    ratchetDispatchOutcome: null,
-    ratchetDispatchRetryCount: 0,
-    ratchetDispatchStalled: summary.dispatchStalled,
+    ratchetState: prSummary.ratchetState,
+    prMonitoring: {
+      deliveryMode: 'MAIN',
+      enabled: true,
+      recipientSessionId: 'main',
+      bindingRevision: 1,
+      pauseReason: null,
+      pendingEventCount: 0,
+    },
+    prs,
+    prSummary,
+    prUrl,
+    prNumber,
+    prState: prSummary.state,
+    prCiStatus: prSummary.ciStatus,
+    prUpdatedAt: null,
+    prHasMergeConflict: prSummary.hasMergeConflict,
   };
 }
-let collector: EventCollectorOrchestrator;
-function setup(prs = [pr('a')]) {
+const mergedProjection = projection('MERGED', 'SUCCESS', 41, 'https://github.com/org/repo/pull/41');
+const openProjection = projection('OPEN', 'PENDING', 42, 'https://github.com/org/repo/pull/42');
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+function createFixture(previous: { prNumber?: number; prUrl?: string; prState?: PRState } = {}) {
   const store = new WorkspaceSnapshotStore();
   store.configure({
     deriveFlowState: (input) =>
@@ -85,18 +87,32 @@ function setup(prs = [pr('a')]) {
   });
   store.upsert(
     'ws',
-    { projectId: 'p', hasHadSessions: true, ...projection(prs), prUpdatedAt: null },
-    'seed',
+    {
+      projectId: 'project',
+      status: 'READY',
+      hasHadSessions: true,
+      prNumber: 41,
+      prUrl: 'https://github.com/org/repo/pull/41',
+      prState: 'MERGED',
+      prCiStatus: 'SUCCESS',
+      ratchetEnabled: true,
+      ratchetState: 'MERGED',
+      ...previous,
+    },
+    'test',
     1
   );
-  const events = new EventEmitter(),
-    ratchet = new EventEmitter(),
-    read = vi.fn<typeof workspaceDataService.findRatchetProjection>();
+  const prs = new EventEmitter();
+  const ratchet = new EventEmitter();
+  const read = vi.fn<typeof workspaceDataService.findRatchetProjection>();
+  const check = vi.fn().mockResolvedValue(null);
+  // Real emitters and store exercise the entire publication path; only domain
+  // IO is stubbed so this test cannot fetch GitHub or archive a live workspace.
   const dependencies = {
-    createLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }),
+    createLogger: () => ({ info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() }),
     getWorkspaceLinearContext: vi.fn().mockResolvedValue(null),
-    prSnapshotService: events,
-    ratchetService: Object.assign(ratchet, { checkWorkspaceById: vi.fn().mockResolvedValue(null) }),
+    prSnapshotService: prs,
+    ratchetService: Object.assign(ratchet, { checkWorkspaceById: check }),
     workspaceDataService: { findRatchetProjection: read },
     workspaceSnapshotStore: store,
     workspaceActivityService: new EventEmitter(),
@@ -106,151 +122,165 @@ function setup(prs = [pr('a')]) {
     sessionDomainService: new EventEmitter(),
     sessionDataService: { findAgentSessionsByWorkspaceId: vi.fn().mockResolvedValue([]) },
   } as unknown as EventCollectorDependencies;
-  collector = createEventCollectorOrchestrator(dependencies);
-  collector.start();
-  return {
-    store,
-    events,
-    ratchet,
-    read,
-    checkWorkspaceById: dependencies.ratchetService.checkWorkspaceById,
-  };
+  const collector = createEventCollectorOrchestrator(dependencies);
+  return { store, prs, ratchet, read, check, collector };
 }
-function assertOpen(store: WorkspaceSnapshotStore) {
-  const snapshot = store.getByWorkspaceId('ws')!;
-  expect(snapshot.prSummary?.hasNonterminal).toBe(true);
-  expect(snapshot.prState).toBe('OPEN');
-  expect(snapshot.kanbanColumn).not.toBe('DONE');
-  expect(isWorkspaceDoneOrMerged(snapshot)).toBe(false);
+
+function emitOpen(prs: EventEmitter, overrides: Partial<PRSnapshotUpdatedEvent> = {}) {
+  prs.emit(PR_SNAPSHOT_UPDATED, {
+    workspaceId: 'ws',
+    prNumber: 42,
+    prUrl: 'https://github.com/org/repo/pull/42',
+    prState: 'OPEN',
+    prCiStatus: 'PENDING',
+    prReviewState: null,
+    ...overrides,
+  } satisfies PRSnapshotUpdatedEvent);
 }
-beforeEach(() => vi.useFakeTimers());
-afterEach(() => {
-  collector?.stop();
-  vi.useRealTimers();
-});
-describe('multiple PR snapshot publication', () => {
-  it.each(['https://github.com/org/repo/pull/42', 'https://github.com/org/other/pull/41'])(
-    'retains merged siblings when another PR opens: %s',
-    async (url) => {
-      const { store, events, read } = setup(),
-        pending = deferred<Projection>();
-      read.mockReturnValue(pending.promise);
-      events.emit(PR_SNAPSHOT_UPDATED, {
-        workspaceId: 'ws',
-        prId: 'b',
-        prUrl: url,
-        prNumber: Number(new URL(url).pathname.split('/').at(-1)),
-        prState: 'OPEN',
-        prCiStatus: 'PENDING',
-        prReviewState: null,
-      });
-      assertOpen(store);
-      expect(store.getByWorkspaceId('ws')?.prs).toEqual([
-        pr('a'),
-        expect.objectContaining({
-          id: 'b',
-          url,
-          number: url.endsWith('/42') ? 42 : 41,
-          state: 'OPEN',
-        }),
-      ]);
-      pending.resolve(projection([pr('a'), pr('b', 'OPEN', url)]));
-      await vi.advanceTimersByTimeAsync(0);
-      assertOpen(store);
-    }
-  );
-  it('keeps unsynchronized attachments visible and requires archive confirmation during an outage', async () => {
-    const { store, events, read } = setup();
-    read.mockRejectedValue(new Error('database unavailable'));
-    events.emit(PR_URL_ATTACHED, { workspaceId: 'ws', prId: 'b', prUrl: pr('b').url });
-    assertOpen(store);
-    expect(store.getByWorkspaceId('ws')?.prs?.[1]).toMatchObject({
-      id: 'b',
-      state: 'NONE',
-      ciStatus: 'UNKNOWN',
-    });
-    await vi.advanceTimersByTimeAsync(4000);
-    expect(read).toHaveBeenCalledTimes(3);
-    assertOpen(store);
-  });
-  it('discards a stale merged collection before the newer read completes', async () => {
-    const { store, events, ratchet, read } = setup(),
-      old = deferred<Projection>(),
-      fresh = deferred<Projection>();
-    read.mockReturnValueOnce(old.promise).mockReturnValueOnce(fresh.promise);
-    ratchet.emit(RATCHET_DISPATCH_CHANGED, { workspaceId: 'ws' });
-    events.emit(PR_URL_ATTACHED, { workspaceId: 'ws', prId: 'b', prUrl: pr('b').url });
-    old.resolve(projection([pr('a')]));
-    await vi.advanceTimersByTimeAsync(0);
-    assertOpen(store);
-    expect(read).toHaveBeenCalledTimes(2);
-    fresh.resolve(projection([pr('a'), pr('b', 'OPEN')]));
-    await vi.advanceTimersByTimeAsync(0);
-    assertOpen(store);
-  });
-  it('handles reopened PRs by their stable ID without duplicating an association', () => {
-    const { store, events, read } = setup([pr('a', 'CLOSED')]);
-    read.mockReturnValue(deferred<Projection>().promise);
-    events.emit(PR_SNAPSHOT_UPDATED, {
-      workspaceId: 'ws',
-      prId: 'a',
-      prUrl: pr('a').url,
-      prNumber: 41,
-      prState: 'OPEN',
-      prCiStatus: 'PENDING',
-      prReviewState: null,
-    });
-    assertOpen(store);
-    expect(store.getByWorkspaceId('ws')?.prs).toHaveLength(1);
-  });
-  it('immediately checks ratchet when one of multiple closed PRs reopens', () => {
-    const { store, events, read, checkWorkspaceById } = setup([
-      pr('a', 'CLOSED'),
-      pr('b', 'CLOSED'),
-    ]);
-    read.mockReturnValue(deferred<Projection>().promise);
-    expect(store.getByWorkspaceId('ws')).toMatchObject({ prUrl: null, prNumber: null });
-    events.emit(PR_SNAPSHOT_UPDATED, {
-      workspaceId: 'ws',
-      prId: 'b',
-      prUrl: pr('b').url,
-      prNumber: 42,
-      prState: 'OPEN',
-      prCiStatus: 'PENDING',
-      prReviewState: null,
-    });
-    assertOpen(store);
-    expect(checkWorkspaceById).toHaveBeenCalledWith('ws', { bypassPrFetchCooldown: true });
+
+function expectOpen(store: WorkspaceSnapshotStore) {
+  const entry = store.getByWorkspaceId('ws')!;
+  expect(entry.prState).toBe('OPEN');
+  expect(entry.ratchetState).not.toBe('MERGED');
+  expect(entry.statusReason.code).toBe('WAITING_FOR_CI');
+  expect(entry.kanbanColumn).toBe('WORKING');
+  expect(entry.sidebarStatus.ciState).not.toBe('MERGED');
+  expect(isWorkspaceDoneOrMerged(entry)).toBe(false);
+}
+
+describe('successful PR switch snapshot publication', () => {
+  let collector: EventCollectorOrchestrator;
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => {
+    collector?.stop();
+    vi.useRealTimers();
   });
 
-  it('keeps a workspace active when one PR merges and its sibling is still open', () => {
-    const { store, events, read } = setup([pr('a', 'OPEN'), pr('b', 'OPEN')]);
-    read.mockReturnValue(deferred<Projection>().promise);
-    events.emit(PR_SNAPSHOT_UPDATED, {
-      workspaceId: 'ws',
-      prId: 'a',
-      prUrl: pr('a').url,
-      prNumber: 41,
-      prState: 'MERGED',
-      prCiStatus: 'SUCCESS',
-      prReviewState: null,
-    });
-    assertOpen(store);
-    expect(store.getByWorkspaceId('ws')?.prs?.[0]?.state).toBe('MERGED');
+  it.each([
+    { label: 'new number and URL', overrides: {} },
+    { label: 'new number without URL', overrides: { prUrl: undefined } },
+    {
+      label: 'same number in a different repository',
+      overrides: {
+        prNumber: 41,
+        prUrl: 'https://github.com/org/other/pull/41',
+      },
+    },
+  ])('clears MERGED before notifying subscribers for $label', async ({ overrides }) => {
+    const fixture = createFixture();
+    collector = fixture.collector;
+    const pending = deferred<Projection>();
+    fixture.read.mockReturnValue(pending.promise);
+    collector.start();
+    fixture.store.on(SNAPSHOT_CHANGED, () => expectOpen(fixture.store));
+
+    emitOpen(fixture.prs, overrides);
+
+    expectOpen(fixture.store);
+    pending.resolve(
+      projection(
+        'OPEN',
+        'PENDING',
+        overrides.prNumber ?? 42,
+        overrides.prUrl ?? 'https://github.com/org/repo/pull/42'
+      )
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fixture.store.getByWorkspaceId('ws')!.ratchetState).toBe('CI_RUNNING');
+    expectOpen(fixture.store);
   });
-  it('publishes the full terminal summary when every PR is complete', () => {
-    const { store, events, read } = setup([pr('a'), pr('b', 'OPEN')]);
-    read.mockReturnValue(deferred<Projection>().promise);
-    events.emit(PR_SNAPSHOT_UPDATED, {
-      workspaceId: 'ws',
-      prId: 'b',
-      prUrl: pr('b').url,
-      prNumber: 42,
+
+  it('remains safe when authoritative projection reads exhaust their retries', async () => {
+    const fixture = createFixture();
+    collector = fixture.collector;
+    fixture.read.mockRejectedValue(new Error('database unavailable'));
+    collector.start();
+    emitOpen(fixture.prs);
+    await vi.advanceTimersByTimeAsync(4000);
+
+    expect(fixture.read).toHaveBeenCalledTimes(3);
+    expectOpen(fixture.store);
+  });
+
+  it('discards an old in-flight MERGED projection before a fresh read completes', async () => {
+    const fixture = createFixture();
+    collector = fixture.collector;
+    const oldRead = deferred<Projection>();
+    const newRead = deferred<Projection>();
+    fixture.read.mockReturnValueOnce(oldRead.promise).mockReturnValueOnce(newRead.promise);
+    collector.start();
+    fixture.ratchet.emit(RATCHET_DISPATCH_CHANGED, { workspaceId: 'ws' });
+    emitOpen(fixture.prs);
+    const publishedRatchetStates: string[] = [];
+    fixture.store.on(SNAPSHOT_CHANGED, () => {
+      publishedRatchetStates.push(fixture.store.getByWorkspaceId('ws')!.ratchetState);
+    });
+
+    oldRead.resolve(mergedProjection);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fixture.read).toHaveBeenCalledTimes(2);
+    expect(publishedRatchetStates).not.toContain('MERGED');
+    expectOpen(fixture.store);
+
+    newRead.resolve(openProjection);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fixture.store.getByWorkspaceId('ws')!.ratchetState).toBe('CI_RUNNING');
+    expectOpen(fixture.store);
+  });
+
+  it('preserves a current open PR projection when its identity is unchanged', () => {
+    const fixture = createFixture({ prState: 'OPEN' });
+    collector = fixture.collector;
+    fixture.store.upsert('ws', { ratchetState: 'CI_FAILED' }, 'test', 2);
+    fixture.read.mockReturnValue(deferred<Projection>().promise);
+    collector.start();
+    emitOpen(fixture.prs, { prNumber: 41, prUrl: undefined });
+
+    expect(fixture.store.getByWorkspaceId('ws')!.ratchetState).toBe('CI_FAILED');
+    expect(fixture.check).not.toHaveBeenCalled();
+  });
+
+  it('clears a stale merged projection when the same closed PR reopens', () => {
+    const fixture = createFixture({ prState: 'CLOSED' });
+    collector = fixture.collector;
+    fixture.read.mockReturnValue(deferred<Projection>().promise);
+    collector.start();
+    emitOpen(fixture.prs, { prNumber: 41, prUrl: undefined });
+
+    expectOpen(fixture.store);
+    expect(fixture.check).toHaveBeenCalledExactlyOnceWith('ws', { bypassPrFetchCooldown: true });
+  });
+
+  it('still reports a newly linked merged PR as done during projection refresh', () => {
+    const fixture = createFixture();
+    collector = fixture.collector;
+    fixture.read.mockReturnValue(deferred<Projection>().promise);
+    collector.start();
+    emitOpen(fixture.prs, { prState: 'MERGED', prCiStatus: 'SUCCESS' });
+
+    const entry = fixture.store.getByWorkspaceId('ws')!;
+    expect(entry.statusReason.code).toBe('MERGED');
+    expect(entry.kanbanColumn).toBe('DONE');
+    expect(entry.sidebarStatus.ciState).toBe('MERGED');
+    expect(isWorkspaceDoneOrMerged(entry)).toBe(true);
+  });
+
+  it('preserves the projection for an unchanged merged PR', () => {
+    const fixture = createFixture();
+    collector = fixture.collector;
+    fixture.read.mockReturnValue(deferred<Projection>().promise);
+    collector.start();
+    emitOpen(fixture.prs, {
+      prNumber: 41,
+      prUrl: 'https://github.com/org/repo/pull/41',
       prState: 'MERGED',
       prCiStatus: 'SUCCESS',
-      prReviewState: null,
     });
-    expect(isWorkspaceDoneOrMerged(store.getByWorkspaceId('ws'))).toBe(true);
-    expect(store.getByWorkspaceId('ws')?.prSummary?.totalCount).toBe(2);
+
+    const entry = fixture.store.getByWorkspaceId('ws')!;
+    expect(entry.ratchetState).toBe('MERGED');
+    expect(entry.kanbanColumn).toBe('DONE');
+    expect(isWorkspaceDoneOrMerged(entry)).toBe(true);
+    expect(fixture.check).not.toHaveBeenCalled();
   });
 });

@@ -87,12 +87,12 @@ export class SessionNotificationDeliveryService {
   async recoverPending(input: {
     sessionId: string;
     workspaceId: string;
-    assertAllowed(): void;
+    assertAllowed(): void | Promise<void>;
   }): Promise<{ dispatchableCount: number }> {
     const { sessionId, workspaceId, assertAllowed } = input;
     try {
       const pending = await this.notificationPort.listPendingForDelivery(workspaceId);
-      assertAllowed();
+      await assertAllowed();
       if (pending.length === 0) {
         return { dispatchableCount: 0 };
       }
@@ -101,7 +101,7 @@ export class SessionNotificationDeliveryService {
       let dispatchableCount = 0;
       const consumedContentMatchIds = new Set<string>();
       for (const notification of pending) {
-        assertAllowed();
+        await assertAllowed();
         const messageId = workspaceNotificationMessageId(notification.id);
         if (this.queuePort.hasQueuedMessage(sessionId, messageId)) {
           dispatchableCount += 1;
@@ -117,7 +117,7 @@ export class SessionNotificationDeliveryService {
           messageText,
           consumedContentMatchIds,
         });
-        assertAllowed();
+        await assertAllowed();
         if (alreadyDelivered) {
           continue;
         }

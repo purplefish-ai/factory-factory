@@ -13,11 +13,5 @@ export const WorkspacePullRequestSchema = z.object({
   ciStatus: z.nativeEnum(CIStatus),
   hasMergeConflict: z.boolean(),
   syncedAt: z.string().nullable(),
-  ratchet: z.object({
-    lastCheckedAt: z.string().nullable(),
-    dispatchOutcome: z.enum(['RUNNING', 'COMPLETED', 'DIED']).nullable(),
-    dispatchRetryCount: z.number().int().nonnegative(),
-    dispatchStalled: z.boolean(),
-  }),
 });
 export type WorkspacePullRequest = z.infer<typeof WorkspacePullRequestSchema>;

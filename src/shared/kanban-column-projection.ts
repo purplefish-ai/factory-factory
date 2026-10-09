@@ -10,10 +10,10 @@ import type { WorkspaceStatusReasonCode } from '@/shared/workspace-status-reason
  * total `Record` over the code union makes an unmapped code a compile error, so
  * the two cannot drift apart again.
  *
- * WAITING is positively asserted rather than inherited. A new code with no
- * obvious home belongs in WORKING: an unclassified workspace should read as
- * "something is happening" and get corrected, rather than quietly accumulating
- * in the column that is supposed to mean the user is blocking.
+ * WAITING covers user action and queued/background monitoring without an
+ * active turn. Monitoring facts alone must not claim that the agent is working.
+ * Every status reason has an explicit mapping so new states need a deliberate
+ * choice rather than inheriting a misleading activity claim.
  */
 export const KANBAN_COLUMN_BY_STATUS_REASON_CODE: Record<
   WorkspaceStatusReasonCode,
@@ -28,9 +28,15 @@ export const KANBAN_COLUMN_BY_STATUS_REASON_CODE: Record<
   FIXING_CI_FAILURES: KanbanColumn.WORKING,
   FIXING_REVIEW_COMMENTS: KanbanColumn.WORKING,
   FIXING_MERGE_CONFLICT: KanbanColumn.WORKING,
-  CHECKING_PR: KanbanColumn.WORKING,
+  // This legacy flow fallback does not establish an active verification turn.
+  CHECKING_PR: KanbanColumn.WAITING,
+  PR_RECIPIENT_REQUIRED: KanbanColumn.WAITING,
+  PR_UPDATES_PAUSED: KanbanColumn.WAITING,
+  PR_UPDATE_QUEUED: KanbanColumn.WAITING,
+  PR_DELIVERY_ERROR: KanbanColumn.WAITING,
+  PR_NEEDS_ATTENTION: KanbanColumn.WAITING,
 
-  // A human owns the next action.
+  // Waiting for user action or another prompt.
   NEEDS_PERMISSION: KanbanColumn.WAITING,
   NEEDS_PLAN_APPROVAL: KanbanColumn.WAITING,
   NEEDS_ANSWER: KanbanColumn.WAITING,

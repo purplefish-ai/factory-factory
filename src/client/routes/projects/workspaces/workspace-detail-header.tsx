@@ -163,6 +163,7 @@ export function WorkspaceDetailHeaderSlot({
                 workspaceId={workspaceId}
                 projectId={workspace.projectId}
                 prs={workspace.prs}
+                monitoring={workspace.prMonitoring}
                 readOnly={isArchived}
                 reviewEnabled={Boolean(workspace.worktreePath)}
               />

@@ -2,7 +2,11 @@
 // Public API for the session domain module.
 // Consumers should import from '@/backend/services/session' only.
 
-export type { AgentSessionRecord } from '@/backend/services/session/types';
+export type {
+  AgentSessionRecord,
+  AcquirePRDedicatedSessionInput,
+  PRDedicatedSessionAcquisition,
+} from '@/backend/services/session/types';
 // ACP runtime (Phase 19+)
 export type {
   AcpClientOptions,
@@ -41,10 +45,16 @@ export {
   type StartSessionOptions,
   type StopSessionOptions,
 } from './lifecycle/session.lifecycle.service';
+export { SessionStartupCancelledError } from './lifecycle/session-lifecycle-gate';
 export { SessionPermissionService } from './lifecycle/session.permission.service';
 export { buildChildWorkspaceContext } from './lifecycle/session.prompt-builder';
 export { sessionRepository } from './lifecycle/session.repository';
 export { SessionService } from './lifecycle/session.service';
+export {
+  type PRBackgroundDeliveryPort,
+  sessionBackgroundDeliveryService,
+} from './lifecycle/session-background-delivery.service';
+export { findPRDeliveryReceipt } from './lifecycle/session-pr-receipt';
 export type { SessionPromptService } from './lifecycle/session-services';
 export {
   acpEventProcessor,

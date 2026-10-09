@@ -237,7 +237,6 @@ model Workspace {
   linearIssueIdentifier String?   // Human-readable e.g. "ENG-123"
   linearIssueUrl        String?   // URL to Linear issue
   defaultSessionProvider WorkspaceProviderSelection @default(WORKSPACE_DEFAULT)
-  ratchetSessionProvider WorkspaceProviderSelection @default(WORKSPACE_DEFAULT)
   agentSessions       AgentSession[]
   sessionLifecycleEvents SessionLifecycleEvent[]
   terminalSessions    TerminalSession[]
@@ -250,7 +249,6 @@ model Workspace {
   prDiscovery         WorkspacePRDiscovery?
 
   // Ratchet tracking (centralized PR progression) — see WorkspaceRatchet
-  ratchet             WorkspaceRatchet?
 
   // Run script: the cached factory-factory.json commands and the process running
   // one of them — see WorkspaceRunScript
@@ -270,6 +268,8 @@ model Workspace {
   parentWorkspace     Workspace?        @relation("WorkspaceChildren", fields: [parentWorkspaceId], references: [id])
   childWorkspaces     Workspace[]       @relation("WorkspaceChildren")
   notifications       WorkspaceNotification[]
+  prMonitoring        WorkspacePRMonitoring?
+  prEvents            WorkspacePREvent[]
 
   // Activity tracking
   hasHadSessions      Boolean           @default(false)
@@ -309,14 +309,65 @@ model WorkspacePR {
   ciLastNotifiedAt DateTime?
   reviewLastCheckedAt DateTime?
   reviewLastCommentId String?
-  automation WorkspacePRRatchet?
-  activeIn WorkspaceRatchet[] @relation("ActiveRatchetPR")
+  observation Json?
+  transitionSequence Int @default(0)
+  observationEpoch Int @default(0)
+  events WorkspacePREvent[]
+  dedicatedSession WorkspacePRDedicatedSession?
   @@unique([workspaceId, url])
   @@index([workspaceId, detachedAt])
   @@index([syncedAt])
 }
 
 /// Discovery belongs to the workspace even before its first PR exists.
+model WorkspacePRMonitoring {
+  workspaceId String @id
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  enabled Boolean @default(false)
+  deliveryMode String @default("MAIN")
+  recipientSessionId String?
+  recipient AgentSession? @relation("PRMonitoringRecipient", fields: [recipientSessionId], references: [id], onDelete: SetNull)
+  bindingRevision Int @default(0)
+  eventEpoch Int @default(0)
+  deliveryPauseReason String?
+  legacySessionIds Json @default("[]")
+  lastCheckedAt DateTime?
+  @@index([recipientSessionId])
+}
+
+model WorkspacePRDedicatedSession {
+  prId String @id
+  pr WorkspacePR @relation(fields: [prId], references: [id], onDelete: Cascade)
+  sessionId String? @unique
+  session AgentSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+}
+
+model WorkspacePREvent {
+  id String @id @default(cuid())
+  workspaceId String
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  prId String?
+  pr WorkspacePR? @relation(fields: [prId], references: [id], onDelete: Cascade)
+  kind String
+  deduplicationKey String
+  payload Json
+  state String @default("PENDING")
+  attempts Int @default(0)
+  deliveryId String?
+  deliverySessionId String?
+  deliveryProvider String?
+  deliveryProviderSessionId String?
+  deliveryBindingRevision Int?
+  deliveryText String?
+  claimedAt DateTime?
+  deliveredAt DateTime?
+  createdAt DateTime @default(now())
+  @@unique([prId, deduplicationKey])
+  @@unique([workspaceId, deduplicationKey])
+  @@index([workspaceId, state, createdAt])
+  @@index([deliveryId])
+}
+
 model WorkspacePRDiscovery {
   workspaceId String @id
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -326,31 +377,6 @@ model WorkspacePRDiscovery {
   @@index([nextCheckAt])
 }
 
-/// The workspace toggle and the single fixer slot shared by all of its PRs.
-model WorkspaceRatchet {
-  workspaceId String @id
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  enabled Boolean @default(true)
-  lastCheckedAt DateTime?
-  activeSessionId String?
-  activePrId String?
-  activePr WorkspacePR? @relation("ActiveRatchetPR", fields: [activePrId], references: [id], onDelete: SetNull)
-  @@index([lastCheckedAt])
-  @@index([activePrId])
-}
-
-/// Independent dispatch deduplication, retry budget, and progress for one PR.
-model WorkspacePRRatchet {
-  prId String @id
-  pr WorkspacePR @relation(fields: [prId], references: [id], onDelete: Cascade)
-  lastCheckedAt DateTime?
-  activeSessionId String?
-  dispatchSnapshotKey String?
-  dispatchOutcome RatchetDispatchOutcome?
-  dispatchRetryCount Int @default(0)
-  dispatchStalled Boolean @default(false)
-  @@index([lastCheckedAt])
-}
 
 /// The workspace's dev server: the commands `factory-factory.json` declares for
 /// it, and the process currently running one of them.
@@ -456,11 +482,13 @@ model WorkspaceAutoIteration {
 }
 
 model AgentSession {
+  dedicatedPRBinding WorkspacePRDedicatedSession?
+  prMonitoringBindings WorkspacePRMonitoring[] @relation("PRMonitoringRecipient")
   id                  String        @id @default(cuid())
   workspaceId         String
   workspace           Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   name                String?
-  workspacePrId       String? // Exact PR target for automated fixer sessions
+  workspacePrId       String? // Retained association for archived automated sessions
   workflow            String // "explore", "implement", "test"
   model               String        @default("sonnet")
   status              SessionStatus @default(IDLE)
@@ -530,6 +558,7 @@ model ClosedSession {
 
   @@index([workspaceId])
   @@index([completedAt])
+  @@index([sessionId, completedAt])
 }
 
 model UserSettings {
@@ -560,7 +589,7 @@ model UserSettings {
   defaultClaudeReasoningEffort String?
   defaultCodexReasoningEffort  String?
   defaultWorkspacePermissions SessionPermissionPreset @default(STRICT) // Default execution-mode preset for non-ratchet sessions
-  ratchetPermissions        SessionPermissionPreset @default(YOLO) // Default execution-mode preset for ratchet sessions
+  autoIterationPermissions  SessionPermissionPreset @default(YOLO) // Execution preset for auto-iteration sessions
 
   // Adversarial Review Settings (on-demand review of the open PR by a different provider/model)
   reviewerSessionProvider   SessionProvider @default(CODEX) // Provider used for adversarial review sessions

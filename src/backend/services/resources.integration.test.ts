@@ -8,7 +8,6 @@ import {
   type Prisma,
   type PrismaClient,
   RunScriptStatus,
-  SessionStatus,
   WorkspaceStatus,
 } from '@prisma-gen/client';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -25,12 +24,10 @@ let prisma: PrismaClient;
 let workspaceDataService: typeof import('@/backend/services/workspace').workspaceDataService;
 let workspaceAutoIterationService: typeof import('@/backend/services/workspace').workspaceAutoIterationService;
 let workspaceMaintenanceService: typeof import('@/backend/services/workspace').workspaceMaintenanceService;
-let workspacePrSnapshotService: typeof import('@/backend/services/workspace').workspacePrSnapshotService;
-let workspaceRatchetService: typeof import('@/backend/services/workspace').workspaceRatchetService;
+let workspacePRMonitoringService: typeof import('@/backend/services/workspace').workspacePRMonitoringService;
 let workspaceRunScriptService: typeof import('@/backend/services/workspace').workspaceRunScriptService;
 let workspaceStateMachine: typeof import('@/backend/services/workspace').workspaceStateMachine;
 let projectManagementService: typeof import('@/backend/services/workspace').projectManagementService;
-let sessionDataService: typeof import('@/backend/services/session').sessionDataService;
 let terminalSessionService: typeof import('@/backend/services/terminal').terminalSessionService;
 let userSettingsService: typeof import('@/backend/services/settings').userSettingsService;
 let decisionLogService: typeof import('@/backend/services/decision-log').decisionLogService;
@@ -47,15 +44,11 @@ beforeAll(async () => {
     workspaceAutoIterationService,
     workspaceDataService,
     workspaceMaintenanceService,
-    workspacePrSnapshotService,
-    workspaceRatchetService,
+    workspacePRMonitoringService,
     workspaceRunScriptService,
     workspaceStateMachine,
   } = await vi.importActual<typeof import('@/backend/services/workspace')>(
     '@/backend/services/workspace'
-  ));
-  ({ sessionDataService } = await vi.importActual<typeof import('@/backend/services/session')>(
-    '@/backend/services/session'
   ));
   ({ terminalSessionService } = await vi.importActual<typeof import('@/backend/services/terminal')>(
     '@/backend/services/terminal'
@@ -105,16 +98,14 @@ async function createProjectFixture(overrides: Partial<Prisma.ProjectUncheckedCr
 async function createWorkspaceFixture(
   projectId: string,
   overrides: Partial<Prisma.WorkspaceUncheckedCreateInput> & {
-    ratchet?: Prisma.WorkspaceRatchetCreateWithoutWorkspaceInput &
-      Partial<Prisma.WorkspacePRRatchetCreateWithoutPrInput>;
-    pr?: Omit<Prisma.WorkspacePRCreateWithoutWorkspaceInput, 'url'> & { url?: string | null };
+    ratchet?: Prisma.WorkspacePRMonitoringCreateWithoutWorkspaceInput;
+    pr?: Prisma.WorkspacePRCreateWithoutWorkspaceInput;
     runScript?: Prisma.WorkspaceRunScriptCreateWithoutWorkspaceInput;
     autoIteration?: Prisma.WorkspaceAutoIterationCreateWithoutWorkspaceInput;
   } = {}
 ) {
   const { ratchet, pr, runScript, autoIteration, ...workspaceOverrides } = overrides;
-  const fixturePrId = nextId('pr');
-  const workspace = await prisma.workspace.create({
+  return await prisma.workspace.create({
     data: {
       projectId,
       name: nextId('workspace'),
@@ -122,47 +113,13 @@ async function createWorkspaceFixture(
       ...workspaceOverrides,
       // Mirrors workspaceAccessor.create: every workspace gets all four
       // side-table rows, so the row-guarded writes under test have one to guard.
-      ratchet: {
-        create: {
-          enabled: ratchet?.enabled,
-          lastCheckedAt: ratchet?.lastCheckedAt,
-          activeSessionId: ratchet?.activeSessionId,
-          activePrId: null,
-        },
-      },
+      prMonitoring: { create: ratchet ?? {} },
       prDiscovery: { create: {} },
-      prs: {
-        create:
-          pr || ratchet?.activeSessionId
-            ? [
-                {
-                  ...pr,
-                  id: fixturePrId,
-                  url: pr?.url ?? 'https://github.com/o/r/pull/42',
-                  automation: {
-                    create: {
-                      activeSessionId: ratchet?.activeSessionId,
-                      dispatchOutcome: ratchet?.dispatchOutcome,
-                      dispatchSnapshotKey: ratchet?.dispatchSnapshotKey,
-                      dispatchRetryCount: ratchet?.dispatchRetryCount,
-                      dispatchStalled: ratchet?.dispatchStalled,
-                    },
-                  },
-                },
-              ]
-            : [],
-      },
+      prs: { create: pr ? [pr] : [] },
       runScript: { create: runScript ?? {} },
       autoIteration: { create: autoIteration ?? {} },
     },
   });
-  if (ratchet?.activeSessionId) {
-    await prisma.workspaceRatchet.update({
-      where: { workspaceId: workspace.id },
-      data: { activePrId: fixturePrId },
-    });
-  }
-  return workspace;
 }
 
 function createGitRepository(remoteUrl?: string): string {
@@ -299,38 +256,6 @@ describe('resource accessors integration', () => {
       ).toBe(true);
     });
 
-    it('filters ratchet workspaces by READY + open PR + ratchet enabled', async () => {
-      const project = await createProjectFixture();
-
-      const included = await createWorkspaceFixture(project.id, {
-        status: WorkspaceStatus.READY,
-        pr: {
-          url: 'https://github.com/acme/repo/pull/1',
-          number: 1,
-          state: PRState.OPEN,
-          ciStatus: CIStatus.PENDING,
-        },
-        ratchet: { enabled: true },
-      });
-
-      await createWorkspaceFixture(project.id, {
-        status: WorkspaceStatus.READY,
-        pr: { url: 'https://github.com/acme/repo/pull/2' },
-        ratchet: { enabled: false },
-      });
-
-      // Merged is read off the PR now, not off a second copy on the ratchet row.
-      await createWorkspaceFixture(project.id, {
-        status: WorkspaceStatus.READY,
-        pr: { url: 'https://github.com/acme/repo/pull/3', state: PRState.MERGED },
-        ratchet: { enabled: true },
-      });
-
-      const ratchetCandidates = await workspaceRatchetService.findCandidates();
-
-      expect(ratchetCandidates.map((workspace) => workspace.id)).toEqual([included.id]);
-    });
-
     it('projects ratchetState from the PR row on every read, with no state column', async () => {
       const project = await createProjectFixture();
 
@@ -356,14 +281,24 @@ describe('resource accessors integration', () => {
 
       // Disabling is the whole transition: no settling write follows it, and the
       // very next read already says IDLE.
-      await workspaceRatchetService.disable(conflicted.id);
+      await workspacePRMonitoringService.setBinding({
+        workspaceId: conflicted.id,
+        enabled: false,
+        recipientSessionId: null,
+        expectedBindingRevision: 0,
+      });
       await expect(workspaceDataService.findById(conflicted.id)).resolves.toMatchObject({
         ratchetEnabled: false,
         ratchetState: 'IDLE',
       });
 
       // Re-enabling restores the projection rather than resuming a stored value.
-      await workspaceRatchetService.enable(conflicted.id);
+      await workspacePRMonitoringService.setBinding({
+        workspaceId: conflicted.id,
+        enabled: true,
+        recipientSessionId: null,
+        expectedBindingRevision: 1,
+      });
       await expect(workspaceDataService.findById(conflicted.id)).resolves.toMatchObject({
         ratchetEnabled: true,
         ratchetState: 'MERGE_CONFLICT',
@@ -418,129 +353,6 @@ describe('resource accessors integration', () => {
 
       const reloaded = await findWorkspaceOrThrow(workspace.id);
       expect(reloaded.updatedAt.getTime()).toBeGreaterThan(staleUpdatedAt.getTime());
-    });
-
-    it('settles ratchet session end only when session id matches', async () => {
-      const project = await createProjectFixture();
-      const workspace = await createWorkspaceFixture(project.id, {
-        ratchet: { activeSessionId: 'session-1', dispatchOutcome: 'RUNNING' },
-      });
-
-      const mismatch = await workspaceRatchetService.recordSessionEnd(
-        workspace.id,
-        'different-session',
-        'DIED'
-      );
-      expect(mismatch).toBe(false);
-      const unchanged = await findWorkspaceOrThrow(workspace.id);
-      expect(unchanged.ratchetActiveSessionId).toBe('session-1');
-      expect(unchanged.prs[0]?.ratchet.dispatchOutcome).toBe('RUNNING');
-
-      const settled = await workspaceRatchetService.recordSessionEnd(
-        workspace.id,
-        'session-1',
-        'DIED'
-      );
-      expect(settled).toBe(true);
-      const cleared = await findWorkspaceOrThrow(workspace.id);
-      expect(cleared.ratchetActiveSessionId).toBeNull();
-      expect(cleared.prs[0]?.ratchet.dispatchOutcome).toBe('DIED');
-    });
-
-    it('resets settled Ratchet ownership only for changed PR aggregates', async () => {
-      const project = await createProjectFixture();
-      const workspace = await createWorkspaceFixture(project.id, {
-        pr: {
-          number: 42,
-          state: PRState.CHANGES_REQUESTED,
-          reviewState: 'CHANGES_REQUESTED',
-          ciStatus: CIStatus.FAILURE,
-        },
-        ratchet: {
-          dispatchSnapshotKey: 'rich-dispatch-snapshot',
-          dispatchOutcome: 'DIED',
-          dispatchRetryCount: 3,
-        },
-      });
-
-      const identical = await workspacePrSnapshotService.applyPrSnapshotWithDispatchReset(
-        workspace.id,
-        {
-          prNumber: 42,
-          prState: PRState.CHANGES_REQUESTED,
-          prReviewState: 'CHANGES_REQUESTED',
-          prCiStatus: CIStatus.FAILURE,
-          prUpdatedAt: new Date('2026-07-17T12:00:00.000Z'),
-        }
-      );
-      expect(identical).toEqual({ applied: true, dispatchReset: false });
-      expect((await findWorkspaceOrThrow(workspace.id)).ratchetDispatchOutcome).toBe('DIED');
-
-      const changed = await workspacePrSnapshotService.applyPrSnapshotWithDispatchReset(
-        workspace.id,
-        {
-          prNumber: 42,
-          prState: PRState.OPEN,
-          prReviewState: null,
-          prCiStatus: CIStatus.PENDING,
-          prUpdatedAt: new Date('2026-07-17T12:01:00.000Z'),
-        }
-      );
-      expect(changed).toEqual({ applied: true, dispatchReset: true });
-      const reset = await findWorkspaceOrThrow(workspace.id);
-      expect(reset.ratchetDispatchOutcome).toBeNull();
-      expect(reset.ratchetDispatchRetryCount).toBe(0);
-      expect(reset.ratchetDispatchSnapshotKey).toBe('rich-dispatch-snapshot');
-
-      const ciChangedWorkspace = await createWorkspaceFixture(project.id, {
-        pr: { number: 42, state: PRState.OPEN, reviewState: null, ciStatus: CIStatus.PENDING },
-        ratchet: { dispatchOutcome: 'DIED', dispatchRetryCount: 3 },
-      });
-      await expect(
-        workspacePrSnapshotService.applyPrSnapshotWithDispatchReset(ciChangedWorkspace.id, {
-          prNumber: 42,
-          prState: PRState.OPEN,
-          prReviewState: null,
-          prCiStatus: CIStatus.FAILURE,
-          prUpdatedAt: new Date('2026-07-17T12:02:00.000Z'),
-        })
-      ).resolves.toEqual({ applied: true, dispatchReset: true });
-
-      const reviewChangedWorkspace = await createWorkspaceFixture(project.id, {
-        pr: { number: 42, state: PRState.OPEN, reviewState: null, ciStatus: CIStatus.FAILURE },
-        ratchet: { dispatchOutcome: 'DIED', dispatchRetryCount: 3 },
-      });
-      await expect(
-        workspacePrSnapshotService.applyPrSnapshotWithDispatchReset(reviewChangedWorkspace.id, {
-          prNumber: 42,
-          prState: PRState.CHANGES_REQUESTED,
-          prReviewState: 'CHANGES_REQUESTED',
-          prCiStatus: CIStatus.FAILURE,
-          prUpdatedAt: new Date('2026-07-17T12:03:00.000Z'),
-        })
-      ).resolves.toEqual({ applied: true, dispatchReset: true });
-
-      const runningWorkspace = await createWorkspaceFixture(project.id, {
-        pr: {
-          number: 42,
-          state: PRState.CHANGES_REQUESTED,
-          reviewState: 'CHANGES_REQUESTED',
-          ciStatus: CIStatus.FAILURE,
-        },
-        ratchet: { dispatchOutcome: 'RUNNING', dispatchRetryCount: 1 },
-      });
-      await expect(
-        workspacePrSnapshotService.applyPrSnapshotWithDispatchReset(runningWorkspace.id, {
-          prNumber: 43,
-          prState: PRState.OPEN,
-          prReviewState: null,
-          prCiStatus: CIStatus.SUCCESS,
-          prUpdatedAt: new Date('2026-07-17T12:04:00.000Z'),
-        })
-      ).resolves.toEqual({ applied: true, dispatchReset: false });
-      expect((await findWorkspaceOrThrow(runningWorkspace.id)).ratchetDispatchOutcome).toBe(
-        'RUNNING'
-      );
     });
 
     it('clears auto-iteration session only when the expected pointer still matches', async () => {
@@ -666,143 +478,6 @@ describe('resource accessors integration', () => {
       expect(invalid.error).toContain('not a git repository');
       expect(missing.valid).toBe(false);
       expect(missing.error).toContain('does not exist');
-    });
-  });
-
-  describe('sessionDataService', () => {
-    it('returns existing RUNNING fixer session instead of creating a new one', async () => {
-      const project = await createProjectFixture();
-      const workspace = await createWorkspaceFixture(project.id);
-
-      const existing = await prisma.agentSession.create({
-        data: {
-          workspaceId: workspace.id,
-          workflow: 'ci-fix',
-          status: SessionStatus.RUNNING,
-          model: 'sonnet',
-          provider: 'CLAUDE',
-        },
-      });
-
-      const acquired = await sessionDataService.acquireFixerSession({
-        workspaceId: workspace.id,
-        workflow: 'ci-fix',
-        sessionName: 'CI Fixer',
-        maxSessions: 3,
-        provider: 'CLAUDE',
-        providerProjectPath: '/tmp/worktree',
-      });
-
-      expect(acquired).toEqual({
-        outcome: 'existing',
-        sessionId: existing.id,
-        status: SessionStatus.RUNNING,
-      });
-    });
-
-    it('returns limit_reached when active session cap is already met', async () => {
-      const project = await createProjectFixture();
-      const workspace = await createWorkspaceFixture(project.id);
-
-      await prisma.agentSession.createMany({
-        data: [
-          {
-            workspaceId: workspace.id,
-            workflow: 'explore',
-            status: SessionStatus.RUNNING,
-            model: 'sonnet',
-            provider: 'CLAUDE',
-          },
-          {
-            workspaceId: workspace.id,
-            workflow: 'feature',
-            status: SessionStatus.IDLE,
-            model: 'opus',
-            provider: 'CLAUDE',
-          },
-        ],
-      });
-
-      const acquired = await sessionDataService.acquireFixerSession({
-        workspaceId: workspace.id,
-        workflow: 'ci-fix',
-        sessionName: 'CI Fixer',
-        maxSessions: 2,
-        provider: 'CLAUDE',
-        providerProjectPath: null,
-      });
-
-      expect(acquired).toEqual({ outcome: 'limit_reached' });
-    });
-
-    it('ignores completed and failed sessions when enforcing fixer session cap', async () => {
-      const project = await createProjectFixture();
-      const workspace = await createWorkspaceFixture(project.id);
-
-      await prisma.agentSession.createMany({
-        data: [
-          {
-            workspaceId: workspace.id,
-            workflow: 'explore',
-            status: SessionStatus.COMPLETED,
-            model: 'sonnet',
-            provider: 'CLAUDE',
-          },
-          {
-            workspaceId: workspace.id,
-            workflow: 'feature',
-            status: SessionStatus.FAILED,
-            model: 'opus',
-            provider: 'CLAUDE',
-          },
-        ],
-      });
-
-      const acquired = await sessionDataService.acquireFixerSession({
-        workspaceId: workspace.id,
-        workflow: 'ci-fix',
-        sessionName: 'CI Fixer',
-        maxSessions: 2,
-        provider: 'CLAUDE',
-        providerProjectPath: null,
-      });
-
-      expect(acquired.outcome).toBe('created');
-    });
-
-    it('creates fixer session and reuses recent model preference', async () => {
-      const project = await createProjectFixture();
-      const workspace = await createWorkspaceFixture(project.id);
-
-      await prisma.agentSession.create({
-        data: {
-          workspaceId: workspace.id,
-          workflow: 'explore',
-          model: 'opus',
-          status: SessionStatus.COMPLETED,
-          provider: 'CLAUDE',
-        },
-      });
-
-      const acquired = await sessionDataService.acquireFixerSession({
-        workspaceId: workspace.id,
-        workflow: 'ci-fix',
-        sessionName: 'CI Fixer',
-        maxSessions: 5,
-        provider: 'CLAUDE',
-        providerProjectPath: '/tmp/worktree',
-      });
-
-      expect(acquired.outcome).toBe('created');
-      if (acquired.outcome !== 'created') {
-        throw new Error(`Expected created outcome, received ${acquired.outcome}`);
-      }
-
-      const created = await prisma.agentSession.findUniqueOrThrow({
-        where: { id: acquired.sessionId },
-      });
-      expect(created.model).toBe('opus');
-      expect(created.status).toBe(SessionStatus.IDLE);
     });
   });
 

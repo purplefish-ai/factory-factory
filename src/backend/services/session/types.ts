@@ -1,4 +1,5 @@
 import type { SessionProvider, SessionStatus, WorkspaceStatus } from '@/shared/core';
+import type { PRTarget } from '@/shared/pr-monitoring';
 
 export interface SessionWorkspaceRecord {
   status: WorkspaceStatus;
@@ -27,3 +28,14 @@ export interface AgentSessionRecord {
 export interface AgentSessionRecordWithWorkspace extends AgentSessionRecord {
   workspace: SessionWorkspaceRecord;
 }
+
+export interface AcquirePRDedicatedSessionInput extends PRTarget {
+  provider?: SessionProvider;
+  model?: string;
+  maxSessions: number;
+  expectedBindingRevision?: number;
+  isCurrent?: () => boolean;
+}
+export type PRDedicatedSessionAcquisition =
+  | { outcome: 'created' | 'reused'; session: AgentSessionRecord }
+  | { outcome: 'limit_reached' | 'unavailable' };

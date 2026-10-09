@@ -16,7 +16,6 @@ import { isDeepStrictEqual } from 'node:util';
  * functions are injected via configure() at startup through the orchestration
  * layer.
  */
-import type { RatchetDispatchOutcome } from '@prisma-gen/client';
 import { assembleWorkspaceDerivedState } from '@/backend/lib/workspace-derived-state';
 import { SERVICE_CACHE_TTL_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
@@ -84,9 +83,7 @@ export interface SnapshotUpdateInput {
   // Ratchet fields (group: 'ratchet')
   ratchetEnabled?: boolean;
   ratchetState?: RatchetState;
-  ratchetDispatchOutcome?: RatchetDispatchOutcome | null;
-  ratchetDispatchRetryCount?: number;
-  ratchetDispatchStalled?: boolean;
+  prMonitoring?: WorkspaceSnapshotEntry['prMonitoring'];
 
   // Run-script fields (group: 'runScript')
   runScriptStatus?: RunScriptStatus;
@@ -183,13 +180,7 @@ const PR_FIELDS = [
   'hasMergeConflict',
 ] as const;
 const SESSION_FIELDS = ['isWorking', 'pendingRequestType', 'sessionSummaries'] as const;
-const RATCHET_FIELDS = [
-  'ratchetEnabled',
-  'ratchetState',
-  'ratchetDispatchOutcome',
-  'ratchetDispatchRetryCount',
-  'ratchetDispatchStalled',
-] as const;
+const RATCHET_FIELDS = ['ratchetEnabled', 'ratchetState', 'prMonitoring'] as const;
 const RUN_SCRIPT_FIELDS = ['runScriptStatus'] as const;
 const RECONCILIATION_FIELDS = ['lastActivityAt'] as const;
 const GIT_FIELDS = ['gitStats'] as const;
@@ -280,6 +271,9 @@ function snapshotFieldValuesEqual(
   left: WorkspaceSnapshotEntry[SnapshotField],
   right: WorkspaceSnapshotEntry[SnapshotField]
 ): boolean {
+  if (field === 'prMonitoring') {
+    return isDeepStrictEqual(left, right);
+  }
   if (field === 'gitStats') {
     return gitStatsEqual(left as GitStats | null, right as GitStats | null);
   }
@@ -398,9 +392,14 @@ export class WorkspaceSnapshotStore extends EventEmitter {
       hasMergeConflict: false,
       ratchetEnabled: false,
       ratchetState: 'IDLE' as RatchetState,
-      ratchetDispatchOutcome: null,
-      ratchetDispatchRetryCount: 0,
-      ratchetDispatchStalled: false,
+      prMonitoring: {
+        enabled: false,
+        deliveryMode: 'MAIN',
+        recipientSessionId: null,
+        bindingRevision: 0,
+        pauseReason: null,
+        pendingEventCount: 0,
+      },
       runScriptStatus: 'IDLE' as RunScriptStatus,
       hasHadSessions: false,
       mode: 'STANDARD' as WorkspaceMode,
@@ -475,6 +474,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
         prState: entry.prState,
         prCiStatus: entry.prCiStatus,
         ratchetState: entry.ratchetState,
+        prMonitoring: entry.prMonitoring,
         hasHadSessions: entry.hasHadSessions,
         sessionIsWorking,
         pendingRequestType: entry.pendingRequestType,
@@ -482,7 +482,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
         isSessionStarting: hasStartingSessionSummary(entry.sessionSummaries),
         ratchetEnabled: entry.ratchetEnabled,
         hasMergeConflict: entry.hasMergeConflict,
-        dispatchStalled: entry.ratchetDispatchStalled,
+        dispatchStalled: Boolean(entry.prMonitoring.pauseReason),
         mode: entry.mode,
         autoIterationStatus: entry.autoIterationStatus,
         flowState,

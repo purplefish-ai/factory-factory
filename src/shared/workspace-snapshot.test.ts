@@ -149,14 +149,26 @@ describe('workspace snapshot transport contract', () => {
       hasMergeConflict: true,
       mode: 'AUTO_ITERATION',
       autoIterationStatus: 'RUNNING',
-      ratchetDispatchStalled: true,
+      prMonitoring: {
+        enabled: true,
+        recipientSessionId: 'main',
+        bindingRevision: 1,
+        pauseReason: 'DELIVERY_FAILED',
+        pendingEventCount: 0,
+      },
     });
 
     expect(parsed).toMatchObject({
       hasMergeConflict: true,
       mode: 'AUTO_ITERATION',
       autoIterationStatus: 'RUNNING',
-      ratchetDispatchStalled: true,
+      prMonitoring: {
+        enabled: true,
+        recipientSessionId: 'main',
+        bindingRevision: 1,
+        pauseReason: 'DELIVERY_FAILED',
+        pendingEventCount: 0,
+      },
     });
   });
 });

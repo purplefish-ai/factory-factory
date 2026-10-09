@@ -32,7 +32,7 @@ const defaultSettings = {
   ratchetEnabled: false,
   ratchetReplyToPrComments: true,
   ratchetReviewTriggerMode: 'CHANGES_REQUESTED',
-  ratchetPermissions: 'YOLO',
+  autoIterationPermissions: 'YOLO',
 };
 
 // A local transport keeps these interactive examples independent of a running backend.

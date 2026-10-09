@@ -43,7 +43,7 @@ const PLACEHOLDER_PATTERN =
 const UNTRUSTED_DATA_START = '<untrusted-pr-data>';
 const UNTRUSTED_DATA_END = '</untrusted-pr-data>';
 
-/** Same escaping `ratchet-dispatch.ts` uses for untrusted GitHub content. */
+/** Escape untrusted GitHub content before including it in task instructions. */
 function escapeUntrustedText(value: string): string {
   return value
     .replaceAll('<', '\\u003c')

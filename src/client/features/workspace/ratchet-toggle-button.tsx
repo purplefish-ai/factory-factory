@@ -16,10 +16,10 @@ interface RatchetToggleButtonProps {
 
 function getTooltip(enabled: boolean, state: RatchetStateLike): string {
   if (!enabled) {
-    return 'Ratchet is off. Click to enable automatic fixes for CI failures and review comments.';
+    return 'PR updates are off. Click to queue CI and review updates in the main conversation.';
   }
   const stateLabel = getRatchetStateLabel(state);
-  return `Ratchet is on (${stateLabel}). Click to disable.`;
+  return `PR updates are on (${stateLabel}). Click to disable.`;
 }
 
 export function RatchetToggleButton({
@@ -51,7 +51,7 @@ export function RatchetToggleButton({
             onToggle(!enabled);
           }}
           disabled={disabled}
-          aria-label={enabled ? 'Disable ratchet' : 'Enable ratchet'}
+          aria-label={enabled ? 'Disable PR updates' : 'Enable PR updates'}
           aria-pressed={enabled}
           className={cn('h-7 w-7 p-0', className)}
         >

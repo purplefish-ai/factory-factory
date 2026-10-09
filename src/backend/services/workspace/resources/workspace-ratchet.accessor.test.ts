@@ -1,310 +1,96 @@
-import type { PrismaClient } from '@prisma-gen/client';
-import { afterAll, beforeAll, expect, it, vi } from 'vitest';
-import {
-  createIntegrationDatabase,
-  destroyIntegrationDatabase,
-  type IntegrationDatabase,
-} from '@/backend/testing/integration-db';
-import { workspacePrRatchetAccessor } from './workspace-pr-ratchet.accessor';
-import { workspacePrAccessor } from './workspace-pr.accessor';
-import {
-  flattenWorkspaceRatchet,
-  WORKSPACE_RATCHET_DEFAULTS,
-  workspaceRatchetAccessor,
-} from './workspace-ratchet.accessor';
+import { expect, it, vi } from 'vitest';
 
-const database = vi.hoisted(() => ({ prisma: undefined as PrismaClient | undefined }));
-vi.mock('@/backend/db', () => ({
-  get prisma() {
-    if (!database.prisma) {
-      throw new Error('Missing database');
-    }
-    return database.prisma;
-  },
-}));
-let db: IntegrationDatabase;
-beforeAll(async () => {
-  db = await createIntegrationDatabase();
-  database.prisma = db.prisma;
-  await db.prisma.project.create({
-    data: { id: 'p', name: 'P', slug: 'p', repoPath: '/tmp/p', worktreeBasePath: '/tmp/w' },
-  });
-}, 30_000);
-afterAll(async () => {
-  await destroyIntegrationDatabase(db);
-});
-async function setup(id: string) {
-  await db.prisma.workspace.create({
-    data: { id, projectId: 'p', name: id, status: 'READY', ratchet: { create: {} } },
-  });
-  const a = await workspacePrAccessor.attach(id, `https://github.com/o/r/pull/1`),
-    b = await workspacePrAccessor.attach(id, `https://github.com/other/r/pull/1`);
-  return { a: a.prId, b: b.prId };
-}
-it('returns immutable defaults without ownership', () => {
-  const fields = flattenWorkspaceRatchet(null);
-  fields.ratchetEnabled = false;
-  expect(flattenWorkspaceRatchet(undefined)).toEqual(WORKSPACE_RATCHET_DEFAULTS);
-});
-it('observes each nonterminal PR, orders them fairly, and excludes archived workspaces', async () => {
-  const { a, b } = await setup('candidates');
-  await db.prisma.workspacePR.updateMany({
-    where: { workspaceId: 'candidates' },
-    data: { state: 'OPEN' },
-  });
-  await db.prisma.workspacePRRatchet.update({
-    where: { prId: a },
-    data: { lastCheckedAt: new Date('2026-10-08') },
-  });
-  await db.prisma.workspacePRRatchet.update({
-    where: { prId: b },
-    data: { lastCheckedAt: new Date('2026-10-01') },
-  });
-  expect((await workspaceRatchetAccessor.findWithPRsForRatchet()).map((pr) => pr.prId)).toEqual([
-    b,
-    a,
-  ]);
-  await db.prisma.workspacePR.update({ where: { id: a }, data: { state: 'MERGED' } });
-  expect(await workspaceRatchetAccessor.findWithPRsForRatchet()).toEqual([
-    expect.objectContaining({ id: 'candidates', prId: b }),
-  ]);
-  expect(await workspaceRatchetAccessor.findForRatchetById('candidates')).toBeNull();
-  await db.prisma.workspace.update({ where: { id: 'candidates' }, data: { status: 'ARCHIVED' } });
-  expect(await workspaceRatchetAccessor.findAllForRatchetById('candidates')).toEqual([]);
-});
-it('atomically allows only one active PR fixer and preserves sibling history on completion', async () => {
-  const { a, b } = await setup('ownership');
-  const results = await Promise.all([
-    workspaceRatchetAccessor.recordDispatchIfEnabled('ownership', {
-      prId: a,
-      sessionId: 'sa',
-      snapshotKey: 'a',
-      retryCount: 2,
-    }),
-    workspaceRatchetAccessor.recordDispatchIfEnabled('ownership', {
-      prId: b,
-      sessionId: 'sb',
-      snapshotKey: 'b',
-      retryCount: 0,
-    }),
-  ]);
-  expect(results.filter(Boolean)).toHaveLength(1);
-  const slot = await db.prisma.workspaceRatchet.findUniqueOrThrow({
-    where: { workspaceId: 'ownership' },
-  });
-  expect(await workspaceRatchetAccessor.recordSessionEnd('ownership', 'unrelated', 'DIED')).toBe(
-    false
-  );
-  expect(
-    await workspaceRatchetAccessor.recordSessionEnd('ownership', slot.activeSessionId!, 'DIED')
-  ).toBe(true);
-  const next = slot.activePrId === a ? b : a;
-  expect(
-    await workspaceRatchetAccessor.recordDispatchIfEnabled('ownership', {
-      prId: next,
-      sessionId: 'next',
-      snapshotKey: 'next',
-      retryCount: 0,
-    })
-  ).toBe(true);
-  expect(
-    await workspaceRatchetAccessor.recordSessionEnd('ownership', slot.activeSessionId!, 'COMPLETED')
-  ).toBe(false);
-  expect(
-    await db.prisma.workspaceRatchet.findUnique({ where: { workspaceId: 'ownership' } })
-  ).toMatchObject({ activeSessionId: 'next', activePrId: next });
-  expect(
-    await db.prisma.workspacePRRatchet.findUnique({ where: { prId: slot.activePrId! } })
-  ).toMatchObject({ dispatchOutcome: 'DIED' });
-});
-it('guards dispatch on lifecycle, enabled state, PR identity and revision', async () => {
-  const { a } = await setup('guards');
-  expect(
-    await workspaceRatchetAccessor.recordDispatchIfEnabled('other', {
-      prId: a,
-      sessionId: 's',
-      snapshotKey: 'a',
-      retryCount: 0,
-    })
-  ).toBe(false);
-  expect(
-    await workspaceRatchetAccessor.recordDispatchIfEnabled('guards', {
-      prId: a,
-      expectedRevision: 99,
-      sessionId: 's',
-      snapshotKey: 'a',
-      retryCount: 0,
-    })
-  ).toBe(false);
-  await workspaceRatchetAccessor.disable('guards');
-  expect(
-    await workspaceRatchetAccessor.recordDispatchIfEnabled('guards', {
-      prId: a,
-      sessionId: 's',
-      snapshotKey: 'a',
-      retryCount: 0,
-    })
-  ).toBe(false);
-  expect(await workspaceRatchetAccessor.recordCheckIfEnabled('guards', new Date(), a)).toBe(false);
-  await workspaceRatchetAccessor.enable('guards');
-  expect(await workspaceRatchetAccessor.recordCheckIfEnabled('guards', new Date(), a)).toBe(true);
-  await db.prisma.workspacePR.update({ where: { id: a }, data: { state: 'CLOSED' } });
-  expect(
-    await workspaceRatchetAccessor.recordDispatchIfEnabled('guards', {
-      prId: a,
-      sessionId: 's',
-      snapshotKey: 'a',
-      retryCount: 0,
-    })
-  ).toBe(false);
-});
-it('adopts only exact persisted ownership and keeps the dispatch snapshot', async () => {
-  const { a, b } = await setup('adopt');
-  await workspaceRatchetAccessor.recordDispatchIfEnabled('adopt', {
-    prId: a,
-    sessionId: 's',
-    snapshotKey: 'old',
-    retryCount: 1,
-  });
-  expect(await workspaceRatchetAccessor.adoptActiveSessionIfEnabled('adopt', 's', b)).toBe(false);
-  expect(await workspaceRatchetAccessor.adoptActiveSessionIfEnabled('adopt', 's', a)).toBe(true);
-  expect(await db.prisma.workspacePRRatchet.findUnique({ where: { prId: a } })).toMatchObject({
-    dispatchSnapshotKey: 'old',
-    dispatchRetryCount: 1,
-  });
-});
-it('marks stalls only for the exact dispatch and resets settled records with a CAS', async () => {
-  const { a, b } = await setup('stall');
-  await workspaceRatchetAccessor.recordDispatchIfEnabled('stall', {
-    prId: a,
-    sessionId: 's',
-    snapshotKey: 'a',
-    retryCount: 3,
-  });
-  await workspaceRatchetAccessor.recordSessionEnd('stall', 's', 'DIED');
-  expect(await workspaceRatchetAccessor.markDispatchStalled('stall', 'wrong', a)).toBe(false);
-  expect(await workspaceRatchetAccessor.markDispatchStalled('stall', 'a', b)).toBe(false);
-  expect(await workspaceRatchetAccessor.markDispatchStalled('stall', 'a', a)).toBe(true);
-  expect(await workspaceRatchetAccessor.markDispatchStalled('stall', 'a', a)).toBe(false);
-  await db.prisma.$transaction(async (tx) => {
-    const guard = await workspacePrRatchetAccessor.read(tx, a);
-    expect(await workspacePrRatchetAccessor.reset(tx, a, guard!)).toBe(true);
-    expect(await workspacePrRatchetAccessor.reset(tx, a, guard!)).toBe(false);
-  });
-  expect(await db.prisma.workspacePRRatchet.findUnique({ where: { prId: a } })).toMatchObject({
-    dispatchOutcome: null,
-    dispatchRetryCount: 0,
-    dispatchStalled: false,
-  });
-});
+const read = vi.hoisted(() => vi.fn());
+vi.mock('@/backend/db', () => ({ prisma: { workspace: { findUnique: read } } }));
 
-it.each(['MERGED', 'CLOSED'] as const)(
-  'retains a terminal %s fixer owner for restart cleanup',
-  async (state) => {
-    const id = `terminal-${state}`;
-    const { a } = await setup(id);
-    await workspaceRatchetAccessor.recordDispatchIfEnabled(id, {
-      prId: a,
-      sessionId: 'old',
-      snapshotKey: 'old',
-      retryCount: 0,
-    });
-    await db.prisma.workspacePR.update({ where: { id: a }, data: { state } });
-    expect(await workspaceRatchetAccessor.findWithPRsForRatchet()).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ id, prId: a, ratchetActiveSessionId: 'old' }),
-      ])
-    );
-  }
-);
+import { flattenWorkspaceRatchet, workspaceRatchetAccessor } from './workspace-ratchet.accessor';
 
-it('does not overwrite a dispatch settled while startup was completing', async () => {
-  const { a } = await setup('startup-completed');
-  await workspaceRatchetAccessor.recordDispatchIfEnabled('startup-completed', {
-    prId: a,
-    sessionId: 'old',
-    snapshotKey: 'old',
-    retryCount: 0,
-  });
-  await workspaceRatchetAccessor.recordSessionEnd('startup-completed', 'old', 'COMPLETED');
-  expect(
-    await workspaceRatchetAccessor.recordDispatchIfEnabled('startup-completed', {
-      prId: a,
-      sessionId: 'old',
-      snapshotKey: 'old',
-      retryCount: 0,
-      requireExistingOwnership: true,
-    })
-  ).toBe(false);
-  expect(await db.prisma.workspacePRRatchet.findUnique({ where: { prId: a } })).toMatchObject({
-    dispatchOutcome: 'COMPLETED',
+it('projects a missing configuration as disabled with no recipient', () => {
+  expect(flattenWorkspaceRatchet(null)).toMatchObject({
+    ratchetEnabled: false,
+    prMonitoring: { recipientSessionId: null, bindingRevision: 0 },
   });
 });
-
-it('flattens populated ratchet and per-PR dispatch fields', async () => {
-  const { a } = await setup('populated-fields');
-  const checkedAt = new Date('2026-10-01');
-  const ratchet = await db.prisma.workspaceRatchet.update({
-    where: { workspaceId: 'populated-fields' },
-    data: { enabled: false, lastCheckedAt: checkedAt, activeSessionId: 'fixer', activePrId: a },
-  });
-  const dispatch = await db.prisma.workspacePRRatchet.update({
-    where: { prId: a },
-    data: {
-      dispatchSnapshotKey: 'key',
-      dispatchOutcome: 'DIED',
-      dispatchRetryCount: 3,
-      dispatchStalled: true,
+it('projects a paused recipient and persisted pending count', async () => {
+  read.mockResolvedValue({
+    status: 'READY',
+    prs: [],
+    prMonitoring: {
+      enabled: true,
+      recipientSessionId: 'main',
+      bindingRevision: 4,
+      deliveryPauseReason: 'USER_STOPPED',
+      lastCheckedAt: null,
     },
+    _count: { prEvents: 2 },
   });
-  expect(flattenWorkspaceRatchet(ratchet, dispatch)).toEqual({
-    ratchetEnabled: false,
-    ratchetLastCheckedAt: checkedAt,
-    ratchetActiveSessionId: 'fixer',
-    ratchetDispatchSnapshotKey: 'key',
-    ratchetDispatchOutcome: 'DIED',
-    ratchetDispatchRetryCount: 3,
-    ratchetDispatchStalled: true,
+  expect(await workspaceRatchetAccessor.findSnapshotProjection('w')).toMatchObject({
+    prMonitoring: { recipientSessionId: 'main', pauseReason: 'USER_STOPPED', pendingEventCount: 2 },
   });
 });
 
-it('projects settled sole-PR dispatch history and disabled snapshots', async () => {
-  const { a, b } = await setup('sole-projection');
-  await db.prisma.workspacePR.update({
-    where: { id: a },
-    data: { number: 10, state: 'OPEN', ciStatus: 'FAILURE', syncedAt: new Date('2026-10-01') },
+it('publishes collection facts while selecting the active sibling link', async () => {
+  read.mockResolvedValue({
+    status: 'READY',
+    prs: [
+      {
+        id: 'merged',
+        url: 'https://github.com/o/r/pull/1',
+        number: 1,
+        state: 'MERGED',
+        ciStatus: 'SUCCESS',
+        hasMergeConflict: true,
+        syncedAt: null,
+      },
+      {
+        id: 'open',
+        url: 'https://github.com/o/r/pull/2',
+        number: 2,
+        state: 'OPEN',
+        ciStatus: 'FAILURE',
+        hasMergeConflict: false,
+        syncedAt: null,
+      },
+    ],
+    prMonitoring: { enabled: true },
+    _count: { prEvents: 2 },
   });
-  await db.prisma.workspacePRRatchet.update({
-    where: { prId: a },
-    data: { dispatchOutcome: 'DIED', dispatchRetryCount: 3, dispatchStalled: true },
-  });
-  expect(await workspaceRatchetAccessor.findSnapshotProjection('sole-projection')).toMatchObject({
-    ratchetDispatchOutcome: null,
-    ratchetDispatchRetryCount: 0,
-    prUrl: null,
-    prNumber: null,
-  });
-  await workspacePrAccessor.detach({ workspaceId: 'sole-projection', prId: b });
-  expect(await workspaceRatchetAccessor.findSnapshotProjection('sole-projection')).toMatchObject({
-    ratchetEnabled: true,
-    ratchetState: 'CI_FAILED',
-    ratchetDispatchOutcome: 'DIED',
-    ratchetDispatchRetryCount: 3,
-    ratchetDispatchStalled: true,
-    prUrl: 'https://github.com/o/r/pull/1',
-    prNumber: 10,
+  expect(await workspaceRatchetAccessor.findSnapshotProjection('w')).toMatchObject({
+    prUrl: 'https://github.com/o/r/pull/2',
+    prNumber: 2,
+    prState: 'OPEN',
     prCiStatus: 'FAILURE',
-    prUpdatedAt: new Date('2026-10-01'),
-    prs: [{ id: a, ratchet: { dispatchOutcome: 'DIED', dispatchRetryCount: 3 } }],
+    prHasMergeConflict: false,
+    ratchetState: 'CI_FAILED',
+    prSummary: { state: 'OPEN', totalCount: 2 },
+    prs: [expect.objectContaining({ id: 'merged' }), expect.objectContaining({ id: 'open' })],
   });
-  await db.prisma.workspaceRatchet.update({
-    where: { workspaceId: 'sole-projection' },
-    data: { enabled: false },
+});
+it('keeps mixed merged and closed associations closed in the snapshot projection', async () => {
+  read.mockResolvedValue({
+    status: 'READY',
+    prs: [
+      {
+        id: 'merged',
+        url: 'https://github.com/o/r/pull/1',
+        state: 'MERGED',
+        ciStatus: 'SUCCESS',
+        syncedAt: null,
+      },
+      {
+        id: 'closed',
+        url: 'https://github.com/o/r/pull/2',
+        state: 'CLOSED',
+        ciStatus: 'SUCCESS',
+        syncedAt: null,
+      },
+    ],
+    prMonitoring: { enabled: true },
+    _count: { prEvents: 0 },
   });
-  expect(await workspaceRatchetAccessor.findSnapshotProjection('sole-projection')).toMatchObject({
-    ratchetEnabled: false,
+  expect(await workspaceRatchetAccessor.findSnapshotProjection('w')).toMatchObject({
+    prState: 'CLOSED',
+    prSummary: { state: 'CLOSED' },
     ratchetState: 'IDLE',
-    ratchetDispatchStalled: false,
-    prSummary: { ratchetState: 'IDLE', dispatchStalled: false },
   });
 });

@@ -10,6 +10,15 @@ const logger = createLogger('chat-message-handlers');
 export function createRemoveQueuedMessageHandler(): ChatMessageHandler<RemoveQueuedMessageInput> {
   return ({ ws, sessionId, message }) => {
     const { messageId } = message;
+    if (messageId.startsWith('pr-event-')) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          message: 'Disable PR updates to cancel background monitoring',
+        })
+      );
+      return;
+    }
     const removed = sessionDomainService.removeQueuedMessage(sessionId, messageId);
 
     if (removed) {

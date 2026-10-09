@@ -20,9 +20,14 @@ const readyProjection = {
   status: 'READY',
   ratchetEnabled: true,
   ratchetState: 'CI_FAILED',
-  ratchetDispatchOutcome: 'DIED',
-  ratchetDispatchRetryCount: 3,
-  ratchetDispatchStalled: true,
+  prMonitoring: {
+    deliveryMode: 'MAIN',
+    enabled: true,
+    recipientSessionId: 'main',
+    bindingRevision: 1,
+    pauseReason: 'DELIVERY_FAILED',
+    pendingEventCount: 0,
+  },
   prHasMergeConflict: false,
 } satisfies Projection;
 
@@ -49,9 +54,14 @@ describe('RatchetProjectionWorker', () => {
       status: 'READY',
       ratchetEnabled: true,
       ratchetState: 'CI_FAILED',
-      ratchetDispatchOutcome: 'DIED',
-      ratchetDispatchRetryCount: 3,
-      ratchetDispatchStalled: false,
+      prMonitoring: {
+        deliveryMode: 'MAIN',
+        enabled: true,
+        recipientSessionId: 'main',
+        bindingRevision: 1,
+        pauseReason: null,
+        pendingEventCount: 0,
+      },
       prHasMergeConflict: false,
     });
 
@@ -62,7 +72,7 @@ describe('RatchetProjectionWorker', () => {
     await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
     expect(publish).toHaveBeenCalledWith(
       'ws-retry',
-      expect.objectContaining({ ratchetDispatchOutcome: 'DIED' })
+      expect.objectContaining({ prMonitoring: expect.objectContaining({ pauseReason: null }) })
     );
   });
 
@@ -88,9 +98,14 @@ describe('RatchetProjectionWorker', () => {
       status: 'READY',
       ratchetEnabled: true,
       ratchetState: 'CI_FAILED',
-      ratchetDispatchOutcome: 'DIED',
-      ratchetDispatchRetryCount: 3,
-      ratchetDispatchStalled: false,
+      prMonitoring: {
+        deliveryMode: 'MAIN',
+        enabled: true,
+        recipientSessionId: 'main',
+        bindingRevision: 1,
+        pauseReason: null,
+        pendingEventCount: 0,
+      },
       prHasMergeConflict: false,
     });
 
@@ -151,9 +166,14 @@ describe('RatchetProjectionWorker', () => {
       prUpdatedAt: null,
       ratchetEnabled: true,
       ratchetState: 'CI_FAILED',
-      ratchetDispatchOutcome: 'DIED',
-      ratchetDispatchRetryCount: 3,
-      ratchetDispatchStalled: true,
+      prMonitoring: {
+        deliveryMode: 'MAIN',
+        enabled: true,
+        recipientSessionId: 'main',
+        bindingRevision: 1,
+        pauseReason: 'DELIVERY_FAILED',
+        pendingEventCount: 0,
+      },
       hasMergeConflict: false,
     });
     worker.request('ws');

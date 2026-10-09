@@ -1,4 +1,3 @@
-import type { RatchetDispatchOutcome } from '@prisma-gen/client';
 import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
 export const prProjectionDefaults = {
   prs: [],
@@ -8,5 +7,4 @@ export const prProjectionDefaults = {
   prState: 'NONE' as const,
   prCiStatus: 'UNKNOWN' as const,
   prUpdatedAt: null,
-  ratchetDispatchOutcome: null as RatchetDispatchOutcome | null,
 };

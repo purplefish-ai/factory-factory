@@ -253,6 +253,8 @@ describe('SchedulerService', () => {
         'ws-2',
         ['https://github.com/Owner/Repo/pull/2'],
         {
+          githubOwner: 'owner',
+          githubRepo: 'repo',
           branchName: 'two',
           checkedAt,
           retryCount: 2,

@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
     ratchetEnabled: false,
     ratchetReplyToPrComments: true,
     ratchetReviewTriggerMode: 'CHANGES_REQUESTED' as 'CHANGES_REQUESTED' | 'ALL_REVIEW_FEEDBACK',
-    ratchetPermissions: 'YOLO',
+    autoIterationPermissions: 'YOLO',
   },
 }));
 

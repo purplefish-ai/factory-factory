@@ -3,6 +3,7 @@ import type {
   ChatMessageHandlerPromptService,
   ChatMessageHandlerRuntimeManager,
 } from '@/backend/services/session/service/chat/chat-message-handlers/types';
+import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
 import { createUserInputHandler } from './user-input.handler';
 
 function createDeps(options?: { isSessionRunning?: boolean }) {
@@ -55,7 +56,7 @@ describe('createUserInputHandler', () => {
       message: { type: 'user_input', text: 'hello' } as never,
     });
 
-    await Promise.resolve();
+    await vi.waitFor(() => expect(deps.sessionService.sendSessionMessage).toHaveBeenCalled());
     expect(deps.sessionService.sendSessionMessage).toHaveBeenCalledWith('session-1', 'hello');
     expect(ws.send).not.toHaveBeenCalled();
   });
@@ -73,7 +74,7 @@ describe('createUserInputHandler', () => {
       message: { type: 'user_input', content } as never,
     });
 
-    await Promise.resolve();
+    await vi.waitFor(() => expect(deps.sessionService.sendSessionMessage).toHaveBeenCalled());
     expect(deps.sessionService.sendSessionMessage).toHaveBeenCalledWith('session-2', content);
     expect(ws.send).not.toHaveBeenCalled();
   });
@@ -97,4 +98,54 @@ describe('createUserInputHandler', () => {
       })
     );
   });
+});
+
+it('sends concurrent human input in arrival order while delivery resume is pending', async () => {
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const resume = vi
+    .spyOn(sessionBackgroundDeliveryService, 'userResume')
+    .mockReturnValueOnce(pending)
+    .mockResolvedValueOnce();
+  const deps = createDeps({ isSessionRunning: true });
+  const handler = createUserInputHandler(deps);
+  const context = { ws: { send: vi.fn() } as never, sessionId: 'session-1', workingDir: '/tmp' };
+  try {
+    const first = handler({ ...context, message: { type: 'user_input', text: 'first' } as never });
+    await handler({ ...context, message: { type: 'user_input', text: 'second' } as never });
+    expect(deps.sessionService.sendSessionMessage).toHaveBeenNthCalledWith(1, 'session-1', 'first');
+    expect(deps.sessionService.sendSessionMessage).toHaveBeenNthCalledWith(
+      2,
+      'session-1',
+      'second'
+    );
+    release();
+    await first;
+  } finally {
+    release();
+    resume.mockRestore();
+  }
+});
+it('sends human input when delivery resume persistence rejects', async () => {
+  const resume = vi
+    .spyOn(sessionBackgroundDeliveryService, 'userResume')
+    .mockRejectedValue(new Error('database unavailable'));
+  const deps = createDeps({ isSessionRunning: true });
+  try {
+    await expect(
+      Promise.resolve(
+        createUserInputHandler(deps)({
+          ws: { send: vi.fn() } as never,
+          sessionId: 'session-1',
+          workingDir: '/tmp',
+          message: { type: 'user_input', text: 'human' } as never,
+        })
+      )
+    ).resolves.toBeUndefined();
+    expect(deps.sessionService.sendSessionMessage).toHaveBeenCalledWith('session-1', 'human');
+  } finally {
+    resume.mockRestore();
+  }
 });

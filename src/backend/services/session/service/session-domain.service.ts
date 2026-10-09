@@ -9,6 +9,7 @@ import type {
 import { MessageState } from '@/shared/acp-protocol';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
+import { sessionResumeFences } from './session-resume-fence';
 import { mergeLifecycleMessage } from './store/session-lifecycle-transcript';
 import { handleProcessExit } from './store/session-process-exit';
 import { SessionPublisher } from './store/session-publisher';
@@ -506,6 +507,7 @@ export class SessionDomainService extends EventEmitter {
   /** Call only after durable deletion; ordinary store eviction must retain this fence. */
   forgetProviderHistoryIdentity(sessionId: string): void {
     this.repairedProviderHistoryIdentities.delete(sessionId);
+    sessionResumeFences.forget(sessionId);
   }
 
   getAllPendingRequests(): Map<string, PendingInteractiveRequest> {

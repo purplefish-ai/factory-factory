@@ -1,13 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { agentSessionAccessor } from '@/backend/services/session/resources/agent-session.accessor';
+import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
 import { createLifecycleTestSession } from '@/backend/services/session/service/lifecycle/session-lifecycle.test-helpers';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionDataService } from './session-data.service';
-import { sessionProviderResolverService } from './session-provider-resolver.service';
 
 vi.mock('@/backend/services/session/resources/agent-session.accessor', () => ({
   agentSessionAccessor: {
-    acquireFixerSession: vi.fn(),
     findById: vi.fn(),
     delete: vi.fn(),
   },
@@ -26,6 +25,7 @@ describe('sessionDataService', () => {
   });
 
   it('reclaims the history identity fence after permanent deletion, but retains it on failure', async () => {
+    const resumeGuard = sessionBackgroundDeliveryService.captureResumeGuard('session-1');
     sessionDomainService.resetProviderHistory('session-1', 'new');
     sessionDomainService.clearSession('session-1');
     vi.mocked(agentSessionAccessor.delete).mockRejectedValueOnce(new Error('delete failed'));
@@ -33,44 +33,11 @@ describe('sessionDataService', () => {
       'delete failed'
     );
     expect(sessionDomainService.acceptProviderHistoryIdentity('session-1', 'old')).toBe(false);
+    expect(resumeGuard()).toBe(true);
     vi.mocked(agentSessionAccessor.delete).mockResolvedValue(createLifecycleTestSession());
     await sessionDataService.deleteAgentSession('session-1');
     expect(sessionDomainService.acceptProviderHistoryIdentity('session-1', 'old')).toBe(true);
-  });
-
-  it('resolves provider and model defaults before atomic fixer acquisition', async () => {
-    vi.mocked(sessionProviderResolverService.resolveSessionDefaults).mockResolvedValue({
-      provider: 'CODEX',
-      model: 'gpt-5.3-codex',
-    });
-    vi.mocked(agentSessionAccessor.acquireFixerSession).mockResolvedValue({
-      outcome: 'created',
-      sessionId: 'session-1',
-    });
-
-    await expect(
-      sessionDataService.acquireFixerSession({
-        workspaceId: 'workspace-1',
-        workflow: 'ci-fix',
-        sessionName: 'CI Fixing',
-        maxSessions: 5,
-        providerProjectPath: null,
-      })
-    ).resolves.toEqual({ outcome: 'created', sessionId: 'session-1' });
-
-    expect(sessionProviderResolverService.resolveSessionDefaults).toHaveBeenCalledWith({
-      workspaceId: 'workspace-1',
-      explicitProvider: undefined,
-    });
-    expect(agentSessionAccessor.acquireFixerSession).toHaveBeenCalledWith({
-      workspaceId: 'workspace-1',
-      workflow: 'ci-fix',
-      sessionName: 'CI Fixing',
-      maxSessions: 5,
-      provider: 'CODEX',
-      model: 'gpt-5.3-codex',
-      providerProjectPath: null,
-    });
+    expect(resumeGuard()).toBe(false);
   });
 
   it('maps persistence rows to capsule-owned session records', async () => {
@@ -79,6 +46,7 @@ describe('sessionDataService', () => {
       workspaceId: 'workspace-1',
       name: 'Implement',
       workflow: 'implement',
+      workspacePrId: 'pr-1',
       model: 'gpt-5.3-codex',
       status: 'IDLE',
       provider: 'CODEX',
@@ -100,6 +68,7 @@ describe('sessionDataService', () => {
       workspaceId: 'workspace-1',
       name: 'Implement',
       workflow: 'implement',
+      workspacePrId: 'pr-1',
       model: 'gpt-5.3-codex',
       status: 'IDLE',
       provider: 'CODEX',

@@ -44,6 +44,7 @@ const {
     findAgentSessionById: vi.fn(),
   },
   mockNotificationDeliveryService: {
+    recoverPending: vi.fn(),
     claimForDispatch: vi.fn(),
     isAlreadyDelivered: vi.fn(),
     acknowledgeSuccessfulDispatch: vi.fn(),
@@ -444,7 +445,6 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
       's1',
       'workspace-notification-notif-parent'
     );
-    // The message behind the duplicate still dispatches in the same pass.
     expect(mockSessionService.sendSessionMessage).toHaveBeenCalledTimes(1);
     expect(mockSessionService.sendSessionMessage).toHaveBeenCalledWith('s1', 'hello');
     expect(mockNotificationDeliveryService.acknowledgeSuccessfulDispatch).toHaveBeenCalledWith(
@@ -860,7 +860,6 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
 
     await chatMessageHandlerService.tryDispatchNextMessage('s1');
 
-    // Message was never dequeued, so no requeueFront needed
     expect(mockSessionDomainService.dequeueNext).not.toHaveBeenCalled();
     expect(mockSessionDomainService.requeueFront).not.toHaveBeenCalled();
     expect(mockSessionDomainService.markRunning).not.toHaveBeenCalled();

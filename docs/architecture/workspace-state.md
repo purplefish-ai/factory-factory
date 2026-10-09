@@ -232,3 +232,12 @@ caches are cleared only after the archive or deletion succeeds. Restarted
 activity gets a new state, so an older lookup cannot notify for that earlier
 lifecycle. Clearing also detaches the old notification chain, so restarted work
 does not wait for an earlier lookup.
+
+## PR monitoring status
+
+PR monitoring queues updates in its bound ordinary conversation. Enablement,
+recipient, pause and pending-event count come from `WorkspacePRMonitoring` and
+`WorkspacePREvent`; live agent work comes from session runtime state. Idle
+failed CI, a queued update or a paused delivery does not create a working agent
+signal. An attached open PR keeps the workspace actionable when a sibling
+merges. See [PR update delivery and recovery](pull-requests.md).

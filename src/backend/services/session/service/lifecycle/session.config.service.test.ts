@@ -149,7 +149,7 @@ describe('SessionConfigService', () => {
     );
   });
 
-  it.each(['ratchet', 'auto-iteration'])('sets %s unattended mode', async (workflow) => {
+  it.each(['auto-iteration', 'auto-iteration'])('sets %s unattended mode', async (workflow) => {
     const modeConfig = {
       id: 'mode',
       name: 'Mode',
@@ -988,7 +988,7 @@ describe('SessionConfigService', () => {
     async (workflow) => {
       vi.mocked(userSettingsService.get).mockResolvedValue(
         unsafeCoerce({
-          ratchetPermissions: workflow === 'default' ? 'STRICT' : 'RELAXED',
+          autoIterationPermissions: workflow === 'default' ? 'STRICT' : 'RELAXED',
           defaultWorkspacePermissions: workflow === 'default' ? 'RELAXED' : 'STRICT',
         })
       );
@@ -1057,7 +1057,7 @@ describe('SessionConfigService', () => {
   it('applies configured permission preset for CLAUDE sessions that expose permission config', async () => {
     vi.mocked(userSettingsService.get).mockResolvedValue(
       unsafeCoerce({
-        ratchetPermissions: 'YOLO',
+        autoIterationPermissions: 'YOLO',
         defaultWorkspacePermissions: 'YOLO',
       })
     );

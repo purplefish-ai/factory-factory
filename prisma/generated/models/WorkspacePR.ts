@@ -29,11 +29,15 @@ export type AggregateWorkspacePR = {
 export type WorkspacePRAvgAggregateOutputType = {
   number: number | null
   revision: number | null
+  transitionSequence: number | null
+  observationEpoch: number | null
 }
 
 export type WorkspacePRSumAggregateOutputType = {
   number: number | null
   revision: number | null
+  transitionSequence: number | null
+  observationEpoch: number | null
 }
 
 export type WorkspacePRMinAggregateOutputType = {
@@ -55,6 +59,8 @@ export type WorkspacePRMinAggregateOutputType = {
   ciLastNotifiedAt: Date | null
   reviewLastCheckedAt: Date | null
   reviewLastCommentId: string | null
+  transitionSequence: number | null
+  observationEpoch: number | null
 }
 
 export type WorkspacePRMaxAggregateOutputType = {
@@ -76,6 +82,8 @@ export type WorkspacePRMaxAggregateOutputType = {
   ciLastNotifiedAt: Date | null
   reviewLastCheckedAt: Date | null
   reviewLastCommentId: string | null
+  transitionSequence: number | null
+  observationEpoch: number | null
 }
 
 export type WorkspacePRCountAggregateOutputType = {
@@ -97,6 +105,9 @@ export type WorkspacePRCountAggregateOutputType = {
   ciLastNotifiedAt: number
   reviewLastCheckedAt: number
   reviewLastCommentId: number
+  observation: number
+  transitionSequence: number
+  observationEpoch: number
   _all: number
 }
 
@@ -104,11 +115,15 @@ export type WorkspacePRCountAggregateOutputType = {
 export type WorkspacePRAvgAggregateInputType = {
   number?: true
   revision?: true
+  transitionSequence?: true
+  observationEpoch?: true
 }
 
 export type WorkspacePRSumAggregateInputType = {
   number?: true
   revision?: true
+  transitionSequence?: true
+  observationEpoch?: true
 }
 
 export type WorkspacePRMinAggregateInputType = {
@@ -130,6 +145,8 @@ export type WorkspacePRMinAggregateInputType = {
   ciLastNotifiedAt?: true
   reviewLastCheckedAt?: true
   reviewLastCommentId?: true
+  transitionSequence?: true
+  observationEpoch?: true
 }
 
 export type WorkspacePRMaxAggregateInputType = {
@@ -151,6 +168,8 @@ export type WorkspacePRMaxAggregateInputType = {
   ciLastNotifiedAt?: true
   reviewLastCheckedAt?: true
   reviewLastCommentId?: true
+  transitionSequence?: true
+  observationEpoch?: true
 }
 
 export type WorkspacePRCountAggregateInputType = {
@@ -172,6 +191,9 @@ export type WorkspacePRCountAggregateInputType = {
   ciLastNotifiedAt?: true
   reviewLastCheckedAt?: true
   reviewLastCommentId?: true
+  observation?: true
+  transitionSequence?: true
+  observationEpoch?: true
   _all?: true
 }
 
@@ -280,6 +302,9 @@ export type WorkspacePRGroupByOutputType = {
   ciLastNotifiedAt: Date | null
   reviewLastCheckedAt: Date | null
   reviewLastCommentId: string | null
+  observation: runtime.JsonValue | null
+  transitionSequence: number
+  observationEpoch: number
   _count: WorkspacePRCountAggregateOutputType | null
   _avg: WorkspacePRAvgAggregateOutputType | null
   _sum: WorkspacePRSumAggregateOutputType | null
@@ -324,9 +349,12 @@ export type WorkspacePRWhereInput = {
   ciLastNotifiedAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
   reviewLastCheckedAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
   reviewLastCommentId?: Prisma.StringNullableFilter<"WorkspacePR"> | string | null
+  observation?: Prisma.JsonNullableFilter<"WorkspacePR">
+  transitionSequence?: Prisma.IntFilter<"WorkspacePR"> | number
+  observationEpoch?: Prisma.IntFilter<"WorkspacePR"> | number
   workspace?: Prisma.XOR<Prisma.WorkspaceScalarRelationFilter, Prisma.WorkspaceWhereInput>
-  automation?: Prisma.XOR<Prisma.WorkspacePRRatchetNullableScalarRelationFilter, Prisma.WorkspacePRRatchetWhereInput> | null
-  activeIn?: Prisma.WorkspaceRatchetListRelationFilter
+  events?: Prisma.WorkspacePREventListRelationFilter
+  dedicatedSession?: Prisma.XOR<Prisma.WorkspacePRDedicatedSessionNullableScalarRelationFilter, Prisma.WorkspacePRDedicatedSessionWhereInput> | null
 }
 
 export type WorkspacePROrderByWithRelationInput = {
@@ -348,9 +376,12 @@ export type WorkspacePROrderByWithRelationInput = {
   ciLastNotifiedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   reviewLastCheckedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   reviewLastCommentId?: Prisma.SortOrderInput | Prisma.SortOrder
+  observation?: Prisma.SortOrderInput | Prisma.SortOrder
+  transitionSequence?: Prisma.SortOrder
+  observationEpoch?: Prisma.SortOrder
   workspace?: Prisma.WorkspaceOrderByWithRelationInput
-  automation?: Prisma.WorkspacePRRatchetOrderByWithRelationInput
-  activeIn?: Prisma.WorkspaceRatchetOrderByRelationAggregateInput
+  events?: Prisma.WorkspacePREventOrderByRelationAggregateInput
+  dedicatedSession?: Prisma.WorkspacePRDedicatedSessionOrderByWithRelationInput
 }
 
 export type WorkspacePRWhereUniqueInput = Prisma.AtLeast<{
@@ -376,9 +407,12 @@ export type WorkspacePRWhereUniqueInput = Prisma.AtLeast<{
   ciLastNotifiedAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
   reviewLastCheckedAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
   reviewLastCommentId?: Prisma.StringNullableFilter<"WorkspacePR"> | string | null
+  observation?: Prisma.JsonNullableFilter<"WorkspacePR">
+  transitionSequence?: Prisma.IntFilter<"WorkspacePR"> | number
+  observationEpoch?: Prisma.IntFilter<"WorkspacePR"> | number
   workspace?: Prisma.XOR<Prisma.WorkspaceScalarRelationFilter, Prisma.WorkspaceWhereInput>
-  automation?: Prisma.XOR<Prisma.WorkspacePRRatchetNullableScalarRelationFilter, Prisma.WorkspacePRRatchetWhereInput> | null
-  activeIn?: Prisma.WorkspaceRatchetListRelationFilter
+  events?: Prisma.WorkspacePREventListRelationFilter
+  dedicatedSession?: Prisma.XOR<Prisma.WorkspacePRDedicatedSessionNullableScalarRelationFilter, Prisma.WorkspacePRDedicatedSessionWhereInput> | null
 }, "id" | "workspaceId_url">
 
 export type WorkspacePROrderByWithAggregationInput = {
@@ -400,6 +434,9 @@ export type WorkspacePROrderByWithAggregationInput = {
   ciLastNotifiedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   reviewLastCheckedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   reviewLastCommentId?: Prisma.SortOrderInput | Prisma.SortOrder
+  observation?: Prisma.SortOrderInput | Prisma.SortOrder
+  transitionSequence?: Prisma.SortOrder
+  observationEpoch?: Prisma.SortOrder
   _count?: Prisma.WorkspacePRCountOrderByAggregateInput
   _avg?: Prisma.WorkspacePRAvgOrderByAggregateInput
   _max?: Prisma.WorkspacePRMaxOrderByAggregateInput
@@ -429,6 +466,9 @@ export type WorkspacePRScalarWhereWithAggregatesInput = {
   ciLastNotifiedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"WorkspacePR"> | Date | string | null
   reviewLastCheckedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"WorkspacePR"> | Date | string | null
   reviewLastCommentId?: Prisma.StringNullableWithAggregatesFilter<"WorkspacePR"> | string | null
+  observation?: Prisma.JsonNullableWithAggregatesFilter<"WorkspacePR">
+  transitionSequence?: Prisma.IntWithAggregatesFilter<"WorkspacePR"> | number
+  observationEpoch?: Prisma.IntWithAggregatesFilter<"WorkspacePR"> | number
 }
 
 export type WorkspacePRCreateInput = {
@@ -449,9 +489,12 @@ export type WorkspacePRCreateInput = {
   ciLastNotifiedAt?: Date | string | null
   reviewLastCheckedAt?: Date | string | null
   reviewLastCommentId?: string | null
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: number
+  observationEpoch?: number
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrsInput
-  automation?: Prisma.WorkspacePRRatchetCreateNestedOneWithoutPrInput
-  activeIn?: Prisma.WorkspaceRatchetCreateNestedManyWithoutActivePrInput
+  events?: Prisma.WorkspacePREventCreateNestedManyWithoutPrInput
+  dedicatedSession?: Prisma.WorkspacePRDedicatedSessionCreateNestedOneWithoutPrInput
 }
 
 export type WorkspacePRUncheckedCreateInput = {
@@ -473,8 +516,11 @@ export type WorkspacePRUncheckedCreateInput = {
   ciLastNotifiedAt?: Date | string | null
   reviewLastCheckedAt?: Date | string | null
   reviewLastCommentId?: string | null
-  automation?: Prisma.WorkspacePRRatchetUncheckedCreateNestedOneWithoutPrInput
-  activeIn?: Prisma.WorkspaceRatchetUncheckedCreateNestedManyWithoutActivePrInput
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: number
+  observationEpoch?: number
+  events?: Prisma.WorkspacePREventUncheckedCreateNestedManyWithoutPrInput
+  dedicatedSession?: Prisma.WorkspacePRDedicatedSessionUncheckedCreateNestedOneWithoutPrInput
 }
 
 export type WorkspacePRUpdateInput = {
@@ -495,9 +541,12 @@ export type WorkspacePRUpdateInput = {
   ciLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   reviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   reviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: Prisma.IntFieldUpdateOperationsInput | number
+  observationEpoch?: Prisma.IntFieldUpdateOperationsInput | number
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrsNestedInput
-  automation?: Prisma.WorkspacePRRatchetUpdateOneWithoutPrNestedInput
-  activeIn?: Prisma.WorkspaceRatchetUpdateManyWithoutActivePrNestedInput
+  events?: Prisma.WorkspacePREventUpdateManyWithoutPrNestedInput
+  dedicatedSession?: Prisma.WorkspacePRDedicatedSessionUpdateOneWithoutPrNestedInput
 }
 
 export type WorkspacePRUncheckedUpdateInput = {
@@ -519,8 +568,11 @@ export type WorkspacePRUncheckedUpdateInput = {
   ciLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   reviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   reviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  automation?: Prisma.WorkspacePRRatchetUncheckedUpdateOneWithoutPrNestedInput
-  activeIn?: Prisma.WorkspaceRatchetUncheckedUpdateManyWithoutActivePrNestedInput
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: Prisma.IntFieldUpdateOperationsInput | number
+  observationEpoch?: Prisma.IntFieldUpdateOperationsInput | number
+  events?: Prisma.WorkspacePREventUncheckedUpdateManyWithoutPrNestedInput
+  dedicatedSession?: Prisma.WorkspacePRDedicatedSessionUncheckedUpdateOneWithoutPrNestedInput
 }
 
 export type WorkspacePRCreateManyInput = {
@@ -542,6 +594,9 @@ export type WorkspacePRCreateManyInput = {
   ciLastNotifiedAt?: Date | string | null
   reviewLastCheckedAt?: Date | string | null
   reviewLastCommentId?: string | null
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: number
+  observationEpoch?: number
 }
 
 export type WorkspacePRUpdateManyMutationInput = {
@@ -562,6 +617,9 @@ export type WorkspacePRUpdateManyMutationInput = {
   ciLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   reviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   reviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: Prisma.IntFieldUpdateOperationsInput | number
+  observationEpoch?: Prisma.IntFieldUpdateOperationsInput | number
 }
 
 export type WorkspacePRUncheckedUpdateManyInput = {
@@ -583,6 +641,9 @@ export type WorkspacePRUncheckedUpdateManyInput = {
   ciLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   reviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   reviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: Prisma.IntFieldUpdateOperationsInput | number
+  observationEpoch?: Prisma.IntFieldUpdateOperationsInput | number
 }
 
 export type WorkspacePRListRelationFilter = {
@@ -619,11 +680,16 @@ export type WorkspacePRCountOrderByAggregateInput = {
   ciLastNotifiedAt?: Prisma.SortOrder
   reviewLastCheckedAt?: Prisma.SortOrder
   reviewLastCommentId?: Prisma.SortOrder
+  observation?: Prisma.SortOrder
+  transitionSequence?: Prisma.SortOrder
+  observationEpoch?: Prisma.SortOrder
 }
 
 export type WorkspacePRAvgOrderByAggregateInput = {
   number?: Prisma.SortOrder
   revision?: Prisma.SortOrder
+  transitionSequence?: Prisma.SortOrder
+  observationEpoch?: Prisma.SortOrder
 }
 
 export type WorkspacePRMaxOrderByAggregateInput = {
@@ -645,6 +711,8 @@ export type WorkspacePRMaxOrderByAggregateInput = {
   ciLastNotifiedAt?: Prisma.SortOrder
   reviewLastCheckedAt?: Prisma.SortOrder
   reviewLastCommentId?: Prisma.SortOrder
+  transitionSequence?: Prisma.SortOrder
+  observationEpoch?: Prisma.SortOrder
 }
 
 export type WorkspacePRMinOrderByAggregateInput = {
@@ -666,21 +734,25 @@ export type WorkspacePRMinOrderByAggregateInput = {
   ciLastNotifiedAt?: Prisma.SortOrder
   reviewLastCheckedAt?: Prisma.SortOrder
   reviewLastCommentId?: Prisma.SortOrder
+  transitionSequence?: Prisma.SortOrder
+  observationEpoch?: Prisma.SortOrder
 }
 
 export type WorkspacePRSumOrderByAggregateInput = {
   number?: Prisma.SortOrder
   revision?: Prisma.SortOrder
-}
-
-export type WorkspacePRNullableScalarRelationFilter = {
-  is?: Prisma.WorkspacePRWhereInput | null
-  isNot?: Prisma.WorkspacePRWhereInput | null
+  transitionSequence?: Prisma.SortOrder
+  observationEpoch?: Prisma.SortOrder
 }
 
 export type WorkspacePRScalarRelationFilter = {
   is?: Prisma.WorkspacePRWhereInput
   isNot?: Prisma.WorkspacePRWhereInput
+}
+
+export type WorkspacePRNullableScalarRelationFilter = {
+  is?: Prisma.WorkspacePRWhereInput | null
+  isNot?: Prisma.WorkspacePRWhereInput | null
 }
 
 export type WorkspacePRCreateNestedManyWithoutWorkspaceInput = {
@@ -733,34 +805,34 @@ export type EnumCIStatusFieldUpdateOperationsInput = {
   set?: $Enums.CIStatus
 }
 
-export type WorkspacePRCreateNestedOneWithoutActiveInInput = {
-  create?: Prisma.XOR<Prisma.WorkspacePRCreateWithoutActiveInInput, Prisma.WorkspacePRUncheckedCreateWithoutActiveInInput>
-  connectOrCreate?: Prisma.WorkspacePRCreateOrConnectWithoutActiveInInput
+export type WorkspacePRCreateNestedOneWithoutDedicatedSessionInput = {
+  create?: Prisma.XOR<Prisma.WorkspacePRCreateWithoutDedicatedSessionInput, Prisma.WorkspacePRUncheckedCreateWithoutDedicatedSessionInput>
+  connectOrCreate?: Prisma.WorkspacePRCreateOrConnectWithoutDedicatedSessionInput
   connect?: Prisma.WorkspacePRWhereUniqueInput
 }
 
-export type WorkspacePRUpdateOneWithoutActiveInNestedInput = {
-  create?: Prisma.XOR<Prisma.WorkspacePRCreateWithoutActiveInInput, Prisma.WorkspacePRUncheckedCreateWithoutActiveInInput>
-  connectOrCreate?: Prisma.WorkspacePRCreateOrConnectWithoutActiveInInput
-  upsert?: Prisma.WorkspacePRUpsertWithoutActiveInInput
+export type WorkspacePRUpdateOneRequiredWithoutDedicatedSessionNestedInput = {
+  create?: Prisma.XOR<Prisma.WorkspacePRCreateWithoutDedicatedSessionInput, Prisma.WorkspacePRUncheckedCreateWithoutDedicatedSessionInput>
+  connectOrCreate?: Prisma.WorkspacePRCreateOrConnectWithoutDedicatedSessionInput
+  upsert?: Prisma.WorkspacePRUpsertWithoutDedicatedSessionInput
+  connect?: Prisma.WorkspacePRWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.WorkspacePRUpdateToOneWithWhereWithoutDedicatedSessionInput, Prisma.WorkspacePRUpdateWithoutDedicatedSessionInput>, Prisma.WorkspacePRUncheckedUpdateWithoutDedicatedSessionInput>
+}
+
+export type WorkspacePRCreateNestedOneWithoutEventsInput = {
+  create?: Prisma.XOR<Prisma.WorkspacePRCreateWithoutEventsInput, Prisma.WorkspacePRUncheckedCreateWithoutEventsInput>
+  connectOrCreate?: Prisma.WorkspacePRCreateOrConnectWithoutEventsInput
+  connect?: Prisma.WorkspacePRWhereUniqueInput
+}
+
+export type WorkspacePRUpdateOneWithoutEventsNestedInput = {
+  create?: Prisma.XOR<Prisma.WorkspacePRCreateWithoutEventsInput, Prisma.WorkspacePRUncheckedCreateWithoutEventsInput>
+  connectOrCreate?: Prisma.WorkspacePRCreateOrConnectWithoutEventsInput
+  upsert?: Prisma.WorkspacePRUpsertWithoutEventsInput
   disconnect?: Prisma.WorkspacePRWhereInput | boolean
   delete?: Prisma.WorkspacePRWhereInput | boolean
   connect?: Prisma.WorkspacePRWhereUniqueInput
-  update?: Prisma.XOR<Prisma.XOR<Prisma.WorkspacePRUpdateToOneWithWhereWithoutActiveInInput, Prisma.WorkspacePRUpdateWithoutActiveInInput>, Prisma.WorkspacePRUncheckedUpdateWithoutActiveInInput>
-}
-
-export type WorkspacePRCreateNestedOneWithoutAutomationInput = {
-  create?: Prisma.XOR<Prisma.WorkspacePRCreateWithoutAutomationInput, Prisma.WorkspacePRUncheckedCreateWithoutAutomationInput>
-  connectOrCreate?: Prisma.WorkspacePRCreateOrConnectWithoutAutomationInput
-  connect?: Prisma.WorkspacePRWhereUniqueInput
-}
-
-export type WorkspacePRUpdateOneRequiredWithoutAutomationNestedInput = {
-  create?: Prisma.XOR<Prisma.WorkspacePRCreateWithoutAutomationInput, Prisma.WorkspacePRUncheckedCreateWithoutAutomationInput>
-  connectOrCreate?: Prisma.WorkspacePRCreateOrConnectWithoutAutomationInput
-  upsert?: Prisma.WorkspacePRUpsertWithoutAutomationInput
-  connect?: Prisma.WorkspacePRWhereUniqueInput
-  update?: Prisma.XOR<Prisma.XOR<Prisma.WorkspacePRUpdateToOneWithWhereWithoutAutomationInput, Prisma.WorkspacePRUpdateWithoutAutomationInput>, Prisma.WorkspacePRUncheckedUpdateWithoutAutomationInput>
+  update?: Prisma.XOR<Prisma.XOR<Prisma.WorkspacePRUpdateToOneWithWhereWithoutEventsInput, Prisma.WorkspacePRUpdateWithoutEventsInput>, Prisma.WorkspacePRUncheckedUpdateWithoutEventsInput>
 }
 
 export type WorkspacePRCreateWithoutWorkspaceInput = {
@@ -781,8 +853,11 @@ export type WorkspacePRCreateWithoutWorkspaceInput = {
   ciLastNotifiedAt?: Date | string | null
   reviewLastCheckedAt?: Date | string | null
   reviewLastCommentId?: string | null
-  automation?: Prisma.WorkspacePRRatchetCreateNestedOneWithoutPrInput
-  activeIn?: Prisma.WorkspaceRatchetCreateNestedManyWithoutActivePrInput
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: number
+  observationEpoch?: number
+  events?: Prisma.WorkspacePREventCreateNestedManyWithoutPrInput
+  dedicatedSession?: Prisma.WorkspacePRDedicatedSessionCreateNestedOneWithoutPrInput
 }
 
 export type WorkspacePRUncheckedCreateWithoutWorkspaceInput = {
@@ -803,8 +878,11 @@ export type WorkspacePRUncheckedCreateWithoutWorkspaceInput = {
   ciLastNotifiedAt?: Date | string | null
   reviewLastCheckedAt?: Date | string | null
   reviewLastCommentId?: string | null
-  automation?: Prisma.WorkspacePRRatchetUncheckedCreateNestedOneWithoutPrInput
-  activeIn?: Prisma.WorkspaceRatchetUncheckedCreateNestedManyWithoutActivePrInput
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: number
+  observationEpoch?: number
+  events?: Prisma.WorkspacePREventUncheckedCreateNestedManyWithoutPrInput
+  dedicatedSession?: Prisma.WorkspacePRDedicatedSessionUncheckedCreateNestedOneWithoutPrInput
 }
 
 export type WorkspacePRCreateOrConnectWithoutWorkspaceInput = {
@@ -854,9 +932,12 @@ export type WorkspacePRScalarWhereInput = {
   ciLastNotifiedAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
   reviewLastCheckedAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
   reviewLastCommentId?: Prisma.StringNullableFilter<"WorkspacePR"> | string | null
+  observation?: Prisma.JsonNullableFilter<"WorkspacePR">
+  transitionSequence?: Prisma.IntFilter<"WorkspacePR"> | number
+  observationEpoch?: Prisma.IntFilter<"WorkspacePR"> | number
 }
 
-export type WorkspacePRCreateWithoutActiveInInput = {
+export type WorkspacePRCreateWithoutDedicatedSessionInput = {
   id?: string
   url: string
   number?: number | null
@@ -874,11 +955,14 @@ export type WorkspacePRCreateWithoutActiveInInput = {
   ciLastNotifiedAt?: Date | string | null
   reviewLastCheckedAt?: Date | string | null
   reviewLastCommentId?: string | null
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: number
+  observationEpoch?: number
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrsInput
-  automation?: Prisma.WorkspacePRRatchetCreateNestedOneWithoutPrInput
+  events?: Prisma.WorkspacePREventCreateNestedManyWithoutPrInput
 }
 
-export type WorkspacePRUncheckedCreateWithoutActiveInInput = {
+export type WorkspacePRUncheckedCreateWithoutDedicatedSessionInput = {
   id?: string
   workspaceId: string
   url: string
@@ -897,26 +981,29 @@ export type WorkspacePRUncheckedCreateWithoutActiveInInput = {
   ciLastNotifiedAt?: Date | string | null
   reviewLastCheckedAt?: Date | string | null
   reviewLastCommentId?: string | null
-  automation?: Prisma.WorkspacePRRatchetUncheckedCreateNestedOneWithoutPrInput
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: number
+  observationEpoch?: number
+  events?: Prisma.WorkspacePREventUncheckedCreateNestedManyWithoutPrInput
 }
 
-export type WorkspacePRCreateOrConnectWithoutActiveInInput = {
+export type WorkspacePRCreateOrConnectWithoutDedicatedSessionInput = {
   where: Prisma.WorkspacePRWhereUniqueInput
-  create: Prisma.XOR<Prisma.WorkspacePRCreateWithoutActiveInInput, Prisma.WorkspacePRUncheckedCreateWithoutActiveInInput>
+  create: Prisma.XOR<Prisma.WorkspacePRCreateWithoutDedicatedSessionInput, Prisma.WorkspacePRUncheckedCreateWithoutDedicatedSessionInput>
 }
 
-export type WorkspacePRUpsertWithoutActiveInInput = {
-  update: Prisma.XOR<Prisma.WorkspacePRUpdateWithoutActiveInInput, Prisma.WorkspacePRUncheckedUpdateWithoutActiveInInput>
-  create: Prisma.XOR<Prisma.WorkspacePRCreateWithoutActiveInInput, Prisma.WorkspacePRUncheckedCreateWithoutActiveInInput>
+export type WorkspacePRUpsertWithoutDedicatedSessionInput = {
+  update: Prisma.XOR<Prisma.WorkspacePRUpdateWithoutDedicatedSessionInput, Prisma.WorkspacePRUncheckedUpdateWithoutDedicatedSessionInput>
+  create: Prisma.XOR<Prisma.WorkspacePRCreateWithoutDedicatedSessionInput, Prisma.WorkspacePRUncheckedCreateWithoutDedicatedSessionInput>
   where?: Prisma.WorkspacePRWhereInput
 }
 
-export type WorkspacePRUpdateToOneWithWhereWithoutActiveInInput = {
+export type WorkspacePRUpdateToOneWithWhereWithoutDedicatedSessionInput = {
   where?: Prisma.WorkspacePRWhereInput
-  data: Prisma.XOR<Prisma.WorkspacePRUpdateWithoutActiveInInput, Prisma.WorkspacePRUncheckedUpdateWithoutActiveInInput>
+  data: Prisma.XOR<Prisma.WorkspacePRUpdateWithoutDedicatedSessionInput, Prisma.WorkspacePRUncheckedUpdateWithoutDedicatedSessionInput>
 }
 
-export type WorkspacePRUpdateWithoutActiveInInput = {
+export type WorkspacePRUpdateWithoutDedicatedSessionInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   url?: Prisma.StringFieldUpdateOperationsInput | string
   number?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
@@ -934,11 +1021,14 @@ export type WorkspacePRUpdateWithoutActiveInInput = {
   ciLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   reviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   reviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: Prisma.IntFieldUpdateOperationsInput | number
+  observationEpoch?: Prisma.IntFieldUpdateOperationsInput | number
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrsNestedInput
-  automation?: Prisma.WorkspacePRRatchetUpdateOneWithoutPrNestedInput
+  events?: Prisma.WorkspacePREventUpdateManyWithoutPrNestedInput
 }
 
-export type WorkspacePRUncheckedUpdateWithoutActiveInInput = {
+export type WorkspacePRUncheckedUpdateWithoutDedicatedSessionInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   url?: Prisma.StringFieldUpdateOperationsInput | string
@@ -957,10 +1047,13 @@ export type WorkspacePRUncheckedUpdateWithoutActiveInInput = {
   ciLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   reviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   reviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  automation?: Prisma.WorkspacePRRatchetUncheckedUpdateOneWithoutPrNestedInput
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: Prisma.IntFieldUpdateOperationsInput | number
+  observationEpoch?: Prisma.IntFieldUpdateOperationsInput | number
+  events?: Prisma.WorkspacePREventUncheckedUpdateManyWithoutPrNestedInput
 }
 
-export type WorkspacePRCreateWithoutAutomationInput = {
+export type WorkspacePRCreateWithoutEventsInput = {
   id?: string
   url: string
   number?: number | null
@@ -978,11 +1071,14 @@ export type WorkspacePRCreateWithoutAutomationInput = {
   ciLastNotifiedAt?: Date | string | null
   reviewLastCheckedAt?: Date | string | null
   reviewLastCommentId?: string | null
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: number
+  observationEpoch?: number
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrsInput
-  activeIn?: Prisma.WorkspaceRatchetCreateNestedManyWithoutActivePrInput
+  dedicatedSession?: Prisma.WorkspacePRDedicatedSessionCreateNestedOneWithoutPrInput
 }
 
-export type WorkspacePRUncheckedCreateWithoutAutomationInput = {
+export type WorkspacePRUncheckedCreateWithoutEventsInput = {
   id?: string
   workspaceId: string
   url: string
@@ -1001,26 +1097,29 @@ export type WorkspacePRUncheckedCreateWithoutAutomationInput = {
   ciLastNotifiedAt?: Date | string | null
   reviewLastCheckedAt?: Date | string | null
   reviewLastCommentId?: string | null
-  activeIn?: Prisma.WorkspaceRatchetUncheckedCreateNestedManyWithoutActivePrInput
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: number
+  observationEpoch?: number
+  dedicatedSession?: Prisma.WorkspacePRDedicatedSessionUncheckedCreateNestedOneWithoutPrInput
 }
 
-export type WorkspacePRCreateOrConnectWithoutAutomationInput = {
+export type WorkspacePRCreateOrConnectWithoutEventsInput = {
   where: Prisma.WorkspacePRWhereUniqueInput
-  create: Prisma.XOR<Prisma.WorkspacePRCreateWithoutAutomationInput, Prisma.WorkspacePRUncheckedCreateWithoutAutomationInput>
+  create: Prisma.XOR<Prisma.WorkspacePRCreateWithoutEventsInput, Prisma.WorkspacePRUncheckedCreateWithoutEventsInput>
 }
 
-export type WorkspacePRUpsertWithoutAutomationInput = {
-  update: Prisma.XOR<Prisma.WorkspacePRUpdateWithoutAutomationInput, Prisma.WorkspacePRUncheckedUpdateWithoutAutomationInput>
-  create: Prisma.XOR<Prisma.WorkspacePRCreateWithoutAutomationInput, Prisma.WorkspacePRUncheckedCreateWithoutAutomationInput>
+export type WorkspacePRUpsertWithoutEventsInput = {
+  update: Prisma.XOR<Prisma.WorkspacePRUpdateWithoutEventsInput, Prisma.WorkspacePRUncheckedUpdateWithoutEventsInput>
+  create: Prisma.XOR<Prisma.WorkspacePRCreateWithoutEventsInput, Prisma.WorkspacePRUncheckedCreateWithoutEventsInput>
   where?: Prisma.WorkspacePRWhereInput
 }
 
-export type WorkspacePRUpdateToOneWithWhereWithoutAutomationInput = {
+export type WorkspacePRUpdateToOneWithWhereWithoutEventsInput = {
   where?: Prisma.WorkspacePRWhereInput
-  data: Prisma.XOR<Prisma.WorkspacePRUpdateWithoutAutomationInput, Prisma.WorkspacePRUncheckedUpdateWithoutAutomationInput>
+  data: Prisma.XOR<Prisma.WorkspacePRUpdateWithoutEventsInput, Prisma.WorkspacePRUncheckedUpdateWithoutEventsInput>
 }
 
-export type WorkspacePRUpdateWithoutAutomationInput = {
+export type WorkspacePRUpdateWithoutEventsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   url?: Prisma.StringFieldUpdateOperationsInput | string
   number?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
@@ -1038,11 +1137,14 @@ export type WorkspacePRUpdateWithoutAutomationInput = {
   ciLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   reviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   reviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: Prisma.IntFieldUpdateOperationsInput | number
+  observationEpoch?: Prisma.IntFieldUpdateOperationsInput | number
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrsNestedInput
-  activeIn?: Prisma.WorkspaceRatchetUpdateManyWithoutActivePrNestedInput
+  dedicatedSession?: Prisma.WorkspacePRDedicatedSessionUpdateOneWithoutPrNestedInput
 }
 
-export type WorkspacePRUncheckedUpdateWithoutAutomationInput = {
+export type WorkspacePRUncheckedUpdateWithoutEventsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   url?: Prisma.StringFieldUpdateOperationsInput | string
@@ -1061,7 +1163,10 @@ export type WorkspacePRUncheckedUpdateWithoutAutomationInput = {
   ciLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   reviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   reviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  activeIn?: Prisma.WorkspaceRatchetUncheckedUpdateManyWithoutActivePrNestedInput
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: Prisma.IntFieldUpdateOperationsInput | number
+  observationEpoch?: Prisma.IntFieldUpdateOperationsInput | number
+  dedicatedSession?: Prisma.WorkspacePRDedicatedSessionUncheckedUpdateOneWithoutPrNestedInput
 }
 
 export type WorkspacePRCreateManyWorkspaceInput = {
@@ -1082,6 +1187,9 @@ export type WorkspacePRCreateManyWorkspaceInput = {
   ciLastNotifiedAt?: Date | string | null
   reviewLastCheckedAt?: Date | string | null
   reviewLastCommentId?: string | null
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: number
+  observationEpoch?: number
 }
 
 export type WorkspacePRUpdateWithoutWorkspaceInput = {
@@ -1102,8 +1210,11 @@ export type WorkspacePRUpdateWithoutWorkspaceInput = {
   ciLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   reviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   reviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  automation?: Prisma.WorkspacePRRatchetUpdateOneWithoutPrNestedInput
-  activeIn?: Prisma.WorkspaceRatchetUpdateManyWithoutActivePrNestedInput
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: Prisma.IntFieldUpdateOperationsInput | number
+  observationEpoch?: Prisma.IntFieldUpdateOperationsInput | number
+  events?: Prisma.WorkspacePREventUpdateManyWithoutPrNestedInput
+  dedicatedSession?: Prisma.WorkspacePRDedicatedSessionUpdateOneWithoutPrNestedInput
 }
 
 export type WorkspacePRUncheckedUpdateWithoutWorkspaceInput = {
@@ -1124,8 +1235,11 @@ export type WorkspacePRUncheckedUpdateWithoutWorkspaceInput = {
   ciLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   reviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   reviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  automation?: Prisma.WorkspacePRRatchetUncheckedUpdateOneWithoutPrNestedInput
-  activeIn?: Prisma.WorkspaceRatchetUncheckedUpdateManyWithoutActivePrNestedInput
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: Prisma.IntFieldUpdateOperationsInput | number
+  observationEpoch?: Prisma.IntFieldUpdateOperationsInput | number
+  events?: Prisma.WorkspacePREventUncheckedUpdateManyWithoutPrNestedInput
+  dedicatedSession?: Prisma.WorkspacePRDedicatedSessionUncheckedUpdateOneWithoutPrNestedInput
 }
 
 export type WorkspacePRUncheckedUpdateManyWithoutWorkspaceInput = {
@@ -1146,6 +1260,9 @@ export type WorkspacePRUncheckedUpdateManyWithoutWorkspaceInput = {
   ciLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   reviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   reviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  observation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  transitionSequence?: Prisma.IntFieldUpdateOperationsInput | number
+  observationEpoch?: Prisma.IntFieldUpdateOperationsInput | number
 }
 
 
@@ -1154,11 +1271,11 @@ export type WorkspacePRUncheckedUpdateManyWithoutWorkspaceInput = {
  */
 
 export type WorkspacePRCountOutputType = {
-  activeIn: number
+  events: number
 }
 
 export type WorkspacePRCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
-  activeIn?: boolean | WorkspacePRCountOutputTypeCountActiveInArgs
+  events?: boolean | WorkspacePRCountOutputTypeCountEventsArgs
 }
 
 /**
@@ -1174,8 +1291,8 @@ export type WorkspacePRCountOutputTypeDefaultArgs<ExtArgs extends runtime.Types.
 /**
  * WorkspacePRCountOutputType without action
  */
-export type WorkspacePRCountOutputTypeCountActiveInArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
-  where?: Prisma.WorkspaceRatchetWhereInput
+export type WorkspacePRCountOutputTypeCountEventsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.WorkspacePREventWhereInput
 }
 
 
@@ -1198,9 +1315,12 @@ export type WorkspacePRSelect<ExtArgs extends runtime.Types.Extensions.InternalA
   ciLastNotifiedAt?: boolean
   reviewLastCheckedAt?: boolean
   reviewLastCommentId?: boolean
+  observation?: boolean
+  transitionSequence?: boolean
+  observationEpoch?: boolean
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
-  automation?: boolean | Prisma.WorkspacePR$automationArgs<ExtArgs>
-  activeIn?: boolean | Prisma.WorkspacePR$activeInArgs<ExtArgs>
+  events?: boolean | Prisma.WorkspacePR$eventsArgs<ExtArgs>
+  dedicatedSession?: boolean | Prisma.WorkspacePR$dedicatedSessionArgs<ExtArgs>
   _count?: boolean | Prisma.WorkspacePRCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["workspacePR"]>
 
@@ -1223,6 +1343,9 @@ export type WorkspacePRSelectCreateManyAndReturn<ExtArgs extends runtime.Types.E
   ciLastNotifiedAt?: boolean
   reviewLastCheckedAt?: boolean
   reviewLastCommentId?: boolean
+  observation?: boolean
+  transitionSequence?: boolean
+  observationEpoch?: boolean
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["workspacePR"]>
 
@@ -1245,6 +1368,9 @@ export type WorkspacePRSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.E
   ciLastNotifiedAt?: boolean
   reviewLastCheckedAt?: boolean
   reviewLastCommentId?: boolean
+  observation?: boolean
+  transitionSequence?: boolean
+  observationEpoch?: boolean
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["workspacePR"]>
 
@@ -1267,13 +1393,16 @@ export type WorkspacePRSelectScalar = {
   ciLastNotifiedAt?: boolean
   reviewLastCheckedAt?: boolean
   reviewLastCommentId?: boolean
+  observation?: boolean
+  transitionSequence?: boolean
+  observationEpoch?: boolean
 }
 
-export type WorkspacePROmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "workspaceId" | "url" | "number" | "title" | "headRefName" | "baseRefName" | "state" | "reviewState" | "ciStatus" | "hasMergeConflict" | "syncedAt" | "detachedAt" | "revision" | "ciFailedAt" | "ciLastNotifiedAt" | "reviewLastCheckedAt" | "reviewLastCommentId", ExtArgs["result"]["workspacePR"]>
+export type WorkspacePROmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "workspaceId" | "url" | "number" | "title" | "headRefName" | "baseRefName" | "state" | "reviewState" | "ciStatus" | "hasMergeConflict" | "syncedAt" | "detachedAt" | "revision" | "ciFailedAt" | "ciLastNotifiedAt" | "reviewLastCheckedAt" | "reviewLastCommentId" | "observation" | "transitionSequence" | "observationEpoch", ExtArgs["result"]["workspacePR"]>
 export type WorkspacePRInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
-  automation?: boolean | Prisma.WorkspacePR$automationArgs<ExtArgs>
-  activeIn?: boolean | Prisma.WorkspacePR$activeInArgs<ExtArgs>
+  events?: boolean | Prisma.WorkspacePR$eventsArgs<ExtArgs>
+  dedicatedSession?: boolean | Prisma.WorkspacePR$dedicatedSessionArgs<ExtArgs>
   _count?: boolean | Prisma.WorkspacePRCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type WorkspacePRIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
@@ -1287,8 +1416,8 @@ export type $WorkspacePRPayload<ExtArgs extends runtime.Types.Extensions.Interna
   name: "WorkspacePR"
   objects: {
     workspace: Prisma.$WorkspacePayload<ExtArgs>
-    automation: Prisma.$WorkspacePRRatchetPayload<ExtArgs> | null
-    activeIn: Prisma.$WorkspaceRatchetPayload<ExtArgs>[]
+    events: Prisma.$WorkspacePREventPayload<ExtArgs>[]
+    dedicatedSession: Prisma.$WorkspacePRDedicatedSessionPayload<ExtArgs> | null
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -1309,6 +1438,9 @@ export type $WorkspacePRPayload<ExtArgs extends runtime.Types.Extensions.Interna
     ciLastNotifiedAt: Date | null
     reviewLastCheckedAt: Date | null
     reviewLastCommentId: string | null
+    observation: runtime.JsonValue | null
+    transitionSequence: number
+    observationEpoch: number
   }, ExtArgs["result"]["workspacePR"]>
   composites: {}
 }
@@ -1704,8 +1836,8 @@ readonly fields: WorkspacePRFieldRefs;
 export interface Prisma__WorkspacePRClient<T, Null = never, ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
   readonly [Symbol.toStringTag]: "PrismaPromise"
   workspace<T extends Prisma.WorkspaceDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.WorkspaceDefaultArgs<ExtArgs>>): Prisma.Prisma__WorkspaceClient<runtime.Types.Result.GetResult<Prisma.$WorkspacePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
-  automation<T extends Prisma.WorkspacePR$automationArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.WorkspacePR$automationArgs<ExtArgs>>): Prisma.Prisma__WorkspacePRRatchetClient<runtime.Types.Result.GetResult<Prisma.$WorkspacePRRatchetPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
-  activeIn<T extends Prisma.WorkspacePR$activeInArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.WorkspacePR$activeInArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$WorkspaceRatchetPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  events<T extends Prisma.WorkspacePR$eventsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.WorkspacePR$eventsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$WorkspacePREventPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  dedicatedSession<T extends Prisma.WorkspacePR$dedicatedSessionArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.WorkspacePR$dedicatedSessionArgs<ExtArgs>>): Prisma.Prisma__WorkspacePRDedicatedSessionClient<runtime.Types.Result.GetResult<Prisma.$WorkspacePRDedicatedSessionPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1753,6 +1885,9 @@ export interface WorkspacePRFieldRefs {
   readonly ciLastNotifiedAt: Prisma.FieldRef<"WorkspacePR", 'DateTime'>
   readonly reviewLastCheckedAt: Prisma.FieldRef<"WorkspacePR", 'DateTime'>
   readonly reviewLastCommentId: Prisma.FieldRef<"WorkspacePR", 'String'>
+  readonly observation: Prisma.FieldRef<"WorkspacePR", 'Json'>
+  readonly transitionSequence: Prisma.FieldRef<"WorkspacePR", 'Int'>
+  readonly observationEpoch: Prisma.FieldRef<"WorkspacePR", 'Int'>
 }
     
 
@@ -2152,46 +2287,46 @@ export type WorkspacePRDeleteManyArgs<ExtArgs extends runtime.Types.Extensions.I
 }
 
 /**
- * WorkspacePR.automation
+ * WorkspacePR.events
  */
-export type WorkspacePR$automationArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+export type WorkspacePR$eventsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   /**
-   * Select specific fields to fetch from the WorkspacePRRatchet
+   * Select specific fields to fetch from the WorkspacePREvent
    */
-  select?: Prisma.WorkspacePRRatchetSelect<ExtArgs> | null
+  select?: Prisma.WorkspacePREventSelect<ExtArgs> | null
   /**
-   * Omit specific fields from the WorkspacePRRatchet
+   * Omit specific fields from the WorkspacePREvent
    */
-  omit?: Prisma.WorkspacePRRatchetOmit<ExtArgs> | null
+  omit?: Prisma.WorkspacePREventOmit<ExtArgs> | null
   /**
    * Choose, which related nodes to fetch as well
    */
-  include?: Prisma.WorkspacePRRatchetInclude<ExtArgs> | null
-  where?: Prisma.WorkspacePRRatchetWhereInput
+  include?: Prisma.WorkspacePREventInclude<ExtArgs> | null
+  where?: Prisma.WorkspacePREventWhereInput
+  orderBy?: Prisma.WorkspacePREventOrderByWithRelationInput | Prisma.WorkspacePREventOrderByWithRelationInput[]
+  cursor?: Prisma.WorkspacePREventWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.WorkspacePREventScalarFieldEnum | Prisma.WorkspacePREventScalarFieldEnum[]
 }
 
 /**
- * WorkspacePR.activeIn
+ * WorkspacePR.dedicatedSession
  */
-export type WorkspacePR$activeInArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+export type WorkspacePR$dedicatedSessionArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   /**
-   * Select specific fields to fetch from the WorkspaceRatchet
+   * Select specific fields to fetch from the WorkspacePRDedicatedSession
    */
-  select?: Prisma.WorkspaceRatchetSelect<ExtArgs> | null
+  select?: Prisma.WorkspacePRDedicatedSessionSelect<ExtArgs> | null
   /**
-   * Omit specific fields from the WorkspaceRatchet
+   * Omit specific fields from the WorkspacePRDedicatedSession
    */
-  omit?: Prisma.WorkspaceRatchetOmit<ExtArgs> | null
+  omit?: Prisma.WorkspacePRDedicatedSessionOmit<ExtArgs> | null
   /**
    * Choose, which related nodes to fetch as well
    */
-  include?: Prisma.WorkspaceRatchetInclude<ExtArgs> | null
-  where?: Prisma.WorkspaceRatchetWhereInput
-  orderBy?: Prisma.WorkspaceRatchetOrderByWithRelationInput | Prisma.WorkspaceRatchetOrderByWithRelationInput[]
-  cursor?: Prisma.WorkspaceRatchetWhereUniqueInput
-  take?: number
-  skip?: number
-  distinct?: Prisma.WorkspaceRatchetScalarFieldEnum | Prisma.WorkspaceRatchetScalarFieldEnum[]
+  include?: Prisma.WorkspacePRDedicatedSessionInclude<ExtArgs> | null
+  where?: Prisma.WorkspacePRDedicatedSessionWhereInput
 }
 
 /**

@@ -19,7 +19,12 @@ interface RetryWaiter {
 }
 
 interface RatchetProjectionDependencies {
-  read: typeof workspaceDataService.findRatchetProjection;
+  read(workspaceId: string): Promise<
+    | (NonNullable<Awaited<ReturnType<typeof workspaceDataService.findRatchetProjection>>> & {
+        snapshotFields?: SnapshotUpdateInput;
+      })
+    | null
+  >;
   publish(workspaceId: string, fields: SnapshotUpdateInput): void;
   logger: Pick<ReturnType<typeof createLogger>, 'warn'>;
 }
@@ -103,10 +108,9 @@ export class RatchetProjectionWorker {
         prUpdatedAt: workspace.prUpdatedAt?.toISOString() ?? null,
         ratchetEnabled: workspace.ratchetEnabled,
         ratchetState: workspace.ratchetState,
-        ratchetDispatchOutcome: workspace.ratchetDispatchOutcome,
-        ratchetDispatchRetryCount: workspace.ratchetDispatchRetryCount,
-        ratchetDispatchStalled: workspace.ratchetDispatchStalled,
+        prMonitoring: workspace.prMonitoring,
         hasMergeConflict: workspace.prHasMergeConflict,
+        ...workspace.snapshotFields,
       });
       return true;
     } catch (error) {

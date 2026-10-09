@@ -405,7 +405,7 @@ export function createLifecycleTestWorkspace(
     linearIssueIdentifier: null,
     linearIssueUrl: null,
     defaultSessionProvider: 'WORKSPACE_DEFAULT',
-    ratchetSessionProvider: 'WORKSPACE_DEFAULT',
+
     periodicTaskId: null,
     parentWorkspaceId: null,
     hasHadSessions: false,

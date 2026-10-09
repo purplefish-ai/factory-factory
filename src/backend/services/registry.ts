@@ -3,9 +3,11 @@ export const prismaModelNames = [
   'DecisionLog',
   'Workspace',
   'WorkspacePR',
+  'WorkspacePRMonitoring',
+  'WorkspacePRDedicatedSession',
+  'WorkspacePREvent',
   'WorkspacePRDiscovery',
-  'WorkspacePRRatchet',
-  'WorkspaceRatchet',
+
   'WorkspaceRunScript',
   'WorkspaceAutoIteration',
   'WorkspaceNotification',
@@ -98,7 +100,12 @@ type ServiceDefinition = {
 export const serviceRegistry = {
   session: {
     dependsOn: ['workspace', 'settings', 'terminal', 'github'],
-    ownsModels: ['AgentSession', 'ClosedSession', 'SessionLifecycleEvent'],
+    ownsModels: [
+      'AgentSession',
+      'ClosedSession',
+      'SessionLifecycleEvent',
+      'WorkspacePRDedicatedSession',
+    ],
   },
   workspace: {
     dependsOn: ['settings', 'auto-iteration'],
@@ -106,9 +113,10 @@ export const serviceRegistry = {
       'Project',
       'Workspace',
       'WorkspacePR',
+      'WorkspacePRMonitoring',
+      'WorkspacePREvent',
       'WorkspacePRDiscovery',
-      'WorkspacePRRatchet',
-      'WorkspaceRatchet',
+
       'WorkspaceRunScript',
       'WorkspaceAutoIteration',
       'WorkspaceNotification',

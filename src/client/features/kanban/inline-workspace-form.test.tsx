@@ -344,6 +344,14 @@ describe('InlineWorkspaceForm', () => {
       id: context.optimisticWorkspaceId,
       worktreePath: null,
       name: 'New Workspace',
+      prMonitoring: {
+        deliveryMode: 'MAIN',
+        enabled: true,
+        recipientSessionId: null,
+        bindingRevision: 0,
+        pauseReason: null,
+        pendingEventCount: 0,
+      },
     });
 
     // A snapshot delta lands while the create is still in flight.

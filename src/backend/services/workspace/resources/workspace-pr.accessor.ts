@@ -1,10 +1,19 @@
-import type { Prisma, WorkspacePR, WorkspacePRRatchet } from '@prisma-gen/client';
+import { createHash } from 'node:crypto';
+import { Prisma as PrismaValues } from '@prisma-gen/client';
+import type { Prisma, WorkspacePR } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
-import type { PRDiscoveryClaim, WorkspacePRIdentity } from '@/backend/services/workspace/types';
+import type {
+  PRDiscoveryClaim,
+  PRSnapshotFields,
+  WorkspacePRIdentity,
+} from '@/backend/services/workspace/types';
 import type { CIStatus, PRState } from '@/shared/core';
+import { type PRObservation, type PRTarget, reducePRObservation } from '@/shared/pr-monitoring';
+import { prFactPayloadSchema, prObservationSchema } from '@/shared/schemas/pr-event.schema';
 import type { WorkspacePullRequest } from '@/shared/workspace-pr';
+import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
 import { workspacePrDiscoveryAccessor } from './workspace-pr-discovery.accessor';
-import { workspacePrRatchetAccessor } from './workspace-pr-ratchet.accessor';
+import { workspacePrEventAccessor } from './workspace-pr-event.accessor';
 
 export interface WorkspacePRFields {
   title?: string | null;
@@ -58,7 +67,7 @@ export const WORKSPACE_PR_DEFAULTS: WorkspacePRFields = {
 };
 
 /** The persisted row, as joined onto a workspace read. */
-export type WorkspacePRRow = WorkspacePR & { automation?: WorkspacePRRatchet | null };
+export type WorkspacePRRow = WorkspacePR;
 
 /** Flatten a joined PR row onto the caller-facing field names. */
 export function flattenWorkspacePR(pr: WorkspacePR | null | undefined): WorkspacePRFields {
@@ -83,6 +92,58 @@ export function flattenWorkspacePR(pr: WorkspacePR | null | undefined): Workspac
   };
 }
 
+/** Collection facts are authoritative; the scalar link selects an active association. */
+export function projectWorkspacePRCollection(rows: WorkspacePRRow[], enabled: boolean) {
+  const attached = rows.filter((pr) => !pr.detachedAt);
+  const prs = attached.map(serializeWorkspacePR);
+  const prSummary = deriveWorkspacePRSummary(prs, enabled);
+  return {
+    ...flattenWorkspacePR(selectActiveWorkspacePR(attached)),
+    prs,
+    prSummary,
+    prState: prSummary.state,
+    prCiStatus: prSummary.ciStatus,
+    prHasMergeConflict: prSummary.hasMergeConflict,
+    ratchetState: prSummary.ratchetState,
+  };
+}
+
+export function serializeWorkspacePR(pr: WorkspacePRRow): WorkspacePullRequest {
+  return {
+    id: pr.id,
+    url: pr.url,
+    number: pr.number,
+    title: pr.title,
+    headRefName: pr.headRefName,
+    baseRefName: pr.baseRefName,
+    state: pr.state,
+    reviewState: pr.reviewState,
+    ciStatus: pr.ciStatus,
+    hasMergeConflict: pr.hasMergeConflict,
+    syncedAt: pr.syncedAt?.toISOString() ?? null,
+  };
+}
+
+export function selectActiveWorkspacePR<T extends { state: PRState }>(prs: T[]): T | undefined {
+  return prs.find((pr) => pr.state !== 'MERGED' && pr.state !== 'CLOSED') ?? prs[0];
+}
+
+const reattachmentFields = {
+  detachedAt: null,
+  state: 'NONE',
+  number: null,
+  reviewState: null,
+  ciStatus: 'UNKNOWN',
+  hasMergeConflict: false,
+  syncedAt: null,
+  ciFailedAt: null,
+  ciLastNotifiedAt: null,
+  reviewLastCheckedAt: null,
+  reviewLastCommentId: null,
+  observation: PrismaValues.DbNull,
+  revision: { increment: 1 },
+} satisfies Prisma.WorkspacePRUpdateInput;
+
 /** The subset of the PR cache a caller may write in one unconditional update. */
 export type WorkspacePRWriteFields = Partial<WorkspacePRFields>;
 
@@ -91,8 +152,7 @@ export type WorkspacePRWriteFields = Partial<WorkspacePRFields>;
  * left absent so a partial write stays partial. `undefined` means "not
  * supplied"; `null` is a value and is written.
  */
-function toColumns(fields: WorkspacePRWriteFields): Prisma.WorkspacePRUpdateInput {
-  const columns: Prisma.WorkspacePRUpdateInput = {};
+function assignPRMetadata(columns: Prisma.WorkspacePRUpdateInput, fields: WorkspacePRWriteFields) {
   if (fields.title !== undefined) {
     columns.title = fields.title;
   }
@@ -101,6 +161,15 @@ function toColumns(fields: WorkspacePRWriteFields): Prisma.WorkspacePRUpdateInpu
   }
   if (fields.baseRefName !== undefined) {
     columns.baseRefName = fields.baseRefName;
+  }
+}
+function toColumns(fields: WorkspacePRWriteFields): Prisma.WorkspacePRUpdateInput {
+  const columns: Prisma.WorkspacePRUpdateInput = {};
+  assignPRMetadata(columns, fields);
+  if (fields.prUrl !== undefined) {
+    if (fields.prUrl !== null) {
+      columns.url = fields.prUrl;
+    }
   }
   if (fields.prNumber !== undefined) {
     columns.number = fields.prNumber;
@@ -135,7 +204,7 @@ function toColumns(fields: WorkspacePRWriteFields): Prisma.WorkspacePRUpdateInpu
   return columns;
 }
 
-export type WorkspacePRRecord = Prisma.WorkspacePRGetPayload<{ include: { automation: true } }>;
+export type WorkspacePRRecord = WorkspacePR;
 export interface PRAggregateGuard {
   prId: string;
   revision: number;
@@ -148,44 +217,121 @@ export interface PRAggregateGuard {
   prUpdatedAt: Date | null;
 }
 
-export function serializeWorkspacePR(pr: WorkspacePRRow): WorkspacePullRequest {
-  return {
-    id: pr.id,
-    url: pr.url,
-    number: pr.number,
-    title: pr.title,
-    headRefName: pr.headRefName,
-    baseRefName: pr.baseRefName,
-    state: pr.state,
-    reviewState: pr.reviewState,
-    ciStatus: pr.ciStatus,
-    hasMergeConflict: pr.hasMergeConflict,
-    syncedAt: pr.syncedAt?.toISOString() ?? null,
-    ratchet: {
-      lastCheckedAt: pr.automation?.lastCheckedAt?.toISOString() ?? null,
-      dispatchOutcome: pr.automation?.dispatchOutcome ?? null,
-      dispatchRetryCount: pr.automation?.dispatchRetryCount ?? 0,
-      dispatchStalled: pr.automation?.dispatchStalled ?? false,
-    },
-  };
-}
-
 class WorkspacePRAccessor {
+  acceptMonitoredObservation(input: {
+    target: PRTarget;
+    expectedPrRevision: number;
+    observation: PRObservation;
+    expectedEventEpoch: number;
+  }) {
+    const observation = prObservationSchema.parse(input.observation);
+    const titleFields = observation.title !== undefined ? { title: observation.title } : {};
+    return prisma.$transaction(async (tx) => {
+      const row = await tx.workspacePR.findFirst({
+        where: {
+          id: input.target.prId,
+          workspaceId: input.target.workspaceId,
+          detachedAt: null,
+          revision: input.expectedPrRevision,
+        },
+      });
+      const config = await tx.workspacePRMonitoring.findUnique({
+        where: { workspaceId: input.target.workspaceId },
+      });
+      if (
+        !row ||
+        row.url !== observation.url ||
+        !config ||
+        config.eventEpoch !== input.expectedEventEpoch
+      ) {
+        return { applied: false, eventIds: [] };
+      }
+      const baseline = row.observation === null ? null : prObservationSchema.parse(row.observation);
+      const previous = row.observationEpoch === config.eventEpoch ? baseline : null;
+      const rows = await workspacePrEventAccessor.listForPR(tx, row.id);
+      const events = rows
+        .filter((e) => e.deduplicationKey.startsWith(`${row.id}:epoch:${config.eventEpoch}:`))
+        .map((e) => {
+          const payload = prFactPayloadSchema.parse(e.payload);
+          return { ...e, kind: payload.kind, payload };
+        });
+      const reduction = reducePRObservation({
+        hashIdentity: (identity) => createHash('sha256').update(identity).digest('hex'),
+        target: input.target,
+        previous,
+        current: observation,
+        transitionSequence: row.transitionSequence,
+        eventEpoch: config.eventEpoch,
+        pendingEvents: events.filter((e) => e.state === 'PENDING' && !e.deliveryId),
+        deliveredEvents: events.filter((e) => e.state === 'DELIVERED'),
+        inFlightEvents: events.filter(
+          (e) => (e.state === 'DISPATCHING' || e.state === 'PENDING') && Boolean(e.deliveryId)
+        ),
+      });
+      const updated = await tx.workspacePR.updateMany({
+        where: { id: row.id, revision: input.expectedPrRevision, detachedAt: null },
+        data: {
+          number: observation.number,
+          ...titleFields,
+          headRefName: observation.headBranch,
+          baseRefName: observation.baseBranch,
+          state: observation.prState,
+          ciStatus: observation.ciStatus,
+          reviewState: observation.reviewState,
+          hasMergeConflict: observation.hasMergeConflict,
+          syncedAt: new Date(observation.observedAt),
+          revision: { increment: 1 },
+          observation:
+            !observation.reviewsComplete && baseline
+              ? {
+                  ...observation,
+                  actionableReviews: [
+                    ...observation.actionableReviews,
+                    ...baseline.actionableReviews.filter(
+                      (r) =>
+                        !(
+                          observation.resolvedReviewIds?.includes(r.identity) ||
+                          observation.actionableReviews.some((c) => c.identity === r.identity)
+                        )
+                    ),
+                  ],
+                }
+              : observation,
+          transitionSequence: reduction.nextTransitionSequence,
+          observationEpoch: config.eventEpoch,
+        },
+      });
+      if (!updated.count) {
+        return { applied: false, eventIds: [] };
+      }
+      if (!config.enabled) {
+        return { applied: true, eventIds: [] };
+      }
+      await workspacePrEventAccessor.supersede(tx, reduction.supersededEventIds);
+      return {
+        applied: true,
+        eventIds: await workspacePrEventAccessor.insert(
+          tx,
+          row.workspaceId,
+          row.id,
+          reduction.events
+        ),
+      };
+    });
+  }
   list(workspaceId: string): Promise<WorkspacePRRecord[]> {
     return prisma.workspacePR.findMany({
       where: { workspaceId, detachedAt: null },
-      include: { automation: true },
       orderBy: { id: 'asc' },
     });
   }
   findByIdentity(target: WorkspacePRIdentity): Promise<WorkspacePRRecord | null> {
     return prisma.workspacePR.findFirst({
       where: { id: target.prId, workspaceId: target.workspaceId, detachedAt: null },
-      include: { automation: true },
     });
   }
-  async attach(workspaceId: string, url: string) {
-    return await prisma.$transaction(async (tx) => {
+  attach(workspaceId: string, url: string) {
+    return prisma.$transaction(async (tx) => {
       const existing = await tx.workspacePR.findUnique({
         where: { workspaceId_url: { workspaceId, url } },
       });
@@ -193,53 +339,49 @@ class WorkspacePRAccessor {
         if (existing.detachedAt) {
           await tx.workspacePR.update({
             where: { id: existing.id },
-            data: {
-              detachedAt: null,
-              state: 'NONE',
-              reviewState: null,
-              ciStatus: 'UNKNOWN',
-              hasMergeConflict: false,
-              syncedAt: null,
-              revision: { increment: 1 },
-            },
+            data: reattachmentFields,
           });
-          await workspacePrRatchetAccessor.reset(tx, existing.id);
         }
         return { prId: existing.id, created: false, reattached: existing.detachedAt !== null };
       }
       const pr = await tx.workspacePR.create({ data: { workspaceId, url } });
-      await workspacePrRatchetAccessor.create(tx, pr.id);
+
       return { prId: pr.id, created: true, reattached: false };
     });
   }
   detach(target: WorkspacePRIdentity) {
-    return prisma.$transaction((tx) => this.detachInTransaction(tx, target));
-  }
-  async detachInTransaction(tx: Prisma.TransactionClient, target: WorkspacePRIdentity) {
-    const result = await tx.workspacePR.updateMany({
-      where: { id: target.prId, workspaceId: target.workspaceId, detachedAt: null },
-      data: { detachedAt: new Date(), revision: { increment: 1 } },
+    return prisma.$transaction(async (tx) => {
+      const result = await tx.workspacePR.updateMany({
+        where: { id: target.prId, workspaceId: target.workspaceId, detachedAt: null },
+        data: { detachedAt: new Date(), revision: { increment: 1 } },
+      });
+      if (result.count) {
+        await workspacePrEventAccessor.cancelForPR(tx, target.prId);
+      }
+      return result.count > 0;
     });
-    return result.count > 0;
   }
-  async attachDiscoveredPRsIfClaimMatches(
-    workspaceId: string,
-    claim: PRDiscoveryClaim,
-    urls: string[]
-  ) {
-    return await prisma.$transaction(async (tx) => {
+  attachDiscoveredPRsIfClaimMatches(workspaceId: string, claim: PRDiscoveryClaim, urls: string[]) {
+    return prisma.$transaction(async (tx) => {
       if (!(await workspacePrDiscoveryAccessor.claimMatches(tx, workspaceId, claim))) {
         return [];
       }
       const ids: string[] = [];
       for (const url of urls) {
-        if (await tx.workspacePR.findUnique({ where: { workspaceId_url: { workspaceId, url } } })) {
+        const existing = await tx.workspacePR.findUnique({
+          where: { workspaceId_url: { workspaceId, url } },
+        });
+        if (existing) {
+          if (existing.detachedAt) {
+            await tx.workspacePR.update({ where: { id: existing.id }, data: reattachmentFields });
+            ids.push(existing.id);
+          }
           continue;
         }
         const pr = await tx.workspacePR.create({
           data: { workspaceId, url, headRefName: claim.branchName },
         });
-        await workspacePrRatchetAccessor.create(tx, pr.id);
+
         ids.push(pr.id);
       }
       return ids;
@@ -278,6 +420,14 @@ class WorkspacePRAccessor {
   clearDiscoverySchedule(tx: Prisma.TransactionClient, workspaceId: string) {
     return workspacePrDiscoveryAccessor.clearDiscoverySchedule(tx, workspaceId);
   }
+  async attachDiscoveredPRIfClaimMatches(
+    workspaceId: string,
+    url: string,
+    claim: PRDiscoveryClaim,
+    _at: Date
+  ) {
+    return (await this.attachDiscoveredPRsIfClaimMatches(workspaceId, claim, [url])).length > 0;
+  }
   async readAggregate(
     tx: Prisma.TransactionClient,
     workspaceId: string,
@@ -293,18 +443,29 @@ class WorkspacePRAccessor {
     const row = rows[0];
     return { prId: row.id, revision: row.revision, ...flattenWorkspacePR(row) };
   }
-  async write(workspaceId: string, fields: WorkspacePRWriteFields, prId?: string): Promise<void> {
-    await prisma.$transaction((tx) => this.writeInTransaction(tx, workspaceId, fields, prId));
+  async write(
+    workspaceId: string,
+    fields: WorkspacePRWriteFields,
+    prId?: string,
+    expectedRevision?: number
+  ): Promise<void> {
+    await prisma.$transaction((tx) =>
+      this.writeInTransaction(tx, workspaceId, fields, prId, expectedRevision)
+    );
   }
   async writeInTransaction(
     tx: Prisma.TransactionClient,
     workspaceId: string,
     fields: WorkspacePRWriteFields,
-    prId?: string
+    prId?: string,
+    expectedRevision?: number
   ) {
     const row = await this.readAggregate(tx, workspaceId, prId);
     if (!row) {
       throw new Error(`Explicit PR identity required for workspace: ${workspaceId}`);
+    }
+    if (expectedRevision !== undefined && row.revision !== expectedRevision) {
+      return;
     }
     await this.applyAggregateIfUnchanged(tx, workspaceId, row, fields);
   }
@@ -320,12 +481,24 @@ class WorkspacePRAccessor {
     });
     return result.count > 0;
   }
+  async updateSnapshotIfUrlMatches(
+    workspaceId: string,
+    url: string,
+    snapshot: PRSnapshotFields,
+    at: Date
+  ) {
+    const result = await prisma.workspacePR.updateMany({
+      where: { workspaceId, url, detachedAt: null },
+      data: { ...toColumns({ ...snapshot, prUpdatedAt: at }), revision: { increment: 1 } },
+    });
+    return result.count > 0;
+  }
   async findPRState(workspaceId: string, prId?: string) {
     const rows = await prisma.workspacePR.findMany({
       where: { workspaceId, detachedAt: null, ...(prId ? { id: prId } : {}) },
-      take: 2,
+      orderBy: { id: 'asc' },
     });
-    const row = rows.length === 1 ? rows[0] : undefined;
+    const row = selectActiveWorkspacePR(rows);
     return row ? { prId: row.id, prUrl: row.url, prNumber: row.number, prState: row.state } : null;
   }
 }

@@ -6,8 +6,6 @@ import {
 } from '@/backend/services/auto-iteration';
 import { AutoIterationStatus, SessionStatus } from '@/shared/core';
 
-// --- Module mocks (inline vi.fn() - no top-level variable references) ---
-
 const mockLogger = vi.hoisted(() => ({
   info: vi.fn(),
   debug: vi.fn(),
@@ -21,20 +19,14 @@ vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => mockLogger,
 }));
 
-vi.mock('@/backend/services/ratchet', () => ({
-  ratchetService: { configure: vi.fn(), recordSessionEnd: vi.fn() },
-  fixerSessionService: {
-    configure: vi.fn(),
-    acquireAndDispatch: vi.fn(),
-    getActiveSession: vi.fn(),
-  },
-}));
+vi.mock('@/backend/services/ratchet', () => ({ ratchetService: { configure: vi.fn() } }));
 
 vi.mock('./reconciliation.service', () => ({
   reconciliationService: { configure: vi.fn() },
 }));
 
 vi.mock('@/backend/services/workspace', () => ({
+  workspacePRMonitoringService: { get: vi.fn(), listConfigs: vi.fn() },
   WorkspaceCreationService: class {
     create = mockWorkspaceCreationService.create;
   },
@@ -76,6 +68,8 @@ vi.mock('@/backend/services/workspace', () => ({
 }));
 
 vi.mock('@/backend/services/session', () => ({
+  sessionBackgroundDeliveryService: { configure: vi.fn() },
+  findPRDeliveryReceipt: vi.fn(),
   acpRuntimeManager: {
     isSessionRunning: vi.fn(),
     isSessionWorking: vi.fn(),
@@ -87,7 +81,6 @@ vi.mock('@/backend/services/session', () => ({
     deleteAgentSession: vi.fn(),
     updateAgentSession: vi.fn(),
     findAgentSessionsByWorkspaceId: vi.fn(),
-    acquireFixerSession: vi.fn(),
   },
   sessionService: {
     configure: vi.fn(),
@@ -114,6 +107,7 @@ vi.mock('@/backend/services/session', () => ({
 }));
 
 vi.mock('@/backend/services/github', () => ({
+  prObservationService: { configure: vi.fn() },
   githubCLIService: {
     extractPRInfo: vi.fn(),
     getPRFullDetails: vi.fn(),
@@ -148,12 +142,15 @@ vi.mock('./workspace-init.orchestrator', () => ({
   recoverStaleProvisioningWorkspace: vi.fn(),
 }));
 
-// --- Import mocked modules to get references ---
-
-import { githubCLIService, prFetchCoordinator, prSnapshotService } from '@/backend/services/github';
+import {
+  githubCLIService,
+  prFetchCoordinator,
+  prSnapshotService,
+  prObservationService,
+} from '@/backend/services/github';
 import { createLogger } from '@/backend/services/logger.service';
 import { periodicTaskService } from '@/backend/services/periodic-task';
-import { fixerSessionService, ratchetService } from '@/backend/services/ratchet';
+import { ratchetService } from '@/backend/services/ratchet';
 import { startupScriptService } from '@/backend/services/run-script';
 import {
   acpRuntimeManager,
@@ -174,19 +171,18 @@ import {
   workspaceMaintenanceService,
   workspacePrSnapshotService,
   workspaceQueryService,
-  workspaceRatchetService,
   workspaceRunScriptService,
   workspaceSnapshotStore,
   workspaceStateMachine,
 } from '@/backend/services/workspace';
 import { type BridgeServices, configureDomainBridges } from './domain-bridges.orchestrator';
+import { defaultPRMonitoringServices } from './pr-monitoring-dependencies';
 import { reconciliationService } from './reconciliation.service';
 import {
   initializeWorkspaceWorktree,
   recoverStaleProvisioningWorkspace,
 } from './workspace-init.orchestrator';
 
-// Helper to extract bridge argument from a mocked configure call.
 function getBridge<T>(mockFn: (arg: T) => void): T {
   return vi.mocked(mockFn).mock.calls[0]![0];
 }
@@ -205,12 +201,10 @@ function createAutoIterationServiceMock(): AutoIterationServiceBridge {
 
 function createBridgeServices(overrides: Partial<BridgeServices> = {}): BridgeServices {
   return {
-    acpRuntimeManager,
+    ...defaultPRMonitoringServices,
     autoIterationService,
     chatEventForwarderService,
-    chatMessageHandlerService,
     createLogger,
-    fixerSessionService,
     getWorkspaceInitPolicy,
     githubCLIService,
     logbookService,
@@ -220,9 +214,6 @@ function createBridgeServices(overrides: Partial<BridgeServices> = {}): BridgeSe
     ratchetService,
     recoverStaleProvisioningWorkspace,
     reconciliationService,
-    sessionDataService,
-    sessionDomainService,
-    sessionLifecycleService,
     sessionPromptTurnCompletionService,
     sessionService,
     startupScriptService,
@@ -235,7 +226,6 @@ function createBridgeServices(overrides: Partial<BridgeServices> = {}): BridgeSe
     workspaceMaintenanceService,
     workspacePrSnapshotService,
     workspaceQueryService,
-    workspaceRatchetService,
     workspaceRunScriptService,
     workspaceSnapshotStore,
     workspaceStateMachine,
@@ -253,7 +243,6 @@ describe('configureDomainBridges', () => {
     configureDomainBridges(createBridgeServices());
 
     expect(ratchetService.configure).toHaveBeenCalledTimes(1);
-    expect(fixerSessionService.configure).toHaveBeenCalledTimes(1);
     expect(reconciliationService.configure).toHaveBeenCalledTimes(1);
   });
 
@@ -320,123 +309,6 @@ describe('configureDomainBridges', () => {
 
     expect(configure).toHaveBeenCalledTimes(1);
     expect(periodicTaskService.configure).not.toHaveBeenCalled();
-  });
-
-  describe('ratchet bridge delegation', () => {
-    it('session bridge delegates isSessionRunning to acpRuntimeManager', () => {
-      configureDomainBridges(createBridgeServices());
-      const bridge = getBridge(ratchetService.configure);
-
-      bridge.session.isSessionRunning('s1');
-      expect(acpRuntimeManager.isSessionRunning).toHaveBeenCalledWith('s1');
-    });
-
-    it('session bridge delegates stopSession to sessionLifecycleService', () => {
-      configureDomainBridges(createBridgeServices());
-      const bridge = getBridge(ratchetService.configure);
-
-      bridge.session.stopSession('s1');
-      expect(sessionLifecycleService.stopSession).toHaveBeenCalledWith('s1');
-    });
-
-    it('session bridge delegates startSession to sessionLifecycleService', () => {
-      configureDomainBridges(createBridgeServices());
-      const bridge = getBridge(ratchetService.configure);
-
-      bridge.session.startSession('s1', { initialPrompt: 'hello' });
-      expect(sessionLifecycleService.startSession).toHaveBeenCalledWith('s1', {
-        initialPrompt: 'hello',
-      });
-    });
-
-    it('session bridge delegates sendSessionMessage to sessionService', async () => {
-      configureDomainBridges(createBridgeServices());
-      const bridge = getBridge(ratchetService.configure);
-
-      await bridge.session.sendSessionMessage('s1', 'hello');
-      expect(sessionService.sendSessionMessage).toHaveBeenCalledWith('s1', 'hello');
-    });
-
-    it('session bridge delegates injectCommittedUserMessage to sessionDomainService', () => {
-      configureDomainBridges(createBridgeServices());
-      const bridge = getBridge(ratchetService.configure);
-
-      bridge.session.injectCommittedUserMessage('s1', 'msg');
-      expect(sessionDomainService.injectCommittedUserMessage).toHaveBeenCalledWith('s1', 'msg');
-    });
-
-    it('github bridge delegates extractPRInfo to githubCLIService', () => {
-      configureDomainBridges(createBridgeServices());
-      const bridge = getBridge(ratchetService.configure);
-
-      bridge.github.extractPRInfo('https://github.com/owner/repo/pull/1');
-      expect(githubCLIService.extractPRInfo).toHaveBeenCalledWith(
-        'https://github.com/owner/repo/pull/1'
-      );
-    });
-
-    it('github bridge forwards abort signals to PR reads', async () => {
-      const controller = new AbortController();
-      configureDomainBridges(createBridgeServices());
-      const bridge = getBridge(ratchetService.configure);
-
-      await bridge.github.getPRFullDetails('owner/repo', 42, controller.signal);
-      await bridge.github.getReviewComments('owner/repo', 42, undefined, controller.signal);
-      await bridge.github.getResolvedReviewCommentIds('owner/repo', 42, controller.signal);
-      await bridge.github.getAuthenticatedUsername(controller.signal);
-
-      expect(githubCLIService.getPRFullDetails).toHaveBeenCalledWith(
-        'owner/repo',
-        42,
-        controller.signal
-      );
-      expect(githubCLIService.getReviewComments).toHaveBeenCalledWith(
-        'owner/repo',
-        42,
-        undefined,
-        controller.signal
-      );
-      expect(githubCLIService.getResolvedReviewCommentIds).toHaveBeenCalledWith(
-        'owner/repo',
-        42,
-        controller.signal
-      );
-      expect(githubCLIService.getAuthenticatedUsername).toHaveBeenCalledWith(controller.signal);
-    });
-
-    it('github bridge delegates computeCIStatus with null input', () => {
-      configureDomainBridges(createBridgeServices());
-      const bridge = getBridge(ratchetService.configure);
-
-      bridge.github.computeCIStatus(null);
-      expect(githubCLIService.computeCIStatus).toHaveBeenCalledWith(null);
-    });
-
-    it('github bridge maps conclusion null to undefined in computeCIStatus', () => {
-      configureDomainBridges(createBridgeServices());
-      const bridge = getBridge(ratchetService.configure);
-
-      const checks = [{ name: 'build', status: 'completed', conclusion: null }];
-      bridge.github.computeCIStatus(checks);
-      expect(githubCLIService.computeCIStatus).toHaveBeenCalledWith([
-        { name: 'build', status: 'completed', conclusion: undefined },
-      ]);
-    });
-
-    it('github bridge delegates coordinatePrFetch to prFetchCoordinator', async () => {
-      const value = { prNumber: 1 };
-      vi.mocked(prFetchCoordinator.coordinate).mockResolvedValue({ status: 'fetched', value });
-      configureDomainBridges(createBridgeServices());
-      const bridge = getBridge(ratchetService.configure);
-
-      const fetch = vi.fn();
-      await expect(
-        bridge.github.coordinatePrFetch('ws1', fetch, { ignoreCooldown: true })
-      ).resolves.toEqual({ status: 'fetched', value });
-      expect(prFetchCoordinator.coordinate).toHaveBeenCalledWith('ws1', fetch, {
-        ignoreCooldown: true,
-      });
-    });
   });
 
   describe('reconciliation bridge delegation', () => {
@@ -1001,6 +873,9 @@ describe('configureDomainBridges', () => {
 
       bridge.workspace.markSessionIdle('ws1', 's1', 12);
       expect(workspaceActivityService.markSessionIdle).toHaveBeenCalledWith('ws1', 's1', 12);
+      expect(defaultPRMonitoringServices.workspacePRMonitoringService.get).toHaveBeenCalledWith(
+        'ws1'
+      );
     });
 
     it('chatEventForwarder workspace bridge delegates on', () => {
@@ -1034,14 +909,9 @@ describe('configureDomainBridges', () => {
 
       bridge.workspace.markSessionIdle('ws1', 's1', 12);
       expect(workspaceActivityService.markSessionIdle).toHaveBeenCalledWith('ws1', 's1', 12);
-    });
-
-    it('session lifecycle workspace bridge delegates ratchet session end recording', async () => {
-      configureDomainBridges(createBridgeServices());
-      const bridge = getBridge(sessionLifecycleService.configure);
-
-      await bridge.workspace.recordRatchetSessionEnd('ws1', 's1', 'DIED');
-      expect(ratchetService.recordSessionEnd).toHaveBeenCalledWith('ws1', 's1', 'DIED');
+      expect(defaultPRMonitoringServices.workspacePRMonitoringService.get).toHaveBeenCalledWith(
+        'ws1'
+      );
     });
 
     it('session lifecycle message queue bridge delegates pending dispatch to chat handlers', async () => {
@@ -1092,4 +962,38 @@ describe('configureDomainBridges', () => {
       expect(workspaceQueryService.configure).toHaveBeenCalledTimes(2);
     });
   });
+});
+
+it('wires PR monitoring through the injected graph rather than global instances', async () => {
+  const monitoring = {
+    ...defaultPRMonitoringServices.workspacePRMonitoringService,
+    listConfigs: vi.fn(async () => []),
+    get: vi.fn(async () => null),
+  };
+  const observer = { ...prObservationService, configure: vi.fn() };
+  const background = {
+    ...defaultPRMonitoringServices.sessionBackgroundDeliveryService,
+    configure: vi.fn(),
+  };
+  const settings = {
+    ...defaultPRMonitoringServices.userSettingsService,
+    get: vi.fn(async () => ({ ratchetReviewTriggerMode: 'all' })),
+  };
+  configureDomainBridges(
+    createBridgeServices({
+      workspacePRMonitoringService:
+        monitoring as unknown as BridgeServices['workspacePRMonitoringService'],
+      prObservationService: observer as unknown as BridgeServices['prObservationService'],
+      sessionBackgroundDeliveryService:
+        background as unknown as BridgeServices['sessionBackgroundDeliveryService'],
+      userSettingsService: settings as unknown as BridgeServices['userSettingsService'],
+    })
+  );
+  await getBridge(vi.mocked(ratchetService.configure)).retireLegacy?.();
+  await getBridge(vi.mocked(ratchetService.configure)).wake('custom-workspace');
+  expect(monitoring.listConfigs).toHaveBeenCalledOnce();
+  expect(monitoring.get).toHaveBeenCalledWith('custom-workspace');
+  expect(background.configure).toHaveBeenCalledOnce();
+  await getBridge(observer.configure).readPolicy();
+  expect(settings.get).toHaveBeenCalledOnce();
 });

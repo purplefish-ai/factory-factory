@@ -8,6 +8,7 @@ import { CopyMessageButton } from './copy-message-button';
 import { AssistantMessageRenderer, MessageWrapper } from './message-renderers';
 import { ChildWorkspaceUpdateRenderer } from './message-renderers/child-workspace-update-renderer';
 import { ParentWorkspaceUpdateRenderer } from './message-renderers/parent-workspace-update-renderer';
+import { PRUpdateRenderer } from './message-renderers/pr-update-renderer';
 import { ToolSequenceGroup } from './tool-renderers';
 import {
   createToolCallExpansionKey,
@@ -76,6 +77,16 @@ export const MessageItem = memo(function MessageItem({
   resolveWorkspaceFileLink,
   onWorkspaceFileLink,
 }: MessageItemProps) {
+  if (message.message?.type === 'pr_update' || message.id.startsWith('pr-event-')) {
+    return (
+      <MessageWrapper>
+        <PRUpdateRenderer
+          text={message.message?.text ?? message.text ?? 'PR update'}
+          queued={isQueued}
+        />
+      </MessageWrapper>
+    );
+  }
   // User messages
   if (message.source === 'user') {
     const userText = getMessageText(message.text);

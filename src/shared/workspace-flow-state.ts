@@ -102,6 +102,14 @@ function deriveWorkspaceCiObservation(input: WorkspaceFlowStateInput): Workspace
  * - With ratchet enabled, an active PR stays WORKING until ratchet verifies it is READY/MERGED.
  */
 export function deriveWorkspaceFlowState(input: WorkspaceFlowStateInput): WorkspaceFlowState {
+  if (input.prSummary) {
+    input = {
+      ...input,
+      prState: input.prSummary.state,
+      prCiStatus: input.prSummary.ciStatus,
+      ratchetState: input.prSummary.ratchetState,
+    };
+  }
   const activePr = input.prSummary?.hasNonterminal ?? hasActivePr(input.prUrl, input.prState);
   const ciObservation = deriveWorkspaceCiObservation(input);
 

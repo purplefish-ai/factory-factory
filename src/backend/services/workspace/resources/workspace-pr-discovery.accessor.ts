@@ -69,7 +69,11 @@ class WorkspacePRDiscoveryAccessor {
           lastCheckedAt: claim.checkedAt,
           retryCount: claim.retryCount,
           nextCheckAt: claim.nextCheckAt,
-          workspace: { status: 'READY', branchName: claim.branchName },
+          workspace: {
+            status: 'READY',
+            branchName: claim.branchName,
+            project: { githubOwner: claim.githubOwner, githubRepo: claim.githubRepo },
+          },
         },
       })) > 0
     );

@@ -62,20 +62,25 @@ export type Workspace = Prisma.WorkspaceModel
  */
 export type WorkspacePR = Prisma.WorkspacePRModel
 /**
- * Model WorkspacePRDiscovery
+ * Model WorkspacePRMonitoring
  * Discovery belongs to the workspace even before its first PR exists.
  */
+export type WorkspacePRMonitoring = Prisma.WorkspacePRMonitoringModel
+/**
+ * Model WorkspacePRDedicatedSession
+ * 
+ */
+export type WorkspacePRDedicatedSession = Prisma.WorkspacePRDedicatedSessionModel
+/**
+ * Model WorkspacePREvent
+ * 
+ */
+export type WorkspacePREvent = Prisma.WorkspacePREventModel
+/**
+ * Model WorkspacePRDiscovery
+ * 
+ */
 export type WorkspacePRDiscovery = Prisma.WorkspacePRDiscoveryModel
-/**
- * Model WorkspaceRatchet
- * The workspace toggle and the single fixer slot shared by all of its PRs.
- */
-export type WorkspaceRatchet = Prisma.WorkspaceRatchetModel
-/**
- * Model WorkspacePRRatchet
- * Independent dispatch deduplication, retry budget, and progress for one PR.
- */
-export type WorkspacePRRatchet = Prisma.WorkspacePRRatchetModel
 /**
  * Model WorkspaceRunScript
  * The workspace's dev server: the commands `factory-factory.json` declares for

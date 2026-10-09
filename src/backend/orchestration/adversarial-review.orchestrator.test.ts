@@ -65,7 +65,6 @@ function mockOpenPrWorkspace() {
     id: WORKSPACE_ID,
     worktreePath: '/tmp/worktree',
     defaultSessionProvider: 'WORKSPACE_DEFAULT',
-    ratchetSessionProvider: 'WORKSPACE_DEFAULT',
   });
   vi.mocked(workspaceDataService.findPRState).mockResolvedValue({
     prId: 'pr-1',
@@ -114,7 +113,6 @@ describe('triggerAdversarialReview', () => {
       id: WORKSPACE_ID,
       worktreePath: null,
       defaultSessionProvider: 'WORKSPACE_DEFAULT',
-      ratchetSessionProvider: 'WORKSPACE_DEFAULT',
     });
     vi.mocked(workspaceDataService.findPRState).mockResolvedValue(null);
 
@@ -128,7 +126,6 @@ describe('triggerAdversarialReview', () => {
       id: WORKSPACE_ID,
       worktreePath: '/tmp/worktree',
       defaultSessionProvider: 'WORKSPACE_DEFAULT',
-      ratchetSessionProvider: 'WORKSPACE_DEFAULT',
     });
     vi.mocked(workspaceDataService.findPRState).mockResolvedValue(null);
 

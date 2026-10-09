@@ -26,12 +26,6 @@ const makePR = (
   ciStatus: 'SUCCESS',
   hasMergeConflict: false,
   syncedAt: null,
-  ratchet: {
-    lastCheckedAt: null,
-    dispatchOutcome: null,
-    dispatchRetryCount: 0,
-    dispatchStalled: false,
-  },
 });
 let root: Root;
 beforeEach(() => {
@@ -131,4 +125,108 @@ describe('WorkspacePrMenu', () => {
     await vi.waitFor(() => expect(item('Run review').getAttribute('aria-disabled')).toBe('true'));
     expect(item('Remove from workspace').getAttribute('aria-disabled')).toBe('true');
   });
+});
+
+it('shows checked destination, description and disables controls while changing mode', async () => {
+  const onDeliveryMode = vi.fn();
+  await render(
+    <WorkspacePrMenu
+      prs={[]}
+      monitoring={{
+        enabled: true,
+        deliveryMode: 'DEDICATED',
+        pending: true,
+        onToggle: vi.fn(),
+        onDeliveryMode,
+        onChangeRecipient: vi.fn(),
+      }}
+    />
+  );
+  await open();
+  const selected = document.querySelector('[role="menuitemradio"][aria-checked="true"]')!;
+  expect(selected.textContent).toContain('Dedicated conversation per PR');
+  const destinations = [...document.querySelectorAll('[role="menuitemradio"]')];
+  expect(destinations).toHaveLength(2);
+  for (const destination of destinations) {
+    expect(destination.getAttribute('aria-disabled')).toBe('true');
+  }
+  expect(document.body.textContent).toContain('reuses it for that PR');
+  expect(document.body.textContent).not.toContain('Change PR update conversation');
+  const alternate = destinations.find((destination) => destination !== selected)!;
+  expect(alternate.textContent).toContain('Main conversation');
+  await key(alternate, 'Enter');
+  expect(onDeliveryMode).not.toHaveBeenCalled();
+});
+
+it.each(['MAIN', 'DEDICATED'] as const)(
+  'resumes recoverably paused %s monitoring',
+  async (deliveryMode) => {
+    const onResume = vi.fn();
+    await render(
+      <WorkspacePrMenu
+        prs={[]}
+        monitoring={{
+          enabled: true,
+          deliveryMode,
+          pauseReason: 'USER_STOPPED',
+          pending: false,
+          onToggle: vi.fn(),
+          onDeliveryMode: vi.fn(),
+          onChangeRecipient: vi.fn(),
+          onResume,
+        }}
+      />
+    );
+    await open();
+    await key(item('Resume PR updates'), 'Enter');
+    expect(onResume).toHaveBeenCalledOnce();
+  }
+);
+it.each(['BINDING_CHANGED', 'UNKNOWN_PAUSE', null])(
+  'does not offer resume for unsupported pause %s',
+  async (pauseReason) => {
+    await render(
+      <WorkspacePrMenu
+        prs={[]}
+        monitoring={{
+          enabled: true,
+          deliveryMode: 'DEDICATED',
+          pauseReason,
+          pending: false,
+          onToggle: vi.fn(),
+          onDeliveryMode: vi.fn(),
+          onChangeRecipient: vi.fn(),
+          onResume: vi.fn(),
+        }}
+      />
+    );
+    await open();
+    expect(document.body.textContent).not.toContain('Resume PR updates');
+  }
+);
+it('disables resume during a mutation and hides it when monitoring is off', async () => {
+  const onResume = vi.fn();
+  const monitoring = {
+    enabled: true,
+    deliveryMode: 'MAIN' as const,
+    pauseReason: 'RECEIPT_UNAVAILABLE',
+    pending: true,
+    onToggle: vi.fn(),
+    onDeliveryMode: vi.fn(),
+    onChangeRecipient: vi.fn(),
+    onResume,
+  };
+  await render(<WorkspacePrMenu prs={[]} monitoring={monitoring} />);
+  await open();
+  expect(item('Resume PR updates').getAttribute('aria-disabled')).toBe('true');
+  await key(item('Resume PR updates'), 'Enter');
+  expect(onResume).not.toHaveBeenCalled();
+  await act(() =>
+    root.render(
+      <TooltipProvider>
+        <WorkspacePrMenu prs={[]} monitoring={{ ...monitoring, enabled: false }} />
+      </TooltipProvider>
+    )
+  );
+  expect(document.body.textContent).not.toContain('Resume PR updates');
 });

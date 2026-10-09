@@ -28,7 +28,7 @@ Enforced by dependency-cruiser and ownership checks:
 - Application `gh` calls go through `GitHubCLIService` for the shared rate
   budget.
 - Side-table accessors own Prisma writes. `WorkspacePR` exposes a collection;
-  `WorkspacePRRatchet` owns each PR’s history, `WorkspaceRatchet` the shared
-  fixer slot, and `WorkspacePRDiscovery` the discovery schedule. Other side
-  tables flatten their rows onto workspace reads. Read
+  `WorkspacePRMonitoring` owns the recipient binding, `WorkspacePREvent` the
+  durable event ledger, and `WorkspacePRDiscovery` the discovery schedule. Other
+  side tables flatten their rows onto workspace reads. Read
   [workspace state](../../../docs/architecture/workspace-state.md).

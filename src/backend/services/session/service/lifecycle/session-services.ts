@@ -37,6 +37,7 @@ chatMessageHandlerService.configureLifecycle({
     getSessionClient: (sessionId) => sessionLifecycleService.getSessionClient(sessionId),
     getOrCreateSessionClient: (sessionId, options) =>
       sessionLifecycleService.getOrCreateSessionClient(sessionId, {
+        resumePolicy: options.resumePolicy,
         thinkingEnabled: options.thinkingEnabled,
         model: options.model,
         reasoningEffort: options.reasoningEffort,

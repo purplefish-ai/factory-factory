@@ -68,7 +68,7 @@ import {
 } from '@/backend/services/workspace';
 import type { PRState } from '@/shared/core';
 import type { getWorkspaceLinearContext } from './linear-config.helper';
-import { projectPrEvent } from './pr-event-projection';
+import { projectPrEvent, shouldRefreshRatchetForPrSwitch } from './pr-event-projection';
 import { RatchetProjectionWorker } from './ratchet-projection.worker';
 
 // ---------------------------------------------------------------------------
@@ -147,39 +147,15 @@ export type EventCollectorDependencies = {
   workspaceStateMachine: typeof workspaceStateMachine;
 };
 
-function shouldRefreshRatchetForPrSwitch(
-  previousSnapshot: ReturnType<StoreInterface['getByWorkspaceId']>,
-  event: PRSnapshotUpdatedEvent
-): boolean {
-  if (!previousSnapshot) {
-    return false;
-  }
-
-  const linkedPr = previousSnapshot.prs?.find((pr) =>
-    event.prId ? pr.id === event.prId : event.prUrl && pr.url === event.prUrl
-  );
-  if (linkedPr?.state === 'CLOSED' && event.prState !== 'CLOSED' && event.prState !== 'MERGED') {
-    return true;
-  }
-
-  const hadPreviouslyLinkedPr = previousSnapshot.prNumber != null || previousSnapshot.prUrl != null;
-  if (!hadPreviouslyLinkedPr) {
-    return false;
-  }
-
-  const prNumberChanged =
-    previousSnapshot.prNumber != null && previousSnapshot.prNumber !== event.prNumber;
-  const prUrlChanged =
-    previousSnapshot.prUrl != null &&
-    event.prUrl !== undefined &&
-    event.prUrl !== null &&
-    previousSnapshot.prUrl !== event.prUrl;
-  // The ratchet poll query excludes prState CLOSED, so a reopened PR needs an
-  // immediate check here to resume ratcheting as soon as the reopen is synced.
-  // A reopened PR can land on any non-CLOSED state (OPEN/DRAFT/APPROVED/...).
-  const prReopened = previousSnapshot.prState === 'CLOSED' && event.prState !== 'CLOSED';
-
-  return prNumberChanged || prUrlChanged || prReopened;
+function requestImmediateRatchetCheck(state: EventCollectorState, workspaceId: string): void {
+  void state.dependencies.ratchetService
+    .checkWorkspaceById(workspaceId, { bypassPrFetchCooldown: true })
+    .catch((error) => {
+      state.logger.warn('Failed immediate ratchet refresh after PR switch', {
+        workspaceId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
 }
 
 /**
@@ -315,6 +291,7 @@ class EventCollectorState {
   >();
   teardownListeners: Array<() => void> = [];
   ratchetProjection: RatchetProjectionWorker | null = null;
+  prProjection: RatchetProjectionWorker | null = null;
 
   constructor(readonly dependencies: Readonly<EventCollectorDependencies>) {
     this.logger = dependencies.createLogger('event-collector');
@@ -481,7 +458,7 @@ async function handleLinearIssueCompletedOnMerge(
   try {
     const projection =
       await state.dependencies.workspaceDataService.findRatchetProjection(workspaceId);
-    if (projection?.prSummary?.hasNonterminal) {
+    if (projection && (projection.prSummary?.state ?? projection.prState) !== 'MERGED') {
       attempt.status = 'pending';
       return;
     }
@@ -577,6 +554,44 @@ function startEventCollectorWithState(state: EventCollectorState): void {
     logger: state.logger,
   });
   state.ratchetProjection = ratchetProjection;
+  const prProjection = new RatchetProjectionWorker({
+    read: async (workspaceId) => {
+      const [workspace, projection] = await Promise.all([
+        dependencies.workspaceDataService.findById(workspaceId),
+        dependencies.workspaceDataService.findRatchetProjection(workspaceId),
+      ]);
+      return workspace && projection
+        ? {
+            ...projection,
+            snapshotFields: {
+              prUrl: workspace.prUrl,
+              prNumber: workspace.prNumber,
+              prState: workspace.prState,
+              prCiStatus: workspace.prCiStatus,
+              prUpdatedAt: workspace.prUpdatedAt?.toISOString() ?? null,
+            },
+          }
+        : null;
+    },
+    publish: (workspaceId, fields) => {
+      const previous = dependencies.workspaceSnapshotStore.getByWorkspaceId(workspaceId);
+      const shouldRefreshRatchet = shouldRefreshRatchetForPrSwitch(previous, fields);
+      coalescer.enqueue(workspaceId, fields, 'projection:pr_authoritative', { immediate: true });
+      if (shouldRefreshRatchet) {
+        requestImmediateRatchetCheck(state, workspaceId);
+      }
+      retryDeferredLinearCompletion(state, workspaceId);
+      // A merged sibling is not workspace completion while the selected PR is open.
+      if ((fields.prSummary?.state ?? fields.prState) === 'MERGED' && fields.prNumber != null) {
+        void handleLinearIssueCompletedOnMerge(state, workspaceId, {
+          prNumber: fields.prNumber,
+          prUrl: fields.prUrl,
+        });
+      }
+    },
+    logger: state.logger,
+  });
+  state.prProjection = prProjection;
   state.lastIdlePrRefreshByWorkspace.clear();
 
   const refreshPrSnapshotOnIdle = (workspaceId: string): void => {
@@ -622,6 +637,7 @@ function startEventCollectorWithState(state: EventCollectorState): void {
   const workspaceStateChangedHandler = (event: WorkspaceStateChangedEvent) => {
     if (event.toStatus === 'ARCHIVED') {
       ratchetProjection.setArchived(event.workspaceId, true);
+      prProjection.setArchived(event.workspaceId, true);
       // Immediate removal for UI feedback -- no coalescing delay
       removeWorkspaceWithState(state, event.workspaceId);
       void Promise.allSettled([
@@ -651,6 +667,7 @@ function startEventCollectorWithState(state: EventCollectorState): void {
       return;
     }
     ratchetProjection.setArchived(event.workspaceId, false);
+    prProjection.setArchived(event.workspaceId, false);
     coalescer.enqueue(
       event.workspaceId,
       buildWorkspaceStateChangeFields(event),
@@ -665,6 +682,10 @@ function startEventCollectorWithState(state: EventCollectorState): void {
 
   // 2. PR snapshot updates
   const prSnapshotUpdatedHandler = (event: PRSnapshotUpdatedEvent) => {
+    if (event.prId) {
+      prProjection.request(event.workspaceId);
+      return;
+    }
     const previousSnapshot = dependencies.workspaceSnapshotStore.getByWorkspaceId(
       event.workspaceId
     );
@@ -688,14 +709,7 @@ function startEventCollectorWithState(state: EventCollectorState): void {
       // Bypass the PR-fetch cooldown: this event was emitted by a sync that
       // just registered its own fetch, so a plain check would be deduped into
       // a no-op and the "immediate" refresh would wait for the next poll.
-      void dependencies.ratchetService
-        .checkWorkspaceById(event.workspaceId, { bypassPrFetchCooldown: true })
-        .catch((error) => {
-          state.logger.warn('Failed immediate ratchet refresh after PR switch', {
-            workspaceId: event.workspaceId,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        });
+      requestImmediateRatchetCheck(state, event.workspaceId);
     }
 
     // Transition linked Linear issue to completed when PR is merged
@@ -711,7 +725,12 @@ function startEventCollectorWithState(state: EventCollectorState): void {
   );
 
   const prUrlAttachedHandler = (event: PRUrlAttachedEvent) => {
-    ratchetProjection.request(event.workspaceId);
+    if (event.prId) {
+      prProjection.request(event.workspaceId);
+      return;
+    }
+    // No snapshot was fetched for this URL. Publish its neutral cache and drop
+    // the old PR's projection before any subscriber can archive it as merged.
     coalescer.enqueue(
       event.workspaceId,
       projectPrEvent(
@@ -721,6 +740,7 @@ function startEventCollectorWithState(state: EventCollectorState): void {
       'event:pr_url_attached',
       { immediate: true }
     );
+    ratchetProjection.request(event.workspaceId);
   };
   dependencies.prSnapshotService.on(PR_URL_ATTACHED, prUrlAttachedHandler);
   state.teardownListeners.push(() =>
@@ -728,7 +748,7 @@ function startEventCollectorWithState(state: EventCollectorState): void {
   );
 
   const prDetachedHandler = (event: { workspaceId: string }) => {
-    ratchetProjection.request(event.workspaceId);
+    prProjection.request(event.workspaceId);
     retryDeferredLinearCompletion(state, event.workspaceId);
   };
   dependencies.prSnapshotService.on(PR_DETACHED, prDetachedHandler);
@@ -926,6 +946,8 @@ function stopEventCollectorWithState(state: EventCollectorState): void {
   }
   state.ratchetProjection?.stop();
   state.ratchetProjection = null;
+  state.prProjection?.stop();
+  state.prProjection = null;
 
   if (state.activeCoalescer) {
     state.activeCoalescer.flushAll();

@@ -13,6 +13,7 @@ import {
   deriveWorkspaceFlowStateFromWorkspace,
 } from '@/backend/services/workspace';
 import { KanbanColumn } from '@/shared/core';
+import { prDeliveryModeSchema } from '@/shared/pr-monitoring';
 import { autoIterationConfigSchema } from '@/shared/schemas/auto-iteration.schema';
 import {
   findWorkspaceSessionRuntimeError,
@@ -163,7 +164,8 @@ export const workspaceCoreRouter = router({
         isSessionStarting: hasStartingSessionSummary(sessionSummaries),
         ratchetEnabled: workspace.ratchetEnabled,
         hasMergeConflict: workspace.prHasMergeConflict,
-        dispatchStalled: workspace.ratchetDispatchStalled,
+        dispatchStalled: Boolean(workspace.prMonitoring?.pauseReason),
+        prMonitoring: workspace.prMonitoring,
         mode: workspace.mode,
         autoIterationStatus: workspace.autoIterationStatus,
         flowState,
@@ -305,7 +307,8 @@ export const workspaceCoreRouter = router({
       if (!result.success && result.reason === 'workspace_not_found') {
         throw new TRPCError({ code: 'NOT_FOUND', message: `Workspace not found: ${input.id}` });
       }
-      if (!result.success && result.reason !== 'fetch_failed') {
+      // A retained association succeeds even when its initial GitHub refresh fails.
+      if (!result.success && result.reason !== 'fetch_failed' && !result.prId) {
         throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to attach PR' });
       }
       const updatedWorkspace = await workspaceDataService.findById(input.id);
@@ -322,27 +325,8 @@ export const workspaceCoreRouter = router({
   detachPR: publicProcedure
     .input(z.object({ workspaceId: z.string(), prId: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const { prSnapshotService, sessionLifecycleService, sessionDataService } =
-        ctx.appContext.services;
-      const { removed, sessionId } = await prSnapshotService.detachPR(input);
-      // Persisted PR targeting also finds cleanup left unfinished by a failed stop.
-      const sessions = await sessionDataService.findAgentSessionsByWorkspaceId(input.workspaceId);
-      const fixerIds = new Set(
-        sessions
-          .filter(
-            (session) =>
-              session.workspacePrId === input.prId &&
-              session.workflow === 'ratchet' &&
-              (session.status === 'RUNNING' || session.status === 'IDLE')
-          )
-          .map((session) => session.id)
-      );
-      if (sessionId) {
-        fixerIds.add(sessionId);
-      }
-      for (const id of fixerIds) {
-        await sessionLifecycleService.stopSession(id);
-      }
+      const { prSnapshotService } = ctx.appContext.services;
+      const { removed } = await prSnapshotService.detachPR(input);
       return { removed };
     }),
 
@@ -352,29 +336,25 @@ export const workspaceCoreRouter = router({
       z.object({
         workspaceId: z.string(),
         enabled: z.boolean(),
+        recipientSessionId: z.string().nullable().optional(),
+        deliveryMode: prDeliveryModeSchema.optional(),
+        resume: z.boolean().optional(),
+        expectedBindingRevision: z.number().int().nonnegative().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const logger = getLogger(ctx);
-      const { ratchetService, workspaceDataService } = ctx.appContext.services;
-      await ratchetService.setWorkspaceRatcheting(input.workspaceId, input.enabled);
-      const updatedWorkspace = await workspaceDataService.findById(input.workspaceId);
-      if (!updatedWorkspace) {
-        throw new Error(`Workspace not found: ${input.workspaceId}`);
+      const { ratchetService } = ctx.appContext.services;
+      const result = await ratchetService.setWorkspaceRatcheting(
+        input.workspaceId,
+        input.enabled,
+        input
+      );
+      if (result.status === 'updated' && input.enabled) {
+        void ratchetService
+          .checkWorkspaceById(input.workspaceId)
+          .catch((error) => getLogger(ctx).warn('Background PR check failed', { error }));
       }
-
-      // Do not block the toggle response on external GitHub checks.
-      // Run an immediate ratchet check in the background.
-      if (input.enabled) {
-        void ratchetService.checkWorkspaceById(input.workspaceId).catch((error) => {
-          logger.warn('Background ratchet check failed after enabling workspace ratcheting', {
-            workspaceId: input.workspaceId,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        });
-      }
-
-      return updatedWorkspace;
+      return result;
     }),
 
   // Update workspace provider defaults (session + ratchet).
@@ -383,14 +363,12 @@ export const workspaceCoreRouter = router({
       z.object({
         workspaceId: z.string(),
         defaultSessionProvider: z.nativeEnum(WorkspaceProviderSelection).optional(),
-        ratchetSessionProvider: z.nativeEnum(WorkspaceProviderSelection).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       try {
         return await ctx.appContext.services.workspaceDataService.update(input.workspaceId, {
           defaultSessionProvider: input.defaultSessionProvider,
-          ratchetSessionProvider: input.ratchetSessionProvider,
         });
       } catch (error) {
         if (error && typeof error === 'object' && 'code' in error && error.code === 'P2025') {
