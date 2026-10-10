@@ -213,9 +213,9 @@ store, or (b) iterate by project. Option (a) is simpler and more reliable.
 ### Pattern 4: Git Stats Computed Only During Reconciliation (RCNL-02)
 
 **What:** Git stats (diff size, additions, deletions, hasUncommitted) are
-expensive (spawns git processes). They are NEVER computed in event-driven paths
--- only during reconciliation. The `reconciliation` field group in the store
-contains `gitStats` and `lastActivityAt`. **When to use:** Only in the
+expensive (spawns git processes). They are NEVER computed in event-driven
+paths -- only during reconciliation. The `reconciliation` field group in the
+store contains `gitStats` and `lastActivityAt`. **When to use:** Only in the
 reconciliation service, never in the event collector. **Example:**
 
 ```typescript
@@ -657,8 +657,9 @@ it('does not overwrite event-driven updates that arrived after poll started', ()
   continuous loop + graceful shutdown pattern (alternative approach)
 - **Codebase analysis:** `src/backend/services/git-ops.service.ts` --
   `getWorkspaceGitStats()` API for git diff computation
-- **Codebase analysis:** `src/backend/resource_accessors/workspace.accessor.ts`
-  -- DB query methods, `findByProjectIdWithSessions()`, available query patterns
+- **Codebase analysis:**
+  `src/backend/resource_accessors/workspace.accessor.ts` -- DB query methods,
+  `findByProjectIdWithSessions()`, available query patterns
 - **Codebase analysis:** `src/backend/resource_accessors/project.accessor.ts` --
   `list()` for enumerating projects, `defaultBranch` field
 - **Codebase analysis:**

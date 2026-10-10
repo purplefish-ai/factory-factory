@@ -6,6 +6,7 @@ import {
 
 type RatchetSidebarCacheFields = {
   sidebarStatus?: WorkspaceSidebarStatus;
+  prSummary?: WorkspaceSidebarStatusInput['prSummary'];
   isWorking?: WorkspaceSidebarStatusInput['isWorking'];
   prUrl?: WorkspaceSidebarStatusInput['prUrl'];
   prState?: WorkspaceSidebarStatusInput['prState'];
@@ -29,6 +30,7 @@ function deriveUpdatedSidebarStatus<T extends Omit<RatchetToggleCacheShape, 'id'
 
   return deriveWorkspaceSidebarStatus({
     isWorking: item.isWorking,
+    prSummary: item.prSummary,
     prUrl: item.prUrl ?? null,
     prState: item.prState ?? null,
     prCiStatus: item.prCiStatus ?? null,

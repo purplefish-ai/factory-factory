@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Mock dependencies before importing the service
 const mockExecFile = vi.fn();
 const mockLoggerInfo = vi.fn();
 const mockLoggerDebug = vi.fn();
@@ -32,11 +31,10 @@ vi.mock('@/backend/services/logger.service', () => ({
   }),
 }));
 
-// Import after mocks are set up
 import { execFile } from 'node:child_process';
 import { deriveCiStatusFromCheckRollup } from '@/shared/core';
-import { classifyError } from './github-cli/errors';
 import { githubCLIService } from './github-cli.service';
+import { classifyError } from './github-cli/errors';
 
 vi.mocked(execFile).mockImplementation(mockExecFile as never);
 
@@ -432,7 +430,6 @@ describe('GitHubCLIService', () => {
       it('should return null and log error when response is missing required fields', async () => {
         const malformedData = {
           number: 123,
-          // missing state, isDraft, etc.
         };
 
         mockExecFile.mockResolvedValue({
@@ -503,7 +500,6 @@ describe('GitHubCLIService', () => {
           {
             number: 1,
             title: 'Issue 1',
-            // missing body, url, state, etc.
           },
         ];
 
@@ -1287,6 +1283,9 @@ describe('GitHubCLIService', () => {
       expect(result).toEqual({
         prState: 'OPEN',
         prNumber: 77,
+        title: null,
+        baseRefName: null,
+        prHasMergeConflict: false,
         prReviewState: 'REVIEW_REQUIRED',
         prCiStatus: 'SUCCESS',
         headRefName: null,

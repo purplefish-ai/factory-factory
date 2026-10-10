@@ -5,9 +5,9 @@ import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { createLogger } from '@/backend/services/logger.service';
 import { AutoIterationStatus } from '@/shared/core';
-import { AutoIterationService } from './auto-iteration.service';
 import type { RunningLoop } from './auto-iteration-loop-state';
 import { createInitialRunningLoop } from './auto-iteration-loop-state';
+import { AutoIterationService } from './auto-iteration.service';
 import type {
   AutoIterationLogbookBridge,
   AutoIterationSessionBridge,

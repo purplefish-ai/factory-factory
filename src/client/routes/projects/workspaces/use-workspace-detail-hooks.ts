@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-
 import { trpc } from '@/client/lib/trpc';
-
 import {
   forgetSetupWarningDismissed,
   isSetupWarningDismissed,

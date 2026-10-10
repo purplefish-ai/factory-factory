@@ -1,5 +1,5 @@
-import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
 import { workspacePrAccessor } from '@/backend/services/workspace/resources/workspace-pr.accessor';
+import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
 
 class WorkspaceMaintenanceService {
   findNeedingWorktree() {

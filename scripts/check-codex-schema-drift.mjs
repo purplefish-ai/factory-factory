@@ -87,7 +87,6 @@ function buildSchemaSnapshot(outputDir, codexCliVersion) {
 function printDrift(current, expected) {
   const versionChanged = current.codexCliVersion !== expected.codexCliVersion;
   if (versionChanged) {
-    // eslint-disable-next-line no-console
     console.error(
       `codex-cli version changed: expected ${expected.codexCliVersion}, got ${current.codexCliVersion}`
     );
@@ -98,28 +97,22 @@ function printDrift(current, expected) {
     if (diff.added.length === 0 && diff.removed.length === 0) {
       continue;
     }
-    // eslint-disable-next-line no-console
     console.error(`drift in ${filename}`);
     if (diff.added.length > 0) {
-      // eslint-disable-next-line no-console
       console.error(`  added: ${diff.added.join(', ')}`);
     }
     if (diff.removed.length > 0) {
-      // eslint-disable-next-line no-console
       console.error(`  removed: ${diff.removed.join(', ')}`);
     }
   }
 
   const allDiff = diffArrays(current.allMethods, expected.allMethods);
   if (allDiff.added.length > 0 || allDiff.removed.length > 0) {
-    // eslint-disable-next-line no-console
     console.error('aggregate method drift');
     if (allDiff.added.length > 0) {
-      // eslint-disable-next-line no-console
       console.error(`  added: ${allDiff.added.join(', ')}`);
     }
     if (allDiff.removed.length > 0) {
-      // eslint-disable-next-line no-console
       console.error(`  removed: ${allDiff.removed.join(', ')}`);
     }
   }
@@ -163,14 +156,12 @@ function main() {
 
     if (updateSnapshot) {
       writeFileSync(`${SNAPSHOT_PATH}`, `${JSON.stringify(currentSnapshot, null, 2)}\n`, 'utf8');
-      // eslint-disable-next-line no-console
       console.log(`updated snapshot: ${SNAPSHOT_PATH}`);
       return;
     }
 
     const identical = JSON.stringify(currentSnapshot) === JSON.stringify(expectedSnapshot);
     if (identical) {
-      // eslint-disable-next-line no-console
       console.log('codex app-server schema snapshot is up to date');
       return;
     }

@@ -15,6 +15,7 @@ vi.mock('@/backend/services/github', async () => {
       getPRDiff: vi.fn(),
       getPRFullDetails: vi.fn(),
       addPRComment: vi.fn(),
+      getAuthenticatedUsername: vi.fn(),
     },
     getPRDescription: vi.fn(),
     getPRHeadCommitSha: vi.fn(),
@@ -23,7 +24,10 @@ vi.mock('@/backend/services/github', async () => {
   };
 });
 vi.mock('@/backend/services/session', () => ({
-  sessionDataService: { createAgentSession: vi.fn(), findAgentSessionsByWorkspaceId: vi.fn() },
+  sessionDataService: {
+    createAgentSessionWithinWorkspaceLimit: vi.fn(),
+    findAgentSessionsByWorkspaceId: vi.fn(),
+  },
   sessionDomainService: { getTranscriptSnapshot: vi.fn() },
   sessionLifecycleService: { startSession: vi.fn(), stopSession: vi.fn() },
   sessionService: { sendSessionMessage: vi.fn() },
@@ -59,6 +63,7 @@ describe('adversarial-review fallback delivery', () => {
       worktreePath: '/tmp/worktree',
     } as never);
     vi.mocked(workspaceDataService.findPRState).mockResolvedValue({
+      prId: 'pr-1',
       prUrl: 'https://github.com/example/repo/pull/1',
       prNumber: 1,
       prState: 'OPEN',
@@ -69,8 +74,9 @@ describe('adversarial-review fallback delivery', () => {
       number: 1,
     });
     vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([]);
-    vi.mocked(sessionDataService.createAgentSession).mockResolvedValue({
-      id: 'review-session',
+    vi.mocked(sessionDataService.createAgentSessionWithinWorkspaceLimit).mockResolvedValue({
+      outcome: 'created',
+      session: { id: 'review-session' },
     } as never);
     vi.mocked(userSettingsService.get).mockResolvedValue({
       reviewerSessionProvider: 'CODEX',
@@ -80,6 +86,7 @@ describe('adversarial-review fallback delivery', () => {
       'diff --git a/file.ts b/file.ts\n--- a/file.ts\n+++ b/file.ts\n@@ -1 +1 @@\n-old\n+new\n'
     );
     vi.mocked(githubCLIService.getPRFullDetails).mockResolvedValue({ reviews: [] } as never);
+    vi.mocked(githubCLIService.getAuthenticatedUsername).mockResolvedValue('factory-factory[bot]');
     vi.mocked(getPRDescription).mockResolvedValue('description');
     vi.mocked(getPRHeadCommitSha).mockResolvedValue('abc123');
     vi.mocked(sessionLifecycleService.stopSession).mockResolvedValue(undefined);

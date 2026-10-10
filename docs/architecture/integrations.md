@@ -2,10 +2,30 @@
 
 ## GitHub
 
+GitHub URL imports use the shared `parseGithubUrl` validator for both the New
+Project form and backend input validation. Invalid owner/repository segments
+show an inline error and cannot be submitted; supported HTTP, HTTPS, and SSH
+URLs keep the existing `.git` suffix and trailing-slash behavior.
+
 Uses the local `gh` CLI's auth — there is no stored GitHub token. Issue fetch
-supports the workspace issue picker (`listIssuesForWorkspace`) and Kanban intake
-(`listIssuesForProject`, assigned to `@me`). Starting from an issue creates a
-linked workspace (`githubIssueNumber`, `githubIssueUrl`).
+supports Kanban intake (`listIssuesForProject`, assigned to `@me`). Starting
+from an issue creates a linked workspace (`githubIssueNumber`,
+`githubIssueUrl`).
+
+GitHub project imports reuse existing clone directories when owner or repository
+casing differs, preserving the existing path and local changes. New clones use
+lowercase owner/repository paths, matching GitHub's case-insensitive names. URL
+validation and the existing non-repository directory guard still apply.
+
+Concurrent imports targeting the same normalized clone path share one in-flight
+clone result. Clone-path inspection waits for that clone to finish before
+classifying the directory, including clones started during directory scans. A
+new clone waits for any active inspection of its destination to finish. Failed
+clones can be retried, and cleanup never removes a completed repository.
+Coordination is in-process and uses lexically resolved paths; filesystem aliases
+such as symlinks to the same directory are not coordinated. Equivalent GitHub
+HTTPS and SSH URLs share a clone, while a different source targeting an
+in-flight destination returns an error without disturbing the active clone.
 
 The New Project authentication badge requires a successful login line and a zero
 exit status from `gh auth status`. Explicit login failures take precedence over
@@ -26,6 +46,11 @@ Check-run conclusions preserve `STARTUP_FAILURE` through PR-detail mapping, so
 both PR sync and Ratchet classify startup failures as failing CI, including when
 other checks are still running. Sidebar and Kanban projections therefore agree
 on the cached CI status.
+
+Legacy status contexts retain their context names and target URLs through PR
+snapshot parsing and use the same normalization as Ratchet. Contexts pointing at
+GitHub Actions runs therefore use the latest run attempt in both paths, keeping
+the cached CI status consistent after reruns.
 
 CLI authentication checks normally use cached health. Closing the setup terminal
 in admin settings or project onboarding, or choosing Recheck, forces a fresh
@@ -59,6 +84,10 @@ omitted PR URL does not change its identity; known URLs still distinguish PRs
 with the same number in different repositories. Failed or incomplete transitions
 retry on later polls, and a seeded merged snapshot is attempted after startup.
 Removing a workspace or stopping the collector clears completion tracking.
+
+Archiving a project returns the same sanitized issue tracker configuration as
+project reads and updates: the encrypted key is omitted and replaced with
+`hasApiKey`.
 
 API key validation in admin settings clears earlier team choices before each
 request. Editing the key requires fresh validation and team selection before

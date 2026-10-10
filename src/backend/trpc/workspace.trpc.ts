@@ -151,6 +151,7 @@ export const workspaceCoreRouter = router({
     const derivedState = assembleWorkspaceDerivedState(
       {
         lifecycle: workspace.status,
+        prSummary: workspace.prSummary,
         prUrl: workspace.prUrl,
         prState: workspace.prState,
         prCiStatus: workspace.prCiStatus,
@@ -301,23 +302,48 @@ export const workspaceCoreRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: `Workspace not found: ${input.id}` });
       }
       const result = await prSnapshotService.attachAndRefreshPR(input.id, input.prUrl);
-      if (!result.success) {
-        if (result.reason === 'workspace_not_found') {
-          throw new TRPCError({ code: 'NOT_FOUND', message: `Workspace not found: ${input.id}` });
-        }
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message:
-            result.reason === 'fetch_failed'
-              ? `PR was associated but snapshot fetch failed for: ${input.prUrl}`
-              : `Failed to attach PR: ${input.prUrl}`,
-        });
+      if (!result.success && result.reason === 'workspace_not_found') {
+        throw new TRPCError({ code: 'NOT_FOUND', message: `Workspace not found: ${input.id}` });
+      }
+      if (!result.success && result.reason !== 'fetch_failed') {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to attach PR' });
       }
       const updatedWorkspace = await workspaceDataService.findById(input.id);
       if (!updatedWorkspace) {
         throw new TRPCError({ code: 'NOT_FOUND', message: `Workspace not found: ${input.id}` });
       }
-      return updatedWorkspace;
+      return {
+        ...updatedWorkspace,
+        attachedPrId: result.prId,
+        prSyncStatus: result.success ? ('synced' as const) : ('pending' as const),
+      };
+    }),
+
+  detachPR: publicProcedure
+    .input(z.object({ workspaceId: z.string(), prId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const { prSnapshotService, sessionLifecycleService, sessionDataService } =
+        ctx.appContext.services;
+      const { removed, sessionId } = await prSnapshotService.detachPR(input);
+      // Persisted PR targeting also finds cleanup left unfinished by a failed stop.
+      const sessions = await sessionDataService.findAgentSessionsByWorkspaceId(input.workspaceId);
+      const fixerIds = new Set(
+        sessions
+          .filter(
+            (session) =>
+              session.workspacePrId === input.prId &&
+              session.workflow === 'ratchet' &&
+              (session.status === 'RUNNING' || session.status === 'IDLE')
+          )
+          .map((session) => session.id)
+      );
+      if (sessionId) {
+        fixerIds.add(sessionId);
+      }
+      for (const id of fixerIds) {
+        await sessionLifecycleService.stopSession(id);
+      }
+      return { removed };
     }),
 
   // Toggle workspace-level ratcheting
@@ -361,11 +387,20 @@ export const workspaceCoreRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const updated = await ctx.appContext.services.workspaceDataService.update(input.workspaceId, {
-        defaultSessionProvider: input.defaultSessionProvider,
-        ratchetSessionProvider: input.ratchetSessionProvider,
-      });
-      return updated;
+      try {
+        return await ctx.appContext.services.workspaceDataService.update(input.workspaceId, {
+          defaultSessionProvider: input.defaultSessionProvider,
+          ratchetSessionProvider: input.ratchetSessionProvider,
+        });
+      } catch (error) {
+        if (error && typeof error === 'object' && 'code' in error && error.code === 'P2025') {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: `Workspace not found: ${input.workspaceId}`,
+          });
+        }
+        throw error;
+      }
     }),
 
   // Archive a workspace

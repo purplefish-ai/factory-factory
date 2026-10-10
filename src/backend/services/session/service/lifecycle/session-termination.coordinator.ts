@@ -12,13 +12,16 @@ import {
 } from '@/shared/core';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import type { AcpEventProcessor } from './acp-event-processor';
+import type {
+  RecordLifecycleEventInput,
+  SessionLifecycleEventService,
+} from './session-lifecycle-event.service';
+import type { SessionLifecycleGate } from './session-lifecycle-gate';
+import type { SessionWorkflowFinalizer } from './session-workflow-finalizer';
 import type { SessionPermissionService } from './session.permission.service';
 import type { SessionPromptTurnCompletionService } from './session.prompt-turn-completion.service';
 import type { SessionRepository } from './session.repository';
 import type { SessionRetryService } from './session.retry.service';
-import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
-import type { SessionLifecycleGate } from './session-lifecycle-gate';
-import type { SessionWorkflowFinalizer } from './session-workflow-finalizer';
 
 const logger = createLogger('session');
 const SHUTDOWN_LIFECYCLE_RECORD_TIMEOUT_MS = 1000;
@@ -34,6 +37,11 @@ export type StopSessionOptions = {
   cleanupTransientRatchetSession?: boolean;
   recordLifecycleEvent?: boolean;
   reason?: SessionStopReason;
+};
+
+type StopLifecycleEventOutcome = {
+  persisted: boolean;
+  input?: RecordLifecycleEventInput;
 };
 
 const SESSION_STOP_MESSAGES: Record<SessionStopReason, string> = {
@@ -74,7 +82,7 @@ export type SessionTerminationCoordinatorDependencies = {
     'clearSession' | 'clearAll'
   >;
   lifecycleEventService: Pick<SessionLifecycleEventService, 'record'>;
-  lifecycleGate: Pick<SessionLifecycleGate, 'reserveStop' | 'reserveShutdown'>;
+  lifecycleGate: Pick<SessionLifecycleGate, 'reserveStop' | 'reserveShutdown' | 'releaseShutdown'>;
   workflowFinalizer: Pick<
     SessionWorkflowFinalizer,
     'finalizeDeliberateStop' | 'clearInactiveSession'
@@ -85,6 +93,8 @@ export type SessionTerminationCoordinatorDependencies = {
 
 export class SessionTerminationCoordinator {
   private workspaceBridge: Pick<SessionLifecycleWorkspaceBridge, 'markSessionIdle'> | null = null;
+
+  private readonly stopLifecycleEvents = new Map<string, Promise<StopLifecycleEventOutcome>>();
 
   constructor(private readonly dependencies: SessionTerminationCoordinatorDependencies) {}
 
@@ -101,10 +111,19 @@ export class SessionTerminationCoordinator {
       return;
     }
 
+    let completeEvent!: (outcome: StopLifecycleEventOutcome) => void;
+    const eventOutcome = new Promise<StopLifecycleEventOutcome>((resolve) => {
+      completeEvent = resolve;
+    });
+    if (options?.recordLifecycleEvent !== false) {
+      this.stopLifecycleEvents.set(sessionId, eventOutcome);
+    }
     const stopInvocationId = randomUUID();
     try {
-      await this.stopSessionWithBarrier(sessionId, stopInvocationId, options);
+      await this.stopSessionWithBarrier(sessionId, stopInvocationId, completeEvent, options);
     } finally {
+      completeEvent({ persisted: false });
+      this.stopLifecycleEvents.delete(sessionId);
       stopReservation.release();
     }
   }
@@ -153,21 +172,27 @@ export class SessionTerminationCoordinator {
     );
     this.dependencies.lifecycleGate.reserveShutdown(activeShutdownSessionIds);
 
-    await this.recordShutdownLifecycleEvents(activeShutdownSessionIds);
-
     try {
-      await this.dependencies.runtimeManager.stopAllClients(timeoutMs);
-    } catch (error) {
-      logger.error('Failed to stop ACP clients during shutdown', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      throw error;
+      await this.recordShutdownLifecycleEvents(activeShutdownSessionIds);
+      try {
+        await this.dependencies.runtimeManager.stopAllClients(timeoutMs);
+      } catch (error) {
+        logger.error('Failed to stop ACP clients during shutdown', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      }
+    } finally {
+      for (const sessionId of activeShutdownSessionIds) {
+        this.dependencies.lifecycleGate.releaseShutdown(sessionId);
+      }
     }
   }
 
   private async stopSessionWithBarrier(
     sessionId: string,
     stopInvocationId: string,
+    completeEvent: (outcome: StopLifecycleEventOutcome) => void,
     options?: StopSessionOptions
   ): Promise<void> {
     this.dependencies.promptTurnCompletionService.clearSession(sessionId);
@@ -179,14 +204,18 @@ export class SessionTerminationCoordinator {
     const reason = options?.reason ?? 'SYSTEM_STOP';
 
     if (workspaceId && options?.recordLifecycleEvent !== false) {
-      await this.dependencies.lifecycleEventService.record({
+      const input: RecordLifecycleEventInput = {
         workspaceId,
         sessionId,
         kind: SessionLifecycleEventKind.SESSION_STOPPED,
         reason,
         message: SESSION_STOP_MESSAGES[reason],
         dedupeKey: `session-stop:${stopInvocationId}`,
-      });
+      };
+      const event = await this.dependencies.lifecycleEventService.record(input);
+      completeEvent({ persisted: event !== null, input });
+    } else {
+      completeEvent({ persisted: false });
     }
 
     const current = this.dependencies.getRuntimeSnapshot(sessionId);
@@ -318,6 +347,14 @@ export class SessionTerminationCoordinator {
   }
 
   private async recordShutdownLifecycleEvent(sessionId: string): Promise<void> {
+    const stopOutcome = await this.stopLifecycleEvents.get(sessionId);
+    if (stopOutcome?.persisted) {
+      return;
+    }
+    if (stopOutcome?.input) {
+      await this.dependencies.lifecycleEventService.record(stopOutcome.input);
+      return;
+    }
     const session = await this.loadSessionForStop(sessionId);
     const workspaceId =
       session?.workspaceId ?? this.dependencies.acpEventProcessor.getWorkspaceId(sessionId);

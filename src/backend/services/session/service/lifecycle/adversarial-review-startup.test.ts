@@ -2,9 +2,10 @@ import type { SessionConfigOption } from '@agentclientprotocol/sdk';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import { SessionConfigService } from './session.config.service';
-import { createLifecycleHarness } from './session-lifecycle.test-helpers';
+import { SessionStartupCancelledError } from './session-lifecycle-gate';
+import { createDeferred, createLifecycleHarness } from './session-lifecycle.test-helpers';
 import { assertReadOnlyReviewConfigOption } from './session-permission-policy';
+import { SessionConfigService } from './session.config.service';
 
 vi.mock('@/backend/services/logger.service', () => ({
   getCurrentProcessEnv: () => ({ NODE_ENV: 'test' }),
@@ -87,7 +88,7 @@ function createHarness(provider: 'CLAUDE' | 'CODEX', workflow = ADVERSARIAL_REVI
   return { ...harness, runtime, config };
 }
 
-const paths = ['start', 'restart', 'chat auto-start', 'preloaded auto-start'] as const;
+const paths = ['start', 'restart', 'chat auto-start'] as const;
 type StartupPath = (typeof paths)[number];
 function start(harness: ReturnType<typeof createHarness>, path: StartupPath) {
   switch (path) {
@@ -97,8 +98,6 @@ function start(harness: ReturnType<typeof createHarness>, path: StartupPath) {
       return harness.service.restartSession(harness.session.id);
     case 'chat auto-start':
       return harness.service.getOrCreateSessionClient(harness.session.id);
-    case 'preloaded auto-start':
-      return harness.service.getOrCreateSessionClientFromRecord(harness.session);
   }
 }
 
@@ -184,6 +183,7 @@ describe('adversarial review startup permissions', () => {
     harness.runtimeManager.stopClient.mockRejectedValue(new Error('stop rejected'));
     await expect(start(harness, 'chat auto-start')).rejects.toThrow('stop rejected');
     expect(harness.acpEventProcessor.clearSessionState).toHaveBeenCalledWith(harness.session.id);
+    expect(harness.lifecycleGate.isStopReserved(harness.session.id)).toBe(false);
     expect(harness.tryDispatchNextMessage).not.toHaveBeenCalled();
   });
 
@@ -233,7 +233,7 @@ describe('adversarial review startup permissions', () => {
     expect(harness.runtimeManager.getOrCreateClient).not.toHaveBeenCalled();
   });
 
-  it.each(['chat auto-start', 'preloaded auto-start'] as const)(
+  it.each(['chat auto-start'] as const)(
     'stops an existing review client when read-only execution fails during %s',
     async (path) => {
       const harness = createHarness('CODEX');
@@ -255,6 +255,46 @@ describe('adversarial review startup permissions', () => {
     }
   );
 
+  it('cancels concurrent starts when an existing review client loses read-only permissions', async () => {
+    const harness = createHarness('CODEX');
+    let stopped = false;
+    harness.runtimeManager.getClient.mockImplementation(() =>
+      stopped ? undefined : harness.handle
+    );
+    harness.runtimeManager.stopClient.mockImplementation(() => {
+      stopped = true;
+      return Promise.resolve();
+    });
+    const secondPreset = createDeferred<void>();
+    const bothStarted = createDeferred<void>();
+    harness.sessionConfigService.applyConfiguredPermissionPreset
+      .mockImplementationOnce(async () => {
+        await bothStarted.promise;
+        throw new Error('sandbox rejected');
+      })
+      .mockImplementationOnce(async () => {
+        bothStarted.resolve();
+        await secondPreset.promise;
+      });
+
+    const first = start(harness, 'chat auto-start');
+    const second = start(harness, 'chat auto-start');
+    const secondOutcome = second.then(
+      (value) => value,
+      (error) => error
+    );
+    await expect(first).rejects.toThrow('sandbox rejected');
+    expect(harness.runtimeManager.getClient(harness.session.id)).toBeUndefined();
+    expect(harness.lifecycleGate.isStopReserved(harness.session.id)).toBe(false);
+
+    secondPreset.resolve();
+    expect(await secondOutcome).toBeInstanceOf(SessionStartupCancelledError);
+    expect(harness.sessionDomainService.setRuntimeSnapshot).toHaveBeenLastCalledWith(
+      harness.session.id,
+      expect.objectContaining({ processState: 'stopped' })
+    );
+  });
+
   it('clears failed review startup state even when stopping the client rejects', async () => {
     const harness = createHarness('CODEX');
     harness.runtimeManager.getClient.mockReturnValue(harness.handle);
@@ -262,11 +302,31 @@ describe('adversarial review startup permissions', () => {
     harness.runtimeManager.stopClient.mockRejectedValue(new Error('stop rejected'));
     await expect(start(harness, 'chat auto-start')).rejects.toThrow('stop rejected');
     expect(harness.acpEventProcessor.clearSessionState).toHaveBeenCalledWith(harness.session.id);
+    expect(harness.lifecycleGate.isStopReserved(harness.session.id)).toBe(false);
     expect(harness.sessionDomainService.setRuntimeSnapshot).not.toHaveBeenCalledWith(
       harness.session.id,
       expect.objectContaining({ processState: 'stopped' })
     );
   });
+
+  it.each([false, true])(
+    'releases the stop fence when review cleanup throws after stop failure=%s',
+    async (stopFails) => {
+      const harness = createHarness('CODEX');
+      harness.runtimeManager.getClient.mockReturnValue(harness.handle);
+      harness.runtime.setConfigOption.mockRejectedValue(new Error('sandbox rejected'));
+      if (stopFails) {
+        harness.runtimeManager.stopClient.mockRejectedValue(new Error('stop rejected'));
+      }
+      harness.acpEventProcessor.clearSessionState.mockImplementation(() => {
+        throw new Error('cleanup rejected');
+      });
+
+      await expect(start(harness, 'chat auto-start')).rejects.toThrow('cleanup rejected');
+      expect(harness.lifecycleGate.isStopReserved(harness.session.id)).toBe(false);
+      expect(harness.lifecycleGate.isSessionStopping(harness.session.id)).toBe(false);
+    }
+  );
 
   it('persists and emits repaired permissions on an existing review client', async () => {
     const harness = createHarness('CODEX');

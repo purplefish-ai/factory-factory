@@ -48,11 +48,6 @@ interface TruncatedResolvedThread {
   afterCursor: string | null;
 }
 
-/**
- * Collect comment ids from resolved threads into resolvedIds, returning
- * continuations for resolved threads whose comment list was truncated at the
- * first page (they need follow-up node queries to fetch the tail).
- */
 function collectResolvedReviewCommentIds(
   threads: ResolvedReviewThreadsPage['nodes'],
   resolvedIds: Set<number>
@@ -77,13 +72,6 @@ function collectResolvedReviewCommentIds(
   return truncatedThreads;
 }
 
-/**
- * Service for interacting with GitHub via the `gh` CLI.
- * Uses the locally authenticated gh CLI instead of API tokens.
- *
- * All process spawning is gated through a shared concurrency limiter
- * and read-only calls benefit from in-flight deduplication (singleflight).
- */
 // How long to fast-fail gh calls after a rate limit is detected (60 s).
 const RATE_LIMIT_FAST_FAIL_MS = 60_000;
 
@@ -103,7 +91,6 @@ class GitHubCLIService {
   // When set, all exec() calls will fail immediately until this timestamp.
   private rateLimitedUntil: number | null = null;
 
-  /** Clear all caches — used in tests to prevent cross-test contamination. */
   clearCaches(): void {
     this.cachedHealth = null;
     this.healthRefreshInFlight = null;
@@ -112,13 +99,6 @@ class GitHubCLIService {
     this.rateLimitedUntil = null;
   }
 
-  /**
-   * Execute a read-only gh CLI command with concurrency limiting and singleflight dedup.
-   * Identical in-flight calls share a single process.
-   *
-   * Fast-fails immediately when a rate limit was detected recently, preventing
-   * calls from piling up in the queue and blocking user-facing requests.
-   */
   private exec(args: string[], options?: ReadExecOptions): Promise<ExecResult> {
     if (this.rateLimitedUntil !== null && Date.now() < this.rateLimitedUntil) {
       return Promise.reject(new Error('GitHub API rate limit exceeded, backing off'));
@@ -304,7 +284,7 @@ class GitHubCLIService {
           '--repo',
           `${prInfo.owner}/${prInfo.repo}`,
           '--json',
-          'number,state,isDraft,reviewDecision,statusCheckRollup,headRefName',
+          'number,state,isDraft,reviewDecision,statusCheckRollup,headRefName,title,baseRefName,mergeStateStatus',
         ],
         { timeout: GH_TIMEOUT_MS.default }
       );
@@ -340,6 +320,9 @@ class GitHubCLIService {
     prReviewState: string | null;
     prCiStatus: CIStatus;
     headRefName: string | null;
+    title?: string | null;
+    baseRefName?: string | null;
+    prHasMergeConflict?: boolean;
   } | null> {
     const status = await this.getPRStatus(prUrl);
     if (!status) {
@@ -352,6 +335,9 @@ class GitHubCLIService {
       prReviewState: status.reviewDecision,
       prCiStatus: this.computeCIStatus(status.statusCheckRollup),
       headRefName: status.headRefName ?? null,
+      title: status.title ?? null,
+      baseRefName: status.baseRefName ?? null,
+      prHasMergeConflict: status.mergeStateStatus === 'DIRTY',
     };
   }
 

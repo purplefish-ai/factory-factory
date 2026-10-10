@@ -63,7 +63,7 @@ export class AcpProcessHandle {
   }
 
   isRunning(): boolean {
-    return this.child.exitCode === null && !this.child.killed;
+    return this.child.exitCode === null && this.child.signalCode === null && !this.child.killed;
   }
 
   getPid(): number | undefined {

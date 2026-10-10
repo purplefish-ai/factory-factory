@@ -35,3 +35,8 @@ export interface WorkspacePRContext {
   branchName: string | null;
   prUrl: string | null;
 }
+
+export interface WorkspacePRIdentity {
+  workspaceId: string;
+  prId: string;
+}

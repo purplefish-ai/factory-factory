@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
 import { WorkspaceItemContent } from './workspace-item-content';
 
+vi.mock('@/client/features/workspace', () => ({ WorkspacePrMenu: () => null }));
 vi.mock('@phosphor-icons/react', () => ({
   ClockIcon: () => null,
   DotOutlineIcon: () => null,

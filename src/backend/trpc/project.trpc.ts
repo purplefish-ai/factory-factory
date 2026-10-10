@@ -6,8 +6,8 @@ import { z } from 'zod';
 import type { ApplicationServices } from '@/backend/app-context';
 import { searchFilesRecursive } from '@/backend/lib/file-helpers';
 import { gitCommandC } from '@/backend/lib/shell';
-import { parseGithubUrl } from '@/backend/services/workspace';
 import { IssueProvider } from '@/shared/core/enums';
+import { parseGithubUrl } from '@/shared/github-url';
 import { FactoryConfigSchema } from '@/shared/schemas/factory-config.schema';
 import {
   IssueTrackerConfigSchema,
@@ -270,9 +270,10 @@ export const projectRouter = router({
       if (!project) {
         throw new Error(`Project not found: ${input.projectId}`);
       }
+      // Match session loading: project commands take precedence over global commands.
       const dirs = [
-        { dir: join(homedir(), '.claude', 'commands') },
         { dir: join(project.repoPath, '.claude', 'commands'), containmentRoot: project.repoPath },
+        { dir: join(homedir(), '.claude', 'commands') },
       ];
       return { commands: scanSlashCommandDirs(dirs) };
     }),
@@ -368,8 +369,12 @@ export const projectRouter = router({
     }),
 
   // Archive a project (soft delete)
-  archive: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
-    return ctx.appContext.services.projectManagementService.archive(input.id);
+  archive: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
+    const project = await ctx.appContext.services.projectManagementService.archive(input.id);
+    return {
+      ...project,
+      issueTrackerConfig: sanitizeIssueTrackerConfig(project.issueTrackerConfig),
+    };
   }),
 
   // Validate repo path
@@ -446,12 +451,13 @@ export const projectRouter = router({
         );
       }
 
-      // Compute clone destination
+      // Resolve the clone destination and reuse the scan's existing-clone status.
       const reposDir = configService.getReposDir();
-      const clonePath = gitCloneService.getClonePath(reposDir, parsed.owner, parsed.repo);
-
-      // Check if already cloned
-      const existingStatus = await gitCloneService.checkExistingClone(clonePath);
+      const { path: clonePath, status: existingStatus } = await gitCloneService.getClonePath(
+        reposDir,
+        parsed.owner,
+        parsed.repo
+      );
 
       if (existingStatus === 'not_repo') {
         throw new Error(`Directory already exists at ${clonePath} but is not a git repository`);

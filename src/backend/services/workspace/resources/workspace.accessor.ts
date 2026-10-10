@@ -1,4 +1,9 @@
-import type { Prisma, Workspace, WorkspaceAutoIteration } from '@prisma-gen/client';
+import type {
+  Prisma,
+  Workspace,
+  WorkspaceAutoIteration,
+  WorkspacePRDiscovery,
+} from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
 import {
   flattenWorkspaceAutoIteration,
@@ -7,10 +12,8 @@ import {
 } from '@/backend/services/workspace/resources/workspace-auto-iteration.accessor';
 import {
   flattenWorkspacePR,
-  type PRAggregateGuard,
   type WorkspacePRFields,
   type WorkspacePRRow,
-  type WorkspacePRWriteFields,
   workspacePrAccessor,
 } from '@/backend/services/workspace/resources/workspace-pr.accessor';
 import {
@@ -39,16 +42,31 @@ import type {
   WorkspaceProviderSelectionSnapshot,
   WorkspaceStatusSnapshot,
 } from '@/backend/services/workspace/types';
-import {
-  type AutoIterationStatus,
-  type CIStatus,
-  deriveRatchetState,
-  type PRState,
-  type RatchetState,
-  type RunScriptStatus,
-  type WorkspaceMode,
-  type WorkspaceStatus,
+import type {
+  AutoIterationStatus,
+  RatchetState,
+  RunScriptStatus,
+  WorkspaceMode,
+  WorkspaceStatus,
 } from '@/shared/core';
+import type { WorkspacePullRequest } from '@/shared/workspace-pr';
+import type { WorkspacePRSummary } from '@/shared/workspace-pr-summary';
+import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
+import {
+  type PrAggregatePersistenceResult,
+  type PrObservationPersistenceInput,
+  type PrSnapshotPersistenceInput,
+  workspacePrAggregateAccessor,
+} from './workspace-pr-aggregate.accessor';
+import { serializeWorkspacePR } from './workspace-pr.accessor';
+
+export type {
+  PrAggregatePersistenceResult,
+  PrObservationPersistenceInput,
+  PrSnapshotPersistenceInput,
+} from './workspace-pr-aggregate.accessor';
+
+import { flattenPRDiscovery } from './workspace-pr-discovery.accessor';
 
 /**
  * Spans both tables now: the worktree path is the workspace's, the session id is
@@ -134,109 +152,8 @@ interface UpdateWorkspaceInput {
   // workspaceAutoIterationAccessor.
 }
 
-export interface PrSnapshotPersistenceInput {
-  prUrl?: string | null;
-  prNumber: number;
-  prState: PRState;
-  prReviewState: string | null;
-  prCiStatus: CIStatus;
-  prUpdatedAt: Date;
-  branchName?: string;
-}
-
-/**
- * One ratchet check's observation. Every field is an input to
- * `deriveRatchetState`, which is why this is no longer CI-only: the projection
- * reads the cache, so the check has to write what it saw.
- */
-export interface PrObservationPersistenceInput {
-  /**
-   * The PR this observation was fetched for. Guarded, never written: the ratchet
-   * does not attach PRs, it reports on the one already attached.
-   *
-   * The aggregate compare-and-swap cannot cover this on its own, because it reads
-   * its guard inside the write transaction — it catches a write racing the
-   * transaction, not a workspace re-pointed at a new PR while the check was off
-   * fetching. Without this, a check that observed `MERGED` on the old PR could
-   * stamp it onto the new one, and a workspace deriving `MERGED` leaves the ratchet
-   * poll set altogether.
-   */
-  expectedPrUrl: string;
-  expectedPrNumber: number;
-  prCiStatus: CIStatus;
-  prState: PRState;
-  prReviewState: string | null;
-  prHasMergeConflict: boolean;
-  prUpdatedAt: Date;
-  prCiFailedAt?: Date | null;
-}
-
-export interface PrAggregatePersistenceResult {
-  applied: boolean;
-  dispatchReset: boolean;
-}
-
-interface PrObservationIdentityGuard {
-  prUrl: string;
-  prNumber: number;
-}
-
-type PrAggregatePersistenceInput = Partial<{
-  prUrl: string | null;
-  prNumber: number | null;
-  prState: PRState;
-  prReviewState: string | null;
-  prCiStatus: CIStatus;
-  prHasMergeConflict: boolean;
-  prCiFailedAt: Date | null;
-  branchName: string | null;
-}> & { prUpdatedAt: Date };
-
 interface FindByProjectIdFilters {
   excludeStatuses?: WorkspaceStatus[];
-}
-
-/**
- * Whether an observation moves the PR aggregate, which is what makes a settled
- * ratchet dispatch stale.
- *
- * A field the observation omits cannot have changed, so it is skipped rather
- * than compared against `undefined`. `prUpdatedAt` is deliberately not here: it
- * moves on every refresh, and counting it would reset the dispatch every time
- * the poller ran.
- */
-function prAggregateChanged(
-  current: PRAggregateGuard,
-  observation: PrAggregatePersistenceInput
-): boolean {
-  const compared: Array<keyof PRAggregateGuard> = [
-    'prUrl',
-    'prNumber',
-    'prState',
-    'prReviewState',
-    'prCiStatus',
-    // A conflict appearing or clearing changes the PR state a fixer was
-    // dispatched for, so it invalidates a settled dispatch like any other
-    // aggregate field. It joins the guard as well as the comparison, so the two
-    // writers of this column cannot race each other.
-    'prHasMergeConflict',
-  ];
-  return compared.some(
-    (field) => observation[field] !== undefined && current[field] !== observation[field]
-  );
-}
-
-function prIdentityChanged(
-  current: PRAggregateGuard,
-  expected?: PrObservationIdentityGuard
-): boolean {
-  if (!expected) {
-    return false;
-  }
-  if (current.prNumber !== null && current.prNumber !== expected.prNumber) {
-    return true;
-  }
-  return current.prUrl !== expected.prUrl;
 }
 
 /**
@@ -253,46 +170,64 @@ function prIdentityChanged(
  * disagree with them — and what let the projection land without touching any of
  * the forty files that read `workspace.ratchetState`.
  */
-type Flattened<T> = Omit<T, 'ratchet' | 'pr' | 'runScript' | 'autoIteration' | 'wakeSchedule'> &
+type Flattened<T> = Omit<
+  T,
+  'ratchet' | 'prs' | 'prDiscovery' | 'runScript' | 'autoIteration' | 'wakeSchedule'
+> &
   WorkspaceRatchetFields &
   WorkspacePRFields &
   WorkspaceRunScriptFields &
   WorkspaceAutoIterationFields &
-  WorkspaceWakeScheduleFields & { ratchetState: RatchetState };
+  WorkspaceWakeScheduleFields & {
+    ratchetState: RatchetState;
+    prs: WorkspacePullRequest[];
+    prSummary: WorkspacePRSummary;
+    ratchetActivePrId: string | null;
+  };
 
 function flatten<
   T extends {
     ratchet?: WorkspaceRatchetRow | null;
-    pr?: WorkspacePRRow | null;
+    prs?: WorkspacePRRow[];
+    prDiscovery?: WorkspacePRDiscovery | null;
     runScript?: WorkspaceRunScriptRow | null;
     autoIteration?: WorkspaceAutoIteration | null;
     wakeSchedule?: WorkspaceWakeScheduleRow | null;
   },
 >(row: T): Flattened<T> {
-  const { ratchet, pr, runScript, autoIteration, wakeSchedule, ...rest } = row;
-  const ratchetFields = flattenWorkspaceRatchet(ratchet);
-  const prFields = flattenWorkspacePR(pr);
+  const { ratchet, prs = [], prDiscovery, runScript, autoIteration, wakeSchedule, ...rest } = row;
+  const active = prs.filter((pr) => !pr.detachedAt);
+  const collection = active.map(serializeWorkspacePR);
+  const summary = deriveWorkspacePRSummary(collection, ratchet?.enabled ?? true);
+  const pr = active.length === 1 ? active[0] : null;
+  const ratchetFields = flattenWorkspaceRatchet(ratchet, pr?.automation);
+  const prFields = { ...flattenWorkspacePR(pr), ...flattenPRDiscovery(prDiscovery) };
   return {
     ...rest,
+    prs: collection,
+    prSummary: summary,
+    ratchetActivePrId: ratchet?.activePrId ?? null,
     ...ratchetFields,
     ...prFields,
     ...flattenWorkspaceRunScript(runScript),
     ...flattenWorkspaceAutoIteration(autoIteration),
     ...flattenWorkspaceWakeSchedule(wakeSchedule),
-    ratchetState: deriveRatchetState({
-      ratchetEnabled: ratchetFields.ratchetEnabled,
-      prState: prFields.prState,
-      prCiStatus: prFields.prCiStatus,
-      prHasMergeConflict: prFields.prHasMergeConflict,
-      prReviewState: prFields.prReviewState,
-    }),
+    prState: summary.state,
+    prCiStatus: summary.ciStatus,
+    prHasMergeConflict: summary.hasMergeConflict,
+    ratchetState: summary.ratchetState,
+    ratchetDispatchStalled: summary.dispatchStalled,
+    ratchetDispatchOutcome: ratchet?.activeSessionId
+      ? 'RUNNING'
+      : ratchetFields.ratchetDispatchOutcome,
   };
 }
 
 /** Included on every read that has to reproduce the old flat workspace shape. */
 const sideTables = {
   ratchet: true,
-  pr: true,
+  prs: { include: { automation: true } },
+  prDiscovery: true,
   runScript: true,
   autoIteration: true,
   wakeSchedule: true,
@@ -325,20 +260,43 @@ export type WorkspaceWithSessions = WorkspaceWithAgentSessions;
  * use. `autoIteration` is here because workspace init branches on `mode` to
  * decide whether to start a default session or leave the loop to manage its own.
  */
-type WorkspaceWithProjectInclude = { project: true; pr: true; autoIteration: true };
+type WorkspaceWithProjectInclude = {
+  project: true;
+  ratchet: { select: { enabled: true } };
+  prs: { include: { automation: true } };
+  prDiscovery: true;
+  autoIteration: true;
+};
 
 type WorkspaceWithProject = Omit<
   Prisma.WorkspaceGetPayload<{ include: WorkspaceWithProjectInclude }>,
-  'pr' | 'autoIteration'
+  'prs' | 'prDiscovery' | 'autoIteration' | 'ratchet'
 > &
   WorkspacePRFields &
-  WorkspaceAutoIterationFields;
+  WorkspaceAutoIterationFields & { prs: WorkspacePullRequest[]; prSummary: WorkspacePRSummary };
 
 function withProjectAndPR(
   row: Prisma.WorkspaceGetPayload<{ include: WorkspaceWithProjectInclude }>
 ): WorkspaceWithProject {
-  const { pr, autoIteration, ...rest } = row;
-  return { ...rest, ...flattenWorkspacePR(pr), ...flattenWorkspaceAutoIteration(autoIteration) };
+  const { prs = [], prDiscovery, autoIteration, ratchet, ...rest } = row;
+  const active = prs.filter((pr) => !pr.detachedAt);
+
+  const pr = active.length === 1 ? active[0] : null;
+  const summary = deriveWorkspacePRSummary(
+    active.map(serializeWorkspacePR),
+    ratchet?.enabled ?? true
+  );
+  return {
+    ...rest,
+    prs: active.map(serializeWorkspacePR),
+    prSummary: summary,
+    ...flattenWorkspacePR(pr),
+    ...flattenPRDiscovery(prDiscovery),
+    ...flattenWorkspaceAutoIteration(autoIteration),
+    prState: summary.state,
+    prCiStatus: summary.ciStatus,
+    prHasMergeConflict: summary.hasMergeConflict,
+  };
 }
 
 type WorkspaceWithAgentSessionsAndProject = Flattened<
@@ -374,7 +332,7 @@ class WorkspaceAccessor {
         // run-script status compare-and-swap needs a row before the first start,
         // and the auto-iteration session guards need one before the first loop.
         ratchet: { create: { enabled: data.ratchetEnabled } },
-        pr: { create: {} },
+        prDiscovery: { create: {} },
         runScript: { create: {} },
         // `mode` and `config` are the two auto-iteration columns known at
         // creation; the loop's own three are written by its accessor later.
@@ -446,7 +404,12 @@ class WorkspaceAccessor {
       select: {
         status: true,
         initCompletedAt: true,
-        pr: { select: { url: true, number: true } },
+        prs: {
+          where: { detachedAt: null },
+          select: { url: true, number: true },
+          orderBy: { id: 'asc' },
+          take: 1,
+        },
       },
     });
     if (!row) {
@@ -455,17 +418,22 @@ class WorkspaceAccessor {
     return {
       status: row.status,
       initCompletedAt: row.initCompletedAt,
-      prUrl: row.pr?.url ?? null,
-      prNumber: row.pr?.number ?? null,
+      prUrl: row.prs[0]?.url ?? null,
+      prNumber: row.prs[0]?.number ?? null,
     };
   }
 
   async findPRContext(id: string): Promise<WorkspacePRContext | null> {
     const row = await prisma.workspace.findUnique({
       where: { id },
-      select: { branchName: true, pr: { select: { url: true } } },
+      select: { branchName: true, prs: { where: { detachedAt: null }, select: { url: true } } },
     });
-    return row ? { branchName: row.branchName, prUrl: row.pr?.url ?? null } : null;
+    return row
+      ? {
+          branchName: row.branchName,
+          prUrl: row.prs.length === 1 ? (row.prs[0]?.url ?? null) : null,
+        }
+      : null;
   }
 
   /**
@@ -742,7 +710,13 @@ class WorkspaceAccessor {
           },
         ],
       },
-      include: { project: true, pr: true, autoIteration: true },
+      include: {
+        project: true,
+        ratchet: { select: { enabled: true } },
+        prs: { include: { automation: true } },
+        prDiscovery: true,
+        autoIteration: true,
+      },
       orderBy: { createdAt: 'asc' },
     });
     return rows.map(withProjectAndPR);
@@ -760,7 +734,13 @@ class WorkspaceAccessor {
         status: 'ARCHIVING',
         updatedAt: { lt: staleThreshold },
       },
-      include: { project: true, pr: true, autoIteration: true },
+      include: {
+        project: true,
+        ratchet: { select: { enabled: true } },
+        prs: { include: { automation: true } },
+        prDiscovery: true,
+        autoIteration: true,
+      },
       orderBy: { updatedAt: 'asc' },
     });
     return rows.map(withProjectAndPR);
@@ -773,7 +753,13 @@ class WorkspaceAccessor {
   async findByIdWithProject(id: string): Promise<WorkspaceWithProject | null> {
     const row = await prisma.workspace.findUnique({
       where: { id },
-      include: { project: true, pr: true, autoIteration: true },
+      include: {
+        project: true,
+        ratchet: { select: { enabled: true } },
+        prs: { include: { automation: true } },
+        prDiscovery: true,
+        autoIteration: true,
+      },
     });
     return row ? withProjectAndPR(row) : null;
   }
@@ -810,7 +796,7 @@ class WorkspaceAccessor {
     workspaceId: string,
     observation: PrSnapshotPersistenceInput
   ): Promise<PrAggregatePersistenceResult> {
-    return this.applyPrAggregateUpdateWithDispatchReset(workspaceId, observation);
+    return workspacePrAggregateAccessor.apply(workspaceId, observation);
   }
 
   applyPrObservationWithDispatchReset(
@@ -818,27 +804,23 @@ class WorkspaceAccessor {
     observation: PrObservationPersistenceInput
   ): Promise<PrAggregatePersistenceResult> {
     const { expectedPrUrl, expectedPrNumber, ...fields } = observation;
-    return this.applyPrAggregateUpdateWithDispatchReset(workspaceId, fields, {
+    return workspacePrAggregateAccessor.apply(workspaceId, fields, {
       prUrl: expectedPrUrl,
       prNumber: expectedPrNumber,
     });
   }
 
-  /**
-   * Write a PR observation together with a corrected branch name.
-   *
-   * A refresh discovers the two at once — the PR's head branch can differ from
-   * what the workspace recorded — and they now live in different tables, so this
-   * is the transaction that keeps them from being observable apart.
-   */
-  async recordPrSnapshotWithBranchName(
-    workspaceId: string,
-    branchName: string | null,
-    prFields: WorkspacePRWriteFields
-  ): Promise<void> {
-    await prisma.$transaction(async (transaction) => {
-      await workspacePrAccessor.writeInTransaction(transaction, workspaceId, prFields);
-      await transaction.workspace.update({ where: { id: workspaceId }, data: { branchName } });
+  detachPR(target: { workspaceId: string; prId: string }) {
+    return prisma.$transaction(async (tx) => {
+      if (!(await workspacePrAccessor.detachInTransaction(tx, target))) {
+        return { removed: false, sessionId: null };
+      }
+      const sessionId = await workspaceRatchetAccessor.releaseDetachedPR(
+        tx,
+        target.workspaceId,
+        target.prId
+      );
+      return { removed: true, sessionId };
     });
   }
 
@@ -857,53 +839,6 @@ class WorkspaceAccessor {
         data: { branchName, isAutoGeneratedBranch: false },
       });
       await workspacePrAccessor.clearDiscoverySchedule(transaction, workspaceId);
-    });
-  }
-
-  private async applyPrAggregateUpdateWithDispatchReset(
-    workspaceId: string,
-    observation: PrAggregatePersistenceInput,
-    /** The exact PR identity the observation was fetched from. */
-    expectedPr?: PrObservationIdentityGuard
-  ): Promise<PrAggregatePersistenceResult> {
-    const { branchName, ...prFields } = observation;
-    return await prisma.$transaction(async (transaction) => {
-      const current = await workspacePrAccessor.readAggregate(transaction, workspaceId);
-      if (!current) {
-        return { applied: false, dispatchReset: false };
-      }
-      if (prIdentityChanged(current, expectedPr)) {
-        return { applied: false, dispatchReset: false };
-      }
-      const dispatch = await workspaceRatchetAccessor.readDispatchGuard(transaction, workspaceId);
-      const shouldReset =
-        prAggregateChanged(current, observation) &&
-        (dispatch?.dispatchOutcome === 'COMPLETED' || dispatch?.dispatchOutcome === 'DIED');
-
-      const applied = await workspacePrAccessor.applyAggregateIfUnchanged(
-        transaction,
-        workspaceId,
-        current,
-        prFields
-      );
-      if (!applied) {
-        return { applied: false, dispatchReset: false };
-      }
-
-      // The corrected branch name is the workspace's own column, so it lands as
-      // a second statement in the same transaction — only once the aggregate
-      // write it was observed alongside has held.
-      if (branchName !== undefined) {
-        await transaction.workspace.update({ where: { id: workspaceId }, data: { branchName } });
-      }
-
-      // Only once the aggregate write has landed, and only for a dispatch that
-      // has not moved on since it was read.
-      const dispatchReset =
-        shouldReset && dispatch
-          ? await workspaceRatchetAccessor.resetSettledDispatch(transaction, workspaceId, dispatch)
-          : false;
-      return { applied: true, dispatchReset };
     });
   }
 
@@ -984,7 +919,13 @@ class WorkspaceAccessor {
       where: {
         id: { in: ids },
       },
-      include: { project: true, pr: true, autoIteration: true },
+      include: {
+        project: true,
+        ratchet: { select: { enabled: true } },
+        prs: { include: { automation: true } },
+        prDiscovery: true,
+        autoIteration: true,
+      },
     });
     return rows.map(withProjectAndPR);
   }
@@ -1028,7 +969,13 @@ class WorkspaceAccessor {
   async findParentWorkspace(childId: string): Promise<WorkspaceWithProject | null> {
     const row = await prisma.workspace.findFirst({
       where: { childWorkspaces: { some: { id: childId } } },
-      include: { project: true, pr: true, autoIteration: true },
+      include: {
+        project: true,
+        ratchet: { select: { enabled: true } },
+        prs: { include: { automation: true } },
+        prDiscovery: true,
+        autoIteration: true,
+      },
     });
     return row ? withProjectAndPR(row) : null;
   }

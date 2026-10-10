@@ -210,8 +210,7 @@ export class AcpRuntimeSupervisor {
       return existingStop;
     }
 
-    let trackedStop: Promise<void>;
-    trackedStop = this.stopClientOnce(sessionId).finally(() => {
+    const trackedStop: Promise<void> = this.stopClientOnce(sessionId).finally(() => {
       if (this.stopOperations.get(sessionId) === trackedStop) {
         this.stopOperations.delete(sessionId);
       }

@@ -69,6 +69,34 @@ describe('convertPendingRequest', () => {
     expect(result.type).toBe('question');
   });
 
+  it.each(
+    [[], [{ prompt: 'Survey question' }], [{ question: 'Usable', options: [] }]].map(
+      (questions) => [questions]
+    )
+  )('restores MCP questions %j as actionable permissions', (questions) => {
+    const request = {
+      requestId: 'mcp-question',
+      toolName: 'AskUserQuestion',
+      rawToolName: 'mcp__survey__poll',
+      toolUseId: 'tool',
+      input: { questions },
+      planContent: null,
+      acpOptions: [{ optionId: 'allow', name: 'Allow', kind: 'allow_once' as const }],
+      timestamp: '2026-02-09T00:00:00.000Z',
+    };
+    expect(convertPendingRequest(request)).toEqual({
+      type: 'permission',
+      request: {
+        requestId: 'mcp-question',
+        toolName: 'AskUserQuestion',
+        toolInput: { questions },
+        planContent: null,
+        acpOptions: request.acpOptions,
+        timestamp: request.timestamp,
+      },
+    });
+  });
+
   it('keeps non-question tools as permission requests', () => {
     const acpOptions = [{ optionId: 'default', name: 'Default', kind: 'allow_once' as const }];
     const request: PendingInteractiveRequest = {

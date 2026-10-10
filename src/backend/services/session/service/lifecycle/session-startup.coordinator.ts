@@ -15,18 +15,18 @@ import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import { SessionStatus } from '@/shared/core';
 import type { AcpEventProcessor } from './acp-event-processor';
+import type { SessionContextService } from './session-context.service';
+import { type SessionLifecycleGate, SessionStartupCancelledError } from './session-lifecycle-gate';
+import type { SessionAcpEnvironmentPort } from './session-lifecycle.types';
+import type { SessionNotificationDeliveryService } from './session-notification-delivery.service';
+import type { SessionRuntimeExitCoordinator } from './session-runtime-exit.coordinator';
+import type { StopSessionOptions } from './session-termination.coordinator';
 import type {
   PersistAcpConfigSnapshotParams,
   SessionConfigService,
 } from './session.config.service';
 import { toErrorMessage } from './session.error-message';
 import type { SessionRepository } from './session.repository';
-import type { SessionContextService } from './session-context.service';
-import type { SessionAcpEnvironmentPort } from './session-lifecycle.types';
-import { type SessionLifecycleGate, SessionStartupCancelledError } from './session-lifecycle-gate';
-import type { SessionNotificationDeliveryService } from './session-notification-delivery.service';
-import type { SessionRuntimeExitCoordinator } from './session-runtime-exit.coordinator';
-import type { StopSessionOptions } from './session-termination.coordinator';
 
 const logger = createLogger('session');
 
@@ -189,16 +189,6 @@ export class SessionStartupCoordinator {
       }
       this.assertStartupAllowed(sessionId, stopGeneration);
 
-      return await this.getOrCreateFromRecord(session, options ?? {}, lease);
-    });
-  }
-
-  async getOrCreateSessionClientFromRecord(
-    session: AgentSessionRecord,
-    options?: GetOrCreateSessionClientOptions
-  ): Promise<unknown> {
-    return await this.dependencies.lifecycleGate.runStartup(session.id, async (lease) => {
-      this.assertStartupAllowed(session.id, lease.generation);
       return await this.getOrCreateFromRecord(session, options ?? {}, lease);
     });
   }
@@ -481,6 +471,7 @@ export class SessionStartupCoordinator {
             existingAcp
           );
         } catch (error) {
+          const stopReservation = this.dependencies.lifecycleGate.reserveStop(sessionId);
           try {
             await this.dependencies.runtimeManager.stopClient(sessionId);
             this.dependencies.sessionDomainService.setRuntimeSnapshot(sessionId, {
@@ -491,11 +482,16 @@ export class SessionStartupCoordinator {
               updatedAt: new Date().toISOString(),
             });
           } finally {
-            this.dependencies.acpEventProcessor.clearSessionState(sessionId);
+            try {
+              this.dependencies.acpEventProcessor.clearSessionState(sessionId);
+            } finally {
+              stopReservation?.release();
+            }
           }
           throw error;
         }
       }
+      this.assertStartupAllowed(sessionId, stopGeneration);
       const isWorking = this.dependencies.runtimeManager.isSessionWorking(sessionId);
       this.dependencies.sessionDomainService.setRuntimeSnapshot(sessionId, {
         phase: isWorking ? 'running' : 'idle',

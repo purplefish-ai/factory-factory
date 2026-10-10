@@ -755,6 +755,47 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
     }
   );
 
+  it('rejects a fallback killed externally during identity reconciliation and allows retry', async () => {
+    const handle = createTestProcessHandle({
+      sessionCreationOutcome: {
+        kind: 'resume_fallback',
+        previousProviderSessionId: 'old',
+        reason: 'load_failed',
+      },
+    });
+    const reconciliation = createDeferred<void>();
+    const onProviderIdentityRollover = vi.fn(() => reconciliation.promise);
+    const { supervisor, createClient } = createHarness(async () => handle);
+    const creation = supervisor.getOrCreateClient(
+      'session-1',
+      defaultOptions(),
+      { onProviderIdentityRollover },
+      defaultContext()
+    );
+    const result = creation.catch((error: unknown) => error);
+    await vi.waitFor(() => expect(onProviderIdentityRollover).toHaveBeenCalledOnce());
+    const child = mockChildOf(handle);
+    child.signalCode = 'SIGKILL';
+    child.emit('exit', null, 'SIGKILL');
+    reconciliation.resolve(undefined);
+
+    expect(await result).toMatchObject({
+      message: 'Stale ACP identity reconciliation for session session-1',
+    });
+    expect(supervisor.getInstalledHandle('session-1')).toBeUndefined();
+    expect(child.kill).not.toHaveBeenCalled();
+    const replacement = createTestProcessHandle();
+    createClient.mockResolvedValue(replacement);
+    await expect(
+      supervisor.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      )
+    ).resolves.toBe(replacement);
+  });
+
   it('fails closed when a fallback has no durable reconciliation owner', async () => {
     const handle = createTestProcessHandle({
       sessionCreationOutcome: {

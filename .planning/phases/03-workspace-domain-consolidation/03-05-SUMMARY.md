@@ -90,8 +90,8 @@ Each task was committed atomically:
   following the Phase 2 session domain pattern. This gives consumers a clear API
   surface and prevents accidental export of internals.
 - **Biome auto-sort:** Biome's import organizer re-sorted exports alphabetically
-  by import path during pre-commit hooks. This is expected and correct behavior
-  -- the section comments remain as landmarks.
+  by import path during pre-commit hooks. This is expected and correct
+  behavior -- the section comments remain as landmarks.
 
 ## Deviations from Plan
 

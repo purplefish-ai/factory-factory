@@ -577,16 +577,8 @@ describe('SessionDomainService additional behavior', () => {
   });
 
   it('updates runtime state transitions and transcript hydration markers', () => {
-    sessionDomainService.markStarting('s1');
-    expect(sessionDomainService.getRuntimeSnapshot('s1')).toMatchObject({
-      phase: 'starting',
-      processState: 'alive',
-      activity: 'IDLE',
-    });
-
     sessionDomainService.markRunning('s1');
     sessionDomainService.markIdle('s1', 'alive');
-    sessionDomainService.markStopping('s1');
     sessionDomainService.markError('s1');
     expect(sessionDomainService.getRuntimeSnapshot('s1').phase).toBe('error');
 

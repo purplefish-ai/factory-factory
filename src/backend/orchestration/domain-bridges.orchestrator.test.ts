@@ -54,8 +54,6 @@ vi.mock('@/backend/services/workspace', () => ({
   workspaceMaintenanceService: { findNeedingWorktree: vi.fn() },
   workspacePrSnapshotService: {
     record: vi.fn(),
-    attachDiscoveredPRIfClaimMatches: vi.fn(),
-    updatePRSnapshotIfUrlMatches: vi.fn(),
   },
   workspaceRatchetService: { recordSessionEnd: vi.fn() },
   workspaceRunScriptService: {

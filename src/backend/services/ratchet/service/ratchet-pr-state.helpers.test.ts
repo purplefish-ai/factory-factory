@@ -14,7 +14,6 @@ vi.mock('@/backend/services/logger.service', () => ({
 
 import { CIStatus, RatchetState } from '@/shared/core';
 import type { RatchetGitHubBridge } from './bridges';
-import type { PRStateInfo } from './ratchet.types';
 import {
   buildFailedCheckDiagnostics,
   buildReviewSummariesForPrompt,
@@ -25,6 +24,7 @@ import {
   fetchPRState,
   shouldSkipCleanPR,
 } from './ratchet-pr-state.helpers';
+import type { PRStateInfo } from './ratchet.types';
 
 interface FakeCoordinatorState {
   /** A completed fetch inside the cooldown window; `ignoreCooldown` overrides it. */
@@ -237,7 +237,7 @@ describe('fetchPRState', () => {
 
     expect(result).toEqual({ skipped: true, reason: 'recently_fetched' });
     expect(github.coordinatePrFetch).toHaveBeenCalledWith(
-      'ws-1',
+      { workspaceId: 'ws-1', prId: undefined },
       expect.any(Function),
       expect.objectContaining({ ignoreCooldown: false })
     );
@@ -280,7 +280,7 @@ describe('fetchPRState', () => {
     // The bypass reaches the coordinator as `ignoreCooldown`, and the fetch
     // still runs inside a claim rather than around it.
     expect(github.coordinatePrFetch).toHaveBeenCalledWith(
-      'ws-1',
+      { workspaceId: 'ws-1', prId: undefined },
       expect.any(Function),
       expect.objectContaining({ ignoreCooldown: true })
     );

@@ -63,7 +63,9 @@ function isVitestModuleMockCall(node) {
 
   const expression = node.expression.expression;
   const methodName = node.expression.name.text;
-  return ts.isIdentifier(expression) && expression.text === 'vi' && VITEST_MOCK_METHODS.has(methodName);
+  return (
+    ts.isIdentifier(expression) && expression.text === 'vi' && VITEST_MOCK_METHODS.has(methodName)
+  );
 }
 
 function findImportViolations(filePath) {

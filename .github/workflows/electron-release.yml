@@ -4,15 +4,15 @@ on:
   workflow_dispatch:
     inputs:
       create_release:
-        description: "Create a GitHub release"
+        description: 'Create a GitHub release'
         type: boolean
         default: false
       release_tag:
-        description: "Release tag (e.g., v0.1.0). Required if creating release."
+        description: 'Release tag (e.g., v0.1.0). Required if creating release.'
         type: string
-        default: ""
+        default: ''
       platforms:
-        description: "Platforms to build for"
+        description: 'Platforms to build for'
         type: choice
         options:
           - mac
@@ -29,18 +29,18 @@ jobs:
     permissions:
       contents: read
     env:
-      DATABASE_URL: "file:./test.db"
+      DATABASE_URL: 'file:./test.db'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install pnpm
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0: native pnpm 12 support
 
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "26.8.1"
-          cache: "pnpm"
+          node-version: '26.8.1'
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -54,7 +54,7 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
       - name: Upload macOS artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: electron-mac
           path: |
@@ -69,18 +69,18 @@ jobs:
     permissions:
       contents: read
     env:
-      DATABASE_URL: "file:./test.db"
+      DATABASE_URL: 'file:./test.db'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install pnpm
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0: native pnpm 12 support
 
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "26.8.1"
-          cache: "pnpm"
+          node-version: '26.8.1'
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -92,7 +92,7 @@ jobs:
         run: pnpm build:electron
 
       - name: Upload Windows artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: electron-windows
           path: release/*.exe
@@ -105,18 +105,18 @@ jobs:
     permissions:
       contents: read
     env:
-      DATABASE_URL: "file:./test.db"
+      DATABASE_URL: 'file:./test.db'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install pnpm
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0: native pnpm 12 support
 
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "26.8.1"
-          cache: "pnpm"
+          node-version: '26.8.1'
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -128,7 +128,7 @@ jobs:
         run: pnpm build:electron
 
       - name: Upload Linux artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: electron-linux
           path: |
@@ -150,7 +150,7 @@ jobs:
       contents: write
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: artifacts
 
@@ -159,13 +159,13 @@ jobs:
 
       - name: Upload to Release (from release event)
         if: github.event_name == 'release'
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           files: artifacts/**/*
 
       - name: Create new Release (from workflow_dispatch)
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true'
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: ${{ github.event.inputs.release_tag }}
           name: ${{ github.event.inputs.release_tag }}

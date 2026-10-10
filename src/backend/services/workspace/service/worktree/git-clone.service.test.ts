@@ -3,12 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mockPathExists = vi.fn();
 const mockMkdir = vi.fn();
 const mockRm = vi.fn();
+const mockReaddir = vi.fn();
 const mockExecCommand = vi.fn();
 const mockGitCommand = vi.fn();
 
 vi.mock('node:fs/promises', () => ({
   mkdir: (...args: unknown[]) => mockMkdir(...args),
   rm: (...args: unknown[]) => mockRm(...args),
+  readdir: (...args: unknown[]) => mockReaddir(...args),
 }));
 
 vi.mock('@/backend/lib/file-helpers', () => ({
@@ -30,6 +32,21 @@ vi.mock('@/backend/services/logger.service', () => ({
 }));
 
 import { gitCloneService, parseGithubUrl } from './git-clone.service';
+
+function createDeferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T | PromiseLike<T>) => void;
+} {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
+async function drainAsyncWork(): Promise<void> {
+  await new Promise<void>((resolve) => setImmediate(resolve));
+}
 
 describe('parseGithubUrl', () => {
   it('parses a valid GitHub HTTPS URL', () => {
@@ -104,6 +121,95 @@ describe('parseGithubUrl', () => {
   });
 });
 
+describe('GitCloneService.getClonePath', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mockPathExists.mockResolvedValue(true);
+    // Simulate Linux, where multiple differently cased owner paths can coexist.
+    mockReaddir.mockImplementation((path: string) => {
+      if (path === '/repos') {
+        return Promise.resolve(['owner', 'OWNER', 'unrelated']);
+      }
+      return Promise.resolve(['RePo', 'repo']);
+    });
+    mockGitCommand.mockResolvedValue({ code: 0, stdout: '', stderr: '' });
+  });
+
+  it('prefers an existing canonical clone when multiple case variants exist', async () => {
+    await expect(gitCloneService.getClonePath('/repos', 'OwNeR', 'RePo')).resolves.toEqual({
+      path: '/repos/owner/repo',
+      status: 'valid_repo',
+    });
+    expect(mockReaddir).not.toHaveBeenCalledWith('/repos/unrelated');
+    expect(mockGitCommand).toHaveBeenCalledTimes(2);
+  });
+
+  it('searches all owner variants for a valid clone before rejecting non-repos', async () => {
+    mockGitCommand.mockImplementation(async (_args: string[], path: string) => ({
+      code: path === '/repos/owner/RePo' ? 0 : 128,
+      stdout: '',
+      stderr: '',
+    }));
+    await expect(gitCloneService.getClonePath('/repos', 'OWNER', 'REPO')).resolves.toEqual({
+      path: '/repos/owner/RePo',
+      status: 'valid_repo',
+    });
+  });
+
+  it('returns the first conflicting path and its existing non-repository status', async () => {
+    mockGitCommand.mockResolvedValue({ code: 128, stdout: '', stderr: '' });
+    await expect(gitCloneService.getClonePath('/repos', 'OWNER', 'REPO')).resolves.toEqual({
+      path: '/repos/owner/repo',
+      status: 'not_repo',
+    });
+    expect(mockGitCommand).toHaveBeenCalledTimes(4);
+  });
+
+  it('returns a new canonical destination without spawning git', async () => {
+    mockReaddir.mockResolvedValue([]);
+    mockPathExists.mockResolvedValue(false);
+    await expect(gitCloneService.getClonePath('/repos', 'OWNER', 'REPO')).resolves.toEqual({
+      path: '/repos/owner/repo',
+      status: 'not_exists',
+    });
+    expect(mockGitCommand).not.toHaveBeenCalled();
+  });
+
+  it('keeps the selected first candidate status when later candidates disappeared', async () => {
+    mockPathExists.mockImplementation(async (path: string) => path === '/repos/owner/repo');
+    mockGitCommand.mockResolvedValue({ code: 128, stdout: '', stderr: '' });
+    await expect(gitCloneService.getClonePath('/repos', 'OWNER', 'REPO')).resolves.toEqual({
+      path: '/repos/owner/repo',
+      status: 'not_repo',
+    });
+    expect(mockGitCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it('checks the canonical path even when the scan found no candidates', async () => {
+    mockReaddir.mockResolvedValue([]);
+    mockGitCommand.mockResolvedValue({ code: 128, stdout: '', stderr: '' });
+    await expect(gitCloneService.getClonePath('/repos', 'OWNER', 'REPO')).resolves.toEqual({
+      path: '/repos/owner/repo',
+      status: 'not_repo',
+    });
+    expect(mockPathExists).toHaveBeenCalledWith('/repos/owner/repo');
+  });
+
+  it.each(['/repos', '/repos/owner'])(
+    'propagates directory access errors at %s instead of choosing another clone path',
+    async (deniedPath) => {
+      const error = Object.assign(new Error('permission denied'), { code: 'EACCES' });
+      mockReaddir.mockImplementation((path: string) => {
+        if (path === deniedPath) {
+          return Promise.reject(error);
+        }
+        return Promise.resolve(['owner']);
+      });
+      await expect(gitCloneService.getClonePath('/repos', 'owner', 'repo')).rejects.toBe(error);
+    }
+  );
+});
+
 describe('GitCloneService.checkExistingClone', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -170,6 +276,199 @@ describe('GitCloneService.clone', () => {
     mockMkdir.mockResolvedValue(undefined);
     mockRm.mockResolvedValue(undefined);
     mockPathExists.mockResolvedValue(false);
+    mockGitCommand.mockResolvedValue({ code: 128, stdout: '', stderr: '' });
+  });
+
+  it('shares concurrent clones to the same normalized destination without removing the winner', async () => {
+    const completed = createDeferred<{ code: number; stdout: string; stderr: string }>();
+    mockExecCommand
+      .mockImplementationOnce(() => completed.promise)
+      .mockResolvedValue({
+        code: 128,
+        stdout: '',
+        stderr: 'fatal: destination path already exists',
+      });
+    mockPathExists.mockResolvedValueOnce(false).mockResolvedValue(true);
+    const first = gitCloneService.clone('source', '/tmp/repos/owner/repo');
+    const second = gitCloneService.clone('source', '/tmp/repos/owner/./repo');
+    await vi.waitFor(() => expect(mockExecCommand).toHaveBeenCalled());
+    completed.resolve({ code: 0, stdout: '', stderr: 'Cloned' });
+    expect(await Promise.all([first, second])).toEqual([
+      { success: true, output: 'Cloned' },
+      { success: true, output: 'Cloned' },
+    ]);
+    expect(mockExecCommand).toHaveBeenCalledTimes(1);
+    expect(mockRm).not.toHaveBeenCalled();
+  });
+
+  it('rejects a different source targeting an in-flight clone destination', async () => {
+    const completed = createDeferred<{ code: number; stdout: string; stderr: string }>();
+    mockExecCommand.mockImplementation(() => completed.promise);
+    const first = gitCloneService.clone('https://github.com/owner/first', '/tmp/source-conflict');
+    await vi.waitFor(() => expect(mockExecCommand).toHaveBeenCalledTimes(1));
+    const second = gitCloneService.clone('https://github.com/owner/second', '/tmp/source-conflict');
+    completed.resolve({ code: 0, stdout: '', stderr: 'Cloned first repository' });
+    expect(await second).toMatchObject({
+      success: false,
+      error: expect.stringContaining('different repository'),
+    });
+    expect(await first).toEqual({ success: true, output: 'Cloned first repository' });
+    expect(mockExecCommand).toHaveBeenCalledTimes(1);
+    expect(mockRm).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'git@github.com:owner/repo',
+    'http://github.com/owner/repo/',
+    'https://github.com/owner/repo.git',
+  ])('shares an equivalent GitHub source spelled %s', async (url) => {
+    const completed = createDeferred<{ code: number; stdout: string; stderr: string }>();
+    mockExecCommand.mockImplementation(() => completed.promise);
+    const first = gitCloneService.clone(
+      'https://github.com/OWNER/REPO.git',
+      '/tmp/equivalent-source'
+    );
+    const second = gitCloneService.clone(url, '/tmp/equivalent-source');
+    await vi.waitFor(() => expect(mockExecCommand).toHaveBeenCalledTimes(1));
+    completed.resolve({ code: 0, stdout: '', stderr: '' });
+    expect(await Promise.all([first, second])).toEqual([
+      { success: true, output: '' },
+      { success: true, output: '' },
+    ]);
+    expect(mockExecCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it('waits for an in-flight clone before inspecting its destination for another import', async () => {
+    const completed = createDeferred<{ code: number; stdout: string; stderr: string }>();
+    mockExecCommand.mockImplementation(() => completed.promise);
+    mockReaddir.mockResolvedValue([]);
+    const clone = gitCloneService.clone('source', '/repos/owner/repo');
+    await vi.waitFor(() => expect(mockExecCommand).toHaveBeenCalledTimes(1));
+    mockPathExists.mockResolvedValue(true);
+    const scan = gitCloneService.getClonePath('/repos', 'OWNER', 'REPO');
+    await drainAsyncWork();
+    const scannedBeforeCloneCompleted = mockReaddir.mock.calls.length > 0;
+    mockGitCommand.mockResolvedValue({ code: 0, stdout: '', stderr: '' });
+    completed.resolve({ code: 0, stdout: '', stderr: '' });
+    await clone;
+    expect(scannedBeforeCloneCompleted).toBe(false);
+    expect(await scan).toEqual({ path: '/repos/owner/repo', status: 'valid_repo' });
+  });
+
+  it('clones different destinations concurrently', async () => {
+    const completed = createDeferred<{ code: number; stdout: string; stderr: string }>();
+    mockExecCommand.mockImplementation(() => completed.promise);
+    const first = gitCloneService.clone('source-a', '/tmp/clone-a');
+    const second = gitCloneService.clone('source-b', '/tmp/clone-b');
+    await vi.waitFor(() => expect(mockExecCommand).toHaveBeenCalledTimes(2));
+    completed.resolve({ code: 0, stdout: '', stderr: '' });
+    expect(await Promise.all([first, second])).toEqual([
+      { success: true, output: '' },
+      { success: true, output: '' },
+    ]);
+  });
+
+  it('waits for a clone that starts while the directory scan is pending', async () => {
+    const scanEntered = createDeferred<void>();
+    const scanBoundary = createDeferred<string[]>();
+    const completed = createDeferred<{ code: number; stdout: string; stderr: string }>();
+    mockReaddir.mockResolvedValue([]).mockImplementationOnce(() => {
+      scanEntered.resolve();
+      return scanBoundary.promise;
+    });
+    mockExecCommand.mockImplementation(() => completed.promise);
+    const scan = gitCloneService.getClonePath('/repos', 'OWNER', 'REPO');
+    await scanEntered.promise;
+    const clone = gitCloneService.clone('source', '/repos/owner/repo');
+    await vi.waitFor(() => expect(mockExecCommand).toHaveBeenCalledTimes(1));
+    mockPathExists.mockResolvedValue(true);
+    let cloneCompleted = false;
+    mockGitCommand.mockImplementation(async () => ({
+      code: cloneCompleted ? 0 : 128,
+      stdout: '',
+      stderr: '',
+    }));
+    scanBoundary.resolve([]);
+    await drainAsyncWork();
+    const inspectedBeforeCloneCompleted = mockGitCommand.mock.calls.length > 0;
+    cloneCompleted = true;
+    completed.resolve({ code: 0, stdout: '', stderr: '' });
+    await clone;
+    expect(await scan).toEqual({ path: '/repos/owner/repo', status: 'valid_repo' });
+    expect(inspectedBeforeCloneCompleted).toBe(false);
+  });
+
+  it('allows retry after a shared clone fails', async () => {
+    const completed = createDeferred<{ code: number; stdout: string; stderr: string }>();
+    mockExecCommand.mockImplementation(() => completed.promise);
+    const first = gitCloneService.clone('source', '/tmp/retry-clone');
+    const second = gitCloneService.clone('source', '/tmp/retry-clone');
+    await vi.waitFor(() => expect(mockExecCommand).toHaveBeenCalled());
+    completed.resolve({ code: 128, stdout: '', stderr: 'network failure' });
+    expect(await Promise.all([first, second])).toEqual([
+      { success: false, output: 'network failure', error: 'network failure' },
+      { success: false, output: 'network failure', error: 'network failure' },
+    ]);
+    mockExecCommand.mockResolvedValue({ code: 0, stdout: '', stderr: '' });
+    expect(await gitCloneService.clone('source', '/tmp/retry-clone')).toEqual({
+      success: true,
+      output: '',
+    });
+    expect(mockExecCommand).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps a new clone from changing the destination during clone-path inspection', async () => {
+    const inspectionEntered = createDeferred<void>();
+    const existsBoundary = createDeferred<boolean>();
+    const completed = createDeferred<{ code: number; stdout: string; stderr: string }>();
+    mockReaddir.mockResolvedValue([]);
+    mockPathExists.mockResolvedValue(false).mockImplementationOnce(() => {
+      inspectionEntered.resolve();
+      return existsBoundary.promise;
+    });
+    let cloneStarted = false;
+    mockExecCommand.mockImplementation(() => {
+      cloneStarted = true;
+      return completed.promise;
+    });
+    const scan = gitCloneService.getClonePath('/repos', 'owner', 'repo');
+    await inspectionEntered.promise;
+    const clone = gitCloneService.clone('source', '/repos/owner/repo');
+    await drainAsyncWork();
+    const admittedDuringInspection = cloneStarted;
+    existsBoundary.resolve(cloneStarted);
+    const destination = await scan;
+    completed.resolve({ code: 0, stdout: '', stderr: '' });
+    await clone;
+    expect(admittedDuringInspection).toBe(false);
+    expect(destination).toEqual({ path: '/repos/owner/repo', status: 'not_exists' });
+  });
+
+  it('reuses a completed repository when another caller resolved a stale missing destination', async () => {
+    mockPathExists.mockResolvedValue(true);
+    mockGitCommand.mockResolvedValue({ code: 0, stdout: '', stderr: '' });
+    mockExecCommand.mockResolvedValue({
+      code: 128,
+      stdout: '',
+      stderr: 'destination already exists',
+    });
+    expect(await gitCloneService.clone('source', '/tmp/completed-clone')).toMatchObject({
+      success: true,
+    });
+    expect(mockExecCommand).not.toHaveBeenCalled();
+    expect(mockRm).not.toHaveBeenCalled();
+  });
+
+  it('never cleans up a valid repository observed after a clone failure', async () => {
+    mockPathExists.mockResolvedValueOnce(false).mockResolvedValue(true);
+    mockGitCommand.mockResolvedValue({ code: 0, stdout: '', stderr: '' });
+    mockExecCommand.mockResolvedValue({
+      code: 128,
+      stdout: '',
+      stderr: 'destination already exists',
+    });
+    await gitCloneService.clone('source', '/tmp/concurrent-repo');
+    expect(mockRm).not.toHaveBeenCalled();
   });
 
   it('runs git clone with a timeout and non-interactive prompts disabled', async () => {

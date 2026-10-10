@@ -1,3 +1,4 @@
+import type { RequestPermissionResponse } from '@agentclientprotocol/sdk';
 import { describe, expect, it, vi } from 'vitest';
 import type { AdapterSession } from './adapter-state';
 import { buildCommandApprovalScopeKey } from './command-metadata';
@@ -56,6 +57,99 @@ describe('protocol-permission-handler', () => {
       expect.objectContaining({ method: 'unsupported/method' })
     );
   });
+
+  it.each([
+    { name: 'padded id', ids: ['  color  '], rawKeys: false },
+    { name: 'raw padded id', ids: ['  color  '], rawKeys: true },
+    { name: 'raw id before alias collision', ids: ['color', ' color '], rawKeys: true },
+    { name: 'raw id after alias collision', ids: [' color ', 'color'], rawKeys: true },
+    { name: 'raw answer plus alias', ids: [' color '], rawKeys: true, bothKeys: true },
+    { name: 'duplicate empty ids', ids: ['', ''], duplicateIds: true },
+    { name: 'duplicate whitespace ids', ids: ['   ', '   '], duplicateIds: true },
+    { name: 'duplicate nonempty ids', ids: ['color', 'color'], duplicateIds: true },
+    { name: 'ambiguous aliases', ids: [' color ', 'color '], ambiguous: true },
+    { name: 'empty id', ids: [''] },
+    { name: 'whitespace id', ids: ['   '] },
+    { name: 'mixed multi-question ids', ids: ['  color  ', '', '   ', 'plain'] },
+  ])(
+    'maps question answers without misattribution for $name',
+    async ({ ids, rawKeys, ambiguous, bothKeys, duplicateIds }) => {
+      const session = createSession();
+      const questions = ids.map((id, index) => ({
+        id,
+        header: 'Choice',
+        question: `Question ${index}?`,
+        isOther: false,
+        isSecret: false,
+        options: [{ label: 'Blue', description: 'Color' }],
+      }));
+      const permission = {
+        outcome: { outcome: 'selected', optionId: 'allow_once' },
+        _meta: {
+          factoryFactory: {
+            toolUserInputAnswers: {
+              ...Object.fromEntries(
+                questions.map((question, index) => [
+                  rawKeys ? question.id : question.id.trim() || question.question,
+                  [` Answer ${index} `, '', 42],
+                ])
+              ),
+              ...(bothKeys ? { color: ['Alias answer'] } : {}),
+              unknown: ['ignored'],
+            },
+          },
+        },
+      } satisfies RequestPermissionResponse;
+      const codex = { respondSuccess: vi.fn(), respondError: vi.fn() };
+      const emitSessionUpdate = vi.fn(async () => undefined);
+
+      await handleCodexServerPermissionRequest({
+        request: {
+          id: 3,
+          method: 'item/tool/requestUserInput',
+          params: { threadId: 'thread_1', turnId: 'turn_1', itemId: 'item_1', questions },
+        },
+        sessionIdByThreadId: new Map([['thread_1', session.sessionId]]),
+        sessions: new Map([[session.sessionId, session]]),
+        connection: { requestPermission: vi.fn(async () => permission) },
+        codex,
+        emitSessionUpdate,
+        reportShapeDrift: vi.fn(),
+      });
+
+      if (ambiguous || duplicateIds) {
+        expect(codex.respondSuccess).not.toHaveBeenCalled();
+        expect(codex.respondError).toHaveBeenCalledWith(
+          3,
+          expect.objectContaining({
+            message: 'Failed to map requestUserInput answers',
+            data: {
+              error: duplicateIds
+                ? 'Duplicate question IDs in requestUserInput'
+                : 'Ambiguous structured answer key: color',
+            },
+          })
+        );
+        expect(emitSessionUpdate).toHaveBeenLastCalledWith(
+          session.sessionId,
+          expect.objectContaining({ status: 'failed' })
+        );
+        return;
+      }
+      const answers = Object.fromEntries(
+        ids.map((id, index) => [id, { answers: [`Answer ${index}`] }])
+      );
+      expect(codex.respondSuccess).toHaveBeenCalledWith(3, { answers });
+      expect(codex.respondError).not.toHaveBeenCalled();
+      expect(emitSessionUpdate).toHaveBeenLastCalledWith(
+        session.sessionId,
+        expect.objectContaining({
+          status: 'completed',
+          rawOutput: { answers },
+        })
+      );
+    }
+  );
 
   it('auto-approves command requests when allow_always scope exists', async () => {
     const session = createSession();

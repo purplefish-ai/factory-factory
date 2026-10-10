@@ -1,11 +1,13 @@
 import mermaid from 'mermaid';
 import { useEffect, useRef, useState } from 'react';
 
-// Initialize mermaid with strict security
+// Keep the existing appearance when Mermaid changes its diagram defaults.
 if (typeof window !== 'undefined') {
   mermaid.initialize({
     startOnLoad: false,
     theme: 'default',
+    look: 'classic',
+    layout: 'dagre',
     securityLevel: 'strict',
     suppressErrorRendering: true,
   });

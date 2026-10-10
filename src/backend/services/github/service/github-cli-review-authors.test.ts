@@ -7,8 +7,8 @@ vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({ info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() }),
 }));
 
-import { reviewCommentSchema } from './github-cli/schemas';
 import { githubCLIService } from './github-cli.service';
+import { reviewCommentSchema } from './github-cli/schemas';
 
 function comment(id: number, user: { login: string } | null = { login: 'reviewer' }) {
   return {

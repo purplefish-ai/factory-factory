@@ -6,11 +6,7 @@
  * - PR detail panel (file-based with hunks)
  */
 
-export {
-  calculateLineNumberWidth,
-  parseDetailedDiff,
-  parseFileDiff,
-} from './parse';
+export { calculateLineNumberWidth, parseDetailedDiff, parseFileDiff } from './parse';
 export {
   getDiffLineBackground,
   getDiffLinePrefix,

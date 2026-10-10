@@ -26,7 +26,7 @@ describe('DataImportButton - File Validation', () => {
     const result = exportDataSchema.safeParse(validV4Data);
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.meta.schemaVersion).toBe(4);
+      expect(result.data.meta.schemaVersion).toBe(5);
     }
   });
 

@@ -17,11 +17,16 @@ export interface PRStatusFromGitHub {
     status?: string; // COMPLETED, QUEUED, IN_PROGRESS, etc.
     conclusion?: string; // SUCCESS, FAILURE, NEUTRAL, CANCELLED, SKIPPED, etc.
     state?: string; // Legacy format support
+    context?: string;
+    targetUrl?: string;
     detailsUrl?: string;
     startedAt?: string;
     completedAt?: string;
   }> | null;
   headRefName?: string;
+  title?: string;
+  baseRefName?: string;
+  mergeStateStatus?: string;
 }
 
 export interface PRInfo {

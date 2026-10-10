@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
-import type { SessionRepository } from './session.repository';
 import type { SessionPermissionPresetPort } from './session-context.service';
 import { SessionContextService } from './session-context.service';
 import {
   createLifecycleTestSession,
   createLifecycleTestWorkspace,
 } from './session-lifecycle.test-helpers';
+import type { SessionRepository } from './session.repository';
 
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({

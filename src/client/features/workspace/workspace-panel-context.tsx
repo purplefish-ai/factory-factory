@@ -11,7 +11,6 @@ import { z } from 'zod';
 import type { SubagentSelection } from '@/client/features/subagents';
 import { MOBILE_BREAKPOINT, useIsMobile } from '@/hooks/use-mobile';
 import { subagentSummarySchema } from '@/shared/acp-protocol';
-
 import {
   getScrollStateFromRecord,
   loadScrollStateRecord,

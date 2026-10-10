@@ -772,34 +772,34 @@ When pitfalls occur despite prevention, how to recover:
 
 ### ACP Protocol
 
-- [Agent Client Protocol - Overview](https://agentclientprotocol.com/protocol/overview)
-  -- Core methods and lifecycle
-- [Agent Client Protocol - Schema](https://agentclientprotocol.com/protocol/schema)
-  -- Full method signatures, permission options, config options, mode categories
-- [ACP TypeScript SDK - ClientSideConnection](https://agentclientprotocol.github.io/typescript-sdk/classes/ClientSideConnection.html)
-  -- Unstable method signatures, capability API
-- [ACP GitHub Repository](https://github.com/agentclientprotocol/agent-client-protocol)
-  -- Protocol specification
+- [Agent Client Protocol - Overview](https://agentclientprotocol.com/protocol/overview) --
+  Core methods and lifecycle
+- [Agent Client Protocol - Schema](https://agentclientprotocol.com/protocol/schema) --
+  Full method signatures, permission options, config options, mode categories
+- [ACP TypeScript SDK - ClientSideConnection](https://agentclientprotocol.github.io/typescript-sdk/classes/ClientSideConnection.html) --
+  Unstable method signatures, capability API
+- [ACP GitHub Repository](https://github.com/agentclientprotocol/agent-client-protocol) --
+  Protocol specification
 - [Kiro ACP CLI Documentation](https://kiro.dev/docs/cli/acp/) -- Practical
   implementation guidance, session persistence, PATH caveats
 
 ### Node.js Process Lifecycle
 
-- [Node.js Child Process Documentation](https://nodejs.org/api/child_process.html)
-  -- Detached processes, process groups, stdio pipe behavior
-- [MCP Lifecycle Specification](https://modelcontextprotocol.io/specification/2025-03-26/basic/lifecycle)
-  -- stdio shutdown sequence (SIGTERM -> SIGKILL pattern)
-- [Killing process families with Node.js](https://medium.com/@almenon214/killing-processes-with-node-772ffdd19aad)
-  -- Process group kill patterns
+- [Node.js Child Process Documentation](https://nodejs.org/api/child_process.html) --
+  Detached processes, process groups, stdio pipe behavior
+- [MCP Lifecycle Specification](https://modelcontextprotocol.io/specification/2025-03-26/basic/lifecycle) --
+  stdio shutdown sequence (SIGTERM -> SIGKILL pattern)
+- [Killing process families with Node.js](https://medium.com/@almenon214/killing-processes-with-node-772ffdd19aad) --
+  Process group kill patterns
 
 ### ACP Community
 
-- [Intro to Agent Client Protocol (ACP)](https://block.github.io/goose/blog/2025/10/24/intro-to-agent-client-protocol-acp/)
-  -- Protocol design rationale
-- [ACP Explained - CodeStandUp](https://codestandup.com/posts/2025/agent-client-protocol-acp-explained/)
-  -- Permission option model
-- [Cline ACP Implementation](<https://deepwiki.com/cline/cline/12.5-agent-client-protocol-(acp)>)
-  -- Real-world ACP integration patterns
+- [Intro to Agent Client Protocol (ACP)](https://block.github.io/goose/blog/2025/10/24/intro-to-agent-client-protocol-acp/) --
+  Protocol design rationale
+- [ACP Explained - CodeStandUp](https://codestandup.com/posts/2025/agent-client-protocol-acp-explained/) --
+  Permission option model
+- [Cline ACP Implementation](<https://deepwiki.com/cline/cline/12.5-agent-client-protocol-(acp)>) --
+  Real-world ACP integration patterns
 
 ---
 

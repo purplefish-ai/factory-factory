@@ -16,6 +16,7 @@ import { Link } from 'react-router';
 import { PrStateBadge } from '@/client/components/pr-state-badge';
 import {
   ArchiveWorkspaceDialog,
+  ConnectedWorkspacePrMenu,
   RatchetToggleButton,
   WorkspaceStatusBadge,
 } from '@/client/features/workspace';
@@ -94,7 +95,7 @@ function IssueAndPullRequestRow({
   issue: IssueLink | null;
   showPR: boolean;
 }) {
-  if (!(issue || showPR)) {
+  if (!(issue || showPR || workspace.prs?.length)) {
     return null;
   }
 
@@ -117,27 +118,37 @@ function IssueAndPullRequestRow({
           <span>{issue.label}</span>
         </button>
       )}
-      {showPR && (
-        <div className="inline-flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              window.open(workspace.prUrl as string, '_blank', 'noopener,noreferrer');
-            }}
-            className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
-          >
-            <GitPullRequestIcon className="h-3 w-3 shrink-0" />
-            <span>#{workspace.prNumber}</span>
-          </button>
-          <PrStateBadge prState={workspace.prState} size="sm" />
-        </div>
+      {workspace.prs?.length ? (
+        <ConnectedWorkspacePrMenu
+          workspaceId={workspace.id}
+          projectId={workspace.projectId}
+          prs={workspace.prs}
+          reviewEnabled={Boolean(workspace.worktreePath)}
+          readOnly={workspace.status === 'ARCHIVED' || workspace.status === 'ARCHIVING'}
+          compact
+        />
+      ) : (
+        showPR && (
+          <div className="inline-flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                window.open(workspace.prUrl as string, '_blank', 'noopener,noreferrer');
+              }}
+              className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
+            >
+              <GitPullRequestIcon className="h-3 w-3 shrink-0" />
+              <span>#{workspace.prNumber}</span>
+            </button>
+            <PrStateBadge prState={workspace.prState} size="sm" />
+          </div>
+        )
       )}
     </div>
   );
 }
-
 function BranchRow({ branchName }: { branchName: string | null }) {
   if (!branchName) {
     return null;
@@ -331,6 +342,7 @@ function deriveCardState(workspace: WorkspaceWithKanban) {
     Boolean(workspace.statusReason) ||
     showBranch ||
     showPR ||
+    Boolean(workspace.prs?.length) ||
     !!issue ||
     !!sessionRuntimeError ||
     workspace.mode === 'AUTO_ITERATION' ||

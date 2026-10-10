@@ -4,7 +4,6 @@ import { AcpRuntimeQuiescence } from '@/backend/services/session/service/acp/acp
 import { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { workspaceNotificationService } from '@/backend/services/workspace';
 import { SessionStatus } from '@/shared/core';
-import { SessionService } from './session.service';
 import {
   createDeferred,
   createLifecycleHarness,
@@ -15,6 +14,7 @@ import {
   SessionStartupCoordinator,
   type SessionStartupCoordinatorDependencies,
 } from './session-startup.coordinator';
+import { SessionService } from './session.service';
 
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
@@ -574,20 +574,6 @@ describe('SessionStartupCoordinator', () => {
     const generationAfterFailure = service.getStopGeneration('missing-session');
     expect(sentinelGeneration).toBeGreaterThan(generationBeforeFailure);
     expect(generationAfterFailure).toBeGreaterThan(sentinelGeneration);
-  });
-
-  it('releases the stop generation when record-based client creation fails', async () => {
-    const { service, session, runtimeManager } = createLifecycleHarness();
-    runtimeManager.getOrCreateClient.mockRejectedValueOnce(new Error('spawn failed'));
-    const generationBeforeFailure = service.getStopGeneration('session-1');
-
-    await expect(service.getOrCreateSessionClientFromRecord(session as never)).rejects.toThrow(
-      'spawn failed'
-    );
-
-    const sentinelGeneration = service.getStopGeneration('sentinel-session');
-    expect(sentinelGeneration).toBeGreaterThan(generationBeforeFailure);
-    expect(service.getStopGeneration('session-1')).toBeGreaterThan(sentinelGeneration);
   });
 
   it('does not release a stop generation still owned by a concurrent startup', async () => {

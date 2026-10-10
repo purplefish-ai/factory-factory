@@ -103,3 +103,39 @@ describe('ChatContent runtime error placeholder', () => {
     }
   });
 });
+
+describe('ChatContent scroll control', () => {
+  it('jumps to the latest messages and hides when the viewport reaches the bottom', () => {
+    const scrollToBottom = vi.fn();
+    const props = {
+      workspaceId: 'workspace-1',
+      sessionId: 'session-1',
+      messages: [],
+      queuedMessages: [],
+      sessionStatus: { phase: 'ready' },
+      sessionRuntime: createInitialSessionRuntimeState(),
+      chatCapabilities: EMPTY_CHAT_BAR_CAPABILITIES,
+      pendingRequest: { type: 'none' },
+      pendingMessages: new Map(),
+      inputRef: createRef(),
+      viewportRef: createRef(),
+      isNearBottom: false,
+      scrollToBottom,
+    } as unknown as ChatContentProps;
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    try {
+      flushSync(() => root.render(<ChatContent {...props} />));
+      const button = Array.from(container.querySelectorAll('button')).find((element) =>
+        element.textContent?.includes('Scroll to bottom')
+      );
+      expect(button).toBeDefined();
+      button?.click();
+      expect(scrollToBottom).toHaveBeenCalledOnce();
+      flushSync(() => root.render(<ChatContent {...props} isNearBottom />));
+      expect(container.textContent).not.toContain('Scroll to bottom');
+    } finally {
+      flushSync(() => root.unmount());
+    }
+  });
+});

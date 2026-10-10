@@ -10,11 +10,17 @@ import { prisma } from '@/backend/db';
 export type DataBackupTransactionClient = Prisma.TransactionClient;
 
 /**
- * A workspace as the export format sees it: the row plus its ratchet, which the
- * v4 format carries as flat `ratchet*` workspace fields.
+ * Version 5 exports include every PR and its dispatch history, including tombstones.
  */
 export type WorkspaceForExport = Prisma.WorkspaceGetPayload<{
-  include: { ratchet: true; pr: true; runScript: true; autoIteration: true; wakeSchedule: true };
+  include: {
+    ratchet: true;
+    prDiscovery: true;
+    prs: { include: { automation: true } };
+    runScript: true;
+    autoIteration: true;
+    wakeSchedule: true;
+  };
 }>;
 
 export interface DataBackupSnapshot {
@@ -33,7 +39,8 @@ class DataBackupAccessor {
         orderBy: { createdAt: 'asc' },
         include: {
           ratchet: true,
-          pr: true,
+          prDiscovery: true,
+          prs: { include: { automation: true } },
           runScript: true,
           autoIteration: true,
           wakeSchedule: true,

@@ -80,6 +80,7 @@ function makeWorkspaceRow(id: string, worktreePath: string | null) {
     worktreePath,
     branchName: `feature/${id}`,
     prUrl: null,
+    prs: [],
     prNumber: null,
     prState: 'NONE',
     prCiStatus: null,
@@ -151,6 +152,7 @@ describe('WorkspaceQueryService', () => {
         id: 'w1',
         status: WorkspaceStatus.READY,
         prUrl: null,
+        prs: [],
         prState: 'NONE',
         prCiStatus: 'UNKNOWN',
         ratchetState: 'IDLE',
@@ -162,7 +164,9 @@ describe('WorkspaceQueryService', () => {
       {
         id: 'w2',
         status: WorkspaceStatus.READY,
+        worktreePath: '/tmp/w2',
         prUrl: 'https://github.com/o/r/pull/2',
+        prs: [{ id: 'pr', url: 'https://github.com/o/r/pull/2' }],
         prState: 'OPEN',
         prCiStatus: 'PENDING',
         ratchetState: 'REVIEW_PENDING',
@@ -185,13 +189,21 @@ describe('WorkspaceQueryService', () => {
         ciObservation: 'CHECKS_UNKNOWN',
       },
     }));
-    mockGetAllPendingRequests.mockReturnValue(new Map([['w2', { toolName: 'AskUserQuestion' }]]));
+    mockGetAllPendingRequests.mockReturnValue(
+      new Map([
+        [
+          'w2',
+          { toolName: 'AskUserQuestion', input: { questions: [{ question: 'Which approach?' }] } },
+        ],
+      ])
+    );
 
     const { workspaces: result } = await workspaceQueryService.listForProject('proj-1');
 
     expect(result).toHaveLength(2);
     expect(result[0]).toMatchObject({
       id: 'w2',
+      worktreePath: '/tmp/w2',
       kanbanColumn: 'WAITING',
       pendingRequestType: 'user_question',
       ratchetButtonAnimated: true,
@@ -222,6 +234,7 @@ describe('WorkspaceQueryService', () => {
         worktreePath: null,
         branchName: 'feature/pending-ci',
         prUrl: 'https://github.com/org/repo/pull/1',
+        prs: [{ id: 'pr', url: 'https://github.com/org/repo/pull/1' }],
         prNumber: 1,
         prState: PRState.OPEN,
         prCiStatus: CIStatus.PENDING,
@@ -265,6 +278,7 @@ describe('WorkspaceQueryService', () => {
         id: 'w1',
         status: WorkspaceStatus.READY,
         prUrl: null,
+        prs: [],
         prState: PRState.NONE,
         prCiStatus: CIStatus.UNKNOWN,
         ratchetState: RatchetState.IDLE,
@@ -300,15 +314,12 @@ describe('WorkspaceQueryService', () => {
   });
 
   it('treats an alive-but-idle session as working, matching the snapshot store', async () => {
-    // hasWorkingSessionSummary is true for runtimePhase 'running' even when no
-    // prompt is in flight. The snapshot store and reconciliation use that
-    // predicate, so this query must too — a narrower one (prompt-in-flight
-    // only) would report WAITING here while the live board reported WORKING.
     mockFindByProjectIdWithSessions.mockResolvedValue([
       {
         id: 'w-alive',
         status: WorkspaceStatus.READY,
         prUrl: null,
+        prs: [],
         prState: PRState.NONE,
         prCiStatus: CIStatus.UNKNOWN,
         ratchetState: RatchetState.IDLE,
@@ -326,7 +337,6 @@ describe('WorkspaceQueryService', () => {
       activity: 'IDLE',
       updatedAt: '2026-01-01T00:00:00.000Z',
     });
-    // Let the service's own predicate decide, rather than stubbing the answer.
     mockDeriveWorkspaceRuntimeState.mockImplementation(
       (
         workspace: { id: string },
@@ -355,15 +365,12 @@ describe('WorkspaceQueryService', () => {
   });
 
   it('findWorkspaceIdsInKanbanColumn matches a column only live session state produces', async () => {
-    // A READY workspace with no PR is WAITING by its persisted fields alone; it
-    // is WORKING only because a session is live. Filtering used to run against
-    // the persisted cachedKanbanColumn in SQL, which dropped this workspace
-    // from the result (and so from bulk archive) before derivation ever ran.
     mockFindByProjectIdWithSessions.mockResolvedValue([
       {
         id: 'w-live',
         status: WorkspaceStatus.READY,
         prUrl: null,
+        prs: [],
         prState: PRState.NONE,
         prCiStatus: CIStatus.UNKNOWN,
         ratchetState: RatchetState.IDLE,
@@ -404,6 +411,7 @@ describe('WorkspaceQueryService', () => {
         id: 'w1',
         status: WorkspaceStatus.FAILED,
         prUrl: null,
+        prs: [],
         prState: PRState.NONE,
         prCiStatus: CIStatus.UNKNOWN,
         ratchetState: RatchetState.IDLE,
@@ -446,6 +454,7 @@ describe('WorkspaceQueryService', () => {
       worktreePath: null,
       branchName: null,
       prUrl: null,
+      prs: [],
       prNumber: null,
       prState: PRState.NONE,
       prCiStatus: CIStatus.UNKNOWN,
@@ -508,6 +517,7 @@ describe('WorkspaceQueryService', () => {
         worktreePath: '/tmp/w1',
         branchName: 'feature/w1',
         prUrl: null,
+        prs: [],
         prNumber: null,
         prState: 'NONE',
         prCiStatus: null,
@@ -525,6 +535,7 @@ describe('WorkspaceQueryService', () => {
         worktreePath: null,
         branchName: null,
         prUrl: 'https://github.com/o/r/pull/2',
+        prs: [{ id: 'pr', url: 'https://github.com/o/r/pull/2' }],
         prNumber: 2,
         prState: 'OPEN',
         prCiStatus: 'PENDING',
@@ -562,10 +573,8 @@ describe('WorkspaceQueryService', () => {
       { reviewDecision: 'CHANGES_REQUESTED' },
     ]);
 
-    // First call: no cache yet — returns 0 immediately and fires background refresh.
     const first = await workspaceQueryService.listForProject('p1');
     expect(first.reviewCount).toBe(0);
-    // Newest first, so every surface renders the same order without re-sorting.
     expect(first.workspaces.map((workspace) => workspace.id)).toEqual(['w2', 'w1']);
     expect(first.workspaces[1]).toMatchObject({
       id: 'w1',
@@ -579,28 +588,16 @@ describe('WorkspaceQueryService', () => {
       lastActivityAt: '2026-01-04T00:00:00.000Z',
     });
     expect(mockGetCachedWorkspaceGitStats).toHaveBeenCalledWith('/tmp/w1', 'main');
-    // Served from cache: the response path spawns no git.
     expect(mockGetWorkspaceGitStats).not.toHaveBeenCalled();
 
-    // Flush background refresh promises (checkHealth → listReviewRequests → cache write).
     await new Promise((resolve) => setImmediate(resolve));
 
-    // Second call: cache is now warm — returns cached count without calling GitHub.
     mockGithubListReviewRequests.mockClear();
     const second = await workspaceQueryService.listForProject('p1');
     expect(second.reviewCount).toBe(1);
     expect(mockGithubListReviewRequests).not.toHaveBeenCalled();
   });
 
-  /**
-   * The board's first paint must not wait on git. Computing a worktree's diff
-   * stats costs several `git` spawns, and a project with dozens of live
-   * workspaces used to serialize all of them behind this one query — the
-   * Kanban sat on its loading state for as long as that took. The stats are a
-   * reconciliation field: the snapshot poll recomputes them and streams them
-   * into the very same client cache, so the list serves whatever is already
-   * cached and warms the misses in the background.
-   */
   it('listForProject serves cached git stats without awaiting a recompute', async () => {
     mockProjectFindById.mockResolvedValue({ id: 'p1', defaultBranch: 'main' });
     mockFindByProjectIdWithSessions.mockResolvedValue([
@@ -618,8 +615,6 @@ describe('WorkspaceQueryService', () => {
         : null
     );
 
-    // A recompute that never settles: if the query awaited it, this test would
-    // time out rather than fail an assertion.
     let releaseRecompute: (() => void) | undefined;
     mockGetWorkspaceGitStats.mockImplementation(
       () =>
@@ -637,11 +632,9 @@ describe('WorkspaceQueryService', () => {
       deletions: 1,
       hasUncommitted: true,
     });
-    // Not yet known — the snapshot stream fills it in once the warm completes.
     expect(byId.get('uncached')?.gitStats).toBeNull();
     expect(byId.get('no-worktree')?.gitStats).toBeNull();
 
-    // Only the cache miss with a worktree is warmed, and only in the background.
     expect(mockGetWorkspaceGitStats).toHaveBeenCalledTimes(1);
     expect(mockGetWorkspaceGitStats).toHaveBeenCalledWith('/tmp/uncached', 'main');
 
@@ -668,8 +661,6 @@ describe('WorkspaceQueryService', () => {
     await workspaceQueryService.listForProject('p1');
     await workspaceQueryService.listForProject('p1');
 
-    // The first warm is still in flight; polling the board must not pile up
-    // another git recompute behind it on every refetch.
     expect(mockGetWorkspaceGitStats).toHaveBeenCalledTimes(1);
 
     releaseRecompute?.();
@@ -685,6 +676,7 @@ describe('WorkspaceQueryService', () => {
       worktreePath: null,
       branchName: 'feature/equivalence',
       prUrl: 'https://github.com/o/r/pull/12',
+      prs: [{ id: 'pr', url: 'https://github.com/o/r/pull/12' }],
       prNumber: 12,
       prState: PRState.OPEN,
       prCiStatus: CIStatus.PENDING,
@@ -779,20 +771,29 @@ describe('WorkspaceQueryService', () => {
       'Workspace not found'
     );
 
-    mockFindById.mockResolvedValueOnce({ id: 'w1', prUrl: null });
+    mockFindById.mockResolvedValueOnce({ id: 'w1', prUrl: null, prs: [] });
     await expect(workspaceQueryService.syncPRStatus('w1')).resolves.toEqual({
       success: false,
       reason: 'no_pr_url',
     });
 
-    mockFindById.mockResolvedValueOnce({ id: 'w1', prUrl: 'https://github.com/o/r/pull/1' });
+    mockFindById.mockResolvedValueOnce({
+      id: 'w1',
+      prUrl: 'https://github.com/o/r/pull/1',
+      prs: [{ id: 'pr', url: 'https://github.com/o/r/pull/1' }],
+    });
     mockRefreshWorkspace.mockResolvedValueOnce({ success: false });
     await expect(workspaceQueryService.syncPRStatus('w1')).resolves.toEqual({
       success: false,
       reason: 'fetch_failed',
     });
 
-    mockFindById.mockResolvedValueOnce({ id: 'w1', prUrl: 'https://github.com/o/r/pull/1' });
+    mockFindById.mockResolvedValueOnce({
+      id: 'w1',
+      prUrl: 'https://github.com/o/r/pull/1',
+      prs: [{ id: 'pr', url: 'https://github.com/o/r/pull/1' }],
+    });
+    mockFindById.mockResolvedValueOnce({ id: 'w1', prState: 'OPEN' });
     mockRefreshWorkspace.mockResolvedValueOnce({
       success: true,
       snapshot: { prNumber: 1, prState: 'OPEN' },
@@ -803,16 +804,24 @@ describe('WorkspaceQueryService', () => {
     });
 
     mockFindByProjectIdWithSessions.mockResolvedValueOnce([
-      { id: 'w1', prUrl: null },
-      { id: 'w2', prUrl: null },
+      { id: 'w1', prUrl: null, prs: [] },
+      { id: 'w2', prUrl: null, prs: [] },
     ]);
     await expect(workspaceQueryService.syncAllPRStatuses('p1')).resolves.toEqual({
       queued: 0,
     });
 
     mockFindByProjectIdWithSessions.mockResolvedValueOnce([
-      { id: 'w1', prUrl: 'https://github.com/o/r/pull/1' },
-      { id: 'w2', prUrl: 'https://github.com/o/r/pull/2' },
+      {
+        id: 'w1',
+        prUrl: 'https://github.com/o/r/pull/1',
+        prs: [{ id: 'pr', url: 'https://github.com/o/r/pull/1' }],
+      },
+      {
+        id: 'w2',
+        prUrl: 'https://github.com/o/r/pull/2',
+        prs: [{ id: 'pr', url: 'https://github.com/o/r/pull/2' }],
+      },
     ]);
     mockRefreshWorkspace
       .mockResolvedValueOnce({ success: true })
@@ -824,7 +833,7 @@ describe('WorkspaceQueryService', () => {
   });
 
   it('syncPRStatus resets discovery backoff before returning no_pr_url', async () => {
-    mockFindById.mockResolvedValue({ id: 'w1', prUrl: null });
+    mockFindById.mockResolvedValue({ id: 'w1', prUrl: null, prs: [] });
     mockResetPRDiscoveryBackoff.mockResolvedValue(true);
 
     await expect(workspaceQueryService.syncPRStatus('w1')).resolves.toEqual({
@@ -839,8 +848,8 @@ describe('WorkspaceQueryService', () => {
 
   it('syncAllPRStatuses does not reset discovery backoff for workspaces without PRs', async () => {
     mockFindByProjectIdWithSessions.mockResolvedValue([
-      { id: 'w1', prUrl: null },
-      { id: 'w2', prUrl: null },
+      { id: 'w1', prUrl: null, prs: [] },
+      { id: 'w2', prUrl: null, prs: [] },
     ]);
 
     await expect(workspaceQueryService.syncAllPRStatuses('p1')).resolves.toEqual({ queued: 0 });
@@ -850,9 +859,17 @@ describe('WorkspaceQueryService', () => {
 
   it('skips concurrent syncAllPRStatuses calls while the workspace lookup is pending', async () => {
     let resolveLookup:
-      | ((workspaces: Array<{ id: string; prUrl: string | null }>) => void)
+      | ((
+          workspaces: Array<{
+            id: string;
+            prUrl: string | null;
+            prs: Array<{ id: string; url: string }>;
+          }>
+        ) => void)
       | undefined;
-    const lookupPromise = new Promise<Array<{ id: string; prUrl: string | null }>>((resolve) => {
+    const lookupPromise = new Promise<
+      Array<{ id: string; prUrl: string | null; prs: Array<{ id: string; url: string }> }>
+    >((resolve) => {
       resolveLookup = resolve;
     });
 
@@ -865,7 +882,13 @@ describe('WorkspaceQueryService', () => {
     await expect(workspaceQueryService.syncAllPRStatuses('p1')).resolves.toEqual({ queued: 0 });
     expect(mockFindByProjectIdWithSessions).toHaveBeenCalledTimes(1);
 
-    resolveLookup?.([{ id: 'w1', prUrl: 'https://github.com/o/r/pull/1' }]);
+    resolveLookup?.([
+      {
+        id: 'w1',
+        prUrl: 'https://github.com/o/r/pull/1',
+        prs: [{ id: 'pr', url: 'https://github.com/o/r/pull/1' }],
+      },
+    ]);
     await expect(firstSync).resolves.toEqual({ queued: 1 });
     await vi.waitFor(() => {
       expect(mockRefreshWorkspace).toHaveBeenCalledTimes(1);
@@ -881,6 +904,7 @@ describe('WorkspaceQueryService', () => {
     mockFindByProjectIdWithSessions.mockImplementation(async (projectId: string) => [
       {
         id: projectId === 'p1' ? 'w1' : 'w2',
+        prs: [{ id: 'pr' }],
         prUrl: `https://github.com/o/r/pull/${projectId === 'p1' ? '1' : '2'}`,
       },
     ]);
@@ -891,7 +915,7 @@ describe('WorkspaceQueryService', () => {
     try {
       await expect(workspaceQueryService.syncAllPRStatuses('p1')).resolves.toEqual({ queued: 1 });
       await vi.waitFor(() => {
-        expect(mockRefreshWorkspace).toHaveBeenCalledWith('w1', 'https://github.com/o/r/pull/1');
+        expect(mockRefreshWorkspace).toHaveBeenCalledWith('w1');
       });
 
       await expect(workspaceQueryService.syncAllPRStatuses('p2')).resolves.toEqual({ queued: 1 });
@@ -899,7 +923,7 @@ describe('WorkspaceQueryService', () => {
         excludeStatuses: [WorkspaceStatus.ARCHIVING, WorkspaceStatus.ARCHIVED],
       });
       await vi.waitFor(() => {
-        expect(mockRefreshWorkspace).toHaveBeenCalledWith('w2', 'https://github.com/o/r/pull/2');
+        expect(mockRefreshWorkspace).toHaveBeenCalledWith('w2');
       });
     } finally {
       resolveFirstRefresh?.({ success: true });

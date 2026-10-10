@@ -4,6 +4,11 @@ Rejected or failed messages restore their text and attachments only when the
 current session composer is empty. A newer draft or attachment selection is
 preserved, and clearing it later does not replay the earlier recovery.
 
+The new-workspace slash-command palette prefers project command descriptions
+over same-named global commands, matching the workspace-first precedence used
+when loading a Claude session. Commands found only in the global directory
+remain available.
+
 ## ACP runtime
 
 All agent sessions use the Agent Client Protocol (ACP) via
@@ -28,9 +33,22 @@ Session init/load fails unless model/mode select options can be obtained from
 provider `configOptions` or legacy model/mode response fields. Permission
 requests present multi-option selection (`allow_once`, `allow_always`,
 `deny_once`, `deny_always`) and are bridged through ACP permission response
-handlers. Soft cancellation (including voice stop and prompt timeout) resolves
-pending permission requests with a cancelled outcome, dismisses their prompts,
-and keeps the bridge available for later turns.
+handlers. User-question prompts require a non-empty, valid question payload; MCP
+tools retain their raw identity and use normal tool approval even when their
+inputs contain a `questions` array. Free-form provider questions remain
+supported without selection options. Codex question answers are mapped from the
+composer's trimmed ID or question-text fallback to the original provider ID,
+including empty and whitespace-only IDs. Exact provider IDs take precedence over
+normalized aliases; ambiguous aliases fail instead of assigning an answer to the
+wrong question. Duplicate provider IDs are rejected before answer mapping. Soft
+cancellation (including voice stop and prompt timeout) resolves pending
+permission requests with a cancelled outcome, dismisses their prompts, and keeps
+the bridge available for later turns.
+
+When reapplying read-only permissions to an existing reviewer fails, teardown
+reserves a lifecycle stop to cancel concurrent starts. A cancelled start cannot
+publish an alive runtime snapshot for the stopped client. The stop reservation
+is released even if runtime stopping or state cleanup throws.
 
 Approving a Codex plan queues the automatic approval turn with the same
 plan-disabled settings persisted for the session, preventing that turn from
@@ -53,7 +71,10 @@ that existing result still completes exactly one occurrence of the tool ID.
 Normal user turns have a fixed four-hour deadline; auto-iteration keeps its
 separate configured deadline. Explicit stops, closes, workspace archives,
 provider failures, prompt timeouts, and unexpected process exits record distinct
-typed reasons.
+typed reasons. Unreserved process exits with code `0` complete the session
+without an unexpected-exit lifecycle row; unexpected nonzero or signal exits
+retain that stop evidence. Explicit stops and shutdown reservations preserve
+their idle-state behavior.
 
 The chat composer uses generic retry wording for runtime errors; the banner
 provides the specific startup, prompt, or process-exit error.
@@ -111,7 +132,9 @@ commit leaves the new durable identity available for the next restart. An
 archive created before a cancelled or failed commit remains available as a
 retained copy.
 
-Runtime incarnation/stop fences reject stale repair callbacks. Failed-load
+Runtime incarnation/stop fences reject stale repair callbacks. A process that
+has exited by code or signal fails the liveness fence, including when an
+external signal kills a candidate during identity reconciliation. Failed-load
 replay is discarded before `newSession`; replacement updates stay buffered until
 repair succeeds. History hydration ignores reads started under an older
 identity, even when they finish after rollover, and retry cooldowns reset for
@@ -176,7 +199,14 @@ including after a browsing runtime is promoted to active use.
 Graceful server shutdown persists active sessions as `IDLE`, matching explicit
 stops, so deliberately stopped ratchet sessions are not retried as crashes on
 the next boot. Runtime-managed exits without a shutdown reservation still use
-the exit code to determine terminal status.
+the exit code to determine terminal status. Bulk shutdown retains its non-browse
+lifecycle reservations through event recording and runtime shutdown, then
+releases them on every exit path. Shutdown waits for a concurrent explicit
+stop’s lifecycle write and suppresses a duplicate event only after durable
+success. A failed write retries the same event identity, replacing its transient
+banner if persistence recovers. Stops that suppress their own event still
+receive shutdown history. The supervisor's closed shutdown admission remains in
+effect after gate cleanup.
 
 Startup, termination, runtime exit, notifications, context, and workflow
 finalization each have one coordinator or service.

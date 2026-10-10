@@ -1,5 +1,4 @@
 import { PulseIcon } from '@phosphor-icons/react';
-
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Progress } from '@/components/ui/progress';

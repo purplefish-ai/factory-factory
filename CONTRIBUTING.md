@@ -105,18 +105,21 @@ Write clear, descriptive commit messages:
 
 ### Code Style
 
-- We use [Biome](https://biomejs.dev/) for source linting and formatting, and
-  [Prettier](https://prettier.io/) for Markdown. Markdown prose wraps at 80
-  columns; fenced code is preserved.
+- We use [Oxlint](https://oxc.rs/docs/guide/usage/linter.html) for source
+  linting and [Oxfmt](https://oxc.rs/docs/guide/usage/formatter.html) for
+  formatting and import sorting. [Biome](https://biomejs.dev/) preserves CSS and
+  remaining lint guards; see [lint guardrails](lint-rules/README.md). Markdown
+  prose wraps at 80 columns; fenced code is preserved.
 - Run `pnpm check` for standard guardrails and `pnpm check:fix` to automatically
-  fix Biome issues and format Markdown
+  fix lint issues, sort imports and format files. Use `pnpm lint` for linting
+  alone and `pnpm check:format` for formatting alone.
 - `pnpm check` enforces Codex schema drift in CI. Locally, that check is skipped
   unless the pinned Codex CLI is installed; use
   `CODEX_SCHEMA_CHECK=strict pnpm check:codex-schema` to enforce it.
-- `prisma/generated/` is generated and excluded from Biome linting. After
-  changing `prisma/schema.prisma`, run `pnpm check:prisma-schema` to regenerate
-  Prisma output, enforce Prisma import/ownership rules, and typecheck the
-  resulting type surface. CI also runs `pnpm check:prisma-generated` after
+- `prisma/generated/` is generated and excluded from linting and formatting.
+  After changing `prisma/schema.prisma`, run `pnpm check:prisma-schema` to
+  regenerate Prisma output, enforce Prisma import/ownership rules, and typecheck
+  the resulting type surface. CI also runs `pnpm check:prisma-generated` after
   generation to fail if generated output is not committed.
 - Staged `.md` files are formatted automatically by the pre-commit hook. Use
   `pnpm format:markdown` to format all Markdown or `pnpm check:markdown` to

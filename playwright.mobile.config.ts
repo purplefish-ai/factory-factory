@@ -2,6 +2,7 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: './e2e',
+  testMatch: 'mobile-baseline.spec.ts',
   timeout: 30_000,
   retries: process.env.CI ? 2 : 0,
   snapshotPathTemplate: '{testDir}/{testFilePath}-snapshots/{arg}{ext}',

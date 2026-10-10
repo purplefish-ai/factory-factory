@@ -1,5 +1,4 @@
 import { SpinnerGapIcon } from '@phosphor-icons/react';
-
 import { trpc } from '@/client/lib/trpc';
 
 interface ScreenshotViewerTabProps {

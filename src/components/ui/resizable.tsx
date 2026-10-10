@@ -4,7 +4,6 @@ import { useCallback, useMemo } from 'react';
 import type { Layout, LayoutChangedMeta } from 'react-resizable-panels';
 import { Group, Panel, Separator } from 'react-resizable-panels';
 import { z } from 'zod';
-
 import { cn } from '@/lib/utils';
 
 type ResizablePanelGroupProps = Omit<ComponentProps<typeof Group>, 'orientation'> & {
@@ -69,8 +68,24 @@ const ResizablePanelGroup = ({
         return;
       }
 
+      // A conditional panel removal must not replace a complete split with a
+      // smaller layout. Read the latest save, not the render-time default: the
+      // user may have resized since mount. Keep full commits (including the
+      // library's imperative double-click resets) persistent as before.
+      const savedLayout = loadLayoutFromStorage(autoSaveId);
+      if (
+        !meta.isUserInteraction &&
+        savedLayout &&
+        Object.keys(layout).length < Object.keys(savedLayout).length
+      ) {
+        return;
+      }
+
       try {
-        localStorage.setItem(`resizable-panels:${autoSaveId}`, JSON.stringify(layout));
+        localStorage.setItem(
+          `resizable-panels:${autoSaveId}`,
+          JSON.stringify(meta.requestedLayout ?? layout)
+        );
       } catch {
         // Ignore storage errors
       }

@@ -24,8 +24,8 @@ import {
   setPendingInteractiveRequest,
 } from './store/session-queue';
 import { SessionRuntimeMachine } from './store/session-runtime-machine';
-import type { RecentMessageRejection, SessionStore } from './store/session-store.types';
 import { SessionStoreRegistry } from './store/session-store-registry';
+import type { RecentMessageRejection, SessionStore } from './store/session-store.types';
 import {
   appendClaudeEvent,
   commitSentUserMessageWithOrder,
@@ -435,23 +435,6 @@ export class SessionDomainService extends EventEmitter {
       return;
     }
     this.publisher.forwardSnapshot(store, { reason: 'queue_cleared' });
-  }
-
-  markStarting(sessionId: string): void {
-    this.transitionRuntime(sessionId, {
-      phase: 'starting',
-      processState: 'alive',
-      activity: 'IDLE',
-    });
-  }
-
-  markStopping(sessionId: string): void {
-    const store = this.registry.getOrCreateActive(sessionId);
-    this.transitionRuntime(sessionId, {
-      phase: 'stopping',
-      processState: store.runtime.processState,
-      activity: store.runtime.activity,
-    });
   }
 
   markRunning(sessionId: string): void {

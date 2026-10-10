@@ -23,6 +23,7 @@ function toAgentSessionRecord(session: PersistenceAgentSessionRecord): AgentSess
     workspaceId: session.workspaceId,
     name: session.name,
     workflow: session.workflow,
+    workspacePrId: session.workspacePrId,
     model: session.model,
     status: session.status,
     provider: session.provider,
@@ -72,6 +73,7 @@ class SessionDataService {
   async createAgentSession(data: {
     workspaceId: string;
     name?: string;
+    workspacePrId?: string;
     workflow: string;
     model?: string;
     provider?: SessionProvider;
@@ -88,6 +90,7 @@ class SessionDataService {
   async createAgentSessionWithinWorkspaceLimit(data: {
     workspaceId: string;
     name?: string;
+    workspacePrId?: string;
     workflow: string;
     model?: string;
     provider?: SessionProvider;
@@ -108,6 +111,7 @@ class SessionDataService {
   async acquireFixerSession(data: {
     workspaceId: string;
     workflow: string;
+    workspacePrId?: string;
     sessionName: string;
     maxSessions: number;
     provider?: SessionProvider;

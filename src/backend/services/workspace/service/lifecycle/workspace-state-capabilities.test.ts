@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
 import { workspaceRatchetAccessor } from '@/backend/services/workspace/resources/workspace-ratchet.accessor';
+import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
 import {
   AUTO_ITERATION_STATUS_CHANGED,
   type AutoIterationStatusChangedEvent,

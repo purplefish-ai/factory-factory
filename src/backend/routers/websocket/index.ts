@@ -13,12 +13,6 @@ export {
   postRunLogsConnections,
 } from './log-stream.handler';
 export { createSetupTerminalUpgradeHandler } from './setup-terminal.handler';
-export {
-  createSnapshotsUpgradeHandler,
-  disposeSnapshotsHandlerState,
-} from './snapshots.handler';
-export {
-  createTerminalUpgradeHandler,
-  terminalConnections,
-} from './terminal.handler';
+export { createSnapshotsUpgradeHandler, disposeSnapshotsHandlerState } from './snapshots.handler';
+export { createTerminalUpgradeHandler, terminalConnections } from './terminal.handler';
 export { createVoiceUpgradeHandler } from './voice.handler';

@@ -13,6 +13,7 @@ import {
   type AdversarialReviewFindings,
   parseAdversarialReviewFindings,
 } from '@/backend/prompts/adversarial-review-findings.schema';
+import { configService } from '@/backend/services/config.service';
 import {
   createReviewComment,
   getPRDescription,
@@ -33,6 +34,7 @@ import { workspaceDataService } from '@/backend/services/workspace';
 import {
   ADVERSARIAL_REVIEW_MARKER,
   ADVERSARIAL_REVIEW_WORKFLOW,
+  hasAdversarialReviewMarker,
 } from '@/shared/adversarial-review';
 import { PRState, SessionStatus } from '@/shared/core';
 import { buildDiffLineIndex } from './adversarial-review-diff-line-index';
@@ -53,34 +55,35 @@ export interface TriggerAdversarialReviewResult {
   sessionId: string;
 }
 
-// Per-workspace acquisition lock: without it, two concurrent triggers can
+// Per-PR acquisition lock: without it, two concurrent triggers can
 // both observe "no active session" before either has created one, starting
-// duplicate reviewers. A second call for the same workspace instead awaits
+// duplicate reviewers. A second call for the same PR instead awaits
 // the first call's own in-flight result rather than repeating its checks.
 const inFlightTriggers = new Map<string, Promise<TriggerAdversarialReviewResult>>();
 
-export function triggerAdversarialReview(
-  workspaceId: string
+export async function triggerAdversarialReview(
+  workspaceId: string,
+  prId?: string
 ): Promise<TriggerAdversarialReviewResult> {
-  const existingTrigger = inFlightTriggers.get(workspaceId);
+  const prState = await workspaceDataService.findPRState(workspaceId, prId);
+  const key = `${workspaceId}:${prState?.prId ?? prId ?? 'missing'}`;
+  const existingTrigger = inFlightTriggers.get(key);
   if (existingTrigger !== undefined) {
     return existingTrigger;
   }
 
-  const trigger = triggerAdversarialReviewLocked(workspaceId).finally(() => {
-    inFlightTriggers.delete(workspaceId);
+  const trigger = triggerAdversarialReviewLocked(workspaceId, prState).finally(() => {
+    inFlightTriggers.delete(key);
   });
-  inFlightTriggers.set(workspaceId, trigger);
+  inFlightTriggers.set(key, trigger);
   return trigger;
 }
 
 async function triggerAdversarialReviewLocked(
-  workspaceId: string
+  workspaceId: string,
+  prState: Awaited<ReturnType<typeof workspaceDataService.findPRState>>
 ): Promise<TriggerAdversarialReviewResult> {
-  const [fixerContext, prState] = await Promise.all([
-    workspaceDataService.findFixerContext(workspaceId),
-    workspaceDataService.findPRState(workspaceId),
-  ]);
+  const fixerContext = await workspaceDataService.findFixerContext(workspaceId);
 
   if (!fixerContext) {
     throw new ApplicationError('NOT_FOUND', `Workspace not found: ${workspaceId}`);
@@ -95,7 +98,7 @@ async function triggerAdversarialReviewLocked(
     );
   }
 
-  const existing = await findActiveAdversarialReviewSession(workspaceId);
+  const existing = await findActiveAdversarialReviewSession(workspaceId, prState.prId);
   if (existing) {
     return { status: 'already_active', sessionId: existing.id };
   }
@@ -117,13 +120,22 @@ async function triggerAdversarialReviewLocked(
       : (settings.reviewerCodexModel ?? 'default');
   const providerLabel = provider === 'CLAUDE' ? 'Claude' : 'Codex';
 
-  const session = await sessionDataService.createAgentSession({
+  const creation = await sessionDataService.createAgentSessionWithinWorkspaceLimit({
     workspaceId,
+    workspacePrId: prState.prId,
     name: `Adversarial Review (${providerLabel})`,
     workflow: ADVERSARIAL_REVIEW_WORKFLOW,
     provider,
     model,
+    maxSessions: configService.getMaxSessionsPerWorkspace(),
   });
+  if (creation.outcome === 'limit_reached') {
+    throw new ApplicationError(
+      'PRECONDITION_FAILED',
+      'Workspace session limit reached; close a session before reviewing'
+    );
+  }
+  const session = creation.session;
 
   // `plan` mode structurally blocks write tools (not just the permission
   // preset, which non-interactive sessions can't be prompted to approve
@@ -156,13 +168,15 @@ async function triggerAdversarialReviewLocked(
 }
 
 async function findActiveAdversarialReviewSession(
-  workspaceId: string
+  workspaceId: string,
+  prId: string
 ): Promise<{ id: string } | null> {
   const sessions = await sessionDataService.findAgentSessionsByWorkspaceId(workspaceId);
   return (
     sessions.find(
       (session) =>
         session.workflow === ADVERSARIAL_REVIEW_WORKFLOW &&
+        session.workspacePrId === prId &&
         (session.status === SessionStatus.RUNNING || session.status === SessionStatus.IDLE)
     ) ?? null
   );
@@ -180,11 +194,12 @@ async function runAdversarialReviewTurn(params: RunAdversarialReviewTurnParams):
   const { sessionId, repo, prUrl, prNumber, postReviewToGitHub } = params;
 
   try {
-    const [diff, headSha, fullDetails, description] = await Promise.all([
+    const [diff, headSha, fullDetails, description, authenticatedUsername] = await Promise.all([
       githubCLIService.getPRDiff(repo, prNumber),
       getPRHeadCommitSha(repo, prNumber),
       githubCLIService.getPRFullDetails(repo, prNumber),
       getPRDescription(repo, prNumber),
+      githubCLIService.getAuthenticatedUsername(),
     ]);
 
     const prompt = buildAdversarialReviewDispatchPrompt({
@@ -192,7 +207,7 @@ async function runAdversarialReviewTurn(params: RunAdversarialReviewTurnParams):
       prNumber,
       prDescription: description,
       prDiff: diff,
-      existingReviewCommentsSummary: summarizeExistingActivity(fullDetails),
+      existingReviewCommentsSummary: summarizeExistingActivity(fullDetails, authenticatedUsername),
     });
 
     await sessionService.sendSessionMessage(sessionId, prompt);
@@ -232,10 +247,28 @@ async function runAdversarialReviewTurn(params: RunAdversarialReviewTurnParams):
   }
 }
 
-function summarizeExistingActivity(fullDetails: {
-  reviews: Array<{ author: { login: string }; state?: string; body?: string }>;
-}): string {
+// Other automated review tools' verdicts are noise here, not signal: an
+// unrelated bot saying "no issues" must not read as independent confirmation
+// the PR is clean, so it's excluded from the "don't repeat this" context.
+// Our own prior marker-tagged reviews are real findings (or a real prior
+// clean pass) worth not repeating, so they're kept even if posted under a
+// bot-suffixed identity — but only when that review actually came from our
+// own authenticated `gh` identity, since the marker text itself is public
+// and any other bot could copy it to get its "no issues" verdict treated as
+// ours.
+export function summarizeExistingActivity(
+  fullDetails: {
+    reviews: Array<{ author: { login: string }; state?: string; body?: string }>;
+  },
+  authenticatedUsername: string | null
+): string {
   return fullDetails.reviews
+    .filter(
+      (review) =>
+        (hasAdversarialReviewMarker(review.body) &&
+          review.author.login === authenticatedUsername) ||
+        !review.author.login.endsWith('[bot]')
+    )
     .filter((review) => (review.body?.trim().length ?? 0) > 0)
     .map(
       (review) => `Review by ${review.author.login} (${review.state ?? 'UNKNOWN'}): ${review.body}`

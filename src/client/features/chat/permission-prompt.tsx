@@ -5,7 +5,6 @@ import {
   TerminalIcon,
 } from '@phosphor-icons/react';
 import { useEffect, useRef, useState } from 'react';
-
 import { Button } from '@/components/ui/button';
 import { MarkdownRenderer } from '@/components/ui/markdown';
 import { PromptCard } from '@/components/ui/prompt-card';

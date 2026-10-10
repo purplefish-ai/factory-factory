@@ -13,15 +13,10 @@ import { SessionStatus, WorkspaceStatus } from '@/shared/core';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type { AcpEventProcessor } from './acp-event-processor';
-import type { SessionConfigService } from './session.config.service';
-import { SessionLifecycleService } from './session.lifecycle.service';
-import type { SessionPermissionService } from './session.permission.service';
-import type { SessionRepository } from './session.repository';
-import { SessionRetryService } from './session.retry.service';
 import { SessionContextService, type SessionPermissionPresetPort } from './session-context.service';
-import type { SessionAcpEnvironmentPort } from './session-lifecycle.types';
 import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import { SessionLifecycleGate } from './session-lifecycle-gate';
+import type { SessionAcpEnvironmentPort } from './session-lifecycle.types';
 import { SessionNotificationDeliveryService } from './session-notification-delivery.service';
 import { SessionRuntimeExitCoordinator } from './session-runtime-exit.coordinator';
 import { SessionStartupCoordinator } from './session-startup.coordinator';
@@ -30,6 +25,11 @@ import {
   type SessionTerminationCoordinatorDependencies,
 } from './session-termination.coordinator';
 import { SessionWorkflowFinalizer } from './session-workflow-finalizer';
+import type { SessionConfigService } from './session.config.service';
+import { SessionLifecycleService } from './session.lifecycle.service';
+import type { SessionPermissionService } from './session.permission.service';
+import type { SessionRepository } from './session.repository';
+import { SessionRetryService } from './session.retry.service';
 
 export type Deferred<T> = {
   promise: Promise<T>;
@@ -301,7 +301,11 @@ export function createTerminationHarness(
     clearAll: vi.fn<() => void>(),
   };
   const lifecycleEventService = {
-    record: vi.fn<SessionLifecycleEventService['record']>(async () => null),
+    record: vi.fn<SessionLifecycleEventService['record']>(async (input) => ({
+      ...input,
+      id: `event:${input.dedupeKey}`,
+      createdAt: input.createdAt ?? new Date(),
+    })),
   } satisfies Pick<SessionLifecycleEventService, 'record'>;
   const workflowFinalizer = {
     finalizeDeliberateStop: vi.fn(async () => undefined),
@@ -371,6 +375,7 @@ export function createLifecycleTestSession(
     createdAt: new Date('2026-07-15T00:00:00.000Z'),
     updatedAt: new Date('2026-07-15T00:00:00.000Z'),
     ...overrides,
+    workspacePrId: overrides.workspacePrId ?? null,
   };
 }
 
@@ -629,7 +634,11 @@ export function createLifecycleHarness(
     | 'handleAcpLog'
   >;
   const lifecycleEventService = {
-    record: vi.fn<SessionLifecycleEventService['record']>(async () => null),
+    record: vi.fn<SessionLifecycleEventService['record']>(async (input) => ({
+      ...input,
+      id: `event:${input.dedupeKey}`,
+      createdAt: input.createdAt ?? new Date(),
+    })),
     hydrate: vi.fn(async () => undefined),
   } satisfies Pick<SessionLifecycleEventService, 'record' | 'hydrate'>;
   const notificationService = {

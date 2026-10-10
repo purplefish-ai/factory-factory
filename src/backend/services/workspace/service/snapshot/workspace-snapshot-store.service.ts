@@ -1,3 +1,5 @@
+import { EventEmitter } from 'node:events';
+import { isDeepStrictEqual } from 'node:util';
 /**
  * Workspace Snapshot Store Service
  *
@@ -14,9 +16,6 @@
  * functions are injected via configure() at startup through the orchestration
  * layer.
  */
-
-import { EventEmitter } from 'node:events';
-import { isDeepStrictEqual } from 'node:util';
 import type { RatchetDispatchOutcome } from '@prisma-gen/client';
 import { assembleWorkspaceDerivedState } from '@/backend/lib/workspace-derived-state';
 import { SERVICE_CACHE_TTL_MS } from '@/backend/services/constants';
@@ -36,6 +35,8 @@ import {
   hasStartingSessionSummary,
 } from '@/shared/session-runtime';
 import type { WorkspaceCiObservation, WorkspaceFlowPhase } from '@/shared/workspace-flow-state';
+import type { WorkspacePullRequest } from '@/shared/workspace-pr';
+import type { WorkspacePRSummary } from '@/shared/workspace-pr-summary';
 import type { WorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import type { SnapshotFieldGroup, WorkspaceSnapshotEntry } from '@/shared/workspace-snapshot';
 import type { WorkspaceStatusReason } from '@/shared/workspace-status-reason';
@@ -66,6 +67,8 @@ export interface SnapshotUpdateInput {
   autoIterationStatus?: AutoIterationStatus | null;
 
   // PR fields (group: 'pr')
+  prs?: WorkspacePullRequest[];
+  prSummary?: WorkspacePRSummary;
   prUrl?: string | null;
   prNumber?: number | null;
   prState?: PRState;
@@ -107,6 +110,7 @@ export interface SnapshotUpdateInput {
  */
 export interface SnapshotDerivationFns {
   deriveFlowState: (input: {
+    prSummary?: WorkspacePRSummary;
     prUrl: string | null;
     prState: PRState;
     prCiStatus: CIStatus;
@@ -122,6 +126,7 @@ export interface SnapshotDerivationFns {
   };
   deriveSidebarStatus: (input: {
     isWorking: boolean;
+    prSummary?: WorkspacePRSummary;
     prUrl: string | null;
     prState: PRState | null;
     prCiStatus: CIStatus | null;
@@ -168,6 +173,8 @@ const WORKSPACE_FIELDS = [
   'autoIterationStatus',
 ] as const;
 const PR_FIELDS = [
+  'prs',
+  'prSummary',
   'prUrl',
   'prNumber',
   'prState',
@@ -281,6 +288,9 @@ function snapshotFieldValuesEqual(
       left as WorkspaceSessionSummary[],
       right as WorkspaceSessionSummary[]
     );
+  }
+  if (field === 'prs' || field === 'prSummary') {
+    return isDeepStrictEqual(left, right);
   }
   return Object.is(left, right);
 }
@@ -449,6 +459,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
   private recomputeDerivedState(entry: WorkspaceSnapshotEntry): boolean {
     const sessionIsWorking = this.rawSessionIsWorkingByWorkspaceId.get(entry.workspaceId) ?? false;
     const flowState = this.derive.deriveFlowState({
+      prSummary: entry.prSummary,
       prUrl: entry.prUrl,
       prState: entry.prState,
       prCiStatus: entry.prCiStatus,
@@ -459,6 +470,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     const derivedState = assembleWorkspaceDerivedState(
       {
         lifecycle: entry.status,
+        prSummary: entry.prSummary,
         prUrl: entry.prUrl,
         prState: entry.prState,
         prCiStatus: entry.prCiStatus,

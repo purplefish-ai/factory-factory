@@ -324,10 +324,10 @@ relevant fields. Never spread the entire event payload into the update.
 
 ### Pitfall 4: Coalescing Window Too Small or Too Large
 
-**What goes wrong:** Too small (e.g., 10ms) and events don't actually coalesce
--- defeating the purpose. Too large (e.g., 1s) and the UI feels laggy. **Why it
-happens:** Miscalibrating the debounce window. **How to avoid:** Use 150ms as
-default (middle of the 100-200ms requirement). Make it configurable via
+**What goes wrong:** Too small (e.g., 10ms) and events don't actually
+coalesce -- defeating the purpose. Too large (e.g., 1s) and the UI feels laggy.
+**Why it happens:** Miscalibrating the debounce window. **How to avoid:** Use
+150ms as default (middle of the 100-200ms requirement). Make it configurable via
 constructor parameter for testing. In tests, use a 0ms or very small window to
 avoid test flakiness. **Warning signs:** Tests timing out waiting for coalesced
 updates, or rapid-fire events producing multiple snapshot updates.

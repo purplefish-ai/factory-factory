@@ -1,24 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import type { SessionLifecycleWorkspaceBridge } from '@/backend/services/session/service/bridges';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { workspaceNotificationService } from '@/backend/services/workspace';
 import { WorkspaceStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import {
-  SessionLifecycleService,
-  type SessionLifecycleServiceDependencies,
-} from './session.lifecycle.service';
 import type { SessionContextService } from './session-context.service';
+import type { SessionLifecycleGate } from './session-lifecycle-gate';
 import {
   createLifecycleHarness,
   createPendingWorkspaceNotification,
 } from './session-lifecycle.test-helpers';
-import type { SessionLifecycleGate } from './session-lifecycle-gate';
 import type { SessionStartupCoordinator } from './session-startup.coordinator';
 import type { SessionTerminationCoordinator } from './session-termination.coordinator';
 import type { SessionWorkflowFinalizer } from './session-workflow-finalizer';
+import {
+  SessionLifecycleService,
+  type SessionLifecycleServiceDependencies,
+} from './session.lifecycle.service';
 
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
@@ -84,9 +83,6 @@ describe('SessionLifecycleFacade', () => {
       getOrCreateSessionClient: vi.fn<SessionStartupCoordinator['getOrCreateSessionClient']>(
         async () => 'client-by-id'
       ),
-      getOrCreateSessionClientFromRecord: vi.fn<
-        SessionStartupCoordinator['getOrCreateSessionClientFromRecord']
-      >(async () => 'client-by-record'),
       ensureSubagentBrowseSession: vi.fn<SessionStartupCoordinator['ensureSubagentBrowseSession']>(
         async () => true
       ),
@@ -152,7 +148,6 @@ describe('SessionLifecycleFacade', () => {
     const startOptions = { initialPrompt: 'Continue exactly' };
     const stopOptions = { reason: 'USER_STOP' as const };
     const clientOptions = { model: 'delegated-model', reasoningEffort: 'high' };
-    const session = unsafeCoerce<AgentSessionRecord>({ id: 'record-session' });
 
     const guardedOperations = [
       [() => service.startSession('unconfigured-start'), startupCoordinator.startSession],
@@ -166,10 +161,6 @@ describe('SessionLifecycleFacade', () => {
       [
         () => service.getOrCreateSessionClient('unconfigured-client'),
         startupCoordinator.getOrCreateSessionClient,
-      ],
-      [
-        () => service.getOrCreateSessionClientFromRecord(session),
-        startupCoordinator.getOrCreateSessionClientFromRecord,
       ],
       [
         () => service.ensureSubagentBrowseSession('unconfigured-browse'),
@@ -199,9 +190,6 @@ describe('SessionLifecycleFacade', () => {
     await service.restartSession('restart-session', startOptions);
     await expect(service.getOrCreateSessionClient('client-session', clientOptions)).resolves.toBe(
       'client-by-id'
-    );
-    await expect(service.getOrCreateSessionClientFromRecord(session, clientOptions)).resolves.toBe(
-      'client-by-record'
     );
     await expect(service.ensureSubagentBrowseSession('browse-session')).resolves.toBe(true);
     await expect(service.stopSession('stop-session', stopOptions)).resolves.toBeUndefined();
@@ -237,10 +225,6 @@ describe('SessionLifecycleFacade', () => {
     expect(startupCoordinator.restartSession).toHaveBeenCalledWith('restart-session', startOptions);
     expect(startupCoordinator.getOrCreateSessionClient).toHaveBeenCalledWith(
       'client-session',
-      clientOptions
-    );
-    expect(startupCoordinator.getOrCreateSessionClientFromRecord).toHaveBeenCalledWith(
-      session,
       clientOptions
     );
     expect(startupCoordinator.ensureSubagentBrowseSession).toHaveBeenCalledWith('browse-session');
@@ -286,12 +270,6 @@ describe('SessionLifecycleFacade', () => {
         reject: (error: Error) =>
           startupCoordinator.getOrCreateSessionClient.mockRejectedValueOnce(error),
         invoke: () => service.getOrCreateSessionClient('rejected-client'),
-      },
-      {
-        name: 'record client acquisition',
-        reject: (error: Error) =>
-          startupCoordinator.getOrCreateSessionClientFromRecord.mockRejectedValueOnce(error),
-        invoke: () => service.getOrCreateSessionClientFromRecord(session),
       },
       {
         name: 'browse acquisition',

@@ -28,22 +28,17 @@ export type PRSnapshotRefreshResult =
       reason: 'workspace_not_found' | 'no_pr_url' | 'fetch_failed' | 'stale_observation' | 'error';
     };
 
-export type AttachAndRefreshResult =
-  | { success: true; snapshot: SnapshotData }
-  | {
-      success: false;
-      reason:
-        | 'workspace_not_found'
-        | 'fetch_failed'
-        | 'claim_stale'
-        | 'stale_observation'
-        | 'error';
-    };
+export type AttachAndRefreshResult = (
+  | PRSnapshotRefreshResult
+  | { success: false; reason: 'claim_stale' }
+) & { prId?: string };
 
 export const PR_SNAPSHOT_UPDATED = 'pr_snapshot_updated' as const;
 export const PR_URL_ATTACHED = 'pr_url_attached' as const;
+export const PR_DETACHED = 'pr_detached' as const;
 
 export interface PRSnapshotUpdatedEvent {
+  prId?: string;
   workspaceId: string;
   prUrl?: string | null;
   prNumber: number;
@@ -55,12 +50,15 @@ export interface PRSnapshotUpdatedEvent {
 }
 
 export interface PRUrlAttachedEvent {
+  prId?: string;
   workspaceId: string;
   prUrl: string;
 }
 
 /** One ratchet check's observation of a PR: every input `deriveRatchetState` reads. */
 interface PrObservationInput {
+  prId?: string;
+  expectedRevision?: number;
   prUrl: string;
   prNumber: number;
   ciStatus: SnapshotData['prCiStatus'];
@@ -73,11 +71,14 @@ interface PrObservationInput {
 }
 
 interface ReviewCheckInput {
+  prId?: string;
   checkedAt?: Date | null;
   latestCommentId?: string;
 }
 
 interface ApplySnapshotOptions {
+  prId?: string;
+  expectedRevision?: number;
   eventPrUrl?: string | null;
   persistPrUrl?: string | null;
   branchName?: string;
@@ -85,12 +86,9 @@ interface ApplySnapshotOptions {
 
 class PRSnapshotService extends EventEmitter {
   private workspaceBridge: GitHubWorkspaceBridge | null = null;
-  private readonly workspaceOperations = new Map<string, Promise<void>>();
-
   configure(bridges: { workspace: GitHubWorkspaceBridge }): void {
     this.workspaceBridge = bridges.workspace;
   }
-
   private get workspace(): GitHubWorkspaceBridge {
     if (!this.workspaceBridge) {
       throw new Error(
@@ -99,363 +97,225 @@ class PRSnapshotService extends EventEmitter {
     }
     return this.workspaceBridge;
   }
-
-  private runWorkspaceOperation<T>(workspaceId: string, operation: () => Promise<T>): Promise<T> {
-    const previous = this.workspaceOperations.get(workspaceId) ?? Promise.resolve();
-    const result = previous.catch(() => undefined).then(operation);
-    const completion = result.then(
-      () => undefined,
-      () => undefined
-    );
-    this.workspaceOperations.set(workspaceId, completion);
-    void completion.then(() => {
-      if (this.workspaceOperations.get(workspaceId) === completion) {
-        this.workspaceOperations.delete(workspaceId);
+  async attachAndRefreshPR(workspaceId: string, prUrl: string): Promise<AttachAndRefreshResult> {
+    try {
+      if (!(await this.workspace.findPRContext(workspaceId))) {
+        return { success: false, reason: 'workspace_not_found' };
       }
-    });
+      const attached = await this.workspace.attachPR(workspaceId, prUrl);
+      if (attached.created || attached.reattached) {
+        this.emit(PR_URL_ATTACHED, {
+          workspaceId,
+          prId: attached.prId,
+          prUrl,
+        } satisfies PRUrlAttachedEvent);
+      }
+      const result = await this.refreshPR({ workspaceId, prId: attached.prId });
+      return {
+        ...result,
+        prId: attached.prId,
+        ...(!result.success && result.reason === 'error'
+          ? { reason: 'fetch_failed' as const }
+          : {}),
+      };
+    } catch (error) {
+      logger.error('Failed to attach PR', toError(error), { workspaceId, prUrl });
+      return { success: false, reason: 'error' };
+    }
+  }
+  async detachPR(target: { workspaceId: string; prId: string }) {
+    const result = await this.workspace.detachPR(target);
+    if (result.removed) {
+      this.emit(PR_DETACHED, target);
+    }
     return result;
   }
-
-  /**
-   * Record what a ratchet check observed about a PR. The canonical write path for
-   * the ratchet's half of the PR cache.
-   *
-   * Publishes `PR_SNAPSHOT_UPDATED` for every applied write, exactly as the
-   * PR-sync poller does. It used to publish only a dispatch-invalidation, and only
-   * when a settled dispatch was reset — so a merge the ratchet saw first reached
-   * the database and stopped there, leaving the client on `OPEN` and the linked
-   * Linear issue uncompleted until the poller came round.
-   */
-  async recordPrObservation(workspaceId: string, input: PrObservationInput): Promise<void> {
-    await this.runWorkspaceOperation(workspaceId, async () => {
-      const result = await this.workspace.applyPrObservationWithDispatchReset(workspaceId, {
-        expectedPrUrl: input.prUrl,
-        expectedPrNumber: input.prNumber,
-        prCiStatus: input.ciStatus,
-        prState: input.prState,
-        prReviewState: input.reviewState,
-        prHasMergeConflict: input.hasMergeConflict,
-        prUpdatedAt: input.observedAt ?? new Date(),
-        ...(input.failedAt !== undefined ? { prCiFailedAt: input.failedAt ?? null } : {}),
+  async refreshPR(target: { workspaceId: string; prId: string }): Promise<PRSnapshotRefreshResult> {
+    try {
+      const pr = await this.workspace.findPR(target);
+      if (!pr) {
+        return { success: false, reason: 'no_pr_url' };
+      }
+      const snapshot = await githubCLIService.fetchAndComputePRState(pr.url);
+      if (!snapshot) {
+        return { success: false, reason: 'fetch_failed' };
+      }
+      const result = await this.workspace.applyPrSnapshotWithDispatchReset(target.workspaceId, {
+        ...snapshot,
+        prId: pr.id,
+        expectedRevision: pr.revision,
+        prUpdatedAt: new Date(),
       });
       if (!result.applied) {
-        return;
+        return { success: false, reason: 'stale_observation' };
       }
-      // `prUrl` is deliberately absent: this observation is for the PR already
-      // attached, and the PR-switch check keys off a changed url or number.
+      this.emit(PR_SNAPSHOT_UPDATED, {
+        workspaceId: target.workspaceId,
+        prId: pr.id,
+        prUrl: pr.url,
+        ...snapshot,
+        ...(result.dispatchReset ? { ratchetDispatchChanged: true as const } : {}),
+      } satisfies PRSnapshotUpdatedEvent);
+      return { success: true, snapshot };
+    } catch (error) {
+      logger.error('Failed to refresh PR', toError(error), target);
+      return { success: false, reason: 'error' };
+    }
+  }
+  async refreshWorkspace(
+    workspaceId: string,
+    explicitPrUrl?: string | null
+  ): Promise<PRSnapshotRefreshResult> {
+    try {
+      if (!(await this.workspace.findPRContext(workspaceId))) {
+        return { success: false, reason: 'workspace_not_found' };
+      }
+      const prs = (await this.workspace.listPRs(workspaceId)).filter(
+        (pr) => !explicitPrUrl || pr.url === explicitPrUrl
+      );
+      if (!prs.length) {
+        return { success: false, reason: 'no_pr_url' };
+      }
+      let result: PRSnapshotRefreshResult = { success: false, reason: 'no_pr_url' };
+      let failed: PRSnapshotRefreshResult | undefined;
+      for (const pr of prs) {
+        result = await this.refreshPR({ workspaceId, prId: pr.id });
+        if (!result.success) {
+          failed = result;
+        }
+      }
+      return failed ?? result;
+    } catch (error) {
+      logger.error('Failed to refresh workspace PRs', toError(error), { workspaceId });
+      return { success: false, reason: 'error' };
+    }
+  }
+  async attachDiscoveredPRAndRefresh(
+    workspaceId: string,
+    prUrl: string,
+    claim: GitHubPRDiscoveryClaim
+  ): Promise<AttachAndRefreshResult> {
+    const ids = await this.workspace.attachDiscoveredPRsIfClaimMatches(workspaceId, claim, [prUrl]);
+    const prId = ids[0];
+    if (!prId) {
+      return { success: false, reason: 'claim_stale' };
+    }
+    this.emit(PR_URL_ATTACHED, { workspaceId, prId, prUrl } satisfies PRUrlAttachedEvent);
+    return await this.refreshPR({ workspaceId, prId });
+  }
+  async attachDiscoveredPRsAndRefresh(
+    workspaceId: string,
+    urls: string[],
+    claim: GitHubPRDiscoveryClaim
+  ): Promise<number> {
+    const ids = await this.workspace.attachDiscoveredPRsIfClaimMatches(workspaceId, claim, urls);
+    for (const prId of ids) {
+      const pr = await this.workspace.findPR({ workspaceId, prId });
+      if (!pr) {
+        continue;
+      }
+      this.emit(PR_URL_ATTACHED, { workspaceId, prId, prUrl: pr.url } satisfies PRUrlAttachedEvent);
+      await this.refreshPR({ workspaceId, prId });
+    }
+    return ids.length;
+  }
+  async recordPrObservation(workspaceId: string, input: PrObservationInput): Promise<void> {
+    const prs = await this.workspace.listPRs(workspaceId);
+    const pr = prs.find((pr) => pr.url === input.prUrl && (!input.prId || pr.id === input.prId));
+    if (!pr) {
+      return;
+    }
+    const result = await this.workspace.applyPrObservationWithDispatchReset(workspaceId, {
+      prId: pr.id,
+      expectedRevision: input.expectedRevision ?? pr.revision,
+      expectedPrUrl: pr.url,
+      expectedPrNumber: input.prNumber,
+      prCiStatus: input.ciStatus,
+      prState: input.prState,
+      prReviewState: input.reviewState,
+      prHasMergeConflict: input.hasMergeConflict,
+      prUpdatedAt: input.observedAt ?? new Date(),
+      ...(input.failedAt !== undefined ? { prCiFailedAt: input.failedAt } : {}),
+    });
+    if (result.applied) {
       this.emit(PR_SNAPSHOT_UPDATED, {
         workspaceId,
+        prId: pr.id,
+        prUrl: pr.url,
         prNumber: input.prNumber,
         prState: input.prState,
         prCiStatus: input.ciStatus,
         prReviewState: input.reviewState,
         ...(result.dispatchReset ? { ratchetDispatchChanged: true as const } : {}),
       } satisfies PRSnapshotUpdatedEvent);
-    });
+    }
   }
-
-  /**
-   * Record PR review polling checkpoint.
-   */
   async recordReviewCheck(workspaceId: string, input: ReviewCheckInput = {}): Promise<void> {
-    const checkedAt = input.checkedAt === null ? null : (input.checkedAt ?? new Date());
-    await this.workspace.recordSnapshot(workspaceId, {
-      prReviewLastCheckedAt: checkedAt,
+    const prs = await this.workspace.listPRs(workspaceId);
+    const pr = input.prId
+      ? prs.find((pr) => pr.id === input.prId)
+      : prs.length === 1
+        ? prs[0]
+        : undefined;
+    if (!pr) {
+      return;
+    }
+    await this.workspace.applyPrSnapshotWithDispatchReset(workspaceId, {
+      prId: pr.id,
+      expectedRevision: pr.revision,
+      prNumber: pr.number ?? githubCLIService.extractPRInfo(pr.url)?.number ?? 0,
+      prState: pr.state,
+      prReviewState: pr.reviewState,
+      prCiStatus: pr.ciStatus,
+      prUpdatedAt: pr.syncedAt ?? new Date(),
+      prReviewLastCheckedAt: input.checkedAt === null ? null : (input.checkedAt ?? new Date()),
       ...(input.latestCommentId !== undefined
         ? { prReviewLastCommentId: input.latestCommentId }
         : {}),
     });
   }
-
-  /**
-   * Canonical operation to attach a PR URL to a workspace and refresh its snapshot.
-   * This is the single entry point for setting prUrl and PR snapshot fields.
-   *
-   * @param workspaceId - The workspace ID to update
-   * @param prUrl - The PR URL to attach
-   * @returns Result with snapshot data or failure reason
-   */
-  async attachAndRefreshPR(workspaceId: string, prUrl: string): Promise<AttachAndRefreshResult> {
-    return await this.runWorkspaceOperation(workspaceId, () =>
-      this.attachAndRefreshPRNow(workspaceId, prUrl)
-    );
-  }
-
-  private async attachAndRefreshPRNow(
-    workspaceId: string,
-    prUrl: string
-  ): Promise<AttachAndRefreshResult> {
-    try {
-      // Verify workspace exists
-      const workspace = await this.workspace.findPRContext(workspaceId);
-      if (!workspace) {
-        return { success: false, reason: 'workspace_not_found' };
-      }
-
-      // Fetch PR snapshot from GitHub
-      const snapshot = await githubCLIService.fetchAndComputePRState(prUrl);
-      if (!snapshot) {
-        // Attach with a neutral cache so the old PR cannot exclude ratchet
-        // candidates or reject observations for the newly attached PR.
-        await this.workspace.recordSnapshot(workspaceId, {
-          prUrl,
-          prUpdatedAt: new Date(),
-          prNumber: null,
-          prState: 'NONE',
-          prReviewState: null,
-          prCiStatus: 'UNKNOWN',
-          prHasMergeConflict: false,
-        });
-        this.emit(PR_URL_ATTACHED, {
-          workspaceId,
-          prUrl,
-        } satisfies PRUrlAttachedEvent);
-        logger.warn('Attached PR URL but could not fetch snapshot', { workspaceId, prUrl });
-        return { success: false, reason: 'fetch_failed' };
-      }
-
-      // Correct branchName if the PR was created on a different branch than what's stored
-      const branchNameUpdate =
-        snapshot.headRefName && snapshot.headRefName !== workspace.branchName
-          ? { branchName: snapshot.headRefName }
-          : {};
-
-      // Write full PR snapshot atomically, including prUrl
-      const applied = await this.applySnapshotNow(
-        workspaceId,
-        {
-          prNumber: snapshot.prNumber,
-          prState: snapshot.prState,
-          prReviewState: snapshot.prReviewState,
-          prCiStatus: snapshot.prCiStatus,
-        },
-        {
-          persistPrUrl: prUrl,
-          ...branchNameUpdate,
-        }
-      );
-      if (!applied) {
-        return { success: false, reason: 'stale_observation' };
-      }
-
-      if (branchNameUpdate.branchName) {
-        logger.info('Corrected workspace branchName to match PR head branch', {
-          workspaceId,
-          oldBranchName: workspace.branchName,
-          newBranchName: branchNameUpdate.branchName,
-        });
-      }
-
-      logger.info('Attached PR and refreshed snapshot', {
-        workspaceId,
-        prUrl,
-        prNumber: snapshot.prNumber,
-        prState: snapshot.prState,
-      });
-
-      return {
-        success: true,
-        snapshot: {
-          prNumber: snapshot.prNumber,
-          prState: snapshot.prState,
-          prReviewState: snapshot.prReviewState,
-          prCiStatus: snapshot.prCiStatus,
-        },
-      };
-    } catch (error) {
-      logger.error('Failed to attach PR and refresh snapshot', toError(error), {
-        workspaceId,
-        prUrl,
-      });
-      return { success: false, reason: 'error' };
-    }
-  }
-
-  /**
-   * Attach a PR found by scheduled discovery only if the claim that selected
-   * the workspace still matches. Snapshot refresh deliberately omits branch
-   * correction so a later user rename cannot be overwritten.
-   */
-  async attachDiscoveredPRAndRefresh(
-    workspaceId: string,
-    prUrl: string,
-    claim: GitHubPRDiscoveryClaim
-  ): Promise<AttachAndRefreshResult> {
-    return await this.runWorkspaceOperation(workspaceId, () =>
-      this.attachDiscoveredPRAndRefreshNow(workspaceId, prUrl, claim)
-    );
-  }
-
-  private async attachDiscoveredPRAndRefreshNow(
-    workspaceId: string,
-    prUrl: string,
-    claim: GitHubPRDiscoveryClaim
-  ): Promise<AttachAndRefreshResult> {
-    try {
-      const attached = await this.workspace.attachDiscoveredPRIfClaimMatches(
-        workspaceId,
-        prUrl,
-        claim,
-        new Date()
-      );
-      if (!attached) {
-        return { success: false, reason: 'claim_stale' };
-      }
-
-      const snapshot = await githubCLIService.fetchAndComputePRState(prUrl);
-      if (!snapshot) {
-        this.emit(PR_URL_ATTACHED, {
-          workspaceId,
-          prUrl,
-        } satisfies PRUrlAttachedEvent);
-        logger.warn('Attached discovered PR URL but could not fetch snapshot', {
-          workspaceId,
-          prUrl,
-        });
-        return { success: false, reason: 'fetch_failed' };
-      }
-
-      const snapshotData: SnapshotData = {
-        prNumber: snapshot.prNumber,
-        prState: snapshot.prState,
-        prReviewState: snapshot.prReviewState,
-        prCiStatus: snapshot.prCiStatus,
-      };
-      const persisted = await this.workspace.updatePRSnapshotIfUrlMatches(
-        workspaceId,
-        prUrl,
-        snapshotData,
-        new Date()
-      );
-      if (!persisted) {
-        return { success: false, reason: 'claim_stale' };
-      }
-
-      this.emit(PR_SNAPSHOT_UPDATED, {
-        workspaceId,
-        prUrl,
-        prNumber: snapshotData.prNumber,
-        prState: snapshotData.prState,
-        prCiStatus: snapshotData.prCiStatus,
-        prReviewState: snapshotData.prReviewState,
-      } satisfies PRSnapshotUpdatedEvent);
-
-      return { success: true, snapshot: snapshotData };
-    } catch (error) {
-      logger.error('Failed to attach discovered PR and refresh snapshot', toError(error), {
-        workspaceId,
-        prUrl,
-      });
-      return { success: false, reason: 'error' };
-    }
-  }
-
-  async refreshWorkspace(
-    workspaceId: string,
-    explicitPrUrl?: string | null
-  ): Promise<PRSnapshotRefreshResult> {
-    return await this.runWorkspaceOperation(workspaceId, () =>
-      this.refreshWorkspaceNow(workspaceId, explicitPrUrl)
-    );
-  }
-
-  private async refreshWorkspaceNow(
-    workspaceId: string,
-    explicitPrUrl?: string | null
-  ): Promise<PRSnapshotRefreshResult> {
-    try {
-      let prUrl = explicitPrUrl;
-
-      if (!prUrl) {
-        const workspace = await this.workspace.findPRContext(workspaceId);
-        if (!workspace) {
-          return { success: false, reason: 'workspace_not_found' };
-        }
-
-        prUrl = workspace.prUrl;
-      }
-
-      if (!prUrl) {
-        return { success: false, reason: 'no_pr_url' };
-      }
-
-      const snapshot = await githubCLIService.fetchAndComputePRState(prUrl);
-      if (!snapshot) {
-        return { success: false, reason: 'fetch_failed' };
-      }
-
-      const applied = await this.applySnapshotNow(
-        workspaceId,
-        {
-          prNumber: snapshot.prNumber,
-          prState: snapshot.prState,
-          prReviewState: snapshot.prReviewState,
-          prCiStatus: snapshot.prCiStatus,
-        },
-        {
-          eventPrUrl: prUrl,
-        }
-      );
-      if (!applied) {
-        return { success: false, reason: 'stale_observation' };
-      }
-
-      return {
-        success: true,
-        snapshot: {
-          prNumber: snapshot.prNumber,
-          prState: snapshot.prState,
-          prReviewState: snapshot.prReviewState,
-          prCiStatus: snapshot.prCiStatus,
-        },
-      };
-    } catch (error) {
-      logger.error('Failed to refresh PR snapshot', toError(error), { workspaceId });
-      return { success: false, reason: 'error' };
-    }
-  }
-
   async applySnapshot(
     workspaceId: string,
     snapshot: SnapshotData,
     options: ApplySnapshotOptions = {}
   ): Promise<void> {
-    await this.runWorkspaceOperation(workspaceId, () =>
-      this.applySnapshotNow(workspaceId, snapshot, options)
-    );
-  }
-
-  private async applySnapshotNow(
-    workspaceId: string,
-    snapshot: SnapshotData,
-    options: ApplySnapshotOptions = {}
-  ): Promise<boolean> {
-    const eventPrUrl = options.eventPrUrl ?? options.persistPrUrl;
-    const result = await this.workspace.applyPrSnapshotWithDispatchReset(workspaceId, {
-      ...(options.persistPrUrl !== undefined ? { prUrl: options.persistPrUrl } : {}),
-      prNumber: snapshot.prNumber,
-      prState: snapshot.prState,
-      prReviewState: snapshot.prReviewState,
-      prCiStatus: snapshot.prCiStatus,
-      prUpdatedAt: new Date(),
-      ...(options.branchName !== undefined ? { branchName: options.branchName } : {}),
-    });
-    if (!result.applied) {
-      return false;
+    if (options.persistPrUrl) {
+      const attached = await this.workspace.attachPR(workspaceId, options.persistPrUrl);
+      options = { ...options, prId: attached.prId };
+      if (attached.created || attached.reattached) {
+        this.emit(PR_URL_ATTACHED, {
+          workspaceId,
+          prId: attached.prId,
+          prUrl: options.persistPrUrl,
+        });
+      }
     }
-
-    this.emit(PR_SNAPSHOT_UPDATED, {
-      workspaceId,
-      ...(eventPrUrl !== undefined ? { prUrl: eventPrUrl } : {}),
-      prNumber: snapshot.prNumber,
-      prState: snapshot.prState,
-      prCiStatus: snapshot.prCiStatus,
-      prReviewState: snapshot.prReviewState,
-      ...(result.dispatchReset ? { ratchetDispatchChanged: true as const } : {}),
-    } satisfies PRSnapshotUpdatedEvent);
-
-    return true;
+    const prs = await this.workspace.listPRs(workspaceId);
+    const pr = prs.find((pr) =>
+      options.prId
+        ? pr.id === options.prId
+        : options.eventPrUrl
+          ? pr.url === options.eventPrUrl
+          : prs.length === 1
+    );
+    if (!pr) {
+      return;
+    }
+    const result = await this.workspace.applyPrSnapshotWithDispatchReset(workspaceId, {
+      ...snapshot,
+      prId: pr.id,
+      expectedRevision: options.expectedRevision ?? pr.revision,
+      prUpdatedAt: new Date(),
+    });
+    if (result.applied) {
+      this.emit(PR_SNAPSHOT_UPDATED, {
+        workspaceId,
+        prId: pr.id,
+        prUrl: pr.url,
+        ...snapshot,
+        ...(result.dispatchReset ? { ratchetDispatchChanged: true as const } : {}),
+      } satisfies PRSnapshotUpdatedEvent);
+    }
   }
 }
-
 export const prSnapshotService = new PRSnapshotService();

@@ -149,11 +149,15 @@ function main() {
     return;
   }
 
-  console.error('Disallowed direct process.env access detected. Route env access through configService.');
+  console.error(
+    'Disallowed direct process.env access detected. Route env access through configService.'
+  );
   for (const violation of violations) {
     console.error(`- ${violation.file}:${violation.line}:${violation.column}`);
   }
-  console.error('If a file must directly access process.env, add it to the allowlist in this script.');
+  console.error(
+    'If a file must directly access process.env, add it to the allowlist in this script.'
+  );
   process.exit(1);
 }
 

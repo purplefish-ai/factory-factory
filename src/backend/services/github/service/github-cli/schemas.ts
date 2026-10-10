@@ -10,6 +10,8 @@ const statusCheckRollupItemSchema = z
     status: z.string().optional(),
     conclusion: z.string().optional(),
     state: z.string().optional(),
+    context: z.string().optional(),
+    targetUrl: z.string().optional(),
     detailsUrl: z.string().optional(),
     startedAt: z.string().optional(),
     completedAt: z.string().optional(),
@@ -35,6 +37,9 @@ export const prStatusSchema = z.object({
   reviewDecision: reviewDecisionSchema,
   statusCheckRollup: z.array(statusCheckRollupItemSchema).nullable(),
   headRefName: z.string().optional(),
+  title: z.string().optional(),
+  baseRefName: z.string().optional(),
+  mergeStateStatus: z.string().optional(),
 });
 
 const authorSchema = z.object({

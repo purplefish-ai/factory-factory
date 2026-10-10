@@ -79,13 +79,14 @@ describe('workspaceAccessor', () => {
           name: 'Issue workspace',
           githubIssueNumber: 12,
           ratchet: { create: { enabled: false } },
-          pr: { create: {} },
+          prDiscovery: { create: {} },
           runScript: { create: {} },
           autoIteration: { create: { mode: undefined, config: undefined } },
         }),
         include: {
           ratchet: true,
-          pr: true,
+          prs: { include: { automation: true } },
+          prDiscovery: true,
           runScript: true,
           autoIteration: true,
           wakeSchedule: true,
@@ -106,13 +107,14 @@ describe('workspaceAccessor', () => {
           projectId: 'project-1',
           name: 'Manual workspace',
           ratchet: { create: { enabled: undefined } },
-          pr: { create: {} },
+          prDiscovery: { create: {} },
           runScript: { create: {} },
           autoIteration: { create: { mode: undefined, config: undefined } },
         }),
         include: {
           ratchet: true,
-          pr: true,
+          prs: { include: { automation: true } },
+          prDiscovery: true,
           runScript: true,
           autoIteration: true,
           wakeSchedule: true,
@@ -144,7 +146,8 @@ describe('workspaceAccessor', () => {
         agentSessions: true,
         terminalSessions: true,
         ratchet: true,
-        pr: true,
+        prs: { include: { automation: true } },
+        prDiscovery: true,
         runScript: true,
         autoIteration: true,
         wakeSchedule: true,
@@ -165,7 +168,13 @@ describe('workspaceAccessor', () => {
 
     expect(mockFindMany).toHaveBeenNthCalledWith(1, {
       where: { id: { in: ['ws-2'] } },
-      include: { project: true, pr: true, autoIteration: true },
+      include: {
+        project: true,
+        ratchet: { select: { enabled: true } },
+        prs: { include: { automation: true } },
+        prDiscovery: true,
+        autoIteration: true,
+      },
     });
   });
 
@@ -174,7 +183,24 @@ describe('workspaceAccessor', () => {
       pr: Record<string, unknown>,
       ratchet: Record<string, unknown> = { enabled: true }
     ) {
-      return { id: 'ws-1', ratchet, pr };
+      return {
+        id: 'ws-1',
+        ratchet,
+        prs: [
+          {
+            id: 'pr-1',
+            url: 'https://github.com/o/r/pull/1',
+            number: 1,
+            title: null,
+            headRefName: null,
+            baseRefName: null,
+            syncedAt: null,
+            detachedAt: null,
+            revision: 0,
+            ...pr,
+          },
+        ],
+      };
     }
 
     it('derives the state from the joined PR row instead of reading a column', async () => {
@@ -196,7 +222,8 @@ describe('workspaceAccessor', () => {
         expect.objectContaining({
           include: expect.objectContaining({
             ratchet: true,
-            pr: true,
+            prs: { include: { automation: true } },
+            prDiscovery: true,
             runScript: true,
             autoIteration: true,
           }),
@@ -233,7 +260,7 @@ describe('workspaceAccessor', () => {
     });
 
     it('falls back to the side-table defaults when a row is missing', async () => {
-      mockFindUnique.mockResolvedValue({ id: 'ws-1', ratchet: null, pr: null });
+      mockFindUnique.mockResolvedValue({ id: 'ws-1', ratchet: null, prs: [] });
 
       await expect(workspaceAccessor.findById('ws-1')).resolves.toMatchObject({
         // Defaults are enabled + no PR, which derives to IDLE.
@@ -262,6 +289,10 @@ describe('workspaceAccessor', () => {
      */
     function currentColumns(overrides: Record<string, unknown> = {}) {
       return {
+        id: 'pr-1',
+        revision: 0,
+        detachedAt: null,
+        workspaceId: 'ws-1',
         url: null,
         number: 41,
         state: 'CHANGES_REQUESTED',
@@ -290,11 +321,19 @@ describe('workspaceAccessor', () => {
             update: mockUpdate,
             updateMany: mockUpdateMany,
           },
+          workspacePRRatchet: {
+            findUnique: mockRatchetFindUnique,
+            updateMany: mockRatchetUpdateMany,
+          },
           workspaceRatchet: {
             findUnique: mockRatchetFindUnique,
             updateMany: mockRatchetUpdateMany,
           },
           workspacePR: {
+            findMany: async () => {
+              const pr = await mockPrFindUnique();
+              return pr ? [pr] : [];
+            },
             findUnique: mockPrFindUnique,
             updateMany: mockPrUpdateMany,
           },
@@ -326,13 +365,14 @@ describe('workspaceAccessor', () => {
       ).resolves.toEqual({ applied: true, dispatchReset: true });
 
       expect(mockPrUpdateMany).toHaveBeenCalledWith({
-        where: { workspaceId: 'ws-1', ...currentColumns() },
+        where: { id: 'pr-1', workspaceId: 'ws-1', detachedAt: null, revision: 0 },
         data: {
           number: 42,
           state: 'OPEN',
           ciStatus: 'PENDING',
           reviewState: 'CHANGES_REQUESTED',
           syncedAt: prUpdatedAt,
+          revision: { increment: 1 },
         },
       });
     });
@@ -347,7 +387,7 @@ describe('workspaceAccessor', () => {
       expect(mockUpdateMany).not.toHaveBeenCalled();
     });
 
-    it('writes a corrected branch name only after the aggregate write holds', async () => {
+    it('does not overwrite the workspace branch from attached PR metadata', async () => {
       mockPrUpdateMany.mockResolvedValue({ count: 1 });
       mockRatchetUpdateMany.mockResolvedValue({ count: 1 });
 
@@ -356,10 +396,7 @@ describe('workspaceAccessor', () => {
         branchName: 'feature/actual-head',
       });
 
-      expect(mockUpdate).toHaveBeenCalledWith({
-        where: { id: 'ws-1' },
-        data: { branchName: 'feature/actual-head' },
-      });
+      expect(mockUpdate).not.toHaveBeenCalled();
     });
 
     it('does not write the branch name when the aggregate write lost its guard', async () => {
@@ -382,8 +419,13 @@ describe('workspaceAccessor', () => {
       await workspaceAccessor.applyPrSnapshotWithDispatchReset('ws-1', changedObservation);
 
       expect(mockRatchetUpdateMany).toHaveBeenCalledWith({
-        where: { workspaceId: 'ws-1', ...currentDispatch() },
-        data: { dispatchOutcome: null, dispatchRetryCount: 0, dispatchStalled: false },
+        where: { prId: 'pr-1', ...currentDispatch() },
+        data: {
+          activeSessionId: null,
+          dispatchOutcome: null,
+          dispatchRetryCount: 0,
+          dispatchStalled: false,
+        },
       });
     });
 
@@ -549,8 +591,13 @@ describe('workspaceAccessor', () => {
       ).resolves.toEqual({ applied: true, dispatchReset: true });
 
       expect(mockRatchetUpdateMany).toHaveBeenCalledWith({
-        where: { workspaceId: 'ws-1', ...currentDispatch() },
-        data: { dispatchOutcome: null, dispatchRetryCount: 0, dispatchStalled: false },
+        where: { prId: 'pr-1', ...currentDispatch() },
+        data: {
+          activeSessionId: null,
+          dispatchOutcome: null,
+          dispatchRetryCount: 0,
+          dispatchStalled: false,
+        },
       });
     });
 
@@ -686,7 +733,13 @@ describe('workspaceAccessor', () => {
           status: 'ARCHIVING',
           updatedAt: { lt: expect.any(Date) },
         },
-        include: { project: true, pr: true, autoIteration: true },
+        include: {
+          project: true,
+          ratchet: { select: { enabled: true } },
+          prs: { include: { automation: true } },
+          prDiscovery: true,
+          autoIteration: true,
+        },
         orderBy: { updatedAt: 'asc' },
       });
 
