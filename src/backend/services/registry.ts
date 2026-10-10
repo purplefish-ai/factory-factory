@@ -8,6 +8,7 @@ export const prismaModelNames = [
   'WorkspaceRatchet',
   'WorkspaceRunScript',
   'WorkspaceAutoIteration',
+  'WorkspaceWakeSchedule',
   'WorkspaceNotification',
   'AgentSession',
   'SessionLifecycleEvent',
@@ -86,6 +87,7 @@ export const serviceNames = [
   'decision-log',
   'auto-iteration',
   'periodic-task',
+  'workspace-wake',
 ] as const;
 
 export type ServiceName = (typeof serviceNames)[number];
@@ -111,6 +113,7 @@ export const serviceRegistry = {
       'WorkspaceRatchet',
       'WorkspaceRunScript',
       'WorkspaceAutoIteration',
+      'WorkspaceWakeSchedule',
       'WorkspaceNotification',
     ],
   },
@@ -149,5 +152,9 @@ export const serviceRegistry = {
   'periodic-task': {
     dependsOn: ['workspace', 'settings'],
     ownsModels: ['PeriodicTask', 'PeriodicTaskExecution'],
+  },
+  'workspace-wake': {
+    dependsOn: [],
+    ownsModels: [],
   },
 } as const satisfies Record<ServiceName, ServiceDefinition>;

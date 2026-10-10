@@ -53,6 +53,9 @@ export const baseWorkspace: WorkspaceWithKanban = {
   ratchetEnabled: true,
   ratchetState: 'IDLE',
   runScriptStatus: 'IDLE',
+  wakeScheduleEnabled: false,
+  wakeScheduleCadence: null,
+  wakeScheduleNextWakeAt: null,
   githubIssueNumber: null,
   githubIssueUrl: null,
   linearIssueId: null,
@@ -112,6 +115,19 @@ function withPR(overrides: Partial<WorkspaceWithKanban>): WorkspaceWithKanban {
 export const NoPR: Story = {
   args: {
     workspace: baseWorkspace,
+    projectSlug: 'my-project',
+  },
+};
+
+export const WakeSchedule: Story = {
+  args: {
+    workspace: {
+      ...baseWorkspace,
+      name: 'Log watcher',
+      wakeScheduleEnabled: true,
+      wakeScheduleCadence: 'EVERY_HOUR',
+      wakeScheduleNextWakeAt: new Date('2026-10-01T15:00:00Z'),
+    },
     projectSlug: 'my-project',
   },
 };

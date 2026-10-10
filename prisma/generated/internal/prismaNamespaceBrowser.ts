@@ -60,6 +60,7 @@ export const ModelName = {
   WorkspacePRRatchet: 'WorkspacePRRatchet',
   WorkspaceRunScript: 'WorkspaceRunScript',
   WorkspaceAutoIteration: 'WorkspaceAutoIteration',
+  WorkspaceWakeSchedule: 'WorkspaceWakeSchedule',
   AgentSession: 'AgentSession',
   SessionLifecycleEvent: 'SessionLifecycleEvent',
   TerminalSession: 'TerminalSession',
@@ -233,6 +234,23 @@ export const WorkspaceAutoIterationScalarFieldEnum = {
 } as const
 
 export type WorkspaceAutoIterationScalarFieldEnum = (typeof WorkspaceAutoIterationScalarFieldEnum)[keyof typeof WorkspaceAutoIterationScalarFieldEnum]
+
+
+export const WorkspaceWakeScheduleScalarFieldEnum = {
+  workspaceId: 'workspaceId',
+  enabled: 'enabled',
+  cadence: 'cadence',
+  prompt: 'prompt',
+  scheduledTime: 'scheduledTime',
+  timezone: 'timezone',
+  scheduledDayOfMonth: 'scheduledDayOfMonth',
+  nextWakeAt: 'nextWakeAt',
+  lastWakeAt: 'lastWakeAt',
+  lastOutcome: 'lastOutcome',
+  lastError: 'lastError'
+} as const
+
+export type WorkspaceWakeScheduleScalarFieldEnum = (typeof WorkspaceWakeScheduleScalarFieldEnum)[keyof typeof WorkspaceWakeScheduleScalarFieldEnum]
 
 
 export const AgentSessionScalarFieldEnum = {

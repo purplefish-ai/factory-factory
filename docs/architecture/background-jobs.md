@@ -2,11 +2,12 @@
 
 Recurring backend work is declared to `jobRunner`
 (`src/backend/services/job-runner.service.ts`), which owns the loop lifecycle
-for all five poll loops: the snapshot reconciliation safety net, the PR
-sync/discovery poll, the periodic reconciliation cleanup, the ratchet, and the
-periodic-task poll. Each service registers its job in its constructor and keeps
-a thin `start()`/`stop()` that delegates — those delegators are the injection
-seam `server.ts` and `server.upgrade.test.ts` use, not leftovers.
+for all six poll loops: the snapshot reconciliation safety net, the PR
+sync/discovery poll, the periodic reconciliation cleanup, the ratchet, the
+periodic-task poll, and the workspace-wake poll. Each service registers its job
+in its constructor and keeps a thin `start()`/`stop()` that delegates — those
+delegators are the injection seam `server.ts` and `server.upgrade.test.ts` use,
+not leftovers.
 
 ## Pacing
 
@@ -18,9 +19,9 @@ next start to `interval + d`.
 
 Two per-job options carry behaviour the loops depended on:
 
-- `runImmediately` — the ratchet, periodic tasks and snapshot reconciliation
-  poll once on start; PR sync and reconciliation cleanup wait out the first
-  interval.
+- `runImmediately` — the ratchet, periodic tasks, workspace wake and snapshot
+  reconciliation poll once on start; PR sync and reconciliation cleanup wait out
+  the first interval.
 - `computeDelay` — consulted after every run, which is how the ratchet stretches
   its interval under GitHub rate limiting.
 

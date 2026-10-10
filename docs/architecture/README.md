@@ -9,7 +9,7 @@ the one that matches your change before you touch it.
 
 | File                                       | Covers                                                             |
 | ------------------------------------------ | ------------------------------------------------------------------ |
-| [background-jobs.md](./background-jobs.md) | `jobRunner`, the five poll loops, cadences, shutdown semantics     |
+| [background-jobs.md](./background-jobs.md) | `jobRunner`, the six poll loops, cadences, shutdown semantics      |
 | [pull-requests.md](./pull-requests.md)     | Auto-Fix (Ratchet), the `WorkspacePR` cache, PR fetch coordination |
 | [workspace-state.md](./workspace-state.md) | Run script, auto-iteration state, the Kanban column projection     |
 | [agent-runtime.md](./agent-runtime.md)     | ACP runtime, provider sub-agents, child workspaces, quick actions  |

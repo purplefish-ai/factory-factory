@@ -110,6 +110,7 @@ type WorkspaceForExport = Prisma.WorkspaceGetPayload<{
     prDiscovery: true;
     runScript: true;
     autoIteration: true;
+    wakeSchedule: true;
   };
 }>;
 
@@ -197,6 +198,7 @@ const mockWorkspace: WorkspaceForExport = {
   },
   periodicTaskId: null,
   parentWorkspaceId: null,
+  wakeSchedule: null,
   createdAt: new Date('2025-01-01T00:00:00.000Z'),
   updatedAt: new Date('2025-01-01T00:35:00.000Z'),
 };
@@ -554,6 +556,102 @@ describe('DataBackupService', () => {
             },
           },
         }),
+      });
+    });
+
+    it('exports and imports a workspace wake schedule', async () => {
+      const wakeScheduledWorkspace: WorkspaceForExport = {
+        ...mockWorkspace,
+        wakeSchedule: {
+          workspaceId: 'ws-1',
+          enabled: true,
+          cadence: 'DAILY',
+          prompt: 'Check the logs',
+          scheduledTime: '09:30',
+          timezone: 'America/New_York',
+          scheduledDayOfMonth: null,
+          nextWakeAt: new Date('2025-01-02T14:30:00.000Z'),
+          lastWakeAt: new Date('2025-01-01T14:30:00.000Z'),
+          lastOutcome: 'DELIVERED',
+          lastError: null,
+        },
+      };
+
+      vi.mocked(prisma.project.findMany).mockResolvedValue([mockProject]);
+      vi.mocked(prisma.workspace.findMany).mockResolvedValue([wakeScheduledWorkspace]);
+      vi.mocked(prisma.agentSession.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.terminalSession.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.userSettings.findFirst).mockResolvedValue(null);
+
+      const exported = await dataBackupService.exportData('1.0.0');
+      const exportedWorkspace = exported.data.workspaces[0];
+
+      expect(exportedWorkspace).toEqual(
+        expect.objectContaining({
+          wakeScheduleEnabled: true,
+          wakeScheduleCadence: 'DAILY',
+          wakeSchedulePrompt: 'Check the logs',
+          wakeScheduleScheduledTime: '09:30',
+          wakeScheduleTimezone: 'America/New_York',
+          wakeScheduleScheduledDayOfMonth: null,
+          wakeScheduleNextWakeAt: '2025-01-02T14:30:00.000Z',
+          wakeScheduleLastWakeAt: '2025-01-01T14:30:00.000Z',
+          wakeScheduleLastOutcome: 'DELIVERED',
+          wakeScheduleLastError: null,
+        })
+      );
+      expect(exportDataSchema.safeParse(exported).success).toBe(true);
+
+      vi.mocked(mockTx.project.findUnique)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue(mockProject);
+      vi.mocked(mockTx.project.create).mockResolvedValue(mockProject);
+      vi.mocked(mockTx.workspace.findUnique).mockResolvedValue(null);
+      vi.mocked(mockTx.workspace.create).mockResolvedValue(wakeScheduledWorkspace);
+
+      const result = await dataBackupService.importData(exported);
+
+      expect(result.workspaces.imported).toBe(1);
+      expect(mockTx.workspace.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          id: 'ws-1',
+          wakeSchedule: {
+            create: {
+              enabled: true,
+              cadence: 'DAILY',
+              prompt: 'Check the logs',
+              scheduledTime: '09:30',
+              timezone: 'America/New_York',
+              scheduledDayOfMonth: null,
+              nextWakeAt: new Date('2025-01-02T14:30:00.000Z'),
+              lastWakeAt: new Date('2025-01-01T14:30:00.000Z'),
+              lastOutcome: 'DELIVERED',
+              lastError: null,
+            },
+          },
+        }),
+      });
+    });
+
+    it('does not create a wake-schedule row for a workspace that never had one', async () => {
+      vi.mocked(mockTx.project.findUnique)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue(mockProject);
+      vi.mocked(mockTx.project.create).mockResolvedValue(mockProject);
+      vi.mocked(mockTx.workspace.findUnique).mockResolvedValue(null);
+      vi.mocked(mockTx.workspace.create).mockResolvedValue(mockWorkspace);
+
+      const exportedData = createImportData({
+        agentSessions: [],
+        terminalSessions: [],
+        userSettings: null,
+      });
+
+      await dataBackupService.importData(exportedData);
+
+      expect(mockTx.workspace.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ wakeSchedule: undefined }),
       });
     });
 

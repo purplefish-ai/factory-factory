@@ -257,6 +257,37 @@ and an archive warning when a parent has active children.
 - MCP server:
   `src/backend/services/session/service/acp/child-workspace-mcp-server.ts`
 
+## Wake schedule
+
+A workspace can schedule itself to wake back up on a cadence and resume its own
+session with a stored prompt, via the `set_wake_schedule` / `get_wake_schedule`
+/ `clear_wake_schedule` MCP tools exposed to every session
+(`workspace-wake-mcp-server.ts`). This is distinct from Periodic Tasks (see
+[integrations.md](./integrations.md)), which spawns a fresh workspace per run
+and is only configurable from the Admin UI — the wake schedule preserves
+conversation continuity in the same workspace and is configured by the agent
+itself mid-session. One schedule per workspace; setting a new one replaces any
+existing schedule.
+
+The `workspace-wake` capsule's poll loop (`workspace-wake-poll`, one of the six
+jobs in [background-jobs.md](./background-jobs.md)) finds due, enabled schedules
+and resumes the workspace's most recently updated session — any status, not just
+`RUNNING`/`IDLE` — via the same enqueue-then-dispatch path normal chat messages
+use (`chatMessageHandlerService.tryDispatchNextMessage`), which auto-starts a
+stopped session's ACP client. The woken turn runs under the resumed session's
+effective permission preset (derived from its workflow, same as
+`getWorkflowPermissionPreset`); if that preset isn't auto-approving (YOLO or
+RELAXED), tool-call approval prompts will stall with nobody present to answer
+them — so `workspaceWake.set` returns a `permissionWarning` in that case, which
+the MCP tool surfaces for the agent to relay at scheduling time.
+
+UI: `wakeScheduleEnabled`/`wakeScheduleCadence`/`wakeScheduleNextWakeAt` are
+flattened onto workspace reads like the other side tables (client-side they are
+mutation-only fields, not on the live snapshot wire), feeding a kanban-card
+badge and a read-only "Wake Schedule" right-panel tab with a cancel action.
+Archiving a workspace stops its wakes: the due-schedule query excludes
+`ARCHIVED`/`ARCHIVING` workspaces.
+
 ## Quick actions
 
 Workspace quick actions are markdown-driven from `prompts/quick-actions/`

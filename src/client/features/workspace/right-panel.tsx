@@ -1,4 +1,5 @@
 import {
+  AlarmIcon,
   ArrowsClockwiseIcon,
   CalendarIcon,
   CameraIcon,
@@ -34,6 +35,7 @@ import { TerminalPanel, type TerminalPanelRef, type TerminalTabState } from './t
 import { TerminalTabBar } from './terminal-tab-bar';
 import { TodoPanelContainer } from './todo-panel-container';
 import { useLogStream } from './use-log-stream';
+import { WakeSchedulePanel } from './wake-schedule-panel';
 import { type BottomPanelTab, useWorkspacePanel } from './workspace-panel-context';
 
 // =============================================================================
@@ -44,6 +46,26 @@ type LogsBottomTab = Exclude<BottomPanelTab, 'terminal'>;
 
 function isLogsBottomTab(tab: BottomPanelTab): tab is LogsBottomTab {
   return tab === 'setup-logs' || tab === 'dev-logs' || tab === 'post-run-logs';
+}
+
+function deriveWorkspacePanelFlags(
+  workspace:
+    | {
+        mode?: string | null;
+        periodicTaskId?: string | null;
+        wakeScheduleEnabled?: boolean;
+        creationSource?: string | null;
+      }
+    | undefined
+) {
+  const creationSource = workspace?.creationSource ?? null;
+  return {
+    isAutoIteration: workspace?.mode === 'AUTO_ITERATION',
+    periodicTaskId: workspace?.periodicTaskId ?? null,
+    hasWakeSchedule: workspace?.wakeScheduleEnabled ?? false,
+    // Child-workspace eligibility is unknown until the workspace query resolves.
+    isParentWorkspace: workspace !== undefined && creationSource !== 'CHILD_WORKSPACE',
+  };
 }
 
 // =============================================================================
@@ -71,6 +93,7 @@ interface TopPanelAreaProps {
   onTakeScreenshots?: () => void;
   isAutoIteration: boolean;
   periodicTaskId: string | null;
+  hasWakeSchedule: boolean;
   isParentWorkspace: boolean;
   selectedSessionId: string | null;
   selectedSessionName: string | null;
@@ -87,6 +110,7 @@ function TopPanelArea({
   onTakeScreenshots,
   isAutoIteration,
   periodicTaskId,
+  hasWakeSchedule,
   isParentWorkspace,
   selectedSessionId,
   selectedSessionName,
@@ -99,6 +123,7 @@ function TopPanelArea({
   const showScreenshots = activeTopTab === 'screenshots';
   const showAutoIteration = isAutoIteration && activeTopTab === 'auto-iteration';
   const showPeriodicTask = !!periodicTaskId && activeTopTab === 'periodic-task';
+  const showWakeSchedule = hasWakeSchedule && activeTopTab === 'wake-schedule';
   const showAgents = activeTopTab === 'agents';
 
   const screenshotsButtonClassName = cn(
@@ -146,6 +171,14 @@ function TopPanelArea({
             onSelect={() => onTopTabChange('periodic-task')}
           />
         )}
+        {hasWakeSchedule && (
+          <TabButton
+            label="Wake Schedule"
+            icon={<AlarmIcon className="h-3.5 w-3.5" />}
+            isActive={showWakeSchedule}
+            onSelect={() => onTopTabChange('wake-schedule')}
+          />
+        )}
         <TabButton
           label="Agents"
           icon={<TreeStructureIcon className="h-3.5 w-3.5" />}
@@ -190,6 +223,7 @@ function TopPanelArea({
         {showPeriodicTask && periodicTaskId && (
           <PeriodicTaskPanel periodicTaskId={periodicTaskId} />
         )}
+        {showWakeSchedule && <WakeSchedulePanel workspaceId={workspaceId} />}
         {showAgents && (
           <AgentsPanel
             workspaceId={workspaceId}
@@ -244,13 +278,23 @@ export function RightPanel({
     { id: workspaceId },
     { enabled: !!workspaceId }
   );
-  const isAutoIteration = workspace?.mode === 'AUTO_ITERATION';
-  const periodicTaskId =
-    (workspace as { periodicTaskId?: string | null } | undefined)?.periodicTaskId ?? null;
-  const creationSource =
-    (workspace as { creationSource?: string | null } | undefined)?.creationSource ?? null;
-  // Child-workspace eligibility is unknown until the workspace query resolves.
-  const isParentWorkspace = workspace !== undefined && creationSource !== 'CHILD_WORKSPACE';
+  const {
+    isAutoIteration,
+    periodicTaskId,
+    hasWakeSchedule: snapshotHasWakeSchedule,
+    isParentWorkspace,
+  } = deriveWorkspacePanelFlags(workspace);
+  // workspace.get's wakeSchedule* fields come from a websocket snapshot that
+  // doesn't carry this capsule's data on `snapshot_changed` deltas (only on a
+  // reconnect's `snapshot_full` baseline) — an agent setting/clearing its own
+  // schedule mid-session wouldn't flip this tab's visibility otherwise. Poll
+  // independently so the tab tracks the schedule live.
+  const { data: wakeSchedule } = trpc.workspaceWake.get.useQuery(
+    { workspaceId },
+    { enabled: !!workspaceId, refetchInterval: 15_000 }
+  );
+  const hasWakeSchedule =
+    wakeSchedule !== undefined ? !!wakeSchedule?.enabled : snapshotHasWakeSchedule;
 
   const { data: initStatus } = trpc.workspace.getInitStatus.useQuery(
     { id: workspaceId },
@@ -344,6 +388,14 @@ export function RightPanel({
     }
   }, [isAutoIteration, periodicTaskId, handleTopTabChange, workspaceId]);
 
+  // Clearing the wake schedule hides its tab; fall back to a visible one so
+  // the top panel doesn't render empty.
+  useEffect(() => {
+    if (!hasWakeSchedule && activeTopTab === 'wake-schedule') {
+      handleTopTabChange('changes');
+    }
+  }, [hasWakeSchedule, activeTopTab, handleTopTabChange]);
+
   const handleBottomTabChange = useCallback(
     (tab: BottomPanelTab) => {
       setActiveBottomTab(tab);
@@ -410,6 +462,7 @@ export function RightPanel({
           onTakeScreenshots={onTakeScreenshots ? handleTakeScreenshots : undefined}
           isAutoIteration={isAutoIteration}
           periodicTaskId={periodicTaskId}
+          hasWakeSchedule={hasWakeSchedule}
           isParentWorkspace={isParentWorkspace}
           selectedSessionId={selectedSessionId}
           selectedSessionName={selectedSessionName}

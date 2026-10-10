@@ -59,6 +59,9 @@ vi.mock('@/backend/orchestration/workspace-children.orchestrator', () => ({
 vi.mock('@/backend/orchestration/workspace-notification-delivery.orchestrator', () => ({
   deliverWorkspaceNotification: vi.fn(),
 }));
+vi.mock('@/backend/orchestration/workspace-wake-delivery.orchestrator', () => ({
+  deliverWorkspaceWake: vi.fn(),
+}));
 vi.mock('@/backend/orchestration/workspace-init.orchestrator', () => ({
   initializeWorkspaceWorktree: vi.fn(),
   recoverStaleProvisioningWorkspace: vi.fn(),
@@ -102,6 +105,7 @@ vi.mock('@/backend/services/periodic-task', () => ({
   periodicTaskService: {},
 }));
 vi.mock('@/backend/services/port.service', () => ({ findAvailablePort: vi.fn() }));
+vi.mock('@/backend/services/workspace-wake', () => ({ workspaceWakeService: {} }));
 vi.mock('@/backend/services/ratchet', () => ({ fixerSessionService: {}, ratchetService: {} }));
 vi.mock('@/backend/services/rate-limiter.service', () => ({ rateLimiter: {} }));
 vi.mock('@/backend/services/run-script', () => ({
@@ -161,6 +165,7 @@ vi.mock('@/backend/services/workspace', () => ({
   workspaceRunScriptService: {},
   workspaceSnapshotStore: {},
   workspaceStateMachine: {},
+  workspaceWakeScheduleService: {},
   worktreeLifecycleService: {},
 }));
 vi.mock('@/backend/services/workspace-git-state.service', () => ({
@@ -205,6 +210,7 @@ import {
   retryQueuedDispatchAfterWorkspaceReady,
 } from '@/backend/orchestration/workspace-init.orchestrator';
 import { deliverWorkspaceNotification } from '@/backend/orchestration/workspace-notification-delivery.orchestrator';
+import { deliverWorkspaceWake } from '@/backend/orchestration/workspace-wake-delivery.orchestrator';
 import { getQuickAction, listQuickActions } from '@/backend/prompts/quick-actions';
 import {
   autoIterationService,
@@ -274,9 +280,11 @@ import {
   workspaceRunScriptService,
   workspaceSnapshotStore,
   workspaceStateMachine,
+  workspaceWakeScheduleService,
   worktreeLifecycleService,
 } from '@/backend/services/workspace';
 import { workspaceGitStateService } from '@/backend/services/workspace-git-state.service';
+import { workspaceWakeService } from '@/backend/services/workspace-wake';
 
 const fakeSystemConfig = {
   baseDir: '/tmp/factory-factory',
@@ -357,6 +365,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     triggerAdversarialReview,
     createChildWorkspace,
     deliverWorkspaceNotification,
+    deliverWorkspaceWake,
     createLogger,
     createWorkspaceCreationService: () => ({ create: vi.fn() }),
     cryptoService,
@@ -430,6 +439,8 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     workspaceRunScriptService,
     workspaceSnapshotStore,
     workspaceStateMachine,
+    workspaceWakeScheduleService,
+    workspaceWakeService,
     worktreeLifecycleService,
   } satisfies ApplicationServices;
 

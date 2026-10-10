@@ -7,6 +7,7 @@ export type TopPanelTab =
   | 'screenshots'
   | 'auto-iteration'
   | 'periodic-task'
+  | 'wake-schedule'
   | 'agents';
 
 export interface PersistedTopPanelState {
@@ -21,6 +22,7 @@ export function parseStoredTopTab(value: string | null): TopPanelTab | null {
     value === 'screenshots' ||
     value === 'auto-iteration' ||
     value === 'periodic-task' ||
+    value === 'wake-schedule' ||
     value === 'agents'
   ) {
     return value;

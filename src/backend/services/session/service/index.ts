@@ -59,6 +59,7 @@ export {
   sessionRetryService,
   sessionService,
 } from './lifecycle/session-services';
+export { getWorkflowPermissionPreset } from './lifecycle/session-workflow-permissions';
 export { AcpTraceLogger, acpTraceLogger } from './logging/acp-trace-logger.service';
 // Session file logging
 export { SessionFileLogger, sessionFileLogger } from './logging/session-file-logger.service';

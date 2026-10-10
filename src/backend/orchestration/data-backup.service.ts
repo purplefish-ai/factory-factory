@@ -97,6 +97,28 @@ function exportedAutoIterationFields(workspace: WorkspaceForExport) {
   };
 }
 
+/**
+ * The ten wake-schedule fields a v4+ export file carries, flattened out of
+ * `WorkspaceWakeSchedule`. A workspace without one (most of them — the row is
+ * created lazily, only once an agent sets a schedule) exports as "no
+ * schedule" rather than omitting the fields.
+ */
+function exportedWakeScheduleFields(workspace: WorkspaceForExport) {
+  const wakeSchedule = workspace.wakeSchedule;
+  return {
+    wakeScheduleEnabled: wakeSchedule?.enabled ?? false,
+    wakeScheduleCadence: wakeSchedule?.cadence ?? null,
+    wakeSchedulePrompt: wakeSchedule?.prompt ?? null,
+    wakeScheduleScheduledTime: wakeSchedule?.scheduledTime ?? null,
+    wakeScheduleTimezone: wakeSchedule?.timezone ?? null,
+    wakeScheduleScheduledDayOfMonth: wakeSchedule?.scheduledDayOfMonth ?? null,
+    wakeScheduleNextWakeAt: toISOString(wakeSchedule?.nextWakeAt ?? null),
+    wakeScheduleLastWakeAt: toISOString(wakeSchedule?.lastWakeAt ?? null),
+    wakeScheduleLastOutcome: wakeSchedule?.lastOutcome ?? null,
+    wakeScheduleLastError: wakeSchedule?.lastError ?? null,
+  };
+}
+
 function sanitizeIssueTrackerConfigForExport(config: unknown): unknown {
   if (!config || typeof config !== 'object') {
     return null;
@@ -157,6 +179,33 @@ async function importProjects(
   }
 
   return counter;
+}
+
+/**
+ * WorkspaceWakeSchedule is created lazily (not with the workspace), so a
+ * workspace that never had one restores without a row too, instead of
+ * creating an empty one.
+ */
+function importedWakeScheduleCreateInput(
+  workspace: ExportedWorkspace
+): Prisma.WorkspaceCreateInput['wakeSchedule'] {
+  if (!workspace.wakeScheduleEnabled) {
+    return undefined;
+  }
+  return {
+    create: {
+      enabled: workspace.wakeScheduleEnabled,
+      cadence: workspace.wakeScheduleCadence ?? 'DAILY',
+      prompt: workspace.wakeSchedulePrompt ?? '',
+      scheduledTime: workspace.wakeScheduleScheduledTime,
+      timezone: workspace.wakeScheduleTimezone,
+      scheduledDayOfMonth: workspace.wakeScheduleScheduledDayOfMonth,
+      nextWakeAt: parseDate(workspace.wakeScheduleNextWakeAt),
+      lastWakeAt: parseDate(workspace.wakeScheduleLastWakeAt),
+      lastOutcome: workspace.wakeScheduleLastOutcome,
+      lastError: workspace.wakeScheduleLastError,
+    },
+  };
 }
 
 async function hasImportedParent(
@@ -305,6 +354,7 @@ async function importWorkspaces(
                 : undefined,
           },
         },
+        wakeSchedule: importedWakeScheduleCreateInput(workspace),
         hasHadSessions: workspace.hasHadSessions,
         createdAt: new Date(workspace.createdAt),
         updatedAt: new Date(workspace.updatedAt),
@@ -544,6 +594,8 @@ class DataBackupService {
           // Flattened out of WorkspaceAutoIteration. Only two of the five are in
           // the v4 format; see the helper.
           ...exportedAutoIterationFields(w),
+          // Flattened out of WorkspaceWakeSchedule; see the helper.
+          ...exportedWakeScheduleFields(w),
           githubIssueNumber: w.githubIssueNumber,
           githubIssueUrl: w.githubIssueUrl,
           linearIssueId: w.linearIssueId,

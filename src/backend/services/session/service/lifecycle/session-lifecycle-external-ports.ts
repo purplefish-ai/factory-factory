@@ -1,6 +1,7 @@
 import { configService } from '@/backend/services/config.service';
 import { serverInstanceService } from '@/backend/services/server-instance.service';
 import { getChildWorkspaceMcpServerConfig } from '@/backend/services/session/service/acp/child-workspace-mcp-server';
+import { getWorkspaceWakeMcpServerConfig } from '@/backend/services/session/service/acp/workspace-wake-mcp-server';
 import { userSettingsService } from '@/backend/services/settings';
 import { SessionContextService } from './session-context.service';
 import type { SessionAcpEnvironmentPort } from './session-lifecycle.types';
@@ -53,6 +54,10 @@ export const sessionAcpEnvironment: SessionAcpEnvironmentPort = {
     getChildWorkspaceMcpServerConfig({
       workspaceId,
       parentWorkspaceId,
+      apiBaseUrl: getBackendBaseUrl(),
+    }),
+    getWorkspaceWakeMcpServerConfig({
+      workspaceId,
       apiBaseUrl: getBackendBaseUrl(),
     }),
   ],

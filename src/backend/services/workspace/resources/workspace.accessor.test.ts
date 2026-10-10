@@ -89,6 +89,7 @@ describe('workspaceAccessor', () => {
           prDiscovery: true,
           runScript: true,
           autoIteration: true,
+          wakeSchedule: true,
         },
       });
     });
@@ -116,6 +117,7 @@ describe('workspaceAccessor', () => {
           prDiscovery: true,
           runScript: true,
           autoIteration: true,
+          wakeSchedule: true,
         },
       });
     });
@@ -148,6 +150,7 @@ describe('workspaceAccessor', () => {
         prDiscovery: true,
         runScript: true,
         autoIteration: true,
+        wakeSchedule: true,
       },
     });
   });

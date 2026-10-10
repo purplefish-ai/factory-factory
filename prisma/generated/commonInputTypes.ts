@@ -409,6 +409,23 @@ export type EnumAutoIterationStatusNullableWithAggregatesFilter<$PrismaModel = n
   _max?: Prisma.NestedEnumAutoIterationStatusNullableFilter<$PrismaModel>
 }
 
+export type EnumPeriodicTaskCadenceFilter<$PrismaModel = never> = {
+  equals?: $Enums.PeriodicTaskCadence | Prisma.EnumPeriodicTaskCadenceFieldRefInput<$PrismaModel>
+  in?: $Enums.PeriodicTaskCadence[]
+  notIn?: $Enums.PeriodicTaskCadence[]
+  not?: Prisma.NestedEnumPeriodicTaskCadenceFilter<$PrismaModel> | $Enums.PeriodicTaskCadence
+}
+
+export type EnumPeriodicTaskCadenceWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.PeriodicTaskCadence | Prisma.EnumPeriodicTaskCadenceFieldRefInput<$PrismaModel>
+  in?: $Enums.PeriodicTaskCadence[]
+  notIn?: $Enums.PeriodicTaskCadence[]
+  not?: Prisma.NestedEnumPeriodicTaskCadenceWithAggregatesFilter<$PrismaModel> | $Enums.PeriodicTaskCadence
+  _count?: Prisma.NestedIntFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumPeriodicTaskCadenceFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumPeriodicTaskCadenceFilter<$PrismaModel>
+}
+
 export type EnumSessionStatusFilter<$PrismaModel = never> = {
   equals?: $Enums.SessionStatus | Prisma.EnumSessionStatusFieldRefInput<$PrismaModel>
   in?: $Enums.SessionStatus[]
@@ -536,23 +553,6 @@ export type FloatWithAggregatesFilter<$PrismaModel = never> = {
   _sum?: Prisma.NestedFloatFilter<$PrismaModel>
   _min?: Prisma.NestedFloatFilter<$PrismaModel>
   _max?: Prisma.NestedFloatFilter<$PrismaModel>
-}
-
-export type EnumPeriodicTaskCadenceFilter<$PrismaModel = never> = {
-  equals?: $Enums.PeriodicTaskCadence | Prisma.EnumPeriodicTaskCadenceFieldRefInput<$PrismaModel>
-  in?: $Enums.PeriodicTaskCadence[]
-  notIn?: $Enums.PeriodicTaskCadence[]
-  not?: Prisma.NestedEnumPeriodicTaskCadenceFilter<$PrismaModel> | $Enums.PeriodicTaskCadence
-}
-
-export type EnumPeriodicTaskCadenceWithAggregatesFilter<$PrismaModel = never> = {
-  equals?: $Enums.PeriodicTaskCadence | Prisma.EnumPeriodicTaskCadenceFieldRefInput<$PrismaModel>
-  in?: $Enums.PeriodicTaskCadence[]
-  notIn?: $Enums.PeriodicTaskCadence[]
-  not?: Prisma.NestedEnumPeriodicTaskCadenceWithAggregatesFilter<$PrismaModel> | $Enums.PeriodicTaskCadence
-  _count?: Prisma.NestedIntFilter<$PrismaModel>
-  _min?: Prisma.NestedEnumPeriodicTaskCadenceFilter<$PrismaModel>
-  _max?: Prisma.NestedEnumPeriodicTaskCadenceFilter<$PrismaModel>
 }
 
 export type EnumPeriodicTaskExecutionStatusFilter<$PrismaModel = never> = {
@@ -979,6 +979,23 @@ export type NestedEnumAutoIterationStatusNullableWithAggregatesFilter<$PrismaMod
   _max?: Prisma.NestedEnumAutoIterationStatusNullableFilter<$PrismaModel>
 }
 
+export type NestedEnumPeriodicTaskCadenceFilter<$PrismaModel = never> = {
+  equals?: $Enums.PeriodicTaskCadence | Prisma.EnumPeriodicTaskCadenceFieldRefInput<$PrismaModel>
+  in?: $Enums.PeriodicTaskCadence[]
+  notIn?: $Enums.PeriodicTaskCadence[]
+  not?: Prisma.NestedEnumPeriodicTaskCadenceFilter<$PrismaModel> | $Enums.PeriodicTaskCadence
+}
+
+export type NestedEnumPeriodicTaskCadenceWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.PeriodicTaskCadence | Prisma.EnumPeriodicTaskCadenceFieldRefInput<$PrismaModel>
+  in?: $Enums.PeriodicTaskCadence[]
+  notIn?: $Enums.PeriodicTaskCadence[]
+  not?: Prisma.NestedEnumPeriodicTaskCadenceWithAggregatesFilter<$PrismaModel> | $Enums.PeriodicTaskCadence
+  _count?: Prisma.NestedIntFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumPeriodicTaskCadenceFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumPeriodicTaskCadenceFilter<$PrismaModel>
+}
+
 export type NestedEnumSessionStatusFilter<$PrismaModel = never> = {
   equals?: $Enums.SessionStatus | Prisma.EnumSessionStatusFieldRefInput<$PrismaModel>
   in?: $Enums.SessionStatus[]
@@ -1095,23 +1112,6 @@ export type NestedFloatWithAggregatesFilter<$PrismaModel = never> = {
   _sum?: Prisma.NestedFloatFilter<$PrismaModel>
   _min?: Prisma.NestedFloatFilter<$PrismaModel>
   _max?: Prisma.NestedFloatFilter<$PrismaModel>
-}
-
-export type NestedEnumPeriodicTaskCadenceFilter<$PrismaModel = never> = {
-  equals?: $Enums.PeriodicTaskCadence | Prisma.EnumPeriodicTaskCadenceFieldRefInput<$PrismaModel>
-  in?: $Enums.PeriodicTaskCadence[]
-  notIn?: $Enums.PeriodicTaskCadence[]
-  not?: Prisma.NestedEnumPeriodicTaskCadenceFilter<$PrismaModel> | $Enums.PeriodicTaskCadence
-}
-
-export type NestedEnumPeriodicTaskCadenceWithAggregatesFilter<$PrismaModel = never> = {
-  equals?: $Enums.PeriodicTaskCadence | Prisma.EnumPeriodicTaskCadenceFieldRefInput<$PrismaModel>
-  in?: $Enums.PeriodicTaskCadence[]
-  notIn?: $Enums.PeriodicTaskCadence[]
-  not?: Prisma.NestedEnumPeriodicTaskCadenceWithAggregatesFilter<$PrismaModel> | $Enums.PeriodicTaskCadence
-  _count?: Prisma.NestedIntFilter<$PrismaModel>
-  _min?: Prisma.NestedEnumPeriodicTaskCadenceFilter<$PrismaModel>
-  _max?: Prisma.NestedEnumPeriodicTaskCadenceFilter<$PrismaModel>
 }
 
 export type NestedEnumPeriodicTaskExecutionStatusFilter<$PrismaModel = never> = {

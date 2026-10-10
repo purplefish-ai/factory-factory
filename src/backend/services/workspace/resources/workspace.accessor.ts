@@ -31,6 +31,11 @@ import {
   type WorkspaceRunScriptRow,
   workspaceRunScriptAccessor,
 } from '@/backend/services/workspace/resources/workspace-run-script.accessor';
+import {
+  flattenWorkspaceWakeSchedule,
+  type WorkspaceWakeScheduleFields,
+  type WorkspaceWakeScheduleRow,
+} from '@/backend/services/workspace/resources/workspace-wake-schedule.accessor';
 import type {
   WorkspaceFixerContext,
   WorkspacePRContext,
@@ -165,11 +170,15 @@ interface FindByProjectIdFilters {
  * disagree with them — and what let the projection land without touching any of
  * the forty files that read `workspace.ratchetState`.
  */
-type Flattened<T> = Omit<T, 'ratchet' | 'prs' | 'prDiscovery' | 'runScript' | 'autoIteration'> &
+type Flattened<T> = Omit<
+  T,
+  'ratchet' | 'prs' | 'prDiscovery' | 'runScript' | 'autoIteration' | 'wakeSchedule'
+> &
   WorkspaceRatchetFields &
   WorkspacePRFields &
   WorkspaceRunScriptFields &
-  WorkspaceAutoIterationFields & {
+  WorkspaceAutoIterationFields &
+  WorkspaceWakeScheduleFields & {
     ratchetState: RatchetState;
     prs: WorkspacePullRequest[];
     prSummary: WorkspacePRSummary;
@@ -183,9 +192,10 @@ function flatten<
     prDiscovery?: WorkspacePRDiscovery | null;
     runScript?: WorkspaceRunScriptRow | null;
     autoIteration?: WorkspaceAutoIteration | null;
+    wakeSchedule?: WorkspaceWakeScheduleRow | null;
   },
 >(row: T): Flattened<T> {
-  const { ratchet, prs = [], prDiscovery, runScript, autoIteration, ...rest } = row;
+  const { ratchet, prs = [], prDiscovery, runScript, autoIteration, wakeSchedule, ...rest } = row;
   const active = prs.filter((pr) => !pr.detachedAt);
   const collection = active.map(serializeWorkspacePR);
   const summary = deriveWorkspacePRSummary(collection, ratchet?.enabled ?? true);
@@ -201,6 +211,7 @@ function flatten<
     ...prFields,
     ...flattenWorkspaceRunScript(runScript),
     ...flattenWorkspaceAutoIteration(autoIteration),
+    ...flattenWorkspaceWakeSchedule(wakeSchedule),
     prState: summary.state,
     prCiStatus: summary.ciStatus,
     prHasMergeConflict: summary.hasMergeConflict,
@@ -219,15 +230,10 @@ const sideTables = {
   prDiscovery: true,
   runScript: true,
   autoIteration: true,
-} satisfies Prisma.WorkspaceInclude;
+  wakeSchedule: true,
+} as const satisfies Prisma.WorkspaceInclude;
 
-type SideTableInclude = {
-  ratchet: true;
-  prs: { include: { automation: true } };
-  prDiscovery: true;
-  runScript: true;
-  autoIteration: true;
-};
+type SideTableInclude = typeof sideTables;
 
 /** A bare workspace row with its side-table fields flattened on. */
 export type WorkspaceWithRatchet = Flattened<
@@ -376,11 +382,7 @@ class WorkspaceAccessor {
   findProviderSelection(id: string): Promise<WorkspaceProviderSelectionSnapshot | null> {
     return prisma.workspace.findUnique({
       where: { id },
-      select: {
-        id: true,
-        defaultSessionProvider: true,
-        ratchetSessionProvider: true,
-      },
+      select: { id: true, defaultSessionProvider: true, ratchetSessionProvider: true },
     });
   }
 
@@ -627,11 +629,7 @@ class WorkspaceAccessor {
    */
   startProvisioningRetryIfAllowed(id: string, maxRetries: number): Promise<{ count: number }> {
     return prisma.workspace.updateMany({
-      where: {
-        id,
-        status: 'FAILED',
-        initRetryCount: { lt: maxRetries },
-      },
+      where: { id, status: 'FAILED', initRetryCount: { lt: maxRetries } },
       data: {
         status: 'PROVISIONING',
         initRetryCount: { increment: 1 },
@@ -649,11 +647,7 @@ class WorkspaceAccessor {
    */
   startProvisioningFromReadyIfAllowed(id: string, maxRetries: number): Promise<{ count: number }> {
     return prisma.workspace.updateMany({
-      where: {
-        id,
-        status: 'READY',
-        initRetryCount: { lt: maxRetries },
-      },
+      where: { id, status: 'READY', initRetryCount: { lt: maxRetries } },
       data: {
         status: 'PROVISIONING',
         initRetryCount: { increment: 1 },

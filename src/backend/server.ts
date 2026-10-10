@@ -73,6 +73,7 @@ export function createServer(application: Application, requestedPort?: number): 
     terminalService,
     workspaceAutoIterationService,
     workspaceGitStateService,
+    workspaceWakeService,
   } = services;
   const {
     database,
@@ -457,6 +458,7 @@ export function createServer(application: Application, requestedPort?: number): 
       workspaceGitStateService.stop();
       await ratchetService.stop();
       await periodicTaskService.stop();
+      await workspaceWakeService.stop();
       await reconciliationService.stopPeriodicCleanup();
       await database.$disconnect();
 
@@ -550,6 +552,7 @@ export function createServer(application: Application, requestedPort?: number): 
         schedulerService.start();
         ratchetService.start();
         periodicTaskService.start();
+        workspaceWakeService.start();
         startupComplete = true;
 
         logger.info('Server endpoints available', {

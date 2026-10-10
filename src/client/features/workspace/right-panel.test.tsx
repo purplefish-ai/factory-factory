@@ -35,6 +35,9 @@ vi.mock('@/client/lib/trpc', () => ({
       },
       getInitStatus: { useQuery: () => ({ data: { status: 'READY' } }) },
     },
+    workspaceWake: {
+      get: { useQuery: () => ({ data: null }) },
+    },
   },
 }));
 
