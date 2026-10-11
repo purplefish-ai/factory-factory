@@ -176,6 +176,28 @@ describe('AppearanceSettingsSection', () => {
     });
   });
 
+  it('keeps an in-progress pick when the placeholder changes underneath it', () => {
+    const container = render();
+    const picker = container.querySelector<HTMLInputElement>('#appearance-background-color');
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    flushSync(() => {
+      setValue?.call(picker, '#123456');
+      picker?.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    // The painted scheme color is re-read whenever <html> changes.
+    flushSync(() => {
+      document.documentElement.classList.toggle('dark');
+    });
+
+    flushSync(() => {
+      picker?.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+    });
+    expect(mocks.updateSettingsMutate).toHaveBeenCalledWith({
+      appearanceBackgroundColor: '#123456',
+    });
+  });
+
   it('does not save when the picker is left on its placeholder', () => {
     const container = render();
     const picker = container.querySelector<HTMLInputElement>('#appearance-foreground-color');

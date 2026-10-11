@@ -1,6 +1,6 @@
 import { PaletteIcon } from '@phosphor-icons/react';
 import { useTheme } from 'next-themes';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
   COLOR_SCHEME_ATTRIBUTE,
@@ -180,20 +180,23 @@ function ColorOverrideField({
 }: ColorOverrideFieldProps) {
   const shown = value ?? placeholderColor;
   const [draft, setDraft] = useState(shown);
-  // Tracks whether the picker changed, so choosing exactly the placeholder
-  // color still saves it as an override.
-  const [dirty, setDirty] = useState(false);
+  // Set once the picker reports a change, so choosing exactly the placeholder
+  // color still saves it as an override. A ref: it never needs a re-render.
+  const dirtyRef = useRef(false);
 
+  // The placeholder follows the painted scheme and can change while the
+  // native picker is open; only replace the draft when no pick is in progress.
   useEffect(() => {
-    setDraft(shown);
-    setDirty(false);
+    if (!dirtyRef.current) {
+      setDraft(shown);
+    }
   }, [shown]);
 
   const commit = () => {
-    if (!dirty) {
+    if (!dirtyRef.current) {
       return;
     }
-    setDirty(false);
+    dirtyRef.current = false;
     const next = draft.toLowerCase();
     if (next !== value?.toLowerCase()) {
       onCommit(next);
@@ -210,7 +213,7 @@ function ColorOverrideField({
           value={draft}
           onChange={(event) => {
             setDraft(event.target.value);
-            setDirty(true);
+            dirtyRef.current = true;
           }}
           onBlur={commit}
           disabled={disabled}
