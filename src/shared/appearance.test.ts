@@ -12,6 +12,7 @@ import {
   FONT_SCALE_MIN,
   fontFamilySchema,
   fontOptionIdForValue,
+  fontScaleSchema,
   hexColorSchema,
   isDefaultAppearance,
   MONO_FONT_OPTIONS,
@@ -54,6 +55,12 @@ describe('font scale', () => {
     expect(clampFontScale(Number.NaN)).toBe(100);
   });
 
+  it('only accepts saved scales on the slider step', () => {
+    expect(fontScaleSchema.safeParse(105).success).toBe(true);
+    expect(fontScaleSchema.safeParse(102).success).toBe(false);
+    expect(fontScaleSchema.safeParse(102.5).success).toBe(false);
+  });
+
   it('scales the terminal font size from its pixel base', () => {
     expect(scaledTerminalFontSize(100)).toBe(13);
     expect(scaledTerminalFontSize(150)).toBe(20);
@@ -67,6 +74,11 @@ describe('fontFamilySchema', () => {
       '"Atkinson Hyperlegible", ui-sans-serif, sans-serif'
     );
     expect(fontFamilySchema.safeParse('OpenDyslexic').success).toBe(true);
+  });
+
+  it('accepts font names in any script', () => {
+    expect(fontFamilySchema.parse('游ゴシック, sans-serif')).toBe('游ゴシック, sans-serif');
+    expect(fontFamilySchema.safeParse('"Noto Sans Devanagari", देवनागरी').success).toBe(true);
   });
 
   it('rejects values that could escape a font-family declaration', () => {

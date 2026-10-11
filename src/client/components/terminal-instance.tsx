@@ -54,8 +54,9 @@ export function TerminalInstance({
   const appearance = useAppearance();
   const fontSize = scaledTerminalFontSize(appearance.fontScale);
   const fontFamily = appearance.fontMono ?? DEFAULT_TERMINAL_FONT_FAMILY;
-  const fontOptionsRef = useRef({ fontSize, fontFamily });
-  fontOptionsRef.current = { fontSize, fontFamily };
+  // The mount-only effect below only ever sees the first render's values; a
+  // later change is applied by the font effect further down.
+  const initialFontOptionsRef = useRef({ fontSize, fontFamily });
 
   // Initialize terminal synchronously
   useEffect(() => {
@@ -65,8 +66,8 @@ export function TerminalInstance({
 
     const terminal = new Terminal({
       cursorBlink: true,
-      fontSize: fontOptionsRef.current.fontSize,
-      fontFamily: fontOptionsRef.current.fontFamily,
+      fontSize: initialFontOptionsRef.current.fontSize,
+      fontFamily: initialFontOptionsRef.current.fontFamily,
       theme: {
         background: '#18181b', // zinc-900
         foreground: '#fafafa', // zinc-50

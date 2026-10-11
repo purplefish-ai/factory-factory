@@ -2,6 +2,11 @@ import { PaletteIcon } from '@phosphor-icons/react';
 import { useTheme } from 'next-themes';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import {
+  COLOR_SCHEME_ATTRIBUTE,
+  readRenderedThemeColors,
+  type RenderedThemeColors,
+} from '@/client/lib/appearance';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -44,6 +49,51 @@ type AppearanceUpdate = Partial<{
 }>;
 
 const FIELD_WIDTH = 'w-full sm:w-[280px]';
+
+/** Used until the page's painted colors can be read, and in environments without canvas. */
+const SCHEME_COLOR_FALLBACK: Record<'light' | 'dark', RenderedThemeColors> = {
+  dark: { background: '#0a0a0a', foreground: '#fafafa' },
+  light: { background: '#fafafa', foreground: '#0a0a0a' },
+};
+
+/**
+ * The background and text colors the active scheme and mode actually paint,
+ * so a color picker without an override starts from what the user sees.
+ */
+function useRenderedSchemeColors(isDark: boolean): RenderedThemeColors {
+  const fallback = SCHEME_COLOR_FALLBACK[isDark ? 'dark' : 'light'];
+  const [colors, setColors] = useState(fallback);
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const read = () => {
+      const next = readRenderedThemeColors() ?? fallback;
+      setColors((current) =>
+        current.background === next.background && current.foreground === next.foreground
+          ? current
+          : next
+      );
+    };
+    // The AppearanceProvider and next-themes write to <html>; re-read once
+    // their changes have been painted rather than guessing at the timing.
+    const schedule = () => {
+      clearTimeout(timer);
+      timer = setTimeout(read, 0);
+    };
+    schedule();
+    const observer = new MutationObserver(schedule);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['style', 'class', COLOR_SCHEME_ATTRIBUTE],
+    });
+    return () => {
+      clearTimeout(timer);
+      observer.disconnect();
+    };
+  }, [fallback]);
+
+  return colors;
+}
 
 const THEME_MODES = [
   { value: 'system', label: 'System' },
@@ -130,14 +180,22 @@ function ColorOverrideField({
 }: ColorOverrideFieldProps) {
   const shown = value ?? placeholderColor;
   const [draft, setDraft] = useState(shown);
+  // Tracks whether the picker changed, so choosing exactly the placeholder
+  // color still saves it as an override.
+  const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
     setDraft(shown);
+    setDirty(false);
   }, [shown]);
 
   const commit = () => {
+    if (!dirty) {
+      return;
+    }
+    setDirty(false);
     const next = draft.toLowerCase();
-    if (next !== shown.toLowerCase()) {
+    if (next !== value?.toLowerCase()) {
       onCommit(next);
     }
   };
@@ -150,7 +208,10 @@ function ColorOverrideField({
           id={id}
           type="color"
           value={draft}
-          onChange={(event) => setDraft(event.target.value)}
+          onChange={(event) => {
+            setDraft(event.target.value);
+            setDirty(true);
+          }}
           onBlur={commit}
           disabled={disabled}
           className="h-9 w-12 cursor-pointer rounded-md border border-input bg-background p-1 disabled:cursor-not-allowed disabled:opacity-50"
@@ -348,6 +409,11 @@ export function AppearanceSettingsSection() {
   const { data: settings, isLoading } = trpc.userSettings.get.useQuery();
   const utils = trpc.useUtils();
   const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
+  const appearance = appearanceFromUserSettings(settings);
+  const schemeColors = useRenderedSchemeColors(isDark);
+  // Fields keep local drafts; bumping this remounts them from the saved values.
+  const [resetKey, setResetKey] = useState(0);
   const updateSettings = trpc.userSettings.update.useMutation({
     onSuccess: (result) => {
       // Seed the cache so the AppearanceProvider applies the change before
@@ -357,6 +423,7 @@ export function AppearanceSettingsSection() {
     },
     onError: (error) => {
       toast.error(`Failed to update appearance: ${error.message}`);
+      setResetKey((key) => key + 1);
     },
   });
 
@@ -376,9 +443,7 @@ export function AppearanceSettingsSection() {
     );
   }
 
-  const appearance = appearanceFromUserSettings(settings);
   const disabled = updateSettings.isPending;
-  const isDark = resolvedTheme === 'dark';
   const update = (patch: AppearanceUpdate) => updateSettings.mutate(patch);
 
   return (
@@ -404,20 +469,22 @@ export function AppearanceSettingsSection() {
 
         <div className="grid gap-4 sm:grid-cols-2">
           <ColorOverrideField
+            key={`background-${resetKey}`}
             id="appearance-background-color"
             label="Background color"
             helpText="Replaces the color scheme’s page background in both light and dark mode."
             value={appearance.backgroundColor}
-            placeholderColor={isDark ? '#0a0a0a' : '#fafafa'}
+            placeholderColor={schemeColors.background}
             disabled={disabled}
             onCommit={(color) => update({ appearanceBackgroundColor: color })}
           />
           <ColorOverrideField
+            key={`foreground-${resetKey}`}
             id="appearance-foreground-color"
             label="Text color"
             helpText="Replaces the primary text color; secondary text is blended from it."
             value={appearance.foregroundColor}
-            placeholderColor={isDark ? '#fafafa' : '#0a0a0a'}
+            placeholderColor={schemeColors.foreground}
             disabled={disabled}
             onCommit={(color) => update({ appearanceForegroundColor: color })}
           />
@@ -425,12 +492,14 @@ export function AppearanceSettingsSection() {
 
         <div className="space-y-4 border-t pt-4">
           <FontScaleField
+            key={`scale-${resetKey}`}
             value={appearance.fontScale}
             disabled={disabled}
             onCommit={(fontScale) => update({ appearanceFontScale: fontScale })}
           />
           <div className="grid gap-4 sm:grid-cols-2">
             <FontFamilyField
+              key={`sans-${resetKey}`}
               id="appearance-font-sans"
               label="Interface font"
               helpText="Used for navigation, chat, and settings."
@@ -440,6 +509,7 @@ export function AppearanceSettingsSection() {
               onCommit={(fontSans) => update({ appearanceFontSans: fontSans })}
             />
             <FontFamilyField
+              key={`mono-${resetKey}`}
               id="appearance-font-mono"
               label="Monospace font"
               helpText="Used for code, diffs, and terminals."

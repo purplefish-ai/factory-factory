@@ -158,6 +158,7 @@ describe('userSettingsRouter', () => {
     { appearanceColorScheme: 'dracula' },
     { appearanceBackgroundColor: 'red' },
     { appearanceFontScale: 40 },
+    { appearanceFontScale: 102 },
     { appearanceFontScale: 102.5 },
     { appearanceFontMono: 'Inter; background: url(x)' },
   ])('rejects invalid appearance input %j', async (input) => {

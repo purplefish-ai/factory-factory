@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TRPCClientError } from '@trpc/client';
 import { observable } from '@trpc/server/observable';
+import { ThemeProvider } from 'next-themes';
 import { type ReactNode, useState } from 'react';
 import { Toaster } from 'sonner';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
@@ -192,11 +193,22 @@ export const Notifications: Story = {
   },
 };
 
+// The Mode selector talks to next-themes, which the app provides in RootLayout.
+function AppearanceStoryProvider({ children }: { children: ReactNode }) {
+  return (
+    <ThemeProvider attribute="class" storageKey="storybook-appearance-theme" enableSystem={false}>
+      {children}
+    </ThemeProvider>
+  );
+}
+
 export const Appearance: Story = {
   render: () => (
-    <SettingsStoryProvider>
-      <AppearanceSettingsSection />
-    </SettingsStoryProvider>
+    <AppearanceStoryProvider>
+      <SettingsStoryProvider>
+        <AppearanceSettingsSection />
+      </SettingsStoryProvider>
+    </AppearanceStoryProvider>
   ),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -226,7 +238,9 @@ export const CustomizedAppearance: Story = {
         appearanceFontMono: 'Fira Code',
       }}
     >
-      <AppearanceSettingsSection />
+      <AppearanceStoryProvider>
+        <AppearanceSettingsSection />
+      </AppearanceStoryProvider>
     </SettingsStoryProvider>
   ),
   play: async ({ canvasElement }) => {
@@ -242,7 +256,9 @@ export const CustomizedAppearance: Story = {
 export const LoadingAppearance: Story = {
   render: () => (
     <SettingsStoryProvider loading>
-      <AppearanceSettingsSection />
+      <AppearanceStoryProvider>
+        <AppearanceSettingsSection />
+      </AppearanceStoryProvider>
     </SettingsStoryProvider>
   ),
 };

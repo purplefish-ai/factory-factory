@@ -8,8 +8,11 @@
  */
 
 import { z } from 'zod';
-import type { AppearanceSettings } from '@/shared/appearance';
-import { DEFAULT_FONT_SCALE } from '@/shared/appearance';
+import {
+  type AppearanceSettings,
+  appearanceSettingsSchema,
+  DEFAULT_FONT_SCALE,
+} from '@/shared/appearance';
 
 export const APPEARANCE_STORAGE_KEY = 'factoryfactory_appearance';
 export const COLOR_SCHEME_ATTRIBUTE = 'data-color-scheme';
@@ -33,11 +36,14 @@ export const APPEARANCE_STYLE_PROPERTIES = [
 export interface ResolvedAppearance {
   colorScheme: string;
   styles: Record<string, string>;
+  /** The preferences behind the styles, so consumers that size in pixels can start from them. */
+  appearance: AppearanceSettings;
 }
 
 const resolvedAppearanceSchema = z.object({
   colorScheme: z.string(),
   styles: z.record(z.string(), z.string()),
+  appearance: appearanceSettingsSchema,
 });
 
 function applyColorOverrides(appearance: AppearanceSettings, styles: Record<string, string>) {
@@ -76,7 +82,7 @@ export function resolveAppearanceStyles(appearance: AppearanceSettings): Resolve
     styles['--font-mono'] = appearance.fontMono;
   }
   applyColorOverrides(appearance, styles);
-  return { colorScheme: appearance.colorScheme, styles };
+  return { colorScheme: appearance.colorScheme, styles, appearance };
 }
 
 export function applyResolvedAppearance(resolved: ResolvedAppearance, root: HTMLElement): void {
@@ -102,20 +108,22 @@ export function applyAppearance(
 
 export function writeStoredAppearance(
   resolved: ResolvedAppearance,
-  storage: Pick<Storage, 'setItem'> = localStorage
+  storage?: Pick<Storage, 'setItem'>
 ): void {
+  // Resolve localStorage inside the guard: merely touching it throws when
+  // storage is blocked, and that must not take the app down.
   try {
-    storage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify(resolved));
+    (storage ?? localStorage).setItem(APPEARANCE_STORAGE_KEY, JSON.stringify(resolved));
   } catch {
     // Non-blocking: the preferences still apply, the next load just flashes briefly.
   }
 }
 
 export function readStoredAppearance(
-  storage: Pick<Storage, 'getItem'> = localStorage
+  storage?: Pick<Storage, 'getItem'>
 ): ResolvedAppearance | null {
   try {
-    const raw = storage.getItem(APPEARANCE_STORAGE_KEY);
+    const raw = (storage ?? localStorage).getItem(APPEARANCE_STORAGE_KEY);
     if (!raw) {
       return null;
     }
@@ -124,4 +132,32 @@ export function readStoredAppearance(
   } catch {
     return null;
   }
+}
+
+/** Normalizes any color the browser can paint, including oklch(), to #rrggbb. */
+export function cssColorToHex(color: string): string | null {
+  if (!color) {
+    return null;
+  }
+  const context = document.createElement('canvas').getContext('2d');
+  if (!context) {
+    return null;
+  }
+  context.fillStyle = '#000000';
+  context.fillStyle = color;
+  const normalized = String(context.fillStyle);
+  return /^#[0-9a-f]{6}$/.test(normalized) ? normalized : null;
+}
+
+export interface RenderedThemeColors {
+  background: string;
+  foreground: string;
+}
+
+/** The page background and text colors as currently painted, or null where unavailable. */
+export function readRenderedThemeColors(): RenderedThemeColors | null {
+  const style = getComputedStyle(document.body);
+  const background = cssColorToHex(style.backgroundColor);
+  const foreground = cssColorToHex(style.color);
+  return background && foreground ? { background, foreground } : null;
 }

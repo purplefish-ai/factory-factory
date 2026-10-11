@@ -1,5 +1,9 @@
-import { createContext, useContext, useEffect, useMemo } from 'react';
-import { applyAppearance, writeStoredAppearance } from '@/client/lib/appearance';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import {
+  applyAppearance,
+  readStoredAppearance,
+  writeStoredAppearance,
+} from '@/client/lib/appearance';
 import { trpc } from '@/client/lib/trpc';
 import {
   type AppearanceSettings,
@@ -16,11 +20,13 @@ interface AppearanceProviderProps {
 /**
  * Reads the saved appearance preferences and applies them to <html>. Must be
  * rendered inside TRPCProvider. Until the settings query resolves, consumers
- * see the defaults and the document keeps whatever the bootstrap script in
- * index.html replayed from the last visit.
+ * see the preferences cached from the last visit (the same ones the bootstrap
+ * script in index.html replayed), so pixel-sized consumers such as the
+ * terminal do not jump once the saved values arrive.
  */
 export function AppearanceProvider({ children }: AppearanceProviderProps) {
   const { data: settings } = trpc.userSettings.get.useQuery();
+  const [cached] = useState(() => readStoredAppearance()?.appearance ?? null);
   const appearance = useMemo(
     () => (settings ? appearanceFromUserSettings(settings) : null),
     [settings]
@@ -34,7 +40,7 @@ export function AppearanceProvider({ children }: AppearanceProviderProps) {
   }, [appearance]);
 
   return (
-    <AppearanceContext.Provider value={appearance ?? DEFAULT_APPEARANCE}>
+    <AppearanceContext.Provider value={appearance ?? cached ?? DEFAULT_APPEARANCE}>
       {children}
     </AppearanceContext.Provider>
   );

@@ -44,7 +44,9 @@ const preview: Preview = {
   },
   decorators: [
     (Story, context) => {
-      // Presets are keyed off <html>, matching how the app applies them.
+      // Presets are keyed off <html> (and its .dark class), matching how the
+      // app applies them.
+      document.documentElement.classList.toggle('dark', context.globals.theme === 'dark');
       document.documentElement.setAttribute(
         COLOR_SCHEME_ATTRIBUTE,
         typeof context.globals.colorScheme === 'string'

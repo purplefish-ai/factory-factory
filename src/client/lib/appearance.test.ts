@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_APPEARANCE } from '@/shared/appearance';
 import {
   APPEARANCE_STORAGE_KEY,
@@ -16,6 +16,7 @@ describe('resolveAppearanceStyles', () => {
     expect(resolveAppearanceStyles(DEFAULT_APPEARANCE)).toEqual({
       colorScheme: 'factory',
       styles: {},
+      appearance: DEFAULT_APPEARANCE,
     });
   });
 
@@ -67,7 +68,8 @@ describe('stored appearance', () => {
         store.set(key, value);
       },
     };
-    const resolved = { colorScheme: 'one', styles: { 'font-size': '110%' } };
+    const appearance = { ...DEFAULT_APPEARANCE, colorScheme: 'one' as const, fontScale: 110 };
+    const resolved = { colorScheme: 'one', styles: { 'font-size': '110%' }, appearance };
     writeStoredAppearance(resolved, storage);
     expect(store.has(APPEARANCE_STORAGE_KEY)).toBe(true);
     expect(readStoredAppearance(storage)).toEqual(resolved);
@@ -77,6 +79,10 @@ describe('stored appearance', () => {
     expect(readStoredAppearance({ getItem: () => null })).toBeNull();
     expect(readStoredAppearance({ getItem: () => '{not json' })).toBeNull();
     expect(readStoredAppearance({ getItem: () => JSON.stringify({ styles: 'nope' }) })).toBeNull();
+    // Entries written before the preferences were cached alongside the styles.
+    expect(
+      readStoredAppearance({ getItem: () => JSON.stringify({ colorScheme: 'one', styles: {} }) })
+    ).toBeNull();
     expect(
       readStoredAppearance({
         getItem: () => {
@@ -84,5 +90,28 @@ describe('stored appearance', () => {
         },
       })
     ).toBeNull();
+  });
+
+  it('survives storage that throws on access', () => {
+    const blocked = Object.create(null, {
+      localStorage: {
+        get() {
+          throw new Error('SecurityError');
+        },
+      },
+    });
+    vi.stubGlobal('localStorage', undefined);
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      get: () => blocked.localStorage,
+    });
+    try {
+      expect(() =>
+        writeStoredAppearance({ colorScheme: 'one', styles: {}, appearance: DEFAULT_APPEARANCE })
+      ).not.toThrow();
+      expect(readStoredAppearance()).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

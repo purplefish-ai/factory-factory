@@ -90,7 +90,12 @@ export const FONT_SCALE_MAX = 175;
 export const FONT_SCALE_STEP = 5;
 export const DEFAULT_FONT_SCALE = 100;
 
-export const fontScaleSchema = z.number().int().min(FONT_SCALE_MIN).max(FONT_SCALE_MAX);
+export const fontScaleSchema = z
+  .number()
+  .int()
+  .min(FONT_SCALE_MIN)
+  .max(FONT_SCALE_MAX)
+  .multipleOf(FONT_SCALE_STEP);
 
 export function clampFontScale(value: number): number {
   if (!Number.isFinite(value)) {
@@ -130,6 +135,7 @@ export const SANS_FONT_OPTIONS: readonly FontFamilyOption[] = [
     value:
       '"Atkinson Hyperlegible Next", "Atkinson Hyperlegible", ui-sans-serif, system-ui, sans-serif',
   },
+  { id: 'monaco', label: 'Monaco', value: 'Monaco, ui-monospace, monospace' },
   {
     id: 'system',
     label: 'System UI',
@@ -145,6 +151,7 @@ export const MONO_FONT_OPTIONS: readonly FontFamilyOption[] = [
     label: 'Atkinson Hyperlegible Mono',
     value: '"Atkinson Hyperlegible Mono", ui-monospace, monospace',
   },
+  { id: 'monaco', label: 'Monaco', value: 'Monaco, ui-monospace, monospace' },
   {
     id: 'system-mono',
     label: 'System monospace',
@@ -155,11 +162,12 @@ export const MONO_FONT_OPTIONS: readonly FontFamilyOption[] = [
 export const FONT_FAMILY_MAX_LENGTH = 200;
 
 /**
- * Only characters that can appear in a `font-family` list. This keeps a saved
- * value from smuggling other declarations (`;`, `{`, `url(`) into the style
- * attribute it is written to.
+ * Only characters that can appear in a `font-family` list: letters, marks, and
+ * digits in any script plus the punctuation font stacks use. This keeps a
+ * saved value from smuggling other declarations (`;`, `{`, `url(`) into the
+ * style attribute it is written to.
  */
-const FONT_FAMILY_PATTERN = /^[A-Za-z0-9 ,"'._-]+$/;
+const FONT_FAMILY_PATTERN = /^[\p{L}\p{M}\p{N} ,"'._-]+$/u;
 
 export const fontFamilySchema = z
   .string()

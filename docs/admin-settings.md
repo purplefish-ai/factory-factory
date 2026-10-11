@@ -7,8 +7,9 @@ factory configuration and issue provider.
 
 ## Appearance
 
-Appearance preferences are saved with the other user settings and apply on every
-device that opens this server. Each change saves immediately.
+Color scheme, color overrides, font size, and fonts are saved with the other
+user settings and apply on every device that opens this server. Mode is saved in
+the browser and does not sync across devices. Each change saves immediately.
 
 - **Color scheme** picks a palette. Factory is the default; GitHub, One,
   Solarized, and High contrast are inspired by the corresponding editor themes.
@@ -17,19 +18,19 @@ device that opens this server. Each change saves immediately.
   solid borders.
 - **Background color** and **Text color** override the scheme's page background
   and primary text in both light and dark mode. Cards and secondary text are
-  blended from the override so they stay readable. Use **Reset** next to a color
-  to return to the scheme's own value.
+  blended from the overrides, but contrast is not checked. Use **Reset** next to
+  a color to return to the scheme's own value.
 - **Font size** scales the root font size from 75% to 175%. All text and spacing
   defined in `rem` follows it, including the terminal, independently of browser
   zoom.
 - **Interface font** and **Monospace font** offer a few bundled stacks,
   including Atkinson Hyperlegible, plus **Custom** for any font installed on the
   device. A custom value is a CSS `font-family` list and may contain only
-  letters, numbers, spaces, quotes, commas, periods, and hyphens.
+  letters, numbers, spaces, quotes, commas, periods, underscores, and hyphens.
 
-**Reset appearance** returns every preference to its default. The last applied
-appearance is cached in the browser so a reload does not flash the defaults
-before the saved settings load.
+**Reset appearance** returns every saved appearance preference to its default;
+it does not change Mode. The last applied appearance is cached in the browser so
+a reload does not flash the defaults before the saved settings load.
 
 ## Custom IDE commands
 

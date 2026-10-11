@@ -8,6 +8,7 @@ import { AppearanceSettingsSection } from './AppearanceSettingsSection';
 
 const mocks = vi.hoisted(() => ({
   updateSettingsMutate: vi.fn(),
+  mutationOptions: null as null | { onError?: (error: Error) => void },
   setTheme: vi.fn(),
   userSettings: {
     appearanceColorScheme: 'factory',
@@ -30,7 +31,12 @@ vi.mock('@/client/lib/trpc', () => ({
     }),
     userSettings: {
       get: { useQuery: () => ({ data: mocks.userSettings, isLoading: false }) },
-      update: { useMutation: () => ({ mutate: mocks.updateSettingsMutate, isPending: false }) },
+      update: {
+        useMutation: (options: { onError?: (error: Error) => void }) => {
+          mocks.mutationOptions = options;
+          return { mutate: mocks.updateSettingsMutate, isPending: false };
+        },
+      },
     },
   },
 }));
@@ -74,6 +80,20 @@ function typeInto(input: HTMLInputElement | null, value: string) {
   });
 }
 
+/** Simulates dragging through the picker (one input event per color) and then leaving it. */
+function pickColors(input: HTMLInputElement | null, values: string[]) {
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+  for (const value of values) {
+    flushSync(() => {
+      setValue?.call(input, value);
+      input?.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  }
+  flushSync(() => {
+    input?.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+  });
+}
+
 function buttonNamed(scope: ParentNode, name: string): HTMLButtonElement | undefined {
   return Array.from(scope.querySelectorAll('button')).find((button) => button.textContent === name);
 }
@@ -88,6 +108,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   // Radix Slider measures its thumb with ResizeObserver, which jsdom lacks.
   vi.stubGlobal('ResizeObserver', MockResizeObserver);
+  // jsdom has no canvas, which the rendered-color probe needs; it falls back.
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+  mocks.mutationOptions = null;
   mocks.userSettings.appearanceColorScheme = 'factory';
   mocks.userSettings.appearanceBackgroundColor = null;
   mocks.userSettings.appearanceForegroundColor = null;
@@ -143,6 +166,16 @@ describe('AppearanceSettingsSection', () => {
     expect(mocks.updateSettingsMutate).toHaveBeenCalledWith({ appearanceBackgroundColor: null });
   });
 
+  it('saves the placeholder color when it is picked deliberately', () => {
+    const container = render();
+    const picker = container.querySelector<HTMLInputElement>('#appearance-background-color');
+    expect(picker?.value).toBe('#0a0a0a');
+    pickColors(picker, ['#123456', '#0a0a0a']);
+    expect(mocks.updateSettingsMutate).toHaveBeenCalledWith({
+      appearanceBackgroundColor: '#0a0a0a',
+    });
+  });
+
   it('does not save when the picker is left on its placeholder', () => {
     const container = render();
     const picker = container.querySelector<HTMLInputElement>('#appearance-foreground-color');
@@ -190,6 +223,38 @@ describe('AppearanceSettingsSection', () => {
     typeInto(input, 'Inter; background: url(x)');
     expect(mocks.updateSettingsMutate).not.toHaveBeenCalled();
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('Font family');
+  });
+
+  it('returns the font selector to the saved font when the save fails', () => {
+    const container = render();
+    selectOption(container, 'appearance-font-mono', 'IBM Plex Mono');
+    expect(container.querySelector('#appearance-font-mono')?.textContent).toContain(
+      'IBM Plex Mono'
+    );
+
+    flushSync(() => {
+      mocks.mutationOptions?.onError?.(new Error('offline'));
+    });
+
+    expect(container.querySelector('#appearance-font-mono')?.textContent).toContain(
+      'Geist Mono (default)'
+    );
+  });
+
+  it('returns the font scale draft to the saved value when the save fails', () => {
+    const container = render();
+    const slider = container.querySelector<HTMLElement>('#appearance-font-scale [role="slider"]');
+    flushSync(() => {
+      slider?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    });
+    expect(container.textContent).toContain('105%');
+
+    flushSync(() => {
+      mocks.mutationOptions?.onError?.(new Error('offline'));
+    });
+
+    expect(container.textContent).toContain('100%');
+    expect(container.textContent).not.toContain('105%');
   });
 
   it('shows a saved custom font as Custom with its value', () => {
