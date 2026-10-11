@@ -7,6 +7,7 @@ import { Toaster } from 'sonner';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import { trpc } from '@/client/lib/trpc';
 import type { FactoryConfig } from '@/shared/schemas/factory-config.schema';
+import { AppearanceSettingsSection } from './AppearanceSettingsSection';
 import { AppInfoSection } from './AppInfoSection';
 import { ChatProviderDefaultsSection } from './ChatProviderDefaultsSection';
 import { CliAuthSection } from './CliAuthSection';
@@ -33,6 +34,12 @@ const defaultSettings = {
   ratchetReplyToPrComments: true,
   ratchetReviewTriggerMode: 'CHANGES_REQUESTED',
   ratchetPermissions: 'YOLO',
+  appearanceColorScheme: 'factory',
+  appearanceBackgroundColor: null as string | null,
+  appearanceForegroundColor: null as string | null,
+  appearanceFontScale: 100,
+  appearanceFontSans: null as string | null,
+  appearanceFontMono: null as string | null,
 };
 
 // A local transport keeps these interactive examples independent of a running backend.
@@ -183,6 +190,61 @@ export const Notifications: Story = {
     );
     await waitFor(() => expect(toggle).not.toBeChecked());
   },
+};
+
+export const Appearance: Story = {
+  render: () => (
+    <SettingsStoryProvider>
+      <AppearanceSettingsSection />
+    </SettingsStoryProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByLabelText('Color scheme'));
+    await userEvent.click(await within(document.body).findByRole('option', { name: 'Solarized' }));
+    await waitFor(() =>
+      expect(onRequest).toHaveBeenCalledWith('userSettings.update', {
+        appearanceColorScheme: 'solarized',
+      })
+    );
+    await waitFor(() =>
+      expect(canvas.getByLabelText('Color scheme')).toHaveTextContent('Solarized')
+    );
+    await expect(canvas.getByRole('button', { name: 'Reset appearance' })).toBeEnabled();
+  },
+};
+
+export const CustomizedAppearance: Story = {
+  render: () => (
+    <SettingsStoryProvider
+      settings={{
+        appearanceColorScheme: 'high-contrast',
+        appearanceBackgroundColor: '#000000',
+        appearanceForegroundColor: '#ffff00',
+        appearanceFontScale: 125,
+        appearanceFontSans: '"Inter", ui-sans-serif, system-ui, sans-serif',
+        appearanceFontMono: 'Fira Code',
+      }}
+    >
+      <AppearanceSettingsSection />
+    </SettingsStoryProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByLabelText('Monospace font')).toHaveTextContent('Custom');
+    await expect(canvas.getByRole('textbox', { name: 'Monospace font family' })).toHaveValue(
+      'Fira Code'
+    );
+    await expect(canvas.getByText('125%')).toBeVisible();
+  },
+};
+
+export const LoadingAppearance: Story = {
+  render: () => (
+    <SettingsStoryProvider loading>
+      <AppearanceSettingsSection />
+    </SettingsStoryProvider>
+  ),
 };
 
 export const LoadingNotifications: Story = {

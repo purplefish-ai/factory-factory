@@ -576,6 +576,14 @@ model UserSettings {
   voiceUtteranceEndMs       Int      @default(1000)  // Deepgram silence gap (ms) before a turn is considered done; lower = more aggressive
   voiceBargeInSustainedMs   Int      @default(16)  // Sustained loud-frame duration (ms) before barge-in triggers; lower = more aggressive
 
+  // Appearance Settings (see src/shared/appearance.ts for valid values)
+  appearanceColorScheme     String   @default("factory")  // Color scheme preset id
+  appearanceBackgroundColor String?                       // Hex override for the page background
+  appearanceForegroundColor String?                       // Hex override for primary text
+  appearanceFontScale       Int      @default(100)        // Percent applied to the root font size
+  appearanceFontSans        String?                       // CSS font-family for interface text; null = default
+  appearanceFontMono        String?                       // CSS font-family for code and terminals; null = default
+
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 

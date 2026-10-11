@@ -29,6 +29,7 @@ vi.mock('@/client/features/workspace', () => ({
 vi.mock('./admin/index', () => ({
   AdversarialReviewSection: () => createElement('section', null, 'Adversarial Review'),
   ApiUsageSection: () => createElement('section', null, 'API Usage'),
+  AppearanceSettingsSection: () => createElement('section', null, 'Appearance Settings'),
   PeriodicTasksSection: () => createElement('section', null, 'Periodic Tasks'),
   ProcessesSection: () => createElement('section', null, 'Processes'),
   ProcessesSectionSkeleton: () => createElement('section', null, 'Processes Loading'),

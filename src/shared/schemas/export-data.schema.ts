@@ -9,6 +9,14 @@ import { z } from 'zod';
  * Prisma client into the browser bundle.
  */
 import {
+  DEFAULT_COLOR_SCHEME,
+  DEFAULT_FONT_SCALE,
+  fontFamilySchema,
+  fontScaleSchema,
+  hexColorSchema,
+  normalizeColorScheme,
+} from '@/shared/appearance';
+import {
   CIStatus as CoreCIStatus,
   IssueProvider as CoreIssueProvider,
   PRState as CorePRState,
@@ -253,6 +261,18 @@ const exportedUserSettingsSchema = z.object({
     .max(VOICE_BARGE_IN_SUSTAINED_MS_MAX)
     .optional()
     .default(DEFAULT_VOICE_BARGE_IN_SUSTAINED_MS),
+  // Appearance: pure display preferences. A scheme that no longer exists maps
+  // back to the default instead of rejecting the whole backup.
+  appearanceColorScheme: z
+    .string()
+    .optional()
+    .default(DEFAULT_COLOR_SCHEME)
+    .transform(normalizeColorScheme),
+  appearanceBackgroundColor: hexColorSchema.nullable().optional().default(null),
+  appearanceForegroundColor: hexColorSchema.nullable().optional().default(null),
+  appearanceFontScale: fontScaleSchema.optional().default(DEFAULT_FONT_SCALE),
+  appearanceFontSans: fontFamilySchema.nullable().optional().default(null),
+  appearanceFontMono: fontFamilySchema.nullable().optional().default(null),
 });
 
 const version5Schema = z.object({

@@ -327,6 +327,12 @@ export const UserSettingsScalarFieldEnum = {
   voiceTtsSpeed: 'voiceTtsSpeed',
   voiceUtteranceEndMs: 'voiceUtteranceEndMs',
   voiceBargeInSustainedMs: 'voiceBargeInSustainedMs',
+  appearanceColorScheme: 'appearanceColorScheme',
+  appearanceBackgroundColor: 'appearanceBackgroundColor',
+  appearanceForegroundColor: 'appearanceForegroundColor',
+  appearanceFontScale: 'appearanceFontScale',
+  appearanceFontSans: 'appearanceFontSans',
+  appearanceFontMono: 'appearanceFontMono',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const

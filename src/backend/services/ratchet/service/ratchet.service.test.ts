@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SERVICE_THRESHOLDS, SERVICE_TIMEOUT_MS } from '@/backend/services/constants';
 import { CIStatus, RatchetState, SessionStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
+import { buildUserSettingsFixture } from '@/test-utils/user-settings-fixture';
 import type {
   RatchetGitHubBridge,
   RatchetPRSnapshotBridge,
@@ -157,39 +158,11 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     vi.mocked(workspaceRatchetService.recordSessionEnd).mockResolvedValue(true);
     vi.mocked(workspaceRatchetService.clearActiveSession).mockResolvedValue(true);
     vi.mocked(mockWorkspaceBridge.recordSessionEnd).mockResolvedValue(true);
-    vi.mocked(mockSessionBridge.findSessionsByWorkspaceId).mockResolvedValue([] as never);
     vi.mocked(mockSessionBridge.findSessionsByWorkspaceId).mockResolvedValue([]);
     vi.mocked(mockGitHubBridge.getAuthenticatedUsername).mockResolvedValue(null);
     vi.mocked(mockGitHubBridge.getResolvedReviewCommentIds).mockResolvedValue(new Set());
     vi.mocked(mockSessionBridge.isSessionWorking).mockReturnValue(false);
-    vi.mocked(userSettingsService.get).mockResolvedValue({
-      id: 'settings-1',
-      userId: 'default',
-      preferredIde: 'cursor',
-      customIdeCommand: null,
-      playSoundOnComplete: true,
-      notificationSoundPath: null,
-      workspaceOrder: null,
-      cachedSlashCommands: null,
-      ratchetEnabled: false,
-      ratchetReplyToPrComments: true,
-      ratchetReviewTriggerMode: 'CHANGES_REQUESTED',
-      defaultSessionProvider: 'CLAUDE',
-      defaultClaudeModel: 'sonnet',
-      defaultCodexModel: 'default',
-      defaultClaudeReasoningEffort: null,
-      defaultCodexReasoningEffort: null,
-      defaultWorkspacePermissions: 'STRICT',
-      ratchetPermissions: 'YOLO',
-      voiceModeEnabled: false,
-      deepgramApiKeyEncrypted: null,
-      voiceTtsModel: 'flux-haley-en',
-      voiceTtsSpeed: 1,
-      voiceUtteranceEndMs: 1000,
-      voiceBargeInSustainedMs: 16,
-      createdAt: new Date('2026-01-01T00:00:00.000Z'),
-      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
-    } as never);
+    vi.mocked(userSettingsService.get).mockResolvedValue(buildUserSettingsFixture());
     vi.mocked(userSettingsService.getDefaultSessionProvider).mockResolvedValue('CLAUDE');
   });
 

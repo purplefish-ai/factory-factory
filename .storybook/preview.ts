@@ -1,8 +1,10 @@
 import type { Preview } from '@storybook/react';
 import React from 'react';
 import { MemoryRouter } from 'react-router';
+import { COLOR_SCHEME_ATTRIBUTE } from '@/client/lib/appearance';
 import { TRPCProvider } from '@/client/lib/providers';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { COLOR_SCHEME_OPTIONS, DEFAULT_COLOR_SCHEME } from '@/shared/appearance';
 import '../src/client/globals.css';
 
 const preview: Preview = {
@@ -20,6 +22,16 @@ const preview: Preview = {
         dynamicTitle: true,
       },
     },
+    colorScheme: {
+      name: 'Color scheme',
+      description: 'Appearance color scheme preset (Settings → Appearance)',
+      defaultValue: 'factory',
+      toolbar: {
+        icon: 'paintbrush',
+        items: COLOR_SCHEME_OPTIONS.map((option) => ({ value: option.id, title: option.label })),
+        dynamicTitle: true,
+      },
+    },
   },
   parameters: {
     controls: {
@@ -31,8 +43,15 @@ const preview: Preview = {
     layout: 'centered',
   },
   decorators: [
-    (Story, context) =>
-      React.createElement(
+    (Story, context) => {
+      // Presets are keyed off <html>, matching how the app applies them.
+      document.documentElement.setAttribute(
+        COLOR_SCHEME_ATTRIBUTE,
+        typeof context.globals.colorScheme === 'string'
+          ? context.globals.colorScheme
+          : DEFAULT_COLOR_SCHEME
+      );
+      return React.createElement(
         'div',
         {
           className:
@@ -49,7 +68,8 @@ const preview: Preview = {
             React.createElement(TooltipProvider, null, React.createElement(Story))
           )
         )
-      ),
+      );
+    },
   ],
   tags: ['autodocs'],
 };

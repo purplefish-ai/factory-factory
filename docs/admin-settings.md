@@ -1,8 +1,35 @@
 # Settings
 
 Open Settings from the app navigation. General Settings includes IDE
-preferences, chat defaults, and server logs. Project Settings controls the
-selected project's factory configuration and issue provider.
+preferences, chat defaults, and server logs. Appearance controls the color
+scheme, text size, and fonts. Project Settings controls the selected project's
+factory configuration and issue provider.
+
+## Appearance
+
+Appearance preferences are saved with the other user settings and apply on every
+device that opens this server. Each change saves immediately.
+
+- **Color scheme** picks a palette. Factory is the default; GitHub, One,
+  Solarized, and High contrast are inspired by the corresponding editor themes.
+  Every scheme has a light and a dark variant, chosen by **Mode** (or the
+  sun/moon toggle in the sidebar). High contrast uses pure black and white with
+  solid borders.
+- **Background color** and **Text color** override the scheme's page background
+  and primary text in both light and dark mode. Cards and secondary text are
+  blended from the override so they stay readable. Use **Reset** next to a color
+  to return to the scheme's own value.
+- **Font size** scales the root font size from 75% to 175%. All text and spacing
+  defined in `rem` follows it, including the terminal, independently of browser
+  zoom.
+- **Interface font** and **Monospace font** offer a few bundled stacks,
+  including Atkinson Hyperlegible, plus **Custom** for any font installed on the
+  device. A custom value is a CSS `font-family` list and may contain only
+  letters, numbers, spaces, quotes, commas, periods, and hyphens.
+
+**Reset appearance** returns every preference to its default. The last applied
+appearance is cached in the browser so a reload does not flash the defaults
+before the saved settings load.
 
 ## Custom IDE commands
 

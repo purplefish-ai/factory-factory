@@ -1,5 +1,6 @@
 import { Suspense, useEffect } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
+import { AppearanceProvider } from '@/client/components/appearance-provider';
 import { CLIHealthBanner } from '@/client/components/cli-health-banner';
 import { Loading } from '@/client/components/loading';
 import { AppLayout } from '@/client/components/resizable-layout';
@@ -50,9 +51,11 @@ export function Root() {
   return (
     <ThemeProvider>
       <TRPCProvider>
-        <WorkspaceNotificationManager />
-        <RootLayout />
-        <Toaster />
+        <AppearanceProvider>
+          <WorkspaceNotificationManager />
+          <RootLayout />
+          <Toaster />
+        </AppearanceProvider>
       </TRPCProvider>
     </ThemeProvider>
   );
