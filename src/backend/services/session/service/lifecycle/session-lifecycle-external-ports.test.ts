@@ -37,7 +37,7 @@ describe('session lifecycle external ports', () => {
     async (preset) => {
       vi.mocked(userSettingsService.get).mockResolvedValueOnce(
         unsafeCoerce({
-          ratchetPermissions: preset,
+          autoIterationPermissions: preset,
           defaultWorkspacePermissions: 'STRICT',
         })
       );

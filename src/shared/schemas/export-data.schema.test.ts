@@ -28,7 +28,7 @@ import {
   exportedAgentSessionSchema,
   exportedProjectSchema,
   exportedUserSettingsSchema,
-  legacyWorkspaceSchema as exportedWorkspaceSchema,
+  exportedWorkspaceSchema,
 } from './export-data.schema';
 
 type DefWithType = {
@@ -125,7 +125,7 @@ describe('Enum sync with Prisma schema', () => {
       linearIssueIdentifier: null,
       linearIssueUrl: null,
       defaultSessionProvider: 'WORKSPACE_DEFAULT',
-      ratchetSessionProvider: 'WORKSPACE_DEFAULT',
+
       prNumber: null,
       prState: 'NONE',
       prReviewState: null,
@@ -185,7 +185,7 @@ describe('Enum sync with Prisma schema', () => {
       linearIssueIdentifier: null,
       linearIssueUrl: null,
       defaultSessionProvider: 'WORKSPACE_DEFAULT',
-      ratchetSessionProvider: 'WORKSPACE_DEFAULT',
+
       prNumber: null,
       prState: 'NONE',
       prReviewState: null,
@@ -262,7 +262,7 @@ describe('voice settings normalization on restore', () => {
       defaultClaudeModel: 'sonnet',
       defaultCodexModel: 'gpt-5-codex',
       defaultWorkspacePermissions: 'STRICT',
-      ratchetPermissions: 'YOLO',
+      autoIterationPermissions: 'YOLO',
       ...overrides,
     });
 
@@ -311,7 +311,7 @@ describe('appearance settings on restore', () => {
       defaultClaudeModel: 'sonnet',
       defaultCodexModel: 'gpt-5-codex',
       defaultWorkspacePermissions: 'STRICT',
-      ratchetPermissions: 'YOLO',
+      autoIterationPermissions: 'YOLO',
       ...overrides,
     });
 

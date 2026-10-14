@@ -284,6 +284,8 @@ export type AgentSessionWhereInput = {
   providerMetadata?: Prisma.JsonNullableFilter<"AgentSession">
   createdAt?: Prisma.DateTimeFilter<"AgentSession"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"AgentSession"> | Date | string
+  dedicatedPRBinding?: Prisma.XOR<Prisma.WorkspacePRDedicatedSessionNullableScalarRelationFilter, Prisma.WorkspacePRDedicatedSessionWhereInput> | null
+  prMonitoringBindings?: Prisma.WorkspacePRMonitoringListRelationFilter
   workspace?: Prisma.XOR<Prisma.WorkspaceScalarRelationFilter, Prisma.WorkspaceWhereInput>
 }
 
@@ -302,6 +304,8 @@ export type AgentSessionOrderByWithRelationInput = {
   providerMetadata?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
+  dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionOrderByWithRelationInput
+  prMonitoringBindings?: Prisma.WorkspacePRMonitoringOrderByRelationAggregateInput
   workspace?: Prisma.WorkspaceOrderByWithRelationInput
 }
 
@@ -323,6 +327,8 @@ export type AgentSessionWhereUniqueInput = Prisma.AtLeast<{
   providerMetadata?: Prisma.JsonNullableFilter<"AgentSession">
   createdAt?: Prisma.DateTimeFilter<"AgentSession"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"AgentSession"> | Date | string
+  dedicatedPRBinding?: Prisma.XOR<Prisma.WorkspacePRDedicatedSessionNullableScalarRelationFilter, Prisma.WorkspacePRDedicatedSessionWhereInput> | null
+  prMonitoringBindings?: Prisma.WorkspacePRMonitoringListRelationFilter
   workspace?: Prisma.XOR<Prisma.WorkspaceScalarRelationFilter, Prisma.WorkspaceWhereInput>
 }, "id">
 
@@ -382,6 +388,8 @@ export type AgentSessionCreateInput = {
   providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Date | string
   updatedAt?: Date | string
+  dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionCreateNestedOneWithoutSessionInput
+  prMonitoringBindings?: Prisma.WorkspacePRMonitoringCreateNestedManyWithoutRecipientInput
   workspace: Prisma.WorkspaceCreateNestedOneWithoutAgentSessionsInput
 }
 
@@ -400,6 +408,8 @@ export type AgentSessionUncheckedCreateInput = {
   providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Date | string
   updatedAt?: Date | string
+  dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionUncheckedCreateNestedOneWithoutSessionInput
+  prMonitoringBindings?: Prisma.WorkspacePRMonitoringUncheckedCreateNestedManyWithoutRecipientInput
 }
 
 export type AgentSessionUpdateInput = {
@@ -416,6 +426,8 @@ export type AgentSessionUpdateInput = {
   providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionUpdateOneWithoutSessionNestedInput
+  prMonitoringBindings?: Prisma.WorkspacePRMonitoringUpdateManyWithoutRecipientNestedInput
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutAgentSessionsNestedInput
 }
 
@@ -434,6 +446,8 @@ export type AgentSessionUncheckedUpdateInput = {
   providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionUncheckedUpdateOneWithoutSessionNestedInput
+  prMonitoringBindings?: Prisma.WorkspacePRMonitoringUncheckedUpdateManyWithoutRecipientNestedInput
 }
 
 export type AgentSessionCreateManyInput = {
@@ -494,6 +508,11 @@ export type AgentSessionListRelationFilter = {
 
 export type AgentSessionOrderByRelationAggregateInput = {
   _count?: Prisma.SortOrder
+}
+
+export type AgentSessionNullableScalarRelationFilter = {
+  is?: Prisma.AgentSessionWhereInput | null
+  isNot?: Prisma.AgentSessionWhereInput | null
 }
 
 export type AgentSessionCountOrderByAggregateInput = {
@@ -595,6 +614,38 @@ export type AgentSessionUncheckedUpdateManyWithoutWorkspaceNestedInput = {
   deleteMany?: Prisma.AgentSessionScalarWhereInput | Prisma.AgentSessionScalarWhereInput[]
 }
 
+export type AgentSessionCreateNestedOneWithoutPrMonitoringBindingsInput = {
+  create?: Prisma.XOR<Prisma.AgentSessionCreateWithoutPrMonitoringBindingsInput, Prisma.AgentSessionUncheckedCreateWithoutPrMonitoringBindingsInput>
+  connectOrCreate?: Prisma.AgentSessionCreateOrConnectWithoutPrMonitoringBindingsInput
+  connect?: Prisma.AgentSessionWhereUniqueInput
+}
+
+export type AgentSessionUpdateOneWithoutPrMonitoringBindingsNestedInput = {
+  create?: Prisma.XOR<Prisma.AgentSessionCreateWithoutPrMonitoringBindingsInput, Prisma.AgentSessionUncheckedCreateWithoutPrMonitoringBindingsInput>
+  connectOrCreate?: Prisma.AgentSessionCreateOrConnectWithoutPrMonitoringBindingsInput
+  upsert?: Prisma.AgentSessionUpsertWithoutPrMonitoringBindingsInput
+  disconnect?: Prisma.AgentSessionWhereInput | boolean
+  delete?: Prisma.AgentSessionWhereInput | boolean
+  connect?: Prisma.AgentSessionWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.AgentSessionUpdateToOneWithWhereWithoutPrMonitoringBindingsInput, Prisma.AgentSessionUpdateWithoutPrMonitoringBindingsInput>, Prisma.AgentSessionUncheckedUpdateWithoutPrMonitoringBindingsInput>
+}
+
+export type AgentSessionCreateNestedOneWithoutDedicatedPRBindingInput = {
+  create?: Prisma.XOR<Prisma.AgentSessionCreateWithoutDedicatedPRBindingInput, Prisma.AgentSessionUncheckedCreateWithoutDedicatedPRBindingInput>
+  connectOrCreate?: Prisma.AgentSessionCreateOrConnectWithoutDedicatedPRBindingInput
+  connect?: Prisma.AgentSessionWhereUniqueInput
+}
+
+export type AgentSessionUpdateOneWithoutDedicatedPRBindingNestedInput = {
+  create?: Prisma.XOR<Prisma.AgentSessionCreateWithoutDedicatedPRBindingInput, Prisma.AgentSessionUncheckedCreateWithoutDedicatedPRBindingInput>
+  connectOrCreate?: Prisma.AgentSessionCreateOrConnectWithoutDedicatedPRBindingInput
+  upsert?: Prisma.AgentSessionUpsertWithoutDedicatedPRBindingInput
+  disconnect?: Prisma.AgentSessionWhereInput | boolean
+  delete?: Prisma.AgentSessionWhereInput | boolean
+  connect?: Prisma.AgentSessionWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.AgentSessionUpdateToOneWithWhereWithoutDedicatedPRBindingInput, Prisma.AgentSessionUpdateWithoutDedicatedPRBindingInput>, Prisma.AgentSessionUncheckedUpdateWithoutDedicatedPRBindingInput>
+}
+
 export type EnumSessionStatusFieldUpdateOperationsInput = {
   set?: $Enums.SessionStatus
 }
@@ -617,6 +668,8 @@ export type AgentSessionCreateWithoutWorkspaceInput = {
   providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Date | string
   updatedAt?: Date | string
+  dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionCreateNestedOneWithoutSessionInput
+  prMonitoringBindings?: Prisma.WorkspacePRMonitoringCreateNestedManyWithoutRecipientInput
 }
 
 export type AgentSessionUncheckedCreateWithoutWorkspaceInput = {
@@ -633,6 +686,8 @@ export type AgentSessionUncheckedCreateWithoutWorkspaceInput = {
   providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Date | string
   updatedAt?: Date | string
+  dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionUncheckedCreateNestedOneWithoutSessionInput
+  prMonitoringBindings?: Prisma.WorkspacePRMonitoringUncheckedCreateNestedManyWithoutRecipientInput
 }
 
 export type AgentSessionCreateOrConnectWithoutWorkspaceInput = {
@@ -680,6 +735,182 @@ export type AgentSessionScalarWhereInput = {
   updatedAt?: Prisma.DateTimeFilter<"AgentSession"> | Date | string
 }
 
+export type AgentSessionCreateWithoutPrMonitoringBindingsInput = {
+  id?: string
+  name?: string | null
+  workspacePrId?: string | null
+  workflow: string
+  model?: string
+  status?: $Enums.SessionStatus
+  provider: $Enums.SessionProvider
+  providerSessionId?: string | null
+  providerProjectPath?: string | null
+  providerProcessPid?: number | null
+  providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionCreateNestedOneWithoutSessionInput
+  workspace: Prisma.WorkspaceCreateNestedOneWithoutAgentSessionsInput
+}
+
+export type AgentSessionUncheckedCreateWithoutPrMonitoringBindingsInput = {
+  id?: string
+  workspaceId: string
+  name?: string | null
+  workspacePrId?: string | null
+  workflow: string
+  model?: string
+  status?: $Enums.SessionStatus
+  provider: $Enums.SessionProvider
+  providerSessionId?: string | null
+  providerProjectPath?: string | null
+  providerProcessPid?: number | null
+  providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionUncheckedCreateNestedOneWithoutSessionInput
+}
+
+export type AgentSessionCreateOrConnectWithoutPrMonitoringBindingsInput = {
+  where: Prisma.AgentSessionWhereUniqueInput
+  create: Prisma.XOR<Prisma.AgentSessionCreateWithoutPrMonitoringBindingsInput, Prisma.AgentSessionUncheckedCreateWithoutPrMonitoringBindingsInput>
+}
+
+export type AgentSessionUpsertWithoutPrMonitoringBindingsInput = {
+  update: Prisma.XOR<Prisma.AgentSessionUpdateWithoutPrMonitoringBindingsInput, Prisma.AgentSessionUncheckedUpdateWithoutPrMonitoringBindingsInput>
+  create: Prisma.XOR<Prisma.AgentSessionCreateWithoutPrMonitoringBindingsInput, Prisma.AgentSessionUncheckedCreateWithoutPrMonitoringBindingsInput>
+  where?: Prisma.AgentSessionWhereInput
+}
+
+export type AgentSessionUpdateToOneWithWhereWithoutPrMonitoringBindingsInput = {
+  where?: Prisma.AgentSessionWhereInput
+  data: Prisma.XOR<Prisma.AgentSessionUpdateWithoutPrMonitoringBindingsInput, Prisma.AgentSessionUncheckedUpdateWithoutPrMonitoringBindingsInput>
+}
+
+export type AgentSessionUpdateWithoutPrMonitoringBindingsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workspacePrId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workflow?: Prisma.StringFieldUpdateOperationsInput | string
+  model?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumSessionStatusFieldUpdateOperationsInput | $Enums.SessionStatus
+  provider?: Prisma.EnumSessionProviderFieldUpdateOperationsInput | $Enums.SessionProvider
+  providerSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  providerProjectPath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  providerProcessPid?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionUpdateOneWithoutSessionNestedInput
+  workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutAgentSessionsNestedInput
+}
+
+export type AgentSessionUncheckedUpdateWithoutPrMonitoringBindingsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workspacePrId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workflow?: Prisma.StringFieldUpdateOperationsInput | string
+  model?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumSessionStatusFieldUpdateOperationsInput | $Enums.SessionStatus
+  provider?: Prisma.EnumSessionProviderFieldUpdateOperationsInput | $Enums.SessionProvider
+  providerSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  providerProjectPath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  providerProcessPid?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionUncheckedUpdateOneWithoutSessionNestedInput
+}
+
+export type AgentSessionCreateWithoutDedicatedPRBindingInput = {
+  id?: string
+  name?: string | null
+  workspacePrId?: string | null
+  workflow: string
+  model?: string
+  status?: $Enums.SessionStatus
+  provider: $Enums.SessionProvider
+  providerSessionId?: string | null
+  providerProjectPath?: string | null
+  providerProcessPid?: number | null
+  providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  prMonitoringBindings?: Prisma.WorkspacePRMonitoringCreateNestedManyWithoutRecipientInput
+  workspace: Prisma.WorkspaceCreateNestedOneWithoutAgentSessionsInput
+}
+
+export type AgentSessionUncheckedCreateWithoutDedicatedPRBindingInput = {
+  id?: string
+  workspaceId: string
+  name?: string | null
+  workspacePrId?: string | null
+  workflow: string
+  model?: string
+  status?: $Enums.SessionStatus
+  provider: $Enums.SessionProvider
+  providerSessionId?: string | null
+  providerProjectPath?: string | null
+  providerProcessPid?: number | null
+  providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  prMonitoringBindings?: Prisma.WorkspacePRMonitoringUncheckedCreateNestedManyWithoutRecipientInput
+}
+
+export type AgentSessionCreateOrConnectWithoutDedicatedPRBindingInput = {
+  where: Prisma.AgentSessionWhereUniqueInput
+  create: Prisma.XOR<Prisma.AgentSessionCreateWithoutDedicatedPRBindingInput, Prisma.AgentSessionUncheckedCreateWithoutDedicatedPRBindingInput>
+}
+
+export type AgentSessionUpsertWithoutDedicatedPRBindingInput = {
+  update: Prisma.XOR<Prisma.AgentSessionUpdateWithoutDedicatedPRBindingInput, Prisma.AgentSessionUncheckedUpdateWithoutDedicatedPRBindingInput>
+  create: Prisma.XOR<Prisma.AgentSessionCreateWithoutDedicatedPRBindingInput, Prisma.AgentSessionUncheckedCreateWithoutDedicatedPRBindingInput>
+  where?: Prisma.AgentSessionWhereInput
+}
+
+export type AgentSessionUpdateToOneWithWhereWithoutDedicatedPRBindingInput = {
+  where?: Prisma.AgentSessionWhereInput
+  data: Prisma.XOR<Prisma.AgentSessionUpdateWithoutDedicatedPRBindingInput, Prisma.AgentSessionUncheckedUpdateWithoutDedicatedPRBindingInput>
+}
+
+export type AgentSessionUpdateWithoutDedicatedPRBindingInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workspacePrId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workflow?: Prisma.StringFieldUpdateOperationsInput | string
+  model?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumSessionStatusFieldUpdateOperationsInput | $Enums.SessionStatus
+  provider?: Prisma.EnumSessionProviderFieldUpdateOperationsInput | $Enums.SessionProvider
+  providerSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  providerProjectPath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  providerProcessPid?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  prMonitoringBindings?: Prisma.WorkspacePRMonitoringUpdateManyWithoutRecipientNestedInput
+  workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutAgentSessionsNestedInput
+}
+
+export type AgentSessionUncheckedUpdateWithoutDedicatedPRBindingInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workspacePrId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workflow?: Prisma.StringFieldUpdateOperationsInput | string
+  model?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumSessionStatusFieldUpdateOperationsInput | $Enums.SessionStatus
+  provider?: Prisma.EnumSessionProviderFieldUpdateOperationsInput | $Enums.SessionProvider
+  providerSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  providerProjectPath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  providerProcessPid?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  prMonitoringBindings?: Prisma.WorkspacePRMonitoringUncheckedUpdateManyWithoutRecipientNestedInput
+}
+
 export type AgentSessionCreateManyWorkspaceInput = {
   id?: string
   name?: string | null
@@ -710,6 +941,8 @@ export type AgentSessionUpdateWithoutWorkspaceInput = {
   providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionUpdateOneWithoutSessionNestedInput
+  prMonitoringBindings?: Prisma.WorkspacePRMonitoringUpdateManyWithoutRecipientNestedInput
 }
 
 export type AgentSessionUncheckedUpdateWithoutWorkspaceInput = {
@@ -726,6 +959,8 @@ export type AgentSessionUncheckedUpdateWithoutWorkspaceInput = {
   providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionUncheckedUpdateOneWithoutSessionNestedInput
+  prMonitoringBindings?: Prisma.WorkspacePRMonitoringUncheckedUpdateManyWithoutRecipientNestedInput
 }
 
 export type AgentSessionUncheckedUpdateManyWithoutWorkspaceInput = {
@@ -745,6 +980,35 @@ export type AgentSessionUncheckedUpdateManyWithoutWorkspaceInput = {
 }
 
 
+/**
+ * Count Type AgentSessionCountOutputType
+ */
+
+export type AgentSessionCountOutputType = {
+  prMonitoringBindings: number
+}
+
+export type AgentSessionCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  prMonitoringBindings?: boolean | AgentSessionCountOutputTypeCountPrMonitoringBindingsArgs
+}
+
+/**
+ * AgentSessionCountOutputType without action
+ */
+export type AgentSessionCountOutputTypeDefaultArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the AgentSessionCountOutputType
+   */
+  select?: Prisma.AgentSessionCountOutputTypeSelect<ExtArgs> | null
+}
+
+/**
+ * AgentSessionCountOutputType without action
+ */
+export type AgentSessionCountOutputTypeCountPrMonitoringBindingsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.WorkspacePRMonitoringWhereInput
+}
+
 
 export type AgentSessionSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   id?: boolean
@@ -761,7 +1025,10 @@ export type AgentSessionSelect<ExtArgs extends runtime.Types.Extensions.Internal
   providerMetadata?: boolean
   createdAt?: boolean
   updatedAt?: boolean
+  dedicatedPRBinding?: boolean | Prisma.AgentSession$dedicatedPRBindingArgs<ExtArgs>
+  prMonitoringBindings?: boolean | Prisma.AgentSession$prMonitoringBindingsArgs<ExtArgs>
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
+  _count?: boolean | Prisma.AgentSessionCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["agentSession"]>
 
 export type AgentSessionSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
@@ -819,7 +1086,10 @@ export type AgentSessionSelectScalar = {
 
 export type AgentSessionOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "workspaceId" | "name" | "workspacePrId" | "workflow" | "model" | "status" | "provider" | "providerSessionId" | "providerProjectPath" | "providerProcessPid" | "providerMetadata" | "createdAt" | "updatedAt", ExtArgs["result"]["agentSession"]>
 export type AgentSessionInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  dedicatedPRBinding?: boolean | Prisma.AgentSession$dedicatedPRBindingArgs<ExtArgs>
+  prMonitoringBindings?: boolean | Prisma.AgentSession$prMonitoringBindingsArgs<ExtArgs>
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
+  _count?: boolean | Prisma.AgentSessionCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type AgentSessionIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
@@ -831,6 +1101,8 @@ export type AgentSessionIncludeUpdateManyAndReturn<ExtArgs extends runtime.Types
 export type $AgentSessionPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   name: "AgentSession"
   objects: {
+    dedicatedPRBinding: Prisma.$WorkspacePRDedicatedSessionPayload<ExtArgs> | null
+    prMonitoringBindings: Prisma.$WorkspacePRMonitoringPayload<ExtArgs>[]
     workspace: Prisma.$WorkspacePayload<ExtArgs>
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
@@ -1242,6 +1514,8 @@ readonly fields: AgentSessionFieldRefs;
  */
 export interface Prisma__AgentSessionClient<T, Null = never, ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
   readonly [Symbol.toStringTag]: "PrismaPromise"
+  dedicatedPRBinding<T extends Prisma.AgentSession$dedicatedPRBindingArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.AgentSession$dedicatedPRBindingArgs<ExtArgs>>): Prisma.Prisma__WorkspacePRDedicatedSessionClient<runtime.Types.Result.GetResult<Prisma.$WorkspacePRDedicatedSessionPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+  prMonitoringBindings<T extends Prisma.AgentSession$prMonitoringBindingsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.AgentSession$prMonitoringBindingsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$WorkspacePRMonitoringPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   workspace<T extends Prisma.WorkspaceDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.WorkspaceDefaultArgs<ExtArgs>>): Prisma.Prisma__WorkspaceClient<runtime.Types.Result.GetResult<Prisma.$WorkspacePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
@@ -1682,6 +1956,49 @@ export type AgentSessionDeleteManyArgs<ExtArgs extends runtime.Types.Extensions.
    * Limit how many AgentSessions to delete.
    */
   limit?: number
+}
+
+/**
+ * AgentSession.dedicatedPRBinding
+ */
+export type AgentSession$dedicatedPRBindingArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the WorkspacePRDedicatedSession
+   */
+  select?: Prisma.WorkspacePRDedicatedSessionSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the WorkspacePRDedicatedSession
+   */
+  omit?: Prisma.WorkspacePRDedicatedSessionOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.WorkspacePRDedicatedSessionInclude<ExtArgs> | null
+  where?: Prisma.WorkspacePRDedicatedSessionWhereInput
+}
+
+/**
+ * AgentSession.prMonitoringBindings
+ */
+export type AgentSession$prMonitoringBindingsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the WorkspacePRMonitoring
+   */
+  select?: Prisma.WorkspacePRMonitoringSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the WorkspacePRMonitoring
+   */
+  omit?: Prisma.WorkspacePRMonitoringOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.WorkspacePRMonitoringInclude<ExtArgs> | null
+  where?: Prisma.WorkspacePRMonitoringWhereInput
+  orderBy?: Prisma.WorkspacePRMonitoringOrderByWithRelationInput | Prisma.WorkspacePRMonitoringOrderByWithRelationInput[]
+  cursor?: Prisma.WorkspacePRMonitoringWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.WorkspacePRMonitoringScalarFieldEnum | Prisma.WorkspacePRMonitoringScalarFieldEnum[]
 }
 
 /**

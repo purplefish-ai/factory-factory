@@ -71,6 +71,7 @@ export type MergeStateStatus =
   | 'UNSTABLE';
 
 export interface PRWithFullDetails {
+  headRefOid?: string;
   number: number;
   title: string;
   url: string;

@@ -11,7 +11,12 @@ export function enqueueMessage(
     return { error: `Queue full (max ${SERVICE_LIMITS.sessionStoreMaxQueueSize} messages)` };
   }
 
-  store.queue.push(message);
+  const firstBackground = store.queue.findIndex((item) => item.source?.type === 'pr_event');
+  if (!message.source && firstBackground >= 0) {
+    store.queue.splice(firstBackground, 0, message);
+  } else {
+    store.queue.push(message);
+  }
   return { position: store.queue.length - 1 };
 }
 

@@ -1,11 +1,7 @@
 import type { PrismaClient } from '@prisma-gen/client';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { githubCLIService, prSnapshotService } from '@/backend/services/github';
-import {
-  workspaceDataService,
-  workspacePrSnapshotService,
-  workspaceRatchetService,
-} from '@/backend/services/workspace';
+import { workspaceDataService, workspacePrSnapshotService } from '@/backend/services/workspace';
 import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,
@@ -39,10 +35,15 @@ beforeAll(async () => {
       attachDiscoveredPRsIfClaimMatches: (id, claim, urls) =>
         workspacePrSnapshotService.attachDiscoveredPRsIfClaimMatches(id, claim, urls),
       findPRContext: (id) => workspaceDataService.findPRContext(id),
+      recordSnapshot: (id, data) => workspacePrSnapshotService.record(id, data),
       applyPrSnapshotWithDispatchReset: (id, observation) =>
         workspacePrSnapshotService.applyPrSnapshotWithDispatchReset(id, observation),
       applyPrObservationWithDispatchReset: (id, observation) =>
         workspacePrSnapshotService.applyPrObservationWithDispatchReset(id, observation),
+      attachDiscoveredPRIfClaimMatches: (id, prUrl, claim, updatedAt) =>
+        workspacePrSnapshotService.attachDiscoveredPRIfClaimMatches(id, prUrl, claim, updatedAt),
+      updatePRSnapshotIfUrlMatches: (id, prUrl, snapshot, updatedAt) =>
+        workspacePrSnapshotService.updatePRSnapshotIfUrlMatches(id, prUrl, snapshot, updatedAt),
     },
   });
   await db.prisma.project.create({
@@ -62,7 +63,7 @@ afterAll(async () => {
 
 describe('failed PR attachment recovery', () => {
   it.each(['OPEN', 'MERGED', 'CLOSED'] as const)(
-    'preserves a previous %s PR and accepts ratchet observations for the new URL',
+    'preserves a previous %s PR and isolates observations for a newly attached URL',
     async (previousState) => {
       const workspaceId = `pr-${previousState}`;
       await db.prisma.workspace.create({
@@ -74,7 +75,6 @@ describe('failed PR attachment recovery', () => {
           prs: {
             create: {
               url: previousPrUrl,
-              automation: { create: {} },
               number: 1,
               state: previousState,
               reviewState: 'CHANGES_REQUESTED',
@@ -82,11 +82,8 @@ describe('failed PR attachment recovery', () => {
               hasMergeConflict: true,
             },
           },
-          ratchet: { create: { enabled: true } },
+          prMonitoring: { create: { enabled: true } },
         },
-      });
-      const previousCache = await db.prisma.workspacePR.findUniqueOrThrow({
-        where: { workspaceId_url: { workspaceId, url: previousPrUrl } },
       });
       vi.spyOn(githubCLIService, 'fetchAndComputePRState').mockResolvedValue(null);
 
@@ -95,13 +92,6 @@ describe('failed PR attachment recovery', () => {
         reason: 'fetch_failed',
         prId: expect.any(String),
       });
-
-      expect(
-        await db.prisma.workspacePR.findUniqueOrThrow({
-          where: { workspaceId_url: { workspaceId, url: previousPrUrl } },
-        })
-      ).toEqual(previousCache);
-      expect(previousCache.detachedAt).toBeNull();
 
       const neutralCache = await db.prisma.workspacePR.findUniqueOrThrow({
         where: { workspaceId_url: { workspaceId, url: nextPrUrl } },
@@ -115,11 +105,7 @@ describe('failed PR attachment recovery', () => {
         hasMergeConflict: false,
         syncedAt: null,
       });
-      expect(await workspaceRatchetService.findCandidates()).toEqual(
-        expect.arrayContaining([expect.objectContaining({ id: workspaceId, prUrl: nextPrUrl })])
-      );
-
-      // An observation of the sibling must not overwrite the new PR.
+      // A late observation from the old PR must still be rejected.
       await prSnapshotService.recordPrObservation(workspaceId, {
         prUrl: previousPrUrl,
         prNumber: 1,
@@ -133,16 +119,6 @@ describe('failed PR attachment recovery', () => {
           where: { workspaceId_url: { workspaceId, url: nextPrUrl } },
         })
       ).toEqual(neutralCache);
-      expect(
-        await db.prisma.workspacePR.findUniqueOrThrow({
-          where: { workspaceId_url: { workspaceId, url: previousPrUrl } },
-        })
-      ).toMatchObject({
-        detachedAt: null,
-        state: 'MERGED',
-        ciStatus: 'SUCCESS',
-        reviewState: 'APPROVED',
-      });
 
       await prSnapshotService.recordPrObservation(workspaceId, {
         prUrl: nextPrUrl,

@@ -28,19 +28,28 @@ it('preserves NOT_FOUND if the workspace disappears during attachment', async ()
     caller().attachPR({ id: 'w', prUrl: 'https://github.com/o/r/pull/1' })
   ).rejects.toMatchObject({ code: 'NOT_FOUND' });
 });
-it('retries detached fixer cleanup without stopping sibling or review sessions', async () => {
+it('detaches only the selected association without stopping conversation sessions', async () => {
   detach
-    .mockResolvedValueOnce({ removed: true, sessionId: 'fixer' })
-    .mockResolvedValue({ removed: false, sessionId: null });
-  sessions.mockResolvedValue([
-    { id: 'fixer', workspacePrId: 'a', workflow: 'ratchet', status: 'IDLE' },
-    { id: 'sibling', workspacePrId: 'b', workflow: 'ratchet', status: 'RUNNING' },
-    { id: 'review', workspacePrId: 'a', workflow: 'adversarial_review', status: 'RUNNING' },
-  ]);
-  stop.mockRejectedValueOnce(new Error('runtime unavailable')).mockResolvedValue(undefined);
-  const api = caller(),
-    input = { workspaceId: 'w', prId: 'a' };
-  await expect(api.detachPR(input)).rejects.toThrow('runtime unavailable');
+    .mockResolvedValueOnce({ removed: true, dispatchReleased: false })
+    .mockResolvedValue({ removed: false, dispatchReleased: false });
+  const api = caller();
+  const input = { workspaceId: 'w', prId: 'a' };
+  await expect(api.detachPR(input)).resolves.toEqual({ removed: true });
   await expect(api.detachPR(input)).resolves.toEqual({ removed: false });
-  expect(stop.mock.calls).toEqual([['fixer'], ['fixer']]);
+  expect(detach.mock.calls).toEqual([[input], [input]]);
+  expect(stop).not.toHaveBeenCalled();
+  expect(sessions).not.toHaveBeenCalled();
+});
+
+it('returns a pending retained association when the configured observer throws offline', async () => {
+  attach.mockResolvedValue({ success: false, reason: 'error', prId: 'a' });
+  await expect(
+    caller().attachPR({ id: 'w', prUrl: 'https://github.com/o/r/pull/1' })
+  ).resolves.toMatchObject({ id: 'w', attachedPrId: 'a', prSyncStatus: 'pending' });
+});
+it('rejects attachment errors that did not persist an association', async () => {
+  attach.mockResolvedValue({ success: false, reason: 'error' });
+  await expect(
+    caller().attachPR({ id: 'w', prUrl: 'https://github.com/o/r/pull/1' })
+  ).rejects.toMatchObject({ code: 'INTERNAL_SERVER_ERROR' });
 });

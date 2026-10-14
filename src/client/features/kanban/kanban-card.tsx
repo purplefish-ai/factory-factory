@@ -121,6 +121,7 @@ function IssueAndPullRequestRow({
           workspaceId={workspace.id}
           projectId={workspace.projectId}
           prs={workspace.prs}
+          monitoring={workspace.prMonitoring}
           reviewEnabled={Boolean(workspace.worktreePath)}
           readOnly={workspace.status === 'ARCHIVED' || workspace.status === 'ARCHIVING'}
           compact

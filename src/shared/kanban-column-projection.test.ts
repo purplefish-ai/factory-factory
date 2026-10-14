@@ -22,7 +22,6 @@ describe('kanbanColumnForStatusReason', () => {
       'FIXING_CI_FAILURES',
       'FIXING_REVIEW_COMMENTS',
       'FIXING_MERGE_CONFLICT',
-      'CHECKING_PR',
     ] as const) {
       expect(kanbanColumnForStatusReason(code)).toBe('WORKING');
     }
@@ -37,6 +36,11 @@ describe('kanbanColumnForStatusReason', () => {
       'SETUP_FAILED',
       'MERGE_CONFLICT',
       'RATCHET_STALLED',
+      'CHECKING_PR',
+      'PR_UPDATE_QUEUED',
+      'PR_UPDATES_PAUSED',
+      'PR_RECIPIENT_REQUIRED',
+      'PR_DELIVERY_ERROR',
       'READY_TO_MERGE',
       'READY_FOR_REVIEW',
       'NO_SESSION_STARTED',

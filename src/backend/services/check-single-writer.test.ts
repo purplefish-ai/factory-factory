@@ -87,54 +87,33 @@ describe('check-single-writer', () => {
     expect(result.output).toContain('unauthorized write of workspace field "hasHadSessions"');
   });
 
-  // The PR aggregate mutators now write one Workspace column -- the branch name a
-  // refresh may correct. The rest of what they carry lands on WorkspacePR, which
-  // this checker does not police because nothing else can name those columns.
-  it('checks ownership through public PR aggregate dispatch-reset mutators', () => {
-    const tempRoot = createTempBackend([
-      {
-        relPath: 'src/backend/services/session/service/lifecycle/session.service.ts',
-        content: `
-          async function writeSnapshots(workspaceAccessor) {
-            await workspaceAccessor.setBranchNameAndClearDiscoverySchedule('ws', {
-              prNumber: 1,
-              prUpdatedAt: new Date(),
-              branchName: 'feature/actual-head',
-            });
-          }
-        `,
-      },
-    ]);
-
-    const result = runChecker(tempRoot);
-
-    expect(result.status).toBe(1);
-    expect(result.output).toContain('unauthorized write of workspace field "branchName"');
-  });
-
-  it('allows workspace PR snapshot capability dispatch-reset writes', () => {
-    const tempRoot = createTempBackend([
-      {
-        relPath:
-          'src/backend/services/workspace/service/lifecycle/workspace-pr-snapshot.service.ts',
-        content: `
-          async function writeSnapshots(workspaceAccessor) {
-            await workspaceAccessor.applyPrSnapshotWithDispatchReset('ws', {
-              prNumber: 1,
-              prUpdatedAt: new Date(),
-              branchName: 'feature/actual-head',
-            });
-          }
-        `,
-      },
-    ]);
-
-    const result = runChecker(tempRoot);
-
-    expect(result.status).toBe(0);
-  });
-
   describe('owned side tables', () => {
+    it.each([
+      `tx.workspacePRDedicatedSession.upsert({ where: { prId: 'p' }, create: { prId: 'p' }, update: {} });`,
+      `tx.workspacePR.update({ where: { id: 'p' }, data: { dedicatedSession: { create: { sessionId: 's' } } } });`,
+      `tx.agentSession.update({ where: { id: 's' }, data: { dedicatedPRBinding: { connect: { prId: 'p' } } } });`,
+    ])('keeps dedicated binding mutations exclusively in the session resource: %s', (mutation) => {
+      const tempRoot = createTempBackend([
+        {
+          relPath: 'src/backend/services/workspace/resources/other.accessor.ts',
+          content: `function change(tx) { ${mutation} }`,
+        },
+      ]);
+      const result = runChecker(tempRoot);
+      expect(result.status).toBe(1);
+      expect(result.output).toContain(
+        'workspacePRDedicatedSession is written only by src/backend/services/session/resources/pr-dedicated-session.accessor.ts'
+      );
+    });
+    it('allows the dedicated session resource to write its own mapping', () => {
+      const tempRoot = createTempBackend([
+        {
+          relPath: 'src/backend/services/session/resources/pr-dedicated-session.accessor.ts',
+          content: `function change(tx) { tx.workspacePRDedicatedSession.upsert({ where: { prId: 'p' }, create: { prId: 'p' }, update: {} }); }`,
+        },
+      ]);
+      expect(runChecker(tempRoot).status).toBe(0);
+    });
     // These tables were split off Workspace, so the field-ownership table cannot
     // police them. dep-cruiser lets any file under services/*/resources/ import
     // prisma, so without this rule a second accessor could write them freely.
@@ -157,14 +136,14 @@ describe('check-single-writer', () => {
       expect(result.output).toContain('unauthorized write to workspacePR via updateMany()');
     });
 
-    it('rejects a WorkspaceRatchet write from outside its accessor', () => {
+    it('rejects a WorkspacePRMonitoring write from outside its accessor', () => {
       const tempRoot = createTempBackend([
         {
           relPath: 'src/backend/services/ratchet/resources/ratchet.accessor.ts',
           content: `
             import { prisma } from '@/backend/db';
             async function disable(id) {
-              await prisma.workspaceRatchet.update({ where: { workspaceId: id }, data: { enabled: false } });
+              await prisma.workspacePRMonitoring.update({ where: { workspaceId: id }, data: { enabled: false } });
             }
           `,
         },
@@ -173,7 +152,7 @@ describe('check-single-writer', () => {
       const result = runChecker(tempRoot);
 
       expect(result.status).toBe(1);
-      expect(result.output).toContain('unauthorized write to workspaceRatchet via update()');
+      expect(result.output).toContain('unauthorized write to workspacePRMonitoring via update()');
     });
 
     // Prisma exposes nine writes per model, not seven. These two were missing
@@ -237,7 +216,7 @@ describe('check-single-writer', () => {
       expect(result.status).toBe(0);
     });
 
-    it('rejects a nested update of the pr relation', () => {
+    it('rejects a nested update of the prs relation', () => {
       const tempRoot = createTempBackend([
         {
           relPath: 'src/backend/services/workspace/resources/other.accessor.ts',
@@ -256,45 +235,13 @@ describe('check-single-writer', () => {
       expect(result.output).toContain('unauthorized nested update of the workspacePR relation');
     });
 
-    it.each([
-      "{ create: { url: 'https://example.test/pr/1', automation: { create: { dispatchOutcome: 'DIED' } } } }",
-      "{ create: [{ url: 'https://example.test/pr/1', automation: { create: { dispatchOutcome: 'DIED' } } }] }",
-      "{ create: rows.map((row) => ({ url: row.url, automation: { create: { dispatchOutcome: 'DIED' } } })) }",
-    ])('rejects nested PR automation creation from another accessor: %s', (prs) => {
-      const tempRoot = createTempBackend([
-        {
-          relPath: 'src/backend/services/workspace/resources/other.accessor.ts',
-          content: `async function sneak(tx) {
-          await tx.workspace.create({ data: { name: 'x', projectId: 'p', prs: ${prs} } });
-        }`,
-        },
-      ]);
-      const result = runChecker(tempRoot);
-      expect(result.status).toBe(1);
-      expect(result.output).toContain(
-        'unauthorized nested create of the workspacePRRatchet relation'
-      );
-    });
-
-    it('allows backup initialization of nested PR automation history', () => {
-      const tempRoot = createTempBackend([
-        {
-          relPath: 'src/backend/orchestration/data-backup.service.ts',
-          content: `async function restore(tx) {
-          await tx.workspace.create({ data: { name: 'x', projectId: 'p', prs: { create: [{ url: 'https://example.test/pr/1', automation: { create: { dispatchOutcome: 'DIED' } } }] } } });
-        }`,
-        },
-      ]);
-      expect(runChecker(tempRoot).status).toBe(0);
-    });
-
-    it('rejects a nested upsert of the ratchet relation', () => {
+    it('rejects a nested upsert of the prMonitoring relation', () => {
       const tempRoot = createTempBackend([
         {
           relPath: 'src/backend/orchestration/some.orchestrator.ts',
           content: `
             async function sneak(tx, id) {
-              await tx.workspace.update({ where: { id }, data: { ratchet: { upsert: { create: {}, update: {} } } } });
+              await tx.workspace.update({ where: { id }, data: { prMonitoring: { upsert: { create: {}, update: {} } } } });
             }
           `,
         },
@@ -304,13 +251,34 @@ describe('check-single-writer', () => {
 
       expect(result.status).toBe(1);
       expect(result.output).toContain(
-        'unauthorized nested upsert of the workspaceRatchet relation'
+        'unauthorized nested upsert of the workspacePRMonitoring relation'
       );
     });
 
     // All three rows are created with their workspace and have to be, or the
     // row-guarded writes would skip it. Restoring a backup creates them the same
     // way, before any accessor could reach the rows.
+    it.each(['object', 'array'] as const)(
+      'rejects nested event creation inside exempt PR creation (%s)',
+      (shape) => {
+        const pr =
+          "{ url: 'https://github.com/org/repo/pull/1', events: { create: { kind: 'CI_FAILED' } } }";
+        const tempRoot = createTempBackend([
+          {
+            relPath: 'src/backend/services/workspace/resources/other.accessor.ts',
+            content: `async function sneak(prisma) {
+            await prisma.workspace.create({ data: { prs: { create: ${shape === 'array' ? `[${pr}]` : pr} } } });
+          }`,
+          },
+        ]);
+        const result = runChecker(tempRoot);
+        expect(result.status).toBe(1);
+        expect(result.output).toContain(
+          'unauthorized nested create of the workspacePREvent relation'
+        );
+      }
+    );
+
     it('allows nested creation of all three rows alongside a workspace', () => {
       const tempRoot = createTempBackend([
         {
@@ -322,7 +290,7 @@ describe('check-single-writer', () => {
                   projectId,
                   name: 'x',
                   prs: { create: { url: null } },
-                  ratchet: { create: { enabled: true } },
+                  prMonitoring: { create: { enabled: true } },
                   runScript: { create: { command: 'pnpm dev' } },
                 },
               });
@@ -458,7 +426,7 @@ describe('check-single-writer', () => {
             import { prisma } from '@/backend/db';
             async function read(id) {
               return await prisma.workspace.findMany({
-                where: { id, prs: { url: null }, ratchet: { enabled: true } },
+                where: { id, prs: { url: null }, prMonitoring: { enabled: true } },
               });
             }
           `,
@@ -664,8 +632,8 @@ export const workspaceAccessor = new WorkspaceAccessor();
 
     const schemaPath = path.join(tempRoot, 'prisma/schema.prisma');
     const schemaWithNewField = schemaSource.replace(
-      /(hasHadSessions[^\n]+\n)/,
-      '$1  uncheckedMutableField String?\n'
+      '  // Activity tracking\n  hasHadSessions      Boolean           @default(false)',
+      '  // Activity tracking\n  hasHadSessions      Boolean           @default(false)\n  uncheckedMutableField String?'
     );
     writeFileSync(schemaPath, schemaWithNewField);
 

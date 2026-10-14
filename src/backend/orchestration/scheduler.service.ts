@@ -196,7 +196,14 @@ class SchedulerService {
             return claimed
               ? {
                   ...candidate,
-                  claim: { branchName, checkedAt, retryCount, nextCheckAt },
+                  claim: {
+                    branchName,
+                    checkedAt,
+                    retryCount,
+                    nextCheckAt,
+                    githubOwner: workspace.project.githubOwner ?? group.owner,
+                    githubRepo: workspace.project.githubRepo ?? group.repo,
+                  },
                 }
               : null;
           })
@@ -248,7 +255,7 @@ class SchedulerService {
         (left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime()
       )) {
         const prCreatedAt = new Date(pr.createdAt).getTime();
-        const candidate = group.candidates
+        const candidate = [...group.candidates]
           .filter(
             (item) =>
               item.branchName === pr.headRefName &&

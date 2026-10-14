@@ -54,7 +54,11 @@ export const ChatMessageSchema = z.discriminatedUnion('type', [
   // Queue a message for sending
   z.object({
     type: z.literal('queue_message'),
-    id: z.string().min(1),
+    source: z.never().optional(),
+    id: z
+      .string()
+      .min(1)
+      .refine((id) => !id.startsWith('pr-event-'), 'Reserved message id'),
     text: z.string().optional(),
     attachments: z.array(AttachmentSchema).optional(),
     settings: ChatSettingsSchema.optional(),

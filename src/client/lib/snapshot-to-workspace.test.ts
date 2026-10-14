@@ -22,8 +22,6 @@ function makeEntry(overrides: Partial<WorkspaceSnapshotEntry> = {}): WorkspaceSn
     prUpdatedAt: '2026-01-14T12:00:00Z',
     ratchetEnabled: true,
     ratchetState: 'IDLE',
-    ratchetDispatchOutcome: 'DIED',
-    ratchetDispatchRetryCount: 2,
     runScriptStatus: 'IDLE',
     hasHadSessions: true,
     isWorking: true,
@@ -123,7 +121,6 @@ describe('workspace snapshot cache projections', () => {
         ciStatus: 'UNKNOWN',
         hasMergeConflict: false,
         ratchetState: 'IDLE',
-        dispatchStalled: false,
       },
       hasMergeConflict: true,
     });
@@ -138,12 +135,6 @@ describe('workspace snapshot cache projections', () => {
           state: 'OPEN',
           ciStatus: 'SUCCESS',
           hasMergeConflict: true,
-          ratchet: {
-            lastCheckedAt: null,
-            dispatchOutcome: 'DIED',
-            dispatchRetryCount: 2,
-            dispatchStalled: false,
-          },
         }),
       ]);
       expect(projection?.prSummary).toMatchObject({ totalCount: 1, openCount: 1 });
@@ -297,7 +288,7 @@ describe('workspace snapshot cache projections', () => {
       'CI_FAILED',
       'RATCHET_FIXING',
       'CHECKS_FAILED',
-      'FIXING_CI_FAILURES',
+      'PR_NEEDS_ATTENTION',
       'FAILING',
       false,
     ],
@@ -320,7 +311,7 @@ describe('workspace snapshot cache projections', () => {
           ciObservation,
           ratchetButtonAnimated: animated,
           statusReason: { code: reasonCode },
-          kanbanColumn: 'WORKING',
+          kanbanColumn: ciStatus === 'PENDING' ? 'WORKING' : 'WAITING',
           sidebarStatus: { activityState: 'IDLE', ciState: sidebarCi },
           prSummary: { totalCount: 2, hasNonterminal: true },
         });
@@ -414,21 +405,23 @@ describe('workspace snapshot cache projections', () => {
     }
   );
 
-  it('projects aggregate conflict and stalled dispatch flags into the detail cache', () => {
-    const { existing, entry } = legacyMergeWithSibling();
+  it('projects aggregate conflict and queued PR updates into the detail cache', () => {
+    const { existing, entry } = legacyMergeWithSibling({
+      prMonitoring: {
+        deliveryMode: 'MAIN',
+        enabled: true,
+        recipientSessionId: 'main-session',
+        bindingRevision: 1,
+        pauseReason: null,
+        pendingEventCount: 1,
+      },
+    });
     existing.prs[1]!.ciStatus = 'FAILURE';
     existing.prs[1]!.hasMergeConflict = true;
-    existing.prs[1]!.ratchet = {
-      lastCheckedAt: null,
-      dispatchOutcome: 'DIED',
-      dispatchRetryCount: 3,
-      dispatchStalled: true,
-    };
     const detail = mergeProjectSnapshotIntoWorkspaceDetail(entry, seedDetail(existing));
     expect(detail).toMatchObject({
       prHasMergeConflict: true,
-      ratchetDispatchStalled: true,
-      statusReason: { code: 'RATCHET_STALLED' },
+      statusReason: { code: 'PR_UPDATE_QUEUED' },
       kanbanColumn: 'WAITING',
     });
   });
@@ -474,8 +467,6 @@ describe('workspace snapshot cache projections', () => {
     );
 
     expect(detail?.prUpdatedAt).toEqual(new Date('2026-02-02T12:00:00Z'));
-    expect(detail?.ratchetDispatchOutcome).toBe('DIED');
-    expect(detail?.ratchetDispatchRetryCount).toBe(2);
     expect(detail?.hasHadSessions).toBe(true);
   });
 

@@ -2,6 +2,7 @@ import { CaretDownIcon, GitPullRequestIcon, PlusIcon } from '@phosphor-icons/rea
 import { useState } from 'react';
 import { CiStatusChip } from '@/client/components/ci-status-chip';
 import { PrStateBadge } from '@/client/components/pr-state-badge';
+import { useToggleRatcheting } from '@/client/hooks/use-toggle-ratcheting';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
@@ -25,7 +26,10 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
+import type { PRMonitoringProjection } from '@/shared/pr-monitoring';
 import type { WorkspacePullRequest } from '@/shared/workspace-pr';
+import { createPRMonitoringMenuProps } from './pr-monitoring-menu-actions';
+import { PRMonitoringMenuItems, type PRMonitoringMenuProps } from './pr-monitoring-menu-items';
 import { useWorkspacePrActions } from './use-workspace-pr-actions';
 
 export function WorkspacePrMenu({
@@ -35,6 +39,7 @@ export function WorkspacePrMenu({
   onReview,
   pending = false,
   compact = false,
+  monitoring,
 }: {
   prs: readonly WorkspacePullRequest[];
   onAdd?: () => void;
@@ -42,6 +47,7 @@ export function WorkspacePrMenu({
   onReview?: (prId: string) => void;
   pending?: boolean;
   compact?: boolean;
+  monitoring?: PRMonitoringMenuProps;
 }) {
   const ordered = [...prs].sort(
     (a, b) =>
@@ -72,14 +78,14 @@ export function WorkspacePrMenu({
       <DropdownMenuContent
         align="end"
         collisionPadding={8}
-        className="flex flex-col overflow-hidden w-80 max-w-[calc(100vw-1rem)]"
+        className="w-80 max-w-[calc(100vw-1rem)]"
         onClick={(event) => event.stopPropagation()}
       >
         <DropdownMenuLabel className="shrink-0 text-xs text-muted-foreground">
           Pull requests
         </DropdownMenuLabel>
         {!ordered.length && <p className="px-2 py-3 text-xs text-muted-foreground">No PRs yet</p>}
-        <div className="min-h-0 max-h-80 overflow-y-auto">
+        <div>
           {ordered.map((pr) => (
             <WorkspacePrMenuRow
               key={pr.id}
@@ -90,6 +96,7 @@ export function WorkspacePrMenu({
             />
           ))}
         </div>
+        {monitoring && <PRMonitoringMenuItems {...monitoring} />}
         {onAdd && (
           <>
             <DropdownMenuSeparator />
@@ -178,11 +185,50 @@ function WorkspacePrMenuRow({
   );
 }
 
+function ConnectedPRMonitoringMenu({
+  workspaceId,
+  projectId,
+  prs,
+  monitoring,
+  compact,
+  actions,
+  onAdd,
+  onRemove,
+}: {
+  workspaceId: string;
+  projectId?: string;
+  prs: readonly WorkspacePullRequest[];
+  monitoring: PRMonitoringProjection;
+  compact: boolean;
+  actions: Omit<ReturnType<typeof useWorkspacePrActions>, 'review'> & {
+    review?: (id: string) => void;
+  };
+  onAdd(): void;
+  onRemove(id: string): void;
+}) {
+  const toggle = useToggleRatcheting(projectId);
+  return (
+    <>
+      {toggle.recipientPicker}
+      <WorkspacePrMenu
+        prs={prs}
+        compact={compact}
+        pending={actions.pending}
+        onAdd={onAdd}
+        onRemove={onRemove}
+        onReview={actions.review}
+        monitoring={createPRMonitoringMenuProps(workspaceId, monitoring, toggle)}
+      />
+    </>
+  );
+}
+
 export function ConnectedWorkspacePrMenu({
   workspaceId,
   projectId,
   prs,
   readOnly = false,
+  monitoring,
   reviewEnabled = true,
   compact = false,
 }: {
@@ -190,6 +236,7 @@ export function ConnectedWorkspacePrMenu({
   projectId?: string;
   prs: readonly WorkspacePullRequest[];
   readOnly?: boolean;
+  monitoring?: PRMonitoringProjection;
   reviewEnabled?: boolean;
   compact?: boolean;
 }) {
@@ -198,6 +245,11 @@ export function ConnectedWorkspacePrMenu({
   const [url, setUrl] = useState('');
   const [error, setError] = useState<string | null>(null);
   const actions = useWorkspacePrActions(workspaceId, projectId);
+  const openAdd = () => {
+    setUrl('');
+    setError(null);
+    setOpen(true);
+  };
   return (
     <fieldset
       className="contents"
@@ -206,22 +258,27 @@ export function ConnectedWorkspacePrMenu({
       onClick={(event) => event.stopPropagation()}
       onPointerUp={(event) => event.stopPropagation()}
     >
-      <WorkspacePrMenu
-        prs={prs}
-        compact={compact}
-        pending={actions.pending}
-        onAdd={
-          readOnly
-            ? undefined
-            : () => {
-                setUrl('');
-                setError(null);
-                setOpen(true);
-              }
-        }
-        onRemove={readOnly ? undefined : setRemoveId}
-        onReview={readOnly || !reviewEnabled ? undefined : actions.review}
-      />
+      {monitoring && !readOnly ? (
+        <ConnectedPRMonitoringMenu
+          workspaceId={workspaceId}
+          projectId={projectId}
+          prs={prs}
+          compact={compact}
+          monitoring={monitoring}
+          actions={{ ...actions, review: reviewEnabled ? actions.review : undefined }}
+          onAdd={openAdd}
+          onRemove={setRemoveId}
+        />
+      ) : (
+        <WorkspacePrMenu
+          prs={prs}
+          compact={compact}
+          pending={actions.pending}
+          onAdd={readOnly ? undefined : openAdd}
+          onRemove={readOnly ? undefined : setRemoveId}
+          onReview={readOnly || !reviewEnabled ? undefined : actions.review}
+        />
+      )}
       <ConfirmDialog
         open={removeId !== null}
         onOpenChange={(value) => {
@@ -244,7 +301,7 @@ export function ConnectedWorkspacePrMenu({
           <DialogHeader>
             <DialogTitle>Add PR</DialogTitle>
             <DialogDescription>
-              Link a GitHub PR. Ratchet watches every open PR in this workspace.
+              Link a GitHub PR to receive updates in this workspace.
             </DialogDescription>
           </DialogHeader>
           <form

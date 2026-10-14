@@ -7,6 +7,7 @@ import type {
   WorkspaceStatus,
 } from '@/shared/core';
 import type { WorkspaceCiObservation, WorkspaceFlowPhase } from '@/shared/workspace-flow-state';
+import type { PRMonitoringProjection } from './pr-monitoring';
 
 export const WORKSPACE_PENDING_REQUEST_TYPES = [
   'plan_approval',
@@ -45,6 +46,11 @@ export const WORKSPACE_STATUS_REASON_CODES = [
   'FIXING_MERGE_CONFLICT',
   'MERGE_CONFLICT',
   'RATCHET_STALLED',
+  'PR_RECIPIENT_REQUIRED',
+  'PR_UPDATES_PAUSED',
+  'PR_UPDATE_QUEUED',
+  'PR_DELIVERY_ERROR',
+  'PR_NEEDS_ATTENTION',
   'CHECKING_PR',
   'MERGED',
   'PR_CLOSED',
@@ -78,6 +84,7 @@ export interface WorkspaceStatusReasonInput {
   ratchetEnabled: boolean;
   hasMergeConflict: boolean;
   dispatchStalled: boolean;
+  prMonitoring?: PRMonitoringProjection;
   mode: WorkspaceMode;
   autoIterationStatus: AutoIterationStatus | null;
 }
@@ -102,6 +109,7 @@ export function deriveWorkspaceStatusReason(
     deriveBlockingReason(input) ??
     deriveLifecycleReason(input) ??
     deriveActiveReason(input) ??
+    deriveMonitoringReason(input) ??
     deriveRatchetTroubleReason(input) ??
     derivePrFlowReason(input) ??
     deriveIdleReason(input)
@@ -177,6 +185,27 @@ function deriveActiveReason(input: WorkspaceStatusReasonInput): OptionalWorkspac
  * cognitive-complexity limit; it runs immediately before it, so the precedence
  * is the same as if these were its first two branches.
  */
+function deriveMonitoringReason(input: WorkspaceStatusReasonInput): OptionalWorkspaceStatusReason {
+  const config = input.prMonitoring;
+  if (!config?.enabled) {
+    return null;
+  }
+  if ((config.deliveryMode ?? 'MAIN') === 'MAIN' && !config.recipientSessionId) {
+    return reason('PR_RECIPIENT_REQUIRED', 'Choose main conversation', 'attention', true);
+  }
+  if (config.pauseReason) {
+    return ['DELIVERY_FAILED', 'RESUME_FAILED', 'INVALID_EVENT', 'LEGACY_FIXER'].includes(
+      config.pauseReason
+    )
+      ? reason('PR_DELIVERY_ERROR', 'PR update delivery needs attention', 'danger', true)
+      : reason('PR_UPDATES_PAUSED', 'PR updates paused', 'waiting', true);
+  }
+  if (config.pendingEventCount) {
+    return reason('PR_UPDATE_QUEUED', 'PR update queued for next turn', 'waiting');
+  }
+  return null;
+}
+
 function deriveRatchetTroubleReason(
   input: WorkspaceStatusReasonInput
 ): OptionalWorkspaceStatusReason {
@@ -192,13 +221,11 @@ function deriveRatchetTroubleReason(
   }
 
   if (input.ratchetEnabled && input.dispatchStalled) {
-    return reason('RATCHET_STALLED', 'Auto-fix stalled', 'attention', true);
+    return reason('PR_DELIVERY_ERROR', 'PR update delivery needs attention', 'attention', true);
   }
 
   if (input.hasMergeConflict) {
-    return input.ratchetEnabled
-      ? reason('FIXING_MERGE_CONFLICT', 'Fixing merge conflict', 'working')
-      : reason('MERGE_CONFLICT', 'Merge conflict', 'attention', true);
+    return reason('MERGE_CONFLICT', 'Merge conflict', 'attention', true);
   }
 
   return null;
@@ -234,13 +261,13 @@ function derivePrFlowReason(input: WorkspaceStatusReasonInput): OptionalWorkspac
 
   if (input.flowPhase === 'RATCHET_FIXING') {
     if (input.ratchetState === 'REVIEW_PENDING') {
-      return reason('FIXING_REVIEW_COMMENTS', 'Fixing review comments', 'working');
+      return reason('PR_NEEDS_ATTENTION', 'Review feedback awaiting action', 'waiting', true);
     }
-    return reason('FIXING_CI_FAILURES', 'Fixing CI failures', 'working');
+    return reason('PR_NEEDS_ATTENTION', 'CI failure awaiting action', 'waiting', true);
   }
 
   if (input.flowPhase === 'RATCHET_VERIFY') {
-    return reason('CHECKING_PR', 'Checking PR', 'working');
+    return reason('CHECKING_PR', 'Checking PR', 'waiting');
   }
 
   if (input.flowPhase === 'READY' && input.ciObservation === 'CHECKS_PASSED') {

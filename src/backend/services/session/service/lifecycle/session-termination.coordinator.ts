@@ -12,6 +12,7 @@ import {
 } from '@/shared/core';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import type { AcpEventProcessor } from './acp-event-processor';
+import { sessionBackgroundDeliveryService } from './session-background-delivery.service';
 import type {
   RecordLifecycleEventInput,
   SessionLifecycleEventService,
@@ -120,6 +121,13 @@ export class SessionTerminationCoordinator {
     }
     const stopInvocationId = randomUUID();
     try {
+      if (options?.reason === 'USER_STOP') {
+        try {
+          await sessionBackgroundDeliveryService.userStop(sessionId);
+        } catch (error) {
+          logger.warn('Failed to pause PR delivery before user stop', { sessionId, error });
+        }
+      }
       await this.stopSessionWithBarrier(sessionId, stopInvocationId, completeEvent, options);
     } finally {
       completeEvent({ persisted: false });

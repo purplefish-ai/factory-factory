@@ -9,189 +9,171 @@ destination and rename metadata to disambiguate filenames containing spaces.
 Metadata only updates filenames before a hunk; header-like additions and
 deletions inside hunks remain diff content.
 
-## Auto-Fix (Ratchet)
+## PR event delivery destinations
 
-Automatically watches pull requests and dispatches agents to fix issues
-(1-minute check cadence). When a PR has failing CI or actionable review
-feedback, creates a fixer session to address it.
+PR monitoring replaces the former Ratchet fixer workflow. The two-minute
+`pr-event-poll` job observes every attached PR and queues actionable updates in
+either a bound ordinary conversation (MAIN, the default) or one reusable
+dedicated conversation per PR (DEDICATED). This is one event pipeline with a
+destination setting, replacing the former fixer engine. Human messages retain
+FIFO priority; a background update waits for an idle recipient, no interactive
+request, and no working agent in the workspace. An update arriving mid-turn
+stays queued for the next turn.
 
-The global review-trigger mode defaults to `CHANGES_REQUESTED`, which includes
-changes-requested review bodies and unresolved inline review threads;
-`ALL_REVIEW_FEEDBACK` additionally permits top-level commented review summaries.
-Ordinary PR conversation comments never trigger Ratchet or advance its review
-snapshot. PR states: `IDLE` / `CI_RUNNING` / `CI_FAILED` / `REVIEW_PENDING` /
-`READY` / `MERGED`. A workspace-level toggle controls whether auto-fix is
-active. Admin settings control the default ratchet state for new workspaces and
-the global review-trigger mode.
+Enablement and delivery destination are workspace-scoped. In MAIN mode, a unique
+ordinary conversation can be bound automatically; multiple candidates require an
+explicit choice. Auxiliary Ratchet, PR-monitoring, auto-iteration, and
+adversarial-review sessions are ineligible as main recipients. Issue starts bind
+their created conversation after its initial human message is queued. The
+workspace menu allows changing the destination or main recipient. DEDICATED mode
+creates a normal workspace conversation lazily when that PR has pending events,
+using the workspace's provider selection, normal user model defaults, and the
+normal session limit. `WorkspacePRDedicatedSession`, owned by the session
+service, binds one `pr-monitoring` conversation to each PR. Later events reuse
+its saved provider identity and settings. Switching back to MAIN retains the
+selected main conversation. Binding changes use a revision compare-and-swap and
+invalidate queued requests for the old revision.
 
-One narrow, deliberate exception to "ordinary comments never trigger Ratchet": a
-review or fallback conversation summary whose body carries the Adversarial
-Review feature's marker (`src/shared/adversarial-review.ts`) is always
-actionable, regardless of `ratchetReviewTriggerMode`, provided its author
-matches the authenticated GitHub identity — see
-[Adversarial Review](../design/adversarial-review.md). This exists because this
-app's own `gh` identity is also the PR's author, which rules out using GitHub's
-native `REQUEST_CHANGES` review state to signal "actionable" the way a human
-reviewer's does.
+An existing dedicated conversation receives its queued chat card even while
+another session is working. Creating a new provider conversation waits for an
+idle workspace; session idle transitions wake pending PR delivery immediately.
 
-The dispatch prompt asks the agent to refresh GitHub state, address actionable
-feedback, fix CI, and resolve conflicts autonomously. It leaves execution order
-and repository-specific checks to the agent. Base-branch updates happen when
-needed; conflict-only fixes may be pushed, and the PR stays open. Declined
-feedback and blockers are reported rather than forcing unnecessary edits.
+Each `WorkspacePR` association has its own ID, URL, revision, complete
+normalized observation, epoch, and transition sequence. `WorkspacePRDiscovery`
+owns branch lookup scheduling separately. An observation and its
+`WorkspacePREvent` rows are accepted in one transaction, guarded by association
+identity and revision. Attaching or merging one PR preserves sibling
+associations and events.
 
-The PR reply setting controls comments and thread resolution. When enabled,
-agents reply to unaddressed feedback and request re-review after fixes without
-duplicate messages. When disabled, they leave comments and threads untouched and
-request re-review through reviewer assignment only. Supplied review data remains
-escaped and explicitly untrusted. A missing or empty dispatch template fails
-dispatch instead of falling back to a second set of instructions.
+`WorkspacePRMonitoring` owns enablement, delivery mode, main recipient
+preference, binding revision, epoch, and delivery pause. Turning monitoring off
+cancels unclaimed events while facts continue to refresh. Re-enabling or
+changing destinations/recipients starts an observation epoch. MAIN queues one
+trusted enablement control; DEDICATED batches carry concise maintenance
+instructions in the same bounded event message. Collection projections report
+MERGED only when every attached PR is merged; an open sibling remains visible.
+Workspace snapshots include the plain `prs` collection and its `prSummary`. The
+PR menu offers per-association refresh, review, and detachment. Detaching one
+association cancels its pending events while leaving sibling monitoring and the
+main conversation intact.
 
-### State
+### Observations and events
 
-A workspace retains all associated PRs in `Workspace.prs`. Each PR has a stable
-ID, URL, GitHub cache, and independent `WorkspacePRRatchet` history.
-`WorkspaceRatchet` owns the workspace toggle, check time, and one active fixer
-slot (`activePrId`, `activeSessionId`). Only the matching session can settle
-that slot. All open PRs are observed; checks visit the least recently checked
-PRs first and continue observing siblings while a fixer is busy. Session
-acquisition and review actions carry the specific PR ID.
+Polling, manual refresh, and dispatch preparation share normalized observation
+fetching through `pr-observation.orchestrator.ts`. Coalescing is scoped to
+workspace/PR identity and revision/epoch; separate PRs do not share a baseline.
+GitHub owns process-wide spawn limits, in-flight read deduplication, and rate
+limit backoff. Watcher concurrency remains bounded at three workspaces, with a
+90-second timeout and shutdown cancellation.
 
-`deriveWorkspacePRSummary` derives workspace CI, conflict, completion, and stall
-state from the complete active collection. Any open or unsynchronized PR keeps
-the workspace nonterminal. Failure takes precedence over pending checks, and a
-workspace stalls only when all actionable PRs have exhausted their dispatches
-and none is waiting or running. Per-PR state still uses `deriveRatchetState`.
+Observation depends on four method-level ports: normalized fetching, PR/config
+reads, atomic observation acceptance, and snapshot notifications. It has no
+session or delivery dependencies. Delivery receives a `refreshObservation`
+callback from composition wiring and awaits it before claiming events, then
+rechecks the recipient binding. Recipient readiness belongs to delivery.
 
-Snapshot invalidations re-read and publish the collection and summary together
-through `RatchetProjectionWorker`. Its generation guard discards superseded
-reads, with three attempts at 1s and 2s delays and archive/stop suppression.
-Attachments immediately publish a neutral PR alongside existing siblings, so a
-late merged observation cannot bypass archive confirmation. Reconciliation is
-the safety net after retry exhaustion.
+`prFactPayloadSchema` validates GitHub-derived facts; the transition reducer
+accepts and emits only those facts. `prMonitoringControlPayloadSchema` validates
+backend-owned enable instructions separately, with a separate message builder.
+The ledger retains its compatible payload union, but rendering rejects mixed
+control/fact batches instead of silently omitting facts. The reducer
+deliberately reads pending, in-flight, and delivered fact history for
+deduplication and recovery semantics; it does not choose a session, destination,
+or prompt.
 
-### Dispatch tracking
+Unclaimed enable controls and review-feedback messages use the current trusted
+reply preference at delivery. A control's captured `replyToPrComments` records
+the enable-time setting and remains in compatible payloads; it does not override
+a later preference change. After a delivery is claimed, retries reuse its frozen
+text and identity.
 
-Each fixer dispatch is tracked on its PR’s `WorkspacePRRatchet` row with a
-snapshot key, outcome (`RUNNING`, `COMPLETED`, or `DIED`), and retry count.
-Deliberate stops and clean exits settle as `COMPLETED` (no re-dispatch while the
-PR state is unchanged). Unexpected exits settle as `DIED` and are re-dispatched
-for the same PR state up to 3 times.
+The reducer emits changed CI failures, recovery after a delivered failure,
+actionable review additions or edits, conflict transitions, and merge/close
+transitions. Check details, head SHA, and transition sequence distinguish reruns
+and recurrences. An unchanged red observation never sends another prompt merely
+because the agent left CI red. Unfrozen obsolete facts are superseded; frozen
+retry messages keep the original text and UUID. A destination-only switch
+preserves queued facts so the new recipient can receive them.
 
-A `dispatchStalled` boolean on the same row records the ratchet's own conclusion
-that it will not act again until the PR changes — set both when a settled
-dispatch achieved nothing for an unchanged snapshot key and when a `DIED` fixer
-exhausts its retries, cleared by `resetSettledDispatch`, `disable`, and the next
-dispatch. The set is a compare-and-swap pinned to the `dispatchSnapshotKey` the
-check evaluated, so a concurrent PR observation or disable wins rather than
-being overwritten by a check that has already been superseded; it returns
-whether it flipped the flag, and only that transition emits
-`RATCHET_DISPATCH_CHANGED`.
+Review policy defaults to `CHANGES_REQUESTED`: changes-requested review bodies
+and unresolved inline threads. `ALL_REVIEW_FEEDBACK` also includes commented
+review summaries. Ordinary PR conversation comments do not trigger updates. The
+app's own [adversarial-review marker](../design/adversarial-review.md) remains
+an explicit exception under its authenticated GitHub identity.
 
-That event is load-bearing: a stall is by definition nothing changing, so
-neither the PR-observation write nor the ratchet-state transition fires, and
-without it the WORKING-to-WAITING move would wait for the next reconciliation
-sweep. It is what moves a stuck workspace out of the WORKING column; the
-snapshot key hashes `statusCheckRollup` detail `WorkspacePR` does not store, so
-no reader can re-derive it.
+Approvals supersede earlier feedback only with reliable same-author ordering.
+Submission times and REST review ordinals provide that ordering; opaque IDs do
+not. Deleted reviewers retain their feedback under an unknown identity, and
+unknown authors' approvals cannot erase each other's feedback. Resolved threads
+are excluded. Pagination caps mark reviews incomplete, so omitted feedback is
+retained rather than inferred resolved. Unknown CI results never become green.
 
-Review summaries superseded by the same author's approval are excluded from
-prompts and review activity. Different valid submission times take precedence;
-same-second or missing times use an explicit ordinal from GitHub's
-[chronologically ordered REST reviews endpoint](https://docs.github.com/en/rest/pulls/reviews#list-reviews-for-a-pull-request),
-including across pages. Ratchet never infers order from its input array or
-opaque review IDs; without enough ordering evidence, it retains the feedback.
-Deleted reviewers retain their feedback under an explicit unknown identity;
-their approvals never supersede another unknown author’s feedback.
+### Delivery and recovery
 
-Inline review comment fetches retain at most 2,000 comments, ordered by newest
-update first at the API boundary. Hitting that budget drops older activity
-rather than the newest comment or edit used in the dispatch snapshot. Returned
-comments are in ascending update order. Comments from deleted GitHub accounts
-are retained with an empty author login, preserving their feedback and activity
-timestamps without inventing an identity or failing the PR fetch.
+The session queue carries a backend-owned `pr_event` source. Browser messages
+cannot supply it or reserved message IDs. Preparation refreshes facts and checks
+eligibility before freezing a bounded message (16 KiB UTF-8), event IDs,
+delivery UUID, recipient, binding revision, and attempt. The final guard runs
+again immediately before provider submission. A transactional workspace-wide
+claim permits only one PR delivery at a time, including across dedicated
+conversations. A competing claim retains its queued card and retries when the
+active delivery settles. Review data is escaped, explicitly untrusted, and
+includes PR links and omission counts.
 
-Review comments belonging to resolved review threads (GraphQL
-`reviewThreads.isResolved`) are excluded from fixer dispatch prompts and from
-the "has actionable review comments" trigger; they still count toward the
-review-activity timestamp so dispatch snapshot keys stay stable when threads get
-resolved. Dispatch state is persisted as soon as prompt execution begins,
-without waiting for the full ACP turn to complete; a later prompt failure
-conditionally settles the matching dispatch as `DIED`.
+Cold delivery requires resuming the exact stored Claude/Codex conversation.
+Failed or unsupported resume cannot fall back to a new conversation. Saved ACP
+model, mode, reasoning and permissions are restored; PR updates never apply
+separate Ratchet provider or permission defaults.
 
-## PR cache
+A completed provider prompt acknowledges delivery, meaning the facts were
+received, regardless of whether the PR was fixed. After an uncertain exit,
+provider-owned user history must contain the exact delivery marker to prove
+receipt; optimistic UI rows are insufficient. Missing history pauses delivery as
+`RECEIPT_UNAVAILABLE`. Loaded history without the marker allows a bounded retry
+in the same conversation. A recipient change first recovers old claims; only
+proven absence allows cancelling an old frozen delivery. It never retargets that
+frozen message into a new conversation.
 
-Each `WorkspacePR` stores URL, number, title, head/base branches, state, review
-state, CI, merge conflict, sync time, and notification/review cursors. The
-`workspace-pr.accessor.ts` sole writer guards observations by workspace ID, PR
-ID, active association, and revision. Fetches pin that revision before GitHub
-I/O; stale responses cannot modify siblings or resurrect removed associations.
-PR head metadata never renames the workspace’s worktree branch.
+Closing a conversation retains its provider session ID in archived transcript
+metadata. Receipt recovery reads that identity and checks provider-owned
+history, including after another conversation is selected. If history is
+unavailable, restore the provider history files and archived identity, then
+explicitly resume the selected conversation. Local transcript messages cannot
+prove receipt.
 
-Adding a URL is idempotent and retains siblings and their dispatch history.
-Removing a PR sets a tombstone, advances its revision, and releases only its
-fixer slot; it does not close the GitHub PR. Discovery honors tombstones, while
-explicit reattachment clears one and resets its dispatch history and cached
-status before fetching. Failed initial synchronization retains a visible
-unsynchronized association. The compact PR menu contains explicit GitHub,
-review, remove, and add actions.
+Transport attempts stop after three failures. User stop and runtime failure
+persist a pause and invalidate queued requests; explicit user continuation
+clears recoverable pauses and renews the bounded retry allowance while
+preserving the original frozen delivery ID and text. The PR menu also offers
+explicit **Resume PR updates** for recoverable pauses, including when no
+dedicated conversation exists yet. Changing destinations alone preserves a
+pause; resuming uses the binding revision and retains frozen recipients. The
+chat renders PR updates as noneditable cards. Snapshots expose enablement,
+delivery mode, recipient, pause reason and pending count. Queued updates, paused
+delivery, and idle red CI do not imply live agent work.
 
-Detachment cleanup can be retried using the persisted session’s PR target if
-stopping its runtime fails after the association was removed. Unchanged PR
-collections and summaries do not emit snapshot deltas. Older events resolve to
-an attached PR by URL or an unambiguous PR number before updating the
-collection. Reopened PRs trigger an immediate ratchet check even when the
-workspace has multiple associations. Linear completion waits while any PR is
-nonterminal and retries when the final sibling closes or is removed.
+### Migration and backups
 
-Client compatibility updates merge legacy observations into cached PR
-collections and recompute aggregate status with the same shared flow rules used
-by the backend. Draft observations preserve cached review decisions. Ready
-workspaces missing their worktree path refetch the project list, retrying later
-if the cache still lacks a path after the refetch settles.
+The cutover retains exact legacy fixer IDs and all session/transcript rows,
+retires and archives each legacy fixer, and fences delivery until retention is
+confirmed. It drops old fixer dispatch tables and the Ratchet provider override.
+Existing enabled workspaces bind their sole ordinary conversation during
+migration. Ambiguous workspaces require an explicit recipient selection. The
+former permission default migrates to `autoIterationPermissions` for the
+independent auto-iteration workflow. Main conversation settings remain intact.
 
-`WorkspacePRDiscovery` owns workspace discovery scheduling and backoff,
-including workspaces that already have PRs. Repository batches attach all
-matching URLs under one validated claim, choosing the newest eligible workspace
-when a branch is reused. Activity and branch changes invalidate claims. Every
-attached PR is eligible for status sync, including terminal PRs that may reopen.
+Version-6 backups preserve every PR association, normalized observation,
+monitoring binding/pause, and event including frozen delivery metadata. Versions
+4 and 5 remain accepted. Published version-5 fixer identities normalize into
+retained legacy IDs and pause delivery until cutover completes; operational
+fixer ownership is not restored. Restored process IDs are never trusted as live
+runtimes; provider identity is retained for receipt recovery. Invalid restored
+recipients are unbound and require selection.
 
-Backups export version 5 with the collection, tombstones, cursors, independent
-histories, discovery, and fixer ownership. Version 4 imports normalize into this
-shape, creating no association when the old URL was empty. Validation rejects
-duplicate PR identities and ownership outside the workspace before restoration.
+In-flight backup deliveries must include their frozen delivery ID, text,
+recipient, binding revision, provider, and provider conversation identity.
 
-Idle-triggered PR refreshes retain a 30-second cooldown per workspace. At the
-workspace cache limit, only expired cooldowns are removed; if all entries are
-still live, new idle refreshes are skipped until a later idle event can claim a
-slot. The regular PR sync poll remains the fallback under capacity pressure.
-
-## PR fetch coordination
-
-The scheduler's PR sync and the ratchet both fetch the same workspaces' PRs, so
-both go through `prFetchCoordinator`
-(`src/backend/services/github/service/pr-fetch-coordinator.ts`), which runs the
-fetch inside a PR-scoped claim and declines to run it at all when another caller
-fetched that PR within the cooldown or is fetching it right now.
-
-It replaced a registry with a three-call claim protocol (`startFetch`, then
-`register` or `cancelFetch`) plus a token the caller threaded through its own
-try/catch — duplicated at both call sites and exposed as five methods on
-`RatchetGitHubBridge`, now one. Scoping the claim to a callback makes releasing
-it a `finally` rather than a caller obligation; the token survives as an
-internal detail only because claims still expire, so a late release must not
-delete a newer one.
-
-Two options carry what the callers need: `ignoreCooldown` (event-driven ratchet
-checks recompute now, but still defer to a fetch actually in flight) and
-`countsAsFetched` (PR sync reports failure as a value, and a failed refresh must
-not start a cooldown).
-
-It is deliberately **not** a rate limiter — the shared GitHub budget lives one
-level down in `GitHubCLIService`: a process-wide `pLimit` on `gh` spawns, a
-one-minute fast-fail once GitHub pushes back, and singleflight dedup of
-identical in-flight reads. That last one cannot dedupe these two callers,
-because they fetch the same workspace with different `gh` commands; that is the
-gap the coordinator fills. The scheduler's own `pLimit(3)` and the ratchet's
-workspace limit stay separate on purpose: merging them would make a large sync
-batch starve ratchet checks.
+The delivery-mode migration is additive: existing monitoring defaults to MAIN.
+Version 6 backups retain the destination and dedicated PR/session bindings;
+older backups default to MAIN. Binding restoration validates the workspace, PR
+and `pr-monitoring` workflow after the sessions have been restored.
