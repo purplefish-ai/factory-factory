@@ -51,6 +51,14 @@ export const baseWorkspace: WorkspaceWithKanban = {
   prState: 'NONE',
   prCiStatus: 'UNKNOWN',
   ratchetEnabled: true,
+  prMonitoring: {
+    deliveryMode: 'MAIN',
+    enabled: true,
+    recipientSessionId: null,
+    bindingRevision: 0,
+    pauseReason: null,
+    pendingEventCount: 0,
+  },
   ratchetState: 'IDLE',
   runScriptStatus: 'IDLE',
   githubIssueNumber: null,
@@ -95,12 +103,6 @@ function withPR(overrides: Partial<WorkspaceWithKanban>): WorkspaceWithKanban {
     ciStatus: workspace.prCiStatus,
     hasMergeConflict: false,
     syncedAt: null,
-    ratchet: {
-      lastCheckedAt: null,
-      dispatchOutcome: null,
-      dispatchRetryCount: 0,
-      dispatchStalled: false,
-    },
   };
   return {
     ...workspace,

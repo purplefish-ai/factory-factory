@@ -146,6 +146,7 @@ export class SessionWorkflowFinalizer {
       name: session.name,
       workflow: session.workflow,
       provider: session.provider,
+      ...(session.providerSessionId ? { providerSessionId: session.providerSessionId } : {}),
       model: session.model,
       startedAt: session.createdAt,
       messages: this.dependencies.sessionDomainService.getTranscriptSnapshot(sessionId),
@@ -225,9 +226,10 @@ export class SessionWorkflowFinalizer {
     let persistence = this.transientSessionPersistenceOperations.get(sessionId);
     if (!persistence) {
       persistence = this.persistClosedSessionIfAvailable(sessionId).then((persisted) => {
-        if (persisted) {
-          this.persistedTransientSessionIds.add(sessionId);
+        if (!persisted) {
+          throw new Error('Legacy session transcript could not be archived');
         }
+        this.persistedTransientSessionIds.add(sessionId);
       });
       this.transientSessionPersistenceOperations.set(sessionId, persistence);
     }

@@ -7,6 +7,7 @@ import {
   getValidModel,
   getValidReasoningEffort,
 } from '@/backend/services/session/service/chat/chat-message-handlers/utils';
+import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
 import { sessionLifecycleService } from '@/backend/services/session/service/lifecycle/session-core-services';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { WorkspaceStatus } from '@/shared/core';
@@ -18,6 +19,7 @@ export function createStartHandler(deps: {
   startupService: ChatMessageHandlerStartupService;
 }): ChatMessageHandler<StartMessageInput> {
   return async ({ ws, sessionId, message }) => {
+    const isCurrent = sessionBackgroundDeliveryService.captureResumeGuard(sessionId);
     const sessionOpts = await sessionLifecycleService.getSessionOptions(sessionId);
     if (!sessionOpts) {
       logger.error('[Chat WS] Failed to get session options', { sessionId });
@@ -44,6 +46,9 @@ export function createStartHandler(deps: {
         planModeEnabled: message.planModeEnabled,
         model: getValidModel(message),
         reasoningEffort: getValidReasoningEffort(message),
+      });
+      void sessionBackgroundDeliveryService.userResume(sessionId, isCurrent).catch((error) => {
+        logger.warn('Failed to resume PR delivery after session startup', { sessionId, error });
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);

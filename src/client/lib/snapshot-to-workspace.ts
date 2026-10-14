@@ -71,12 +71,6 @@ function projectSnapshotPRs(
     ciStatus: entry.prCiStatus,
     hasMergeConflict: entry.hasMergeConflict,
     syncedAt: entry.prUpdatedAt,
-    ratchet: {
-      lastCheckedAt: cachedPR?.ratchet.lastCheckedAt ?? null,
-      dispatchOutcome: entry.ratchetDispatchOutcome,
-      dispatchRetryCount: entry.ratchetDispatchRetryCount,
-      dispatchStalled: entry.ratchetDispatchStalled,
-    },
   };
   return cachedPR
     ? cachedPRs.map((pr) => (pr.id === cachedPR.id ? legacyPR : pr))
@@ -118,7 +112,8 @@ function projectLegacyPRState(entry: WorkspaceSnapshotEntry, prs: WorkspacePullR
     ratchetState,
     ratchetEnabled: entry.ratchetEnabled,
     hasMergeConflict: prSummary.hasMergeConflict,
-    dispatchStalled: prSummary.dispatchStalled,
+    dispatchStalled: false,
+    prMonitoring: entry.prMonitoring,
     mode: entry.mode,
     autoIterationStatus: entry.autoIterationStatus,
   });
@@ -168,6 +163,7 @@ function projectSnapshotToLiveFields(
     prCiStatus: entry.prCiStatus,
     ratchetEnabled: entry.ratchetEnabled,
     ratchetState: entry.ratchetState,
+    prMonitoring: entry.prMonitoring,
     runScriptStatus: entry.runScriptStatus,
     sessionSummaries: entry.sessionSummaries,
     pendingRequestType: entry.pendingRequestType,
@@ -213,10 +209,5 @@ export function mergeProjectSnapshotIntoWorkspaceDetail(
       : entry.hasMergeConflict,
     prUpdatedAt: entry.prUpdatedAt ? new Date(entry.prUpdatedAt) : null,
     hasHadSessions: entry.hasHadSessions,
-    ratchetDispatchOutcome: entry.ratchetDispatchOutcome,
-    ratchetDispatchRetryCount: entry.ratchetDispatchRetryCount,
-    ratchetDispatchStalled: hasLegacyPR
-      ? liveFields.prSummary.dispatchStalled
-      : entry.ratchetDispatchStalled,
   };
 }

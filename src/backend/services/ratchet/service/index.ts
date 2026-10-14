@@ -2,23 +2,6 @@
 // Public API for the ratchet domain module.
 // Consumers should import from '@/backend/services/ratchet' only.
 
-// Bridge interfaces for orchestration layer wiring
-export type {
-  RatchetGitHubBridge,
-  RatchetPRFullDetails,
-  RatchetPRSnapshotBridge,
-  RatchetReviewComment,
-  RatchetSessionBridge,
-  RatchetStatusCheckInput,
-  RatchetWorkspaceBridge,
-} from './bridges';
-export type {
-  AcquireAndDispatchInput,
-  AcquireAndDispatchResult,
-  RunningIdleSessionAction,
-} from './fixer-session.service';
-// Shared fixer session acquisition
-export { fixerSessionService } from './fixer-session.service';
 export type {
   RatchetAction,
   RatchetCheckResult,

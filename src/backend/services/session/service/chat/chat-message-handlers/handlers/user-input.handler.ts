@@ -4,6 +4,7 @@ import type {
   ChatMessageHandlerPromptService,
   ChatMessageHandlerRuntimeManager,
 } from '@/backend/services/session/service/chat/chat-message-handlers/types';
+import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
 import type { AgentContentItem } from '@/shared/acp-protocol';
 import type { UserInputMessage } from '@/shared/websocket';
 
@@ -30,8 +31,12 @@ export function createUserInputHandler(deps: {
       typeof rawContent === 'string' ? rawContent : (rawContent as AgentContentItem[]);
 
     if (acpRuntimeManager.isSessionRunning(sessionId)) {
+      const isCurrent = sessionBackgroundDeliveryService.captureResumeGuard(sessionId);
       void sessionService.sendSessionMessage(sessionId, messageContent).catch((error) => {
         logger.error('Failed to send message to provider', { sessionId, error });
+      });
+      void sessionBackgroundDeliveryService.userResume(sessionId, isCurrent).catch((error) => {
+        logger.warn('Failed to resume PR delivery after human input', { sessionId, error });
       });
       return;
     }

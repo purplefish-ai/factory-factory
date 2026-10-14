@@ -9,7 +9,6 @@ export const WorkspacePRSummarySchema = z.object({
   ciStatus: z.nativeEnum(CIStatus),
   hasMergeConflict: z.boolean(),
   ratchetState: z.nativeEnum(RatchetState),
-  dispatchStalled: z.boolean(),
 });
 export type WorkspacePRSummary = z.infer<typeof WorkspacePRSummarySchema>;
 function summarizeCI(active: readonly WorkspacePullRequest[]): CIStatus {
@@ -30,7 +29,7 @@ export function deriveWorkspacePRSummary(
   const active = prs.filter((pr) => pr.state !== 'MERGED' && pr.state !== 'CLOSED');
   const state = active.length
     ? PRState.OPEN
-    : prs.some((pr) => pr.state === 'MERGED')
+    : prs.length > 0 && prs.every((pr) => pr.state === 'MERGED')
       ? PRState.MERGED
       : prs.length
         ? PRState.CLOSED
@@ -57,30 +56,6 @@ export function deriveWorkspacePRSummary(
     ? (ranks.find((rank) => states.includes(rank)) ??
       (state === 'MERGED' ? RatchetState.MERGED : RatchetState.IDLE))
     : RatchetState.IDLE;
-  const actionable = active.filter(
-    (pr) =>
-      pr.ciStatus === 'FAILURE' ||
-      pr.hasMergeConflict ||
-      pr.reviewState === 'CHANGES_REQUESTED' ||
-      pr.ratchet.dispatchStalled ||
-      (pr.ratchet.dispatchOutcome === 'DIED' && pr.ratchet.dispatchRetryCount >= 3)
-  );
-  const waiting = active.some(
-    (pr) =>
-      pr.state === 'NONE' ||
-      pr.ciStatus === 'PENDING' ||
-      pr.ciStatus === 'UNKNOWN' ||
-      pr.ratchet.dispatchOutcome === 'RUNNING'
-  );
-  const dispatchStalled =
-    ratchetEnabled &&
-    !waiting &&
-    actionable.length > 0 &&
-    actionable.every(
-      (pr) =>
-        pr.ratchet.dispatchStalled ||
-        (pr.ratchet.dispatchOutcome === 'DIED' && pr.ratchet.dispatchRetryCount >= 3)
-    );
   return {
     totalCount: prs.length,
     openCount: active.filter((pr) => pr.state !== 'NONE').length,
@@ -92,6 +67,5 @@ export function deriveWorkspacePRSummary(
         : ciStatus,
     hasMergeConflict,
     ratchetState,
-    dispatchStalled,
   };
 }

@@ -1,3 +1,4 @@
+import type { WebSocket } from 'ws';
 /**
  * Chat Message Handlers Service
  *
@@ -7,12 +8,11 @@
  * - All message type handlers (start, queue_message, stop, etc.)
  * - Model validation
  */
-
-import type { WebSocket } from 'ws';
 import { createLogger } from '@/backend/services/logger.service';
 import { acpRuntimeManager } from '@/backend/services/session/service/acp';
 import type { SessionInitPolicyBridge } from '@/backend/services/session/service/bridges';
 import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
+import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
 import {
   sessionConfigService,
   sessionPermissionService,
@@ -275,7 +275,11 @@ export class ChatMessageHandlerService {
           : 'done';
       }
       await this.dispatchPeekedMessage(dbSessionId, peeked, stopGeneration);
-      return 'done';
+      return peeked.source &&
+        this.isDispatchGenerationCurrent(dbSessionId, stopGeneration) &&
+        sessionDomainService.peekNextMessage(dbSessionId) !== peeked
+        ? 'continue'
+        : 'done';
     } finally {
       if (claim.status === 'claimed') {
         claim.release();
@@ -297,15 +301,30 @@ export class ChatMessageHandlerService {
       return;
     }
 
-    const clientResult = await this.resolveClientForDispatch(dbSessionId, peeked);
+    if (!(await this.prepareBackgroundForDispatch(dbSessionId, peeked, stopGeneration))) {
+      return;
+    }
+    const clientResult = await this.resolvePreparedClientForDispatch(
+      dbSessionId,
+      peeked,
+      stopGeneration
+    );
     if (!clientResult) {
       return;
     }
 
     if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
+      await this.releaseStoppedBackground(peeked);
       return;
     }
 
+    if (peeked.source && sessionDomainService.peekNextMessage(dbSessionId)?.id !== peeked.id) {
+      await sessionBackgroundDeliveryService.fail(
+        peeked,
+        new Error('Turn in progress: human message queued during preparation')
+      );
+      return;
+    }
     // NOW dequeue — client is ready, we're about to dispatch.
     const msg = sessionDomainService.dequeueNext(dbSessionId, { emitSnapshot: false });
     if (!msg) {
@@ -316,8 +335,85 @@ export class ChatMessageHandlerService {
       await this.dispatchMessage(dbSessionId, msg, clientResult.client, stopGeneration);
       this.turnInProgressRetryAttempts.delete(dbSessionId);
     } catch (error) {
+      if (msg.source) {
+        await sessionBackgroundDeliveryService.fail(msg, error);
+      }
       this.handleDispatchError(dbSessionId, msg, error, stopGeneration);
     }
+  }
+
+  private async releaseStoppedBackground(message: QueuedMessage): Promise<void> {
+    if (message.source) {
+      await sessionBackgroundDeliveryService.fail(
+        message,
+        new Error('Session stopped before dispatch')
+      );
+    }
+  }
+
+  private async resolvePreparedClientForDispatch(
+    dbSessionId: string,
+    peeked: QueuedMessage,
+    stopGeneration: number
+  ): Promise<{ client: unknown } | null> {
+    const clientResult = await this.resolveClientForDispatch(dbSessionId, peeked);
+    if (!(clientResult && this.isDispatchGenerationCurrent(dbSessionId, stopGeneration))) {
+      await this.releaseStoppedBackground(peeked);
+      return null;
+    }
+    if ('blocked' in clientResult) {
+      if (peeked.source) {
+        await sessionBackgroundDeliveryService.fail(
+          peeked,
+          new Error(
+            clientResult.blocked === 'busy'
+              ? 'A turn is already in progress for this session'
+              : 'Required existing conversation could not be restored'
+          )
+        );
+      }
+      return null;
+    }
+    if (peeked.source && !(await sessionBackgroundDeliveryService.validate(peeked))) {
+      await sessionBackgroundDeliveryService.fail(
+        peeked,
+        new Error('PR delivery invalidated before dispatch')
+      );
+      sessionDomainService.removeQueuedMessage(dbSessionId, peeked.id);
+      return null;
+    }
+    return clientResult;
+  }
+
+  private async prepareBackgroundForDispatch(
+    dbSessionId: string,
+    peeked: QueuedMessage,
+    stopGeneration: number
+  ): Promise<boolean> {
+    if (peeked.source) {
+      if (
+        acpRuntimeManager.isSessionWorking(dbSessionId) ||
+        sessionDomainService.getPendingInteractiveRequest(dbSessionId)
+      ) {
+        return false;
+      }
+      const prepared = await sessionBackgroundDeliveryService.prepare(dbSessionId, peeked);
+      if (prepared.status === 'discard') {
+        sessionDomainService.removeQueuedMessage(dbSessionId, peeked.id);
+        return false;
+      }
+      if (prepared.status !== 'ready') {
+        return false;
+      }
+      if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
+        await sessionBackgroundDeliveryService.fail(
+          peeked,
+          new Error('Session stopped before dispatch')
+        );
+        return false;
+      }
+    }
+    return true;
   }
 
   /**
@@ -486,25 +582,26 @@ export class ChatMessageHandlerService {
   private async resolveClientForDispatch(
     dbSessionId: string,
     msg: QueuedMessage
-  ): Promise<{ client: unknown } | null> {
+  ): Promise<{ client: unknown } | { blocked: 'busy' | 'resume_failed' } | null> {
     let client = this.lifecycle.startup.getSessionClient(dbSessionId);
 
     let justAutoStarted = false;
-    if (!client) {
+    if (!client || msg.source) {
+      const hadClient = !!client;
       const started = await this.autoStartClientForQueue(dbSessionId, msg);
       if (!started) {
-        return null;
+        return msg.source ? { blocked: 'resume_failed' } : null;
       }
       client = this.lifecycle.startup.getSessionClient(dbSessionId);
-      justAutoStarted = true;
+      justAutoStarted = !hadClient;
     }
 
     // Skip requeue check when the client was just auto-started: the "working" state
     // comes from the startup itself, not from a prior user message being processed.
-    if (!justAutoStarted) {
+    if (!justAutoStarted || msg.source) {
       const reason = this.getRequeueReason(dbSessionId, client);
       if (reason) {
-        return null;
+        return msg.source && reason !== 'stopped' ? { blocked: 'busy' } : null;
       }
     }
 
@@ -520,12 +617,17 @@ export class ChatMessageHandlerService {
     }
 
     try {
-      await this.lifecycle.startup.getOrCreateSessionClient(dbSessionId, {
-        thinkingEnabled: msg.settings.thinkingEnabled,
-        planModeEnabled: msg.settings.planModeEnabled,
-        model: msg.settings.selectedModel ?? undefined,
-        reasoningEffort: msg.settings.reasoningEffort ?? undefined,
-      });
+      await this.lifecycle.startup.getOrCreateSessionClient(
+        dbSessionId,
+        msg.source
+          ? { resumePolicy: 'require_existing' }
+          : {
+              thinkingEnabled: msg.settings.thinkingEnabled,
+              planModeEnabled: msg.settings.planModeEnabled,
+              model: msg.settings.selectedModel ?? undefined,
+              reasoningEffort: msg.settings.reasoningEffort ?? undefined,
+            }
+      );
       return true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -598,7 +700,22 @@ export class ChatMessageHandlerService {
         newState: MessageState.COMMITTED,
         userMessage: dispatchedUserMessage,
       });
-      await this.lifecycle.notificationDelivery.acknowledgeSuccessfulDispatch(msg.id);
+      if (msg.source) {
+        await sessionBackgroundDeliveryService.complete(msg);
+        if (this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
+          await this.lifecycle.notificationDelivery.recoverPending({
+            sessionId: dbSessionId,
+            workspaceId: msg.source.request.workspaceId,
+            assertAllowed: () => {
+              if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
+                throw new Error('Session stopped before notification recovery');
+              }
+            },
+          });
+        }
+      } else {
+        await this.lifecycle.notificationDelivery.acknowledgeSuccessfulDispatch(msg.id);
+      }
     } catch (error) {
       if (isCompactCommand && compactionClient) {
         compactionClient.endCompaction();
@@ -621,6 +738,17 @@ export class ChatMessageHandlerService {
     client: unknown,
     stopGeneration: number
   ): Promise<boolean> {
+    if (msg.source) {
+      const valid = await sessionBackgroundDeliveryService.validate(msg);
+      if (!(valid && this.isDispatchGenerationCurrent(dbSessionId, stopGeneration))) {
+        await sessionBackgroundDeliveryService.fail(
+          msg,
+          new Error('PR delivery invalidated before provider enqueue')
+        );
+        return false;
+      }
+      return true;
+    }
     try {
       if (msg.settings.planModeEnabled) {
         await sessionConfigService.setSessionCollaborationMode(dbSessionId, 'plan');

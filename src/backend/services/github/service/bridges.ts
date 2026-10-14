@@ -7,6 +7,8 @@ import type { workspacePrSnapshotService } from '@/backend/services/workspace';
 import type { CIStatus, PRState } from '@/shared/core';
 
 export interface GitHubPRDiscoveryClaim {
+  githubOwner: string;
+  githubRepo: string;
   branchName: string;
   checkedAt: Date;
   retryCount: number;
@@ -18,6 +20,26 @@ export interface GitHubSnapshotFields {
   prState: PRState;
   prReviewState: string | null;
   prCiStatus: CIStatus;
+}
+
+export interface GitHubWorkspaceSnapshotUpdate {
+  prId?: string;
+  expectedRevision?: number;
+  title?: string | null;
+  headRefName?: string | null;
+  baseRefName?: string | null;
+  prUrl?: string | null;
+  prNumber?: number | null;
+  prState?: PRState;
+  prReviewState?: string | null;
+  prCiStatus?: CIStatus;
+  prHasMergeConflict?: boolean;
+  prUpdatedAt?: Date | null;
+  prCiFailedAt?: Date | null;
+  prCiLastNotifiedAt?: Date | null;
+  prReviewLastCheckedAt?: Date | null;
+  prReviewLastCommentId?: string | null;
+  branchName?: string;
 }
 
 export interface GitHubPrAggregatePersistenceResult {
@@ -69,6 +91,7 @@ export interface GitHubWorkspaceBridge {
     branchName: string | null;
     prUrl: string | null;
   } | null>;
+  recordSnapshot(workspaceId: string, data: GitHubWorkspaceSnapshotUpdate): Promise<unknown>;
   applyPrSnapshotWithDispatchReset(
     workspaceId: string,
     observation: GitHubPRSnapshotPersistenceInput
@@ -77,4 +100,16 @@ export interface GitHubWorkspaceBridge {
     workspaceId: string,
     observation: GitHubPrObservationPersistenceInput
   ): Promise<GitHubPrAggregatePersistenceResult>;
+  attachDiscoveredPRIfClaimMatches(
+    workspaceId: string,
+    prUrl: string,
+    claim: GitHubPRDiscoveryClaim,
+    prUpdatedAt: Date
+  ): Promise<boolean>;
+  updatePRSnapshotIfUrlMatches(
+    workspaceId: string,
+    prUrl: string,
+    snapshot: GitHubSnapshotFields,
+    prUpdatedAt: Date
+  ): Promise<boolean>;
 }

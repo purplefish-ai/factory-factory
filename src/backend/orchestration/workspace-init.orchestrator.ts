@@ -26,9 +26,11 @@ import {
 } from '@/backend/services/workspace';
 import { type MessageAttachment, MessageState, resolveSelectedModel } from '@/shared/acp-protocol';
 import { SessionStatus, WorkspaceMode } from '@/shared/core';
+import { isPRMonitoringRecipient } from '@/shared/pr-monitoring';
 import { autoIterationConfigSchema } from '@/shared/schemas/auto-iteration.schema';
 import { AttachmentSchema } from '@/shared/websocket';
 import { getWorkspaceLinearContext } from './linear-config.helper';
+import { bindIssueMonitoringSession } from './pr-monitoring.orchestrator';
 import type { WorkspaceWithProject } from './types';
 import { GitHubUsernameCache } from './workspace-init-github-username-cache';
 import {
@@ -367,6 +369,18 @@ async function resolveInitialAutoMessageContent(
   return null;
 }
 
+async function bindInitialMonitoringSession(workspaceId: string, sessionId: string): Promise<void> {
+  try {
+    await bindIssueMonitoringSession(workspaceId, sessionId);
+  } catch (error) {
+    logger.warn('Failed to bind initial PR monitoring conversation', {
+      workspaceId,
+      sessionId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 async function startDefaultAgentSession(workspaceId: string): Promise<string | null> {
   try {
     const sessions = await sessionDataService.findAgentSessionsByWorkspaceId(workspaceId, {
@@ -420,6 +434,8 @@ async function startDefaultAgentSession(workspaceId: string): Promise<string | n
       );
     }
 
+    await bindInitialMonitoringSession(workspaceId, session.id);
+
     // Trigger queue dispatch after init/session start so messages queued during
     // workspace provisioning are picked up immediately when dispatch is allowed.
     await chatMessageHandlerService.tryDispatchNextMessage(session.id);
@@ -447,29 +463,30 @@ export async function retryQueuedDispatchAfterWorkspaceReady(
   try {
     // Prefer the specific session we just started; it may now be RUNNING.
     if (startedSessionId) {
+      await bindInitialMonitoringSession(workspaceId, startedSessionId);
       await chatMessageHandlerService.tryDispatchNextMessage(startedSessionId);
       return;
     }
 
     const runningSessions = await sessionDataService.findAgentSessionsByWorkspaceId(workspaceId, {
       status: SessionStatus.RUNNING,
-      limit: 1,
     });
-    const runningSession = runningSessions[0];
+    const runningSession = runningSessions.find(isPRMonitoringRecipient);
     if (runningSession) {
+      await bindInitialMonitoringSession(workspaceId, runningSession.id);
       await chatMessageHandlerService.tryDispatchNextMessage(runningSession.id);
       return;
     }
 
     const idleSessions = await sessionDataService.findAgentSessionsByWorkspaceId(workspaceId, {
       status: SessionStatus.IDLE,
-      limit: 1,
     });
-    const idleSession = idleSessions[0];
+    const idleSession = idleSessions.find(isPRMonitoringRecipient);
     if (!idleSession) {
       return;
     }
 
+    await bindInitialMonitoringSession(workspaceId, idleSession.id);
     await chatMessageHandlerService.tryDispatchNextMessage(idleSession.id);
   } catch (error) {
     logger.warn('Failed to retry queued dispatch after workspace became ready', {

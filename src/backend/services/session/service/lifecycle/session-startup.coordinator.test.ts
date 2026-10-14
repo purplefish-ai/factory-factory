@@ -778,7 +778,7 @@ describe('SessionStartupCoordinator', () => {
   });
 
   it('keeps stop ahead of startup when runtime stop fails during running persistence', async () => {
-    const harness = createLifecycleHarness({ session: { workflow: 'ratchet' } });
+    const harness = createLifecycleHarness();
     installRuntimeQuiescence(harness);
     const runningPersistence = createDeferred<typeof harness.session>();
     harness.repository.updateSession.mockReturnValueOnce(runningPersistence.promise);
@@ -810,11 +810,7 @@ describe('SessionStartupCoordinator', () => {
     runningPersistence.resolve(harness.session);
     await stopPromise;
     expect(harness.runtimeManager.stopClient).toHaveBeenCalledTimes(2);
-    expect(harness.workspaceBridge.recordRatchetSessionEnd).toHaveBeenCalledWith(
-      'workspace-1',
-      'session-1',
-      'COMPLETED'
-    );
+    expect(harness.repository.updateSessionIfStatus).toHaveBeenCalled();
     await expect(startResult).resolves.toEqual(
       expect.objectContaining({ message: 'Session is currently being stopped' })
     );

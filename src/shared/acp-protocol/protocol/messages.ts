@@ -28,7 +28,8 @@ type AgentMessageType =
   | 'error'
   | 'session_lifecycle'
   | 'child_workspace_update'
-  | 'parent_workspace_update';
+  | 'parent_workspace_update'
+  | 'pr_update';
 
 interface AgentMessageCommon {
   timestamp?: string;
@@ -90,6 +91,7 @@ const AGENT_MESSAGE_TYPE_MAP: Record<AgentMessage['type'], true> = {
   session_lifecycle: true,
   child_workspace_update: true,
   parent_workspace_update: true,
+  pr_update: true,
 };
 
 /**

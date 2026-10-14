@@ -17,6 +17,7 @@ vi.mock('@/backend/services/session/service/lifecycle/session-core-services', ()
   },
 }));
 
+import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
 import { createStartHandler } from './start.handler';
 
 describe('createStartHandler', () => {
@@ -85,4 +86,66 @@ describe('createStartHandler', () => {
       );
     }
   );
+});
+
+it('keeps the PR delivery fence when explicit startup fails', async () => {
+  const resume = vi.spyOn(sessionBackgroundDeliveryService, 'userResume').mockResolvedValue();
+  mocks.getSessionOptions.mockResolvedValue({ workspaceStatus: 'READY' });
+  const startup = vi.fn().mockRejectedValue(new Error('provider unavailable'));
+  try {
+    await createStartHandler({
+      startupService: { getSessionClient: vi.fn(), getOrCreateSessionClient: startup },
+    })({
+      ws: { send: vi.fn() } as never,
+      sessionId: 'session-1',
+      workingDir: '/tmp',
+      message: { type: 'start' } as never,
+    });
+    expect(resume).not.toHaveBeenCalled();
+  } finally {
+    resume.mockRestore();
+  }
+});
+
+it('keeps a stop made while startup was pending after the old start finishes', async () => {
+  const sessionId = 'pending-start-stop';
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let pauseReason: string | null = null;
+  sessionBackgroundDeliveryService.configure({
+    prepare: () => Promise.resolve({ status: 'discard' }),
+    validate: () => Promise.resolve(false),
+    complete: () => Promise.resolve(),
+    fail: () => Promise.resolve(),
+    recover: () => Promise.resolve(),
+    pause: (_id, reason) => {
+      pauseReason = reason;
+      return Promise.resolve();
+    },
+    resume: (_id, isCurrent?: () => boolean) => {
+      if (!isCurrent || isCurrent()) {
+        pauseReason = null;
+      }
+      return Promise.resolve();
+    },
+  });
+  mocks.getSessionOptions.mockResolvedValue({ workspaceStatus: 'READY' });
+  const startup = vi.fn().mockReturnValue(pending);
+  const handler = createStartHandler({
+    startupService: { getSessionClient: vi.fn(), getOrCreateSessionClient: startup },
+  });
+  const start = handler({
+    ws: { send: vi.fn() } as never,
+    sessionId,
+    workingDir: '/tmp',
+    message: { type: 'start' } as never,
+  });
+  await vi.waitFor(() => expect(startup).toHaveBeenCalled());
+  await sessionBackgroundDeliveryService.userStop(sessionId);
+  release();
+  await start;
+  await Promise.resolve();
+  expect(pauseReason).toBe('USER_STOPPED');
 });

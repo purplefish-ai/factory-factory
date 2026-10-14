@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SERVICE_THRESHOLDS } from '@/backend/services/constants';
 import type { SnapshotUpdateInput, WorkspaceSnapshotEntry } from '@/backend/services/workspace';
 import { deriveWorkspaceFlowState } from '@/backend/services/workspace';
 import { deriveWorkspaceSidebarStatus } from '@/shared/core';
@@ -169,33 +168,6 @@ describe('detectDrift', () => {
     };
 
     expect(detectDrift(existing, authoritative)).toEqual([]);
-  });
-
-  it.each([
-    {
-      field: 'ratchetDispatchOutcome' as const,
-      snapshotValue: 'RUNNING' as const,
-      authoritativeValue: 'DIED' as const,
-    },
-    {
-      field: 'ratchetDispatchRetryCount' as const,
-      snapshotValue: 1,
-      authoritativeValue: SERVICE_THRESHOLDS.ratchetDispatchMaxRetries,
-    },
-  ])('detects Ratchet drift when $field changes', (drift) => {
-    const existing = createSnapshotEntry({ [drift.field]: drift.snapshotValue });
-    const authoritative: SnapshotUpdateInput = {
-      [drift.field]: drift.authoritativeValue,
-    };
-
-    expect(detectDrift(existing, authoritative)).toEqual([
-      {
-        field: drift.field,
-        group: 'ratchet',
-        snapshotValue: drift.snapshotValue,
-        authoritativeValue: drift.authoritativeValue,
-      },
-    ]);
   });
 
   it('ignores undefined authoritative fields', () => {
@@ -370,8 +342,6 @@ describe('SnapshotReconciliationService', () => {
       expect(fields.branchName).toBe('feature/test');
       expect(fields.prState).toBe('OPEN');
       expect(fields.ratchetEnabled).toBe(true);
-      expect(fields.ratchetDispatchOutcome).toBe('DIED');
-      expect(fields.ratchetDispatchRetryCount).toBe(SERVICE_THRESHOLDS.ratchetDispatchMaxRetries);
 
       const { WorkspaceSnapshotStore } = await vi.importActual<
         typeof import('@/backend/services/workspace')
@@ -388,10 +358,14 @@ describe('SnapshotReconciliationService', () => {
       snapshotStore.upsert('ws-1', fields, 'reconciliation', 100);
       const snapshot = snapshotStore.getByWorkspaceId('ws-1');
       expect(snapshot).toMatchObject({
-        ratchetDispatchOutcome: 'DIED',
-        ratchetDispatchRetryCount: SERVICE_THRESHOLDS.ratchetDispatchMaxRetries,
-        ratchetDispatchStalled: true,
-        statusReason: expect.objectContaining({ code: 'RATCHET_STALLED' }),
+        prMonitoring: {
+          enabled: true,
+          recipientSessionId: 'main',
+          bindingRevision: 1,
+          pauseReason: 'DELIVERY_FAILED',
+          pendingEventCount: 0,
+        },
+        statusReason: expect.objectContaining({ code: 'PR_DELIVERY_ERROR' }),
         kanbanColumn: 'WAITING',
       });
 

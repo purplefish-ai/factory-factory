@@ -24,6 +24,7 @@ import {
   WORKSPACE_STATUS_REASON_CODES,
   WORKSPACE_STATUS_REASON_TONES,
 } from '@/shared/workspace-status-reason';
+import { prDeliveryModeSchema } from './schemas/pr-event.schema';
 import { WorkspacePullRequestSchema } from './workspace-pr';
 import { WorkspacePRSummarySchema } from './workspace-pr-summary';
 
@@ -79,8 +80,6 @@ const WorkspaceStatusReasonSchema = z.object({
   needsUser: z.boolean(),
 });
 
-const RatchetDispatchOutcomeSchema = z.enum(['RUNNING', 'COMPLETED', 'DIED']);
-
 export const WorkspaceSnapshotEntrySchema = z.object({
   workspaceId: z.string(),
   projectId: z.string(),
@@ -101,9 +100,23 @@ export const WorkspaceSnapshotEntrySchema = z.object({
   hasMergeConflict: z.boolean(),
   ratchetEnabled: z.boolean(),
   ratchetState: z.nativeEnum(RatchetState),
-  ratchetDispatchOutcome: RatchetDispatchOutcomeSchema.nullable(),
-  ratchetDispatchRetryCount: z.number().int().nonnegative(),
-  ratchetDispatchStalled: z.boolean(),
+  prMonitoring: z
+    .object({
+      enabled: z.boolean(),
+      deliveryMode: prDeliveryModeSchema.default('MAIN'),
+      recipientSessionId: z.string().nullable(),
+      bindingRevision: z.number().int().nonnegative(),
+      pauseReason: z.string().nullable(),
+      pendingEventCount: z.number().int().nonnegative(),
+    })
+    .default({
+      enabled: false,
+      deliveryMode: 'MAIN',
+      recipientSessionId: null,
+      bindingRevision: 0,
+      pauseReason: null,
+      pendingEventCount: 0,
+    }),
   runScriptStatus: z.nativeEnum(RunScriptStatus),
   hasHadSessions: z.boolean(),
   mode: z.nativeEnum(WorkspaceMode),

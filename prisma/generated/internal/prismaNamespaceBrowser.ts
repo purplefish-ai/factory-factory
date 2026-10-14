@@ -55,9 +55,10 @@ export const ModelName = {
   DecisionLog: 'DecisionLog',
   Workspace: 'Workspace',
   WorkspacePR: 'WorkspacePR',
+  WorkspacePRMonitoring: 'WorkspacePRMonitoring',
+  WorkspacePRDedicatedSession: 'WorkspacePRDedicatedSession',
+  WorkspacePREvent: 'WorkspacePREvent',
   WorkspacePRDiscovery: 'WorkspacePRDiscovery',
-  WorkspaceRatchet: 'WorkspaceRatchet',
-  WorkspacePRRatchet: 'WorkspacePRRatchet',
   WorkspaceRunScript: 'WorkspaceRunScript',
   WorkspaceAutoIteration: 'WorkspaceAutoIteration',
   AgentSession: 'AgentSession',
@@ -140,7 +141,6 @@ export const WorkspaceScalarFieldEnum = {
   linearIssueIdentifier: 'linearIssueIdentifier',
   linearIssueUrl: 'linearIssueUrl',
   defaultSessionProvider: 'defaultSessionProvider',
-  ratchetSessionProvider: 'ratchetSessionProvider',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt',
   periodicTaskId: 'periodicTaskId',
@@ -169,10 +169,59 @@ export const WorkspacePRScalarFieldEnum = {
   ciFailedAt: 'ciFailedAt',
   ciLastNotifiedAt: 'ciLastNotifiedAt',
   reviewLastCheckedAt: 'reviewLastCheckedAt',
-  reviewLastCommentId: 'reviewLastCommentId'
+  reviewLastCommentId: 'reviewLastCommentId',
+  observation: 'observation',
+  transitionSequence: 'transitionSequence',
+  observationEpoch: 'observationEpoch'
 } as const
 
 export type WorkspacePRScalarFieldEnum = (typeof WorkspacePRScalarFieldEnum)[keyof typeof WorkspacePRScalarFieldEnum]
+
+
+export const WorkspacePRMonitoringScalarFieldEnum = {
+  workspaceId: 'workspaceId',
+  enabled: 'enabled',
+  deliveryMode: 'deliveryMode',
+  recipientSessionId: 'recipientSessionId',
+  bindingRevision: 'bindingRevision',
+  eventEpoch: 'eventEpoch',
+  deliveryPauseReason: 'deliveryPauseReason',
+  legacySessionIds: 'legacySessionIds',
+  lastCheckedAt: 'lastCheckedAt'
+} as const
+
+export type WorkspacePRMonitoringScalarFieldEnum = (typeof WorkspacePRMonitoringScalarFieldEnum)[keyof typeof WorkspacePRMonitoringScalarFieldEnum]
+
+
+export const WorkspacePRDedicatedSessionScalarFieldEnum = {
+  prId: 'prId',
+  sessionId: 'sessionId'
+} as const
+
+export type WorkspacePRDedicatedSessionScalarFieldEnum = (typeof WorkspacePRDedicatedSessionScalarFieldEnum)[keyof typeof WorkspacePRDedicatedSessionScalarFieldEnum]
+
+
+export const WorkspacePREventScalarFieldEnum = {
+  id: 'id',
+  workspaceId: 'workspaceId',
+  prId: 'prId',
+  kind: 'kind',
+  deduplicationKey: 'deduplicationKey',
+  payload: 'payload',
+  state: 'state',
+  attempts: 'attempts',
+  deliveryId: 'deliveryId',
+  deliverySessionId: 'deliverySessionId',
+  deliveryProvider: 'deliveryProvider',
+  deliveryProviderSessionId: 'deliveryProviderSessionId',
+  deliveryBindingRevision: 'deliveryBindingRevision',
+  deliveryText: 'deliveryText',
+  claimedAt: 'claimedAt',
+  deliveredAt: 'deliveredAt',
+  createdAt: 'createdAt'
+} as const
+
+export type WorkspacePREventScalarFieldEnum = (typeof WorkspacePREventScalarFieldEnum)[keyof typeof WorkspacePREventScalarFieldEnum]
 
 
 export const WorkspacePRDiscoveryScalarFieldEnum = {
@@ -183,30 +232,6 @@ export const WorkspacePRDiscoveryScalarFieldEnum = {
 } as const
 
 export type WorkspacePRDiscoveryScalarFieldEnum = (typeof WorkspacePRDiscoveryScalarFieldEnum)[keyof typeof WorkspacePRDiscoveryScalarFieldEnum]
-
-
-export const WorkspaceRatchetScalarFieldEnum = {
-  workspaceId: 'workspaceId',
-  enabled: 'enabled',
-  lastCheckedAt: 'lastCheckedAt',
-  activeSessionId: 'activeSessionId',
-  activePrId: 'activePrId'
-} as const
-
-export type WorkspaceRatchetScalarFieldEnum = (typeof WorkspaceRatchetScalarFieldEnum)[keyof typeof WorkspaceRatchetScalarFieldEnum]
-
-
-export const WorkspacePRRatchetScalarFieldEnum = {
-  prId: 'prId',
-  lastCheckedAt: 'lastCheckedAt',
-  activeSessionId: 'activeSessionId',
-  dispatchSnapshotKey: 'dispatchSnapshotKey',
-  dispatchOutcome: 'dispatchOutcome',
-  dispatchRetryCount: 'dispatchRetryCount',
-  dispatchStalled: 'dispatchStalled'
-} as const
-
-export type WorkspacePRRatchetScalarFieldEnum = (typeof WorkspacePRRatchetScalarFieldEnum)[keyof typeof WorkspacePRRatchetScalarFieldEnum]
 
 
 export const WorkspaceRunScriptScalarFieldEnum = {
@@ -316,7 +341,7 @@ export const UserSettingsScalarFieldEnum = {
   defaultClaudeReasoningEffort: 'defaultClaudeReasoningEffort',
   defaultCodexReasoningEffort: 'defaultCodexReasoningEffort',
   defaultWorkspacePermissions: 'defaultWorkspacePermissions',
-  ratchetPermissions: 'ratchetPermissions',
+  autoIterationPermissions: 'autoIterationPermissions',
   reviewerSessionProvider: 'reviewerSessionProvider',
   reviewerClaudeModel: 'reviewerClaudeModel',
   reviewerCodexModel: 'reviewerCodexModel',
@@ -397,6 +422,13 @@ export const NullableJsonNullValueInput = {
 } as const
 
 export type NullableJsonNullValueInput = (typeof NullableJsonNullValueInput)[keyof typeof NullableJsonNullValueInput]
+
+
+export const JsonNullValueInput = {
+  JsonNull: JsonNull
+} as const
+
+export type JsonNullValueInput = (typeof JsonNullValueInput)[keyof typeof JsonNullValueInput]
 
 
 export const JsonNullValueFilter = {

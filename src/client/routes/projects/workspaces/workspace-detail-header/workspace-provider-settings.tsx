@@ -47,9 +47,6 @@ export function WorkspaceProviderSettings({
   const [defaultProvider, setDefaultProvider] = useState<NewSessionProviderSelection>(
     resolveProviderSelection(workspace.defaultSessionProvider)
   );
-  const [ratchetProvider, setRatchetProvider] = useState<NewSessionProviderSelection>(
-    resolveProviderSelection(workspace.ratchetSessionProvider)
-  );
   const { data: userSettings } = trpc.userSettings.get.useQuery();
   const utils = trpc.useUtils();
 
@@ -75,20 +72,13 @@ export function WorkspaceProviderSettings({
       return;
     }
     setDefaultProvider(resolveProviderSelection(workspace.defaultSessionProvider));
-    setRatchetProvider(resolveProviderSelection(workspace.ratchetSessionProvider));
-  }, [dialogOpen, workspace.defaultSessionProvider, workspace.ratchetSessionProvider]);
+  }, [dialogOpen, workspace.defaultSessionProvider]);
 
   const currentDefaultProvider = resolveProviderSelection(workspace.defaultSessionProvider);
-  const currentRatchetProvider = resolveProviderSelection(workspace.ratchetSessionProvider);
-  const isDirty =
-    defaultProvider !== currentDefaultProvider || ratchetProvider !== currentRatchetProvider;
+  const isDirty = defaultProvider !== currentDefaultProvider;
   const userDefaultProvider = userSettings?.defaultSessionProvider;
   const defaultWorkspaceLabel = getWorkspaceDefaultOptionLabel(
     'WORKSPACE_DEFAULT',
-    userDefaultProvider
-  );
-  const ratchetWorkspaceLabel = getWorkspaceDefaultOptionLabel(
-    defaultProvider,
     userDefaultProvider
   );
 
@@ -114,9 +104,7 @@ export function WorkspaceProviderSettings({
       <DialogContent className="sm:max-w-[440px]">
         <DialogHeader>
           <DialogTitle>Session Provider Defaults</DialogTitle>
-          <DialogDescription>
-            Configure workspace defaults and ratchet provider behavior.
-          </DialogDescription>
+          <DialogDescription>Configure the default provider for new sessions.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-2">
@@ -143,33 +131,6 @@ export function WorkspaceProviderSettings({
               provider={resolveEffectiveSessionProvider(defaultProvider, userDefaultProvider)}
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="workspace-ratchet-provider">Ratchet Session Provider</Label>
-            <Select
-              value={ratchetProvider}
-              onValueChange={(value) => {
-                setRatchetProvider(resolveProviderSelection(value));
-              }}
-            >
-              <SelectTrigger id="workspace-ratchet-provider">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="WORKSPACE_DEFAULT">{ratchetWorkspaceLabel}</SelectItem>
-                {EXPLICIT_SESSION_PROVIDER_OPTIONS.map((option) => (
-                  <SelectItem key={`ratchet-${option.value}`} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <ProviderCliWarning
-              provider={resolveEffectiveSessionProvider(
-                ratchetProvider === 'WORKSPACE_DEFAULT' ? defaultProvider : ratchetProvider,
-                userDefaultProvider
-              )}
-            />
-          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setDialogOpen(false)}>
@@ -180,7 +141,6 @@ export function WorkspaceProviderSettings({
               updateProviderDefaults.mutate({
                 workspaceId,
                 defaultSessionProvider: defaultProvider,
-                ratchetSessionProvider: ratchetProvider,
               });
             }}
             disabled={!isDirty || updateProviderDefaults.isPending}

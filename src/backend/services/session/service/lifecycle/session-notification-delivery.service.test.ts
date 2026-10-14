@@ -657,3 +657,14 @@ describe('SessionNotificationDeliveryService', () => {
     );
   });
 });
+
+it('awaits the current destination fence before enqueuing or appending recovered cards', async () => {
+  const h = createHarness({ pending: [createPendingWorkspaceNotification()] });
+  await h.service.recoverPending({
+    sessionId: 'session-1',
+    workspaceId: 'workspace-1',
+    assertAllowed: () => Promise.reject(new Error('Destination changed')),
+  });
+  expect(h.queuePort.enqueue).not.toHaveBeenCalled();
+  expect(h.transcriptPort.appendClaudeEvent).not.toHaveBeenCalled();
+});

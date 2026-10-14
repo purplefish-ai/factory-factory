@@ -61,6 +61,17 @@ describe('closedSessionPersistenceService', () => {
     expect(closedSessionAccessor.create).not.toHaveBeenCalled();
     expect(mkdir).not.toHaveBeenCalled();
   });
+  it('retains provider identity even when closure has no local messages', async () => {
+    await closedSessionPersistenceService.persistClosedSession(
+      createInput({ messages: [], ...{ providerSessionId: 'provider' } })
+    );
+    expect(writeFileAtomic).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.stringContaining('"providerSessionId": "provider"'),
+      expect.anything()
+    );
+    expect(closedSessionAccessor.create).toHaveBeenCalledOnce();
+  });
 
   it('rethrows file write errors so callers can handle failures', async () => {
     vi.mocked(writeFileAtomic).mockRejectedValue(new Error('Disk full'));

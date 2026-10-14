@@ -37,9 +37,14 @@ import {
   VOICE_UTTERANCE_END_MS_MAX,
   VOICE_UTTERANCE_END_MS_MIN,
 } from '@/shared/voice-vad';
-import { WorkspacePullRequestSchema } from '@/shared/workspace-pr';
 import { autoIterationConfigSchema } from './auto-iteration.schema';
-import { validateBackupPRs } from './export-data-pr-validation';
+import { validateBackupPRs, validateLegacyFixerOwnership } from './export-data-pr-validation';
+import {
+  prAssociationBackupSchema,
+  prDiscoveryBackupSchema,
+  prEventBackupSchema,
+  prMonitoringBackupSchema,
+} from './pr-monitoring-backup.schema';
 
 function enumValues<const T extends Record<string, string>>(enumObject: T) {
   return Object.values(enumObject) as [T[keyof T], ...T[keyof T][]];
@@ -79,7 +84,11 @@ const exportedProjectSchema = z.object({
   updatedAt: z.string(),
 });
 
-const legacyWorkspaceSchema = z.object({
+const exportedWorkspaceSchema = z.object({
+  prs: z.array(prAssociationBackupSchema).optional().default([]),
+  prDiscovery: prDiscoveryBackupSchema.nullable().optional().default(null),
+  prMonitoring: prMonitoringBackupSchema.nullable().optional().default(null),
+  prEvents: z.array(prEventBackupSchema).optional().default([]),
   id: z.string(),
   projectId: z.string(),
   parentWorkspaceId: z.string().nullable().optional().default(null),
@@ -111,7 +120,7 @@ const legacyWorkspaceSchema = z.object({
   linearIssueIdentifier: z.string().nullable(),
   linearIssueUrl: z.string().nullable(),
   defaultSessionProvider: WorkspaceProviderSelection,
-  ratchetSessionProvider: WorkspaceProviderSelection,
+  ratchetSessionProvider: WorkspaceProviderSelection.optional(),
   prNumber: z.number().nullable(),
   prState: PRState,
   prReviewState: z.string().nullable(),
@@ -134,43 +143,6 @@ const legacyWorkspaceSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
 });
-
-const exportedPRSchema = WorkspacePullRequestSchema.extend({
-  detachedAt: z.string().nullable(),
-  revision: z.number().int().nonnegative(),
-  ciFailedAt: z.string().nullable(),
-  ciLastNotifiedAt: z.string().nullable(),
-  reviewLastCheckedAt: z.string().nullable(),
-  reviewLastCommentId: z.string().nullable(),
-  ratchet: WorkspacePullRequestSchema.shape.ratchet.extend({
-    activeSessionId: z.string().nullable(),
-    dispatchSnapshotKey: z.string().nullable(),
-  }),
-});
-const exportedWorkspaceSchema = legacyWorkspaceSchema
-  .omit({
-    prUrl: true,
-    prNumber: true,
-    prState: true,
-    prReviewState: true,
-    prCiStatus: true,
-    prUpdatedAt: true,
-    prCiFailedAt: true,
-    prCiLastNotifiedAt: true,
-    prReviewLastCheckedAt: true,
-    prReviewLastCommentId: true,
-    ratchetLastCiRunId: true,
-    ratchetState: true,
-  })
-  .extend({
-    prs: z.array(exportedPRSchema),
-    ratchetActivePrId: z.string().nullable(),
-    prDiscovery: z.object({
-      lastCheckedAt: z.string().nullable(),
-      retryCount: z.number().int().nonnegative(),
-      nextCheckAt: z.string().nullable(),
-    }),
-  });
 
 const exportedAgentSessionSchema = z.object({
   id: z.string(),
@@ -213,7 +185,8 @@ const exportedUserSettingsSchema = z.object({
   defaultClaudeReasoningEffort: z.string().nullable().optional().default(null),
   defaultCodexReasoningEffort: z.string().nullable().optional().default(null),
   defaultWorkspacePermissions: SessionPermissionPreset.optional().default('STRICT'),
-  ratchetPermissions: SessionPermissionPreset.optional().default('YOLO'),
+  ratchetPermissions: SessionPermissionPreset.optional(),
+  autoIterationPermissions: SessionPermissionPreset.optional(),
   // Adversarial review settings
   reviewerSessionProvider: SessionProvider.optional().default('CODEX'),
   reviewerClaudeModel: z.string().nullable().optional().default(null),
@@ -255,11 +228,11 @@ const exportedUserSettingsSchema = z.object({
     .default(DEFAULT_VOICE_BARGE_IN_SUSTAINED_MS),
 });
 
-const version5Schema = z.object({
+const legacyAndCurrentSchema = z.object({
   meta: z.object({
     exportedAt: z.string(),
     version: z.string(),
-    schemaVersion: z.literal(5),
+    schemaVersion: z.union([z.literal(4), z.literal(5), z.literal(6)]),
   }),
   data: z.object({
     projects: z.array(exportedProjectSchema),
@@ -270,81 +243,194 @@ const version5Schema = z.object({
   }),
 });
 
-const version4Schema = version5Schema.extend({
-  meta: version5Schema.shape.meta.extend({ schemaVersion: z.literal(4) }),
-  data: version5Schema.shape.data.extend({ workspaces: z.array(legacyWorkspaceSchema) }),
+const legacyPRSchema = prAssociationBackupSchema.extend({
+  ratchet: z.object({
+    lastCheckedAt: z.string().nullable(),
+    activeSessionId: z.string().nullable(),
+    dispatchSnapshotKey: z.string().nullable(),
+    dispatchOutcome: z.enum(['RUNNING', 'COMPLETED', 'DIED']).nullable(),
+    dispatchRetryCount: z.number().int().nonnegative(),
+    dispatchStalled: z.boolean(),
+  }),
 });
-const normalizedVersion4Schema = version4Schema.transform((data) => {
-  const workspaces = data.data.workspaces.map((w) => {
-    const id = `legacy-pr-${w.id}`;
-    return exportedWorkspaceSchema.parse({
-      ...w,
-      ratchetActiveSessionId: w.prUrl ? w.ratchetActiveSessionId : null,
-      ratchetActivePrId: w.prUrl && w.ratchetActiveSessionId ? id : null,
-      prDiscovery: { lastCheckedAt: null, retryCount: 0, nextCheckAt: null },
-      prs: w.prUrl
-        ? [
-            {
-              id,
-              url: w.prUrl,
-              number: w.prNumber,
-              title: null,
-              headRefName: null,
-              baseRefName: null,
-              state: w.prState,
-              reviewState: w.prReviewState,
-              ciStatus: w.prCiStatus,
-              hasMergeConflict: w.ratchetState === 'MERGE_CONFLICT',
-              syncedAt: w.prUpdatedAt,
-              detachedAt: null,
-              revision: 0,
-              ciFailedAt: w.prCiFailedAt,
-              ciLastNotifiedAt: w.prCiLastNotifiedAt,
-              reviewLastCheckedAt: w.prReviewLastCheckedAt,
-              reviewLastCommentId: w.prReviewLastCommentId,
-              ratchet: {
-                lastCheckedAt: w.ratchetLastCheckedAt,
-                activeSessionId: w.ratchetActiveSessionId,
-                dispatchSnapshotKey: w.ratchetLastCiRunId,
-                dispatchOutcome: w.ratchetActiveSessionId ? 'RUNNING' : null,
-                dispatchRetryCount: 0,
-                dispatchStalled: false,
-              },
-            },
-          ]
-        : [],
-    });
+const publishedVersion5Schema = legacyAndCurrentSchema
+  .extend({
+    meta: legacyAndCurrentSchema.shape.meta.extend({ schemaVersion: z.literal(5) }),
+    data: legacyAndCurrentSchema.shape.data.extend({
+      workspaces: z.array(
+        exportedWorkspaceSchema
+          .omit({
+            prUrl: true,
+            prNumber: true,
+            prState: true,
+            prReviewState: true,
+            prCiStatus: true,
+            prUpdatedAt: true,
+            prCiFailedAt: true,
+            prCiLastNotifiedAt: true,
+            prReviewLastCheckedAt: true,
+            prReviewLastCommentId: true,
+            ratchetLastCiRunId: true,
+            ratchetState: true,
+          })
+          .extend({
+            prs: z.array(legacyPRSchema),
+            ratchetActivePrId: z.string().nullable(),
+          })
+      ),
+    }),
+  })
+  .superRefine(validateLegacyFixerOwnership);
+
+function normalizePublishedVersion5(data: z.infer<typeof publishedVersion5Schema>) {
+  return {
+    ...data,
+    meta: { ...data.meta, schemaVersion: 6 as const },
+    data: {
+      ...data.data,
+      workspaces: data.data.workspaces.map((workspace) => {
+        const legacySessionIds = [
+          ...new Set([
+            ...(workspace.ratchetActiveSessionId ? [workspace.ratchetActiveSessionId] : []),
+            ...workspace.prs.flatMap((pr) =>
+              pr.ratchet.activeSessionId ? [pr.ratchet.activeSessionId] : []
+            ),
+            ...data.data.agentSessions
+              .filter((s) => s.workspaceId === workspace.id && s.workflow === 'ratchet')
+              .map((s) => s.id),
+          ]),
+        ];
+        return exportedWorkspaceSchema.parse({
+          ...workspace,
+          prs: workspace.prs.map(({ ratchet: _ratchet, ...pr }) => pr),
+          prUrl: null,
+          prNumber: null,
+          prState: 'NONE',
+          prReviewState: null,
+          prCiStatus: 'UNKNOWN',
+          prUpdatedAt: null,
+          prCiFailedAt: null,
+          prCiLastNotifiedAt: null,
+          prReviewLastCheckedAt: null,
+          prReviewLastCommentId: null,
+          ratchetLastCiRunId: null,
+          ratchetState: 'IDLE',
+          ratchetActiveSessionId: null,
+          prMonitoring: {
+            enabled: workspace.ratchetEnabled,
+            deliveryMode: 'MAIN' as const,
+            recipientSessionId: null,
+            bindingRevision: 0,
+            eventEpoch: workspace.ratchetEnabled ? 1 : 0,
+            deliveryPauseReason: legacySessionIds.length ? 'LEGACY_FIXER' : null,
+            legacySessionIds,
+            lastCheckedAt: workspace.ratchetLastCheckedAt,
+          },
+        });
+      }),
+    },
+  };
+}
+function normalizeLegacyAndCurrent(data: z.infer<typeof legacyAndCurrentSchema>) {
+  if (data.meta.schemaVersion === 6) {
+    return { ...data, meta: { ...data.meta, schemaVersion: 6 as const } };
+  }
+  const workspaces = data.data.workspaces.map((workspace) => {
+    const legacySessionIds = [
+      ...new Set([
+        ...(workspace.ratchetActiveSessionId ? [workspace.ratchetActiveSessionId] : []),
+        ...data.data.agentSessions
+          .filter((s) => s.workspaceId === workspace.id && s.workflow === 'ratchet')
+          .map((s) => s.id),
+      ]),
+    ];
+    const prs =
+      data.meta.schemaVersion === 4
+        ? workspace.prUrl
+          ? [
+              prAssociationBackupSchema.parse({
+                id: `legacy-pr-${workspace.id}`,
+                url: workspace.prUrl,
+                number: workspace.prNumber,
+                title: null,
+                headRefName: null,
+                baseRefName: null,
+                state: workspace.prState,
+                reviewState: workspace.prReviewState,
+                ciStatus: workspace.prCiStatus,
+                hasMergeConflict: workspace.ratchetState === 'MERGE_CONFLICT',
+                syncedAt: workspace.prUpdatedAt,
+                detachedAt: null,
+                revision: 0,
+                ciFailedAt: workspace.prCiFailedAt,
+                ciLastNotifiedAt: workspace.prCiLastNotifiedAt,
+                reviewLastCheckedAt: workspace.prReviewLastCheckedAt,
+                reviewLastCommentId: workspace.prReviewLastCommentId,
+              }),
+            ]
+          : []
+        : workspace.prs;
+    return {
+      ...workspace,
+      prs,
+      prMonitoring: workspace.prMonitoring ?? {
+        enabled: workspace.ratchetEnabled,
+        deliveryMode: 'MAIN' as const,
+        recipientSessionId: null,
+        bindingRevision: 0,
+        eventEpoch: workspace.ratchetEnabled ? 1 : 0,
+        deliveryPauseReason: legacySessionIds.length ? 'LEGACY_FIXER' : null,
+        legacySessionIds,
+        lastCheckedAt: workspace.ratchetLastCheckedAt,
+      },
+    };
   });
-  const legacyFixers = new Map(workspaces.map((w) => [w.id, w]));
   const agentSessions = data.data.agentSessions.map((session) => {
-    const workspace = legacyFixers.get(session.workspaceId);
-    return workspace?.ratchetActiveSessionId === session.id
-      ? { ...session, workspacePrId: workspace.ratchetActivePrId }
+    const workspace = workspaces.find((w) => w.id === session.workspaceId);
+    return data.meta.schemaVersion === 4 && workspace?.ratchetActiveSessionId === session.id
+      ? { ...session, workspacePrId: workspace.prs[0]?.id ?? null }
       : session;
   });
   return {
     ...data,
-    meta: { ...data.meta, schemaVersion: 5 as const },
+    meta: { ...data.meta, schemaVersion: 6 as const },
     data: { ...data.data, workspaces, agentSessions },
   };
-});
-
-export type ExportDataV5 = z.infer<typeof version5Schema>;
-export const exportDataV5Schema = version5Schema.superRefine(validateBackupPRs);
-export const exportDataV4Schema = version4Schema;
-export const exportDataSchema = z
-  .union([exportDataV5Schema, normalizedVersion4Schema])
-  .superRefine(validateBackupPRs);
-export function normalizeExportData(input: unknown): ExportDataV5 {
-  return exportDataSchema.parse(input);
 }
+function safelyNormalize<T, R>(
+  input: T,
+  ctx: z.RefinementCtx,
+  normalize: (input: T) => R
+): R | typeof z.NEVER {
+  try {
+    return normalize(input);
+  } catch (error) {
+    if (!(error instanceof z.ZodError)) {
+      throw error;
+    }
+    for (const issue of error.issues) {
+      ctx.addIssue({ ...issue });
+    }
+    return z.NEVER;
+  }
+}
+export const exportDataSchema = z
+  .union([
+    publishedVersion5Schema.transform((input, ctx) =>
+      safelyNormalize(input, ctx, normalizePublishedVersion5)
+    ),
+    legacyAndCurrentSchema.transform((input, ctx) =>
+      safelyNormalize(input, ctx, normalizeLegacyAndCurrent)
+    ),
+  ])
+  .superRefine(validateBackupPRs);
+
 export {
   exportedAgentSessionSchema,
   exportedProjectSchema,
   exportedTerminalSessionSchema,
   exportedUserSettingsSchema,
   exportedWorkspaceSchema,
-  legacyWorkspaceSchema,
 };
 
 export type ExportData = z.infer<typeof exportDataSchema>;

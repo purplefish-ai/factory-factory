@@ -19,7 +19,7 @@ export interface UpdateUserSettingsInput {
   defaultClaudeReasoningEffort?: string | null;
   defaultCodexReasoningEffort?: string | null;
   defaultWorkspacePermissions?: SessionPermissionPreset;
-  ratchetPermissions?: SessionPermissionPreset;
+  autoIterationPermissions?: SessionPermissionPreset;
   reviewerSessionProvider?: SessionProvider;
   reviewerClaudeModel?: string | null;
   reviewerCodexModel?: string | null;

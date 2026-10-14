@@ -3,7 +3,7 @@
 Recurring backend work is declared to `jobRunner`
 (`src/backend/services/job-runner.service.ts`), which owns the loop lifecycle
 for all five poll loops: the snapshot reconciliation safety net, the PR
-sync/discovery poll, the periodic reconciliation cleanup, the ratchet, and the
+sync/discovery poll, the periodic reconciliation cleanup, PR monitoring, and the
 periodic-task poll. Each service registers its job in its constructor and keeps
 a thin `start()`/`stop()` that delegates — those delegators are the injection
 seam `server.ts` and `server.upgrade.test.ts` use, not leftovers.
@@ -33,8 +33,8 @@ local constant in its own orchestrator, which is how it escaped notice.
 `run` receives an `AbortSignal` that aborts on stop. Services expose it as a
 private `isShuttingDown` getter, because the flag it replaced was read at
 intermediate points inside long batches — between workspaces in the PR sync,
-before each ratchet check — so a stop partway through does not walk the whole
-list first. A service whose guard is also reachable outside a run
+before each PR monitoring check — so a stop partway through does not walk the
+whole list first. A service whose guard is also reachable outside a run
 (`cleanupOrphans` at startup, admin-triggered ratchet checks) clears `runSignal`
 in `start()`, or a restart would inherit the previous stop's aborted signal.
 

@@ -13,6 +13,10 @@ import {
   mapLabels,
   mapStatusChecks,
 } from './github-cli/mappers';
+import {
+  collectResolvedReviewCommentIds,
+  type TruncatedResolvedThread,
+} from './github-cli/resolved-review-comments';
 import { getChronologicalReviews } from './github-cli/reviews';
 import {
   fullPRDetailsSchema,
@@ -43,35 +47,13 @@ const logger = createLogger('github-cli');
 type ExecResult = { stdout: string; stderr: string };
 type ReadExecOptions = { timeout?: number; maxBuffer?: number; signal?: AbortSignal };
 
-interface TruncatedResolvedThread {
-  threadId: string;
-  afterCursor: string | null;
-}
-
-function collectResolvedReviewCommentIds(
-  threads: ResolvedReviewThreadsPage['nodes'],
-  resolvedIds: Set<number>
-): TruncatedResolvedThread[] {
-  const truncatedThreads: TruncatedResolvedThread[] = [];
-  for (const thread of threads) {
-    if (!thread.isResolved) {
-      continue;
-    }
-    for (const comment of thread.comments.nodes) {
-      if (comment.fullDatabaseId !== null) {
-        resolvedIds.add(comment.fullDatabaseId);
-      }
-    }
-    if (thread.comments.pageInfo.hasNextPage) {
-      truncatedThreads.push({
-        threadId: thread.id,
-        afterCursor: thread.comments.pageInfo.endCursor,
-      });
-    }
-  }
-  return truncatedThreads;
-}
-
+/**
+ * Service for interacting with GitHub via the `gh` CLI.
+ * Uses the locally authenticated gh CLI instead of API tokens.
+ *
+ * All process spawning is gated through a shared concurrency limiter
+ * and read-only calls benefit from in-flight deduplication (singleflight).
+ */
 // How long to fast-fail gh calls after a rate limit is detected (60 s).
 const RATE_LIMIT_FAST_FAIL_MS = 60_000;
 
@@ -79,7 +61,6 @@ class GitHubCLIService {
   private readonly execLimit = ghExecLimit;
   private readonly inflight = new Map<string, Promise<ExecResult>>();
 
-  // Stale-while-revalidate caches for expensive GitHub CLI calls.
   private cachedHealth: { result: GitHubCLIHealthStatus; fetchedAt: number } | null = null;
   private healthRefreshInFlight: Promise<GitHubCLIHealthStatus> | null = null;
   private readonly HEALTH_CACHE_TTL_MS = 30_000;
@@ -493,6 +474,7 @@ class GitHubCLIService {
       'deletions',
       'changedFiles',
       'headRefName',
+      'headRefOid',
       'baseRefName',
       'mergeStateStatus',
     ].join(',');
@@ -529,6 +511,7 @@ class GitHubCLIService {
         additions: data.additions || 0,
         deletions: data.deletions || 0,
         changedFiles: data.changedFiles || 0,
+        headRefOid: data.headRefOid,
         headRefName: data.headRefName || '',
         baseRefName: data.baseRefName || '',
         mergeStateStatus: data.mergeStateStatus || 'UNKNOWN',
@@ -704,7 +687,8 @@ class GitHubCLIService {
     repo: string,
     prNumber: number,
     since?: Date,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    onIncomplete?: () => void
   ): Promise<
     Array<{
       id: number;
@@ -769,6 +753,7 @@ class GitHubCLIService {
         }
 
         if (page === MAX_PAGES) {
+          onIncomplete?.();
           logger.warn('getReviewComments: reached MAX_PAGES limit, results may be incomplete', {
             repo,
             prNumber,
@@ -803,7 +788,8 @@ class GitHubCLIService {
   async getResolvedReviewCommentIds(
     repo: string,
     prNumber: number,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    onIncomplete?: () => void
   ): Promise<Set<number>> {
     const [owner, name] = repo.split('/');
     if (!(owner && name)) {
@@ -816,7 +802,8 @@ class GitHubCLIService {
       await this.collectResolvedIdsFromThreadPages(
         { owner, name, repo, prNumber },
         resolvedIds,
-        signal
+        signal,
+        onIncomplete
       );
       signal?.throwIfAborted();
       return resolvedIds;
@@ -839,7 +826,8 @@ class GitHubCLIService {
   private async collectResolvedIdsFromThreadPages(
     ctx: { owner: string; name: string; repo: string; prNumber: number },
     resolvedIds: Set<number>,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    onIncomplete?: () => void
   ): Promise<void> {
     const MAX_PAGES = 20;
     const logContext = { repo: ctx.repo, prNumber: ctx.prNumber };
@@ -855,13 +843,20 @@ class GitHubCLIService {
         signal
       );
       if (!reviewThreads) {
+        onIncomplete?.();
         logger.warn('getResolvedReviewCommentIds: repository or PR not found', logContext);
         return;
       }
 
       const truncatedThreads = collectResolvedReviewCommentIds(reviewThreads.nodes, resolvedIds);
       for (const thread of truncatedThreads) {
-        await this.collectResolvedThreadCommentTail(thread, resolvedIds, logContext, signal);
+        await this.collectResolvedThreadCommentTail(
+          thread,
+          resolvedIds,
+          logContext,
+          signal,
+          onIncomplete
+        );
       }
 
       if (!reviewThreads.pageInfo.hasNextPage) {
@@ -869,6 +864,7 @@ class GitHubCLIService {
       }
       afterCursor = reviewThreads.pageInfo.endCursor;
       if (!afterCursor) {
+        onIncomplete?.();
         logger.warn(
           'getResolvedReviewCommentIds: review thread page is missing an end cursor',
           logContext
@@ -877,6 +873,7 @@ class GitHubCLIService {
       }
     }
 
+    onIncomplete?.();
     logger.warn('getResolvedReviewCommentIds: reached MAX_PAGES limit, results may be incomplete', {
       ...logContext,
       totalResolved: resolvedIds.size,
@@ -935,7 +932,8 @@ class GitHubCLIService {
     thread: TruncatedResolvedThread,
     resolvedIds: Set<number>,
     logContext: { repo: string; prNumber: number },
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    onIncomplete?: () => void
   ): Promise<void> {
     const MAX_PAGES = 20;
     let afterCursor = thread.afterCursor;
@@ -943,6 +941,7 @@ class GitHubCLIService {
     for (let page = 1; page <= MAX_PAGES; page++) {
       signal?.throwIfAborted();
       if (!afterCursor) {
+        onIncomplete?.();
         logger.warn(
           'getResolvedReviewCommentIds: truncated thread comments are missing an end cursor',
           logContext
@@ -952,6 +951,7 @@ class GitHubCLIService {
 
       const comments = await this.fetchThreadCommentsPage(thread.threadId, afterCursor, signal);
       if (!comments) {
+        onIncomplete?.();
         logger.warn('getResolvedReviewCommentIds: review thread not found while paging comments', {
           ...logContext,
           threadId: thread.threadId,
@@ -971,6 +971,7 @@ class GitHubCLIService {
       afterCursor = comments.pageInfo.endCursor;
     }
 
+    onIncomplete?.();
     logger.warn(
       'getResolvedReviewCommentIds: reached MAX_PAGES limit while paging thread comments',
       { ...logContext, threadId: thread.threadId, maxPages: MAX_PAGES }

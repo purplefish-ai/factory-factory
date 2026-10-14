@@ -100,7 +100,7 @@ describe('SessionContextService', () => {
 
   it.each([
     { workflow: 'code', preset: 'STRICT' as const },
-    { workflow: 'ratchet', preset: 'YOLO' as const },
+    { workflow: 'auto-iteration', preset: 'YOLO' as const },
   ])('uses the configured $workflow permission preset', async ({ workflow, preset }) => {
     const { service, session, permissionPresetPort } = createHarness();
     permissionPresetPort.getPermissionPreset.mockResolvedValueOnce(preset);
@@ -112,7 +112,7 @@ describe('SessionContextService', () => {
 
   it.each([
     { workflow: 'code', fallback: 'STRICT' as const },
-    { workflow: 'ratchet', fallback: 'YOLO' as const },
+    { workflow: 'auto-iteration', fallback: 'YOLO' as const },
     { workflow: 'auto-iteration', fallback: 'YOLO' as const },
     { workflow: ADVERSARIAL_REVIEW_WORKFLOW, fallback: 'STRICT' as const },
   ])(

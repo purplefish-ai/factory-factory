@@ -14,12 +14,6 @@ const pr = (fields: Partial<WorkspacePullRequest>): WorkspacePullRequest => ({
   ciStatus: 'SUCCESS',
   hasMergeConflict: false,
   syncedAt: null,
-  ratchet: {
-    lastCheckedAt: null,
-    dispatchOutcome: null,
-    dispatchRetryCount: 0,
-    dispatchStalled: false,
-  },
   ...fields,
 });
 it.each([
@@ -34,59 +28,16 @@ it.each([
     'MERGE_CONFLICT',
   ],
   [[pr({ reviewState: 'CHANGES_REQUESTED' }), pr({})], 'OPEN', 'SUCCESS', 'REVIEW_PENDING'],
-  [[pr({ state: 'MERGED' }), pr({ state: 'CLOSED' })], 'MERGED', 'UNKNOWN', 'MERGED'],
+  [[pr({ state: 'MERGED' }), pr({ state: 'CLOSED' })], 'CLOSED', 'UNKNOWN', 'IDLE'],
+  [[pr({ state: 'MERGED' }), pr({ state: 'MERGED' })], 'MERGED', 'UNKNOWN', 'MERGED'],
   [[], 'NONE', 'UNKNOWN', 'IDLE'],
 ] as const)('aggregates every PR (%#)', (prs, state, ciStatus, ratchetState) => {
   expect(deriveWorkspacePRSummary(prs, true)).toMatchObject({ state, ciStatus, ratchetState });
 });
-it('keeps pending siblings and active fixers out of stalled state', () => {
-  const stalled = pr({
+it('disables monitoring without hiding GitHub failures', () => {
+  expect(deriveWorkspacePRSummary([pr({ ciStatus: 'FAILURE' })], false)).toMatchObject({
+    state: 'OPEN',
     ciStatus: 'FAILURE',
-    ratchet: {
-      lastCheckedAt: null,
-      dispatchOutcome: 'DIED',
-      dispatchRetryCount: 3,
-      dispatchStalled: true,
-    },
+    ratchetState: 'IDLE',
   });
-  expect(deriveWorkspacePRSummary([stalled], true).dispatchStalled).toBe(true);
-  expect(
-    deriveWorkspacePRSummary([stalled, pr({ ciStatus: 'PENDING' })], true).dispatchStalled
-  ).toBe(false);
-  expect(
-    deriveWorkspacePRSummary(
-      [
-        stalled,
-        pr({
-          ciStatus: 'FAILURE',
-          ratchet: {
-            lastCheckedAt: null,
-            dispatchOutcome: 'RUNNING',
-            dispatchRetryCount: 3,
-            dispatchStalled: true,
-          },
-        }),
-      ],
-      true
-    ).dispatchStalled
-  ).toBe(false);
-  expect(deriveWorkspacePRSummary([stalled], false).ratchetState).toBe('IDLE');
-});
-
-it('preserves exhausted comment-only work and defers stalls while siblings wait', () => {
-  const stalled = pr({
-    ratchet: {
-      lastCheckedAt: null,
-      dispatchOutcome: 'DIED',
-      dispatchRetryCount: 3,
-      dispatchStalled: true,
-    },
-  });
-  expect(deriveWorkspacePRSummary([stalled], true).dispatchStalled).toBe(true);
-  expect(
-    deriveWorkspacePRSummary([stalled, pr({ ciStatus: 'PENDING' })], true).dispatchStalled
-  ).toBe(false);
-  expect(
-    deriveWorkspacePRSummary([stalled, pr({ ciStatus: 'FAILURE' })], true).dispatchStalled
-  ).toBe(false);
 });
