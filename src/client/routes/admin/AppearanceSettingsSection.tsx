@@ -249,12 +249,14 @@ function FontScaleField({ value, disabled, onCommit }: FontScaleFieldProps) {
   return (
     <div className="space-y-1.5">
       <div className={`flex items-center justify-between ${FIELD_WIDTH}`}>
-        <Label htmlFor="appearance-font-scale">Font size</Label>
+        <Label id="appearance-font-scale-label">Font size</Label>
         <span className="font-mono text-xs text-muted-foreground">{draft}%</span>
       </div>
       <div className="flex items-center gap-2">
         <Slider
           id="appearance-font-scale"
+          aria-labelledby="appearance-font-scale-label"
+          aria-valuetext={`${draft}%`}
           className={FIELD_WIDTH}
           value={[draft]}
           onValueChange={([next]) => setDraft(next ?? value)}

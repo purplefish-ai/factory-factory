@@ -212,6 +212,8 @@ export const Appearance: Story = {
   ),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    const fontSize = await canvas.findByRole('slider', { name: 'Font size' });
+    await expect(fontSize).toHaveAttribute('aria-valuetext', '100%');
     await userEvent.click(await canvas.findByLabelText('Color scheme'));
     await userEvent.click(await within(document.body).findByRole('option', { name: 'Solarized' }));
     await waitFor(() =>

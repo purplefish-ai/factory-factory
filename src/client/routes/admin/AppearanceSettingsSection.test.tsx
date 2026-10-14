@@ -127,6 +127,16 @@ afterEach(() => {
 });
 
 describe('AppearanceSettingsSection', () => {
+  it('labels the font size slider thumb and announces its percentage', () => {
+    const container = render();
+    const thumb = container.querySelector('[role="slider"]');
+    const label = document.getElementById(thumb?.getAttribute('aria-labelledby') ?? '');
+
+    expect(thumb).not.toBeNull();
+    expect(label?.textContent).toBe('Font size');
+    expect(thumb?.getAttribute('aria-valuetext')).toBe('100%');
+  });
+
   it('saves a chosen color scheme', () => {
     const container = render();
     expect(container.querySelector('#appearance-color-scheme')?.textContent).toContain('Factory');
