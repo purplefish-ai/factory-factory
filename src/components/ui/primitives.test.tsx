@@ -90,9 +90,36 @@ describe('refreshed UI primitives', () => {
   });
 
   it('keeps a single thumb for the volume controls', async () => {
-    await render(<Slider defaultValue={[50]} min={0} max={100} aria-label="Volume" />);
+    await render(
+      <Slider
+        defaultValue={[50]}
+        min={0}
+        max={100}
+        aria-label="Volume"
+        aria-valuetext="50 percent"
+      />
+    );
     expect(container.querySelectorAll('[role=slider]')).toHaveLength(1);
     expect(container.querySelector('[role=slider]')?.getAttribute('aria-valuenow')).toBe('50');
+    expect(container.querySelector('[role=slider]')?.getAttribute('aria-valuetext')).toBe(
+      '50 percent'
+    );
+  });
+
+  it.each([
+    { mode: 'controlled', props: { value: [20, 80] } },
+    { mode: 'uncontrolled', props: { defaultValue: [20, 80] } },
+  ])('announces each $mode range endpoint without shared value text', async ({ props }) => {
+    await render(<Slider {...props} aria-label="Range" aria-valuetext="20 percent" />);
+    const thumbs = container.querySelectorAll('[role=slider]');
+
+    expect(Array.from(thumbs, (thumb) => thumb.getAttribute('aria-valuenow'))).toEqual([
+      '20',
+      '80',
+    ]);
+    for (const thumb of thumbs) {
+      expect(thumb.hasAttribute('aria-valuetext')).toBe(false);
+    }
   });
 
   it('can hide the corner close control and close through the dialog footer', async () => {
