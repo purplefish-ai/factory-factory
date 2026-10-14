@@ -14,6 +14,9 @@ and this project adheres to
 
 - Support multiple pull requests per workspace with independent PR state,
   targeted automation, aggregate status, and backup support (#2443)
+- Add Appearance settings with color scheme presets, background and text color
+  overrides, adjustable font scale, and preset or custom interface and monospace
+  fonts, including matching terminal and file viewer styling (#2450)
 - Add on-demand adversarial PR reviews using a different agent provider (#2308)
 - Add a local development option to disable Origin validation while preserving
   trusted-network checks (#2357)
