@@ -8,15 +8,86 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.4.10] - 2026-10-14
+
+### Added
+
+- Support multiple pull requests per workspace with independent PR state,
+  targeted automation, aggregate status, and backup support (#2443)
+- Add Appearance settings with color scheme presets, background and text color
+  overrides, adjustable font scale, and preset or custom interface and monospace
+  fonts, including matching terminal and file viewer styling (#2450)
+- Add on-demand adversarial PR reviews using a different agent provider (#2308)
+- Add a local development option to disable Origin validation while preserving
+  trusted-network checks (#2357)
+
 ### Changed
 
-- Refresh dependencies, including ACP SDK 1.6, Claude ACP 0.85, Linear SDK 97,
-  dotenv 18, Electron 44.5, Storybook 10.6.1, and Vitest 5.0.3.
+- Replace the Ratchet fixer workflow with durable PR monitoring updates queued
+  in a selected main conversation or one reusable dedicated conversation per PR,
+  preserving human-message priority, queued updates across destination changes,
+  and delivery recovery (#2447)
+- Refresh dependencies, including ACP SDK 1.7, Claude ACP 0.88, Linear SDK 97.1,
+  Electron 44.7, Storybook 10.6.1, and Vitest 5.0.3 (#2384, #2439)
+- Upgrade Mermaid to 12 while preserving diagram appearance (#2440)
+- Adopt Oxlint and Oxfmt while preserving lint guardrails, and upgrade and pin
+  GitHub Actions dependencies (#2441, #2442)
+- Cache the Claude model catalog and prefer project slash command descriptions
+  (#2358, #2411)
+- Remove unused UI components, helpers, state fields, service methods, and
+  GitHub API procedures (#2337, #2338, #2339, #2340, #2341, #2342, #2352, #2353,
+  #2354, #2355, #2356, #2403, #2404, #2405, #2406, #2444, #2445, #2446)
+
+### Fixed
+
+- Preserve workspace split panel preferences, keep scroll-to-bottom reachable
+  above tall composers, prevent duplicate inline renames, and clear stale Kanban
+  state when switching projects (#2380, #2402, #2408, #2409)
+- Recover from project list errors, resync failed issue provider selections, and
+  resolve deep links for projects named `new` (#2397, #2398, #2432)
+- Preserve diff filenames and quoted paths, and avoid phantom context rows in
+  unified diffs (#2400, #2427)
+- Keep Linear keys and team settings consistent, preserve validated settings
+  after failed saves, and sanitize archived project issue tracker configuration
+  (#2390, #2396, #2428)
+- Validate GitHub authentication, reuse clones across URL casing, and coordinate
+  concurrent clones by destination (#2394, #2407, #2438)
+- Handle large PR detail payloads and deleted review authors, clear stale PR
+  fields after attachment fetch failures, and reset Ratchet state on PR switches
+  (#2381, #2383, #2386, #2391)
+- Preserve startup failure CI conclusions, normalize legacy CI contexts, and
+  order same-second review supersession correctly (#2392, #2393, #2429)
+- Deliver adversarial fallback summaries to Ratchet, keep reviews read-only
+  across session starts, respect workspace session limits, and stop reviewer
+  startup after concurrent permission failures (#2385, #2395, #2431, #2433)
+- Hide adversarial review without a worktree and keep reviewers independent of
+  other bots' clean verdicts (#2359, #2401)
+- Repair provider identity after ACP resume fallback, protect newer default chat
+  model selections, and preserve Codex answers for normalized question IDs
+  (#2387, #2399, #2436)
+- Release bulk shutdown reservations, avoid duplicate stop history, classify
+  clean session exits correctly, reject signal-terminated ACP process handles,
+  and report deleted workspace provider updates as not found (#2412, #2430,
+  #2434, #2435, #2437)
+- Exclude runtime files from auto-iteration change detection (#2350)
 
 ### Security
 
-- Patch seven registry advisories in brace-expansion, fast-uri, ip-address, and
-  DOMPurify.
+- Patch registry advisories in brace-expansion, fast-uri, ip-address, DOMPurify,
+  proxy-addr, MCP SDK, source-map-js, http-cache-semantics,
+  postcss-selector-parser, and KaTeX; remove vulnerable sprintf-js from the
+  Electron download path and mitigate braces recursion with a local depth patch
+  (#2384, #2439)
+- Restrict custom IDE command tests to trusted callers, validate user-question
+  requests before bypassing approval, share strict GitHub URL validation with
+  the project form, and treat adversarial review PR URLs as untrusted data
+  (#2379, #2410, #2413, #2414)
+
+### Documentation
+
+- Document Claude model catalog caching (#2389)
+- Clarify multi-PR workspace state, PR cache ownership, and backup behavior
+  (#2448)
 
 ## [0.4.9] - 2026-09-17
 
