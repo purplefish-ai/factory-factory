@@ -8,6 +8,7 @@
 
 import { RatchetReviewTriggerMode as PrismaRatchetReviewTriggerMode } from '@prisma-gen/client';
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_COLOR_SCHEME, DEFAULT_FONT_SCALE } from '@/shared/appearance';
 import {
   CIStatus as PrismaCIStatus,
   PRState as PrismaPRState,
@@ -294,6 +295,61 @@ describe('voice settings normalization on restore', () => {
     const parsed = parseVoiceSettings({});
     expect(parsed.voiceTtsModel).toBe(DEFAULT_DEEPGRAM_TTS_MODEL);
     expect(parsed.voiceTtsSpeed).toBe(DEFAULT_DEEPGRAM_TTS_SPEED);
+  });
+});
+
+describe('appearance settings on restore', () => {
+  const parseAppearance = (overrides: Record<string, unknown>) =>
+    exportedUserSettingsSchema.parse({
+      preferredIde: 'cursor',
+      customIdeCommand: null,
+      playSoundOnComplete: true,
+      notificationSoundPath: null,
+      ratchetEnabled: true,
+      ratchetReplyToPrComments: true,
+      defaultSessionProvider: 'CLAUDE',
+      defaultClaudeModel: 'sonnet',
+      defaultCodexModel: 'gpt-5-codex',
+      defaultWorkspacePermissions: 'STRICT',
+      autoIterationPermissions: 'YOLO',
+      ...overrides,
+    });
+
+  it('falls back to defaults when a backup predates appearance settings', () => {
+    const parsed = parseAppearance({});
+    expect(parsed).toMatchObject({
+      appearanceColorScheme: DEFAULT_COLOR_SCHEME,
+      appearanceBackgroundColor: null,
+      appearanceForegroundColor: null,
+      appearanceFontScale: DEFAULT_FONT_SCALE,
+      appearanceFontSans: null,
+      appearanceFontMono: null,
+    });
+  });
+
+  it('maps a retired color scheme back to the default', () => {
+    expect(parseAppearance({ appearanceColorScheme: 'dracula' }).appearanceColorScheme).toBe(
+      DEFAULT_COLOR_SCHEME
+    );
+    expect(parseAppearance({ appearanceColorScheme: 'github' }).appearanceColorScheme).toBe(
+      'github'
+    );
+  });
+
+  it('normalizes colors and keeps valid fonts and scale', () => {
+    const parsed = parseAppearance({
+      appearanceBackgroundColor: '#ABC',
+      appearanceFontScale: 150,
+      appearanceFontMono: 'Fira Code',
+    });
+    expect(parsed.appearanceBackgroundColor).toBe('#aabbcc');
+    expect(parsed.appearanceFontScale).toBe(150);
+    expect(parsed.appearanceFontMono).toBe('Fira Code');
+  });
+
+  it('rejects an out-of-range scale or an unsafe font family', () => {
+    expect(() => parseAppearance({ appearanceFontScale: 400 })).toThrow();
+    expect(() => parseAppearance({ appearanceFontSans: 'Inter; color: red' })).toThrow();
   });
 });
 

@@ -13,6 +13,7 @@ import {
   type WorkspaceForExport,
 } from '@/backend/services/settings/resources/data-backup.accessor';
 import { workspacePrSnapshotService } from '@/backend/services/workspace';
+import { normalizeColorScheme } from '@/shared/appearance';
 import { autoIterationConfigSchema } from '@/shared/schemas/auto-iteration.schema';
 import type {
   ExportData,
@@ -491,6 +492,12 @@ async function importUserSettings(
       voiceTtsSpeed: settings.voiceTtsSpeed,
       voiceUtteranceEndMs: settings.voiceUtteranceEndMs,
       voiceBargeInSustainedMs: settings.voiceBargeInSustainedMs,
+      appearanceColorScheme: settings.appearanceColorScheme,
+      appearanceBackgroundColor: settings.appearanceBackgroundColor,
+      appearanceForegroundColor: settings.appearanceForegroundColor,
+      appearanceFontScale: settings.appearanceFontScale,
+      appearanceFontSans: settings.appearanceFontSans,
+      appearanceFontMono: settings.appearanceFontMono,
       // Note: workspaceOrder and cachedSlashCommands are intentionally not imported
       // as they are rebuild-able cache data. deepgramApiKeyEncrypted is never
       // exported (secret), so it's left unset here too.
@@ -640,6 +647,12 @@ class DataBackupService {
               voiceTtsSpeed: userSettings.voiceTtsSpeed,
               voiceUtteranceEndMs: userSettings.voiceUtteranceEndMs,
               voiceBargeInSustainedMs: userSettings.voiceBargeInSustainedMs,
+              appearanceColorScheme: normalizeColorScheme(userSettings.appearanceColorScheme),
+              appearanceBackgroundColor: userSettings.appearanceBackgroundColor,
+              appearanceForegroundColor: userSettings.appearanceForegroundColor,
+              appearanceFontScale: userSettings.appearanceFontScale,
+              appearanceFontSans: userSettings.appearanceFontSans,
+              appearanceFontMono: userSettings.appearanceFontMono,
               // Note: workspaceOrder and cachedSlashCommands are intentionally excluded
               // as they are rebuild-able cache data (per design doc). The Deepgram
               // API key is excluded too — it's a secret, not a preference.

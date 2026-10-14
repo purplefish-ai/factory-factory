@@ -261,6 +261,12 @@ const mockUserSettings: UserSettings = {
   voiceTtsSpeed: 1.3,
   voiceUtteranceEndMs: 2500,
   voiceBargeInSustainedMs: 24,
+  appearanceColorScheme: 'solarized',
+  appearanceBackgroundColor: '#002b36',
+  appearanceForegroundColor: '#93a1a1',
+  appearanceFontScale: 125,
+  appearanceFontSans: '"Inter", ui-sans-serif, system-ui, sans-serif',
+  appearanceFontMono: 'Fira Code',
   createdAt: new Date('2025-01-01T00:00:00.000Z'),
   updatedAt: new Date('2025-01-01T00:00:00.000Z'),
 };
@@ -397,6 +403,12 @@ function createImportData(
         voiceTtsSpeed: 1.3,
         voiceUtteranceEndMs: 2500,
         voiceBargeInSustainedMs: 24,
+        appearanceColorScheme: 'solarized',
+        appearanceBackgroundColor: '#002b36',
+        appearanceForegroundColor: '#93a1a1',
+        appearanceFontScale: 125,
+        appearanceFontSans: '"Inter", ui-sans-serif, system-ui, sans-serif',
+        appearanceFontMono: 'Fira Code',
       },
       ...overrides,
     },
@@ -479,6 +491,12 @@ describe('DataBackupService', () => {
           voiceTtsSpeed: 1.3,
           voiceUtteranceEndMs: 2500,
           voiceBargeInSustainedMs: 24,
+          appearanceColorScheme: 'solarized',
+          appearanceBackgroundColor: '#002b36',
+          appearanceForegroundColor: '#93a1a1',
+          appearanceFontScale: 125,
+          appearanceFontSans: '"Inter", ui-sans-serif, system-ui, sans-serif',
+          appearanceFontMono: 'Fira Code',
         })
       );
       // The Deepgram API key is a secret, not a preference — it must never
@@ -732,6 +750,12 @@ describe('DataBackupService', () => {
           voiceTtsSpeed: 1.3,
           voiceUtteranceEndMs: 2500,
           voiceBargeInSustainedMs: 24,
+          appearanceColorScheme: 'solarized',
+          appearanceBackgroundColor: '#002b36',
+          appearanceForegroundColor: '#93a1a1',
+          appearanceFontScale: 125,
+          appearanceFontSans: '"Inter", ui-sans-serif, system-ui, sans-serif',
+          appearanceFontMono: 'Fira Code',
         }),
       });
       // The Deepgram API key is never part of the export, so a restore

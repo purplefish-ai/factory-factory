@@ -1,8 +1,36 @@
 # Settings
 
 Open Settings from the app navigation. General Settings includes IDE
-preferences, chat defaults, and server logs. Project Settings controls the
-selected project's factory configuration and issue provider.
+preferences, chat defaults, and server logs. Appearance controls the color
+scheme, text size, and fonts. Project Settings controls the selected project's
+factory configuration and issue provider.
+
+## Appearance
+
+Color scheme, color overrides, font size, and fonts are saved with the other
+user settings and apply on every device that opens this server. Mode is saved in
+the browser and does not sync across devices. Each change saves immediately.
+
+- **Color scheme** picks a palette. Factory is the default; GitHub, One,
+  Solarized, and High contrast are inspired by the corresponding editor themes.
+  Every scheme has a light and a dark variant, chosen by **Mode** (or the
+  sun/moon toggle in the sidebar). High contrast uses pure black and white with
+  solid borders.
+- **Background color** and **Text color** override the scheme's page background
+  and primary text in both light and dark mode. Cards and secondary text are
+  blended from the overrides, but contrast is not checked. Use **Reset** next to
+  a color to return to the scheme's own value.
+- **Font size** scales the root font size from 75% to 175%. All text and spacing
+  defined in `rem` follows it, including the terminal, independently of browser
+  zoom.
+- **Interface font** and **Monospace font** offer a few bundled stacks,
+  including Atkinson Hyperlegible, plus **Custom** for any font installed on the
+  device. A custom value is a CSS `font-family` list and may contain only
+  letters, numbers, spaces, quotes, commas, periods, underscores, and hyphens.
+
+**Reset appearance** returns every saved appearance preference to its default;
+it does not change Mode. The last applied appearance is cached in the browser so
+a reload does not flash the defaults before the saved settings load.
 
 ## Custom IDE commands
 

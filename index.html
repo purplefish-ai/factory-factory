@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Geist+Mono:wght@100..900&family=Inter:wght@400;500;700;900&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Geist+Mono:wght@100..900&family=Inter:wght@400;500;700;900&family=IBM+Plex+Mono:wght@400;500;600;700&family=Atkinson+Hyperlegible+Next:wght@400;500;700&family=Atkinson+Hyperlegible+Mono:wght@400;500;700&display=swap"
       rel="stylesheet"
     />
     <style>
@@ -20,6 +20,32 @@
         --font-plex-mono: 'IBM Plex Mono', ui-monospace, monospace;
       }
     </style>
+    <script>
+      // Replay the last applied appearance (Settings → Appearance) before React
+      // mounts so a reload doesn't flash the default font size and colors.
+      // Written by src/client/lib/appearance.ts; keep the key in sync.
+      (function () {
+        try {
+          var raw = localStorage.getItem('factoryfactory_appearance');
+          if (!raw) return;
+          var saved = JSON.parse(raw);
+          var root = document.documentElement;
+          if (typeof saved.colorScheme === 'string') {
+            root.setAttribute('data-color-scheme', saved.colorScheme);
+          }
+          var styles = saved.styles;
+          if (styles && typeof styles === 'object') {
+            for (var property in styles) {
+              if (typeof styles[property] === 'string') {
+                root.style.setProperty(property, styles[property]);
+              }
+            }
+          }
+        } catch (_error) {
+          // Ignore: preferences load from the server once the app mounts.
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

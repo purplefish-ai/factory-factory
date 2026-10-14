@@ -30,12 +30,14 @@ export type UserSettingsAvgAggregateOutputType = {
   voiceTtsSpeed: number | null
   voiceUtteranceEndMs: number | null
   voiceBargeInSustainedMs: number | null
+  appearanceFontScale: number | null
 }
 
 export type UserSettingsSumAggregateOutputType = {
   voiceTtsSpeed: number | null
   voiceUtteranceEndMs: number | null
   voiceBargeInSustainedMs: number | null
+  appearanceFontScale: number | null
 }
 
 export type UserSettingsMinAggregateOutputType = {
@@ -65,6 +67,12 @@ export type UserSettingsMinAggregateOutputType = {
   voiceTtsSpeed: number | null
   voiceUtteranceEndMs: number | null
   voiceBargeInSustainedMs: number | null
+  appearanceColorScheme: string | null
+  appearanceBackgroundColor: string | null
+  appearanceForegroundColor: string | null
+  appearanceFontScale: number | null
+  appearanceFontSans: string | null
+  appearanceFontMono: string | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -96,6 +104,12 @@ export type UserSettingsMaxAggregateOutputType = {
   voiceTtsSpeed: number | null
   voiceUtteranceEndMs: number | null
   voiceBargeInSustainedMs: number | null
+  appearanceColorScheme: string | null
+  appearanceBackgroundColor: string | null
+  appearanceForegroundColor: string | null
+  appearanceFontScale: number | null
+  appearanceFontSans: string | null
+  appearanceFontMono: string | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -129,6 +143,12 @@ export type UserSettingsCountAggregateOutputType = {
   voiceTtsSpeed: number
   voiceUtteranceEndMs: number
   voiceBargeInSustainedMs: number
+  appearanceColorScheme: number
+  appearanceBackgroundColor: number
+  appearanceForegroundColor: number
+  appearanceFontScale: number
+  appearanceFontSans: number
+  appearanceFontMono: number
   createdAt: number
   updatedAt: number
   _all: number
@@ -139,12 +159,14 @@ export type UserSettingsAvgAggregateInputType = {
   voiceTtsSpeed?: true
   voiceUtteranceEndMs?: true
   voiceBargeInSustainedMs?: true
+  appearanceFontScale?: true
 }
 
 export type UserSettingsSumAggregateInputType = {
   voiceTtsSpeed?: true
   voiceUtteranceEndMs?: true
   voiceBargeInSustainedMs?: true
+  appearanceFontScale?: true
 }
 
 export type UserSettingsMinAggregateInputType = {
@@ -174,6 +196,12 @@ export type UserSettingsMinAggregateInputType = {
   voiceTtsSpeed?: true
   voiceUtteranceEndMs?: true
   voiceBargeInSustainedMs?: true
+  appearanceColorScheme?: true
+  appearanceBackgroundColor?: true
+  appearanceForegroundColor?: true
+  appearanceFontScale?: true
+  appearanceFontSans?: true
+  appearanceFontMono?: true
   createdAt?: true
   updatedAt?: true
 }
@@ -205,6 +233,12 @@ export type UserSettingsMaxAggregateInputType = {
   voiceTtsSpeed?: true
   voiceUtteranceEndMs?: true
   voiceBargeInSustainedMs?: true
+  appearanceColorScheme?: true
+  appearanceBackgroundColor?: true
+  appearanceForegroundColor?: true
+  appearanceFontScale?: true
+  appearanceFontSans?: true
+  appearanceFontMono?: true
   createdAt?: true
   updatedAt?: true
 }
@@ -238,6 +272,12 @@ export type UserSettingsCountAggregateInputType = {
   voiceTtsSpeed?: true
   voiceUtteranceEndMs?: true
   voiceBargeInSustainedMs?: true
+  appearanceColorScheme?: true
+  appearanceBackgroundColor?: true
+  appearanceForegroundColor?: true
+  appearanceFontScale?: true
+  appearanceFontSans?: true
+  appearanceFontMono?: true
   createdAt?: true
   updatedAt?: true
   _all?: true
@@ -358,6 +398,12 @@ export type UserSettingsGroupByOutputType = {
   voiceTtsSpeed: number
   voiceUtteranceEndMs: number
   voiceBargeInSustainedMs: number
+  appearanceColorScheme: string
+  appearanceBackgroundColor: string | null
+  appearanceForegroundColor: string | null
+  appearanceFontScale: number
+  appearanceFontSans: string | null
+  appearanceFontMono: string | null
   createdAt: Date
   updatedAt: Date
   _count: UserSettingsCountAggregateOutputType | null
@@ -414,6 +460,12 @@ export type UserSettingsWhereInput = {
   voiceTtsSpeed?: Prisma.FloatFilter<"UserSettings"> | number
   voiceUtteranceEndMs?: Prisma.IntFilter<"UserSettings"> | number
   voiceBargeInSustainedMs?: Prisma.IntFilter<"UserSettings"> | number
+  appearanceColorScheme?: Prisma.StringFilter<"UserSettings"> | string
+  appearanceBackgroundColor?: Prisma.StringNullableFilter<"UserSettings"> | string | null
+  appearanceForegroundColor?: Prisma.StringNullableFilter<"UserSettings"> | string | null
+  appearanceFontScale?: Prisma.IntFilter<"UserSettings"> | number
+  appearanceFontSans?: Prisma.StringNullableFilter<"UserSettings"> | string | null
+  appearanceFontMono?: Prisma.StringNullableFilter<"UserSettings"> | string | null
   createdAt?: Prisma.DateTimeFilter<"UserSettings"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"UserSettings"> | Date | string
 }
@@ -447,6 +499,12 @@ export type UserSettingsOrderByWithRelationInput = {
   voiceTtsSpeed?: Prisma.SortOrder
   voiceUtteranceEndMs?: Prisma.SortOrder
   voiceBargeInSustainedMs?: Prisma.SortOrder
+  appearanceColorScheme?: Prisma.SortOrder
+  appearanceBackgroundColor?: Prisma.SortOrderInput | Prisma.SortOrder
+  appearanceForegroundColor?: Prisma.SortOrderInput | Prisma.SortOrder
+  appearanceFontScale?: Prisma.SortOrder
+  appearanceFontSans?: Prisma.SortOrderInput | Prisma.SortOrder
+  appearanceFontMono?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -483,6 +541,12 @@ export type UserSettingsWhereUniqueInput = Prisma.AtLeast<{
   voiceTtsSpeed?: Prisma.FloatFilter<"UserSettings"> | number
   voiceUtteranceEndMs?: Prisma.IntFilter<"UserSettings"> | number
   voiceBargeInSustainedMs?: Prisma.IntFilter<"UserSettings"> | number
+  appearanceColorScheme?: Prisma.StringFilter<"UserSettings"> | string
+  appearanceBackgroundColor?: Prisma.StringNullableFilter<"UserSettings"> | string | null
+  appearanceForegroundColor?: Prisma.StringNullableFilter<"UserSettings"> | string | null
+  appearanceFontScale?: Prisma.IntFilter<"UserSettings"> | number
+  appearanceFontSans?: Prisma.StringNullableFilter<"UserSettings"> | string | null
+  appearanceFontMono?: Prisma.StringNullableFilter<"UserSettings"> | string | null
   createdAt?: Prisma.DateTimeFilter<"UserSettings"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"UserSettings"> | Date | string
 }, "id" | "userId">
@@ -516,6 +580,12 @@ export type UserSettingsOrderByWithAggregationInput = {
   voiceTtsSpeed?: Prisma.SortOrder
   voiceUtteranceEndMs?: Prisma.SortOrder
   voiceBargeInSustainedMs?: Prisma.SortOrder
+  appearanceColorScheme?: Prisma.SortOrder
+  appearanceBackgroundColor?: Prisma.SortOrderInput | Prisma.SortOrder
+  appearanceForegroundColor?: Prisma.SortOrderInput | Prisma.SortOrder
+  appearanceFontScale?: Prisma.SortOrder
+  appearanceFontSans?: Prisma.SortOrderInput | Prisma.SortOrder
+  appearanceFontMono?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   _count?: Prisma.UserSettingsCountOrderByAggregateInput
@@ -557,6 +627,12 @@ export type UserSettingsScalarWhereWithAggregatesInput = {
   voiceTtsSpeed?: Prisma.FloatWithAggregatesFilter<"UserSettings"> | number
   voiceUtteranceEndMs?: Prisma.IntWithAggregatesFilter<"UserSettings"> | number
   voiceBargeInSustainedMs?: Prisma.IntWithAggregatesFilter<"UserSettings"> | number
+  appearanceColorScheme?: Prisma.StringWithAggregatesFilter<"UserSettings"> | string
+  appearanceBackgroundColor?: Prisma.StringNullableWithAggregatesFilter<"UserSettings"> | string | null
+  appearanceForegroundColor?: Prisma.StringNullableWithAggregatesFilter<"UserSettings"> | string | null
+  appearanceFontScale?: Prisma.IntWithAggregatesFilter<"UserSettings"> | number
+  appearanceFontSans?: Prisma.StringNullableWithAggregatesFilter<"UserSettings"> | string | null
+  appearanceFontMono?: Prisma.StringNullableWithAggregatesFilter<"UserSettings"> | string | null
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"UserSettings"> | Date | string
   updatedAt?: Prisma.DateTimeWithAggregatesFilter<"UserSettings"> | Date | string
 }
@@ -590,6 +666,12 @@ export type UserSettingsCreateInput = {
   voiceTtsSpeed?: number
   voiceUtteranceEndMs?: number
   voiceBargeInSustainedMs?: number
+  appearanceColorScheme?: string
+  appearanceBackgroundColor?: string | null
+  appearanceForegroundColor?: string | null
+  appearanceFontScale?: number
+  appearanceFontSans?: string | null
+  appearanceFontMono?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -623,6 +705,12 @@ export type UserSettingsUncheckedCreateInput = {
   voiceTtsSpeed?: number
   voiceUtteranceEndMs?: number
   voiceBargeInSustainedMs?: number
+  appearanceColorScheme?: string
+  appearanceBackgroundColor?: string | null
+  appearanceForegroundColor?: string | null
+  appearanceFontScale?: number
+  appearanceFontSans?: string | null
+  appearanceFontMono?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -656,6 +744,12 @@ export type UserSettingsUpdateInput = {
   voiceTtsSpeed?: Prisma.FloatFieldUpdateOperationsInput | number
   voiceUtteranceEndMs?: Prisma.IntFieldUpdateOperationsInput | number
   voiceBargeInSustainedMs?: Prisma.IntFieldUpdateOperationsInput | number
+  appearanceColorScheme?: Prisma.StringFieldUpdateOperationsInput | string
+  appearanceBackgroundColor?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  appearanceForegroundColor?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  appearanceFontScale?: Prisma.IntFieldUpdateOperationsInput | number
+  appearanceFontSans?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  appearanceFontMono?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -689,6 +783,12 @@ export type UserSettingsUncheckedUpdateInput = {
   voiceTtsSpeed?: Prisma.FloatFieldUpdateOperationsInput | number
   voiceUtteranceEndMs?: Prisma.IntFieldUpdateOperationsInput | number
   voiceBargeInSustainedMs?: Prisma.IntFieldUpdateOperationsInput | number
+  appearanceColorScheme?: Prisma.StringFieldUpdateOperationsInput | string
+  appearanceBackgroundColor?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  appearanceForegroundColor?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  appearanceFontScale?: Prisma.IntFieldUpdateOperationsInput | number
+  appearanceFontSans?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  appearanceFontMono?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -722,6 +822,12 @@ export type UserSettingsCreateManyInput = {
   voiceTtsSpeed?: number
   voiceUtteranceEndMs?: number
   voiceBargeInSustainedMs?: number
+  appearanceColorScheme?: string
+  appearanceBackgroundColor?: string | null
+  appearanceForegroundColor?: string | null
+  appearanceFontScale?: number
+  appearanceFontSans?: string | null
+  appearanceFontMono?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -755,6 +861,12 @@ export type UserSettingsUpdateManyMutationInput = {
   voiceTtsSpeed?: Prisma.FloatFieldUpdateOperationsInput | number
   voiceUtteranceEndMs?: Prisma.IntFieldUpdateOperationsInput | number
   voiceBargeInSustainedMs?: Prisma.IntFieldUpdateOperationsInput | number
+  appearanceColorScheme?: Prisma.StringFieldUpdateOperationsInput | string
+  appearanceBackgroundColor?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  appearanceForegroundColor?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  appearanceFontScale?: Prisma.IntFieldUpdateOperationsInput | number
+  appearanceFontSans?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  appearanceFontMono?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -788,6 +900,12 @@ export type UserSettingsUncheckedUpdateManyInput = {
   voiceTtsSpeed?: Prisma.FloatFieldUpdateOperationsInput | number
   voiceUtteranceEndMs?: Prisma.IntFieldUpdateOperationsInput | number
   voiceBargeInSustainedMs?: Prisma.IntFieldUpdateOperationsInput | number
+  appearanceColorScheme?: Prisma.StringFieldUpdateOperationsInput | string
+  appearanceBackgroundColor?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  appearanceForegroundColor?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  appearanceFontScale?: Prisma.IntFieldUpdateOperationsInput | number
+  appearanceFontSans?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  appearanceFontMono?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -821,6 +939,12 @@ export type UserSettingsCountOrderByAggregateInput = {
   voiceTtsSpeed?: Prisma.SortOrder
   voiceUtteranceEndMs?: Prisma.SortOrder
   voiceBargeInSustainedMs?: Prisma.SortOrder
+  appearanceColorScheme?: Prisma.SortOrder
+  appearanceBackgroundColor?: Prisma.SortOrder
+  appearanceForegroundColor?: Prisma.SortOrder
+  appearanceFontScale?: Prisma.SortOrder
+  appearanceFontSans?: Prisma.SortOrder
+  appearanceFontMono?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -829,6 +953,7 @@ export type UserSettingsAvgOrderByAggregateInput = {
   voiceTtsSpeed?: Prisma.SortOrder
   voiceUtteranceEndMs?: Prisma.SortOrder
   voiceBargeInSustainedMs?: Prisma.SortOrder
+  appearanceFontScale?: Prisma.SortOrder
 }
 
 export type UserSettingsMaxOrderByAggregateInput = {
@@ -858,6 +983,12 @@ export type UserSettingsMaxOrderByAggregateInput = {
   voiceTtsSpeed?: Prisma.SortOrder
   voiceUtteranceEndMs?: Prisma.SortOrder
   voiceBargeInSustainedMs?: Prisma.SortOrder
+  appearanceColorScheme?: Prisma.SortOrder
+  appearanceBackgroundColor?: Prisma.SortOrder
+  appearanceForegroundColor?: Prisma.SortOrder
+  appearanceFontScale?: Prisma.SortOrder
+  appearanceFontSans?: Prisma.SortOrder
+  appearanceFontMono?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -889,6 +1020,12 @@ export type UserSettingsMinOrderByAggregateInput = {
   voiceTtsSpeed?: Prisma.SortOrder
   voiceUtteranceEndMs?: Prisma.SortOrder
   voiceBargeInSustainedMs?: Prisma.SortOrder
+  appearanceColorScheme?: Prisma.SortOrder
+  appearanceBackgroundColor?: Prisma.SortOrder
+  appearanceForegroundColor?: Prisma.SortOrder
+  appearanceFontScale?: Prisma.SortOrder
+  appearanceFontSans?: Prisma.SortOrder
+  appearanceFontMono?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -897,6 +1034,7 @@ export type UserSettingsSumOrderByAggregateInput = {
   voiceTtsSpeed?: Prisma.SortOrder
   voiceUtteranceEndMs?: Prisma.SortOrder
   voiceBargeInSustainedMs?: Prisma.SortOrder
+  appearanceFontScale?: Prisma.SortOrder
 }
 
 export type EnumRatchetReviewTriggerModeFieldUpdateOperationsInput = {
@@ -946,6 +1084,12 @@ export type UserSettingsSelect<ExtArgs extends runtime.Types.Extensions.Internal
   voiceTtsSpeed?: boolean
   voiceUtteranceEndMs?: boolean
   voiceBargeInSustainedMs?: boolean
+  appearanceColorScheme?: boolean
+  appearanceBackgroundColor?: boolean
+  appearanceForegroundColor?: boolean
+  appearanceFontScale?: boolean
+  appearanceFontSans?: boolean
+  appearanceFontMono?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }, ExtArgs["result"]["userSettings"]>
@@ -979,6 +1123,12 @@ export type UserSettingsSelectCreateManyAndReturn<ExtArgs extends runtime.Types.
   voiceTtsSpeed?: boolean
   voiceUtteranceEndMs?: boolean
   voiceBargeInSustainedMs?: boolean
+  appearanceColorScheme?: boolean
+  appearanceBackgroundColor?: boolean
+  appearanceForegroundColor?: boolean
+  appearanceFontScale?: boolean
+  appearanceFontSans?: boolean
+  appearanceFontMono?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }, ExtArgs["result"]["userSettings"]>
@@ -1012,6 +1162,12 @@ export type UserSettingsSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.
   voiceTtsSpeed?: boolean
   voiceUtteranceEndMs?: boolean
   voiceBargeInSustainedMs?: boolean
+  appearanceColorScheme?: boolean
+  appearanceBackgroundColor?: boolean
+  appearanceForegroundColor?: boolean
+  appearanceFontScale?: boolean
+  appearanceFontSans?: boolean
+  appearanceFontMono?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }, ExtArgs["result"]["userSettings"]>
@@ -1045,11 +1201,17 @@ export type UserSettingsSelectScalar = {
   voiceTtsSpeed?: boolean
   voiceUtteranceEndMs?: boolean
   voiceBargeInSustainedMs?: boolean
+  appearanceColorScheme?: boolean
+  appearanceBackgroundColor?: boolean
+  appearanceForegroundColor?: boolean
+  appearanceFontScale?: boolean
+  appearanceFontSans?: boolean
+  appearanceFontMono?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }
 
-export type UserSettingsOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "userId" | "preferredIde" | "customIdeCommand" | "playSoundOnComplete" | "notificationSoundPath" | "workspaceOrder" | "cachedSlashCommands" | "ratchetEnabled" | "ratchetReplyToPrComments" | "ratchetReviewTriggerMode" | "defaultSessionProvider" | "defaultClaudeModel" | "defaultCodexModel" | "defaultClaudeReasoningEffort" | "defaultCodexReasoningEffort" | "defaultWorkspacePermissions" | "autoIterationPermissions" | "reviewerSessionProvider" | "reviewerClaudeModel" | "reviewerCodexModel" | "postReviewToGitHub" | "voiceModeEnabled" | "deepgramApiKeyEncrypted" | "voiceTtsModel" | "voiceTtsSpeed" | "voiceUtteranceEndMs" | "voiceBargeInSustainedMs" | "createdAt" | "updatedAt", ExtArgs["result"]["userSettings"]>
+export type UserSettingsOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "userId" | "preferredIde" | "customIdeCommand" | "playSoundOnComplete" | "notificationSoundPath" | "workspaceOrder" | "cachedSlashCommands" | "ratchetEnabled" | "ratchetReplyToPrComments" | "ratchetReviewTriggerMode" | "defaultSessionProvider" | "defaultClaudeModel" | "defaultCodexModel" | "defaultClaudeReasoningEffort" | "defaultCodexReasoningEffort" | "defaultWorkspacePermissions" | "autoIterationPermissions" | "reviewerSessionProvider" | "reviewerClaudeModel" | "reviewerCodexModel" | "postReviewToGitHub" | "voiceModeEnabled" | "deepgramApiKeyEncrypted" | "voiceTtsModel" | "voiceTtsSpeed" | "voiceUtteranceEndMs" | "voiceBargeInSustainedMs" | "appearanceColorScheme" | "appearanceBackgroundColor" | "appearanceForegroundColor" | "appearanceFontScale" | "appearanceFontSans" | "appearanceFontMono" | "createdAt" | "updatedAt", ExtArgs["result"]["userSettings"]>
 
 export type $UserSettingsPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   name: "UserSettings"
@@ -1083,6 +1245,12 @@ export type $UserSettingsPayload<ExtArgs extends runtime.Types.Extensions.Intern
     voiceTtsSpeed: number
     voiceUtteranceEndMs: number
     voiceBargeInSustainedMs: number
+    appearanceColorScheme: string
+    appearanceBackgroundColor: string | null
+    appearanceForegroundColor: string | null
+    appearanceFontScale: number
+    appearanceFontSans: string | null
+    appearanceFontMono: string | null
     createdAt: Date
     updatedAt: Date
   }, ExtArgs["result"]["userSettings"]>
@@ -1536,6 +1704,12 @@ export interface UserSettingsFieldRefs {
   readonly voiceTtsSpeed: Prisma.FieldRef<"UserSettings", 'Float'>
   readonly voiceUtteranceEndMs: Prisma.FieldRef<"UserSettings", 'Int'>
   readonly voiceBargeInSustainedMs: Prisma.FieldRef<"UserSettings", 'Int'>
+  readonly appearanceColorScheme: Prisma.FieldRef<"UserSettings", 'String'>
+  readonly appearanceBackgroundColor: Prisma.FieldRef<"UserSettings", 'String'>
+  readonly appearanceForegroundColor: Prisma.FieldRef<"UserSettings", 'String'>
+  readonly appearanceFontScale: Prisma.FieldRef<"UserSettings", 'Int'>
+  readonly appearanceFontSans: Prisma.FieldRef<"UserSettings", 'String'>
+  readonly appearanceFontMono: Prisma.FieldRef<"UserSettings", 'String'>
   readonly createdAt: Prisma.FieldRef<"UserSettings", 'DateTime'>
   readonly updatedAt: Prisma.FieldRef<"UserSettings", 'DateTime'>
 }

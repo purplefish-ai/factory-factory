@@ -30,6 +30,12 @@ export interface UpdateUserSettingsInput {
   voiceTtsSpeed?: number;
   voiceUtteranceEndMs?: number;
   voiceBargeInSustainedMs?: number;
+  appearanceColorScheme?: string;
+  appearanceBackgroundColor?: string | null;
+  appearanceForegroundColor?: string | null;
+  appearanceFontScale?: number;
+  appearanceFontSans?: string | null;
+  appearanceFontMono?: string | null;
 }
 
 class UserSettingsService {

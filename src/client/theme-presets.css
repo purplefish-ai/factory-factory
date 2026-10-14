@@ -1,0 +1,281 @@
+/*
+ * Color scheme presets, selected in Settings → Appearance.
+ *
+ * The default "factory" scheme is the base palette in globals.css. Each preset
+ * below redefines the same custom properties for light mode and, under the
+ * next-themes `.dark` class, for dark mode. Status colors (success, warning,
+ * destructive, info) and charts are inherited from the base palette unless a
+ * preset needs a different accent.
+ *
+ * The scheme id is written to `data-color-scheme` on <html> by
+ * src/client/lib/appearance.ts; `:root[...]` beats the base `:root`/`.dark`
+ * rules on specificity without needing !important.
+ */
+
+/* ------------------------------------------------------------------------ */
+/* GitHub — inspired by Primer light / dark                                  */
+/* ------------------------------------------------------------------------ */
+
+:root[data-color-scheme='github'] {
+  --background: #ffffff;
+  --foreground: #1f2328;
+  --card: #ffffff;
+  --card-foreground: #1f2328;
+  --popover: #ffffff;
+  --popover-foreground: #1f2328;
+  --primary: #1f2328;
+  --primary-foreground: #ffffff;
+  --secondary: #f6f8fa;
+  --secondary-foreground: #1f2328;
+  --muted: #f6f8fa;
+  --muted-foreground: #59636e;
+  --accent: #f6f8fa;
+  --accent-foreground: #1f2328;
+  --brand: #0969da;
+  --brand-foreground: #ffffff;
+  --border: #d1d9e0;
+  --input: #d1d9e0;
+  --ring: #0969da;
+  --chart-1: #0969da;
+  --sidebar: #f6f8fa;
+  --sidebar-foreground: #1f2328;
+  --sidebar-primary: #0969da;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eaeef2;
+  --sidebar-accent-foreground: #1f2328;
+  --sidebar-border: #d1d9e0;
+  --sidebar-ring: #0969da;
+}
+
+:root[data-color-scheme='github'].dark {
+  --background: #0d1117;
+  --foreground: #e6edf3;
+  --card: #161b22;
+  --card-foreground: #e6edf3;
+  --popover: #161b22;
+  --popover-foreground: #e6edf3;
+  --primary: #e6edf3;
+  --primary-foreground: #0d1117;
+  --secondary: #21262d;
+  --secondary-foreground: #e6edf3;
+  --muted: #21262d;
+  --muted-foreground: #9198a1;
+  --accent: #21262d;
+  --accent-foreground: #e6edf3;
+  --brand: #4493f8;
+  --brand-foreground: #0d1117;
+  --border: #30363d;
+  --input: #30363d;
+  --ring: #4493f8;
+  --chart-1: #4493f8;
+  --sidebar: #010409;
+  --sidebar-foreground: #e6edf3;
+  --sidebar-primary: #4493f8;
+  --sidebar-primary-foreground: #0d1117;
+  --sidebar-accent: #161b22;
+  --sidebar-accent-foreground: #e6edf3;
+  --sidebar-border: #30363d;
+  --sidebar-ring: #4493f8;
+}
+
+/* ------------------------------------------------------------------------ */
+/* One — inspired by Atom One Light / One Dark                               */
+/* ------------------------------------------------------------------------ */
+
+:root[data-color-scheme='one'] {
+  --background: #fafafa;
+  --foreground: #383a42;
+  --card: #ffffff;
+  --card-foreground: #383a42;
+  --popover: #ffffff;
+  --popover-foreground: #383a42;
+  --primary: #383a42;
+  --primary-foreground: #fafafa;
+  --secondary: #eaeaeb;
+  --secondary-foreground: #383a42;
+  --muted: #eaeaeb;
+  --muted-foreground: #696c77;
+  --accent: #eaeaeb;
+  --accent-foreground: #383a42;
+  --brand: #4078f2;
+  --brand-foreground: #ffffff;
+  --border: #dbdbdc;
+  --input: #dbdbdc;
+  --ring: #4078f2;
+  --chart-1: #4078f2;
+  --sidebar: #eaeaeb;
+  --sidebar-foreground: #383a42;
+  --sidebar-primary: #4078f2;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #dbdbdc;
+  --sidebar-accent-foreground: #383a42;
+  --sidebar-border: #dbdbdc;
+  --sidebar-ring: #4078f2;
+}
+
+:root[data-color-scheme='one'].dark {
+  --background: #282c34;
+  --foreground: #abb2bf;
+  --card: #21252b;
+  --card-foreground: #abb2bf;
+  --popover: #21252b;
+  --popover-foreground: #abb2bf;
+  --primary: #abb2bf;
+  --primary-foreground: #282c34;
+  --secondary: #2c313a;
+  --secondary-foreground: #abb2bf;
+  --muted: #2c313a;
+  --muted-foreground: #8b919c;
+  --accent: #2c313a;
+  --accent-foreground: #dcdfe4;
+  --brand: #61afef;
+  --brand-foreground: #282c34;
+  --border: #3e4451;
+  --input: #3e4451;
+  --ring: #61afef;
+  --chart-1: #61afef;
+  --sidebar: #21252b;
+  --sidebar-foreground: #abb2bf;
+  --sidebar-primary: #61afef;
+  --sidebar-primary-foreground: #282c34;
+  --sidebar-accent: #2c313a;
+  --sidebar-accent-foreground: #dcdfe4;
+  --sidebar-border: #181a1f;
+  --sidebar-ring: #61afef;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Solarized — Ethan Schoonover's light / dark palettes                      */
+/* ------------------------------------------------------------------------ */
+
+:root[data-color-scheme='solarized'] {
+  --background: #fdf6e3;
+  --foreground: #586e75;
+  --card: #fdf6e3;
+  --card-foreground: #586e75;
+  --popover: #fdf6e3;
+  --popover-foreground: #586e75;
+  --primary: #586e75;
+  --primary-foreground: #fdf6e3;
+  --secondary: #eee8d5;
+  --secondary-foreground: #586e75;
+  --muted: #eee8d5;
+  --muted-foreground: #657b83;
+  --accent: #eee8d5;
+  --accent-foreground: #073642;
+  --brand: #268bd2;
+  --brand-foreground: #fdf6e3;
+  --border: #e0d8c3;
+  --input: #e0d8c3;
+  --ring: #268bd2;
+  --chart-1: #268bd2;
+  --sidebar: #eee8d5;
+  --sidebar-foreground: #586e75;
+  --sidebar-primary: #268bd2;
+  --sidebar-primary-foreground: #fdf6e3;
+  --sidebar-accent: #e4ddc7;
+  --sidebar-accent-foreground: #073642;
+  --sidebar-border: #d6cfb8;
+  --sidebar-ring: #268bd2;
+}
+
+:root[data-color-scheme='solarized'].dark {
+  --background: #002b36;
+  --foreground: #93a1a1;
+  --card: #073642;
+  --card-foreground: #93a1a1;
+  --popover: #073642;
+  --popover-foreground: #93a1a1;
+  --primary: #93a1a1;
+  --primary-foreground: #002b36;
+  --secondary: #073642;
+  --secondary-foreground: #93a1a1;
+  --muted: #073642;
+  --muted-foreground: #839496;
+  --accent: #073642;
+  --accent-foreground: #eee8d5;
+  --brand: #268bd2;
+  --brand-foreground: #fdf6e3;
+  --border: #1a4a56;
+  --input: #1a4a56;
+  --ring: #268bd2;
+  --chart-1: #268bd2;
+  --sidebar: #00212b;
+  --sidebar-foreground: #93a1a1;
+  --sidebar-primary: #268bd2;
+  --sidebar-primary-foreground: #fdf6e3;
+  --sidebar-accent: #073642;
+  --sidebar-accent-foreground: #eee8d5;
+  --sidebar-border: #0a3a47;
+  --sidebar-ring: #268bd2;
+}
+
+/* ------------------------------------------------------------------------ */
+/* High contrast — pure black / white with solid borders                     */
+/* ------------------------------------------------------------------------ */
+
+:root[data-color-scheme='high-contrast'] {
+  --background: #ffffff;
+  --foreground: #000000;
+  --card: #ffffff;
+  --card-foreground: #000000;
+  --popover: #ffffff;
+  --popover-foreground: #000000;
+  --primary: #000000;
+  --primary-foreground: #ffffff;
+  --secondary: #e5e5e5;
+  --secondary-foreground: #000000;
+  --muted: #e5e5e5;
+  --muted-foreground: #333333;
+  --accent: #e5e5e5;
+  --accent-foreground: #000000;
+  --brand: #0000cc;
+  --brand-foreground: #ffffff;
+  --destructive: #b00000;
+  --destructive-foreground: #ffffff;
+  --border: #000000;
+  --input: #000000;
+  --ring: #0000cc;
+  --chart-1: #0000cc;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #000000;
+  --sidebar-primary: #0000cc;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e5e5e5;
+  --sidebar-accent-foreground: #000000;
+  --sidebar-border: #000000;
+  --sidebar-ring: #0000cc;
+}
+
+:root[data-color-scheme='high-contrast'].dark {
+  --background: #000000;
+  --foreground: #ffffff;
+  --card: #000000;
+  --card-foreground: #ffffff;
+  --popover: #000000;
+  --popover-foreground: #ffffff;
+  --primary: #ffffff;
+  --primary-foreground: #000000;
+  --secondary: #262626;
+  --secondary-foreground: #ffffff;
+  --muted: #262626;
+  --muted-foreground: #d4d4d4;
+  --accent: #262626;
+  --accent-foreground: #ffffff;
+  --brand: #ffff00;
+  --brand-foreground: #000000;
+  --destructive: #ff5c5c;
+  --destructive-foreground: #000000;
+  --border: #ffffff;
+  --input: #ffffff;
+  --ring: #ffff00;
+  --chart-1: #ffff00;
+  --sidebar: #000000;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #ffff00;
+  --sidebar-primary-foreground: #000000;
+  --sidebar-accent: #262626;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #ffffff;
+  --sidebar-ring: #ffff00;
+}

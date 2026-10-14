@@ -89,6 +89,12 @@ describe('sessionProviderResolverService', () => {
       voiceTtsSpeed: 1,
       voiceUtteranceEndMs: 1000,
       voiceBargeInSustainedMs: 16,
+      appearanceColorScheme: 'factory',
+      appearanceBackgroundColor: null,
+      appearanceForegroundColor: null,
+      appearanceFontScale: 100,
+      appearanceFontSans: null,
+      appearanceFontMono: null,
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     });

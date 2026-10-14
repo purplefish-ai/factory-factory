@@ -7,6 +7,7 @@ import type {
 import { Prisma } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
 import { normalizeSessionModelForProvider } from '@/backend/lib/session-model';
+import { DEFAULT_COLOR_SCHEME, DEFAULT_FONT_SCALE } from '@/shared/appearance';
 import { workspaceOrderMapSchema } from '@/shared/schemas/persisted-stores.schema';
 
 interface UpdateUserSettingsInput {
@@ -36,6 +37,12 @@ interface UpdateUserSettingsInput {
   voiceTtsSpeed?: number;
   voiceUtteranceEndMs?: number;
   voiceBargeInSustainedMs?: number;
+  appearanceColorScheme?: string;
+  appearanceBackgroundColor?: string | null;
+  appearanceForegroundColor?: string | null;
+  appearanceFontScale?: number;
+  appearanceFontSans?: string | null;
+  appearanceFontMono?: string | null;
 }
 
 // Type for workspace order storage: { [projectId]: workspaceId[] }
@@ -210,6 +217,27 @@ function buildVoiceDefaults(
   };
 }
 
+function buildAppearanceDefaults(
+  data: UpdateUserSettingsInput
+): Pick<
+  Prisma.UserSettingsCreateInput,
+  | 'appearanceColorScheme'
+  | 'appearanceBackgroundColor'
+  | 'appearanceForegroundColor'
+  | 'appearanceFontScale'
+  | 'appearanceFontSans'
+  | 'appearanceFontMono'
+> {
+  return {
+    appearanceColorScheme: data.appearanceColorScheme ?? DEFAULT_COLOR_SCHEME,
+    appearanceBackgroundColor: data.appearanceBackgroundColor ?? null,
+    appearanceForegroundColor: data.appearanceForegroundColor ?? null,
+    appearanceFontScale: data.appearanceFontScale ?? DEFAULT_FONT_SCALE,
+    appearanceFontSans: data.appearanceFontSans ?? null,
+    appearanceFontMono: data.appearanceFontMono ?? null,
+  };
+}
+
 /**
  * Builds the upsert `create` branch's data, so a first-time write of any
  * field (e.g. voice mode config before any other setting has been saved)
@@ -240,6 +268,7 @@ function buildCreateData(
     ),
     ...buildReviewerDefaults(data, normalizedReviewerClaudeModel, normalizedReviewerCodexModel),
     ...buildVoiceDefaults(data),
+    ...buildAppearanceDefaults(data),
   };
 }
 

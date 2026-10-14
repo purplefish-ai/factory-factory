@@ -2,6 +2,10 @@ import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 import { useCallback, useEffect, useRef } from 'react';
+import { useAppearance } from '@/client/components/appearance-provider';
+import { scaledTerminalFontSize } from '@/shared/appearance';
+
+const DEFAULT_TERMINAL_FONT_FAMILY = 'Menlo, Monaco, "Courier New", monospace';
 
 // =============================================================================
 // Types
@@ -45,6 +49,15 @@ export function TerminalInstance({
     onResizeRef.current = onResize;
   }, [onData, onResize]);
 
+  // xterm sizes text in pixels, so the appearance font scale and monospace
+  // font are applied here rather than through CSS.
+  const appearance = useAppearance();
+  const fontSize = scaledTerminalFontSize(appearance.fontScale);
+  const fontFamily = appearance.fontMono ?? DEFAULT_TERMINAL_FONT_FAMILY;
+  // The mount-only effect below only ever sees the first render's values; a
+  // later change is applied by the font effect further down.
+  const initialFontOptionsRef = useRef({ fontSize, fontFamily });
+
   // Initialize terminal synchronously
   useEffect(() => {
     if (!containerRef.current) {
@@ -53,8 +66,8 @@ export function TerminalInstance({
 
     const terminal = new Terminal({
       cursorBlink: true,
-      fontSize: 13,
-      fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+      fontSize: initialFontOptionsRef.current.fontSize,
+      fontFamily: initialFontOptionsRef.current.fontFamily,
       theme: {
         background: '#18181b', // zinc-900
         foreground: '#fafafa', // zinc-50
@@ -125,6 +138,21 @@ export function TerminalInstance({
       fitAddonRef.current = null;
     };
   }, []);
+
+  // Re-measure when the appearance font settings change after mount.
+  useEffect(() => {
+    const terminal = terminalRef.current;
+    if (!terminal) {
+      return;
+    }
+    if (terminal.options.fontSize === fontSize && terminal.options.fontFamily === fontFamily) {
+      return;
+    }
+    terminal.options.fontSize = fontSize;
+    terminal.options.fontFamily = fontFamily;
+    fitAddonRef.current?.fit();
+    onResizeRef.current(terminal.cols, terminal.rows);
+  }, [fontSize, fontFamily]);
 
   // Write output to terminal
   useEffect(() => {

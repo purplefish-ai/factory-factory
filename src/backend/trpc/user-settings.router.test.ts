@@ -131,6 +131,42 @@ describe('userSettingsRouter', () => {
     });
   });
 
+  it('accepts valid appearance settings and normalizes colors', async () => {
+    mockUpdate.mockImplementation(async (input: unknown) => input);
+    const caller = createCaller();
+
+    await caller.update({
+      appearanceColorScheme: 'github',
+      appearanceBackgroundColor: '#ABC',
+      appearanceForegroundColor: null,
+      appearanceFontScale: 125,
+      appearanceFontSans: '"Atkinson Hyperlegible", sans-serif',
+      appearanceFontMono: null,
+    });
+
+    expect(mockUpdate).toHaveBeenCalledWith({
+      appearanceColorScheme: 'github',
+      appearanceBackgroundColor: '#aabbcc',
+      appearanceForegroundColor: null,
+      appearanceFontScale: 125,
+      appearanceFontSans: '"Atkinson Hyperlegible", sans-serif',
+      appearanceFontMono: null,
+    });
+  });
+
+  it.each([
+    { appearanceColorScheme: 'dracula' },
+    { appearanceBackgroundColor: 'red' },
+    { appearanceFontScale: 40 },
+    { appearanceFontScale: 102 },
+    { appearanceFontScale: 102.5 },
+    { appearanceFontMono: 'Inter; background: url(x)' },
+  ])('rejects invalid appearance input %j', async (input) => {
+    const caller = createCaller();
+    await expect(caller.update(input as never)).rejects.toThrow();
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
   it('requires command when preferred ide is custom', async () => {
     const caller = createCaller();
     await expect(caller.update({ preferredIde: 'custom' })).rejects.toThrow(

@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   AdversarialReviewSection,
   ApiUsageSection,
+  AppearanceSettingsSection,
   AppInfoSection,
   ChatProviderDefaultsSection,
   CliAuthSection,
@@ -24,6 +25,8 @@ import {
   ServerLogsSection,
   VoiceModeSection,
 } from './admin/index';
+
+type SettingsTab = 'general' | 'appearance' | 'project' | 'periodic-tasks' | 'voice';
 
 function resolveSelectedProjectSlug(
   projects: Array<{ slug: string }> | undefined
@@ -42,9 +45,7 @@ function resolveSelectedProjectSlug(
 
 export default function AdminDashboardPage() {
   useAppHeader({ title: 'Settings' });
-  const [settingsTab, setSettingsTab] = useState<
-    'general' | 'project' | 'periodic-tasks' | 'voice'
-  >('general');
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>('general');
 
   const {
     data: stats,
@@ -85,15 +86,13 @@ export default function AdminDashboardPage() {
         </HeaderLeftExtraSlot>
       )}
       <div className="space-y-6 p-3 md:p-6">
-        <Tabs
-          value={settingsTab}
-          onValueChange={(value) =>
-            setSettingsTab(value as 'general' | 'project' | 'periodic-tasks' | 'voice')
-          }
-        >
+        <Tabs value={settingsTab} onValueChange={(value) => setSettingsTab(value as SettingsTab)}>
           <TabsList className="w-full sm:w-auto">
             <TabsTrigger value="general" className="flex-1 sm:flex-initial">
               General Settings
+            </TabsTrigger>
+            <TabsTrigger value="appearance" className="flex-1 sm:flex-initial">
+              Appearance
             </TabsTrigger>
             <TabsTrigger value="project" className="flex-1 sm:flex-initial">
               Project Settings
@@ -138,6 +137,10 @@ export default function AdminDashboardPage() {
             <AppInfoSection />
             <DataBackupSection />
             <ServerLogsSection />
+          </TabsContent>
+
+          <TabsContent value="appearance" className="mt-4">
+            <AppearanceSettingsSection />
           </TabsContent>
 
           <TabsContent value="project" className="mt-4">
