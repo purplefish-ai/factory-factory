@@ -333,6 +333,33 @@ describe('AcpClientFactory', () => {
     });
   });
 
+  it.each(['CLAUDE', 'CODEX'] as const)(
+    'requires the existing %s conversation for background delivery',
+    async (provider) => {
+      for (const failure of ['missing', 'unsupported', 'failed']) {
+        mocks.newSession.mockClear();
+        setupSuccessfulSpawn(createMockChildProcess({ exitAfterSigterm: true }), {
+          loadSession: failure !== 'unsupported',
+        });
+        if (failure === 'failed') {
+          mocks.loadSession.mockRejectedValue(new Error('forgotten conversation'));
+        }
+        await expect(
+          new AcpClientFactory().createClient(
+            createParams({
+              options: defaultOptions({
+                provider,
+                resumePolicy: 'require_existing',
+                resumeProviderSessionId: failure === 'missing' ? undefined : 'stored-provider',
+              }),
+            })
+          )
+        ).rejects.toThrow('existing');
+        expect(mocks.newSession).not.toHaveBeenCalled();
+      }
+    }
+  );
+
   it('loads a stored provider session when supported', async () => {
     setupSuccessfulSpawn(undefined, { loadSession: true });
 

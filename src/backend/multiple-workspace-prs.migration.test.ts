@@ -36,7 +36,7 @@ it('preserves known PRs, discovery, and active fixer ownership in the collection
   let db: Database.Database | undefined;
   try {
     for (const name of readdirSync(migrationsPath)) {
-      if (name !== migrationName) {
+      if (name < migrationName) {
         cpSync(join(migrationsPath, name), join(oldMigrations, name), { recursive: true });
       }
     }
@@ -49,7 +49,10 @@ it('preserves known PRs, discovery, and active fixer ownership in the collection
       VALUES ('fixer-1', 'OPEN', 'ratchet', 'CODEX', 1000)`);
     db.close();
     db = undefined;
-    runMigrations({ databasePath, migrationsPath, log: () => undefined });
+    cpSync(join(migrationsPath, migrationName), join(oldMigrations, migrationName), {
+      recursive: true,
+    });
+    runMigrations({ databasePath, migrationsPath: oldMigrations, log: () => undefined });
     db = new Database(databasePath);
     expect(db.prepare('PRAGMA table_info(WorkspacePR)').all()).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: 'id' })])

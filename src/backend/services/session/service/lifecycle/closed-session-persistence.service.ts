@@ -16,6 +16,7 @@ export interface ClosedSessionTranscript {
     name: string | null;
     workflow: string;
     provider: SessionProvider;
+    providerSessionId?: string;
     model: string;
     startedAt: string; // ISO timestamp
     completedAt: string; // ISO timestamp
@@ -30,6 +31,7 @@ export interface PersistClosedSessionInput {
   name: string | null;
   workflow: string;
   provider: SessionProvider;
+  providerSessionId?: string;
   model: string;
   startedAt: Date;
   messages: ChatMessage[];
@@ -54,7 +56,7 @@ class ClosedSessionPersistenceService {
 
     try {
       // Skip if no messages (nothing to save)
-      if (messages.length === 0) {
+      if (messages.length === 0 && !input.providerSessionId) {
         logger.debug('Skipping closed session persistence: no messages', { sessionId });
         return;
       }
@@ -85,6 +87,7 @@ class ClosedSessionPersistenceService {
           name,
           workflow,
           provider,
+          ...(input.providerSessionId ? { providerSessionId: input.providerSessionId } : {}),
           model,
           startedAt: startedAt.toISOString(),
           completedAt: new Date().toISOString(),

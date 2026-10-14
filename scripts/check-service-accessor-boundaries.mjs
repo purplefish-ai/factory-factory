@@ -19,17 +19,21 @@ const ACCESSOR_POLICIES = {
     owner: 'workspace',
     module: 'src/backend/services/workspace/resources/workspace-ratchet.accessor',
   },
-  workspacePrAggregateAccessor: {
-    owner: 'workspace',
-    module: 'src/backend/services/workspace/resources/workspace-pr-aggregate.accessor',
-  },
   workspacePrDiscoveryAccessor: {
     owner: 'workspace',
     module: 'src/backend/services/workspace/resources/workspace-pr-discovery.accessor',
   },
-  workspacePrRatchetAccessor: {
+  workspacePrAggregateAccessor: {
     owner: 'workspace',
-    module: 'src/backend/services/workspace/resources/workspace-pr-ratchet.accessor',
+    module: 'src/backend/services/workspace/resources/workspace-pr-aggregate.accessor',
+  },
+  workspacePrMonitoringAccessor: {
+    owner: 'workspace',
+    module: 'src/backend/services/workspace/resources/workspace-pr-monitoring.accessor',
+  },
+  workspacePrEventAccessor: {
+    owner: 'workspace',
+    module: 'src/backend/services/workspace/resources/workspace-pr-event.accessor',
   },
   workspacePrAccessor: {
     owner: 'workspace',
@@ -46,6 +50,10 @@ const ACCESSOR_POLICIES = {
   workspaceNotificationAccessor: {
     owner: 'workspace',
     module: 'src/backend/services/workspace/resources/workspace-notification.accessor',
+  },
+  prDedicatedSessionAccessor: {
+    owner: 'session',
+    module: 'src/backend/services/session/resources/pr-dedicated-session.accessor',
   },
   agentSessionAccessor: {
     owner: 'session',

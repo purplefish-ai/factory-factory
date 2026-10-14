@@ -146,6 +146,34 @@ describe('WorkspaceQueryService', () => {
     });
   });
 
+  it('returns the durable PR monitoring projection in collection results', async () => {
+    const workspace = {
+      ...makeWorkspaceRow('w-monitoring', null),
+      prMonitoring: {
+        enabled: true,
+        recipientSessionId: 'main',
+        bindingRevision: 4,
+        pauseReason: 'USER_STOPPED',
+        pendingEventCount: 2,
+      },
+    };
+    mockFindByProjectIdWithSessions.mockResolvedValue([workspace]);
+    mockProjectFindById.mockResolvedValue({ id: 'p1', defaultBranch: 'main' });
+    mockGetAllPendingRequests.mockReturnValue(new Map());
+    mockGithubCheckHealth.mockResolvedValue({ isInstalled: false, isAuthenticated: false });
+    mockDeriveWorkspaceRuntimeState.mockReturnValue(defaultRuntimeState(workspace));
+    const result = await workspaceQueryService.listForProject('p1');
+    expect(result.workspaces[0]).toMatchObject({
+      prMonitoring: {
+        enabled: true,
+        recipientSessionId: 'main',
+        bindingRevision: 4,
+        pauseReason: 'USER_STOPPED',
+        pendingEventCount: 2,
+      },
+    });
+  });
+
   it('listForProject applies runtime-derived reasons, newest first', async () => {
     mockFindByProjectIdWithSessions.mockResolvedValue([
       {
@@ -241,8 +269,6 @@ describe('WorkspaceQueryService', () => {
         prUpdatedAt: new Date('2026-01-01T00:00:00.000Z'),
         ratchetEnabled: true,
         ratchetState: RatchetState.CI_RUNNING,
-        ratchetDispatchOutcome: null,
-        ratchetDispatchRetryCount: 0,
         runScriptStatus: RunScriptStatus.IDLE,
         hasHadSessions: true,
         agentSessions: [],
@@ -314,6 +340,7 @@ describe('WorkspaceQueryService', () => {
   });
 
   it('treats an alive-but-idle session as working, matching the snapshot store', async () => {
+    // Running between prompts must match the live board's WORKING state.
     mockFindByProjectIdWithSessions.mockResolvedValue([
       {
         id: 'w-alive',
@@ -365,6 +392,7 @@ describe('WorkspaceQueryService', () => {
   });
 
   it('findWorkspaceIdsInKanbanColumn matches a column only live session state produces', async () => {
+    // SQL column filtering previously dropped this live WORKING workspace.
     mockFindByProjectIdWithSessions.mockResolvedValue([
       {
         id: 'w-live',
@@ -598,6 +626,7 @@ describe('WorkspaceQueryService', () => {
     expect(mockGithubListReviewRequests).not.toHaveBeenCalled();
   });
 
+  // Serve cached stats immediately; reconciliation streams the background warm.
   it('listForProject serves cached git stats without awaiting a recompute', async () => {
     mockProjectFindById.mockResolvedValue({ id: 'p1', defaultBranch: 'main' });
     mockFindByProjectIdWithSessions.mockResolvedValue([
@@ -683,7 +712,13 @@ describe('WorkspaceQueryService', () => {
       prUpdatedAt: new Date('2026-01-01T00:10:00.000Z'),
       ratchetEnabled: true,
       ratchetState: RatchetState.REVIEW_PENDING,
-      ratchetDispatchStalled: false,
+      prMonitoring: {
+        enabled: true,
+        recipientSessionId: 'main',
+        bindingRevision: 1,
+        pauseReason: null,
+        pendingEventCount: 0,
+      },
       prHasMergeConflict: false,
       mode: WorkspaceMode.STANDARD,
       autoIterationStatus: null,
@@ -742,7 +777,6 @@ describe('WorkspaceQueryService', () => {
         prUpdatedAt: workspace.prUpdatedAt.toISOString(),
         ratchetEnabled: workspace.ratchetEnabled,
         ratchetState: workspace.ratchetState,
-        ratchetDispatchStalled: workspace.ratchetDispatchStalled,
         hasMergeConflict: workspace.prHasMergeConflict,
         mode: workspace.mode,
         autoIterationStatus: workspace.autoIterationStatus,
@@ -930,48 +964,6 @@ describe('WorkspaceQueryService', () => {
       await firstRefresh;
       await new Promise((resolve) => setImmediate(resolve));
     }
-  });
-
-  it('hasChanges checks workspace metadata and git stats safely', async () => {
-    mockFindByIdWithProject.mockResolvedValueOnce(null);
-    await expect(workspaceQueryService.hasChanges('w1')).resolves.toBe(false);
-    expect(mockGetWorkspaceGitStats).not.toHaveBeenCalled();
-
-    mockFindByIdWithProject.mockResolvedValueOnce({
-      id: 'w1',
-      worktreePath: '/tmp/w1',
-      project: { defaultBranch: 'main' },
-    });
-    mockGetWorkspaceGitStats.mockResolvedValueOnce({
-      total: 0,
-      additions: 0,
-      deletions: 0,
-      hasUncommitted: false,
-    });
-    await expect(workspaceQueryService.hasChanges('w1')).resolves.toBe(false);
-    expect(mockGetWorkspaceGitStats).toHaveBeenLastCalledWith('/tmp/w1', 'main');
-
-    mockFindByIdWithProject.mockResolvedValueOnce({
-      id: 'w1',
-      worktreePath: '/tmp/w1',
-      project: { defaultBranch: 'main' },
-    });
-    mockGetWorkspaceGitStats.mockResolvedValueOnce({
-      total: 1,
-      additions: 1,
-      deletions: 0,
-      hasUncommitted: false,
-    });
-    await expect(workspaceQueryService.hasChanges('w1')).resolves.toBe(true);
-    expect(mockGetWorkspaceGitStats).toHaveBeenLastCalledWith('/tmp/w1', 'main');
-
-    mockFindByIdWithProject.mockResolvedValueOnce({
-      id: 'w1',
-      worktreePath: '/tmp/w1',
-      project: { defaultBranch: 'main' },
-    });
-    mockGetWorkspaceGitStats.mockRejectedValueOnce(new Error('git failed'));
-    await expect(workspaceQueryService.hasChanges('w1')).resolves.toBe(false);
   });
 
   it('queries active workspaces by excluding ARCHIVING and ARCHIVED statuses', async () => {

@@ -14,7 +14,7 @@ import type * as Prisma from "../internal/prismaNamespace"
 
 /**
  * Model WorkspacePRDiscovery
- * Discovery belongs to the workspace even before its first PR exists.
+ * 
  */
 export type WorkspacePRDiscoveryModel = runtime.Types.Result.DefaultSelection<Prisma.$WorkspacePRDiscoveryPayload>
 

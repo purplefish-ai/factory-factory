@@ -1,49 +1,76 @@
-import { LightningIcon, SpinnerGapIcon } from '@phosphor-icons/react';
-import { RatchetToggleButton } from '@/client/features/workspace';
+import { CaretDownIcon } from '@phosphor-icons/react';
+import {
+  createPRMonitoringMenuProps,
+  PRMonitoringMenuItems,
+  RatchetToggleButton,
+} from '@/client/features/workspace';
 import { useToggleRatcheting } from '@/client/hooks/use-toggle-ratcheting';
-import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { PRDeliveryMode } from '@/shared/pr-monitoring';
 import type { WorkspaceHeaderWorkspace } from './types';
 
 export function RatchetingToggle({
   workspace,
   workspaceId,
-  renderAsMenuItem = false,
 }: {
   workspace: WorkspaceHeaderWorkspace;
   workspaceId: string;
-  renderAsMenuItem?: boolean;
 }) {
   const toggleRatcheting = useToggleRatcheting(workspace.projectId);
-
-  const workspaceRatchetEnabled = workspace.ratchetEnabled ?? true;
-
-  if (renderAsMenuItem) {
-    return (
-      <DropdownMenuItem
-        onSelect={() => {
-          toggleRatcheting.mutate({ workspaceId, enabled: !workspaceRatchetEnabled });
-        }}
-        disabled={toggleRatcheting.isPending}
-      >
-        {toggleRatcheting.isPending ? (
-          <SpinnerGapIcon className="h-4 w-4 animate-spin" />
-        ) : (
-          <LightningIcon className="h-4 w-4" />
-        )}
-        {workspaceRatchetEnabled ? 'Turn off Ratchet' : 'Turn on Ratchet'}
-      </DropdownMenuItem>
-    );
-  }
-
+  const mode = workspace.prMonitoring?.deliveryMode ?? PRDeliveryMode.MAIN;
   return (
-    <RatchetToggleButton
-      enabled={workspaceRatchetEnabled}
-      state={workspace.ratchetState}
-      animated={workspace.ratchetButtonAnimated ?? false}
-      disabled={toggleRatcheting.isPending}
-      onToggle={(enabled) => {
-        toggleRatcheting.mutate({ workspaceId, enabled });
-      }}
+    <>
+      {toggleRatcheting.recipientPicker}
+      <RatchetToggleButton
+        enabled={workspace.ratchetEnabled ?? false}
+        state={workspace.ratchetState}
+        animated={workspace.ratchetButtonAnimated ?? false}
+        disabled={toggleRatcheting.isPending}
+        onToggle={(enabled) => toggleRatcheting.mutate({ workspaceId, enabled })}
+      />
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-1"
+            aria-label={`PR update destination: ${mode === PRDeliveryMode.MAIN ? 'Main conversation' : 'Dedicated conversation per PR'}`}
+          >
+            <CaretDownIcon className="h-3 w-3" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-72">
+          <RatchetingMenuItems
+            workspace={workspace}
+            workspaceId={workspaceId}
+            toggleRatcheting={toggleRatcheting}
+          />
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </>
+  );
+}
+export function RatchetingMenuItems({
+  workspace,
+  workspaceId,
+  toggleRatcheting,
+}: {
+  workspace: WorkspaceHeaderWorkspace;
+  workspaceId: string;
+  toggleRatcheting: ReturnType<typeof useToggleRatcheting>;
+}) {
+  return (
+    <PRMonitoringMenuItems
+      {...createPRMonitoringMenuProps(
+        workspaceId,
+        { ...workspace.prMonitoring, enabled: workspace.ratchetEnabled ?? false },
+        toggleRatcheting
+      )}
     />
   );
 }

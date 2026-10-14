@@ -1,11 +1,7 @@
 import type { PrismaClient } from '@prisma-gen/client';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { githubCLIService, prSnapshotService } from '@/backend/services/github';
-import {
-  workspaceDataService,
-  workspacePrSnapshotService,
-  workspaceRatchetService,
-} from '@/backend/services/workspace';
+import { workspaceDataService, workspacePrSnapshotService } from '@/backend/services/workspace';
 import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,
@@ -41,16 +37,10 @@ beforeAll(async () => {
       name: 'Multi',
       branchName: 'workspace-branch',
       status: 'READY',
-      ratchet: { create: {} },
+      prMonitoring: { create: {} },
       prDiscovery: { create: {} },
       prs: {
-        create: {
-          id: 'pr-a',
-          url: 'https://github.com/org/repo/pull/1',
-          number: 1,
-          state: 'OPEN',
-          automation: { create: { dispatchOutcome: 'COMPLETED', dispatchSnapshotKey: 'a-done' } },
-        },
+        create: { id: 'pr-a', url: 'https://github.com/org/repo/pull/1', number: 1, state: 'OPEN' },
       },
     },
   });
@@ -63,10 +53,15 @@ beforeAll(async () => {
       attachDiscoveredPRsIfClaimMatches: (id, claim, urls) =>
         workspacePrSnapshotService.attachDiscoveredPRsIfClaimMatches(id, claim, urls),
       findPRContext: (id) => workspaceDataService.findPRContext(id),
+      recordSnapshot: (id, data) => workspacePrSnapshotService.record(id, data),
       applyPrSnapshotWithDispatchReset: (id, data) =>
         workspacePrSnapshotService.applyPrSnapshotWithDispatchReset(id, data),
       applyPrObservationWithDispatchReset: (id, data) =>
         workspacePrSnapshotService.applyPrObservationWithDispatchReset(id, data),
+      attachDiscoveredPRIfClaimMatches: (id, url, claim, at) =>
+        workspacePrSnapshotService.attachDiscoveredPRIfClaimMatches(id, url, claim, at),
+      updatePRSnapshotIfUrlMatches: (id, url, data, at) =>
+        workspacePrSnapshotService.updatePRSnapshotIfUrlMatches(id, url, data, at),
     },
   });
 }, 30_000);
@@ -86,47 +81,12 @@ it('adds another PR without replacing its sibling or changing the workspace bran
   expect(
     await db.prisma.workspacePR.count({ where: { workspaceId: 'multi', detachedAt: null } })
   ).toBe(2);
-  expect(
-    await db.prisma.workspacePR.findUnique({ where: { id: 'pr-a' }, include: { automation: true } })
-  ).toMatchObject({
+  expect(await db.prisma.workspacePR.findUnique({ where: { id: 'pr-a' } })).toMatchObject({
     url: 'https://github.com/org/repo/pull/1',
-    automation: { dispatchSnapshotKey: 'a-done', dispatchOutcome: 'COMPLETED' },
   });
   expect(await db.prisma.workspace.findUnique({ where: { id: 'multi' } })).toMatchObject({
     branchName: 'workspace-branch',
   });
-});
-
-it('clears only a removed PR ownership and rejects stale dispatch claims', async () => {
-  const attached = await workspacePrSnapshotService.attach(
-    'multi',
-    'https://github.com/other/repo/pull/1'
-  );
-  const pr = await workspacePrSnapshotService.find({ workspaceId: 'multi', prId: attached.prId });
-  expect(pr).not.toBeNull();
-  expect(
-    await workspaceRatchetService.recordDispatchIfEnabled('multi', {
-      prId: attached.prId,
-      expectedRevision: pr!.revision,
-      sessionId: 'fixer-a',
-      snapshotKey: 'a',
-      retryCount: 0,
-    })
-  ).toBe(true);
-  await workspacePrSnapshotService.detach({ workspaceId: 'multi', prId: attached.prId });
-  expect(
-    await db.prisma.workspaceRatchet.findUnique({ where: { workspaceId: 'multi' } })
-  ).toMatchObject({ activePrId: null, activeSessionId: null });
-  await workspacePrSnapshotService.attach('multi', pr!.url);
-  expect(
-    await workspaceRatchetService.recordDispatchIfEnabled('multi', {
-      prId: attached.prId,
-      expectedRevision: pr!.revision,
-      sessionId: 'late',
-      snapshotKey: 'a',
-      retryCount: 0,
-    })
-  ).toBe(false);
 });
 
 it('rejects a refresh started before detach and reattach', async () => {
@@ -158,37 +118,4 @@ it('rejects a refresh started before detach and reattach', async () => {
   expect(
     await workspacePrSnapshotService.find({ workspaceId: 'multi', prId: attached.prId })
   ).toMatchObject({ state: 'NONE' });
-});
-
-it('does not reclaim an invalidated startup dispatch after detach and reattach', async () => {
-  const { prId } = await workspacePrSnapshotService.attach(
-    'multi',
-    'https://github.com/o/r/pull/99'
-  );
-  expect(
-    await workspaceRatchetService.recordDispatchIfEnabled('multi', {
-      prId,
-      sessionId: 'startup',
-      snapshotKey: 'old',
-      retryCount: 0,
-    })
-  ).toBe(true);
-  await workspacePrSnapshotService.detach({ workspaceId: 'multi', prId });
-  await workspacePrSnapshotService.attach('multi', 'https://github.com/o/r/pull/99');
-  expect(
-    await workspaceRatchetService.recordDispatchIfEnabled('multi', {
-      prId,
-      sessionId: 'startup',
-      snapshotKey: 'old',
-      retryCount: 0,
-      requireExistingOwnership: true,
-    })
-  ).toBe(false);
-  expect(
-    await db.prisma.workspaceRatchet.findUnique({ where: { workspaceId: 'multi' } })
-  ).toMatchObject({ activePrId: null, activeSessionId: null });
-  expect(await db.prisma.workspacePRRatchet.findUnique({ where: { prId } })).toMatchObject({
-    dispatchOutcome: null,
-    activeSessionId: null,
-  });
 });

@@ -1,6 +1,8 @@
 import type { CIStatus, PRState, WorkspaceProviderSelection, WorkspaceStatus } from '@/shared/core';
 
 export interface PRDiscoveryClaim {
+  githubOwner: string;
+  githubRepo: string;
   branchName: string;
   checkedAt: Date;
   retryCount: number;
@@ -17,7 +19,6 @@ export interface PRSnapshotFields {
 export interface WorkspaceProviderSelectionSnapshot {
   id: string;
   defaultSessionProvider: WorkspaceProviderSelection;
-  ratchetSessionProvider: WorkspaceProviderSelection;
 }
 
 export interface WorkspaceFixerContext extends WorkspaceProviderSelectionSnapshot {

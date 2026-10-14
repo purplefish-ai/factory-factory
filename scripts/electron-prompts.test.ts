@@ -8,7 +8,7 @@ import { expect, it } from 'vitest';
 import { parse } from 'yaml';
 import { z } from 'zod';
 
-it('loads the Ratchet template from the unpacked Electron backend layout', () => {
+it('loads the adversarial review template from the unpacked Electron backend layout', () => {
   const root = resolve(import.meta.dirname, '..');
   const config = z
     .object({ files: z.array(z.string()), asarUnpack: z.array(z.string()) })
@@ -16,11 +16,11 @@ it('loads the Ratchet template from the unpacked Electron backend layout', () =>
   const resources = mkdtempSync(join(tmpdir(), 'ff-electron-prompts-'));
   try {
     const unpackedRoot = join(resources, 'app.asar.unpacked');
-    const modulePath = 'dist/src/backend/prompts/ratchet-dispatch.js';
-    const templatePath = 'dist/prompts/ratchet/dispatch.md';
+    const modulePath = 'dist/src/backend/prompts/adversarial-review-dispatch.js';
+    const templatePath = 'dist/prompts/adversarial-review/dispatch.md';
     const files = [
-      { path: modulePath, source: 'src/backend/prompts/ratchet-dispatch.ts' },
-      { path: templatePath, source: 'prompts/ratchet/dispatch.md' },
+      { path: modulePath, source: 'src/backend/prompts/adversarial-review-dispatch.ts' },
+      { path: templatePath, source: 'prompts/adversarial-review/dispatch.md' },
     ];
     for (const file of files) {
       const included =
@@ -55,13 +55,13 @@ it('loads the Ratchet template from the unpacked Electron backend layout', () =>
       [
         '--input-type=module',
         '-e',
-        `import { buildRatchetDispatchPrompt } from ${JSON.stringify(moduleUrl)};
-       console.log(buildRatchetDispatchPrompt('https://github.com/example/repo/pull/42', 42));`,
+        `import { buildAdversarialReviewDispatchPrompt } from ${JSON.stringify(moduleUrl)};
+       console.log(buildAdversarialReviewDispatchPrompt({ prUrl: 'https://github.com/example/repo/pull/42', prNumber: 42, prDescription: 'description', prDiff: 'diff', existingReviewCommentsSummary: 'none' }));`,
       ],
       { encoding: 'utf8' }
     );
     expect(output).toContain('https://github.com/example/repo/pull/42');
-    expect(output).toContain('Reply to unaddressed review feedback');
+    expect(output).toContain('description');
     expect(output).not.toMatch(/\{\{[A-Z_]+\}\}/);
   } finally {
     rmSync(resources, { recursive: true, force: true });

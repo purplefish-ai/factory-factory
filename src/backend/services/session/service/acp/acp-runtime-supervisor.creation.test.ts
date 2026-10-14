@@ -887,3 +887,24 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
     expect(handle.child.signalCode).toBe('SIGTERM');
   });
 });
+
+it('reports candidate ownership only to the creator and not a caller reusing it', async () => {
+  const handle = createTestProcessHandle();
+  const { supervisor } = createHarness(() => Promise.resolve(handle));
+  const creator = vi.fn();
+  const reuser = vi.fn();
+  await supervisor.getOrCreateClient(
+    'session-1',
+    defaultOptions(),
+    { ...defaultHandlers(), onRuntimeCreated: creator },
+    defaultContext()
+  );
+  await supervisor.getOrCreateClient(
+    'session-1',
+    defaultOptions(),
+    { ...defaultHandlers(), onRuntimeCreated: reuser },
+    defaultContext()
+  );
+  expect(creator).toHaveBeenCalledExactlyOnceWith(handle);
+  expect(reuser).not.toHaveBeenCalled();
+});

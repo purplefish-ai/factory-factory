@@ -156,9 +156,10 @@ messages:
 - Issue starts: `src/shared/issue-start-prompt.ts`, shared with the editable UI
   preview. It supplies untrusted issue data, the implementation/PR outcome,
   repository-defined verification, and screenshot/PR metadata.
-- PR maintenance: `prompts/ratchet/dispatch.md`, rendered by
-  `src/backend/prompts/ratchet-dispatch.ts` with PR context and reply
-  preferences.
+- PR updates: `src/backend/prompts/pr-event.ts` renders bounded facts and a
+  trusted enablement control for the existing main conversation. Delivery uses
+  the source-aware session queue and strict provider resume; see
+  [PR updates](pull-requests.md).
 - Quick actions: `prompts/quick-actions/` (see below).
 - Auto-iteration: `src/backend/services/auto-iteration/service/prompts.ts`.
   Implementation turns make one focused change; the loop owns verification and
@@ -178,10 +179,10 @@ behavior. Before introducing custom system-prompt metadata, revisit the SDK's
 custom/append snapshot semantics. See
 [the upgrade validation](../superpowers/plans/2026-09-09-remaining-dependencies.md).
 
-Auto-iteration and ratchet sessions use the configured ratchet permission
-preset, with YOLO as the fallback if settings cannot be read. Codex
-non-interactive startup for either workflow selects the unattended execution
-mode so approval requests do not stall the loop waiting for a viewer.
+Auto-iteration sessions use `autoIterationPermissions`, with YOLO as the
+fallback if settings cannot be read. Codex auto-iteration selects unattended
+execution mode. PR updates inherit their main conversation’s configuration and
+do not use a workflow-specific permission preset.
 
 ## Session lifecycle ownership
 
@@ -197,9 +198,9 @@ whether the stop was managed; coordinators consume this metadata directly,
 including after a browsing runtime is promoted to active use.
 
 Graceful server shutdown persists active sessions as `IDLE`, matching explicit
-stops, so deliberately stopped ratchet sessions are not retried as crashes on
-the next boot. Runtime-managed exits without a shutdown reservation still use
-the exit code to determine terminal status. Bulk shutdown retains its non-browse
+stops. PR delivery remains paused after an explicit stop until user
+continuation. Runtime-managed exits without a shutdown reservation still use the
+exit code to determine terminal status. Bulk shutdown retains its non-browse
 lifecycle reservations through event recording and runtime shutdown, then
 releases them on every exit path. Shutdown waits for a concurrent explicit
 stop’s lifecycle write and suppresses a duplicate event only after durable

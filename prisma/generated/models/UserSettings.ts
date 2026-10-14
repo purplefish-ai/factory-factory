@@ -54,7 +54,7 @@ export type UserSettingsMinAggregateOutputType = {
   defaultClaudeReasoningEffort: string | null
   defaultCodexReasoningEffort: string | null
   defaultWorkspacePermissions: $Enums.SessionPermissionPreset | null
-  ratchetPermissions: $Enums.SessionPermissionPreset | null
+  autoIterationPermissions: $Enums.SessionPermissionPreset | null
   reviewerSessionProvider: $Enums.SessionProvider | null
   reviewerClaudeModel: string | null
   reviewerCodexModel: string | null
@@ -85,7 +85,7 @@ export type UserSettingsMaxAggregateOutputType = {
   defaultClaudeReasoningEffort: string | null
   defaultCodexReasoningEffort: string | null
   defaultWorkspacePermissions: $Enums.SessionPermissionPreset | null
-  ratchetPermissions: $Enums.SessionPermissionPreset | null
+  autoIterationPermissions: $Enums.SessionPermissionPreset | null
   reviewerSessionProvider: $Enums.SessionProvider | null
   reviewerClaudeModel: string | null
   reviewerCodexModel: string | null
@@ -118,7 +118,7 @@ export type UserSettingsCountAggregateOutputType = {
   defaultClaudeReasoningEffort: number
   defaultCodexReasoningEffort: number
   defaultWorkspacePermissions: number
-  ratchetPermissions: number
+  autoIterationPermissions: number
   reviewerSessionProvider: number
   reviewerClaudeModel: number
   reviewerCodexModel: number
@@ -163,7 +163,7 @@ export type UserSettingsMinAggregateInputType = {
   defaultClaudeReasoningEffort?: true
   defaultCodexReasoningEffort?: true
   defaultWorkspacePermissions?: true
-  ratchetPermissions?: true
+  autoIterationPermissions?: true
   reviewerSessionProvider?: true
   reviewerClaudeModel?: true
   reviewerCodexModel?: true
@@ -194,7 +194,7 @@ export type UserSettingsMaxAggregateInputType = {
   defaultClaudeReasoningEffort?: true
   defaultCodexReasoningEffort?: true
   defaultWorkspacePermissions?: true
-  ratchetPermissions?: true
+  autoIterationPermissions?: true
   reviewerSessionProvider?: true
   reviewerClaudeModel?: true
   reviewerCodexModel?: true
@@ -227,7 +227,7 @@ export type UserSettingsCountAggregateInputType = {
   defaultClaudeReasoningEffort?: true
   defaultCodexReasoningEffort?: true
   defaultWorkspacePermissions?: true
-  ratchetPermissions?: true
+  autoIterationPermissions?: true
   reviewerSessionProvider?: true
   reviewerClaudeModel?: true
   reviewerCodexModel?: true
@@ -347,7 +347,7 @@ export type UserSettingsGroupByOutputType = {
   defaultClaudeReasoningEffort: string | null
   defaultCodexReasoningEffort: string | null
   defaultWorkspacePermissions: $Enums.SessionPermissionPreset
-  ratchetPermissions: $Enums.SessionPermissionPreset
+  autoIterationPermissions: $Enums.SessionPermissionPreset
   reviewerSessionProvider: $Enums.SessionProvider
   reviewerClaudeModel: string | null
   reviewerCodexModel: string | null
@@ -403,7 +403,7 @@ export type UserSettingsWhereInput = {
   defaultClaudeReasoningEffort?: Prisma.StringNullableFilter<"UserSettings"> | string | null
   defaultCodexReasoningEffort?: Prisma.StringNullableFilter<"UserSettings"> | string | null
   defaultWorkspacePermissions?: Prisma.EnumSessionPermissionPresetFilter<"UserSettings"> | $Enums.SessionPermissionPreset
-  ratchetPermissions?: Prisma.EnumSessionPermissionPresetFilter<"UserSettings"> | $Enums.SessionPermissionPreset
+  autoIterationPermissions?: Prisma.EnumSessionPermissionPresetFilter<"UserSettings"> | $Enums.SessionPermissionPreset
   reviewerSessionProvider?: Prisma.EnumSessionProviderFilter<"UserSettings"> | $Enums.SessionProvider
   reviewerClaudeModel?: Prisma.StringNullableFilter<"UserSettings"> | string | null
   reviewerCodexModel?: Prisma.StringNullableFilter<"UserSettings"> | string | null
@@ -436,7 +436,7 @@ export type UserSettingsOrderByWithRelationInput = {
   defaultClaudeReasoningEffort?: Prisma.SortOrderInput | Prisma.SortOrder
   defaultCodexReasoningEffort?: Prisma.SortOrderInput | Prisma.SortOrder
   defaultWorkspacePermissions?: Prisma.SortOrder
-  ratchetPermissions?: Prisma.SortOrder
+  autoIterationPermissions?: Prisma.SortOrder
   reviewerSessionProvider?: Prisma.SortOrder
   reviewerClaudeModel?: Prisma.SortOrderInput | Prisma.SortOrder
   reviewerCodexModel?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -472,7 +472,7 @@ export type UserSettingsWhereUniqueInput = Prisma.AtLeast<{
   defaultClaudeReasoningEffort?: Prisma.StringNullableFilter<"UserSettings"> | string | null
   defaultCodexReasoningEffort?: Prisma.StringNullableFilter<"UserSettings"> | string | null
   defaultWorkspacePermissions?: Prisma.EnumSessionPermissionPresetFilter<"UserSettings"> | $Enums.SessionPermissionPreset
-  ratchetPermissions?: Prisma.EnumSessionPermissionPresetFilter<"UserSettings"> | $Enums.SessionPermissionPreset
+  autoIterationPermissions?: Prisma.EnumSessionPermissionPresetFilter<"UserSettings"> | $Enums.SessionPermissionPreset
   reviewerSessionProvider?: Prisma.EnumSessionProviderFilter<"UserSettings"> | $Enums.SessionProvider
   reviewerClaudeModel?: Prisma.StringNullableFilter<"UserSettings"> | string | null
   reviewerCodexModel?: Prisma.StringNullableFilter<"UserSettings"> | string | null
@@ -505,7 +505,7 @@ export type UserSettingsOrderByWithAggregationInput = {
   defaultClaudeReasoningEffort?: Prisma.SortOrderInput | Prisma.SortOrder
   defaultCodexReasoningEffort?: Prisma.SortOrderInput | Prisma.SortOrder
   defaultWorkspacePermissions?: Prisma.SortOrder
-  ratchetPermissions?: Prisma.SortOrder
+  autoIterationPermissions?: Prisma.SortOrder
   reviewerSessionProvider?: Prisma.SortOrder
   reviewerClaudeModel?: Prisma.SortOrderInput | Prisma.SortOrder
   reviewerCodexModel?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -546,7 +546,7 @@ export type UserSettingsScalarWhereWithAggregatesInput = {
   defaultClaudeReasoningEffort?: Prisma.StringNullableWithAggregatesFilter<"UserSettings"> | string | null
   defaultCodexReasoningEffort?: Prisma.StringNullableWithAggregatesFilter<"UserSettings"> | string | null
   defaultWorkspacePermissions?: Prisma.EnumSessionPermissionPresetWithAggregatesFilter<"UserSettings"> | $Enums.SessionPermissionPreset
-  ratchetPermissions?: Prisma.EnumSessionPermissionPresetWithAggregatesFilter<"UserSettings"> | $Enums.SessionPermissionPreset
+  autoIterationPermissions?: Prisma.EnumSessionPermissionPresetWithAggregatesFilter<"UserSettings"> | $Enums.SessionPermissionPreset
   reviewerSessionProvider?: Prisma.EnumSessionProviderWithAggregatesFilter<"UserSettings"> | $Enums.SessionProvider
   reviewerClaudeModel?: Prisma.StringNullableWithAggregatesFilter<"UserSettings"> | string | null
   reviewerCodexModel?: Prisma.StringNullableWithAggregatesFilter<"UserSettings"> | string | null
@@ -579,7 +579,7 @@ export type UserSettingsCreateInput = {
   defaultClaudeReasoningEffort?: string | null
   defaultCodexReasoningEffort?: string | null
   defaultWorkspacePermissions?: $Enums.SessionPermissionPreset
-  ratchetPermissions?: $Enums.SessionPermissionPreset
+  autoIterationPermissions?: $Enums.SessionPermissionPreset
   reviewerSessionProvider?: $Enums.SessionProvider
   reviewerClaudeModel?: string | null
   reviewerCodexModel?: string | null
@@ -612,7 +612,7 @@ export type UserSettingsUncheckedCreateInput = {
   defaultClaudeReasoningEffort?: string | null
   defaultCodexReasoningEffort?: string | null
   defaultWorkspacePermissions?: $Enums.SessionPermissionPreset
-  ratchetPermissions?: $Enums.SessionPermissionPreset
+  autoIterationPermissions?: $Enums.SessionPermissionPreset
   reviewerSessionProvider?: $Enums.SessionProvider
   reviewerClaudeModel?: string | null
   reviewerCodexModel?: string | null
@@ -645,7 +645,7 @@ export type UserSettingsUpdateInput = {
   defaultClaudeReasoningEffort?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   defaultCodexReasoningEffort?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   defaultWorkspacePermissions?: Prisma.EnumSessionPermissionPresetFieldUpdateOperationsInput | $Enums.SessionPermissionPreset
-  ratchetPermissions?: Prisma.EnumSessionPermissionPresetFieldUpdateOperationsInput | $Enums.SessionPermissionPreset
+  autoIterationPermissions?: Prisma.EnumSessionPermissionPresetFieldUpdateOperationsInput | $Enums.SessionPermissionPreset
   reviewerSessionProvider?: Prisma.EnumSessionProviderFieldUpdateOperationsInput | $Enums.SessionProvider
   reviewerClaudeModel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   reviewerCodexModel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -678,7 +678,7 @@ export type UserSettingsUncheckedUpdateInput = {
   defaultClaudeReasoningEffort?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   defaultCodexReasoningEffort?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   defaultWorkspacePermissions?: Prisma.EnumSessionPermissionPresetFieldUpdateOperationsInput | $Enums.SessionPermissionPreset
-  ratchetPermissions?: Prisma.EnumSessionPermissionPresetFieldUpdateOperationsInput | $Enums.SessionPermissionPreset
+  autoIterationPermissions?: Prisma.EnumSessionPermissionPresetFieldUpdateOperationsInput | $Enums.SessionPermissionPreset
   reviewerSessionProvider?: Prisma.EnumSessionProviderFieldUpdateOperationsInput | $Enums.SessionProvider
   reviewerClaudeModel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   reviewerCodexModel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -711,7 +711,7 @@ export type UserSettingsCreateManyInput = {
   defaultClaudeReasoningEffort?: string | null
   defaultCodexReasoningEffort?: string | null
   defaultWorkspacePermissions?: $Enums.SessionPermissionPreset
-  ratchetPermissions?: $Enums.SessionPermissionPreset
+  autoIterationPermissions?: $Enums.SessionPermissionPreset
   reviewerSessionProvider?: $Enums.SessionProvider
   reviewerClaudeModel?: string | null
   reviewerCodexModel?: string | null
@@ -744,7 +744,7 @@ export type UserSettingsUpdateManyMutationInput = {
   defaultClaudeReasoningEffort?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   defaultCodexReasoningEffort?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   defaultWorkspacePermissions?: Prisma.EnumSessionPermissionPresetFieldUpdateOperationsInput | $Enums.SessionPermissionPreset
-  ratchetPermissions?: Prisma.EnumSessionPermissionPresetFieldUpdateOperationsInput | $Enums.SessionPermissionPreset
+  autoIterationPermissions?: Prisma.EnumSessionPermissionPresetFieldUpdateOperationsInput | $Enums.SessionPermissionPreset
   reviewerSessionProvider?: Prisma.EnumSessionProviderFieldUpdateOperationsInput | $Enums.SessionProvider
   reviewerClaudeModel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   reviewerCodexModel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -777,7 +777,7 @@ export type UserSettingsUncheckedUpdateManyInput = {
   defaultClaudeReasoningEffort?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   defaultCodexReasoningEffort?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   defaultWorkspacePermissions?: Prisma.EnumSessionPermissionPresetFieldUpdateOperationsInput | $Enums.SessionPermissionPreset
-  ratchetPermissions?: Prisma.EnumSessionPermissionPresetFieldUpdateOperationsInput | $Enums.SessionPermissionPreset
+  autoIterationPermissions?: Prisma.EnumSessionPermissionPresetFieldUpdateOperationsInput | $Enums.SessionPermissionPreset
   reviewerSessionProvider?: Prisma.EnumSessionProviderFieldUpdateOperationsInput | $Enums.SessionProvider
   reviewerClaudeModel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   reviewerCodexModel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -810,7 +810,7 @@ export type UserSettingsCountOrderByAggregateInput = {
   defaultClaudeReasoningEffort?: Prisma.SortOrder
   defaultCodexReasoningEffort?: Prisma.SortOrder
   defaultWorkspacePermissions?: Prisma.SortOrder
-  ratchetPermissions?: Prisma.SortOrder
+  autoIterationPermissions?: Prisma.SortOrder
   reviewerSessionProvider?: Prisma.SortOrder
   reviewerClaudeModel?: Prisma.SortOrder
   reviewerCodexModel?: Prisma.SortOrder
@@ -847,7 +847,7 @@ export type UserSettingsMaxOrderByAggregateInput = {
   defaultClaudeReasoningEffort?: Prisma.SortOrder
   defaultCodexReasoningEffort?: Prisma.SortOrder
   defaultWorkspacePermissions?: Prisma.SortOrder
-  ratchetPermissions?: Prisma.SortOrder
+  autoIterationPermissions?: Prisma.SortOrder
   reviewerSessionProvider?: Prisma.SortOrder
   reviewerClaudeModel?: Prisma.SortOrder
   reviewerCodexModel?: Prisma.SortOrder
@@ -878,7 +878,7 @@ export type UserSettingsMinOrderByAggregateInput = {
   defaultClaudeReasoningEffort?: Prisma.SortOrder
   defaultCodexReasoningEffort?: Prisma.SortOrder
   defaultWorkspacePermissions?: Prisma.SortOrder
-  ratchetPermissions?: Prisma.SortOrder
+  autoIterationPermissions?: Prisma.SortOrder
   reviewerSessionProvider?: Prisma.SortOrder
   reviewerClaudeModel?: Prisma.SortOrder
   reviewerCodexModel?: Prisma.SortOrder
@@ -935,7 +935,7 @@ export type UserSettingsSelect<ExtArgs extends runtime.Types.Extensions.Internal
   defaultClaudeReasoningEffort?: boolean
   defaultCodexReasoningEffort?: boolean
   defaultWorkspacePermissions?: boolean
-  ratchetPermissions?: boolean
+  autoIterationPermissions?: boolean
   reviewerSessionProvider?: boolean
   reviewerClaudeModel?: boolean
   reviewerCodexModel?: boolean
@@ -968,7 +968,7 @@ export type UserSettingsSelectCreateManyAndReturn<ExtArgs extends runtime.Types.
   defaultClaudeReasoningEffort?: boolean
   defaultCodexReasoningEffort?: boolean
   defaultWorkspacePermissions?: boolean
-  ratchetPermissions?: boolean
+  autoIterationPermissions?: boolean
   reviewerSessionProvider?: boolean
   reviewerClaudeModel?: boolean
   reviewerCodexModel?: boolean
@@ -1001,7 +1001,7 @@ export type UserSettingsSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.
   defaultClaudeReasoningEffort?: boolean
   defaultCodexReasoningEffort?: boolean
   defaultWorkspacePermissions?: boolean
-  ratchetPermissions?: boolean
+  autoIterationPermissions?: boolean
   reviewerSessionProvider?: boolean
   reviewerClaudeModel?: boolean
   reviewerCodexModel?: boolean
@@ -1034,7 +1034,7 @@ export type UserSettingsSelectScalar = {
   defaultClaudeReasoningEffort?: boolean
   defaultCodexReasoningEffort?: boolean
   defaultWorkspacePermissions?: boolean
-  ratchetPermissions?: boolean
+  autoIterationPermissions?: boolean
   reviewerSessionProvider?: boolean
   reviewerClaudeModel?: boolean
   reviewerCodexModel?: boolean
@@ -1049,7 +1049,7 @@ export type UserSettingsSelectScalar = {
   updatedAt?: boolean
 }
 
-export type UserSettingsOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "userId" | "preferredIde" | "customIdeCommand" | "playSoundOnComplete" | "notificationSoundPath" | "workspaceOrder" | "cachedSlashCommands" | "ratchetEnabled" | "ratchetReplyToPrComments" | "ratchetReviewTriggerMode" | "defaultSessionProvider" | "defaultClaudeModel" | "defaultCodexModel" | "defaultClaudeReasoningEffort" | "defaultCodexReasoningEffort" | "defaultWorkspacePermissions" | "ratchetPermissions" | "reviewerSessionProvider" | "reviewerClaudeModel" | "reviewerCodexModel" | "postReviewToGitHub" | "voiceModeEnabled" | "deepgramApiKeyEncrypted" | "voiceTtsModel" | "voiceTtsSpeed" | "voiceUtteranceEndMs" | "voiceBargeInSustainedMs" | "createdAt" | "updatedAt", ExtArgs["result"]["userSettings"]>
+export type UserSettingsOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "userId" | "preferredIde" | "customIdeCommand" | "playSoundOnComplete" | "notificationSoundPath" | "workspaceOrder" | "cachedSlashCommands" | "ratchetEnabled" | "ratchetReplyToPrComments" | "ratchetReviewTriggerMode" | "defaultSessionProvider" | "defaultClaudeModel" | "defaultCodexModel" | "defaultClaudeReasoningEffort" | "defaultCodexReasoningEffort" | "defaultWorkspacePermissions" | "autoIterationPermissions" | "reviewerSessionProvider" | "reviewerClaudeModel" | "reviewerCodexModel" | "postReviewToGitHub" | "voiceModeEnabled" | "deepgramApiKeyEncrypted" | "voiceTtsModel" | "voiceTtsSpeed" | "voiceUtteranceEndMs" | "voiceBargeInSustainedMs" | "createdAt" | "updatedAt", ExtArgs["result"]["userSettings"]>
 
 export type $UserSettingsPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   name: "UserSettings"
@@ -1072,7 +1072,7 @@ export type $UserSettingsPayload<ExtArgs extends runtime.Types.Extensions.Intern
     defaultClaudeReasoningEffort: string | null
     defaultCodexReasoningEffort: string | null
     defaultWorkspacePermissions: $Enums.SessionPermissionPreset
-    ratchetPermissions: $Enums.SessionPermissionPreset
+    autoIterationPermissions: $Enums.SessionPermissionPreset
     reviewerSessionProvider: $Enums.SessionProvider
     reviewerClaudeModel: string | null
     reviewerCodexModel: string | null
@@ -1525,7 +1525,7 @@ export interface UserSettingsFieldRefs {
   readonly defaultClaudeReasoningEffort: Prisma.FieldRef<"UserSettings", 'String'>
   readonly defaultCodexReasoningEffort: Prisma.FieldRef<"UserSettings", 'String'>
   readonly defaultWorkspacePermissions: Prisma.FieldRef<"UserSettings", 'SessionPermissionPreset'>
-  readonly ratchetPermissions: Prisma.FieldRef<"UserSettings", 'SessionPermissionPreset'>
+  readonly autoIterationPermissions: Prisma.FieldRef<"UserSettings", 'SessionPermissionPreset'>
   readonly reviewerSessionProvider: Prisma.FieldRef<"UserSettings", 'SessionProvider'>
   readonly reviewerClaudeModel: Prisma.FieldRef<"UserSettings", 'String'>
   readonly reviewerCodexModel: Prisma.FieldRef<"UserSettings", 'String'>

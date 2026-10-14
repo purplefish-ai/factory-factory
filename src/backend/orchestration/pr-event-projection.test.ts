@@ -17,12 +17,6 @@ const pr = (id: string, url: string, number: number): WorkspacePullRequest => ({
   ciStatus: 'PENDING',
   hasMergeConflict: false,
   syncedAt: null,
-  ratchet: {
-    lastCheckedAt: null,
-    dispatchOutcome: null,
-    dispatchRetryCount: 0,
-    dispatchStalled: false,
-  },
 });
 function previous(prs: WorkspacePullRequest[]) {
   const store = new WorkspaceSnapshotStore();

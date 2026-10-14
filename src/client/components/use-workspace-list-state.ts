@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CIStatus, PRState, RatchetState, RunScriptStatus } from '@/shared/core';
+import type { PRMonitoringProjection } from '@/shared/pr-monitoring';
 import type { SessionSummary } from '@/shared/session-runtime';
 import type { WorkspacePullRequest } from '@/shared/workspace-pr';
 import type { WorkspacePRSummary } from '@/shared/workspace-pr-summary';
@@ -36,6 +37,7 @@ export interface ServerWorkspace {
   } | null;
   lastActivityAt?: string | null;
   ratchetEnabled?: boolean;
+  prMonitoring?: PRMonitoringProjection;
   ratchetState?: RatchetState | null;
   ratchetButtonAnimated?: boolean;
   flowPhase?: string | null;
