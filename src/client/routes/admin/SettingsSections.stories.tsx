@@ -2,11 +2,13 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TRPCClientError } from '@trpc/client';
 import { observable } from '@trpc/server/observable';
+import { ThemeProvider } from 'next-themes';
 import { type ReactNode, useState } from 'react';
 import { Toaster } from 'sonner';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import { trpc } from '@/client/lib/trpc';
 import type { FactoryConfig } from '@/shared/schemas/factory-config.schema';
+import { AppearanceSettingsSection } from './AppearanceSettingsSection';
 import { AppInfoSection } from './AppInfoSection';
 import { ChatProviderDefaultsSection } from './ChatProviderDefaultsSection';
 import { CliAuthSection } from './CliAuthSection';
@@ -33,6 +35,12 @@ const defaultSettings = {
   ratchetReplyToPrComments: true,
   ratchetReviewTriggerMode: 'CHANGES_REQUESTED',
   autoIterationPermissions: 'YOLO',
+  appearanceColorScheme: 'factory',
+  appearanceBackgroundColor: null as string | null,
+  appearanceForegroundColor: null as string | null,
+  appearanceFontScale: 100,
+  appearanceFontSans: null as string | null,
+  appearanceFontMono: null as string | null,
 };
 
 // A local transport keeps these interactive examples independent of a running backend.
@@ -183,6 +191,78 @@ export const Notifications: Story = {
     );
     await waitFor(() => expect(toggle).not.toBeChecked());
   },
+};
+
+// The Mode selector talks to next-themes, which the app provides in RootLayout.
+function AppearanceStoryProvider({ children }: { children: ReactNode }) {
+  return (
+    <ThemeProvider attribute="class" storageKey="storybook-appearance-theme" enableSystem={false}>
+      {children}
+    </ThemeProvider>
+  );
+}
+
+export const Appearance: Story = {
+  render: () => (
+    <AppearanceStoryProvider>
+      <SettingsStoryProvider>
+        <AppearanceSettingsSection />
+      </SettingsStoryProvider>
+    </AppearanceStoryProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const fontSize = await canvas.findByRole('slider', { name: 'Font size' });
+    await expect(fontSize).toHaveAttribute('aria-valuetext', '100%');
+    await userEvent.click(await canvas.findByLabelText('Color scheme'));
+    await userEvent.click(await within(document.body).findByRole('option', { name: 'Solarized' }));
+    await waitFor(() =>
+      expect(onRequest).toHaveBeenCalledWith('userSettings.update', {
+        appearanceColorScheme: 'solarized',
+      })
+    );
+    await waitFor(() =>
+      expect(canvas.getByLabelText('Color scheme')).toHaveTextContent('Solarized')
+    );
+    await expect(canvas.getByRole('button', { name: 'Reset appearance' })).toBeEnabled();
+  },
+};
+
+export const CustomizedAppearance: Story = {
+  render: () => (
+    <SettingsStoryProvider
+      settings={{
+        appearanceColorScheme: 'high-contrast',
+        appearanceBackgroundColor: '#000000',
+        appearanceForegroundColor: '#ffff00',
+        appearanceFontScale: 125,
+        appearanceFontSans: '"Inter", ui-sans-serif, system-ui, sans-serif',
+        appearanceFontMono: 'Fira Code',
+      }}
+    >
+      <AppearanceStoryProvider>
+        <AppearanceSettingsSection />
+      </AppearanceStoryProvider>
+    </SettingsStoryProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByLabelText('Monospace font')).toHaveTextContent('Custom');
+    await expect(canvas.getByRole('textbox', { name: 'Monospace font family' })).toHaveValue(
+      'Fira Code'
+    );
+    await expect(canvas.getByText('125%')).toBeVisible();
+  },
+};
+
+export const LoadingAppearance: Story = {
+  render: () => (
+    <SettingsStoryProvider loading>
+      <AppearanceStoryProvider>
+        <AppearanceSettingsSection />
+      </AppearanceStoryProvider>
+    </SettingsStoryProvider>
+  ),
 };
 
 export const LoadingNotifications: Story = {

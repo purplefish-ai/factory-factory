@@ -1,5 +1,6 @@
 export { AdversarialReviewSection } from './AdversarialReviewSection';
 export { type ApiUsageData, ApiUsageSection, type ApiUsageSectionProps } from './ApiUsageSection';
+export { AppearanceSettingsSection } from './AppearanceSettingsSection';
 export { AppInfoSection } from './AppInfoSection';
 export { ChatProviderDefaultsSection } from './ChatProviderDefaultsSection';
 export { CliAuthSection } from './CliAuthSection';

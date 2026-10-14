@@ -146,6 +146,26 @@ export const ThemedSlider: Story = {
   },
 };
 
+export const RangeValueAnnouncements: Story = {
+  render: () => (
+    <Slider
+      defaultValue={[20, 80]}
+      className="m-4 max-w-sm"
+      aria-label="Range"
+      aria-valuetext="20 percent"
+    />
+  ),
+  play: async ({ canvas }) => {
+    const thumbs = canvas.getAllByRole('slider', { name: 'Range' });
+    await expect(thumbs).toHaveLength(2);
+    await expect(thumbs[0]).toHaveAttribute('aria-valuenow', '20');
+    await expect(thumbs[1]).toHaveAttribute('aria-valuenow', '80');
+    for (const thumb of thumbs) {
+      await expect(thumb).not.toHaveAttribute('aria-valuetext');
+    }
+  },
+};
+
 export const SheetHeading: Story = {
   render: () => (
     <Sheet>

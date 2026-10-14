@@ -61,4 +61,24 @@ describe('userSettingsAccessor.update', () => {
 
     expect(settings.reviewerClaudeModel).toBeNull();
   });
+
+  it('fills appearance defaults when the first write is an appearance change', async () => {
+    mockUpsert.mockImplementation(
+      async ({ create }: { create: Record<string, unknown> }) => create
+    );
+
+    const settings = await userSettingsAccessor.update({ appearanceFontScale: 125 });
+
+    expect(settings).toMatchObject({
+      appearanceColorScheme: 'factory',
+      appearanceBackgroundColor: null,
+      appearanceForegroundColor: null,
+      appearanceFontScale: 125,
+      appearanceFontSans: null,
+      appearanceFontMono: null,
+    });
+    expect(mockUpsert.mock.calls[0]?.[0].update).toEqual(
+      expect.objectContaining({ appearanceFontScale: 125 })
+    );
+  });
 });

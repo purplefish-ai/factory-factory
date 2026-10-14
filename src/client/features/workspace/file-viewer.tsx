@@ -239,11 +239,13 @@ function FileViewerContent({
           padding: '1rem',
           background: 'transparent',
           fontSize: '0.75rem',
+          fontFamily: 'var(--font-mono)',
           lineHeight: '1.5',
         }}
         codeTagProps={{
           style: {
             background: 'transparent',
+            fontFamily: 'var(--font-mono)',
           },
         }}
         lineNumberStyle={{

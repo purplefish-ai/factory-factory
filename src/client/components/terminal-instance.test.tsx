@@ -1,12 +1,22 @@
 // @vitest-environment jsdom
 
+import { Terminal } from '@xterm/xterm';
 import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_APPEARANCE } from '@/shared/appearance';
 import { TerminalInstance } from './terminal-instance';
 
 const mocks = vi.hoisted(() => ({
+  appearance: {
+    colorScheme: 'factory',
+    backgroundColor: null as string | null,
+    foregroundColor: null as string | null,
+    fontScale: 100,
+    fontSans: null as string | null,
+    fontMono: null as string | null,
+  },
   fit: vi.fn(),
   clear: vi.fn(),
   dispose: vi.fn(),
@@ -26,7 +36,7 @@ vi.mock('@xterm/addon-fit', () => ({
 }));
 
 vi.mock('@xterm/xterm', () => ({
-  Terminal: vi.fn(function Terminal() {
+  Terminal: vi.fn(function Terminal(options: Record<string, unknown>) {
     return {
       clear: mocks.clear,
       cols: 80,
@@ -35,10 +45,15 @@ vi.mock('@xterm/xterm', () => ({
       loadAddon: mocks.loadAddon,
       onData: mocks.onData,
       open: mocks.open,
+      options: { ...options },
       rows: 24,
       write: mocks.write,
     };
   }),
+}));
+
+vi.mock('@/client/components/appearance-provider', () => ({
+  useAppearance: () => mocks.appearance,
 }));
 
 vi.mock('@xterm/xterm/css/xterm.css', () => ({}));
@@ -51,6 +66,8 @@ class MockResizeObserver {
 describe('TerminalInstance', () => {
   beforeEach(() => {
     vi.stubGlobal('ResizeObserver', MockResizeObserver);
+    Object.assign(mocks.appearance, DEFAULT_APPEARANCE);
+    vi.mocked(Terminal).mockClear();
     mocks.fit.mockReset();
     mocks.clear.mockReset();
     mocks.dispose.mockReset();
@@ -64,6 +81,61 @@ describe('TerminalInstance', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     document.body.innerHTML = '';
+  });
+
+  it('uses the default terminal font when appearance is default', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    flushSync(() => {
+      root.render(
+        createElement(TerminalInstance, { onData: vi.fn(), onResize: vi.fn(), output: '' })
+      );
+    });
+
+    expect(vi.mocked(Terminal).mock.calls[0]?.[0]).toMatchObject({
+      fontSize: 13,
+      fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+    });
+
+    root.unmount();
+  });
+
+  it('scales the font and applies the monospace font from appearance settings', () => {
+    mocks.appearance.fontScale = 150;
+    mocks.appearance.fontMono = '"Fira Code", monospace';
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const onResize = vi.fn();
+
+    flushSync(() => {
+      root.render(createElement(TerminalInstance, { onData: vi.fn(), onResize, output: '' }));
+    });
+
+    expect(vi.mocked(Terminal).mock.calls[0]?.[0]).toMatchObject({
+      fontSize: 20,
+      fontFamily: '"Fira Code", monospace',
+    });
+    // Mount reports size once; the font effect must not refit when nothing changed.
+    expect(mocks.fit).toHaveBeenCalledTimes(1);
+    expect(onResize).toHaveBeenCalledTimes(1);
+
+    mocks.appearance.fontScale = 100;
+    flushSync(() => {
+      root.render(createElement(TerminalInstance, { onData: vi.fn(), onResize, output: '' }));
+    });
+
+    const instance = vi.mocked(Terminal).mock.results[0]?.value as {
+      options: Record<string, unknown>;
+    };
+    expect(instance.options.fontSize).toBe(13);
+    expect(instance.options.fontFamily).toBe('"Fira Code", monospace');
+    expect(mocks.fit).toHaveBeenCalledTimes(2);
+    expect(onResize).toHaveBeenCalledTimes(2);
+
+    root.unmount();
   });
 
   it('appends only the new suffix when output grows', () => {

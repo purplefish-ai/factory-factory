@@ -12,6 +12,12 @@ import {
 import { z } from 'zod';
 import type { ApplicationServices } from '@/backend/app-context';
 import { execCommand } from '@/backend/lib/shell';
+import {
+  colorSchemeIdSchema,
+  fontFamilySchema,
+  fontScaleSchema,
+  hexColorSchema,
+} from '@/shared/appearance';
 import { publicProcedure, router, trustedLocalProcedure } from './trpc';
 
 const providerModelOptionSchema = z.object({
@@ -181,6 +187,13 @@ export const userSettingsRouter = router({
         reviewerClaudeModel: z.string().trim().min(1).nullable().optional(),
         reviewerCodexModel: z.string().trim().min(1).nullable().optional(),
         postReviewToGitHub: z.boolean().optional(),
+        // Appearance
+        appearanceColorScheme: colorSchemeIdSchema.optional(),
+        appearanceBackgroundColor: hexColorSchema.nullable().optional(),
+        appearanceForegroundColor: hexColorSchema.nullable().optional(),
+        appearanceFontScale: fontScaleSchema.optional(),
+        appearanceFontSans: fontFamilySchema.nullable().optional(),
+        appearanceFontMono: fontFamilySchema.nullable().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
