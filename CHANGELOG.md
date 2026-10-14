@@ -8,7 +8,7 @@ and this project adheres to
 
 ## [Unreleased]
 
-## [0.4.10] - 2026-10-11
+## [0.4.10] - 2026-10-14
 
 ### Added
 
@@ -20,6 +20,10 @@ and this project adheres to
 
 ### Changed
 
+- Replace the Ratchet fixer workflow with durable PR monitoring updates queued
+  in a selected main conversation or one reusable dedicated conversation per PR,
+  preserving human-message priority, queued updates across destination changes,
+  and delivery recovery (#2447)
 - Refresh dependencies, including ACP SDK 1.7, Claude ACP 0.88, Linear SDK 97.1,
   Electron 44.7, Storybook 10.6.1, and Vitest 5.0.3 (#2384, #2439)
 - Upgrade Mermaid to 12 while preserving diagram appearance (#2440)
@@ -79,6 +83,8 @@ and this project adheres to
 ### Documentation
 
 - Document Claude model catalog caching (#2389)
+- Clarify multi-PR workspace state, PR cache ownership, and backup behavior
+  (#2448)
 
 ## [0.4.9] - 2026-09-17
 
