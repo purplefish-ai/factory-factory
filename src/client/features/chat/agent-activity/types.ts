@@ -4,23 +4,9 @@
 
 import type { ToolResultContentValue as _ToolResultContentValue } from '@/lib/chat-protocol';
 
-// Re-export commonly used chat protocol types for index.ts
-export type { AgentMessage, ChatMessage } from '@/lib/chat-protocol';
-
 // =============================================================================
 // Agent-Specific Types
 // =============================================================================
-
-/**
- * Tool call group for rendering multiple tool calls together.
- */
-export interface ToolCallGroup {
-  id: string;
-  toolCalls: ToolCallInfo[];
-  startTimestamp: string;
-  endTimestamp?: string;
-  isComplete: boolean;
-}
 
 /**
  * Information about a single tool call.

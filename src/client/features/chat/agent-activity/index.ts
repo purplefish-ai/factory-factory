@@ -1,21 +1,5 @@
 // Main components
-export type { GroupedMessageItemRendererProps, MessageItemProps } from './agent-activity';
-export { GroupedMessageItemRenderer, MessageItem } from './agent-activity';
-export { CopyMessageButton } from './copy-message-button';
+export { GroupedMessageItemRenderer } from './agent-activity';
 
 // Message renderers
-export {
-  AssistantMessageRenderer,
-  ErrorRenderer,
-  LoadingIndicator,
-  MessageWrapper,
-  ResultRenderer,
-  StreamDeltaRenderer,
-  ToolCallRenderer,
-} from './message-renderers';
-
-// Tool renderers
-export { ToolCallGroupRenderer, ToolInfoRenderer } from './tool-renderers';
-
-// Types
-export type { AgentMessage, ChatMessage, ToolCallGroup, ToolCallInfo } from './types';
+export { LoadingIndicator } from './message-renderers';
