@@ -6,8 +6,7 @@ import {
   SAMPLE_FILE_CONTENTS,
   SAMPLE_FILE_PATHS,
 } from '@/lib/claude-fixtures';
-import { ToolCallGroupRenderer, ToolInfoRenderer, ToolSequenceGroup } from './tool-renderers';
-import type { ToolCallInfo } from './types';
+import { ToolInfoRenderer, ToolSequenceGroup } from './tool-renderers';
 
 // =============================================================================
 // Helper Functions for Creating Messages
@@ -422,138 +421,6 @@ export const ToolResultCollapsed: Story = {
     message: createToolResultClaudeMessage('toolu_123', SAMPLE_FILE_CONTENTS.typescript),
     defaultOpen: false,
   },
-};
-
-// =============================================================================
-// ToolCallGroupRenderer Stories
-// =============================================================================
-
-const createToolCallInfo = (
-  name: string,
-  input: Record<string, unknown>,
-  result?: { content: string; isError: boolean }
-): ToolCallInfo => ({
-  id: `toolu_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
-  name,
-  input,
-  result: result ? { content: result.content, isError: result.isError } : undefined,
-  timestamp: new Date().toISOString(),
-});
-
-export const ToolCallGroup: StoryObj<typeof ToolCallGroupRenderer> = {
-  render: () => (
-    <ToolCallGroupRenderer
-      defaultOpen={true}
-      toolCalls={[
-        createToolCallInfo(
-          'Glob',
-          { pattern: '**/*.tsx', path: '/Users/developer/project' },
-          {
-            content: JSON.stringify(
-              [
-                '/Users/developer/project/src/components/Button.tsx',
-                '/Users/developer/project/src/components/Input.tsx',
-              ],
-              null,
-              2
-            ),
-            isError: false,
-          }
-        ),
-        createToolCallInfo(
-          'Read',
-          { file_path: '/Users/developer/project/src/components/Button.tsx' },
-          { content: SAMPLE_FILE_CONTENTS.typescript, isError: false }
-        ),
-        createToolCallInfo(
-          'Read',
-          { file_path: '/Users/developer/project/src/components/Input.tsx' },
-          { content: 'export function Input() { return <input />; }', isError: false }
-        ),
-      ]}
-    />
-  ),
-};
-
-export const ToolCallGroupWithErrors: StoryObj<typeof ToolCallGroupRenderer> = {
-  render: () => (
-    <ToolCallGroupRenderer
-      defaultOpen={true}
-      toolCalls={[
-        createToolCallInfo(
-          'Read',
-          { file_path: '/Users/developer/project/src/valid.ts' },
-          { content: 'export const valid = true;', isError: false }
-        ),
-        createToolCallInfo(
-          'Read',
-          { file_path: '/Users/developer/project/src/nonexistent.ts' },
-          { content: 'Error: ENOENT: no such file or directory', isError: true }
-        ),
-        createToolCallInfo(
-          'Bash',
-          { command: 'npm test' },
-          { content: SAMPLE_BASH_OUTPUTS.npmTest, isError: false }
-        ),
-      ]}
-    />
-  ),
-};
-
-export const ToolCallGroupPending: StoryObj<typeof ToolCallGroupRenderer> = {
-  render: () => (
-    <ToolCallGroupRenderer
-      defaultOpen={true}
-      toolCalls={[
-        createToolCallInfo(
-          'Read',
-          { file_path: '/Users/developer/project/src/file1.ts' },
-          { content: 'export const one = 1;', isError: false }
-        ),
-        createToolCallInfo('Read', { file_path: '/Users/developer/project/src/file2.ts' }),
-        createToolCallInfo('Read', { file_path: '/Users/developer/project/src/file3.ts' }),
-      ]}
-    />
-  ),
-};
-
-export const ToolCallGroupCollapsed: StoryObj<typeof ToolCallGroupRenderer> = {
-  render: () => (
-    <ToolCallGroupRenderer
-      defaultOpen={false}
-      toolCalls={[
-        createToolCallInfo(
-          'Glob',
-          { pattern: '**/*.tsx' },
-          { content: '["/path/to/file.tsx"]', isError: false }
-        ),
-        createToolCallInfo(
-          'Read',
-          { file_path: '/path/to/file.tsx' },
-          { content: 'export function Component() {}', isError: false }
-        ),
-      ]}
-    />
-  ),
-};
-
-export const ToolCallGroupEmpty: StoryObj<typeof ToolCallGroupRenderer> = {
-  render: () => <ToolCallGroupRenderer defaultOpen={true} toolCalls={[]} />,
-};
-
-export const ToolCallGroupSingle: StoryObj<typeof ToolCallGroupRenderer> = {
-  render: () => (
-    <ToolCallGroupRenderer
-      defaultOpen={true}
-      toolCalls={[
-        createToolCallInfo(
-          'Bash',
-          { command: 'git status', description: 'Check git status' },
-          { content: SAMPLE_BASH_OUTPUTS.gitStatus, isError: false }
-        ),
-      ]}
-    />
-  ),
 };
 
 // =============================================================================
