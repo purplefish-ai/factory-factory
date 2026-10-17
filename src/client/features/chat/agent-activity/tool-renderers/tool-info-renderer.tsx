@@ -8,7 +8,6 @@ import {
 } from '@phosphor-icons/react';
 import * as React from 'react';
 import { memo } from 'react';
-import type { ToolCallInfo } from '@/client/features/chat/agent-activity/types';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import type {
@@ -485,131 +484,6 @@ const PairedToolCallRenderer = memo(function PairedToolCallRenderer({
           </div>
         </CollapsibleContent>
       </div>
-    </Collapsible>
-  );
-});
-
-// =============================================================================
-// Tool Call Group Renderer
-// =============================================================================
-
-export interface ToolCallGroupRendererProps {
-  toolCalls: ToolCallInfo[];
-  defaultOpen?: boolean;
-}
-
-/**
- * Renders a group of related tool calls.
- */
-export const ToolCallGroupRenderer = memo(function ToolCallGroupRenderer({
-  toolCalls,
-  defaultOpen = false,
-}: ToolCallGroupRendererProps) {
-  const [isOpen, setIsOpen] = React.useState(defaultOpen);
-
-  if (toolCalls.length === 0) {
-    return null;
-  }
-
-  const successCount = toolCalls.filter((tc) => tc.result && !tc.result.isError).length;
-  const errorCount = toolCalls.filter((tc) => tc.result?.isError).length;
-  const pendingCount = toolCalls.filter((tc) => !tc.result).length;
-
-  return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <div className="rounded border bg-muted/20 min-w-0">
-        <CollapsibleTrigger asChild>
-          <button className="flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-muted/50 transition-colors">
-            {isOpen ? (
-              <CaretDownIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
-            ) : (
-              <CaretRightIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
-            )}
-            <TerminalIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className="text-xs">{toolCalls.length} tool calls</span>
-            <div className="ml-auto flex gap-1">
-              {successCount > 0 && (
-                <Badge variant="success" className="text-[10px] px-1 py-0">
-                  {successCount}
-                </Badge>
-              )}
-              {errorCount > 0 && (
-                <Badge variant="destructive" className="text-[10px] px-1 py-0">
-                  {errorCount}
-                </Badge>
-              )}
-              {pendingCount > 0 && (
-                <Badge variant="outline" className="text-[10px] px-1 py-0">
-                  {pendingCount}
-                </Badge>
-              )}
-            </div>
-          </button>
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <div className="border-t divide-y overflow-x-auto">
-            {toolCalls.map((toolCall) => (
-              <ToolCallItem key={toolCall.id} toolCall={toolCall} />
-            ))}
-          </div>
-        </CollapsibleContent>
-      </div>
-    </Collapsible>
-  );
-});
-
-// =============================================================================
-// Tool Call Item
-// =============================================================================
-
-interface ToolCallItemProps {
-  toolCall: ToolCallInfo;
-}
-
-const ToolCallItem = memo(function ToolCallItem({ toolCall }: ToolCallItemProps) {
-  const [isOpen, setIsOpen] = React.useState(false);
-  const displayInput = resolveDisplayInput(toolCall.name, toolCall.input, toolCall.result?.content);
-  const displayName = getDisplayToolName(toolCall.name, displayInput);
-
-  return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <CollapsibleTrigger asChild>
-        <button className="flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-muted/30 transition-colors">
-          {isOpen ? (
-            <CaretDownIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
-          ) : (
-            <CaretRightIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
-          )}
-          <span className="font-mono text-xs flex-1 min-w-0 truncate" title={toolCall.name}>
-            {displayName}
-          </span>
-          {toolCall.result && (
-            <span className="ml-auto">
-              {toolCall.result.isError ? (
-                <WarningCircleIcon className="h-4 w-4 shrink-0 text-destructive" />
-              ) : (
-                <CheckCircleIcon className="h-4 w-4 shrink-0 text-success" />
-              )}
-            </span>
-          )}
-        </button>
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <div className="px-4 pb-1.5 space-y-1 overflow-x-auto">
-          <ToolInputRenderer
-            name={toolCall.name}
-            input={toolCall.input}
-            resultContent={toolCall.result?.content}
-          />
-          {toolCall.result && (
-            <ToolResultContentRenderer
-              content={toolCall.result.content}
-              isError={toolCall.result.isError}
-              toolName={toolCall.name}
-            />
-          )}
-        </div>
-      </CollapsibleContent>
     </Collapsible>
   );
 });
