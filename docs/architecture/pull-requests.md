@@ -55,7 +55,8 @@ MERGED only when every attached PR is merged; an open sibling remains visible.
 Workspace snapshots include the plain `prs` collection and its `prSummary`. The
 PR menu offers per-association refresh, review, and detachment. Detaching one
 association cancels its pending events while leaving sibling monitoring and the
-main conversation intact.
+main conversation intact. Discovery preserves detached associations as
+tombstones; only an explicit attachment clears them.
 
 ### Observations and events
 
