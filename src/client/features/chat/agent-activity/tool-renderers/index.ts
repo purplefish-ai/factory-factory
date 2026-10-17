@@ -1,10 +1,6 @@
 // Tool info rendering (main components)
-export type {
-  ToolCallGroupRendererProps,
-  ToolInfoRendererProps,
-  ToolSequenceGroupProps,
-} from './tool-info-renderer';
-export { ToolCallGroupRenderer, ToolInfoRenderer, ToolSequenceGroup } from './tool-info-renderer';
+export type { ToolInfoRendererProps, ToolSequenceGroupProps } from './tool-info-renderer';
+export { ToolInfoRenderer, ToolSequenceGroup } from './tool-info-renderer';
 
 // Tool input rendering
 export type { ToolInputRendererProps } from './tool-input-renderer';
