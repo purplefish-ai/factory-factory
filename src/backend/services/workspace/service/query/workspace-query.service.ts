@@ -383,20 +383,22 @@ class WorkspaceQueryService {
 
     const previousPrState = workspace.prState;
     const prResult = await this.prSnapshot.refreshWorkspace(workspaceId);
-    if (!(prResult.success && prResult.snapshot)) {
+    // A sibling refresh can fail after another PR has persisted a transition.
+    // Read the committed state before deciding whether the whole sync failed.
+    const refreshedWorkspace = await workspaceAccessor.findById(workspaceId);
+    if (!refreshedWorkspace) {
+      throw new Error('Workspace not found');
+    }
+    if (!prResult.success && refreshedWorkspace.prState === previousPrState) {
       return { success: false, reason: 'fetch_failed' as const };
     }
 
     logger.info('PR status synced manually', {
       workspaceId,
-      prNumber: prResult.snapshot.prNumber,
-      prState: prResult.snapshot.prState,
+      prState: refreshedWorkspace.prState,
+      refreshSucceeded: prResult.success,
     });
 
-    const refreshedWorkspace = await workspaceAccessor.findById(workspaceId);
-    if (!refreshedWorkspace) {
-      throw new Error('Workspace not found');
-    }
     return { success: true, prState: refreshedWorkspace.prState, previousPrState };
   }
 
