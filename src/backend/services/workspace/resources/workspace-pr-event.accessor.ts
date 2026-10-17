@@ -1,5 +1,5 @@
 import type { AgentSession, Prisma } from '@prisma-gen/client';
-import type { z } from 'zod';
+import { z } from 'zod';
 import { prisma } from '@/backend/db';
 import {
   isPRMonitoringRecipient,
@@ -54,6 +54,41 @@ async function authorizedRecipient(
       },
     })
   );
+}
+
+type RecoveryIdentity = {
+  sessionId: string;
+  provider: AgentSession['provider'];
+  providerSessionId: string;
+};
+
+function hasRolloverLineage(session: AgentSession, previousIdentity: string | null) {
+  if (!(previousIdentity && session.providerSessionId)) {
+    return false;
+  }
+  if (previousIdentity === session.providerSessionId) {
+    return true;
+  }
+  const metadata = z
+    .object({
+      providerIdentityRollovers: z.array(
+        z.object({
+          previousProviderSessionId: z.string().min(1),
+          providerSessionId: z.string().min(1),
+        })
+      ),
+    })
+    .safeParse(session.providerMetadata);
+  if (!metadata.success) {
+    return false;
+  }
+  const reachable = new Set([previousIdentity]);
+  for (const rollover of metadata.data.providerIdentityRollovers) {
+    if (reachable.has(rollover.previousProviderSessionId)) {
+      reachable.add(rollover.providerSessionId);
+    }
+  }
+  return reachable.has(session.providerSessionId);
 }
 
 class WorkspacePrEventAccessor {
@@ -283,7 +318,41 @@ class WorkspacePrEventAccessor {
       data: { attempts: 0 },
     });
   }
-  recoverClaim(deliveryId: string, delivered: boolean) {
+  recoverClaim(deliveryId: string, delivered: boolean, identity?: RecoveryIdentity) {
+    if (!delivered && identity) {
+      // Only receipt recovery may migrate a frozen claim to a recorded successor.
+      return prisma.$transaction(async (tx) => {
+        const session = await tx.agentSession.findFirst({
+          where: {
+            id: identity.sessionId,
+            provider: identity.provider,
+            providerSessionId: identity.providerSessionId,
+          },
+        });
+        const rows = await tx.workspacePREvent.findMany({
+          where: { deliveryId, state: { in: ['PENDING', 'DISPATCHING'] } },
+        });
+        if (
+          !(session && rows.length) ||
+          rows.some(
+            (row) =>
+              row.workspaceId !== session.workspaceId ||
+              row.deliverySessionId !== session.id ||
+              row.deliveryProvider !== session.provider ||
+              !hasRolloverLineage(session, row.deliveryProviderSessionId)
+          )
+        ) {
+          return { count: 0 };
+        }
+        return tx.workspacePREvent.updateMany({
+          where: {
+            id: { in: rows.map((row) => row.id) },
+            state: { in: ['PENDING', 'DISPATCHING'] },
+          },
+          data: { state: 'PENDING', deliveryProviderSessionId: identity.providerSessionId },
+        });
+      });
+    }
     return prisma.workspacePREvent.updateMany({
       where: { deliveryId, state: delivered ? { in: ['PENDING', 'DISPATCHING'] } : 'DISPATCHING' },
       data: delivered ? { state: 'DELIVERED', deliveredAt: new Date() } : { state: 'PENDING' },

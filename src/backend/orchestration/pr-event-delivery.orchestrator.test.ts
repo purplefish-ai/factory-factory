@@ -106,6 +106,7 @@ beforeEach(() => {
   mocks.interaction.mockReturnValue(null);
   mocks.otherReady.mockResolvedValue(true);
   mocks.pause.mockResolvedValue({ count: 1 });
+  mocks.recover.mockResolvedValue({ count: 1 });
   mocks.pending.mockResolvedValue([
     {
       id: 'event',
@@ -495,4 +496,31 @@ it('keeps a delivered claim settled when waking its sibling fails', async () => 
   expect(mocks.settle).toHaveBeenCalledExactlyOnceWith(
     expect.objectContaining({ result: 'delivered' })
   );
+});
+
+it('passes the identity observed before receipt lookup when recovering an absent claim', async () => {
+  mocks.receipt.mockImplementation(() => {
+    mocks.session.mockResolvedValue({
+      id: 'main',
+      workspaceId: 'w',
+      workflow: 'implement',
+      provider: 'CLAUDE',
+      providerSessionId: 'changed-during-lookup',
+      workspace: { status: 'READY' },
+    });
+    return Promise.resolve('absent');
+  });
+  await recoverPRDeliveries('main');
+  expect(mocks.recover).toHaveBeenCalledWith('delivery', false, {
+    sessionId: 'main',
+    provider: 'CLAUDE',
+    providerSessionId: 'original',
+  });
+});
+
+it('pauses an absent frozen claim when its receipt identity cannot be safely recovered', async () => {
+  mocks.receipt.mockResolvedValue('absent');
+  mocks.recover.mockResolvedValue({ count: 0 });
+  await recoverPRDeliveries('main');
+  expect(mocks.pause).toHaveBeenCalledWith('w', 'RECEIPT_UNAVAILABLE', 1);
 });
