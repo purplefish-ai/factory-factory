@@ -157,10 +157,6 @@ activity, and reads `thread/goal/get` when resuming a session. An `active` goal
 therefore keeps the workspace in WORKING even when no prompt is currently in
 flight; paused, blocked, limited, completed and cleared goals do not.
 
-The ratchet projection and reconciliation reads derive legacy PR fields from the
-selected active association. Both publishers use that association's sync
-timestamp even when several PRs are attached.
-
 One endpoint (`workspace.listForProject`) serves both the board and the sidebar,
 and one React Query cache backs both — the snapshot WebSocket patches that
 single cache.
