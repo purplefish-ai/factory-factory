@@ -255,8 +255,8 @@ export function workspacePullRequestsEqual(
   right: WorkspaceSnapshotEntry['prs']
 ): boolean {
   return isDeepStrictEqual(
-    left?.toSorted((a, b) => a.id.localeCompare(b.id)),
-    right?.toSorted((a, b) => a.id.localeCompare(b.id))
+    left?.slice().sort((a, b) => a.id.localeCompare(b.id)),
+    right?.slice().sort((a, b) => a.id.localeCompare(b.id))
   );
 }
 
