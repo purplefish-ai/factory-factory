@@ -104,7 +104,9 @@ Daily/weekly/monthly tasks can optionally run at a specific time of day in the
 user's browser timezone (`scheduledTime` HH:MM + IANA `timezone` fields).
 
 Each execution runs the configured prompt, monitors for PR creation, and
-advances the schedule. Concurrent runs are skipped.
+advances the schedule. Concurrent runs are skipped. Default sessions use the
+`periodic-task` workflow, so non-interactive Codex startup selects unattended
+execution mode and tool approval prompts cannot stall scheduled runs.
 
 Managed via the "Periodic Tasks" admin tab and created from the Kanban launch
 dropdown. The workspace right panel shows execution history for
