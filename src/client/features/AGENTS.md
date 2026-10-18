@@ -22,5 +22,5 @@ When multiple features need the same code:
 - A cohesive group with multiple feature consumers and no knowledge of them →
   its own feature, as with `composer`.
 
-`src/components/` is reserved for shadcn/ui. Follow the root guide's UI,
-testing, and Storybook requirements.
+`src/components/` is reserved for shadcn/ui. Follow the shared
+[UI verification requirements](../../../CONTRIBUTING.md#verification).
