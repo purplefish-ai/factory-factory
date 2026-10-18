@@ -234,7 +234,9 @@ Factory Factory surfaces their live metadata and transcripts through
 
 They are distinct from workspace-scoped child workspaces, and are recovered from
 the provider when a parent session is reloaded rather than persisted by Factory
-Factory.
+Factory. Transcript pages use a bounded reducer working set; see
+[projection performance](subagent-transcript-performance.md) for the constraints
+and benchmark.
 
 ## Child workspaces
 
