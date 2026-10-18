@@ -8,6 +8,11 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Changed
+
+- Stream completed tRPC reads within HTTP batches so slower queries do not hold
+  up independent results; preserve ordinary batching for mutations.
+
 ## [0.4.10] - 2026-10-14
 
 ### Added
