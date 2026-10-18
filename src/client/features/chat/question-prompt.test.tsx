@@ -236,6 +236,8 @@ describe('QuestionPrompt', () => {
     const submit = Array.from(container.querySelectorAll('button')).find(
       (button) => button.textContent === 'Submit'
     )!;
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(submit.disabled).toBe(true);
     flushSync(() => choices[0]!.click());
     expect(submit.disabled).toBe(true);
     expect(container.querySelector('[role="alert"]')?.textContent).toBe(

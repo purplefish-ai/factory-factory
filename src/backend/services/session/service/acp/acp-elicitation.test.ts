@@ -2,6 +2,7 @@ import type { CreateElicitationRequest, ElicitationSchema } from '@agentclientpr
 import { describe, expect, it, vi } from 'vitest';
 import { getAskUserQuestions } from '@/shared/acp-protocol/question-input';
 import { AcpClientHandler } from './acp-client-handler';
+import { createAcpElicitationForm } from './acp-elicitation-form';
 import { AcpPermissionBridge } from './acp-permission-bridge';
 
 function form(requestedSchema: ElicitationSchema): CreateElicitationRequest {
@@ -62,7 +63,21 @@ describe('ACP elicitation', () => {
     });
   });
 
-  it('carries string and array constraints through live/restored question parsing', async () => {
+  it('uses safe matching for backend form answers and rejects unsupported patterns', () => {
+    const schema = (pattern: string) => ({
+      properties: { text: { type: 'string', pattern } },
+      required: ['text'],
+    });
+    const safeForm = createAcpElicitationForm(schema('^(a+)+$'));
+    expect(safeForm).not.toBeNull();
+    expect(safeForm?.parseAnswers({ text: [`${'a'.repeat(30_000)}!`] })).toBeNull();
+    expect(safeForm?.parseAnswers({ text: ['aaa'] })).toEqual({ text: 'aaa' });
+    for (const pattern of ['(?=a)a', '(a)\\1', '[', 'a'.repeat(1025)]) {
+      expect(createAcpElicitationForm(schema(pattern))).toBeNull();
+    }
+  });
+
+  it('carries string and array constraints through live question parsing', async () => {
     const { handler, bridge, onEvent } = setup();
     const response = handler.createElicitation(
       form({

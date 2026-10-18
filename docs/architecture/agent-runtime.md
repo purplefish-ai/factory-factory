@@ -40,6 +40,11 @@ collaboration/access tuples are converted into native options before startup,
 inactive-session display, or strict PR continuation. Durable legacy `sess_`
 provider identities remain unchanged; transport calls use the underlying native
 Codex thread ID. A failed legacy resume cannot start a replacement conversation.
+History loading accepts both legacy event messages and current public response
+items, deduplicates copies per turn, and excludes injected context and internal
+reasoning. Terminal output deltas are negotiated explicitly, accumulated with
+per-tool and total pending-tool limits, and included in completed tool results.
+Buffers are isolated by session and cleared on teardown.
 
 Permission requests retain the provider's option IDs and choices. Upstream Codex
 plan review is normalized into the application's plan UI. Interactive sessions
@@ -48,12 +53,14 @@ implementation. Both adapters own their plan implementation continuation; the
 client does not enqueue a second approval turn. Structured questions use ACP
 form elicitation, with validated answers mapped into the existing question UI.
 Numeric fields display validation errors before submission, and blank enum
-choices retain their exact provider values behind visible labels. Run
-`pnpm test:acp:manual` for the live handshake or `pnpm test:acp:manual:prompt`
-to explicitly enable a read-only model round trip. URL elicitation exposes the
-destination and message and requires explicit consent; it never opens a URL
-automatically. Cancellation resolves pending permissions and elicitations as
-cancelled and dismisses their prompts.
+choices retain their exact provider values behind visible labels. String
+patterns use bounded RE2 compilation and linear-time matching in the browser and
+backend; unsupported expressions fail closed. Run `pnpm test:acp:manual` for the
+live handshake or `pnpm test:acp:manual:prompt` to explicitly enable a read-only
+model round trip. URL elicitation exposes the destination and message and
+requires explicit consent; it never opens a URL automatically. Cancellation
+resolves pending permissions and elicitations as cancelled and dismisses their
+prompts.
 
 Native subagent/session updates are captured before SDK validation because the
 subagent contract is still a draft. Children retain separate transcripts and

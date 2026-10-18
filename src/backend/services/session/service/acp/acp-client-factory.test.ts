@@ -329,6 +329,10 @@ describe('AcpClientFactory', () => {
       clientCapabilities: expect.objectContaining({
         elicitation: { form: {}, url: {} },
         subagents: {},
+        _meta: {
+          terminal_output_delta: true,
+          jetbrains: { air: { version: 1, capabilities: ['asyncTasks'] } },
+        },
       }),
       clientInfo: { name: 'factory-factory', title: 'Factory Factory', version: '1.2.0' },
     });

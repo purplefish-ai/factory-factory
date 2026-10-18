@@ -1,4 +1,5 @@
 import type { SessionUpdate } from '@agentclientprotocol/sdk';
+import { z } from 'zod';
 import type { SessionDeltaEvent } from './protocol';
 import type { SubagentTranscriptUpdate } from './subagents';
 
@@ -19,8 +20,12 @@ export type TranslatableSessionUpdate =
 
 export type AcpTranslatedDelta = SessionDeltaEvent & Record<string, unknown>;
 
+const MAX_TERMINAL_OUTPUT_CHARS = 256 * 1024;
+const MAX_BUFFERED_TERMINAL_TOOLS = 64;
+const terminalOutputSchema = z.object({ data: z.string(), terminal_id: z.string().min(1) });
+
 /**
- * Stateless translator that maps ACP SessionUpdate variants to FF SessionDeltaEvent arrays.
+ * Maps ACP SessionUpdate variants to FF deltas, retaining bounded pending terminal output.
  *
  * Modeled on CodexEventTranslator. Each ACP session update type is mapped to the
  * appropriate FF delta event type(s) that the frontend already knows how to render.
@@ -29,9 +34,11 @@ export type AcpTranslatedDelta = SessionDeltaEvent & Record<string, unknown>;
  * and returns an empty array, so one bad event does not break the pipeline.
  */
 export class AcpEventTranslator {
+  private readonly terminalOutput = new Map<string, { sessionId: string; text: string }>();
+
   constructor(private readonly logger: AcpTranslationLogger) {}
 
-  translateSessionUpdate(update: TranslatableSessionUpdate): SessionDeltaEvent[] {
+  translateSessionUpdate(update: TranslatableSessionUpdate, sessionId = ''): SessionDeltaEvent[] {
     switch (update.sessionUpdate) {
       case 'agent_message_chunk':
         return this.translateAgentMessageChunk(update);
@@ -40,10 +47,12 @@ export class AcpEventTranslator {
         return this.translateAgentThoughtChunk(update);
 
       case 'tool_call':
-        return this.translateToolCall(update);
+        this.captureTerminalOutput(update, sessionId, true);
+        return this.translateToolCall(update, sessionId);
 
       case 'tool_call_update':
-        return this.translateToolCallUpdate(update);
+        this.captureTerminalOutput(update, sessionId);
+        return this.translateToolCallUpdate(update, sessionId);
 
       case 'plan':
         return this.translatePlan(update);
@@ -71,6 +80,45 @@ export class AcpEventTranslator {
           sessionUpdate: this.readSessionUpdateType(update),
         });
         return [];
+    }
+  }
+
+  clearTerminalOutput(sessionId: string): void {
+    for (const [key, output] of this.terminalOutput) {
+      if (output.sessionId === sessionId) {
+        this.terminalOutput.delete(key);
+      }
+    }
+  }
+
+  private captureTerminalOutput(
+    update: { toolCallId: string; _meta?: unknown },
+    sessionId: string,
+    reset = false
+  ): void {
+    const key = JSON.stringify([sessionId, update.toolCallId]);
+    if (reset) {
+      this.terminalOutput.delete(key);
+    }
+    const meta = this.getObject(update._meta);
+    const parsed = terminalOutputSchema.safeParse(
+      meta?.terminal_output_delta ?? meta?.terminal_output
+    );
+    if (!parsed.success || parsed.data.terminal_id !== update.toolCallId) {
+      return;
+    }
+    const previous =
+      meta?.terminal_output_delta != null ? (this.terminalOutput.get(key)?.text ?? '') : '';
+    const text = `${previous}${parsed.data.data.slice(-MAX_TERMINAL_OUTPUT_CHARS)}`.slice(
+      -MAX_TERMINAL_OUTPUT_CHARS
+    );
+    this.terminalOutput.delete(key);
+    this.terminalOutput.set(key, { sessionId, text });
+    if (this.terminalOutput.size > MAX_BUFFERED_TERMINAL_TOOLS) {
+      const oldest = this.terminalOutput.keys().next().value;
+      if (oldest !== undefined) {
+        this.terminalOutput.delete(oldest);
+      }
     }
   }
 
@@ -120,7 +168,8 @@ export class AcpEventTranslator {
   }
 
   private translateToolCall(
-    update: Extract<TranslatableSessionUpdate, { sessionUpdate: 'tool_call' }>
+    update: Extract<TranslatableSessionUpdate, { sessionUpdate: 'tool_call' }>,
+    sessionId: string
   ): AcpTranslatedDelta[] {
     if (!(update.toolCallId && update.title)) {
       this.logger.warn('tool_call: missing toolCallId or title', {
@@ -170,13 +219,14 @@ export class AcpEventTranslator {
 
     // Some adapters emit one-shot terminal tool_call events without a follow-up tool_call_update.
     // Emit tool_result here so UI tool cards don't remain stuck in pending state.
-    this.appendTerminalToolResultIfNeeded(events, update);
+    this.appendTerminalToolResultIfNeeded(events, update, sessionId);
 
     return events;
   }
 
   private translateToolCallUpdate(
-    update: Extract<TranslatableSessionUpdate, { sessionUpdate: 'tool_call_update' }>
+    update: Extract<TranslatableSessionUpdate, { sessionUpdate: 'tool_call_update' }>,
+    sessionId: string
   ): AcpTranslatedDelta[] {
     if (!update.toolCallId) {
       this.logger.warn('tool_call_update: missing toolCallId', { update });
@@ -201,7 +251,7 @@ export class AcpEventTranslator {
     const events: AcpTranslatedDelta[] = [event as AcpTranslatedDelta];
 
     // Emit tool_result so the frontend can pair it with the tool_use (transitions pending → success/error)
-    this.appendTerminalToolResultIfNeeded(events, update);
+    this.appendTerminalToolResultIfNeeded(events, update, sessionId);
 
     return events;
   }
@@ -237,12 +287,16 @@ export class AcpEventTranslator {
     ];
   }
 
-  private extractToolOutputText(content: unknown, rawOutput: unknown): string {
+  private extractToolOutputText(
+    content: unknown,
+    rawOutput: unknown,
+    terminalOutput: string
+  ): string {
     const contentText = this.extractContentText(content);
     if (contentText.length > 0) {
       return contentText;
     }
-    return this.extractContentText(rawOutput);
+    return terminalOutput || this.extractContentText(rawOutput);
   }
 
   private createTerminalToolResultEvent(params: {
@@ -250,6 +304,7 @@ export class AcpEventTranslator {
     status?: unknown;
     content?: unknown;
     rawOutput?: unknown;
+    terminalOutput: string;
   }): AcpTranslatedDelta | null {
     if (!this.isTerminalToolStatus(params.status)) {
       return null;
@@ -265,7 +320,11 @@ export class AcpEventTranslator {
             {
               type: 'tool_result',
               tool_use_id: params.toolCallId,
-              content: this.extractToolOutputText(params.content, params.rawOutput),
+              content: this.extractToolOutputText(
+                params.content,
+                params.rawOutput,
+                params.terminalOutput
+              ),
               ...(params.status === 'failed' ? { is_error: true } : {}),
             },
           ],
@@ -281,10 +340,16 @@ export class AcpEventTranslator {
       status?: unknown;
       content?: unknown;
       rawOutput?: unknown;
-    }
+    },
+    sessionId: string
   ): void {
-    const terminalResult = this.createTerminalToolResultEvent(update);
+    const key = JSON.stringify([sessionId, update.toolCallId]);
+    const terminalResult = this.createTerminalToolResultEvent({
+      ...update,
+      terminalOutput: this.terminalOutput.get(key)?.text ?? '',
+    });
     if (terminalResult) {
+      this.terminalOutput.delete(key);
       events.push(terminalResult);
     }
   }

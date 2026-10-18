@@ -477,7 +477,7 @@ function MultiSelectQuestion({
           </label>
         )}
       </div>
-      {getArrayAnswerError(question, selectedValues, otherText) && (
+      {selectedValues.length > 0 && getArrayAnswerError(question, selectedValues, otherText) && (
         <p role="alert" className="text-xs text-destructive">
           {getArrayAnswerError(question, selectedValues, otherText)}
         </p>

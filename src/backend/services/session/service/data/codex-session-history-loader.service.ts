@@ -41,7 +41,29 @@ const CodexSessionMetaEntrySchema = z
   })
   .passthrough();
 
+const CodexMessageMetadataSchema = z.object({
+  turn_id: z.string().optional(),
+  content_item_kinds: z.array(z.string()).optional(),
+});
+const CodexResponseMessageSchema = z.object({
+  type: z.literal('message'),
+  role: z.enum(['user', 'assistant']),
+  content: z.array(z.object({ type: z.string(), text: z.string().optional() })),
+  phase: z.string().nullish(),
+  channel: z.string().nullish(),
+  internal_chat_message_metadata_passthrough: CodexMessageMetadataSchema.nullish(),
+});
+const CodexTurnIdentitySchema = z.object({
+  turn_id: z.string().optional(),
+  internal_chat_message_metadata_passthrough: CodexMessageMetadataSchema.nullish(),
+});
+
 type CodexHistoryEntry = z.infer<typeof CodexHistoryEntrySchema>;
+type CodexHistorySource = 'event' | 'response';
+type CodexHistoryTurn = {
+  id?: string;
+  messages: { source: CodexHistorySource; message: HistoryMessage }[];
+};
 type SessionFileLookupCacheEntry = {
   filePath: string | null;
   expiresAtMs: number;
@@ -406,6 +428,9 @@ function parseCodexResponseItemMessages(
   }
 
   const payloadType = entry.payload.type;
+  if (payloadType === 'message') {
+    return parseResponseTextMessage(entry.payload, timestamp);
+  }
   if (payloadType === 'function_call' || payloadType === 'custom_tool_call') {
     return parseFunctionCallResponseItem(entry.payload, timestamp);
   }
@@ -415,6 +440,67 @@ function parseCodexResponseItemMessages(
   }
 
   return [];
+}
+
+function parseResponseTextMessage(payload: unknown, timestamp: string): HistoryMessage[] {
+  const parsed = CodexResponseMessageSchema.safeParse(payload);
+  if (!parsed.success) {
+    return [];
+  }
+  const {
+    role,
+    content,
+    phase,
+    channel,
+    internal_chat_message_metadata_passthrough: metadata,
+  } = parsed.data;
+  if (
+    role === 'assistant' &&
+    ((phase != null && phase !== 'commentary' && phase !== 'final_answer') ||
+      channel === 'analysis')
+  ) {
+    return [];
+  }
+  const text = content
+    .filter((block, index) =>
+      role === 'assistant'
+        ? block.type === 'output_text'
+        : block.type === 'input_text' &&
+          (!metadata?.content_item_kinds || metadata.content_item_kinds[index] === 'user.text')
+    )
+    .map((block) => block.text ?? '')
+    .join('\n');
+  return text.trim() ? [{ type: role, content: text, timestamp }] : [];
+}
+
+function appendHistoryTurn(history: HistoryMessage[], turn: CodexHistoryTurn): void {
+  const eventTypes = new Set(
+    turn.messages.filter((item) => item.source === 'event').map((item) => item.message.type)
+  );
+  for (const { source, message } of turn.messages) {
+    if (source === 'event' || !eventTypes.has(message.type)) {
+      history.push(message);
+    }
+  }
+  turn.messages = [];
+  turn.id = undefined;
+}
+
+function startsImplicitTurn(
+  turn: CodexHistoryTurn,
+  messages: HistoryMessage[],
+  source: CodexHistorySource
+): boolean {
+  const user = messages.find((message) => message.type === 'user');
+  return Boolean(
+    user &&
+    turn.messages.some(
+      (item) =>
+        item.message.type === 'assistant' ||
+        (item.message.type === 'user' &&
+          (item.source === source || item.message.content !== user.content))
+    )
+  );
 }
 
 function parseJsonLineWithLogging(params: {
@@ -742,12 +828,20 @@ class CodexSessionHistoryLoaderService {
   ): Promise<{ history: HistoryMessage[]; hadReadError: boolean }> {
     let hadReadError = false;
     const history: HistoryMessage[] = [];
+    const turn: CodexHistoryTurn = { messages: [] };
     const fallbackBaseTimestampMs = Date.now();
 
     await readNonEmptyJsonlLines({
       filePath,
       onLine: (trimmed, lineNumber) =>
-        this.appendHistoryFromLine(history, filePath, trimmed, lineNumber, fallbackBaseTimestampMs),
+        this.appendHistoryFromLine(
+          history,
+          turn,
+          filePath,
+          trimmed,
+          lineNumber,
+          fallbackBaseTimestampMs
+        ),
       onError: (error) => {
         hadReadError = true;
         logger.warn('Failed parsing Codex session history file', {
@@ -757,11 +851,14 @@ class CodexSessionHistoryLoaderService {
       },
     });
 
+    appendHistoryTurn(history, turn);
+
     return { history, hadReadError };
   }
 
   private appendHistoryFromLine(
     history: HistoryMessage[],
+    turn: CodexHistoryTurn,
     filePath: string,
     line: string,
     lineNumber: number,
@@ -773,9 +870,27 @@ class CodexSessionHistoryLoaderService {
     }
 
     const timestamp = normalizeTimestamp(entry, lineNumber, fallbackBaseTimestampMs);
+    const identity = CodexTurnIdentitySchema.safeParse(entry.payload);
+    const turnId = identity.success
+      ? (identity.data.turn_id ?? identity.data.internal_chat_message_metadata_passthrough?.turn_id)
+      : undefined;
+    const taskStarted =
+      entry.type === 'event_msg' &&
+      isRecord(entry.payload) &&
+      entry.payload.type === 'task_started';
+    if ((turnId && turn.id && turnId !== turn.id) || (taskStarted && turn.messages.length > 0)) {
+      appendHistoryTurn(history, turn);
+    }
     const parsedMessages = parseCodexHistoryMessages(entry, timestamp);
-    if (parsedMessages.length > 0) {
-      history.push(...parsedMessages);
+    const source = entry.type === 'event_msg' ? 'event' : 'response';
+    if (!turn.id && startsImplicitTurn(turn, parsedMessages, source)) {
+      appendHistoryTurn(history, turn);
+    }
+    if (turnId) {
+      turn.id = turnId;
+    }
+    for (const message of parsedMessages) {
+      turn.messages.push({ source, message });
     }
   }
 }

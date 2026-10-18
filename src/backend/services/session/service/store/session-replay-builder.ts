@@ -138,6 +138,9 @@ export function buildReplayEvents(store: SessionStore): ReplayEventMessage[] {
         requestId: store.pendingInteractiveRequest.requestId,
         toolName: store.pendingInteractiveRequest.toolName,
         toolInput: store.pendingInteractiveRequest.input,
+        ...(store.pendingInteractiveRequest.elicitation
+          ? { elicitation: store.pendingInteractiveRequest.elicitation }
+          : {}),
         planContent: store.pendingInteractiveRequest.planContent,
         acpOptions: store.pendingInteractiveRequest.acpOptions,
       });

@@ -3,6 +3,7 @@ import type { AskUserQuestion } from './protocol/interaction';
 import { questionValidationSchema } from './question-validation';
 
 export type { AskUserQuestion };
+export { compileQuestionPattern, getStringAnswerError } from './question-validation';
 
 const nonEmptyText = z.string().refine((value) => value.trim().length > 0);
 const questionInputSchema = z

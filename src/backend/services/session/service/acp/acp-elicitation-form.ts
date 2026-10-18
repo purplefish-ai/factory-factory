@@ -1,6 +1,10 @@
 import type { ElicitationContentValue } from '@agentclientprotocol/sdk';
 import { z } from 'zod';
-import type { AskUserQuestion } from '@/shared/acp-protocol/question-input';
+import {
+  type AskUserQuestion,
+  compileQuestionPattern,
+  getStringAnswerError,
+} from '@/shared/acp-protocol/question-input';
 
 const optionSchema = z.object({
   const: z.string(),
@@ -145,29 +149,22 @@ function questionValidation(field: Field): AskUserQuestion['validation'] {
 }
 
 function stringValidator(field: Extract<Field, { type: 'string' }>): z.ZodType<string> {
-  let value = z.string();
-  if (field.minLength != null) {
-    value = value.min(field.minLength);
-  }
-  if (field.maxLength != null) {
-    value = value.max(field.maxLength);
-  }
   if (field.pattern != null) {
-    value = value.regex(new RegExp(field.pattern));
+    // Reject unsupported patterns before showing a form that cannot be answered.
+    compileQuestionPattern(field.pattern);
   }
-  if (field.format === 'email') {
-    value = value.email();
-  }
-  if (field.format === 'uri') {
-    value = value.url();
-  }
-  if (field.format === 'date') {
-    value = value.date();
-  }
-  if (field.format === 'date-time') {
-    value = value.datetime({ offset: true });
-  }
-  return value.refine((input) => isAllowedStringChoice(field, input));
+  const rules = {
+    type: 'string' as const,
+    minLength: field.minLength ?? undefined,
+    maxLength: field.maxLength ?? undefined,
+    pattern: field.pattern ?? undefined,
+    format: field.format ?? undefined,
+  };
+  return z
+    .string()
+    .refine(
+      (input) => getStringAnswerError(rules, input) === null && isAllowedStringChoice(field, input)
+    );
 }
 
 function isAllowedStringChoice(field: Extract<Field, { type: 'string' }>, input: string): boolean {

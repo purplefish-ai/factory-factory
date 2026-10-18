@@ -79,7 +79,10 @@ describe('AcpRuntimeManager', () => {
           clientCapabilities: {
             subagents: {},
             elicitation: { form: {}, url: {} },
-            _meta: { jetbrains: { air: { version: 1, capabilities: ['asyncTasks'] } } },
+            _meta: {
+              terminal_output_delta: true,
+              jetbrains: { air: { version: 1, capabilities: ['asyncTasks'] } },
+            },
           },
           clientInfo: expect.objectContaining({
             name: 'factory-factory',

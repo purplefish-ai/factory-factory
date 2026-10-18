@@ -52,6 +52,7 @@ vi.mock('@/backend/services/session/service/acp', async (importOriginal) => {
   return {
     ...actual,
     AcpEventTranslator: class MockAcpEventTranslator {
+      clearTerminalOutput = vi.fn();
       translateSessionUpdate = vi.fn().mockReturnValue([]);
     },
     AcpPermissionBridge: class MockAcpPermissionBridge {

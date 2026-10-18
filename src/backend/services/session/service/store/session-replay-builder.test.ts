@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createAcpElicitationForm } from '@/backend/services/session/service/acp/acp-elicitation-form';
 import { type ChatMessage, DEFAULT_RENDERER_TRANSCRIPT_LIMIT } from '@/shared/acp-protocol';
 import { buildReplayEvents, buildSnapshotMessages } from './session-replay-builder';
 import type { SessionStore } from './session-store.types';
@@ -144,6 +145,65 @@ describe('session-replay-builder', () => {
         }),
       ])
     );
+  });
+
+  it.each(['form', 'url'] as const)(
+    'retains the trusted %s elicitation marker in replay batches',
+    (elicitation) => {
+      const store = createStore();
+      store.pendingInteractiveRequest = {
+        requestId: 'elicitation',
+        toolName: elicitation === 'url' ? 'Authorize URL' : 'Confirm request',
+        toolUseId: 'tool',
+        input: { message: 'Confirm this request', url: 'https://example.com' },
+        planContent: null,
+        timestamp: '',
+        elicitation,
+        acpOptions: [{ optionId: 'accept', name: 'Confirm', kind: 'allow_once' }],
+      };
+      expect(buildReplayEvents(store)).toContainEqual(
+        expect.objectContaining({
+          type: 'permission_request',
+          requestId: 'elicitation',
+          elicitation,
+          toolInput: store.pendingInteractiveRequest.input,
+        })
+      );
+    }
+  );
+
+  it('preserves elicitation validation constraints when replaying a stored pending question', () => {
+    const form = createAcpElicitationForm({
+      properties: {
+        text: { type: 'string', minLength: 2, maxLength: 20, pattern: '^[a-z]+$' },
+        email: { type: 'string', format: 'email' },
+        count: { type: 'integer', minimum: 1, maximum: 5 },
+        choices: {
+          type: 'array',
+          items: { type: 'string', enum: ['a', 'b'] },
+          minItems: 1,
+          maxItems: 2,
+        },
+      },
+    });
+    expect(form).not.toBeNull();
+    const store = createStore();
+    store.pendingInteractiveRequest = {
+      requestId: 'form-replay',
+      toolName: 'AskUserQuestion',
+      toolUseId: 'tool',
+      input: { questions: form!.questions },
+      planContent: null,
+      timestamp: '',
+      elicitation: 'form',
+    };
+    const replay = buildReplayEvents(store).find((event) => event.type === 'user_question');
+    expect(replay?.questions).toMatchObject([
+      { validation: { type: 'string', minLength: 2, maxLength: 20, pattern: '^[a-z]+$' } },
+      { validation: { type: 'string', format: 'email' } },
+      { validation: { type: 'integer', minimum: 1, maximum: 5 } },
+      { validation: { type: 'array', minItems: 1, maxItems: 2 } },
+    ]);
   });
 
   it('includes recent rejected message states in replay', () => {

@@ -266,6 +266,14 @@ export const OptionalProgress: Story = {
 };
 
 export const ConstrainedForm: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Required selections disable Submit while empty. Count validation appears after selecting an option.',
+      },
+    },
+  },
   args: {
     question: createUserQuestion([
       {
