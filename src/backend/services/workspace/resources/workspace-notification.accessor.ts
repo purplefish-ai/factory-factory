@@ -1,5 +1,5 @@
-import type { WorkspaceNotification } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
+import type { WorkspaceNotification } from '@prisma-gen/client';
 
 interface CreateNotificationInput {
   workspaceId: string;

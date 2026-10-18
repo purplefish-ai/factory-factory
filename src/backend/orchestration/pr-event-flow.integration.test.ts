@@ -1,4 +1,3 @@
-import type { PrismaClient } from '@prisma-gen/client';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { sessionBackgroundDeliveryService } from '@/backend/services/session';
 import {
@@ -11,6 +10,7 @@ import {
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
 import { redObservation } from '@/shared/pr-monitoring.test-helpers';
+import type { PrismaClient } from '@prisma-gen/client';
 
 const state = vi.hoisted(() => ({ prisma: undefined as PrismaClient | undefined, busy: false }));
 vi.mock('@/backend/db', () => ({

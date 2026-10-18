@@ -1,10 +1,10 @@
-import type { Project } from '@prisma-gen/client';
 import {
   type ProjectAccessorContext,
   projectAccessor,
 } from '@/backend/services/workspace/resources/project.accessor';
 import type { IssueProvider } from '@/shared/core/enums';
 import type { IssueTrackerConfig } from '@/shared/schemas/issue-tracker-config.schema';
+import type { Project } from '@prisma-gen/client';
 
 class ProjectManagementService {
   list(filters?: { isArchived?: boolean; limit?: number; offset?: number }) {

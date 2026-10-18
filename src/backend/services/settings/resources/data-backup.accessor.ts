@@ -1,3 +1,4 @@
+import { prisma } from '@/backend/db';
 import type {
   AgentSession,
   Prisma,
@@ -5,7 +6,6 @@ import type {
   TerminalSession,
   UserSettings,
 } from '@prisma-gen/client';
-import { prisma } from '@/backend/db';
 
 export type DataBackupTransactionClient = Prisma.TransactionClient;
 

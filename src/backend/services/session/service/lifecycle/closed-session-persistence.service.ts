@@ -1,10 +1,10 @@
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { SessionProvider } from '@prisma-gen/client';
 import { writeFileAtomic } from '@/backend/lib/atomic-file';
 import { createLogger } from '@/backend/services/logger.service';
 import { closedSessionAccessor } from '@/backend/services/session/resources/closed-session.accessor';
 import type { ChatMessage } from '@/shared/acp-protocol';
+import type { SessionProvider } from '@prisma-gen/client';
 
 const logger = createLogger('closed-session-persistence');
 

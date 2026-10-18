@@ -1,3 +1,7 @@
+import { prisma } from '@/backend/db';
+import { normalizeSessionModelForProvider } from '@/backend/lib/session-model';
+import { DEFAULT_COLOR_SCHEME, DEFAULT_FONT_SCALE } from '@/shared/appearance';
+import { workspaceOrderMapSchema } from '@/shared/schemas/persisted-stores.schema';
 import type {
   RatchetReviewTriggerMode,
   SessionPermissionPreset,
@@ -5,10 +9,6 @@ import type {
   UserSettings,
 } from '@prisma-gen/client';
 import { Prisma } from '@prisma-gen/client';
-import { prisma } from '@/backend/db';
-import { normalizeSessionModelForProvider } from '@/backend/lib/session-model';
-import { DEFAULT_COLOR_SCHEME, DEFAULT_FONT_SCALE } from '@/shared/appearance';
-import { workspaceOrderMapSchema } from '@/shared/schemas/persisted-stores.schema';
 
 interface UpdateUserSettingsInput {
   preferredIde?: string;

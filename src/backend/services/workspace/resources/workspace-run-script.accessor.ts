@@ -1,6 +1,6 @@
-import type { Prisma, WorkspaceRunScript } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
 import type { RunScriptStatus } from '@/shared/core';
+import type { Prisma, WorkspaceRunScript } from '@prisma-gen/client';
 
 /**
  * Persistence for `WorkspaceRunScript`, the cached run-script commands and the

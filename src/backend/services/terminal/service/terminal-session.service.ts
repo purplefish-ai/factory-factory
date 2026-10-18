@@ -1,7 +1,7 @@
-import type { TerminalSession } from '@prisma-gen/client';
 import { isProcessRunning } from '@/backend/lib/process-liveness';
 import { terminalSessionAccessor } from '@/backend/services/terminal/resources/terminal-session.accessor';
 import { SessionStatus } from '@/shared/core';
+import type { TerminalSession } from '@prisma-gen/client';
 
 export type { TerminalSession } from '@prisma-gen/client';
 

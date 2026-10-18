@@ -17,13 +17,13 @@
  * themselves are present.
  */
 
-import type { PrismaClient } from '@prisma-gen/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
+import type { PrismaClient } from '@prisma-gen/client';
 
 let db: IntegrationDatabase;
 let prisma: PrismaClient;

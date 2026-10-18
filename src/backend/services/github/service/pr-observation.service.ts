@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
-import type { RatchetReviewTriggerMode } from '@prisma-gen/client';
 import { deriveCiStatusFromCheckRollup, reduceCheckRollupToLatestRunAttempts } from '@/shared/core';
 import type { PRObservation, PRTarget } from '@/shared/pr-monitoring';
 import { prObservationSchema } from '@/shared/schemas/pr-event.schema';
+import type { RatchetReviewTriggerMode } from '@prisma-gen/client';
 import { githubCLIService } from './github-cli.service';
 import {
   isIgnoredReviewAuthor,

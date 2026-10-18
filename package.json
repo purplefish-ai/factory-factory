@@ -168,18 +168,18 @@
     "!(prisma/generated/**/*)*.{js,jsx,ts,tsx}": [
       "oxlint --fix",
       "biome lint --write",
-      "oxfmt --write"
+      "oxfmt --write --no-error-on-unmatched-pattern"
     ],
     "!(prisma/generated/**/*)*.{mjs,cjs,mts,cts}": [
       "oxlint --fix",
-      "oxfmt --write"
+      "oxfmt --write --no-error-on-unmatched-pattern"
     ],
     "*.{json,css}": [
       "biome lint --write",
-      "oxfmt --write"
+      "oxfmt --write --no-error-on-unmatched-pattern"
     ],
     "*.{jsonc,md,yml,yaml,html}": [
-      "oxfmt --write"
+      "oxfmt --write --no-error-on-unmatched-pattern"
     ]
   },
   "devDependencies": {
@@ -215,8 +215,8 @@
     "knip": "^6.41.0",
     "lint-staged": "^17.6.0",
     "next-themes": "^0.4.6",
-    "oxfmt": "0.72.0",
-    "oxlint": "1.87.0",
+    "oxfmt": "0.73.0",
+    "oxlint": "1.88.0",
     "storybook": "10.6.2",
     "supertest": "^7.3.1",
     "tailwindcss": "^4.3.3",

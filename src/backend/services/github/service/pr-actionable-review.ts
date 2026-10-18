@@ -1,6 +1,6 @@
-import type { RatchetReviewTriggerMode } from '@prisma-gen/client';
 import { hasAdversarialReviewMarker } from '@/shared/adversarial-review';
 import type { GitHubReview } from '@/shared/github-types';
+import type { RatchetReviewTriggerMode } from '@prisma-gen/client';
 export function isIgnoredReviewAuthor(
   authorLogin: string,
   authenticatedUsername: string | null

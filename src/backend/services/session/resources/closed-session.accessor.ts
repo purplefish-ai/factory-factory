@@ -1,5 +1,5 @@
-import type { ClosedSession, Prisma, SessionProvider } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
+import type { ClosedSession, Prisma, SessionProvider } from '@prisma-gen/client';
 
 export type ClosedSessionRecord = ClosedSession;
 
