@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { LineTokenMap, PrismStylesheet } from '@/lib/diff/syntax-highlight';
 import type { DiffLine } from '@/lib/diff/types';
 import { diffHighlightResponseSchema } from './diff-highlight-protocol';
 
+type HighlightRequest = { language: string; theme: PrismStylesheet } & (
+  | { lines: DiffLine[] }
+  | { content: string }
+);
 interface HighlightResult {
-  lines: DiffLine[];
-  language: string;
-  theme: PrismStylesheet;
+  request: HighlightRequest;
   tokens: LineTokenMap | null;
 }
 
@@ -17,10 +19,20 @@ export function useDiffHighlighting(
   theme: PrismStylesheet,
   enabled = true
 ): LineTokenMap | null {
+  const request = useMemo(() => ({ lines, language, theme }), [lines, language, theme]);
+  return useHighlighting(request, enabled && lines.length > 0);
+}
+
+export function useFileHighlighting(content: string, language: string, theme: PrismStylesheet) {
+  const request = useMemo(() => ({ content, language, theme }), [content, language, theme]);
+  return useHighlighting(request, content.length > 0);
+}
+
+function useHighlighting(request: HighlightRequest, enabled: boolean): LineTokenMap | null {
   const [result, setResult] = useState<HighlightResult | null>(null);
 
   useEffect(() => {
-    if (!enabled || lines.length === 0 || language === 'text') {
+    if (!enabled || request.language === 'text') {
       return;
     }
     let active = true;
@@ -34,12 +46,12 @@ export function useDiffHighlighting(
           return;
         }
         const parsed = diffHighlightResponseSchema.safeParse(event.data);
-        setResult({ lines, language, theme, tokens: parsed.success ? parsed.data : null });
+        setResult({ request, tokens: parsed.success ? parsed.data : null });
         worker?.terminate();
       };
       worker.onerror = () => worker?.terminate();
       worker.onmessageerror = () => worker?.terminate();
-      worker.postMessage({ lines, language, theme });
+      worker.postMessage(request);
     } catch {
       worker?.terminate();
     }
@@ -47,12 +59,7 @@ export function useDiffHighlighting(
       active = false;
       worker?.terminate();
     };
-  }, [enabled, lines, language, theme]);
+  }, [enabled, request]);
 
-  return enabled &&
-    result?.lines === lines &&
-    result.language === language &&
-    result.theme === theme
-    ? result.tokens
-    : null;
+  return enabled && result?.request === request ? result.tokens : null;
 }

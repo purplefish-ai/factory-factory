@@ -14,6 +14,12 @@ export const diffHighlightRequestSchema = z.object({
   theme: z.record(z.string(), styleSchema),
 });
 
+export const fileHighlightRequestSchema = z.object({
+  content: z.string(),
+  language: z.string(),
+  theme: z.record(z.string(), styleSchema),
+});
+
 export const diffHighlightResponseSchema = z
   .map(
     z.number().int().nonnegative(),

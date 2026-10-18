@@ -5,7 +5,7 @@ import { ThemeProvider } from 'next-themes';
 import { type CSSProperties, type ReactNode, useState } from 'react';
 import { expect, within } from 'storybook/test';
 import { trpc } from '@/client/lib/trpc';
-import { FileViewer } from './file-viewer';
+import { FileCode, FileViewer } from './file-viewer';
 import { WorkspacePanelProvider } from './workspace-panel-context';
 
 const fontStyle: CSSProperties & { '--font-mono': string } = {
@@ -90,4 +90,18 @@ export const DarkMonospaceFont: Story = {
     ),
   ],
   play: AccessibleMonospaceFont.play,
+};
+
+export const LargeSourceFile: Story = {
+  render: () => (
+    <div className="h-80 overflow-auto">
+      <FileCode
+        content={'/* multiline comment\ncontinues here */\nexport const greeting = "Hello";\n'.repeat(
+          4000
+        )}
+        language="typescript"
+        theme={{ comment: { color: 'gray' }, keyword: { color: 'purple' } }}
+      />
+    </div>
+  ),
 };

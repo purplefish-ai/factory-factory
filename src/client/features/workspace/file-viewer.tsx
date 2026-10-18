@@ -8,14 +8,16 @@ import {
 import type { inferRouterOutputs } from '@trpc/server';
 import { useTheme } from 'next-themes';
 import type { RefObject, UIEvent } from 'react';
-import { Component, useRef, useState } from 'react';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { Component, useEffect, useMemo, useRef, useState } from 'react';
+import type { SyntaxHighlighterProps } from 'react-syntax-highlighter';
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import type { AppRouter } from '@/client/lib/trpc';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { MarkdownRenderer } from '@/components/ui/markdown';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import type { LineTokenMap, SyntaxToken } from '@/lib/diff/syntax-highlight';
+import { useFileHighlighting } from './use-diff-highlighting';
 import { usePersistentScroll } from './use-persistent-scroll';
 
 // =============================================================================
@@ -94,7 +96,7 @@ interface FileViewerLoadedProps {
   filePath: string;
   tabId: string;
   data: FileData;
-  syntaxTheme: typeof oneDark;
+  syntaxTheme: NonNullable<SyntaxHighlighterProps['style']>;
 }
 
 function FileViewerHeader({
@@ -201,7 +203,7 @@ function FileViewerContent({
   data: FileData;
   isMarkdown: boolean;
   showPreview: boolean;
-  syntaxTheme: typeof oneDark;
+  syntaxTheme: NonNullable<SyntaxHighlighterProps['style']>;
   onScroll: (event: UIEvent<HTMLDivElement>) => void;
   viewportRef: RefObject<HTMLDivElement | null>;
 }) {
@@ -229,39 +231,7 @@ function FileViewerContent({
 
   return (
     <ScrollArea className="flex-1" onScroll={onScroll} viewportRef={viewportRef} scrollbars="both">
-      <SyntaxHighlighter
-        language={data.language}
-        style={syntaxTheme}
-        showLineNumbers
-        wrapLines
-        customStyle={{
-          margin: 0,
-          padding: '1rem',
-          background: 'transparent',
-          fontSize: '0.75rem',
-          fontFamily: 'var(--font-mono)',
-          lineHeight: '1.5',
-        }}
-        codeTagProps={{
-          style: {
-            background: 'transparent',
-            fontFamily: 'var(--font-mono)',
-          },
-        }}
-        lineNumberStyle={{
-          minWidth: '3em',
-          paddingRight: '1em',
-          color: 'var(--muted-foreground)',
-          background: 'transparent',
-        }}
-        lineProps={{
-          style: {
-            background: 'transparent',
-          },
-        }}
-      >
-        {data.content}
-      </SyntaxHighlighter>
+      <FileCode content={data.content} language={data.language} theme={syntaxTheme} />
     </ScrollArea>
   );
 }
@@ -319,5 +289,110 @@ function FileViewerLoaded({ filePath, tabId, data, syntaxTheme }: FileViewerLoad
         viewportRef={showPreview ? markdownViewportRef : codeViewportRef}
       />
     </div>
+  );
+}
+
+const FILE_BLOCK_LINES = 128;
+interface SourceBlock {
+  firstLine: number;
+  lines: string[];
+  content: string;
+  hasNext: boolean;
+}
+
+function SourceBlockView({ block, tokens }: { block: SourceBlock; tokens: LineTokenMap | null }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    if (!ref.current || typeof IntersectionObserver === 'undefined') {
+      return;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setVisible(entry?.isIntersecting ?? false);
+      },
+      { rootMargin: '300px' }
+    );
+    observer.observe(ref.current);
+    return () => observer.disconnect();
+  }, []);
+  const renderTokens = (lineTokens: SyntaxToken[]) => {
+    let offset = 0;
+    return lineTokens.map((token) => {
+      const key = offset;
+      offset += token.content.length;
+      return (
+        <span key={key} style={token.style}>
+          {token.content}
+        </span>
+      );
+    });
+  };
+  return (
+    <div ref={ref} style={{ display: 'flex', minHeight: `${block.lines.length * 1.5}em` }}>
+      <span
+        aria-hidden="true"
+        className="select-none text-muted-foreground"
+        style={{ flexShrink: 0, width: '4em', paddingRight: '1em', textAlign: 'right' }}
+      >
+        {block.lines.map((_, index) => block.firstLine + index).join('\n')}
+      </span>
+      <code style={{ fontFamily: 'var(--font-mono)' }}>
+        {visible && tokens
+          ? block.lines.map((line, index) => {
+              const number = block.firstLine + index;
+              const lineTokens = tokens.get(number - 1);
+              return (
+                <span key={number}>
+                  {lineTokens ? renderTokens(lineTokens) : line}
+                  {index < block.lines.length - 1 || block.hasNext ? '\n' : ''}
+                </span>
+              );
+            })
+          : block.content}
+      </code>
+    </div>
+  );
+}
+
+/** All source remains in the DOM; only nearby blocks expand into syntax spans. */
+export function FileCode({
+  content,
+  language,
+  theme,
+}: {
+  content: string;
+  language: string;
+  theme: NonNullable<SyntaxHighlighterProps['style']>;
+}) {
+  const tokens = useFileHighlighting(content, language, theme);
+  const blocks = useMemo(() => {
+    const lines = content.split('\n');
+    const result: SourceBlock[] = [];
+    for (let index = 0; index < lines.length; index += FILE_BLOCK_LINES) {
+      const block = lines.slice(index, index + FILE_BLOCK_LINES);
+      result.push({
+        firstLine: index + 1,
+        lines: block,
+        hasNext: index + FILE_BLOCK_LINES < lines.length,
+        content: block.join('\n') + (index + FILE_BLOCK_LINES < lines.length ? '\n' : ''),
+      });
+    }
+    return result;
+  }, [content]);
+  return (
+    <pre
+      style={{
+        margin: 0,
+        padding: '1rem',
+        fontSize: '0.75rem',
+        fontFamily: 'var(--font-mono)',
+        lineHeight: '1.5',
+      }}
+    >
+      {blocks.map((block) => (
+        <SourceBlockView key={block.firstLine} block={block} tokens={tokens} />
+      ))}
+    </pre>
   );
 }

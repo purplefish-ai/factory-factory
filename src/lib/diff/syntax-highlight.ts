@@ -240,6 +240,29 @@ function tokenizeAndMapLines(
   }
 }
 
+/** Tokenize a complete file before splitting lines, preserving multiline syntax. */
+export function tokenizeFileContent(
+  content: string,
+  language: string,
+  stylesheet: PrismStylesheet
+): LineTokenMap | null {
+  const resolved = resolveLanguage(language);
+  if (!resolved) {
+    return null;
+  }
+  try {
+    const highlighted = refractor.highlight(content, resolved);
+    if (!isHastRoot(highlighted)) {
+      return null;
+    }
+    return new Map(
+      splitHastByLine(highlighted, stylesheet).map((tokens, index) => [index, tokens])
+    );
+  } catch {
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Main tokenization function
 // ---------------------------------------------------------------------------
