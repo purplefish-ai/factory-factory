@@ -7,13 +7,12 @@ import type { inferRouterOutputs } from '@trpc/server';
 import { useTheme } from 'next-themes';
 import type { RefObject, UIEvent } from 'react';
 import { Component, useRef, useState } from 'react';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import type { AppRouter } from '@/client/lib/trpc';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { MarkdownRenderer } from '@/components/ui/markdown';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { FileCode } from './file-code';
 import { usePersistentScroll } from './use-persistent-scroll';
 
 // =============================================================================
@@ -81,7 +80,7 @@ export function FileViewer({ workspaceId, filePath, tabId }: FileViewerProps) {
     );
   }
 
-  const syntaxTheme = resolvedTheme === 'dark' ? oneDark : oneLight;
+  const syntaxTheme = resolvedTheme === 'dark' ? 'dark' : 'light';
 
   return (
     <FileViewerLoaded filePath={filePath} tabId={tabId} data={data} syntaxTheme={syntaxTheme} />
@@ -92,7 +91,7 @@ interface FileViewerLoadedProps {
   filePath: string;
   tabId: string;
   data: FileData;
-  syntaxTheme: typeof oneDark;
+  syntaxTheme: 'dark' | 'light';
 }
 
 function FileViewerHeader({
@@ -199,7 +198,7 @@ function FileViewerContent({
   data: FileData;
   isMarkdown: boolean;
   showPreview: boolean;
-  syntaxTheme: typeof oneDark;
+  syntaxTheme: 'dark' | 'light';
   onScroll: (event: UIEvent<HTMLDivElement>) => void;
   viewportRef: RefObject<HTMLDivElement | null>;
 }) {
@@ -227,39 +226,7 @@ function FileViewerContent({
 
   return (
     <ScrollArea className="flex-1" onScroll={onScroll} viewportRef={viewportRef} scrollbars="both">
-      <SyntaxHighlighter
-        language={data.language}
-        style={syntaxTheme}
-        showLineNumbers
-        wrapLines
-        customStyle={{
-          margin: 0,
-          padding: '1rem',
-          background: 'transparent',
-          fontSize: '0.75rem',
-          fontFamily: 'var(--font-mono)',
-          lineHeight: '1.5',
-        }}
-        codeTagProps={{
-          style: {
-            background: 'transparent',
-            fontFamily: 'var(--font-mono)',
-          },
-        }}
-        lineNumberStyle={{
-          minWidth: '3em',
-          paddingRight: '1em',
-          color: 'var(--muted-foreground)',
-          background: 'transparent',
-        }}
-        lineProps={{
-          style: {
-            background: 'transparent',
-          },
-        }}
-      >
-        {data.content}
-      </SyntaxHighlighter>
+      <FileCode content={data.content} language={data.language} theme={syntaxTheme} />
     </ScrollArea>
   );
 }
