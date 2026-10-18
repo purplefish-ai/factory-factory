@@ -6,15 +6,16 @@ context, not a new task or a substitute for current repository guidance.
 
 ## Current guides
 
-| Need                                       | Start here                                                                                            |
-| ------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
-| Install and run                            | [README](../README.md)                                                                                |
-| Contribute and verify changes              | [Contributing](../CONTRIBUTING.md) and [agent guide](../AGENTS.md)                                    |
-| Service boundaries and subsystem contracts | [Architecture notes](architecture/README.md)                                                          |
-| Chat streaming, loading, and replay        | [Chat message flow](chat-message-flow.md)                                                             |
-| Workspace state and PR monitoring          | [Workspace state](architecture/workspace-state.md) and [PR monitoring](architecture/pull-requests.md) |
-| User and project configuration             | [Settings](admin-settings.md)                                                                         |
-| Maintain UI primitives and dependencies    | [shadcn](shadcn.md) and [Knip](knip.md)                                                               |
+| Need                                         | Start here                                                                                            |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Install and run                              | [README](../README.md)                                                                                |
+| Contribute and verify changes                | [Contributing](../CONTRIBUTING.md) and [agent guide](../AGENTS.md)                                    |
+| Service boundaries and subsystem contracts   | [Architecture notes](architecture/README.md)                                                          |
+| Chat streaming, loading, and replay          | [Chat message flow](chat-message-flow.md)                                                             |
+| Workspace state and PR monitoring            | [Workspace state](architecture/workspace-state.md) and [PR monitoring](architecture/pull-requests.md) |
+| User and project configuration               | [Settings](admin-settings.md)                                                                         |
+| Maintain UI primitives and dependencies      | [shadcn](shadcn.md) and [Knip](knip.md)                                                               |
+| Audit vulnerabilities and dependency updates | [Dependency security](dependency-security.md)                                                         |
 
 For implementation work, search the relevant source area and current guides
 first, for example `rg -n 'PR monitoring' docs/architecture`. Consult historical

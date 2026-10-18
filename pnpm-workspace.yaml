@@ -1,3 +1,8 @@
+# GitHub currently reads only the first document of pnpm 12 lockfiles.
+# Keep project dependencies visible; .pnpmfile.mjs enforces packageManager instead.
+# https://github.com/dependabot/dependabot-core/issues/15904
+pmOnFail: ignore
+
 publicHoistPattern:
   - '@types/*'
 

@@ -21,7 +21,11 @@ const aliasRequire = createRequire(require.resolve('tsc-alias'));
 const globRequire = createRequire(aliasRequire.resolve('globby'));
 const fastGlobRequire = createRequire(globRequire.resolve('fast-glob'));
 const micromatchRequire = createRequire(fastGlobRequire.resolve('micromatch'));
-const braces: Braces = micromatchRequire('braces');
+const chokidarRequire = createRequire(aliasRequire.resolve('chokidar'));
+const consumers = [
+  ['micromatch', micromatchRequire.resolve('braces')],
+  ['chokidar', chokidarRequire.resolve('braces')],
+] as const;
 
 function nestedAst(depth: number): BraceNode {
   const root: BraceNode = { type: 'root', nodes: [] };
@@ -35,7 +39,8 @@ function nestedAst(depth: number): BraceNode {
   return root;
 }
 
-describe('braces security patch', () => {
+describe.each(consumers)('braces security patch through %s', (_consumer, path) => {
+  const braces: Braces = require(path);
   it.each(['parse', 'compile', 'stringify', 'expand'] as const)(
     '%s rejects excessive brace nesting before recursive traversal',
     (method) => {
