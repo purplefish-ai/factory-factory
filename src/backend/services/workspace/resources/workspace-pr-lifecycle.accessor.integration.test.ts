@@ -435,3 +435,30 @@ it('persists monitored titles in the PR collection while keeping legacy observat
     title: null,
   });
 });
+it.each([
+  ['OPEN', 'OPEN'],
+  ['MERGED', 'OPEN'],
+  ['MERGED', 'CLOSED'],
+] as const)(
+  'keeps PR timestamps consistent between snapshot publishers for %s/%s siblings',
+  async (firstState, secondState) => {
+    const firstSyncedAt = new Date('2026-10-16T12:00:00Z');
+    const secondSyncedAt = new Date('2026-10-16T13:00:00Z');
+    const first = await createPR('p', { state: firstState, syncedAt: firstSyncedAt });
+    const second = await createPR('p2', { state: secondState, syncedAt: secondSyncedAt });
+    for (let cycle = 0; cycle < 2; cycle++) {
+      const projection = await workspaceRatchetAccessor.findSnapshotProjection('w');
+      const reconciliation = await workspaceAccessor.findById('w');
+      const selected = [first, second].find((pr) => pr.url === projection?.prUrl);
+      expect(selected).toBeDefined();
+      expect(projection?.prUpdatedAt).toEqual(selected?.syncedAt);
+      expect(reconciliation).toMatchObject({
+        prUrl: projection?.prUrl,
+        prUpdatedAt: projection?.prUpdatedAt,
+      });
+      if (firstState === 'MERGED' && secondState === 'OPEN') {
+        expect(projection?.prUrl).toBe(second.url);
+      }
+    }
+  }
+);
