@@ -22,7 +22,13 @@ export type AcpTranslatedDelta = SessionDeltaEvent & Record<string, unknown>;
 
 const MAX_TERMINAL_OUTPUT_CHARS = 256 * 1024;
 const MAX_BUFFERED_TERMINAL_TOOLS = 64;
+const MAX_TERMINALS_PER_TOOL = 16;
 const terminalOutputSchema = z.object({ data: z.string(), terminal_id: z.string().min(1) });
+const terminalReferenceSchema = z.object({
+  type: z.literal('terminal'),
+  terminalId: z.string().min(1),
+});
+type TerminalOutputState = { sessionId: string; text: string; terminalIds: Set<string> };
 
 /**
  * Maps ACP SessionUpdate variants to FF deltas, retaining bounded pending terminal output.
@@ -34,7 +40,7 @@ const terminalOutputSchema = z.object({ data: z.string(), terminal_id: z.string(
  * and returns an empty array, so one bad event does not break the pipeline.
  */
 export class AcpEventTranslator {
-  private readonly terminalOutput = new Map<string, { sessionId: string; text: string }>();
+  private readonly terminalOutput = new Map<string, TerminalOutputState>();
 
   constructor(private readonly logger: AcpTranslationLogger) {}
 
@@ -92,7 +98,7 @@ export class AcpEventTranslator {
   }
 
   private captureTerminalOutput(
-    update: { toolCallId: string; _meta?: unknown },
+    update: { toolCallId: string; _meta?: unknown; content?: unknown },
     sessionId: string,
     reset = false
   ): void {
@@ -100,26 +106,57 @@ export class AcpEventTranslator {
     if (reset) {
       this.terminalOutput.delete(key);
     }
+    const state = this.terminalOutput.get(key) ?? {
+      sessionId,
+      text: '',
+      terminalIds: new Set<string>(),
+    };
+    let changed = this.registerTerminalReferences(state, update.content);
     const meta = this.getObject(update._meta);
     const parsed = terminalOutputSchema.safeParse(
       meta?.terminal_output_delta ?? meta?.terminal_output
     );
-    if (!parsed.success || parsed.data.terminal_id !== update.toolCallId) {
+    if (
+      parsed.success &&
+      (parsed.data.terminal_id === update.toolCallId ||
+        state.terminalIds.has(parsed.data.terminal_id))
+    ) {
+      const previous = meta?.terminal_output_delta != null ? state.text : '';
+      state.text = `${previous}${parsed.data.data.slice(-MAX_TERMINAL_OUTPUT_CHARS)}`;
+      // Trim with hysteresis so small deltas do not copy the whole retained tail every time.
+      if (state.text.length > 2 * MAX_TERMINAL_OUTPUT_CHARS) {
+        state.text = state.text.slice(-MAX_TERMINAL_OUTPUT_CHARS);
+      }
+      changed = true;
+    }
+    if (!changed) {
       return;
     }
-    const previous =
-      meta?.terminal_output_delta != null ? (this.terminalOutput.get(key)?.text ?? '') : '';
-    const text = `${previous}${parsed.data.data.slice(-MAX_TERMINAL_OUTPUT_CHARS)}`.slice(
-      -MAX_TERMINAL_OUTPUT_CHARS
-    );
     this.terminalOutput.delete(key);
-    this.terminalOutput.set(key, { sessionId, text });
+    this.terminalOutput.set(key, state);
     if (this.terminalOutput.size > MAX_BUFFERED_TERMINAL_TOOLS) {
       const oldest = this.terminalOutput.keys().next().value;
       if (oldest !== undefined) {
         this.terminalOutput.delete(oldest);
       }
     }
+  }
+
+  private registerTerminalReferences(state: TerminalOutputState, content: unknown): boolean {
+    if (!Array.isArray(content)) {
+      return false;
+    }
+    const count = state.terminalIds.size;
+    for (const item of content) {
+      if (state.terminalIds.size >= MAX_TERMINALS_PER_TOOL) {
+        break;
+      }
+      const parsed = terminalReferenceSchema.safeParse(item);
+      if (parsed.success) {
+        state.terminalIds.add(parsed.data.terminalId);
+      }
+    }
+    return state.terminalIds.size !== count;
   }
 
   private translateAgentMessageChunk(
@@ -346,7 +383,7 @@ export class AcpEventTranslator {
     const key = JSON.stringify([sessionId, update.toolCallId]);
     const terminalResult = this.createTerminalToolResultEvent({
       ...update,
-      terminalOutput: this.terminalOutput.get(key)?.text ?? '',
+      terminalOutput: this.terminalOutput.get(key)?.text.slice(-MAX_TERMINAL_OUTPUT_CHARS) ?? '',
     });
     if (terminalResult) {
       this.terminalOutput.delete(key);

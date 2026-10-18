@@ -144,7 +144,7 @@ export class SessionStartupCoordinator {
           session.workflow
         );
         await this.assertCreationAllowed(sessionId, stopGeneration, options?.assertCurrent);
-        await this.applyConfiguredPermissionPreset(
+        await this.reapplyReviewPermissions(
           sessionId,
           session,
           handle,
@@ -325,19 +325,15 @@ export class SessionStartupCoordinator {
     lease: Readonly<{ sessionId: string; generation: number }>
   ): Promise<AcpProcessHandle> {
     const hadClient = !!this.dependencies.runtimeManager.getClient(session.id);
-    const { handle, resolvedPreset, dispatchableNotificationCount } =
-      await this.getOrCreateAcpSessionClient(session.id, options, session, lease.generation);
+    const { handle, dispatchableNotificationCount } = await this.getOrCreateAcpSessionClient(
+      session.id,
+      options,
+      session,
+      lease.generation
+    );
     this.dependencies.lifecycleGate.establishStartup(lease);
     this.assertStartupAllowed(session.id, lease.generation);
     if (!hadClient && options.resumePolicy !== 'require_existing') {
-      await this.applyConfiguredPermissionPreset(
-        session.id,
-        session,
-        handle,
-        lease.generation,
-        resolvedPreset
-      );
-      this.assertStartupAllowed(session.id, lease.generation);
       await this.dispatchQueuedNotificationsIfNeeded(session.id, dispatchableNotificationCount);
       this.assertStartupAllowed(session.id, lease.generation);
     }
@@ -452,7 +448,10 @@ export class SessionStartupCoordinator {
           { persistSnapshot: false, emitUpdates: false }
         );
       }
-      if (session.workflow === ADVERSARIAL_REVIEW_WORKFLOW) {
+      if (
+        options.resumePolicy !== 'require_existing' ||
+        session.workflow === ADVERSARIAL_REVIEW_WORKFLOW
+      ) {
         await this.dependencies.sessionConfigService.applyConfiguredPermissionPreset(
           sessionId,
           session,
@@ -772,6 +771,11 @@ export class SessionStartupCoordinator {
     startupModePreset: SessionStartupModePreset | undefined,
     workflow: string
   ): Promise<void> {
+    // Native access was already restored (or initialized) before persistence.
+    // The legacy Claude execution preset must not broaden it to bypassPermissions.
+    if (handle.provider === 'CLAUDE' && startupModePreset === 'non_interactive') {
+      return;
+    }
     await this.dependencies.sessionConfigService.applyStartupModePreset(
       sessionId,
       handle,
@@ -779,6 +783,26 @@ export class SessionStartupCoordinator {
       workflow,
       { persistSnapshot: this.persistAcpConfigSnapshot.bind(this) }
     );
+  }
+
+  private async reapplyReviewPermissions(
+    sessionId: string,
+    session: AgentSessionRecord,
+    handle: AcpProcessHandle,
+    stopGeneration: number,
+    permissionPreset?: PermissionPreset,
+    ownership?: OwnedStartupRuntime
+  ): Promise<void> {
+    if (session.workflow === ADVERSARIAL_REVIEW_WORKFLOW) {
+      await this.applyConfiguredPermissionPreset(
+        sessionId,
+        session,
+        handle,
+        stopGeneration,
+        permissionPreset,
+        ownership
+      );
+    }
   }
 
   private async applyConfiguredPermissionPreset(

@@ -175,6 +175,15 @@ describe('Codex response-item history messages', () => {
     ]);
   });
 
+  it('keeps a repeated native prompt after a markerless cancelled legacy turn', async () => {
+    const history = await load([
+      event('user_message', 'Repeat'),
+      response('user', 'Repeat', { kinds: ['user.text'], turnId: 'new-native-turn' }),
+      response('assistant', 'Native answer', { phase: 'final_answer', turnId: 'new-native-turn' }),
+    ]);
+    expect(history.map(({ content }) => content)).toEqual(['Repeat', 'Repeat', 'Native answer']);
+  });
+
   it('starts a native turn after markerless legacy history even when the prompt is repeated', async () => {
     const history = await load([
       event('user_message', 'Repeat'),

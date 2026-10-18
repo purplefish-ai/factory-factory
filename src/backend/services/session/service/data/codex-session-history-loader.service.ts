@@ -489,7 +489,8 @@ function appendHistoryTurn(history: HistoryMessage[], turn: CodexHistoryTurn): v
 function startsImplicitTurn(
   turn: CodexHistoryTurn,
   messages: HistoryMessage[],
-  source: CodexHistorySource
+  source: CodexHistorySource,
+  incomingTurnId?: string
 ): boolean {
   const user = messages.find((message) => message.type === 'user');
   return Boolean(
@@ -497,6 +498,9 @@ function startsImplicitTurn(
     turn.messages.some(
       (item) =>
         item.message.type === 'assistant' ||
+        // An identified prompt starts a new turn after anonymous legacy history,
+        // even if an interrupted turn used the same text and has no assistant reply.
+        (Boolean(incomingTurnId) && item.message.type === 'user') ||
         (item.message.type === 'user' &&
           (item.source === source || item.message.content !== user.content))
     )
@@ -883,7 +887,7 @@ class CodexSessionHistoryLoaderService {
     }
     const parsedMessages = parseCodexHistoryMessages(entry, timestamp);
     const source = entry.type === 'event_msg' ? 'event' : 'response';
-    if (!turn.id && startsImplicitTurn(turn, parsedMessages, source)) {
+    if (!turn.id && startsImplicitTurn(turn, parsedMessages, source, turnId)) {
       appendHistoryTurn(history, turn);
     }
     if (turnId) {

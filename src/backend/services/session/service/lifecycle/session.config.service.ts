@@ -23,6 +23,7 @@ import {
   assertReadOnlyReviewConfigOption,
   resolveConfiguredAccessModeTarget,
 } from './session-permission-policy';
+import { restoreSavedNativeModes } from './session-saved-native-modes';
 import { getWorkflowPermissionPreset } from './session-workflow-permissions';
 import type { SessionRepository } from './session.repository';
 
@@ -150,6 +151,10 @@ export class SessionConfigService {
       return;
     }
 
+    if (await this.restoreNativeModes(sessionId, session, handle)) {
+      return;
+    }
+
     const accessModeOption = handle.configOptions.find(
       (option) => option.id === 'mode' || option.category === 'mode'
     );
@@ -211,6 +216,21 @@ export class SessionConfigService {
       });
       throw error;
     }
+  }
+
+  private async restoreNativeModes(
+    sessionId: string,
+    session: AgentSessionRecord,
+    handle: AcpProcessHandle
+  ): Promise<boolean> {
+    const restored = await restoreSavedNativeModes(sessionId, session, handle, this.runtimeManager);
+    if (restored === undefined) {
+      return false;
+    }
+    if (restored) {
+      await this.persistAndEmitConfigOptions(sessionId, handle);
+    }
+    return true;
   }
 
   private async persistAndEmitConfigOptions(

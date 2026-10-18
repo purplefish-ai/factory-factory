@@ -146,7 +146,7 @@ it('cancels after reasoning configuration before persisting the provider snapsho
 it('does not stop a concurrent runtime reused during guarded acquisition', async () => {
   const h = guardHarness();
   h.runtimeManager.getClient.mockReturnValueOnce(undefined).mockReturnValue(h.handle);
-  h.sessionConfigService.applyConfiguredPermissionPreset.mockImplementation(() => {
+  h.sessionConfigService.applyStartupModePreset.mockImplementation(() => {
     h.invalidate();
     return Promise.resolve();
   });

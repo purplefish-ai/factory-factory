@@ -75,6 +75,64 @@ describe('ACP terminal output stream', () => {
     expectResult(translator.translateSessionUpdate(complete('exec')), 'exec', '');
   });
 
+  it('associates independent terminal IDs with their declaring tool and session only', () => {
+    const translator = new AcpEventTranslator({ warn: vi.fn() });
+    for (const [toolCallId, terminalId] of [
+      ['tool-a', 'pty-a'],
+      ['tool-b', 'pty-b'],
+    ] as const) {
+      translator.translateSessionUpdate(
+        {
+          sessionUpdate: 'tool_call',
+          toolCallId,
+          title: 'Terminal',
+          content: [{ type: 'terminal', terminalId }],
+        },
+        'session-a'
+      );
+    }
+    translator.translateSessionUpdate(output('tool-a', 'Alpha', 'pty-a'), 'session-a');
+    translator.translateSessionUpdate(output('tool-b', 'Wrong tool', 'pty-a'), 'session-a');
+    translator.translateSessionUpdate(output('tool-a', 'Wrong session', 'pty-a'), 'session-b');
+    translator.translateSessionUpdate(output('tool-b', 'Beta', 'pty-b'), 'session-a');
+    expectResult(
+      translator.translateSessionUpdate(complete('tool-a'), 'session-a'),
+      'tool-a',
+      'Alpha'
+    );
+    expectResult(
+      translator.translateSessionUpdate(complete('tool-b'), 'session-a'),
+      'tool-b',
+      'Beta'
+    );
+    expectResult(translator.translateSessionUpdate(complete('tool-a'), 'session-b'), 'tool-a', '');
+  });
+
+  it('captures output when its independent terminal reference arrives in a tool update', () => {
+    const translator = new AcpEventTranslator({ warn: vi.fn() });
+    translator.translateSessionUpdate({
+      ...output('tool', 'Output', 'pty'),
+      content: [{ type: 'terminal', terminalId: 'pty' }],
+    });
+    expectResult(translator.translateSessionUpdate(complete('tool')), 'tool', 'Output');
+  });
+
+  it('keeps the latest output through long streams containing many small deltas', () => {
+    const translator = new AcpEventTranslator({ warn: vi.fn() });
+    translator.translateSessionUpdate(output('verbose', 'A'.repeat(262_144)));
+    for (let index = 0; index < 32; index += 1) {
+      translator.translateSessionUpdate(output('verbose', 'B'.repeat(8192)));
+    }
+    for (let index = 0; index < 10_000; index += 1) {
+      translator.translateSessionUpdate(output('verbose', 'c'));
+    }
+    expectResult(
+      translator.translateSessionUpdate(complete('verbose')),
+      'verbose',
+      `${'B'.repeat(252_144)}${'c'.repeat(10_000)}`
+    );
+  });
+
   it('bounds a verbose tool to the latest 256 KiB of text and bounds abandoned tool IDs', () => {
     const translator = new AcpEventTranslator({ warn: vi.fn() });
     translator.translateSessionUpdate(output('verbose', 'x'.repeat(300_000)));
