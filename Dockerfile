@@ -1,7 +1,7 @@
 # FactoryFactory Dockerfile
 # Multi-stage build for cloud deployment
 
-ARG NODE_VERSION=26.8.1
+ARG NODE_VERSION=26.12.0
 
 # Node 26 does not bundle Corepack. Share one pinned pnpm installation across stages.
 FROM node:${NODE_VERSION}-alpine AS base
@@ -9,10 +9,10 @@ ENV PNPM_HOME=/pnpm
 ENV PATH="${PNPM_HOME}/bin:${PNPM_HOME}:${PATH}"
 # Keep the pnpm version and release asset SHA-256 digests pinned together.
 # Use musl release archives on Alpine and verify before extraction.
-RUN PNPM_VERSION=12.4.2 \
+RUN PNPM_VERSION=12.14.0 \
   && case "$(uname -m)" in \
-       x86_64) PNPM_ARCH=x64; PNPM_SHA256=5ac22f6d1da756482490a10b3be1b929a62fa1022a5b034b37856fab609cbd6c ;; \
-       aarch64) PNPM_ARCH=arm64; PNPM_SHA256=bf7597812c814030e759c20691dab88a1b271f495576fdbc4dae568458367105 ;; \
+       x86_64) PNPM_ARCH=x64; PNPM_SHA256=d7115e2f2791d79bf9e7e448609537595bb7787de1ef5292ce91ff3d1be2629e ;; \
+       aarch64) PNPM_ARCH=arm64; PNPM_SHA256=511a54809bdfd28270d30011d1697f582c8130d555b4fa0e2856b1a7534c98bf ;; \
        *) echo "Unsupported pnpm architecture: $(uname -m)" >&2; exit 1 ;; \
      esac \
   && mkdir -p "${PNPM_HOME}" \

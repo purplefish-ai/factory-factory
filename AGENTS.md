@@ -3,7 +3,7 @@
 Workspace-based Claude Code/Codex sessions in git worktrees. TypeScript:
 Express + tRPC, React + Vite, Prisma/SQLite, Electron, and the `ff` CLI.
 
-Use Node `>=26.8.1` and pnpm (version in `package.json`); never npm or yarn.
+Use Node `>=26.12.0` and pnpm (version in `package.json`); never npm or yarn.
 Electron uses its bundled runtime.
 
 ## Working approach
