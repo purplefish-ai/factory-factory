@@ -42,57 +42,59 @@ pnpm build
 pnpm start
 ```
 
-### Code Quality
-
-Before submitting a pull request, ensure your code passes all checks:
-
-```bash
-# Run tests
-pnpm test
-
-# Watch tests while developing
-pnpm test:watch
-
-# Type checking
-pnpm typecheck
-
-# Lint and format
-pnpm check:fix
-```
-
 ### Database
 
-```bash
-# Run migrations
-pnpm db:migrate
+The app stores its database at `~/factory-factory/data.db` by default;
+`DATABASE_PATH` and `BASE_DIR` override that location. Use `pnpm db:studio` to
+inspect it. Follow the Prisma schema row below for migrations and generated
+client changes.
 
-# Generate Prisma client after schema changes
-pnpm db:generate
+## Verification
 
-# Regenerate Prisma output, validate service ownership/imports, and typecheck after schema changes
-pnpm check:prisma-schema
+This is the shared verification policy for contributors and agents. Command
+behavior lives in [package scripts](package.json); the
+[CI workflow](.github/workflows/ci.yml) defines the enforced CI pipeline.
 
-# Open Prisma Studio
-pnpm db:studio
-```
+Prepare schema output as needed below. Before handing changes back, run
+`pnpm check:fix`, `pnpm typecheck`, the applicable tests below, then
+`pnpm check`. `pnpm check:fix` edits files across the repository, including
+Markdown; inspect its diff and keep unrelated changes out of the PR.
 
-### Storybook
+| Change             | Additional verification                                                                                                                                                                                                                                                                             |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Application code   | Add focused, co-located Vitest tests for changed behavior, including a regression for bugs. Run `pnpm test` before handoff. While iterating, use `pnpm test path/to/file.test.ts`, `pnpm test -t "name"`, or `pnpm test:watch`. Explain corrections to existing assertions.                         |
+| UI                 | Follow the application-code row, update `*.stories.tsx`, and check changed states in Storybook (`pnpm storybook`). Use `pnpm test:e2e:mobile` when mobile behavior changes.                                                                                                                         |
+| Prisma schema      | Follow the application-code row. Run `pnpm check:prisma-schema` to regenerate the client, validate ownership and typecheck. Include any required migration (`pnpm db:migrate`) and commit the regenerated `prisma/generated/` output. Generate before checking code that depends on the new schema. |
+| Documentation only | Run the shared checks above, validate changed links and anchors, verify documented commands against package scripts, and check `CLAUDE.md` imports when changing agent guides. Application tests are not needed solely for prose changes.                                                           |
 
-Use Storybook for UI development and to validate component changes:
+Run `pnpm test:integration` for changes to integration behavior. Subsystem notes
+may name additional focused checks for their contracts. Inspect the final diff,
+report failed or unavailable checks, and never weaken assertions or guardrails
+to pass. Repeat successful checks only after edits or new evidence.
 
-```bash
-pnpm storybook
-```
+`pnpm check` covers linting, formatting, file lengths, environment access,
+ownership, foreign-key indexes, dependencies, and Codex schemas. The Codex
+schema check skips locally when the pinned CLI is unavailable or mismatched; CI
+installs the pinned version. To enforce it locally, use
+`CODEX_SCHEMA_CHECK=strict pnpm check:codex-schema` with that CLI installed.
+After reducing oversized legacy files, run `pnpm check:file-length:update` to
+lower their exact ceilings; it never allows growth.
+
+The [pre-commit hook](.husky/pre-commit) formats staged files and checks types,
+migration drift, dependencies, and unused code. CI also runs coverage,
+production and Storybook builds, and generated Prisma drift checks. Hooks and CI
+supplement the verification above; report any local skips rather than assuming
+CI ran.
 
 ## Pull Request Process
 
-1. **Fork the repository** and create a new branch from `main`
-2. **Make your changes** with clear, focused commits
-3. **Run all checks** (`pnpm check`, `pnpm typecheck`, `pnpm test`)
-4. **Write or update tests** for your changes
-5. **Add or update Storybook stories** for UI changes
-6. **Update documentation** if needed
-7. **Submit a pull request** with a clear description
+1. Fork the repository if needed and create a branch from `main`.
+2. Make focused changes and follow [verification](#verification).
+3. Update documentation when behavior or commands change and inspect the final
+   diff.
+4. Open the pull request ready for review, with what changed, why, and checks
+   run. Cubic does not run on drafts. Use `--body-file` for multiline
+   `gh pr create` and `gh issue create` bodies.
 
 ### Commit Messages
 
@@ -101,7 +103,8 @@ Write clear, descriptive commit messages:
 - Use present tense ("Add feature" not "Added feature")
 - Use imperative mood ("Move cursor to..." not "Moves cursor to...")
 - Keep the first line under 72 characters
-- Reference issues when relevant ("Fix #123")
+- Reference issues as `(#123)` when relevant; use a closing keyword such as
+  `Fix #123` when the change resolves the issue
 
 ### Code Style
 
@@ -110,21 +113,8 @@ Write clear, descriptive commit messages:
   formatting and import sorting. [Biome](https://biomejs.dev/) preserves CSS and
   remaining lint guards; see [lint guardrails](lint-rules/README.md). Markdown
   prose wraps at 80 columns; fenced code is preserved.
-- Run `pnpm check` for standard guardrails and `pnpm check:fix` to automatically
-  fix lint issues, sort imports and format files. Use `pnpm lint` for linting
-  alone and `pnpm check:format` for formatting alone.
-- `pnpm check` enforces Codex schema drift in CI. Locally, that check is skipped
-  unless the pinned Codex CLI is installed; use
-  `CODEX_SCHEMA_CHECK=strict pnpm check:codex-schema` to enforce it.
-- `prisma/generated/` is generated and excluded from linting and formatting.
-  After changing `prisma/schema.prisma`, run `pnpm check:prisma-schema` to
-  regenerate Prisma output, enforce Prisma import/ownership rules, and typecheck
-  the resulting type surface. CI also runs `pnpm check:prisma-generated` after
-  generation to fail if generated output is not committed.
-- Staged `.md` files are formatted automatically by the pre-commit hook. Use
-  `pnpm format:markdown` to format all Markdown or `pnpm check:markdown` to
-  check it. CI includes this check through `pnpm check`. Git-ignored files are
-  excluded.
+- `prisma/generated/` is generated and excluded from linting and formatting;
+  follow the schema row in [verification](#verification) when changing it.
 - Follow existing patterns in the codebase
 - Use TypeScript strict mode
 - Prefer Zod for schemas and validation; avoid raw typecasts
@@ -148,17 +138,6 @@ src/
 electron/             # Electron main process
 prisma/               # Database schema and migrations
 ```
-
-## Contributor Checklist
-
-- Add or update tests and run `pnpm test` (use `pnpm test:watch` while
-  developing)
-- Add or update Storybook stories when UI changes are introduced
-  (`pnpm storybook`)
-- Run `pnpm check`, `pnpm typecheck`, and `pnpm check:fix`
-- Run `pnpm check:prisma-schema` when `prisma/schema.prisma` changes
-- Ensure schemas use Zod and avoid raw typecasts
-- Update docs when behavior or commands change
 
 ## Reporting Issues
 

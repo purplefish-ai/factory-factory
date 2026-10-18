@@ -166,17 +166,10 @@ pnpm install
 pnpm dev
 ```
 
-Before opening a pull request, run the standard checks:
-
-```bash
-pnpm test
-pnpm typecheck
-pnpm check
-```
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for project structure, conventions, and
-the full contributor workflow. The [documentation index](docs/README.md) points
-to current guides, proposals, and historical records.
+Follow the shared [verification policy](CONTRIBUTING.md#verification) before
+opening a pull request. See [CONTRIBUTING.md](CONTRIBUTING.md) for project
+structure and conventions, and the [documentation index](docs/README.md) for
+current guides, proposals, and historical records.
 
 ## Acknowledgements
 

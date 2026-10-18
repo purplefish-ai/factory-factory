@@ -9,7 +9,7 @@ context, not a new task or a substitute for current repository guidance.
 | Need                                         | Start here                                                                                            |
 | -------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | Install and run                              | [README](../README.md)                                                                                |
-| Contribute and verify changes                | [Contributing](../CONTRIBUTING.md) and [agent guide](../AGENTS.md)                                    |
+| Contribute and verify changes                | [Verification](../CONTRIBUTING.md#verification) and [agent guide](../AGENTS.md)                       |
 | Service boundaries and subsystem contracts   | [Architecture notes](architecture/README.md)                                                          |
 | Chat streaming, loading, and replay          | [Chat message flow](chat-message-flow.md)                                                             |
 | Workspace state and PR monitoring            | [Workspace state](architecture/workspace-state.md) and [PR monitoring](architecture/pull-requests.md) |
