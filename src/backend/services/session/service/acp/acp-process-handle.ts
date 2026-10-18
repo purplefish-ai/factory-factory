@@ -7,6 +7,7 @@ import {
 } from '@/shared/acp-protocol/subagents';
 import type { AcpNativeSessionTracker } from './acp-native-session-tracker';
 import type { AcpPermissionBridge } from './acp-permission-bridge';
+import { type AcpConfigurationLease, AcpPromptReadiness } from './acp-prompt-readiness';
 import type { AcpSessionCreationOutcome } from './acp-session-creation-outcome';
 import { toAcpSessionId } from './acp-session-identity';
 import type { AcpProvider } from './types';
@@ -27,6 +28,8 @@ export class AcpProcessHandle {
   configOptions: SessionConfigOption[];
   readonly createdAt: Date;
   readonly sessionCreationOutcome: AcpSessionCreationOutcome;
+  private readonly promptReadiness = new AcpPromptReadiness();
+  private initialConfiguration?: AcpConfigurationLease;
 
   constructor(params: {
     connection: ClientSideConnection;
@@ -53,6 +56,27 @@ export class AcpProcessHandle {
 
   get acpSessionId(): string {
     return toAcpSessionId(this.provider, this.providerSessionId);
+  }
+
+  get configurationReady(): Promise<void> | undefined {
+    return this.promptReadiness.wait();
+  }
+
+  beginConfiguration(): AcpConfigurationLease {
+    return this.promptReadiness.begin();
+  }
+
+  deferPromptReadiness(): void {
+    this.initialConfiguration ??= this.beginConfiguration();
+  }
+
+  completeConfiguration(assertCurrent?: () => void): void {
+    assertCurrent?.();
+    this.initialConfiguration?.complete();
+  }
+
+  failConfiguration(error: unknown): void {
+    this.promptReadiness.fail(error);
   }
 
   supportsImages(): boolean {

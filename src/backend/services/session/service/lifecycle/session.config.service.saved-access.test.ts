@@ -50,10 +50,16 @@ function setup(
     return Promise.resolve(handle.configOptions);
   };
   const runtime = {
+    isStopInProgress: vi.fn().mockReturnValue(false),
     getClient: vi.fn(() => handle as AcpProcessHandle | undefined),
-    setSessionMode: vi.fn((sessionId: string, value: string) =>
-      applyOption(sessionId, 'mode', value)
-    ),
+    setSessionMode: vi.fn((_sessionId: string, value: string) => {
+      handle.configOptions = handle.configOptions.map((option) =>
+        option.type === 'select' && option.category === 'mode'
+          ? { ...option, currentValue: value }
+          : option
+      );
+      return Promise.resolve(handle.configOptions);
+    }),
     setConfigOption: vi.fn(applyOption),
   };
   const repository = {
@@ -84,6 +90,26 @@ describe('saved native session access', () => {
       expect(h.handle.configOptions[0]?.currentValue).toBe('read-only');
     }
   );
+
+  it('restores a category-based native access mode with a custom ID', async () => {
+    const h = setup();
+    h.session.providerMetadata.acpConfigSnapshot.configOptions = [
+      { ...h.access('read-only'), id: 'native-access' },
+    ];
+    h.handle.configOptions = [{ ...h.access('workspace-write'), id: 'native-access' }];
+    await h.service.applyConfiguredPermissionPreset(
+      'session',
+      unsafeCoerce(h.session),
+      h.handle,
+      'YOLO'
+    );
+    expect(h.runtime.setSessionMode).toHaveBeenCalledWith('session', 'read-only');
+    expect(h.runtime.setConfigOption).not.toHaveBeenCalled();
+    expect(h.handle.configOptions[0]).toMatchObject({
+      id: 'native-access',
+      currentValue: 'read-only',
+    });
+  });
 
   it.each(['plan', 'default', 'acceptEdits', 'bypassPermissions'])(
     'restores Claude native %s access',

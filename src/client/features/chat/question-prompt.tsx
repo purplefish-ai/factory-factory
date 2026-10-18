@@ -80,7 +80,7 @@ function SingleQuestionLayout({
     <PromptCard
       icon={<QuestionIcon className="h-5 w-5 text-blue-500" aria-hidden="true" />}
       role="form"
-      label="Question from Claude"
+      label="Agent question"
       hideIconOnMobile
       iconSlot="question-prompt-icon"
       actions={
@@ -140,7 +140,7 @@ function MultiQuestionLayout({
     <PromptCard
       icon={<QuestionIcon className="h-5 w-5 text-blue-500" aria-hidden="true" />}
       role="form"
-      label="Questions from Claude"
+      label="Agent questions"
       hideIconOnMobile
       iconSlot="question-prompt-icon"
       actions={

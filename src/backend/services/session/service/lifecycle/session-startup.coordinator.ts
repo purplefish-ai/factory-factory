@@ -39,6 +39,7 @@ export type GetOrCreateSessionClientOptions = {
   thinkingEnabled?: boolean;
   model?: string;
   reasoningEffort?: string;
+  startupModePreset?: SessionStartupModePreset;
 };
 
 export type StartSessionOptions = {
@@ -127,31 +128,14 @@ export class SessionStartupCoordinator {
           throw new Error('Session is already running');
         }
 
-        const { handle, resolvedPreset, dispatchableNotificationCount } =
-          await this.getOrCreateAcpSessionClient(
-            sessionId,
-            { assertCurrent: options?.assertCurrent },
-            session,
-            stopGeneration,
-            ownership
-          );
-        this.dependencies.lifecycleGate.establishStartup(lease);
-        await this.assertCreationAllowed(sessionId, stopGeneration, options?.assertCurrent);
-        await this.applyStartupModePreset(
+        const { dispatchableNotificationCount } = await this.getOrCreateAcpSessionClient(
           sessionId,
-          handle,
-          options?.startupModePreset,
-          session.workflow
-        );
-        await this.assertCreationAllowed(sessionId, stopGeneration, options?.assertCurrent);
-        await this.reapplyReviewPermissions(
-          sessionId,
+          { assertCurrent: options?.assertCurrent, startupModePreset: options?.startupModePreset },
           session,
-          handle,
           stopGeneration,
-          resolvedPreset,
           ownership
         );
+        this.dependencies.lifecycleGate.establishStartup(lease);
         await this.assertCreationAllowed(sessionId, stopGeneration, options?.assertCurrent);
         await this.dispatchQueuedNotificationsIfNeeded(sessionId, dispatchableNotificationCount);
         await this.assertCreationAllowed(sessionId, stopGeneration, options?.assertCurrent);
@@ -365,6 +349,7 @@ export class SessionStartupCoordinator {
       model?: string;
       purpose?: 'active' | 'browse';
       resumePolicy?: 'allow_fallback' | 'require_existing';
+      startupModePreset?: SessionStartupModePreset;
     },
     session: AgentSessionRecord,
     permissionPreset: PermissionPreset | undefined,
@@ -406,6 +391,7 @@ export class SessionStartupCoordinator {
     const clientOptions: AcpClientOptions = {
       provider: session.provider,
       purpose: options.purpose,
+      deferPromptReadiness: !browseOnly,
       workingDir: sessionContext.workingDir,
       model: options.model ?? sessionContext.model,
       permissionPreset,
@@ -461,6 +447,19 @@ export class SessionStartupCoordinator {
           permissionPreset
         );
       }
+      await this.applyStartupModePreset(
+        sessionId,
+        handle,
+        options.startupModePreset,
+        session.workflow
+      );
+      await this.reapplyReviewPermissions(
+        sessionId,
+        session,
+        handle,
+        stopGeneration,
+        permissionPreset
+      );
       await this.assertCreationAllowed(sessionId, stopGeneration, options.assertCurrent);
       await this.persistAcpConfigSnapshot(sessionId, {
         provider: handle.provider as PersistAcpConfigSnapshotParams['provider'],
@@ -473,7 +472,14 @@ export class SessionStartupCoordinator {
             : (session.providerMetadata ?? undefined),
       });
       await this.assertCreationAllowed(sessionId, stopGeneration, options.assertCurrent);
+      handle.completeConfiguration(() => {
+        this.assertStartupAllowed(sessionId, stopGeneration);
+        if (this.dependencies.runtimeManager.getClient(sessionId) !== handle) {
+          throw new Error('Session runtime changed during configuration');
+        }
+      });
     } catch (error) {
+      handle?.failConfiguration(error);
       await this.cleanupFailedClientCreation(
         sessionId,
         session.workflow,
@@ -599,8 +605,14 @@ export class SessionStartupCoordinator {
       if (options.resumePolicy === 'require_existing') {
         this.assertExistingConversation(session, existingAcp, false);
       }
-      if (session.workflow === ADVERSARIAL_REVIEW_WORKFLOW) {
-        await this.applyConfiguredPermissionPreset(sessionId, session, existingAcp, stopGeneration);
+      if (session.workflow === ADVERSARIAL_REVIEW_WORKFLOW || options.startupModePreset) {
+        await this.configureExistingClient(
+          sessionId,
+          session,
+          existingAcp,
+          stopGeneration,
+          options
+        );
       }
       await this.assertCreationAllowed(sessionId, stopGeneration, options.assertCurrent);
       const isWorking = this.dependencies.runtimeManager.isSessionWorking(sessionId);
@@ -795,6 +807,33 @@ export class SessionStartupCoordinator {
       workflow,
       { persistSnapshot: this.persistAcpConfigSnapshot.bind(this) }
     );
+  }
+
+  private async configureExistingClient(
+    sessionId: string,
+    session: AgentSessionRecord,
+    handle: AcpProcessHandle,
+    stopGeneration: number,
+    options: GetOrCreateSessionClientOptions
+  ): Promise<void> {
+    const configuration = handle.beginConfiguration();
+    try {
+      await this.applyStartupModePreset(
+        sessionId,
+        handle,
+        options.startupModePreset,
+        session.workflow
+      );
+      await this.reapplyReviewPermissions(sessionId, session, handle, stopGeneration);
+      await this.assertCreationAllowed(sessionId, stopGeneration, options.assertCurrent);
+      if (this.dependencies.runtimeManager.getClient(sessionId) !== handle) {
+        throw new Error('Session runtime changed during configuration');
+      }
+      configuration.complete();
+    } catch (error) {
+      configuration.fail(error);
+      throw error;
+    }
   }
 
   private async reapplyReviewPermissions(

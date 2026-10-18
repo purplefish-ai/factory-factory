@@ -90,7 +90,7 @@ import type { AcpProcessHandle, AcpRuntimeEvent } from '@/backend/services/sessi
 import { acpRuntimeManager } from '@/backend/services/session/service/acp';
 import { workspaceDataService } from '@/backend/services/workspace';
 import { closedSessionPersistenceService } from './closed-session-persistence.service';
-import { createDeferred } from './session-lifecycle.test-helpers';
+import { createDeferred, mockCreatedAcpClient } from './session-lifecycle.test-helpers';
 import {
   acpEventProcessor,
   sessionLifecycleService,
@@ -106,12 +106,6 @@ const activeRuntime = {
 } as const;
 
 const getAcpProcessorState = () => acpEventProcessor;
-function mockCreatedAcpClient(acpHandle: AcpProcessHandle): void {
-  vi.mocked(acpRuntimeManager.getOrCreateClient).mockImplementation(() => {
-    vi.mocked(acpRuntimeManager.getClient).mockReturnValue(acpHandle);
-    return Promise.resolve(acpHandle);
-  });
-}
 describe('SessionService', () => {
   const sessionId = 'session-fixture-isolation';
   beforeEach(() => {
@@ -199,7 +193,7 @@ describe('SessionService', () => {
     vi.mocked(sessionRepository.markWorkspaceHasHadSessions).mockResolvedValue();
     vi.mocked(sessionRepository.updateSession).mockResolvedValue(session);
 
-    mockCreatedAcpClient(acpHandle);
+    mockCreatedAcpClient(acpRuntimeManager, acpHandle);
     vi.mocked(acpRuntimeManager.sendPrompt).mockResolvedValue({ stopReason: 'end_turn' });
 
     await sessionLifecycleService.startSession('session-1', { initialPrompt: 'Hello' });
@@ -254,7 +248,7 @@ describe('SessionService', () => {
     vi.mocked(sessionRepository.markWorkspaceHasHadSessions).mockResolvedValue();
     vi.mocked(sessionRepository.updateSession).mockResolvedValue(session);
 
-    mockCreatedAcpClient(acpHandle);
+    mockCreatedAcpClient(acpRuntimeManager, acpHandle);
     vi.mocked(acpRuntimeManager.sendPrompt).mockResolvedValue({ stopReason: 'end_turn' });
 
     await sessionLifecycleService.startSession('session-1', { initialPrompt: '' });
@@ -299,7 +293,7 @@ describe('SessionService', () => {
     vi.mocked(sessionRepository.markWorkspaceHasHadSessions).mockResolvedValue();
     vi.mocked(sessionRepository.updateSession).mockResolvedValue(session);
 
-    mockCreatedAcpClient(acpHandle);
+    mockCreatedAcpClient(acpRuntimeManager, acpHandle);
 
     const result = await sessionLifecycleService.getOrCreateSessionClient('session-1');
 
@@ -354,7 +348,7 @@ describe('SessionService', () => {
     vi.mocked(sessionRepository.getWorkspaceById).mockResolvedValue(workspace);
     vi.mocked(sessionRepository.markWorkspaceHasHadSessions).mockResolvedValue();
     vi.mocked(sessionRepository.updateSession).mockResolvedValue(session);
-    mockCreatedAcpClient(acpHandle);
+    mockCreatedAcpClient(acpRuntimeManager, acpHandle);
 
     const injectUserMessageSpy = vi.spyOn(sessionDomainService, 'injectCommittedUserMessage');
     await sessionLifecycleService.getOrCreateSessionClient('session-1');
@@ -406,7 +400,7 @@ describe('SessionService', () => {
     vi.mocked(sessionRepository.getWorkspaceById).mockResolvedValue(workspace);
     vi.mocked(sessionRepository.markWorkspaceHasHadSessions).mockResolvedValue();
     vi.mocked(sessionRepository.updateSession).mockResolvedValue(session);
-    mockCreatedAcpClient(acpHandle);
+    mockCreatedAcpClient(acpRuntimeManager, acpHandle);
 
     const injectUserMessageSpy = vi.spyOn(sessionDomainService, 'injectCommittedUserMessage');
     await sessionLifecycleService.getOrCreateSessionClient('session-1');
@@ -463,7 +457,7 @@ describe('SessionService', () => {
     vi.mocked(sessionRepository.getWorkspaceById).mockResolvedValue(workspace);
     vi.mocked(sessionRepository.markWorkspaceHasHadSessions).mockResolvedValue();
     vi.mocked(sessionRepository.updateSession).mockResolvedValue(session);
-    mockCreatedAcpClient(acpHandle);
+    mockCreatedAcpClient(acpRuntimeManager, acpHandle);
 
     const historyHydratedSpy = vi
       .spyOn(sessionDomainService, 'isHistoryHydrated')
@@ -533,7 +527,7 @@ describe('SessionService', () => {
     vi.mocked(sessionRepository.getWorkspaceById).mockResolvedValue(workspace);
     vi.mocked(sessionRepository.markWorkspaceHasHadSessions).mockResolvedValue();
     vi.mocked(sessionRepository.updateSession).mockResolvedValue(session);
-    mockCreatedAcpClient(acpHandle);
+    mockCreatedAcpClient(acpRuntimeManager, acpHandle);
 
     const injectUserMessageSpy = vi.spyOn(sessionDomainService, 'injectCommittedUserMessage');
     await sessionLifecycleService.getOrCreateSessionClient('session-1');
@@ -668,7 +662,7 @@ describe('SessionService', () => {
     vi.mocked(sessionRepository.getWorkspaceById).mockResolvedValue(workspace);
     vi.mocked(sessionRepository.updateSession).mockResolvedValue(session);
     vi.mocked(sessionRepository.getSessionById).mockResolvedValue(session);
-    mockCreatedAcpClient(acpHandle);
+    mockCreatedAcpClient(acpRuntimeManager, acpHandle);
     await sessionLifecycleService.getOrCreateSessionClient('session-race-test');
 
     const stopLoad = createDeferred<typeof session | null>();
@@ -766,7 +760,7 @@ describe('SessionService', () => {
     vi.mocked(sessionRepository.markWorkspaceHasHadSessions).mockResolvedValue();
     vi.mocked(sessionRepository.updateSession).mockResolvedValue(session);
     vi.mocked(acpRuntimeManager.stopClient).mockResolvedValue();
-    mockCreatedAcpClient(acpHandle);
+    mockCreatedAcpClient(acpRuntimeManager, acpHandle);
 
     const stopPromise = sessionLifecycleService.stopSession('session-1');
     await vi.waitFor(() => {
@@ -963,7 +957,7 @@ describe('SessionService', () => {
     vi.mocked(sessionRepository.getWorkspaceById).mockResolvedValue(workspace);
     vi.mocked(sessionRepository.markWorkspaceHasHadSessions).mockResolvedValue();
     vi.mocked(sessionRepository.updateSession).mockResolvedValue(session);
-    mockCreatedAcpClient(acpHandle);
+    mockCreatedAcpClient(acpRuntimeManager, acpHandle);
     await sessionLifecycleService.getOrCreateSessionClient('session-runtime-exit');
 
     const acpHandlers = vi.mocked(acpRuntimeManager.getOrCreateClient).mock.calls[0]![2];
@@ -1025,7 +1019,7 @@ describe('SessionService', () => {
     vi.mocked(sessionRepository.getWorkspaceById).mockResolvedValue(workspace);
     vi.mocked(sessionRepository.markWorkspaceHasHadSessions).mockResolvedValue();
     vi.mocked(sessionRepository.updateSession).mockResolvedValue(session);
-    mockCreatedAcpClient(acpHandle);
+    mockCreatedAcpClient(acpRuntimeManager, acpHandle);
 
     await sessionLifecycleService.getOrCreateSessionClient('session-runtime-exit');
 
@@ -1625,7 +1619,7 @@ describe('SessionService', () => {
     vi.mocked(sessionRepository.markWorkspaceHasHadSessions).mockResolvedValue();
     vi.mocked(sessionRepository.updateSession).mockResolvedValue(session);
 
-    mockCreatedAcpClient(acpHandle);
+    mockCreatedAcpClient(acpRuntimeManager, acpHandle);
     vi.mocked(acpRuntimeManager.sendPrompt).mockResolvedValue({ stopReason: 'end_turn' });
 
     await sessionLifecycleService.startSession('session-2');
@@ -1672,7 +1666,7 @@ describe('SessionService', () => {
     vi.mocked(sessionRepository.getWorkspaceById).mockResolvedValue(workspace);
     vi.mocked(sessionRepository.markWorkspaceHasHadSessions).mockResolvedValue();
     vi.mocked(sessionRepository.updateSession).mockResolvedValue(session);
-    mockCreatedAcpClient(acpHandle);
+    mockCreatedAcpClient(acpRuntimeManager, acpHandle);
     vi.mocked(sessionRepository.getSessionById).mockResolvedValue(session);
     await sessionLifecycleService.getOrCreateSessionClient(sessionId);
 
@@ -1781,7 +1775,7 @@ describe('SessionService', () => {
       vi.mocked(sessionRepository.markWorkspaceHasHadSessions).mockResolvedValue();
       vi.mocked(sessionRepository.updateSession).mockResolvedValue(session);
 
-      mockCreatedAcpClient(acpHandle);
+      mockCreatedAcpClient(acpRuntimeManager, acpHandle);
       vi.mocked(acpRuntimeManager.sendPrompt).mockResolvedValue({ stopReason: 'end_turn' });
 
       await sessionLifecycleService.startSession('session-2');
@@ -1850,7 +1844,7 @@ describe('SessionService', () => {
     vi.mocked(sessionRepository.getWorkspaceById).mockResolvedValue(workspace);
     vi.mocked(sessionRepository.markWorkspaceHasHadSessions).mockResolvedValue();
     vi.mocked(sessionRepository.updateSession).mockResolvedValue(session);
-    mockCreatedAcpClient(acpHandle);
+    mockCreatedAcpClient(acpRuntimeManager, acpHandle);
     vi.mocked(acpRuntimeManager.sendPrompt).mockResolvedValue({ stopReason: 'end_turn' });
 
     await sessionLifecycleService.startSession('session-2');
@@ -1902,7 +1896,7 @@ describe('SessionService', () => {
     vi.mocked(sessionRepository.markWorkspaceHasHadSessions).mockResolvedValue();
     vi.mocked(sessionRepository.updateSession).mockResolvedValue(session);
 
-    mockCreatedAcpClient(acpHandle);
+    mockCreatedAcpClient(acpRuntimeManager, acpHandle);
 
     await sessionLifecycleService.getOrCreateSessionClient('session-1');
 
@@ -2336,7 +2330,7 @@ describe('SessionService', () => {
     vi.mocked(sessionRepository.getWorkspaceById).mockResolvedValue(workspace);
     vi.mocked(sessionRepository.markWorkspaceHasHadSessions).mockResolvedValue();
     vi.mocked(sessionRepository.updateSession).mockResolvedValue(session);
-    mockCreatedAcpClient(acpHandle);
+    mockCreatedAcpClient(acpRuntimeManager, acpHandle);
     vi.mocked(acpRuntimeManager.sendPrompt).mockResolvedValue({ stopReason: 'end_turn' });
 
     await sessionLifecycleService.startSession('session-1', { initialPrompt: 'go' });

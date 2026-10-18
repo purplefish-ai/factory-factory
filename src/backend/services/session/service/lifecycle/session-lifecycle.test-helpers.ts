@@ -207,6 +207,20 @@ export type TerminationHarnessOverrides = Pick<
   onBeforeStopSession?: (sessionId: string) => void;
 };
 
+export function mockCreatedAcpClient(
+  runtimeManager: Pick<AcpRuntimeManager, 'getOrCreateClient' | 'getClient'>,
+  acpHandle: AcpProcessHandle
+): void {
+  Object.assign(acpHandle, {
+    completeConfiguration: vi.fn((assertCurrent?: () => void) => assertCurrent?.()),
+    failConfiguration: vi.fn(),
+  });
+  vi.mocked(runtimeManager.getOrCreateClient).mockImplementation(() => {
+    vi.mocked(runtimeManager.getClient).mockReturnValue(acpHandle);
+    return Promise.resolve(acpHandle);
+  });
+}
+
 export function createDeferred<T>(): Deferred<T> {
   let resolve!: (value: T | PromiseLike<T>) => void;
   let reject!: (reason?: unknown) => void;
@@ -468,6 +482,9 @@ export function createLifecycleHarness(
     },
     configOptions: [],
     isPromptInFlight: false,
+    beginConfiguration: vi.fn(() => ({ complete: vi.fn(), fail: vi.fn() })),
+    completeConfiguration: vi.fn(),
+    failConfiguration: vi.fn(),
     getSubagentBrowseCapability: vi.fn(() => ({
       version: 1 as const,
       list: true as const,

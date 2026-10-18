@@ -270,7 +270,7 @@ export const ConstrainedForm: Story = {
     docs: {
       description: {
         story:
-          'Required selections disable Submit while empty. Count validation appears after selecting an option.',
+          'Claude and Codex share provider-neutral form labels. Required selections disable Submit while empty. Count validation appears after selecting an option.',
       },
     },
   },

@@ -37,9 +37,11 @@ controls render select options.
 
 Permission defaults initialize new sessions. Existing sessions restore their
 saved native access and Codex planning choices before publishing a new snapshot
-or dispatching work. Invalid, mismatched, or unavailable saved modes stop
-startup; legacy sessions without a snapshot retain the configured-default
-fallback. Reviewer workflows always reapply their read-only restrictions.
+or dispatching work. Prompts and user configuration changes wait for that
+restoration on the current runtime handle. Invalid, mismatched, or unavailable
+saved modes stop startup; legacy sessions without a snapshot retain the
+configured-default fallback. Reviewer workflows always reapply their read-only
+restrictions.
 
 Persisted ACP configuration snapshots are validated before use. Legacy Codex
 collaboration/access tuples are converted into native options before startup,

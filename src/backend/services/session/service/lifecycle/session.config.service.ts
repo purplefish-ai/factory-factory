@@ -2,6 +2,7 @@ import type { SessionConfigOption } from '@agentclientprotocol/sdk';
 import { createLogger } from '@/backend/services/logger.service';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/session/service/acp';
+import { withConfiguredAcpHandle } from '@/backend/services/session/service/acp/acp-configured-handle';
 import { normalizeSessionConfigOptions } from '@/backend/services/session/service/acp/acp-session-config-options';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
@@ -391,12 +392,15 @@ export class SessionConfigService {
       return;
     }
 
-    await this.applyReasoningEffortTarget({
-      sessionId,
-      handle: acpHandle,
-      targetReasoningEffort,
-      source: requestedReasoningEffort ? 'message' : 'settings',
-    });
+    await withConfiguredAcpHandle(this.runtimeManager, sessionId, acpHandle, () =>
+      this.applyReasoningEffortTarget({
+        sessionId,
+        handle: acpHandle,
+        targetReasoningEffort,
+        source: requestedReasoningEffort ? 'message' : 'settings',
+        assertCurrent: () => this.assertCurrentConfiguredHandle(sessionId, acpHandle),
+      })
+    );
   }
 
   async applyConfiguredReasoningEffort(
@@ -436,6 +440,10 @@ export class SessionConfigService {
       return;
     }
 
+    while (acpHandle.configurationReady !== undefined) {
+      await acpHandle.configurationReady;
+    }
+    this.assertCurrentConfiguredHandle(sessionId, acpHandle);
     const selectedOption = acpHandle.configOptions.find((option) => option.id === configId);
     const isModeOption = configId === 'mode' || selectedOption?.category === 'mode';
     const isModelOption = configId === 'model' || selectedOption?.category === 'model';
@@ -454,24 +462,38 @@ export class SessionConfigService {
       );
     }
 
-    const configOptions = isModeOption
-      ? await this.runtimeManager.setSessionMode(sessionId, value)
-      : isModelOption
-        ? await this.runtimeManager.setSessionModel(sessionId, value)
-        : await this.runtimeManager.setConfigOption(sessionId, configId, value);
+    const configOptions = await withConfiguredAcpHandle(
+      this.runtimeManager,
+      sessionId,
+      acpHandle,
+      () =>
+        isModeOption
+          ? this.runtimeManager.setSessionMode(sessionId, value)
+          : isModelOption
+            ? this.runtimeManager.setSessionModel(sessionId, value)
+            : this.runtimeManager.setConfigOption(sessionId, configId, value)
+    );
 
+    this.assertCurrentConfiguredHandle(sessionId, acpHandle);
     this.sessionDomainService.emitDelta(sessionId, {
       type: 'config_options_update',
       configOptions,
     } as SessionDeltaEvent);
 
-    const acpHandleAfterUpdate = this.runtimeManager.getClient(sessionId);
-    if (acpHandleAfterUpdate) {
-      await this.persistAcpConfigSnapshot(sessionId, {
-        provider: acpHandleAfterUpdate.provider as SessionProvider,
-        providerSessionId: acpHandleAfterUpdate.providerSessionId,
-        configOptions,
-      });
+    await this.persistAcpConfigSnapshot(sessionId, {
+      provider: acpHandle.provider as SessionProvider,
+      providerSessionId: acpHandle.providerSessionId,
+      configOptions,
+    });
+  }
+
+  private assertCurrentConfiguredHandle(sessionId: string, handle: AcpProcessHandle): void {
+    if (
+      this.runtimeManager.getClient(sessionId) !== handle ||
+      this.runtimeManager.isStopInProgress(sessionId) ||
+      handle.configurationReady !== undefined
+    ) {
+      throw new Error('Session runtime changed before configuration update');
     }
   }
 
@@ -704,6 +726,7 @@ export class SessionConfigService {
     source: 'message' | 'settings';
     persistSnapshot?: boolean;
     emitUpdates?: boolean;
+    assertCurrent?: () => void;
   }): Promise<void> {
     const reasoningOption = params.handle.configOptions.find(
       (option) =>
@@ -745,6 +768,7 @@ export class SessionConfigService {
       reasoningOption.id,
       params.targetReasoningEffort
     );
+    params.assertCurrent?.();
     params.handle.configOptions = configOptions;
     if (params.persistSnapshot !== false) {
       await this.persistAcpConfigSnapshot(params.sessionId, {

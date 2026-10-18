@@ -132,12 +132,18 @@ export class AcpRuntimeManager {
     prompt: ContentBlock[],
     timeoutMs?: number
   ): Promise<{ stopReason: string }> {
-    return await this.promptController.sendPrompt(
-      sessionId,
-      this.requireInstalledHandle(sessionId),
-      prompt,
-      timeoutMs
-    );
+    const handle = this.requireInstalledHandle(sessionId);
+    while (handle.configurationReady !== undefined) {
+      await handle.configurationReady;
+    }
+    if (
+      this.supervisor.getClient(sessionId) !== handle ||
+      this.supervisor.isStopInProgress(sessionId) ||
+      !handle.isRunning()
+    ) {
+      throw new Error(`ACP session is not ready for prompts: ${sessionId}`);
+    }
+    return await this.promptController.sendPrompt(sessionId, handle, prompt, timeoutMs);
   }
 
   /** Returns true when a prompt was actually in flight and got cancelled. */

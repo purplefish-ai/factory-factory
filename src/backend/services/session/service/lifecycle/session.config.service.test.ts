@@ -30,11 +30,11 @@ describe('SessionConfigService', () => {
 
   const runtimeManager = {
     getClient: vi.fn(),
+    isStopInProgress: vi.fn(() => false),
     setSessionMode: vi.fn(),
     setSessionModel: vi.fn(),
     setConfigOption: vi.fn(),
   };
-
   const sessionDomain = {
     emitDelta: vi.fn(),
   };
