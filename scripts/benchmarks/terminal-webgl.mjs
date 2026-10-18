@@ -5,38 +5,44 @@ import { join } from 'node:path';
 import { chromium } from '@playwright/test';
 import { createServer } from 'vite';
 const directory = mkdtempSync(join(tmpdir(), 'ff-webgl-trial-'));
-writeFileSync(
-  join(directory, 'package.json'),
-  JSON.stringify({
-    private: true,
-    type: 'module',
-    dependencies: { '@xterm/xterm': '6.0.0', '@xterm/addon-webgl': '0.19.0' },
-  })
-);
-const install = spawnSync('pnpm', ['install', '--ignore-scripts'], {
-  cwd: directory,
-  encoding: 'utf8',
-});
-if (install.status !== 0) {
-  rmSync(directory, { recursive: true, force: true });
-  throw new Error(install.stderr || install.stdout);
-}
-writeFileSync(
-  join(directory, 'index.html'),
-  '<html><body style="margin:0;background:#18181b"><script type="module" src="/entry.js"></script></body></html>'
-);
-writeFileSync(
-  join(directory, 'entry.js'),
-  "import { Terminal } from '@xterm/xterm'; import { WebglAddon } from '@xterm/addon-webgl'; import '@xterm/xterm/css/xterm.css'; window.xtermTrial = { Terminal, WebglAddon };"
-);
-const server = await createServer({
-  root: directory,
-  configFile: false,
-  server: { host: '127.0.0.1', port: 0 },
-});
-await server.listen();
-const browser = await chromium.launch({ channel: 'chrome', headless: true });
+let server;
+let browser;
 try {
+  writeFileSync(
+    join(directory, 'package.json'),
+    JSON.stringify({
+      private: true,
+      type: 'module',
+      dependencies: { '@xterm/xterm': '6.0.0', '@xterm/addon-webgl': '0.19.0' },
+    })
+  );
+  const install = spawnSync('pnpm', ['install', '--ignore-scripts'], {
+    cwd: directory,
+    encoding: 'utf8',
+  });
+  if (install.status !== 0) {
+    throw new Error(
+      install.error?.message ||
+        install.stderr ||
+        install.stdout ||
+        'Trial dependency installation failed'
+    );
+  }
+  writeFileSync(
+    join(directory, 'index.html'),
+    '<html><body style="margin:0;background:#18181b"><script type="module" src="/entry.js"></script></body></html>'
+  );
+  writeFileSync(
+    join(directory, 'entry.js'),
+    "import { Terminal } from '@xterm/xterm'; import { WebglAddon } from '@xterm/addon-webgl'; import '@xterm/xterm/css/xterm.css'; window.xtermTrial = { Terminal, WebglAddon };"
+  );
+  server = await createServer({
+    root: directory,
+    configFile: false,
+    server: { host: '127.0.0.1', port: 0 },
+  });
+  await server.listen();
+  browser = await chromium.launch({ channel: 'chrome', headless: true });
   const page = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
   await page.goto(server.resolvedUrls.local[0]);
   await page.waitForFunction(() => Boolean(window.xtermTrial));
@@ -227,7 +233,13 @@ try {
   }
   console.log(JSON.stringify({ measurements: result, lifecycle, unsupported }, null, 2));
 } finally {
-  await browser.close();
-  await server.close();
-  rmSync(directory, { recursive: true, force: true });
+  try {
+    await browser?.close();
+  } finally {
+    try {
+      await server?.close();
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  }
 }

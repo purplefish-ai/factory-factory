@@ -11,8 +11,10 @@ resources. No production dependency or terminal behavior changes are included.
 node scripts/benchmarks/terminal-webgl.mjs
 ```
 
-The script requires installed Google Chrome and network access to install the
-two pinned xterm packages in a temporary directory. It serves an isolated Vite
+Run from a repository checkout with its dependencies installed. The script
+imports the checkout's `vite` and `@playwright/test` packages; it also requires
+installed Google Chrome, `pnpm` on PATH, and network access to install the two
+pinned xterm packages in a temporary directory. It serves an isolated Vite
 fixture, compares the default renderer against WebGL, checks context-loss and
 unsupported-GPU fallback, then removes the temporary installation. It does not
 install into the application or change its lockfile.
@@ -22,8 +24,8 @@ Each case runs three times with one, four, and eight visible terminals in a
 receives a 6,000-row colored ANSI replay followed by thirty 50-row bursts. Both
 renderers receive identical bytes; the final buffer text is asserted. Timings
 include write completion and two animation frames. A warmup precedes replay. The
-harness reports GPU backend, frame intervals, atlas dimensions, live contexts
-after disposal, and both fallback checks.
+harness reports GPU backend, frame intervals, estimated atlas bytes, live
+contexts after disposal, and both fallback checks.
 
 ## Hardware measurements
 
