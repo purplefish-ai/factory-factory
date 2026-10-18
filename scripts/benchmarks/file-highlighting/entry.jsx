@@ -125,6 +125,8 @@ window.showHighlightingPreview = () => {
     ['javascript', `const value = \`Hello \${name}\`;\nif (value !== null) console.log(value);`],
     ['css', '.example { color: red !important; background: url("image.png"); }'],
     ['markup', '<a href="https://example.com" class="example">Link &amp; text</a>'],
+    ['jsx', '<Button disabled={true} count={2} onClick={() => null} />'],
+    ['tsx', '<Button disabled={true} count={2} onClick={() => null} />'],
     ['json', '{ "enabled": true, "count": 42, "value": null }'],
     [
       'markdown',

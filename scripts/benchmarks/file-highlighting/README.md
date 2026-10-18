@@ -28,10 +28,11 @@ numbered plaintext fallback and subsequent chunk download are not timed.
 Before measuring, browser assertions verify light/dark keyword colors, italic
 comments, exact source text including whitespace and trailing newlines, line
 numbers, monospace font, long-line horizontal scrolling, absence of inline token
-styles, and unknown-language fallback. The optional screenshot shows both themes
-for TypeScript, JavaScript, CSS, markup, JSON, and Markdown. Vitest separately
-covers readable source during loading and after chunk-load failure, plus theme
-changes without replacing the mounted code element.
+styles, JSX/TSX expression leaf colors, nested class-name punctuation, and
+unknown-language fallback. The optional screenshot shows both themes for
+TypeScript, JavaScript, CSS, markup, JSX, TSX, JSON, and Markdown. Vitest
+separately covers readable source during loading and after chunk-load failure,
+plus theme changes without replacing the mounted code element.
 
 Bundle mode builds the current frontend twice. For the baseline only, a Vite
 loader substitutes `file-viewer.tsx` from commit

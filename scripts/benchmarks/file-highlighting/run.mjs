@@ -182,6 +182,24 @@ try {
     ],
     ['json', '{ "value": null }', '.token.null.keyword', 'hsl(35, 99%, 36%)', 'hsl(29, 54%, 61%)'],
   ];
+  const jsxExpression = '<Button disabled={true} count={2} onClick={() => null} />';
+  for (const language of ['jsx', 'tsx']) {
+    languageColors.push(
+      [language, jsxExpression, '.token.tag.class-name', 'hsl(35, 99%, 36%)', 'hsl(29, 54%, 61%)'],
+      [language, jsxExpression, '.token.tag.boolean', 'hsl(35, 99%, 36%)', 'hsl(29, 54%, 61%)'],
+      [language, jsxExpression, '.token.tag.number', 'hsl(35, 99%, 36%)', 'hsl(29, 54%, 61%)'],
+      [language, jsxExpression, '.token.tag.keyword', 'hsl(301, 63%, 40%)', 'hsl(286, 60%, 67%)']
+    );
+  }
+  for (const language of ['javascript', 'jsx']) {
+    languageColors.push([
+      language,
+      'class Foo extends Bar.Baz {}',
+      '.token.class-name.punctuation',
+      'hsl(230, 8%, 24%)',
+      'hsl(220, 14%, 71%)',
+    ]);
+  }
   for (const [language, content, selector, light, dark] of languageColors) {
     for (const [theme, color] of [
       ['light', light],
@@ -260,6 +278,7 @@ try {
         productionBuild: true,
         viewport: { width: 1200, height: 800 },
         functionalChecks: 'passed',
+        languageColorAssertions: languageColors.length * 2,
         results,
         bundles,
       },

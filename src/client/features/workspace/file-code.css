@@ -201,13 +201,24 @@
   opacity: 0.8;
 }
 
-/* wrapLines flattens ancestor classes onto tokens (e.g. tag + attr-name).
-   Prefer the leaf token's color over a conflicting parent token color. */
-.file-code .token.tag.attr-name {
+/* wrapLines flattens ancestors onto leaves, including JSX expression tokens.
+   Tag ancestry must not override earlier generic leaf colors. Alias classes
+   can follow the leaf type (e.g. keyword + null + nil), so use class membership.
+   Keep punctuation overrides last for nested class names and attributes. */
+.file-code .token.tag:is(.comment, .prolog, .cdata) {
+  color: var(--syntax-comment);
+}
+
+.file-code .token.tag:is(.attr-name, .class-name, .boolean, .constant, .number, .atrule) {
   color: var(--syntax-orange);
 }
 
-.file-code .token.tag.punctuation {
+.file-code .token.tag.keyword {
+  color: var(--syntax-purple);
+}
+
+.file-code .token.tag:is(.doctype, .punctuation, .entity),
+.file-code .token.class-name.punctuation {
   color: var(--syntax-text);
 }
 

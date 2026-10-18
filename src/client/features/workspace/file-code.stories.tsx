@@ -107,3 +107,15 @@ export const MarkdownSource: Story = {
       '# Heading\n\n**Bold** and *italic*, ~~struck~~.\n\n> Quoted text\n\n[Link](https://example.com)\n\n- List item\n',
   },
 };
+
+export const JSXExpressions: Story = {
+  args: {
+    language: 'jsx',
+    content:
+      'class Button extends UI.Component {}\n\nconst view = <Button disabled={true} count={2} onClick={() => null} />;\n',
+  },
+};
+
+export const TSXExpressions: Story = {
+  args: { ...JSXExpressions.args, language: 'tsx', theme: 'dark' },
+};
