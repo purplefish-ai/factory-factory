@@ -63,24 +63,6 @@ describe('FileViewer appearance', () => {
 });
 
 describe('FileViewer highlighting', () => {
-  it('shows readable numbered text before the language bundle loads', () => {
-    const container = document.createElement('div');
-    container.innerHTML = renderToStaticMarkup(
-      createElement(FileViewer, {
-        workspaceId: 'workspace-1',
-        filePath: 'example.ts',
-        tabId: 'file-1',
-      })
-    );
-
-    expect(container.querySelector('pre')?.textContent).toContain('const x = 1;');
-    expect(container.querySelector('.token.keyword')).toBeNull();
-    expect(container.querySelector('pre')?.getAttribute('aria-busy')).toBe('true');
-    expect(
-      container.querySelector('.react-syntax-highlighter-line-number')?.textContent?.trim()
-    ).toBe('1');
-  });
-
   it('highlights loaded source with CSS tokens instead of per-token styles', async () => {
     const container = document.createElement('div');
     const root = createRoot(container);

@@ -20,6 +20,8 @@ it('keeps numbered source readable when the highlighting chunk fails to load', a
   try {
     await act(async () => root.render(createElement(FileCode, props)));
     expect(container.querySelector('pre')?.getAttribute('aria-busy')).toBe('true');
+    expect(container.querySelector('pre')?.textContent).toBe('1first\n2  second\n3');
+    expect(container.querySelector('.token')).toBeNull();
     await act(async () => {
       loader.rejectLoad(new Error('Chunk unavailable'));
       await loader.pending.catch(() => undefined);
