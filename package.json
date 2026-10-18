@@ -97,8 +97,8 @@
     "check:lint-suppressions": "node scripts/check-lint-suppressions.mjs"
   },
   "dependencies": {
-    "@agentclientprotocol/claude-agent-acp": "^0.88.0",
-    "@agentclientprotocol/sdk": "1.7.0",
+    "@agentclientprotocol/claude-agent-acp": "^0.93.0",
+    "@agentclientprotocol/sdk": "1.9.0",
     "@daypicker/react": "^10.0.2",
     "@linear/sdk": "^98.0.0",
     "@phosphor-icons/react": "^2.1.10",
