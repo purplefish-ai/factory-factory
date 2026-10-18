@@ -7,6 +7,7 @@ import {
   WorkspaceContentView,
 } from '@/client/features/workspace';
 import type { WorkspaceSessionRuntimeSummary } from '@/client/features/workspace/session-tab-runtime';
+import { runInBackground } from '@/client/lib/background-task';
 import { Button } from '@/components/ui/button';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import {
@@ -200,7 +201,12 @@ export function WorkspaceDetailView({
         onCreateSession={sessionTabs.handleNewChat}
         onCloseSession={sessionTabs.handleCloseChatSession}
         onRestartSession={sessionTabs.handleRestartSession}
-        onQuickAction={sessionTabs.handleQuickAction}
+        onQuickAction={(name, prompt) => {
+          runInBackground(
+            sessionTabs.handleQuickAction(name, prompt),
+            'Could not run quick action'
+          );
+        }}
         maxSessions={sessionTabs.maxSessions}
         hasWorktreePath={sessionTabs.hasWorktreePath}
         selectedProvider={sessionTabs.selectedProvider}

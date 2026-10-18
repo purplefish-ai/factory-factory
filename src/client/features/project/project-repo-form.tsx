@@ -1,5 +1,6 @@
 import { CheckCircleIcon, FolderOpenIcon } from '@phosphor-icons/react';
 import { type ScriptType, StartupScriptForm } from '@/client/features/project/startup-script-form';
+import { runInBackground } from '@/client/lib/background-task';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -68,7 +69,13 @@ export function ProjectRepoForm({
             autoFocus
           />
           {isElectron && (
-            <Button type="button" variant="outline" onClick={handleBrowse}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                runInBackground(handleBrowse(), 'Could not browse project directories');
+              }}
+            >
               <FolderOpenIcon className="h-4 w-4" />
             </Button>
           )}

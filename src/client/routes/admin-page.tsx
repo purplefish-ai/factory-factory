@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { HeaderLeftExtraSlot, useAppHeader } from '@/client/components/app-header-context';
 import { Loading } from '@/client/components/loading';
 import { WorkspacesBackLink } from '@/client/features/workspace';
+import { runInBackground } from '@/client/lib/background-task';
 import { readSelectedProjectSlug } from '@/client/lib/project-selection';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
@@ -67,7 +68,7 @@ export default function AdminDashboardPage() {
 
   const resetApiStats = trpc.admin.resetApiUsageStats.useMutation({
     onSuccess: () => {
-      refetch();
+      runInBackground(refetch(), 'Could not refresh data');
     },
   });
 

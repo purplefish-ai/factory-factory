@@ -18,6 +18,7 @@ import {
   useSlashCommands,
 } from '@/client/features/composer';
 import { RatchetToggleButton } from '@/client/features/workspace';
+import { runInBackground } from '@/client/lib/background-task';
 import type { AppRouter } from '@/client/lib/trpc';
 import { trpc } from '@/client/lib/trpc';
 import {
@@ -517,7 +518,10 @@ export function InlineWorkspaceForm({
         }
         return createOptimisticWorkspaceCacheData(workspace);
       });
-      utils.workspace.listForProject.invalidate({ projectId });
+      runInBackground(
+        utils.workspace.listForProject.invalidate({ projectId }),
+        'Could not refresh data'
+      );
       onCreated(workspace.id);
     },
     onError: (error, _input, context) => {
@@ -537,7 +541,7 @@ export function InlineWorkspaceForm({
   const createPeriodicTaskMutation = trpc.periodicTask.create.useMutation({
     onSuccess: (task) => {
       toast.success(`Periodic task "${task.name}" created`);
-      utils.periodicTask.list.invalidate({ projectId });
+      runInBackground(utils.periodicTask.list.invalidate({ projectId }), 'Could not refresh data');
       onCancel();
     },
     onError: (error) => {
@@ -770,7 +774,9 @@ export function InlineWorkspaceForm({
                   type="file"
                   multiple
                   accept={ATTACHMENT_ACCEPT_TYPES}
-                  onChange={handleFileSelect}
+                  onChange={(event) => {
+                    runInBackground(handleFileSelect(event), 'Could not attach file');
+                  }}
                   className="hidden"
                   aria-label="Attach files"
                 />

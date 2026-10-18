@@ -1,5 +1,6 @@
 import { ArrowSquareOutIcon, ArrowsClockwiseIcon, WarningIcon } from '@phosphor-icons/react';
 import { toast } from 'sonner';
+import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 
@@ -165,7 +166,12 @@ export function ProviderCliWarning({ provider }: { provider: 'CLAUDE' | 'CODEX' 
         variant="ghost"
         size="icon"
         className="h-7 w-7 text-amber-600 hover:bg-amber-100 dark:text-amber-400 dark:hover:bg-amber-900/40"
-        onClick={() => utils.admin.checkCLIHealth.invalidate()}
+        onClick={() => {
+          runInBackground(
+            utils.admin.checkCLIHealth.invalidate(),
+            'Could not check provider status'
+          );
+        }}
         disabled={isRefetching || upgradeProviderCli.isPending}
       >
         <ArrowsClockwiseIcon className={`h-3.5 w-3.5 ${isRefetching ? 'animate-spin' : ''}`} />

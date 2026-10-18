@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { FactoryConfigScripts } from '@/client/components/factory-config-scripts';
 import { DevServerSetupPanel } from '@/client/features/workspace/dev-server-setup-panel';
+import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -38,7 +39,10 @@ export function ProjectFactoryConfigCard({
 
   const saveConfig = trpc.project.saveFactoryConfig.useMutation({
     onSuccess: () => {
-      utils.workspace.getFactoryConfig.invalidate({ projectId });
+      runInBackground(
+        utils.workspace.getFactoryConfig.invalidate({ projectId }),
+        'Could not refresh data'
+      );
       setEditPanelOpen(false);
     },
     onError: (error) => {

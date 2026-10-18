@@ -1,10 +1,13 @@
 # Lint and formatting guardrails
 
 [Oxlint](https://oxc.rs/docs/guide/usage/linter.html) runs the JavaScript and
-TypeScript checks in `.oxlintrc.json`. Biome preserves the existing hook order,
-exhaustive dependencies and promise checks. The repository already uses the
-TypeScript 7 compiler via `@typescript/native` while keeping the TypeScript 6
-JavaScript API for tooling.
+TypeScript checks in `.oxlintrc.json`, including native type-aware floating and
+misused promise checks through the pinned `oxlint-tsgolint` engine. The root
+`options.typeAware` setting applies to the CLI and the Oxc editor extension.
+Biome preserves the existing hook order, exhaustive dependencies and remaining
+checks, including its promise coverage while equivalence is still evaluated. The
+repository already uses the TypeScript 7 compiler via `@typescript/native` while
+keeping the TypeScript 6 JavaScript API for tooling.
 
 [Oxfmt](https://oxc.rs/docs/guide/usage/formatter.html) owns formatting and
 import sorting. `.oxfmtrc.json` keeps two-space indentation, single quotes,
@@ -22,10 +25,12 @@ preservation. To hide the import-only conversion from blame, run
 ## Custom rules
 
 `factory.mjs` replaces the enabled Grit rules with Oxlint's ESLint-compatible
-plugin API. The rules reject awaited dynamic imports, native browser dialogs,
-Next.js directives, `z.any()`/`zod.any()`, assertions on `JSON.parse` results,
-and casts of promise resolvers to function types accepting `unknown`. Regression
-tests invoke the real Oxlint binary against accepted and rejected fixtures.
+plugin API. That API remains alpha: keep exact tool pins and real-binary
+fixtures when upgrading it. The rules reject awaited dynamic imports, native
+browser dialogs, Next.js directives, `z.any()`/`zod.any()`, assertions on
+`JSON.parse` results, and casts of promise resolvers to function types accepting
+`unknown`. Regression tests invoke the real Oxlint binary against accepted and
+rejected fixtures.
 
 ## Remaining Biome checks
 
@@ -45,8 +50,9 @@ Native Oxlint equivalents for hooks, promises and some style rules have
 different coverage. For example, native hook naming checks flag Storybook render
 callbacks, and native array syntax differs for complex generic types. The
 migration preserves existing behavior through Biome rather than introducing
-application refactors or suppressions. Type-aware Oxlint checks can be evaluated
-in a separate change after reviewing the newly detected findings.
+application refactors or suppressions. The type-aware promise checks are enabled
+after reviewing their newly detected findings. Other differences remain covered
+by Biome.
 
 Biome also preserves underscore-prefixed unused import detection, empty function
 body detection and dangerous HTML checks for `React.createElement` in `.ts` and
@@ -64,3 +70,19 @@ Run `pnpm check:fix`, `pnpm typecheck`, affected tests and `pnpm check` before
 submitting changes. Use `pnpm lint` for just the lint guardrails,
 `pnpm check:format` to check formatting and `pnpm format` to apply formatting.
 The pre-commit hook uses the same tools on staged source files.
+
+## Promise ownership
+
+Promise-returning work is awaited when its caller owns completion. Test mocks
+retain their asynchronous API contracts instead of erasing them through generic
+mock types. Storybook assertions are awaited as well.
+
+Synchronous process, timer and WebSocket callbacks start explicitly detached
+operations with error handling; resource-monitoring overlap protection is
+preserved. Server signal cleanup reports failure and exits unsuccessfully, and
+run-script cleanup falls back to its synchronous cleanup when needed.
+
+Client event and subscription callbacks use `runInBackground` for detached work.
+It catches unexpected rejection and reports a contextual error toast. Existing
+handlers keep their own error handling. Query refreshes remain in the background
+so mutation pending state and subsequent UI actions keep their previous timing.

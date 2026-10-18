@@ -1,6 +1,7 @@
 import { GearSixIcon } from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
 import { ProviderCliWarning } from '@/client/components/provider-cli-warning';
+import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import {
@@ -52,8 +53,14 @@ export function WorkspaceProviderSettings({
 
   const updateProviderDefaults = trpc.workspace.updateProviderDefaults.useMutation({
     onSuccess: () => {
-      utils.workspace.get.invalidate({ id: workspaceId });
-      utils.workspace.listForProject.invalidate({ projectId: workspace.projectId });
+      runInBackground(
+        utils.workspace.get.invalidate({ id: workspaceId }),
+        'Could not refresh data'
+      );
+      runInBackground(
+        utils.workspace.listForProject.invalidate({ projectId: workspace.projectId }),
+        'Could not refresh data'
+      );
       setDialogOpen(false);
     },
   });

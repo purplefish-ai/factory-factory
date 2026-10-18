@@ -2,6 +2,7 @@ import { ArrowSquareOutIcon, PlayIcon } from '@phosphor-icons/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { RatchetToggleButton } from '@/client/features/workspace';
+import { runInBackground } from '@/client/lib/background-task';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import { trpc } from '@/client/lib/trpc';
 import { createOptimisticWorkspaceCacheData } from '@/client/lib/workspace-cache-helpers';
@@ -166,7 +167,10 @@ export function IssueLaunchSheet({
         return createOptimisticWorkspaceCacheData(workspace);
       });
 
-      utils.workspace.listForProject.invalidate({ projectId });
+      runInBackground(
+        utils.workspace.listForProject.invalidate({ projectId }),
+        'Could not refresh data'
+      );
       onOpenChange(false);
       onStarted?.();
     },

@@ -184,7 +184,7 @@ export class RunScriptService {
     });
 
     // Handle spawn errors
-    childProcess.on('error', async (error) => {
+    childProcess.on('error', (error) => {
       if (this.runningProcesses.get(workspaceId) !== childProcess) {
         logger.info('Ignoring stale run script error from non-active process', {
           workspaceId,
@@ -195,14 +195,12 @@ export class RunScriptService {
       }
       logger.error('Run script spawn error', error, { workspaceId, pid });
       this.runningProcesses.delete(workspaceId);
-      try {
-        await runScriptStateMachine.markFailed(workspaceId);
-      } catch (stateError) {
+      void runScriptStateMachine.markFailed(workspaceId).catch((stateError: unknown) => {
         logger.warn('Failed to transition to FAILED on spawn error (likely already transitioned)', {
           workspaceId,
           error: stateError,
         });
-      }
+      });
     });
   }
 
@@ -986,23 +984,19 @@ export class RunScriptService {
     // Register cleanup handlers for graceful shutdown
     // These handlers allow async cleanup (unlike 'exit' which is synchronous)
     // Note: We don't call process.exit() to allow other shutdown handlers to run
-    process.on('SIGINT', async () => {
+    const cleanupOnSignal = (signal: string): void => {
       if (this.isShuttingDown) {
         return;
       }
       this.isShuttingDown = true;
-      logger.info('Received SIGINT, cleaning up run scripts');
-      await this.cleanup();
-    });
-
-    process.on('SIGTERM', async () => {
-      if (this.isShuttingDown) {
-        return;
-      }
-      this.isShuttingDown = true;
-      logger.info('Received SIGTERM, cleaning up run scripts');
-      await this.cleanup();
-    });
+      logger.info(`Received ${signal}, cleaning up run scripts`);
+      void this.cleanup().catch((error: unknown) => {
+        logger.error('Run script shutdown cleanup failed', toError(error));
+        this.cleanupSync();
+      });
+    };
+    process.on('SIGINT', () => cleanupOnSignal('SIGINT'));
+    process.on('SIGTERM', () => cleanupOnSignal('SIGTERM'));
 
     // Fallback synchronous cleanup for 'exit' event
     // This won't run cleanup scripts, but will kill processes

@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { toast } from 'sonner';
+import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { isResumeWorkspace } from './resume-workspace-storage';
 
@@ -12,7 +13,10 @@ export function useRetryWorkspaceInit(workspaceId: string): UseRetryWorkspaceIni
   const utils = trpc.useUtils();
   const retryInit = trpc.workspace.retryInit.useMutation({
     onSuccess: () => {
-      utils.workspace.getInitStatus.invalidate({ id: workspaceId });
+      runInBackground(
+        utils.workspace.getInitStatus.invalidate({ id: workspaceId }),
+        'Could not refresh data'
+      );
     },
     onError: (error) => {
       toast.error(error.message);

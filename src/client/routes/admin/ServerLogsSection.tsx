@@ -1,6 +1,7 @@
 import { DownloadIcon, FileTextIcon } from '@phosphor-icons/react';
 import { Link as RouterLink } from 'react-router';
 import { useDownloadServerLog } from '@/client/hooks/use-download-server-log';
+import { runInBackground } from '@/client/lib/background-task';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -22,7 +23,9 @@ export function ServerLogsSection() {
         </Button>
         <Button
           variant="outline"
-          onClick={download}
+          onClick={() => {
+            runInBackground(download(), 'Could not download logs');
+          }}
           disabled={isDownloading}
           className="w-full sm:w-auto"
         >

@@ -84,7 +84,9 @@
     "factory/no-next-directives": "error",
     "factory/no-zod-any": "error",
     "factory/no-unsafe-json-parse-cast": "error",
-    "factory/no-unsafe-resolver-cast": "error"
+    "factory/no-unsafe-resolver-cast": "error",
+    "typescript/no-floating-promises": "error",
+    "typescript/no-misused-promises": "error"
   },
   "overrides": [
     {
@@ -105,5 +107,8 @@
         "typescript/no-non-null-assertion": "off"
       }
     }
-  ]
+  ],
+  "options": {
+    "typeAware": true
+  }
 }

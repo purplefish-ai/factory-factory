@@ -332,11 +332,11 @@ describe('configureDomainBridges', () => {
   });
 
   describe('workspace bridge delegation', () => {
-    it('workspaceQueryService gets github bridge with checkHealth', () => {
+    it('workspaceQueryService gets github bridge with checkHealth', async () => {
       configureDomainBridges(createBridgeServices());
       const bridge = getBridge(workspaceQueryService.configure);
 
-      bridge.github.checkHealth();
+      await bridge.github.checkHealth();
       expect(githubCLIService.checkHealth).toHaveBeenCalled();
     });
 
@@ -348,11 +348,11 @@ describe('configureDomainBridges', () => {
       expect(sessionLifecycleService.getRuntimeSnapshot).toHaveBeenCalledWith('s1');
     });
 
-    it('workspaceQueryService gets prSnapshot bridge with refreshWorkspace', () => {
+    it('workspaceQueryService gets prSnapshot bridge with refreshWorkspace', async () => {
       configureDomainBridges(createBridgeServices());
       const bridge = getBridge(workspaceQueryService.configure);
 
-      bridge.prSnapshot.refreshWorkspace('ws1', 'https://pr.url');
+      await bridge.prSnapshot.refreshWorkspace('ws1', 'https://pr.url');
       expect(prSnapshotService.refreshWorkspace).toHaveBeenCalledWith('ws1', 'https://pr.url');
     });
   });
@@ -936,19 +936,19 @@ describe('configureDomainBridges', () => {
   });
 
   describe('run-script bridge delegation', () => {
-    it('startupScript workspace bridge delegates markReady', () => {
+    it('startupScript workspace bridge delegates markReady', async () => {
       configureDomainBridges(createBridgeServices());
       const bridge = getBridge(startupScriptService.configure);
 
-      bridge.workspace.markReady('ws1');
+      await bridge.workspace.markReady('ws1');
       expect(workspaceStateMachine.markReady).toHaveBeenCalledWith('ws1');
     });
 
-    it('startupScript workspace bridge delegates markFailed', () => {
+    it('startupScript workspace bridge delegates markFailed', async () => {
       configureDomainBridges(createBridgeServices());
       const bridge = getBridge(startupScriptService.configure);
 
-      bridge.workspace.markFailed('ws1', 'script error');
+      await bridge.workspace.markFailed('ws1', 'script error');
       expect(workspaceStateMachine.markFailed).toHaveBeenCalledWith('ws1', 'script error');
     });
   });

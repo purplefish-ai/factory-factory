@@ -15,6 +15,7 @@ import { useAppHeader } from '@/client/components/app-header-context';
 import { Loading } from '@/client/components/loading';
 import { PageHeader } from '@/client/components/page-header';
 import { useDownloadServerLog } from '@/client/hooks/use-download-server-log';
+import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -314,7 +315,9 @@ export default function LogsPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={download}
+            onClick={() => {
+              runInBackground(download(), 'Could not download logs');
+            }}
             disabled={isDownloading}
             className="w-full sm:w-auto"
           >

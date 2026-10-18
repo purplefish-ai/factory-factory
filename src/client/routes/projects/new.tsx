@@ -14,6 +14,7 @@ import { SetupTerminalModal } from '@/client/features/project/setup-terminal-mod
 import type { ScriptType } from '@/client/features/project/startup-script-form';
 import { useCLIHealthRefresh } from '@/client/hooks/use-cli-health-refresh';
 import { useProjectHeaderNavigation } from '@/client/hooks/use-project-header-navigation';
+import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -113,7 +114,7 @@ export default function NewProjectPage() {
   // Local path creation
   const createProject = trpc.project.create.useMutation({
     onSuccess: (project) => {
-      utils.project.list.invalidate();
+      runInBackground(utils.project.list.invalidate(), 'Could not refresh data');
       void navigate(`/projects/${project.slug}`);
     },
     onError: (err) => setError(err.message),
@@ -122,7 +123,7 @@ export default function NewProjectPage() {
   // GitHub URL creation
   const createFromGithub = trpc.project.createFromGithub.useMutation({
     onSuccess: (project) => {
-      utils.project.list.invalidate();
+      runInBackground(utils.project.list.invalidate(), 'Could not refresh data');
       void navigate(`/projects/${project.slug}`);
     },
     onError: (err) => setGithubError(err.message),
@@ -174,7 +175,7 @@ export default function NewProjectPage() {
   const handleTerminalClose = useCallback(() => {
     setTerminalOpen(false);
     // Re-check auth after terminal closes
-    refetchAuth();
+    runInBackground(refetchAuth(), 'Could not refresh data');
     void refreshCLIHealth();
   }, [refetchAuth, refreshCLIHealth]);
 
@@ -305,7 +306,9 @@ export default function NewProjectPage() {
               </div>
 
               <DataImportButton
-                onImportSuccess={handleImportSuccess}
+                onImportSuccess={() => {
+                  runInBackground(handleImportSuccess(), 'Could not import project');
+                }}
                 variant="outline"
                 className="w-full"
               >

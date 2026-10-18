@@ -1,4 +1,5 @@
 import { toast } from 'sonner';
+import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -10,7 +11,7 @@ export function NotificationSettingsSection() {
   const utils = trpc.useUtils();
   const updateSettings = trpc.userSettings.update.useMutation({
     onSuccess: () => {
-      utils.userSettings.get.invalidate();
+      runInBackground(utils.userSettings.get.invalidate(), 'Could not refresh data');
     },
     onError: (error) => {
       toast.error(`Failed to update settings: ${error.message}`);

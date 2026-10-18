@@ -1,5 +1,6 @@
 import { CheckIcon, CopyIcon } from '@phosphor-icons/react';
 import * as React from 'react';
+import { runInBackground } from '@/client/lib/background-task';
 import { cn } from '@/lib/utils';
 
 const COPY_SUCCESS_DURATION_MS = 2000;
@@ -53,7 +54,9 @@ export function CopyMessageButton({ textContent, className }: CopyMessageButtonP
 
   return (
     <button
-      onClick={handleCopy}
+      onClick={() => {
+        runInBackground(handleCopy(), 'Could not copy message');
+      }}
       onMouseDown={(e) => e.preventDefault()}
       className={cn(
         'absolute top-1 right-1 p-1.5 rounded-md',

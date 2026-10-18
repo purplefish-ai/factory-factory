@@ -6,6 +6,7 @@ import {
   usePasteDropHandler,
   useSlashCommands,
 } from '@/client/features/composer';
+import { runInBackground } from '@/client/lib/background-task';
 import { InputGroup, InputGroupAddon, InputGroupTextarea } from '@/components/ui/input-group';
 import type { ChatSettings, CommandInfo, MessageAttachment, TokenStats } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
@@ -289,7 +290,9 @@ export const ChatInput = memo(function ChatInput({
             modLabel={modLabel}
             modifierHeld={modifierHeld}
             fileInputRef={actions.fileInputRef}
-            onFileSelect={actions.handleFileSelect}
+            onFileSelect={(event) => {
+              runInBackground(actions.handleFileSelect(event), 'Could not attach file');
+            }}
             supportedImageTypes={actions.supportedImageTypes}
             disabled={isDisabled}
             onQuickAction={actions.handleQuickAction}

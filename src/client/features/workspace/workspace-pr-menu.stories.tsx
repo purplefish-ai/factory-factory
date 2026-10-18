@@ -110,11 +110,11 @@ export const ShortViewport: Story = {
       body.getByRole('menuitem', { name: /^Add PR$/ }),
     ]) {
       control.scrollIntoView({ block: 'center' });
-      await waitFor(() => {
+      await waitFor(async () => {
         const menuBounds = menu.getBoundingClientRect();
         const controlBounds = control.getBoundingClientRect();
-        expect(controlBounds.top).toBeGreaterThanOrEqual(menuBounds.top);
-        expect(controlBounds.bottom).toBeLessThanOrEqual(menuBounds.bottom);
+        await expect(controlBounds.top).toBeGreaterThanOrEqual(menuBounds.top);
+        await expect(controlBounds.bottom).toBeLessThanOrEqual(menuBounds.bottom);
       });
     }
   },

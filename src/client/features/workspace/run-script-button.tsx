@@ -1,5 +1,6 @@
 import { PencilIcon, PlayIcon, SpinnerGapIcon, SquareIcon } from '@phosphor-icons/react';
 import { useState } from 'react';
+import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import {
@@ -36,7 +37,7 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
   // Mutations
   const startScript = trpc.workspace.startRunScript.useMutation({
     onSuccess: () => {
-      refetch();
+      runInBackground(refetch(), 'Could not refresh data');
       setActiveBottomTab('dev-logs');
       setRightPanelVisible(true);
     },
@@ -44,13 +45,16 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
 
   const stopScript = trpc.workspace.stopRunScript.useMutation({
     onSuccess: () => {
-      refetch();
+      runInBackground(refetch(), 'Could not refresh data');
     },
   });
 
   const createConfig = trpc.workspace.createFactoryConfig.useMutation({
     onSuccess: () => {
-      utils.workspace.getRunScriptStatus.invalidate({ workspaceId });
+      runInBackground(
+        utils.workspace.getRunScriptStatus.invalidate({ workspaceId }),
+        'Could not refresh data'
+      );
       setSetupPanelOpen(false);
     },
   });

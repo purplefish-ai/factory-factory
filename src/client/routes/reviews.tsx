@@ -5,6 +5,7 @@ import { HeaderLeftExtraSlot, useAppHeader } from '@/client/components/app-heade
 import { PRDetailPanel } from '@/client/components/pr-detail-panel';
 import { PRInboxItem } from '@/client/components/pr-inbox-item';
 import { WorkspacesBackLink } from '@/client/features/workspace';
+import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import {
   Sheet,
@@ -283,7 +284,9 @@ function ReviewsMobileLayout({
             pr={selectedDetails ?? null}
             diff={selectedDiff ?? null}
             diffLoading={diffLoading}
-            onFetchDiff={onFetchDiff}
+            onFetchDiff={() => {
+              runInBackground(onFetchDiff(), 'Could not load pull request diff');
+            }}
             onOpenGitHub={onOpenGitHub}
             onApprove={onApprove}
             approving={approving}
@@ -339,7 +342,9 @@ function ReviewsDesktopLayout({
           pr={selectedDetails ?? null}
           diff={selectedDiff ?? null}
           diffLoading={diffLoading}
-          onFetchDiff={onFetchDiff}
+          onFetchDiff={() => {
+            runInBackground(onFetchDiff(), 'Could not load pull request diff');
+          }}
           onOpenGitHub={onOpenGitHub}
           onApprove={onApprove}
           approving={approving}
@@ -369,7 +374,7 @@ function useReviewActions({
   const approveMutation = trpc.prReview.submitReview.useMutation({
     onSuccess: (_data, variables) => {
       toast.success('PR approved successfully');
-      utils.prReview.listReviewRequests.invalidate();
+      runInBackground(utils.prReview.listReviewRequests.invalidate(), 'Could not refresh data');
 
       const approvedKey = `${variables.repo}#${variables.number}`;
       setPrDetails((prev) => {

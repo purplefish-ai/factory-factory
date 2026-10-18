@@ -1,6 +1,7 @@
 import { GearIcon } from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
 import { type ScriptType, StartupScriptForm } from '@/client/features/project/startup-script-form';
+import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -39,8 +40,11 @@ export function ProjectSettingsDialog({
 
   const updateProject = trpc.project.update.useMutation({
     onSuccess: () => {
-      utils.project.list.invalidate();
-      utils.project.getById.invalidate({ id: projectId });
+      runInBackground(utils.project.list.invalidate(), 'Could not refresh data');
+      runInBackground(
+        utils.project.getById.invalidate({ id: projectId }),
+        'Could not refresh data'
+      );
       setOpen(false);
     },
     onError: (err) => {

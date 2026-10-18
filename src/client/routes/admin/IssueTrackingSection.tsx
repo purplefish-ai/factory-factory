@@ -1,6 +1,7 @@
 import { CheckCircleIcon } from '@phosphor-icons/react';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -128,7 +129,9 @@ function LinearConfigFields({
         </div>
         <Button
           variant="outline"
-          onClick={handleValidate}
+          onClick={() => {
+            runInBackground(handleValidate(), 'Could not update issue tracking');
+          }}
           disabled={validateAndList.isPending || !apiKey}
         >
           {validateAndList.isPending ? 'Validating...' : 'Validate'}
@@ -158,7 +161,13 @@ function LinearConfigFields({
               </SelectContent>
             </Select>
           </div>
-          <Button onClick={handleSave} disabled={!selectedTeamId || isSaving} className="self-end">
+          <Button
+            onClick={() => {
+              runInBackground(handleSave(), 'Could not update issue tracking');
+            }}
+            disabled={!selectedTeamId || isSaving}
+            className="self-end"
+          >
             {isSaving ? 'Saving...' : 'Save'}
           </Button>
         </>
@@ -206,7 +215,7 @@ export function ProjectIssueTrackingCard({
   const updateProject = trpc.project.update.useMutation({
     onSuccess: () => {
       toast.success('Issue tracking settings saved');
-      utils.project.list.invalidate();
+      runInBackground(utils.project.list.invalidate(), 'Could not refresh data');
     },
     onError: (error) => toast.error(`Failed to save: ${error.message}`),
   });
@@ -284,7 +293,9 @@ export function ProjectIssueTrackingCard({
             <Label>Issue Provider</Label>
             <Select
               value={provider}
-              onValueChange={handleProviderChange}
+              onValueChange={(value) => {
+                runInBackground(handleProviderChange(value), 'Could not update issue tracking');
+              }}
               disabled={updateProvider.isPending || updateProject.isPending}
             >
               <SelectTrigger className="w-[180px]">

@@ -2,6 +2,15 @@ import { EventEmitter } from 'node:events';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FactoryConfigService } from './factory-config.service';
 
+function captureShutdownHandlers() {
+  const handlers = new Map<string, (...args: unknown[]) => unknown>();
+  const processOnSpy = vi.spyOn(process, 'on').mockImplementation((event, handler) => {
+    handlers.set(String(event), handler);
+    return process;
+  });
+  return { handlers, processOnSpy };
+}
+
 const mockSpawn = vi.fn();
 const mockTreeKill = vi.fn();
 const mockFindById = vi.fn();
@@ -2268,14 +2277,7 @@ describe('RunScriptService.cleanup + shutdown handlers', () => {
   });
 
   it('registers shutdown handlers once and runs cleanup hooks', async () => {
-    const handlers = new Map<string, (...args: unknown[]) => unknown>();
-    const processOnSpy = vi.spyOn(process, 'on').mockImplementation(((
-      event: string,
-      handler: (...args: unknown[]) => unknown
-    ) => {
-      handlers.set(event, handler);
-      return process;
-    }) as typeof process.on);
+    const { handlers, processOnSpy } = captureShutdownHandlers();
 
     const service = new RunScriptService() as unknown as {
       registerShutdownHandlers: () => void;
@@ -2309,24 +2311,20 @@ describe('RunScriptService.cleanup + shutdown handlers', () => {
     expect(secondCleanupSyncSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('runs SIGTERM cleanup and skips second invocation after shutdown begins', async () => {
-    const handlers = new Map<string, (...args: unknown[]) => unknown>();
-    vi.spyOn(process, 'on').mockImplementation(((
-      event: string,
-      handler: (...args: unknown[]) => unknown
-    ) => {
-      handlers.set(event, handler);
-      return process;
-    }) as typeof process.on);
+  it('falls back to sync cleanup on SIGTERM failure and skips duplicate signals', async () => {
+    const { handlers } = captureShutdownHandlers();
     const service = new RunScriptService() as unknown as {
       registerShutdownHandlers: () => void;
       cleanup: () => Promise<void>;
+      cleanupSync: () => void;
     };
-    const cleanupSpy = vi.spyOn(service, 'cleanup').mockResolvedValue(undefined);
+    const cleanupSpy = vi.spyOn(service, 'cleanup').mockRejectedValue(new Error('cleanup failed'));
+    const cleanupSyncSpy = vi.spyOn(service, 'cleanupSync').mockImplementation(() => undefined);
     service.registerShutdownHandlers();
 
     await (handlers.get('SIGTERM') as () => Promise<void>)();
     await (handlers.get('SIGTERM') as () => Promise<void>)();
     expect(cleanupSpy).toHaveBeenCalledTimes(1);
+    expect(cleanupSyncSpy).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,6 +1,7 @@
 import { CalendarIcon, PencilIcon, TrashIcon } from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { runInBackground } from '@/client/lib/background-task';
 import { readSelectedProjectSlug, writeSelectedProjectSlug } from '@/client/lib/project-selection';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
@@ -114,14 +115,14 @@ function PeriodicTaskList({ projectId }: { projectId: string }) {
   const deleteMutation = trpc.periodicTask.delete.useMutation({
     onSuccess: () => {
       toast.success('Periodic task deleted');
-      utils.periodicTask.list.invalidate({ projectId });
+      runInBackground(utils.periodicTask.list.invalidate({ projectId }), 'Could not refresh data');
     },
     onError: (error) => toast.error(`Delete failed: ${error.message}`),
   });
 
   const toggleMutation = trpc.periodicTask.toggleEnabled.useMutation({
     onSuccess: () => {
-      utils.periodicTask.list.invalidate({ projectId });
+      runInBackground(utils.periodicTask.list.invalidate({ projectId }), 'Could not refresh data');
     },
     onError: (error) => toast.error(`Toggle failed: ${error.message}`),
   });
@@ -129,7 +130,7 @@ function PeriodicTaskList({ projectId }: { projectId: string }) {
   const updateMutation = trpc.periodicTask.update.useMutation({
     onSuccess: () => {
       toast.success('Periodic task updated');
-      utils.periodicTask.list.invalidate({ projectId });
+      runInBackground(utils.periodicTask.list.invalidate({ projectId }), 'Could not refresh data');
     },
     onError: (error) => toast.error(`Update failed: ${error.message}`),
   });
