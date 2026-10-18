@@ -1,8 +1,8 @@
-import { SessionProvider } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CLIHealthStatus } from '@/backend/orchestration/cli-health.service';
 import type { AcpRuntimeManager } from '@/backend/services/session';
 import { SessionStatus } from '@/shared/core';
+import { SessionProvider } from '@prisma-gen/client';
 
 const mockSessionDataService = vi.hoisted(() => ({
   findAgentSessionsByWorkspaceId: vi.fn(),

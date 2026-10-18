@@ -1,10 +1,10 @@
+import { userSettingsAccessor } from '@/backend/services/settings/resources/user-settings.accessor';
 import type {
   Prisma,
   SessionPermissionPreset,
   SessionProvider,
   UserSettings,
 } from '@prisma-gen/client';
-import { userSettingsAccessor } from '@/backend/services/settings/resources/user-settings.accessor';
 
 export interface UpdateUserSettingsInput {
   preferredIde?: string;

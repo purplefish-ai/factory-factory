@@ -1,11 +1,11 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { PrismaClient } from '@prisma-gen/client';
-import { PrismaClient as PrismaClientCtor } from '@prisma-gen/client';
 import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
 import { vi } from 'vitest';
 import { runMigrations } from '@/backend/migrate';
+import type { PrismaClient } from '@prisma-gen/client';
+import { PrismaClient as PrismaClientCtor } from '@prisma-gen/client';
 
 const MIGRATIONS_PATH = join(process.cwd(), 'prisma', 'migrations');
 

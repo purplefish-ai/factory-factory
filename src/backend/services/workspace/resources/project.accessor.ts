@@ -1,11 +1,11 @@
 import { spawn } from 'node:child_process';
 import { access, constants } from 'node:fs/promises';
 import path from 'node:path';
-import { Prisma, type Project } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
 import { gitCommandC } from '@/backend/lib/shell';
 import type { IssueProvider } from '@/shared/core/enums';
 import type { IssueTrackerConfig } from '@/shared/schemas/issue-tracker-config.schema';
+import { Prisma, type Project } from '@prisma-gen/client';
 
 /**
  * Execute a command with proper argument separation (no shell injection).

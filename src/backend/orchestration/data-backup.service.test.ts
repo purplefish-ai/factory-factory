@@ -1,11 +1,3 @@
-import {
-  type AgentSession,
-  type Project,
-  SessionProvider,
-  type TerminalSession,
-  type UserSettings,
-  WorkspaceProviderSelection,
-} from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { z } from 'zod';
 import {
@@ -20,6 +12,14 @@ import {
 import { DEFAULT_DEEPGRAM_TTS_MODEL } from '@/shared/deepgram-voices';
 import type { ExportData } from '@/shared/schemas/export-data.schema';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
+import {
+  type AgentSession,
+  type Project,
+  SessionProvider,
+  type TerminalSession,
+  type UserSettings,
+  WorkspaceProviderSelection,
+} from '@prisma-gen/client';
 
 const mockTx = vi.hoisted(() => ({
   workspacePRMonitoring: { upsert: vi.fn() },

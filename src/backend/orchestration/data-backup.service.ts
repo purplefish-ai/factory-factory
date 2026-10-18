@@ -1,4 +1,3 @@
-import type { Prisma } from '@prisma-gen/client';
 /**
  * Data Backup Service
  *
@@ -23,6 +22,7 @@ import type {
   exportedUserSettingsSchema,
   exportedWorkspaceSchema,
 } from '@/shared/schemas/export-data.schema';
+import type { Prisma } from '@prisma-gen/client';
 import { exportPRBackupState, restorePRBackupState } from './data-backup-pr-events';
 
 type TransactionClient = DataBackupTransactionClient;

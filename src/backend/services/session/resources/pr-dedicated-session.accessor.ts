@@ -1,7 +1,7 @@
-import type { AgentSession, Prisma, SessionProvider, Workspace } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
 import { agentSessionAccessor } from '@/backend/services/session/resources/agent-session.accessor';
 import { PR_DEDICATED_WORKFLOW, type PRTarget } from '@/shared/pr-monitoring';
+import type { AgentSession, Prisma, SessionProvider, Workspace } from '@prisma-gen/client';
 
 export interface AcquirePRDedicatedSessionInput extends PRTarget {
   provider: SessionProvider;

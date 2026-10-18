@@ -1,6 +1,6 @@
-import { Prisma } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SessionStatus } from '@/shared/core';
+import { Prisma } from '@prisma-gen/client';
 
 const mockCreate = vi.fn();
 const mockFindUnique = vi.fn();

@@ -1,4 +1,3 @@
-import type { PrismaClient } from '@prisma-gen/client';
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import {
   clearIntegrationDatabase,
@@ -7,6 +6,7 @@ import {
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
+import type { PrismaClient } from '@prisma-gen/client';
 import { dataBackupService } from './data-backup.service';
 
 const database = vi.hoisted(() => ({ prisma: undefined as PrismaClient | undefined }));

@@ -1,6 +1,6 @@
-import type { WorkspaceNotification } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentMessage } from '@/shared/acp-protocol';
+import type { WorkspaceNotification } from '@prisma-gen/client';
 
 const mockFindSessionsByWorkspaceId = vi.hoisted(() => vi.fn());
 const mockAppendClaudeEvent = vi.hoisted(() => vi.fn());
