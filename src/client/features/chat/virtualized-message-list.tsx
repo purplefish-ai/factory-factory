@@ -1,4 +1,4 @@
-import { SpinnerGapIcon } from '@phosphor-icons/react';
+import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import type { GroupedMessageItem } from '@/lib/chat-protocol';

@@ -1,4 +1,5 @@
-import { ArchiveIcon, PlusIcon } from '@phosphor-icons/react';
+import { ArchiveIcon } from '@phosphor-icons/react/dist/csr/Archive';
+import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';

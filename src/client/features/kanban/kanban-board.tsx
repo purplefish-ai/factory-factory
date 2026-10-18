@@ -1,4 +1,5 @@
-import { ArrowsClockwiseIcon, PlusIcon } from '@phosphor-icons/react';
+import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
+import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArchiveGitLockDialog, ArchiveWorkspaceDialog } from '@/client/features/workspace';
 import { runInBackground } from '@/client/lib/background-task';

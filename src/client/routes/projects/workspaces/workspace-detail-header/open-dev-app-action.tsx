@@ -1,4 +1,4 @@
-import { HardDrivesIcon } from '@phosphor-icons/react';
+import { HardDrivesIcon } from '@phosphor-icons/react/dist/csr/HardDrives';
 import { useRunScriptLaunch } from '@/client/features/workspace';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 

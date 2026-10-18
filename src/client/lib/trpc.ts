@@ -1,6 +1,6 @@
-import type { TRPCClient } from '@trpc/client';
+import { httpBatchLink, httpBatchStreamLink, splitLink, type TRPCClient } from '@trpc/client';
 import type { CreateTRPCReact } from '@trpc/react-query';
-import { createTRPCReact, httpBatchLink } from '@trpc/react-query';
+import { createTRPCReact } from '@trpc/react-query';
 import superjson from 'superjson';
 import type { AppRouter } from '@/backend/trpc';
 
@@ -18,9 +18,17 @@ export const getBaseUrl = () => {
 export function createTrpcClient(): TRPCClient<AppRouter> {
   return trpc.createClient({
     links: [
-      httpBatchLink({
-        url: `${getBaseUrl()}/api/trpc`,
-        transformer: superjson,
+      splitLink({
+        // Query results can arrive independently; mutations retain response-header support.
+        condition: (operation) => operation.type === 'query',
+        true: httpBatchStreamLink({
+          url: `${getBaseUrl()}/api/trpc`,
+          transformer: superjson,
+        }),
+        false: httpBatchLink({
+          url: `${getBaseUrl()}/api/trpc`,
+          transformer: superjson,
+        }),
       }),
     ],
   });

@@ -1,4 +1,4 @@
-import { WrenchIcon } from '@phosphor-icons/react';
+import { WrenchIcon } from '@phosphor-icons/react/dist/csr/Wrench';
 import { cn } from '@/lib/utils';
 import { getRatchetVisualState } from './ratchet-state';
 

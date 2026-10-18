@@ -1,4 +1,4 @@
-import { ArrowsClockwiseIcon } from '@phosphor-icons/react';
+import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
 import { toast } from 'sonner';
 import { RatchetWrenchIcon } from '@/client/features/workspace';
 import { runInBackground } from '@/client/lib/background-task';

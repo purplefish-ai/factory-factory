@@ -1,4 +1,7 @@
-import { PencilIcon, PlayIcon, SpinnerGapIcon, SquareIcon } from '@phosphor-icons/react';
+import { PencilIcon } from '@phosphor-icons/react/dist/csr/Pencil';
+import { PlayIcon } from '@phosphor-icons/react/dist/csr/Play';
+import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
+import { SquareIcon } from '@phosphor-icons/react/dist/csr/Square';
 import { useState } from 'react';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';

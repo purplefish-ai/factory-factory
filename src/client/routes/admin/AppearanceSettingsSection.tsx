@@ -1,4 +1,4 @@
-import { PaletteIcon } from '@phosphor-icons/react';
+import { PaletteIcon } from '@phosphor-icons/react/dist/csr/Palette';
 import { useTheme } from 'next-themes';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';

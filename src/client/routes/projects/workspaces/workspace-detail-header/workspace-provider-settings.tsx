@@ -1,4 +1,4 @@
-import { GearSixIcon } from '@phosphor-icons/react';
+import { GearSixIcon } from '@phosphor-icons/react/dist/csr/GearSix';
 import { useEffect, useState } from 'react';
 import { ProviderCliWarning } from '@/client/components/provider-cli-warning';
 import { runInBackground } from '@/client/lib/background-task';

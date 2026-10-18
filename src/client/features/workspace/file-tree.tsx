@@ -1,11 +1,9 @@
-import {
-  CaretDownIcon,
-  CaretRightIcon,
-  FileCodeIcon,
-  FileIcon,
-  FolderIcon,
-  SpinnerGapIcon,
-} from '@phosphor-icons/react';
+import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
+import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
+import { FileIcon } from '@phosphor-icons/react/dist/csr/File';
+import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
+import { FolderIcon } from '@phosphor-icons/react/dist/csr/Folder';
+import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { memo, useCallback } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import { cn } from '@/lib/utils';

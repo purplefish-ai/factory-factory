@@ -1,4 +1,5 @@
-import { ClockIcon, XIcon } from '@phosphor-icons/react';
+import { ClockIcon } from '@phosphor-icons/react/dist/csr/Clock';
+import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import { Button } from '@/components/ui/button';
 import type { QueuedMessage } from '@/lib/chat-protocol';
 

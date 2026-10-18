@@ -6,9 +6,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WorkspaceSwitcherDropdown } from './workspace-switcher-dropdown';
 
-vi.mock('@phosphor-icons/react', () => ({
-  CaretUpDownIcon: () => null,
-}));
+vi.mock('@phosphor-icons/react/dist/csr/CaretUpDown', () => ({ CaretUpDownIcon: () => null }));
 
 vi.mock('react-router', () => ({
   useNavigate: () => vi.fn(),

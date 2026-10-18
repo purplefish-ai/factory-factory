@@ -1,4 +1,4 @@
-import { GearIcon } from '@phosphor-icons/react';
+import { GearIcon } from '@phosphor-icons/react/dist/csr/Gear';
 import { useEffect, useState } from 'react';
 import { type ScriptType, StartupScriptForm } from '@/client/features/project/startup-script-form';
 import { runInBackground } from '@/client/lib/background-task';

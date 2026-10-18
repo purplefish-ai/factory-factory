@@ -1,4 +1,6 @@
-import { ArrowSquareOutIcon, ArrowsClockwiseIcon, WarningIcon } from '@phosphor-icons/react';
+import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
+import { ArrowSquareOutIcon } from '@phosphor-icons/react/dist/csr/ArrowSquareOut';
+import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { toast } from 'sonner';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';

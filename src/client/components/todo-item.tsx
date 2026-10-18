@@ -1,4 +1,6 @@
-import { CheckSquareIcon, CircleIcon, SquareIcon } from '@phosphor-icons/react';
+import { CheckSquareIcon } from '@phosphor-icons/react/dist/csr/CheckSquare';
+import { CircleIcon } from '@phosphor-icons/react/dist/csr/Circle';
+import { SquareIcon } from '@phosphor-icons/react/dist/csr/Square';
 import { memo } from 'react';
 import type { Todo } from '@/client/features/chat/use-todo-tracker';
 import { cn } from '@/lib/utils';

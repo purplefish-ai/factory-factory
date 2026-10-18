@@ -1,4 +1,5 @@
-import { DownloadIcon, FileTextIcon } from '@phosphor-icons/react';
+import { DownloadIcon } from '@phosphor-icons/react/dist/csr/Download';
+import { FileTextIcon } from '@phosphor-icons/react/dist/csr/FileText';
 import { Link as RouterLink } from 'react-router';
 import { useDownloadServerLog } from '@/client/hooks/use-download-server-log';
 import { runInBackground } from '@/client/lib/background-task';

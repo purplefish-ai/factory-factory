@@ -1,4 +1,5 @@
-import { DownloadIcon, FileCodeIcon } from '@phosphor-icons/react';
+import { DownloadIcon } from '@phosphor-icons/react/dist/csr/Download';
+import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { DataImportButton } from '@/client/features/data-import/data-import-button';

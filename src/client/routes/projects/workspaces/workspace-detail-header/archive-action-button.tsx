@@ -1,4 +1,5 @@
-import { ArchiveIcon, SpinnerGapIcon } from '@phosphor-icons/react';
+import { ArchiveIcon } from '@phosphor-icons/react/dist/csr/Archive';
+import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
 import { Button } from '@/components/ui/button';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';

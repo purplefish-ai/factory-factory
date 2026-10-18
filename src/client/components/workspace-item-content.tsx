@@ -1,10 +1,8 @@
-import {
-  ClockIcon,
-  DotOutlineIcon,
-  GitBranchIcon,
-  GitPullRequestIcon,
-  TreeStructureIcon,
-} from '@phosphor-icons/react';
+import { ClockIcon } from '@phosphor-icons/react/dist/csr/Clock';
+import { DotOutlineIcon } from '@phosphor-icons/react/dist/csr/DotOutline';
+import { GitBranchIcon } from '@phosphor-icons/react/dist/csr/GitBranch';
+import { GitPullRequestIcon } from '@phosphor-icons/react/dist/csr/GitPullRequest';
+import { TreeStructureIcon } from '@phosphor-icons/react/dist/csr/TreeStructure';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
 import { WorkspaceStatusIcon } from '@/client/components/workspace-status-icon';
 import { ConnectedWorkspacePrMenu } from '@/client/features/workspace';

@@ -27,9 +27,7 @@ const mocks = vi.hoisted(() => ({
   } | null,
 }));
 
-vi.mock('@phosphor-icons/react', () => ({
-  TerminalIcon: () => null,
-}));
+vi.mock('@phosphor-icons/react/dist/csr/Terminal', () => ({ TerminalIcon: () => null }));
 
 vi.mock('@/client/components/terminal-instance', () => ({
   TerminalInstance: ({ output }: { output: string }) => {

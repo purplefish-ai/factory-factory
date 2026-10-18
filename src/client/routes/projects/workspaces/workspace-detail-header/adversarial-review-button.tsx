@@ -1,4 +1,5 @@
-import { ShieldWarningIcon, SpinnerGapIcon } from '@phosphor-icons/react';
+import { ShieldWarningIcon } from '@phosphor-icons/react/dist/csr/ShieldWarning';
+import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { toast } from 'sonner';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';

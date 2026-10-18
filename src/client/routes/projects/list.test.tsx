@@ -20,10 +20,10 @@ const mocks = vi.hoisted(() => ({
   toastError: vi.fn(),
 }));
 
-vi.mock('@phosphor-icons/react', () => ({
+vi.mock('@phosphor-icons/react/dist/csr/Archive', () => ({
   ArchiveIcon: () => createElement('span', { 'data-testid': 'archive-icon' }),
-  PlusIcon: () => null,
 }));
+vi.mock('@phosphor-icons/react/dist/csr/Plus', () => ({ PlusIcon: () => null }));
 
 vi.mock('react-router', () => ({
   Link: ({ children, to }: { children: ReactNode; to: string }) =>

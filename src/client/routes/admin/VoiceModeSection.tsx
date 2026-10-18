@@ -1,4 +1,5 @@
-import { CheckCircleIcon, MicrophoneIcon } from '@phosphor-icons/react';
+import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
+import { MicrophoneIcon } from '@phosphor-icons/react/dist/csr/Microphone';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { runInBackground } from '@/client/lib/background-task';

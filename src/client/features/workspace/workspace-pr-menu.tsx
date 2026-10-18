@@ -1,4 +1,6 @@
-import { CaretDownIcon, GitPullRequestIcon, PlusIcon } from '@phosphor-icons/react';
+import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
+import { GitPullRequestIcon } from '@phosphor-icons/react/dist/csr/GitPullRequest';
+import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { useState } from 'react';
 import { CiStatusChip } from '@/client/components/ci-status-chip';
 import { PrStateBadge } from '@/client/components/pr-state-badge';

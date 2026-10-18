@@ -1,9 +1,7 @@
-import {
-  FileTextIcon,
-  ShieldCheckIcon,
-  ShieldSlashIcon,
-  TerminalIcon,
-} from '@phosphor-icons/react';
+import { FileTextIcon } from '@phosphor-icons/react/dist/csr/FileText';
+import { ShieldCheckIcon } from '@phosphor-icons/react/dist/csr/ShieldCheck';
+import { ShieldSlashIcon } from '@phosphor-icons/react/dist/csr/ShieldSlash';
+import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { MarkdownRenderer } from '@/components/ui/markdown';

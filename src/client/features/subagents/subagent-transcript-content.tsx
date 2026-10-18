@@ -1,4 +1,6 @@
-import { RobotIcon, SpinnerGapIcon, WarningCircleIcon } from '@phosphor-icons/react';
+import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
+import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
+import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import { type RefObject, useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { VirtualizedMessageList } from '@/client/features/chat';
 import { Button } from '@/components/ui/button';

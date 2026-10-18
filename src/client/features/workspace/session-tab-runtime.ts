@@ -1,12 +1,10 @@
-import {
-  CheckCircleIcon,
-  CircleIcon,
-  type Icon,
-  ProhibitIcon,
-  PulseIcon,
-  SpinnerGapIcon,
-  XCircleIcon,
-} from '@phosphor-icons/react';
+import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
+import { CircleIcon } from '@phosphor-icons/react/dist/csr/Circle';
+import { ProhibitIcon } from '@phosphor-icons/react/dist/csr/Prohibit';
+import { PulseIcon } from '@phosphor-icons/react/dist/csr/Pulse';
+import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
+import { XCircleIcon } from '@phosphor-icons/react/dist/csr/XCircle';
+import type { Icon } from '@phosphor-icons/react/dist/lib/types';
 import type { SessionStatus as DbSessionStatus } from '@/shared/core';
 import {
   getSessionSummaryErrorMessage,

@@ -71,6 +71,10 @@ The ratchet projection and reconciliation select one association for the PR URL,
 number, and sync timestamp, preferring a nonterminal PR. State, CI status, and
 merge conflicts come from the aggregate summary.
 
+Manual workspace PR refreshes serialize per workspace so concurrent requests
+report a committed lifecycle transition only once. Sibling refresh failures log
+their reason while preserving transitions already written by successful reads.
+
 ### Observations and events
 
 Polling, manual refresh, and dispatch preparation share normalized observation

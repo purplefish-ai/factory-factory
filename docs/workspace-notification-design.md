@@ -1,5 +1,9 @@
 # 🔔 Workspace Agent Completion Notification System - Implementation Proposal
 
+> **Historical proposal.** Proposed paths and event wiring may be obsolete.
+> Current behavior is documented in
+> [workspace state](architecture/workspace-state.md#completion-notifications).
+
 ## Executive Summary
 
 **Goal:** Notify user via OS desktop notification when all Claude sessions in a
