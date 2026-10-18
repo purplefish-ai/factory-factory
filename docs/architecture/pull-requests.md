@@ -56,9 +56,11 @@ Workspace snapshots include the plain `prs` collection and its `prSummary`. PR
 arrays are compared by identity and content, so database row order does not
 trigger drift warnings, version bumps, or snapshot broadcasts. Workspace and
 ratchet snapshot reads order PRs by ID to keep scalar PR selection consistent.
+
 The PR menu offers per-association refresh, review, and detachment. Detaching
 one association cancels its pending events while leaving sibling monitoring and
-the main conversation intact.
+the main conversation intact. Discovery preserves detached associations as
+tombstones; only an explicit attachment clears them.
 
 ### Observations and events
 
@@ -100,9 +102,11 @@ preserves queued facts so the new recipient can receive them.
 
 Review policy defaults to `CHANGES_REQUESTED`: changes-requested review bodies
 and unresolved inline threads. `ALL_REVIEW_FEEDBACK` also includes commented
-review summaries. Ordinary PR conversation comments do not trigger updates. The
-app's own [adversarial-review marker](../design/adversarial-review.md) remains
-an explicit exception under its authenticated GitHub identity.
+review summaries. Ordinary PR conversation comments do not trigger updates.
+GitHub identity must be known before accepting an observation, so failed
+identity lookups are retried without disabling self-review filtering. The app's
+own [adversarial-review marker](../design/adversarial-review.md) remains an
+explicit exception under its authenticated GitHub identity.
 
 Approvals supersede earlier feedback only with reliable same-author ordering.
 Submission times and REST review ordinals provide that ordering; opaque IDs do

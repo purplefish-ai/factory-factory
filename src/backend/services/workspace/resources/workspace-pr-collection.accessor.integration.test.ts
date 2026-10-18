@@ -142,7 +142,7 @@ it('rejects stale aggregate revisions and cross-workspace updates', async () => 
     ).toBe(false);
   });
 });
-it('attaches every discovery match atomically while reattaching detached matches and preserving duplicates', async () => {
+it('attaches discovery matches atomically while preserving tombstones and duplicates', async () => {
   const row = await workspace('discovery');
   const checkedAt = new Date(),
     nextCheckAt = new Date(checkedAt.getTime() + 60_000);
@@ -168,17 +168,17 @@ it('attaches every discovery match atomically while reattaching detached matches
   const ids = await workspacePrAccessor.attachDiscoveredPRsIfClaimMatches(row.id, claim, urls);
   expect(ids).toHaveLength(3);
   await workspacePrAccessor.detach({ workspaceId: row.id, prId: ids[0]! });
-  expect(await workspacePrAccessor.attachDiscoveredPRsIfClaimMatches(row.id, claim, urls)).toEqual([
-    ids[0],
-  ]);
-  expect(await workspacePrAccessor.list(row.id)).toHaveLength(3);
+  expect(await workspacePrAccessor.attachDiscoveredPRsIfClaimMatches(row.id, claim, urls)).toEqual(
+    []
+  );
+  expect(await workspacePrAccessor.list(row.id)).toHaveLength(2);
   await db.prisma.workspace.update({ where: { id: row.id }, data: { branchName: 'renamed' } });
   expect(
     await workspacePrAccessor.attachDiscoveredPRsIfClaimMatches(row.id, claim, [
       'https://github.com/org/repo/pull/4',
     ])
   ).toEqual([]);
-  expect((await workspacePrAccessor.attach(row.id, urls[0]!)).reattached).toBe(false);
+  expect((await workspacePrAccessor.attach(row.id, urls[0]!)).reattached).toBe(true);
 });
 it('discovers workspaces that already have PRs and syncs terminal PRs so reopening is observable', async () => {
   const row = await workspace('existing');

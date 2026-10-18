@@ -99,8 +99,9 @@ it('selects the open sibling for workspace-scoped review, status and PR context'
   });
   expect(await workspaceAccessor.findPRContext('w')).toMatchObject({ prUrl: open.url });
 });
-it('reattaches a detached URL from a valid discovery claim', async () => {
-  const pr = await createPR('p', { detachedAt: new Date(), state: 'MERGED' });
+it('preserves a detached URL and its cached state during valid discovery', async () => {
+  const detachedAt = new Date();
+  const pr = await createPR('p', { detachedAt, state: 'MERGED' });
   const claim = {
     branchName: 'feature',
     githubOwner: 'org',
@@ -114,12 +115,14 @@ it('reattaches a detached URL from a valid discovery claim', async () => {
     data: { lastCheckedAt: claim.checkedAt, retryCount: 1, nextCheckAt: claim.nextCheckAt },
   });
   expect(await workspacePrAccessor.attachDiscoveredPRsIfClaimMatches('w', claim, [pr.url])).toEqual(
-    ['p']
+    []
   );
-  expect(await workspacePrAccessor.findByIdentity({ workspaceId: 'w', prId: 'p' })).toMatchObject({
-    state: 'NONE',
-    detachedAt: null,
+  expect(await db.prisma.workspacePR.findUnique({ where: { id: 'p' } })).toMatchObject({
+    state: 'MERGED',
+    detachedAt,
+    revision: pr.revision,
   });
+  expect(await workspacePrAccessor.list('w')).toEqual([]);
 });
 it('rejects a discovery claim after the project repository changes', async () => {
   const claim = {
