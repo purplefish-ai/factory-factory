@@ -106,6 +106,7 @@ beforeEach(() => {
   mocks.interaction.mockReturnValue(null);
   mocks.otherReady.mockResolvedValue(true);
   mocks.pause.mockResolvedValue({ count: 1 });
+  mocks.recover.mockResolvedValue({ count: 1, status: 'recovered' });
   mocks.pending.mockResolvedValue([
     {
       id: 'event',
@@ -495,4 +496,99 @@ it('keeps a delivered claim settled when waking its sibling fails', async () => 
   expect(mocks.settle).toHaveBeenCalledExactlyOnceWith(
     expect.objectContaining({ result: 'delivered' })
   );
+});
+
+it('passes the identity observed before receipt lookup when recovering an absent claim', async () => {
+  mocks.receipt.mockImplementation(() => {
+    mocks.session.mockResolvedValue({
+      id: 'main',
+      workspaceId: 'w',
+      workflow: 'implement',
+      provider: 'CLAUDE',
+      providerSessionId: 'changed-during-lookup',
+      workspace: { status: 'READY' },
+    });
+    return Promise.resolve('absent');
+  });
+  await recoverPRDeliveries('main');
+  expect(mocks.recover).toHaveBeenCalledWith('delivery', false, {
+    sessionId: 'main',
+    provider: 'CLAUDE',
+    providerSessionId: 'original',
+  });
+});
+
+it('pauses an absent frozen claim when its receipt identity cannot be safely recovered', async () => {
+  mocks.receipt.mockResolvedValue('absent');
+  mocks.recover.mockResolvedValue({ count: 0, status: 'identity_mismatch' });
+  await recoverPRDeliveries('main');
+  expect(mocks.pause).toHaveBeenCalledWith('w', 'RECEIPT_UNAVAILABLE', 1);
+});
+
+it('keeps monitoring active when another recovery settles the delivery first', async () => {
+  mocks.receipt.mockResolvedValue('absent');
+  mocks.recover.mockResolvedValue({ count: 0, status: 'settled' });
+  await recoverPRDeliveries('main');
+  expect(mocks.recover).toHaveBeenCalledWith('delivery', false, {
+    sessionId: 'main',
+    provider: 'CLAUDE',
+    providerSessionId: 'original',
+  });
+  expect(mocks.pause).not.toHaveBeenCalled();
+});
+
+it('captures a rollover that completes while pending deliveries are read', async () => {
+  mocks.pending.mockImplementation(() => {
+    mocks.session.mockResolvedValue({
+      id: 'main',
+      workspaceId: 'w',
+      workflow: 'implement',
+      provider: 'CLAUDE',
+      providerSessionId: 'rolled-over',
+      workspace: { status: 'READY' },
+    });
+    return Promise.resolve([
+      {
+        id: 'event',
+        workspaceId: 'w',
+        prId: 'p',
+        state: 'DISPATCHING',
+        deliveryId: 'delivery',
+        deliverySessionId: 'main',
+        deliveryProvider: 'CLAUDE',
+        deliveryProviderSessionId: 'original',
+      },
+    ]);
+  });
+  mocks.receipt.mockResolvedValue('absent');
+  await recoverPRDeliveries('main');
+  expect(mocks.recover).toHaveBeenCalledWith('delivery', false, {
+    sessionId: 'main',
+    provider: 'CLAUDE',
+    providerSessionId: 'rolled-over',
+  });
+  expect(mocks.pause).not.toHaveBeenCalled();
+});
+
+it('captures each delivery identity after the preceding receipt lookup completes', async () => {
+  mocks.pending.mockResolvedValue([
+    { deliveryId: 'first', deliverySessionId: 'main' },
+    { deliveryId: 'second', deliverySessionId: 'main' },
+  ]);
+  mocks.receipt.mockImplementation(() => {
+    mocks.session.mockResolvedValue({
+      id: 'main',
+      workspaceId: 'w',
+      workflow: 'implement',
+      provider: 'CLAUDE',
+      providerSessionId: 'rolled-over',
+      workspace: { status: 'READY' },
+    });
+    return Promise.resolve('absent');
+  });
+  await recoverPRDeliveries('main');
+  expect(mocks.recover.mock.calls).toEqual([
+    ['first', false, { sessionId: 'main', provider: 'CLAUDE', providerSessionId: 'original' }],
+    ['second', false, { sessionId: 'main', provider: 'CLAUDE', providerSessionId: 'rolled-over' }],
+  ]);
 });

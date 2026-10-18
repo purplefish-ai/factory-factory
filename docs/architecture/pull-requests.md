@@ -137,9 +137,14 @@ received, regardless of whether the PR was fixed. After an uncertain exit,
 provider-owned user history must contain the exact delivery marker to prove
 receipt; optimistic UI rows are insufficient. Missing history pauses delivery as
 `RECEIPT_UNAVAILABLE`. Loaded history without the marker allows a bounded retry
-in the same conversation. A recipient change first recovers old claims; only
-proven absence allows cancelling an old frozen delivery. It never retargets that
-frozen message into a new conversation.
+in the same conversation. When that session has a recorded provider identity
+rollover, proven absence permits recovery to re-stamp its frozen claim to the
+current identity. The recovery transaction fences the identity observed before
+receipt lookup and verifies the rollover lineage; unreadable history still
+pauses delivery. Frozen message text and delivery IDs remain unchanged. A
+recipient change first recovers old claims; only proven absence allows
+cancelling an old frozen delivery. It never retargets that frozen message into a
+new conversation.
 
 Closing a conversation retains its provider session ID in archived transcript
 metadata. Receipt recovery reads that identity and checks provider-owned
