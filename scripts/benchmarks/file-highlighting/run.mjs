@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, extname, join, resolve } from 'node:path';
@@ -9,6 +9,8 @@ import { gzipSync } from 'node:zlib';
 import { chromium } from '@playwright/test';
 import react from '@vitejs/plugin-react';
 import { build, loadConfigFromFile, mergeConfig } from 'vite';
+import { workerSafeAliases } from '../../vite-worker-aliases.ts';
+import { waitForHighlightingPreview } from './wait-for-highlighting.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repository = resolve(here, '../../..');
@@ -89,7 +91,7 @@ async function measureBundles() {
   return { baselineRef, results };
 }
 
-async function verifyColdLoading(browser, origin, prismFile) {
+async function verifyColdLoading(browser, origin, workerFile) {
   const url = `${origin}/loading/loading.html`;
   const scrollPage = await browser.newPage();
   const scrollOwnership = [];
@@ -124,7 +126,7 @@ async function verifyColdLoading(browser, origin, prismFile) {
   const plainAliases = ['text', 'plain', 'plaintext', 'txt'];
   try {
     plainPage.on('request', (request) => {
-      if (request.url().endsWith(prismFile)) {
+      if (request.url().endsWith(workerFile)) {
         grammarRequests.push(request.url());
       }
     });
@@ -139,13 +141,9 @@ async function verifyColdLoading(browser, origin, prismFile) {
         };
       }, language);
       assert.equal(result.busy, 'false', `${language}: plaintext is ready immediately`);
-      assert.equal(result.text, '1<literal>\n2  whitespace\n3');
+      assert.equal(result.text, '<literal>\n  whitespace\n');
     }
-    assert.deepEqual(
-      grammarRequests,
-      [],
-      'Plaintext aliases must not fetch the Prism grammar chunk'
-    );
+    assert.deepEqual(grammarRequests, [], 'Plaintext aliases must not fetch the grammar worker');
   } finally {
     await plainPage.close();
   }
@@ -154,7 +152,7 @@ async function verifyColdLoading(browser, origin, prismFile) {
   let blockedRequests = 0;
   let blockedChunkError;
   try {
-    await blockedPage.route(`**/${prismFile}`, (route) => {
+    await blockedPage.route(`**/${workerFile}`, (route) => {
       blockedRequests++;
       return route.abort();
     });
@@ -169,7 +167,7 @@ async function verifyColdLoading(browser, origin, prismFile) {
       ])
     );
     assert.equal(blockedChunkError, 'Timed out waiting for syntax highlighting after 100 ms');
-    assert.equal(blockedRequests, 1, 'Negative warmup check must block the actual Prism chunk');
+    assert.equal(blockedRequests, 1, 'Negative warmup check must block the actual grammar worker');
   } finally {
     await blockedPage.close();
   }
@@ -189,7 +187,7 @@ try {
     root: here,
     logLevel: 'warn',
     plugins: [react()],
-    resolve: { alias: { '@': join(repository, 'src') } },
+    resolve: { alias: { ...workerSafeAliases, '@': join(repository, 'src') } },
     build: { outDir, chunkSizeWarningLimit: 5000, emptyOutDir: true },
   });
   await build({
@@ -198,7 +196,7 @@ try {
     base: './',
     logLevel: 'warn',
     plugins: [react()],
-    resolve: { alias: { '@': join(repository, 'src') } },
+    resolve: { alias: { ...workerSafeAliases, '@': join(repository, 'src') } },
     build: {
       outDir: join(outDir, 'loading'),
       manifest: true,
@@ -207,13 +205,10 @@ try {
       rollupOptions: { input: join(here, 'loading.html') },
     },
   });
-  const loadingManifest = JSON.parse(
-    await readFile(join(outDir, 'loading/.vite/manifest.json'), 'utf8')
+  const grammarWorker = (await readdir(join(outDir, 'loading/assets'))).find((file) =>
+    /^diff-highlight\.worker-.*\.js$/.test(file)
   );
-  const prism = Object.values(loadingManifest).find(
-    (entry) => entry.isDynamicEntry && entry.name === 'prism'
-  );
-  assert(prism, 'Cold-loading fixture must split the actual Prism engine into its own chunk');
+  assert(grammarWorker, 'Cold-loading fixture must defer the actual grammar worker');
   server = createServer((req, res) => {
     void (async () => {
       try {
@@ -325,8 +320,8 @@ try {
       ['dark', dark],
     ]) {
       const result = await page.evaluate(
-        ([text, lang, mode, token, expected]) => {
-          const view = window.inspectHighlighting(text, lang, mode, token);
+        async ([text, lang, mode, token, expected]) => {
+          const view = await window.inspectHighlighting(text, lang, mode, token);
           const probe = document.createElement('span');
           probe.style.color = expected;
           document.body.append(probe);
@@ -352,7 +347,7 @@ try {
   const coldLoadingChecks = await verifyColdLoading(
     browser,
     `http://127.0.0.1:${server.address().port}`,
-    prism.file
+    `assets/${grammarWorker}`
   );
   const fallback = await page.evaluate(() =>
     window.inspectHighlighting('<unknown>\n  text\n', 'unregistered-language', 'light')
@@ -389,9 +384,41 @@ try {
     }
   }
   const screenshots = process.argv.find((arg) => arg.startsWith('--screenshots='))?.slice(14);
+  let screenshotChecks;
+  let stalledPreviewDiagnostic;
   if (screenshots) {
     await mkdir(screenshots, { recursive: true });
     await page.evaluate(() => window.showHighlightingPreview());
+    // A full-page capture does not expand the viewport used by IntersectionObserver.
+    // Make every matrix sample intersect before waiting for its actual colored DOM.
+    const previewHeight = await page.evaluate(() =>
+      Math.ceil(document.documentElement.scrollHeight)
+    );
+    await page.setViewportSize({ width: 1200, height: Math.max(800, previewHeight) });
+    await waitForHighlightingPreview(page);
+    // Prove the diagnostic identifies a real stalled sample, then restore it.
+    await page.evaluate(() =>
+      document.querySelector('#root pre.file-code').setAttribute('aria-busy', 'true')
+    );
+    try {
+      await assert.rejects(
+        () => waitForHighlightingPreview(page, 32),
+        (error) => {
+          stalledPreviewDiagnostic = error.message;
+          assert.match(error.message, /Timed out waiting for 16 highlighted preview samples/);
+          assert.match(error.message, /"index":0/);
+          assert.match(error.message, /"theme":"light"/);
+          assert.match(error.message, /"language":"language-typescript"/);
+          assert.match(error.message, /"settled":false/);
+          return true;
+        }
+      );
+    } finally {
+      await page.evaluate(() =>
+        document.querySelector('#root pre.file-code').setAttribute('aria-busy', 'false')
+      );
+    }
+    screenshotChecks = await waitForHighlightingPreview(page);
     await page.screenshot({
       path: join(screenshots, 'file-highlighting-themes.png'),
       fullPage: true,
@@ -408,6 +435,8 @@ try {
         functionalChecks: 'passed',
         languageColorAssertions: languageColors.length * 2,
         coldLoadingChecks,
+        screenshotChecks,
+        stalledPreviewDiagnostic,
         results,
         bundles,
       },

@@ -19,12 +19,14 @@ timings.
 
 The production browser build renders the first 100 and 1,000 lines of the actual
 GitHub CLI service. It compares the previous inline-styled Prism configuration
-against the actual `FileCode` component. Both render line numbers and line
-wrappers. After loading the deferred highlighter, each case gets three warm-up
-renders and nine measured renders. JSON includes every sample and the median
-synchronous render time, render plus forced layout time, DOM node count, and
-inline-styled token count. These are warm render measurements; the initial
-numbered plaintext fallback and subsequent chunk download are not timed.
+against the actual `FileCode` component. Both render line numbers; the worker
+renderer groups source into bounded blocks. After verifying the deferred worker,
+each case gets three warm-up renders and nine measured renders. JSON includes
+every sample and the median synchronous render time, render plus forced layout
+time, DOM node count, and inline-styled token count. These measure the
+synchronous initial usable-text render and layout. For the worker renderer,
+asynchronous coloring and worker completion are excluded from these timings; the
+baseline performs highlighting within its measured render.
 
 Before measuring, browser assertions verify light/dark keyword colors, italic
 comments, an all-token inline-style scan for every syntax fixture and measured
@@ -32,19 +34,27 @@ optimized render, exact source text including whitespace and trailing newlines,
 line numbers, monospace font, long-line horizontal scrolling, JSX/TSX expression
 leaf colors, nested class-name punctuation, and unknown-language fallback. The
 optional screenshot shows both themes for TypeScript, JavaScript, CSS, markup,
-JSX, TSX, JSON, and Markdown. Vitest separately covers readable source during
-loading and after chunk-load failure, plus theme changes without replacing the
-mounted code element.
+JSX, TSX, JSON, and Markdown. Capture enlarges the viewport to fit the entire
+matrix, then waits for all 16 samples to finish their workers and display
+visible, differently colored CSS token spans. Assertions record these conditions
+before saving the image, so pending or offscreen plaintext cannot pass as a
+theme preview. One shared browser evaluator supplies polling state and the
+capture report; bounded timeout errors include each unready sample's index,
+theme, language, and readiness flags. The native harness injects a stalled
+sample and verifies that diagnostic before restoring and capturing the matrix.
+Vitest separately covers readable source during loading and after worker
+construction, loading, or message failure, plus theme changes without replacing
+the mounted code element.
 
 The cold-loading fixture uses the actual `ScrollArea` and `usePersistentScroll`:
 for both highlighted code and plaintext, its outer viewport moves 192 pixels,
 the `pre` cannot independently scroll, and the outer position restores after
 unmounting and remounting the file. The fixture also checks that `text`,
-`plain`, `plaintext`, and `txt` render immediately without requesting the Prism
-chunk. A separate browser page aborts that actual chunk request and requires
-warmup to reject with a clear timeout. Normal warmup has a 10-second deadline;
-the negative check uses a 100-millisecond deadline with a separate two-second
-hang guard.
+`plain`, `plaintext`, and `txt` render immediately without requesting the
+grammar worker. A separate browser page aborts that actual worker request and
+requires warmup to reject with a clear timeout. Normal warmup has a 10-second
+deadline; the negative check uses a 100-millisecond deadline with a separate
+two-second hang guard.
 
 Bundle mode builds the current frontend twice. For the baseline only, a Vite
 loader substitutes `file-viewer.tsx` from commit
@@ -56,13 +66,22 @@ chunks are excluded from that startup closure; their bytes are downloaded when
 code is first opened. These sums describe code transfer, not network request
 latency or browser execution time.
 
-The optimization preserves the full Prism language set and keeps numbered source
-visible while the chunk loads or if it fails. Plain-text aliases skip the chunk
+The controlled common-language registry explicitly includes JSX, TSX, and
+GraphQL; unsupported languages keep numbered plain text. Source remains visible
+while the worker loads or if it fails. Plain-text aliases skip the worker
 altogether. The enclosing scroll viewport owns horizontal scrolling. Token
 colors use scoped One Light and One Dark CSS, including language-specific
-selectors. Long lines retain horizontal scrolling. There is no virtualization or
-file-size policy change; very large files still create a DOM node for every
-rendered token.
+selectors. Long lines retain horizontal scrolling. Blocks retain all source
+text, and only nearby byte/token-eligible blocks expand into CSS token spans.
+Oversized or token-heavy blocks retain plain text; the byte/token limits bound
+transfer and DOM expansion.
+
+The following measurements record the earlier lazy main-thread Prism
+implementation. The current component retains its CSS themes but uses bounded
+worker tokens; rerun this harness for current timings. Worker CPU and temporary
+memory still grow with the full source to preserve multiline grammar context.
+Transfer and visible DOM expansion are bounded separately; see
+[the viewer report](../../../docs/performance/file-viewer.md).
 
 ## Measured result
 

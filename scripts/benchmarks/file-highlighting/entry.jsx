@@ -81,22 +81,30 @@ window.runHighlightingBenchmark = (lines, optimized) => {
   }
 };
 
-window.inspectHighlighting = (content, language, theme, selector) => {
+window.inspectHighlighting = async (content, language, theme, selector) => {
   const root = createRoot(node);
   try {
     flushSync(() => root.render(createElement(FileCode, { content, language, theme })));
+    const deadline = performance.now() + 10_000;
+    while (node.querySelector('pre')?.getAttribute('aria-busy') === 'true') {
+      if (performance.now() > deadline) {
+        throw new Error('Worker did not settle');
+      }
+      await new Promise((resolve) => setTimeout(resolve, 16));
+    }
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const pre = node.querySelector('pre');
     const code = node.querySelector('code');
     const keyword = node.querySelector('.token.keyword');
     const comment = node.querySelector('.token.comment');
-    const clone = code.cloneNode(true);
+    const clone = pre.cloneNode(true);
     clone
       .querySelectorAll('.react-syntax-highlighter-line-number')
       .forEach((item) => item.remove());
     return {
       text: clone.textContent,
-      numbers: [...node.querySelectorAll('.react-syntax-highlighter-line-number')].map(
-        (item) => item.textContent
+      numbers: [...node.querySelectorAll('.react-syntax-highlighter-line-number')].flatMap((item) =>
+        item.textContent.split('\n')
       ),
       keywordColor: keyword && getComputedStyle(keyword).color,
       commentStyle: comment && getComputedStyle(comment).fontStyle,

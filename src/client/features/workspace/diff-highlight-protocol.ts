@@ -14,9 +14,22 @@ export const diffHighlightRequestSchema = z.object({
   theme: z.record(z.string(), styleSchema),
 });
 
+export const fileHighlightRequestSchema = z.object({
+  content: z.string(),
+  cssClasses: z.boolean().optional(),
+  language: z.string(),
+  theme: z.record(z.string(), styleSchema),
+});
+
 export const diffHighlightResponseSchema = z
   .map(
     z.number().int().nonnegative(),
-    z.array(z.object({ content: z.string(), style: styleSchema.optional() }))
+    z.array(
+      z.object({
+        content: z.string(),
+        style: styleSchema.optional(),
+        className: z.string().optional(),
+      })
+    )
   )
   .nullable();

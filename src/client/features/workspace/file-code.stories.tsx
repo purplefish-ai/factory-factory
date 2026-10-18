@@ -121,7 +121,10 @@ export const TSXExpressions: Story = {
 };
 
 export const PlainText: Story = {
-  args: { language: 'text', content: '<literal>\n  Preserves whitespace without loading Prism.\n' },
+  args: {
+    language: 'text',
+    content: '<literal>\n  Preserves whitespace without starting a grammar worker.\n',
+  },
   play: async ({ canvasElement }) => {
     await expect(canvasElement.querySelector('pre')?.getAttribute('aria-busy')).toBe('false');
     await expect(canvasElement.querySelector('.token')).toBeNull();

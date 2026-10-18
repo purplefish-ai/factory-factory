@@ -44,7 +44,7 @@
   ],
   "scripts": {
     "dev": "node scripts/ensure-native-modules.mjs node && tsx src/cli/index.ts serve --dev",
-    "build": "node scripts/check-ambiguous-relative-imports.mjs && rm -rf dist && tsc -p tsconfig.backend.json && tsc-alias -p tsconfig.backend.json --resolve-full-paths && node scripts/fix-prisma-imports.mjs && cp -r prompts dist/ && vite build",
+    "build": "node scripts/check-ambiguous-relative-imports.mjs && rm -rf dist && tsc -p tsconfig.backend.json && tsc-alias -p tsconfig.backend.json --resolve-full-paths && node scripts/fix-prisma-imports.mjs && cp -r prompts dist/ && vite build && pnpm check:client-chunks",
     "build:storybook": "storybook build",
     "start": "node scripts/ensure-native-modules.mjs node && tsx src/cli/index.ts serve",
     "proxy": "node scripts/ensure-native-modules.mjs node && tsx src/cli/index.ts proxy --private",
@@ -94,7 +94,8 @@
     "lint:fix": "oxlint --fix . && biome lint --write .",
     "format": "oxfmt --write .",
     "check:format": "oxfmt --check .",
-    "check:lint-suppressions": "node scripts/check-lint-suppressions.mjs"
+    "check:lint-suppressions": "node scripts/check-lint-suppressions.mjs",
+    "check:client-chunks": "node scripts/check-client-chunk-budget.mjs"
   },
   "dependencies": {
     "@agentclientprotocol/claude-agent-acp": "^0.93.0",

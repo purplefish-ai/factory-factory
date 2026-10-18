@@ -5,6 +5,7 @@ import { ThemeProvider } from 'next-themes';
 import { type CSSProperties, type ReactNode, useState } from 'react';
 import { expect, within } from 'storybook/test';
 import { trpc } from '@/client/lib/trpc';
+import { FileCode } from './file-code';
 import { FileViewer } from './file-viewer';
 import { WorkspacePanelProvider } from './workspace-panel-context';
 
@@ -90,4 +91,26 @@ export const DarkMonospaceFont: Story = {
     ),
   ],
   play: AccessibleMonospaceFont.play,
+};
+
+export const LargeSourceFile: Story = {
+  render: () => (
+    <div className="h-80 overflow-auto">
+      <FileCode
+        content={'/* multiline comment\ncontinues here */\nexport const greeting = "Hello";\n'.repeat(
+          4000
+        )}
+        language="typescript"
+        theme="dark"
+      />
+    </div>
+  ),
+};
+
+export const MinifiedSourceFile: Story = {
+  render: () => (
+    <div className="h-80 overflow-auto">
+      <FileCode content={`[${'{"x":1},'.repeat(124_998)}{"x":1}]`} language="json" theme="dark" />
+    </div>
+  ),
 };

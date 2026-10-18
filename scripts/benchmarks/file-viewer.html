@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>File viewer benchmark</title>
+    <link rel="stylesheet" href="/src/client/globals.css" />
+  </head>
+  <body>
+    <script type="module">
+      import {
+        createElement,
+        createRoot,
+        flushSync,
+        FileCode,
+        Prism,
+      } from './file-viewer-entry.ts';
+      window.fileViewerBenchmark = { createElement, createRoot, flushSync, FileCode, Prism };
+    </script>
+  </body>
+</html>
