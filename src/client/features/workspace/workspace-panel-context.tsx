@@ -448,7 +448,7 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
         if (type === 'closed-session' && path) {
           return tab.type === 'closed-session' && tab.closedSessionId === path;
         }
-        if ((type === 'file' || type === 'diff') && path) {
+        if ((type === 'file' || type === 'diff' || type === 'screenshot') && path) {
           return tab.type === type && tab.path === path;
         }
         return false;

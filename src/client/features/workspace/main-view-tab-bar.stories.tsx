@@ -60,7 +60,7 @@ function SubagentTabBarStoryFrame({ selection }: SubagentTabBarStoryProps) {
 }
 
 const meta = {
-  title: 'Workspace/MainViewTabBar/Subagent',
+  title: 'Workspace/MainViewTabBar',
   component: SubagentTabBarStoryFrame,
   parameters: { layout: 'fullscreen' },
   args: { selection: runningSelection },
