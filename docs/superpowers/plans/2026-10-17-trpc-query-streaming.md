@@ -50,12 +50,12 @@ registry submission was declined.
 - [x] Document query streaming and buffering caveats; update Unreleased notes.
 - [x] Run `pnpm check:fix`, `pnpm typecheck`, relevant tests, `pnpm check`,
       production build and normal commit-hook checks; inspect final diff.
-- [ ] Obtain independent review, fix findings, and open a ready PR using
+- [x] Obtain independent review, fix findings, and open a ready PR using
       `gh pr create --body-file`. Attach the PR and report measurements.
 
 ## Verification
 
-- Six transport cases pass through real Express HTTP and the authenticated
+- Seven transport cases pass through real Express HTTP and the authenticated
   proxy. The two gated fast-result regressions failed with ordinary batching.
 - Formatting, typecheck, repository checks and production build pass. The local
   Codex schema check skips the installed CLI mismatch; CI uses its pinned CLI.
@@ -67,3 +67,10 @@ registry submission was declined.
 - Controlled trial: a 250 ms slow sibling, one warmup and five alternating
   measured rounds. Median fast-result arrival was 255.9 ms versus 5.0 ms both
   directly and through the proxy. These are synthetic transport measurements.
+
+Review follow-up: the proxy fixture now validates a signed session through the
+production authentication helper and rejects unsigned sessions before upstream
+forwarding. Strict comparisons verify explicit undefined keys. The new negative
+authentication case failed with HTTP 200 before fixture correction, then all
+seven cases passed. Product transport code is unchanged; formatting, typecheck,
+repository checks and scoped independent re-review pass. PR: #2485.

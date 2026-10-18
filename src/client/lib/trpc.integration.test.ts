@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import { initTRPC, TRPCError } from '@trpc/server';
 import { createExpressMiddleware } from '@trpc/server/adapters/express';
@@ -5,7 +6,11 @@ import express, { type Response as ExpressResponse } from 'express';
 import superjson from 'superjson';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { proxyAuthenticatedHttpRequest } from '@/shared/proxy-utils';
+import {
+  authenticateRequest,
+  createSessionValue,
+  proxyAuthenticatedHttpRequest,
+} from '@/shared/proxy-utils';
 import { createTrpcClient } from './trpc';
 
 const nativeFetch = globalThis.fetch;
@@ -32,6 +37,9 @@ afterEach(async () => {
 });
 
 async function createFixture(proxied: boolean) {
+  const cookieSecret = randomBytes(32);
+  const session = createSessionValue(cookieSecret);
+  const sessionCookie = `ff_proxy_session=${session.id}.${session.signature}`;
   const slow = Promise.withResolvers<void>();
   const started = Promise.withResolvers<void>();
   const value = {
@@ -84,11 +92,21 @@ async function createFixture(proxied: boolean) {
   const port = proxied
     ? await listen(
         createServer((req, res) => {
+          const auth = authenticateRequest({
+            req,
+            cookieSecret,
+            authToken: 'fixture-token',
+            sessionCookieName: 'ff_proxy_session',
+          });
+          if (!auth.authenticated) {
+            res.writeHead(401).end();
+            return;
+          }
           proxyAuthenticatedHttpRequest({
             req,
             res,
             upstreamPort,
-            path: req.url ?? '/',
+            path: auth.sanitizedPath,
             sessionCookieName: 'ff_proxy_session',
             localHost: '127.0.0.1',
           });
@@ -102,7 +120,7 @@ async function createFixture(proxied: boolean) {
       ...init,
       headers: {
         ...Object.fromEntries(new Headers(init?.headers)),
-        cookie: 'fixture=incoming; ff_proxy_session=authenticated',
+        cookie: `fixture=incoming; ${sessionCookie}`,
       },
     });
     responses.push({
@@ -111,7 +129,16 @@ async function createFixture(proxied: boolean) {
     });
     return response;
   });
-  return { client: createTrpcClient(), slow, started, value, requests, responses, fetchOptions };
+  return {
+    client: createTrpcClient(),
+    slow,
+    started,
+    value,
+    requests,
+    responses,
+    fetchOptions,
+    baseUrl: `http://127.0.0.1:${port}`,
+  };
 }
 
 describe.each([false, true])('tRPC transport (authenticated proxy: %s)', (proxied) => {
@@ -127,7 +154,7 @@ describe.each([false, true])('tRPC transport (authenticated proxy: %s)', (proxie
       });
     try {
       await fixture.started.promise;
-      await vi.waitFor(() => expect(received).toEqual(fixture.value), { timeout: 1000 });
+      await vi.waitFor(() => expect(received).toStrictEqual(fixture.value), { timeout: 1000 });
       expect(fixture.requests).toHaveLength(1);
       expect(fixture.requests[0]?.accept).toBe('application/jsonl');
       expect(fixture.responses[0]?.contentType).toContain('application/json');
@@ -153,9 +180,25 @@ describe.each([false, true])('tRPC transport (authenticated proxy: %s)', (proxie
       status: 'rejected',
       reason: { message: 'Read denied', data: { code: 'FORBIDDEN' } },
     });
-    expect(results[1]).toEqual({ status: 'fulfilled', value: fixture.value });
+    expect(results[1]).toStrictEqual({ status: 'fulfilled', value: fixture.value });
     expect(fixture.requests).toHaveLength(1);
   });
+
+  if (proxied) {
+    it('rejects an unsigned proxy session before forwarding the operation', async () => {
+      const fixture = await createFixture(true);
+      const response = await nativeFetch(
+        `${fixture.baseUrl}/api/trpc/admin.resetApiUsageStats?batch=1`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', cookie: 'ff_proxy_session=unsigned' },
+          body: JSON.stringify({ 0: { json: null } }),
+        }
+      );
+      expect(response.status).toBe(401);
+      expect(fixture.requests).toHaveLength(0);
+    });
+  }
 
   it('keeps mutations on ordinary HTTP batching and preserves response cookies', async () => {
     const fixture = await createFixture(proxied);
