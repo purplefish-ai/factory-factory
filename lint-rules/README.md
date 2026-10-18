@@ -16,7 +16,8 @@ formatting preserves unused imports for the linter to report.
 
 `scripts/oxfmt-config.test.ts` runs the pinned formatter against source, CSS,
 JSON and Markdown fixtures, including generated-file exclusions and fenced-code
-preservation.
+preservation. To hide the import-only conversion from blame, run
+`git config blame.ignoreRevsFile .git-blame-ignore-revs`.
 
 ## Custom rules
 
