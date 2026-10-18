@@ -30,9 +30,11 @@ single-document lockfile generation.
 
 Dependabot checks npm dependencies and GitHub Actions weekly, with five npm and
 three Actions PRs allowed at a time. Prisma's three coordinated packages and the
-Storybook packages are grouped. Security-update PRs must also be enabled in
-repository settings; the configuration file alone does not enable them.
-Dependency PRs require normal CI and review. There is no automatic merge rule.
+Storybook packages are grouped. CodeQL action steps are also grouped because
+`init` and `analyze` require matching versions. Security-update PRs must also be
+enabled in repository settings; the configuration file alone does not enable
+them. Dependency PRs require normal CI and review. There is no automatic merge
+rule.
 
 ## Running the audit
 
