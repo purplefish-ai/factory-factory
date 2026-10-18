@@ -1,4 +1,6 @@
-import { GitBranchIcon, ListIcon, PlusIcon } from '@phosphor-icons/react';
+import { GitBranchIcon } from '@phosphor-icons/react/dist/csr/GitBranch';
+import { ListIcon } from '@phosphor-icons/react/dist/csr/List';
+import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { useState } from 'react';
 import { PageHeader } from '@/client/components/page-header';
 import { PRDetailPanel } from '@/client/components/pr-detail-panel';

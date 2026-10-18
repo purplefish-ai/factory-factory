@@ -16,7 +16,7 @@ vi.mock('react-resizable-panels', () => ({
   },
 }));
 
-vi.mock('@phosphor-icons/react', () => ({
+vi.mock('@phosphor-icons/react/dist/csr/DotsSixVertical', () => ({
   DotsSixVerticalIcon: () => createElement('svg'),
 }));
 

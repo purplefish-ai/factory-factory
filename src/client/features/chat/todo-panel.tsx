@@ -1,4 +1,5 @@
-import { CheckCircleIcon, ListChecksIcon } from '@phosphor-icons/react';
+import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
+import { ListChecksIcon } from '@phosphor-icons/react/dist/csr/ListChecks';
 import { memo } from 'react';
 import { TodoItem } from '@/client/components/todo-item';
 import { withOccurrenceKeys } from '@/client/lib/list-keys';

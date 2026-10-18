@@ -1,4 +1,5 @@
-import { CheckIcon, CopyIcon } from '@phosphor-icons/react';
+import { CheckIcon } from '@phosphor-icons/react/dist/csr/Check';
+import { CopyIcon } from '@phosphor-icons/react/dist/csr/Copy';
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 

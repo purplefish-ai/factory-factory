@@ -142,7 +142,7 @@ export class AcpRuntimeSupervisor {
         }
 
         const pending = this.pendingCreation.get(sessionId);
-        if (pending) {
+        if (pending !== undefined) {
           logger.debug('Waiting for pending ACP client creation', { sessionId });
           const handle = await pending;
           this.promoteForActiveUse(sessionId, options, handle);
@@ -697,7 +697,7 @@ export class AcpRuntimeSupervisor {
     let stoppedHandle: AcpProcessHandle | undefined;
     let stopCompleted = false;
     try {
-      if (pendingCreation) {
+      if (pendingCreation !== undefined) {
         await raceWithSoftTimeout(
           pendingCreation.catch(() => undefined),
           STOP_TIMEOUT_MS

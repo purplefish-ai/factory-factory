@@ -1,4 +1,6 @@
-import { FileCodeIcon, PlayIcon, SpinnerGapIcon } from '@phosphor-icons/react';
+import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
+import { PlayIcon } from '@phosphor-icons/react/dist/csr/Play';
+import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

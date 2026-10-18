@@ -1,4 +1,4 @@
-import { RobotIcon } from '@phosphor-icons/react';
+import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { useCallback, useMemo } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import { SubagentList, type SubagentListState } from './subagent-list';

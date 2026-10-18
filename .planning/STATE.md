@@ -1,5 +1,9 @@
 # Project State
 
+> **Historical milestone record (2026-02-14).** This is not current project
+> state or an active work queue. See the [planning archive](README.md) and
+> [current documentation](../docs/README.md).
+
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-02-14)

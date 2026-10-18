@@ -1,434 +1,113 @@
-# Chat Message Flow Architecture
+# Chat message flow
 
-This document describes how chat messages flow between the frontend and backend,
-including session resume, reconnection, and state synchronization.
+Claude and Codex share the ACP runtime and the same session event stream. For
+provider startup, cancellation, and lifecycle ownership, see
+[agent runtime](architecture/agent-runtime.md).
 
-## Overview
+## Live messages
 
-The chat system uses a unified `SessionStore` model with `SessionDomainService`
-as the single source of truth for chat state, ensuring all connected frontends
-receive identical messages regardless of when they connect.
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           BACKEND SERVICES                               │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
-│   ClaudeClient                ChatEventForwarderService                  │
-│   (Claude CLI)  ─────emit────▶  (Event Handlers)                        │
-│                                       │                                  │
-│                                       │ emitDelta()                      │
-│                                       ▼                                  │
-│   SessionDomainService ◀───────── subscribe()                            │
-│   (SessionStore)                       │                                 │
-│         │                              │                                 │
-│         │ emitDelta()                  │ publishToSession()              │
-│         │ (via SessionPublisher →      │                                 │
-│         │  sessionEventBus)            │                                 │
-│         └──────────────────────────────┼─────────────────────────────┐   │
-│                                        │                             │   │
-│                                        ▼                             ▼   │
-│                          ┌─────────────────────────────┐               │
-│                          │ SessionEventBus              │               │
-│                          │ publishToSession()           │ ◀── DOMAIN   │
-│                          │ (transport-free outbound)    │    SURFACE    │
-│                          └─────────────────────────────┘               │
-│                                        │                                 │
-│                                        ▼                                 │
-│                          ┌─────────────────────────────┐               │
-│                          │ ChatConnectionRegistry       │ ◀── TRANSPORT│
-│                          │ broadcastToSession()         │    ADAPTER   │
-│                          │ (THE ONLY BROADCAST)         │               │
-│                          └─────────────────────────────┘               │
-│                                        │                                 │
-└────────────────────────────────────────┼─────────────────────────────────┘
-                                         │ WebSocket
-                                         ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           FRONTEND                                       │
-├─────────────────────────────────────────────────────────────────────────┤
-│   WebSocket Transport ─────▶ ChatReducer ─────▶ React State             │
-└─────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    UI[Chat composer] -->|queue_message over WebSocket| Handler[ChatMessageHandlerService]
+    Handler --> Store[SessionDomainService: queue and transcript]
+    Handler -->|dispatch through session lifecycle| Runtime[AcpRuntimeManager]
+    Runtime -->|session/prompt| Provider[Claude or Codex ACP adapter]
+    Provider -->|session/update| Processor[AcpEventProcessor and AcpEventTranslator]
+    Processor --> Store
+    Store --> Publisher[SessionPublisher]
+    Publisher --> Bus[SessionEventBus]
+    Bus --> Registry[ChatConnectionRegistry]
+    Registry -->|WebSocket| Transport[useChatTransport]
+    Transport --> Reducer[chatReducer]
 ```
 
-## Core Principle: Single Broadcast Point
+`ChatMessageHandlerService` validates dispatch eligibility and starts the
+runtime when needed. The queued message stays visible until dispatch is ready,
+so refreshing during startup does not remove it from the queue.
 
-**All messages to the frontend go through `sessionEventBus.publishToSession()`,
-which the WebSocket adapter (`ChatConnectionRegistry`) consumes and delivers via
-`broadcastToSession()`.**
+`AcpEventProcessor` translates provider updates with `AcpEventTranslator`,
+stores transcript changes, and emits session deltas. Streaming text accumulates
+under a stable message order so the client updates the existing message. Runtime
+and permission events update session state through their respective handlers.
 
-This keeps the session domain free of any `ws` imports: domain code publishes
-transport-free outbound events on `sessionEventBus`, and
-`ChatConnectionRegistry` (in `routers/websocket/`) owns the socket registry,
-serialization, and delivery. `sessionFileLogger` records each payload that
-actually reaches at least one client.
+`SessionEventBus` is the transport-free outbound surface. `SessionPublisher`
+wraps incremental events in `session_delta`; `ChatConnectionRegistry` owns
+socket subscriptions, serialization, delivery, and logging of payloads that
+reach a client. The registry also supplies viewer counts to the domain through
+the bus.
 
-The adapter:
+`ChatEventForwarderService` handles workspace completion notifications and
+pending-request access. Agent stream translation belongs to the ACP processor;
+it does not attach legacy `ClaudeClient` listeners.
 
-1. Broadcasts to all WebSocket connections subscribed to a specific session
-   (indexed per-session for O(viewers) fan-out)
-2. Serializes the message once and sends to every subscriber
-3. Logs every delivered message for debugging via `sessionFileLogger`
+## Loading and reconnecting
 
-Adapter location: `src/backend/routers/websocket/chat-connection-registry.ts`
-Domain event bus: `src/backend/services/session/service/session-event-bus.ts`
+Registering a chat WebSocket does not hydrate history. The client explicitly
+sends `load_session`, whose handler:
 
-```typescript
-// Domain side (transport-free)
-sessionEventBus.publishToSession(dbSessionId: string, payload: WebSocketMessage): void
-// Transport side (owns sockets)
-chatConnectionRegistry.broadcastToSession(dbSessionId: string, payload: WebSocketMessage): number
-```
+1. Reads the `AgentSession` and hydrates provider history when needed.
+2. Merges durable lifecycle events and recovers interrupted tool calls when the
+   runtime is stopped.
+3. Calls
+   `sessionDomainService.subscribe({ sessionId, sessionRuntime, loadRequestId })`,
+   which publishes a `session_replay_batch` and a runtime update.
+4. Sends capabilities, configuration options, and cached slash commands.
 
-## Event Flow Pattern
+Passive loading does not initialize an ACP runtime. A stored initial message may
+subsequently be enqueued and dispatched through the normal message path.
 
-Every event from Claude is emitted before forwarding:
+Replay reconstructs the renderer's transcript window, queued messages, runtime,
+pending interactive request, and retained recent rejections. `SessionPublisher`
+also supports `session_snapshot`; loading is not split into an initial snapshot
+protocol and a separate reconnect protocol. `loadRequestId` associates responses
+with the client's load request.
 
-```typescript
-// In session-domain.service.ts (delegates to SessionPublisher → sessionEventBus)
-sessionDomainService.emitDelta(sessionId, event);
-// The publisher inside SessionDomainService calls:
-sessionEventBus.publishToSession(sessionId, { type: 'session_delta', data: event });
-// The WebSocket adapter (ChatConnectionRegistry) subscribes to the bus and delivers to sockets.
-```
+Provider history comes from the Claude or Codex history loader selected by the
+session's provider and identity. In-memory pending requests can survive a viewer
+reconnect while the session exists; they are not a durable permission request
+that can be resumed after a server restart.
 
-This pattern appears for:
+## Frontend updates
 
-- Status messages (running: true/false)
-- Claude stream events (tool use, thinking, text)
-- User messages with tool results
-- Result messages (completion)
+`useChatTransport` unwraps `session_delta` before passing its inner event to
+`createActionFromWebSocketMessage`. The reducer handles snapshots and replay
+batches as well as live events; replay uses the same event-to-action mapping.
 
-**Why?** When a frontend reconnects (page reload while Claude is running), we
-replay stored state including recent rejected message states to bring the UI
-back in sync.
+| Wire event                                             | Reducer action or handling                             |
+| ------------------------------------------------------ | ------------------------------------------------------ |
+| `session_snapshot`                                     | `SESSION_SNAPSHOT`                                     |
+| `session_replay_batch`                                 | `SESSION_REPLAY_BATCH`                                 |
+| `agent_message`                                        | `WS_AGENT_MESSAGE`                                     |
+| `assistant_text_delta`                                 | Incremental text update                                |
+| `message_state_changed`                                | `MESSAGE_STATE_CHANGED`                                |
+| `session_runtime_snapshot` / `session_runtime_updated` | `SESSION_RUNTIME_SNAPSHOT` / `SESSION_RUNTIME_UPDATED` |
+| `user_question` / `permission_request`                 | Interactive request state                              |
 
-## Message Flow Scenarios
-
-### Scenario 1: New Session (Frontend Connected)
-
-```
-User sends message
-        │
-        ▼
-┌───────────────────┐
-│ Frontend WebSocket│
-│ queue_message     │
-└───────────────────┘
-        │
-        ▼
-┌───────────────────┐
-│ SessionDomainSvc  │──▶ emitDelta(MESSAGE_STATE_CHANGED: ACCEPTED)
-│ enqueue()         │
-└───────────────────┘
-        │
-        ▼
-┌───────────────────┐
-│ tryDispatch       │
-│ NextMessage()     │
-└───────────────────┘
-        │
-        ▼
-┌───────────────────┐
-│ ClaudeClient      │
-│ sendMessage()     │
-└───────────────────┘
-        │
-        ▼
-┌───────────────────┐     ┌──────────────────┐
-│ Claude CLI        │────▶│ Event Handlers   │
-│ (subprocess)      │     │ (on stream,etc)  │
-└───────────────────┘     └──────────────────┘
-                                   │
-                                   │ For each event:
-                                   │ 1. emitDelta() (→ sessionEventBus.publishToSession)
-                                   │ 2. ChatConnectionRegistry delivers to sockets
-                                   ▼
-                          ┌──────────────────┐
-                          │ All Connected    │
-                          │ Frontends        │
-                          └──────────────────┘
-```
-
-### Scenario 2: Page Reload (Claude Still Running)
-
-```
-Frontend reconnects via WebSocket
-        │
-        ▼
-┌───────────────────────────────────────────┐
-│ chat.handler.ts: handleChatUpgrade()      │
-│                                           │
-│ 1. Register connection                    │
-│ 2. Send initial status                    │
-│ 3. Call sessionDomainService.subscribe()  │
-└───────────────────────────────────────────┘
-        │
-        │ subscribe() emits session_snapshot
-        │ or session_replay_batch via sessionEventBus → ChatConnectionRegistry
-        ▼
-┌───────────────────────────────────────────┐
-│ Frontend receives session_snapshot or     │
-│ session_replay_batch:                     │
-│ - ChatMessage[] array                     │
-│ - SessionRuntimeState                     │
-│ - pendingInteractiveRequest (if any)      │
-│ - recent rejected messages (if replaying) │
-└───────────────────────────────────────────┘
-```
-
-**Key insight:** The frontend receives `session_snapshot` on initial load or
-`session_replay_batch` on reconnection, both providing complete state including
-recent rejected messages.
-
-### Scenario 3: Cold Start (No Claude Process Running)
-
-```
-Frontend sends load_session
-        │
-        ▼
-┌───────────────────────────────────────────┐
-│ handleLoadSessionMessage()                │
-│                                           │
-│ Check: existingClient?.isRunning()        │
-│        ↓ NO (cold start)                  │
-│                                           │
-│ loadHistoryFromJSONL():                   │
-│   1. SessionManager.getHistory()          │
-│      (reads ~/.claude/projects/.../       │
-│       conversation.jsonl)                 │
-│   2. sessionDomainService.loadHistory()   │
-│   3. sessionDomainService.subscribe()     │
-└───────────────────────────────────────────┘
-        │
-        │ subscribe() emits session_snapshot
-        ▼
-┌───────────────────────────────────────────┐
-│ Frontend receives session_snapshot        │
-│ (same format as live session!)            │
-└───────────────────────────────────────────┘
-```
-
-## Key Services
-
-### SessionDomainService
-
-**Purpose:** Single source of truth for chat state, manages transcript, queue,
-and message lifecycle.
-
-**Location:** `src/backend/services/session/service/session-domain.service.ts`
-
-Key methods:
-
-- `enqueue(sessionId, message)` - Add message to queue
-- `rejectMessage(sessionId, messageId, errorMessage)` - Reject a message and
-  emit state change
-- `emitDelta(sessionId, event)` - Broadcast incremental updates
-- `subscribe(sessionId, runtime)` - Subscribe to session and get snapshot
-
-### SessionEventBus
-
-**Purpose:** Transport-free outbound event surface for the session domain.
-Domain code (e.g. `SessionPublisher`, `ChatEventForwarderService`) publishes
-session-scoped payloads here; the WebSocket adapter owns the socket registry,
-serialization, and delivery. This keeps `ws` imports out of the session domain
-entirely. Viewer-count queries flow the other way: the transport adapter
-registers a provider so domain code can ask how many clients are viewing a
-session without knowing about sockets.
-
-**Location:** `src/backend/services/session/service/session-event-bus.ts`
-
-Key methods:
-
-- `publishToSession(sessionId, payload)` - **DOMAIN-SIDE PUBLISH POINT**
-  (consumed by the transport adapter)
-- `publishToAllClients(payload)` - Publish a payload to every connected chat
-  client
-- `registerViewerCountProvider(provider | null)` - Called by the transport
-  adapter at startup/teardown
-- `countViewers(sessionId)` - Number of clients currently viewing a session
-
-### ChatConnectionRegistry (WebSocket adapter)
-
-**Purpose:** Transport-side counterpart of `SessionEventBus`. Tracks chat
-WebSocket connections by connection ID, maintains a per-session topic index so
-fan-out is O(viewers) rather than O(all connections), serializes and delivers
-session-scoped payloads published by the session domain, and answers
-viewer-count queries from the domain via the event bus. Includes OUT_TO_CLIENT
-session file logging for payloads that actually reached at least one client.
-
-**Location:** `src/backend/routers/websocket/chat-connection-registry.ts`
-
-Key methods:
-
-- `register(connectionId, info)` - Track a new WebSocket connection (subscribes
-  it to its session's topic)
-- `unregister(connectionId)` - Remove a closed connection
-- `broadcastToSession(dbSessionId, payload)` - **THE ONLY BROADCAST** (invoked
-  by the `sessionEventBus` outbound listener)
-
-### ChatEventForwarderService
-
-**Purpose:** Sets up event listeners on ClaudeClient and routes events to
-WebSocket.
-
-**Location:**
-`src/backend/services/session/service/chat/chat-event-forwarder.service.ts`
-
-Key methods:
-
-- `setupClientEvents(sessionId, client, context, onDispatch)` - Wire up all
-  event handlers
-- `getPendingRequest(sessionId)` - Get pending interactive request for restore
-- `clearPendingRequest(sessionId)` - Clear pending request on stop/response
-
-### ChatMessageHandlerService
-
-**Purpose:** Handles all incoming WebSocket message types.
-
-**Location:**
-`src/backend/services/session/service/chat/chat-message-handlers.service.ts`
-
-Key methods:
-
-- `handleMessage(ws, sessionId, workingDir, message)` - Route message to handler
-- `tryDispatchNextMessage(sessionId)` - Dispatch next queued message to Claude
-- `handleLoadSessionMessage(...)` - Load session and send snapshot
-- `replayEventsForRunningClient(ws, sessionId, client)` - Replay stored events
-
-## Frontend Message Handling
-
-### WebSocket → Reducer Flow
-
-```
-WebSocket.onmessage
-        │
-        ▼
-createActionFromWebSocketMessage(data)
-        │
-        ▼
-dispatch(action)
-        │
-        ▼
-chatReducer(state, action)
-        │
-        ▼
-New React State
-```
-
-### Grouping for display
+Questions and permissions are stored in `SessionStore.pendingInteractiveRequest`
+and included in replay. Responses resolve through the permission service;
+request IDs ensure clearing an older response does not remove a newer request.
 
 Main chat and quick chat use `useGroupedChatMessages` to retain stable tool
 groups between updates. An unchanged message array and length return the cached
 grouping before filtering, deduplication, or prefix scanning. Changing
-duplicate-result filtering creates a new grouper, even when the message array is
-unchanged.
+duplicate-result filtering creates a new grouper. Message edits must replace the
+array and changed message objects; in-place appends and truncation are detected
+by length, but same-length in-place edits are unsupported.
 
-Message edits must replace the array and changed message objects, as the chat
-reducer does for streaming updates. The grouper also detects in-place appends
-and truncation by checking array length; same-length in-place edits are
-unsupported. New arrays still use the existing incremental grouping and
-history/late-result fallbacks.
+## Sources of truth
 
-### Key Actions
+| Concern                                               | Source                                                                                                                                                                                                                                      |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Queue, transcript, runtime snapshot, pending requests | [SessionDomainService](../src/backend/services/session/service/session-domain.service.ts) and its `store/` collaborators                                                                                                                    |
+| Provider event translation                            | [AcpEventProcessor](../src/backend/services/session/service/lifecycle/acp-event-processor.ts)                                                                                                                                               |
+| History hydration and replay                          | [Load handler](../src/backend/services/session/service/chat/chat-message-handlers/handlers/load-session.handler.ts) and [provider history hydrator](../src/backend/services/session/service/lifecycle/session-provider-history-hydrator.ts) |
+| Outbound event envelopes                              | [SessionPublisher](../src/backend/services/session/service/store/session-publisher.ts)                                                                                                                                                      |
+| WebSocket subscriptions and delivery                  | [ChatConnectionRegistry](../src/backend/routers/websocket/chat-connection-registry.ts)                                                                                                                                                      |
+| Client transport and event reduction                  | [useChatTransport](../src/client/features/chat/use-chat-transport.ts) and [chat reducer](../src/client/features/chat/reducer/index.ts)                                                                                                      |
+| Persisted provider identity and lifecycle history     | `AgentSession` and `SessionLifecycleEvent` in [Prisma schema](../prisma/schema.prisma)                                                                                                                                                      |
 
-| WebSocket Type          | Redux Action            | Effect                                                       |
-| ----------------------- | ----------------------- | ------------------------------------------------------------ |
-| `messages_snapshot`     | `MESSAGES_SNAPSHOT`     | Replace all messages, set status, set pending request        |
-| `message_state_changed` | `MESSAGE_STATE_CHANGED` | Update message state (ACCEPTED, DISPATCHED, COMMITTED, etc.) |
-| `claude_message`        | `WS_CLAUDE_MESSAGE`     | Add Claude message to list (filtered for relevant events)    |
-| `status`                | `WS_STATUS`             | Update running state                                         |
-| `user_question`         | `WS_USER_QUESTION`      | Show question dialog                                         |
-| `permission_request`    | `WS_PERMISSION_REQUEST` | Show permission dialog                                       |
-
-### Message State Machine
-
-User messages go through states:
-
-```
-PENDING → SENT → ACCEPTED → DISPATCHED → COMMITTED
-                    ↘ REJECTED/FAILED/CANCELLED
-```
-
-Claude messages:
-
-```
-STREAMING → COMPLETE
-```
-
-## Session Status States
-
-The `sessionStatus` discriminated union tracks the session lifecycle:
-
-```
-idle → loading → starting → ready ↔ running → stopping → ready
-```
-
-| Phase      | Meaning                                     |
-| ---------- | ------------------------------------------- |
-| `idle`     | No session selected                         |
-| `loading`  | Loading session from DB/JSONL               |
-| `starting` | Claude process is starting                  |
-| `ready`    | Claude is idle, ready for input             |
-| `running`  | Claude is processing a message              |
-| `stopping` | Stop requested, waiting for process to exit |
-
-## Interactive Requests (Questions/Permissions)
-
-When Claude needs user input (e.g., `AskUserQuestion` or `ExitPlanMode`):
-
-1. **Backend stores request:**
-   `pendingInteractiveRequests.set(sessionId, request)`
-2. **Frontend receives:** via `user_question` or `permission_request` message
-3. **On reconnect:** Request is included in
-   `messages_snapshot.pendingInteractiveRequest`
-4. **User responds:** Frontend sends `question_response` or
-   `permission_response`
-5. **Backend clears:** `clearPendingRequestIfMatches(sessionId, requestId)`
-
-## Data Persistence
-
-### In-Memory (Session Running)
-
-- **SessionStore:** Stores transcript, queue, and recent rejections
-- **ChatEventForwarderService:** Stores pending interactive requests
-
-### On Disk (Session Not Running)
-
-- **JSONL files:** `~/.claude/projects/<hash>/conversation.jsonl`
-- Loaded via `SessionManager.getHistory(claudeSessionId, workingDir)`
-- Converted to `HistoryMessage[]` then to `MessageWithState[]`
-
-### Database (Prisma/SQLite)
-
-- **ClaudeSession:** `claudeSessionId` links to JSONL file location
-- **Workspace:** Contains session relationships
-
-## Reconnection Guarantees
-
-The architecture guarantees:
-
-1. **Same messages:** Whether live streaming or reconnecting, frontends receive
-   identical `ChatMessage[]`
-2. **No message loss:** SessionStore captures state before broadcast
-3. **State consistency:** `subscribe()` provides complete state via
-   session_snapshot or session_replay_batch
-4. **Interactive request preservation:** Pending questions/permissions survive
-   reconnect
-5. **Rejected message recovery:** Recent rejected messages (within 60s) are
-   replayed on reconnect
-
-## File Locations
-
-| Service                             | Path                                                                         |
-| ----------------------------------- | ---------------------------------------------------------------------------- |
-| SessionDomainService                | `src/backend/services/session/service/session-domain.service.ts`             |
-| SessionEventBus                     | `src/backend/services/session/service/session-event-bus.ts`                  |
-| SessionPublisher                    | `src/backend/services/session/service/store/session-publisher.ts`            |
-| ChatConnectionRegistry (WS adapter) | `src/backend/routers/websocket/chat-connection-registry.ts`                  |
-| ChatEventForwarderService           | `src/backend/services/session/service/chat/chat-event-forwarder.service.ts`  |
-| ChatMessageHandlerService           | `src/backend/services/session/service/chat/chat-message-handlers.service.ts` |
-| Chat WebSocket Handler              | `src/backend/routers/websocket/chat.handler.ts`                              |
-| Frontend Chat Reducer               | `src/client/features/chat/reducer/`                                          |
-| Frontend WebSocket Hook             | `src/client/features/chat/use-chat-websocket.ts`                             |
-| Frontend State Hook                 | `src/client/features/chat/use-chat-state.ts`                                 |
+Focused load and recovery coverage lives beside the load handler in
+`load-session.handler.test.ts` and `load-session.handler.recovery.test.ts`.
+`src/client/features/chat/reducer/result-dedup.test.ts` covers result
+deduplication across live and replay paths. Consult the current tests for exact
+ordering and recovery contracts rather than inferring guarantees from a diagram.

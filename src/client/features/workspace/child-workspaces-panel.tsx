@@ -1,4 +1,6 @@
-import { ArrowSquareOutIcon, PlusIcon, TreeStructureIcon } from '@phosphor-icons/react';
+import { ArrowSquareOutIcon } from '@phosphor-icons/react/dist/csr/ArrowSquareOut';
+import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
+import { TreeStructureIcon } from '@phosphor-icons/react/dist/csr/TreeStructure';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';

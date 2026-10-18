@@ -1,4 +1,5 @@
-import { WarningCircleIcon, XCircleIcon } from '@phosphor-icons/react';
+import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
+import { XCircleIcon } from '@phosphor-icons/react/dist/csr/XCircle';
 import type { AgentMessage } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
 

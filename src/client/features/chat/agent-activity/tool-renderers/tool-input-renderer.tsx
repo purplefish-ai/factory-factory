@@ -1,4 +1,5 @@
-import { FileCodeIcon, LightningIcon } from '@phosphor-icons/react';
+import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
+import { LightningIcon } from '@phosphor-icons/react/dist/csr/Lightning';
 import type { ReactElement } from 'react';
 import { memo } from 'react';
 import { TodoItem } from '@/client/components/todo-item';

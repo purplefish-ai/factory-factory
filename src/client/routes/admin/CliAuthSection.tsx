@@ -1,4 +1,4 @@
-import { TerminalIcon } from '@phosphor-icons/react';
+import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
 import { useState } from 'react';
 import { OnboardingCliHealth } from '@/client/features/project/onboarding-cli-health';
 import { SetupTerminalModal } from '@/client/features/project/setup-terminal-modal';

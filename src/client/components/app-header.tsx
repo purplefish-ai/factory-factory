@@ -1,4 +1,5 @@
-import { ListIcon, SidebarSimpleIcon } from '@phosphor-icons/react';
+import { ListIcon } from '@phosphor-icons/react/dist/csr/List';
+import { SidebarSimpleIcon } from '@phosphor-icons/react/dist/csr/SidebarSimple';
 import { Button } from '@/components/ui/button';
 import { useSidebar } from '@/components/ui/sidebar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';

@@ -1,4 +1,5 @@
-import { CheckCircleIcon, FolderOpenIcon } from '@phosphor-icons/react';
+import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
+import { FolderOpenIcon } from '@phosphor-icons/react/dist/csr/FolderOpen';
 import { type ScriptType, StartupScriptForm } from '@/client/features/project/startup-script-form';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';

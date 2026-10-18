@@ -1,4 +1,6 @@
-import { ArchiveIcon, ChatIcon, ClockIcon } from '@phosphor-icons/react';
+import { ArchiveIcon } from '@phosphor-icons/react/dist/csr/Archive';
+import { ChatIcon } from '@phosphor-icons/react/dist/csr/Chat';
+import { ClockIcon } from '@phosphor-icons/react/dist/csr/Clock';
 import { formatDistanceToNow } from 'date-fns';
 import { useState } from 'react';
 import { trpc } from '@/client/lib/trpc';

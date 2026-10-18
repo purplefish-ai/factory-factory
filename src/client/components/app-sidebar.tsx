@@ -1,10 +1,8 @@
-import {
-  DotOutlineIcon,
-  GearIcon,
-  GitPullRequestIcon,
-  PlusIcon,
-  XIcon,
-} from '@phosphor-icons/react';
+import { DotOutlineIcon } from '@phosphor-icons/react/dist/csr/DotOutline';
+import { GearIcon } from '@phosphor-icons/react/dist/csr/Gear';
+import { GitPullRequestIcon } from '@phosphor-icons/react/dist/csr/GitPullRequest';
+import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
+import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import {
   type PointerEvent as ReactPointerEvent,
   useEffect,

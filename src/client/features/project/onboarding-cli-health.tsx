@@ -1,10 +1,8 @@
-import {
-  ArrowsClockwiseIcon,
-  CheckCircleIcon,
-  CircleDashedIcon,
-  TerminalIcon,
-  WarningIcon,
-} from '@phosphor-icons/react';
+import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
+import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
+import { CircleDashedIcon } from '@phosphor-icons/react/dist/csr/CircleDashed';
+import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
+import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { useCLIHealthRefresh } from '@/client/hooks/use-cli-health-refresh';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';

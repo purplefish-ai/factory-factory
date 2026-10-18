@@ -1,4 +1,5 @@
-import { CheckCircleIcon, FileCodeIcon } from '@phosphor-icons/react';
+import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
+import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import type { FactoryConfig } from '@/shared/schemas/factory-config.schema';
 

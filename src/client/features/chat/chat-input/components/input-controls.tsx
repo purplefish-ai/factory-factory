@@ -1,12 +1,10 @@
-import {
-  BrainIcon,
-  ImageIcon,
-  MapTrifoldIcon,
-  PaperPlaneTiltIcon,
-  SlidersHorizontalIcon,
-  SpinnerGapIcon,
-  SquareIcon,
-} from '@phosphor-icons/react';
+import { BrainIcon } from '@phosphor-icons/react/dist/csr/Brain';
+import { ImageIcon } from '@phosphor-icons/react/dist/csr/Image';
+import { MapTrifoldIcon } from '@phosphor-icons/react/dist/csr/MapTrifold';
+import { PaperPlaneTiltIcon } from '@phosphor-icons/react/dist/csr/PaperPlaneTilt';
+import { SlidersHorizontalIcon } from '@phosphor-icons/react/dist/csr/SlidersHorizontal';
+import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
+import { SquareIcon } from '@phosphor-icons/react/dist/csr/Square';
 import { memo, useState } from 'react';
 import type { AcpConfigOption } from '@/client/features/chat/reducer';
 import { ContextWindowIndicator } from '@/client/features/chat/usage-stats';

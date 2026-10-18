@@ -8,13 +8,13 @@ import type { ServerWorkspace } from '@/client/components/use-workspace-list-sta
 import { WorkspaceItemContent } from './workspace-item-content';
 
 vi.mock('@/client/features/workspace', () => ({ WorkspacePrMenu: () => null }));
-vi.mock('@phosphor-icons/react', () => ({
-  ClockIcon: () => null,
-  DotOutlineIcon: () => null,
-  GitBranchIcon: () => null,
+vi.mock('@phosphor-icons/react/dist/csr/Clock', () => ({ ClockIcon: () => null }));
+vi.mock('@phosphor-icons/react/dist/csr/DotOutline', () => ({ DotOutlineIcon: () => null }));
+vi.mock('@phosphor-icons/react/dist/csr/GitBranch', () => ({ GitBranchIcon: () => null }));
+vi.mock('@phosphor-icons/react/dist/csr/GitPullRequest', () => ({
   GitPullRequestIcon: () => null,
-  TreeStructureIcon: () => null,
 }));
+vi.mock('@phosphor-icons/react/dist/csr/TreeStructure', () => ({ TreeStructureIcon: () => null }));
 
 vi.mock('@/client/components/workspace-status-icon', () => ({
   WorkspaceStatusIcon: () => createElement('span', null),

@@ -1,12 +1,10 @@
-import {
-  ArrowsClockwiseIcon,
-  CaretDownIcon,
-  CaretRightIcon,
-  PlayIcon,
-  SpinnerGapIcon,
-  WarningIcon,
-  XIcon,
-} from '@phosphor-icons/react';
+import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
+import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
+import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
+import { PlayIcon } from '@phosphor-icons/react/dist/csr/Play';
+import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
+import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
+import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { InitOutputPanel } from './init-output-panel';

@@ -1,4 +1,7 @@
-import { FileCodeIcon, FileDashedIcon, FileMinusIcon, FilePlusIcon } from '@phosphor-icons/react';
+import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
+import { FileDashedIcon } from '@phosphor-icons/react/dist/csr/FileDashed';
+import { FileMinusIcon } from '@phosphor-icons/react/dist/csr/FileMinus';
+import { FilePlusIcon } from '@phosphor-icons/react/dist/csr/FilePlus';
 import { memo } from 'react';
 import { cn } from '@/lib/utils';
 

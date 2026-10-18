@@ -1,14 +1,12 @@
-import {
-  CameraIcon,
-  CheckIcon,
-  EyeIcon,
-  GitBranchIcon,
-  type Icon,
-  LightningIcon,
-  PlayIcon,
-  SparkleIcon,
-  TerminalIcon,
-} from '@phosphor-icons/react';
+import { CameraIcon } from '@phosphor-icons/react/dist/csr/Camera';
+import { CheckIcon } from '@phosphor-icons/react/dist/csr/Check';
+import { EyeIcon } from '@phosphor-icons/react/dist/csr/Eye';
+import { GitBranchIcon } from '@phosphor-icons/react/dist/csr/GitBranch';
+import { LightningIcon } from '@phosphor-icons/react/dist/csr/Lightning';
+import { PlayIcon } from '@phosphor-icons/react/dist/csr/Play';
+import { SparkleIcon } from '@phosphor-icons/react/dist/csr/Sparkle';
+import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
+import type { Icon } from '@phosphor-icons/react/dist/lib/types';
 import type { inferRouterOutputs } from '@trpc/server';
 import type { AppRouter } from '@/client/lib/trpc';
 import { trpc } from '@/client/lib/trpc';

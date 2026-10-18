@@ -1,4 +1,4 @@
-import { UploadIcon } from '@phosphor-icons/react';
+import { UploadIcon } from '@phosphor-icons/react/dist/csr/Upload';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type { z } from 'zod';

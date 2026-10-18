@@ -1,59 +1,24 @@
-# Bugbot Configuration
+# Bugbot Review Guidance
 
-## Project Overview
+Use the repository's [agent guide](../AGENTS.md) and the applicable
+[backend service](../src/backend/services/AGENTS.md) or
+[client feature](../src/client/features/AGENTS.md) guide for current
+conventions. Use [architecture notes](../docs/architecture/README.md) for
+subsystem contracts.
 
-This is a workspace-based coding environment where users interact with Claude
-Code through isolated workspaces. The app runs as both a web application and an
-Electron desktop app.
+Focus review on actionable correctness, security, and regression risks:
 
-## Architecture
+- Preserve service ownership and public API boundaries. Database access belongs
+  in the owning service capsule's `resources/`; cross-service coordination
+  belongs in `src/backend/orchestration/`.
+- Validate external input, file paths, WebSocket messages, and shell arguments
+  at their boundaries. Worktree file operations must stay within the intended
+  workspace, and credentials must not reach logs or commits.
+- Check session lifecycle, cancellation, replay, and reconnect behavior for both
+  Claude and Codex through ACP. Review browser and Electron differences when the
+  changed behavior depends on their runtime or filesystem.
+- Check that changed behavior has focused regression coverage and that Prisma
+  schema changes include the required migration and generated output.
 
-- **Frontend:** Vite + React Router v7 + TailwindCSS
-- **Backend:** Express + tRPC with WebSocket support
-- **Database:** SQLite + Prisma ORM
-- **Desktop:** Electron wrapper that spawns backend as child process
-
-## Code Review Guidelines
-
-### TypeScript Standards
-
-- Use strict TypeScript - no `any` types without justification
-- Prefer interfaces over type aliases
-- Use path aliases: `@/*` for `src/`, `@prisma-gen/*` for `prisma/generated/`
-- No `.js` extensions needed for backend imports (tsx handles resolution)
-
-### Backend Rules
-
-- All database queries must go through `src/backend/resource_accessors/`
-- tRPC routers live in `src/backend/trpc/`
-- Claude integration code is in `src/backend/claude/`
-- WebSocket handlers: `/chat` for Claude CLI streaming, `/terminal` for PTY
-  sessions
-
-### Frontend Rules
-
-- Routes are explicitly configured in `src/client/router.tsx`
-- Use React Router v7 patterns
-- Component files in `src/client/routes/`
-- Prefer React Query for server state
-
-### Security Concerns
-
-- Check for command injection in terminal/shell operations
-- Validate all user inputs, especially file paths
-- Git worktree operations should be sandboxed to workspace directories
-- WebSocket messages should be validated before processing
-
-### Common Pitfalls
-
-- Don't commit `.env` files or credentials
-- Prisma schema changes require running `pnpm check:prisma-schema` (regenerates
-  client, checks service registry, typechecks); commit the updated
-  `prisma/generated/` output alongside the schema change
-- Electron builds have different database paths than web mode
-- Test both web and Electron modes when making backend changes
-
-## Testing
-
-Run tests with `pnpm test` (Vitest) Lint with `pnpm check:fix` (Biome) Typecheck
-with `pnpm typecheck`
+Report the concrete trigger and impact with a file reference. Avoid speculative
+findings, stylistic preferences, and duplicate summaries of enforced rules.

@@ -1,4 +1,5 @@
-import { FileCodeIcon, LinkIcon } from '@phosphor-icons/react';
+import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
+import { LinkIcon } from '@phosphor-icons/react/dist/csr/Link';
 import { useState } from 'react';
 import { readSelectedProjectSlug, writeSelectedProjectSlug } from '@/client/lib/project-selection';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';

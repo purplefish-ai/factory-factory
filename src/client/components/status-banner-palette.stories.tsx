@@ -1,4 +1,5 @@
-import { InfoIcon, WarningIcon } from '@phosphor-icons/react';
+import { InfoIcon } from '@phosphor-icons/react/dist/csr/Info';
+import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import type { Meta, StoryObj } from '@storybook/react';
 import { getStatusBannerClassName } from '@/client/lib/status-banner-styles';
 import type { WorkspaceInitBanner } from '@/shared/workspace-init';

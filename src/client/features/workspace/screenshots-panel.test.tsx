@@ -11,11 +11,9 @@ const mocks = vi.hoisted(() => ({
   onTakeScreenshots: vi.fn(),
 }));
 
-vi.mock('@phosphor-icons/react', () => ({
-  CameraIcon: () => null,
-  SpinnerGapIcon: () => null,
-  XIcon: () => null,
-}));
+vi.mock('@phosphor-icons/react/dist/csr/Camera', () => ({ CameraIcon: () => null }));
+vi.mock('@phosphor-icons/react/dist/csr/SpinnerGap', () => ({ SpinnerGapIcon: () => null }));
+vi.mock('@phosphor-icons/react/dist/csr/X', () => ({ XIcon: () => null }));
 
 vi.mock('@/components/ui/button', () => ({
   Button: ({ children, onClick }: { children: ReactNode; onClick?: () => void }) =>

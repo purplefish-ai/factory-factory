@@ -1,5 +1,9 @@
 # Roadmap: Factory Factory
 
+> **Historical milestone record (2026-02-14).** This is not current project
+> state or an active work queue. See the [planning archive](README.md) and
+> [current documentation](../docs/README.md).
+
 ## Milestones
 
 - ✅ **v1.0 SRP Consolidation** -- Phases 1-10 (shipped 2026-02-10) --

@@ -1,4 +1,5 @@
-import { ArrowSquareOutIcon, FileCodeIcon } from '@phosphor-icons/react';
+import { ArrowSquareOutIcon } from '@phosphor-icons/react/dist/csr/ArrowSquareOut';
+import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
 import {
   type ComponentPropsWithoutRef,
   isValidElement,
