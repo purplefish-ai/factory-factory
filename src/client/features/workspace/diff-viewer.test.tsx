@@ -61,6 +61,9 @@ beforeEach(() => {
     return this.hasAttribute('data-index') ? 16 : 320;
   });
   vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(640);
+  // TanStack measures the viewport's content box; jsdom supplies no layout.
+  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(320);
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(640);
   vi.stubGlobal(
     'ResizeObserver',
     class {

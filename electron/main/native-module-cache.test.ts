@@ -184,7 +184,17 @@ it('force rebuilds Prisma native dependencies from their resolved pnpm location'
     const pnpm = join(root, 'bin', 'pnpm');
     writeFile(
       pnpm,
-      `#!${process.execPath}
+      `#!${process.execPath}\nthrow new Error('Nested package-manager execution can install inside a dependency');\n`
+    );
+    const rebuildPackage = join(root, 'node_modules', '@electron', 'rebuild');
+    writeFile(
+      join(rebuildPackage, 'package.json'),
+      '{"name":"@electron/rebuild","exports":"./lib/main.js"}'
+    );
+    writeFile(join(rebuildPackage, 'lib', 'main.js'), '');
+    writeFile(
+      join(rebuildPackage, 'lib', 'cli.js'),
+      `
 require('node:fs').appendFileSync(${JSON.stringify(commandLog)}, JSON.stringify({ cwd: process.cwd(), args: process.argv.slice(2) }) + String.fromCharCode(10));
 `
     );
@@ -203,9 +213,14 @@ require('node:fs').appendFileSync(${JSON.stringify(commandLog)}, JSON.stringify(
       .trim()
       .split('\n')
       .map((line) => JSON.parse(line));
+    expect(commands).toHaveLength(2);
+    expect(commands).toContainEqual({
+      cwd: realpathSync(root),
+      args: ['-f', '-m', '.', '-o', 'better-sqlite3,node-pty'],
+    });
     expect(commands).toContainEqual({
       cwd: realpathSync(adapter),
-      args: ['exec', 'electron-rebuild', '-f', '-m', '.', '-o', 'better-sqlite3'],
+      args: ['-f', '-m', '.', '-o', 'better-sqlite3'],
     });
   } finally {
     rmSync(root, { recursive: true, force: true });
