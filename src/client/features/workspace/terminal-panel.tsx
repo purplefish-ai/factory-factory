@@ -1,4 +1,4 @@
-import { TerminalIcon } from '@phosphor-icons/react';
+import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
 import {
   forwardRef,
   lazy,

@@ -1,12 +1,10 @@
-import {
-  ArrowLeftIcon,
-  CalendarIcon,
-  CaretDownIcon,
-  CaretRightIcon,
-  DownloadIcon,
-  MagnifyingGlassIcon,
-  XIcon,
-} from '@phosphor-icons/react';
+import { ArrowLeftIcon } from '@phosphor-icons/react/dist/csr/ArrowLeft';
+import { CalendarIcon } from '@phosphor-icons/react/dist/csr/Calendar';
+import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
+import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
+import { DownloadIcon } from '@phosphor-icons/react/dist/csr/Download';
+import { MagnifyingGlassIcon } from '@phosphor-icons/react/dist/csr/MagnifyingGlass';
+import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import { keepPreviousData } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { Fragment, useEffect, useState } from 'react';

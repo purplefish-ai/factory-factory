@@ -21,13 +21,13 @@ const mocks = vi.hoisted(() => ({
     | undefined,
 }));
 
-vi.mock('@phosphor-icons/react', () => ({
+vi.mock('@phosphor-icons/react/dist/csr/ArrowsClockwise', () => ({
   ArrowsClockwiseIcon: () => null,
-  CalendarIcon: () => null,
-  CaretDownIcon: () => null,
-  PaperclipIcon: () => null,
-  SpinnerGapIcon: () => null,
 }));
+vi.mock('@phosphor-icons/react/dist/csr/Calendar', () => ({ CalendarIcon: () => null }));
+vi.mock('@phosphor-icons/react/dist/csr/CaretDown', () => ({ CaretDownIcon: () => null }));
+vi.mock('@phosphor-icons/react/dist/csr/Paperclip', () => ({ PaperclipIcon: () => null }));
+vi.mock('@phosphor-icons/react/dist/csr/SpinnerGap', () => ({ SpinnerGapIcon: () => null }));
 
 vi.mock('sonner', () => ({
   toast: {

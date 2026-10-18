@@ -1,12 +1,10 @@
-import {
-  ArchiveIcon,
-  ArrowsClockwiseIcon,
-  CameraIcon,
-  FileCodeIcon,
-  GitDiffIcon,
-  PlusIcon,
-  RobotIcon,
-} from '@phosphor-icons/react';
+import { ArchiveIcon } from '@phosphor-icons/react/dist/csr/Archive';
+import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
+import { CameraIcon } from '@phosphor-icons/react/dist/csr/Camera';
+import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
+import { GitDiffIcon } from '@phosphor-icons/react/dist/csr/GitDiff';
+import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
+import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { type Dispatch, type SetStateAction, useEffect } from 'react';
 import { type SubagentSelection, useLiveSubagentSelection } from '@/client/features/subagents';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';

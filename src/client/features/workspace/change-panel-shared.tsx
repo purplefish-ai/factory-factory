@@ -1,11 +1,9 @@
-import {
-  CaretDownIcon,
-  CaretRightIcon,
-  FileCodeIcon,
-  FolderIcon,
-  SpinnerGapIcon,
-  WarningCircleIcon,
-} from '@phosphor-icons/react';
+import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
+import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
+import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
+import { FolderIcon } from '@phosphor-icons/react/dist/csr/Folder';
+import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
+import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { trpc } from '@/client/lib/trpc';

@@ -1,4 +1,4 @@
-import { DotsSixVerticalIcon } from '@phosphor-icons/react';
+import { DotsSixVerticalIcon } from '@phosphor-icons/react/dist/csr/DotsSixVertical';
 import type { ComponentProps } from 'react';
 import { useCallback, useMemo } from 'react';
 import type { Layout, LayoutChangedMeta } from 'react-resizable-panels';

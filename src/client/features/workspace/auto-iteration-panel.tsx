@@ -1,18 +1,16 @@
-import {
-  ArrowsClockwiseIcon,
-  CaretDownIcon,
-  CaretRightIcon,
-  CheckCircleIcon,
-  FloppyDiskIcon,
-  LightbulbIcon,
-  ListIcon,
-  PauseIcon,
-  PlayIcon,
-  SpinnerGapIcon,
-  SquareIcon,
-  TerminalIcon,
-  XCircleIcon,
-} from '@phosphor-icons/react';
+import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
+import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
+import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
+import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
+import { FloppyDiskIcon } from '@phosphor-icons/react/dist/csr/FloppyDisk';
+import { LightbulbIcon } from '@phosphor-icons/react/dist/csr/Lightbulb';
+import { ListIcon } from '@phosphor-icons/react/dist/csr/List';
+import { PauseIcon } from '@phosphor-icons/react/dist/csr/Pause';
+import { PlayIcon } from '@phosphor-icons/react/dist/csr/Play';
+import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
+import { SquareIcon } from '@phosphor-icons/react/dist/csr/Square';
+import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
+import { XCircleIcon } from '@phosphor-icons/react/dist/csr/XCircle';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { trpc } from '@/client/lib/trpc';

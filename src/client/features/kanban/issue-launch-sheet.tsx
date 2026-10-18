@@ -1,4 +1,5 @@
-import { ArrowSquareOutIcon, PlayIcon } from '@phosphor-icons/react';
+import { ArrowSquareOutIcon } from '@phosphor-icons/react/dist/csr/ArrowSquareOut';
+import { PlayIcon } from '@phosphor-icons/react/dist/csr/Play';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { RatchetToggleButton } from '@/client/features/workspace';

@@ -6,18 +6,20 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { KanbanCard, type WorkspaceWithKanban } from './kanban-card';
 
-vi.mock('@phosphor-icons/react', () => ({
-  ArchiveIcon: () => null,
+vi.mock('@phosphor-icons/react/dist/csr/Archive', () => ({ ArchiveIcon: () => null }));
+vi.mock('@phosphor-icons/react/dist/csr/ArrowsClockwise', () => ({
   ArrowsClockwiseIcon: () => null,
-  ChatIcon: () => null,
-  DotOutlineIcon: () => null,
-  GitBranchIcon: () => null,
-  GitPullRequestIcon: () => null,
-  PencilIcon: () => null,
-  PlayIcon: () => null,
-  TreeStructureIcon: () => null,
-  WarningIcon: () => null,
 }));
+vi.mock('@phosphor-icons/react/dist/csr/Chat', () => ({ ChatIcon: () => null }));
+vi.mock('@phosphor-icons/react/dist/csr/DotOutline', () => ({ DotOutlineIcon: () => null }));
+vi.mock('@phosphor-icons/react/dist/csr/GitBranch', () => ({ GitBranchIcon: () => null }));
+vi.mock('@phosphor-icons/react/dist/csr/GitPullRequest', () => ({
+  GitPullRequestIcon: () => null,
+}));
+vi.mock('@phosphor-icons/react/dist/csr/Pencil', () => ({ PencilIcon: () => null }));
+vi.mock('@phosphor-icons/react/dist/csr/Play', () => ({ PlayIcon: () => null }));
+vi.mock('@phosphor-icons/react/dist/csr/TreeStructure', () => ({ TreeStructureIcon: () => null }));
+vi.mock('@phosphor-icons/react/dist/csr/Warning', () => ({ WarningIcon: () => null }));
 
 vi.mock('react-router', () => ({
   Link: ({ children, to }: { children: ReactNode; to: string }) =>

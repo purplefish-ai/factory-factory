@@ -1,4 +1,5 @@
-import { CaretRightIcon, CaretUpDownIcon } from '@phosphor-icons/react';
+import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
+import { CaretUpDownIcon } from '@phosphor-icons/react/dist/csr/CaretUpDown';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';

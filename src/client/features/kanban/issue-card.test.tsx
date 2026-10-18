@@ -15,13 +15,13 @@ const mocks = vi.hoisted(() => ({
   toastErrorMock: vi.fn(),
 }));
 
-vi.mock('@phosphor-icons/react', () => ({
+vi.mock('@phosphor-icons/react/dist/csr/ArrowSquareOut', () => ({
   ArrowSquareOutIcon: () => null,
-  DotOutlineIcon: () => null,
-  PlayIcon: () => null,
-  UserIcon: () => null,
-  XIcon: () => null,
 }));
+vi.mock('@phosphor-icons/react/dist/csr/DotOutline', () => ({ DotOutlineIcon: () => null }));
+vi.mock('@phosphor-icons/react/dist/csr/Play', () => ({ PlayIcon: () => null }));
+vi.mock('@phosphor-icons/react/dist/csr/User', () => ({ UserIcon: () => null }));
+vi.mock('@phosphor-icons/react/dist/csr/X', () => ({ XIcon: () => null }));
 
 vi.mock('@/client/lib/workspace-cache-helpers', () => ({
   createOptimisticWorkspaceCacheData: mocks.createOptimisticWorkspaceCacheDataMock,

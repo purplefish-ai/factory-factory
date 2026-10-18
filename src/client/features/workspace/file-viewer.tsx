@@ -1,10 +1,8 @@
-import {
-  EyeIcon,
-  FileCodeIcon,
-  SpinnerGapIcon,
-  WarningCircleIcon,
-  WarningIcon,
-} from '@phosphor-icons/react';
+import { EyeIcon } from '@phosphor-icons/react/dist/csr/Eye';
+import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
+import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
+import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
+import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import type { inferRouterOutputs } from '@trpc/server';
 import { useTheme } from 'next-themes';
 import type { RefObject, UIEvent } from 'react';
