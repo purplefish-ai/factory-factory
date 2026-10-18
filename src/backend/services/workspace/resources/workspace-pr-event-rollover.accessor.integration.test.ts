@@ -141,7 +141,10 @@ it.each([
 ])('does not rebind an unproven identity lineage %j', async (providerMetadata) => {
   await frozen();
   await db.prisma.agentSession.update({ where: { id: 'main' }, data: { providerMetadata } });
-  await workspacePrEventAccessor.recoverClaim('frozen', false, identity);
+  expect(await workspacePrEventAccessor.recoverClaim('frozen', false, identity)).toEqual({
+    count: 0,
+    status: 'identity_mismatch',
+  });
   expect(
     (await db.prisma.workspacePREvent.findUnique({ where: { id: 'event' } }))
       ?.deliveryProviderSessionId
@@ -155,7 +158,10 @@ it.each([
   { ...identity, sessionId: 'other' },
 ])('fences stale receipt recovery identity %j', async (expectedIdentity) => {
   await frozen();
-  await workspacePrEventAccessor.recoverClaim('frozen', false, expectedIdentity);
+  expect(await workspacePrEventAccessor.recoverClaim('frozen', false, expectedIdentity)).toEqual({
+    count: 0,
+    status: 'identity_mismatch',
+  });
   expect(
     (await db.prisma.workspacePREvent.findUnique({ where: { id: 'event' } }))
       ?.deliveryProviderSessionId
@@ -172,3 +178,19 @@ it('acknowledges receipt in the original identity without retrying in the new id
   });
   expect(await workspacePrEventAccessor.claimDelivery(request, input)).toBeNull();
 });
+
+it.each(['DELIVERED', 'CANCELLED'] as const)(
+  'distinguishes a concurrently %s claim from an identity failure',
+  async (state) => {
+    await frozen();
+    await db.prisma.workspacePREvent.update({ where: { id: 'event' }, data: { state } });
+    expect(await workspacePrEventAccessor.recoverClaim('frozen', false, identity)).toEqual({
+      count: 0,
+      status: 'settled',
+    });
+    expect(await db.prisma.workspacePREvent.findUnique({ where: { id: 'event' } })).toMatchObject({
+      state,
+      deliveryProviderSessionId: 'original',
+    });
+  }
+);

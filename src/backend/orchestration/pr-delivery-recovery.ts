@@ -7,7 +7,6 @@ export async function recoverPRDeliveries(
   services: PRDeliveryRecoveryPorts = defaultPRDeliveryPorts
 ) {
   const { sessionDataService, workspacePRMonitoringService, findPRDeliveryReceipt } = services;
-  // Keep the pre-lookup identity so recovery cannot trust a later rollover's history.
   const session = await sessionDataService.findAgentSessionById(sessionId);
   const targetWorkspaceId = session?.workspaceId ?? workspaceId;
   if (!targetWorkspaceId) {
@@ -20,6 +19,8 @@ export async function recoverPRDeliveries(
     if (!deliveryId || isDeliveryActive(sessionId, deliveryId, services)) {
       continue;
     }
+    // Fence each lookup against rollovers that happen while provider history is read.
+    const receiptSession = await sessionDataService.findAgentSessionById(sessionId);
     const receipt = await findPRDeliveryReceipt(sessionId, deliveryId);
     if (receipt !== 'delivered' && isDeliveryActive(sessionId, deliveryId, services)) {
       continue;
@@ -30,11 +31,11 @@ export async function recoverPRDeliveries(
       deliveryId,
       receipt,
       services,
-      session?.providerSessionId
+      receiptSession?.providerSessionId
         ? {
             sessionId,
-            provider: session.provider,
-            providerSessionId: session.providerSessionId,
+            provider: receiptSession.provider,
+            providerSessionId: receiptSession.providerSessionId,
           }
         : undefined
     );
@@ -108,7 +109,7 @@ async function recoverAbsentClaim(
     false,
     identity
   );
-  if (!recovered.count && config && !config.deliveryPauseReason) {
+  if (recovered.status === 'identity_mismatch' && config && !config.deliveryPauseReason) {
     await services.workspacePRMonitoringService.pauseWorkspace(
       config.workspaceId,
       'RECEIPT_UNAVAILABLE',

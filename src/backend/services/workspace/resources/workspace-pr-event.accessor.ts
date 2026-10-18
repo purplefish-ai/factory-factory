@@ -62,6 +62,11 @@ type RecoveryIdentity = {
   providerSessionId: string;
 };
 
+type ClaimRecoveryResult = {
+  count: number;
+  status: 'recovered' | 'settled' | 'identity_mismatch';
+};
+
 function hasRolloverLineage(session: AgentSession, previousIdentity: string | null) {
   if (!(previousIdentity && session.providerSessionId)) {
     return false;
@@ -318,10 +323,20 @@ class WorkspacePrEventAccessor {
       data: { attempts: 0 },
     });
   }
-  recoverClaim(deliveryId: string, delivered: boolean, identity?: RecoveryIdentity) {
+  async recoverClaim(
+    deliveryId: string,
+    delivered: boolean,
+    identity?: RecoveryIdentity
+  ): Promise<ClaimRecoveryResult> {
     if (!delivered && identity) {
       // Only receipt recovery may migrate a frozen claim to a recorded successor.
       return prisma.$transaction(async (tx) => {
+        const rows = await tx.workspacePREvent.findMany({
+          where: { deliveryId, state: { in: ['PENDING', 'DISPATCHING'] } },
+        });
+        if (!rows.length) {
+          return { count: 0, status: 'settled' };
+        }
         const session = await tx.agentSession.findFirst({
           where: {
             id: identity.sessionId,
@@ -329,11 +344,8 @@ class WorkspacePrEventAccessor {
             providerSessionId: identity.providerSessionId,
           },
         });
-        const rows = await tx.workspacePREvent.findMany({
-          where: { deliveryId, state: { in: ['PENDING', 'DISPATCHING'] } },
-        });
         if (
-          !(session && rows.length) ||
+          !session ||
           rows.some(
             (row) =>
               row.workspaceId !== session.workspaceId ||
@@ -342,21 +354,23 @@ class WorkspacePrEventAccessor {
               !hasRolloverLineage(session, row.deliveryProviderSessionId)
           )
         ) {
-          return { count: 0 };
+          return { count: 0, status: 'identity_mismatch' };
         }
-        return tx.workspacePREvent.updateMany({
+        const updated = await tx.workspacePREvent.updateMany({
           where: {
             id: { in: rows.map((row) => row.id) },
             state: { in: ['PENDING', 'DISPATCHING'] },
           },
           data: { state: 'PENDING', deliveryProviderSessionId: identity.providerSessionId },
         });
+        return { ...updated, status: updated.count ? 'recovered' : 'settled' };
       });
     }
-    return prisma.workspacePREvent.updateMany({
+    const updated = await prisma.workspacePREvent.updateMany({
       where: { deliveryId, state: delivered ? { in: ['PENDING', 'DISPATCHING'] } : 'DISPATCHING' },
       data: delivered ? { state: 'DELIVERED', deliveredAt: new Date() } : { state: 'PENDING' },
     });
+    return { ...updated, status: updated.count ? 'recovered' : 'settled' };
   }
   cancelRecoveredDelivery(deliveryId: string, sessionId: string) {
     return prisma.workspacePREvent.updateMany({
