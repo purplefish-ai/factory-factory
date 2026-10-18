@@ -6,7 +6,7 @@ import { SessionPermissionService } from './session.permission.service';
 
 const usableQuestions = [{ question: 'Pick a path', options: [{ label: 'A' }] }];
 
-function createHarness(policy: 'none' | 'all' = 'none', workflow?: string) {
+function createHarness(workflow?: string) {
   const domain = {
     emitDelta: vi.fn(),
     setPendingInteractiveRequest: vi.fn(),
@@ -21,9 +21,7 @@ function createHarness(policy: 'none' | 'all' = 'none', workflow?: string) {
         service.handlePermissionRequest('session', event);
       }
     },
-    bridge,
-    undefined,
-    policy
+    bridge
   );
   return { domain, service, bridge, handler };
 }
@@ -75,6 +73,113 @@ describe('permission question classification', () => {
     }
   );
 
+  it('routes an optional elicitation field through the question UI and back to ACP', async () => {
+    const harness = createHarness();
+    const response = harness.handler.createElicitation({
+      mode: 'form',
+      sessionId: 'session',
+      message: 'Add a note if needed',
+      requestedSchema: { properties: { note: { type: 'string', title: 'Additional note' } } },
+    });
+    expect(harness.domain.emitDelta).toHaveBeenCalledWith(
+      'session',
+      expect.objectContaining({
+        type: 'user_question',
+        questions: [expect.objectContaining({ id: 'note', optional: true })],
+      })
+    );
+    const requestId = harness.domain.setPendingInteractiveRequest.mock.calls[0]?.[1].requestId;
+    expect(harness.service.respondToPermission('session', requestId, 'accept', {})).toBe(true);
+    await expect(response).resolves.toEqual({ action: 'accept', content: {} });
+  });
+
+  it.each([true, false])(
+    'preserves native custom-choice permission isOther=%s in the question UI',
+    async (isOther) => {
+      const harness = createHarness();
+      const response = harness.handler.createElicitation({
+        mode: 'form',
+        sessionId: 'session',
+        message: 'Choose',
+        requestedSchema: {
+          properties: { choice: { type: 'string', enum: ['A'], _meta: { codex: { isOther } } } },
+          required: ['choice'],
+        },
+      });
+      expect(harness.domain.emitDelta).toHaveBeenCalledWith(
+        'session',
+        expect.objectContaining({
+          type: 'user_question',
+          questions: [expect.objectContaining({ id: 'choice', allowOther: isOther })],
+        })
+      );
+      const requestId = harness.domain.setPendingInteractiveRequest.mock.calls[0]?.[1].requestId;
+      expect(
+        harness.service.respondToPermission('session', requestId, 'accept', {
+          choice: ['My own answer'],
+        })
+      ).toBe(true);
+      await expect(response).resolves.toEqual(
+        isOther ? { action: 'accept', content: { choice: 'My own answer' } } : { action: 'cancel' }
+      );
+    }
+  );
+
+  it('presents an empty elicitation form as explicit consent rather than an empty question', async () => {
+    const harness = createHarness();
+    const response = harness.handler.createElicitation({
+      mode: 'form',
+      sessionId: 'session',
+      message: 'Confirm this request',
+      requestedSchema: { properties: {} },
+    });
+    expect(harness.domain.emitDelta).toHaveBeenCalledWith(
+      'session',
+      expect.objectContaining({
+        type: 'permission_request',
+        toolName: 'Confirm request',
+        toolInput: { type: 'FormElicitation', message: 'Confirm this request' },
+      })
+    );
+    expect(harness.domain.emitDelta).not.toHaveBeenCalledWith(
+      'session',
+      expect.objectContaining({ type: 'user_question' })
+    );
+    const requestId = harness.domain.setPendingInteractiveRequest.mock.calls[0]?.[1].requestId;
+    expect(harness.service.respondToPermission('session', requestId, 'accept')).toBe(true);
+    await expect(response).resolves.toEqual({ action: 'accept', content: {} });
+  });
+
+  it.each(['form', 'url'] as const)(
+    'denies reviewer %s elicitation without prompting',
+    async (mode) => {
+      const harness = createHarness(ADVERSARIAL_REVIEW_WORKFLOW);
+      const request =
+        mode === 'form'
+          ? {
+              mode,
+              sessionId: 'session',
+              message: 'Choose',
+              requestedSchema: {
+                properties: { choice: { type: 'string' as const } },
+                required: ['choice'],
+              },
+            }
+          : {
+              mode,
+              sessionId: 'session',
+              message: 'Authorize',
+              url: 'https://example.com',
+              elicitationId: 'url-1',
+            };
+      await expect(harness.handler.createElicitation(request)).resolves.toEqual({
+        action: 'decline',
+      });
+      expect(harness.domain.emitDelta).not.toHaveBeenCalled();
+      expect(harness.bridge.pendingCount).toBe(0);
+    }
+  );
+
   it('preserves a nameless MCP title when input type claims to be a provider question', async () => {
     const harness = createHarness();
     const params = request('mcp__survey__poll', usableQuestions);
@@ -96,9 +201,9 @@ describe('permission question classification', () => {
   });
 
   it.each(['AskUserQuestion', 'item/tool/requestUserInput', 'Tool input request'])(
-    'keeps valid %s question requests interactive in auto-approval mode',
+    'keeps valid %s question requests interactive',
     async (title) => {
-      const harness = createHarness('all');
+      const harness = createHarness();
       const response = harness.handler.requestPermission(request(title, usableQuestions));
       expect(harness.domain.emitDelta).toHaveBeenCalledWith(
         'session',
@@ -123,19 +228,28 @@ describe('permission question classification', () => {
     ['AskUserQuestion', [{ question: 12 }], undefined],
     ['AskUserQuestion', [{ question: 'Pick', options: [{ value: 'A' }] }], undefined],
     ['AskUserQuestion', usableQuestions, 'mcp__survey__poll'],
-  ])('uses normal auto-approval for non-question input %s %j', async (title, questions, name) => {
-    const harness = createHarness('all');
-    await expect(
-      harness.handler.requestPermission(
+  ])(
+    'requires explicit tool approval for non-question input %s %j',
+    async (title, questions, name) => {
+      const harness = createHarness();
+      const response = harness.handler.requestPermission(
         request(title as string, questions, name as string | undefined)
-      )
-    ).resolves.toEqual({ outcome: { outcome: 'selected', optionId: 'allow' } });
-    expect(harness.domain.emitDelta).not.toHaveBeenCalled();
-    expect(harness.bridge.pendingCount).toBe(0);
-  });
+      );
+      expect(harness.domain.emitDelta).toHaveBeenCalledWith(
+        'session',
+        expect.objectContaining({ type: 'permission_request' })
+      );
+      const requestId = harness.domain.setPendingInteractiveRequest.mock.calls[0]?.[1].requestId;
+      expect(harness.service.respondToPermission('session', requestId, 'allow')).toBe(true);
+      await expect(response).resolves.toEqual({
+        outcome: { outcome: 'selected', optionId: 'allow' },
+      });
+      expect(harness.bridge.pendingCount).toBe(0);
+    }
+  );
 
-  it('preserves adversarial-review denial ahead of all classification and auto-approval', async () => {
-    const harness = createHarness('all', ADVERSARIAL_REVIEW_WORKFLOW);
+  it('preserves adversarial-review denial before question classification', async () => {
+    const harness = createHarness(ADVERSARIAL_REVIEW_WORKFLOW);
     await expect(
       harness.handler.requestPermission(
         request('AskUserQuestion', usableQuestions, 'mcp__survey__poll')

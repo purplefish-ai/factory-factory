@@ -39,28 +39,24 @@ function createHarness(provider: 'CLAUDE' | 'CODEX', workflow = ADVERSARIAL_REVI
   harness.handle.configOptions = [
     {
       id: 'mode',
-      name: 'Mode',
+      name: 'Access',
       category: 'mode',
       type: 'select',
-      currentValue: 'default',
-      options: [
-        { value: 'default', name: 'Default' },
-        { value: 'plan', name: 'Plan' },
-      ],
+      currentValue: provider === 'CODEX' ? 'agent-full-access' : 'default',
+      options: (provider === 'CODEX'
+        ? ['read-only', 'workspace-write', 'agent', 'agent-full-access']
+        : ['default', 'plan']
+      ).map((value) => ({ value, name: value })),
     },
     ...(provider === 'CODEX'
       ? [
           {
-            id: 'execution_mode',
-            name: 'Execution Mode',
-            category: 'permission',
+            id: 'collaboration_mode',
+            name: 'Planning',
+            category: 'collaboration_mode',
             type: 'select',
-            currentValue: '["never","danger-full-access"]',
-            options: [
-              '["never","danger-full-access"]',
-              '["on-request","workspace-write"]',
-              '["never","read-only"]',
-            ].map((value) => ({ value, name: value })),
+            currentValue: 'default',
+            options: ['default', 'plan'].map((value) => ({ value, name: value })),
           } as SessionConfigOption,
         ]
       : []),
@@ -118,12 +114,12 @@ describe('adversarial review startup permissions', () => {
       const assertRestricted = () => {
         expect(
           harness.handle.configOptions.find((option) => option.id === 'mode')?.currentValue
-        ).toBe('plan');
+        ).toBe(provider === 'CODEX' ? 'read-only' : 'plan');
         if (provider === 'CODEX') {
           expect(
-            harness.handle.configOptions.find((option) => option.id === 'execution_mode')
+            harness.handle.configOptions.find((option) => option.id === 'collaboration_mode')
               ?.currentValue
-          ).toBe('["never","read-only"]');
+          ).toBe('plan');
         }
       };
       harness.sendSessionMessage.mockImplementation(() => {
@@ -159,12 +155,12 @@ describe('adversarial review startup permissions', () => {
     const harness = createHarness('CODEX');
     if (failure === 'unsupported plan') {
       harness.handle.configOptions = harness.handle.configOptions.filter(
-        (option) => option.id !== 'mode'
+        (option) => option.id !== 'collaboration_mode'
       );
     }
     if (failure === 'unsupported sandbox') {
       harness.handle.configOptions = harness.handle.configOptions.filter(
-        (option) => option.id !== 'execution_mode'
+        (option) => option.id !== 'mode'
       );
     }
     if (failure === 'mode rejected') {
@@ -196,11 +192,27 @@ describe('adversarial review startup permissions', () => {
     const harness = createHarness('CODEX', 'code');
     await start(harness, 'start');
     expect(harness.handle.configOptions.find((option) => option.id === 'mode')?.currentValue).toBe(
-      'default'
+      'workspace-write'
     );
     expect(
-      harness.handle.configOptions.find((option) => option.id === 'execution_mode')?.currentValue
-    ).toBe('["on-request","workspace-write"]');
+      harness.handle.configOptions.find((option) => option.id === 'collaboration_mode')
+        ?.currentValue
+    ).toBe('default');
+  });
+
+  it.each(paths)('stops a normal runtime if native access setup fails during %s', async (path) => {
+    const harness = createHarness('CODEX', 'code');
+    harness.runtime.setConfigOption.mockRejectedValue(new Error('access rejected'));
+    await expect(start(harness, path)).rejects.toThrow('access rejected');
+    expect(harness.runtimeManager.stopClient).toHaveBeenCalledWith(harness.session.id);
+    expect(harness.acpEventProcessor.clearSessionState).toHaveBeenCalledWith(harness.session.id);
+    expect(harness.lifecycleGate.isStopReserved(harness.session.id)).toBe(false);
+    expect(harness.sendSessionMessage).not.toHaveBeenCalled();
+    expect(harness.tryDispatchNextMessage).not.toHaveBeenCalled();
+    expect(harness.sessionDomainService.setRuntimeSnapshot).toHaveBeenLastCalledWith(
+      harness.session.id,
+      expect.objectContaining({ processState: 'stopped', phase: 'error' })
+    );
   });
 
   it.each(['STRICT', 'RELAXED', 'YOLO'] as const)(
@@ -220,8 +232,9 @@ describe('adversarial review startup permissions', () => {
         preset
       );
       expect(
-        harness.handle.configOptions.find((option) => option.id === 'execution_mode')?.currentValue
-      ).toBe('["never","read-only"]');
+        harness.handle.configOptions.find((option) => option.id === 'collaboration_mode')
+          ?.currentValue
+      ).toBe('plan');
     }
   );
 
@@ -230,11 +243,12 @@ describe('adversarial review startup permissions', () => {
     harness.runtimeManager.getClient.mockReturnValue(harness.handle);
     await start(harness, 'chat auto-start');
     expect(harness.handle.configOptions.find((option) => option.id === 'mode')?.currentValue).toBe(
-      'plan'
+      'read-only'
     );
     expect(
-      harness.handle.configOptions.find((option) => option.id === 'execution_mode')?.currentValue
-    ).toBe('["never","read-only"]');
+      harness.handle.configOptions.find((option) => option.id === 'collaboration_mode')
+        ?.currentValue
+    ).toBe('plan');
     expect(harness.runtimeManager.getOrCreateClient).not.toHaveBeenCalled();
   });
 
@@ -363,11 +377,17 @@ describe('adversarial review startup permissions', () => {
   });
 
   it.each([
-    ['mode', 'PLAN'],
-    ['execution_mode', '[ "never", "read-only" ]'],
-  ])('accepts equivalent safe provider values for %s', (configId, value) => {
+    ['mode', 'read-only'],
+    ['collaboration_mode', 'plan'],
+  ])('accepts native safe Codex values for %s', (configId, value) => {
     expect(() =>
-      assertReadOnlyReviewConfigOption(ADVERSARIAL_REVIEW_WORKFLOW, configId, value, undefined)
+      assertReadOnlyReviewConfigOption(
+        ADVERSARIAL_REVIEW_WORKFLOW,
+        configId,
+        value,
+        undefined,
+        'CODEX'
+      )
     ).not.toThrow();
   });
 
@@ -377,11 +397,12 @@ describe('adversarial review startup permissions', () => {
       startupModePreset: 'non_interactive',
     });
     expect(harness.handle.configOptions.find((option) => option.id === 'mode')?.currentValue).toBe(
-      'plan'
+      'read-only'
     );
     expect(
-      harness.handle.configOptions.find((option) => option.id === 'execution_mode')?.currentValue
-    ).toBe('["never","read-only"]');
+      harness.handle.configOptions.find((option) => option.id === 'collaboration_mode')
+        ?.currentValue
+    ).toBe('plan');
   });
 
   it.each(['CLAUDE', 'CODEX'] as const)(
@@ -399,18 +420,14 @@ describe('adversarial review startup permissions', () => {
         config.setSessionConfigOption(harness.session.id, 'mode', 'default')
       ).rejects.toThrow('read-only');
       await expect(
-        config.setSessionConfigOption(
-          harness.session.id,
-          'execution_mode',
-          '["never","danger-full-access"]'
-        )
+        config.setSessionConfigOption(harness.session.id, 'collaboration_mode', 'default')
       ).rejects.toThrow('read-only');
       expect(harness.runtime.setConfigOption).not.toHaveBeenCalled();
       expect(harness.runtime.setSessionMode).not.toHaveBeenCalled();
     }
   );
 
-  it.each(['mode', 'execution_mode'])(
+  it.each(['mode', 'collaboration_mode'])(
     'rejects %s permission broadening on a stopped review',
     async (configId) => {
       const harness = createHarness('CODEX');
@@ -423,11 +440,7 @@ describe('adversarial review startup permissions', () => {
         },
       });
       await expect(
-        harness.config.setSessionConfigOption(
-          harness.session.id,
-          configId,
-          configId === 'mode' ? 'default' : '["never","danger-full-access"]'
-        )
+        harness.config.setSessionConfigOption(harness.session.id, configId, 'default')
       ).rejects.toThrow('read-only');
       expect(harness.repository.updateSession).not.toHaveBeenCalled();
     }

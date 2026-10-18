@@ -108,6 +108,9 @@ export class AcpSubagentBrowser {
       });
     }
     try {
+      if (browseHandle.nativeSessionTracker?.isAvailable()) {
+        return browseHandle.nativeSessionTracker.list(parsedParams.data);
+      }
       const response = await browseHandle.connection.extMethod(
         SUBAGENTS_LIST_METHOD,
         parsedParams.data
@@ -135,6 +138,9 @@ export class AcpSubagentBrowser {
       );
     }
     try {
+      if (browseHandle.nativeSessionTracker?.isAvailable()) {
+        return browseHandle.nativeSessionTracker.read(parsedParams.data);
+      }
       const response = await browseHandle.connection.extMethod(
         SUBAGENTS_READ_METHOD,
         parsedParams.data

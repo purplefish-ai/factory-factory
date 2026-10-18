@@ -277,22 +277,6 @@ module.exports = {
       },
     },
     {
-      name: 'codex-app-server-adapter-self-contained',
-      severity: 'error',
-      comment:
-        'Codex app-server ACP adapter must be self-contained except for the provider-neutral sub-agent wire contract.',
-      from: {
-        path: '^src/backend/services/session/service/acp/codex-app-server-adapter/',
-        pathNot:
-          '^src/backend/services/session/service/acp/codex-app-server-adapter/.*\\.test\\.ts$',
-      },
-      to: {
-        path: '^src/',
-        pathNot:
-          '^src/backend/services/session/service/acp/codex-app-server-adapter/|^src/shared/acp-protocol/subagents.ts$',
-      },
-    },
-    {
       name: 'no-shared-importing-app-layers',
       severity: 'error',
       comment:

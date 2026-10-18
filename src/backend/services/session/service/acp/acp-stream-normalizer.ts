@@ -6,7 +6,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function normalizeSessionUpdateMessage(message: unknown): unknown {
+export function normalizeSessionUpdateMessage(message: unknown): unknown {
   if (
     !isRecord(message) ||
     message.method !== 'session/update' ||
@@ -49,7 +49,8 @@ function normalizeSessionUpdateMessage(message: unknown): unknown {
 }
 
 export function createNormalizedAcpReadableStream<T>(
-  readable: ReadableStream<T>
+  readable: ReadableStream<T>,
+  intercept?: (message: T) => boolean
 ): ReadableStream<T> {
   if (typeof readable.getReader !== 'function') {
     return readable;
@@ -67,14 +68,20 @@ export function createNormalizedAcpReadableStream<T>(
       const currentReader = reader;
 
       try {
-        const { done, value } = await currentReader.read();
-        if (done) {
-          controller.close();
-          currentReader.releaseLock();
-          reader = null;
+        while (true) {
+          const { done, value } = await currentReader.read();
+          if (done) {
+            controller.close();
+            currentReader.releaseLock();
+            reader = null;
+            return;
+          }
+          if (intercept?.(value)) {
+            continue;
+          }
+          controller.enqueue(normalizeSessionUpdateMessage(value) as T);
           return;
         }
-        controller.enqueue(normalizeSessionUpdateMessage(value) as T);
       } catch (error) {
         currentReader.releaseLock();
         controller.error(error);

@@ -15,6 +15,9 @@ export interface AskUserQuestion {
   header?: string;
   options: AskUserQuestionOption[];
   multiSelect?: boolean;
+  optional?: boolean;
+  /** Whether option questions accept an additional free-form answer. Defaults to true. */
+  allowOther?: boolean;
 }
 
 /**

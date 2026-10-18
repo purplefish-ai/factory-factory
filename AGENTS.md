@@ -42,11 +42,10 @@ new evidence. The pre-commit hook also checks migration drift, dependencies, and
 unused code.
 
 `pnpm check` enforces formatting, file lengths, environment access, ownership,
-foreign-key indexes, dependencies, and Codex schemas. The schema check skips
-locally without the pinned CLI; force with
-`CODEX_SCHEMA_CHECK=strict pnpm check:codex-schema`. After reducing oversized
-legacy files, run `pnpm check:file-length:update` to lower their exact ceilings;
-it never allows growth.
+foreign-key indexes and dependencies. Upstream ACP adapters own their provider
+protocol schemas. After reducing oversized legacy files, run
+`pnpm check:file-length:update` to lower their exact ceilings; it never allows
+growth.
 
 ## Architecture and style
 

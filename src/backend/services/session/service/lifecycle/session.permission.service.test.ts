@@ -43,11 +43,11 @@ describe('SessionPermissionService', () => {
     }
   );
 
-  it('denies review permissions before YOLO auto-approval on subsequent turns', async () => {
+  it('denies review permissions on subsequent turns', async () => {
     const service = createService();
     const bridge = service.createPermissionBridge('review', ADVERSARIAL_REVIEW_WORKFLOW);
     const onEvent = vi.fn();
-    const handler = new AcpClientHandler('review', onEvent, bridge, undefined, 'all');
+    const handler = new AcpClientHandler('review', onEvent, bridge);
     for (const tool of ['ExitPlanMode', 'Edit']) {
       const response = await handler.requestPermission(
         unsafeCoerce({
@@ -103,7 +103,7 @@ describe('SessionPermissionService', () => {
     const bridge = service.createPermissionBridge('session-1');
     const params = unsafeCoerce<Parameters<typeof bridge.waitForUserResponse>[1]>({
       toolCall: { toolCallId: 'tool-1', title: 'Command' },
-      options: [],
+      options: [{ optionId: 'allow_once', kind: 'allow_once', name: 'Allow once' }],
     });
     const response = bridge.waitForUserResponse('req-1', params);
     bridge.cancelAll();
@@ -134,7 +134,7 @@ describe('SessionPermissionService', () => {
           title: 'Command',
           rawInput: { command: 'pwd' },
         },
-        options: [],
+        options: [{ optionId: 'allow_once', kind: 'allow_once', name: 'Allow once' }],
       })
     );
 

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { AcpProcessHandle } from '@/backend/services/session/service/acp';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionConfigService } from './session.config.service';
 
@@ -43,6 +44,47 @@ describe('inactive session config errors', () => {
       expect(option.currentValue).toBe(false);
       expect(repository.updateSession).not.toHaveBeenCalled();
       expect(sessionDomainService.emitDelta).not.toHaveBeenCalled();
+    }
+  );
+});
+
+describe('native access setup failures', () => {
+  it.each(['rejected', 'unchanged'])(
+    'fails closed when native access restrictions are %s',
+    async (failure) => {
+      const access = {
+        id: 'mode',
+        name: 'Access',
+        type: 'select',
+        category: 'mode',
+        currentValue: 'agent-full-access',
+        options: ['workspace-write', 'agent-full-access'].map((value) => ({ value, name: value })),
+      };
+      const handle = unsafeCoerce<AcpProcessHandle>({
+        provider: 'CODEX',
+        providerSessionId: 'provider-codex-1',
+        configOptions: [access],
+      });
+      const runtimeManager = { setConfigOption: vi.fn() };
+      const service = new SessionConfigService({
+        repository: unsafeCoerce({ getSessionById: vi.fn(), updateSession: vi.fn() }),
+        runtimeManager: unsafeCoerce(runtimeManager),
+        codexModelCatalogService: { getModels: vi.fn().mockResolvedValue([]) },
+        sessionDomainService: unsafeCoerce({ emitDelta: vi.fn() }),
+      });
+      if (failure === 'rejected') {
+        runtimeManager.setConfigOption.mockRejectedValue(new Error('access rejected'));
+      } else {
+        runtimeManager.setConfigOption.mockResolvedValue([access]);
+      }
+      await expect(
+        service.applyConfiguredPermissionPreset(
+          'session-1',
+          unsafeCoerce({ workflow: 'code' }),
+          handle,
+          'STRICT'
+        )
+      ).rejects.toThrow();
     }
   );
 });

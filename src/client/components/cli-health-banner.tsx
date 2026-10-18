@@ -65,16 +65,6 @@ export function collectIssues(health: CliHealthForBanner): HealthIssue[] {
     });
   }
 
-  if (health.codex.isInstalled && health.codex.isAuthenticated && health.codex.isOutdated) {
-    issues.push({
-      title: 'Codex CLI out of date',
-      description: `Installed ${health.codex.version ?? 'unknown'}; latest is ${health.codex.latestVersion ?? 'latest'}.`,
-      link: 'https://developers.openai.com/codex/app-server/',
-      linkLabel: 'Upgrade',
-      upgradeProvider: 'CODEX',
-    });
-  }
-
   return issues;
 }
 

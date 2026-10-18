@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockExecFile = vi.hoisted(() => vi.fn());
+const mockResolve = vi.hoisted(() => vi.fn());
 const mockGithubCheckHealth = vi.hoisted(() => vi.fn());
 const mockLogger = vi.hoisted(() => ({
   debug: vi.fn(),
@@ -12,6 +13,8 @@ const mockLogger = vi.hoisted(() => ({
 vi.mock('node:child_process', () => ({
   execFile: vi.fn(),
 }));
+
+vi.mock('node:module', () => ({ createRequire: () => ({ resolve: mockResolve }) }));
 
 vi.mock('node:util', () => ({
   promisify: (fn: unknown) => fn,
@@ -25,6 +28,7 @@ vi.mock('@/backend/services/github', () => ({
 
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => mockLogger,
+  getCurrentProcessEnv: () => ({ FACTORY_RUNTIME: 'preserved' }),
 }));
 
 import { execFile } from 'node:child_process';
@@ -37,6 +41,9 @@ describe('cliHealthService', () => {
     vi.clearAllMocks();
     cliHealthService.clearCache();
     vi.stubGlobal('fetch', vi.fn());
+    mockResolve.mockReturnValue(
+      '/app/resources/app.asar/node_modules/@agentclientprotocol/codex-acp/dist/index.js'
+    );
   });
 
   afterEach(() => {
@@ -105,73 +112,69 @@ describe('cliHealthService', () => {
     });
   });
 
-  it('checks Codex CLI install/auth state and freshness', async () => {
+  it('checks bundled Codex health without a global CLI or npm freshness check', async () => {
+    // Catches probing a global Codex that does not match the runtime used by sessions.
     mockExecFile.mockImplementation((cmd: string, args: string[]) => {
-      if (cmd === 'codex' && args[0] === '--version') {
-        return Promise.resolve({ stdout: '0.5.0\n', stderr: '' });
+      if (cmd === process.execPath && args[1] === 'cli' && args[2] === '-V') {
+        return Promise.resolve({ stdout: 'codex-cli 0.155.0\n', stderr: '' });
       }
-      if (cmd === 'codex' && args[0] === 'login') {
+      if (cmd === process.execPath && args[1] === 'cli' && args[2] === 'login') {
         return Promise.resolve({ stdout: 'authenticated', stderr: '' });
       }
       throw new Error(`unexpected command: ${cmd} ${args.join(' ')}`);
     });
-    vi.mocked(fetch).mockResolvedValue({
-      ok: true,
-      json: async () => ({ version: '0.4.0' }),
-    } as never);
-
-    const status = await cliHealthService.checkCodexCLI();
-
-    expect(status).toEqual(
-      expect.objectContaining({
-        isInstalled: true,
-        isAuthenticated: true,
-        version: '0.5.0',
-        latestVersion: '0.4.0',
-        isOutdated: false,
-      })
-    );
-  });
-
-  it('returns unauthenticated status when Codex login check fails', async () => {
-    mockExecFile.mockImplementation((cmd: string, args: string[]) => {
-      if (cmd === 'codex' && args[0] === '--version') {
-        return Promise.resolve({ stdout: '0.5.0\n', stderr: '' });
-      }
-      if (cmd === 'codex' && args[0] === 'login') {
-        return Promise.reject(new Error('login required'));
-      }
-      throw new Error(`unexpected command: ${cmd} ${args.join(' ')}`);
-    });
-    vi.mocked(fetch).mockResolvedValue({
-      ok: true,
-      json: async () => ({ version: '0.6.0' }),
-    } as never);
-
-    const status = await cliHealthService.checkCodexCLI();
-
-    expect(status).toEqual(
-      expect.objectContaining({
-        isInstalled: true,
-        isAuthenticated: false,
-        latestVersion: '0.6.0',
-        isOutdated: true,
-        error: 'Codex CLI is not authenticated. Run `codex login` to authenticate.',
-      })
-    );
-  });
-
-  it('returns a not-installed error for missing Codex CLI', async () => {
-    mockExecFile.mockRejectedValue(new Error('spawn codex ENOENT'));
 
     const status = await cliHealthService.checkCodexCLI();
 
     expect(status).toEqual({
+      isInstalled: true,
+      isAuthenticated: true,
+      version: 'codex-cli 0.155.0',
+    });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(mockExecFile).toHaveBeenCalledWith(
+      process.execPath,
+      [
+        '/app/resources/app.asar.unpacked/node_modules/@agentclientprotocol/codex-acp/dist/index.js',
+        'cli',
+        'login',
+        'status',
+      ],
+      expect.objectContaining({ env: { FACTORY_RUNTIME: 'preserved', ELECTRON_RUN_AS_NODE: '1' } })
+    );
+  });
+
+  it('returns bundled-runtime login instructions when authentication fails', async () => {
+    mockExecFile.mockImplementation((_cmd: string, args: string[]) => {
+      if (args[2] === '-V') {
+        return Promise.resolve({ stdout: 'codex-cli 0.155.0\n', stderr: '' });
+      }
+      return Promise.reject(new Error('login required'));
+    });
+    expect(await cliHealthService.checkCodexCLI()).toMatchObject({
+      isInstalled: true,
+      isAuthenticated: false,
+      error: expect.stringContaining('ff codex login'),
+    });
+  });
+
+  it('reports a missing bundled runtime without suggesting a global install', async () => {
+    mockResolve.mockImplementation(() => {
+      throw new Error('package not found');
+    });
+    expect(await cliHealthService.checkCodexCLI()).toMatchObject({
       isInstalled: false,
       isAuthenticated: false,
-      error:
-        'Codex CLI is not installed. Install from https://developers.openai.com/codex/app-server/',
+      error: expect.stringContaining('Update or reinstall Factory Factory'),
     });
+    expect(mockExecFile).not.toHaveBeenCalled();
+  });
+
+  it('rejects global Codex upgrades because Factory Factory manages the runtime', async () => {
+    await expect(cliHealthService.upgradeProviderCLI('CODEX')).rejects.toThrow(
+      'Update Factory Factory'
+    );
+    expect(mockExecFile).not.toHaveBeenCalled();
   });
 
   it('upgrades provider CLI and returns refreshed health', async () => {
@@ -184,17 +187,17 @@ describe('cliHealthService', () => {
     };
     const checkHealthSpy = vi.spyOn(cliHealthService, 'checkHealth').mockResolvedValue(refreshed);
 
-    const result = await cliHealthService.upgradeProviderCLI('CODEX');
+    const result = await cliHealthService.upgradeProviderCLI('CLAUDE');
 
-    expect(result.provider).toBe('CODEX');
-    expect(result.packageName).toBe('@openai/codex');
-    expect(result.command).toBe('npm install -g @openai/codex');
+    expect(result.provider).toBe('CLAUDE');
+    expect(result.packageName).toBe('@anthropic-ai/claude-code');
+    expect(result.command).toBe('npm install -g @anthropic-ai/claude-code');
     expect(result.output).toContain('installed');
     expect(result.health).toBe(refreshed);
     expect(checkHealthSpy).toHaveBeenCalledWith(true);
     expect(mockExecFile).toHaveBeenCalledWith(
       'npm',
-      ['install', '-g', '@openai/codex'],
+      ['install', '-g', '@anthropic-ai/claude-code'],
       expect.objectContaining({ timeout: expect.any(Number) })
     );
   });

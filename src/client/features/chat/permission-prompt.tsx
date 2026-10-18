@@ -409,9 +409,30 @@ function AcpPermissionPrompt({ permission, onApprove, className }: PermissionPro
       }
     >
       <div className="text-sm font-medium">Permission: {toolName}</div>
-      <div className="text-xs text-muted-foreground mt-1 font-mono truncate" title={inputPreview}>
-        {inputPreview}
-      </div>
+      {toolInput.type === 'UrlElicitation' &&
+      typeof toolInput.url === 'string' &&
+      /^https?:\/\//i.test(toolInput.url) ? (
+        <div className="mt-1 space-y-2 text-sm break-words">
+          {typeof toolInput.message === 'string' && <p>{toolInput.message}</p>}
+          <a
+            href={toolInput.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary underline break-all"
+          >
+            {toolInput.url}
+          </a>
+        </div>
+      ) : (
+        <div
+          className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap break-words"
+          title={inputPreview}
+        >
+          {toolInput.type === 'FormElicitation' && typeof toolInput.message === 'string'
+            ? toolInput.message
+            : inputPreview}
+        </div>
+      )}
     </PromptCard>
   );
 }

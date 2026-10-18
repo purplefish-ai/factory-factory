@@ -49,12 +49,20 @@ function findCurrentLabel(configOption: AcpConfigOption): string {
  */
 export function AcpConfigSelector({ configOption, onSelect, disabled }: AcpConfigSelectorProps) {
   const displayName = findCurrentLabel(configOption);
+  const controlName =
+    configOption.id === 'mode'
+      ? 'Access'
+      : configOption.id === 'collaboration_mode'
+        ? 'Planning'
+        : configOption.name;
   const hasGroupedOptions = configOption.options.some(isGroupedOption);
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
+          aria-label={`${controlName}: ${displayName}`}
+          title={`${controlName}: ${displayName}`}
           variant="ghost"
           size="sm"
           disabled={disabled}
@@ -65,6 +73,7 @@ export function AcpConfigSelector({ configOption, onSelect, disabled }: AcpConfi
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64 max-w-[calc(100vw-2rem)]">
+        <DropdownMenuLabel>{controlName}</DropdownMenuLabel>
         <DropdownMenuRadioGroup
           value={configOption.currentValue}
           onValueChange={(value) => onSelect(configOption.id, value)}

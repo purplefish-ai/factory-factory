@@ -56,7 +56,6 @@ describe('createApplication', () => {
       4321
     );
     expect(dependencies.services.acpRuntimeManager.configureEnvironment).toHaveBeenCalledWith({
-      preferSourceEntrypoint: true,
       childProcessEnvProvider: expect.any(Function),
     });
 

@@ -91,6 +91,17 @@ describe('AcpPermissionBridge', () => {
     expect(result).toBe(false);
   });
 
+  it('ignores option IDs that were not offered and keeps the request pending', async () => {
+    const bridge = new AcpPermissionBridge();
+    const response = bridge.waitForUserResponse('req-1', createMockParams());
+    expect(bridge.resolvePermission('req-1', 'invented_allow')).toBe(false);
+    expect(bridge.hasPending('req-1')).toBe(true);
+    bridge.resolvePermission('req-1', 'reject_once');
+    await expect(response).resolves.toEqual({
+      outcome: { outcome: 'selected', optionId: 'reject_once' },
+    });
+  });
+
   it('cancelAll resolves all pending with cancelled outcome', async () => {
     const bridge = new AcpPermissionBridge();
 

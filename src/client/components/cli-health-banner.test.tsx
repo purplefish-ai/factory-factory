@@ -33,7 +33,7 @@ const mockLocalStorage = {
 };
 
 describe('collectIssues', () => {
-  it('collects outdated and missing CLI issues', () => {
+  it('reports Claude freshness while leaving bundled Codex upgrades to the app', () => {
     const issues = collectIssues({
       claude: {
         isInstalled: true,
@@ -54,11 +54,10 @@ describe('collectIssues', () => {
       },
     });
 
-    expect(issues).toHaveLength(3);
+    expect(issues).toHaveLength(2);
     expect(issues.map((issue) => issue.title)).toEqual([
       'Claude CLI out of date',
       'GitHub CLI not installed',
-      'Codex CLI out of date',
     ]);
   });
 
@@ -221,11 +220,11 @@ describe('CLIHealthBannerContent', () => {
       <CLIHealthBannerContent
         issues={[
           {
-            title: 'Codex CLI out of date',
+            title: 'Claude CLI out of date',
             description: 'Installed 1.0.0; latest is 1.1.0.',
-            link: 'https://developers.openai.com/codex/app-server/',
+            link: 'https://claude.ai/download',
             linkLabel: 'Upgrade',
-            upgradeProvider: 'CODEX',
+            upgradeProvider: 'CLAUDE',
           },
         ]}
         isRefetching={false}

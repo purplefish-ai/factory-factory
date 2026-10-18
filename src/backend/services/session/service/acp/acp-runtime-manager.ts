@@ -45,10 +45,7 @@ export class AcpRuntimeManager {
     this.clientFactory.setAcpStartupTimeoutMs(timeoutMs);
   }
 
-  configureEnvironment(options: {
-    preferSourceEntrypoint: boolean;
-    childProcessEnvProvider: () => NodeJS.ProcessEnv;
-  }): void {
+  configureEnvironment(options: { childProcessEnvProvider: () => NodeJS.ProcessEnv }): void {
     this.clientFactory.configureEnvironment(options);
   }
 

@@ -209,3 +209,26 @@ export const NoQuestion: Story = {
     },
   },
 };
+
+export const OptionalNote: Story = {
+  args: {
+    question: createUserQuestion([
+      { question: 'Additional answer or note', options: [], optional: true },
+    ]),
+  },
+};
+
+export const StrictChoice: Story = {
+  args: {
+    question: createUserQuestion([
+      {
+        question: 'Choose the configured region',
+        options: [
+          { label: 'US', description: 'United States' },
+          { label: 'EU', description: 'Europe' },
+        ],
+        allowOther: false,
+      },
+    ]),
+  },
+};

@@ -232,24 +232,52 @@ describe('AcpClientFactory', () => {
     await new AcpClientFactory().createClient(createParams());
 
     const [command, args] = mocks.spawn.mock.calls[0] ?? [];
-    expect(command).toEqual(expect.stringContaining('claude-agent-acp'));
-    expect(args).toEqual([]);
+    expect(command).toBe(process.execPath);
+    expect(args).toEqual([expect.stringContaining('claude-agent-acp')]);
   });
 
-  it('spawns the internal Codex adapter command', async () => {
+  it('spawns the released Codex adapter with the host Node runtime', async () => {
     setupSuccessfulSpawn();
-
     await new AcpClientFactory().createClient(
       createParams({ options: defaultOptions({ provider: 'CODEX' }) })
     );
-
     const [command, args] = mocks.spawn.mock.calls[0] as [string, string[]];
-    expect(command.length).toBeGreaterThan(0);
-    expect(args).toContain('internal');
-    expect(args).toContain('codex-app-server-acp');
-    expect(
-      args.some((arg) => arg.endsWith('src/cli/index.ts') || arg.endsWith('dist/src/cli/index.js'))
-    ).toBe(true);
+    expect(command).toBe(process.execPath);
+    expect(args).toEqual([expect.stringContaining('@agentclientprotocol/codex-acp')]);
+  });
+
+  it('resumes a legacy Codex identity without changing durable identity', async () => {
+    setupSuccessfulSpawn(undefined, { loadSession: true });
+    mocks.loadSession.mockResolvedValue({ configOptions: CONFIG_OPTIONS });
+    const handle = await new AcpClientFactory().createClient(
+      createParams({
+        options: defaultOptions({
+          provider: 'CODEX',
+          resumeProviderSessionId: 'sess_native-thread',
+        }),
+      })
+    );
+    expect(mocks.loadSession).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: 'native-thread' })
+    );
+    expect(handle.providerSessionId).toBe('sess_native-thread');
+    expect(mocks.newSession).not.toHaveBeenCalled();
+  });
+
+  it('never replaces a failed legacy Codex resume with a fresh conversation', async () => {
+    setupSuccessfulSpawn(createMockChildProcess({ exitAfterSigterm: true }), { loadSession: true });
+    mocks.loadSession.mockRejectedValue(new Error('thread unavailable'));
+    await expect(
+      new AcpClientFactory().createClient(
+        createParams({
+          options: defaultOptions({
+            provider: 'CODEX',
+            resumeProviderSessionId: 'sess_native-thread',
+          }),
+        })
+      )
+    ).rejects.toThrow('thread unavailable');
+    expect(mocks.newSession).not.toHaveBeenCalled();
   });
 
   it('uses an adapter override verbatim', async () => {
@@ -266,7 +294,6 @@ describe('AcpClientFactory', () => {
     setupSuccessfulSpawn();
     const factory = new AcpClientFactory();
     factory.configureEnvironment({
-      preferSourceEntrypoint: false,
       childProcessEnvProvider: () => ({ CUSTOM_ENV: 'preserved' }),
     });
 
@@ -275,7 +302,13 @@ describe('AcpClientFactory', () => {
     expect(mocks.spawn).toHaveBeenCalledWith(expect.any(String), expect.any(Array), {
       cwd: '/tmp/workspace',
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { CUSTOM_ENV: 'preserved', BROWSER: 'none', DOTENV_CONFIG_QUIET: 'true' },
+      env: {
+        CUSTOM_ENV: 'preserved',
+        BROWSER: 'none',
+        ELECTRON_RUN_AS_NODE: '1',
+        DOTENV_CONFIG_QUIET: 'true',
+        DISABLE_MCP_CONFIG_FILTERING: 'true',
+      },
       detached: false,
     });
   });
@@ -289,7 +322,10 @@ describe('AcpClientFactory', () => {
     expect(mocks.ndJsonStream).toHaveBeenCalledTimes(1);
     expect(mocks.initialize).toHaveBeenCalledWith({
       protocolVersion: 1,
-      clientCapabilities: {},
+      clientCapabilities: expect.objectContaining({
+        elicitation: { form: {}, url: {} },
+        subagents: {},
+      }),
       clientInfo: { name: 'factory-factory', title: 'Factory Factory', version: '1.2.0' },
     });
     expect(handle.child).toBe(child as unknown as ChildProcess);
@@ -577,12 +613,12 @@ describe('AcpClientFactory', () => {
   });
 
   it.each([
-    ['RELAXED', 'allow-always'],
-    ['YOLO', 'allow-always'],
+    ['RELAXED', 'bridge-choice'],
+    ['YOLO', 'bridge-choice'],
     ['STRICT', 'bridge-choice'],
     [undefined, 'bridge-choice'],
   ] as [PermissionPreset | undefined, string][])(
-    'maps permission preset %s to the client policy',
+    'lets the adapter own permissions for saved preset %s',
     async (permissionPreset, expectedOptionId) => {
       setupSuccessfulSpawn();
       const permissionBridge = {

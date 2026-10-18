@@ -1,55 +1,62 @@
 import crypto from 'node:crypto';
 import type {
   Client,
+  CompleteElicitationNotification,
+  CreateElicitationRequest,
+  CreateElicitationResponse,
   RequestPermissionRequest,
   RequestPermissionResponse,
   SessionNotification,
 } from '@agentclientprotocol/sdk';
 import { createLogger } from '@/backend/services/logger.service';
-import { isUserQuestionRequest } from '@/shared/acp-protocol/question-input';
 import {
   SUBAGENTS_CHANGED_METHOD,
   subagentsChangedParamsSchema,
 } from '@/shared/acp-protocol/subagents';
+import { createAcpElicitation } from './acp-elicitation';
 import type { AcpPermissionBridge } from './acp-permission-bridge';
 import type { AcpRuntimeEvent } from './acp-runtime-events';
 import {
   TASK_STATUS_CHANGED_METHOD,
   taskStatusChangedParamsSchema,
-} from './codex-app-server-adapter/task-status-protocol';
+} from './acp-task-status-protocol';
 
 export type AcpEventCallback = (sessionId: string, event: AcpRuntimeEvent) => void;
 export type AcpLogCallback = (sessionId: string, payload: Record<string, unknown>) => void;
 
-/** Controls whether permission requests are auto-approved without user interaction. */
-export type AutoApprovePolicy = 'none' | 'all';
-
 const logger = createLogger('acp-client-handler');
 
-function isExitPlanModeApprovalRequest(params: RequestPermissionRequest): boolean {
-  if (params.toolCall.title === 'ExitPlanMode') {
-    return true;
-  }
-
+function normalizePlanReview(params: RequestPermissionRequest): RequestPermissionRequest {
   const rawInput = params.toolCall.rawInput;
-  if (typeof rawInput !== 'object' || rawInput === null) {
-    return false;
+  const input =
+    typeof rawInput === 'object' && rawInput !== null && !Array.isArray(rawInput)
+      ? (rawInput as Record<string, unknown>)
+      : {};
+  const codex = params._meta?.codex;
+  const hasPlanReviewMetadata =
+    typeof codex === 'object' && codex !== null && 'kind' in codex && codex.kind === 'plan_review';
+  if (
+    !(
+      hasPlanReviewMetadata ||
+      (params.toolCall.title === 'Implement this plan?' &&
+        params.toolCall.kind === 'switch_mode' &&
+        typeof input.plan === 'string')
+    )
+  ) {
+    return params;
   }
-
-  const typeValue = (rawInput as { type?: unknown }).type;
-  return typeValue === 'ExitPlanMode';
-}
-
-function isUserInputPermissionRequest(params: RequestPermissionRequest): boolean {
-  const rawInput = params.toolCall.rawInput;
-  return isUserQuestionRequest({
-    toolName: params.toolCall.title ?? 'ACP Tool',
-    rawToolName: typeof params.toolCall.name === 'string' ? params.toolCall.name : undefined,
-    input:
-      typeof rawInput === 'object' && rawInput !== null && !Array.isArray(rawInput)
-        ? (rawInput as Record<string, unknown>)
-        : undefined,
-  });
+  return {
+    ...params,
+    toolCall: {
+      ...params.toolCall,
+      title: 'ExitPlanMode',
+      rawInput: {
+        ...input,
+        type: 'ExitPlanMode',
+        providerContinuesAfterApproval: true,
+      },
+    },
+  };
 }
 
 function resolveRejectOptionId(params: RequestPermissionRequest): string | null {
@@ -57,22 +64,6 @@ function resolveRejectOptionId(params: RequestPermissionRequest): string | null 
     (option) => option.kind === 'reject_once' || option.kind === 'reject_always'
   );
   return rejectOption?.optionId ?? null;
-}
-
-function resolveAllowOptionId(params: RequestPermissionRequest): string | null {
-  const allowOption = params.options.find(
-    (option) => option.kind === 'allow_always' || option.kind === 'allow_once'
-  );
-  return allowOption?.optionId ?? null;
-}
-
-function resolveInteractiveRequestTypeLabel(
-  isPlanApproval: boolean
-): 'ExitPlanMode' | 'requestUserInput' {
-  if (isPlanApproval) {
-    return 'ExitPlanMode';
-  }
-  return 'requestUserInput';
 }
 
 function resolveFailClosedOutcome(params: {
@@ -101,85 +92,22 @@ function resolveFailClosedOutcome(params: {
   };
 }
 
-function tryAutoApprovePermission(params: {
-  request: RequestPermissionRequest;
-  autoApprovePolicy: AutoApprovePolicy;
-  bypassesAutoApprove: boolean;
-  sessionId: string;
-}): RequestPermissionResponse | null {
-  if (params.autoApprovePolicy !== 'all' || params.bypassesAutoApprove) {
-    return null;
-  }
-
-  const allowOptionId = resolveAllowOptionId(params.request);
-  if (allowOptionId) {
-    logger.debug('Auto-approving permission request per configured preset', {
-      sessionId: params.sessionId,
-      toolCallId: params.request.toolCall.toolCallId,
-    });
-    return {
-      outcome: {
-        outcome: 'selected',
-        optionId: allowOptionId,
-      },
-    };
-  }
-
-  logger.warn('Auto-approve enabled but no allow option found; deferring to permission bridge', {
-    sessionId: params.sessionId,
-    toolCallId: params.request.toolCall.toolCallId,
-    availableOptions: params.request.options.map((option) => option.kind),
-  });
-  return null;
-}
-
-function resolveMissingBridgeOutcome(params: {
-  request: RequestPermissionRequest;
-  bypassesAutoApprove: boolean;
-  isPlanApproval: boolean;
-  sessionId: string;
-}): RequestPermissionResponse {
-  const outcome = resolveFailClosedOutcome({
-    request: params.request,
-    sessionId: params.sessionId,
-  });
-  const failClosedAction = outcome.outcome.outcome === 'cancelled' ? 'cancelling' : 'rejecting';
-
-  logger.warn(
-    params.bypassesAutoApprove
-      ? `Permission bridge missing; ${failClosedAction} interactive ACP permission request`
-      : `Permission bridge missing; ${failClosedAction} ACP permission request`,
-    {
-      sessionId: params.sessionId,
-      toolCallId: params.request.toolCall.toolCallId,
-      requestType: params.bypassesAutoApprove
-        ? resolveInteractiveRequestTypeLabel(params.isPlanApproval)
-        : 'permission',
-    }
-  );
-
-  return outcome;
-}
-
 export class AcpClientHandler implements Client {
   private readonly sessionId: string;
   private readonly onEvent: AcpEventCallback;
   private readonly permissionBridge: AcpPermissionBridge | null;
   private readonly onLog: AcpLogCallback | null;
-  private readonly autoApprovePolicy: AutoApprovePolicy;
 
   constructor(
     sessionId: string,
     onEvent: AcpEventCallback,
     permissionBridge?: AcpPermissionBridge,
-    onLog?: AcpLogCallback,
-    autoApprovePolicy?: AutoApprovePolicy
+    onLog?: AcpLogCallback
   ) {
     this.sessionId = sessionId;
     this.onEvent = onEvent;
     this.permissionBridge = permissionBridge ?? null;
     this.onLog = onLog ?? null;
-    this.autoApprovePolicy = autoApprovePolicy ?? 'none';
   }
 
   sessionUpdate(params: SessionNotification): Promise<void> {
@@ -257,52 +185,36 @@ export class AcpClientHandler implements Client {
       options: params.options.map((o) => ({ optionId: o.optionId, kind: o.kind, name: o.name })),
     });
 
-    const automatic = this.permissionBridge?.resolveAutomaticPermission(params);
+    const request = normalizePlanReview(params);
+    const automatic = this.permissionBridge?.resolveAutomaticPermission(request);
     if (automatic) {
       return Promise.resolve(automatic);
     }
 
-    const isPlanApproval = isExitPlanModeApprovalRequest(params);
-    const isUserInputRequest = isUserInputPermissionRequest(params);
-    const bypassesAutoApprove = isPlanApproval || isUserInputRequest;
-
-    const autoApproved = tryAutoApprovePermission({
-      request: params,
-      autoApprovePolicy: this.autoApprovePolicy,
-      bypassesAutoApprove,
-      sessionId: this.sessionId,
-    });
-    if (autoApproved) {
-      return Promise.resolve(autoApproved);
-    }
-
-    if (bypassesAutoApprove && this.autoApprovePolicy === 'all') {
-      logger.debug('Bypassing auto-approve for interactive request', {
-        sessionId: this.sessionId,
-        toolCallId: params.toolCall.toolCallId,
-        requestType: isPlanApproval ? 'ExitPlanMode' : 'requestUserInput',
-      });
-    }
-
     if (!this.permissionBridge) {
-      return Promise.resolve(
-        resolveMissingBridgeOutcome({
-          request: params,
-          bypassesAutoApprove,
-          isPlanApproval,
-          sessionId: this.sessionId,
-        })
-      );
+      return Promise.resolve(resolveFailClosedOutcome({ request, sessionId: this.sessionId }));
     }
 
     const requestId = crypto.randomUUID();
-    // Emit permission request event for WebSocket push
-    this.onEvent(this.sessionId, {
-      type: 'acp_permission_request',
-      requestId,
-      params,
+    const response = this.permissionBridge.waitForUserResponse(requestId, request);
+    this.onEvent(this.sessionId, { type: 'acp_permission_request', requestId, params: request });
+    return response;
+  }
+
+  createElicitation(params: CreateElicitationRequest): Promise<CreateElicitationResponse> {
+    if (!this.permissionBridge) {
+      return Promise.resolve({ action: 'cancel' });
+    }
+    return createAcpElicitation(params, this.sessionId, (request) =>
+      this.requestPermission(request)
+    );
+  }
+
+  completeElicitation(params: CompleteElicitationNotification): Promise<void> {
+    this.onLog?.(this.sessionId, {
+      eventType: 'acp_elicitation_complete',
+      elicitationId: params.elicitationId,
     });
-    // Suspend until user responds
-    return this.permissionBridge.waitForUserResponse(requestId, params);
+    return Promise.resolve();
   }
 }

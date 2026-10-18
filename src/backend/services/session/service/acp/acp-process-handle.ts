@@ -5,6 +5,7 @@ import {
   type SubagentBrowseCapability,
   subagentBrowseCapabilitySchema,
 } from '@/shared/acp-protocol/subagents';
+import type { AcpNativeSessionTracker } from './acp-native-session-tracker';
 import type { AcpPermissionBridge } from './acp-permission-bridge';
 import type { AcpSessionCreationOutcome } from './acp-session-creation-outcome';
 
@@ -17,6 +18,7 @@ export class AcpProcessHandle {
   readonly child: ChildProcess;
   readonly permissionBridge?: AcpPermissionBridge;
   readonly provider: string;
+  readonly nativeSessionTracker?: AcpNativeSessionTracker;
   providerSessionId: string;
   agentCapabilities: Record<string, unknown>;
   isPromptInFlight: boolean;
@@ -28,6 +30,7 @@ export class AcpProcessHandle {
     connection: ClientSideConnection;
     child: ChildProcess;
     permissionBridge?: AcpPermissionBridge;
+    nativeSessionTracker?: AcpNativeSessionTracker;
     provider: string;
     providerSessionId: string;
     sessionCreationOutcome?: AcpSessionCreationOutcome;
@@ -36,6 +39,7 @@ export class AcpProcessHandle {
     this.connection = params.connection;
     this.child = params.child;
     this.permissionBridge = params.permissionBridge;
+    this.nativeSessionTracker = params.nativeSessionTracker;
     this.provider = params.provider;
     this.providerSessionId = params.providerSessionId;
     this.sessionCreationOutcome = params.sessionCreationOutcome ?? { kind: 'new' };
@@ -53,6 +57,9 @@ export class AcpProcessHandle {
   }
 
   getSubagentBrowseCapability(): SubagentBrowseCapability | null {
+    if (this.nativeSessionTracker?.isAvailable()) {
+      return { version: 1, list: true, read: true, notifications: true };
+    }
     const meta = this.agentCapabilities._meta;
     if (!isRecord(meta)) {
       return null;

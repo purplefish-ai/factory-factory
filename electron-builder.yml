@@ -41,6 +41,11 @@ files:
   - node_modules/.pnpm/bindings@*/**/*
   - node_modules/.pnpm/file-uri-to-path@*/**/*
   - node_modules/.pnpm/node-addon-api@*/**/*
+  # ACP adapters and their packaged Codex/Claude runtimes.
+  - node_modules/@agentclientprotocol/**/*
+  - node_modules/.pnpm/@agentclientprotocol+*/**/*
+  - node_modules/.pnpm/@openai+codex*/**/*
+  - node_modules/.pnpm/@anthropic-ai+claude-agent-sdk*/**/*
   # Exclude dev/build dependencies
   - '!**/node_modules/.pnpm/*storybook*/**'
   - '!**/node_modules/.pnpm/*vite*/**'
@@ -58,6 +63,11 @@ extraResources:
     to: prisma/schema.prisma
 asar: true
 asarUnpack:
+  # Adapter entrypoints and native provider executables spawn outside Electron ASAR.
+  - node_modules/@agentclientprotocol/**/*
+  - node_modules/.pnpm/@agentclientprotocol+*/**/*
+  - node_modules/.pnpm/@openai+codex*/**/*
+  - node_modules/.pnpm/@anthropic-ai+claude-agent-sdk*/**/*
   # Native modules must be unpacked for Node.js to load them
   - node_modules/better-sqlite3/**/*
   - node_modules/bindings/**/*

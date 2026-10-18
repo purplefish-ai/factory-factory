@@ -95,6 +95,52 @@ describe('QuestionPrompt', () => {
     root.unmount();
   });
 
+  it.each([true, false])('allows skipping an optional field only when optional=%s', (optional) => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const onAnswer = vi.fn();
+    const question = unsafeCoerce<UserQuestionRequest>({
+      requestId: 'optional-field',
+      timestamp: '2026-10-18T00:00:00Z',
+      questions: [{ id: 'note', question: 'Additional note', options: [], optional }],
+    });
+    flushSync(() => root.render(createElement(QuestionPrompt, { question, onAnswer })));
+    const submit = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Submit'
+    )!;
+    expect(submit.disabled).toBe(!optional);
+    if (optional) {
+      expect(container.textContent).toContain('(optional)');
+      flushSync(() => submit.click());
+      expect(onAnswer).toHaveBeenCalledWith('optional-field', {});
+    }
+    root.unmount();
+  });
+
+  it.each([false, true])('hides Other when a strict choice has multiSelect=%s', (multiSelect) => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const question = unsafeCoerce<UserQuestionRequest>({
+      requestId: 'strict',
+      timestamp: '2026-10-18T00:00:00Z',
+      questions: [
+        {
+          id: 'choice',
+          question: 'Choose',
+          options: [{ label: 'A', description: '' }],
+          multiSelect,
+          allowOther: false,
+        },
+      ],
+    });
+    flushSync(() => root.render(createElement(QuestionPrompt, { question, onAnswer: vi.fn() })));
+    expect(container.textContent).toContain('A');
+    expect(container.querySelector('textarea[aria-label="Other response"]')).toBeNull();
+    root.unmount();
+  });
+
   it('renders free-form questions with null options without crashing', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);

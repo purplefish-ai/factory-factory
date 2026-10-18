@@ -73,7 +73,7 @@ export class AcpPermissionBridge {
    */
   resolvePermission(requestId: string, optionId: string, answers?: ToolUserInputAnswers): boolean {
     const entry = this.pending.get(requestId);
-    if (!entry) {
+    if (!entry?.params.options.some((option) => option.optionId === optionId)) {
       return false;
     }
 

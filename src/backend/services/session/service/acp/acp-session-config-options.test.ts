@@ -148,3 +148,16 @@ describe('boolean ACP config options', () => {
     ).toThrow('missing required config option categories: model, mode');
   });
 });
+
+it('restores an omitted native collaboration category independently of access', () => {
+  const options = normalizeSessionConfigOptions('CODEX', [
+    {
+      id: 'collaboration_mode',
+      name: 'Planning',
+      type: 'select',
+      currentValue: 'plan',
+      options: [{ value: 'plan', name: 'Plan' }],
+    },
+  ]);
+  expect(options[0]?.category).toBe('collaboration_mode');
+});

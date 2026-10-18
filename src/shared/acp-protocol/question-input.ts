@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import type { AskUserQuestion } from './protocol/interaction';
 
+export type { AskUserQuestion };
+
 const nonEmptyText = z.string().refine((value) => value.trim().length > 0);
 const questionInputSchema = z
   .array(
@@ -21,6 +23,8 @@ const questionInputSchema = z
         .nullish()
         .transform((options) => options ?? []),
       multiSelect: z.boolean().optional(),
+      optional: z.boolean().optional(),
+      allowOther: z.boolean().optional(),
     })
   )
   .min(1);

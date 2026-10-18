@@ -11,101 +11,66 @@ remain available.
 
 ## ACP runtime
 
-All agent sessions use the Agent Client Protocol (ACP) via
-`@agentclientprotocol/sdk`. CLAUDE sessions spawn `claude-agent-acp`; CODEX
-sessions spawn Factory Factory's internal `codex-app-server-acp` adapter, both
-over stdio JSON-RPC. The direct SDK dependency matches Claude ACP's SDK 1.9.
-Model changes use `session/set_config_option`. Legacy model/mode response
-fallbacks remain supported; model and mode controls require select options.
-Boolean options are retained in backend configuration but omitted from the
-current select-only chat controls. The internal Codex adapter accepts string
-configuration values and stdio/HTTP/SSE MCP servers; it rejects ACP-tunneled MCP
-servers, which it does not advertise support for.
+All agent sessions use Agent Client Protocol over stdio JSON-RPC through
+`@agentclientprotocol/sdk` 1.9. Claude uses `claude-agent-acp` 0.93 and Codex
+uses the released `@agentclientprotocol/codex-acp` 2.2.2. Factory Factory does
+not implement a Codex harness adapter. Codex's compatible runtime is packaged
+with its adapter; `ff codex login` authenticates that same runtime.
 
-Persisted ACP config snapshots are validated with a strict schema for ACP select
-and boolean options before being used for inactive-session options or
-capabilities. Malformed snapshots are treated as cache misses; provider history
-identity recovery stays independent of configuration validity. Valid snapshots
-restore omitted model/mode categories for both providers, while retaining
-Codex's provider-supplied labels.
+Adapter entrypoints run with the host Node runtime, including Electron's bundled
+Node, and are unpacked in desktop packages. Model discovery uses the same
+bundled Codex runtime, without starting an inference turn. Claude model
+discovery uses an ephemeral ACP session with tools disabled. Both catalog
+services coalesce requests and cache successful results for 30 seconds.
 
-Session init/load fails unless model/mode select options can be obtained from
-provider `configOptions` or legacy model/mode response fields. Permission
-requests present multi-option selection (`allow_once`, `allow_always`,
-`deny_once`, `deny_always`) and are bridged through ACP permission response
-handlers. User-question prompts require a non-empty, valid question payload; MCP
-tools retain their raw identity and use normal tool approval even when their
-inputs contain a `questions` array. Free-form provider questions remain
-supported without selection options. Codex question answers are mapped from the
-composer's trimmed ID or question-text fallback to the original provider ID,
-including empty and whitespace-only IDs. Exact provider IDs take precedence over
-normalized aliases; ambiguous aliases fail instead of assigning an answer to the
-wrong question. Duplicate provider IDs are rejected before answer mapping. Soft
-cancellation (including voice stop and prompt timeout) resolves pending
-permission requests with a cancelled outcome, dismisses their prompts, and keeps
-the bridge available for later turns.
+Provider-native configuration controls own access permissions. Codex `mode`
+selects access and `collaboration_mode` selects planning independently. Claude
+`mode` owns its native access/planning modes. Saved STRICT/RELAXED/YOLO defaults
+remain backward-compatible preset inputs, mapped to advertised native values;
+the ACP client never automatically grants a permission because of a preset.
+Read-only review sessions use the provider's read-only/plan mode and reject all
+permission escalation. Model and configuration changes use
+`session/set_config_option`; legacy model/mode response fallbacks remain
+supported. Boolean options remain in backend snapshots while current chat
+controls render select options.
 
-When reapplying read-only permissions to an existing reviewer fails, teardown
-reserves a lifecycle stop to cancel concurrent starts. A cancelled start cannot
-publish an alive runtime snapshot for the stopped client. The stop reservation
-is released even if runtime stopping or state cleanup throws.
+Persisted ACP configuration snapshots are validated before use. Legacy Codex
+collaboration/access tuples are converted into native options before startup,
+inactive-session display, or strict PR continuation. Durable legacy `sess_`
+provider identities remain unchanged; transport calls use the underlying native
+Codex thread ID. A failed legacy resume cannot start a replacement conversation.
 
-Approving a Codex plan queues the automatic approval turn with the same
-plan-disabled settings persisted for the session, preventing that turn from
-re-entering plan mode.
+Permission requests retain the provider's option IDs and choices. Upstream Codex
+plan review is normalized into the application's plan UI and always requires a
+user response. Both adapters own their plan implementation continuation; the
+client does not enqueue a second approval turn. Structured questions use ACP
+form elicitation, with validated answers mapped into the existing question UI.
+URL elicitation exposes the destination and message and requires explicit
+consent; it never opens a URL automatically. Cancellation resolves pending
+permissions and elicitations as cancelled and dismisses their prompts.
+
+Native subagent/session updates are captured before SDK validation because the
+subagent contract is still a draft. Children retain separate transcripts and
+permissions remain routed through the owning parent. The client negotiates
+upstream background-task metadata and combines subagent, goal and task activity
+so provider work outside a prompt keeps the session running. Native session
+loading reconstructs child histories; no Factory Factory extension is required
+from either adapter.
+
+Factory Factory supplies workspace MCP servers through session-scoped adapter
+configuration. It never writes the user's native Codex configuration. Requested
+workspace MCP configuration takes precedence over stale entries left by older
+Factory Factory versions; native configuration for other servers is retained.
 
 Session stop history is durable: `SessionLifecycleEvent` rows are append-only,
 deduplicated by session/attempt key, merged chronologically with provider
-history, and rendered as structured chat rows after reconnect or restart.
+history, and rendered as structured chat rows after reconnect or restart. Normal
+user turns have a four-hour deadline; auto-iteration has its own timeout.
+Startup/stop incarnation fences protect runtime replacement and shutdown.
 
-The Codex adapter suppresses late turn notifications for the last 128 cancelled
-turns per loaded session, before emitting chat updates or invalidating subagent
-transcripts. Eviction emits a `cancelled_turn_history_evicted` diagnostic; an
-evicted turn no longer has this protection against late notifications.
-
-When reloading a stopped session, transcript recovery matches tool results to
-call occurrences across the full transcript before synthesizing interruption
-results. Provider history backfill can timestamp-sort a result before its call;
-that existing result still completes exactly one occurrence of the tool ID.
-
-Normal user turns have a fixed four-hour deadline; auto-iteration keeps its
-separate configured deadline. Explicit stops, closes, workspace archives,
-provider failures, prompt timeouts, and unexpected process exits record distinct
-typed reasons. Unreserved process exits with code `0` complete the session
-without an unexpected-exit lifecycle row; unexpected nonzero or signal exits
-retain that stop evidence. Explicit stops and shutdown reservations preserve
-their idle-state behavior.
-
-The chat composer uses generic retry wording for runtime errors; the banner
-provides the specific startup, prompt, or process-exit error.
-
-Admin Claude model options come from an ephemeral, non-persisted Claude ACP
-session with tools disabled; `ClaudeModelCatalogService` coalesces concurrent
-discovery and caches the catalog for 30 seconds like `CodexModelCatalogService`.
-Discovery failure falls back to static aliases. Claude model names are
-normalized from provider descriptions at every ACP config ingress so Admin and
-in-chat selectors show explicit family versions while preserving raw provider
-values and configured defaults.
-
-Admin Codex options and inactive-session chat capabilities share
-`CodexModelCatalogService`. It coalesces concurrent app-server discovery, caches
-successful catalogs for 30 seconds from completion, and gives each consumer an
-isolated copy. Discovery failures are not cached; each consumer keeps its
-existing fallback and the next request retries discovery.
-
-The ACP layer is import-fenced by dependency-cruiser (`acp-no-external-imports`,
-`codex-app-server-adapter-self-contained`, `session-model-import-boundary`,
-`session-runtime-import-boundary`). The Codex app-server schemas are generated —
-run `pnpm codex:schema:generate` and check drift with `pnpm check:codex-schema`.
-
-### Claude SDK dependency
-
-Claude ACP 0.93.0 pins Claude Agent SDK 0.3.300, which includes the upstream
-permission-handling fixes previously supplied by our scoped SDK override. The
-override is no longer needed. Offline ACP tests cover turn/cancellation, session
-options, resume, and file audit behavior, including coalesced results stamped
-with the last user UUID and the new UUID array. These checks do not exercise
-live model streaming or prompt persistence.
+Provider protocol schemas are maintained by upstream adapters. Keep focused ACP
+client contract tests when upgrading either dependency, including saved-session
+resume, plan approval, questions, native subagents, and reviewer permissions.
 
 ### Failed provider resume
 
@@ -180,13 +145,11 @@ custom/append snapshot semantics. See
 [the upgrade validation](../superpowers/plans/2026-09-09-remaining-dependencies.md).
 
 Auto-iteration sessions use `autoIterationPermissions`, with YOLO as the
-fallback if settings cannot be read. Codex auto-iteration and periodic-task
-sessions select unattended execution mode during non-interactive startup.
-Scheduled Codex tasks use YOLO permissions so the configured workspace preset
-cannot restore interactive approvals after startup. Scheduled Claude tasks
-retain their configured workspace permission preset. PR updates inherit their
-main conversation’s configuration and do not use a workflow-specific permission
-preset.
+fallback if settings cannot be read. Auto-iteration uses the same native
+access-mode mapping as manual sessions. Scheduled Codex tasks retain their YOLO
+access preset and scheduled Claude tasks retain their configured access preset.
+PR updates inherit their main conversation’s configuration and do not use a
+workflow-specific permission preset.
 
 ## Session lifecycle ownership
 
@@ -233,14 +196,12 @@ public operations and the session composition root wires the owners.
 ## Provider sub-agents
 
 Provider-initiated sub-agents are session-scoped, read-only, and provider-owned.
-Factory Factory surfaces their live metadata and transcripts through
-`factoryfactory.ai` ACP extensions and displays them in the Agents panel.
+Factory Factory projects their native ACP metadata and transcripts into the
+Agents panel through its session-scoped tracker.
 
 They are distinct from workspace-scoped child workspaces, and are recovered from
 the provider when a parent session is reloaded rather than persisted by Factory
-Factory. Transcript pages use a bounded reducer working set; see
-[projection performance](subagent-transcript-performance.md) for the constraints
-and benchmark.
+Factory.
 
 ## Child workspaces
 
