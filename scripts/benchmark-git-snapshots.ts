@@ -153,7 +153,7 @@ async function main() {
         {
           node: process.version,
           git: gitVersion.stdout.trim(),
-          fixture: disposable ? 'disposable:1000-files' : worktreePath,
+          fixture: disposable ? 'disposable:1001-files' : worktreePath,
           cacheMiss: { sequential: summary(cold.sequential), parallel: summary(cold.parallel) },
           cached: { sequential: summary(cached.sequential), parallel: summary(cached.parallel) },
           commandCountsIncludingWarmup: {

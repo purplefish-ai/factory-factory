@@ -1,13 +1,16 @@
+import { setImmediate } from 'node:timers/promises';
 import { describe, expect, it, vi } from 'vitest';
 import type { ExecResult } from '@/backend/lib/shell';
 import { WorkspaceGitStateService } from './workspace-git-state.service';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((resolvePromise) => {
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise;
+    reject = rejectPromise;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 function result(args: string[]): ExecResult {
@@ -62,9 +65,7 @@ async function drainCommands(pending: Array<() => void>) {
   // Release successive dependency levels without depending on command ordering.
   for (let round = 0; round < 100; round++) {
     pending.splice(0).forEach((release) => release());
-    for (let tick = 0; tick < 30; tick++) {
-      await Promise.resolve();
-    }
+    await setImmediate();
     if (pending.length === 0) {
       return;
     }
@@ -188,6 +189,73 @@ describe('WorkspaceGitStateService command scheduling', () => {
     expect(commands.filter((args) => args[0] === 'diff')).toHaveLength(3);
     expect(commands).not.toContainEqual(['diff', '--name-only']);
     service.stop();
+  });
+
+  it('rejects immediately while bounded sibling reads settle without restoring the cache', async () => {
+    const status = deferred<ExecResult>();
+    const mergeBase = deferred<ExecResult>();
+    const upstream = deferred<ExecResult>();
+    const failure = new Error('status spawn failed');
+    const commands: string[][] = [];
+    const pending: Array<() => void> = [];
+    let failing = true;
+    let active = 0;
+    let peak = 0;
+    const service = new WorkspaceGitStateService({
+      ...watcherOptions,
+      runGit: (args) => {
+        if (!failing) {
+          return Promise.resolve(result(args));
+        }
+        commands.push(args);
+        active++;
+        peak = Math.max(peak, active);
+        const response = args.includes('status')
+          ? status.promise
+          : args[0] === 'merge-base'
+            ? mergeBase.promise
+            : args[0] === 'rev-parse'
+              ? upstream.promise
+              : new Promise<ExecResult>((resolve, reject) =>
+                  pending.push(() => {
+                    if (args[1] === '--name-status') {
+                      reject(new Error('later sibling failure'));
+                    } else {
+                      resolve(result(args));
+                    }
+                  })
+                );
+        return response.finally(() => {
+          active--;
+        });
+      },
+    });
+    const rejected = expect(service.getSnapshot(input)).rejects.toBe(failure);
+    try {
+      await vi.waitFor(() => expect(commands).toHaveLength(3));
+      status.reject(failure);
+      await rejected;
+      // Both sibling lookups are still pending when the caller receives its error.
+      expect(active).toBe(2);
+      expect(service.getCachedSnapshot(input)).toBeNull();
+      mergeBase.resolve(result(['merge-base']));
+      upstream.resolve(result(['rev-parse']));
+      await setImmediate();
+      expect(pending).toHaveLength(3);
+      await drainCommands(pending);
+      expect(active).toBe(0);
+      expect(peak).toBeLessThanOrEqual(3);
+      expect(service.getCachedSnapshot(input)).toBeNull();
+      failing = false;
+      expectSnapshot(await service.getSnapshot(input));
+    } finally {
+      status.reject(failure);
+      await rejected;
+      mergeBase.resolve(result(['merge-base']));
+      upstream.resolve(result(['rev-parse']));
+      await drainCommands(pending);
+      service.stop();
+    }
   });
 
   it.each(['status', 'merge-base', 'rev-parse', '--numstat', '--name-status', '--name-only'])(
