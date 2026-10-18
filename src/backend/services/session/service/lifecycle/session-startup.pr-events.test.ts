@@ -158,6 +158,10 @@ it.each(['CLAUDE', 'CODEX'] as const)(
 );
 it('rejects an unavailable existing configuration before any background turn', async () => {
   const harness = createLifecycleHarness({ session: { providerSessionId: 'existing' } });
+  harness.runtimeManager.getOrCreateClient.mockImplementationOnce(() => {
+    harness.runtimeManager.getClient.mockReturnValue(harness.handle);
+    return Promise.resolve(harness.handle);
+  });
   await expect(
     createStartupCoordinator(harness).getOrCreateSessionClient('session-1', {
       resumePolicy: 'require_existing',

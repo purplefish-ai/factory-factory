@@ -43,16 +43,18 @@ function setup(
     configOptions: [access(values[1]!)],
     sessionCreationOutcome: outcome,
   });
+  const applyOption = (_id: string, optionId: string, value: string) => {
+    handle.configOptions = handle.configOptions.map((option) =>
+      option.id === optionId ? ({ ...option, currentValue: value } as SessionConfigOption) : option
+    );
+    return Promise.resolve(handle.configOptions);
+  };
   const runtime = {
     getClient: vi.fn(() => handle as AcpProcessHandle | undefined),
-    setConfigOption: vi.fn((_id: string, optionId: string, value: string) => {
-      handle.configOptions = handle.configOptions.map((option) =>
-        option.id === optionId
-          ? ({ ...option, currentValue: value } as SessionConfigOption)
-          : option
-      );
-      return Promise.resolve(handle.configOptions);
-    }),
+    setSessionMode: vi.fn((sessionId: string, value: string) =>
+      applyOption(sessionId, 'mode', value)
+    ),
+    setConfigOption: vi.fn(applyOption),
   };
   const repository = {
     getSessionById: vi.fn(() => Promise.resolve(session)),
@@ -78,7 +80,7 @@ describe('saved native session access', () => {
         h.handle,
         preset
       );
-      expect(h.runtime.setConfigOption).toHaveBeenCalledWith('session', 'mode', 'read-only');
+      expect(h.runtime.setSessionMode).toHaveBeenCalledWith('session', 'read-only');
       expect(h.handle.configOptions[0]?.currentValue).toBe('read-only');
     }
   );
@@ -107,6 +109,20 @@ describe('saved native session access', () => {
         providerMetadata: null,
         providerSessionId: kind === 'new' ? null : 'thread',
       };
+      const durableSession = { ...session };
+      h.repository.getSessionById.mockImplementation(() =>
+        Promise.resolve(unsafeCoerce(durableSession))
+      );
+      h.repository.updateSession.mockImplementation((_sessionId, update) => {
+        Object.assign(durableSession, update);
+        return Promise.resolve(unsafeCoerce(durableSession));
+      });
+      if (kind === 'new') {
+        // Startup persists the provider identity before configuration can be saved.
+        await h.repository.updateSession('session', {
+          providerSessionId: h.handle.providerSessionId,
+        });
+      }
       h.handle.configOptions = [h.access('read-only')];
       await h.service.applyConfiguredPermissionPreset(
         'session',
@@ -115,6 +131,14 @@ describe('saved native session access', () => {
         'STRICT'
       );
       expect(h.handle.configOptions[0]?.currentValue).toBe('workspace-write');
+      expect(h.repository.updateSession).toHaveBeenLastCalledWith(
+        'session',
+        expect.objectContaining({
+          providerMetadata: expect.objectContaining({
+            acpConfigSnapshot: expect.objectContaining({ providerSessionId: 'thread' }),
+          }),
+        })
+      );
     }
   );
 
@@ -147,6 +171,7 @@ describe('saved native session access', () => {
         )
       ).rejects.toThrow();
       expect(h.runtime.setConfigOption).not.toHaveBeenCalled();
+      expect(h.runtime.setSessionMode).not.toHaveBeenCalled();
       expect(h.repository.updateSession).not.toHaveBeenCalled();
     }
   );
@@ -158,6 +183,24 @@ describe('saved native session access', () => {
       reason: 'load_failed',
     });
     h.handle.providerSessionId = 'replacement';
+    const rollovers = [
+      {
+        previousProviderSessionId: 'thread',
+        providerSessionId: 'replacement',
+        runtimeIncarnationId: 'incarnation-1',
+      },
+    ];
+    h.repository.getSessionById.mockResolvedValue(
+      unsafeCoerce({
+        ...h.session,
+        providerSessionId: 'replacement',
+        providerMetadata: {
+          ...h.session.providerMetadata,
+          providerIdentityRollovers: rollovers,
+          retainedMetadata: 'preserved',
+        },
+      })
+    );
     await h.service.applyConfiguredPermissionPreset(
       'session',
       unsafeCoerce(h.session),
@@ -165,6 +208,16 @@ describe('saved native session access', () => {
       'YOLO'
     );
     expect(h.handle.configOptions[0]?.currentValue).toBe('read-only');
+    expect(h.repository.updateSession).toHaveBeenCalledWith(
+      'session',
+      expect.objectContaining({
+        providerMetadata: expect.objectContaining({
+          providerIdentityRollovers: rollovers,
+          retainedMetadata: 'preserved',
+          acpConfigSnapshot: expect.objectContaining({ providerSessionId: 'replacement' }),
+        }),
+      })
+    );
   });
 
   it('rejects an unrelated runtime identity', async () => {
@@ -179,6 +232,7 @@ describe('saved native session access', () => {
       )
     ).rejects.toThrow();
     expect(h.runtime.setConfigOption).not.toHaveBeenCalled();
+    expect(h.runtime.setSessionMode).not.toHaveBeenCalled();
   });
 
   it.each(['wrong-category', 'duplicate-id', 'ambiguous-access', 'ambiguous-planning'] as const)(
@@ -214,6 +268,7 @@ describe('saved native session access', () => {
         )
       ).rejects.toThrow();
       expect(h.runtime.setConfigOption).not.toHaveBeenCalled();
+      expect(h.runtime.setSessionMode).not.toHaveBeenCalled();
     }
   );
 
@@ -265,6 +320,7 @@ describe('saved native session access', () => {
       )
     ).rejects.toThrow();
     expect(h.runtime.setConfigOption).not.toHaveBeenCalled();
+    expect(h.runtime.setSessionMode).not.toHaveBeenCalled();
     expect(h.repository.updateSession).not.toHaveBeenCalled();
   });
 
@@ -290,6 +346,7 @@ describe('saved native session access', () => {
       )
     ).rejects.toThrow('unavailable');
     expect(h.runtime.setConfigOption).not.toHaveBeenCalled();
+    expect(h.runtime.setSessionMode).not.toHaveBeenCalled();
   });
 
   it('does not configure or persist a replacement runtime after restoring access', async () => {
@@ -303,8 +360,8 @@ describe('saved native session access', () => {
     };
     h.session.providerMetadata.acpConfigSnapshot.configOptions.push(collaboration);
     h.handle.configOptions.push({ ...collaboration, currentValue: 'default' });
-    const original = h.runtime.setConfigOption.getMockImplementation()!;
-    h.runtime.setConfigOption.mockImplementationOnce(async (...args) => {
+    const original = h.runtime.setSessionMode.getMockImplementation()!;
+    h.runtime.setSessionMode.mockImplementationOnce(async (...args) => {
       const result = await original(...args);
       h.runtime.getClient.mockReturnValue(undefined);
       return result;
@@ -317,7 +374,8 @@ describe('saved native session access', () => {
         'YOLO'
       )
     ).rejects.toThrow();
-    expect(h.runtime.setConfigOption).toHaveBeenCalledTimes(1);
+    expect(h.runtime.setSessionMode).toHaveBeenCalledTimes(1);
+    expect(h.runtime.setConfigOption).not.toHaveBeenCalled();
     expect(h.repository.updateSession).not.toHaveBeenCalled();
   });
 

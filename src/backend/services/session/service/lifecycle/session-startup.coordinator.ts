@@ -452,10 +452,12 @@ export class SessionStartupCoordinator {
         options.resumePolicy !== 'require_existing' ||
         session.workflow === ADVERSARIAL_REVIEW_WORKFLOW
       ) {
-        await this.dependencies.sessionConfigService.applyConfiguredPermissionPreset(
+        // Permission enforcement must stop an unsafe candidate even when another caller shares it.
+        await this.applyConfiguredPermissionPreset(
           sessionId,
           session,
           handle,
+          stopGeneration,
           permissionPreset
         );
       }
@@ -477,6 +479,7 @@ export class SessionStartupCoordinator {
         session.workflow,
         handle,
         registration,
+        stopGeneration,
         ownership
       );
       throw error;
@@ -546,12 +549,15 @@ export class SessionStartupCoordinator {
     workflow: string | undefined,
     handle: AcpProcessHandle | undefined,
     registration: AcpClientCreationOperation,
+    stopGeneration: number,
     ownership?: OwnedStartupRuntime
   ): Promise<void> {
     const isOnlyOperation = registration.isOnlyOperation();
     try {
       if (
         handle &&
+        this.canUpdateFailedStartupState(sessionId, ownership, stopGeneration) &&
+        this.dependencies.runtimeManager.getClient(sessionId) === handle &&
         (!ownership || this.canCleanupOwnedRuntime(sessionId, ownership)) &&
         (isOnlyOperation || workflow === ADVERSARIAL_REVIEW_WORKFLOW)
       ) {
@@ -563,7 +569,12 @@ export class SessionStartupCoordinator {
         error: toErrorMessage(error),
       });
     } finally {
-      if (isOnlyOperation && this.canUpdateFailedStartupState(sessionId, ownership)) {
+      const current = this.dependencies.runtimeManager.getClient(sessionId);
+      if (
+        isOnlyOperation &&
+        (!current || current === handle) &&
+        this.canUpdateFailedStartupState(sessionId, ownership, stopGeneration)
+      ) {
         this.dependencies.acpEventProcessor.clearSessionState(sessionId);
       }
     }
@@ -652,6 +663,7 @@ export class SessionStartupCoordinator {
               session.workflow,
               handle ?? this.dependencies.runtimeManager.getClient(sessionId) ?? undefined,
               registration,
+              stopGeneration,
               ownership
             );
           }

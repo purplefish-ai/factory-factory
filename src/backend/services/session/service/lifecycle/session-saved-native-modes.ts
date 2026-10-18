@@ -5,7 +5,7 @@ import { parseAcpConfigSnapshot } from './acp-config-snapshot';
 import { getConfigOptionValues } from './session-config-option-helpers';
 
 type NativeModeKind = 'mode' | 'collaboration_mode';
-type Runtime = Pick<AcpRuntimeManager, 'setConfigOption' | 'getClient'>;
+type Runtime = Pick<AcpRuntimeManager, 'setConfigOption' | 'setSessionMode' | 'getClient'>;
 
 function isNativeMode(option: SessionConfigOption, kind: NativeModeKind): boolean {
   return option.id === kind || option.category === kind;
@@ -99,11 +99,9 @@ export async function restoreSavedNativeModes(
     ) {
       continue;
     }
-    handle.configOptions = await runtime.setConfigOption(
-      sessionId,
-      saved.id,
-      String(saved.currentValue)
-    );
+    handle.configOptions = isNativeMode(saved, 'mode')
+      ? await runtime.setSessionMode(sessionId, String(saved.currentValue))
+      : await runtime.setConfigOption(sessionId, saved.id, String(saved.currentValue));
     changed = true;
   }
   assertCurrentRuntime(sessionId, handle, runtime);
