@@ -80,7 +80,7 @@ Vitest.
 ## Execution evidence
 
 - Required formatting/lint fixes, typecheck, repository guards, and unused
-  dependency checks pass. The full suite passes 6,622 tests; one manual suite
+  dependency checks pass. The full suite passes 6,669 tests; one manual suite
   remains skipped.
 - Production build and Electron TypeScript compilation pass. Built
   `ff codex --version` resolves the bundled native Codex 0.160.1 runtime.

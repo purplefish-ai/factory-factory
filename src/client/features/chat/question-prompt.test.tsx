@@ -13,6 +13,99 @@ afterEach(() => {
 });
 
 describe('QuestionPrompt', () => {
+  it('keeps skipped optional progress dots unanswered while allowing navigation', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const question: UserQuestionRequest = {
+      requestId: 'optional-progress',
+      timestamp: '2026-10-18T00:00:00Z',
+      questions: [
+        { question: 'Optional note', options: [], optional: true },
+        { question: 'Required note', options: [] },
+      ],
+    };
+    flushSync(() => root.render(createElement(QuestionPrompt, { question, onAnswer: vi.fn() })));
+    const next = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Next'
+    )!;
+    expect(next.disabled).toBe(false);
+    flushSync(() => next.click());
+    expect(container.querySelector('[aria-label="Go to question 1"]')?.className).toContain(
+      'bg-muted-foreground/30'
+    );
+    root.unmount();
+  });
+
+  it.each([
+    ['abc', 'Enter a number.'],
+    ['1.5', 'Enter a whole number.'],
+    ['9007199254740992', 'Enter a whole number.'],
+    ['0', 'Enter a number greater than or equal to 1.'],
+    ['6', 'Enter a number less than or equal to 5.'],
+    ['3', null],
+  ])('validates numeric freeform answer %s before submission', (value, error) => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const onAnswer = vi.fn();
+    const question: UserQuestionRequest = {
+      requestId: 'numeric',
+      timestamp: '2026-10-18T00:00:00Z',
+      questions: [
+        { question: 'Count', options: [], validation: { type: 'integer', minimum: 1, maximum: 5 } },
+      ],
+    };
+    flushSync(() => root.render(createElement(QuestionPrompt, { question, onAnswer })));
+    const input = container.querySelector('textarea')!;
+    flushSync(() => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(
+        input,
+        value
+      );
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const submit = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Submit'
+    )!;
+    expect(submit.disabled).toBe(Boolean(error));
+    expect(container.querySelector('[role="alert"]')?.textContent ?? null).toBe(error);
+    if (!error) {
+      flushSync(() => submit.click());
+      expect(onAnswer).toHaveBeenCalledWith('numeric', { Count: '3' });
+    }
+    root.unmount();
+  });
+
+  it('submits a choice transport value while displaying its readable label', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const onAnswer = vi.fn();
+    const question: UserQuestionRequest = {
+      requestId: 'empty-choice',
+      timestamp: '2026-10-18T00:00:00Z',
+      questions: [
+        {
+          id: 'choice',
+          question: 'Choose',
+          options: [{ label: 'Empty value', value: '__blank__', description: '' }],
+          allowOther: false,
+        },
+      ],
+    };
+    flushSync(() => root.render(createElement(QuestionPrompt, { question, onAnswer })));
+    expect(container.textContent).toContain('Empty value');
+    flushSync(() => container.querySelector<HTMLButtonElement>('[role="radio"]')!.click());
+    const submit = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Submit'
+    )!;
+    expect(submit.disabled).toBe(false);
+    flushSync(() => submit.click());
+    expect(onAnswer).toHaveBeenCalledWith('empty-choice', { choice: '__blank__' });
+    root.unmount();
+  });
+
   it('renders nothing when the questions array is empty', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);

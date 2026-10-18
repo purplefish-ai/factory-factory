@@ -45,9 +45,13 @@ plan review is normalized into the application's plan UI and always requires a
 user response. Both adapters own their plan implementation continuation; the
 client does not enqueue a second approval turn. Structured questions use ACP
 form elicitation, with validated answers mapped into the existing question UI.
-URL elicitation exposes the destination and message and requires explicit
-consent; it never opens a URL automatically. Cancellation resolves pending
-permissions and elicitations as cancelled and dismisses their prompts.
+Numeric fields display validation errors before submission, and blank enum
+choices retain their exact provider values behind visible labels. Run
+`pnpm test:acp:manual` for the live handshake or `pnpm test:acp:manual:prompt`
+to explicitly enable a read-only model round trip. URL elicitation exposes the
+destination and message and requires explicit consent; it never opens a URL
+automatically. Cancellation resolves pending permissions and elicitations as
+cancelled and dismisses their prompts.
 
 Native subagent/session updates are captured before SDK validation because the
 subagent contract is still a draft. Children retain separate transcripts and

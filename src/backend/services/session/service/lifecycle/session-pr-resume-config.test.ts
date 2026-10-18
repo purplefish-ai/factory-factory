@@ -32,6 +32,7 @@ function harness(legacyExecution = '["on-failure","workspace-write"]') {
     },
   });
   const handle = {
+    acpSessionId: 'original',
     provider: 'CODEX',
     providerSessionId: 'sess_original',
     configOptions: [
@@ -63,7 +64,19 @@ function harness(legacyExecution = '["on-failure","workspace-write"]') {
 describe('strict PR resume configuration', () => {
   it('restores migrated access and collaboration using the upstream ID without replacing identity', async () => {
     const { session, handle } = harness();
-    await restorePRResumeConfig(session, unsafeCoerce<AcpProcessHandle>(handle), vi.fn());
+    const observed: string[][] = [];
+    const assertStartupAllowed = vi.fn(() => {
+      observed.push(handle.configOptions.map((entry) => String(entry.currentValue)));
+    });
+    await restorePRResumeConfig(
+      session,
+      unsafeCoerce<AcpProcessHandle>(handle),
+      assertStartupAllowed
+    );
+    expect(observed).toEqual([
+      ['workspace-write', 'default'],
+      ['workspace-write', 'plan'],
+    ]);
     expect(handle.connection.setSessionMode).toHaveBeenCalledWith({
       sessionId: 'original',
       modeId: 'workspace-write',
@@ -78,6 +91,28 @@ describe('strict PR resume configuration', () => {
       'workspace-write',
       'plan',
     ]);
+  });
+
+  it.each([1, 2])('propagates startup cancellation after mutation %s', async (cancelAfter) => {
+    const { session, handle } = harness();
+    const cancellation = new Error('startup cancelled');
+    let checked = 0;
+    const assertStartupAllowed = () => {
+      checked += 1;
+      if (checked === cancelAfter) {
+        throw cancellation;
+      }
+    };
+    await expect(
+      restorePRResumeConfig(session, unsafeCoerce<AcpProcessHandle>(handle), assertStartupAllowed)
+    ).rejects.toBe(cancellation);
+    expect(handle.configOptions.map((entry) => entry.currentValue)).toEqual([
+      'workspace-write',
+      cancelAfter === 1 ? 'default' : 'plan',
+    ]);
+    if (cancelAfter === 1) {
+      expect(handle.connection.setSessionConfigOption).not.toHaveBeenCalled();
+    }
   });
 
   it('fails closed when the saved legacy permissions cannot be migrated', async () => {

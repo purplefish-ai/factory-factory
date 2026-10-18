@@ -17,7 +17,13 @@ export function registerCodexCommand(
     .allowExcessArguments(true)
     .argument('[args...]')
     .action(async (args: string[]) => {
-      process.exitCode = await run(args);
+      try {
+        process.exitCode = await run(args);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`Bundled Codex runtime is unavailable: ${message}`);
+        process.exitCode = 1;
+      }
     });
 }
 
@@ -28,7 +34,21 @@ export async function runCodexCommand(args: string[]): Promise<number> {
     env: { ...getCurrentProcessEnv(), ELECTRON_RUN_AS_NODE: '1' },
   });
   return await new Promise<number>((resolve, reject) => {
-    child.once('error', reject);
-    child.once('exit', (code) => resolve(code ?? 1));
+    const onInterrupt = () => child.kill('SIGINT');
+    const onTerminate = () => child.kill('SIGTERM');
+    const cleanup = () => {
+      process.off('SIGINT', onInterrupt);
+      process.off('SIGTERM', onTerminate);
+    };
+    process.on('SIGINT', onInterrupt);
+    process.on('SIGTERM', onTerminate);
+    child.once('error', (error) => {
+      cleanup();
+      reject(error);
+    });
+    child.once('exit', (code, signal) => {
+      cleanup();
+      resolve(code ?? (signal === 'SIGINT' ? 130 : signal === 'SIGTERM' ? 143 : 1));
+    });
   });
 }

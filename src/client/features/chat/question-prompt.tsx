@@ -10,6 +10,12 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
 import type { AskUserQuestion, UserQuestionRequest } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
+import {
+  OTHER_OPTION_VALUE,
+  formatAnswer,
+  isAnswerComplete,
+  getAnswerError,
+} from './question-prompt-answers';
 
 // =============================================================================
 // Types
@@ -58,66 +64,6 @@ interface MultiQuestionLayoutProps {
 // =============================================================================
 // Helper Components
 // =============================================================================
-
-const OTHER_OPTION_VALUE = '__other__';
-
-function normalizeOtherText(value: string | undefined): string {
-  return value?.trim() ?? '';
-}
-
-function isAnswerComplete(
-  question: AskUserQuestion,
-  answer: string | string[] | undefined,
-  otherText: string
-): boolean {
-  const normalizedOther = normalizeOtherText(otherText);
-  if (question.optional && (!answer || (Array.isArray(answer) && answer.length === 0))) {
-    return true;
-  }
-  if (question.multiSelect) {
-    if (!Array.isArray(answer) || answer.length === 0) {
-      return false;
-    }
-    if (answer.includes(OTHER_OPTION_VALUE)) {
-      return normalizedOther.length > 0;
-    }
-    return true;
-  }
-  if (typeof answer !== 'string' || answer.length === 0) {
-    return false;
-  }
-  if (answer === OTHER_OPTION_VALUE) {
-    return normalizedOther.length > 0;
-  }
-  return true;
-}
-
-function formatAnswer(
-  question: AskUserQuestion,
-  answer: string | string[] | undefined,
-  otherText: string
-): string | string[] {
-  const normalizedOther = normalizeOtherText(otherText);
-  if (answer === undefined) {
-    return question.multiSelect ? [] : '';
-  }
-  if (question.multiSelect && Array.isArray(answer)) {
-    if (answer.includes(OTHER_OPTION_VALUE)) {
-      if (normalizedOther) {
-        return answer.map((value) => (value === OTHER_OPTION_VALUE ? normalizedOther : value));
-      }
-      return answer.filter((value) => value !== OTHER_OPTION_VALUE);
-    }
-    return answer;
-  }
-  if (!question.multiSelect && answer === OTHER_OPTION_VALUE && normalizedOther) {
-    return normalizedOther;
-  }
-  if (!question.multiSelect && answer === OTHER_OPTION_VALUE) {
-    return '';
-  }
-  return answer as string;
-}
 
 function SingleQuestionLayout({
   question,
@@ -245,7 +191,7 @@ function MultiQuestionLayout({
           {withOccurrenceKeys(question.questions, (item) =>
             JSON.stringify([requestId, item.question])
           ).map(({ item, key }, idx) => {
-            const isAnswered = isAnswerComplete(item, answers[idx], otherTexts[idx] ?? '');
+            const isAnswered = isAnswerComplete(item, answers[idx], otherTexts[idx] ?? '', false);
             return (
               <button
                 type="button"
@@ -322,16 +268,16 @@ function SingleSelectQuestion({
       <RadioGroup value={selectedValue} onValueChange={onChange} className="space-y-1.5">
         {options.map((option) => (
           <label
-            key={`${index}-${option.label}`}
-            htmlFor={`question-${idPrefix}-option-${option.label}`}
+            key={`${index}-${option.value ?? option.label}`}
+            htmlFor={`question-${idPrefix}-option-${option.value ?? option.label}`}
             className={cn(
               'flex items-start gap-2 rounded-md border p-1.5 transition-colors cursor-pointer hover:bg-background',
-              selectedValue === option.label && 'border-primary bg-primary/5'
+              selectedValue === (option.value ?? option.label) && 'border-primary bg-primary/5'
             )}
           >
             <RadioGroupItem
-              value={option.label}
-              id={`question-${idPrefix}-option-${option.label}`}
+              value={option.value ?? option.label}
+              id={`question-${idPrefix}-option-${option.value ?? option.label}`}
               className="mt-0.5 shrink-0"
             />
             <div className="flex-1 min-w-0">
@@ -384,7 +330,13 @@ function SingleSelectQuestion({
                 }}
                 placeholder="Type your response..."
                 className="min-h-[42px] text-sm py-1.5"
+                aria-invalid={Boolean(getAnswerError(question, otherText))}
               />
+              {getAnswerError(question, otherText) && (
+                <p role="alert" className="text-xs text-destructive">
+                  {getAnswerError(question, otherText)}
+                </p>
+              )}
             </div>
           </label>
         )}
@@ -432,21 +384,23 @@ function MultiSelectQuestion({
 
       <div className="space-y-1.5">
         {options.map((option) => {
-          const isSelected = selectedValues.includes(option.label);
+          const isSelected = selectedValues.includes(option.value ?? option.label);
 
           return (
             <label
-              key={`${index}-${option.label}`}
-              htmlFor={`question-${idPrefix}-option-${option.label}`}
+              key={`${index}-${option.value ?? option.label}`}
+              htmlFor={`question-${idPrefix}-option-${option.value ?? option.label}`}
               className={cn(
                 'flex items-start gap-2 rounded-md border p-1.5 transition-colors cursor-pointer hover:bg-background',
                 isSelected && 'border-primary bg-primary/5'
               )}
             >
               <Checkbox
-                id={`question-${idPrefix}-option-${option.label}`}
+                id={`question-${idPrefix}-option-${option.value ?? option.label}`}
                 checked={isSelected}
-                onCheckedChange={(checked) => handleCheckboxChange(option.label, checked === true)}
+                onCheckedChange={(checked) =>
+                  handleCheckboxChange(option.value ?? option.label, checked === true)
+                }
                 className="mt-0.5 shrink-0"
               />
               <div className="flex-1 min-w-0">

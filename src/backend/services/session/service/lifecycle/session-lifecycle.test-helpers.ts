@@ -1,6 +1,7 @@
 import { type Mock, vi } from 'vitest';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/session/service/acp';
+import { toAcpSessionId } from '@/backend/services/session/service/acp/acp-session-identity';
 import type {
   SessionLifecycleMessageQueueBridge,
   SessionLifecycleWorkspaceBridge,
@@ -459,6 +460,9 @@ export function createLifecycleHarness(
   const handle = {
     provider: session.provider,
     providerSessionId: session.providerSessionId ?? 'provider-session-1',
+    get acpSessionId(): string {
+      return toAcpSessionId(handle.provider, handle.providerSessionId);
+    },
     sessionCreationOutcome: overrides.sessionCreationOutcome ?? {
       kind: session.providerSessionId ? 'resumed' : 'new',
     },

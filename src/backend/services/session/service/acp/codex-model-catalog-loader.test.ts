@@ -17,10 +17,14 @@ const model = {
 };
 let requests: Array<{ id?: number; method: string; params?: { cursor?: string } }>;
 let malformed = false;
+let noisy = false;
+let reasoningDescription: string | null | undefined;
 
 beforeEach(() => {
   requests = [];
   malformed = false;
+  noisy = false;
+  reasoningDescription = undefined;
   mocks.spawn.mockImplementation(() => {
     const child = Object.assign(new EventEmitter(), {
       stdin: new PassThrough(),
@@ -47,8 +51,23 @@ beforeEach(() => {
             ? { data: [{ id: 42 }] }
             : request.params?.cursor
               ? { data: [{ ...model, id: 'model-2' }], nextCursor: null }
-              : { data: [model], nextCursor: 'page-2' };
-      queueMicrotask(() => child.stdout.write(`${JSON.stringify({ id: request.id, result })}\n`));
+              : {
+                  data: [
+                    {
+                      ...model,
+                      supportedReasoningEfforts: [
+                        { reasoningEffort: 'high', description: reasoningDescription },
+                      ],
+                    },
+                  ],
+                  nextCursor: 'page-2',
+                };
+      queueMicrotask(() => {
+        if (noisy) {
+          child.stdout.write('Adapter startup diagnostic\n');
+        }
+        child.stdout.write(`${JSON.stringify({ id: request.id, result })}\n`);
+      });
     });
     return child;
   });
@@ -76,4 +95,17 @@ it('rejects malformed provider model data and closes discovery', async () => {
   malformed = true;
   await expect(fetchCodexModelCatalogFromAppServer()).rejects.toThrow();
   expect(mocks.spawn.mock.results[0]?.value.kill).toHaveBeenCalledWith('SIGTERM');
+});
+
+it('normalizes nullable reasoning descriptions without dropping the catalog', async () => {
+  reasoningDescription = null;
+  const result = await fetchCodexModelCatalogFromAppServer();
+  expect(result[0]?.supportedReasoningEfforts).toEqual([
+    { reasoningEffort: 'high', description: undefined },
+  ]);
+});
+
+it('ignores non-JSON startup diagnostics and still discovers models', async () => {
+  noisy = true;
+  await expect(fetchCodexModelCatalogFromAppServer()).resolves.toHaveLength(2);
 });

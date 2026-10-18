@@ -63,7 +63,7 @@ describe('AcpRuntimeManager', () => {
       const spawnArgs = mockSpawn.mock.calls[0]!;
       expect(spawnArgs[0]).toBe(process.execPath);
       expect(spawnArgs[1]).toEqual([
-        expect.stringContaining('@agentclientprotocol/claude-agent-acp/'),
+        expect.stringMatching(/@agentclientprotocol[/\\]claude-agent-acp[/\\]/),
       ]);
       expect(spawnArgs[2]).toMatchObject({
         cwd: '/tmp/workspace',
@@ -117,7 +117,9 @@ describe('AcpRuntimeManager', () => {
       expect(mockSpawn).toHaveBeenCalledTimes(1);
       const spawnArgs = mockSpawn.mock.calls[0]!;
       expect(spawnArgs[0]).toBe(process.execPath);
-      expect(spawnArgs[1]).toEqual([expect.stringContaining('@agentclientprotocol/codex-acp/')]);
+      expect(spawnArgs[1]).toEqual([
+        expect.stringMatching(/@agentclientprotocol[/\\]codex-acp[/\\]/),
+      ]);
       expect((spawnArgs[2] as { env?: Record<string, string> }).env?.DOTENV_CONFIG_QUIET).toBe(
         'true'
       );
@@ -150,7 +152,9 @@ describe('AcpRuntimeManager', () => {
       expect(mockSpawn).toHaveBeenCalledTimes(1);
       const spawnArgs = mockSpawn.mock.calls[0]!;
       expect(spawnArgs[0]).toBe(process.execPath);
-      expect(spawnArgs[1]).toEqual([expect.stringContaining('@agentclientprotocol/codex-acp/')]);
+      expect(spawnArgs[1]).toEqual([
+        expect.stringMatching(/@agentclientprotocol[/\\]codex-acp[/\\]/),
+      ]);
     });
 
     it('rejects cleanly when ACP binary spawn fails (ENOENT)', async () => {

@@ -66,32 +66,34 @@ describe('provider native access policy', () => {
     expect(runtime.setConfigOption).not.toHaveBeenCalled();
   });
 
-  it('applies review planning without changing read-only access', async () => {
-    const handle = {
-      provider: 'CODEX',
-      configOptions: [
-        mode('read-only', ['read-only', 'workspace-write']),
-        mode('default', ['default', 'plan'], 'collaboration_mode'),
-      ],
-    };
-    const runtime = {
-      setSessionMode: vi.fn(),
-      setConfigOption: vi.fn(async (_id: string, configId: string, value: string) =>
-        handle.configOptions.map((option: SessionConfigOption) =>
-          option.id === configId && option.type === 'select'
-            ? { ...option, currentValue: value }
-            : option
-        )
-      ),
-    };
-    await expect(
-      applyReadOnlyReviewPermissions('session', unsafeCoerce<AcpProcessHandle>(handle), runtime)
-    ).resolves.toBe(true);
-    expect(handle.configOptions.map((option: SessionConfigOption) => option.currentValue)).toEqual([
-      'read-only',
-      'plan',
-    ]);
-  });
+  it.each(['collaboration_mode', 'provider_planning'])(
+    'applies review planning identified by %s without changing read-only access',
+    async (configId) => {
+      const handle = {
+        provider: 'CODEX',
+        configOptions: [
+          mode('read-only', ['read-only', 'workspace-write']),
+          { ...mode('default', ['default', 'plan'], configId), category: 'collaboration_mode' },
+        ],
+      };
+      const runtime = {
+        setSessionMode: vi.fn(),
+        setConfigOption: vi.fn(async (_id: string, configId: string, value: string) =>
+          handle.configOptions.map((option: SessionConfigOption) =>
+            option.id === configId && option.type === 'select'
+              ? { ...option, currentValue: value }
+              : option
+          )
+        ),
+      };
+      await expect(
+        applyReadOnlyReviewPermissions('session', unsafeCoerce<AcpProcessHandle>(handle), runtime)
+      ).resolves.toBe(true);
+      expect(
+        handle.configOptions.map((option: SessionConfigOption) => option.currentValue)
+      ).toEqual(['read-only', 'plan']);
+    }
+  );
 
   it.each([
     ['CODEX', 'mode', 'workspace-write'],

@@ -91,7 +91,8 @@
     "check:format": "oxfmt --check .",
     "check:lint-suppressions": "node scripts/check-lint-suppressions.mjs",
     "check:client-chunks": "node scripts/check-client-chunk-budget.mjs",
-    "test:acp:manual": "node scripts/ensure-native-modules.mjs node && RUN_REAL_CODEX_APP_SERVER_TESTS=1 vitest run src/backend/services/session/service/acp/acp-runtime-manager.manual.integration.test.ts"
+    "test:acp:manual": "node scripts/ensure-native-modules.mjs node && RUN_REAL_CODEX_APP_SERVER_TESTS=1 vitest run src/backend/services/session/service/acp/acp-runtime-manager.manual.integration.test.ts",
+    "test:acp:manual:prompt": "RUN_REAL_CODEX_APP_SERVER_PROMPT_TESTS=1 pnpm test:acp:manual"
   },
   "dependencies": {
     "@agentclientprotocol/claude-agent-acp": "^0.93.0",

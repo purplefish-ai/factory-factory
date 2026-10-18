@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { NATIVE_PERMISSION_OPTIONS, NATIVE_PERMISSION_DESCRIPTION } from './native-permission-copy';
 
 export function ChatProviderDefaultsSection() {
   const { data: settings, isLoading } = trpc.userSettings.get.useQuery();
@@ -271,16 +272,14 @@ export function ChatProviderDefaultsSection() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="STRICT">Standard</SelectItem>
-              <SelectItem value="RELAXED">Accept edits / Auto review</SelectItem>
-              <SelectItem value="YOLO">Full access</SelectItem>
+              {NATIVE_PERMISSION_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground">
-            Standard uses Claude approval prompts and Codex workspace access. Accept edits / Auto
-            review lets Claude accept file edits and Codex review sensitive actions. Full access
-            skips approval prompts.
-          </p>
+          <p className="text-xs text-muted-foreground">{NATIVE_PERMISSION_DESCRIPTION}</p>
         </div>
       </CardContent>
     </Card>

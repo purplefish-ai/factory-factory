@@ -2,8 +2,14 @@ import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { createInterface } from 'node:readline';
 import { z } from 'zod';
-import { getCurrentProcessEnv } from '@/backend/services/logger.service';
-import { resolveProviderAcpSpawnCommand, withTimeout } from './acp-runtime-spawn';
+import { createLogger, getCurrentProcessEnv } from '@/backend/services/logger.service';
+import {
+  resolveProviderAcpSpawnCommand,
+  terminateCatalogProcess,
+  withTimeout,
+} from './acp-runtime-spawn';
+
+const logger = createLogger('codex-model-catalog-loader');
 
 const modelSchema = z.object({
   id: z.string(),
@@ -14,7 +20,10 @@ const modelSchema = z.object({
     .array(
       z.object({
         reasoningEffort: z.string(),
-        description: z.string().optional(),
+        description: z
+          .string()
+          .nullish()
+          .transform((value) => value ?? undefined),
       })
     )
     .default([]),
@@ -37,7 +46,11 @@ export async function fetchCodexModelCatalogFromAppServer(options?: {
   const command = resolveProviderAcpSpawnCommand('CODEX');
   const child = spawn(command.command, [...command.args, 'cli', 'app-server'], {
     cwd: options?.cwd ?? tmpdir(),
-    env: { ...(options?.env ?? getCurrentProcessEnv()), ELECTRON_RUN_AS_NODE: '1' },
+    env: {
+      ...(options?.env ?? getCurrentProcessEnv()),
+      ELECTRON_RUN_AS_NODE: '1',
+      DOTENV_CONFIG_QUIET: 'true',
+    },
     stdio: ['pipe', 'pipe', 'pipe'],
   });
   const pending = new Map<number, { resolve(value: unknown): void; reject(error: Error): void }>();
@@ -60,7 +73,7 @@ export async function fetchCodexModelCatalogFromAppServer(options?: {
     try {
       value = JSON.parse(line);
     } catch {
-      fail(new Error('Invalid Codex discovery response'));
+      logger.debug('Ignoring non-JSON Codex discovery diagnostic');
       return;
     }
     const parsed = responseSchema.safeParse(value);
@@ -120,23 +133,6 @@ export async function fetchCodexModelCatalogFromAppServer(options?: {
     fail(new Error('Codex model discovery closed'));
     reader.close();
     child.stdin.end();
-    if (child.exitCode === null && child.signalCode === null) {
-      child.kill('SIGTERM');
-      await new Promise<void>((resolve) => {
-        const timer = setTimeout(() => {
-          child.kill('SIGKILL');
-          resolve();
-        }, 2000);
-        timer.unref?.();
-        child.once('exit', () => {
-          clearTimeout(timer);
-          resolve();
-        });
-        if (child.exitCode !== null || child.signalCode !== null) {
-          clearTimeout(timer);
-          resolve();
-        }
-      });
-    }
+    await terminateCatalogProcess(child);
   }
 }

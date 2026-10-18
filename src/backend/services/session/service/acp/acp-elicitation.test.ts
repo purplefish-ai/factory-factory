@@ -1,5 +1,6 @@
 import type { CreateElicitationRequest, ElicitationSchema } from '@agentclientprotocol/sdk';
 import { describe, expect, it, vi } from 'vitest';
+import { getAskUserQuestions } from '@/shared/acp-protocol/question-input';
 import { AcpClientHandler } from './acp-client-handler';
 import { AcpPermissionBridge } from './acp-permission-bridge';
 
@@ -15,6 +16,52 @@ function setup() {
 }
 
 describe('ACP elicitation', () => {
+  it.each(['', '   ', '__other__'])(
+    'preserves blank choice values %j through the question UI',
+    async (value) => {
+      const { handler, bridge, onEvent } = setup();
+      const response = handler.createElicitation(
+        form({
+          properties: { choice: { type: 'string', enum: [value, 'normal'] } },
+          required: ['choice'],
+        })
+      );
+      const event = onEvent.mock.calls[0]![1];
+      const questions = getAskUserQuestions(event.params.toolCall.rawInput);
+      expect(questions).toHaveLength(1);
+      const option = questions[0]!.options[0]!;
+      expect(option.label.trim().length).toBeGreaterThan(0);
+      bridge.resolvePermission(event.requestId, 'accept', {
+        choice: [option.value ?? option.label],
+      });
+      await expect(response).resolves.toEqual({ action: 'accept', content: { choice: value } });
+    }
+  );
+
+  it('preserves blank array choices and avoids transport-token collisions', async () => {
+    const { handler, bridge, onEvent } = setup();
+    const response = handler.createElicitation(
+      form({
+        properties: {
+          choices: {
+            type: 'array',
+            items: { type: 'string', enum: ['', '__elicitation_option_0__'] },
+          },
+        },
+        required: ['choices'],
+      })
+    );
+    const event = onEvent.mock.calls[0]![1];
+    const question = getAskUserQuestions(event.params.toolCall.rawInput)[0]!;
+    bridge.resolvePermission(event.requestId, 'accept', {
+      choices: question.options.map((option) => option.value ?? option.label),
+    });
+    await expect(response).resolves.toEqual({
+      action: 'accept',
+      content: { choices: ['', '__elicitation_option_0__'] },
+    });
+  });
+
   it('renders upstream question forms and returns typed field values', async () => {
     const { handler, bridge, onEvent } = setup();
     const response = handler.createElicitation(

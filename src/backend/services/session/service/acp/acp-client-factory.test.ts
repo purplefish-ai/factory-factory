@@ -278,6 +278,10 @@ describe('AcpClientFactory', () => {
       )
     ).rejects.toThrow('thread unavailable');
     expect(mocks.newSession).not.toHaveBeenCalled();
+    expect(mocks.logger.warn).toHaveBeenCalledWith(
+      'loadSession failed',
+      expect.not.objectContaining({ fallback: 'newSession' })
+    );
   });
 
   it('uses an adapter override verbatim', async () => {
@@ -613,10 +617,10 @@ describe('AcpClientFactory', () => {
   });
 
   it.each([
-    ['RELAXED', 'bridge-choice'],
-    ['YOLO', 'bridge-choice'],
-    ['STRICT', 'bridge-choice'],
-    [undefined, 'bridge-choice'],
+    ['RELAXED', 'reject-once'],
+    ['YOLO', 'reject-once'],
+    ['STRICT', 'reject-once'],
+    [undefined, 'reject-once'],
   ] as [PermissionPreset | undefined, string][])(
     'lets the adapter own permissions for saved preset %s',
     async (permissionPreset, expectedOptionId) => {
@@ -624,7 +628,7 @@ describe('AcpClientFactory', () => {
       const permissionBridge = {
         resolveAutomaticPermission: vi.fn(),
         waitForUserResponse: vi.fn().mockResolvedValue({
-          outcome: { outcome: 'selected', optionId: 'bridge-choice' },
+          outcome: { outcome: 'selected', optionId: 'reject-once' },
         }),
       } as unknown as AcpPermissionBridge;
       const handle = await new AcpClientFactory().createClient(

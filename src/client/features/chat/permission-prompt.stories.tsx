@@ -291,3 +291,17 @@ export const FormConsent: Story = {
     },
   },
 };
+
+export const LongAcpCommand: Story = {
+  args: {
+    permission: {
+      ...createPermissionRequest('Run shell command', {
+        command: Array.from({ length: 30 }, (_, index) => `echo "Step ${index + 1}"`).join('\n'),
+      }),
+      acpOptions: [
+        { optionId: 'allow_once', kind: 'allow_once', name: 'Allow once' },
+        { optionId: 'reject_once', kind: 'reject_once', name: 'Reject' },
+      ],
+    },
+  },
+};

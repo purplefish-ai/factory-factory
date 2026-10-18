@@ -43,6 +43,33 @@ describe('AcpClientHandler', () => {
   });
 
   describe('permission requests', () => {
+    it('warns when a missing permission bridge fails closed', async () => {
+      const handler = new AcpClientHandler('session-1', onEvent);
+      await expect(handler.requestPermission(createMockPermissionRequest())).resolves.toEqual({
+        outcome: { outcome: 'selected', optionId: 'reject_once' },
+      });
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Permission bridge missing; failing closed on ACP permission request',
+        { sessionId: 'session-1', toolCallId: 'tc-001' }
+      );
+    });
+
+    it('warns when a missing permission bridge cancels elicitation', async () => {
+      const handler = new AcpClientHandler('session-1', onEvent);
+      await expect(
+        handler.createElicitation({
+          mode: 'form',
+          sessionId: 'provider-1',
+          message: 'Input',
+          requestedSchema: { properties: {} },
+        })
+      ).resolves.toEqual({ action: 'cancel' });
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Permission bridge missing; cancelling ACP elicitation',
+        { sessionId: 'session-1', mode: 'form' }
+      );
+    });
+
     it('requires an explicit choice for ordinary tool requests', async () => {
       const bridge = new AcpPermissionBridge();
       const eventFn = vi.fn();

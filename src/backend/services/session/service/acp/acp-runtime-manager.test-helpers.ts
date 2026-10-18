@@ -7,7 +7,7 @@ import { SUBAGENTS_CAPABILITY_META_KEY } from '@/shared/acp-protocol/subagents';
 import { AcpProcessHandle } from './acp-process-handle';
 import type { AcpRuntimeEventHandlers } from './acp-runtime-events';
 import type { AcpRuntimeManager } from './acp-runtime-manager';
-import type { AcpClientOptions } from './types';
+import type { AcpClientOptions, AcpProvider } from './types';
 
 function unsafeCoerce<T>(value: unknown): T {
   return value as T;
@@ -77,7 +77,7 @@ export function markChildKilledOnSignal(child: MockChildProcess): void {
 }
 
 export function createTestProcessHandle(params?: {
-  provider?: string;
+  provider?: AcpProvider;
   providerSessionId?: string;
   sessionCreationOutcome?: AcpProcessHandle['sessionCreationOutcome'];
   agentCapabilities?: Record<string, unknown>;

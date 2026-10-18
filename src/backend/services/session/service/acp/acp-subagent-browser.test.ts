@@ -10,6 +10,20 @@ import {
 import { AcpSubagentBrowser } from './acp-subagent-browser';
 
 describe('AcpSubagentBrowser', () => {
+  it('uses native Codex identity for legacy session extension browsing', async () => {
+    const extMethod = vi.fn().mockResolvedValue({ subagents: [], nextCursor: null });
+    const handle = createTestProcessHandle({
+      provider: 'CODEX',
+      providerSessionId: 'sess_thread-legacy',
+      agentCapabilities: subagentBrowseCapabilities(),
+      connection: { extMethod },
+    });
+    await new AcpSubagentBrowser().listSubagents(handle, {});
+    expect(extMethod).toHaveBeenCalledWith(
+      SUBAGENTS_LIST_METHOD,
+      expect.objectContaining({ sessionId: 'thread-legacy' })
+    );
+  });
   it('browses negotiated native sessions without provider-specific extension methods', async () => {
     // Catches advertising native support but still invoking the deleted internal adapter methods.
     const tracker = new AcpNativeSessionTracker();

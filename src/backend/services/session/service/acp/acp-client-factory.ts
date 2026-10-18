@@ -335,8 +335,15 @@ export class AcpClientFactory {
         mcpServers,
       });
     } catch (error) {
-      this.logLoadSessionFailure(sessionId, storedId, error, options.purpose === 'browse');
-      if (options.provider === 'CODEX' && storedId.startsWith('sess_')) {
+      const legacyCodex = options.provider === 'CODEX' && storedId.startsWith('sess_');
+      this.logLoadSessionFailure(
+        sessionId,
+        storedId,
+        error,
+        options.purpose === 'browse',
+        !legacyCodex
+      );
+      if (legacyCodex) {
         throw error;
       }
       if (options.purpose === 'browse') {
@@ -362,7 +369,8 @@ export class AcpClientFactory {
     sessionId: string,
     storedProviderSessionId: string,
     error: unknown,
-    browseOnly: boolean
+    browseOnly: boolean,
+    allowFallback: boolean
   ): void {
     const details = getAcpErrorLogDetails(error);
     logger.warn(browseOnly ? 'Browse-only loadSession failed' : 'loadSession failed', {
@@ -371,7 +379,7 @@ export class AcpClientFactory {
       error: details.message,
       ...(details.code !== undefined ? { errorCode: details.code } : {}),
       ...(typeof details.data !== 'undefined' ? { errorData: details.data } : {}),
-      ...(!browseOnly ? { fallback: 'newSession' } : {}),
+      ...(!browseOnly && allowFallback ? { fallback: 'newSession' } : {}),
     });
   }
 }

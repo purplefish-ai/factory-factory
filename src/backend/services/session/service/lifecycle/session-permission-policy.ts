@@ -48,7 +48,9 @@ export async function applyReadOnlyReviewPermissions(
     throw new Error('Adversarial review read-only mode was not applied');
   }
   if (handle.provider === 'CODEX') {
-    const collaboration = handle.configOptions.find((option) => option.id === 'collaboration_mode');
+    const collaboration = handle.configOptions.find(
+      (option) => option.id === 'collaboration_mode' || option.category === 'collaboration_mode'
+    );
     if (!(collaboration && getConfigOptionValues(collaboration).includes('plan'))) {
       throw new Error('Adversarial review requires plan collaboration mode');
     }

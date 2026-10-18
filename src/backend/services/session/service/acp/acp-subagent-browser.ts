@@ -100,7 +100,7 @@ export class AcpSubagentBrowser {
     const browseHandle = this.requireHandle(handle);
     const parsedParams = subagentListParamsSchema.safeParse({
       ...input,
-      sessionId: browseHandle.providerSessionId,
+      sessionId: browseHandle.acpSessionId,
     });
     if (!parsedParams.success) {
       throw new AcpSubagentBrowseError('INVALID_INPUT', subagentBrowseMessage('list', 'invalid'), {
@@ -128,7 +128,7 @@ export class AcpSubagentBrowser {
     const browseHandle = this.requireHandle(handle);
     const parsedParams = subagentReadParamsSchema.safeParse({
       ...input,
-      sessionId: browseHandle.providerSessionId,
+      sessionId: browseHandle.acpSessionId,
     });
     if (!parsedParams.success) {
       throw new AcpSubagentBrowseError(

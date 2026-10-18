@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
+import { NATIVE_PERMISSION_OPTIONS, NATIVE_PERMISSION_DESCRIPTION } from './native-permission-copy';
 
 export function RatchetSettingsSection() {
   const { data: settings, isLoading } = trpc.userSettings.get.useQuery();
@@ -199,16 +200,15 @@ export function RatchetSettingsSection() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="STRICT">Standard</SelectItem>
-                <SelectItem value="RELAXED">Accept edits / Auto review</SelectItem>
-                <SelectItem value="YOLO">Full access</SelectItem>
+                {NATIVE_PERMISSION_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              Uses each provider’s native access mode. Standard uses Claude approval prompts and
-              Codex workspace access; Accept edits / Auto review uses Claude edit approval and Codex
-              auto review. Full access skips prompts. PR updates inherit the main conversation’s
-              settings.
+              {NATIVE_PERMISSION_DESCRIPTION} PR updates inherit the main conversation’s settings.
             </p>
           </div>
         </CardContent>

@@ -8,6 +8,8 @@ import {
 import type { AcpNativeSessionTracker } from './acp-native-session-tracker';
 import type { AcpPermissionBridge } from './acp-permission-bridge';
 import type { AcpSessionCreationOutcome } from './acp-session-creation-outcome';
+import { toAcpSessionId } from './acp-session-identity';
+import type { AcpProvider } from './types';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -17,7 +19,7 @@ export class AcpProcessHandle {
   readonly connection: ClientSideConnection;
   readonly child: ChildProcess;
   readonly permissionBridge?: AcpPermissionBridge;
-  readonly provider: string;
+  readonly provider: AcpProvider;
   readonly nativeSessionTracker?: AcpNativeSessionTracker;
   providerSessionId: string;
   agentCapabilities: Record<string, unknown>;
@@ -31,7 +33,7 @@ export class AcpProcessHandle {
     child: ChildProcess;
     permissionBridge?: AcpPermissionBridge;
     nativeSessionTracker?: AcpNativeSessionTracker;
-    provider: string;
+    provider: AcpProvider;
     providerSessionId: string;
     sessionCreationOutcome?: AcpSessionCreationOutcome;
     agentCapabilities: Record<string, unknown>;
@@ -47,6 +49,10 @@ export class AcpProcessHandle {
     this.isPromptInFlight = false;
     this.configOptions = [];
     this.createdAt = new Date();
+  }
+
+  get acpSessionId(): string {
+    return toAcpSessionId(this.provider, this.providerSessionId);
   }
 
   supportsImages(): boolean {

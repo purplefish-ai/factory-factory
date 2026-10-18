@@ -64,6 +64,7 @@ function pageIndex(cursor: string | null | undefined, fallback: number): number 
 /** Keeps draft native updates out of the released SDK and out of the parent transcript. */
 export class AcpNativeSessionTracker {
   private rootSessionId?: string;
+  private readonly abandonedSessions = new Set<string>();
   private available = false;
   private readonly children = new Map<string, ChildSession>();
   private readonly activeTasks = new Set<string>();
@@ -76,11 +77,18 @@ export class AcpNativeSessionTracker {
     if (this.rootSessionId && this.rootSessionId !== sessionId) {
       this.resetSession();
     }
+    this.abandonedSessions.delete(sessionId);
     this.rootSessionId = sessionId;
   }
 
   /** Discards abandoned load replay before a replacement session starts publishing. */
   resetSession(): void {
+    if (this.rootSessionId) {
+      this.abandonedSessions.add(this.rootSessionId);
+    }
+    for (const sessionId of this.children.keys()) {
+      this.abandonedSessions.add(sessionId);
+    }
     this.rootSessionId = undefined;
     this.children.clear();
     this.activeTasks.clear();
@@ -124,6 +132,9 @@ export class AcpNativeSessionTracker {
   }
 
   private handleSessionUpdate(sessionId: string, update: Record<string, unknown>): boolean {
+    if (this.abandonedSessions.has(sessionId)) {
+      return true;
+    }
     // Providers publish the parent spawn before any child output, including on load.
     this.rootSessionId ??= sessionId;
     if (this.consumeLifecycleUpdate(sessionId, update)) {
@@ -254,6 +265,7 @@ export class AcpNativeSessionTracker {
     child.summary.status = parsed.data.state === 'disconnected' ? 'interrupted' : parsed.data.state;
     child.summary.updatedAt = new Date().toISOString();
     child.summary.completedAt = child.summary.updatedAt;
+    this.activeGoals.delete(child.summary.id);
     this.changed(child.summary.id, 'completed');
     this.publishActivity();
   }
@@ -292,10 +304,12 @@ export class AcpNativeSessionTracker {
     summary.updatedAt = new Date().toISOString();
     if ('content' in value && record(value.content)?.type === 'text') {
       const text = record(value.content)?.text;
-      if (typeof text === 'string' && text.trim()) {
-        summary.latestActivity = text.slice(-500);
+      if (typeof text === 'string') {
+        if (text.trim()) {
+          summary.latestActivity = text.slice(-500);
+        }
         if (value.sessionUpdate === 'agent_message_chunk') {
-          summary.resultPreview = text.slice(-500);
+          summary.resultPreview = `${summary.resultPreview ?? ''}${text}`.slice(-500);
         }
       }
     } else if ('title' in value && typeof value.title === 'string') {

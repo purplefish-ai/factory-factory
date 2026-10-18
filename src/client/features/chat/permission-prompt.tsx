@@ -425,7 +425,10 @@ function AcpPermissionPrompt({ permission, onApprove, className }: PermissionPro
         </div>
       ) : (
         <div
-          className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap break-words"
+          className={cn(
+            'text-xs text-muted-foreground mt-1 whitespace-pre-wrap break-words max-h-32 overflow-y-auto',
+            toolInput.type !== 'FormElicitation' && 'font-mono'
+          )}
           title={inputPreview}
         >
           {toolInput.type === 'FormElicitation' && typeof toolInput.message === 'string'

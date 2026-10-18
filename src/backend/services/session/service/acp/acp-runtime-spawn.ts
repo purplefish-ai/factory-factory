@@ -1,3 +1,4 @@
+import type { ChildProcess } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { createLogger } from '@/backend/services/logger.service';
@@ -97,9 +98,47 @@ export function resolveProviderAcpSpawnCommand(provider: 'CLAUDE' | 'CODEX'): Sp
     /\.asar([/\\])/g,
     '.asar.unpacked$1'
   );
+  if (entrypoint === binaryName) {
+    return { command: binaryName, args: [], commandLabel: binaryName };
+  }
   return {
     command: process.execPath,
     args: [entrypoint],
     commandLabel: `${binaryName} (${entrypoint})`,
   };
+}
+
+/** Terminate discovery subprocesses with a bounded grace period and no leaked listeners. */
+export async function terminateCatalogProcess(child: ChildProcess): Promise<void> {
+  const hasExited = () => child.exitCode !== null || child.signalCode !== null;
+  if (hasExited()) {
+    return;
+  }
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  let resolveExit!: () => void;
+  const exitPromise = new Promise<void>((resolve) => {
+    resolveExit = resolve;
+  });
+  const onExit = () => resolveExit();
+  child.once('exit', onExit);
+  child.once('close', onExit);
+  try {
+    child.kill('SIGTERM');
+    const exited = await Promise.race([
+      exitPromise.then(() => true),
+      new Promise<false>((resolve) => {
+        timeout = setTimeout(() => resolve(false), 5000);
+        timeout.unref?.();
+      }),
+    ]);
+    if (!(exited || hasExited())) {
+      child.kill('SIGKILL');
+    }
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+    child.removeListener('exit', onExit);
+    child.removeListener('close', onExit);
+  }
 }

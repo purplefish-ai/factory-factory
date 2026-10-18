@@ -232,3 +232,31 @@ export const StrictChoice: Story = {
     ]),
   },
 };
+
+export const NumericInput: Story = {
+  args: {
+    question: createUserQuestion([
+      {
+        question: 'How many workers should run?',
+        options: [],
+        validation: { type: 'integer', minimum: 1, maximum: 5 },
+      },
+    ]),
+  },
+};
+
+export const OptionalProgress: Story = {
+  args: {
+    question: createUserQuestion([
+      { question: 'Additional note', options: [], optional: true },
+      {
+        question: 'Choose a value',
+        options: [
+          { label: 'Empty value', value: '__blank_choice__', description: 'Use an empty string' },
+          { label: 'Default', description: 'Use the default setting' },
+        ],
+        allowOther: false,
+      },
+    ]),
+  },
+};

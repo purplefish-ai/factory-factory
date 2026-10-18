@@ -45,6 +45,11 @@ describe('ProviderCliWarning', () => {
 
   it('retains the Claude upgrade action', () => {
     state.health.claude.isOutdated = true;
-    expect(renderToStaticMarkup(<ProviderCliWarning provider="CLAUDE" />)).toContain('Upgrade');
+    const markup = renderToStaticMarkup(<ProviderCliWarning provider="CLAUDE" />);
+    const buttons = Array.from(
+      markup.matchAll(/<button\b[^>]*>([\s\S]*?)<\/button>/g),
+      (match) => match[1]
+    );
+    expect(buttons).toContainEqual(expect.stringContaining('Upgrade'));
   });
 });

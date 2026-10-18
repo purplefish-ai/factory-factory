@@ -14,6 +14,7 @@ const questionInputSchema = z
         .array(
           z.object({
             label: nonEmptyText,
+            value: nonEmptyText.optional(),
             description: z
               .unknown()
               .optional()
@@ -25,6 +26,13 @@ const questionInputSchema = z
       multiSelect: z.boolean().optional(),
       optional: z.boolean().optional(),
       allowOther: z.boolean().optional(),
+      validation: z
+        .object({
+          type: z.enum(['number', 'integer']),
+          minimum: z.number().optional(),
+          maximum: z.number().optional(),
+        })
+        .optional(),
     })
   )
   .min(1);

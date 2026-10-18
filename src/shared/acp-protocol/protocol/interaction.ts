@@ -3,6 +3,8 @@
  */
 export interface AskUserQuestionOption {
   label: string;
+  /** Transport value when the visible label differs from the provider choice. */
+  value?: string;
   description: string;
 }
 
@@ -18,6 +20,7 @@ export interface AskUserQuestion {
   optional?: boolean;
   /** Whether option questions accept an additional free-form answer. Defaults to true. */
   allowOther?: boolean;
+  validation?: { type: 'number' | 'integer'; minimum?: number; maximum?: number };
 }
 
 /**

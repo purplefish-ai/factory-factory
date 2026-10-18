@@ -144,7 +144,14 @@ export class SessionStartupCoordinator {
           session.workflow
         );
         await this.assertCreationAllowed(sessionId, stopGeneration, options?.assertCurrent);
-        await this.applyConfiguredPermissionPreset(sessionId, session, handle, resolvedPreset);
+        await this.applyConfiguredPermissionPreset(
+          sessionId,
+          session,
+          handle,
+          stopGeneration,
+          resolvedPreset,
+          ownership
+        );
         await this.assertCreationAllowed(sessionId, stopGeneration, options?.assertCurrent);
         await this.dispatchQueuedNotificationsIfNeeded(sessionId, dispatchableNotificationCount);
         await this.assertCreationAllowed(sessionId, stopGeneration, options?.assertCurrent);
@@ -323,7 +330,13 @@ export class SessionStartupCoordinator {
     this.dependencies.lifecycleGate.establishStartup(lease);
     this.assertStartupAllowed(session.id, lease.generation);
     if (!hadClient && options.resumePolicy !== 'require_existing') {
-      await this.applyConfiguredPermissionPreset(session.id, session, handle, resolvedPreset);
+      await this.applyConfiguredPermissionPreset(
+        session.id,
+        session,
+        handle,
+        lease.generation,
+        resolvedPreset
+      );
       this.assertStartupAllowed(session.id, lease.generation);
       await this.dispatchQueuedNotificationsIfNeeded(session.id, dispatchableNotificationCount);
       this.assertStartupAllowed(session.id, lease.generation);
@@ -545,6 +558,11 @@ export class SessionStartupCoordinator {
       ) {
         await this.dependencies.runtimeManager.stopClient(sessionId);
       }
+    } catch (error) {
+      logger.warn('Failed to stop runtime after client creation failure', {
+        sessionId,
+        error: toErrorMessage(error),
+      });
     } finally {
       if (isOnlyOperation && this.canUpdateFailedStartupState(sessionId, ownership)) {
         this.dependencies.acpEventProcessor.clearSessionState(sessionId);
@@ -572,32 +590,14 @@ export class SessionStartupCoordinator {
         this.assertExistingConversation(session, existingAcp, false);
       }
       if (session.workflow === ADVERSARIAL_REVIEW_WORKFLOW) {
-        try {
-          await this.dependencies.sessionConfigService.applyConfiguredPermissionPreset(
-            sessionId,
-            session,
-            existingAcp
-          );
-        } catch (error) {
-          const stopReservation = this.dependencies.lifecycleGate.reserveStop(sessionId);
-          try {
-            await this.dependencies.runtimeManager.stopClient(sessionId);
-            this.dependencies.sessionDomainService.setRuntimeSnapshot(sessionId, {
-              phase: 'error',
-              processState: 'stopped',
-              activity: 'IDLE',
-              errorMessage: `Failed to start agent: ${toErrorMessage(error)}`,
-              updatedAt: new Date().toISOString(),
-            });
-          } finally {
-            try {
-              this.dependencies.acpEventProcessor.clearSessionState(sessionId);
-            } finally {
-              stopReservation?.release();
-            }
-          }
-          throw error;
-        }
+        await this.applyConfiguredPermissionPreset(
+          sessionId,
+          session,
+          existingAcp,
+          stopGeneration,
+          undefined,
+          ownership
+        );
       }
       await this.assertCreationAllowed(sessionId, stopGeneration, options.assertCurrent);
       const isWorking = this.dependencies.runtimeManager.isSessionWorking(sessionId);
@@ -663,7 +663,7 @@ export class SessionStartupCoordinator {
               ownership
             );
           }
-          if (this.canUpdateFailedStartupState(sessionId, ownership)) {
+          if (this.canUpdateFailedStartupState(sessionId, ownership, stopGeneration)) {
             this.dependencies.sessionDomainService.setRuntimeSnapshot(sessionId, {
               phase: 'error',
               processState: 'stopped',
@@ -693,7 +693,18 @@ export class SessionStartupCoordinator {
     );
   }
 
-  private canUpdateFailedStartupState(sessionId: string, ownership?: OwnedStartupRuntime): boolean {
+  private canUpdateFailedStartupState(
+    sessionId: string,
+    ownership?: OwnedStartupRuntime,
+    generation?: number
+  ): boolean {
+    if (
+      generation !== undefined &&
+      (this.dependencies.lifecycleGate.isSessionStopping(sessionId) ||
+        !this.dependencies.lifecycleGate.isGenerationCurrent(sessionId, generation))
+    ) {
+      return false;
+    }
     if (!ownership) {
       return true;
     }
@@ -781,7 +792,9 @@ export class SessionStartupCoordinator {
     sessionId: string,
     session: AgentSessionRecord,
     handle: AcpProcessHandle,
-    permissionPreset?: PermissionPreset
+    stopGeneration: number,
+    permissionPreset?: PermissionPreset,
+    ownership?: OwnedStartupRuntime
   ): Promise<void> {
     try {
       await this.dependencies.sessionConfigService.applyConfiguredPermissionPreset(
@@ -791,16 +804,32 @@ export class SessionStartupCoordinator {
         permissionPreset
       );
     } catch (error) {
+      if (!this.canUpdateFailedStartupState(sessionId, ownership, stopGeneration)) {
+        throw error;
+      }
       const stopReservation = this.dependencies.lifecycleGate.reserveStop(sessionId);
+      if (!stopReservation) {
+        throw error;
+      }
       try {
-        await this.dependencies.runtimeManager.stopClient(sessionId);
-        this.dependencies.sessionDomainService.setRuntimeSnapshot(sessionId, {
-          phase: 'error',
-          processState: 'stopped',
-          activity: 'IDLE',
-          errorMessage: `Failed to start agent: ${toErrorMessage(error)}`,
-          updatedAt: new Date().toISOString(),
+        await this.dependencies.runtimeManager.stopClient(sessionId).catch((stopError: unknown) => {
+          logger.warn('Failed to stop runtime after permission preset failure', {
+            sessionId,
+            error: toErrorMessage(stopError),
+          });
         });
+        if (
+          this.canUpdateFailedStartupState(sessionId, ownership) &&
+          this.dependencies.lifecycleGate.isGenerationCurrent(sessionId, stopReservation.generation)
+        ) {
+          this.dependencies.sessionDomainService.setRuntimeSnapshot(sessionId, {
+            phase: 'error',
+            processState: 'stopped',
+            activity: 'IDLE',
+            errorMessage: `Failed to start agent: ${toErrorMessage(error)}`,
+            updatedAt: new Date().toISOString(),
+          });
+        }
       } finally {
         try {
           this.dependencies.acpEventProcessor.clearSessionState(sessionId);

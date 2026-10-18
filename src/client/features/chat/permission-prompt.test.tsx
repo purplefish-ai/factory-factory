@@ -20,6 +20,33 @@ afterEach(() => {
 });
 
 describe('PermissionPrompt', () => {
+  it.each(['Command', 'FormElicitation'])(
+    'bounds previews and uses suitable typography for %s',
+    (type) => {
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const root = createRoot(container);
+      const permission: PermissionRequest = {
+        requestId: 'preview',
+        toolName: 'Run command',
+        timestamp: '2026-10-18T00:00:00Z',
+        toolInput: { type, command: 'pnpm test\n'.repeat(100), message: 'Consent message' },
+        acpOptions: [{ optionId: 'accept', kind: 'allow_once', name: 'Approve' }],
+      };
+      flushSync(() =>
+        root.render(createElement(PermissionPrompt, { permission, onApprove: vi.fn() }))
+      );
+      const preview = container.querySelector('[title]');
+      expect(preview?.className).toContain('max-h-32');
+      expect(preview?.className).toContain('overflow-y-auto');
+      expect(preview?.className.includes('font-mono')).toBe(type !== 'FormElicitation');
+      if (type === 'FormElicitation') {
+        expect(preview?.textContent).toBe('Consent message');
+      }
+      root.unmount();
+    }
+  );
+
   it('shows URL elicitation target and message before explicit authorization', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);

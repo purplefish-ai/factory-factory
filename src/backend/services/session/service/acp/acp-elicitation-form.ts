@@ -86,6 +86,36 @@ function choices(field: Field): Array<{ label: string; description: string }> {
   return [];
 }
 
+/** Give blank provider values a visible label and a nonempty UI selection token. */
+function displayChoices(field: Field) {
+  const options = choices(field);
+  const usedValues = new Set(options.map((option) => option.label));
+  return options.map((option, index) => {
+    if (option.label.trim() && option.label !== '__other__') {
+      return option;
+    }
+    let value = `__elicitation_option_${index}__`;
+    while (usedValues.has(value)) {
+      value += '_';
+    }
+    usedValues.add(value);
+    return {
+      ...option,
+      label: option.label.trim() ? option.label : option.label ? 'Whitespace value' : 'Empty value',
+      value,
+    };
+  });
+}
+
+function decodeAnswers(field: Field, answers: string[] | undefined): string[] | undefined {
+  const rawOptions = choices(field);
+  const displayed = displayChoices(field);
+  return answers?.map((answer) => {
+    const index = displayed.findIndex((option) => 'value' in option && option.value === answer);
+    return index < 0 ? answer : (rawOptions[index]?.label ?? answer);
+  });
+}
+
 function stringValidator(field: Extract<Field, { type: 'string' }>): z.ZodType<string> {
   let value = z.string();
   if (field.minLength != null) {
@@ -220,7 +250,12 @@ function parseAnswers(
   for (const [id, field] of Object.entries(form.properties)) {
     const questionId = questionIds.get(id) ?? id;
     const input = Object.hasOwn(parsed.data, questionId) ? parsed.data[questionId] : undefined;
-    const value = validateFieldAnswer(field, input, validators.get(id), required.has(id));
+    const value = validateFieldAnswer(
+      field,
+      decodeAnswers(field, input),
+      validators.get(id),
+      required.has(id)
+    );
     if (value === null) {
       return null;
     }
@@ -263,7 +298,16 @@ export function createAcpElicitationForm(schema: unknown): AcpElicitationForm | 
       id: questionIds.get(id) ?? id,
       question: field.title?.trim() || id.trim() || 'Input',
       ...(field.description ? { header: field.description } : {}),
-      options: choices(field),
+      options: displayChoices(field),
+      ...(field.type === 'number' || field.type === 'integer'
+        ? {
+            validation: {
+              type: field.type,
+              minimum: field.minimum ?? undefined,
+              maximum: field.maximum ?? undefined,
+            },
+          }
+        : {}),
       allowOther: allowsOtherAnswer(field),
       ...(!form.required?.includes(id) ? { optional: true } : {}),
       ...(field.type === 'array' ? { multiSelect: true } : {}),

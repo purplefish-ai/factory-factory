@@ -192,6 +192,10 @@ export class AcpClientHandler implements Client {
     }
 
     if (!this.permissionBridge) {
+      logger.warn('Permission bridge missing; failing closed on ACP permission request', {
+        sessionId: this.sessionId,
+        toolCallId: request.toolCall.toolCallId,
+      });
       return Promise.resolve(resolveFailClosedOutcome({ request, sessionId: this.sessionId }));
     }
 
@@ -203,6 +207,10 @@ export class AcpClientHandler implements Client {
 
   createElicitation(params: CreateElicitationRequest): Promise<CreateElicitationResponse> {
     if (!this.permissionBridge) {
+      logger.warn('Permission bridge missing; cancelling ACP elicitation', {
+        sessionId: this.sessionId,
+        mode: params.mode,
+      });
       return Promise.resolve({ action: 'cancel' });
     }
     return createAcpElicitation(params, this.sessionId, (request) =>

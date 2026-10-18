@@ -1,3 +1,4 @@
+import type { CreateElicitationRequest, RequestPermissionRequest } from '@agentclientprotocol/sdk';
 import { describe, expect, it, vi } from 'vitest';
 import { AcpNativeSessionTracker } from './acp-native-session-tracker';
 import { createNormalizedAcpReadableStream } from './acp-stream-normalizer';
@@ -86,6 +87,41 @@ describe('AcpNativeSessionTracker', () => {
       nextCursor: null,
     });
   });
+
+  it('retains the last 500 characters of streamed child output including whitespace chunks', () => {
+    const tracker = new AcpNativeSessionTracker();
+    spawn(tracker);
+    text(tracker, 'child', 'agent', 'x'.repeat(600));
+    text(tracker, 'child', 'agent', 'x'.repeat(490));
+    text(tracker, 'child', 'agent', ' ');
+    text(tracker, 'child', 'agent', 'finished');
+    expect(tracker.list({ limit: 10 }).subagents[0]?.resultPreview).toBe(
+      `${'x'.repeat(491)} finished`
+    );
+  });
+
+  it.each(['completed', 'failed', 'cancelled', 'disconnected'])(
+    'clears an active child goal when the child becomes %s',
+    (state) => {
+      const active = vi.fn();
+      const tracker = new AcpNativeSessionTracker({ onTaskStatusChanged: active });
+      spawn(tracker);
+      tracker.onRawMessage(
+        update('child', {
+          sessionUpdate: 'session_info_update',
+          _meta: { jetbrains: { air: { goal: { status: 'active' } } } },
+        })
+      );
+      tracker.onRawMessage(
+        update('root', {
+          sessionUpdate: 'subagent_state_update',
+          subagentSessionId: 'child',
+          state,
+        })
+      );
+      expect(active.mock.calls).toEqual([[true], [false]]);
+    }
+  );
 
   it('shows Claude delegated prompts and replaces them with actual child replay when available', () => {
     // Catches losing Claude live user prompts or duplicating the prompt during provider replay.
@@ -221,6 +257,22 @@ describe('AcpNativeSessionTracker', () => {
     expect(tracker.ownsSession('new-child')).toBe(true);
   });
 
+  it.each(['root', 'child'])(
+    'quarantines delayed abandoned %s updates before adopting the replacement root',
+    (abandonedId) => {
+      const tracker = new AcpNativeSessionTracker();
+      tracker.setRootSessionId('root');
+      spawn(tracker);
+      tracker.resetSession();
+      expect(text(tracker, abandonedId, 'agent', 'Delayed abandoned output')).toBe(true);
+      expect(spawn(tracker, abandonedId, 'delayed-child')).toBe(true);
+      expect(text(tracker, 'replacement', 'agent', 'Replacement output')).toBe(false);
+      spawn(tracker, 'replacement', 'new-child');
+      tracker.setRootSessionId('replacement');
+      expect(tracker.list({ limit: 10 }).subagents).toMatchObject([{ id: 'new-child' }]);
+    }
+  );
+
   it('preserves child tool locations repaired at the stdio boundary', () => {
     // Catches dropping a whole child tool update when Claude sends a line range array.
     const tracker = new AcpNativeSessionTracker();
@@ -238,8 +290,8 @@ describe('AcpNativeSessionTracker', () => {
     ]);
   });
 
-  it('ignores malformed async completion and forwards child permission requests to the SDK', () => {
-    // Catches malformed task updates ending valid work, and consuming a request that needs an answer.
+  it('ignores malformed async completion', () => {
+    // Catches malformed task updates ending valid work.
     const active = vi.fn();
     const tracker = new AcpNativeSessionTracker({ onTaskStatusChanged: active });
     tracker.setRootSessionId('root');
@@ -254,22 +306,51 @@ describe('AcpNativeSessionTracker', () => {
       })
     );
     expect(active.mock.calls).toEqual([[true]]);
-    expect(
-      tracker.onRawMessage({
+  });
+
+  it('forwards child permission and elicitation requests unchanged through the SDK stream', async () => {
+    const tracker = new AcpNativeSessionTracker();
+    spawn(tracker);
+    const requests = [
+      {
         jsonrpc: '2.0',
         id: 5,
         method: 'session/request_permission',
-        params: { sessionId: 'child' },
-      })
-    ).toBe(false);
-    expect(
-      tracker.onRawMessage({
+        params: {
+          sessionId: 'child',
+          toolCall: { toolCallId: 'edit', title: 'Edit', status: 'pending' },
+          options: [{ optionId: 'allow', kind: 'allow_once', name: 'Allow once' }],
+        } satisfies RequestPermissionRequest,
+      },
+      {
         jsonrpc: '2.0',
         id: 6,
-        method: 'session/elicitation',
-        params: { sessionId: 'child' },
-      })
-    ).toBe(false);
+        method: 'elicitation/create',
+        params: {
+          sessionId: 'child',
+          mode: 'form',
+          message: 'Choose settings',
+          requestedSchema: { properties: { note: { type: 'string' } } },
+        } satisfies CreateElicitationRequest,
+      },
+    ];
+    const readable = new ReadableStream({
+      start(controller) {
+        for (const request of requests) {
+          controller.enqueue(request);
+        }
+        controller.close();
+      },
+    });
+    const reader = createNormalizedAcpReadableStream(readable, (message) =>
+      tracker.onRawMessage(message)
+    ).getReader();
+    for (const request of requests) {
+      const result = await reader.read();
+      expect(result.done).toBe(false);
+      expect(result.value).toBe(request);
+    }
+    expect(await reader.read()).toEqual({ done: true, value: undefined });
   });
 
   it('does not accept an unrelated session into the owned child tree', () => {

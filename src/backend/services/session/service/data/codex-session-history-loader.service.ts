@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { z } from 'zod';
 import { createLogger } from '@/backend/services/logger.service';
+import { normalizeCodexSessionId as normalizeProviderSessionId } from '@/backend/services/session/service/acp/acp-session-identity';
 import { summarizeZodIssues } from '@/backend/services/session/service/zod-issue-summary';
 import type { HistoryMessage } from '@/shared/acp-protocol';
 import { readNonEmptyJsonlLines } from './session-history-jsonl-reader';
@@ -85,12 +86,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isSafeProviderSessionId(providerSessionId: string): boolean {
   return SAFE_PROVIDER_SESSION_ID_PATTERN.test(providerSessionId);
-}
-
-function normalizeProviderSessionId(providerSessionId: string): string {
-  return providerSessionId.startsWith('sess_')
-    ? providerSessionId.slice('sess_'.length)
-    : providerSessionId;
 }
 
 function getProviderSessionIdCandidates(providerSessionId: string): string[] {

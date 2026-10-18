@@ -1,6 +1,6 @@
 import type { SessionConfigOption } from '@agentclientprotocol/sdk';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
-import { type AcpProcessHandle, toAcpSessionId } from '@/backend/services/session/service/acp';
+import type { AcpProcessHandle } from '@/backend/services/session/service/acp';
 import { parseAcpConfigSnapshot } from './acp-config-snapshot';
 import { getConfigOptionValues } from './session-config-option-helpers';
 export async function restorePRResumeConfig(
@@ -21,7 +21,7 @@ export async function restorePRResumeConfig(
     if (active.currentValue !== option.currentValue) {
       if (option.category === 'mode' && option.type === 'select') {
         await handle.connection.setSessionMode({
-          sessionId: toAcpSessionId(handle.provider, handle.providerSessionId),
+          sessionId: handle.acpSessionId,
           modeId: option.currentValue,
         });
         handle.configOptions = handle.configOptions.map((cached) =>
@@ -33,7 +33,7 @@ export async function restorePRResumeConfig(
         continue;
       }
       const restored = await handle.connection.setSessionConfigOption({
-        sessionId: toAcpSessionId(handle.provider, handle.providerSessionId),
+        sessionId: handle.acpSessionId,
         configId: option.id,
         ...(typeof option.currentValue === 'boolean'
           ? { type: 'boolean' as const, value: option.currentValue }
