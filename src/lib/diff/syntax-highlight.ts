@@ -17,7 +17,7 @@ import tsx from 'refractor/tsx';
 import {
   FILE_HIGHLIGHT_BLOCK_LINES,
   FILE_HIGHLIGHT_BLOCK_TOKENS,
-  isHighlightableFileBlock,
+  isFileBlockWithinByteBudget,
 } from './file-highlight-limits';
 import type { DiffLine } from './types';
 
@@ -259,7 +259,7 @@ function boundedFileTokens(content: string, tokenLines: SyntaxToken[][]): LineTo
     const end = Math.min(start + FILE_HIGHLIGHT_BLOCK_LINES, sourceLines.length);
     const blockContent =
       sourceLines.slice(start, end).join('\n') + (end < sourceLines.length ? '\n' : '');
-    if (!isHighlightableFileBlock(blockContent)) {
+    if (!isFileBlockWithinByteBudget(blockContent)) {
       continue;
     }
     let tokenCount = 0;
@@ -276,7 +276,10 @@ function boundedFileTokens(content: string, tokenLines: SyntaxToken[][]): LineTo
   return result;
 }
 
-/** Tokenize a complete file before splitting lines, preserving multiline syntax. */
+/**
+ * Tokenize and split the complete file to preserve multiline syntax. Budgets
+ * bound the transferred result, not tokenizer CPU or temporary worker memory.
+ */
 export function tokenizeFileContent(
   content: string,
   language: string,

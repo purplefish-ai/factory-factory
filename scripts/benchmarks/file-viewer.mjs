@@ -1,11 +1,26 @@
 import { chromium } from '@playwright/test';
+const input = process.argv[2] ?? 'http://127.0.0.1:5173/';
+const invalidOrigin = 'Expected an HTTP(S) origin without a path, query, hash, or credentials';
+let origin;
+try {
+  origin = new URL(input);
+} catch {
+  throw new Error(invalidOrigin);
+}
+if (
+  !['http:', 'https:'].includes(origin.protocol) ||
+  origin.pathname !== '/' ||
+  origin.search ||
+  origin.hash ||
+  origin.username ||
+  origin.password
+) {
+  throw new Error(invalidOrigin);
+}
 const browser = await chromium.launch({ channel: 'chrome', headless: true });
 try {
   const page = await browser.newPage();
-  await page.goto(
-    new URL('/scripts/benchmarks/file-viewer.html', process.argv[2] ?? 'http://127.0.0.1:5173/')
-      .href
-  );
+  await page.goto(new URL('/scripts/benchmarks/file-viewer.html', origin.origin).href);
   await page.waitForFunction(() => Boolean(window.fileViewerBenchmark));
   const result = await page.evaluate(async () => {
     const { createElement, createRoot, flushSync, FileCode, Prism } = window.fileViewerBenchmark;

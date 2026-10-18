@@ -3,7 +3,8 @@ export const FILE_HIGHLIGHT_BLOCK_LINES = 128;
 export const FILE_HIGHLIGHT_BLOCK_BYTES = 32_768;
 export const FILE_HIGHLIGHT_BLOCK_TOKENS = 4096;
 
-export function isHighlightableFileBlock(content: string): boolean {
+/** Cheap source-size preflight; the worker separately enforces the token budget. */
+export function isFileBlockWithinByteBudget(content: string): boolean {
   if (content.length > FILE_HIGHLIGHT_BLOCK_BYTES) {
     return false;
   }
