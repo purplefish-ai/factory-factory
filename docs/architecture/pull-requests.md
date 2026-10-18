@@ -52,6 +52,11 @@ changing destinations/recipients starts an observation epoch. MAIN queues one
 trusted enablement control; DEDICATED batches carry concise maintenance
 instructions in the same bounded event message. Collection projections report
 MERGED only when every attached PR is merged; an open sibling remains visible.
+
+Accepted per-PR `NONE` → `OPEN` observations notify the parent workspace once
+for each newly opened association, including attachment and discovery refreshes.
+Rejected or unchanged observations do not repeat the notification.
+
 Workspace snapshots include the plain `prs` collection and its `prSummary`. PR
 arrays are compared by identity and content, so database row order does not
 trigger drift warnings, version bumps, or snapshot broadcasts. Workspace and
