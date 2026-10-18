@@ -1,5 +1,9 @@
 import { performance } from 'node:perf_hooks';
-import { test } from 'vitest';
+import {
+  baselineRevision,
+  projectAcpTranscriptUpdates as projectBaselineTranscript,
+} from 'virtual:subagent-transcript-baseline';
+import { expect, test } from 'vitest';
 import { projectAcpTranscriptUpdates } from '../src/client/features/chat/project-acp-transcript';
 import type { SubagentTranscriptUpdate } from '../src/shared/acp-protocol/subagents';
 
@@ -40,24 +44,52 @@ function createUpdates(toolsPerTurn: number): SubagentTranscriptUpdate[] {
   return updates;
 }
 
-test('measure mixed subagent transcript projection', () => {
+function measureProjection(
+  project: typeof projectAcpTranscriptUpdates,
+  updates: SubagentTranscriptUpdate[],
+  samples: number[]
+) {
+  const start = performance.now();
+  const messages = project(updates);
+  samples.push(performance.now() - start);
+  return messages;
+}
+
+function median(samples: number[]): number | undefined {
+  return [...samples].sort((left, right) => left - right)[Math.floor(samples.length / 2)];
+}
+
+test('compare baseline and current mixed subagent transcript projection', () => {
   for (const toolsPerTurn of [5, 25, 100]) {
     const updates = createUpdates(toolsPerTurn);
     for (let iteration = 0; iteration < 3; iteration += 1) {
+      projectBaselineTranscript(updates);
       projectAcpTranscriptUpdates(updates);
     }
-    const samples: number[] = [];
-    for (let iteration = 0; iteration < 9; iteration += 1) {
-      const start = performance.now();
-      const messages = projectAcpTranscriptUpdates(updates);
-      samples.push(performance.now() - start);
-      if (messages.length !== 10 + 30 * toolsPerTurn) {
-        throw new Error(`Unexpected projected message count: ${messages.length}`);
-      }
+    const baselineSamples: number[] = [];
+    const currentSamples: number[] = [];
+    let first = { project: projectBaselineTranscript, samples: baselineSamples };
+    let second = { project: projectAcpTranscriptUpdates, samples: currentSamples };
+    for (let iteration = 0; iteration < 15; iteration += 1) {
+      const firstMessages = measureProjection(first.project, updates, first.samples);
+      const secondMessages = measureProjection(second.project, updates, second.samples);
+      // Check complete output outside the timed region, not just its length.
+      expect(firstMessages).toEqual(secondMessages);
+      expect(firstMessages).toHaveLength(10 + 30 * toolsPerTurn);
+      [first, second] = [second, first];
     }
-    const sorted = [...samples].sort((left, right) => left - right);
     console.log(
-      JSON.stringify({ toolsPerTurn, updates: updates.length, medianMs: sorted[4], samples })
+      JSON.stringify({
+        baselineRevision,
+        toolsPerTurn,
+        updates: updates.length,
+        warmupPairs: 3,
+        measuredPairs: 15,
+        baselineMedianMs: median(baselineSamples),
+        currentMedianMs: median(currentSamples),
+        baselineSamples,
+        currentSamples,
+      })
     );
   }
 });

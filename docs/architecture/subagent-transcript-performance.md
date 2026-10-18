@@ -28,10 +28,19 @@ pnpm exec vitest run --config scripts/bench-subagent-transcript.config.ts
 
 The benchmark config uses production mode. Each case contains ten user turns,
 pending tool calls, completed tool updates with 512-byte outputs, and an
-assistant text chunk after each tool. It warms up three times and prints nine
-samples plus their median for 5, 25, and 100 tools per turn (160, 760, and 3010
-updates). Copy the benchmark script and config unchanged to a baseline checkout
-when comparing revisions. Keep other CPU-heavy tasks idle for measurements.
+assistant text chunk after each tool. It runs three warm-up pairs and then 15
+measured pairs for 5, 25, and 100 tools per turn (160, 760, and 3010 updates).
+Each measured pair alternates which implementation runs first and compares the
+complete projected message arrays for equality outside the timed region. The
+output includes both sets of raw samples, their medians, and the baseline Git
+revision. Keep other CPU-heavy tasks idle for measurements.
+
+The config reads the historical projection directly with `git show` from
+`fc30bb563ef4d0dc66ca8e30a0ea4f87b640ecd6`; that commit must be available in the
+local Git history. Both implementations use this checkout's shared reducer and
+translator, matching the scope of the recorded comparison. A Vite virtual module
+loads the baseline without modifying source files or relying on temporary
+harness files.
 
 The regression test counts actual collected-message traversal work for a
 750-update page instead of enforcing a machine-dependent time limit. Semantic
@@ -41,7 +50,7 @@ IDs, partial inputs, terminal content, and independent pages.
 ## Recorded comparison
 
 On 2026-10-17, Apple M4 / Node 26.8.1 production-mode projection produced these
-medians against the pre-change implementation from
+medians in a temporary paired harness against the pre-change implementation from
 `fc30bb563ef4d0dc66ca8e30a0ea4f87b640ecd6`:
 
 | Updates |    Before |   After |
@@ -55,3 +64,8 @@ pairs, using the same ten-turn fixtures described above. Every pair compared the
 complete projected message arrays for equality, including IDs, orders,
 timestamps, and content. Other work on the shared host caused some sample
 variation; these are local measurements, not CI performance thresholds.
+
+The original temporary harness was not committed. The checked-in benchmark now
+implements its fixture, warm-up count, alternating pair count, full-array
+equality checks, and historical projection loading, so the same comparison can
+be rerun with the command above. Timings naturally vary by host and load.
