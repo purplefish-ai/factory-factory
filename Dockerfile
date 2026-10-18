@@ -32,6 +32,7 @@ RUN apk add --no-cache python3 make g++ git libc6-compat
 
 # Copy package manifests
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY patches/ ./patches/
 
 # Copy files needed by postinstall script (runs prisma generate + node-pty fixup)
 COPY scripts/postinstall.mjs scripts/
@@ -114,6 +115,7 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/pnpm-workspace.yaml ./
+COPY --from=builder /app/patches ./patches
 
 # Copy Prisma artifacts (migrations for runtime runner + generated client)
 COPY --from=builder /app/prisma/migrations ./prisma/migrations
