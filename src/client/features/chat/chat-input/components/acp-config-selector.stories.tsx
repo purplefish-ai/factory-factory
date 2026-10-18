@@ -33,3 +33,37 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const ClaudeModels: Story = {};
+
+export const CodexAccess: Story = {
+  args: {
+    configOption: {
+      id: 'mode',
+      name: 'Access',
+      type: 'select',
+      category: 'mode',
+      currentValue: 'workspace-write',
+      options: [
+        { value: 'read-only', name: 'Read-only' },
+        { value: 'workspace-write', name: 'Workspace access' },
+        { value: 'agent', name: 'Auto review' },
+        { value: 'agent-full-access', name: 'Full access' },
+      ],
+    },
+  },
+};
+
+export const CodexPlanning: Story = {
+  args: {
+    configOption: {
+      id: 'collaboration_mode',
+      name: 'Planning',
+      type: 'select',
+      category: 'collaboration_mode',
+      currentValue: 'plan',
+      options: [
+        { value: 'default', name: 'Default' },
+        { value: 'plan', name: 'Plan' },
+      ],
+    },
+  },
+};

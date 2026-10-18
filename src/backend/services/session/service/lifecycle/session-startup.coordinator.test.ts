@@ -186,6 +186,7 @@ describe('SessionStartupCoordinator', () => {
       },
     });
     h.runtimeManager.getOrCreateClient.mockImplementationOnce(() => {
+      h.runtimeManager.getClient.mockReturnValue(h.handle);
       h.repository.getSessionById.mockRejectedValue(new Error('metadata unavailable'));
       return Promise.resolve(h.handle);
     });

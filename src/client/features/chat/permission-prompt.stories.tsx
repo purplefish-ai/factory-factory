@@ -260,3 +260,67 @@ Add dark mode support across the application with user preference persistence.
     },
   },
 };
+
+export const UrlAuthorization: Story = {
+  args: {
+    permission: {
+      elicitation: 'url',
+      ...createPermissionRequest('Authorize URL', {
+        type: 'UrlElicitation',
+        message: 'Connect your account to continue.',
+        url: 'https://example.com/authorize',
+      }),
+      acpOptions: [
+        { optionId: 'accept', kind: 'allow_once', name: 'Authorize' },
+        { optionId: 'decline', kind: 'reject_once', name: 'Decline' },
+      ],
+    },
+  },
+};
+
+export const FormConsent: Story = {
+  args: {
+    permission: {
+      elicitation: 'form',
+      ...createPermissionRequest('Confirm request', {
+        type: 'FormElicitation',
+        message: 'Confirm the requested account action.',
+      }),
+      acpOptions: [
+        { optionId: 'accept', kind: 'allow_once', name: 'Confirm' },
+        { optionId: 'decline', kind: 'reject_once', name: 'Decline' },
+      ],
+    },
+  },
+};
+
+export const LongAcpCommand: Story = {
+  args: {
+    permission: {
+      ...createPermissionRequest('Run shell command', {
+        command: Array.from({ length: 30 }, (_, index) => `echo "Step ${index + 1}"`).join('\n'),
+      }),
+      acpOptions: [
+        { optionId: 'allow_once', kind: 'allow_once', name: 'Allow once' },
+        { optionId: 'reject_once', kind: 'reject_once', name: 'Reject' },
+      ],
+    },
+  },
+};
+
+export const OrdinaryToolWithElicitationLikeArguments: Story = {
+  args: {
+    permission: {
+      ...createPermissionRequest('Run shell command', {
+        type: 'UrlElicitation',
+        command: 'pnpm test',
+        message: 'An ordinary tool argument',
+        url: 'https://example.com',
+      }),
+      acpOptions: [
+        { optionId: 'allow_once', kind: 'allow_once', name: 'Allow once' },
+        { optionId: 'reject_once', kind: 'reject_once', name: 'Reject' },
+      ],
+    },
+  },
+};

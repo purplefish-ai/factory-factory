@@ -52,6 +52,7 @@ vi.mock('@/backend/services/session/service/acp', async (importOriginal) => {
   return {
     ...actual,
     AcpEventTranslator: class MockAcpEventTranslator {
+      clearTerminalOutput = vi.fn();
       translateSessionUpdate = vi.fn().mockReturnValue([]);
     },
     AcpPermissionBridge: class MockAcpPermissionBridge {
@@ -91,6 +92,7 @@ import type { AcpProcessHandle } from '@/backend/services/session/service/acp';
 import { acpRuntimeManager } from '@/backend/services/session/service/acp';
 import { workspaceDataService } from '@/backend/services/workspace';
 import { closedSessionPersistenceService } from './closed-session-persistence.service';
+import { mockCreatedAcpClient } from './session-lifecycle.test-helpers';
 import {
   acpEventProcessor,
   sessionLifecycleService,
@@ -106,12 +108,6 @@ const activeRuntime = {
 } as const;
 
 const getAcpProcessorState = () => acpEventProcessor;
-function mockCreatedAcpClient(acpHandle: AcpProcessHandle): void {
-  vi.mocked(acpRuntimeManager.getOrCreateClient).mockImplementation(() => {
-    vi.mocked(acpRuntimeManager.getClient).mockReturnValue(acpHandle);
-    return Promise.resolve(acpHandle);
-  });
-}
 describe('retained legacy runtime exit', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -182,7 +178,7 @@ describe('retained legacy runtime exit', () => {
     vi.mocked(sessionRepository.updateSession).mockResolvedValue(session);
     vi.mocked(sessionRepository.deleteSession).mockResolvedValue(session);
 
-    mockCreatedAcpClient(acpHandle);
+    mockCreatedAcpClient(acpRuntimeManager, acpHandle);
     vi.mocked(acpRuntimeManager.sendPrompt).mockResolvedValue({ stopReason: 'end_turn' });
     const clearSessionSpy = vi.spyOn(sessionDomainService, 'clearSession');
 
@@ -255,7 +251,7 @@ describe('retained legacy runtime exit', () => {
       new Error('Disk full')
     );
 
-    mockCreatedAcpClient(acpHandle);
+    mockCreatedAcpClient(acpRuntimeManager, acpHandle);
     vi.mocked(acpRuntimeManager.sendPrompt).mockResolvedValue({ stopReason: 'end_turn' });
 
     // Install an ordinary runtime; exit reads the retained legacy workflow row.

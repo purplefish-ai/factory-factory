@@ -217,6 +217,7 @@ function handlePermissionRequestMessage(data: WebSocketMessage): ChatAction | nu
         requestId: data.requestId,
         toolName: data.toolName,
         toolInput: data.toolInput ?? {},
+        ...(data.elicitation ? { elicitation: data.elicitation } : {}),
         timestamp: new Date().toISOString(),
         // Include plan content for ExitPlanMode requests
         planContent: data.planContent ?? null,

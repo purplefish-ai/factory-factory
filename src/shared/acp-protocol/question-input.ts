@@ -1,5 +1,9 @@
 import { z } from 'zod';
 import type { AskUserQuestion } from './protocol/interaction';
+import { questionValidationSchema } from './question-validation';
+
+export type { AskUserQuestion };
+export { compileQuestionPattern, getStringAnswerError } from './question-validation';
 
 const nonEmptyText = z.string().refine((value) => value.trim().length > 0);
 const questionInputSchema = z
@@ -12,6 +16,7 @@ const questionInputSchema = z
         .array(
           z.object({
             label: nonEmptyText,
+            value: nonEmptyText.optional(),
             description: z
               .unknown()
               .optional()
@@ -21,6 +26,9 @@ const questionInputSchema = z
         .nullish()
         .transform((options) => options ?? []),
       multiSelect: z.boolean().optional(),
+      optional: z.boolean().optional(),
+      allowOther: z.boolean().optional(),
+      validation: questionValidationSchema.optional(),
     })
   )
   .min(1);

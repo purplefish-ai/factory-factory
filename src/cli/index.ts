@@ -9,8 +9,8 @@ import { Command } from 'commander';
 import { config } from 'dotenv';
 import open from 'open';
 import { runMigrations as runDbMigrations } from '@/backend/migrate';
-import { createLogger, getLogFilePath } from '@/backend/services/logger.service';
-import { runCodexAppServerAcpAdapter } from '@/backend/services/session';
+import { getLogFilePath } from '@/backend/services/logger.service';
+import { registerCodexCommand } from './codex';
 import { resolveDatabasePath } from './database-path';
 import { runProxyCommand } from './proxy';
 import { ensureDataDir, findAvailablePort, treeKillAsync, waitForPort } from './runtime-utils';
@@ -678,17 +678,8 @@ program
     await runProxyCommand({ options, projectRoot: PROJECT_ROOT });
   });
 
-// ============================================================================
-// internal commands (hidden)
-// ============================================================================
-
-const internalProgram = program.command('internal', { hidden: true });
-internalProgram.command('codex-app-server-acp').action(() => {
-  const logger = createLogger('codex-app-server-acp-adapter');
-  runCodexAppServerAcpAdapter({
-    shapeDriftWarn: (message, context) => logger.warn(message, context),
-  });
-});
+// Run login and native CLI commands using the same Codex bundled with ACP.
+registerCodexCommand(program);
 
 // ============================================================================
 // Parse and run

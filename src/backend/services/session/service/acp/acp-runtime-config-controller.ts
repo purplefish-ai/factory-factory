@@ -14,7 +14,7 @@ export class AcpRuntimeConfigController {
   ): Promise<SessionConfigOption[]> {
     try {
       const response = await handle.connection.setSessionConfigOption({
-        sessionId: handle.providerSessionId,
+        sessionId: handle.acpSessionId,
         configId,
         value,
       });
@@ -42,7 +42,7 @@ export class AcpRuntimeConfigController {
   ): Promise<SessionConfigOption[]> {
     try {
       await handle.connection.setSessionMode({
-        sessionId: handle.providerSessionId,
+        sessionId: handle.acpSessionId,
         modeId,
       });
 

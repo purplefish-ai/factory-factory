@@ -87,7 +87,7 @@ export function normalizeSessionConfigOptions(
     if (
       configOption.type !== 'select' ||
       configOption.category ||
-      (configOption.id !== 'model' && configOption.id !== 'mode')
+      !['model', 'mode', 'collaboration_mode'].includes(configOption.id)
     ) {
       return configOption;
     }

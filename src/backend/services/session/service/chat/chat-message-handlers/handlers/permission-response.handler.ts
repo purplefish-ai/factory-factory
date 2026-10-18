@@ -29,6 +29,7 @@ export function createPermissionResponseHandler(deps: {
         sendWebSocketError(ws, 'No pending ACP permission request found for this request ID');
         return;
       }
+      clearPendingInteractiveRequest(sessionId, requestId);
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Responded to permission request', {
           sessionId,
@@ -45,8 +46,6 @@ export function createPermissionResponseHandler(deps: {
         error: errorMessage,
       });
       sendWebSocketError(ws, `Failed to respond to permission: ${errorMessage}`);
-    } finally {
-      clearPendingInteractiveRequest(sessionId, requestId);
     }
   };
 }

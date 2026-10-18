@@ -5,8 +5,12 @@ import {
   type SubagentBrowseCapability,
   subagentBrowseCapabilitySchema,
 } from '@/shared/acp-protocol/subagents';
+import type { AcpNativeSessionTracker } from './acp-native-session-tracker';
 import type { AcpPermissionBridge } from './acp-permission-bridge';
+import { type AcpConfigurationLease, AcpPromptReadiness } from './acp-prompt-readiness';
 import type { AcpSessionCreationOutcome } from './acp-session-creation-outcome';
+import { toAcpSessionId } from './acp-session-identity';
+import type { AcpProvider } from './types';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -16,19 +20,23 @@ export class AcpProcessHandle {
   readonly connection: ClientSideConnection;
   readonly child: ChildProcess;
   readonly permissionBridge?: AcpPermissionBridge;
-  readonly provider: string;
+  readonly provider: AcpProvider;
+  readonly nativeSessionTracker?: AcpNativeSessionTracker;
   providerSessionId: string;
   agentCapabilities: Record<string, unknown>;
   isPromptInFlight: boolean;
   configOptions: SessionConfigOption[];
   readonly createdAt: Date;
   readonly sessionCreationOutcome: AcpSessionCreationOutcome;
+  private readonly promptReadiness = new AcpPromptReadiness();
+  private initialConfiguration?: AcpConfigurationLease;
 
   constructor(params: {
     connection: ClientSideConnection;
     child: ChildProcess;
     permissionBridge?: AcpPermissionBridge;
-    provider: string;
+    nativeSessionTracker?: AcpNativeSessionTracker;
+    provider: AcpProvider;
     providerSessionId: string;
     sessionCreationOutcome?: AcpSessionCreationOutcome;
     agentCapabilities: Record<string, unknown>;
@@ -36,6 +44,7 @@ export class AcpProcessHandle {
     this.connection = params.connection;
     this.child = params.child;
     this.permissionBridge = params.permissionBridge;
+    this.nativeSessionTracker = params.nativeSessionTracker;
     this.provider = params.provider;
     this.providerSessionId = params.providerSessionId;
     this.sessionCreationOutcome = params.sessionCreationOutcome ?? { kind: 'new' };
@@ -43,6 +52,31 @@ export class AcpProcessHandle {
     this.isPromptInFlight = false;
     this.configOptions = [];
     this.createdAt = new Date();
+  }
+
+  get acpSessionId(): string {
+    return toAcpSessionId(this.provider, this.providerSessionId);
+  }
+
+  get configurationReady(): Promise<void> | undefined {
+    return this.promptReadiness.wait();
+  }
+
+  beginConfiguration(): AcpConfigurationLease {
+    return this.promptReadiness.begin();
+  }
+
+  deferPromptReadiness(): void {
+    this.initialConfiguration ??= this.beginConfiguration();
+  }
+
+  completeConfiguration(assertCurrent?: () => void): void {
+    assertCurrent?.();
+    this.initialConfiguration?.complete();
+  }
+
+  failConfiguration(error: unknown): void {
+    this.promptReadiness.fail(error);
   }
 
   supportsImages(): boolean {
@@ -53,6 +87,9 @@ export class AcpProcessHandle {
   }
 
   getSubagentBrowseCapability(): SubagentBrowseCapability | null {
+    if (this.nativeSessionTracker?.isAvailable()) {
+      return { version: 1, list: true, read: true, notifications: true };
+    }
     const meta = this.agentCapabilities._meta;
     if (!isRecord(meta)) {
       return null;

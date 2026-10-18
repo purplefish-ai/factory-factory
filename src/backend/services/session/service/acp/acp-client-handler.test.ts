@@ -2,7 +2,7 @@ import type { RequestPermissionRequest } from '@agentclientprotocol/sdk';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SUBAGENTS_CHANGED_METHOD } from '@/shared/acp-protocol/subagents';
 import { AcpClientHandler, type AcpEventCallback, type AcpLogCallback } from './acp-client-handler';
-import type { AcpPermissionBridge } from './acp-permission-bridge';
+import { AcpPermissionBridge } from './acp-permission-bridge';
 
 const mockLogger = vi.hoisted(() => ({
   debug: vi.fn(),
@@ -42,280 +42,97 @@ describe('AcpClientHandler', () => {
     vi.clearAllMocks();
   });
 
-  describe('requestPermission with autoApprovePolicy', () => {
-    it('auto-approves with allow_always when autoApprovePolicy is "all"', async () => {
-      const handler = new AcpClientHandler('session-1', onEvent, undefined, onLog, 'all');
-      const params = createMockPermissionRequest();
-
-      const response = await handler.requestPermission(params);
-
-      expect(response.outcome).toEqual({
-        outcome: 'selected',
-        optionId: 'allow_always',
-      });
-    });
-
-    it('selects first allow option from the options list when auto-approving', async () => {
-      const handler = new AcpClientHandler('session-1', onEvent, undefined, onLog, 'all');
-      const params = createMockPermissionRequest({
-        options: [
-          { optionId: 'opt-reject', kind: 'reject_once', name: 'Reject' },
-          { optionId: 'opt-allow-always', kind: 'allow_always', name: 'Allow for session' },
-          { optionId: 'opt-allow-once', kind: 'allow_once', name: 'Allow once' },
-        ],
-      } as Partial<RequestPermissionRequest>);
-
-      const response = await handler.requestPermission(params);
-
-      expect(response.outcome).toHaveProperty('optionId');
-      expect((response.outcome as Record<string, unknown>).optionId).toBe('opt-allow-always');
-    });
-
-    it('falls back to allow_once when allow_always is not available', async () => {
-      const handler = new AcpClientHandler('session-1', onEvent, undefined, onLog, 'all');
-      const params = createMockPermissionRequest({
-        options: [
-          { optionId: 'opt-allow-once', kind: 'allow_once', name: 'Allow once' },
-          { optionId: 'opt-reject', kind: 'reject_once', name: 'Reject' },
-        ],
-      } as Partial<RequestPermissionRequest>);
-
-      const response = await handler.requestPermission(params);
-
-      expect(response.outcome).toHaveProperty('optionId');
-      expect((response.outcome as Record<string, unknown>).optionId).toBe('opt-allow-once');
-    });
-
-    it('logs the auto-approved permission request', async () => {
-      const logFn = vi.fn();
-      const handler = new AcpClientHandler('session-1', onEvent, undefined, logFn, 'all');
-      const params = createMockPermissionRequest();
-
-      await handler.requestPermission(params);
-
-      expect(logFn).toHaveBeenCalledWith(
-        'session-1',
-        expect.objectContaining({
-          eventType: 'acp_permission_request',
-          toolCallId: 'tc-001',
-        })
-      );
-    });
-
-    it('does not emit permission request event to WebSocket when auto-approving', async () => {
-      const eventFn = vi.fn();
-      const handler = new AcpClientHandler('session-1', eventFn, undefined, onLog, 'all');
-      const params = createMockPermissionRequest();
-
-      await handler.requestPermission(params);
-
-      expect(eventFn).not.toHaveBeenCalled();
-    });
-
-    it('forwards to permission bridge when autoApprovePolicy is "none"', async () => {
-      const bridge = {
-        resolveAutomaticPermission: vi.fn(),
-        waitForUserResponse: vi.fn().mockResolvedValue({
-          outcome: { outcome: 'selected', optionId: 'allow_once' },
-        }),
-      } as unknown as AcpPermissionBridge;
-      const eventFn = vi.fn();
-      const handler = new AcpClientHandler('session-1', eventFn, bridge, onLog, 'none');
-      const params = createMockPermissionRequest();
-
-      const response = await handler.requestPermission(params);
-
-      expect(bridge.waitForUserResponse).toHaveBeenCalled();
-      expect(eventFn).toHaveBeenCalledWith(
-        'session-1',
-        expect.objectContaining({
-          type: 'acp_permission_request',
-        })
-      );
-      expect(response.outcome).toHaveProperty('optionId');
-      expect((response.outcome as Record<string, unknown>).optionId).toBe('allow_once');
-    });
-
-    it('defaults to "none" policy when autoApprovePolicy is not provided', async () => {
-      const bridge = {
-        resolveAutomaticPermission: vi.fn(),
-        waitForUserResponse: vi.fn().mockResolvedValue({
-          outcome: { outcome: 'selected', optionId: 'allow_once' },
-        }),
-      } as unknown as AcpPermissionBridge;
-      const handler = new AcpClientHandler('session-1', onEvent, bridge, onLog);
-      const params = createMockPermissionRequest();
-
-      await handler.requestPermission(params);
-
-      expect(bridge.waitForUserResponse).toHaveBeenCalled();
-    });
-
-    it('auto-approves even when permission bridge is present in "all" mode', async () => {
-      const bridge = {
-        resolveAutomaticPermission: vi.fn(),
-        waitForUserResponse: vi.fn(),
-      } as unknown as AcpPermissionBridge;
-      const handler = new AcpClientHandler('session-1', onEvent, bridge, onLog, 'all');
-      const params = createMockPermissionRequest();
-
-      const response = await handler.requestPermission(params);
-
-      expect(bridge.waitForUserResponse).not.toHaveBeenCalled();
-      expect(response.outcome).toEqual({
-        outcome: 'selected',
-        optionId: 'allow_always',
-      });
-    });
-
-    it('fails closed when permission bridge is missing and autoApprovePolicy is "none"', async () => {
-      const handler = new AcpClientHandler('session-1', onEvent, undefined, onLog, 'none');
-      const params = createMockPermissionRequest({
-        options: [
-          { optionId: 'opt-allow', kind: 'allow_once', name: 'Allow' },
-          { optionId: 'opt-reject', kind: 'reject_once', name: 'Reject' },
-        ],
-      } as Partial<RequestPermissionRequest>);
-
-      const response = await handler.requestPermission(params);
-
-      expect(response.outcome).toEqual({
-        outcome: 'selected',
-        optionId: 'opt-reject',
-      });
-    });
-
-    it('cancels when failing closed and no reject option is available', async () => {
-      const handler = new AcpClientHandler('session-1', onEvent, undefined, onLog, 'none');
-      const params = createMockPermissionRequest({
-        options: [{ optionId: 'opt-allow', kind: 'allow_once', name: 'Allow' }],
-      } as Partial<RequestPermissionRequest>);
-
-      const response = await handler.requestPermission(params);
-
-      expect(response.outcome).toEqual({
-        outcome: 'cancelled',
+  describe('permission requests', () => {
+    it('warns when a missing permission bridge fails closed', async () => {
+      const handler = new AcpClientHandler('session-1', onEvent);
+      await expect(handler.requestPermission(createMockPermissionRequest())).resolves.toEqual({
+        outcome: { outcome: 'selected', optionId: 'reject_once' },
       });
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        'Permission bridge missing; cancelling ACP permission request',
-        expect.objectContaining({
-          sessionId: 'session-1',
-          toolCallId: 'tc-001',
-          requestType: 'permission',
-        })
-      );
-      expect(mockLogger.warn).not.toHaveBeenCalledWith(
-        expect.stringContaining('rejecting ACP permission request'),
-        expect.anything()
+        'Permission bridge missing; failing closed on ACP permission request',
+        { sessionId: 'session-1', toolCallId: 'tc-001' }
       );
     });
 
-    it('does not auto-approve ExitPlanMode requests even in "all" mode', async () => {
-      const bridge = {
-        resolveAutomaticPermission: vi.fn(),
-        waitForUserResponse: vi.fn().mockResolvedValue({
-          outcome: { outcome: 'selected', optionId: 'plan' },
-        }),
-      } as unknown as AcpPermissionBridge;
+    it('warns when a missing permission bridge cancels elicitation', async () => {
+      const handler = new AcpClientHandler('session-1', onEvent);
+      await expect(
+        handler.createElicitation({
+          mode: 'form',
+          sessionId: 'provider-1',
+          message: 'Input',
+          requestedSchema: { properties: {} },
+        })
+      ).resolves.toEqual({ action: 'cancel' });
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Permission bridge missing; cancelling ACP elicitation',
+        { sessionId: 'session-1', mode: 'form' }
+      );
+    });
+
+    it('requires an explicit choice for ordinary tool requests', async () => {
+      const bridge = new AcpPermissionBridge();
       const eventFn = vi.fn();
-      const handler = new AcpClientHandler('session-1', eventFn, bridge, onLog, 'all');
-      const params = createMockPermissionRequest({
-        toolCall: {
-          toolCallId: 'tc-exit-plan',
+      const handler = new AcpClientHandler('session-1', eventFn, bridge, onLog);
+      const response = handler.requestPermission(createMockPermissionRequest());
+      const event = eventFn.mock.calls[0]![1];
+      expect(bridge.pendingCount).toBe(1);
+      expect(event.params.toolCall.title).toBe('Write file');
+      bridge.resolvePermission(event.requestId, 'allow_once');
+      await expect(response).resolves.toEqual({
+        outcome: { outcome: 'selected', optionId: 'allow_once' },
+      });
+    });
+
+    it.each([true, false])(
+      'normalizes upstream plan review (metadata=%s) and preserves provider options',
+      async (metadata) => {
+        const bridge = new AcpPermissionBridge();
+        const eventFn = vi.fn();
+        const handler = new AcpClientHandler('session-1', eventFn, bridge, onLog);
+        const params = createMockPermissionRequest({
+          ...(metadata ? { _meta: { codex: { kind: 'plan_review' } } } : {}),
+          toolCall: {
+            toolCallId: 'plan-review:1',
+            title: metadata ? 'Review this proposal' : 'Implement this plan?',
+            kind: 'switch_mode',
+            rawInput: { plan: '# Plan' },
+          },
+          options: [
+            { optionId: 'implement_plan', kind: 'allow_once', name: 'Implement' },
+            { optionId: 'revise_plan', kind: 'reject_once', name: 'Revise' },
+          ],
+        });
+        const response = handler.requestPermission(params);
+        const event = eventFn.mock.calls[0]![1];
+        expect(event.params.toolCall).toMatchObject({
           title: 'ExitPlanMode',
-          status: 'pending',
-          rawInput: { type: 'ExitPlanMode' },
-        },
-        options: [
-          { optionId: 'default', kind: 'allow_once', name: 'Approve Plan' },
-          { optionId: 'plan', kind: 'reject_once', name: 'Keep Planning' },
-        ],
+          rawInput: { type: 'ExitPlanMode', plan: '# Plan', providerContinuesAfterApproval: true },
+        });
+        expect(event.params.options).toEqual(params.options);
+        bridge.resolvePermission(event.requestId, 'implement_plan');
+        await expect(response).resolves.toEqual({
+          outcome: { outcome: 'selected', optionId: 'implement_plan' },
+        });
+      }
+    );
+
+    it('preserves the reviewer automatic rejection policy', async () => {
+      const bridge = new AcpPermissionBridge(undefined, () => ({
+        outcome: { outcome: 'selected', optionId: 'reject_once' },
+      }));
+      const handler = new AcpClientHandler('session-1', onEvent, bridge, onLog);
+      await expect(handler.requestPermission(createMockPermissionRequest())).resolves.toEqual({
+        outcome: { outcome: 'selected', optionId: 'reject_once' },
       });
-
-      const response = await handler.requestPermission(params);
-
-      expect(bridge.waitForUserResponse).toHaveBeenCalled();
-      expect(eventFn).toHaveBeenCalledWith(
-        'session-1',
-        expect.objectContaining({
-          type: 'acp_permission_request',
-        })
-      );
-      expect(response.outcome).toEqual({
-        outcome: 'selected',
-        optionId: 'plan',
-      });
-    });
-
-    it('does not auto-approve requestUserInput prompts even in "all" mode', async () => {
-      const bridge = {
-        resolveAutomaticPermission: vi.fn(),
-        waitForUserResponse: vi.fn().mockResolvedValue({
-          outcome: { outcome: 'selected', optionId: 'allow_once' },
-        }),
-      } as unknown as AcpPermissionBridge;
-      const eventFn = vi.fn();
-      const handler = new AcpClientHandler('session-1', eventFn, bridge, onLog, 'all');
-      const params = createMockPermissionRequest({
-        toolCall: {
-          toolCallId: 'tc-user-input',
-          title: 'item/tool/requestUserInput',
-          status: 'pending',
-          rawInput: {
-            questions: [{ id: 'q1', question: 'Select an option', options: [{ label: 'A' }] }],
-          },
-        },
-        options: [
-          { optionId: 'allow_once', kind: 'allow_once', name: 'Submit' },
-          { optionId: 'reject_once', kind: 'reject_once', name: 'Cancel' },
-        ],
-      });
-
-      const response = await handler.requestPermission(params);
-
-      expect(bridge.waitForUserResponse).toHaveBeenCalled();
-      expect(eventFn).toHaveBeenCalledWith(
-        'session-1',
-        expect.objectContaining({
-          type: 'acp_permission_request',
-        })
-      );
-      expect(response.outcome).toEqual({
-        outcome: 'selected',
-        optionId: 'allow_once',
-      });
-    });
-
-    it('fails closed for requestUserInput when permission bridge is missing', async () => {
-      const handler = new AcpClientHandler('session-1', onEvent, undefined, onLog, 'all');
-      const params = createMockPermissionRequest({
-        toolCall: {
-          toolCallId: 'tc-user-input-no-bridge',
-          title: 'item/tool/requestUserInput',
-          status: 'pending',
-          rawInput: {
-            questions: [{ id: 'q1', question: 'Select an option', options: [{ label: 'A' }] }],
-          },
-        },
-        options: [
-          { optionId: 'allow_once', kind: 'allow_once', name: 'Submit' },
-          { optionId: 'reject_once', kind: 'reject_once', name: 'Cancel' },
-        ],
-      });
-
-      const response = await handler.requestPermission(params);
-
-      expect(response.outcome).toEqual({
-        outcome: 'selected',
-        optionId: 'reject_once',
-      });
+      expect(onEvent).not.toHaveBeenCalled();
     });
   });
 
   describe('extension notifications', () => {
     it('dispatches task activity changes under the DB session ID', async () => {
       const eventFn = vi.fn();
-      const handler = new AcpClientHandler('db-session-1', eventFn, undefined, vi.fn(), 'all');
+      const handler = new AcpClientHandler('db-session-1', eventFn, undefined, vi.fn());
 
       await handler.extNotification('factoryfactory.ai/task/status-changed', {
         sessionId: 'provider-session-123',
@@ -331,7 +148,7 @@ describe('AcpClientHandler', () => {
     it('logs then dispatches a valid sub-agent change under the DB session ID', async () => {
       const eventFn = vi.fn();
       const logFn = vi.fn();
-      const handler = new AcpClientHandler('db-session-1', eventFn, undefined, logFn, 'all');
+      const handler = new AcpClientHandler('db-session-1', eventFn, undefined, logFn);
 
       await handler.extNotification(SUBAGENTS_CHANGED_METHOD, {
         sessionId: 'provider-session-123',
@@ -359,7 +176,7 @@ describe('AcpClientHandler', () => {
     it('logs and ignores unknown extension notifications', async () => {
       const eventFn = vi.fn();
       const logFn = vi.fn();
-      const handler = new AcpClientHandler('db-session-1', eventFn, undefined, logFn, 'all');
+      const handler = new AcpClientHandler('db-session-1', eventFn, undefined, logFn);
 
       await expect(
         handler.extNotification('example.invalid/changed', { value: 1 })
@@ -376,7 +193,7 @@ describe('AcpClientHandler', () => {
     it('logs and ignores malformed known extension notifications', async () => {
       const eventFn = vi.fn();
       const logFn = vi.fn();
-      const handler = new AcpClientHandler('db-session-1', eventFn, undefined, logFn, 'all');
+      const handler = new AcpClientHandler('db-session-1', eventFn, undefined, logFn);
       const malformed = {
         sessionId: 'provider-session-123',
         subagentId: '',

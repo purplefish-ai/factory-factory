@@ -83,10 +83,7 @@ describe('createPermissionResponseHandler', () => {
         message: 'No pending ACP permission request found for this request ID',
       })
     );
-    expect(mocks.clearPendingInteractiveRequestIfMatches).toHaveBeenCalledWith(
-      'session-1',
-      'req-2'
-    );
+    expect(mocks.clearPendingInteractiveRequestIfMatches).not.toHaveBeenCalled();
   });
 
   it('sends websocket error when permission response throws', () => {
@@ -117,9 +114,6 @@ describe('createPermissionResponseHandler', () => {
         message: 'Failed to respond to permission: bridge down',
       })
     );
-    expect(mocks.clearPendingInteractiveRequestIfMatches).toHaveBeenCalledWith(
-      'session-1',
-      'req-3'
-    );
+    expect(mocks.clearPendingInteractiveRequestIfMatches).not.toHaveBeenCalled();
   });
 });

@@ -1,6 +1,7 @@
 import type { SessionConfigOption } from '@agentclientprotocol/sdk';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { workspaceNotificationService } from '@/backend/services/workspace';
+import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { createLifecycleHarness, type LifecycleHarness } from './session-lifecycle.test-helpers';
 import {
   SessionStartupCoordinator,
@@ -43,13 +44,13 @@ it.each(['CLAUDE', 'CODEX'] as const)(
   'restores the existing %s config without applying current defaults',
   async (provider) => {
     const mode = {
-      id: 'mode',
-      name: 'Mode',
+      id: provider === 'CODEX' ? 'collaboration_mode' : 'mode',
+      name: 'Planning',
       type: 'select' as const,
       currentValue: 'plan',
       options: [
         { value: 'plan', name: 'Plan' },
-        { value: 'code', name: 'Code' },
+        { value: 'default', name: 'Default' },
       ],
     };
     const thinking = {
@@ -68,22 +69,41 @@ it.each(['CLAUDE', 'CODEX'] as const)(
         { value: 'low', name: 'Low' },
       ],
     };
-    const options: SessionConfigOption[] = [mode, effort, thinking];
+    const access: SessionConfigOption[] =
+      provider === 'CODEX'
+        ? [
+            {
+              id: 'mode',
+              name: 'Access',
+              category: 'mode',
+              type: 'select',
+              currentValue: 'workspace-write',
+              options: ['workspace-write', 'agent-full-access'].map((value) => ({
+                value,
+                name: value,
+              })),
+            },
+          ]
+        : [];
+    const options: SessionConfigOption[] = [...access, mode, effort, thinking];
     const harness = createLifecycleHarness({
       provider,
       session: {
         providerSessionId: 'existing',
-        providerMetadata: {
+        providerMetadata: unsafeCoerce({
           acpConfigSnapshot: {
             provider,
             providerSessionId: 'existing',
-            configOptions: [mode, effort, thinking],
+            configOptions: options,
           },
-        },
+        }),
       },
     });
     harness.handle.configOptions = [
-      { ...mode, currentValue: 'code' },
+      ...access.map((option): SessionConfigOption =>
+        option.type === 'select' ? { ...option, currentValue: 'agent-full-access' } : option
+      ),
+      { ...mode, currentValue: 'default' },
       { ...effort, currentValue: 'low' },
       { ...thinking, currentValue: false },
     ];
@@ -138,6 +158,10 @@ it.each(['CLAUDE', 'CODEX'] as const)(
 );
 it('rejects an unavailable existing configuration before any background turn', async () => {
   const harness = createLifecycleHarness({ session: { providerSessionId: 'existing' } });
+  harness.runtimeManager.getOrCreateClient.mockImplementationOnce(() => {
+    harness.runtimeManager.getClient.mockReturnValue(harness.handle);
+    return Promise.resolve(harness.handle);
+  });
   await expect(
     createStartupCoordinator(harness).getOrCreateSessionClient('session-1', {
       resumePolicy: 'require_existing',

@@ -15,6 +15,11 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
+import {
+  NATIVE_PERMISSION_OPTIONS,
+  NATIVE_PERMISSION_DESCRIPTION,
+  isNativePermissionPreset,
+} from './native-permission-copy';
 
 export function RatchetSettingsSection() {
   const { data: settings, isLoading } = trpc.userSettings.get.useQuery();
@@ -189,7 +194,7 @@ export function RatchetSettingsSection() {
             <Select
               value={currentRatchetPermissions}
               onValueChange={(value) => {
-                if (value === 'STRICT' || value === 'RELAXED' || value === 'YOLO') {
+                if (isNativePermissionPreset(value)) {
                   updateSettings.mutate({ autoIterationPermissions: value });
                 }
               }}
@@ -199,14 +204,15 @@ export function RatchetSettingsSection() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="STRICT">Strict</SelectItem>
-                <SelectItem value="RELAXED">Relaxed</SelectItem>
-                <SelectItem value="YOLO">YOLO</SelectItem>
+                {NATIVE_PERMISSION_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              Controls permissions for separate auto-iteration sessions. PR updates inherit the main
-              conversation’s settings.
+              {NATIVE_PERMISSION_DESCRIPTION} PR updates inherit the main conversation’s settings.
             </p>
           </div>
         </CardContent>

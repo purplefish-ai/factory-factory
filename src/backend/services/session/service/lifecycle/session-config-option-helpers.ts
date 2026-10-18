@@ -223,7 +223,11 @@ export function buildCapabilitiesFromConfigOptions(
   fallbackModel?: string
 ): ChatBarCapabilities {
   const modelOption = configOptions.find((option) => option.category === 'model');
-  const modeOption = configOptions.find((option) => option.category === 'mode');
+  const modeOption = configOptions.find((option) =>
+    provider === 'CODEX'
+      ? option.id === 'collaboration_mode' || option.category === 'collaboration_mode'
+      : option.category === 'mode'
+  );
   const thoughtOption = configOptions.find(
     (option) =>
       option.category === 'thought_level' ||

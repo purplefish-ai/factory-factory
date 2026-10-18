@@ -11,10 +11,6 @@ const PROVIDER_INFO = {
     label: 'Claude',
     installUrl: 'https://claude.ai/download',
   },
-  CODEX: {
-    label: 'Codex',
-    installUrl: 'https://developers.openai.com/codex/app-server/',
-  },
 } as const;
 
 function getWarning(
@@ -41,9 +37,8 @@ function getWarning(
   linkUrl?: string;
   canUpgrade?: boolean;
 } | null {
-  const info = PROVIDER_INFO[provider];
-
   if (provider === 'CLAUDE') {
+    const info = PROVIDER_INFO.CLAUDE;
     if (!health.claude.isInstalled) {
       return {
         title: `${info.label} CLI is not installed`,
@@ -66,30 +61,16 @@ function getWarning(
     return null;
   }
 
-  // Codex
   if (!health.codex.isInstalled) {
     return {
-      title: `${info.label} CLI is not installed`,
-      description: `Install the ${info.label} CLI to use this provider.`,
-      linkLabel: 'Install',
-      linkUrl: info.installUrl,
+      title: 'Codex runtime is unavailable',
+      description: 'Update or reinstall Factory Factory to restore its bundled Codex runtime.',
     };
   }
   if (health.codex.isAuthenticated === false) {
     return {
-      title: `${info.label} CLI is not authenticated`,
-      description: 'Run `codex login` in your terminal to authenticate.',
-    };
-  }
-  if (health.codex.isOutdated) {
-    const installed = health.codex.version ?? 'unknown';
-    const latest = health.codex.latestVersion ?? 'latest';
-    return {
-      title: `${info.label} CLI is out of date`,
-      description: `Installed ${installed}; latest is ${latest}. Upgrade to avoid compatibility issues.`,
-      linkLabel: 'Upgrade',
-      linkUrl: info.installUrl,
-      canUpgrade: true,
+      title: 'Codex is not authenticated',
+      description: 'Run `ff codex login` in your terminal to authenticate.',
     };
   }
   return null;

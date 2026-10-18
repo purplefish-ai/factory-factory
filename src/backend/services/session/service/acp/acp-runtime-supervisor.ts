@@ -195,6 +195,9 @@ export class AcpRuntimeSupervisor {
 
     if (!this.isShuttingDown) {
       this.isShuttingDown = true;
+      for (const handle of this.sessions.values()) {
+        handle.failConfiguration(this.createShutdownError('shutdown'));
+      }
       for (const rejectShutdown of this.shutdownWaiters) {
         rejectShutdown();
       }
@@ -304,6 +307,9 @@ export class AcpRuntimeSupervisor {
   ): void {
     if (options.purpose === 'browse') {
       return;
+    }
+    if (this.browseOnlySessions.has(sessionId) && options.deferPromptReadiness) {
+      handle.deferPromptReadiness();
     }
     this.browseOnlySessions.delete(sessionId);
     const metadata = this.runtimeMetadata.get(handle.child);
@@ -426,6 +432,7 @@ export class AcpRuntimeSupervisor {
             this.sessions.get(sessionId)?.child === child),
       });
       startupHandle = handle;
+      this.deferActiveConfiguration(handle, options);
       startupActive = false;
       const cancellation =
         startupError ?? this.getCreationCancellationError(sessionId, stopGeneration);
@@ -471,7 +478,7 @@ export class AcpRuntimeSupervisor {
       this.sessions.set(sessionId, handle);
       metadata.installed = true;
       this.recordClientPurpose(sessionId, options);
-      this.wireChildExitHandler(sessionId, handle.child, handlers, metadata);
+      this.wireChildExitHandler(sessionId, handle, handlers, metadata);
       try {
         handlers.onRuntimeCreated?.(handle);
         await this.notifyClientCreated(sessionId, handle, context, handlers);
@@ -499,6 +506,12 @@ export class AcpRuntimeSupervisor {
     }
   }
 
+  private deferActiveConfiguration(handle: AcpProcessHandle, options: AcpClientOptions): void {
+    if (options.deferPromptReadiness && options.purpose !== 'browse') {
+      handle.deferPromptReadiness();
+    }
+  }
+
   private createShutdownError(sessionId: string): Error {
     return new Error(`ACP runtime manager is shutting down; cannot create client ${sessionId}`);
   }
@@ -508,6 +521,7 @@ export class AcpRuntimeSupervisor {
     handle: AcpProcessHandle,
     metadata: AcpRuntimeMetadata
   ): Promise<void> {
+    handle.failConfiguration(new Error(`ACP candidate setup failed: ${sessionId}`));
     if (this.sessions.get(sessionId) === handle) {
       this.sessions.delete(sessionId);
       this.clearActivity(sessionId);
@@ -599,6 +613,7 @@ export class AcpRuntimeSupervisor {
 
   private beginSessionStop(sessionId: string): void {
     this.stoppingInProgress.add(sessionId);
+    this.sessions.get(sessionId)?.failConfiguration(this.createStopRequestedError(sessionId));
     const waiters = this.sessionStopWaiters.get(sessionId);
     if (!waiters) {
       return;
@@ -611,11 +626,13 @@ export class AcpRuntimeSupervisor {
 
   private wireChildExitHandler(
     sessionId: string,
-    child: ChildProcess,
+    handle: AcpProcessHandle,
     handlers: AcpRuntimeEventHandlers,
     runtime: AcpRuntimeMetadata
   ): void {
+    const child = handle.child;
     child.once('exit', (code) => {
+      handle.failConfiguration(new Error(`ACP process exited: ${sessionId}`));
       const classification = this.classifyChildExit(sessionId, child, code);
       if (classification === null) {
         this.clearActivityIfUnused(sessionId);

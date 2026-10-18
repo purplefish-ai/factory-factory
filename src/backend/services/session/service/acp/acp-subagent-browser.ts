@@ -100,7 +100,7 @@ export class AcpSubagentBrowser {
     const browseHandle = this.requireHandle(handle);
     const parsedParams = subagentListParamsSchema.safeParse({
       ...input,
-      sessionId: browseHandle.providerSessionId,
+      sessionId: browseHandle.acpSessionId,
     });
     if (!parsedParams.success) {
       throw new AcpSubagentBrowseError('INVALID_INPUT', subagentBrowseMessage('list', 'invalid'), {
@@ -108,6 +108,9 @@ export class AcpSubagentBrowser {
       });
     }
     try {
+      if (browseHandle.nativeSessionTracker?.isAvailable()) {
+        return browseHandle.nativeSessionTracker.list(parsedParams.data);
+      }
       const response = await browseHandle.connection.extMethod(
         SUBAGENTS_LIST_METHOD,
         parsedParams.data
@@ -125,7 +128,7 @@ export class AcpSubagentBrowser {
     const browseHandle = this.requireHandle(handle);
     const parsedParams = subagentReadParamsSchema.safeParse({
       ...input,
-      sessionId: browseHandle.providerSessionId,
+      sessionId: browseHandle.acpSessionId,
     });
     if (!parsedParams.success) {
       throw new AcpSubagentBrowseError(
@@ -135,6 +138,9 @@ export class AcpSubagentBrowser {
       );
     }
     try {
+      if (browseHandle.nativeSessionTracker?.isAvailable()) {
+        return browseHandle.nativeSessionTracker.read(parsedParams.data);
+      }
       const response = await browseHandle.connection.extMethod(
         SUBAGENTS_READ_METHOD,
         parsedParams.data

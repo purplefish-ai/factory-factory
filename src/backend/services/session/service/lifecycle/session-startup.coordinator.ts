@@ -39,6 +39,7 @@ export type GetOrCreateSessionClientOptions = {
   thinkingEnabled?: boolean;
   model?: string;
   reasoningEffort?: string;
+  startupModePreset?: SessionStartupModePreset;
 };
 
 export type StartSessionOptions = {
@@ -127,24 +128,14 @@ export class SessionStartupCoordinator {
           throw new Error('Session is already running');
         }
 
-        const { handle, resolvedPreset, dispatchableNotificationCount } =
-          await this.getOrCreateAcpSessionClient(
-            sessionId,
-            { assertCurrent: options?.assertCurrent },
-            session,
-            stopGeneration,
-            ownership
-          );
-        this.dependencies.lifecycleGate.establishStartup(lease);
-        await this.assertCreationAllowed(sessionId, stopGeneration, options?.assertCurrent);
-        await this.applyStartupModePreset(
+        const { dispatchableNotificationCount } = await this.getOrCreateAcpSessionClient(
           sessionId,
-          handle,
-          options?.startupModePreset,
-          session.workflow
+          { assertCurrent: options?.assertCurrent, startupModePreset: options?.startupModePreset },
+          session,
+          stopGeneration,
+          ownership
         );
-        await this.assertCreationAllowed(sessionId, stopGeneration, options?.assertCurrent);
-        await this.applyConfiguredPermissionPreset(sessionId, session, handle, resolvedPreset);
+        this.dependencies.lifecycleGate.establishStartup(lease);
         await this.assertCreationAllowed(sessionId, stopGeneration, options?.assertCurrent);
         await this.dispatchQueuedNotificationsIfNeeded(sessionId, dispatchableNotificationCount);
         await this.assertCreationAllowed(sessionId, stopGeneration, options?.assertCurrent);
@@ -318,13 +309,15 @@ export class SessionStartupCoordinator {
     lease: Readonly<{ sessionId: string; generation: number }>
   ): Promise<AcpProcessHandle> {
     const hadClient = !!this.dependencies.runtimeManager.getClient(session.id);
-    const { handle, resolvedPreset, dispatchableNotificationCount } =
-      await this.getOrCreateAcpSessionClient(session.id, options, session, lease.generation);
+    const { handle, dispatchableNotificationCount } = await this.getOrCreateAcpSessionClient(
+      session.id,
+      options,
+      session,
+      lease.generation
+    );
     this.dependencies.lifecycleGate.establishStartup(lease);
     this.assertStartupAllowed(session.id, lease.generation);
     if (!hadClient && options.resumePolicy !== 'require_existing') {
-      await this.applyConfiguredPermissionPreset(session.id, session, handle, resolvedPreset);
-      this.assertStartupAllowed(session.id, lease.generation);
       await this.dispatchQueuedNotificationsIfNeeded(session.id, dispatchableNotificationCount);
       this.assertStartupAllowed(session.id, lease.generation);
     }
@@ -356,6 +349,7 @@ export class SessionStartupCoordinator {
       model?: string;
       purpose?: 'active' | 'browse';
       resumePolicy?: 'allow_fallback' | 'require_existing';
+      startupModePreset?: SessionStartupModePreset;
     },
     session: AgentSessionRecord,
     permissionPreset: PermissionPreset | undefined,
@@ -397,6 +391,7 @@ export class SessionStartupCoordinator {
     const clientOptions: AcpClientOptions = {
       provider: session.provider,
       purpose: options.purpose,
+      deferPromptReadiness: !browseOnly,
       workingDir: sessionContext.workingDir,
       model: options.model ?? sessionContext.model,
       permissionPreset,
@@ -439,14 +434,32 @@ export class SessionStartupCoordinator {
           { persistSnapshot: false, emitUpdates: false }
         );
       }
-      if (session.workflow === ADVERSARIAL_REVIEW_WORKFLOW) {
-        await this.dependencies.sessionConfigService.applyConfiguredPermissionPreset(
+      if (
+        options.resumePolicy !== 'require_existing' ||
+        session.workflow === ADVERSARIAL_REVIEW_WORKFLOW
+      ) {
+        // Permission enforcement must stop an unsafe candidate even when another caller shares it.
+        await this.applyConfiguredPermissionPreset(
           sessionId,
           session,
           handle,
+          stopGeneration,
           permissionPreset
         );
       }
+      await this.applyStartupModePreset(
+        sessionId,
+        handle,
+        options.startupModePreset,
+        session.workflow
+      );
+      await this.reapplyReviewPermissions(
+        sessionId,
+        session,
+        handle,
+        stopGeneration,
+        permissionPreset
+      );
       await this.assertCreationAllowed(sessionId, stopGeneration, options.assertCurrent);
       await this.persistAcpConfigSnapshot(sessionId, {
         provider: handle.provider as PersistAcpConfigSnapshotParams['provider'],
@@ -459,12 +472,20 @@ export class SessionStartupCoordinator {
             : (session.providerMetadata ?? undefined),
       });
       await this.assertCreationAllowed(sessionId, stopGeneration, options.assertCurrent);
+      handle.completeConfiguration(() => {
+        this.assertStartupAllowed(sessionId, stopGeneration);
+        if (this.dependencies.runtimeManager.getClient(sessionId) !== handle) {
+          throw new Error('Session runtime changed during configuration');
+        }
+      });
     } catch (error) {
+      handle?.failConfiguration(error);
       await this.cleanupFailedClientCreation(
         sessionId,
         session.workflow,
         handle,
         registration,
+        stopGeneration,
         ownership
       );
       throw error;
@@ -534,19 +555,32 @@ export class SessionStartupCoordinator {
     workflow: string | undefined,
     handle: AcpProcessHandle | undefined,
     registration: AcpClientCreationOperation,
+    stopGeneration: number,
     ownership?: OwnedStartupRuntime
   ): Promise<void> {
     const isOnlyOperation = registration.isOnlyOperation();
     try {
       if (
         handle &&
+        this.canUpdateFailedStartupState(sessionId, ownership, stopGeneration) &&
+        this.dependencies.runtimeManager.getClient(sessionId) === handle &&
         (!ownership || this.canCleanupOwnedRuntime(sessionId, ownership)) &&
         (isOnlyOperation || workflow === ADVERSARIAL_REVIEW_WORKFLOW)
       ) {
         await this.dependencies.runtimeManager.stopClient(sessionId);
       }
+    } catch (error) {
+      logger.warn('Failed to stop runtime after client creation failure', {
+        sessionId,
+        error: toErrorMessage(error),
+      });
     } finally {
-      if (isOnlyOperation && this.canUpdateFailedStartupState(sessionId, ownership)) {
+      const current = this.dependencies.runtimeManager.getClient(sessionId);
+      if (
+        isOnlyOperation &&
+        (!current || current === handle) &&
+        this.canUpdateFailedStartupState(sessionId, ownership, stopGeneration)
+      ) {
         this.dependencies.acpEventProcessor.clearSessionState(sessionId);
       }
     }
@@ -571,33 +605,14 @@ export class SessionStartupCoordinator {
       if (options.resumePolicy === 'require_existing') {
         this.assertExistingConversation(session, existingAcp, false);
       }
-      if (session.workflow === ADVERSARIAL_REVIEW_WORKFLOW) {
-        try {
-          await this.dependencies.sessionConfigService.applyConfiguredPermissionPreset(
-            sessionId,
-            session,
-            existingAcp
-          );
-        } catch (error) {
-          const stopReservation = this.dependencies.lifecycleGate.reserveStop(sessionId);
-          try {
-            await this.dependencies.runtimeManager.stopClient(sessionId);
-            this.dependencies.sessionDomainService.setRuntimeSnapshot(sessionId, {
-              phase: 'error',
-              processState: 'stopped',
-              activity: 'IDLE',
-              errorMessage: `Failed to start agent: ${toErrorMessage(error)}`,
-              updatedAt: new Date().toISOString(),
-            });
-          } finally {
-            try {
-              this.dependencies.acpEventProcessor.clearSessionState(sessionId);
-            } finally {
-              stopReservation?.release();
-            }
-          }
-          throw error;
-        }
+      if (session.workflow === ADVERSARIAL_REVIEW_WORKFLOW || options.startupModePreset) {
+        await this.configureExistingClient(
+          sessionId,
+          session,
+          existingAcp,
+          stopGeneration,
+          options
+        );
       }
       await this.assertCreationAllowed(sessionId, stopGeneration, options.assertCurrent);
       const isWorking = this.dependencies.runtimeManager.isSessionWorking(sessionId);
@@ -660,10 +675,11 @@ export class SessionStartupCoordinator {
               session.workflow,
               handle ?? this.dependencies.runtimeManager.getClient(sessionId) ?? undefined,
               registration,
+              stopGeneration,
               ownership
             );
           }
-          if (this.canUpdateFailedStartupState(sessionId, ownership)) {
+          if (this.canUpdateFailedStartupState(sessionId, ownership, stopGeneration)) {
             this.dependencies.sessionDomainService.setRuntimeSnapshot(sessionId, {
               phase: 'error',
               processState: 'stopped',
@@ -693,7 +709,18 @@ export class SessionStartupCoordinator {
     );
   }
 
-  private canUpdateFailedStartupState(sessionId: string, ownership?: OwnedStartupRuntime): boolean {
+  private canUpdateFailedStartupState(
+    sessionId: string,
+    ownership?: OwnedStartupRuntime,
+    generation?: number
+  ): boolean {
+    if (
+      generation !== undefined &&
+      (this.dependencies.lifecycleGate.isSessionStopping(sessionId) ||
+        !this.dependencies.lifecycleGate.isGenerationCurrent(sessionId, generation))
+    ) {
+      return false;
+    }
     if (!ownership) {
       return true;
     }
@@ -768,6 +795,11 @@ export class SessionStartupCoordinator {
     startupModePreset: SessionStartupModePreset | undefined,
     workflow: string
   ): Promise<void> {
+    // Native access was already restored (or initialized) before persistence.
+    // The legacy Claude execution preset must not broaden it to bypassPermissions.
+    if (handle.provider === 'CLAUDE' && startupModePreset === 'non_interactive') {
+      return;
+    }
     await this.dependencies.sessionConfigService.applyStartupModePreset(
       sessionId,
       handle,
@@ -777,18 +809,119 @@ export class SessionStartupCoordinator {
     );
   }
 
+  private async configureExistingClient(
+    sessionId: string,
+    session: AgentSessionRecord,
+    handle: AcpProcessHandle,
+    stopGeneration: number,
+    options: GetOrCreateSessionClientOptions
+  ): Promise<void> {
+    const configuration = handle.beginConfiguration();
+    try {
+      await this.applyStartupModePreset(
+        sessionId,
+        handle,
+        options.startupModePreset,
+        session.workflow
+      );
+      await this.reapplyReviewPermissions(sessionId, session, handle, stopGeneration);
+      await this.assertCreationAllowed(sessionId, stopGeneration, options.assertCurrent);
+      if (this.dependencies.runtimeManager.getClient(sessionId) !== handle) {
+        throw new Error('Session runtime changed during configuration');
+      }
+      configuration.complete();
+    } catch (error) {
+      configuration.fail(error);
+      throw error;
+    }
+  }
+
+  private async reapplyReviewPermissions(
+    sessionId: string,
+    session: AgentSessionRecord,
+    handle: AcpProcessHandle,
+    stopGeneration: number,
+    permissionPreset?: PermissionPreset,
+    ownership?: OwnedStartupRuntime
+  ): Promise<void> {
+    if (session.workflow === ADVERSARIAL_REVIEW_WORKFLOW) {
+      await this.applyConfiguredPermissionPreset(
+        sessionId,
+        session,
+        handle,
+        stopGeneration,
+        permissionPreset,
+        ownership
+      );
+    }
+  }
+
   private async applyConfiguredPermissionPreset(
     sessionId: string,
     session: AgentSessionRecord,
     handle: AcpProcessHandle,
-    permissionPreset?: PermissionPreset
+    stopGeneration: number,
+    permissionPreset?: PermissionPreset,
+    ownership?: OwnedStartupRuntime
   ): Promise<void> {
-    await this.dependencies.sessionConfigService.applyConfiguredPermissionPreset(
-      sessionId,
-      session,
-      handle,
-      permissionPreset
-    );
+    try {
+      await this.dependencies.sessionConfigService.applyConfiguredPermissionPreset(
+        sessionId,
+        session,
+        handle,
+        permissionPreset
+      );
+    } catch (error) {
+      const canUpdateFailureState = (generation?: number) => {
+        const current = this.dependencies.runtimeManager.getClient(sessionId);
+        return (
+          (!current || current === handle) &&
+          this.canUpdateFailedStartupState(sessionId, ownership, generation)
+        );
+      };
+      if (!canUpdateFailureState(stopGeneration)) {
+        throw error;
+      }
+      const stopReservation = this.dependencies.lifecycleGate.reserveStop(sessionId);
+      if (!stopReservation) {
+        throw error;
+      }
+      try {
+        await this.dependencies.runtimeManager.stopClient(sessionId).catch((stopError: unknown) => {
+          logger.warn('Failed to stop runtime after permission preset failure', {
+            sessionId,
+            error: toErrorMessage(stopError),
+          });
+        });
+        if (
+          canUpdateFailureState() &&
+          this.dependencies.lifecycleGate.isGenerationCurrent(sessionId, stopReservation.generation)
+        ) {
+          this.dependencies.sessionDomainService.setRuntimeSnapshot(sessionId, {
+            phase: 'error',
+            processState: 'stopped',
+            activity: 'IDLE',
+            errorMessage: `Failed to start agent: ${toErrorMessage(error)}`,
+            updatedAt: new Date().toISOString(),
+          });
+        }
+      } finally {
+        try {
+          if (
+            canUpdateFailureState() &&
+            this.dependencies.lifecycleGate.isGenerationCurrent(
+              sessionId,
+              stopReservation.generation
+            )
+          ) {
+            this.dependencies.acpEventProcessor.clearSessionState(sessionId);
+          }
+        } finally {
+          stopReservation.release();
+        }
+      }
+      throw error;
+    }
   }
 
   private async persistAcpConfigSnapshot(

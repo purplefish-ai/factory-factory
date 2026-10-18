@@ -22,7 +22,7 @@ export class AcpPromptController {
     handle.isPromptInFlight = true;
     try {
       const promptPromise = handle.connection.prompt({
-        sessionId: handle.providerSessionId,
+        sessionId: handle.acpSessionId,
         prompt,
       });
 
@@ -71,7 +71,7 @@ export class AcpPromptController {
 
     handle.permissionBridge?.cancelAll();
     await handle.connection.cancel({
-      sessionId: handle.providerSessionId,
+      sessionId: handle.acpSessionId,
     });
     return true;
   }

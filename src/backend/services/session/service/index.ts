@@ -15,14 +15,7 @@ export type {
   AcpSubagentsChangedEvent,
   ClaudeModelCatalogEntry,
 } from './acp';
-export {
-  AcpClientHandler,
-  AcpProcessHandle,
-  AcpRuntimeManager,
-  acpRuntimeManager,
-  CodexAppServerAcpAdapter,
-  runCodexAppServerAcpAdapter,
-} from './acp';
+export { AcpClientHandler, AcpProcessHandle, AcpRuntimeManager, acpRuntimeManager } from './acp';
 // Bridge interfaces for orchestration layer wiring
 export type { SessionInitPolicyBridge, SessionWorkspaceBridge } from './bridges';
 // Chat services

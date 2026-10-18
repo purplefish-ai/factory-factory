@@ -126,7 +126,7 @@ export class AcpEventProcessor {
           this.handleAcpUserMessageChunk(sid, update.content.text);
           return;
         }
-        const deltas = this.acpEventTranslator.translateSessionUpdate(update);
+        const deltas = this.acpEventTranslator.translateSessionUpdate(update, sid);
         if (deltas.length === 0) {
           acpTraceLogger.log(sid, 'translated_delta', {
             sessionUpdate: update.sessionUpdate,
@@ -217,6 +217,7 @@ export class AcpEventProcessor {
   }
 
   clearPendingToolCalls(sessionId: string): void {
+    this.acpEventTranslator.clearTerminalOutput(sessionId);
     this.pendingAcpToolCalls.delete(sessionId);
     this.clearAllToolCallTimers(sessionId);
   }

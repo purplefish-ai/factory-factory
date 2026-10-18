@@ -13,11 +13,19 @@ function createHandle(agentCapabilities: Record<string, unknown>): AcpProcessHan
   return new AcpProcessHandle({
     connection: {} as ClientSideConnection,
     child: { exitCode: null, killed: false } as ChildProcess,
-    provider: 'test-provider',
+    provider: 'CLAUDE',
     providerSessionId: 'provider-session-123',
     agentCapabilities,
   });
 }
+
+it('derives transport identity while preserving durable legacy identity', () => {
+  const handle = createTestProcessHandle({ provider: 'CODEX', providerSessionId: 'sess_thread-1' });
+  expect(handle.acpSessionId).toBe('thread-1');
+  expect(handle.providerSessionId).toBe('sess_thread-1');
+  handle.providerSessionId = 'sess_thread-2';
+  expect(handle.acpSessionId).toBe('thread-2');
+});
 
 describe('AcpProcessHandle.getSubagentBrowseCapability', () => {
   it('returns the negotiated version-1 sub-agent browsing capability', () => {
@@ -99,7 +107,7 @@ describe('AcpProcessHandle.isRunning', () => {
     const handle = new AcpProcessHandle({
       connection: {} as ClientSideConnection,
       child: child as unknown as ChildProcess,
-      provider: 'test-provider',
+      provider: 'CLAUDE',
       providerSessionId: 'provider-session-123',
       agentCapabilities: {},
     });

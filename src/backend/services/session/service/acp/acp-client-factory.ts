@@ -8,7 +8,8 @@ import {
   type SessionConfigOption,
 } from '@agentclientprotocol/sdk';
 import { createLogger, getCurrentProcessEnv } from '@/backend/services/logger.service';
-import { AcpClientHandler, type AutoApprovePolicy } from './acp-client-handler';
+import { AcpClientHandler } from './acp-client-handler';
+import { AcpNativeSessionTracker } from './acp-native-session-tracker';
 import { AcpProcessHandle } from './acp-process-handle';
 import type { AcpRuntimeMetadata, AcpStartupSignal } from './acp-runtime-contracts';
 import { wireAcpRuntimeErrorHandler } from './acp-runtime-error-handler';
@@ -22,14 +23,14 @@ import { raceWithSoftTimeout } from './acp-runtime-quiescence';
 import {
   createAcpSpawnError,
   hasUsableWorkingDir,
-  resolveAcpBinary,
-  resolveInternalCodexAcpSpawnCommand,
+  resolveProviderAcpSpawnCommand,
   type SpawnCommand,
   withTimeout,
 } from './acp-runtime-spawn';
 import { requireSessionConfigOptions } from './acp-session-config-options';
+import { toAcpSessionId } from './acp-session-identity';
 import { createNormalizedAcpReadableStream } from './acp-stream-normalizer';
-import type { AcpClientOptions, PermissionPreset } from './types';
+import type { AcpClientOptions } from './types';
 
 const logger = createLogger('acp-runtime-manager');
 const DEFAULT_ACP_STARTUP_TIMEOUT_MS = 30_000;
@@ -45,14 +46,7 @@ export type CreateAcpClientParams = {
   discardFailedResumeReplay?(): void;
 };
 
-function resolveAutoApprovePolicy(preset: PermissionPreset | undefined): AutoApprovePolicy {
-  return preset === 'YOLO' || preset === 'RELAXED' ? 'all' : 'none';
-}
-
-function resolveSpawnCommand(
-  options: AcpClientOptions,
-  preferSourceEntrypoint: boolean
-): SpawnCommand {
+function resolveSpawnCommand(options: AcpClientOptions): SpawnCommand {
   if (options.adapterBinaryPath) {
     return {
       command: options.adapterBinaryPath,
@@ -60,22 +54,11 @@ function resolveSpawnCommand(
       commandLabel: options.adapterBinaryPath,
     };
   }
-  if (options.provider === 'CODEX') {
-    return resolveInternalCodexAcpSpawnCommand(preferSourceEntrypoint);
-  }
-
-  const binaryName = 'claude-agent-acp';
-  const binaryPath = resolveAcpBinary('@agentclientprotocol/claude-agent-acp', binaryName);
-  return {
-    command: binaryPath,
-    args: [],
-    commandLabel: binaryPath,
-  };
+  return resolveProviderAcpSpawnCommand(options.provider);
 }
 
 export class AcpClientFactory {
   private acpStartupTimeoutMs = DEFAULT_ACP_STARTUP_TIMEOUT_MS;
-  private preferSourceEntrypoint = true;
   private childProcessEnvProvider: () => NodeJS.ProcessEnv = getCurrentProcessEnv;
 
   constructor(options?: { acpStartupTimeoutMs?: number }) {
@@ -90,11 +73,7 @@ export class AcpClientFactory {
     this.acpStartupTimeoutMs = Math.floor(timeoutMs);
   }
 
-  configureEnvironment(options: {
-    preferSourceEntrypoint: boolean;
-    childProcessEnvProvider: () => NodeJS.ProcessEnv;
-  }): void {
-    this.preferSourceEntrypoint = options.preferSourceEntrypoint;
+  configureEnvironment(options: { childProcessEnvProvider: () => NodeJS.ProcessEnv }): void {
     this.childProcessEnvProvider = options.childProcessEnvProvider;
   }
 
@@ -105,7 +84,7 @@ export class AcpClientFactory {
       throw new Error('ACP working directory is required before spawning adapter process');
     }
 
-    const spawnCommand = resolveSpawnCommand(options, this.preferSourceEntrypoint);
+    const spawnCommand = resolveSpawnCommand(options);
     const isCodex = options.provider === 'CODEX';
     logger.info('Spawning ACP subprocess', {
       sessionId,
@@ -121,7 +100,8 @@ export class AcpClientFactory {
       env: {
         ...this.childProcessEnvProvider(),
         BROWSER: 'none',
-        ...(isCodex ? { DOTENV_CONFIG_QUIET: 'true' } : {}),
+        ELECTRON_RUN_AS_NODE: '1',
+        ...(isCodex ? { DOTENV_CONFIG_QUIET: 'true', DISABLE_MCP_CONFIG_FILTERING: 'true' } : {}),
       },
       detached: false,
     });
@@ -152,9 +132,26 @@ export class AcpClientFactory {
       const input = Readable.toWeb(child.stdout) as ReadableStream<Uint8Array>;
       const output = Writable.toWeb(child.stdin) as WritableStream<Uint8Array>;
       const stream = ndJsonStream(output, input);
+      const nativeSessionTracker = new AcpNativeSessionTracker({
+        onSubagentsChanged: (event) =>
+          handlers.onAcpEvent?.(sessionId, {
+            type: 'acp_subagents_changed',
+            subagentId: event.subagentId,
+            change: event.change,
+          }),
+        onTaskStatusChanged: (active) =>
+          handlers.onAcpEvent?.(sessionId, { type: 'acp_task_status_changed', active }),
+      });
+      if (options.resumeProviderSessionId) {
+        nativeSessionTracker.setRootSessionId(
+          toAcpSessionId(options.provider, options.resumeProviderSessionId)
+        );
+      }
       const normalizedStream = {
         writable: stream.writable,
-        readable: createNormalizedAcpReadableStream(stream.readable),
+        readable: createNormalizedAcpReadableStream(stream.readable, (message) =>
+          nativeSessionTracker.onRawMessage(message)
+        ),
       };
 
       const acpEventHandler = handlers.onAcpEvent;
@@ -165,13 +162,7 @@ export class AcpClientFactory {
           };
       const connection = new ClientSideConnection(
         (_agent) =>
-          new AcpClientHandler(
-            sessionId,
-            onEvent,
-            handlers.permissionBridge,
-            handlers.onAcpLog,
-            resolveAutoApprovePolicy(options.permissionPreset)
-          ),
+          new AcpClientHandler(sessionId, onEvent, handlers.permissionBridge, handlers.onAcpLog),
         normalizedStream
       );
       const startupCancelOn = Promise.race([
@@ -184,7 +175,14 @@ export class AcpClientFactory {
         withTimeout({
           promise: connection.initialize({
             protocolVersion: PROTOCOL_VERSION,
-            clientCapabilities: {},
+            clientCapabilities: {
+              subagents: {},
+              elicitation: { form: {}, url: {} },
+              _meta: {
+                terminal_output_delta: true,
+                jetbrains: { air: { version: 1, capabilities: ['asyncTasks'] } },
+              },
+            },
             clientInfo: {
               name: 'factory-factory',
               title: 'Factory Factory',
@@ -205,6 +203,7 @@ export class AcpClientFactory {
       });
 
       const agentCapabilities = initResult.agentCapabilities ?? {};
+      nativeSessionTracker.setCapabilities(agentCapabilities);
       const sessionInfo = await Promise.race([
         withTimeout({
           promise: this.createOrResumeSession(
@@ -212,7 +211,10 @@ export class AcpClientFactory {
             sessionId,
             options,
             agentCapabilities,
-            params.discardFailedResumeReplay
+            () => {
+              nativeSessionTracker.resetSession();
+              params.discardFailedResumeReplay?.();
+            }
           ),
           timeoutMs: startupTimeoutMs,
           description: 'session creation',
@@ -223,7 +225,11 @@ export class AcpClientFactory {
         stopSignal.promise,
       ]);
 
+      nativeSessionTracker.setRootSessionId(
+        toAcpSessionId(options.provider, sessionInfo.providerSessionId)
+      );
       const handle = new AcpProcessHandle({
+        nativeSessionTracker,
         permissionBridge: handlers.permissionBridge,
         connection,
         child,
@@ -327,17 +333,27 @@ export class AcpClientFactory {
     let loadResult: LoadSessionResponse;
     try {
       loadResult = await connection.loadSession({
-        sessionId: storedId,
+        sessionId: toAcpSessionId(options.provider, storedId),
         cwd: options.workingDir,
         mcpServers,
       });
     } catch (error) {
-      this.logLoadSessionFailure(sessionId, storedId, error, options.purpose === 'browse');
+      const legacyCodex = options.provider === 'CODEX' && storedId.startsWith('sess_');
+      this.logLoadSessionFailure(
+        sessionId,
+        storedId,
+        error,
+        options.purpose === 'browse',
+        !legacyCodex
+      );
       if (options.purpose === 'browse') {
         throw new AcpBrowseSessionUnavailableError(
           'Provider failed to restore this session for sub-agent browsing.',
           { cause: error }
         );
+      }
+      if (legacyCodex) {
+        throw error;
       }
       return null;
     }
@@ -356,7 +372,8 @@ export class AcpClientFactory {
     sessionId: string,
     storedProviderSessionId: string,
     error: unknown,
-    browseOnly: boolean
+    browseOnly: boolean,
+    allowFallback: boolean
   ): void {
     const details = getAcpErrorLogDetails(error);
     logger.warn(browseOnly ? 'Browse-only loadSession failed' : 'loadSession failed', {
@@ -365,7 +382,7 @@ export class AcpClientFactory {
       error: details.message,
       ...(details.code !== undefined ? { errorCode: details.code } : {}),
       ...(typeof details.data !== 'undefined' ? { errorData: details.data } : {}),
-      ...(!browseOnly ? { fallback: 'newSession' } : {}),
+      ...(!browseOnly && allowFallback ? { fallback: 'newSession' } : {}),
     });
   }
 }

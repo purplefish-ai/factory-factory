@@ -551,6 +551,7 @@ export function convertPendingRequest(
       requestId: req.requestId,
       toolName: req.toolName,
       toolInput: req.input,
+      ...(req.elicitation ? { elicitation: req.elicitation } : {}),
       timestamp: req.timestamp,
       planContent: req.planContent,
       ...(Array.isArray(req.acpOptions) ? { acpOptions: req.acpOptions } : {}),

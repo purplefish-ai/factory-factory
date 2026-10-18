@@ -73,12 +73,11 @@ report failed or unavailable checks, and never weaken assertions or guardrails
 to pass. Repeat successful checks only after edits or new evidence.
 
 `pnpm check` covers linting, formatting, file lengths, environment access,
-ownership, foreign-key indexes, dependencies, and Codex schemas. The Codex
-schema check skips locally when the pinned CLI is unavailable or mismatched; CI
-installs the pinned version. To enforce it locally, use
-`CODEX_SCHEMA_CHECK=strict pnpm check:codex-schema` with that CLI installed.
-After reducing oversized legacy files, run `pnpm check:file-length:update` to
-lower their exact ceilings; it never allows growth.
+ownership, foreign-key indexes, and dependencies. Upstream ACP adapters own
+their provider protocol schemas; test ACP client contracts when upgrading either
+adapter. After reducing oversized legacy files, run
+`pnpm check:file-length:update` to lower their exact ceilings; it never allows
+growth.
 
 The [pre-commit hook](.husky/pre-commit) formats staged files and checks types,
 migration drift, dependencies, and unused code. CI also runs coverage,

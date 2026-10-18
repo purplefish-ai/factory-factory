@@ -30,11 +30,11 @@ describe('SessionConfigService', () => {
 
   const runtimeManager = {
     getClient: vi.fn(),
+    isStopInProgress: vi.fn(() => false),
     setSessionMode: vi.fn(),
     setSessionModel: vi.fn(),
     setConfigOption: vi.fn(),
   };
-
   const sessionDomain = {
     emitDelta: vi.fn(),
   };
@@ -149,59 +149,44 @@ describe('SessionConfigService', () => {
     );
   });
 
-  it.each(['auto-iteration', 'periodic-task'])('sets %s unattended mode', async (workflow) => {
-    const modeConfig = {
-      id: 'mode',
-      name: 'Mode',
-      type: 'select',
-      category: 'mode',
-      currentValue: 'ask',
-      options: [
-        { value: 'ask', name: 'Ask' },
-        { value: 'code', name: 'Code' },
-      ],
-    };
-    const executionModeConfig = {
-      id: 'execution_mode',
-      name: 'Execution Mode',
-      type: 'select',
-      category: 'permission',
-      currentValue: '["on-failure","workspace-write"]',
-      options: [
-        {
-          value: '["on-failure","workspace-write"]',
-          name: 'On Failure (Workspace Write)',
-        },
-        {
-          value: '["never","danger-full-access"]',
-          name: 'YOLO (Full Access)',
-        },
-      ],
-    };
-    const handle = unsafeCoerce<AcpProcessHandle>({
-      provider: 'CODEX',
-      providerSessionId: 'provider-codex-ratchet-1',
-      configOptions: [modeConfig, executionModeConfig],
-    });
-
-    runtimeManager.setSessionMode.mockResolvedValue([
-      { ...modeConfig, currentValue: 'code' },
-      executionModeConfig,
-    ]);
-    runtimeManager.setConfigOption.mockResolvedValue([
-      { ...modeConfig, currentValue: 'code' },
-      { ...executionModeConfig, currentValue: '["never","danger-full-access"]' },
-    ]);
-
-    await service.applyStartupModePreset('session-codex', handle, 'non_interactive', workflow);
-
-    expect(runtimeManager.setSessionMode).toHaveBeenCalledWith('session-codex', 'code');
-    expect(runtimeManager.setConfigOption).toHaveBeenCalledWith(
-      'session-codex',
-      'execution_mode',
-      '["never","danger-full-access"]'
-    );
-  });
+  it.each(['auto-iteration', 'periodic-task'])(
+    'sets %s collaboration independently of native access at startup',
+    async (workflow) => {
+      const access = {
+        id: 'mode',
+        name: 'Access',
+        type: 'select',
+        category: 'mode',
+        currentValue: 'workspace-write',
+        options: [{ value: 'workspace-write', name: 'Workspace access' }],
+      };
+      const planning = {
+        id: 'collaboration_mode',
+        name: 'Planning',
+        type: 'select',
+        category: 'collaboration_mode',
+        currentValue: 'plan',
+        options: ['default', 'plan'].map((value) => ({ value, name: value })),
+      };
+      const handle = unsafeCoerce<AcpProcessHandle>({
+        provider: 'CODEX',
+        providerSessionId: 'provider-codex-1',
+        configOptions: [access, planning],
+      });
+      runtimeManager.setConfigOption.mockResolvedValue([
+        access,
+        { ...planning, currentValue: 'default' },
+      ]);
+      await service.applyStartupModePreset('session-codex', handle, 'non_interactive', workflow);
+      expect(runtimeManager.setConfigOption).toHaveBeenCalledWith(
+        'session-codex',
+        'collaboration_mode',
+        'default'
+      );
+      expect(runtimeManager.setSessionMode).not.toHaveBeenCalled();
+      expect(handle.configOptions[0]?.currentValue).toBe('workspace-write');
+    }
+  );
 
   it('continues startup when persistSnapshot callback fails', async () => {
     const modeConfig = {
@@ -466,13 +451,13 @@ describe('SessionConfigService', () => {
                 ],
               },
               {
-                id: 'mode',
+                id: 'collaboration_mode',
                 name: 'Mode',
                 type: 'select',
-                category: 'mode',
+                category: 'collaboration_mode',
                 currentValue: 'plan',
                 options: [
-                  { value: 'ask', name: 'Ask' },
+                  { value: 'default', name: 'Default' },
                   { value: 'plan', name: 'Plan' },
                 ],
               },
@@ -721,7 +706,7 @@ describe('SessionConfigService', () => {
       id: 'collaboration_mode',
       name: 'Collaboration Mode',
       type: 'select',
-      category: 'mode',
+      category: 'collaboration_mode',
       currentValue: 'default',
       options: [
         { value: 'default', name: 'Default' },
@@ -735,11 +720,15 @@ describe('SessionConfigService', () => {
         configOptions: [modeConfig],
       })
     );
-    runtimeManager.setSessionMode.mockResolvedValue([{ ...modeConfig, currentValue: 'PLAN' }]);
+    runtimeManager.setConfigOption.mockResolvedValue([{ ...modeConfig, currentValue: 'PLAN' }]);
 
     await service.setSessionCollaborationMode('session-1', 'plan');
 
-    expect(runtimeManager.setSessionMode).toHaveBeenCalledWith('session-1', 'PLAN');
+    expect(runtimeManager.setConfigOption).toHaveBeenCalledWith(
+      'session-1',
+      'collaboration_mode',
+      'PLAN'
+    );
   });
 
   it('skips plan collaboration mode when the session does not advertise it', async () => {
@@ -861,18 +850,18 @@ describe('SessionConfigService', () => {
             capturedAt: '2026-02-15T00:00:00.000Z',
             configOptions: [
               {
-                id: 'execution_mode',
-                name: 'Execution Mode',
+                id: 'mode',
+                name: 'Access',
                 type: 'select',
-                category: 'permission',
-                currentValue: '["on-request","workspace-write"]',
+                category: 'mode',
+                currentValue: 'workspace-write',
                 options: [
                   {
-                    value: '["on-request","workspace-write"]',
+                    value: 'workspace-write',
                     name: 'on-request + workspace-write',
                   },
                   {
-                    value: '["on-failure","workspace-write"]',
+                    value: 'agent',
                     name: 'on-failure + workspace-write',
                   },
                 ],
@@ -883,11 +872,7 @@ describe('SessionConfigService', () => {
       })
     );
 
-    await service.setSessionConfigOption(
-      'session-1',
-      'execution_mode',
-      '["on-failure","workspace-write"]'
-    );
+    await service.setSessionConfigOption('session-1', 'mode', 'agent');
 
     expect(runtimeManager.setConfigOption).not.toHaveBeenCalled();
     expect(runtimeManager.setSessionMode).not.toHaveBeenCalled();
@@ -899,8 +884,8 @@ describe('SessionConfigService', () => {
           acpConfigSnapshot: expect.objectContaining({
             configOptions: expect.arrayContaining([
               expect.objectContaining({
-                id: 'execution_mode',
-                currentValue: '["on-failure","workspace-write"]',
+                id: 'mode',
+                currentValue: 'agent',
               }),
             ]),
           }),
@@ -922,14 +907,14 @@ describe('SessionConfigService', () => {
             capturedAt: '2026-02-15T00:00:00.000Z',
             configOptions: [
               {
-                id: 'execution_mode',
-                name: 'Execution Mode',
+                id: 'mode',
+                name: 'Access',
                 type: 'select',
-                category: 'permission',
-                currentValue: '["on-request","workspace-write"]',
+                category: 'mode',
+                currentValue: 'workspace-write',
                 options: [
                   {
-                    value: '["on-request","workspace-write"]',
+                    value: 'workspace-write',
                     name: 'on-request + workspace-write',
                   },
                 ],
@@ -941,11 +926,7 @@ describe('SessionConfigService', () => {
     );
 
     await expect(
-      service.setSessionConfigOption(
-        'session-1',
-        'execution_mode',
-        '["never","danger-full-access"]'
-      )
+      service.setSessionConfigOption('session-1', 'mode', 'agent-full-access')
     ).rejects.toThrow('Unsupported value');
   });
 
@@ -998,18 +979,18 @@ describe('SessionConfigService', () => {
         providerSessionId: 'provider-codex-1',
         configOptions: [
           {
-            id: 'execution_mode',
-            name: 'Execution Mode',
+            id: 'mode',
+            name: 'Access',
             type: 'select',
-            category: 'permission',
-            currentValue: '["on-request","workspace-write"]',
+            category: 'mode',
+            currentValue: 'workspace-write',
             options: [
               {
-                value: '["on-request","workspace-write"]',
+                value: 'workspace-write',
                 name: 'On Request',
               },
               {
-                value: '["on-failure","workspace-write"]',
+                value: 'agent',
                 name: 'On Failure',
               },
             ],
@@ -1019,18 +1000,18 @@ describe('SessionConfigService', () => {
 
       runtimeManager.setConfigOption.mockResolvedValue([
         {
-          id: 'execution_mode',
-          name: 'Execution Mode',
+          id: 'mode',
+          name: 'Access',
           type: 'select',
-          category: 'permission',
-          currentValue: '["on-failure","workspace-write"]',
+          category: 'mode',
+          currentValue: 'agent',
           options: [
             {
-              value: '["on-request","workspace-write"]',
+              value: 'workspace-write',
               name: 'On Request',
             },
             {
-              value: '["on-failure","workspace-write"]',
+              value: 'agent',
               name: 'On Failure',
             },
           ],
@@ -1046,11 +1027,7 @@ describe('SessionConfigService', () => {
         handle
       );
 
-      expect(runtimeManager.setConfigOption).toHaveBeenCalledWith(
-        'session-1',
-        'execution_mode',
-        '["on-failure","workspace-write"]'
-      );
+      expect(runtimeManager.setConfigOption).toHaveBeenCalledWith('session-1', 'mode', 'agent');
     }
   );
 
@@ -1067,18 +1044,18 @@ describe('SessionConfigService', () => {
       providerSessionId: 'provider-claude-1',
       configOptions: [
         {
-          id: 'execution_mode',
-          name: 'Execution Mode',
+          id: 'mode',
+          name: 'Access',
           type: 'select',
-          category: 'permission',
-          currentValue: '["on-request","workspace-write"]',
+          category: 'mode',
+          currentValue: 'default',
           options: [
             {
-              value: '["on-request","workspace-write"]',
+              value: 'default',
               name: 'On Request',
             },
             {
-              value: '["never","danger-full-access"]',
+              value: 'bypassPermissions',
               name: 'YOLO',
             },
           ],
@@ -1088,18 +1065,18 @@ describe('SessionConfigService', () => {
 
     runtimeManager.setConfigOption.mockResolvedValue([
       {
-        id: 'execution_mode',
-        name: 'Execution Mode',
+        id: 'mode',
+        name: 'Access',
         type: 'select',
-        category: 'permission',
-        currentValue: '["never","danger-full-access"]',
+        category: 'mode',
+        currentValue: 'bypassPermissions',
         options: [
           {
-            value: '["on-request","workspace-write"]',
+            value: 'default',
             name: 'On Request',
           },
           {
-            value: '["never","danger-full-access"]',
+            value: 'bypassPermissions',
             name: 'YOLO',
           },
         ],
@@ -1117,8 +1094,8 @@ describe('SessionConfigService', () => {
 
     expect(runtimeManager.setConfigOption).toHaveBeenCalledWith(
       'session-1',
-      'execution_mode',
-      '["never","danger-full-access"]'
+      'mode',
+      'bypassPermissions'
     );
   });
 

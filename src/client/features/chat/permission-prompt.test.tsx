@@ -20,6 +20,115 @@ afterEach(() => {
 });
 
 describe('PermissionPrompt', () => {
+  it.each(['Command', 'FormElicitation'])(
+    'bounds previews and uses suitable typography for %s',
+    (type) => {
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const root = createRoot(container);
+      const permission: PermissionRequest = {
+        ...(type === 'FormElicitation' ? { elicitation: 'form' as const } : {}),
+        requestId: 'preview',
+        toolName: 'Run command',
+        timestamp: '2026-10-18T00:00:00Z',
+        toolInput: { type, command: 'pnpm test\n'.repeat(100), message: 'Consent message' },
+        acpOptions: [{ optionId: 'accept', kind: 'allow_once', name: 'Approve' }],
+      };
+      flushSync(() =>
+        root.render(createElement(PermissionPrompt, { permission, onApprove: vi.fn() }))
+      );
+      const preview = container.querySelector('[title]');
+      expect(preview?.className).toContain('max-h-32');
+      expect(preview?.className).toContain('overflow-y-auto');
+      expect(preview?.className.includes('font-mono')).toBe(type !== 'FormElicitation');
+      if (type === 'FormElicitation') {
+        expect(preview?.textContent).toBe('Consent message');
+      }
+      root.unmount();
+    }
+  );
+
+  it.each(['UrlElicitation', 'FormElicitation'])(
+    'does not trust raw tool type %s as elicitation presentation',
+    (type) => {
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const root = createRoot(container);
+      const permission: PermissionRequest = {
+        requestId: 'ordinary',
+        toolName: 'Run command',
+        timestamp: '',
+        toolInput: {
+          type,
+          command: 'rm important.txt',
+          message: 'Harmless message',
+          url: 'https://example.com',
+        },
+        acpOptions: [{ optionId: 'allow', kind: 'allow_once', name: 'Allow' }],
+      };
+      flushSync(() =>
+        root.render(createElement(PermissionPrompt, { permission, onApprove: vi.fn() }))
+      );
+      expect(container.textContent).toContain('rm important.txt');
+      expect(container.querySelector('a')).toBeNull();
+      root.unmount();
+    }
+  );
+
+  it('shows URL elicitation target and message before explicit authorization', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const onApprove = vi.fn();
+    const permission: PermissionRequest = {
+      elicitation: 'url',
+      requestId: 'url-1',
+      toolName: 'Authorize URL',
+      timestamp: '2026-10-18T00:00:00Z',
+      toolInput: {
+        type: 'UrlElicitation',
+        url: 'https://example.com/auth',
+        message: 'Connect your account',
+      },
+      acpOptions: [
+        { optionId: 'accept', name: 'Authorize', kind: 'allow_once' },
+        { optionId: 'decline', name: 'Decline', kind: 'reject_once' },
+      ],
+    };
+    flushSync(() => root.render(createElement(PermissionPrompt, { permission, onApprove })));
+    expect(container.textContent).toContain('Connect your account');
+    const link = container.querySelector('a');
+    expect(link?.getAttribute('href')).toBe('https://example.com/auth');
+    expect(link?.getAttribute('rel')).toContain('noopener');
+    expect(onApprove).not.toHaveBeenCalled();
+    findButtonByText(container, 'Authorize')!.click();
+    expect(onApprove).toHaveBeenCalledWith('url-1', true, 'accept');
+    root.unmount();
+  });
+
+  it('shows the message and consent button for an empty elicitation form', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const onApprove = vi.fn();
+    const permission: PermissionRequest = {
+      elicitation: 'form',
+      requestId: 'consent',
+      toolName: 'Confirm request',
+      timestamp: '2026-10-18T00:00:00Z',
+      toolInput: { type: 'FormElicitation', message: 'Confirm this request' },
+      acpOptions: [
+        { optionId: 'accept', kind: 'allow_once', name: 'Confirm' },
+        { optionId: 'decline', kind: 'reject_once', name: 'Decline' },
+      ],
+    };
+    flushSync(() => root.render(createElement(PermissionPrompt, { permission, onApprove })));
+    expect(container.textContent).toContain('Confirm this request');
+    findButtonByText(container, 'Confirm')!.click();
+    expect(onApprove).toHaveBeenCalledWith('consent', true, 'accept');
+    root.unmount();
+  });
+
   it('shows plan content for ExitPlanMode even when acpOptions exist', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);

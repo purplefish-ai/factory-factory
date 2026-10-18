@@ -14,6 +14,8 @@ export interface AcpClientOptions {
   provider: AcpProvider;
   /** Whether the adapter is serving an active turn or read-only history browsing. */
   purpose?: 'active' | 'browse';
+  /** Lifecycle setup must finish before this incarnation accepts prompts. */
+  deferPromptReadiness?: boolean;
   workingDir: string;
   /** Optional test hook to override the ACP adapter binary path. */
   adapterBinaryPath?: string;

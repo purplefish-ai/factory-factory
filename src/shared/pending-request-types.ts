@@ -40,6 +40,7 @@ export interface PendingInteractiveRequest {
   rawToolName?: string;
   toolUseId: string;
   input: Record<string, unknown>;
+  elicitation?: 'form' | 'url';
   /** Plan content for ExitPlanMode requests */
   planContent: string | null;
   /** ACP permission options for resolving pending requests after reconnect. */

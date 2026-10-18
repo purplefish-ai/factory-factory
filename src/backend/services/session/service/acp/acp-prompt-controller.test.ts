@@ -20,6 +20,24 @@ describe('AcpPromptController', () => {
     controller = new AcpPromptController(runtimePort);
   });
 
+  it('uses native Codex identity for both prompt and cancellation of a legacy session', async () => {
+    const connection = {
+      prompt: vi.fn().mockResolvedValue({ stopReason: 'end_turn' }),
+      cancel: vi.fn().mockResolvedValue(undefined),
+    };
+    const handle = createTestProcessHandle({
+      provider: 'CODEX',
+      providerSessionId: 'sess_thread-legacy',
+      connection,
+    });
+    await controller.sendPrompt(sessionId, handle, prompt);
+    expect(connection.prompt).toHaveBeenCalledWith({ sessionId: 'thread-legacy', prompt });
+    handle.isPromptInFlight = true;
+    await controller.cancelPrompt(sessionId, handle);
+    expect(connection.cancel).toHaveBeenCalledWith({ sessionId: 'thread-legacy' });
+    expect(handle.providerSessionId).toBe('sess_thread-legacy');
+  });
+
   it.each(['soft stop', 'timeout'])('cancels pending permission responses on %s', async (mode) => {
     const bridge = new AcpPermissionBridge();
     const response = bridge.waitForUserResponse('request-1', {

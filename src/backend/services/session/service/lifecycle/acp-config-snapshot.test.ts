@@ -96,3 +96,82 @@ describe('parseAcpConfigSnapshot', () => {
     expect(parseAcpConfigSnapshot(metadata)).toBeNull();
   });
 });
+
+function legacyCodexSnapshot(execution: string, collaboration = 'plan') {
+  return {
+    acpConfigSnapshot: {
+      provider: 'CODEX',
+      providerSessionId: 'sess_original',
+      capturedAt: '2026-09-08T12:00:00.000Z',
+      configOptions: [
+        {
+          id: 'mode',
+          name: 'Mode',
+          category: 'mode',
+          type: 'select',
+          currentValue: collaboration,
+          options: ['plan', 'code'].map((value) => ({ value, name: value })),
+        },
+        {
+          id: 'execution_mode',
+          name: 'Execution',
+          category: 'permission',
+          type: 'select',
+          currentValue: execution,
+          options: [{ value: execution, name: execution }],
+        },
+      ],
+    },
+  };
+}
+
+describe('legacy Codex configuration migration', () => {
+  it.each([
+    ['["on-request","workspace-write"]', 'workspace-write'],
+    ['["on-failure","workspace-write"]', 'workspace-write'],
+    ['["never","workspace-write"]', 'workspace-write'],
+    ['["never","read-only"]', 'read-only'],
+    ['[ "on-request", "read-only" ]', 'read-only'],
+    ['["never","danger-full-access"]', 'agent-full-access'],
+  ])(
+    'conservatively migrates %s to %s and preserves planning and identity',
+    (execution, access) => {
+      const snapshot = parseAcpConfigSnapshot(legacyCodexSnapshot(execution));
+      expect(snapshot?.providerSessionId).toBe('sess_original');
+      expect(snapshot?.configOptions.find((option) => option.id === 'mode')?.currentValue).toBe(
+        access
+      );
+      expect(
+        snapshot?.configOptions.find((option) => option.id === 'collaboration_mode')?.currentValue
+      ).toBe('plan');
+      expect(snapshot?.configOptions.some((option) => option.id === 'execution_mode')).toBe(false);
+    }
+  );
+
+  it('migrates the legacy default collaboration mode without dropping access', () => {
+    const snapshot = parseAcpConfigSnapshot(
+      legacyCodexSnapshot('["on-failure","workspace-write"]', 'default')
+    );
+    expect(snapshot?.configOptions.find((option) => option.id === 'mode')?.currentValue).toBe(
+      'workspace-write'
+    );
+    expect(
+      snapshot?.configOptions.find((option) => option.id === 'collaboration_mode')?.currentValue
+    ).toBe('default');
+  });
+
+  it('converts code collaboration to default independently of access', () => {
+    expect(
+      parseAcpConfigSnapshot(
+        legacyCodexSnapshot('["on-request","workspace-write"]', 'code')
+      )?.configOptions.find((option) => option.id === 'collaboration_mode')?.currentValue
+    ).toBe('default');
+  });
+
+  it.each(['["on-request","danger-full-access"]', '["bad","workspace-write"]', 'invalid'])(
+    'fails closed for unrepresentable legacy permissions %s',
+    (execution) => {
+      expect(parseAcpConfigSnapshot(legacyCodexSnapshot(execution))).toBeNull();
+    }
+  );
+});

@@ -1,12 +1,10 @@
-import { existsSync } from 'node:fs';
+import type { ChildProcess } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { createLogger } from '@/backend/services/logger.service';
 import { normalizeUnknownError } from './acp-stream-normalizer';
 
 const logger = createLogger('acp-runtime-manager');
-const MAX_FACTORY_ROOT_SEARCH_DEPTH = 20;
 const requireFromCurrentModule = createRequire(import.meta.url);
 
 export type SpawnCommand = {
@@ -89,110 +87,58 @@ export async function withTimeout<T>(params: {
   });
 }
 
-function findFactoryRoot(startDir: string): string | null {
-  let currentDir = startDir;
-  for (let depth = 0; depth < MAX_FACTORY_ROOT_SEARCH_DEPTH; depth += 1) {
-    const hasPackageJson = existsSync(join(currentDir, 'package.json'));
-    const hasCliDistEntrypoint = existsSync(join(currentDir, 'dist', 'src', 'cli', 'index.js'));
-    const hasCliSourceEntrypoint = existsSync(join(currentDir, 'src', 'cli', 'index.ts'));
-    if (hasPackageJson && (hasCliDistEntrypoint || hasCliSourceEntrypoint)) {
-      return currentDir;
-    }
-
-    const parentDir = dirname(currentDir);
-    if (parentDir === currentDir) {
-      return null;
-    }
-    currentDir = parentDir;
-  }
-  return null;
-}
-
-function resolveFactoryRootForInternalCodexAdapter(): string {
-  const moduleDir = dirname(fileURLToPath(import.meta.url));
-  const candidateStarts = [process.cwd(), moduleDir];
-
-  for (const candidate of candidateStarts) {
-    const root = findFactoryRoot(candidate);
-    if (root) {
-      return root;
-    }
-  }
-
-  throw new Error('Cannot resolve Factory Factory root for CODEX ACP adapter spawn');
-}
-
-export function resolveInternalCodexAcpSpawnCommand(preferSourceEntrypoint: boolean): SpawnCommand {
-  const projectRoot = resolveFactoryRootForInternalCodexAdapter();
-  const cliSourceEntrypoint = join(projectRoot, 'src', 'cli', 'index.ts');
-  const cliDistEntrypoint = join(projectRoot, 'dist', 'src', 'cli', 'index.js');
-  const tsconfigPath = join(projectRoot, 'tsconfig.json');
-  const tsxBin = join(
-    projectRoot,
-    'node_modules',
-    '.bin',
-    process.platform === 'win32' ? 'tsx.cmd' : 'tsx'
+/** Runs package entrypoints with Node (including Electron's bundled Node runtime). */
+export function resolveProviderAcpSpawnCommand(provider: 'CLAUDE' | 'CODEX'): SpawnCommand {
+  const packageName =
+    provider === 'CODEX'
+      ? '@agentclientprotocol/codex-acp'
+      : '@agentclientprotocol/claude-agent-acp';
+  const binaryName = provider === 'CODEX' ? 'codex-acp' : 'claude-agent-acp';
+  const entrypoint = resolveAcpBinary(packageName, binaryName).replace(
+    /\.asar([/\\])/g,
+    '.asar.unpacked$1'
   );
-  const hasTypeScriptRuntime =
-    process.execArgv.some((arg) => arg.includes('tsx')) ||
-    process.execArgv.some((arg) => arg.includes('ts-node'));
-
-  const buildNodeSpawnCommand = (entrypoint: string): SpawnCommand => {
-    const args = [entrypoint, 'internal', 'codex-app-server-acp'];
-    return {
-      command: process.execPath,
-      args,
-      commandLabel: `${process.execPath} ${args.join(' ')}`.trim(),
-    };
-  };
-
-  const resolveSourceSpawnCommand = (): SpawnCommand | null => {
-    if (!existsSync(cliSourceEntrypoint)) {
-      return null;
-    }
-    if (existsSync(tsxBin)) {
-      const args = [
-        ...(existsSync(tsconfigPath) ? ['--tsconfig', tsconfigPath] : []),
-        cliSourceEntrypoint,
-        'internal',
-        'codex-app-server-acp',
-      ];
-      return {
-        command: tsxBin,
-        args,
-        commandLabel: `${tsxBin} ${args.join(' ')}`.trim(),
-      };
-    }
-    if (hasTypeScriptRuntime) {
-      const args = [...process.execArgv, cliSourceEntrypoint, 'internal', 'codex-app-server-acp'];
-      return {
-        command: process.execPath,
-        args,
-        commandLabel: `${process.execPath} ${args.join(' ')}`.trim(),
-      };
-    }
-    return null;
-  };
-
-  if (preferSourceEntrypoint) {
-    const sourceCommand = resolveSourceSpawnCommand();
-    if (sourceCommand) {
-      return sourceCommand;
-    }
-
-    if (existsSync(cliDistEntrypoint)) {
-      return buildNodeSpawnCommand(cliDistEntrypoint);
-    }
-  } else {
-    if (existsSync(cliDistEntrypoint)) {
-      return buildNodeSpawnCommand(cliDistEntrypoint);
-    }
-
-    const sourceCommand = resolveSourceSpawnCommand();
-    if (sourceCommand) {
-      return sourceCommand;
-    }
+  if (entrypoint === binaryName) {
+    return { command: binaryName, args: [], commandLabel: binaryName };
   }
+  return {
+    command: process.execPath,
+    args: [entrypoint],
+    commandLabel: `${binaryName} (${entrypoint})`,
+  };
+}
 
-  throw new Error('Cannot resolve CLI entrypoint for CODEX ACP adapter spawn');
+/** Terminate discovery subprocesses with a bounded grace period and no leaked listeners. */
+export async function terminateCatalogProcess(child: ChildProcess): Promise<void> {
+  const hasExited = () => child.exitCode !== null || child.signalCode !== null;
+  if (hasExited()) {
+    return;
+  }
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  let resolveExit!: () => void;
+  const exitPromise = new Promise<void>((resolve) => {
+    resolveExit = resolve;
+  });
+  const onExit = () => resolveExit();
+  child.once('exit', onExit);
+  child.once('close', onExit);
+  try {
+    child.kill('SIGTERM');
+    const exited = await Promise.race([
+      exitPromise.then(() => true),
+      new Promise<false>((resolve) => {
+        timeout = setTimeout(() => resolve(false), 5000);
+        timeout.unref?.();
+      }),
+    ]);
+    if (!(exited || hasExited())) {
+      child.kill('SIGKILL');
+    }
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+    child.removeListener('exit', onExit);
+    child.removeListener('close', onExit);
+  }
 }

@@ -1,4 +1,4 @@
-import { type ChildProcess, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { Readable, Writable } from 'node:stream';
 import type { NewSessionMeta } from '@agentclientprotocol/claude-agent-acp';
@@ -10,7 +10,12 @@ import {
   type SessionConfigSelectOption,
 } from '@agentclientprotocol/sdk';
 import { createLogger, getCurrentProcessEnv } from '@/backend/services/logger.service';
-import { createAcpSpawnError, resolveAcpBinary, withTimeout } from './acp-runtime-spawn';
+import {
+  createAcpSpawnError,
+  resolveAcpBinary,
+  terminateCatalogProcess,
+  withTimeout,
+} from './acp-runtime-spawn';
 import { formatClaudeModelOptionName } from './claude-model-options';
 
 export type ClaudeModelCatalogEntry = {
@@ -20,7 +25,6 @@ export type ClaudeModelCatalogEntry = {
 };
 
 const CATALOG_OPERATION_TIMEOUT_MS = 30_000;
-const CATALOG_PROCESS_EXIT_TIMEOUT_MS = 5000;
 const CLAUDE_ACP_PACKAGE = '@agentclientprotocol/claude-agent-acp';
 const CLAUDE_ACP_BINARY = 'claude-agent-acp';
 const appLogger = createLogger('claude-model-catalog-loader');
@@ -36,45 +40,6 @@ function createCatalogClient(): Client {
     writeTextFile: unexpectedCallback,
     extNotification: () => Promise.resolve(),
   };
-}
-
-function hasExited(child: ChildProcess): boolean {
-  return child.exitCode !== null || child.signalCode !== null;
-}
-
-async function terminateCatalogProcess(child: ChildProcess): Promise<void> {
-  if (hasExited(child)) {
-    return;
-  }
-
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  let resolveExit!: () => void;
-  const exitPromise = new Promise<void>((resolve) => {
-    resolveExit = resolve;
-  });
-  const onExit = () => resolveExit();
-  child.once('exit', onExit);
-  child.once('close', onExit);
-
-  try {
-    child.kill('SIGTERM');
-    const exited = await Promise.race([
-      exitPromise.then(() => true),
-      new Promise<false>((resolve) => {
-        timeout = setTimeout(() => resolve(false), CATALOG_PROCESS_EXIT_TIMEOUT_MS);
-        timeout.unref?.();
-      }),
-    ]);
-    if (!(exited || hasExited(child))) {
-      child.kill('SIGKILL');
-    }
-  } finally {
-    if (timeout) {
-      clearTimeout(timeout);
-    }
-    child.removeListener('exit', onExit);
-    child.removeListener('close', onExit);
-  }
 }
 
 export async function fetchClaudeModelCatalogFromAcp(): Promise<ClaudeModelCatalogEntry[]> {

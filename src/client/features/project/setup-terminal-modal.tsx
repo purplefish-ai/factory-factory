@@ -35,7 +35,7 @@ export function SetupTerminalModal({ open, onClose }: SetupTerminalModalProps) {
                 claude login
               </code>
               <code className="rounded bg-muted px-1 py-0.5 font-mono text-sm w-fit">
-                codex login
+                ff codex login
               </code>
               <code className="rounded bg-muted px-1 py-0.5 font-mono text-sm w-fit">
                 gh auth login

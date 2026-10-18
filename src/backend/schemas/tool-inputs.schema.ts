@@ -65,6 +65,8 @@ export const AskUserQuestionItemSchema = z.object({
   header: z.string().optional(),
   options: z.array(AskUserQuestionOptionSchema),
   multiSelect: z.boolean().optional(),
+  optional: z.boolean().optional(),
+  allowOther: z.boolean().optional(),
 });
 
 /**
