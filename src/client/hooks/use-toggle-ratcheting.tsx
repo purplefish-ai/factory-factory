@@ -4,6 +4,7 @@ import {
   type PRRecipientChoice,
   PRRecipientPicker,
 } from '@/client/features/workspace/pr-recipient-picker';
+import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { PRDeliveryMode } from '@/shared/pr-monitoring';
 export interface ToggleRatchetingInput {
@@ -52,9 +53,15 @@ export function useToggleRatcheting(projectId?: string): UseToggleRatchetingRetu
       toast.error(`Failed to update PR monitoring: ${error.message}`);
     },
     onSettled: (_data, _error, input) => {
-      utils.workspace.get.invalidate({ id: input.workspaceId });
+      runInBackground(
+        utils.workspace.get.invalidate({ id: input.workspaceId }),
+        'Could not refresh data'
+      );
       if (projectId) {
-        utils.workspace.listForProject.invalidate({ projectId });
+        runInBackground(
+          utils.workspace.listForProject.invalidate({ projectId }),
+          'Could not refresh data'
+        );
       }
     },
   });

@@ -44,10 +44,8 @@ const pendingDeltaBuffers = new WeakMap<WebSocket, string[]>();
 
 class SnapshotStoreSubscriptionState {
   private active = false;
-  private snapshotChangedListener: ((event: SnapshotChangedEvent) => void | Promise<void>) | null =
-    null;
-  private snapshotRemovedListener: ((event: SnapshotRemovedEvent) => void | Promise<void>) | null =
-    null;
+  private snapshotChangedListener: ((event: SnapshotChangedEvent) => void) | null = null;
+  private snapshotRemovedListener: ((event: SnapshotRemovedEvent) => void) | null = null;
   private store: ApplicationServices['workspaceSnapshotStore'] | null = null;
 
   ensure(

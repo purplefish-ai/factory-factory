@@ -214,22 +214,26 @@ try {
     (entry) => entry.isDynamicEntry && entry.name === 'prism'
   );
   assert(prism, 'Cold-loading fixture must split the actual Prism engine into its own chunk');
-  server = createServer(async (req, res) => {
-    const pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
-    if (pathname.includes('..')) {
-      res.writeHead(400).end();
-      return;
-    }
-    try {
-      const file = join(outDir, pathname === '/' ? 'index.html' : pathname);
-      res.setHeader(
-        'Content-Type',
-        { '.js': 'text/javascript', '.css': 'text/css' }[extname(file)] ?? 'text/html'
-      );
-      res.end(await readFile(file));
-    } catch {
-      res.writeHead(404).end();
-    }
+  server = createServer((req, res) => {
+    void (async () => {
+      try {
+        const pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
+        if (pathname.includes('..')) {
+          res.writeHead(400).end();
+          return;
+        }
+        const file = join(outDir, pathname === '/' ? 'index.html' : pathname);
+        res.setHeader(
+          'Content-Type',
+          { '.js': 'text/javascript', '.css': 'text/css' }[extname(file)] ?? 'text/html'
+        );
+        res.end(await readFile(file));
+      } catch {
+        res.writeHead(404).end();
+      }
+    })().catch(() => {
+      res.writeHead(500).end();
+    });
   });
   await new Promise((resolveListen) => server.listen(0, '127.0.0.1', resolveListen));
   browser = await chromium.launch({ headless: true });

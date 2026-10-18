@@ -1,6 +1,7 @@
 import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
 import { toast } from 'sonner';
 import { RatchetWrenchIcon } from '@/client/features/workspace';
+import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,7 +22,7 @@ export function RatchetSettingsSection() {
   const updateSettings = trpc.userSettings.update.useMutation({
     onSuccess: () => {
       toast.success('Settings updated');
-      utils.userSettings.get.invalidate();
+      runInBackground(utils.userSettings.get.invalidate(), 'Could not refresh data');
     },
     onError: (error) => {
       toast.error(`Failed to update settings: ${error.message}`);

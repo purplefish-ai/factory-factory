@@ -13,7 +13,7 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
-import type { WebSocket } from 'ws';
+import type { RawData, WebSocket } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
 import { toError } from '@/backend/lib/error-utils';
@@ -198,7 +198,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
 
       // Session hydration is handled by explicit load_session from the client.
 
-      ws.on('message', async (data) => {
+      const handleMessage = async (data: RawData): Promise<void> => {
         inFlightMessageCount += 1;
         try {
           const message = parseWebSocketMessage(ChatMessageSchema, data, logger, 'chat message', {
@@ -219,6 +219,11 @@ export function createChatUpgradeHandler(appContext: AppContext) {
           inFlightMessageCount = Math.max(0, inFlightMessageCount - 1);
           clearSessionIfDisconnectedAndInactive();
         }
+      };
+      ws.on('message', (data) => {
+        void handleMessage(data).catch((error: unknown) => {
+          logger.error('Unhandled chat message failure', toError(error));
+        });
       });
 
       ws.on('close', () => {

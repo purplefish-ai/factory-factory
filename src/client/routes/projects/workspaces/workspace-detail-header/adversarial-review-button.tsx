@@ -1,6 +1,7 @@
 import { ShieldWarningIcon } from '@phosphor-icons/react/dist/csr/ShieldWarning';
 import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { toast } from 'sonner';
+import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
@@ -20,7 +21,10 @@ export function AdversarialReviewButton({
   const utils = trpc.useUtils();
   const trigger = trpc.adversarialReview.trigger.useMutation({
     onSuccess: (result) => {
-      utils.session.listSessions.invalidate({ workspaceId });
+      runInBackground(
+        utils.session.listSessions.invalidate({ workspaceId }),
+        'Could not refresh data'
+      );
       toast.success(
         result.status === 'already_active'
           ? 'Adversarial review is already running'

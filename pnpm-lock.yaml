@@ -523,6 +523,9 @@ importers:
       oxlint:
         specifier: 1.88.0
         version: 1.88.0(oxlint-tsgolint@7.0.2004)
+      oxlint-tsgolint:
+        specifier: 7.0.2004
+        version: 7.0.2004
       storybook:
         specifier: 10.6.2
         version: 10.6.2(@types/react@19.3.0)(prettier@3.9.9)(react@19.3.1)
@@ -12509,7 +12512,6 @@ snapshots:
       '@oxlint-tsgolint/linux-x64': 7.0.2004
       '@oxlint-tsgolint/win32-arm64': 7.0.2004
       '@oxlint-tsgolint/win32-x64': 7.0.2004
-    optional: true
 
   oxlint@1.88.0(oxlint-tsgolint@7.0.2004):
     optionalDependencies:

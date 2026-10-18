@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useChatWebSocket } from '@/client/features/chat';
+import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { useAutoScroll } from '@/hooks/use-auto-scroll';
 
@@ -72,7 +73,10 @@ export function useQuickChat(workspaceId: string | null) {
   const createSession = trpc.session.createAndStartSession.useMutation({
     onSuccess: () => {
       if (workspaceId) {
-        utils.session.listSessions.invalidate({ workspaceId });
+        runInBackground(
+          utils.session.listSessions.invalidate({ workspaceId }),
+          'Could not refresh data'
+        );
       }
     },
     onError: (error) => {
@@ -100,7 +104,10 @@ export function useQuickChat(workspaceId: string | null) {
     },
     onSettled: () => {
       if (workspaceId) {
-        utils.session.listSessions.invalidate({ workspaceId });
+        runInBackground(
+          utils.session.listSessions.invalidate({ workspaceId }),
+          'Could not refresh data'
+        );
       }
     },
   });

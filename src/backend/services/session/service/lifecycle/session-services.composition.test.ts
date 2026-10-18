@@ -91,7 +91,7 @@ describe('session services composition', () => {
     expect(handlers?.onRuntimeError).toEqual(expect.any(Function));
     expect(handlers?.onAcpLog).toEqual(expect.any(Function));
 
-    handlers?.onRuntimeError?.({
+    await handlers?.onRuntimeError?.({
       sessionId: 'session-1',
       error: new Error('runtime failed'),
       incarnationId: 'incarnation-1',

@@ -7,6 +7,7 @@ import {
   readRenderedThemeColors,
   type RenderedThemeColors,
 } from '@/client/lib/appearance';
+import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -424,7 +425,7 @@ export function AppearanceSettingsSection() {
       // Seed the cache so the AppearanceProvider applies the change before
       // the refetch lands, then refetch to stay authoritative.
       utils.userSettings.get.setData(undefined, result);
-      utils.userSettings.get.invalidate();
+      runInBackground(utils.userSettings.get.invalidate(), 'Could not refresh data');
     },
     onError: (error) => {
       toast.error(`Failed to update appearance: ${error.message}`);

@@ -3,6 +3,7 @@ import { CopyIcon } from '@phosphor-icons/react/dist/csr/Copy';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import { memo } from 'react';
 import { AttachmentPreview } from '@/client/features/composer';
+import { runInBackground } from '@/client/lib/background-task';
 import type { ChatMessage, GroupedMessageItem } from '@/lib/chat-protocol';
 import { extractTextFromMessage, isThinkingContent, isToolSequence } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
@@ -108,12 +109,17 @@ export const MessageItem = memo(function MessageItem({
             {/* Copy button */}
             {userText && (
               <button
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(userText);
-                  } catch {
-                    // Silently fail
-                  }
+                onClick={() => {
+                  runInBackground(
+                    (async () => {
+                      try {
+                        await navigator.clipboard.writeText(userText);
+                      } catch {
+                        // Silently fail
+                      }
+                    })(),
+                    'Could not copy message'
+                  );
                 }}
                 onMouseDown={(e) => e.preventDefault()}
                 className={cn(

@@ -6,6 +6,9 @@ type MockConnection = Pick<
   AgentSideConnection,
   'closed' | 'sessionUpdate' | 'requestPermission' | 'extNotification'
 >;
+type AsyncRequest = (method: string, ...args: unknown[]) => Promise<unknown>;
+type RequestMock = ReturnType<typeof vi.fn<AsyncRequest>>;
+
 type InjectedCodexClient = NonNullable<ConstructorParameters<typeof CodexAppServerAcpAdapter>[1]>;
 
 function createMockConnection(): MockConnection {
@@ -23,9 +26,9 @@ function createMockConnection(): MockConnection {
 
 function createMockCodexClient(): {
   client: InjectedCodexClient;
-  request: ReturnType<typeof vi.fn>;
+  request: RequestMock;
 } {
-  const request = vi.fn();
+  const request = vi.fn<AsyncRequest>();
   const client = {
     start: vi.fn(),
     stop: vi.fn(async () => undefined),
@@ -39,7 +42,7 @@ function createMockCodexClient(): {
 
 async function initializeAdapter(
   adapter: CodexAppServerAcpAdapter,
-  request: ReturnType<typeof vi.fn>
+  request: RequestMock
 ): Promise<void> {
   request.mockResolvedValueOnce({});
   request.mockResolvedValueOnce({
@@ -242,7 +245,7 @@ describe('CodexAppServerAcpAdapter notification ordering', () => {
     });
     await adapter.newSession({ cwd: '/tmp/workspace', mcpServers: [] });
 
-    const sessionUpdate = connection.sessionUpdate as ReturnType<typeof vi.fn>;
+    const sessionUpdate = vi.mocked(connection.sessionUpdate);
     sessionUpdate.mockClear();
     let releaseFirstUpdate: () => void = () => undefined;
     const firstUpdateBlocked = new Promise<void>((resolve) => {
@@ -278,11 +281,11 @@ describe('CodexAppServerAcpAdapter notification ordering', () => {
     releaseFirstUpdate();
     await Promise.all([started, completed]);
 
-    expect(sessionUpdate.mock.calls.map((call) => call[0].update.status).filter(Boolean)).toEqual([
-      'pending',
-      'in_progress',
-      'completed',
-    ]);
+    expect(
+      sessionUpdate.mock.calls
+        .map(([{ update }]) => ('status' in update ? update.status : undefined))
+        .filter(Boolean)
+    ).toEqual(['pending', 'in_progress', 'completed']);
   });
 
   it('finishes an item before turn completion clears its tool call state', async () => {
@@ -311,7 +314,7 @@ describe('CodexAppServerAcpAdapter notification ordering', () => {
       )
     );
 
-    const sessionUpdate = connection.sessionUpdate as ReturnType<typeof vi.fn>;
+    const sessionUpdate = vi.mocked(connection.sessionUpdate);
     sessionUpdate.mockClear();
     let releaseFirstUpdate: () => void = () => undefined;
     const firstUpdateBlocked = new Promise<void>((resolve) => {
@@ -365,7 +368,7 @@ describe('CodexAppServerAcpAdapter notification ordering', () => {
       throw new Error('expected plan approval request callback');
     };
     const connection = createMockConnection();
-    (connection.requestPermission as ReturnType<typeof vi.fn>).mockImplementation(
+    vi.mocked(connection.requestPermission).mockImplementation(
       () =>
         new Promise<RequestPermissionResponse>((resolve) => {
           resolvePlanApproval = resolve;

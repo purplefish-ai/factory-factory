@@ -252,7 +252,7 @@ function createShutdownHandler(
       });
 
     // Wait for graceful shutdown, then force kill remaining
-    setTimeout(async () => {
+    const forceKillRemaining = async (): Promise<void> => {
       try {
         await Promise.allSettled(termPromises);
 
@@ -292,6 +292,9 @@ function createShutdownHandler(
         console.error(chalk.red(`  Shutdown error: ${(err as Error).message}`));
         process.exitCode = 1;
       }
+    };
+    setTimeout(() => {
+      void forceKillRemaining();
     }, 5000);
   };
 }

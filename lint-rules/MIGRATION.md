@@ -107,3 +107,22 @@ invoked directly through Node, without pnpm or git-hook overhead. The Biome row
 measures its retained lint workload; its coverage differs from the Oxlint and
 formatter rows, so these tools are additive layers rather than interchangeable
 benchmarks.
+
+## Type-aware promise follow-up
+
+Oxlint 1.88.0 with the explicitly pinned `oxlint-tsgolint` 7.0.2004 reports 54
+floating and 57 misused promises on the follow-up baseline. These checks are now
+enabled in the root configuration after resolving all 111 findings. No new
+inline suppressions or file-specific lint exceptions are introduced. Biome's
+existing checks remain enabled, including its promise rules and exact cognitive
+complexity and blanket-delete policies.
+
+The fixes distinguish completion-owning callers from detached callbacks. Tests
+await asynchronous bridge calls and assertions, and asynchronous mock APIs keep
+Promise-returning types. Backend event callbacks preserve their existing error
+handling and resource-monitoring overlap guard. Signal cleanup failures are
+reported and covered by regression tests. Client background refreshes and UI
+callbacks explicitly own rejected work through contextual error reporting, while
+preserving existing mutation and event timing. Real CLI fixtures prove floating
+work and Promise-returning void callbacks fail with the normal configuration,
+while awaited and explicitly detached, error-handled work passes.

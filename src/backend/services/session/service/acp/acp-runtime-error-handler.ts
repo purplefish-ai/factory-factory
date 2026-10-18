@@ -13,7 +13,7 @@ export function wireAcpRuntimeErrorHandler(
   runtime: Pick<AcpRuntimeMetadata, 'incarnationId' | 'purpose'>,
   shouldDispatch: () => boolean
 ): void {
-  child.on('error', async (error) => {
+  const handleError = async (error: Error): Promise<void> => {
     const normalizedError = normalizeUnknownError(error);
     if (!shouldDispatch()) {
       return;
@@ -40,5 +40,8 @@ export function wireAcpRuntimeErrorHandler(
         handlerError: handlerError instanceof Error ? handlerError.message : String(handlerError),
       });
     }
+  };
+  child.on('error', (error) => {
+    void handleError(error);
   });
 }

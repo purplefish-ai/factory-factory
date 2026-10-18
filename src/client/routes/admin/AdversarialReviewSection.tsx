@@ -2,6 +2,7 @@ import { ShieldWarningIcon } from '@phosphor-icons/react/dist/csr/ShieldWarning'
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { ProviderCliWarning } from '@/client/components/provider-cli-warning';
+import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -26,7 +27,7 @@ export function AdversarialReviewSection() {
   const updateSettings = trpc.userSettings.update.useMutation({
     onSuccess: () => {
       toast.success('Adversarial review settings updated');
-      utils.userSettings.get.invalidate();
+      runInBackground(utils.userSettings.get.invalidate(), 'Could not refresh data');
     },
     onError: (error, variables) => {
       // Roll back only the selector this failed mutation touched, and only if

@@ -67,10 +67,10 @@ Read the applicable area guide before editing:
   `await import()`; extract shared modules instead.
 - Aliases: `@/*` → `src/`; `@prisma-gen/*` → `prisma/generated/`.
 - Let Oxfmt format source, sort imports and wrap Markdown prose at 80 columns.
-  Oxlint handles source linting; Biome preserves CSS and remaining lint guards.
-  Read [lint guardrails](lint-rules/README.md) before changing lint policy.
-  `pnpm check:fix` runs these tools; the pre-commit hook formats staged files.
-  Read environment through `configService`
+  Oxlint handles source linting and type-aware promise checks; Biome preserves
+  CSS and remaining lint guards. Read [lint guardrails](lint-rules/README.md)
+  before changing lint policy. `pnpm check:fix` runs these tools; the pre-commit
+  hook formats staged files. Read environment through `configService`
   (`@/backend/services/config.service`), never `process.env`.
 - Validate boundaries with Zod. Validate `JSON.parse` results instead of
   casting; use specific schemas or narrowed `z.unknown()`, never `z.any()`.
