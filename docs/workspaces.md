@@ -1,5 +1,11 @@
 # Workspace Progression Model
 
+> **Historical workspace progression model.** The Ratchet fixer workflow and
+> related PR state described here have been replaced by PR monitoring. Use
+> [workspace state](architecture/workspace-state.md) and
+> [PR monitoring](architecture/pull-requests.md) for current behavior. The
+> descriptions and test references below preserve the earlier implementation.
+
 This document defines the workspace lifecycle, Kanban ownership, and PR Ratchet
 model.
 
@@ -410,7 +416,7 @@ Key tests are located at:
 - Ratchet visual-state helpers:
   `src/client/features/workspace/ratchet-state.test.ts`;
 - snapshot propagation and reconciliation:
-  `src/backend/services/workspace-snapshot-store.service.test.ts` and
-  `src/backend/orchestration/snapshot-reconciliation.orchestrator.test.ts`;
+  `src/backend/services/workspace/service/snapshot/workspace-snapshot-store.service.test.ts`
+  and `src/backend/orchestration/snapshot-reconciliation.orchestrator.test.ts`;
 - live event propagation:
   `src/backend/orchestration/event-collector.orchestrator.test.ts`.
