@@ -62,6 +62,10 @@ one association cancels its pending events while leaving sibling monitoring and
 the main conversation intact. Discovery preserves detached associations as
 tombstones; only an explicit attachment clears them.
 
+The ratchet projection and reconciliation select one association for the PR URL,
+number, and sync timestamp, preferring a nonterminal PR. State, CI status, and
+merge conflicts come from the aggregate summary.
+
 ### Observations and events
 
 Polling, manual refresh, and dispatch preparation share normalized observation
