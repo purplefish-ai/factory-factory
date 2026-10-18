@@ -175,7 +175,8 @@ pnpm check
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for project structure, conventions, and
-the full contributor workflow.
+the full contributor workflow. The [documentation index](docs/README.md) points
+to current guides, proposals, and historical records.
 
 ## Acknowledgements
 

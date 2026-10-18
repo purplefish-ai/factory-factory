@@ -1,5 +1,9 @@
 # Factory Factory
 
+> **Historical milestone record (2026-02-14).** This is not current project
+> state or an active work queue. See the [planning archive](README.md) and
+> [current documentation](../docs/README.md).
+
 ## What This Is
 
 A developer tool that manages workspaces with AI agents, GitHub integration, CI
