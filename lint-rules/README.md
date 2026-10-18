@@ -86,3 +86,7 @@ Client event and subscription callbacks use `runInBackground` for detached work.
 It catches unexpected rejection and reports a contextual error toast. Existing
 handlers keep their own error handling. Query refreshes remain in the background
 so mutation pending state and subsequent UI actions keep their previous timing.
+
+Staged formatter commands permit batches containing only ignored files, such as
+`pnpm-lock.yaml`. Supported files still format normally, and parse errors still
+block commits.

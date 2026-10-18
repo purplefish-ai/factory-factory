@@ -23,7 +23,7 @@ function timestamp(value: string | null | undefined): string | null {
 }
 class PRObservationService {
   private ports: ObservationPorts | null = null;
-  private username: { value: string | null; expiresAt: number } | null = null;
+  private username: { value: string; expiresAt: number } | null = null;
   configure(ports: ObservationPorts) {
     this.ports = ports;
   }
@@ -45,10 +45,11 @@ class PRObservationService {
     const number = Number(match[3]);
     const policy = await this.ports.readPolicy();
     if (!this.username || this.username.expiresAt < Date.now()) {
-      this.username = {
-        value: await githubCLIService.getAuthenticatedUsername(signal),
-        expiresAt: Date.now() + 300_000,
-      };
+      const value = await githubCLIService.getAuthenticatedUsername(signal);
+      if (!value) {
+        throw new Error('Unable to determine authenticated GitHub identity');
+      }
+      this.username = { value, expiresAt: Date.now() + 300_000 };
     }
     const username = this.username.value;
     let reviewsComplete = true;

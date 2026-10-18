@@ -43,6 +43,7 @@ export interface PRSnapshotUpdatedEvent {
   prUrl?: string | null;
   prNumber: number;
   prState: string;
+  previousPrState?: string;
   prCiStatus: string;
   prReviewState: string | null;
   /** The PR write may have reset dispatch ownership; consumers must re-read it. */
@@ -180,6 +181,7 @@ class PRSnapshotService extends EventEmitter {
         workspaceId: target.workspaceId,
         prId: pr.id,
         prUrl: pr.url,
+        previousPrState: pr.state,
         ...snapshot,
         ...(result.dispatchReset ? { ratchetDispatchChanged: true as const } : {}),
       } satisfies PRSnapshotUpdatedEvent);
@@ -278,6 +280,7 @@ class PRSnapshotService extends EventEmitter {
         prUrl: pr.url,
         prNumber: input.prNumber,
         prState: input.prState,
+        previousPrState: pr.state,
         prCiStatus: input.ciStatus,
         prReviewState: input.reviewState,
         ...(result.dispatchReset ? { ratchetDispatchChanged: true as const } : {}),
@@ -339,6 +342,7 @@ class PRSnapshotService extends EventEmitter {
         workspaceId,
         prId: pr.id,
         prUrl: pr.url,
+        previousPrState: pr.state,
         ...snapshot,
       } satisfies PRSnapshotUpdatedEvent);
     }

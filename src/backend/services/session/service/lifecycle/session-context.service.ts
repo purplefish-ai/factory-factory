@@ -2,6 +2,7 @@ import { createLogger } from '@/backend/services/logger.service';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { PermissionPreset } from '@/backend/services/session/service/acp';
 import type { WorkspaceStatus } from '@/shared/core';
+import type { SessionProvider } from '@prisma-gen/client';
 import { getWorkflowPermissionPreset } from './session-workflow-permissions';
 import type { SessionRepository } from './session.repository';
 
@@ -18,7 +19,7 @@ export type SessionContext = Readonly<{
 }>;
 
 export interface SessionPermissionPresetPort {
-  getPermissionPreset(workflow: string): Promise<PermissionPreset>;
+  getPermissionPreset(workflow: string, provider: SessionProvider): Promise<PermissionPreset>;
 }
 
 type SessionContextServiceDependencies = {
@@ -76,9 +77,12 @@ export class SessionContextService {
   }
 
   async resolvePermissionPreset(session: AgentSessionRecord): Promise<PermissionPreset> {
-    const fallback = getWorkflowPermissionPreset(session.workflow);
+    const fallback = getWorkflowPermissionPreset(session.workflow, session.provider);
     try {
-      return await this.dependencies.permissionPresetPort.getPermissionPreset(session.workflow);
+      return await this.dependencies.permissionPresetPort.getPermissionPreset(
+        session.workflow,
+        session.provider
+      );
     } catch (error) {
       logger.warn('Failed loading user permission preset; using default', {
         workflow: session.workflow,

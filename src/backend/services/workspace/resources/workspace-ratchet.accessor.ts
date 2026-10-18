@@ -39,7 +39,7 @@ class WorkspaceRatchetAccessor {
       select: {
         status: true,
         prMonitoring: true,
-        prs: { where: { detachedAt: null } },
+        prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
         _count: { select: { prEvents: { where: pendingPREventWhere } } },
       },
     });
