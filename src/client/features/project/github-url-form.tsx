@@ -1,4 +1,6 @@
-import { CheckCircleIcon, TerminalIcon, WarningIcon } from '@phosphor-icons/react';
+import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
+import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
+import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { type ScriptType, StartupScriptForm } from '@/client/features/project/startup-script-form';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';

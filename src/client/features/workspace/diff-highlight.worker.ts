@@ -4,7 +4,14 @@ import { diffHighlightRequestSchema, fileHighlightRequestSchema } from './diff-h
 self.onmessage = (event: MessageEvent<unknown>) => {
   const file = fileHighlightRequestSchema.safeParse(event.data);
   if (file.success) {
-    self.postMessage(tokenizeFileContent(file.data.content, file.data.language, file.data.theme));
+    self.postMessage(
+      tokenizeFileContent(
+        file.data.content,
+        file.data.language,
+        file.data.theme,
+        file.data.cssClasses
+      )
+    );
     return;
   }
   const request = diffHighlightRequestSchema.safeParse(event.data);

@@ -1,10 +1,8 @@
-import {
-  CaretRightIcon,
-  CheckCircleIcon,
-  PauseIcon,
-  SpinnerGapIcon,
-  XCircleIcon,
-} from '@phosphor-icons/react';
+import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
+import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
+import { PauseIcon } from '@phosphor-icons/react/dist/csr/Pause';
+import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
+import { XCircleIcon } from '@phosphor-icons/react/dist/csr/XCircle';
 import { useState } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import { cn } from '@/lib/utils';

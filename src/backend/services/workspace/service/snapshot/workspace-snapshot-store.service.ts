@@ -250,6 +250,16 @@ export function sessionSummariesEqual(
   );
 }
 
+export function workspacePullRequestsEqual(
+  left: WorkspaceSnapshotEntry['prs'],
+  right: WorkspaceSnapshotEntry['prs']
+): boolean {
+  return isDeepStrictEqual(
+    left?.slice().sort((a, b) => a.id.localeCompare(b.id)),
+    right?.slice().sort((a, b) => a.id.localeCompare(b.id))
+  );
+}
+
 function sidebarStatusesEqual(
   left: WorkspaceSidebarStatus,
   right: WorkspaceSidebarStatus
@@ -283,7 +293,13 @@ function snapshotFieldValuesEqual(
       right as WorkspaceSessionSummary[]
     );
   }
-  if (field === 'prs' || field === 'prSummary') {
+  if (field === 'prs') {
+    return workspacePullRequestsEqual(
+      left as WorkspaceSnapshotEntry['prs'],
+      right as WorkspaceSnapshotEntry['prs']
+    );
+  }
+  if (field === 'prSummary') {
     return isDeepStrictEqual(left, right);
   }
   return Object.is(left, right);

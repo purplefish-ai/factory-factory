@@ -3,7 +3,7 @@
 Workspace-based Claude Code/Codex sessions in git worktrees. TypeScript:
 Express + tRPC, React + Vite, Prisma/SQLite, Electron, and the `ff` CLI.
 
-Use Node `>=26.8.1` and pnpm (version in `package.json`); never npm or yarn.
+Use Node `>=26.12.0` and pnpm (version in `package.json`); never npm or yarn.
 Electron uses its bundled runtime.
 
 ## Working approach
@@ -88,8 +88,8 @@ Read the matching note before changing these areas:
 
 - [Background jobs](docs/architecture/background-jobs.md): `jobRunner`, poll
   loops, shutdown.
-- [Pull requests](docs/architecture/pull-requests.md): Ratchet, `WorkspacePR`,
-  `gh` coordination.
+- [Pull requests](docs/architecture/pull-requests.md): PR monitoring,
+  `WorkspacePR`, `gh` coordination.
 - [Workspace state](docs/architecture/workspace-state.md): run scripts,
   auto-iteration, Kanban.
 - [Agent runtime](docs/architecture/agent-runtime.md): ACP, subagents, child
@@ -111,6 +111,9 @@ Read the matching note before changing these areas:
   `gh pr create`/`gh issue create` bodies.
 
 ## Maintaining guidance
+
+Use the [documentation index](docs/README.md) to distinguish current guides from
+proposals and historical plans. Search current guides before execution records.
 
 Keep shared instructions here; each `CLAUDE.md` imports its sibling `AGENTS.md`.
 Add both when creating an area guide; Claude-only guidance follows the import.

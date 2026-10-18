@@ -1,10 +1,8 @@
-import {
-  ArrowDownIcon,
-  ArrowsClockwiseIcon,
-  PlayIcon,
-  SpinnerGapIcon,
-  WarningIcon,
-} from '@phosphor-icons/react';
+import { ArrowDownIcon } from '@phosphor-icons/react/dist/csr/ArrowDown';
+import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
+import { PlayIcon } from '@phosphor-icons/react/dist/csr/Play';
+import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
+import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { memo, useCallback, useEffect, useMemo } from 'react';
 import type { useChatWebSocket } from '@/client/features/chat';
 import {

@@ -52,10 +52,28 @@ changing destinations/recipients starts an observation epoch. MAIN queues one
 trusted enablement control; DEDICATED batches carry concise maintenance
 instructions in the same bounded event message. Collection projections report
 MERGED only when every attached PR is merged; an open sibling remains visible.
-Workspace snapshots include the plain `prs` collection and its `prSummary`. The
-PR menu offers per-association refresh, review, and detachment. Detaching one
-association cancels its pending events while leaving sibling monitoring and the
-main conversation intact.
+
+Accepted per-PR `NONE` → `OPEN` observations notify the parent workspace once
+for each newly opened association, including attachment and discovery refreshes.
+Rejected or unchanged observations do not repeat the notification.
+
+Workspace snapshots include the plain `prs` collection and its `prSummary`. PR
+arrays are compared by identity and content, so database row order does not
+trigger drift warnings, version bumps, or snapshot broadcasts. Workspace and
+ratchet snapshot reads order PRs by ID to keep scalar PR selection consistent.
+
+The PR menu offers per-association refresh, review, and detachment. Detaching
+one association cancels its pending events while leaving sibling monitoring and
+the main conversation intact. Discovery preserves detached associations as
+tombstones; only an explicit attachment clears them.
+
+The ratchet projection and reconciliation select one association for the PR URL,
+number, and sync timestamp, preferring a nonterminal PR. State, CI status, and
+merge conflicts come from the aggregate summary.
+
+Manual workspace PR refreshes serialize per workspace so concurrent requests
+report a committed lifecycle transition only once. Sibling refresh failures log
+their reason while preserving transitions already written by successful reads.
 
 ### Observations and events
 
@@ -97,9 +115,11 @@ preserves queued facts so the new recipient can receive them.
 
 Review policy defaults to `CHANGES_REQUESTED`: changes-requested review bodies
 and unresolved inline threads. `ALL_REVIEW_FEEDBACK` also includes commented
-review summaries. Ordinary PR conversation comments do not trigger updates. The
-app's own [adversarial-review marker](../design/adversarial-review.md) remains
-an explicit exception under its authenticated GitHub identity.
+review summaries. Ordinary PR conversation comments do not trigger updates.
+GitHub identity must be known before accepting an observation, so failed
+identity lookups are retried without disabling self-review filtering. The app's
+own [adversarial-review marker](../design/adversarial-review.md) remains an
+explicit exception under its authenticated GitHub identity.
 
 Approvals supersede earlier feedback only with reliable same-author ordering.
 Submission times and REST review ordinals provide that ordering; opaque IDs do
@@ -130,9 +150,14 @@ received, regardless of whether the PR was fixed. After an uncertain exit,
 provider-owned user history must contain the exact delivery marker to prove
 receipt; optimistic UI rows are insufficient. Missing history pauses delivery as
 `RECEIPT_UNAVAILABLE`. Loaded history without the marker allows a bounded retry
-in the same conversation. A recipient change first recovers old claims; only
-proven absence allows cancelling an old frozen delivery. It never retargets that
-frozen message into a new conversation.
+in the same conversation. When that session has a recorded provider identity
+rollover, proven absence permits recovery to re-stamp its frozen claim to the
+current identity. The recovery transaction fences the identity observed before
+receipt lookup and verifies the rollover lineage; unreadable history still
+pauses delivery. Frozen message text and delivery IDs remain unchanged. A
+recipient change first recovers old claims; only proven absence allows
+cancelling an old frozen delivery. It never retargets that frozen message into a
+new conversation.
 
 Closing a conversation retains its provider session ID in archived transcript
 metadata. Receipt recovery reads that identity and checks provider-owned

@@ -6,7 +6,10 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { applyAppearance } from '@/client/lib/appearance';
 import { DEFAULT_APPEARANCE } from '@/shared/appearance';
-import { FileCode, FileViewer } from './file-viewer';
+import { FileCode } from './file-code';
+import { FileViewer } from './file-viewer';
+
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 const mocks = vi.hoisted(() => ({ theme: 'dark' }));
 
@@ -64,7 +67,7 @@ it('keeps source text and every line available before the worker responds', () =
   const content = '/* first\n\nlast */\n';
   const container = document.createElement('div');
   container.innerHTML = renderToStaticMarkup(
-    createElement(FileCode, { content, language: 'typescript', theme: {} })
+    createElement(FileCode, { content, language: 'typescript', theme: 'dark' })
   );
   expect(container.querySelector('[aria-hidden="true"]')?.textContent).toBe('1\n2\n3\n4');
   container.querySelectorAll('[aria-hidden="true"]').forEach((number) => number.remove());
@@ -75,7 +78,7 @@ it('groups large source into bounded text blocks while retaining browser-find te
   const content = 'const value = 1;\n'.repeat(20_000);
   const container = document.createElement('div');
   container.innerHTML = renderToStaticMarkup(
-    createElement(FileCode, { content, language: 'typescript', theme: {} })
+    createElement(FileCode, { content, language: 'typescript', theme: 'dark' })
   );
   const blocks = [...container.querySelectorAll('code')];
   expect(blocks).toHaveLength(Math.ceil(20_001 / 128));
@@ -125,7 +128,7 @@ it.each(['ready', 'pending', 'visible'])(
     const root = createRoot(container);
     try {
       await act(() =>
-        root.render(createElement(FileCode, { content, language: 'typescript', theme: {} }))
+        root.render(createElement(FileCode, { content, language: 'typescript', theme: 'dark' }))
       );
       const respondWithTokens = () =>
         respond?.(
@@ -133,7 +136,7 @@ it.each(['ready', 'pending', 'visible'])(
             data: new Map(
               content
                 .split('\n')
-                .map((line, index) => [index, [{ content: line, style: { color: 'gray' } }]])
+                .map((line, index) => [index, [{ content: line, className: 'token comment' }]])
             ),
           })
         );
@@ -175,9 +178,9 @@ it.each(['ready', 'pending', 'visible'])(
         selection?.removeAllRanges();
         document.dispatchEvent(new Event('selectionchange'));
       });
-      expect(block.element.querySelector('code span[style]')).not.toBeNull();
+      expect(block.element.querySelector('code .token')).not.toBeNull();
       if (timing === 'ready') {
-        const highlighted = block.element.querySelectorAll('code span[style]').item(15)?.firstChild;
+        const highlighted = block.element.querySelectorAll('code .token').item(15)?.firstChild;
         if (!highlighted) {
           throw new Error('Missing highlighted source');
         }
@@ -195,7 +198,9 @@ it.each(['ready', 'pending', 'visible'])(
         }
         const updated = content.replaceAll('source', 'changed');
         await act(() =>
-          root.render(createElement(FileCode, { content: updated, language: 'text', theme: {} }))
+          root.render(
+            createElement(FileCode, { content: updated, language: 'text', theme: 'dark' })
+          )
         );
         expect(container.textContent).toContain('changed line 399');
         expect(container.textContent).not.toContain('source line 399');

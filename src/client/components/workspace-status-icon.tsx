@@ -1,9 +1,7 @@
-import {
-  ChatCircleDotsIcon,
-  ClipboardTextIcon,
-  ShieldWarningIcon,
-  WarningIcon,
-} from '@phosphor-icons/react';
+import { ChatCircleDotsIcon } from '@phosphor-icons/react/dist/csr/ChatCircleDots';
+import { ClipboardTextIcon } from '@phosphor-icons/react/dist/csr/ClipboardText';
+import { ShieldWarningIcon } from '@phosphor-icons/react/dist/csr/ShieldWarning';
+import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 
 interface WorkspaceStatusIconProps {
   pendingRequestType?: 'permission_request' | 'plan_approval' | 'user_question' | null;

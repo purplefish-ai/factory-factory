@@ -1,4 +1,6 @@
-import { MicrophoneIcon, MicrophoneSlashIcon, SpinnerGapIcon } from '@phosphor-icons/react';
+import { MicrophoneIcon } from '@phosphor-icons/react/dist/csr/Microphone';
+import { MicrophoneSlashIcon } from '@phosphor-icons/react/dist/csr/MicrophoneSlash';
+import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { playSound } from '@/client/lib/sound';

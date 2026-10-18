@@ -1,4 +1,6 @@
-import { DesktopIcon, MoonIcon, SunIcon } from '@phosphor-icons/react';
+import { DesktopIcon } from '@phosphor-icons/react/dist/csr/Desktop';
+import { MoonIcon } from '@phosphor-icons/react/dist/csr/Moon';
+import { SunIcon } from '@phosphor-icons/react/dist/csr/Sun';
 import { useTheme } from 'next-themes';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';

@@ -1,4 +1,4 @@
-import { CaretUpDownIcon } from '@phosphor-icons/react';
+import { CaretUpDownIcon } from '@phosphor-icons/react/dist/csr/CaretUpDown';
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';

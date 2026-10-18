@@ -104,10 +104,25 @@ Daily/weekly/monthly tasks can optionally run at a specific time of day in the
 user's browser timezone (`scheduledTime` HH:MM + IANA `timezone` fields).
 
 Each execution runs the configured prompt, monitors for PR creation, and
-advances the schedule. Concurrent runs are skipped.
+advances the schedule. Concurrent runs are skipped. Default sessions use the
+`periodic-task` workflow, so non-interactive Codex startup selects unattended
+execution mode and tool approval prompts cannot stall scheduled runs.
 
 Managed via the "Periodic Tasks" admin tab and created from the Kanban launch
 dropdown. The workspace right panel shows execution history for
 periodic-task-sourced workspaces.
 
 Service capsule: `src/backend/services/periodic-task/`.
+
+## Client query transport
+
+The browser streams completed tRPC queries within each HTTP batch so a slow read
+does not hold up independent results. Mutations retain ordinary HTTP batching,
+including support for response headers and cookies. Both transports use the same
+relative `/api/trpc` URL, default same-origin credentials and SuperJSON.
+
+The Express adapter and authenticated HTTP proxy pass incremental query chunks
+through. An external proxy configured to buffer responses can still delay
+results until the batch finishes; disable response buffering for `/api/trpc`
+when configuring such a proxy. Procedure errors remain independent within a
+batch.

@@ -1,4 +1,6 @@
-import { CaretLeftIcon, CaretRightIcon, QuestionIcon } from '@phosphor-icons/react';
+import { CaretLeftIcon } from '@phosphor-icons/react/dist/csr/CaretLeft';
+import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
+import { QuestionIcon } from '@phosphor-icons/react/dist/csr/Question';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { withOccurrenceKeys } from '@/client/lib/list-keys';
 import { Button } from '@/components/ui/button';

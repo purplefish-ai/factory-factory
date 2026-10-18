@@ -504,11 +504,7 @@ export const workspaceCoreRouter = router({
       const result = await workspaceQueryService.syncPRStatus(input.workspaceId);
       if (result.success && result.prState && result.previousPrState !== result.prState) {
         const { prState } = result;
-        if (prState === 'OPEN' && result.previousPrState === 'NONE') {
-          fireLifecycleNotification(input.workspaceId, 'A pull request has been opened.').catch(
-            () => undefined
-          );
-        } else if (prState === 'MERGED') {
+        if (prState === 'MERGED') {
           fireLifecycleNotification(input.workspaceId, 'The pull request has been merged.').catch(
             () => undefined
           );

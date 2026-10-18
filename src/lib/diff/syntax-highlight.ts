@@ -66,6 +66,8 @@ function isHastRoot(value: unknown): value is HastRoot {
 /** A single syntax token for rendering */
 export interface SyntaxToken {
   content: string;
+  /** Flattened Prism ancestor and leaf classes for CSS file themes. */
+  className?: string;
   /** Inline style (e.g. { color: 'hsl(...)' }) from the Prism theme */
   style?: CSSProperties;
 }
@@ -134,7 +136,8 @@ function processTextNode(
   node: HastText,
   classNames: string[],
   lines: SyntaxToken[][],
-  stylesheet: PrismStylesheet
+  stylesheet: PrismStylesheet,
+  cssClasses: boolean
 ) {
   const parts = node.value.split('\n');
   for (let i = 0; i < parts.length; i++) {
@@ -143,10 +146,13 @@ function processTextNode(
     }
     const part = parts[i];
     if (part && part.length > 0) {
-      const style = resolveStyle(classNames, stylesheet);
       const currentLine = lines[lines.length - 1];
       if (currentLine) {
-        currentLine.push({ content: part, style });
+        currentLine.push(
+          cssClasses
+            ? { content: part, className: classNames.join(' ') }
+            : { content: part, style: resolveStyle(classNames, stylesheet) }
+        );
       }
     }
   }
@@ -156,25 +162,30 @@ function walkHastNode(
   node: HastNode,
   inheritedClassNames: string[],
   lines: SyntaxToken[][],
-  stylesheet: PrismStylesheet
+  stylesheet: PrismStylesheet,
+  cssClasses: boolean
 ) {
   if (node.type === 'text') {
-    processTextNode(node, inheritedClassNames, lines, stylesheet);
+    processTextNode(node, inheritedClassNames, lines, stylesheet, cssClasses);
   } else if (node.type === 'element') {
     const classNames = [
       ...inheritedClassNames,
       ...((node.properties?.className as string[]) ?? []),
     ];
     for (const child of node.children) {
-      walkHastNode(child, classNames, lines, stylesheet);
+      walkHastNode(child, classNames, lines, stylesheet, cssClasses);
     }
   }
 }
 
-function splitHastByLine(root: HastRoot, stylesheet: PrismStylesheet): SyntaxToken[][] {
+function splitHastByLine(
+  root: HastRoot,
+  stylesheet: PrismStylesheet,
+  cssClasses = false
+): SyntaxToken[][] {
   const lines: SyntaxToken[][] = [[]];
   for (const child of root.children) {
-    walkHastNode(child, [], lines, stylesheet);
+    walkHastNode(child, [], lines, stylesheet, cssClasses);
   }
   return lines;
 }
@@ -283,7 +294,8 @@ function boundedFileTokens(content: string, tokenLines: SyntaxToken[][]): LineTo
 export function tokenizeFileContent(
   content: string,
   language: string,
-  stylesheet: PrismStylesheet
+  stylesheet: PrismStylesheet,
+  cssClasses = false
 ): LineTokenMap | null {
   const resolved = resolveLanguage(language);
   if (!resolved) {
@@ -294,7 +306,7 @@ export function tokenizeFileContent(
     if (!isHastRoot(highlighted)) {
       return null;
     }
-    return boundedFileTokens(content, splitHastByLine(highlighted, stylesheet));
+    return boundedFileTokens(content, splitHastByLine(highlighted, stylesheet, cssClasses));
   } catch {
     return null;
   }

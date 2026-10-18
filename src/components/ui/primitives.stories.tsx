@@ -1,4 +1,6 @@
-import { InfoIcon, MagnifyingGlassIcon, PlusIcon } from '@phosphor-icons/react';
+import { InfoIcon } from '@phosphor-icons/react/dist/csr/Info';
+import { MagnifyingGlassIcon } from '@phosphor-icons/react/dist/csr/MagnifyingGlass';
+import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import type { Meta, StoryObj } from '@storybook/react';
 import { useState } from 'react';
 import { toast } from 'sonner';

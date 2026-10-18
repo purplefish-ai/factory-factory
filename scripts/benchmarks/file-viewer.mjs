@@ -37,11 +37,7 @@ try {
           Prism,
           { children: source, language: 'typescript', showLineNumbers: true, wrapLines: true },
         ],
-        [
-          'FileCode',
-          FileCode,
-          { content: source, language: 'typescript', theme: { comment: { color: 'gray' } } },
-        ],
+        ['FileCode', FileCode, { content: source, language: 'typescript', theme: 'dark' }],
       ]) {
         const host = document.createElement('div');
         host.style.cssText = 'height:400px;overflow:auto';
@@ -54,7 +50,7 @@ try {
         let scroll = null;
         if (name === 'FileCode') {
           const deadline = performance.now() + 15_000;
-          while (!host.querySelector('code span[style]')) {
+          while (!host.querySelector('code .token')) {
             if (performance.now() > deadline) {
               throw new Error('Timed out waiting for worker highlighting');
             }
@@ -65,7 +61,7 @@ try {
           if (sourceNodes.textContent !== source) {
             throw new Error('source changed');
           }
-          if (!host.querySelector('code span[style]')) {
+          if (!host.querySelector('code .token')) {
             throw new Error('worker highlighting missing');
           }
           const code = host.querySelectorAll('code');
@@ -141,7 +137,7 @@ try {
       try {
         const start = performance.now();
         flushSync(() =>
-          root.render(createElement(FileCode, { content: source, language: 'json', theme: {} }))
+          root.render(createElement(FileCode, { content: source, language: 'json', theme: 'dark' }))
         );
         const firstRender = performance.now() - start;
         if (source.length <= 32_768) {

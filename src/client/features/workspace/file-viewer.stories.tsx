@@ -5,7 +5,8 @@ import { ThemeProvider } from 'next-themes';
 import { type CSSProperties, type ReactNode, useState } from 'react';
 import { expect, within } from 'storybook/test';
 import { trpc } from '@/client/lib/trpc';
-import { FileCode, FileViewer } from './file-viewer';
+import { FileCode } from './file-code';
+import { FileViewer } from './file-viewer';
 import { WorkspacePanelProvider } from './workspace-panel-context';
 
 const fontStyle: CSSProperties & { '--font-mono': string } = {
@@ -92,8 +93,6 @@ export const DarkMonospaceFont: Story = {
   play: AccessibleMonospaceFont.play,
 };
 
-const largeSourceTheme = { comment: { color: 'gray' }, keyword: { color: 'purple' } };
-
 export const LargeSourceFile: Story = {
   render: () => (
     <div className="h-80 overflow-auto">
@@ -102,7 +101,7 @@ export const LargeSourceFile: Story = {
           4000
         )}
         language="typescript"
-        theme={largeSourceTheme}
+        theme="dark"
       />
     </div>
   ),
@@ -111,11 +110,7 @@ export const LargeSourceFile: Story = {
 export const MinifiedSourceFile: Story = {
   render: () => (
     <div className="h-80 overflow-auto">
-      <FileCode
-        content={`[${'{"x":1},'.repeat(124_998)}{"x":1}]`}
-        language="json"
-        theme={largeSourceTheme}
-      />
+      <FileCode content={`[${'{"x":1},'.repeat(124_998)}{"x":1}]`} language="json" theme="dark" />
     </div>
   ),
 };

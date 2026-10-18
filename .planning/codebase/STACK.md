@@ -1,5 +1,9 @@
 # Technology Stack
 
+> **Historical snapshot (2026-05-17).** Paths, dependency versions, commands,
+> and conventions may be obsolete. Use the
+> [current documentation](../../docs/README.md) for implementation work.
+
 **Analysis Date:** 2026-05-17
 
 ## Languages

@@ -92,3 +92,40 @@ it('omits oversized blocks before transfer while preserving multiline syntax in 
   expect(tokens.has(0)).toBe(false);
   expect(tokens.get(128)).toEqual([{ content: 'still comment', style: { color: 'gray' } }]);
 });
+
+it('returns flattened JSX ancestor/leaf classes without inline styles for CSS themes', () => {
+  const post = vi.spyOn(window, 'postMessage').mockImplementation(() => undefined);
+  window.dispatchEvent(
+    new MessageEvent('message', {
+      data: {
+        content: '<Button disabled={true} count={2} onClick={() => null} />',
+        language: 'tsx',
+        theme: {},
+        cssClasses: true,
+      },
+    })
+  );
+  const tokens = post.mock.calls[0]?.[0] as Map<
+    number,
+    Array<{ content: string; className?: string; style?: unknown }>
+  >;
+  expect(
+    tokens
+      .get(0)
+      ?.find((token) => token.content === 'true')
+      ?.className?.split(' ')
+  ).toEqual(expect.arrayContaining(['token', 'tag', 'boolean']));
+  expect(
+    tokens
+      .get(0)
+      ?.find((token) => token.content === 'null')
+      ?.className?.split(' ')
+  ).toEqual(expect.arrayContaining(['token', 'tag', 'keyword']));
+  expect(tokens.get(0)?.every((token) => token.style === undefined)).toBe(true);
+  expect(
+    tokens
+      .get(0)
+      ?.map((token) => token.content)
+      .join('')
+  ).toBe('<Button disabled={true} count={2} onClick={() => null} />');
+});

@@ -1,4 +1,5 @@
-import { InfoIcon, PencilIcon } from '@phosphor-icons/react';
+import { InfoIcon } from '@phosphor-icons/react/dist/csr/Info';
+import { PencilIcon } from '@phosphor-icons/react/dist/csr/Pencil';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import {
