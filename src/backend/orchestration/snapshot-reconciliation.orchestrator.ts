@@ -35,6 +35,7 @@ import {
   type gitOpsService,
   type SnapshotUpdateInput,
   sessionSummariesEqual,
+  workspacePullRequestsEqual,
   type WorkspaceSnapshotEntry,
   type workspaceMaintenanceService,
   type workspaceSnapshotStore,
@@ -133,6 +134,24 @@ const DRIFT_FIELD_GROUPS: { group: string; fields: DriftComparableField[] }[] = 
   { group: 'session', fields: ['isWorking', 'pendingRequestType', 'sessionSummaries'] },
 ];
 
+/** Compare fields using the snapshot store's collection equality semantics. */
+function driftFieldValuesEqual(
+  field: DriftComparableField,
+  authoritative: SnapshotUpdateInput,
+  existing: WorkspaceSnapshotEntry
+): boolean {
+  if (field === 'sessionSummaries') {
+    return (
+      authoritative.sessionSummaries !== undefined &&
+      sessionSummariesEqual(authoritative.sessionSummaries, existing.sessionSummaries)
+    );
+  }
+  if (field === 'prs') {
+    return workspacePullRequestsEqual(authoritative.prs, existing.prs);
+  }
+  return isDeepStrictEqual(authoritative[field], existing[field]);
+}
+
 /**
  * Compare an existing snapshot entry against authoritative values and return
  * a list of fields that have drifted.
@@ -150,11 +169,7 @@ export function detectDrift(
         continue;
       }
       const snapValue = existing[field];
-      const valuesEqual =
-        field === 'sessionSummaries'
-          ? authoritative.sessionSummaries !== undefined &&
-            sessionSummariesEqual(authoritative.sessionSummaries, existing.sessionSummaries)
-          : isDeepStrictEqual(authValue, snapValue);
+      const valuesEqual = driftFieldValuesEqual(field, authoritative, existing);
       if (!valuesEqual) {
         drifts.push({
           field,
