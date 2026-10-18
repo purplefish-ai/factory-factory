@@ -119,7 +119,7 @@ describe('npm publish workflow', () => {
     const dryRunStep = getStep(verifyJob, 'Publish to npm (dry run)');
     expect(dryRunStep.if).toBe(
       githubExpression(
-        "matrix.node-version == '26.8.1' && github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true'"
+        "matrix.node-version == '26.12.0' && github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true'"
       )
     );
     expect(dryRunStep.run).toBe('npm publish --dry-run');
@@ -163,7 +163,7 @@ describe('npm publish workflow', () => {
     const uploadStep = getStep(getJob('verify'), 'Upload npm package');
     expect(uploadStep.if).toBe(
       githubExpression(
-        "matrix.node-version == '26.8.1' && (github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.event.inputs.dry_run != 'true' && github.event.inputs.finalize_release != 'true'))"
+        "matrix.node-version == '26.12.0' && (github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.event.inputs.dry_run != 'true' && github.event.inputs.finalize_release != 'true'))"
       )
     );
     expect(uploadStep.with).toEqual({

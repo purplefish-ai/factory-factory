@@ -9,7 +9,7 @@
  *   node scripts/ensure-native-modules.mjs electron --force  # Rebuild cached binaries
  */
 
-import { execSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import {
   cpSync,
   existsSync,
@@ -195,7 +195,11 @@ function restoreFromCache(target) {
 function rebuild(target) {
   console.log(`  Rebuilding native modules for ${target}...`);
   if (target === 'electron') {
-    execSync('pnpm exec electron-rebuild -f -m . -o better-sqlite3,node-pty', {
+    // Resolve once from this project. Running pnpm from an installed dependency
+    // can trigger a separate install there instead of using our rebuild tool.
+    const require = createRequire(import.meta.url);
+    const rebuildCli = join(dirname(require.resolve('@electron/rebuild')), 'cli.js');
+    execFileSync(process.execPath, [rebuildCli, '-f', '-m', '.', '-o', 'better-sqlite3,node-pty'], {
       cwd: ROOT,
       stdio: 'inherit',
     });
@@ -205,8 +209,7 @@ function rebuild(target) {
     const adapterPath = realpathSync(
       join(ROOT, 'node_modules', '@prisma', 'adapter-better-sqlite3')
     );
-    // A constant shell command supports Windows pnpm.cmd without interpolating paths.
-    execSync('pnpm exec electron-rebuild -f -m . -o better-sqlite3', {
+    execFileSync(process.execPath, [rebuildCli, '-f', '-m', '.', '-o', 'better-sqlite3'], {
       cwd: adapterPath,
       stdio: 'inherit',
     });
