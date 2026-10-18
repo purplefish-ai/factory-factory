@@ -47,6 +47,17 @@ function createHarness() {
 }
 
 describe('SessionContextService', () => {
+  it.each(['CODEX', 'CLAUDE'] as const)(
+    'keeps the scheduled %s fallback provider-specific',
+    async (provider) => {
+      const { service, session, permissionPresetPort } = createHarness();
+      permissionPresetPort.getPermissionPreset.mockRejectedValueOnce(new Error('settings failed'));
+      await expect(
+        service.resolvePermissionPreset({ ...session, workflow: 'periodic-task', provider })
+      ).resolves.toBe(provider === 'CODEX' ? 'YOLO' : 'STRICT');
+    }
+  );
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -107,7 +118,10 @@ describe('SessionContextService', () => {
 
     await expect(service.resolvePermissionPreset({ ...session, workflow })).resolves.toBe(preset);
 
-    expect(permissionPresetPort.getPermissionPreset).toHaveBeenCalledWith(workflow);
+    expect(permissionPresetPort.getPermissionPreset).toHaveBeenCalledWith(
+      workflow,
+      session.provider
+    );
   });
 
   it.each([
