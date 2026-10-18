@@ -372,10 +372,6 @@ class WorkspacePRAccessor {
           where: { workspaceId_url: { workspaceId, url } },
         });
         if (existing) {
-          if (existing.detachedAt) {
-            await tx.workspacePR.update({ where: { id: existing.id }, data: reattachmentFields });
-            ids.push(existing.id);
-          }
           continue;
         }
         const pr = await tx.workspacePR.create({

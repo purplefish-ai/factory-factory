@@ -180,9 +180,13 @@ custom/append snapshot semantics. See
 [the upgrade validation](../superpowers/plans/2026-09-09-remaining-dependencies.md).
 
 Auto-iteration sessions use `autoIterationPermissions`, with YOLO as the
-fallback if settings cannot be read. Codex auto-iteration selects unattended
-execution mode. PR updates inherit their main conversation’s configuration and
-do not use a workflow-specific permission preset.
+fallback if settings cannot be read. Codex auto-iteration and periodic-task
+sessions select unattended execution mode during non-interactive startup.
+Scheduled Codex tasks use YOLO permissions so the configured workspace preset
+cannot restore interactive approvals after startup. Scheduled Claude tasks
+retain their configured workspace permission preset. PR updates inherit their
+main conversation’s configuration and do not use a workflow-specific permission
+preset.
 
 ## Session lifecycle ownership
 

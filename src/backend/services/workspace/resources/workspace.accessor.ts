@@ -193,7 +193,7 @@ function flatten<
 /** Included on every read that has to reproduce the old flat workspace shape. */
 const sideTables = {
   prMonitoring: true,
-  prs: { where: { detachedAt: null } },
+  prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
   prDiscovery: true,
   runScript: true,
   autoIteration: true,
@@ -230,7 +230,7 @@ export type WorkspaceWithSessions = WorkspaceWithAgentSessions;
 const projectAndPR = {
   project: true,
   prMonitoring: { select: { enabled: true } },
-  prs: { where: { detachedAt: null } },
+  prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
   prDiscovery: true,
   autoIteration: true,
 } satisfies Prisma.WorkspaceInclude;

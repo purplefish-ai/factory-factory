@@ -60,7 +60,7 @@ function SubagentTabBarStoryFrame({ selection }: SubagentTabBarStoryProps) {
 }
 
 const meta = {
-  title: 'Workspace/MainViewTabBar/Subagent',
+  title: 'Workspace/MainViewTabBar',
   component: SubagentTabBarStoryFrame,
   parameters: { layout: 'fullscreen' },
   args: { selection: runningSelection },
@@ -84,4 +84,31 @@ export const CompletedSubagent: Story = {
       },
     },
   },
+};
+
+function ScreenshotTabBarStory() {
+  const { openTab, tabs, activeTabId } = useWorkspacePanel();
+  const activeTab = tabs.find((tab) => tab.id === activeTabId);
+  return (
+    <>
+      <button type="button" onClick={() => openTab('screenshot', '/tmp/capture.png', 'Capture')}>
+        Open screenshot
+      </button>
+      <MainViewTabBar
+        workspaceId="screenshot-tab-story"
+        sessions={[]}
+        selectedProvider="CODEX"
+        setSelectedProvider={fn()}
+      />
+      <output>{activeTab?.path}</output>
+    </>
+  );
+}
+
+export const ScreenshotTab: Story = {
+  render: () => (
+    <WorkspacePanelProvider workspaceId="screenshot-tab-story">
+      <ScreenshotTabBarStory />
+    </WorkspacePanelProvider>
+  ),
 };
