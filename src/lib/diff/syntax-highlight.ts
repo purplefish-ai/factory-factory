@@ -11,7 +11,19 @@
 
 import type { CSSProperties } from 'react';
 import { refractor } from 'refractor';
+import graphql from 'refractor/graphql';
+import jsx from 'refractor/jsx';
+import tsx from 'refractor/tsx';
+import {
+  FILE_HIGHLIGHT_BLOCK_LINES,
+  FILE_HIGHLIGHT_BLOCK_TOKENS,
+  isHighlightableFileBlock,
+} from './file-highlight-limits';
 import type { DiffLine } from './types';
+
+refractor.register(jsx);
+refractor.register(tsx);
+refractor.register(graphql);
 
 // ---------------------------------------------------------------------------
 // Lightweight HAST types (only what we need from the refractor output)
@@ -240,6 +252,30 @@ function tokenizeAndMapLines(
   }
 }
 
+function boundedFileTokens(content: string, tokenLines: SyntaxToken[][]): LineTokenMap {
+  const sourceLines = content.split('\n');
+  const result: LineTokenMap = new Map();
+  for (let start = 0; start < sourceLines.length; start += FILE_HIGHLIGHT_BLOCK_LINES) {
+    const end = Math.min(start + FILE_HIGHLIGHT_BLOCK_LINES, sourceLines.length);
+    const blockContent =
+      sourceLines.slice(start, end).join('\n') + (end < sourceLines.length ? '\n' : '');
+    if (!isHighlightableFileBlock(blockContent)) {
+      continue;
+    }
+    let tokenCount = 0;
+    for (let line = start; line < end; line++) {
+      tokenCount += tokenLines[line]?.length ?? 0;
+    }
+    if (tokenCount > FILE_HIGHLIGHT_BLOCK_TOKENS) {
+      continue;
+    }
+    for (let line = start; line < end; line++) {
+      result.set(line, tokenLines[line] ?? []);
+    }
+  }
+  return result;
+}
+
 /** Tokenize a complete file before splitting lines, preserving multiline syntax. */
 export function tokenizeFileContent(
   content: string,
@@ -255,9 +291,7 @@ export function tokenizeFileContent(
     if (!isHastRoot(highlighted)) {
       return null;
     }
-    return new Map(
-      splitHastByLine(highlighted, stylesheet).map((tokens, index) => [index, tokens])
-    );
+    return boundedFileTokens(content, splitHastByLine(highlighted, stylesheet));
   } catch {
     return null;
   }

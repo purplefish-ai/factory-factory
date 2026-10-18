@@ -23,9 +23,14 @@ export function useDiffHighlighting(
   return useHighlighting(request, enabled && lines.length > 0);
 }
 
-export function useFileHighlighting(content: string, language: string, theme: PrismStylesheet) {
+export function useFileHighlighting(
+  content: string,
+  language: string,
+  theme: PrismStylesheet,
+  enabled = true
+) {
   const request = useMemo(() => ({ content, language, theme }), [content, language, theme]);
-  return useHighlighting(request, content.length > 0);
+  return useHighlighting(request, enabled && content.length > 0);
 }
 
 function useHighlighting(request: HighlightRequest, enabled: boolean): LineTokenMap | null {

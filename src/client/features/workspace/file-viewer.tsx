@@ -16,6 +16,10 @@ import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { MarkdownRenderer } from '@/components/ui/markdown';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  FILE_HIGHLIGHT_BLOCK_LINES,
+  isHighlightableFileBlock,
+} from '@/lib/diff/file-highlight-limits';
 import type { LineTokenMap, SyntaxToken } from '@/lib/diff/syntax-highlight';
 import { useFileHighlighting } from './use-diff-highlighting';
 import { usePersistentScroll } from './use-persistent-scroll';
@@ -292,12 +296,12 @@ function FileViewerLoaded({ filePath, tabId, data, syntaxTheme }: FileViewerLoad
   );
 }
 
-const FILE_BLOCK_LINES = 128;
 interface SourceBlock {
   firstLine: number;
   lines: string[];
   content: string;
   hasNext: boolean;
+  highlightable: boolean;
 }
 
 /** A token/visibility update must not replace nodes used by native find or selection. */
@@ -388,7 +392,7 @@ function SourceBlockView({ block, tokens }: { block: SourceBlock; tokens: LineTo
         {block.lines.map((_, index) => block.firstLine + index).join('\n')}
       </span>
       <code style={{ fontFamily: 'var(--font-mono)' }}>
-        {displayedTokens
+        {block.highlightable && displayedTokens?.has(block.firstLine - 1)
           ? block.lines.map((line, index) => {
               const number = block.firstLine + index;
               const lineTokens = displayedTokens.get(number - 1);
@@ -415,21 +419,29 @@ export function FileCode({
   language: string;
   theme: NonNullable<SyntaxHighlighterProps['style']>;
 }) {
-  const tokens = useFileHighlighting(content, language, theme);
   const blocks = useMemo(() => {
     const lines = content.split('\n');
     const result: SourceBlock[] = [];
-    for (let index = 0; index < lines.length; index += FILE_BLOCK_LINES) {
-      const block = lines.slice(index, index + FILE_BLOCK_LINES);
+    for (let index = 0; index < lines.length; index += FILE_HIGHLIGHT_BLOCK_LINES) {
+      const block = lines.slice(index, index + FILE_HIGHLIGHT_BLOCK_LINES);
+      const blockContent =
+        block.join('\n') + (index + FILE_HIGHLIGHT_BLOCK_LINES < lines.length ? '\n' : '');
       result.push({
+        highlightable: isHighlightableFileBlock(blockContent),
         firstLine: index + 1,
         lines: block,
-        hasNext: index + FILE_BLOCK_LINES < lines.length,
-        content: block.join('\n') + (index + FILE_BLOCK_LINES < lines.length ? '\n' : ''),
+        hasNext: index + FILE_HIGHLIGHT_BLOCK_LINES < lines.length,
+        content: blockContent,
       });
     }
     return result;
   }, [content]);
+  const tokens = useFileHighlighting(
+    content,
+    language,
+    theme,
+    blocks.some((block) => block.highlightable)
+  );
   return (
     <pre
       style={{

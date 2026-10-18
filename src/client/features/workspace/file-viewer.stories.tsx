@@ -107,3 +107,15 @@ export const LargeSourceFile: Story = {
     </div>
   ),
 };
+
+export const MinifiedSourceFile: Story = {
+  render: () => (
+    <div className="h-80 overflow-auto">
+      <FileCode
+        content={`[${'{"x":1},'.repeat(124_998)}{"x":1}]`}
+        language="json"
+        theme={largeSourceTheme}
+      />
+    </div>
+  ),
+};
