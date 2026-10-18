@@ -1,11 +1,9 @@
-import {
-  ClockIcon,
-  CoinsIcon,
-  DatabaseIcon,
-  GlobeIcon,
-  LightningIcon,
-  StackIcon,
-} from '@phosphor-icons/react';
+import { ClockIcon } from '@phosphor-icons/react/dist/csr/Clock';
+import { CoinsIcon } from '@phosphor-icons/react/dist/csr/Coins';
+import { DatabaseIcon } from '@phosphor-icons/react/dist/csr/Database';
+import { GlobeIcon } from '@phosphor-icons/react/dist/csr/Globe';
+import { LightningIcon } from '@phosphor-icons/react/dist/csr/Lightning';
+import { StackIcon } from '@phosphor-icons/react/dist/csr/Stack';
 import { Progress } from '@/components/ui/progress';
 import type { TokenStats } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';

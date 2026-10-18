@@ -1,4 +1,4 @@
-import { HardDrivesIcon } from '@phosphor-icons/react';
+import { HardDrivesIcon } from '@phosphor-icons/react/dist/csr/HardDrives';
 import { useRunScriptLaunch } from './use-run-script-launch';
 
 interface RunScriptPortBadgeProps {

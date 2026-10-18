@@ -1,4 +1,6 @@
-import { ClockIcon, SpinnerGapIcon, WarningCircleIcon } from '@phosphor-icons/react';
+import { ClockIcon } from '@phosphor-icons/react/dist/csr/Clock';
+import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
+import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';

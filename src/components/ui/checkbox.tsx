@@ -1,4 +1,4 @@
-import { CheckIcon } from '@phosphor-icons/react';
+import { CheckIcon } from '@phosphor-icons/react/dist/csr/Check';
 import * as CheckboxPrimitive from '@radix-ui/react-checkbox';
 import type * as React from 'react';
 import { cn } from '@/lib/utils';

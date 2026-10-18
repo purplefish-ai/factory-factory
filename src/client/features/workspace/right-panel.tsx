@@ -1,14 +1,12 @@
-import {
-  ArrowsClockwiseIcon,
-  CalendarIcon,
-  CameraIcon,
-  FileDashedIcon,
-  FilesIcon,
-  ListChecksIcon,
-  PlusIcon,
-  TerminalIcon,
-  TreeStructureIcon,
-} from '@phosphor-icons/react';
+import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
+import { CalendarIcon } from '@phosphor-icons/react/dist/csr/Calendar';
+import { CameraIcon } from '@phosphor-icons/react/dist/csr/Camera';
+import { FileDashedIcon } from '@phosphor-icons/react/dist/csr/FileDashed';
+import { FilesIcon } from '@phosphor-icons/react/dist/csr/Files';
+import { ListChecksIcon } from '@phosphor-icons/react/dist/csr/ListChecks';
+import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
+import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
+import { TreeStructureIcon } from '@phosphor-icons/react/dist/csr/TreeStructure';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ChatMessage } from '@/client/features/chat';
 import type { SubagentSelection } from '@/client/features/subagents';

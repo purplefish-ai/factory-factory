@@ -1,4 +1,4 @@
-import { FileTextIcon } from '@phosphor-icons/react';
+import { FileTextIcon } from '@phosphor-icons/react/dist/csr/FileText';
 import {
   Dialog,
   DialogContent,

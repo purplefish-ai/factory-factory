@@ -1,4 +1,6 @@
-import { CameraIcon, SpinnerGapIcon, XIcon } from '@phosphor-icons/react';
+import { CameraIcon } from '@phosphor-icons/react/dist/csr/Camera';
+import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
+import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import { useCallback } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';

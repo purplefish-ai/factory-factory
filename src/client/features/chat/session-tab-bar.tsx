@@ -1,14 +1,12 @@
-import {
-  CaretLeftIcon,
-  CaretRightIcon,
-  CheckCircleIcon,
-  CircleIcon,
-  PauseCircleIcon,
-  PlusIcon,
-  PulseIcon,
-  XCircleIcon,
-  XIcon,
-} from '@phosphor-icons/react';
+import { CaretLeftIcon } from '@phosphor-icons/react/dist/csr/CaretLeft';
+import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
+import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
+import { CircleIcon } from '@phosphor-icons/react/dist/csr/Circle';
+import { PauseCircleIcon } from '@phosphor-icons/react/dist/csr/PauseCircle';
+import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
+import { PulseIcon } from '@phosphor-icons/react/dist/csr/Pulse';
+import { XIcon } from '@phosphor-icons/react/dist/csr/X';
+import { XCircleIcon } from '@phosphor-icons/react/dist/csr/XCircle';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';

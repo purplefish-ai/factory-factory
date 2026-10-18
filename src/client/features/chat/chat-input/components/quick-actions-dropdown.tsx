@@ -1,4 +1,4 @@
-import { LightningIcon } from '@phosphor-icons/react';
+import { LightningIcon } from '@phosphor-icons/react/dist/csr/Lightning';
 import { QUICK_ACTIONS } from '@/client/features/chat/chat-input/constants';
 import { Button } from '@/components/ui/button';
 import {

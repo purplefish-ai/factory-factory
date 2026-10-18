@@ -1,4 +1,4 @@
-import { DownloadSimpleIcon } from '@phosphor-icons/react';
+import { DownloadSimpleIcon } from '@phosphor-icons/react/dist/csr/DownloadSimple';
 import { memo } from 'react';
 import type { AgentMessage } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';

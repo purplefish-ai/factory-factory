@@ -1,4 +1,4 @@
-import { SpinnerGapIcon } from '@phosphor-icons/react';
+import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { memo } from 'react';
 import { ToolInfoRenderer } from '@/client/features/chat/agent-activity/tool-renderers';
 import type { AgentMessage } from '@/lib/chat-protocol';

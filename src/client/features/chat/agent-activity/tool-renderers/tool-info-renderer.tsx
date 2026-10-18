@@ -1,11 +1,9 @@
-import {
-  CaretDownIcon,
-  CaretRightIcon,
-  CheckCircleIcon,
-  SpinnerGapIcon,
-  TerminalIcon,
-  WarningCircleIcon,
-} from '@phosphor-icons/react';
+import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
+import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
+import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
+import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
+import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
+import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import * as React from 'react';
 import { memo } from 'react';
 import { Badge } from '@/components/ui/badge';

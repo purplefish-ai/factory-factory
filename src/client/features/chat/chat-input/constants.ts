@@ -1,4 +1,6 @@
-import { ChatTextIcon, GitPullRequestIcon, SparkleIcon } from '@phosphor-icons/react';
+import { ChatTextIcon } from '@phosphor-icons/react/dist/csr/ChatText';
+import { GitPullRequestIcon } from '@phosphor-icons/react/dist/csr/GitPullRequest';
+import { SparkleIcon } from '@phosphor-icons/react/dist/csr/Sparkle';
 
 /**
  * Predefined quick actions that send messages to Claude.

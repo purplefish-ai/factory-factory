@@ -1,9 +1,7 @@
-import {
-  CheckCircleIcon,
-  DotOutlineIcon,
-  GitPullRequestIcon,
-  XCircleIcon,
-} from '@phosphor-icons/react';
+import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
+import { DotOutlineIcon } from '@phosphor-icons/react/dist/csr/DotOutline';
+import { GitPullRequestIcon } from '@phosphor-icons/react/dist/csr/GitPullRequest';
+import { XCircleIcon } from '@phosphor-icons/react/dist/csr/XCircle';
 import { CiStatusChip } from '@/client/components/ci-status-chip';
 import { PrStateBadge } from '@/client/components/pr-state-badge';
 import { Button } from '@/components/ui/button';

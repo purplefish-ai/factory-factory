@@ -1,10 +1,8 @@
-import {
-  CheckCircleIcon,
-  CircleIcon,
-  type Icon,
-  WarningIcon,
-  XCircleIcon,
-} from '@phosphor-icons/react';
+import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
+import { CircleIcon } from '@phosphor-icons/react/dist/csr/Circle';
+import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
+import { XCircleIcon } from '@phosphor-icons/react/dist/csr/XCircle';
+import type { Icon } from '@phosphor-icons/react/dist/lib/types';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import type { PRState } from '@/shared/core';
