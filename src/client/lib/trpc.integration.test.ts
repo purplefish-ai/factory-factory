@@ -138,6 +138,7 @@ async function createFixture(proxied: boolean) {
     responses,
     fetchOptions,
     baseUrl: `http://127.0.0.1:${port}`,
+    invalidSessionCookie: `ff_proxy_session=${session.id}.${'0'.repeat(64)}`,
   };
 }
 
@@ -185,19 +186,26 @@ describe.each([false, true])('tRPC transport (authenticated proxy: %s)', (proxie
   });
 
   if (proxied) {
-    it('rejects an unsigned proxy session before forwarding the operation', async () => {
-      const fixture = await createFixture(true);
-      const response = await nativeFetch(
-        `${fixture.baseUrl}/api/trpc/admin.resetApiUsageStats?batch=1`,
-        {
-          method: 'POST',
-          headers: { 'content-type': 'application/json', cookie: 'ff_proxy_session=unsigned' },
-          body: JSON.stringify({ 0: { json: null } }),
-        }
-      );
-      expect(response.status).toBe(401);
-      expect(fixture.requests).toHaveLength(0);
-    });
+    it.each(['unsigned', 'invalid signature'])(
+      'rejects a proxy session with %s before forwarding',
+      async (kind) => {
+        const fixture = await createFixture(true);
+        const response = await nativeFetch(
+          `${fixture.baseUrl}/api/trpc/admin.resetApiUsageStats?batch=1`,
+          {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              cookie:
+                kind === 'unsigned' ? 'ff_proxy_session=unsigned' : fixture.invalidSessionCookie,
+            },
+            body: JSON.stringify({ 0: { json: null } }),
+          }
+        );
+        expect(response.status).toBe(401);
+        expect(fixture.requests).toHaveLength(0);
+      }
+    );
   }
 
   it('keeps mutations on ordinary HTTP batching and preserves response cookies', async () => {
