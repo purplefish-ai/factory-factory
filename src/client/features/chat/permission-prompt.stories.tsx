@@ -260,3 +260,34 @@ Add dark mode support across the application with user preference persistence.
     },
   },
 };
+
+export const UrlAuthorization: Story = {
+  args: {
+    permission: {
+      ...createPermissionRequest('Authorize URL', {
+        type: 'UrlElicitation',
+        message: 'Connect your account to continue.',
+        url: 'https://example.com/authorize',
+      }),
+      acpOptions: [
+        { optionId: 'accept', kind: 'allow_once', name: 'Authorize' },
+        { optionId: 'decline', kind: 'reject_once', name: 'Decline' },
+      ],
+    },
+  },
+};
+
+export const FormConsent: Story = {
+  args: {
+    permission: {
+      ...createPermissionRequest('Confirm request', {
+        type: 'FormElicitation',
+        message: 'Confirm the requested account action.',
+      }),
+      acpOptions: [
+        { optionId: 'accept', kind: 'allow_once', name: 'Confirm' },
+        { optionId: 'decline', kind: 'reject_once', name: 'Decline' },
+      ],
+    },
+  },
+};

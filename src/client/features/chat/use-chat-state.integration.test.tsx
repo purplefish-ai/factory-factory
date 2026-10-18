@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MessageAttachment } from '@/lib/chat-protocol';
 import { MessageState } from '@/lib/chat-protocol';
-import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
+import { type ChatBarCapabilities, EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { loadSettings } from './chat-persistence';
 import { type UseChatStateReturn, useChatState } from './use-chat-state';
 
@@ -346,58 +346,113 @@ describe('useChatState plan mode persistence', () => {
     vi.clearAllMocks();
   });
 
-  it('persists disabled plan mode after approving ExitPlanMode', async () => {
-    const codexCapabilities: ChatBarCapabilities = {
-      provider: 'CODEX',
-      model: { enabled: false, options: [] },
-      reasoning: { enabled: false, options: [] },
-      thinking: { enabled: false },
-      planMode: { enabled: true },
-      attachments: { enabled: false, kinds: [] },
-      slashCommands: { enabled: false },
-      usageStats: { enabled: false, contextWindow: false },
-      rewind: { enabled: false },
-    };
-    const harness = renderChatState('session-A');
-    await flushEffects();
+  it.each(['CLAUDE', 'CODEX'] as const)(
+    'keeps %s planning settings in sync with its native control',
+    async (provider) => {
+      const harness = renderChatState('session-A');
+      await flushEffects();
+      flushSync(() =>
+        harness.chatRef.current?.dispatch({
+          type: 'WS_CHAT_CAPABILITIES',
+          payload: {
+            capabilities: { ...EMPTY_CHAT_BAR_CAPABILITIES, provider, planMode: { enabled: true } },
+          },
+        })
+      );
+      const configId = provider === 'CODEX' ? 'collaboration_mode' : 'mode';
+      flushSync(() => harness.chatRef.current?.setConfigOption(configId, 'plan'));
+      expect(loadSettings('session-A')?.planModeEnabled).toBe(true);
+      flushSync(() => harness.chatRef.current?.setConfigOption(configId, 'default'));
+      expect(loadSettings('session-A')?.planModeEnabled).toBe(false);
+      if (provider === 'CODEX') {
+        flushSync(() => harness.chatRef.current?.setConfigOption('mode', 'workspace-write'));
+        expect(loadSettings('session-A')?.planModeEnabled).toBe(false);
+      }
+      harness.cleanup();
+    }
+  );
 
-    flushSync(() => {
-      harness.chatRef.current?.dispatch({
-        type: 'WS_CHAT_CAPABILITIES',
-        payload: { capabilities: codexCapabilities },
+  it.each(['CLAUDE', 'CODEX'] as const)(
+    'preserves %s native plan approval without an extra turn or mode override',
+    async (provider) => {
+      const capabilities: ChatBarCapabilities = {
+        provider,
+        model: { enabled: false, options: [] },
+        reasoning: { enabled: false, options: [] },
+        thinking: { enabled: false },
+        planMode: { enabled: true },
+        attachments: { enabled: false, kinds: [] },
+        slashCommands: { enabled: false },
+        usageStats: { enabled: false, contextWindow: false },
+        rewind: { enabled: false },
+      };
+      const harness = renderChatState('session-A');
+      await flushEffects();
+
+      flushSync(() => {
+        harness.chatRef.current?.dispatch({
+          type: 'WS_CHAT_CAPABILITIES',
+          payload: { capabilities },
+        });
       });
-    });
-    flushSync(() => {
-      harness.chatRef.current?.updateSettings({ planModeEnabled: true });
-    });
+      flushSync(() => {
+        harness.chatRef.current?.updateSettings({ planModeEnabled: true });
+      });
 
-    expect(loadSettings('session-A')?.planModeEnabled).toBe(true);
+      expect(loadSettings('session-A')?.planModeEnabled).toBe(true);
+      flushSync(() =>
+        harness.chatRef.current?.dispatch({
+          type: 'CONFIG_OPTIONS_UPDATE',
+          payload: {
+            configOptions: [
+              {
+                id: provider === 'CODEX' ? 'collaboration_mode' : 'mode',
+                name: 'Mode',
+                type: 'select',
+                category: provider === 'CODEX' ? 'collaboration_mode' : 'mode',
+                currentValue: 'plan',
+                options: ['plan', 'default'].map((value) => ({ value, name: value })),
+              },
+            ],
+          },
+        })
+      );
 
-    flushSync(() => {
-      harness.chatRef.current?.dispatch({
-        type: 'WS_PERMISSION_REQUEST',
-        payload: {
+      flushSync(() => {
+        harness.chatRef.current?.dispatch({
+          type: 'WS_PERMISSION_REQUEST',
+          payload: {
+            requestId: 'exit-plan',
+            toolName: 'ExitPlanMode',
+            toolInput: {},
+            acpOptions: [
+              { optionId: 'native-accept-edits', name: 'Accept edits', kind: 'allow_once' },
+            ],
+            timestamp: '2026-07-30T00:00:00.000Z',
+          },
+        });
+      });
+      flushSync(() => {
+        harness.chatRef.current?.approvePermission('exit-plan', true, 'native-accept-edits');
+      });
+
+      expect(harness.chatRef.current?.chatSettings.planModeEnabled).toBe(false);
+      expect(loadSettings('session-A')?.planModeEnabled).toBe(false);
+      expect(harness.send).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'queue_message' })
+      );
+      expect(harness.send).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'set_config_option' })
+      );
+      expect(harness.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'permission_response',
           requestId: 'exit-plan',
-          toolName: 'ExitPlanMode',
-          toolInput: {},
-          timestamp: '2026-07-30T00:00:00.000Z',
-        },
-      });
-    });
-    flushSync(() => {
-      harness.chatRef.current?.approvePermission('exit-plan', true);
-    });
+          optionId: 'native-accept-edits',
+        })
+      );
 
-    expect(harness.chatRef.current?.chatSettings.planModeEnabled).toBe(false);
-    expect(loadSettings('session-A')?.planModeEnabled).toBe(false);
-    expect(harness.send).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'queue_message',
-        text: 'Approved',
-        settings: expect.objectContaining({ planModeEnabled: false }),
-      })
-    );
-
-    harness.cleanup();
-  });
+      harness.cleanup();
+    }
+  );
 });

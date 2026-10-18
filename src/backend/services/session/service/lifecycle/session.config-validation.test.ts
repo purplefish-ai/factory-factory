@@ -44,8 +44,8 @@ describe('cached ACP configuration validation', () => {
               options: [{ value: 'custom', name: 'Provider model label' }],
             },
             {
-              id: 'mode',
-              name: 'Mode',
+              id: 'collaboration_mode',
+              name: 'Planning',
               type: 'select',
               currentValue: 'plan',
               options: [{ value: 'plan', name: 'Plan' }],

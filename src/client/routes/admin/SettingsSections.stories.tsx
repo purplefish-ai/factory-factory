@@ -6,6 +6,7 @@ import { ThemeProvider } from 'next-themes';
 import { type ReactNode, useState } from 'react';
 import { Toaster } from 'sonner';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
+import { ProviderCliWarning } from '@/client/components/provider-cli-warning';
 import { trpc } from '@/client/lib/trpc';
 import type { FactoryConfig } from '@/shared/schemas/factory-config.schema';
 import { AppearanceSettingsSection } from './AppearanceSettingsSection';
@@ -312,6 +313,14 @@ export const ChatDefaults: Story = {
   },
 };
 
+export const NativePermissionDefaults: Story = {
+  render: () => (
+    <SettingsStoryProvider settings={{ defaultWorkspacePermissions: 'RELAXED' }}>
+      <ChatProviderDefaultsSection />
+    </SettingsStoryProvider>
+  ),
+};
+
 export const ChatDefaultsSlowRefresh: Story = {
   render: () => (
     <SettingsStoryProvider refreshDelayMs={1500}>
@@ -533,10 +542,19 @@ export const RefreshCLIAuthentication: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText(/run claude login/);
+    await expect(canvas.getByText(/ff codex login/)).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: 'Recheck' }));
     await waitFor(() => expect(canvas.getAllByText(/Ready/)).toHaveLength(3));
     await expect(
       canvas.queryByRole('button', { name: 'Open Terminal to Log In' })
     ).not.toBeInTheDocument();
   },
+};
+
+export const ManagedCodexLogin: Story = {
+  render: () => (
+    <SettingsStoryProvider>
+      <ProviderCliWarning provider="CODEX" />
+    </SettingsStoryProvider>
+  ),
 };

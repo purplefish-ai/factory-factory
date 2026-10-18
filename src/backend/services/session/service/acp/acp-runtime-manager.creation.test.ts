@@ -61,7 +61,10 @@ describe('AcpRuntimeManager', () => {
       // Verify spawn was called with correct args
       expect(mockSpawn).toHaveBeenCalledTimes(1);
       const spawnArgs = mockSpawn.mock.calls[0]!;
-      expect(spawnArgs[1]).toEqual([]);
+      expect(spawnArgs[0]).toBe(process.execPath);
+      expect(spawnArgs[1]).toEqual([
+        expect.stringContaining('@agentclientprotocol/claude-agent-acp/'),
+      ]);
       expect(spawnArgs[2]).toMatchObject({
         cwd: '/tmp/workspace',
         stdio: ['pipe', 'pipe', 'pipe'],
@@ -73,7 +76,11 @@ describe('AcpRuntimeManager', () => {
       expect(mockInitialize).toHaveBeenCalledWith(
         expect.objectContaining({
           protocolVersion: 1,
-          clientCapabilities: {},
+          clientCapabilities: {
+            subagents: {},
+            elicitation: { form: {}, url: {} },
+            _meta: { jetbrains: { air: { version: 1, capabilities: ['asyncTasks'] } } },
+          },
           clientInfo: expect.objectContaining({
             name: 'factory-factory',
           }),
@@ -97,7 +104,7 @@ describe('AcpRuntimeManager', () => {
       expect(handle.getPid()).toBe(12_345);
     });
 
-    it('spawns CODEX provider using internal CLI adapter command', async () => {
+    it('spawns CODEX using the published upstream adapter and bundled runtime', async () => {
       setupSuccessfulSpawn();
 
       await manager.getOrCreateClient(
@@ -109,25 +116,14 @@ describe('AcpRuntimeManager', () => {
 
       expect(mockSpawn).toHaveBeenCalledTimes(1);
       const spawnArgs = mockSpawn.mock.calls[0]!;
-      expect(spawnArgs[1]).toContain('internal');
-      expect(spawnArgs[1]).toContain('codex-app-server-acp');
-      expect(
-        (spawnArgs[1] as string[]).some(
-          (arg) => arg.endsWith('src/cli/index.ts') || arg.endsWith('dist/src/cli/index.js')
-        )
-      ).toBe(true);
-      expect(typeof spawnArgs[0]).toBe('string');
-      expect((spawnArgs[0] as string).length).toBeGreaterThan(0);
+      expect(spawnArgs[0]).toBe(process.execPath);
+      expect(spawnArgs[1]).toEqual([expect.stringContaining('@agentclientprotocol/codex-acp/')]);
       expect((spawnArgs[2] as { env?: Record<string, string> }).env?.DOTENV_CONFIG_QUIET).toBe(
         'true'
       );
-      if (
-        (spawnArgs[0] as string).endsWith('tsx') ||
-        (spawnArgs[0] as string).endsWith('tsx.cmd')
-      ) {
-        expect(spawnArgs[1]).toContain('--tsconfig');
-        expect((spawnArgs[1] as string[]).some((arg) => arg.endsWith('tsconfig.json'))).toBe(true);
-      }
+      expect(spawnArgs[2]).toMatchObject({
+        env: { ELECTRON_RUN_AS_NODE: '1', DISABLE_MCP_CONFIG_FILTERING: 'true' },
+      });
       expect(spawnArgs[2]).toMatchObject({
         cwd: '/tmp/workspace',
         stdio: ['pipe', 'pipe', 'pipe'],
@@ -135,7 +131,7 @@ describe('AcpRuntimeManager', () => {
       });
     });
 
-    it('resolves CODEX internal adapter from module location when cwd is outside repo', async () => {
+    it('resolves the upstream CODEX package when cwd is outside the repo', async () => {
       setupSuccessfulSpawn();
       const originalCwd = process.cwd();
       process.chdir(tmpdir());
@@ -153,20 +149,8 @@ describe('AcpRuntimeManager', () => {
 
       expect(mockSpawn).toHaveBeenCalledTimes(1);
       const spawnArgs = mockSpawn.mock.calls[0]!;
-      const command = spawnArgs[0] as string;
-      const args = spawnArgs[1] as string[];
-      expect(command.length).toBeGreaterThan(0);
-      expect(args).toContain('internal');
-      expect(args).toContain('codex-app-server-acp');
-      if (command.endsWith('tsx') || command.endsWith('tsx.cmd')) {
-        expect(args).toContain('--tsconfig');
-        expect(args.some((arg) => arg.endsWith('tsconfig.json'))).toBe(true);
-      }
-      expect(
-        args.some(
-          (arg) => arg.endsWith('src/cli/index.ts') || arg.endsWith('dist/src/cli/index.js')
-        )
-      ).toBe(true);
+      expect(spawnArgs[0]).toBe(process.execPath);
+      expect(spawnArgs[1]).toEqual([expect.stringContaining('@agentclientprotocol/codex-acp/')]);
     });
 
     it('rejects cleanly when ACP binary spawn fails (ENOENT)', async () => {

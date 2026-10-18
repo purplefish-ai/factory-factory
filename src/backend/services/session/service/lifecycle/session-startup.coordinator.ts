@@ -783,12 +783,33 @@ export class SessionStartupCoordinator {
     handle: AcpProcessHandle,
     permissionPreset?: PermissionPreset
   ): Promise<void> {
-    await this.dependencies.sessionConfigService.applyConfiguredPermissionPreset(
-      sessionId,
-      session,
-      handle,
-      permissionPreset
-    );
+    try {
+      await this.dependencies.sessionConfigService.applyConfiguredPermissionPreset(
+        sessionId,
+        session,
+        handle,
+        permissionPreset
+      );
+    } catch (error) {
+      const stopReservation = this.dependencies.lifecycleGate.reserveStop(sessionId);
+      try {
+        await this.dependencies.runtimeManager.stopClient(sessionId);
+        this.dependencies.sessionDomainService.setRuntimeSnapshot(sessionId, {
+          phase: 'error',
+          processState: 'stopped',
+          activity: 'IDLE',
+          errorMessage: `Failed to start agent: ${toErrorMessage(error)}`,
+          updatedAt: new Date().toISOString(),
+        });
+      } finally {
+        try {
+          this.dependencies.acpEventProcessor.clearSessionState(sessionId);
+        } finally {
+          stopReservation?.release();
+        }
+      }
+      throw error;
+    }
   }
 
   private async persistAcpConfigSnapshot(

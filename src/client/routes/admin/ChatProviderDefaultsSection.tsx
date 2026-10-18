@@ -271,11 +271,16 @@ export function ChatProviderDefaultsSection() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="STRICT">Strict</SelectItem>
-              <SelectItem value="RELAXED">Relaxed</SelectItem>
-              <SelectItem value="YOLO">YOLO</SelectItem>
+              <SelectItem value="STRICT">Standard</SelectItem>
+              <SelectItem value="RELAXED">Accept edits / Auto review</SelectItem>
+              <SelectItem value="YOLO">Full access</SelectItem>
             </SelectContent>
           </Select>
+          <p className="text-xs text-muted-foreground">
+            Standard uses Claude approval prompts and Codex workspace access. Accept edits / Auto
+            review lets Claude accept file edits and Codex review sensitive actions. Full access
+            skips approval prompts.
+          </p>
         </div>
       </CardContent>
     </Card>

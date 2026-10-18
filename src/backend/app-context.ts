@@ -347,7 +347,6 @@ export function createApplication(
     services.configService.getAcpStartupTimeoutMs()
   );
   services.acpRuntimeManager.configureEnvironment?.({
-    preferSourceEntrypoint: !services.configService.isProduction(),
     childProcessEnvProvider: () => services.configService.getChildProcessEnv(),
   });
   lifecycle.wireDomainBridges(services);

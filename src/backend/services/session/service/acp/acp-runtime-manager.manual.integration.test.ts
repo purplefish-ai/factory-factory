@@ -5,7 +5,7 @@ const RUN_REAL_CODEX_APP_SERVER_TESTS = process.env.RUN_REAL_CODEX_APP_SERVER_TE
 const describeIfRealCodex = RUN_REAL_CODEX_APP_SERVER_TESTS ? describe : describe.skip;
 
 describeIfRealCodex('AcpRuntimeManager (manual real codex app-server)', () => {
-  it('completes initialize/newSession handshake via internal CODEX adapter', async () => {
+  it('completes initialize/newSession handshake via upstream CODEX adapter', async () => {
     const manager = new AcpRuntimeManager();
     const sessionId = `manual-runtime-${Date.now()}`;
 
@@ -32,7 +32,7 @@ describeIfRealCodex('AcpRuntimeManager (manual real codex app-server)', () => {
       const categories = handle.configOptions.map((option) => option.category);
       const promptCapabilities = handle.agentCapabilities.promptCapabilities;
 
-      expect(handle.providerSessionId.startsWith('sess_')).toBe(true);
+      expect(handle.providerSessionId).not.toMatch(/^sess_/);
       expect(handle.agentCapabilities.loadSession).toBe(true);
       expect(promptCapabilities).toEqual(expect.any(Object));
       expect(

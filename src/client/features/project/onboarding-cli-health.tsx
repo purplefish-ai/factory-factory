@@ -54,12 +54,16 @@ function buildItems(health: {
 
   // Codex
   if (!health.codex.isInstalled) {
-    items.push({ label: 'Codex', status: 'missing', detail: 'Not installed (optional)' });
+    items.push({
+      label: 'Codex',
+      status: 'missing',
+      detail: 'Bundled runtime unavailable — update Factory Factory',
+    });
   } else if (health.codex.isAuthenticated !== true) {
     items.push({
       label: 'Codex',
       status: 'warning',
-      detail: 'Installed — run codex login to authenticate',
+      detail: 'Run ff codex login to authenticate',
     });
   } else {
     items.push({ label: 'Codex', status: 'ok', detail: 'Ready' });

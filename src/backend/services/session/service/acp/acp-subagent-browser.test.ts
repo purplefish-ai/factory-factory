@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { SUBAGENTS_LIST_METHOD, SUBAGENTS_READ_METHOD } from '@/shared/acp-protocol/subagents';
+import { AcpNativeSessionTracker } from './acp-native-session-tracker';
+import { AcpProcessHandle } from './acp-process-handle';
 import { AcpSubagentBrowseError } from './acp-runtime-errors';
 import {
   createTestProcessHandle,
@@ -8,6 +10,71 @@ import {
 import { AcpSubagentBrowser } from './acp-subagent-browser';
 
 describe('AcpSubagentBrowser', () => {
+  it('browses negotiated native sessions without provider-specific extension methods', async () => {
+    // Catches advertising native support but still invoking the deleted internal adapter methods.
+    const tracker = new AcpNativeSessionTracker();
+    tracker.setRootSessionId('provider-session-1');
+    tracker.setCapabilities({ sessionCapabilities: { subagents: {} } });
+    tracker.onRawMessage({
+      method: 'session/update',
+      params: {
+        sessionId: 'provider-session-1',
+        update: {
+          sessionUpdate: 'subagent_spawned',
+          subagentSessionId: 'child-native',
+          name: 'Native worker',
+          task: 'Inspect',
+          capabilities: {},
+        },
+      },
+    });
+    tracker.onRawMessage({
+      method: 'session/update',
+      params: {
+        sessionId: 'child-native',
+        update: {
+          sessionUpdate: 'agent_message_chunk',
+          content: { type: 'text', text: 'Recovered child answer' },
+        },
+      },
+    });
+    const original = createTestProcessHandle();
+    const handle = new AcpProcessHandle({
+      connection: original.connection,
+      child: original.child,
+      provider: 'CODEX',
+      providerSessionId: 'provider-session-1',
+      agentCapabilities: {},
+      nativeSessionTracker: tracker,
+    });
+    const browser = new AcpSubagentBrowser();
+    expect(browser.getCapability(handle)).toEqual({
+      version: 1,
+      list: true,
+      read: true,
+      notifications: true,
+    });
+    await expect(browser.listSubagents(handle, { limit: 10 })).resolves.toMatchObject({
+      subagents: [{ id: 'child-native', name: 'Native worker' }],
+      nextCursor: null,
+    });
+    await expect(
+      browser.readSubagentTranscript(handle, { subagentId: 'child-native', limit: 10 })
+    ).resolves.toEqual({
+      projectionBoundary: 'turn',
+      updates: [
+        {
+          sessionUpdate: 'agent_message_chunk',
+          content: { type: 'text', text: 'Recovered child answer' },
+        },
+      ],
+      nextCursor: null,
+    });
+    await expect(
+      browser.readSubagentTranscript(handle, { subagentId: 'unknown', limit: 10 })
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
   it('uses the provider session ID when listing sub-agents', async () => {
     // Catches dropping the provider-session translation before calling the ACP extension.
     const browser = new AcpSubagentBrowser();

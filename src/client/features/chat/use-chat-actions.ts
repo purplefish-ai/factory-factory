@@ -38,7 +38,6 @@ type AcpPermissionOption = {
   name: string;
   kind: 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always';
 };
-type AcpConfigOptionState = NonNullable<ChatState['acpConfigOptions']>[number];
 
 export interface UseChatActionsOptions {
   /** Send function from WebSocket transport */
@@ -204,55 +203,6 @@ function isAllowOptionId(optionId: string, options: AcpPermissionOption[] | unde
   return optionId === 'allow' || optionId === 'allow_once' || optionId === 'default';
 }
 
-function flattenConfigOptionValues(option: AcpConfigOptionState): string[] {
-  const values: string[] = [];
-  for (const entry of option.options) {
-    if ('value' in entry) {
-      values.push(entry.value);
-      continue;
-    }
-    values.push(...entry.options.map((nested) => nested.value));
-  }
-  return values;
-}
-
-function findModeConfigOption(state: ChatState): AcpConfigOptionState | null {
-  if (!state.acpConfigOptions) {
-    return null;
-  }
-  return (
-    state.acpConfigOptions.find((option) => option.id === 'mode' || option.category === 'mode') ??
-    null
-  );
-}
-
-function isPlanModeValue(value: string): boolean {
-  return /plan/i.test(value);
-}
-
-function resolvePostApprovalModeValue(state: ChatState): string | null {
-  const modeOption = findModeConfigOption(state);
-  if (!(modeOption && isPlanModeValue(modeOption.currentValue))) {
-    return null;
-  }
-
-  const optionValues = flattenConfigOptionValues(modeOption);
-  if (optionValues.length === 0) {
-    return null;
-  }
-
-  const preferredOrder = ['default', 'code', 'acceptEdits', 'ask'];
-  for (const preferred of preferredOrder) {
-    const match = optionValues.find((value) => value.toLowerCase() === preferred.toLowerCase());
-    if (match) {
-      return match;
-    }
-  }
-
-  const firstNonPlan = optionValues.find((value) => !isPlanModeValue(value));
-  return firstNonPlan ?? null;
-}
-
 // =============================================================================
 // Hook Implementation
 // =============================================================================
@@ -316,60 +266,16 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
     [send, dispatch, dbSessionIdRef, inputAttachmentsRef, stateRef, onClearInput]
   );
 
-  const queueAutomaticMessage = useCallback(
-    (text: string, settings: ChatSettings) => {
-      const trimmedText = text.trim();
-      if (!trimmedText) {
-        return;
-      }
-
-      const id = generateMessageId();
-      dispatch({
-        type: 'MESSAGE_SENDING',
-        payload: {
-          id,
-          text: trimmedText,
-          sessionId: dbSessionIdRef.current,
-        },
-      });
-
-      const msg: QueueMessageRequest = {
-        type: 'queue_message',
-        id,
-        text: trimmedText,
-        settings,
-      };
-      send(msg);
-    },
-    [send, dispatch, dbSessionIdRef]
-  );
-
-  const completeCodexPlanApproval = useCallback(
+  const completePlanApproval = useCallback(
     (state: ChatState) => {
-      const isCodexProvider = state.chatCapabilities.provider === 'CODEX';
-      if (!isCodexProvider) {
-        const modeValue = resolvePostApprovalModeValue(state);
-        if (modeValue) {
-          const modeMsg: SetConfigOptionMessage = {
-            type: 'set_config_option',
-            configId: 'mode',
-            value: modeValue,
-          };
-          send(modeMsg);
-        }
-      }
-
       dispatch({ type: 'UPDATE_SETTINGS', payload: { planModeEnabled: false } });
       const syncedSettings = clampChatSettingsForCapabilities(
         { ...state.chatSettings, planModeEnabled: false },
         state.chatCapabilities
       );
       persistSettings(dbSessionIdRef.current, syncedSettings);
-      if (isCodexProvider) {
-        queueAutomaticMessage('Approved', syncedSettings);
-      }
     },
-    [send, dispatch, dbSessionIdRef, queueAutomaticMessage]
+    [dispatch, dbSessionIdRef]
   );
 
   const stopChat = useCallback(() => {
@@ -402,10 +308,10 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
       dispatch({ type: 'PERMISSION_RESPONSE', payload: { allow } });
 
       if (allow && pendingRequest.request.toolName === 'ExitPlanMode') {
-        completeCodexPlanApproval(state);
+        completePlanApproval(state);
       }
     },
-    [send, dispatch, stateRef, completeCodexPlanApproval]
+    [send, dispatch, stateRef, completePlanApproval]
   );
 
   const answerQuestion = useCallback(
@@ -432,10 +338,10 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
         pendingRequest.request.toolName === 'ExitPlanMode' &&
         isAllowOptionId(optionId, pendingRequest.request.acpOptions)
       ) {
-        completeCodexPlanApproval(state);
+        completePlanApproval(state);
       }
     },
-    [send, dispatch, stateRef, completeCodexPlanApproval]
+    [send, dispatch, stateRef, completePlanApproval]
   );
 
   const updateSettings = useCallback(
@@ -487,6 +393,21 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
         (option) => option.id === configId
       );
       const isModelOption = configId === 'model' || changedOption?.category === 'model';
+      const isPlanningOption =
+        stateRef.current.chatCapabilities.provider === 'CODEX'
+          ? configId === 'collaboration_mode' || changedOption?.category === 'collaboration_mode'
+          : configId === 'mode' || changedOption?.category === 'mode';
+      if (isPlanningOption) {
+        const planModeEnabled = value === 'plan';
+        dispatch({ type: 'UPDATE_SETTINGS', payload: { planModeEnabled } });
+        persistSettings(
+          dbSessionIdRef.current,
+          clampChatSettingsForCapabilities(
+            { ...stateRef.current.chatSettings, planModeEnabled },
+            stateRef.current.chatCapabilities
+          )
+        );
+      }
       if (isModelOption) {
         dispatch({ type: 'UPDATE_SETTINGS', payload: { selectedModel: value } });
         const syncedSettings = clampChatSettingsForCapabilities(

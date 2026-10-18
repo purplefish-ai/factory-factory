@@ -25,6 +25,31 @@ afterEach(() => {
 });
 
 describe('AcpConfigSelector', () => {
+  it.each([
+    ['mode', 'Access', 'workspace-write', 'Workspace access'],
+    ['collaboration_mode', 'Planning', 'plan', 'Plan'],
+  ])('labels native %s controls independently', (id, label, value, name) => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    flushSync(() =>
+      root.render(
+        createElement(AcpConfigSelector, {
+          configOption: {
+            id,
+            name: 'Mode',
+            type: 'select',
+            currentValue: value,
+            options: [{ value, name }],
+          },
+          onSelect: vi.fn(),
+        })
+      )
+    );
+    expect(container.querySelector('button')?.getAttribute('aria-label')).toBe(`${label}: ${name}`);
+    root.unmount();
+  });
+
   it('renders model labels while selecting their raw ACP values', () => {
     const onSelect = vi.fn();
     const container = document.createElement('div');

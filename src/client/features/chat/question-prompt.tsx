@@ -69,6 +69,9 @@ function isAnswerComplete(
   otherText: string
 ): boolean {
   const normalizedOther = normalizeOtherText(otherText);
+  if (question.optional && (!answer || (Array.isArray(answer) && answer.length === 0))) {
+    return true;
+  }
   if (question.multiSelect) {
     if (!Array.isArray(answer) || answer.length === 0) {
       return false;
@@ -309,7 +312,10 @@ function SingleSelectQuestion({
       {question.header && (
         <h4 className="text-xs font-medium text-muted-foreground break-words">{question.header}</h4>
       )}
-      <p className="text-sm font-medium break-words">{question.question}</p>
+      <p className="text-sm font-medium break-words">
+        {question.question}
+        {question.optional && ' (optional)'}
+      </p>
 
       <RadioGroup value={selectedValue} onValueChange={onChange} className="space-y-1.5">
         {options.map((option) => (
@@ -334,50 +340,52 @@ function SingleSelectQuestion({
             </div>
           </label>
         ))}
-        <label
-          htmlFor={`question-${idPrefix}-option-other`}
-          className={cn(
-            'flex items-start gap-2 rounded-md border p-1.5 transition-colors cursor-pointer hover:bg-background',
-            selectedValue === OTHER_OPTION_VALUE && 'border-primary bg-primary/5'
-          )}
-        >
-          <RadioGroupItem
-            value={OTHER_OPTION_VALUE}
-            id={`question-${idPrefix}-option-other`}
-            className="shrink-0 mt-1"
-          />
-          <div className="flex-1 min-w-0 space-y-1">
-            <span className="text-sm font-medium">Other</span>
-            <Textarea
-              value={otherText}
-              aria-label="Other response"
-              onFocus={() => {
-                if (selectedValue !== OTHER_OPTION_VALUE) {
-                  onChange(OTHER_OPTION_VALUE);
-                }
-              }}
-              onClick={() => {
-                if (selectedValue !== OTHER_OPTION_VALUE) {
-                  onChange(OTHER_OPTION_VALUE);
-                }
-              }}
-              onBlur={() => {
-                if (selectedValue === OTHER_OPTION_VALUE && otherText.trim().length === 0) {
-                  onChange('');
-                }
-              }}
-              onChange={(event) => {
-                const nextValue = event.target.value;
-                onOtherTextChange(nextValue);
-                if (nextValue.trim().length > 0 && selectedValue !== OTHER_OPTION_VALUE) {
-                  onChange(OTHER_OPTION_VALUE);
-                }
-              }}
-              placeholder="Type your response..."
-              className="min-h-[42px] text-sm py-1.5"
+        {question.allowOther !== false && (
+          <label
+            htmlFor={`question-${idPrefix}-option-other`}
+            className={cn(
+              'flex items-start gap-2 rounded-md border p-1.5 transition-colors cursor-pointer hover:bg-background',
+              selectedValue === OTHER_OPTION_VALUE && 'border-primary bg-primary/5'
+            )}
+          >
+            <RadioGroupItem
+              value={OTHER_OPTION_VALUE}
+              id={`question-${idPrefix}-option-other`}
+              className="shrink-0 mt-1"
             />
-          </div>
-        </label>
+            <div className="flex-1 min-w-0 space-y-1">
+              <span className="text-sm font-medium">Other</span>
+              <Textarea
+                value={otherText}
+                aria-label="Other response"
+                onFocus={() => {
+                  if (selectedValue !== OTHER_OPTION_VALUE) {
+                    onChange(OTHER_OPTION_VALUE);
+                  }
+                }}
+                onClick={() => {
+                  if (selectedValue !== OTHER_OPTION_VALUE) {
+                    onChange(OTHER_OPTION_VALUE);
+                  }
+                }}
+                onBlur={() => {
+                  if (selectedValue === OTHER_OPTION_VALUE && otherText.trim().length === 0) {
+                    onChange('');
+                  }
+                }}
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  onOtherTextChange(nextValue);
+                  if (nextValue.trim().length > 0 && selectedValue !== OTHER_OPTION_VALUE) {
+                    onChange(OTHER_OPTION_VALUE);
+                  }
+                }}
+                placeholder="Type your response..."
+                className="min-h-[42px] text-sm py-1.5"
+              />
+            </div>
+          </label>
+        )}
       </RadioGroup>
     </div>
   );
@@ -415,7 +423,10 @@ function MultiSelectQuestion({
       {question.header && (
         <h4 className="text-xs font-medium text-muted-foreground break-words">{question.header}</h4>
       )}
-      <p className="text-sm font-medium break-words">{question.question}</p>
+      <p className="text-sm font-medium break-words">
+        {question.question}
+        {question.optional && ' (optional)'}
+      </p>
 
       <div className="space-y-1.5">
         {options.map((option) => {
@@ -445,59 +456,64 @@ function MultiSelectQuestion({
             </label>
           );
         })}
-        <label
-          htmlFor={`question-${idPrefix}-option-other`}
-          className={cn(
-            'flex items-start gap-2 rounded-md border p-1.5 transition-colors cursor-pointer hover:bg-background',
-            selectedValues.includes(OTHER_OPTION_VALUE) && 'border-primary bg-primary/5'
-          )}
-        >
-          <Checkbox
-            id={`question-${idPrefix}-option-other`}
-            checked={selectedValues.includes(OTHER_OPTION_VALUE)}
-            onCheckedChange={(checked) => {
-              const shouldSelect = checked === true;
-              if (shouldSelect) {
-                onChange([...selectedValues, OTHER_OPTION_VALUE]);
-              } else {
-                onOtherTextChange('');
-                onChange(selectedValues.filter((v) => v !== OTHER_OPTION_VALUE));
-              }
-            }}
-            className="shrink-0 mt-1"
-          />
-          <div className="flex-1 min-w-0 space-y-1">
-            <span className="text-sm font-medium">Other</span>
-            <Textarea
-              value={otherText}
-              aria-label="Other response"
-              onFocus={() => {
-                if (!selectedValues.includes(OTHER_OPTION_VALUE)) {
+        {question.allowOther !== false && (
+          <label
+            htmlFor={`question-${idPrefix}-option-other`}
+            className={cn(
+              'flex items-start gap-2 rounded-md border p-1.5 transition-colors cursor-pointer hover:bg-background',
+              selectedValues.includes(OTHER_OPTION_VALUE) && 'border-primary bg-primary/5'
+            )}
+          >
+            <Checkbox
+              id={`question-${idPrefix}-option-other`}
+              checked={selectedValues.includes(OTHER_OPTION_VALUE)}
+              onCheckedChange={(checked) => {
+                const shouldSelect = checked === true;
+                if (shouldSelect) {
                   onChange([...selectedValues, OTHER_OPTION_VALUE]);
+                } else {
+                  onOtherTextChange('');
+                  onChange(selectedValues.filter((v) => v !== OTHER_OPTION_VALUE));
                 }
               }}
-              onClick={() => {
-                if (!selectedValues.includes(OTHER_OPTION_VALUE)) {
-                  onChange([...selectedValues, OTHER_OPTION_VALUE]);
-                }
-              }}
-              onBlur={() => {
-                if (otherText.trim().length === 0 && selectedValues.includes(OTHER_OPTION_VALUE)) {
-                  onChange(selectedValues.filter((value) => value !== OTHER_OPTION_VALUE));
-                }
-              }}
-              onChange={(event) => {
-                const nextValue = event.target.value;
-                onOtherTextChange(nextValue);
-                if (nextValue.trim().length > 0 && !selectedValues.includes(OTHER_OPTION_VALUE)) {
-                  onChange([...selectedValues, OTHER_OPTION_VALUE]);
-                }
-              }}
-              placeholder="Type your response..."
-              className="min-h-[42px] text-sm py-1.5"
+              className="shrink-0 mt-1"
             />
-          </div>
-        </label>
+            <div className="flex-1 min-w-0 space-y-1">
+              <span className="text-sm font-medium">Other</span>
+              <Textarea
+                value={otherText}
+                aria-label="Other response"
+                onFocus={() => {
+                  if (!selectedValues.includes(OTHER_OPTION_VALUE)) {
+                    onChange([...selectedValues, OTHER_OPTION_VALUE]);
+                  }
+                }}
+                onClick={() => {
+                  if (!selectedValues.includes(OTHER_OPTION_VALUE)) {
+                    onChange([...selectedValues, OTHER_OPTION_VALUE]);
+                  }
+                }}
+                onBlur={() => {
+                  if (
+                    otherText.trim().length === 0 &&
+                    selectedValues.includes(OTHER_OPTION_VALUE)
+                  ) {
+                    onChange(selectedValues.filter((value) => value !== OTHER_OPTION_VALUE));
+                  }
+                }}
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  onOtherTextChange(nextValue);
+                  if (nextValue.trim().length > 0 && !selectedValues.includes(OTHER_OPTION_VALUE)) {
+                    onChange([...selectedValues, OTHER_OPTION_VALUE]);
+                  }
+                }}
+                placeholder="Type your response..."
+                className="min-h-[42px] text-sm py-1.5"
+              />
+            </div>
+          </label>
+        )}
       </div>
     </div>
   );
@@ -571,6 +587,9 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
     const formattedAnswers: Record<string, string | string[]> = {};
 
     question.questions.forEach((q, index) => {
+      if (q.optional && !answers[index]?.length && !otherTexts[index]?.trim()) {
+        return;
+      }
       const answerKey = q.id?.trim() || q.question;
       formattedAnswers[answerKey] = formatAnswer(q, answers[index], otherTexts[index] ?? '');
     });
@@ -583,12 +602,10 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
     setOtherTexts({});
   }, [question, answers, otherTexts, onAnswer]);
 
-  // Check if all questions have been answered
   const isComplete = question?.questions.every((q, index) =>
     isAnswerComplete(q, answers[index], otherTexts[index] ?? '')
   );
 
-  // Check if current question has been answered
   const isCurrentAnswered = (() => {
     if (!question) {
       return false;

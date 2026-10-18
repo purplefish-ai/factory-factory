@@ -22,9 +22,6 @@ export {
   type ClaudeModelCatalogEntry,
   fetchClaudeModelCatalogFromAcp,
 } from './claude-model-catalog-loader';
-export {
-  CodexAppServerAcpAdapter,
-  fetchCodexModelCatalogFromAppServer,
-  runCodexAppServerAcpAdapter,
-} from './codex-app-server-adapter';
+export { fetchCodexModelCatalogFromAppServer } from './codex-model-catalog-loader';
+export { toAcpSessionId } from './acp-session-identity';
 export type { AcpClientOptions, AcpProvider, AcpSessionState, PermissionPreset } from './types';

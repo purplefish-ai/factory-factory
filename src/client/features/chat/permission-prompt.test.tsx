@@ -20,6 +20,58 @@ afterEach(() => {
 });
 
 describe('PermissionPrompt', () => {
+  it('shows URL elicitation target and message before explicit authorization', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const onApprove = vi.fn();
+    const permission: PermissionRequest = {
+      requestId: 'url-1',
+      toolName: 'Authorize URL',
+      timestamp: '2026-10-18T00:00:00Z',
+      toolInput: {
+        type: 'UrlElicitation',
+        url: 'https://example.com/auth',
+        message: 'Connect your account',
+      },
+      acpOptions: [
+        { optionId: 'accept', name: 'Authorize', kind: 'allow_once' },
+        { optionId: 'decline', name: 'Decline', kind: 'reject_once' },
+      ],
+    };
+    flushSync(() => root.render(createElement(PermissionPrompt, { permission, onApprove })));
+    expect(container.textContent).toContain('Connect your account');
+    const link = container.querySelector('a');
+    expect(link?.getAttribute('href')).toBe('https://example.com/auth');
+    expect(link?.getAttribute('rel')).toContain('noopener');
+    expect(onApprove).not.toHaveBeenCalled();
+    findButtonByText(container, 'Authorize')!.click();
+    expect(onApprove).toHaveBeenCalledWith('url-1', true, 'accept');
+    root.unmount();
+  });
+
+  it('shows the message and consent button for an empty elicitation form', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const onApprove = vi.fn();
+    const permission: PermissionRequest = {
+      requestId: 'consent',
+      toolName: 'Confirm request',
+      timestamp: '2026-10-18T00:00:00Z',
+      toolInput: { type: 'FormElicitation', message: 'Confirm this request' },
+      acpOptions: [
+        { optionId: 'accept', kind: 'allow_once', name: 'Confirm' },
+        { optionId: 'decline', kind: 'reject_once', name: 'Decline' },
+      ],
+    };
+    flushSync(() => root.render(createElement(PermissionPrompt, { permission, onApprove })));
+    expect(container.textContent).toContain('Confirm this request');
+    findButtonByText(container, 'Confirm')!.click();
+    expect(onApprove).toHaveBeenCalledWith('consent', true, 'accept');
+    root.unmount();
+  });
+
   it('shows plan content for ExitPlanMode even when acpOptions exist', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);

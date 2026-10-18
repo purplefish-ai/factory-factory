@@ -62,6 +62,11 @@ describe('SetupTerminalModal', () => {
     document.body.innerHTML = '';
   });
 
+  it('offers bundled Codex login without requiring a separate global CLI', () => {
+    render();
+    expect(document.body.textContent).toContain('ff codex login');
+  });
+
   it('shows a Retry control when the connection gives up before ever connecting', () => {
     setupTerminalState.gaveUp = true;
     render();

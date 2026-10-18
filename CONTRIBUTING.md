@@ -113,9 +113,8 @@ Write clear, descriptive commit messages:
 - Run `pnpm check` for standard guardrails and `pnpm check:fix` to automatically
   fix lint issues, sort imports and format files. Use `pnpm lint` for linting
   alone and `pnpm check:format` for formatting alone.
-- `pnpm check` enforces Codex schema drift in CI. Locally, that check is skipped
-  unless the pinned Codex CLI is installed; use
-  `CODEX_SCHEMA_CHECK=strict pnpm check:codex-schema` to enforce it.
+- Provider protocol schemas are owned by the upstream ACP adapters. Test ACP
+  client contracts when upgrading either adapter.
 - `prisma/generated/` is generated and excluded from linting and formatting.
   After changing `prisma/schema.prisma`, run `pnpm check:prisma-schema` to
   regenerate Prisma output, enforce Prisma import/ownership rules, and typecheck

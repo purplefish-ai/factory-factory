@@ -1,15 +1,15 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { z } from 'zod';
+import { getBundledCodexCommand } from '@/backend/lib/codex-cli-command';
 import { toError } from '@/backend/lib/error-utils';
 import { SERVICE_CACHE_TTL_MS, SERVICE_TIMEOUT_MS } from '@/backend/services/constants';
 import { type GitHubCLIHealthStatus, githubCLIService } from '@/backend/services/github';
-import { createLogger } from '@/backend/services/logger.service';
+import { createLogger, getCurrentProcessEnv } from '@/backend/services/logger.service';
 
 const execFileAsync = promisify(execFile);
 const logger = createLogger('cli-health');
 const CLAUDE_CLI_NPM_PACKAGE = '@anthropic-ai/claude-code';
-const CODEX_CLI_NPM_PACKAGE = '@openai/codex';
 
 export interface ClaudeCLIHealthStatus {
   isInstalled: boolean;
@@ -111,12 +111,13 @@ class CLIHealthService {
     };
   }
 
-  private getProviderUpgradePackage(provider: 'CLAUDE' | 'CODEX'): string {
-    return provider === 'CLAUDE' ? CLAUDE_CLI_NPM_PACKAGE : CODEX_CLI_NPM_PACKAGE;
-  }
-
   async upgradeProviderCLI(provider: 'CLAUDE' | 'CODEX'): Promise<CLIUpgradeResult> {
-    const packageName = this.getProviderUpgradePackage(provider);
+    if (provider === 'CODEX') {
+      throw new Error(
+        'Codex is managed by Factory Factory. Update Factory Factory to update its Codex runtime.'
+      );
+    }
+    const packageName = CLAUDE_CLI_NPM_PACKAGE;
     const args = ['install', '-g', packageName];
 
     try {
@@ -144,9 +145,7 @@ class CLIHealthService {
       const stderr = typeof output.stderr === 'string' ? output.stderr : undefined;
       const stdout = typeof output.stdout === 'string' ? output.stdout : undefined;
       const details = [normalizedError.message, stderr, stdout].filter(Boolean).join('\n');
-      throw new Error(
-        `Failed to upgrade ${provider === 'CLAUDE' ? 'Claude' : 'Codex'} CLI via npm: ${details}`
-      );
+      throw new Error(`Failed to upgrade Claude CLI via npm: ${details}`);
     }
   }
 
@@ -195,47 +194,37 @@ class CLIHealthService {
     }
   }
 
-  /**
-   * Check if Codex CLI is installed and authenticated.
-   * Uses `codex --version` for installation and `codex login status` for auth.
-   */
+  /** Check the same bundled Codex executable used by ACP sessions. */
   async checkCodexCLI(): Promise<CodexCLIHealthStatus> {
     try {
-      const { stdout } = await execFileAsync('codex', ['--version'], {
+      const versionCommand = getBundledCodexCommand(['--version']);
+      const env = { ...getCurrentProcessEnv(), ELECTRON_RUN_AS_NODE: '1' };
+      const { stdout } = await execFileAsync(versionCommand.command, versionCommand.args, {
+        env,
         timeout: SERVICE_TIMEOUT_MS.codexCliVersionCheck,
       });
       const version = stdout.trim().split('\n')[0];
-      const versionFreshnessPromise = this.buildVersionFreshness({
-        installedVersion: version,
-        packageName: CODEX_CLI_NPM_PACKAGE,
-      });
-
       try {
-        await execFileAsync('codex', ['login', 'status'], {
+        const authCommand = getBundledCodexCommand(['login', 'status']);
+        await execFileAsync(authCommand.command, authCommand.args, {
+          env,
           timeout: SERVICE_TIMEOUT_MS.codexCliAuthCheck,
         });
-        const versionFreshness = await versionFreshnessPromise;
-        return { isInstalled: true, isAuthenticated: true, version, ...versionFreshness };
+        return { isInstalled: true, isAuthenticated: true, version };
       } catch {
-        const versionFreshness = await versionFreshnessPromise;
         return {
           isInstalled: true,
           isAuthenticated: false,
           version,
-          ...versionFreshness,
-          error: 'Codex CLI is not authenticated. Run `codex login` to authenticate.',
+          error: 'Codex is not authenticated. Run `ff codex login` to authenticate.',
         };
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      const isNotFound = message.toLowerCase().includes('enoent') || message.includes('not found');
-
       return {
         isInstalled: false,
         isAuthenticated: false,
-        error: isNotFound
-          ? 'Codex CLI is not installed. Install from https://developers.openai.com/codex/app-server/'
-          : `Failed to check Codex CLI: ${message}`,
+        error: `Bundled Codex runtime is unavailable. Update or reinstall Factory Factory. ${message}`,
       };
     }
   }

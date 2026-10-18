@@ -2,6 +2,7 @@ import type { SessionConfigOption } from '@agentclientprotocol/sdk';
 import { createLogger } from '@/backend/services/logger.service';
 import type { AcpProcessHandle } from './acp-process-handle';
 import { requireSessionConfigOptions } from './acp-session-config-options';
+import { toAcpSessionId } from './acp-session-identity';
 
 const logger = createLogger('acp-runtime-manager');
 
@@ -14,7 +15,7 @@ export class AcpRuntimeConfigController {
   ): Promise<SessionConfigOption[]> {
     try {
       const response = await handle.connection.setSessionConfigOption({
-        sessionId: handle.providerSessionId,
+        sessionId: toAcpSessionId(handle.provider, handle.providerSessionId),
         configId,
         value,
       });
@@ -42,7 +43,7 @@ export class AcpRuntimeConfigController {
   ): Promise<SessionConfigOption[]> {
     try {
       await handle.connection.setSessionMode({
-        sessionId: handle.providerSessionId,
+        sessionId: toAcpSessionId(handle.provider, handle.providerSessionId),
         modeId,
       });
 

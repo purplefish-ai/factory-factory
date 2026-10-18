@@ -23,7 +23,7 @@ const configOptionFields = {
   _meta: extensionMetadataSchema,
 };
 
-// ACP 1.4 does not export its Zod validators and silently drops malformed group
+// ACP select validators silently drop malformed group
 // entries internally. Persisted snapshots must reject the whole invalid value.
 const storedConfigOptionSchema = z.discriminatedUnion('type', [
   z.object({
@@ -60,9 +60,81 @@ export function parseAcpConfigSnapshot(metadata: unknown): StoredAcpConfigSnapsh
     return null;
   }
   const snapshot = parsed.data;
-  const configOptions: SessionConfigOption[] = snapshot.configOptions;
+  const configOptions =
+    snapshot.provider === 'CODEX'
+      ? migrateCodexConfigOptions(snapshot.configOptions)
+      : snapshot.configOptions;
+  if (!configOptions) {
+    return null;
+  }
   return {
     ...snapshot,
     configOptions: normalizeSessionConfigOptions(snapshot.provider, configOptions),
   };
+}
+
+const legacyExecutionSchema = z.tuple([
+  z.enum(['on-request', 'on-failure', 'never', 'untrusted']),
+  z.enum(['read-only', 'workspace-write', 'danger-full-access']),
+]);
+
+/** Legacy access tuples only migrate to equivalent or more restrictive access. */
+function migrateCodexConfigOptions(
+  configOptions: SessionConfigOption[]
+): SessionConfigOption[] | null {
+  const execution = configOptions.find((option) => option.id === 'execution_mode');
+  const mode = configOptions.find((option) => option.id === 'mode');
+  const legacyCollaboration =
+    mode && ['plan', 'code', 'default'].includes(String(mode.currentValue));
+  if (!(execution || (legacyCollaboration && mode?.currentValue !== 'default'))) {
+    return configOptions;
+  }
+  if (
+    !(execution?.type === 'select' && mode?.type === 'select' && legacyCollaboration) ||
+    configOptions.some((option) => option.id === 'collaboration_mode')
+  ) {
+    return null;
+  }
+  let tuple: z.infer<typeof legacyExecutionSchema>;
+  try {
+    tuple = legacyExecutionSchema.parse(JSON.parse(execution.currentValue));
+  } catch {
+    return null;
+  }
+  const [approval, sandbox] = tuple;
+  if (sandbox === 'danger-full-access' && approval !== 'never') {
+    return null;
+  }
+  const access = sandbox === 'danger-full-access' ? 'agent-full-access' : sandbox;
+  const accessOption: SessionConfigOption = {
+    id: 'mode',
+    name: 'Access',
+    category: 'mode',
+    type: 'select',
+    currentValue: access,
+    options: [
+      { value: 'read-only', name: 'Read-only' },
+      { value: 'workspace-write', name: 'Workspace access' },
+      { value: 'agent', name: 'Auto review' },
+      { value: 'agent-full-access', name: 'Full access' },
+    ],
+  };
+  const collaborationOption: SessionConfigOption = {
+    id: 'collaboration_mode',
+    name: 'Planning',
+    category: 'collaboration_mode',
+    type: 'select',
+    currentValue: mode.currentValue === 'plan' ? 'plan' : 'default',
+    options: [
+      { value: 'default', name: 'Default' },
+      { value: 'plan', name: 'Plan' },
+    ],
+  };
+  return configOptions.flatMap((option) =>
+    option.id === 'execution_mode'
+      ? []
+      : option.id === 'mode'
+        ? [accessOption, collaborationOption]
+        : [option]
+  );
 }

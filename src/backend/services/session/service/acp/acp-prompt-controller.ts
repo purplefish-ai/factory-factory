@@ -2,6 +2,7 @@ import type { ContentBlock } from '@agentclientprotocol/sdk';
 import { createLogger } from '@/backend/services/logger.service';
 import type { AcpProcessHandle } from './acp-process-handle';
 import { PromptTimeoutError } from './acp-runtime-errors';
+import { toAcpSessionId } from './acp-session-identity';
 
 const logger = createLogger('acp-runtime-manager');
 
@@ -22,7 +23,7 @@ export class AcpPromptController {
     handle.isPromptInFlight = true;
     try {
       const promptPromise = handle.connection.prompt({
-        sessionId: handle.providerSessionId,
+        sessionId: toAcpSessionId(handle.provider, handle.providerSessionId),
         prompt,
       });
 
@@ -71,7 +72,7 @@ export class AcpPromptController {
 
     handle.permissionBridge?.cancelAll();
     await handle.connection.cancel({
-      sessionId: handle.providerSessionId,
+      sessionId: toAcpSessionId(handle.provider, handle.providerSessionId),
     });
     return true;
   }
