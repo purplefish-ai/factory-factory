@@ -34,8 +34,10 @@ existing lazy routes to retain their own dependencies. This measurement is
 independent of the file viewer worker change.
 
 Timing samples include local cache and resource effects; repeat before drawing
-statistical conclusions. Both cold-start runs bundle dependencies afresh and use
-the same unavailable backend, so application data is not measured.
+statistical conclusions. The Vite runs use fresh temporary dependency caches and
+the same unavailable backend, so real application data latency is not measured.
+Storybook retains its normal cache; these are local startup/build comparisons,
+not a controlled cold-cache experiment. Its fixture supplies its own query data.
 
 ## Reproduction
 

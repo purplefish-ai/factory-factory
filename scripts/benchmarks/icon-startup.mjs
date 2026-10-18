@@ -5,11 +5,13 @@ import { chromium } from '@playwright/test';
 import { createServer } from 'vite';
 const cacheDir = mkdtempSync(join(tmpdir(), 'ff-icons-vite-'));
 const start = performance.now();
-const server = await createServer({ cacheDir, server: { port: 5190, host: '127.0.0.1' } });
-await server.listen();
-const serverReadyMs = performance.now() - start;
-const browser = await chromium.launch({ channel: 'chrome', headless: true });
+let server;
+let browser;
 try {
+  server = await createServer({ cacheDir, server: { port: 5190, host: '127.0.0.1' } });
+  await server.listen();
+  const serverReadyMs = performance.now() - start;
+  browser = await chromium.launch({ channel: 'chrome', headless: true });
   const page = await browser.newPage();
   page.setDefaultTimeout(90_000);
   let requests = 0;
@@ -26,7 +28,13 @@ try {
     })
   );
 } finally {
-  await browser.close();
-  await server.close();
-  rmSync(cacheDir, { recursive: true, force: true });
+  try {
+    await browser?.close();
+  } finally {
+    try {
+      await server?.close();
+    } finally {
+      rmSync(cacheDir, { recursive: true, force: true });
+    }
+  }
 }
