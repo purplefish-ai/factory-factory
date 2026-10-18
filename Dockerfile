@@ -31,7 +31,7 @@ WORKDIR /app
 RUN apk add --no-cache python3 make g++ git libc6-compat
 
 # Copy package manifests
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .pnpmfile.mjs ./
 COPY patches/ ./patches/
 
 # Copy files needed by postinstall script (runs prisma generate + node-pty fixup)

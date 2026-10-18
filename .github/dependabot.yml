@@ -1,0 +1,22 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      prisma:
+        patterns:
+          - prisma
+          - '@prisma/client'
+          - '@prisma/adapter-better-sqlite3'
+      storybook:
+        patterns:
+          - storybook
+          - '@storybook/*'
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
