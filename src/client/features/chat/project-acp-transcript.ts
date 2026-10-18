@@ -111,23 +111,34 @@ function seedThinkingSequence(
 
 export function projectAcpTranscriptUpdates(updates: SubagentTranscriptUpdate[]): ChatMessage[] {
   const translator = new AcpEventTranslator(transcriptLogger);
-  let state = createInitialChatState({
+  const emptyState = createInitialChatState({
     sessionStatus: { phase: 'ready' },
     rendererTranscriptLimit: null,
   });
+  let state = emptyState;
+  const messages: ChatMessage[] = [];
+  // Subagent events have increasing local orders. Only consecutive thought
+  // chunks update an earlier message, so keep that one reasoning seed in the
+  // reducer until its sequence ends. All other messages can be collected once.
+  // This keeps reducer copies and indexes bounded by one update, not the page.
+  const collectMessages = () => {
+    messages.push(...state.messages);
+    state = emptyState;
+  };
   let order = 0;
   let reasoningSequenceOpen = false;
 
   for (const update of updates) {
-    if (update.sessionUpdate === 'user_message_chunk') {
+    if (update.sessionUpdate !== 'agent_thought_chunk') {
+      collectMessages();
       reasoningSequenceOpen = false;
-      state = appendUserMessage(state, update, order);
-      order += 1;
-      continue;
     }
 
-    if (update.sessionUpdate !== 'agent_thought_chunk') {
-      reasoningSequenceOpen = false;
+    if (update.sessionUpdate === 'user_message_chunk') {
+      state = appendUserMessage(state, update, order);
+      collectMessages();
+      order += 1;
+      continue;
     }
 
     const deltas = translator.translateSessionUpdate(update);
@@ -141,9 +152,13 @@ export function projectAcpTranscriptUpdates(updates: SubagentTranscriptUpdate[])
       state = applySessionDelta(state, delta, order, `subagent-event-${order}`);
       order += 1;
     }
+    if (update.sessionUpdate !== 'agent_thought_chunk') {
+      collectMessages();
+    }
   }
+  collectMessages();
 
-  return state.messages.map((message, index) => ({
+  return messages.map((message, index) => ({
     ...message,
     id: `subagent-message-${message.order}-${index}`,
     timestamp: TRANSCRIPT_FALLBACK_TIMESTAMP,
