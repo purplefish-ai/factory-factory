@@ -170,6 +170,29 @@ describe('detectDrift', () => {
     expect(detectDrift(existing, authoritative)).toEqual([]);
   });
 
+  it('ignores reordered PRs while detecting changed PR content', () => {
+    const first = {
+      id: 'pr-1',
+      url: 'https://github.com/org/repo/pull/1',
+      number: 1,
+      title: 'First',
+      headRefName: null,
+      baseRefName: null,
+      state: 'OPEN',
+      reviewState: null,
+      ciStatus: 'SUCCESS',
+      hasMergeConflict: false,
+      syncedAt: null,
+    } satisfies NonNullable<WorkspaceSnapshotEntry['prs']>[number];
+    const second = { ...first, id: 'pr-2', number: 2 };
+    const existing = createSnapshotEntry({ prs: [first, second] });
+
+    expect(detectDrift(existing, { prs: [{ ...second }, { ...first }] })).toEqual([]);
+    expect(detectDrift(existing, { prs: [second, { ...first, title: 'Updated' }] })).toEqual([
+      expect.objectContaining({ field: 'prs', group: 'pr' }),
+    ]);
+  });
+
   it('ignores undefined authoritative fields', () => {
     const existing = createSnapshotEntry({ status: 'NEW', prState: 'OPEN' });
     const authoritative: SnapshotUpdateInput = { status: 'READY' };

@@ -30,7 +30,7 @@ export type BottomPanelTab = 'terminal' | 'dev-logs' | 'post-run-logs' | 'setup-
 export interface MainViewTab {
   id: string;
   type: 'chat' | 'file' | 'diff' | 'screenshot' | 'closed-session' | 'subagent';
-  path?: string; // for file/diff tabs
+  path?: string; // for file/diff/screenshot tabs
   closedSessionId?: string; // for closed-session tabs
   subagentSelection?: SubagentSelection;
   label: string;
@@ -448,7 +448,7 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
         if (type === 'closed-session' && path) {
           return tab.type === 'closed-session' && tab.closedSessionId === path;
         }
-        if ((type === 'file' || type === 'diff') && path) {
+        if ((type === 'file' || type === 'diff' || type === 'screenshot') && path) {
           return tab.type === type && tab.path === path;
         }
         return false;
@@ -466,7 +466,7 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
       const newTab: MainViewTab = {
         id,
         type,
-        path: type === 'file' || type === 'diff' ? path : undefined,
+        path: type === 'file' || type === 'diff' || type === 'screenshot' ? path : undefined,
         closedSessionId: type === 'closed-session' ? path : undefined,
         label: tabLabel,
       };

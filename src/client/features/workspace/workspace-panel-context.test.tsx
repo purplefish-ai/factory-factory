@@ -47,9 +47,13 @@ const runningSelection: SubagentSelection = {
 };
 
 function WorkspacePanelActionsProbe() {
-  const { activeTabId, tabs, openSubagentTab, updateSubagentTab, closeTab } = useWorkspacePanel();
+  const { activeTabId, tabs, openTab, openSubagentTab, updateSubagentTab, closeTab, selectTab } =
+    useWorkspacePanel();
   return (
     <>
+      <button type="button" onClick={() => openTab('screenshot', '/tmp/capture.png', 'Capture')}>
+        Open screenshot
+      </button>
       <button type="button" onClick={() => openSubagentTab(runningSelection)}>
         Open running
       </button>
@@ -80,6 +84,9 @@ function WorkspacePanelActionsProbe() {
         }
       >
         Complete
+      </button>
+      <button type="button" onClick={() => selectTab('chat')}>
+        Select chat
       </button>
       <button type="button" onClick={() => closeTab(activeTabId)}>
         Close active
@@ -134,6 +141,53 @@ afterEach(() => {
 });
 
 describe('WorkspacePanelProvider persistence', () => {
+  it('reactivates an open screenshot without duplicating its tab', async () => {
+    let panel: ReturnType<typeof renderPanel>;
+    await act(() => {
+      panel = renderPanel(<WorkspacePanelActionsProbe />);
+    });
+    await clickButton(panel!.container, 'Open screenshot');
+    await clickButton(panel!.container, 'Select chat');
+    expect(readProbe(panel!.container).activeTabId).toBe('chat');
+    await clickButton(panel!.container, 'Open screenshot');
+    expect(readProbe(panel!.container).activeTabId).toBe('screenshot-/tmp/capture.png');
+    expect(readProbe(panel!.container).tabs).toHaveLength(2);
+    expect(
+      readProbe(panel!.container).tabs.filter((tab) => tab.type === 'screenshot')
+    ).toHaveLength(1);
+    await clickButton(panel!.container, 'Close active');
+    expect(readProbe(panel!.container).tabs).toEqual([{ id: 'chat', type: 'chat', label: 'Chat' }]);
+    await act(() => panel!.root.unmount());
+  });
+
+  it('retains the screenshot path when opening and restoring its tab', async () => {
+    let panel: ReturnType<typeof renderPanel>;
+    await act(() => {
+      panel = renderPanel(<WorkspacePanelActionsProbe />);
+    });
+    const { container, root } = panel!;
+    await clickButton(container, 'Open screenshot');
+    const screenshotTab: MainViewTab = {
+      id: 'screenshot-/tmp/capture.png',
+      type: 'screenshot',
+      path: '/tmp/capture.png',
+      label: 'Capture',
+    };
+    expect(readProbe(container).tabs).toContainEqual(screenshotTab);
+    expect(readProbe(container).activeTabId).toBe(screenshotTab.id);
+    expect(JSON.parse(localStorage.getItem(TABS_STORAGE_KEY) ?? '[]')).toContainEqual(
+      screenshotTab
+    );
+    await act(() => root.unmount());
+
+    await act(() => {
+      panel = renderPanel(<WorkspacePanelProbe />);
+    });
+    expect(readProbe(panel!.container).tabs).toContainEqual(screenshotTab);
+    expect(readProbe(panel!.container).activeTabId).toBe(screenshotTab.id);
+    await act(() => panel!.root.unmount());
+  });
+
   it('restores mixed tabs when a closed-session tab is stored', async () => {
     const storedTabs: MainViewTab[] = [
       { id: 'chat', type: 'chat', label: 'Chat' },
