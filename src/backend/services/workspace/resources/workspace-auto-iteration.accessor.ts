@@ -1,6 +1,6 @@
-import type { Prisma, WorkspaceAutoIteration } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
 import type { AutoIterationStatus, WorkspaceMode } from '@/shared/core';
+import type { Prisma, WorkspaceAutoIteration } from '@prisma-gen/client';
 
 /**
  * Persistence for `WorkspaceAutoIteration`, the mode discriminant and the

@@ -1,4 +1,3 @@
-import type { PrismaClient } from '@prisma-gen/client';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { githubCLIService, prSnapshotService } from '@/backend/services/github';
 import { workspaceDataService, workspacePrSnapshotService } from '@/backend/services/workspace';
@@ -7,6 +6,7 @@ import {
   destroyIntegrationDatabase,
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
+import type { PrismaClient } from '@prisma-gen/client';
 
 const database = vi.hoisted(() => ({ prisma: undefined as PrismaClient | undefined }));
 vi.mock('@/backend/db', () => ({

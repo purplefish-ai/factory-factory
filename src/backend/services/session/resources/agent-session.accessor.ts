@@ -1,6 +1,6 @@
-import { type AgentSession, Prisma, type SessionProvider } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
 import { SessionStatus } from '@/shared/core';
+import { type AgentSession, Prisma, type SessionProvider } from '@prisma-gen/client';
 
 export type AgentSessionRecord = AgentSession;
 

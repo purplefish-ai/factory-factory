@@ -1,8 +1,8 @@
-import type { SessionProvider, Workspace } from '@prisma-gen/client';
 import { asConcreteWorkspaceProvider } from '@/backend/lib/provider-selection';
 import { resolveSessionModelForProvider } from '@/backend/lib/session-model';
 import { userSettingsService } from '@/backend/services/settings';
 import { workspaceDataService } from '@/backend/services/workspace';
+import type { SessionProvider, Workspace } from '@prisma-gen/client';
 
 class SessionProviderResolverService {
   async resolveSessionDefaults(params: {

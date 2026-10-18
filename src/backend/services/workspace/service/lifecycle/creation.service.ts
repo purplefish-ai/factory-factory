@@ -1,4 +1,3 @@
-import type { Prisma, SessionProvider } from '@prisma-gen/client';
 import { ApplicationError } from '@/backend/lib/application-error';
 import type { AutoIterationConfig } from '@/backend/services/auto-iteration';
 import type { createLogger } from '@/backend/services/logger.service';
@@ -12,6 +11,7 @@ import { gitOpsService } from '@/backend/services/workspace/service/worktree/git
 import { worktreeLifecycleService } from '@/backend/services/workspace/service/worktree/worktree-lifecycle.service';
 import type { MessageAttachment } from '@/shared/acp-protocol';
 import { autoIterationConfigSchema } from '@/shared/schemas/auto-iteration.schema';
+import type { Prisma, SessionProvider } from '@prisma-gen/client';
 
 type Logger = ReturnType<typeof createLogger>;
 

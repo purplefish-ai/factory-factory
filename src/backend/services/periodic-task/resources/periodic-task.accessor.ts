@@ -1,6 +1,6 @@
-import type { PeriodicTask, PeriodicTaskExecution } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
 import type { PeriodicTaskCadence, PeriodicTaskExecutionStatus } from '@/shared/core';
+import type { PeriodicTask, PeriodicTaskExecution } from '@prisma-gen/client';
 
 // ─── Cadence helpers ────────────────────────────────────────────────────────
 

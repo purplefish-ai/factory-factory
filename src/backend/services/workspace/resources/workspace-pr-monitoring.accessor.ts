@@ -1,4 +1,3 @@
-import type { Prisma, WorkspacePRMonitoring } from '@prisma-gen/client';
 import type { z } from 'zod';
 import { prisma } from '@/backend/db';
 import {
@@ -9,6 +8,7 @@ import {
   type PRDeliveryMode,
 } from '@/shared/pr-monitoring';
 import { prMonitoringBackupSchema } from '@/shared/schemas/pr-monitoring-backup.schema';
+import type { Prisma, WorkspacePRMonitoring } from '@prisma-gen/client';
 import { workspacePrEventAccessor } from './workspace-pr-event.accessor';
 
 export interface PRBindingInput {

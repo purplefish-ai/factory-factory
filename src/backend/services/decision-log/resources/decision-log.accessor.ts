@@ -1,5 +1,5 @@
-import type { DecisionLog } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
+import type { DecisionLog } from '@prisma-gen/client';
 
 class DecisionLogAccessor {
   findById(id: string): Promise<DecisionLog | null> {

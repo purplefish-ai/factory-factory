@@ -74,3 +74,36 @@ The native preview's broad correctness category also enabled unrelated rules,
 including React Compiler checks and `unbound-method`. The committed Oxlint
 configuration uses explicit migrated rules while Biome preserves its existing
 recommended preset, avoiding an unrelated expansion of lint policy.
+
+## October 17 patch follow-up
+
+The follow-up pins Oxfmt 0.73.0 and Oxlint 1.88.0 and explicitly identifies `@/`
+and `@prisma-gen/` as internal imports. The resulting source diff only reorders
+complete import declarations. Side effect imports retain their order, and unused
+imports remain available to the linter. Formatter fixtures cover those
+properties, source/CSS/JSON formatting, Markdown fenced-code preservation, and
+generated-file and lockfile exclusions.
+
+The following timings use Node 26.8.1 on the same worktree and configuration.
+Each cell reports the first invocation / median of three subsequent invocations
+in seconds. Every invocation starts a fresh CLI process. The filesystem cache
+was not flushed, and other development checks were running on the host, so the
+first invocation is not a controlled cold-cache measurement. These results do
+not establish a speed improvement from the patch updates.
+
+| Tool                       |     Full tree | Three staged source files |
+| -------------------------- | ------------: | ------------------------: |
+| Oxfmt 0.72.0               | 0.355 / 0.375 |             0.102 / 0.092 |
+| Oxfmt 0.73.0               | 0.323 / 0.434 |             0.137 / 0.127 |
+| Oxlint 1.87.0              | 1.382 / 0.897 |             0.122 / 0.117 |
+| Oxlint 1.88.0              | 0.654 / 1.376 |             0.196 / 0.192 |
+| Retained Biome 2.5.15 lint | 4.113 / 3.742 |             1.777 / 2.778 |
+
+All 40 invocations exited successfully. Full-tree commands were
+`oxfmt --check .`, `oxlint --deny-warnings .`, and `biome lint .`. Staged
+measurements passed `src/backend/db.ts`, `src/backend/trpc/admin.trpc.ts`, and
+`scripts/oxfmt-config.test.ts` instead of `.`. The pinned CLI launchers were
+invoked directly through Node, without pnpm or git-hook overhead. The Biome row
+measures its retained lint workload; its coverage differs from the Oxlint and
+formatter rows, so these tools are additive layers rather than interchangeable
+benchmarks.

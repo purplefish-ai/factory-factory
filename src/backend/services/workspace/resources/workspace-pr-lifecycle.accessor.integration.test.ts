@@ -1,4 +1,3 @@
-import type { PrismaClient } from '@prisma-gen/client';
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import {
   createIntegrationDatabase,
@@ -6,6 +5,7 @@ import {
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
 import { redObservation } from '@/shared/pr-monitoring.test-helpers';
+import type { PrismaClient } from '@prisma-gen/client';
 import { workspacePrDiscoveryAccessor } from './workspace-pr-discovery.accessor';
 import { workspacePrEventAccessor } from './workspace-pr-event.accessor';
 import { workspacePrMonitoringAccessor } from './workspace-pr-monitoring.accessor';

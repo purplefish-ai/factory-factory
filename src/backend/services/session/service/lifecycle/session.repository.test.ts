@@ -1,8 +1,8 @@
-import type { Workspace } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentSessionRecord } from '@/backend/services/session';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
+import type { Workspace } from '@prisma-gen/client';
 import { SessionRepository } from './session.repository';
 
 const createSession = (overrides?: Partial<AgentSessionRecord>): AgentSessionRecord =>

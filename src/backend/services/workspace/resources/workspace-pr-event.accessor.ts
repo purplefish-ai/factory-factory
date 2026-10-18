@@ -1,4 +1,3 @@
-import type { AgentSession, Prisma } from '@prisma-gen/client';
 import { z } from 'zod';
 import { prisma } from '@/backend/db';
 import {
@@ -11,6 +10,7 @@ import {
 } from '@/shared/pr-monitoring';
 import { prMonitoringEventPayloadSchema } from '@/shared/schemas/pr-event.schema';
 import { prEventBackupSchema } from '@/shared/schemas/pr-monitoring-backup.schema';
+import type { AgentSession, Prisma } from '@prisma-gen/client';
 
 function validateImportedTarget(event: z.infer<typeof prEventBackupSchema>, workspaceId: string) {
   if (

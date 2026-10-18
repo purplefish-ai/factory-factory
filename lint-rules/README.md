@@ -10,7 +10,14 @@ JavaScript API for tooling.
 import sorting. `.oxfmtrc.json` keeps two-space indentation, single quotes,
 semicolons, ES5 trailing commas and a 100-column source width. Markdown wraps
 prose at 80 columns and preserves fenced code. Generated Prisma files and the
-pnpm lockfile are excluded.
+pnpm lockfile are excluded. Both `@/` and `@prisma-gen/` are explicitly
+classified as internal imports. Side effect imports keep their execution order;
+formatting preserves unused imports for the linter to report.
+
+`scripts/oxfmt-config.test.ts` runs the pinned formatter against source, CSS,
+JSON and Markdown fixtures, including generated-file exclusions and fenced-code
+preservation. To hide the import-only conversion from blame, run
+`git config blame.ignoreRevsFile .git-blame-ignore-revs`.
 
 ## Custom rules
 
@@ -57,3 +64,7 @@ Run `pnpm check:fix`, `pnpm typecheck`, affected tests and `pnpm check` before
 submitting changes. Use `pnpm lint` for just the lint guardrails,
 `pnpm check:format` to check formatting and `pnpm format` to apply formatting.
 The pre-commit hook uses the same tools on staged source files.
+
+Staged formatter commands permit batches containing only ignored files, such as
+`pnpm-lock.yaml`. Supported files still format normally, and parse errors still
+block commits.
