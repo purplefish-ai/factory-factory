@@ -14,9 +14,11 @@ const result = await page.evaluate(async () => {
   const { createElement, createRoot, flushSync, FileCode, Prism } = window.fileViewerBenchmark;
   const measurements = [];
   for (const bytes of [100_000, 1_000_000]) {
-    const source = '/* multiline comment\ncontinues here */\nexport const greeting = "hello";\n'
+    const fixture = '/* multiline comment\ncontinues here */\nexport const greeting = "hello";\n'
       .repeat(Math.ceil(bytes / 70))
       .slice(0, bytes);
+    const marker = '\n// unique native find marker';
+    const source = fixture.slice(0, bytes - marker.length) + marker;
     for (const [name, component, props] of [
       [
         'Prism',
@@ -37,8 +39,15 @@ const result = await page.evaluate(async () => {
       flushSync(() => root.render(createElement(component, props)));
       const firstRender = performance.now() - start;
       const height = host.scrollHeight;
+      let scroll = null;
       if (name === 'FileCode') {
-        await new Promise((resolve) => setTimeout(resolve, 3000));
+        const deadline = performance.now() + 15_000;
+        while (!host.querySelector('code span[style]')) {
+          if (performance.now() > deadline) {
+            throw new Error('Timed out waiting for worker highlighting');
+          }
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
         const sourceNodes = host.querySelector('pre').cloneNode(true);
         sourceNodes.querySelectorAll('[aria-hidden]').forEach((node) => node.remove());
         if (sourceNodes.textContent !== source) {
@@ -47,7 +56,41 @@ const result = await page.evaluate(async () => {
         if (!host.querySelector('code span[style]')) {
           throw new Error('worker highlighting missing');
         }
+        const code = host.querySelectorAll('code');
+        const range = document.createRange();
+        range.setStartBefore(code[0].firstChild);
+        range.setEndAfter(code[code.length - 1].lastChild);
+        const selection = getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        if (selection.toString() !== source) {
+          throw new Error('Cross-block selection changed source');
+        }
+        selection.removeAllRanges();
+        const phrase = 'unique native find marker';
+        if (!window.find(phrase)) {
+          throw new Error('Native find cannot locate offscreen source');
+        }
+        code[code.length - 1].scrollIntoView({ block: 'start' });
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        if (selection.toString() !== phrase) {
+          throw new Error('Native find selection lost during scroll');
+        }
+        selection.removeAllRanges();
+        document.dispatchEvent(new Event('selectionchange'));
         host.scrollTop = height;
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const viewport = host.getBoundingClientRect();
+        const visibleBlockFirstLines = [...host.querySelectorAll('pre > div')]
+          .filter((block) => {
+            const rect = block.getBoundingClientRect();
+            return rect.bottom > viewport.top && rect.top < viewport.bottom;
+          })
+          .map((block) => Number(block.querySelector('[aria-hidden]')?.textContent.split('\n')[0]));
+        if (host.scrollTop <= 0 || visibleBlockFirstLines.length === 0) {
+          throw new Error('Scrolling did not reveal source blocks');
+        }
+        scroll = { top: host.scrollTop, visibleBlockFirstLines };
       }
       measurements.push({
         bytes,
@@ -55,6 +98,7 @@ const result = await page.evaluate(async () => {
         firstRender,
         height,
         blocks: host.querySelectorAll('pre code').length,
+        scroll,
       });
       root.unmount();
     }

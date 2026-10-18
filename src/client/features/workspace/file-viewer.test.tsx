@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
-import { createElement } from 'react';
+import { act, createElement } from 'react';
+import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { applyAppearance } from '@/client/lib/appearance';
@@ -76,8 +77,133 @@ it('groups large source into bounded text blocks while retaining browser-find te
   container.innerHTML = renderToStaticMarkup(
     createElement(FileCode, { content, language: 'typescript', theme: {} })
   );
-  expect(container.querySelectorAll('code').length).toBeLessThan(200);
+  const blocks = [...container.querySelectorAll('code')];
+  expect(blocks).toHaveLength(Math.ceil(20_001 / 128));
+  expect(blocks.length).toBeGreaterThan(1);
+  let totalLines = 0;
+  blocks.forEach((block, index) => {
+    const lines =
+      (block.textContent ?? '').split('\n').length - (index < blocks.length - 1 ? 1 : 0);
+    expect(lines).toBeGreaterThan(0);
+    expect(lines).toBeLessThanOrEqual(128);
+    totalLines += lines;
+  });
+  expect(totalLines).toBe(20_001);
   expect(container.querySelectorAll('pre *').length).toBeLessThan(1000);
   container.querySelectorAll('[aria-hidden="true"]').forEach((number) => number.remove());
   expect(container.querySelector('pre')?.textContent).toBe(content);
 });
+
+it.each(['ready', 'pending', 'visible'])(
+  'preserves a selected search result during %s highlighting',
+  async (timing) => {
+    const observed: Array<{ element: Element; callback: IntersectionObserverCallback }> = [];
+    let respond: ((event: MessageEvent) => void) | undefined;
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        constructor(private callback: IntersectionObserverCallback) {}
+        observe(element: Element) {
+          observed.push({ element, callback: this.callback });
+        }
+        disconnect = vi.fn();
+      }
+    );
+    vi.stubGlobal(
+      'Worker',
+      class {
+        set onmessage(callback: (event: MessageEvent) => void) {
+          respond = callback;
+        }
+        postMessage = vi.fn();
+        terminate = vi.fn();
+      }
+    );
+    const content = Array.from({ length: 400 }, (_, index) => `source line ${index}`).join('\n');
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    try {
+      await act(() =>
+        root.render(createElement(FileCode, { content, language: 'typescript', theme: {} }))
+      );
+      const respondWithTokens = () =>
+        respond?.(
+          new MessageEvent('message', {
+            data: new Map(
+              content
+                .split('\n')
+                .map((line, index) => [index, [{ content: line, style: { color: 'gray' } }]])
+            ),
+          })
+        );
+      if (timing === 'ready') {
+        await act(respondWithTokens);
+      }
+      const block = observed.at(-1);
+      const text = block?.element.querySelector('code')?.firstChild;
+      expect(text).toBeDefined();
+      if (!(text && block)) {
+        throw new Error('Missing source block');
+      }
+      if (timing === 'visible') {
+        await act(() =>
+          block.callback(
+            [{ isIntersecting: true } as IntersectionObserverEntry],
+            {} as IntersectionObserver
+          )
+        );
+      }
+      const range = document.createRange();
+      const offset = text.textContent?.indexOf('source line 399') ?? -1;
+      range.setStart(text, offset);
+      range.setEnd(text, offset + 'source line 399'.length);
+      const selection = document.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      if (timing !== 'ready') {
+        await act(respondWithTokens);
+      }
+      await act(() =>
+        block.callback(
+          [{ isIntersecting: true } as IntersectionObserverEntry],
+          {} as IntersectionObserver
+        )
+      );
+      expect(selection?.toString()).toBe('source line 399');
+      await act(() => {
+        selection?.removeAllRanges();
+        document.dispatchEvent(new Event('selectionchange'));
+      });
+      expect(block.element.querySelector('code span[style]')).not.toBeNull();
+      if (timing === 'ready') {
+        const highlighted = block.element.querySelectorAll('code span[style]').item(15)?.firstChild;
+        if (!highlighted) {
+          throw new Error('Missing highlighted source');
+        }
+        const selected = document.createRange();
+        selected.selectNodeContents(highlighted);
+        selection?.addRange(selected);
+        for (const visible of [false, true]) {
+          await act(() =>
+            block.callback(
+              [{ isIntersecting: visible } as IntersectionObserverEntry],
+              {} as IntersectionObserver
+            )
+          );
+          expect(selection?.toString()).toBe('source line 399');
+        }
+        const updated = content.replaceAll('source', 'changed');
+        await act(() =>
+          root.render(createElement(FileCode, { content: updated, language: 'text', theme: {} }))
+        );
+        expect(container.textContent).toContain('changed line 399');
+        expect(container.textContent).not.toContain('source line 399');
+      }
+    } finally {
+      await act(() => root.unmount());
+      container.remove();
+      vi.unstubAllGlobals();
+    }
+  }
+);

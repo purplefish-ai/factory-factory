@@ -300,21 +300,71 @@ interface SourceBlock {
   hasNext: boolean;
 }
 
+/** A token/visibility update must not replace nodes used by native find or selection. */
+function afterTextSelection(element: HTMLElement, update: () => void): () => void {
+  const document = element.ownerDocument;
+  const apply = () => {
+    const selection = document.getSelection();
+    if (
+      selection &&
+      !selection.isCollapsed &&
+      selection.rangeCount > 0 &&
+      selection.getRangeAt(0).intersectsNode(element)
+    ) {
+      return;
+    }
+    document.removeEventListener('selectionchange', apply);
+    update();
+  };
+  document.addEventListener('selectionchange', apply);
+  apply();
+  return () => document.removeEventListener('selectionchange', apply);
+}
+
 function SourceBlockView({ block, tokens }: { block: SourceBlock; tokens: LineTokenMap | null }) {
   const ref = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
+  const [highlight, setHighlight] = useState<{ block: SourceBlock; tokens: LineTokenMap | null }>(
+    () => ({ block, tokens: null })
+  );
+  const displayedTokens = highlight.block === block ? highlight.tokens : null;
+  useEffect(() => {
+    const next = visible ? tokens : null;
+    if (highlight.block === block && highlight.tokens === next) {
+      return;
+    }
+    const element = ref.current;
+    if (!element) {
+      return;
+    }
+    return afterTextSelection(element, () =>
+      setHighlight((current) => {
+        return current.block === block && current.tokens === next
+          ? current
+          : { block, tokens: next };
+      })
+    );
+  }, [block, tokens, visible, highlight]);
   useEffect(() => {
     if (!ref.current || typeof IntersectionObserver === 'undefined') {
       return;
     }
+    const element = ref.current;
+    let cancelPending: (() => void) | undefined;
     const observer = new IntersectionObserver(
       ([entry]) => {
-        setVisible(entry?.isIntersecting ?? false);
+        cancelPending?.();
+        cancelPending = afterTextSelection(element, () =>
+          setVisible(entry?.isIntersecting ?? false)
+        );
       },
       { rootMargin: '300px' }
     );
     observer.observe(ref.current);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      cancelPending?.();
+    };
   }, []);
   const renderTokens = (lineTokens: SyntaxToken[]) => {
     let offset = 0;
@@ -338,10 +388,10 @@ function SourceBlockView({ block, tokens }: { block: SourceBlock; tokens: LineTo
         {block.lines.map((_, index) => block.firstLine + index).join('\n')}
       </span>
       <code style={{ fontFamily: 'var(--font-mono)' }}>
-        {visible && tokens
+        {displayedTokens
           ? block.lines.map((line, index) => {
               const number = block.firstLine + index;
-              const lineTokens = tokens.get(number - 1);
+              const lineTokens = displayedTokens.get(number - 1);
               return (
                 <span key={number}>
                   {lineTokens ? renderTokens(lineTokens) : line}

@@ -1,4 +1,5 @@
 import { lazy, Suspense } from 'react';
+import { ErrorBoundary } from '@/client/error-boundary';
 import { SubagentTranscriptView } from '@/client/features/subagents';
 import { cn } from '@/lib/utils';
 import { ClosedSessionTranscriptView } from './closed-session-transcript-view';
@@ -43,30 +44,39 @@ export function MainViewContent({ workspaceId, children, className }: MainViewCo
       {/* Always render chat children but hide when not active.
           This prevents unmounting/remounting which causes state loss. */}
       <div className={cn('h-full', !showChat && 'hidden')}>{children}</div>
-      <Suspense
+      <ErrorBoundary
+        key={activeTabKey}
         fallback={
-          <div role="status" className="p-4 text-sm text-muted-foreground">
-            Loading viewer…
+          <div role="alert" className="p-4 text-sm text-destructive">
+            Unable to load viewer. Reload the app to try again.
           </div>
         }
       >
-        {filePath && activeTabKey && (
-          <FileViewer
-            key={activeTabKey}
-            workspaceId={workspaceId}
-            filePath={filePath}
-            tabId={activeTabKey}
-          />
-        )}
-        {diffPath && activeTabKey && (
-          <DiffViewer
-            key={activeTabKey}
-            workspaceId={workspaceId}
-            filePath={diffPath}
-            tabId={activeTabKey}
-          />
-        )}
-      </Suspense>
+        <Suspense
+          fallback={
+            <div role="status" className="p-4 text-sm text-muted-foreground">
+              Loading viewer…
+            </div>
+          }
+        >
+          {filePath && activeTabKey && (
+            <FileViewer
+              key={activeTabKey}
+              workspaceId={workspaceId}
+              filePath={filePath}
+              tabId={activeTabKey}
+            />
+          )}
+          {diffPath && activeTabKey && (
+            <DiffViewer
+              key={activeTabKey}
+              workspaceId={workspaceId}
+              filePath={diffPath}
+              tabId={activeTabKey}
+            />
+          )}
+        </Suspense>
+      </ErrorBoundary>
       {screenshotPath && activeTabKey && (
         <ScreenshotViewerTab
           workspaceId={workspaceId}

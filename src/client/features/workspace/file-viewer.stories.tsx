@@ -92,6 +92,8 @@ export const DarkMonospaceFont: Story = {
   play: AccessibleMonospaceFont.play,
 };
 
+const largeSourceTheme = { comment: { color: 'gray' }, keyword: { color: 'purple' } };
+
 export const LargeSourceFile: Story = {
   render: () => (
     <div className="h-80 overflow-auto">
@@ -100,7 +102,7 @@ export const LargeSourceFile: Story = {
           4000
         )}
         language="typescript"
-        theme={{ comment: { color: 'gray' }, keyword: { color: 'purple' } }}
+        theme={largeSourceTheme}
       />
     </div>
   ),

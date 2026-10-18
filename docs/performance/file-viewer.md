@@ -10,7 +10,10 @@ Source is grouped into 128-line blocks. All original text remains in the DOM for
 browser find, selection, and copying. An IntersectionObserver expands only
 nearby blocks into colored token spans. Offscreen blocks retain plain text and
 the same line heights. Existing persistent viewport scroll handling is retained.
-Worker creation, parsing, or execution failures leave usable plain text.
+Worker creation, parsing, or execution failures leave usable plain text. Token
+and viewport changes wait while their block contains selected text, so scrolling
+a native find result into view preserves its selection. Coloring resumes after
+that selection is cleared.
 
 ## Reproduction and measurements
 
@@ -38,8 +41,8 @@ These are single local samples during concurrent builds, not statistical claims.
 A previous run measured 457.6/3.3 ms and 3,953.8/20.0 ms respectively. The 1 MB
 fixture uses 326 blocks, retaining all source text.
 
-The production main chunk decreased from 1,869.37 KB (570.83 KB gzip) to 557.58
-KB (159.60 KB gzip). The file viewer chunk is approximately 6 KB and the
+The production main chunk decreased from 1,869.37 KB (570.83 KB gzip) to 572.62
+KB (163.68 KB gzip). The file viewer chunk is approximately 7 KB and the
 highlight worker approximately 240 KB. `pnpm build` checks independent raw-byte
 budgets: entry 650 KB, file viewer 20 KB, highlight worker 300 KB. These budgets
 cover these modules rather than unrelated deferred Mermaid diagram bundles.
