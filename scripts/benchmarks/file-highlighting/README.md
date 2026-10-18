@@ -48,3 +48,30 @@ visible while the chunk loads or if it fails. Token colors use scoped One Light
 and One Dark CSS, including language-specific selectors. Long lines retain
 horizontal scrolling. There is no virtualization or file-size policy change;
 very large files still create a DOM node for every rendered token.
+
+## Measured result
+
+On October 17, 2026, with Node 26.8.1, Vite 8.3.4, React 19.3.0, and headless
+Chromium 156.0.8078.4 at 1200 × 800, a paired production run produced:
+
+| Source lines | Previous render + layout | CSS render + layout | DOM nodes, both |
+| ------------ | -----------------------: | ------------------: | --------------: |
+| 100          |                  54.7 ms |              3.7 ms |           1,041 |
+| 1,000        |                 512.0 ms |             38.2 ms |           9,200 |
+
+For 1,000 lines, the synchronous render portion fell from 499.7 ms to 21.0 ms,
+and inline-styled tokens fell from 4,128 to zero. The same source, line
+wrappers, and DOM node count were retained. Theme fidelity assertions and the
+screenshot matrix passed. The benchmark was run after the other observed test
+and build processes finished; these absolute timings remain specific to the
+machine and browser, and are not test thresholds.
+
+The same run's full frontend builds measured startup static JavaScript at
+715,012 → 499,912 gzip bytes (30.1% smaller). The workspace route's static
+closure measured 746,149 → 531,115 gzip bytes. This defers code transfer until a
+source file is opened; it does not remove the full grammar set from the app.
+
+The browser harness deliberately imports both implementations, so Vite may warn
+that its shared Prism module is imported both statically and dynamically. That
+artifact measures warm rendering. The separate application builds in bundle mode
+measure the actual deferred split.
