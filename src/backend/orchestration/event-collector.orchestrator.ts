@@ -687,7 +687,13 @@ function startEventCollectorWithState(state: EventCollectorState): void {
     if (event.prId && event.previousPrState === 'NONE' && event.prState === 'OPEN') {
       void dependencies
         .fireLifecycleNotification(event.workspaceId, 'A pull request has been opened.')
-        .catch(() => undefined);
+        .catch((error) => {
+          state.logger.warn('Failed to persist PR-open lifecycle notification', {
+            workspaceId: event.workspaceId,
+            prId: event.prId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
     }
     if (event.prId) {
       prProjection.request(event.workspaceId);

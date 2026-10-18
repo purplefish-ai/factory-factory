@@ -7,12 +7,13 @@ import {
   type EventCollectorDependencies,
 } from './event-collector.orchestrator';
 
-it('notifies for each newly opened PR, without repeating on unchanged observations', () => {
+function fixture() {
   const prEvents = new EventEmitter();
   const notify = vi.fn().mockResolvedValue(undefined);
+  const warn = vi.fn();
   const collector = createEventCollectorOrchestrator(
     unsafeCoerce<EventCollectorDependencies>({
-      createLogger: () => ({ info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() }),
+      createLogger: () => ({ info: vi.fn(), debug: vi.fn(), warn, error: vi.fn() }),
       fireLifecycleNotification: notify,
       prSnapshotService: prEvents,
       workspaceActivityService: new EventEmitter(),
@@ -25,6 +26,11 @@ it('notifies for each newly opened PR, without repeating on unchanged observatio
       workspaceSnapshotStore: { getAllWorkspaceIds: () => [], upsert: vi.fn() },
     })
   );
+  return { collector, prEvents, notify, warn };
+}
+
+it('notifies for each newly opened PR, without repeating on unchanged observations', () => {
+  const { collector, prEvents, notify } = fixture();
   collector.start();
   try {
     const event = { workspaceId: 'w', prState: 'OPEN', previousPrState: 'NONE' };
@@ -36,6 +42,30 @@ it('notifies for each newly opened PR, without repeating on unchanged observatio
       ['w', 'A pull request has been opened.'],
       ['w', 'A pull request has been opened.'],
     ]);
+  } finally {
+    collector.stop();
+  }
+});
+
+it('logs failed PR-open notification persistence with its workspace and PR identity', async () => {
+  const { collector, prEvents, notify, warn } = fixture();
+  const error = new Error('database unavailable');
+  notify.mockRejectedValueOnce(error);
+  collector.start();
+  try {
+    prEvents.emit(PR_SNAPSHOT_UPDATED, {
+      workspaceId: 'w',
+      prId: 'first',
+      previousPrState: 'NONE',
+      prState: 'OPEN',
+    });
+    await vi.waitFor(() =>
+      expect(warn).toHaveBeenCalledWith('Failed to persist PR-open lifecycle notification', {
+        workspaceId: 'w',
+        prId: 'first',
+        error: 'database unavailable',
+      })
+    );
   } finally {
     collector.stop();
   }
