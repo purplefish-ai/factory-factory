@@ -103,7 +103,8 @@ Write clear, descriptive commit messages:
 - Use present tense ("Add feature" not "Added feature")
 - Use imperative mood ("Move cursor to..." not "Moves cursor to...")
 - Keep the first line under 72 characters
-- Reference issues as `(#123)` when relevant
+- Reference issues as `(#123)` when relevant; use a closing keyword such as
+  `Fix #123` when the change resolves the issue
 
 ### Code Style
 

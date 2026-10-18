@@ -44,7 +44,7 @@ areas.
 
 ## Subsystem context
 
-Read the matching note when changing these contracts:
+Read the matching note before changing these areas:
 
 - [Background jobs](docs/architecture/background-jobs.md): `jobRunner`, polling,
   shutdown.
