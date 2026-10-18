@@ -98,9 +98,11 @@ preserves queued facts so the new recipient can receive them.
 
 Review policy defaults to `CHANGES_REQUESTED`: changes-requested review bodies
 and unresolved inline threads. `ALL_REVIEW_FEEDBACK` also includes commented
-review summaries. Ordinary PR conversation comments do not trigger updates. The
-app's own [adversarial-review marker](../design/adversarial-review.md) remains
-an explicit exception under its authenticated GitHub identity.
+review summaries. Ordinary PR conversation comments do not trigger updates.
+GitHub identity must be known before accepting an observation, so failed
+identity lookups are retried without disabling self-review filtering. The app's
+own [adversarial-review marker](../design/adversarial-review.md) remains an
+explicit exception under its authenticated GitHub identity.
 
 Approvals supersede earlier feedback only with reliable same-author ordering.
 Submission times and REST review ordinals provide that ordering; opaque IDs do
