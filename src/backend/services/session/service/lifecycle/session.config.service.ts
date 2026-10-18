@@ -167,7 +167,11 @@ export class SessionConfigService {
 
     const permissionPreset =
       preResolvedPreset ??
-      (await this.resolvePermissionPresetFromSettings(sessionId, session.workflow));
+      (await this.resolvePermissionPresetFromSettings(
+        sessionId,
+        session.workflow,
+        session.provider
+      ));
 
     const targetExecutionMode = resolveConfiguredExecutionModeTarget(
       executionModeOption,
@@ -691,12 +695,13 @@ export class SessionConfigService {
 
   private async resolvePermissionPresetFromSettings(
     sessionId: string,
-    workflow: string
+    workflow: string,
+    provider: SessionProvider
   ): Promise<SessionPermissionPreset> {
-    const fallback: SessionPermissionPreset = getWorkflowPermissionPreset(workflow);
+    const fallback: SessionPermissionPreset = getWorkflowPermissionPreset(workflow, provider);
     try {
       const settings = await userSettingsService.get();
-      return getWorkflowPermissionPreset(workflow, settings);
+      return getWorkflowPermissionPreset(workflow, provider, settings);
     } catch (error) {
       logger.warn('Failed loading user permission presets; using defaults', {
         sessionId,

@@ -15,9 +15,10 @@ describe('unattended workflows', () => {
         autoIterationPermissions,
         defaultWorkspacePermissions: 'STRICT',
       } as const;
-      expect(getWorkflowPermissionPreset('periodic-task', settings)).toBe('YOLO');
-      expect(getWorkflowPermissionPreset('implement', settings)).toBe('STRICT');
-      expect(getWorkflowPermissionPreset('auto-iteration', settings)).toBe(
+      expect(getWorkflowPermissionPreset('periodic-task', 'CODEX', settings)).toBe('YOLO');
+      expect(getWorkflowPermissionPreset('periodic-task', 'CLAUDE', settings)).toBe('STRICT');
+      expect(getWorkflowPermissionPreset('implement', 'CODEX', settings)).toBe('STRICT');
+      expect(getWorkflowPermissionPreset('auto-iteration', 'CODEX', settings)).toBe(
         autoIterationPermissions
       );
     }
