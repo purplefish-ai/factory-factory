@@ -32,6 +32,26 @@ import { userSettingsService } from '@/backend/services/settings';
 import { sessionAcpEnvironment, sessionContextService } from './session-lifecycle-external-ports';
 
 describe('session lifecycle external ports', () => {
+  it.each(['CODEX', 'CLAUDE'] as const)(
+    'uses provider-specific scheduled permissions for %s',
+    async (provider) => {
+      vi.mocked(userSettingsService.get).mockResolvedValueOnce(
+        unsafeCoerce({
+          autoIterationPermissions: 'STRICT',
+          defaultWorkspacePermissions: 'RELAXED',
+        })
+      );
+      await expect(
+        sessionContextService.resolvePermissionPreset(
+          unsafeCoerce({
+            workflow: 'periodic-task',
+            provider,
+          })
+        )
+      ).resolves.toBe(provider === 'CODEX' ? 'YOLO' : 'RELAXED');
+    }
+  );
+
   it.each(['STRICT', 'RELAXED', 'YOLO'] as const)(
     'uses unattended permissions %s for auto-iteration',
     async (preset) => {
@@ -42,7 +62,9 @@ describe('session lifecycle external ports', () => {
         })
       );
       await expect(
-        sessionContextService.resolvePermissionPreset(unsafeCoerce({ workflow: 'auto-iteration' }))
+        sessionContextService.resolvePermissionPreset(
+          unsafeCoerce({ workflow: 'auto-iteration', provider: 'CLAUDE' })
+        )
       ).resolves.toBe(preset);
     }
   );

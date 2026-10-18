@@ -597,7 +597,7 @@ export function configureDomainBridges(services: BridgeServices): void {
         // Create default session
         await sessionDataService.createAgentSession({
           workspaceId: workspace.id,
-          workflow: 'implement',
+          workflow: 'periodic-task',
           name: 'Periodic task',
         });
 

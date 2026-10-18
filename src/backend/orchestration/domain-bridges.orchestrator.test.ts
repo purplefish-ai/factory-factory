@@ -391,7 +391,7 @@ describe('configureDomainBridges', () => {
       });
       expect(sessionDataService.createAgentSession).toHaveBeenCalledWith({
         workspaceId: 'ws-periodic',
-        workflow: 'implement',
+        workflow: 'periodic-task',
         name: 'Periodic task',
       });
       expect(mockLogger.error).toHaveBeenCalledWith(
