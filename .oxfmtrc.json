@@ -7,7 +7,9 @@
   "singleQuote": true,
   "trailingComma": "es5",
   "sortImports": {
-    "newlinesBetween": false
+    "newlinesBetween": false,
+    "internalPattern": ["@/", "@prisma-gen/"],
+    "sortSideEffects": false
   },
   "sortPackageJson": false,
   "ignorePatterns": ["prisma/generated/**", "pnpm-lock.yaml", "LICENSE"],

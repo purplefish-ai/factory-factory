@@ -10,7 +10,13 @@ JavaScript API for tooling.
 import sorting. `.oxfmtrc.json` keeps two-space indentation, single quotes,
 semicolons, ES5 trailing commas and a 100-column source width. Markdown wraps
 prose at 80 columns and preserves fenced code. Generated Prisma files and the
-pnpm lockfile are excluded.
+pnpm lockfile are excluded. Both `@/` and `@prisma-gen/` are explicitly
+classified as internal imports. Side effect imports keep their execution order;
+formatting preserves unused imports for the linter to report.
+
+`scripts/oxfmt-config.test.ts` runs the pinned formatter against source, CSS,
+JSON and Markdown fixtures, including generated-file exclusions and fenced-code
+preservation.
 
 ## Custom rules
 
