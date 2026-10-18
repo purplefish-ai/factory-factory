@@ -1,6 +1,7 @@
 import { watch } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import pLimit from 'p-limit';
 import {
   type GitStatusFile,
   parseGitStatusOutput,
@@ -92,6 +93,9 @@ interface WatchRoots {
   shared?: string;
 }
 
+// Bound individual snapshots as well as bursts across many workspaces.
+const SNAPSHOT_GIT_CONCURRENCY = 3;
+const SERVICE_GIT_CONCURRENCY = 6;
 const WATCH_DEBOUNCE_MS = 100;
 const DEGRADED_TTL_MS = 5000;
 const FALLBACK_TTL_MS = 300_000;
@@ -222,7 +226,9 @@ export class WorkspaceGitStateService {
   private readonly sharedWatchers = new Map<string, SharedWatcherRecord>();
 
   constructor(options: WorkspaceGitStateServiceOptions = {}) {
-    this.runGit = options.runGit ?? gitCommand;
+    const executeGit = options.runGit ?? gitCommand;
+    const limitGit = pLimit(SERVICE_GIT_CONCURRENCY);
+    this.runGit = (args, cwd) => limitGit(() => executeGit(args, cwd));
     this.now = options.now ?? Date.now;
     this.readFile = options.readFile ?? ((filePath) => readFile(filePath, 'utf8'));
     this.watchPath = options.watchPath ?? defaultWatchPath;
@@ -576,10 +582,13 @@ export class WorkspaceGitStateService {
   }
 
   private async calculate(input: WorkspaceGitStateInput): Promise<WorkspaceGitStateSnapshot> {
-    const statusResult = await this.runGit(
-      ['--no-optional-locks', 'status', '--porcelain'],
-      input.worktreePath
-    );
+    const limitGit = pLimit(SNAPSHOT_GIT_CONCURRENCY);
+    const runGit: RunGit = (args, cwd) => limitGit(() => this.runGit(args, cwd));
+    const [statusResult, base, upstream] = await Promise.all([
+      runGit(['--no-optional-locks', 'status', '--porcelain'], input.worktreePath),
+      this.calculateBase(input, runGit),
+      this.calculateUpstream(input.worktreePath, runGit),
+    ]);
     const statusFiles = statusResult.code === 0 ? parseGitStatusOutput(statusResult.stdout) : [];
     const status: WorkspaceGitStateSnapshot['status'] = {
       files: statusFiles,
@@ -589,16 +598,27 @@ export class WorkspaceGitStateService {
       status.error = commandError(statusResult);
     }
 
-    const mergeBase = await this.findMergeBase(input);
+    base.stats.hasUncommitted = status.hasUncommitted;
+    return { ...input, computedAt: this.now(), status, base, upstream };
+  }
+
+  private async calculateBase(
+    input: WorkspaceGitStateInput,
+    runGit: RunGit
+  ): Promise<WorkspaceGitStateSnapshot['base'] & { stats: WorkspaceGitStats }> {
+    const mergeBase = await this.findMergeBase(input, runGit);
     const diffArgs = mergeBase ? ['diff', '--numstat', mergeBase] : ['diff', '--numstat'];
-    const numstatResult = await this.runGit(diffArgs, input.worktreePath);
+    const [numstatResult, nameStatusResult] = await Promise.all([
+      runGit(diffArgs, input.worktreePath),
+      mergeBase ? runGit(['diff', '--name-status', mergeBase], input.worktreePath) : null,
+    ]);
     const base: WorkspaceGitStateSnapshot['base'] & { stats: WorkspaceGitStats } = {
       mergeBase,
       noMergeBase: mergeBase === null,
       stats:
         numstatResult.code === 0
-          ? { ...parseNumstatOutput(numstatResult.stdout), hasUncommitted: status.hasUncommitted }
-          : { total: 0, additions: 0, deletions: 0, hasUncommitted: status.hasUncommitted },
+          ? { ...parseNumstatOutput(numstatResult.stdout), hasUncommitted: false }
+          : { total: 0, additions: 0, deletions: 0, hasUncommitted: false },
       added: [],
       modified: [],
       deleted: [],
@@ -607,42 +627,36 @@ export class WorkspaceGitStateService {
       base.statsError = commandError(numstatResult);
     }
 
-    let nameStatusResult: ExecResult | null = null;
-    if (mergeBase) {
-      nameStatusResult = await this.runGit(
-        ['diff', '--name-status', mergeBase],
-        input.worktreePath
-      );
+    if (nameStatusResult) {
       if (nameStatusResult.code === 0) {
         Object.assign(base, parseNameStatus(nameStatusResult.stdout));
       } else {
         base.changesError = commandError(nameStatusResult);
       }
     }
-    await this.populateFallbackFileTotal(base, numstatResult, nameStatusResult, input.worktreePath);
-
-    const upstream = await this.calculateUpstream(input.worktreePath);
-    return {
-      ...input,
-      computedAt: this.now(),
-      status,
+    await this.populateFallbackFileTotal(
       base,
-      upstream,
-    };
+      numstatResult,
+      nameStatusResult,
+      input.worktreePath,
+      runGit
+    );
+    return base;
   }
 
   private async populateFallbackFileTotal(
     base: WorkspaceGitStateSnapshot['base'] & { stats: WorkspaceGitStats },
     numstatResult: ExecResult,
     nameStatusResult: ExecResult | null,
-    worktreePath: string
+    worktreePath: string,
+    runGit: RunGit
   ): Promise<void> {
     if (numstatResult.code === 0) {
       return;
     }
 
     const fileListResult =
-      nameStatusResult ?? (await this.runGit(['diff', '--name-only'], worktreePath));
+      nameStatusResult ?? (await runGit(['diff', '--name-only'], worktreePath));
     if (fileListResult.code === 0) {
       base.stats.total = fileListResult.stdout
         .split('\n')
@@ -650,9 +664,12 @@ export class WorkspaceGitStateService {
     }
   }
 
-  private async findMergeBase(input: WorkspaceGitStateInput): Promise<string | null> {
+  private async findMergeBase(
+    input: WorkspaceGitStateInput,
+    runGit: RunGit = this.runGit
+  ): Promise<string | null> {
     for (const candidate of [`origin/${input.defaultBranch}`, input.defaultBranch]) {
-      const result = await this.runGit(['merge-base', 'HEAD', candidate], input.worktreePath);
+      const result = await runGit(['merge-base', 'HEAD', candidate], input.worktreePath);
       if (result.code === 0 && result.stdout.trim()) {
         return result.stdout.trim();
       }
@@ -661,9 +678,10 @@ export class WorkspaceGitStateService {
   }
 
   private async calculateUpstream(
-    worktreePath: string
+    worktreePath: string,
+    runGit: RunGit
   ): Promise<WorkspaceGitStateSnapshot['upstream']> {
-    const upstreamResult = await this.runGit(
+    const upstreamResult = await runGit(
       ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'],
       worktreePath
     );
@@ -672,7 +690,7 @@ export class WorkspaceGitStateService {
       return { ref: null, hasUpstream: false, files: [] };
     }
 
-    const diffResult = await this.runGit(['diff', '--name-only', `${ref}...HEAD`], worktreePath);
+    const diffResult = await runGit(['diff', '--name-only', `${ref}...HEAD`], worktreePath);
     if (diffResult.code !== 0) {
       return {
         ref,
