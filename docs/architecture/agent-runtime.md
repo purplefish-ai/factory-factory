@@ -14,7 +14,7 @@ remain available.
 All agent sessions use the Agent Client Protocol (ACP) via
 `@agentclientprotocol/sdk`. CLAUDE sessions spawn `claude-agent-acp`; CODEX
 sessions spawn Factory Factory's internal `codex-app-server-acp` adapter, both
-over stdio JSON-RPC. The direct SDK dependency matches Claude ACP's SDK 1.4.
+over stdio JSON-RPC. The direct SDK dependency matches Claude ACP's SDK 1.9.
 Model changes use `session/set_config_option`. Legacy model/mode response
 fallbacks remain supported; model and mode controls require select options.
 Boolean options are retained in backend configuration but omitted from the
@@ -100,7 +100,7 @@ run `pnpm codex:schema:generate` and check drift with `pnpm check:codex-schema`.
 
 ### Claude SDK dependency
 
-Claude ACP 0.78.0 pins Claude Agent SDK 0.3.270, which includes the upstream
+Claude ACP 0.93.0 pins Claude Agent SDK 0.3.300, which includes the upstream
 permission-handling fixes previously supplied by our scoped SDK override. The
 override is no longer needed. Offline ACP tests cover turn/cancellation, session
 options, resume, and file audit behavior, including coalesced results stamped
