@@ -4,7 +4,8 @@
 > related PR state described here have been replaced by PR monitoring. Use
 > [workspace state](architecture/workspace-state.md) and
 > [PR monitoring](architecture/pull-requests.md) for current behavior. The
-> descriptions and test references below preserve the earlier implementation.
+> sections below describe earlier behavior and may refer to renamed or removed
+> APIs and tests.
 
 This document defines the workspace lifecycle, Kanban ownership, and PR Ratchet
 model.
