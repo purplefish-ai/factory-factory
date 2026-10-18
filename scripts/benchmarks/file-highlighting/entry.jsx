@@ -5,6 +5,7 @@ import { Prism } from 'react-syntax-highlighter';
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import source from '../../../src/backend/services/github/service/github-cli.service.ts?raw';
 import { FileCode } from '../../../src/client/features/workspace/file-code';
+import { waitForHighlighting } from './wait-for-highlighting.mjs';
 
 const node = document.getElementById('root');
 
@@ -49,9 +50,7 @@ window.warmHighlighting = async () => {
         })
       )
     );
-    while (!node.querySelector('.token.keyword')) {
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-    }
+    await waitForHighlighting(node);
   } finally {
     root.unmount();
   }
@@ -104,7 +103,7 @@ window.inspectHighlighting = (content, language, theme, selector) => {
       whiteSpace: getComputedStyle(code).whiteSpace,
       font: getComputedStyle(code).fontFamily,
       horizontallyScrollable: pre.scrollWidth > node.clientWidth,
-      keywordStyle: keyword?.getAttribute('style'),
+      styledTokens: node.querySelectorAll('.token[style]').length,
       selectedClasses: selector && node.querySelector(selector)?.className,
       selectedColor:
         selector && node.querySelector(selector)

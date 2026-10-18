@@ -5,6 +5,8 @@ import './file-code.css';
 // Keep the full Prism grammar set behind the file viewer's first code render.
 const SyntaxHighlighter = lazy(() => import('react-syntax-highlighter/dist/esm/prism'));
 
+const plainLanguages = new Set(['text', 'plain', 'plaintext', 'txt']);
+
 interface FileCodeProps {
   content: string;
   language: string;
@@ -68,6 +70,9 @@ class HighlightErrorBoundary extends Component<
 }
 
 export function FileCode(props: FileCodeProps) {
+  if (plainLanguages.has(props.language.toLowerCase())) {
+    return <PlainFileCode {...props} loading={false} />;
+  }
   return (
     <HighlightErrorBoundary fallback={<PlainFileCode {...props} loading={false} />}>
       <Suspense fallback={<PlainFileCode {...props} />}>

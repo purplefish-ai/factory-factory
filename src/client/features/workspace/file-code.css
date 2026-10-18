@@ -19,7 +19,7 @@
   word-break: normal;
   tab-size: 2;
   hyphens: none;
-  overflow: auto;
+  overflow: visible;
 }
 
 .file-code[data-syntax-theme='dark'] {

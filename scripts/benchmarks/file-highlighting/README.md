@@ -8,7 +8,8 @@ pnpm exec node scripts/benchmarks/file-highlighting/run.mjs \
   > /tmp/file-highlighting-results.json
 ```
 
-The runner uses the existing Playwright Chromium installation, Vite, and
+The runner builds a render-comparison fixture and a separate cold-loading
+fixture using the existing Playwright Chromium installation, Vite, and
 repository dependencies. Build outputs live in a temporary directory and are
 removed afterward. It does not start the backend or access a workspace database.
 Use `--verify-only` to run browser assertions and optional screenshots without
@@ -26,13 +27,24 @@ inline-styled token count. These are warm render measurements; the initial
 numbered plaintext fallback and subsequent chunk download are not timed.
 
 Before measuring, browser assertions verify light/dark keyword colors, italic
-comments, exact source text including whitespace and trailing newlines, line
-numbers, monospace font, long-line horizontal scrolling, absence of inline token
-styles, JSX/TSX expression leaf colors, nested class-name punctuation, and
-unknown-language fallback. The optional screenshot shows both themes for
-TypeScript, JavaScript, CSS, markup, JSX, TSX, JSON, and Markdown. Vitest
-separately covers readable source during loading and after chunk-load failure,
-plus theme changes without replacing the mounted code element.
+comments, an all-token inline-style scan for every syntax fixture and measured
+optimized render, exact source text including whitespace and trailing newlines,
+line numbers, monospace font, long-line horizontal scrolling, JSX/TSX expression
+leaf colors, nested class-name punctuation, and unknown-language fallback. The
+optional screenshot shows both themes for TypeScript, JavaScript, CSS, markup,
+JSX, TSX, JSON, and Markdown. Vitest separately covers readable source during
+loading and after chunk-load failure, plus theme changes without replacing the
+mounted code element.
+
+The cold-loading fixture uses the actual `ScrollArea` and `usePersistentScroll`:
+for both highlighted code and plaintext, its outer viewport moves 192 pixels,
+the `pre` cannot independently scroll, and the outer position restores after
+unmounting and remounting the file. The fixture also checks that `text`,
+`plain`, `plaintext`, and `txt` render immediately without requesting the Prism
+chunk. A separate browser page aborts that actual chunk request and requires
+warmup to reject with a clear timeout. Normal warmup has a 10-second deadline;
+the negative check uses a 100-millisecond deadline with a separate two-second
+hang guard.
 
 Bundle mode builds the current frontend twice. For the baseline only, a Vite
 loader substitutes `file-viewer.tsx` from commit
@@ -45,10 +57,12 @@ code is first opened. These sums describe code transfer, not network request
 latency or browser execution time.
 
 The optimization preserves the full Prism language set and keeps numbered source
-visible while the chunk loads or if it fails. Token colors use scoped One Light
-and One Dark CSS, including language-specific selectors. Long lines retain
-horizontal scrolling. There is no virtualization or file-size policy change;
-very large files still create a DOM node for every rendered token.
+visible while the chunk loads or if it fails. Plain-text aliases skip the chunk
+altogether. The enclosing scroll viewport owns horizontal scrolling. Token
+colors use scoped One Light and One Dark CSS, including language-specific
+selectors. Long lines retain horizontal scrolling. There is no virtualization or
+file-size policy change; very large files still create a DOM node for every
+rendered token.
 
 ## Measured result
 

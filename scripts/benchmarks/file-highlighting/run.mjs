@@ -89,6 +89,99 @@ async function measureBundles() {
   return { baselineRef, results };
 }
 
+async function verifyColdLoading(browser, origin, prismFile) {
+  const url = `${origin}/loading/loading.html`;
+  const scrollPage = await browser.newPage();
+  const scrollOwnership = [];
+  try {
+    await scrollPage.goto(url, { waitUntil: 'networkidle' });
+    await scrollPage.evaluate(() => window.warmHighlighting());
+    for (const language of ['typescript', 'text']) {
+      const result = await scrollPage.evaluate(
+        (mode) => window.verifyScrollRestoration(mode),
+        language
+      );
+      assert.equal(
+        result.preOverflow,
+        'visible',
+        `${language}: outer viewport owns overflow (${JSON.stringify(result)})`
+      );
+      assert.equal(result.outerLeft, 192, `${language}: outer viewport can scroll`);
+      assert.equal(result.preLeft, 0, `${language}: pre cannot independently scroll`);
+      assert.equal(
+        result.restoredLeft,
+        192,
+        `${language}: horizontal position restores after remount`
+      );
+      scrollOwnership.push({ language, ...result });
+    }
+  } finally {
+    await scrollPage.close();
+  }
+
+  const plainPage = await browser.newPage();
+  const grammarRequests = [];
+  const plainAliases = ['text', 'plain', 'plaintext', 'txt'];
+  try {
+    plainPage.on('request', (request) => {
+      if (request.url().endsWith(prismFile)) {
+        grammarRequests.push(request.url());
+      }
+    });
+    await plainPage.goto(url, { waitUntil: 'networkidle' });
+    for (const language of plainAliases) {
+      const result = await plainPage.evaluate(async (mode) => {
+        window.mountColdFileCode(mode);
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        return {
+          busy: document.querySelector('pre').getAttribute('aria-busy'),
+          text: document.querySelector('code').textContent,
+        };
+      }, language);
+      assert.equal(result.busy, 'false', `${language}: plaintext is ready immediately`);
+      assert.equal(result.text, '1<literal>\n2  whitespace\n3');
+    }
+    assert.deepEqual(
+      grammarRequests,
+      [],
+      'Plaintext aliases must not fetch the Prism grammar chunk'
+    );
+  } finally {
+    await plainPage.close();
+  }
+
+  const blockedPage = await browser.newPage();
+  let blockedRequests = 0;
+  let blockedChunkError;
+  try {
+    await blockedPage.route(`**/${prismFile}`, (route) => {
+      blockedRequests++;
+      return route.abort();
+    });
+    await blockedPage.goto(url, { waitUntil: 'networkidle' });
+    blockedChunkError = await blockedPage.evaluate(() =>
+      Promise.race([
+        window.warmHighlighting(100).then(
+          () => 'unexpected success',
+          (error) => error.message
+        ),
+        new Promise((resolve) => setTimeout(() => resolve('warmup still pending'), 2000)),
+      ])
+    );
+    assert.equal(blockedChunkError, 'Timed out waiting for syntax highlighting after 100 ms');
+    assert.equal(blockedRequests, 1, 'Negative warmup check must block the actual Prism chunk');
+  } finally {
+    await blockedPage.close();
+  }
+  return {
+    scrollOwnership,
+    plainAliases,
+    grammarRequests: grammarRequests.length,
+    blockedRequests,
+    blockedChunkError,
+  };
+}
+
 try {
   const outDir = join(output, 'browser');
   await build({
@@ -99,6 +192,28 @@ try {
     resolve: { alias: { '@': join(repository, 'src') } },
     build: { outDir, chunkSizeWarningLimit: 5000, emptyOutDir: true },
   });
+  await build({
+    configFile: false,
+    root: here,
+    base: './',
+    logLevel: 'warn',
+    plugins: [react()],
+    resolve: { alias: { '@': join(repository, 'src') } },
+    build: {
+      outDir: join(outDir, 'loading'),
+      manifest: true,
+      emptyOutDir: true,
+      chunkSizeWarningLimit: 5000,
+      rollupOptions: { input: join(here, 'loading.html') },
+    },
+  });
+  const loadingManifest = JSON.parse(
+    await readFile(join(outDir, 'loading/.vite/manifest.json'), 'utf8')
+  );
+  const prism = Object.values(loadingManifest).find(
+    (entry) => entry.isDynamicEntry && entry.name === 'prism'
+  );
+  assert(prism, 'Cold-loading fixture must split the actual Prism engine into its own chunk');
   server = createServer(async (req, res) => {
     const pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
     if (pathname.includes('..')) {
@@ -135,7 +250,7 @@ try {
     assert.equal(view.text, source, 'Source must survive tokenization exactly');
     assert.equal(view.keywordColor, keywordColor, `${theme} keyword color`);
     assert.equal(view.commentStyle, 'italic');
-    assert.equal(view.keywordStyle, null);
+    assert.equal(view.styledTokens, 0, 'Every token must be free of inline styles');
     assert.equal(view.whiteSpace, 'pre');
     assert(view.font.includes('monospace'));
     assert(view.horizontallyScrollable);
@@ -217,10 +332,12 @@ try {
             actual: view.selectedColor,
             expected: expectedColor,
             classes: view.selectedClasses,
+            styledTokens: view.styledTokens,
           };
         },
         [content, language, theme, selector, color]
       );
+      assert.equal(result.styledTokens, 0, `${theme} ${language}: all tokens use CSS`);
       assert.equal(
         result.actual,
         result.expected,
@@ -228,6 +345,11 @@ try {
       );
     }
   }
+  const coldLoadingChecks = await verifyColdLoading(
+    browser,
+    `http://127.0.0.1:${server.address().port}`,
+    prism.file
+  );
   const fallback = await page.evaluate(() =>
     window.inspectHighlighting('<unknown>\n  text\n', 'unregistered-language', 'light')
   );
@@ -244,12 +366,14 @@ try {
       }
       const samples = [];
       for (let i = 0; i < 9; i++) {
-        samples.push(
-          await page.evaluate(
-            ([count, useCSS]) => window.runHighlightingBenchmark(count, useCSS),
-            [lines, optimized]
-          )
+        const sample = await page.evaluate(
+          ([count, useCSS]) => window.runHighlightingBenchmark(count, useCSS),
+          [lines, optimized]
         );
+        if (optimized) {
+          assert.equal(sample.styledTokens, 0, 'Every measured token must use CSS');
+        }
+        samples.push(sample);
       }
       const medians = Object.fromEntries(
         Object.keys(samples[0]).map((key) => [
@@ -279,6 +403,7 @@ try {
         viewport: { width: 1200, height: 800 },
         functionalChecks: 'passed',
         languageColorAssertions: languageColors.length * 2,
+        coldLoadingChecks,
         results,
         bundles,
       },
