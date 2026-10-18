@@ -37,3 +37,21 @@ The regression test counts actual collected-message traversal work for a
 750-update page instead of enforcing a machine-dependent time limit. Semantic
 tests cover deterministic IDs and timestamps, reasoning boundaries, reused tool
 IDs, partial inputs, terminal content, and independent pages.
+
+## Recorded comparison
+
+On 2026-10-17, Apple M4 / Node 26.8.1 production-mode projection produced these
+medians against the pre-change implementation from
+`fc30bb563ef4d0dc66ca8e30a0ea4f87b640ecd6`:
+
+| Updates |    Before |   After |
+| ------- | --------: | ------: |
+| 160     |   1.84 ms | 0.46 ms |
+| 760     |  37.43 ms | 2.35 ms |
+| 3010    | 590.50 ms | 8.19 ms |
+
+The comparison alternated execution order over 15 pairs after three warm-up
+pairs, using the same ten-turn fixtures described above. Every pair compared the
+complete projected message arrays for equality, including IDs, orders,
+timestamps, and content. Other work on the shared host caused some sample
+variation; these are local measurements, not CI performance thresholds.
