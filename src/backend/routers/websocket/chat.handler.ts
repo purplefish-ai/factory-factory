@@ -221,7 +221,9 @@ export function createChatUpgradeHandler(appContext: AppContext) {
         }
       };
       ws.on('message', (data) => {
-        void handleMessage(data);
+        void handleMessage(data).catch((error: unknown) => {
+          logger.error('Unhandled chat message failure', toError(error));
+        });
       });
 
       ws.on('close', () => {

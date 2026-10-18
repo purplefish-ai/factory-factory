@@ -167,6 +167,14 @@ export const ChatInput = memo(function ChatInput({
     onCloseFileMentionMenu: fileMentions.handleFileMentionMenuClose,
   });
 
+  const { handleFileSelect } = actions;
+  const onFileSelect = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      runInBackground(handleFileSelect(event), 'Could not attach file');
+    },
+    [handleFileSelect]
+  );
+
   // Textarea resize hook
   useTextareaResize({
     textareaRef: resolvedInputRef,
@@ -290,9 +298,7 @@ export const ChatInput = memo(function ChatInput({
             modLabel={modLabel}
             modifierHeld={modifierHeld}
             fileInputRef={actions.fileInputRef}
-            onFileSelect={(event) => {
-              runInBackground(actions.handleFileSelect(event), 'Could not attach file');
-            }}
+            onFileSelect={onFileSelect}
             supportedImageTypes={actions.supportedImageTypes}
             disabled={isDisabled}
             onQuickAction={actions.handleQuickAction}

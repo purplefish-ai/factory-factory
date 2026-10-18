@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { registerShutdownSignalHandlers } from './shutdown-signal-handlers';
 
 function createHarness(stop: () => Promise<void>) {
@@ -44,17 +44,15 @@ describe('backend shutdown signal handlers', () => {
     expect(harness.stopCount()).toBe(1);
     expect(harness.exits).toEqual([]);
     finish?.();
-    await Promise.resolve();
-    expect(harness.exits).toEqual([0]);
+    await vi.waitFor(() => expect(harness.exits).toEqual([0]));
   });
 
-  it('reports cleanup rejection and exits with failure without an unhandled promise', async () => {
+  it('reports cleanup rejection and exits with failure', async () => {
     const error = new Error('cleanup failed');
     const harness = createHarness(() => Promise.reject(error));
     harness.process.emit('SIGINT');
-    await Promise.resolve();
+    await vi.waitFor(() => expect(harness.exits).toEqual([1]));
     expect(harness.errors).toEqual([error]);
-    expect(harness.exits).toEqual([1]);
   });
 
   it('starts cleanup only once when both termination signals arrive', async () => {
@@ -62,7 +60,6 @@ describe('backend shutdown signal handlers', () => {
     harness.process.emit('SIGINT');
     harness.process.emit('SIGTERM');
     expect(harness.stopCount()).toBe(1);
-    await Promise.resolve();
-    expect(harness.exits).toEqual([0]);
+    await vi.waitFor(() => expect(harness.exits).toEqual([0]));
   });
 });

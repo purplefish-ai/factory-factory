@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { QueryClient, QueryObserver, type RefetchOptions } from '@tanstack/react-query';
 import { createElement, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
@@ -15,7 +16,7 @@ const mocks = vi.hoisted(() => ({
     | undefined,
   archiveMutate: vi.fn(),
   archivePending: false,
-  refetch: vi.fn(),
+  refetch: vi.fn<(options?: RefetchOptions) => Promise<unknown>>(),
   toastError: vi.fn(),
 }));
 
@@ -194,6 +195,29 @@ afterEach(() => {
 });
 
 describe('ProjectsListPage archive confirmation', () => {
+  it('reports a failed post-archive refresh using the real query refetch contract', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const observer = new QueryObserver(client, {
+      queryKey: ['post-archive-refresh'],
+      enabled: false,
+      queryFn: () => Promise.reject(new Error('Refresh failed')),
+    });
+    mocks.refetch.mockImplementation(observer.refetch);
+    const { root } = renderPage();
+    try {
+      flushSync(() => mocks.archiveMutationOptions?.onSuccess?.());
+      await vi.waitFor(() => {
+        expect(mocks.toastError).toHaveBeenCalledWith(
+          'Could not refresh data',
+          expect.objectContaining({ description: 'Refresh failed' })
+        );
+      });
+    } finally {
+      flushSync(() => root.unmount());
+      client.clear();
+    }
+  });
+
   it('keeps the dialog open while archiving and after a failed archive', () => {
     const { container, root } = renderPage();
     openArchiveDialog(container);

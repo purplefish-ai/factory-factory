@@ -6,7 +6,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 const directory = mkdtempSync(join(tmpdir(), 'ff-type-aware-'));
-const binary = resolve('node_modules/.bin/oxlint');
+const binary = resolve('node_modules/oxlint/bin/oxlint');
 const configuration = z
   .object({
     jsPlugins: z.array(z.object({ name: z.string(), specifier: z.string() })),
@@ -29,8 +29,16 @@ function lint(source: string) {
   const file = join(directory, 'fixture.ts');
   writeFileSync(file, source);
   return spawnSync(
-    binary,
-    ['--config', join(directory, '.oxlintrc.json'), '--deny-warnings', '--format', 'json', file],
+    process.execPath,
+    [
+      binary,
+      '--config',
+      join(directory, '.oxlintrc.json'),
+      '--deny-warnings',
+      '--format',
+      'json',
+      file,
+    ],
     {
       cwd: directory,
       encoding: 'utf8',

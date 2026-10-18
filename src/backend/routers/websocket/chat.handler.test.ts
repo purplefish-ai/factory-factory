@@ -480,6 +480,66 @@ describe('createChatUpgradeHandler', () => {
     });
   });
 
+  it('reports a failure in disconnected-session cleanup at the message boundary', async () => {
+    const {
+      appContext,
+      chatMessageHandlerService,
+      sessionDomainService,
+      acpRuntimeManager,
+      logger,
+    } = createTestContext(tempRootDir);
+    const cleanupError = new Error('session cleanup failed');
+    vi.mocked(sessionDomainService.clearSession).mockImplementation(() => {
+      throw cleanupError;
+    });
+    const handler = createChatUpgradeHandler(appContext);
+    vi.mocked(acpRuntimeManager.isSessionRunning).mockReturnValue(false);
+
+    let releaseMessage: (() => void) | undefined;
+    const messageHandled = new Promise<void>((resolve) => {
+      releaseMessage = resolve;
+    });
+    vi.mocked(chatMessageHandlerService.handleMessage).mockImplementation(async () => {
+      await messageHandled;
+    });
+
+    const ws = new MockWebSocket();
+    const wss = {
+      handleUpgrade: vi.fn(
+        (
+          _request: IncomingMessage,
+          _socket: Duplex,
+          _head: Buffer,
+          callback: (socket: WebSocket) => void
+        ) => callback(ws as unknown as WebSocket)
+      ),
+    } as unknown as WebSocketServer;
+
+    const request = {
+      headers: { origin: allowedOrigin },
+      socket: { remoteAddress: '127.0.0.1' },
+    } as unknown as IncomingMessage;
+    const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
+    const wsAliveMap = new WeakMap<WebSocket, boolean>();
+    const url = new URL('http://localhost/chat?connectionId=conn-1&sessionId=session-1');
+
+    handler(request, socket, Buffer.alloc(0), url, wss, wsAliveMap);
+
+    ws.emit('message', JSON.stringify({ type: 'load_session' }));
+    await Promise.resolve();
+
+    ws.emit('close');
+    expect(sessionDomainService.clearSession).not.toHaveBeenCalled();
+
+    if (!releaseMessage) {
+      throw new Error('Expected message release callback');
+    }
+    releaseMessage();
+    await vi.waitFor(() => {
+      expect(logger.error).toHaveBeenCalledWith('Unhandled chat message failure', cleanupError);
+    });
+  });
+
   it('replaces existing connection with the same id and avoids unregister race on stale close', () => {
     const { appContext, sessionFileLogger } = createTestContext(tempRootDir);
     const handler = createChatUpgradeHandler(appContext);

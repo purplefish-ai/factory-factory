@@ -329,7 +329,7 @@ export function CLIHealthBanner() {
       isRefetching={isRefetching}
       isUpgrading={upgradeProviderCli.isPending}
       onRecheck={() => {
-        runInBackground(refetch(), 'Could not check provider status');
+        runInBackground(refetch({ throwOnError: true }), 'Could not check provider status');
       }}
       onDismiss={() => {
         rememberDismissedCLIHealthWarning(warningFingerprint);

@@ -83,7 +83,9 @@ preserved. Server signal cleanup reports failure and exits unsuccessfully, and
 run-script cleanup falls back to its synchronous cleanup when needed.
 
 Client event and subscription callbacks use `runInBackground` for detached work.
-It catches unexpected rejection and reports a contextual error toast. Existing
+It catches unexpected rejection and reports a contextual error toast; repeated
+failures for the same action update one toast. Explicit user-triggered rechecks
+request rejection from the query API so failures reach this boundary. Existing
 handlers keep their own error handling. Query refreshes remain in the background
 so mutation pending state and subsequent UI actions keep their previous timing.
 

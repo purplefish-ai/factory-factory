@@ -265,7 +265,7 @@ export function KanbanBoard() {
                 }}
                 togglingWorkspaceId={togglingWorkspaceId}
                 onArchive={(workspaceId) => {
-                  runInBackground(archiveWorkspace(workspaceId), 'Could not update workspace');
+                  runInBackground(archiveWorkspace(workspaceId), 'Could not archive workspace');
                 }}
                 onBulkArchive={() => handleBulkArchive(activeColumn.id)}
                 isBulkArchiving={isBulkArchiving}
@@ -319,7 +319,7 @@ export function KanbanBoard() {
               }}
               togglingWorkspaceId={togglingWorkspaceId}
               onArchive={(workspaceId) => {
-                runInBackground(archiveWorkspace(workspaceId), 'Could not update workspace');
+                runInBackground(archiveWorkspace(workspaceId), 'Could not archive workspace');
               }}
               onBulkArchive={() => handleBulkArchive(column.id)}
               isBulkArchiving={isBulkArchiving}
@@ -334,7 +334,7 @@ export function KanbanBoard() {
         open={bulkArchiveDialogOpen}
         onOpenChange={setBulkArchiveDialogOpen}
         onConfirm={() => {
-          runInBackground(handleBulkArchiveConfirm(), 'Could not update workspace');
+          runInBackground(handleBulkArchiveConfirm(), 'Could not archive workspaces');
         }}
         description={`This will archive all ${workspacesInBulkArchiveColumn.length} workspace(s) in this column. Any uncommitted changes will be committed before the worktrees are removed.`}
       />
