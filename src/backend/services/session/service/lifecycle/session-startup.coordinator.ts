@@ -590,14 +590,7 @@ export class SessionStartupCoordinator {
         this.assertExistingConversation(session, existingAcp, false);
       }
       if (session.workflow === ADVERSARIAL_REVIEW_WORKFLOW) {
-        await this.applyConfiguredPermissionPreset(
-          sessionId,
-          session,
-          existingAcp,
-          stopGeneration,
-          undefined,
-          ownership
-        );
+        await this.applyConfiguredPermissionPreset(sessionId, session, existingAcp, stopGeneration);
       }
       await this.assertCreationAllowed(sessionId, stopGeneration, options.assertCurrent);
       const isWorking = this.dependencies.runtimeManager.isSessionWorking(sessionId);
@@ -804,7 +797,14 @@ export class SessionStartupCoordinator {
         permissionPreset
       );
     } catch (error) {
-      if (!this.canUpdateFailedStartupState(sessionId, ownership, stopGeneration)) {
+      const canUpdateFailureState = (generation?: number) => {
+        const current = this.dependencies.runtimeManager.getClient(sessionId);
+        return (
+          (!current || current === handle) &&
+          this.canUpdateFailedStartupState(sessionId, ownership, generation)
+        );
+      };
+      if (!canUpdateFailureState(stopGeneration)) {
         throw error;
       }
       const stopReservation = this.dependencies.lifecycleGate.reserveStop(sessionId);
@@ -819,7 +819,7 @@ export class SessionStartupCoordinator {
           });
         });
         if (
-          this.canUpdateFailedStartupState(sessionId, ownership) &&
+          canUpdateFailureState() &&
           this.dependencies.lifecycleGate.isGenerationCurrent(sessionId, stopReservation.generation)
         ) {
           this.dependencies.sessionDomainService.setRuntimeSnapshot(sessionId, {
@@ -832,9 +832,17 @@ export class SessionStartupCoordinator {
         }
       } finally {
         try {
-          this.dependencies.acpEventProcessor.clearSessionState(sessionId);
+          if (
+            canUpdateFailureState() &&
+            this.dependencies.lifecycleGate.isGenerationCurrent(
+              sessionId,
+              stopReservation.generation
+            )
+          ) {
+            this.dependencies.acpEventProcessor.clearSessionState(sessionId);
+          }
         } finally {
-          stopReservation?.release();
+          stopReservation.release();
         }
       }
       throw error;

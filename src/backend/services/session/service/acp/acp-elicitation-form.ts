@@ -116,6 +116,34 @@ function decodeAnswers(field: Field, answers: string[] | undefined): string[] | 
   });
 }
 
+function questionValidation(field: Field): AskUserQuestion['validation'] {
+  switch (field.type) {
+    case 'number':
+    case 'integer':
+      return {
+        type: field.type,
+        minimum: field.minimum ?? undefined,
+        maximum: field.maximum ?? undefined,
+      };
+    case 'string':
+      return {
+        type: 'string',
+        minLength: field.minLength ?? undefined,
+        maxLength: field.maxLength ?? undefined,
+        pattern: field.pattern ?? undefined,
+        format: field.format ?? undefined,
+      };
+    case 'array':
+      return {
+        type: 'array',
+        minItems: field.minItems ?? undefined,
+        maxItems: field.maxItems ?? undefined,
+      };
+    default:
+      return undefined;
+  }
+}
+
 function stringValidator(field: Extract<Field, { type: 'string' }>): z.ZodType<string> {
   let value = z.string();
   if (field.minLength != null) {
@@ -299,15 +327,7 @@ export function createAcpElicitationForm(schema: unknown): AcpElicitationForm | 
       question: field.title?.trim() || id.trim() || 'Input',
       ...(field.description ? { header: field.description } : {}),
       options: displayChoices(field),
-      ...(field.type === 'number' || field.type === 'integer'
-        ? {
-            validation: {
-              type: field.type,
-              minimum: field.minimum ?? undefined,
-              maximum: field.maximum ?? undefined,
-            },
-          }
-        : {}),
+      validation: questionValidation(field),
       allowOther: allowsOtherAnswer(field),
       ...(!form.required?.includes(id) ? { optional: true } : {}),
       ...(field.type === 'array' ? { multiSelect: true } : {}),

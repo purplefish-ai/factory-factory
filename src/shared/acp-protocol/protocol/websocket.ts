@@ -22,6 +22,7 @@ interface WebSocketMessageCommon {
   toolName?: string;
   toolUseId?: string;
   toolInput?: Record<string, unknown>;
+  elicitation?: 'form' | 'url';
   planContent?: string | null;
   questions?: AskUserQuestion[];
   acpOptions?: Array<{
@@ -121,6 +122,7 @@ interface WebSocketMessagePayloadByType {
     toolName?: string;
     toolUseId?: string;
     toolInput?: Record<string, unknown>;
+    elicitation?: 'form' | 'url';
     planContent?: string | null;
     /** ACP permission options -- when present, frontend renders multi-option buttons instead of binary Allow/Deny */
     acpOptions?: Array<{

@@ -11,10 +11,11 @@ import { Textarea } from '@/components/ui/textarea';
 import type { AskUserQuestion, UserQuestionRequest } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
 import {
-  OTHER_OPTION_VALUE,
+  getOtherOptionValue,
   formatAnswer,
   isAnswerComplete,
   getAnswerError,
+  getArrayAnswerError,
 } from './question-prompt-answers';
 
 // =============================================================================
@@ -254,6 +255,7 @@ function SingleSelectQuestion({
   const selectedValue = typeof value === 'string' ? value : '';
   const idPrefix = `${requestId}-${index}`;
   const options = Array.isArray(question.options) ? question.options : [];
+  const OTHER_OPTION_VALUE = getOtherOptionValue(question);
 
   return (
     <div className="space-y-1.5">
@@ -330,9 +332,12 @@ function SingleSelectQuestion({
                 }}
                 placeholder="Type your response..."
                 className="min-h-[42px] text-sm py-1.5"
-                aria-invalid={Boolean(getAnswerError(question, otherText))}
+                aria-invalid={
+                  selectedValue === OTHER_OPTION_VALUE &&
+                  Boolean(getAnswerError(question, otherText))
+                }
               />
-              {getAnswerError(question, otherText) && (
+              {selectedValue === OTHER_OPTION_VALUE && getAnswerError(question, otherText) && (
                 <p role="alert" className="text-xs text-destructive">
                   {getAnswerError(question, otherText)}
                 </p>
@@ -360,6 +365,7 @@ function MultiSelectQuestion({
   const selectedValues = Array.isArray(value) ? value : [];
   const idPrefix = `${requestId}-${index}`;
   const options = Array.isArray(question.options) ? question.options : [];
+  const OTHER_OPTION_VALUE = getOtherOptionValue(question);
 
   const handleCheckboxChange = useCallback(
     (optionLabel: string, checked: boolean) => {
@@ -471,6 +477,11 @@ function MultiSelectQuestion({
           </label>
         )}
       </div>
+      {getArrayAnswerError(question, selectedValues, otherText) && (
+        <p role="alert" className="text-xs text-destructive">
+          {getArrayAnswerError(question, selectedValues, otherText)}
+        </p>
+      )}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import type { SessionConfigOption } from '@agentclientprotocol/sdk';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
+import { sessionBackgroundDeliveryService } from './session-background-delivery.service';
 import { SessionStartupCancelledError } from './session-lifecycle-gate';
 import { createDeferred, createLifecycleHarness } from './session-lifecycle.test-helpers';
 import { assertReadOnlyReviewConfigOption } from './session-permission-policy';
@@ -259,7 +260,10 @@ describe('adversarial review startup permissions', () => {
       await vi.waitFor(() =>
         expect(harness.sessionConfigService.applyConfiguredPermissionPreset).toHaveBeenCalled()
       );
-      const stopping = harness.service.stopSession(harness.session.id);
+      const deliveryAllowed = sessionBackgroundDeliveryService.captureResumeGuard(
+        harness.session.id
+      );
+      const stopping = harness.service.stopSession(harness.session.id, { reason: 'USER_STOP' });
       await vi.waitFor(() => expect(harness.runtimeManager.stopAndQuiesce).toHaveBeenCalled());
       if (stopCompleted) {
         runtimeStop.resolve();
@@ -273,6 +277,7 @@ describe('adversarial review startup permissions', () => {
       );
       runtimeStop.resolve();
       await stopping;
+      expect(deliveryAllowed()).toBe(false);
       expect(harness.sessionDomainService.setRuntimeSnapshot).toHaveBeenLastCalledWith(
         harness.session.id,
         expect.objectContaining({ phase: 'idle', processState: 'stopped' })
@@ -341,6 +346,80 @@ describe('adversarial review startup permissions', () => {
       expect(harness.tryDispatchNextMessage).not.toHaveBeenCalled();
     }
   );
+
+  it('stops an unsafe existing review runtime that appears before startup creates a client', async () => {
+    const harness = createHarness('CODEX');
+    harness.runtimeManager.getClient.mockReturnValue(harness.handle).mockReturnValueOnce(undefined);
+    harness.runtime.setSessionMode.mockRejectedValue(new Error('access rejected'));
+    await expect(start(harness, 'start')).rejects.toThrow('access rejected');
+    expect(harness.runtimeManager.getOrCreateClient).not.toHaveBeenCalled();
+    expect(harness.handle.configOptions.find((option) => option.id === 'mode')?.currentValue).toBe(
+      'agent-full-access'
+    );
+    expect(harness.runtimeManager.stopClient).toHaveBeenCalledExactlyOnceWith(harness.session.id);
+    expect(harness.sessionDomainService.setRuntimeSnapshot).toHaveBeenLastCalledWith(
+      harness.session.id,
+      expect.objectContaining({
+        phase: 'error',
+        errorMessage: 'Failed to start agent: access rejected',
+      })
+    );
+    expect(harness.acpEventProcessor.clearSessionState).toHaveBeenCalledWith(harness.session.id);
+  });
+
+  it.each(['existing', 'new'] as const)(
+    'does not stop a replacement runtime after stale %s review permission failure',
+    async (kind) => {
+      const harness = createHarness('CODEX');
+      const replacement = createLifecycleHarness({ provider: 'CODEX' }).handle;
+      const applying = createDeferred<void>();
+      if (kind === 'existing') {
+        harness.runtimeManager.getClient.mockReturnValue(harness.handle);
+        harness.sessionConfigService.applyConfiguredPermissionPreset.mockReturnValueOnce(
+          applying.promise
+        );
+      } else {
+        const applyPermissions =
+          harness.sessionConfigService.applyConfiguredPermissionPreset.getMockImplementation()!;
+        harness.sessionConfigService.applyConfiguredPermissionPreset
+          .mockImplementationOnce(applyPermissions)
+          .mockReturnValueOnce(applying.promise);
+      }
+      const outcome = start(harness, kind === 'existing' ? 'chat auto-start' : 'start').catch(
+        (error) => error
+      );
+      await vi.waitFor(() =>
+        expect(harness.sessionConfigService.applyConfiguredPermissionPreset).toHaveBeenCalledTimes(
+          kind === 'existing' ? 1 : 2
+        )
+      );
+      harness.runtimeManager.getClient.mockReturnValue(replacement);
+      const snapshots = harness.sessionDomainService.setRuntimeSnapshot.mock.calls.length;
+      applying.reject(new Error('stale access rejection'));
+      expect(await outcome).toEqual(expect.objectContaining({ message: 'stale access rejection' }));
+      expect(harness.runtimeManager.stopClient).not.toHaveBeenCalled();
+      expect(harness.acpEventProcessor.clearSessionState).not.toHaveBeenCalled();
+      expect(harness.sessionDomainService.setRuntimeSnapshot.mock.calls).toHaveLength(snapshots);
+    }
+  );
+
+  it('preserves replacement state when review stop cleanup finishes late', async () => {
+    const harness = createHarness('CODEX');
+    const replacement = createLifecycleHarness({ provider: 'CODEX' }).handle;
+    const stopping = createDeferred<void>();
+    harness.runtimeManager.getClient.mockReturnValue(harness.handle);
+    harness.runtime.setSessionMode.mockRejectedValue(new Error('access rejected'));
+    harness.runtimeManager.stopClient.mockReturnValueOnce(stopping.promise);
+    const outcome = start(harness, 'chat auto-start').catch((error) => error);
+    await vi.waitFor(() => expect(harness.runtimeManager.stopClient).toHaveBeenCalled());
+    harness.runtimeManager.getClient.mockReturnValue(replacement);
+    const snapshots = harness.sessionDomainService.setRuntimeSnapshot.mock.calls.length;
+    stopping.resolve();
+    expect(await outcome).toEqual(expect.objectContaining({ message: 'access rejected' }));
+    expect(harness.acpEventProcessor.clearSessionState).not.toHaveBeenCalled();
+    expect(harness.sessionDomainService.setRuntimeSnapshot.mock.calls).toHaveLength(snapshots);
+    expect(harness.lifecycleGate.isStopReserved(harness.session.id)).toBe(false);
+  });
 
   it('cancels concurrent starts when an existing review client loses read-only permissions', async () => {
     const harness = createHarness('CODEX');

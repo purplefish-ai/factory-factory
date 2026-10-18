@@ -62,6 +62,39 @@ describe('ACP elicitation', () => {
     });
   });
 
+  it('carries string and array constraints through live/restored question parsing', async () => {
+    const { handler, bridge, onEvent } = setup();
+    const response = handler.createElicitation(
+      form({
+        properties: {
+          text: { type: 'string', minLength: 2, maxLength: 5, pattern: '^a+$', format: 'email' },
+          choices: {
+            type: 'array',
+            items: { type: 'string', enum: ['a', 'b'] },
+            minItems: 1,
+            maxItems: 2,
+          },
+        },
+      })
+    );
+    const event = onEvent.mock.calls[0]![1];
+    const questions = getAskUserQuestions(event.params.toolCall.rawInput);
+    expect(questions).toMatchObject([
+      {
+        validation: {
+          type: 'string',
+          minLength: 2,
+          maxLength: 5,
+          pattern: '^a+$',
+          format: 'email',
+        },
+      },
+      { validation: { type: 'array', minItems: 1, maxItems: 2 } },
+    ]);
+    bridge.resolvePermission(event.requestId, 'decline');
+    await response;
+  });
+
   it('renders upstream question forms and returns typed field values', async () => {
     const { handler, bridge, onEvent } = setup();
     const response = handler.createElicitation(

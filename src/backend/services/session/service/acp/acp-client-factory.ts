@@ -343,14 +343,14 @@ export class AcpClientFactory {
         options.purpose === 'browse',
         !legacyCodex
       );
-      if (legacyCodex) {
-        throw error;
-      }
       if (options.purpose === 'browse') {
         throw new AcpBrowseSessionUnavailableError(
           'Provider failed to restore this session for sub-agent browsing.',
           { cause: error }
         );
+      }
+      if (legacyCodex) {
+        throw error;
       }
       return null;
     }

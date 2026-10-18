@@ -94,7 +94,7 @@ describe('AcpClientHandler', () => {
           ...(metadata ? { _meta: { codex: { kind: 'plan_review' } } } : {}),
           toolCall: {
             toolCallId: 'plan-review:1',
-            title: 'Implement this plan?',
+            title: metadata ? 'Review this proposal' : 'Implement this plan?',
             kind: 'switch_mode',
             rawInput: { plan: '# Plan' },
           },

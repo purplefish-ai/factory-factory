@@ -231,6 +231,111 @@ describe('AcpNativeSessionTracker', () => {
     expect(active.mock.calls).toEqual([[true], [false]]);
   });
 
+  it('evicts oldest whole turns while keeping retained cursors stable and rejecting expired cursors', () => {
+    const tracker = new AcpNativeSessionTracker();
+    spawn(tracker);
+    function turn(index: number) {
+      text(tracker, 'child', 'user', `Question ${index}`, `u${index}`);
+      text(tracker, 'child', 'agent', `Answer ${index}`);
+    }
+    turn(0);
+    turn(1);
+    const expired = tracker.read({ subagentId: 'child', limit: 1 }).nextCursor;
+    for (let index = 2; index < 100; index += 1) {
+      turn(index);
+    }
+    const retained = tracker.read({ subagentId: 'child', limit: 1 }).nextCursor;
+    turn(100);
+    turn(101);
+    const latest = tracker.read({ subagentId: 'child', limit: 100 });
+    expect(latest.updates).toHaveLength(200);
+    expect(latest.updates[0]).toMatchObject({ content: { text: 'Question 2' } });
+    expect(latest.nextCursor).toBeNull();
+    expect(tracker.read({ subagentId: 'child', cursor: retained, limit: 1 }).updates).toMatchObject(
+      [{ content: { text: 'Question 98' } }, { content: { text: 'Answer 98' } }]
+    );
+    expect(() => tracker.read({ subagentId: 'child', cursor: expired, limit: 1 })).toThrowError(
+      expect.objectContaining({ code: 'INVALID_INPUT' })
+    );
+  });
+
+  it('bounds retained tool payload bytes by evicting whole turns including their tool results', () => {
+    const tracker = new AcpNativeSessionTracker();
+    spawn(tracker);
+    for (const id of ['first', 'second', 'third']) {
+      text(tracker, 'child', 'user', id, id);
+      tracker.onRawMessage(
+        update('child', {
+          sessionUpdate: 'tool_call',
+          toolCallId: id,
+          title: 'Inspect output',
+          rawInput: { payload: '🐈'.repeat(200_000) },
+        })
+      );
+      tracker.onRawMessage(
+        update('child', {
+          sessionUpdate: 'tool_call_update',
+          toolCallId: id,
+          status: 'completed',
+        })
+      );
+      text(tracker, 'child', 'agent', 'Done');
+    }
+    const latest = tracker.read({ subagentId: 'child', limit: 100 });
+    expect(latest.updates).toHaveLength(8);
+    expect(latest.updates[0]).toMatchObject({ content: { text: 'second' } });
+    expect(latest.updates[1]).toMatchObject({ toolCallId: 'second' });
+    expect(latest.updates[2]).toMatchObject({ toolCallId: 'second', status: 'completed' });
+    expect(latest.nextCursor).toBeNull();
+  });
+
+  it('discards an oversized streamed turn through its final chunk and resumes at the next user turn', () => {
+    const tracker = new AcpNativeSessionTracker();
+    spawn(tracker);
+    spawn(tracker, 'root', 'sibling');
+    text(tracker, 'sibling', 'agent', 'Sibling output');
+    text(tracker, 'child', 'user', 'Verbose turn', 'verbose');
+    for (let chunk = 0; chunk < 3; chunk += 1) {
+      text(tracker, 'child', 'agent', 'x'.repeat(800_000));
+    }
+    text(tracker, 'child', 'agent', 'finished');
+    expect(tracker.read({ subagentId: 'child', limit: 100 }).updates).toHaveLength(0);
+    expect(tracker.list({ limit: 10 }).subagents[0]?.resultPreview).toBe(
+      `${'x'.repeat(492)}finished`
+    );
+    text(tracker, 'child', 'user', 'Recovered', 'next');
+    text(tracker, 'child', 'agent', 'Done');
+    expect(tracker.read({ subagentId: 'child', limit: 100 }).updates).toMatchObject([
+      { content: { text: 'Recovered' } },
+      { content: { text: 'Done' } },
+    ]);
+    expect(tracker.read({ subagentId: 'sibling', limit: 100 }).updates).toMatchObject([
+      { content: { text: 'Sibling output' } },
+    ]);
+    expect(text(tracker, 'root', 'agent', 'Parent output')).toBe(false);
+  });
+
+  it('bounds synthetic delegated prompts and keeps their replay in the same user turn', () => {
+    const tracker = new AcpNativeSessionTracker();
+    tracker.onRawMessage(
+      update('root', {
+        sessionUpdate: 'subagent_spawned',
+        subagentSessionId: 'child',
+        name: 'Worker',
+        prompt: 'x'.repeat(3_000_000),
+      })
+    );
+    expect(tracker.read({ subagentId: 'child', limit: 100 }).updates).toHaveLength(0);
+    text(tracker, 'child', 'user', 'Replayed prompt', 'actual');
+    text(tracker, 'child', 'user', ' continued', 'actual');
+    text(tracker, 'child', 'agent', 'Answer');
+    expect(tracker.read({ subagentId: 'child', limit: 1 }).updates).toMatchObject([
+      { content: { text: 'Replayed prompt' } },
+      { content: { text: ' continued' } },
+      { content: { text: 'Answer' } },
+    ]);
+  });
+
   it('clears failed-load children and activity when a new root replaces the failed provider session', () => {
     // Catches replay from an abandoned load retaining browse access and background activity.
     const active = vi.fn();

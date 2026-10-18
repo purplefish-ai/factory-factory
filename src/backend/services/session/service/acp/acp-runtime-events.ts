@@ -52,6 +52,8 @@ export type AcpSessionUpdateEvent = {
 
 export type AcpPermissionRequestEvent = {
   type: 'acp_permission_request';
+  /** Set only by the client-side elicitation bridge, never by tool arguments. */
+  elicitation?: 'form' | 'url';
   requestId: string;
   params: RequestPermissionRequest;
 };

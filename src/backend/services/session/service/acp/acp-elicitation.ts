@@ -124,14 +124,18 @@ function convertResponse(
 export async function createAcpElicitation(
   params: CreateElicitationRequest,
   fallbackSessionId: string,
-  requestPermission: (request: RequestPermissionRequest) => Promise<RequestPermissionResponse>
+  requestPermission: (
+    request: RequestPermissionRequest,
+    presentation: 'form' | 'url'
+  ) => Promise<RequestPermissionResponse>
 ): Promise<CreateElicitationResponse> {
   const presentation = createPresentation(params);
   if (!presentation) {
     return { action: 'cancel' };
   }
   const response = await requestPermission(
-    createPermissionRequest(params, fallbackSessionId, presentation)
+    createPermissionRequest(params, fallbackSessionId, presentation),
+    params.mode === 'url' ? 'url' : 'form'
   );
   return convertResponse(response, presentation.form);
 }

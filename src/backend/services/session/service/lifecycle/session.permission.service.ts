@@ -112,6 +112,7 @@ export class SessionPermissionService {
         toolName,
         toolUseId: params.toolCall.toolCallId,
         toolInput,
+        ...(event.elicitation ? { elicitation: event.elicitation } : {}),
         planContent,
         acpOptions,
       });
@@ -123,6 +124,7 @@ export class SessionPermissionService {
       toolUseId: params.toolCall.toolCallId,
       ...(rawToolName ? { rawToolName } : {}),
       input: pendingInput,
+      ...(event.elicitation ? { elicitation: event.elicitation } : {}),
       planContent,
       acpOptions,
       timestamp: new Date().toISOString(),

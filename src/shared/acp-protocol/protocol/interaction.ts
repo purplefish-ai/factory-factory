@@ -1,3 +1,5 @@
+import type { QuestionValidation } from '@/shared/acp-protocol/question-validation';
+
 /**
  * Option for AskUserQuestion.
  */
@@ -20,7 +22,7 @@ export interface AskUserQuestion {
   optional?: boolean;
   /** Whether option questions accept an additional free-form answer. Defaults to true. */
   allowOther?: boolean;
-  validation?: { type: 'number' | 'integer'; minimum?: number; maximum?: number };
+  validation?: QuestionValidation;
 }
 
 /**
@@ -47,6 +49,7 @@ export interface PermissionRequest {
   requestId: string;
   toolName: string;
   toolInput: Record<string, unknown>;
+  elicitation?: 'form' | 'url';
   timestamp: string;
   /** Plan content for ExitPlanMode requests (markdown) */
   planContent?: string | null;

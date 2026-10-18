@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { AskUserQuestion } from './protocol/interaction';
+import { questionValidationSchema } from './question-validation';
 
 export type { AskUserQuestion };
 
@@ -26,13 +27,7 @@ const questionInputSchema = z
       multiSelect: z.boolean().optional(),
       optional: z.boolean().optional(),
       allowOther: z.boolean().optional(),
-      validation: z
-        .object({
-          type: z.enum(['number', 'integer']),
-          minimum: z.number().optional(),
-          maximum: z.number().optional(),
-        })
-        .optional(),
+      validation: questionValidationSchema.optional(),
     })
   )
   .min(1);

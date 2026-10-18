@@ -465,27 +465,34 @@ describe('AcpClientFactory', () => {
     expect(mocks.loadSession).not.toHaveBeenCalled();
   });
 
-  it('classifies a browse load failure without creating a replacement session', async () => {
-    setupSuccessfulSpawn(createMockChildProcess({ exitAfterSigterm: true }), {
-      loadSession: true,
-    });
-    mocks.loadSession.mockRejectedValue(new Error('not found'));
+  it.each([
+    ['CLAUDE', 'stored-provider-1'],
+    ['CODEX', 'sess_native-thread'],
+  ] as const)(
+    'classifies a %s browse load failure without replacing its session',
+    async (provider, resumeProviderSessionId) => {
+      setupSuccessfulSpawn(createMockChildProcess({ exitAfterSigterm: true }), {
+        loadSession: true,
+      });
+      mocks.loadSession.mockRejectedValue(new Error('not found'));
 
-    await expect(
-      new AcpClientFactory().createClient(
-        createParams({
-          options: defaultOptions({
-            purpose: 'browse',
-            resumeProviderSessionId: 'stored-provider-1',
-          }),
-        })
-      )
-    ).rejects.toMatchObject({
-      name: 'AcpBrowseSessionUnavailableError',
-      message: 'Provider failed to restore this session for sub-agent browsing.',
-    });
-    expect(mocks.newSession).not.toHaveBeenCalled();
-  });
+      await expect(
+        new AcpClientFactory().createClient(
+          createParams({
+            options: defaultOptions({
+              provider,
+              purpose: 'browse',
+              resumeProviderSessionId,
+            }),
+          })
+        )
+      ).rejects.toMatchObject({
+        name: 'AcpBrowseSessionUnavailableError',
+        message: 'Provider failed to restore this session for sub-agent browsing.',
+      });
+      expect(mocks.newSession).not.toHaveBeenCalled();
+    }
+  );
 
   it('fails startup when session config options omit required categories', async () => {
     setupSuccessfulSpawn(createMockChildProcess({ exitAfterSigterm: true }));

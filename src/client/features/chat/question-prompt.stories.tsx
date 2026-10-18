@@ -252,10 +252,54 @@ export const OptionalProgress: Story = {
       {
         question: 'Choose a value',
         options: [
-          { label: 'Empty value', value: '__blank_choice__', description: 'Use an empty string' },
+          {
+            label: 'Empty value',
+            value: '__blank_choice__',
+            description: 'Example transport value: __blank_choice__',
+          },
           { label: 'Default', description: 'Use the default setting' },
         ],
         allowOther: false,
+      },
+    ]),
+  },
+};
+
+export const ConstrainedForm: Story = {
+  args: {
+    question: createUserQuestion([
+      {
+        question: 'Contact email',
+        options: [],
+        validation: { type: 'string', format: 'email', maxLength: 80 },
+      },
+      {
+        question: 'Choose two environments',
+        options: ['Development', 'Staging', 'Production'].map((label) => ({
+          label,
+          description: '',
+        })),
+        multiSelect: true,
+        allowOther: false,
+        validation: { type: 'array', minItems: 2, maxItems: 2 },
+      },
+    ]),
+  },
+};
+
+export const LiteralOtherValue: Story = {
+  args: {
+    question: createUserQuestion([
+      {
+        question: 'Choose a literal value or type a response',
+        options: [
+          {
+            label: 'Literal __other__ value',
+            value: '__other__',
+            description:
+              'Submits the provider value without selecting the free-form Other response.',
+          },
+        ],
       },
     ]),
   },

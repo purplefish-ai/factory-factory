@@ -25,10 +25,19 @@ const taskSchema = z.object({
   state: z.enum(['running', 'paused', 'completed', 'failed', 'stopped']).optional(),
 });
 
+const MAX_CHILD_TRANSCRIPT_TURNS = 100;
+const MAX_CHILD_TRANSCRIPT_BYTES = 2 * 1024 * 1024;
+
+type TranscriptTurn = { updates: SubagentTranscriptUpdate[]; bytes: number };
+
 type ChildSession = {
   parentSessionId: string;
   summary: SubagentSummary;
-  turns: SubagentTranscriptUpdate[][];
+  turns: TranscriptTurn[];
+  turnOffset: number;
+  transcriptBytes: number;
+  discardingTurn: boolean;
+  previousUserChunk?: { messageId?: string | null };
   pendingPrompt: boolean;
 };
 
@@ -213,12 +222,19 @@ export class AcpNativeSessionTracker {
         'Sub-agent transcript not found for this session.'
       );
     }
-    const end = pageIndex(input.cursor, child.turns.length);
-    const start = Math.max(0, end - input.limit);
+    const end = pageIndex(input.cursor, child.turnOffset + child.turns.length);
+    if (input.cursor != null && child.turnOffset > 0 && end <= child.turnOffset) {
+      throw new AcpSubagentBrowseError('INVALID_INPUT', 'Sub-agent pagination cursor has expired.');
+    }
+    const start = Math.max(child.turnOffset, end - input.limit);
     return {
       projectionBoundary: 'turn',
-      updates: structuredClone(child.turns.slice(start, end).flat()),
-      nextCursor: start > 0 ? String(start) : null,
+      updates: structuredClone(
+        child.turns
+          .slice(start - child.turnOffset, end - child.turnOffset)
+          .flatMap((turn) => turn.updates)
+      ),
+      nextCursor: start > child.turnOffset ? String(start) : null,
     };
   }
 
@@ -232,12 +248,13 @@ export class AcpNativeSessionTracker {
       return;
     }
     const now = new Date().toISOString();
-    this.children.set(id, {
+    const child: ChildSession = {
       parentSessionId,
-      turns: prompt
-        ? [[{ sessionUpdate: 'user_message_chunk', content: { type: 'text', text: prompt } }]]
-        : [],
-      pendingPrompt: Boolean(prompt),
+      turns: [],
+      turnOffset: 0,
+      transcriptBytes: 0,
+      discardingTurn: false,
+      pendingPrompt: false,
       summary: {
         id,
         name,
@@ -245,10 +262,18 @@ export class AcpNativeSessionTracker {
         createdAt: now,
         updatedAt: now,
         completedAt: null,
-        latestActivity: task ?? null,
+        latestActivity: task?.slice(-500) ?? null,
         resultPreview: null,
       },
-    });
+    };
+    if (prompt) {
+      this.appendTurn(child, {
+        sessionUpdate: 'user_message_chunk',
+        content: { type: 'text', text: prompt },
+      });
+      child.pendingPrompt = true;
+    }
+    this.children.set(id, child);
     this.changed(id, 'created');
     this.publishActivity();
   }
@@ -284,20 +309,51 @@ export class AcpNativeSessionTracker {
   private appendTurn(child: ChildSession, value: SubagentTranscriptUpdate): void {
     if (child.pendingPrompt && value.sessionUpdate === 'user_message_chunk') {
       child.turns = [];
+      child.turnOffset = 0;
+      child.transcriptBytes = 0;
+      child.discardingTurn = false;
+      child.previousUserChunk = undefined;
     }
     child.pendingPrompt = false;
     let turn = child.turns.at(-1);
-    const previous = turn?.at(-1);
     const user = value.sessionUpdate === 'user_message_chunk';
-    const messageId = 'messageId' in value ? value.messageId : undefined;
+    const messageId = value.sessionUpdate === 'user_message_chunk' ? value.messageId : undefined;
     const sameUserMessage =
-      previous?.sessionUpdate === 'user_message_chunk' &&
-      (!(messageId && previous.messageId) || messageId === previous.messageId);
-    if (!turn || (user && !sameUserMessage)) {
-      turn = [];
+      child.previousUserChunk &&
+      (!(messageId && child.previousUserChunk.messageId) ||
+        messageId === child.previousUserChunk.messageId);
+    child.previousUserChunk = user ? { messageId } : undefined;
+    if (!(turn || child.discardingTurn) || (user && !sameUserMessage)) {
+      turn = { updates: [], bytes: 0 };
       child.turns.push(turn);
+      child.discardingTurn = false;
     }
-    turn.push(value);
+    if (!turn || child.discardingTurn) {
+      return;
+    }
+    const bytes = Buffer.byteLength(JSON.stringify(value), 'utf8');
+    turn.updates.push(value);
+    turn.bytes += bytes;
+    child.transcriptBytes += bytes;
+    this.evictOldTurns(child, turn);
+  }
+
+  private evictOldTurns(child: ChildSession, currentTurn: TranscriptTurn): void {
+    while (
+      child.turns.length > MAX_CHILD_TRANSCRIPT_TURNS ||
+      child.transcriptBytes > MAX_CHILD_TRANSCRIPT_BYTES
+    ) {
+      const oldest = child.turns.shift();
+      if (!oldest) {
+        break;
+      }
+      child.transcriptBytes -= oldest.bytes;
+      child.turnOffset += 1;
+      // Never retain a partial turn with orphaned tool results after its beginning was evicted.
+      if (oldest === currentTurn) {
+        child.discardingTurn = true;
+      }
+    }
   }
 
   private updateSummary(summary: SubagentSummary, value: SubagentTranscriptUpdate): void {
@@ -313,7 +369,7 @@ export class AcpNativeSessionTracker {
         }
       }
     } else if ('title' in value && typeof value.title === 'string') {
-      summary.latestActivity = value.title;
+      summary.latestActivity = value.title.slice(-500);
     }
   }
 

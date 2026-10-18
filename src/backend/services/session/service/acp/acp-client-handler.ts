@@ -178,6 +178,13 @@ export class AcpClientHandler implements Client {
   }
 
   requestPermission(params: RequestPermissionRequest): Promise<RequestPermissionResponse> {
+    return this.requestPermissionWithPresentation(params);
+  }
+
+  private requestPermissionWithPresentation(
+    params: RequestPermissionRequest,
+    elicitation?: 'form' | 'url'
+  ): Promise<RequestPermissionResponse> {
     // PRESERVE: Log permission request to session file logger
     this.onLog?.(this.sessionId, {
       eventType: 'acp_permission_request',
@@ -201,7 +208,12 @@ export class AcpClientHandler implements Client {
 
     const requestId = crypto.randomUUID();
     const response = this.permissionBridge.waitForUserResponse(requestId, request);
-    this.onEvent(this.sessionId, { type: 'acp_permission_request', requestId, params: request });
+    this.onEvent(this.sessionId, {
+      type: 'acp_permission_request',
+      requestId,
+      params: request,
+      ...(elicitation ? { elicitation } : {}),
+    });
     return response;
   }
 
@@ -213,8 +225,8 @@ export class AcpClientHandler implements Client {
       });
       return Promise.resolve({ action: 'cancel' });
     }
-    return createAcpElicitation(params, this.sessionId, (request) =>
-      this.requestPermission(request)
+    return createAcpElicitation(params, this.sessionId, (request, presentation) =>
+      this.requestPermissionWithPresentation(request, presentation)
     );
   }
 

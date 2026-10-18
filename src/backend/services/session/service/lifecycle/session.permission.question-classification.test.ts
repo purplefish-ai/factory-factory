@@ -138,8 +138,13 @@ describe('permission question classification', () => {
       expect.objectContaining({
         type: 'permission_request',
         toolName: 'Confirm request',
+        elicitation: 'form',
         toolInput: { type: 'FormElicitation', message: 'Confirm this request' },
       })
+    );
+    expect(harness.domain.setPendingInteractiveRequest).toHaveBeenCalledWith(
+      'session',
+      expect.objectContaining({ elicitation: 'form' })
     );
     expect(harness.domain.emitDelta).not.toHaveBeenCalledWith(
       'session',

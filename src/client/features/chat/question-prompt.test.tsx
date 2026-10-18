@@ -106,6 +106,196 @@ describe('QuestionPrompt', () => {
     root.unmount();
   });
 
+  it('hides a stale Other validation error after choosing a regular option', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const question: UserQuestionRequest = {
+      requestId: 'stale-error',
+      timestamp: '',
+      questions: [
+        {
+          question: 'Count',
+          options: [{ label: '3', description: '' }],
+          validation: { type: 'integer' },
+        },
+      ],
+    };
+    flushSync(() => root.render(createElement(QuestionPrompt, { question, onAnswer: vi.fn() })));
+    const input = container.querySelector('textarea')!;
+    flushSync(() => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(
+        input,
+        'abc'
+      );
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(container.querySelector('[role="alert"]')).not.toBeNull();
+    flushSync(() => container.querySelector<HTMLButtonElement>('[role="radio"]')!.click());
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(input.getAttribute('aria-invalid')).toBe('false');
+    root.unmount();
+  });
+
+  it.each([false, true])('preserves a generic __other__ option (multiSelect=%s)', (multiSelect) => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const onAnswer = vi.fn();
+    const question: UserQuestionRequest = {
+      requestId: 'sentinel',
+      timestamp: '',
+      questions: [
+        {
+          id: 'choice',
+          question: 'Choose',
+          options: [{ label: 'Literal', value: '__other__', description: '' }],
+          multiSelect,
+        },
+      ],
+    };
+    flushSync(() => root.render(createElement(QuestionPrompt, { question, onAnswer })));
+    flushSync(() =>
+      container
+        .querySelector<HTMLButtonElement>(multiSelect ? '[role="checkbox"]' : '[role="radio"]')!
+        .click()
+    );
+    const submit = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Submit'
+    )!;
+    expect(submit.disabled).toBe(false);
+    flushSync(() => submit.click());
+    expect(onAnswer).toHaveBeenCalledWith('sentinel', {
+      choice: multiSelect ? ['__other__'] : '__other__',
+    });
+    root.unmount();
+  });
+
+  it.each([
+    [{ type: 'string', minLength: 3 }, 'ab'],
+    [{ type: 'string', maxLength: 3 }, 'abcd'],
+    [{ type: 'string', pattern: '^a+$' }, 'bbb'],
+    [{ type: 'string', format: 'email' }, 'invalid'],
+    [{ type: 'string', format: 'uri' }, 'invalid'],
+    [{ type: 'string', format: 'date' }, '2026-02-31'],
+    [{ type: 'string', format: 'date-time' }, '2026-10-18'],
+  ] as const)('blocks invalid string constraints %j for %s', (validation, value) => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const question: UserQuestionRequest = {
+      requestId: 'string-validation',
+      timestamp: '',
+      questions: [
+        {
+          question: 'Text',
+          options: [],
+          validation,
+        },
+      ],
+    };
+    flushSync(() => root.render(createElement(QuestionPrompt, { question, onAnswer: vi.fn() })));
+    const input = container.querySelector('textarea')!;
+    flushSync(() => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(
+        input,
+        value
+      );
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(container.querySelector('[role="alert"]')).not.toBeNull();
+    expect(
+      Array.from(container.querySelectorAll('button')).find(
+        (button) => button.textContent === 'Submit'
+      )!.disabled
+    ).toBe(true);
+    root.unmount();
+  });
+
+  it('validates array item counts before allowing submission', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const onAnswer = vi.fn();
+    const question: UserQuestionRequest = {
+      requestId: 'array-validation',
+      timestamp: '',
+      questions: [
+        {
+          id: 'choices',
+          question: 'Choose two',
+          multiSelect: true,
+          allowOther: false,
+          options: ['A', 'B', 'C'].map((label) => ({ label, description: '' })),
+          validation: { type: 'array', minItems: 2, maxItems: 2 },
+        },
+      ],
+    };
+    flushSync(() => root.render(createElement(QuestionPrompt, { question, onAnswer })));
+    const choices = container.querySelectorAll<HTMLButtonElement>('[role="checkbox"]');
+    const submit = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Submit'
+    )!;
+    flushSync(() => choices[0]!.click());
+    expect(submit.disabled).toBe(true);
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      'Select at least 2 options.'
+    );
+    flushSync(() => choices[1]!.click());
+    expect(submit.disabled).toBe(false);
+    flushSync(() => choices[2]!.click());
+    expect(submit.disabled).toBe(true);
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      'Select at most 2 options.'
+    );
+    flushSync(() => choices[2]!.click());
+    flushSync(() => submit.click());
+    expect(onAnswer).toHaveBeenCalledWith('array-validation', { choices: ['A', 'B'] });
+    root.unmount();
+  });
+
+  it('omits skipped optional constrained strings and arrays from submission', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const onAnswer = vi.fn();
+    const question: UserQuestionRequest = {
+      requestId: 'optional-constraints',
+      timestamp: '',
+      questions: [
+        {
+          id: 'note',
+          question: 'Note',
+          options: [],
+          optional: true,
+          validation: { type: 'string', minLength: 5 },
+        },
+        {
+          id: 'choices',
+          question: 'Choices',
+          options: [{ label: 'A', description: '' }],
+          multiSelect: true,
+          optional: true,
+          validation: { type: 'array', minItems: 2 },
+        },
+      ],
+    };
+    flushSync(() => root.render(createElement(QuestionPrompt, { question, onAnswer })));
+    flushSync(() =>
+      Array.from(container.querySelectorAll('button'))
+        .find((button) => button.textContent === 'Next')!
+        .click()
+    );
+    const submit = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Submit'
+    )!;
+    expect(submit.disabled).toBe(false);
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    flushSync(() => submit.click());
+    expect(onAnswer).toHaveBeenCalledWith('optional-constraints', {});
+    root.unmount();
+  });
+
   it('renders nothing when the questions array is empty', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);

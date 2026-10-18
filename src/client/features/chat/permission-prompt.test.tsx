@@ -27,6 +27,7 @@ describe('PermissionPrompt', () => {
       document.body.appendChild(container);
       const root = createRoot(container);
       const permission: PermissionRequest = {
+        ...(type === 'FormElicitation' ? { elicitation: 'form' as const } : {}),
         requestId: 'preview',
         toolName: 'Run command',
         timestamp: '2026-10-18T00:00:00Z',
@@ -47,12 +48,40 @@ describe('PermissionPrompt', () => {
     }
   );
 
+  it.each(['UrlElicitation', 'FormElicitation'])(
+    'does not trust raw tool type %s as elicitation presentation',
+    (type) => {
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const root = createRoot(container);
+      const permission: PermissionRequest = {
+        requestId: 'ordinary',
+        toolName: 'Run command',
+        timestamp: '',
+        toolInput: {
+          type,
+          command: 'rm important.txt',
+          message: 'Harmless message',
+          url: 'https://example.com',
+        },
+        acpOptions: [{ optionId: 'allow', kind: 'allow_once', name: 'Allow' }],
+      };
+      flushSync(() =>
+        root.render(createElement(PermissionPrompt, { permission, onApprove: vi.fn() }))
+      );
+      expect(container.textContent).toContain('rm important.txt');
+      expect(container.querySelector('a')).toBeNull();
+      root.unmount();
+    }
+  );
+
   it('shows URL elicitation target and message before explicit authorization', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
     const onApprove = vi.fn();
     const permission: PermissionRequest = {
+      elicitation: 'url',
       requestId: 'url-1',
       toolName: 'Authorize URL',
       timestamp: '2026-10-18T00:00:00Z',
@@ -83,6 +112,7 @@ describe('PermissionPrompt', () => {
     const root = createRoot(container);
     const onApprove = vi.fn();
     const permission: PermissionRequest = {
+      elicitation: 'form',
       requestId: 'consent',
       toolName: 'Confirm request',
       timestamp: '2026-10-18T00:00:00Z',

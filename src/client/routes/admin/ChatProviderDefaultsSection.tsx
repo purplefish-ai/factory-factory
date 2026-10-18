@@ -12,7 +12,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { NATIVE_PERMISSION_OPTIONS, NATIVE_PERMISSION_DESCRIPTION } from './native-permission-copy';
+import {
+  NATIVE_PERMISSION_OPTIONS,
+  NATIVE_PERMISSION_DESCRIPTION,
+  isNativePermissionPreset,
+} from './native-permission-copy';
 
 export function ChatProviderDefaultsSection() {
   const { data: settings, isLoading } = trpc.userSettings.get.useQuery();
@@ -262,7 +266,7 @@ export function ChatProviderDefaultsSection() {
           <Select
             value={currentWorkspacePermissions}
             onValueChange={(value) => {
-              if (value === 'STRICT' || value === 'RELAXED' || value === 'YOLO') {
+              if (isNativePermissionPreset(value)) {
                 updateSettings.mutate({ defaultWorkspacePermissions: value });
               }
             }}

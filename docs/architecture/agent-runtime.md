@@ -29,8 +29,9 @@ selects access and `collaboration_mode` selects planning independently. Claude
 remain backward-compatible preset inputs, mapped to advertised native values;
 the ACP client never automatically grants a permission because of a preset.
 Read-only review sessions use the provider's read-only/plan mode and reject all
-permission escalation. Model and configuration changes use
-`session/set_config_option`; legacy model/mode response fallbacks remain
+permission escalation. Access modes, including Claude planning, use
+`session/set_mode`. Models and other settings, including Codex collaboration,
+use `session/set_config_option`; legacy model/mode response fallbacks remain
 supported. Boolean options remain in backend snapshots while current chat
 controls render select options.
 
@@ -41,8 +42,9 @@ provider identities remain unchanged; transport calls use the underlying native
 Codex thread ID. A failed legacy resume cannot start a replacement conversation.
 
 Permission requests retain the provider's option IDs and choices. Upstream Codex
-plan review is normalized into the application's plan UI and always requires a
-user response. Both adapters own their plan implementation continuation; the
+plan review is normalized into the application's plan UI. Interactive sessions
+wait for a user response; read-only reviewers automatically reject plan
+implementation. Both adapters own their plan implementation continuation; the
 client does not enqueue a second approval turn. Structured questions use ACP
 form elicitation, with validated answers mapped into the existing question UI.
 Numeric fields display validation errors before submission, and blank enum
@@ -59,7 +61,10 @@ permissions remain routed through the owning parent. The client negotiates
 upstream background-task metadata and combines subagent, goal and task activity
 so provider work outside a prompt keeps the session running. Native session
 loading reconstructs child histories; no Factory Factory extension is required
-from either adapter.
+from either adapter. Each child's in-memory transcript retains at most 100 turns
+and 2 MiB of serialized updates. Oldest whole turns are evicted; an oversized
+active turn is discarded until the next user turn. Cursors use monotonic turn
+offsets, and expired cursors fail explicitly instead of returning another turn.
 
 Factory Factory supplies workspace MCP servers through session-scoped adapter
 configuration. It never writes the user's native Codex configuration. Requested

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ChatMessage } from '@/lib/chat-protocol';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 import { convertPendingRequest, insertMessageByOrder } from './helpers';
+import { createActionFromWebSocketMessage } from './index';
 
 function makeUserMessage(id: string, order: number): ChatMessage {
   return {
@@ -31,6 +32,38 @@ describe('insertMessageByOrder', () => {
 });
 
 describe('convertPendingRequest', () => {
+  it.each(['form', 'url'] as const)(
+    'restores the trusted %s elicitation presentation marker',
+    (elicitation) => {
+      const request: PendingInteractiveRequest = {
+        requestId: 'elicitation',
+        toolName: 'Confirm',
+        toolUseId: 'tool',
+        input: { message: 'Confirm this request' },
+        planContent: null,
+        timestamp: '',
+        elicitation,
+      };
+      expect(convertPendingRequest(request)).toMatchObject({
+        type: 'permission',
+        request: { elicitation },
+      });
+    }
+  );
+
+  it.each(['form', 'url'] as const)(
+    'retains the trusted %s elicitation marker from live requests',
+    (elicitation) => {
+      const action = createActionFromWebSocketMessage({
+        type: 'permission_request',
+        requestId: 'elicitation',
+        toolName: 'Confirm',
+        elicitation,
+      });
+      expect(action).toMatchObject({ type: 'WS_PERMISSION_REQUEST', payload: { elicitation } });
+    }
+  );
+
   it('maps AskUserQuestion tool requests to question prompts', () => {
     const acpOptions = [{ optionId: 'answer_0', name: 'A', kind: 'allow_once' as const }];
     const request: PendingInteractiveRequest = {

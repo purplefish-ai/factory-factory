@@ -34,9 +34,31 @@ const pageSchema = z.object({ data: z.array(modelSchema), nextCursor: z.string()
 const responseSchema = z.object({
   id: z.number(),
   result: z.unknown().optional(),
-  error: z.object({ message: z.string() }).optional(),
+  error: z.object({ message: z.string(), code: z.number().optional() }).optional(),
 });
 export type CodexModelCatalogEntry = z.infer<typeof modelSchema>;
+
+class CatalogRpcError extends Error {
+  constructor(
+    message: string,
+    readonly code: number | undefined
+  ) {
+    super(message);
+  }
+}
+
+async function requestModelPage(request: () => Promise<unknown>): Promise<unknown> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await request();
+    } catch (error) {
+      if (!(error instanceof CatalogRpcError) || error.code !== -32_001 || attempt >= 2) {
+        throw error;
+      }
+      await new Promise<void>((resolve) => setTimeout(resolve, 100 * 2 ** attempt));
+    }
+  }
+}
 
 /** Lightweight discovery only: the upstream adapter owns sessions and harness RPCs. */
 export async function fetchCodexModelCatalogFromAppServer(options?: {
@@ -66,7 +88,9 @@ export async function fetchCodexModelCatalogFromAppServer(options?: {
   child.on('error', fail);
   child.on('exit', () => fail(new Error('Codex model discovery process exited')));
   child.stdin.on('error', fail);
-  child.stderr.resume();
+  child.stderr.on('data', (chunk: Buffer) => {
+    logger.debug('Codex catalog stderr', { data: chunk.toString() });
+  });
   const reader = createInterface({ input: child.stdout });
   reader.on('line', (line) => {
     let value: unknown;
@@ -86,7 +110,7 @@ export async function fetchCodexModelCatalogFromAppServer(options?: {
     }
     pending.delete(parsed.data.id);
     if (parsed.data.error) {
-      request.reject(new Error(parsed.data.error.message));
+      request.reject(new CatalogRpcError(parsed.data.error.message, parsed.data.error.code));
     } else {
       request.resolve(parsed.data.result);
     }
@@ -111,7 +135,9 @@ export async function fetchCodexModelCatalogFromAppServer(options?: {
     const cursors = new Set<string>();
     let cursor: string | null = null;
     do {
-      const page = pageSchema.parse(await request('model/list', cursor ? { cursor } : {}));
+      const page = pageSchema.parse(
+        await requestModelPage(() => request('model/list', cursor ? { cursor } : {}))
+      );
       models.push(...page.data);
       cursor = page.nextCursor ?? null;
       if (cursor && cursors.has(cursor)) {
