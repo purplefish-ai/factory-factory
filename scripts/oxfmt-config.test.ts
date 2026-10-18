@@ -5,7 +5,7 @@ import { dirname, join, resolve } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 
 const directory = mkdtempSync(join(tmpdir(), 'ff-oxfmt-config-'));
-const binary = resolve('node_modules/.bin/oxfmt');
+const binary = resolve('node_modules/oxfmt/bin/oxfmt');
 
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
 
@@ -16,7 +16,10 @@ function format(files: Record<string, string>) {
     mkdirSync(dirname(join(root, name)), { recursive: true });
     writeFileSync(join(root, name), contents);
   }
-  const result = spawnSync(binary, ['--write', '.'], { cwd: root, encoding: 'utf8' });
+  const result = spawnSync(process.execPath, [binary, '--write', '.'], {
+    cwd: root,
+    encoding: 'utf8',
+  });
   expect(result.error).toBeUndefined();
   expect(result.stdout + result.stderr).not.toContain('error');
   expect(result.status).toBe(0);

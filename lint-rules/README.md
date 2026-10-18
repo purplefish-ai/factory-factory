@@ -64,3 +64,7 @@ Run `pnpm check:fix`, `pnpm typecheck`, affected tests and `pnpm check` before
 submitting changes. Use `pnpm lint` for just the lint guardrails,
 `pnpm check:format` to check formatting and `pnpm format` to apply formatting.
 The pre-commit hook uses the same tools on staged source files.
+
+Staged formatter commands permit batches containing only ignored files, such as
+`pnpm-lock.yaml`. Supported files still format normally, and parse errors still
+block commits.
