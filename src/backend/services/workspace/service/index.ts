@@ -44,6 +44,7 @@ export {
   type SnapshotRemovedEvent,
   type SnapshotUpdateInput,
   sessionSummariesEqual,
+  workspacePullRequestsEqual,
   type WorkspaceSnapshotEntry,
   WorkspaceSnapshotStore,
   workspaceSnapshotStore,
