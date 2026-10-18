@@ -1,10 +1,10 @@
-import type { PrismaClient } from '@prisma-gen/client';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
+import type { PrismaClient } from '@prisma-gen/client';
 import { workspacePrEventAccessor } from './workspace-pr-event.accessor';
 import { workspacePrMonitoringAccessor } from './workspace-pr-monitoring.accessor';
 

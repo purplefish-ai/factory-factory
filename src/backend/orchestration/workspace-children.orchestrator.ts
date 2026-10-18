@@ -1,4 +1,3 @@
-import type { WorkspaceNotification } from '@prisma-gen/client';
 import { ApplicationError } from '@/backend/lib/application-error';
 import { createLogger } from '@/backend/services/logger.service';
 import { sessionDataService, sessionProviderResolverService } from '@/backend/services/session';
@@ -8,6 +7,7 @@ import {
   workspaceDataService,
   workspaceNotificationService,
 } from '@/backend/services/workspace';
+import type { WorkspaceNotification } from '@prisma-gen/client';
 import { initializeWorkspaceWorktree } from './workspace-init.orchestrator';
 
 const logger = createLogger('workspace-children-orchestrator');

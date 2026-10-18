@@ -1,7 +1,7 @@
-import type { WorkspaceNotification } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { workspaceNotificationAccessor } from '@/backend/services/workspace/resources/workspace-notification.accessor';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
+import type { WorkspaceNotification } from '@prisma-gen/client';
 import { workspaceNotificationService } from './workspace-notification.service';
 
 vi.mock('@/backend/services/workspace/resources/workspace-notification.accessor', () => ({

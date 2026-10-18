@@ -1,4 +1,3 @@
-import { SessionProvider } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { ApplicationError } from '@/backend/lib/application-error';
@@ -8,6 +7,7 @@ import {
   subagentReadParamsSchema,
 } from '@/shared/acp-protocol/subagents';
 import { SessionStatus } from '@/shared/core';
+import { SessionProvider } from '@prisma-gen/client';
 import { type Context, publicProcedure, router } from './trpc';
 
 const createSessionInputSchema = z.object({

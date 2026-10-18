@@ -1,6 +1,6 @@
-import type { SessionLifecycleEvent } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
 import type { SessionLifecycleEventKind, SessionLifecycleEventReason } from '@/shared/core';
+import type { SessionLifecycleEvent } from '@prisma-gen/client';
 
 export type SessionLifecycleEventRecord = SessionLifecycleEvent;
 

@@ -1,9 +1,3 @@
-import type {
-  Prisma,
-  Workspace,
-  WorkspaceAutoIteration,
-  WorkspacePRDiscovery,
-} from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
 import {
   flattenWorkspaceAutoIteration,
@@ -49,6 +43,12 @@ import type {
 } from '@/shared/core';
 import type { WorkspacePullRequest } from '@/shared/workspace-pr';
 import { deriveWorkspacePRSummary, type WorkspacePRSummary } from '@/shared/workspace-pr-summary';
+import type {
+  Prisma,
+  Workspace,
+  WorkspaceAutoIteration,
+  WorkspacePRDiscovery,
+} from '@prisma-gen/client';
 import {
   type PrAggregatePersistenceResult,
   type PrObservationPersistenceInput,

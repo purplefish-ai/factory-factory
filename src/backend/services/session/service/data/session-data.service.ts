@@ -1,4 +1,3 @@
-import type { Prisma, SessionProvider } from '@prisma-gen/client';
 import {
   agentSessionAccessor,
   type AgentSessionRecord as PersistenceAgentSessionRecord,
@@ -19,6 +18,7 @@ import type {
 } from '@/backend/services/session/types';
 import type { SessionStatus } from '@/shared/core';
 import type { PRTarget } from '@/shared/pr-monitoring';
+import type { Prisma, SessionProvider } from '@prisma-gen/client';
 import { sessionProviderResolverService } from './session-provider-resolver.service';
 
 function toAgentSessionRecord(session: PersistenceAgentSessionRecord): AgentSessionRecord {

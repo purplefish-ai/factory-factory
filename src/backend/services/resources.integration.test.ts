@@ -2,6 +2,13 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import {
+  clearIntegrationDatabase,
+  createIntegrationDatabase,
+  destroyIntegrationDatabase,
+  type IntegrationDatabase,
+} from '@/backend/testing/integration-db';
 import {
   CIStatus,
   PRState,
@@ -10,13 +17,6 @@ import {
   RunScriptStatus,
   WorkspaceStatus,
 } from '@prisma-gen/client';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import {
-  clearIntegrationDatabase,
-  createIntegrationDatabase,
-  destroyIntegrationDatabase,
-  type IntegrationDatabase,
-} from '@/backend/testing/integration-db';
 
 let db: IntegrationDatabase;
 let prisma: PrismaClient;

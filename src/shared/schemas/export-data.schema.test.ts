@@ -6,7 +6,6 @@
  * shared schema to prevent backup import failures.
  */
 
-import { RatchetReviewTriggerMode as PrismaRatchetReviewTriggerMode } from '@prisma-gen/client';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_COLOR_SCHEME, DEFAULT_FONT_SCALE } from '@/shared/appearance';
 import {
@@ -24,6 +23,7 @@ import {
   DEFAULT_DEEPGRAM_TTS_MODEL,
   DEFAULT_DEEPGRAM_TTS_SPEED,
 } from '@/shared/deepgram-voices';
+import { RatchetReviewTriggerMode as PrismaRatchetReviewTriggerMode } from '@prisma-gen/client';
 import {
   exportedAgentSessionSchema,
   exportedProjectSchema,

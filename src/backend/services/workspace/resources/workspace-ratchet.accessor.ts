@@ -1,6 +1,6 @@
-import type { Prisma, WorkspacePRMonitoring } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
 import { prDeliveryModeSchema, type PRMonitoringProjection } from '@/shared/pr-monitoring';
+import type { Prisma, WorkspacePRMonitoring } from '@prisma-gen/client';
 import { projectWorkspacePRCollection } from './workspace-pr.accessor';
 
 /** The legacy toggle name is retained at the API boundary for existing clients. */

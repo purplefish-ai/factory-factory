@@ -1,7 +1,7 @@
-import type { Prisma } from '@prisma-gen/client';
 import { z } from 'zod';
 import type { AcpProviderIdentityEvent } from '@/backend/services/session/service/acp';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import type { Prisma } from '@prisma-gen/client';
 import type { AcpEventProcessor } from './acp-event-processor';
 import type { closedSessionPersistenceService } from './closed-session-persistence.service';
 import type { SessionRepository } from './session.repository';

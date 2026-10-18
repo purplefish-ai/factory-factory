@@ -1,6 +1,4 @@
 import { createHash } from 'node:crypto';
-import { Prisma as PrismaValues } from '@prisma-gen/client';
-import type { Prisma, WorkspacePR } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
 import type {
   PRDiscoveryClaim,
@@ -12,6 +10,8 @@ import { type PRObservation, type PRTarget, reducePRObservation } from '@/shared
 import { prFactPayloadSchema, prObservationSchema } from '@/shared/schemas/pr-event.schema';
 import type { WorkspacePullRequest } from '@/shared/workspace-pr';
 import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
+import { Prisma as PrismaValues } from '@prisma-gen/client';
+import type { Prisma, WorkspacePR } from '@prisma-gen/client';
 import { workspacePrDiscoveryAccessor } from './workspace-pr-discovery.accessor';
 import { workspacePrEventAccessor } from './workspace-pr-event.accessor';
 

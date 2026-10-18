@@ -31,7 +31,6 @@
  * than missing some reasoning color commentary.
  */
 
-import type { UserSettings } from '@prisma-gen/client';
 import WebSocket from 'ws';
 import { safeSend, sendStreamOutput } from '@/backend/lib/websocket-send';
 import { cryptoService } from '@/backend/services/crypto.service';
@@ -44,6 +43,7 @@ import {
 import { userSettingsService } from '@/backend/services/settings';
 import { normalizeDeepgramTtsSpeed } from '@/shared/deepgram-voices';
 import type { VoiceServerMessage } from '@/shared/websocket/voice-message.schema';
+import type { UserSettings } from '@prisma-gen/client';
 
 const logger = createLogger('voice-narration');
 

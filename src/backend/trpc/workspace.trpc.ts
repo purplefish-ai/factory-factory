@@ -1,4 +1,3 @@
-import { SessionProvider, WorkspaceProviderSelection } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { ApplicationError } from '@/backend/lib/application-error';
@@ -21,6 +20,7 @@ import {
 } from '@/shared/session-runtime';
 import { AttachmentSchema } from '@/shared/websocket';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
+import { SessionProvider, WorkspaceProviderSelection } from '@prisma-gen/client';
 import { toTRPCError } from './application-error-mapper';
 import { type Context, mergeRouters, publicProcedure, router, trustedLocalProcedure } from './trpc';
 import { workspaceChildrenRouter } from './workspace/children.trpc';

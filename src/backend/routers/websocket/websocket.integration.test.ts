@@ -1,15 +1,6 @@
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import {
-  CIStatus,
-  PRState,
-  type PrismaClient,
-  RatchetState,
-  RunScriptStatus,
-  SessionStatus,
-  WorkspaceStatus,
-} from '@prisma-gen/client';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
 import type { AppContext } from '@/backend/app-context';
@@ -28,6 +19,15 @@ import {
   waitForWebSocketMessage,
 } from '@/backend/testing/websocket-test-utils';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
+import {
+  CIStatus,
+  PRState,
+  type PrismaClient,
+  RatchetState,
+  RunScriptStatus,
+  SessionStatus,
+  WorkspaceStatus,
+} from '@prisma-gen/client';
 
 let db: IntegrationDatabase;
 let prisma: PrismaClient;

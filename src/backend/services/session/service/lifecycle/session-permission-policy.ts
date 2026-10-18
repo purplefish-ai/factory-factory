@@ -1,7 +1,7 @@
 import type { SessionConfigOption } from '@agentclientprotocol/sdk';
-import type { SessionPermissionPreset } from '@prisma-gen/client';
 import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
+import type { SessionPermissionPreset } from '@prisma-gen/client';
 import { getConfigOptionValues, getSelectOptions } from './session-config-option-helpers';
 
 export function assertReadOnlyReviewConfigOption(

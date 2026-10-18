@@ -1,4 +1,3 @@
-import type { UserSettings } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApplicationError } from '@/backend/lib/application-error';
 import type { createLogger } from '@/backend/services/logger.service';
@@ -10,6 +9,7 @@ import * as gitOpsServiceModule from '@/backend/services/workspace/service/workt
 import * as worktreeLifecycleServiceModule from '@/backend/services/workspace/service/worktree/worktree-lifecycle.service';
 import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
+import type { UserSettings } from '@prisma-gen/client';
 import { WorkspaceCreationService, type WorkspaceCreationSource } from './creation.service';
 
 type Logger = ReturnType<typeof createLogger>;

@@ -1,4 +1,3 @@
-import type { PrismaClient } from '@prisma-gen/client';
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { workspacePrAccessor } from '@/backend/services/workspace/resources/workspace-pr.accessor';
 import {
@@ -6,6 +5,7 @@ import {
   destroyIntegrationDatabase,
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
+import type { PrismaClient } from '@prisma-gen/client';
 import { workspacePrSnapshotService } from './workspace-pr-snapshot.service';
 
 const database = vi.hoisted(() => ({ prisma: undefined as PrismaClient | undefined }));

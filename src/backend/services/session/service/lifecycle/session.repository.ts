@@ -1,4 +1,3 @@
-import type { Prisma, Workspace } from '@prisma-gen/client';
 import {
   type AgentSessionRecord,
   agentSessionAccessor,
@@ -7,6 +6,7 @@ import {
 } from '@/backend/services/session/resources/agent-session.accessor';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { workspaceDataService } from '@/backend/services/workspace';
+import type { Prisma, Workspace } from '@prisma-gen/client';
 
 function isMetadataRecord(value: Prisma.JsonValue | undefined): value is Prisma.JsonObject {
   return !!value && typeof value === 'object' && !Array.isArray(value);

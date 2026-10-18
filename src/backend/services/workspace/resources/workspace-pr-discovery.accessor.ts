@@ -1,6 +1,6 @@
-import type { Prisma, WorkspacePRDiscovery } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
 import type { PRDiscoveryClaim } from '@/backend/services/workspace/types';
+import type { Prisma, WorkspacePRDiscovery } from '@prisma-gen/client';
 
 export function flattenPRDiscovery(row?: WorkspacePRDiscovery | null) {
   return {

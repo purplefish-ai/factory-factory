@@ -4,11 +4,6 @@
  * Provides operations for managing user settings (IDE preferences, etc).
  */
 
-import {
-  RatchetReviewTriggerMode,
-  SessionPermissionPreset,
-  SessionProvider,
-} from '@prisma-gen/client';
 import { z } from 'zod';
 import type { ApplicationServices } from '@/backend/app-context';
 import { execCommand } from '@/backend/lib/shell';
@@ -18,6 +13,11 @@ import {
   fontScaleSchema,
   hexColorSchema,
 } from '@/shared/appearance';
+import {
+  RatchetReviewTriggerMode,
+  SessionPermissionPreset,
+  SessionProvider,
+} from '@prisma-gen/client';
 import { publicProcedure, router, trustedLocalProcedure } from './trpc';
 
 const providerModelOptionSchema = z.object({

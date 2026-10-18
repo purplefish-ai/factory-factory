@@ -1,7 +1,7 @@
-import type { Workspace } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { userSettingsService } from '@/backend/services/settings';
 import { workspaceDataService } from '@/backend/services/workspace';
+import type { Workspace } from '@prisma-gen/client';
 import { sessionProviderResolverService } from './session-provider-resolver.service';
 
 vi.mock('@/backend/services/workspace');

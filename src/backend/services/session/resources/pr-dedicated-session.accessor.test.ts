@@ -1,4 +1,3 @@
-import type { PrismaClient } from '@prisma-gen/client';
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { agentSessionAccessor } from '@/backend/services/session/resources/agent-session.accessor';
 import { prDedicatedSessionAccessor } from '@/backend/services/session/resources/pr-dedicated-session.accessor';
@@ -8,6 +7,7 @@ import {
   destroyIntegrationDatabase,
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
+import type { PrismaClient } from '@prisma-gen/client';
 
 const database = vi.hoisted(() => ({ prisma: undefined as PrismaClient | undefined }));
 vi.mock('@/backend/db', () => ({
