@@ -52,10 +52,13 @@ changing destinations/recipients starts an observation epoch. MAIN queues one
 trusted enablement control; DEDICATED batches carry concise maintenance
 instructions in the same bounded event message. Collection projections report
 MERGED only when every attached PR is merged; an open sibling remains visible.
-Workspace snapshots include the plain `prs` collection and its `prSummary`. The
-PR menu offers per-association refresh, review, and detachment. Detaching one
-association cancels its pending events while leaving sibling monitoring and the
-main conversation intact.
+Workspace snapshots include the plain `prs` collection and its `prSummary`. PR
+arrays are compared by identity and content, so database row order does not
+trigger drift warnings, version bumps, or snapshot broadcasts. Workspace and
+ratchet snapshot reads order PRs by ID to keep scalar PR selection consistent.
+The PR menu offers per-association refresh, review, and detachment. Detaching
+one association cancels its pending events while leaving sibling monitoring and
+the main conversation intact.
 
 ### Observations and events
 

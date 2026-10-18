@@ -157,10 +157,6 @@ activity, and reads `thread/goal/get` when resuming a session. An `active` goal
 therefore keeps the workspace in WORKING even when no prompt is currently in
 flight; paused, blocked, limited, completed and cleared goals do not.
 
-Snapshot PR arrays are compared by PR identity and content; database row order
-does not trigger drift warnings, version bumps, or snapshot broadcasts.
-Authoritative reads order PRs by ID so scalar PR selection stays consistent.
-
 One endpoint (`workspace.listForProject`) serves both the board and the sidebar,
 and one React Query cache backs both — the snapshot WebSocket patches that
 single cache.

@@ -134,6 +134,7 @@ const DRIFT_FIELD_GROUPS: { group: string; fields: DriftComparableField[] }[] = 
   { group: 'session', fields: ['isWorking', 'pendingRequestType', 'sessionSummaries'] },
 ];
 
+/** Compare fields using the snapshot store's collection equality semantics. */
 function driftFieldValuesEqual(
   field: DriftComparableField,
   authoritative: SnapshotUpdateInput,
