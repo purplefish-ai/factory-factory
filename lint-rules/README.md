@@ -66,10 +66,10 @@ scalars, and Markdown code examples are handled separately. The policy also
 checks HTML, YAML and Markdown in documentation and configuration directories.
 Use configuration overrides for approved file-specific exceptions.
 
-Run `pnpm check:fix`, `pnpm typecheck`, affected tests and `pnpm check` before
-submitting changes. Use `pnpm lint` for just the lint guardrails,
-`pnpm check:format` to check formatting and `pnpm format` to apply formatting.
-The pre-commit hook uses the same tools on staged source files.
+Follow [verification](../CONTRIBUTING.md#verification) before submitting
+changes. Use `pnpm lint` for just the lint guardrails, `pnpm check:format` to
+check formatting and `pnpm format` to apply formatting. The pre-commit hook uses
+the same tools on staged source files.
 
 ## Promise ownership
 
