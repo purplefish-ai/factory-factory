@@ -60,6 +60,7 @@ class WorkspaceQueryService {
   private cachedReviewCount: { count: number; fetchedAt: number } | null = null;
   private reviewCountRefreshPromise: Promise<number> | null = null;
   private readonly prStatusSyncProjectsInFlight = new Set<string>();
+  private readonly manualPRSyncLimits = new Map<string, ReturnType<typeof pLimit>>();
   private readonly gitStatsWarmsInFlight = new Set<string>();
 
   private sessionBridge: WorkspaceQuerySessionBridge | null = null;
@@ -371,6 +372,21 @@ class WorkspaceQueryService {
   }
 
   async syncPRStatus(workspaceId: string) {
+    let limit = this.manualPRSyncLimits.get(workspaceId);
+    if (!limit) {
+      limit = pLimit(1);
+      this.manualPRSyncLimits.set(workspaceId, limit);
+    }
+    try {
+      return await limit(() => this.syncPRStatusSerial(workspaceId));
+    } finally {
+      if (limit.activeCount === 0 && limit.pendingCount === 0) {
+        this.manualPRSyncLimits.delete(workspaceId);
+      }
+    }
+  }
+
+  private async syncPRStatusSerial(workspaceId: string) {
     const workspace = await workspaceAccessor.findById(workspaceId);
     if (!workspace) {
       throw new Error('Workspace not found');
@@ -383,6 +399,12 @@ class WorkspaceQueryService {
 
     const previousPrState = workspace.prState;
     const prResult = await this.prSnapshot.refreshWorkspace(workspaceId);
+    if (!prResult.success) {
+      logger.warn('PR status refresh failed for one or more associations', {
+        workspaceId,
+        reason: prResult.reason ?? 'unknown',
+      });
+    }
     // A sibling refresh can fail after another PR has persisted a transition.
     // Read the committed state before deciding whether the whole sync failed.
     const refreshedWorkspace = await workspaceAccessor.findById(workspaceId);

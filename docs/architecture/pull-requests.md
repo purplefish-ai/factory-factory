@@ -57,6 +57,10 @@ PR menu offers per-association refresh, review, and detachment. Detaching one
 association cancels its pending events while leaving sibling monitoring and the
 main conversation intact.
 
+Manual workspace PR refreshes serialize per workspace so concurrent requests
+report a committed lifecycle transition only once. Sibling refresh failures log
+their reason while preserving transitions already written by successful reads.
+
 ### Observations and events
 
 Polling, manual refresh, and dispatch preparation share normalized observation
