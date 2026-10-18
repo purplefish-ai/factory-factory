@@ -34,9 +34,13 @@ optimized render, exact source text including whitespace and trailing newlines,
 line numbers, monospace font, long-line horizontal scrolling, JSX/TSX expression
 leaf colors, nested class-name punctuation, and unknown-language fallback. The
 optional screenshot shows both themes for TypeScript, JavaScript, CSS, markup,
-JSX, TSX, JSON, and Markdown. Vitest separately covers readable source during
-loading and after worker construction, loading, or message failure, plus theme
-changes without replacing the mounted code element.
+JSX, TSX, JSON, and Markdown. Capture enlarges the viewport to fit the entire
+matrix, then waits for all 16 samples to finish their workers and display
+visible, differently colored CSS token spans. Assertions record these conditions
+before saving the image, so pending or offscreen plaintext cannot pass as a
+theme preview. Vitest separately covers readable source during loading and after
+worker construction, loading, or message failure, plus theme changes without
+replacing the mounted code element.
 
 The cold-loading fixture uses the actual `ScrollArea` and `usePersistentScroll`:
 for both highlighted code and plaintext, its outer viewport moves 192 pixels,

@@ -387,9 +387,58 @@ try {
     }
   }
   const screenshots = process.argv.find((arg) => arg.startsWith('--screenshots='))?.slice(14);
+  let screenshotChecks;
   if (screenshots) {
     await mkdir(screenshots, { recursive: true });
     await page.evaluate(() => window.showHighlightingPreview());
+    // A full-page capture does not expand the viewport used by IntersectionObserver.
+    // Make every matrix sample intersect before waiting for its actual colored DOM.
+    const previewHeight = await page.evaluate(() =>
+      Math.ceil(document.documentElement.scrollHeight)
+    );
+    await page.setViewportSize({ width: 1200, height: Math.max(800, previewHeight) });
+    await page.waitForFunction(
+      () => {
+        const samples = [...document.querySelectorAll('#root pre.file-code')];
+        return (
+          samples.length === 16 &&
+          samples.every((pre) => {
+            const rect = pre.getBoundingClientRect();
+            return (
+              pre.getAttribute('aria-busy') === 'false' &&
+              rect.top >= 0 &&
+              rect.bottom <= innerHeight &&
+              [...pre.querySelectorAll('.token')].some(
+                (token) => getComputedStyle(token).color !== getComputedStyle(pre).color
+              )
+            );
+          })
+        );
+      },
+      undefined,
+      { timeout: 10_000 }
+    );
+    screenshotChecks = await page.evaluate(() =>
+      [...document.querySelectorAll('#root pre.file-code')].map((pre) => {
+        const rect = pre.getBoundingClientRect();
+        return {
+          theme: pre.getAttribute('data-syntax-theme'),
+          language: pre.querySelector('code')?.className,
+          settled: pre.getAttribute('aria-busy') === 'false',
+          visible: rect.top >= 0 && rect.bottom <= innerHeight,
+          colored: [...pre.querySelectorAll('.token')].some(
+            (token) => getComputedStyle(token).color !== getComputedStyle(pre).color
+          ),
+        };
+      })
+    );
+    assert.equal(screenshotChecks.length, 16, 'Capture all language/theme samples');
+    for (const sample of screenshotChecks) {
+      assert(
+        sample.settled && sample.visible && sample.colored,
+        `Screenshot must show settled, visible colors: ${JSON.stringify(sample)}`
+      );
+    }
     await page.screenshot({
       path: join(screenshots, 'file-highlighting-themes.png'),
       fullPage: true,
@@ -406,6 +455,7 @@ try {
         functionalChecks: 'passed',
         languageColorAssertions: languageColors.length * 2,
         coldLoadingChecks,
+        screenshotChecks,
         results,
         bundles,
       },
