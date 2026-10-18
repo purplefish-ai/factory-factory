@@ -1,9 +1,7 @@
-import {
-  ArrowsClockwiseIcon,
-  CheckCircleIcon,
-  FileCodeIcon,
-  PencilIcon,
-} from '@phosphor-icons/react';
+import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
+import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
+import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
+import { PencilIcon } from '@phosphor-icons/react/dist/csr/Pencil';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { FactoryConfigScripts } from '@/client/components/factory-config-scripts';

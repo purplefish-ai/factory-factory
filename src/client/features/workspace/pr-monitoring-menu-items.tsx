@@ -1,4 +1,5 @@
-import { LightningIcon, SpinnerGapIcon } from '@phosphor-icons/react';
+import { LightningIcon } from '@phosphor-icons/react/dist/csr/Lightning';
+import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import {
   DropdownMenuItem,
   DropdownMenuLabel,

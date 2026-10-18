@@ -149,7 +149,7 @@ describe('SessionConfigService', () => {
     );
   });
 
-  it.each(['auto-iteration', 'auto-iteration'])('sets %s unattended mode', async (workflow) => {
+  it.each(['auto-iteration', 'periodic-task'])('sets %s unattended mode', async (workflow) => {
     const modeConfig = {
       id: 'mode',
       name: 'Mode',

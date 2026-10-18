@@ -53,3 +53,13 @@ it('rejects attachment errors that did not persist an association', async () => 
     caller().attachPR({ id: 'w', prUrl: 'https://github.com/o/r/pull/1' })
   ).rejects.toMatchObject({ code: 'INTERNAL_SERVER_ERROR' });
 });
+
+it.each(['stale_observation', 'no_pr_url'])(
+  'returns a pending association when its initial refresh reports %s',
+  async (reason) => {
+    attach.mockResolvedValue({ success: false, reason, prId: 'a' });
+    await expect(
+      caller().attachPR({ id: 'w', prUrl: 'https://github.com/o/r/pull/1' })
+    ).resolves.toMatchObject({ id: 'w', attachedPrId: 'a', prSyncStatus: 'pending' });
+  }
+);

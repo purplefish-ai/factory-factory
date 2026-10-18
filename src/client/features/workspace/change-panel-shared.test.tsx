@@ -16,17 +16,15 @@ const mocks = vi.hoisted(() => ({
   })),
 }));
 
-vi.mock('@phosphor-icons/react', () => ({
-  CaretDownIcon: () => null,
-  CaretRightIcon: () => null,
-  FileCodeIcon: () => null,
-  FileDashedIcon: () => null,
-  FileMinusIcon: () => null,
-  FilePlusIcon: () => null,
-  FolderIcon: () => null,
-  SpinnerGapIcon: () => null,
-  WarningCircleIcon: () => null,
-}));
+vi.mock('@phosphor-icons/react/dist/csr/CaretDown', () => ({ CaretDownIcon: () => null }));
+vi.mock('@phosphor-icons/react/dist/csr/CaretRight', () => ({ CaretRightIcon: () => null }));
+vi.mock('@phosphor-icons/react/dist/csr/FileCode', () => ({ FileCodeIcon: () => null }));
+vi.mock('@phosphor-icons/react/dist/csr/FileDashed', () => ({ FileDashedIcon: () => null }));
+vi.mock('@phosphor-icons/react/dist/csr/FileMinus', () => ({ FileMinusIcon: () => null }));
+vi.mock('@phosphor-icons/react/dist/csr/FilePlus', () => ({ FilePlusIcon: () => null }));
+vi.mock('@phosphor-icons/react/dist/csr/Folder', () => ({ FolderIcon: () => null }));
+vi.mock('@phosphor-icons/react/dist/csr/SpinnerGap', () => ({ SpinnerGapIcon: () => null }));
+vi.mock('@phosphor-icons/react/dist/csr/WarningCircle', () => ({ WarningCircleIcon: () => null }));
 
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {

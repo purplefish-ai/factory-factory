@@ -816,6 +816,7 @@ describe('WorkspaceQueryService', () => {
       prUrl: 'https://github.com/o/r/pull/1',
       prs: [{ id: 'pr', url: 'https://github.com/o/r/pull/1' }],
     });
+    mockFindById.mockResolvedValueOnce({ id: 'w1' });
     mockRefreshWorkspace.mockResolvedValueOnce({ success: false });
     await expect(workspaceQueryService.syncPRStatus('w1')).resolves.toEqual({
       success: false,

@@ -75,6 +75,7 @@ export async function observeMonitoredPR(
         prUrl: observation.url,
         prNumber: observation.number,
         prState: observation.prState,
+        previousPrState: row.state,
         prCiStatus: observation.ciStatus,
         prReviewState: observation.reviewState,
       });

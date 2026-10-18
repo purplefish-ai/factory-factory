@@ -26,5 +26,9 @@ export interface WorkspacePRSnapshotBridge {
   refreshWorkspace(
     workspaceId: string,
     prUrl?: string
-  ): Promise<{ success: boolean; snapshot?: { prNumber: number; prState: string } }>;
+  ): Promise<{
+    success: boolean;
+    reason?: string;
+    snapshot?: { prNumber: number; prState: string };
+  }>;
 }

@@ -1,4 +1,4 @@
-import type { Icon } from '@phosphor-icons/react';
+import type { Icon } from '@phosphor-icons/react/dist/lib/types';
 import { Toggle } from '@/components/ui/toggle';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';

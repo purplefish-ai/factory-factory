@@ -8,7 +8,7 @@ function observationPorts() {
   return {
     workspacePRMonitoringService: { get: vi.fn().mockResolvedValue({ eventEpoch: 3 }) },
     workspacePrSnapshotService: {
-      find: vi.fn().mockResolvedValue({ revision: 7 }),
+      find: vi.fn().mockResolvedValue({ revision: 7, state: 'NONE' }),
       acceptMonitoredObservation: vi.fn().mockResolvedValue({ applied: true }),
     },
     prObservationService: { fetch: vi.fn().mockResolvedValue(redObservation) },
@@ -33,6 +33,7 @@ it('accepts and publishes a normalized observation using only producer ports', a
     prUrl: redObservation.url,
     prNumber: redObservation.number,
     prState: redObservation.prState,
+    previousPrState: 'NONE',
     prCiStatus: redObservation.ciStatus,
     prReviewState: redObservation.reviewState,
   });

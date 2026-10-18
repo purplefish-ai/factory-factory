@@ -1,15 +1,13 @@
-import {
-  ArchiveIcon,
-  ArrowsClockwiseIcon,
-  ChatIcon,
-  DotOutlineIcon,
-  GitBranchIcon,
-  GitPullRequestIcon,
-  PencilIcon,
-  PlayIcon,
-  TreeStructureIcon,
-  WarningIcon,
-} from '@phosphor-icons/react';
+import { ArchiveIcon } from '@phosphor-icons/react/dist/csr/Archive';
+import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
+import { ChatIcon } from '@phosphor-icons/react/dist/csr/Chat';
+import { DotOutlineIcon } from '@phosphor-icons/react/dist/csr/DotOutline';
+import { GitBranchIcon } from '@phosphor-icons/react/dist/csr/GitBranch';
+import { GitPullRequestIcon } from '@phosphor-icons/react/dist/csr/GitPullRequest';
+import { PencilIcon } from '@phosphor-icons/react/dist/csr/Pencil';
+import { PlayIcon } from '@phosphor-icons/react/dist/csr/Play';
+import { TreeStructureIcon } from '@phosphor-icons/react/dist/csr/TreeStructure';
+import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { PrStateBadge } from '@/client/components/pr-state-badge';

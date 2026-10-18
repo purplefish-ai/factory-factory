@@ -1,4 +1,6 @@
-import { RobotIcon, TerminalIcon, XCircleIcon } from '@phosphor-icons/react';
+import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
+import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
+import { XCircleIcon } from '@phosphor-icons/react/dist/csr/XCircle';
 import type { inferRouterOutputs } from '@trpc/server';
 import { useCallback, useState } from 'react';
 import { Link } from 'react-router';

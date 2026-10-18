@@ -1,4 +1,4 @@
-import { ShieldWarningIcon } from '@phosphor-icons/react';
+import { ShieldWarningIcon } from '@phosphor-icons/react/dist/csr/ShieldWarning';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { ProviderCliWarning } from '@/client/components/provider-cli-warning';

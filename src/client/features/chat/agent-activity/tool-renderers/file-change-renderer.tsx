@@ -1,11 +1,9 @@
-import {
-  ArrowsLeftRightIcon,
-  FileCodeIcon,
-  FileDashedIcon,
-  FileMinusIcon,
-  FilePlusIcon,
-  type Icon,
-} from '@phosphor-icons/react';
+import { ArrowsLeftRightIcon } from '@phosphor-icons/react/dist/csr/ArrowsLeftRight';
+import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
+import { FileDashedIcon } from '@phosphor-icons/react/dist/csr/FileDashed';
+import { FileMinusIcon } from '@phosphor-icons/react/dist/csr/FileMinus';
+import { FilePlusIcon } from '@phosphor-icons/react/dist/csr/FilePlus';
+import type { Icon } from '@phosphor-icons/react/dist/lib/types';
 import { memo } from 'react';
 import { withOccurrenceKeys } from '@/client/lib/list-keys';
 import { cn } from '@/lib/utils';

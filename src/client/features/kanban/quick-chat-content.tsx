@@ -1,4 +1,4 @@
-import { ArrowDownIcon } from '@phosphor-icons/react';
+import { ArrowDownIcon } from '@phosphor-icons/react/dist/csr/ArrowDown';
 import { useCallback, useMemo } from 'react';
 import {
   ChatInput,

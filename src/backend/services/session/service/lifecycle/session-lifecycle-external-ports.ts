@@ -18,10 +18,10 @@ function isWildcardHost(host: string): boolean {
   return URL.canParse(`http://${urlHost}`) && new URL(`http://${urlHost}`).hostname === '[::]';
 }
 
-// Ratchet and auto-iteration are non-interactive (no one can answer a
-// permission prompt) and need full write trust to fix issues, so they get the
-// ratchet permission preset, which defaults to YOLO (see
-// getWorkflowPermissionPreset). Adversarial review is also non-interactive but
+// Auto-iteration uses its configured permission preset. Scheduled Codex tasks
+// use YOLO so approval prompts cannot stall headless runs; other scheduled
+// providers retain workspace permissions (see getWorkflowPermissionPreset).
+// Adversarial review is also non-interactive but
 // is read-only by contract (see docs/design/adversarial-review.md) — it falls
 // through to `defaultWorkspacePermissions`. Lifecycle startup independently
 // enforces plan mode and Codex read-only execution, and its permission bridge
@@ -29,9 +29,9 @@ function isWildcardHost(host: string): boolean {
 export const sessionContextService = new SessionContextService({
   repository: sessionRepository,
   permissionPresetPort: {
-    async getPermissionPreset(workflow) {
+    async getPermissionPreset(workflow, provider) {
       const settings = await userSettingsService.get();
-      return getWorkflowPermissionPreset(workflow, settings);
+      return getWorkflowPermissionPreset(workflow, provider, settings);
     },
   },
 });

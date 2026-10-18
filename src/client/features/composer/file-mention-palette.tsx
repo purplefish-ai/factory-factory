@@ -1,4 +1,5 @@
-import { FileIcon, FolderIcon } from '@phosphor-icons/react';
+import { FileIcon } from '@phosphor-icons/react/dist/csr/File';
+import { FolderIcon } from '@phosphor-icons/react/dist/csr/Folder';
 import { useCallback, useLayoutEffect, useState } from 'react';
 import {
   Command,

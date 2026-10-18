@@ -1,4 +1,4 @@
-import { SidebarSimpleIcon } from '@phosphor-icons/react';
+import { SidebarSimpleIcon } from '@phosphor-icons/react/dist/csr/SidebarSimple';
 import { Slot } from '@radix-ui/react-slot';
 import { cva, type VariantProps } from 'class-variance-authority';
 import * as React from 'react';

@@ -1,4 +1,4 @@
-import { GithubLogoIcon } from '@phosphor-icons/react';
+import { GithubLogoIcon } from '@phosphor-icons/react/dist/csr/GithubLogo';
 import { trpc } from '@/client/lib/trpc';
 import { encodeGitHubTreeRef } from '@/client/routes/projects/workspaces/github-branch-url';
 import { Button } from '@/components/ui/button';

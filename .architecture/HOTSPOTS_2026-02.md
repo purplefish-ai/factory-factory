@@ -13,7 +13,7 @@
 > - Action Plan Phases 1-3 -- Completed by SRP refactor Phases 1-9
 >
 > For current architecture, see `AGENTS.md` and
-> `.planning/codebase/ARCHITECTURE.md`.
+> [current architecture notes](../docs/architecture/README.md).
 
 **Generated:** 2026-02-09 **Backend Modules Analyzed:** 202 **Circular
 Dependencies:** 0 ✓

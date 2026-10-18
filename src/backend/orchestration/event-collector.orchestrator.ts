@@ -70,6 +70,7 @@ import type { PRState } from '@/shared/core';
 import type { getWorkspaceLinearContext } from './linear-config.helper';
 import { projectPrEvent, shouldRefreshRatchetForPrSwitch } from './pr-event-projection';
 import { RatchetProjectionWorker } from './ratchet-projection.worker';
+import type { fireLifecycleNotification } from './workspace-children.orchestrator';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -131,6 +132,7 @@ export type EventCollectorDependencies = {
   computePendingRequestType: typeof computePendingRequestType;
   createLogger(component: string): Logger;
   getWorkspaceLinearContext: typeof getWorkspaceLinearContext;
+  fireLifecycleNotification: typeof fireLifecycleNotification;
   linearStateSyncService: typeof linearStateSyncService;
   prFetchCoordinator: typeof prFetchCoordinator;
   prSnapshotService: typeof prSnapshotService;
@@ -682,6 +684,17 @@ function startEventCollectorWithState(state: EventCollectorState): void {
 
   // 2. PR snapshot updates
   const prSnapshotUpdatedHandler = (event: PRSnapshotUpdatedEvent) => {
+    if (event.prId && event.previousPrState === 'NONE' && event.prState === 'OPEN') {
+      void dependencies
+        .fireLifecycleNotification(event.workspaceId, 'A pull request has been opened.')
+        .catch((error) => {
+          state.logger.warn('Failed to persist PR-open lifecycle notification', {
+            workspaceId: event.workspaceId,
+            prId: event.prId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+    }
     if (event.prId) {
       prProjection.request(event.workspaceId);
       return;

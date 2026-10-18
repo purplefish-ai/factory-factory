@@ -11,6 +11,7 @@ import {
   WORKSPACE_PR_DEFAULTS,
   workspacePrAccessor,
 } from './workspace-pr.accessor';
+import { workspaceRatchetAccessor } from './workspace-ratchet.accessor';
 import { workspaceAccessor } from './workspace.accessor';
 
 const database = vi.hoisted(() => ({ prisma: undefined as PrismaClient | undefined }));
@@ -141,7 +142,7 @@ it('rejects stale aggregate revisions and cross-workspace updates', async () => 
     ).toBe(false);
   });
 });
-it('attaches every discovery match atomically while reattaching detached matches and preserving duplicates', async () => {
+it('attaches discovery matches atomically while preserving tombstones and duplicates', async () => {
   const row = await workspace('discovery');
   const checkedAt = new Date(),
     nextCheckAt = new Date(checkedAt.getTime() + 60_000);
@@ -167,17 +168,17 @@ it('attaches every discovery match atomically while reattaching detached matches
   const ids = await workspacePrAccessor.attachDiscoveredPRsIfClaimMatches(row.id, claim, urls);
   expect(ids).toHaveLength(3);
   await workspacePrAccessor.detach({ workspaceId: row.id, prId: ids[0]! });
-  expect(await workspacePrAccessor.attachDiscoveredPRsIfClaimMatches(row.id, claim, urls)).toEqual([
-    ids[0],
-  ]);
-  expect(await workspacePrAccessor.list(row.id)).toHaveLength(3);
+  expect(await workspacePrAccessor.attachDiscoveredPRsIfClaimMatches(row.id, claim, urls)).toEqual(
+    []
+  );
+  expect(await workspacePrAccessor.list(row.id)).toHaveLength(2);
   await db.prisma.workspace.update({ where: { id: row.id }, data: { branchName: 'renamed' } });
   expect(
     await workspacePrAccessor.attachDiscoveredPRsIfClaimMatches(row.id, claim, [
       'https://github.com/org/repo/pull/4',
     ])
   ).toEqual([]);
-  expect((await workspacePrAccessor.attach(row.id, urls[0]!)).reattached).toBe(false);
+  expect((await workspacePrAccessor.attach(row.id, urls[0]!)).reattached).toBe(true);
 });
 it('discovers workspaces that already have PRs and syncs terminal PRs so reopening is observable', async () => {
   const row = await workspace('existing');
@@ -289,4 +290,32 @@ it('respects disabled monitoring state in every project metadata read', async ()
   expect(
     (await workspaceAccessor.findStaleArchivingWithProject()).find((w) => w.id === row.id)
   ).toMatchObject(expected);
+});
+
+it('keeps scalar PR selection stable across workspace and ratchet snapshot reads', async () => {
+  const row = await workspace('snapshot-order');
+  await db.prisma.workspacePR.createMany({
+    data: [
+      {
+        id: 'snapshot-z',
+        workspaceId: row.id,
+        url: 'https://github.com/org/repo/pull/102',
+        number: 102,
+        state: 'OPEN',
+        syncedAt: new Date('2026-10-17T12:00:00Z'),
+      },
+      {
+        id: 'snapshot-a',
+        workspaceId: row.id,
+        url: 'https://github.com/org/repo/pull/101',
+        number: 101,
+        state: 'OPEN',
+        syncedAt: new Date('2026-10-17T11:00:00Z'),
+      },
+    ],
+  });
+  const expected = { prNumber: 101, prUpdatedAt: new Date('2026-10-17T11:00:00Z') };
+  expect(await workspaceAccessor.findById(row.id)).toMatchObject(expected);
+  expect(await workspaceAccessor.findByIdWithProject(row.id)).toMatchObject(expected);
+  expect(await workspaceRatchetAccessor.findSnapshotProjection(row.id)).toMatchObject(expected);
 });

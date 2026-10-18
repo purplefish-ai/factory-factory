@@ -12,18 +12,18 @@ const mocks = vi.hoisted(() => ({
     | { mode: string; periodicTaskId: null; creationSource: string },
 }));
 
-vi.mock('@phosphor-icons/react', () => ({
+vi.mock('@phosphor-icons/react/dist/csr/ArrowsClockwise', () => ({
   ArrowsClockwiseIcon: () => null,
-  CalendarIcon: () => null,
-  CameraIcon: () => null,
-  FileDashedIcon: () => null,
-  FilesIcon: () => null,
-  ListChecksIcon: () => null,
-  PlusIcon: () => null,
-  TerminalIcon: () => null,
-  TreeStructureIcon: () => null,
-  XIcon: () => null,
 }));
+vi.mock('@phosphor-icons/react/dist/csr/Calendar', () => ({ CalendarIcon: () => null }));
+vi.mock('@phosphor-icons/react/dist/csr/Camera', () => ({ CameraIcon: () => null }));
+vi.mock('@phosphor-icons/react/dist/csr/FileDashed', () => ({ FileDashedIcon: () => null }));
+vi.mock('@phosphor-icons/react/dist/csr/Files', () => ({ FilesIcon: () => null }));
+vi.mock('@phosphor-icons/react/dist/csr/ListChecks', () => ({ ListChecksIcon: () => null }));
+vi.mock('@phosphor-icons/react/dist/csr/Plus', () => ({ PlusIcon: () => null }));
+vi.mock('@phosphor-icons/react/dist/csr/Terminal', () => ({ TerminalIcon: () => null }));
+vi.mock('@phosphor-icons/react/dist/csr/TreeStructure', () => ({ TreeStructureIcon: () => null }));
+vi.mock('@phosphor-icons/react/dist/csr/X', () => ({ XIcon: () => null }));
 
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {

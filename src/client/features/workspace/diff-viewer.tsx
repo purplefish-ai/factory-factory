@@ -1,4 +1,7 @@
-import { EyeIcon, FileCodeIcon, SpinnerGapIcon, WarningCircleIcon } from '@phosphor-icons/react';
+import { EyeIcon } from '@phosphor-icons/react/dist/csr/Eye';
+import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
+import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
+import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import { useTheme } from 'next-themes';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';

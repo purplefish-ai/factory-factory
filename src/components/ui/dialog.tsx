@@ -1,4 +1,4 @@
-import { XIcon } from '@phosphor-icons/react';
+import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import type * as React from 'react';
 import { Button } from '@/components/ui/button';

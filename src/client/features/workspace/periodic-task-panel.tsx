@@ -1,4 +1,5 @@
-import { ArrowSquareOutIcon, CalendarIcon } from '@phosphor-icons/react';
+import { ArrowSquareOutIcon } from '@phosphor-icons/react/dist/csr/ArrowSquareOut';
+import { CalendarIcon } from '@phosphor-icons/react/dist/csr/Calendar';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';

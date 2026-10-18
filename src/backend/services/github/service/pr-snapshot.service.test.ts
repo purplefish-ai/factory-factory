@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import type { GitHubWorkspaceBridge } from './bridges';
-import { PR_URL_ATTACHED, prSnapshotService } from './pr-snapshot.service';
+import { githubCLIService } from './github-cli.service';
+import { PR_SNAPSHOT_UPDATED, PR_URL_ATTACHED, prSnapshotService } from './pr-snapshot.service';
 
 const url = 'https://github.com/org/repo/pull/1';
 const row = {
@@ -109,4 +110,42 @@ it('returns an error result when a discovery attachment fails', async () => {
       nextCheckAt: new Date(),
     })
   ).resolves.toEqual({ success: false, reason: 'error' });
+});
+
+it('publishes the prior association state after an accepted fallback refresh', async () => {
+  prSnapshotService.configure({ workspace: bridge });
+  bridge.findPR.mockResolvedValue({ ...row, state: 'NONE' });
+  bridge.applyPrSnapshotWithDispatchReset.mockResolvedValue({
+    applied: true,
+    dispatchReset: false,
+  });
+  const fetch = vi.spyOn(githubCLIService, 'fetchAndComputePRState').mockResolvedValue({
+    prNumber: 1,
+    prState: 'OPEN',
+    prCiStatus: 'SUCCESS',
+    prReviewState: null,
+    headRefName: null,
+  });
+  const listener = vi.fn();
+  prSnapshotService.on(PR_SNAPSHOT_UPDATED, listener);
+  try {
+    await expect(
+      prSnapshotService.refreshPR({ workspaceId: 'w', prId: 'p' })
+    ).resolves.toMatchObject({ success: true });
+    expect(listener).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prId: 'p',
+        previousPrState: 'NONE',
+        prState: 'OPEN',
+      })
+    );
+    bridge.applyPrSnapshotWithDispatchReset.mockResolvedValue({
+      applied: false,
+      dispatchReset: false,
+    });
+    await prSnapshotService.refreshPR({ workspaceId: 'w', prId: 'p' });
+    expect(listener).toHaveBeenCalledTimes(1);
+  } finally {
+    fetch.mockRestore();
+  }
 });
