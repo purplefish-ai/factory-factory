@@ -1,4 +1,4 @@
-import { GitPullRequestIcon } from '@phosphor-icons/react';
+import { GitPullRequestIcon } from '@phosphor-icons/react/dist/csr/GitPullRequest';
 export function PRUpdateRenderer({ text, queued = false }: { text: string; queued?: boolean }) {
   const body = text.replace(/^<!-- factory-factory-pr-event:[^\n]+ -->\n?/, '');
   return (

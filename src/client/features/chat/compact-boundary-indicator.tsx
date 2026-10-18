@@ -1,4 +1,4 @@
-import { ScissorsIcon } from '@phosphor-icons/react';
+import { ScissorsIcon } from '@phosphor-icons/react/dist/csr/Scissors';
 import { memo } from 'react';
 import { cn } from '@/lib/utils';
 

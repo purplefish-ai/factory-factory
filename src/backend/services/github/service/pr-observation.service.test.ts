@@ -3,6 +3,72 @@ import { redObservation } from '@/shared/pr-monitoring.test-helpers';
 import { githubCLIService } from './github-cli.service';
 import { prObservationService } from './pr-observation.service';
 
+it('rejects unknown GitHub identity and retries the lookup on the next observation', async () => {
+  prObservationService.configure({
+    findPR: async () => ({ url: redObservation.url }),
+    readPolicy: async () => ({ reviewTriggerMode: 'CHANGES_REQUESTED' }),
+  });
+  const lookup = vi
+    .spyOn(githubCLIService, 'getAuthenticatedUsername')
+    .mockResolvedValueOnce(null)
+    .mockResolvedValue('me');
+  const details = vi.spyOn(githubCLIService, 'getPRFullDetails').mockResolvedValue({
+    number: 1,
+    title: 'PR',
+    url: redObservation.url,
+    author: { login: 'me' },
+    repository: { name: 'repo', nameWithOwner: 'org/repo' },
+    createdAt: redObservation.observedAt,
+    updatedAt: redObservation.observedAt,
+    isDraft: false,
+    state: 'OPEN',
+    reviewDecision: null,
+    statusCheckRollup: [],
+    reviews: [],
+    comments: [],
+    labels: [],
+    additions: 0,
+    deletions: 0,
+    changedFiles: 0,
+    headRefName: 'feature',
+    headRefOid: 'sha',
+    baseRefName: 'main',
+    mergeStateStatus: 'CLEAN',
+  });
+  vi.spyOn(githubCLIService, 'getReviewComments').mockResolvedValue([
+    {
+      id: 1,
+      author: { login: 'me' },
+      body: 'Own feedback',
+      path: 'src/file.ts',
+      line: 1,
+      url: redObservation.url,
+      createdAt: redObservation.observedAt,
+      updatedAt: redObservation.observedAt,
+    },
+    {
+      id: 2,
+      author: { login: 'reviewer' },
+      body: 'Please fix',
+      path: 'src/file.ts',
+      line: 2,
+      url: redObservation.url,
+      createdAt: redObservation.observedAt,
+      updatedAt: redObservation.observedAt,
+    },
+  ]);
+  vi.spyOn(githubCLIService, 'getResolvedReviewCommentIds').mockResolvedValue(new Set());
+  await expect(prObservationService.fetch({ workspaceId: 'w', prId: 'p' })).rejects.toThrow(
+    'Unable to determine authenticated GitHub identity'
+  );
+  expect(details).not.toHaveBeenCalled();
+  await expect(prObservationService.fetch({ workspaceId: 'w', prId: 'p' })).resolves.toMatchObject({
+    reviewsComplete: true,
+    actionableReviews: [expect.objectContaining({ identity: 'comment:2', author: 'reviewer' })],
+  });
+  expect(lookup).toHaveBeenCalledTimes(2);
+});
+
 it('fetches the explicit association and rejects missing head metadata', async () => {
   prObservationService.configure({
     findPR: async () => ({ url: redObservation.url }),

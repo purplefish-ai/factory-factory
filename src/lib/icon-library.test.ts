@@ -11,7 +11,8 @@ const lucideIconType = ['Lucide', 'Icon'].join('');
 const packageJsonSchema = z.object({
   dependencies: z.record(z.string(), z.string()).optional(),
 });
-const phosphorImportPattern = /import\s*{([^{}]*)}\s*from\s*['"]@phosphor-icons\/react['"]/g;
+const phosphorImportPattern =
+  /import(?:\s+type)?\s*{([^{}]*)}\s*from\s*['"]@phosphor-icons\/react(?:\/dist\/(?:csr|lib)\/[^'"]+)?['"]/g;
 
 function sourceFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -36,6 +37,26 @@ describe('icon library', () => {
     expect([...source.matchAll(phosphorImportPattern)].map((match) => match[1]?.trim())).toEqual([
       'CaretDownIcon',
     ]);
+  });
+
+  it('recognizes direct icon and type imports without capturing preceding modules', () => {
+    const source = [
+      "import { DayPicker } from '@daypicker/react';",
+      "import { CheckIcon } from '@phosphor-icons/react/dist/csr/Check';",
+      "import type { Icon } from '@phosphor-icons/react/dist/lib/types';",
+    ].join('\n');
+    expect([...source.matchAll(phosphorImportPattern)].map((match) => match[1]?.trim())).toEqual([
+      'CheckIcon',
+      'Icon',
+    ]);
+  });
+
+  it('loads individual Phosphor modules instead of the package barrel', () => {
+    const imports = sourceFiles(join(repositoryRoot, 'src'))
+      .filter((path) => relative(repositoryRoot, path) !== thisFile)
+      .filter((path) => /from\s*['"]@phosphor-icons\/react['"]/.test(readFileSync(path, 'utf8')))
+      .map((path) => relative(repositoryRoot, path));
+    expect(imports).toEqual([]);
   });
 
   it('recognizes literal and expression forms of the Phosphor fill weight', () => {

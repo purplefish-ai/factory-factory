@@ -1,4 +1,6 @@
-import { CalendarIcon, PencilIcon, TrashIcon } from '@phosphor-icons/react';
+import { CalendarIcon } from '@phosphor-icons/react/dist/csr/Calendar';
+import { PencilIcon } from '@phosphor-icons/react/dist/csr/Pencil';
+import { TrashIcon } from '@phosphor-icons/react/dist/csr/Trash';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { readSelectedProjectSlug, writeSelectedProjectSlug } from '@/client/lib/project-selection';

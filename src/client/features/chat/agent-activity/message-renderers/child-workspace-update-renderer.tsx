@@ -1,4 +1,4 @@
-import { TreeStructureIcon } from '@phosphor-icons/react';
+import { TreeStructureIcon } from '@phosphor-icons/react/dist/csr/TreeStructure';
 import { memo } from 'react';
 import type { AgentMessage } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';

@@ -1,4 +1,7 @@
-import { CheckIcon, EyeIcon, LightningIcon, PlayIcon } from '@phosphor-icons/react';
+import { CheckIcon } from '@phosphor-icons/react/dist/csr/Check';
+import { EyeIcon } from '@phosphor-icons/react/dist/csr/Eye';
+import { LightningIcon } from '@phosphor-icons/react/dist/csr/Lightning';
+import { PlayIcon } from '@phosphor-icons/react/dist/csr/Play';
 import type { Meta, StoryObj } from '@storybook/react';
 import type { ComponentType } from 'react';
 import { fn } from 'storybook/test';

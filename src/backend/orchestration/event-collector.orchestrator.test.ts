@@ -153,7 +153,6 @@ import {
 import { getWorkspaceLinearContext } from './linear-config.helper';
 
 let activeEventCollector: EventCollectorOrchestrator | null = null;
-
 function configureEventCollector(): void {
   activeEventCollector?.stop();
   activeEventCollector = createEventCollectorOrchestrator({
@@ -162,6 +161,7 @@ function configureEventCollector(): void {
     workspaceAutoIterationService,
     createLogger: () => ({ info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() }),
     getWorkspaceLinearContext,
+    fireLifecycleNotification: vi.fn().mockResolvedValue(undefined),
     linearStateSyncService,
     prFetchCoordinator,
     prSnapshotService,

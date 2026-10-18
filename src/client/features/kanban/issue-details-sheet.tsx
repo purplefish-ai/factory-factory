@@ -1,4 +1,7 @@
-import { ArrowSquareOutIcon, DotOutlineIcon, PlayIcon, UserIcon } from '@phosphor-icons/react';
+import { ArrowSquareOutIcon } from '@phosphor-icons/react/dist/csr/ArrowSquareOut';
+import { DotOutlineIcon } from '@phosphor-icons/react/dist/csr/DotOutline';
+import { PlayIcon } from '@phosphor-icons/react/dist/csr/Play';
+import { UserIcon } from '@phosphor-icons/react/dist/csr/User';
 import { useState } from 'react';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import { trpc } from '@/client/lib/trpc';

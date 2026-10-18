@@ -1,4 +1,4 @@
-import { SpinnerGapIcon } from '@phosphor-icons/react';
+import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { useMemo } from 'react';
 import { type SessionData, SessionTabBar } from '@/client/features/chat';
 import { QuickActionsMenu } from '@/client/features/workspace';

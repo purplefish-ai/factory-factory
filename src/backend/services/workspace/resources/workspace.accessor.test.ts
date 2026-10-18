@@ -85,7 +85,7 @@ describe('workspaceAccessor', () => {
         }),
         include: {
           prMonitoring: true,
-          prs: { where: { detachedAt: null } },
+          prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
           prDiscovery: true,
           runScript: true,
           autoIteration: true,
@@ -122,7 +122,7 @@ describe('workspaceAccessor', () => {
         }),
         include: {
           prMonitoring: true,
-          prs: { where: { detachedAt: null } },
+          prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
           prDiscovery: true,
           runScript: true,
           autoIteration: true,
@@ -164,7 +164,7 @@ describe('workspaceAccessor', () => {
         agentSessions: true,
         terminalSessions: true,
         prMonitoring: true,
-        prs: { where: { detachedAt: null } },
+        prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
         prDiscovery: true,
         runScript: true,
         autoIteration: true,
@@ -198,7 +198,7 @@ describe('workspaceAccessor', () => {
       include: {
         project: true,
         prMonitoring: { select: { enabled: true } },
-        prs: { where: { detachedAt: null } },
+        prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
         prDiscovery: true,
         autoIteration: true,
       },
@@ -236,7 +236,7 @@ describe('workspaceAccessor', () => {
         expect.objectContaining({
           include: expect.objectContaining({
             prMonitoring: true,
-            prs: { where: { detachedAt: null } },
+            prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
             prDiscovery: true,
             runScript: true,
             autoIteration: true,
@@ -326,7 +326,7 @@ describe('workspaceAccessor', () => {
         include: {
           project: true,
           prMonitoring: { select: { enabled: true } },
-          prs: { where: { detachedAt: null } },
+          prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
           prDiscovery: true,
           autoIteration: true,
         },

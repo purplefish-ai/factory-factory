@@ -1,4 +1,4 @@
-import { ArrowLeftIcon } from '@phosphor-icons/react';
+import { ArrowLeftIcon } from '@phosphor-icons/react/dist/csr/ArrowLeft';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { FactoryConfigScripts } from '@/client/components/factory-config-scripts';

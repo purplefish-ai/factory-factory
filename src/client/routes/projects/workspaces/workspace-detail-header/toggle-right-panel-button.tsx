@@ -1,4 +1,4 @@
-import { SidebarSimpleIcon } from '@phosphor-icons/react';
+import { SidebarSimpleIcon } from '@phosphor-icons/react/dist/csr/SidebarSimple';
 import { useWorkspacePanel } from '@/client/features/workspace';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';

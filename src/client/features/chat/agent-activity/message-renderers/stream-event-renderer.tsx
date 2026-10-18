@@ -1,4 +1,5 @@
-import { SpinnerGapIcon, WarningIcon } from '@phosphor-icons/react';
+import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
+import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { memo } from 'react';
 import { CompactBoundaryIndicator } from '@/client/features/chat/compact-boundary-indicator';
 import { MarkdownRenderer } from '@/components/ui/markdown';

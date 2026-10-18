@@ -1,4 +1,5 @@
-import { AppWindowIcon, SpinnerGapIcon } from '@phosphor-icons/react';
+import { AppWindowIcon } from '@phosphor-icons/react/dist/csr/AppWindow';
+import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { Button } from '@/components/ui/button';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';

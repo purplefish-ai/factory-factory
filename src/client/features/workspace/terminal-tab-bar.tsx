@@ -1,4 +1,6 @@
-import { PlusIcon, TerminalIcon, XIcon } from '@phosphor-icons/react';
+import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
+import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
+import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 

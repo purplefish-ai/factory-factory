@@ -1,9 +1,7 @@
-import {
-  ArrowCounterClockwiseIcon,
-  FileTextIcon,
-  SpinnerGapIcon,
-  WarningIcon,
-} from '@phosphor-icons/react';
+import { ArrowCounterClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowCounterClockwise';
+import { FileTextIcon } from '@phosphor-icons/react/dist/csr/FileText';
+import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
+import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,

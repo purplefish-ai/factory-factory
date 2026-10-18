@@ -25,7 +25,7 @@ vi.mock('react-resizable-panels', () => ({
   Separator: (props: { children?: ReactNode }) => createElement('div', null, props.children),
 }));
 
-vi.mock('@phosphor-icons/react', () => ({
+vi.mock('@phosphor-icons/react/dist/csr/DotsSixVertical', () => ({
   DotsSixVerticalIcon: () => createElement('svg'),
 }));
 

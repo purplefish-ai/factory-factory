@@ -1,10 +1,8 @@
-import {
-  ArrowsClockwiseIcon,
-  CalendarIcon,
-  CaretDownIcon,
-  PaperclipIcon,
-  SpinnerGapIcon,
-} from '@phosphor-icons/react';
+import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
+import { CalendarIcon } from '@phosphor-icons/react/dist/csr/Calendar';
+import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
+import { PaperclipIcon } from '@phosphor-icons/react/dist/csr/Paperclip';
+import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import type { inferRouterOutputs } from '@trpc/server';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
