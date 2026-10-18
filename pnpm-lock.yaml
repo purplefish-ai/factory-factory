@@ -60,7 +60,7 @@ overrides:
 
 packageExtensionsChecksum: sha256-t0A9VlQ1x4EOA4rRYE4B/pQQIam8N6laKIeyRP5LPJo=
 
-pnpmfileChecksum: sha256-LEY47hVEahdOaf1MRb0m+DLj9Wjh887FNhbKT+g5R9s=
+pnpmfileChecksum: sha256-gdQkqYmfQ8E5lNLlEYDvvSpRzYluizhfbIyeiccDj9Q=
 
 patchedDependencies:
   braces@3.0.3: 495c564c494113073bfc331b541d482a0dc5c25433ac7b30d4fc26fdb66ce9a8

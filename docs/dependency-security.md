@@ -4,7 +4,8 @@ Use the pnpm version pinned in `package.json#packageManager`. CI installs that
 version through `pnpm/action-setup`; Docker installs the same version with
 pinned release checksums. Local commands reject a different pnpm version through
 `.pnpmfile.mjs`, including lock-only installs and commands that skip lifecycle
-scripts. Install the pinned version before updating the lockfile.
+scripts. Custom user-agent values are rejected. Install the pinned version
+before updating the lockfile.
 
 ## Dependabot coverage
 
@@ -16,9 +17,10 @@ lockfile, hiding the application dependencies from its dependency graph. See
 `pmOnFail: ignore` prevents that environment document. The pnpm hook
 independently enforces the manifest's exact version, so disabling pnpm's
 automatic downloader does not permit a different package manager during ordinary
-commands. Explicit `--ignore-pnpmfile` bypasses this repository guard and should
-not be used for repository maintenance. The Docker dependency stage copies the
-hook before installing.
+commands. This catches accidental version mismatches; intentional configuration
+overrides can bypass repository tooling. In particular, `--ignore-pnpmfile`
+bypasses the hook and should not be used for repository maintenance. The Docker
+dependency stage copies the hook before installing.
 
 After lockfile changes, confirm it contains one project document. After merging,
 check GitHub's dependency graph or SBOM for application packages such as React,
@@ -50,12 +52,13 @@ reported one high-severity development-tooling advisory:
 upstream fixed release is available at the time of this check.
 
 The repository's existing `patches/braces@3.0.3.patch` limits parsing and
-recursive AST traversal to a bounded depth. `scripts/braces-security.test.ts`
-verifies both installed dependency paths: normal glob behavior still works,
-deeply nested braces and parentheses fail with a controlled `SyntaxError`, and
-pre-parsed ASTs cannot bypass the compile, expand or stringify guards. The raw
-advisory remains visible because registry scanners identify the upstream
-version, not the local patch. No audit ignore rule is configured.
+recursive AST traversal to a bounded depth.
+`src/backend/testing/dependency-security-patches.test.ts` verifies both
+installed dependency paths: normal glob behavior still works, deeply nested
+braces and parentheses fail with a controlled `SyntaxError`, and pre-parsed ASTs
+cannot bypass the compile, expand or stringify guards. The raw advisory remains
+visible because registry scanners identify the upstream version, not the local
+patch. No audit ignore rule is configured.
 
 Keep the patch and regressions until an upstream release or dependency change
 removes the vulnerable code. Re-run the full audit before removing a mitigation;

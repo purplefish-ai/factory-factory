@@ -24,14 +24,14 @@ afterEach(() => {
   }
 });
 
-function fixture() {
+function fixture(manager = packageManager) {
   const directory = mkdtempSync(join(tmpdir(), 'ff-pnpm-version-'));
   directories.push(directory);
   writeFileSync(
     join(directory, 'package.json'),
     JSON.stringify({
       name: 'version-guard-fixture',
-      packageManager,
+      packageManager: manager,
       scripts: { probe: 'node --version' },
     })
   );
@@ -70,16 +70,30 @@ describe('pinned package-manager guard', () => {
     expect(run(directory, ['run', 'probe']).status).toBe(0);
   });
 
+  it('rejects an explicit user-agent override even when it claims the pinned version', () => {
+    const directory = fixture();
+    const result = run(directory, [
+      `--config.user-agent=${packageManager.replace('@', '/')}`,
+      'install',
+      '--lockfile-only',
+      '--offline',
+      '--ignore-scripts',
+    ]);
+    expect(result.error).toBeUndefined();
+    expect(result.status).not.toBe(0);
+    expect(result.stdout + result.stderr).toContain('user-agent');
+  });
+
   it.each([
     ['lock-only installation', ['install', '--lockfile-only', '--offline', '--ignore-scripts']],
     ['frozen installation', ['install', '--frozen-lockfile', '--offline', '--ignore-scripts']],
     ['script execution', ['run', 'probe']],
     ['command execution', ['exec', 'node', '--version']],
   ])('rejects the wrong manager before %s even without lifecycle scripts', (_name, args) => {
-    const directory = fixture();
-    const result = run(directory, ['--config.user-agent=pnpm/0.0.0', ...args]);
+    const directory = fixture('pnpm@0.0.0');
+    const result = run(directory, args);
     expect(result.error).toBeUndefined();
     expect(result.status).not.toBe(0);
-    expect(result.stdout + result.stderr).toContain(`Use ${packageManager}`);
+    expect(result.stdout + result.stderr).toContain('Use pnpm@0.0.0');
   });
 });
