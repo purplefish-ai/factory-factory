@@ -72,8 +72,12 @@ export class SessionRepository {
     return this.workspaces.recordSessionPresence(workspaceId);
   }
 
-  updateSession(sessionId: string, data: SessionUpdateData): Promise<AgentSessionRecord> {
-    return this.updateSessionWithGuards(sessionId, data);
+  updateSession(
+    sessionId: string,
+    data: SessionUpdateData,
+    assertCurrent?: () => void
+  ): Promise<AgentSessionRecord> {
+    return this.updateSessionWithGuards(sessionId, data, assertCurrent);
   }
 
   updateSessionIfStatus(
@@ -102,7 +106,8 @@ export class SessionRepository {
 
   private async updateSessionWithGuards(
     sessionId: string,
-    data: SessionUpdateData
+    data: SessionUpdateData,
+    assertCurrent?: () => void
   ): Promise<AgentSessionRecord> {
     if (Object.hasOwn(data, 'providerSessionId')) {
       const current = await this.sessions.findById(sessionId);
@@ -120,16 +125,18 @@ export class SessionRepository {
 
     const metadata = data.providerMetadata;
     if (isMetadataRecord(metadata) && Object.hasOwn(metadata, 'acpConfigSnapshot')) {
-      return this.updateConfigSnapshotMetadata(sessionId, data, metadata);
+      return this.updateConfigSnapshotMetadata(sessionId, data, metadata, assertCurrent);
     }
 
+    assertCurrent?.();
     return this.sessions.update(sessionId, data);
   }
 
   private async updateConfigSnapshotMetadata(
     sessionId: string,
     data: SessionUpdateData,
-    metadata: Prisma.JsonObject
+    metadata: Prisma.JsonObject,
+    assertCurrent?: () => void
   ): Promise<AgentSessionRecord> {
     const current = await this.sessions.findById(sessionId);
     if (!current) {
@@ -155,6 +162,7 @@ export class SessionRepository {
         ? { providerIdentityRollovers: durableMetadata.providerIdentityRollovers }
         : {}),
     };
+    assertCurrent?.();
     if (
       (await this.sessions.updateIfProviderIdentity(sessionId, current, {
         ...guardedData,

@@ -632,9 +632,7 @@ export class AcpRuntimeSupervisor {
   ): void {
     const child = handle.child;
     child.once('exit', (code) => {
-      handle.failConfiguration(
-        new Error(`ACP process exited before prompt readiness: ${sessionId}`)
-      );
+      handle.failConfiguration(new Error(`ACP process exited: ${sessionId}`));
       const classification = this.classifyChildExit(sessionId, child, code);
       if (classification === null) {
         this.clearActivityIfUnused(sessionId);

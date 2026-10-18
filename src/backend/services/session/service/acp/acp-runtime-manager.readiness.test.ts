@@ -29,10 +29,11 @@ beforeEach(() => {
 function createManagerTestHarness() {
   return { manager: new AcpRuntimeManager() };
 }
-function setupSuccessfulSpawn(_capabilities?: Record<string, unknown>): MockChildProcess {
+function setupSuccessfulSpawn(capabilities?: Record<string, unknown>): MockChildProcess {
   const handle = createTestProcessHandle({
     provider: 'CLAUDE',
     providerSessionId: 'provider-session-123',
+    agentCapabilities: capabilities,
     connection: { prompt: mockPrompt },
   });
   factory.mockResolvedValue(handle);

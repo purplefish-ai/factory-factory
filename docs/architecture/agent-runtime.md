@@ -43,6 +43,11 @@ saved modes stop startup; legacy sessions without a snapshot retain the
 configured-default fallback. Reviewer workflows always reapply their read-only
 restrictions.
 
+Configuration readiness intentionally has no independent timeout. If provider
+setup stalls, prompts and settings remain blocked until setup fails, the child
+exits, or the session is stopped; elapsed time never releases work with unknown
+permissions.
+
 Persisted ACP configuration snapshots are validated before use. Legacy Codex
 collaboration/access tuples are converted into native options before startup,
 inactive-session display, or strict PR continuation. Durable legacy `sess_`

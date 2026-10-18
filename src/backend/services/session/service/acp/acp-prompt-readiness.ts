@@ -1,6 +1,11 @@
 export type AcpConfigurationLease = { complete(): void; fail(error: unknown): void };
 
-/** A handle-local barrier; one failed setup permanently rejects that incarnation. */
+/**
+ * A handle-local barrier; one failed setup permanently rejects that incarnation.
+ * Deliberately has no independent deadline: stalled setup keeps work blocked
+ * until setup fails, the child exits, or the session is stopped. Elapsed time
+ * cannot establish that native permissions have been applied.
+ */
 export class AcpPromptReadiness {
   private barrier?: { promise: Promise<void>; resolve(): void; reject(error: unknown): void };
   private readonly pending = new Set<symbol>();

@@ -3,6 +3,7 @@ import type { AgentSessionRecord } from '@/backend/services/session';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type { Workspace } from '@prisma-gen/client';
+import { createDeferred } from './session-lifecycle.test-helpers';
 import { SessionRepository } from './session.repository';
 
 const createSession = (overrides?: Partial<AgentSessionRecord>): AgentSessionRecord =>
@@ -161,6 +162,32 @@ describe('SessionRepository', () => {
         providerMetadata: { acpConfigSnapshot: { providerSessionId: 'old' } },
       })
     ).rejects.toThrow('Stale provider metadata');
+    expect(sessions.update).not.toHaveBeenCalled();
+  });
+
+  it('checks the captured runtime after loading same-identity snapshot metadata', async () => {
+    const reading = createDeferred<AgentSessionRecord | null>();
+    sessions.findById.mockReturnValueOnce(reading.promise);
+    let isCurrent = true;
+    const assertCurrent = () => {
+      if (!isCurrent) {
+        throw new Error('Runtime replaced');
+      }
+    };
+    const setting = repository
+      .updateSession(
+        's1',
+        {
+          providerMetadata: { acpConfigSnapshot: { providerSessionId: 'same' } },
+        },
+        assertCurrent
+      )
+      .catch((error: unknown) => error);
+    await vi.waitFor(() => expect(sessions.findById).toHaveBeenCalled());
+    isCurrent = false;
+    reading.resolve(createSession({ providerSessionId: 'same' }));
+    expect(await setting).toEqual(new Error('Runtime replaced'));
+    expect(sessions.updateIfProviderIdentity).not.toHaveBeenCalled();
     expect(sessions.update).not.toHaveBeenCalled();
   });
 

@@ -37,6 +37,7 @@ export type PersistAcpConfigSnapshotParams = {
   providerSessionId: string;
   configOptions: SessionConfigOption[];
   existingMetadata?: unknown;
+  assertCurrent?: () => void;
 };
 
 export type SessionConfigServiceDependencies = {
@@ -475,16 +476,17 @@ export class SessionConfigService {
     );
 
     this.assertCurrentConfiguredHandle(sessionId, acpHandle);
-    this.sessionDomainService.emitDelta(sessionId, {
-      type: 'config_options_update',
-      configOptions,
-    } as SessionDeltaEvent);
-
     await this.persistAcpConfigSnapshot(sessionId, {
       provider: acpHandle.provider as SessionProvider,
       providerSessionId: acpHandle.providerSessionId,
       configOptions,
+      assertCurrent: () => this.assertCurrentConfiguredHandle(sessionId, acpHandle),
     });
+    this.assertCurrentConfiguredHandle(sessionId, acpHandle);
+    this.sessionDomainService.emitDelta(sessionId, {
+      type: 'config_options_update',
+      configOptions,
+    } as SessionDeltaEvent);
   }
 
   private assertCurrentConfiguredHandle(sessionId: string, handle: AcpProcessHandle): void {
@@ -567,7 +569,6 @@ export class SessionConfigService {
       params.existingMetadata ??
       (await this.repository.getSessionById(sessionId))?.providerMetadata ??
       null;
-
     const snapshot: StoredAcpConfigSnapshot = {
       provider: params.provider,
       providerSessionId: params.providerSessionId,
@@ -582,14 +583,20 @@ export class SessionConfigService {
       observedModelId
     );
 
+    params.assertCurrent?.();
     try {
-      await this.repository.updateSession(sessionId, persistedUpdate);
+      await this.repository.updateSession(
+        sessionId,
+        persistedUpdate,
+        ...(params.assertCurrent ? ([params.assertCurrent] as const) : [])
+      );
     } catch (error) {
+      params.assertCurrent?.();
       logger.warn('Failed persisting ACP config snapshot to session metadata; retrying once', {
         sessionId,
         error: error instanceof Error ? error.message : String(error),
       });
-      await this.retryPersistAcpConfigSnapshot(sessionId, snapshot, observedModelId);
+      await this.retryPersistAcpConfigSnapshot(sessionId, snapshot, params.assertCurrent);
     }
   }
 
@@ -775,8 +782,10 @@ export class SessionConfigService {
         provider: params.handle.provider as SessionProvider,
         providerSessionId: params.handle.providerSessionId,
         configOptions,
+        assertCurrent: params.assertCurrent,
       });
     }
+    params.assertCurrent?.();
     if (params.emitUpdates !== false) {
       this.sessionDomainService.emitDelta(params.sessionId, {
         type: 'config_options_update',
@@ -946,16 +955,19 @@ export class SessionConfigService {
   private async retryPersistAcpConfigSnapshot(
     sessionId: string,
     snapshot: StoredAcpConfigSnapshot,
-    observedModelId: string | undefined
+    assertCurrent?: () => void
   ): Promise<void> {
     try {
       const latestMetadataSource = (await this.repository.getSessionById(sessionId))
         ?.providerMetadata;
+      assertCurrent?.();
       await this.repository.updateSession(
         sessionId,
-        this.buildSnapshotPersistUpdate(latestMetadataSource, snapshot, observedModelId)
+        this.buildSnapshotPersistUpdate(latestMetadataSource, snapshot, snapshot.observedModelId),
+        ...(assertCurrent ? ([assertCurrent] as const) : [])
       );
     } catch (retryError) {
+      assertCurrent?.();
       logger.warn('Retry failed persisting ACP config snapshot to session metadata', {
         sessionId,
         error: retryError instanceof Error ? retryError.message : String(retryError),

@@ -212,6 +212,7 @@ export function mockCreatedAcpClient(
   acpHandle: AcpProcessHandle
 ): void {
   Object.assign(acpHandle, {
+    beginConfiguration: vi.fn(() => ({ complete: vi.fn(), fail: vi.fn() })),
     completeConfiguration: vi.fn((assertCurrent?: () => void) => assertCurrent?.()),
     failConfiguration: vi.fn(),
   });
