@@ -1,0 +1,220 @@
+/* One Light / One Dark token colors, scoped to the file viewer. Keep token
+   styling in CSS: resolving theme objects for every token dominates rendering. */
+.file-code {
+  --syntax-text: hsl(230, 8%, 24%);
+  --syntax-comment: hsl(230, 4%, 64%);
+  --syntax-orange: hsl(35, 99%, 36%);
+  --syntax-purple: hsl(301, 63%, 40%);
+  --syntax-red: hsl(5, 74%, 59%);
+  --syntax-green: hsl(119, 34%, 47%);
+  --syntax-blue: hsl(221, 87%, 60%);
+  --syntax-cyan: hsl(198, 99%, 37%);
+  --syntax-interpolation: hsl(344, 84%, 43%);
+  --syntax-selection: hsl(230, 1%, 90%);
+  color: var(--syntax-text);
+  direction: ltr;
+  text-align: left;
+  white-space: pre;
+  word-spacing: normal;
+  word-break: normal;
+  tab-size: 2;
+  hyphens: none;
+  overflow: auto;
+}
+
+.file-code[data-syntax-theme='dark'] {
+  --syntax-text: hsl(220, 14%, 71%);
+  --syntax-comment: hsl(220, 10%, 40%);
+  --syntax-orange: hsl(29, 54%, 61%);
+  --syntax-purple: hsl(286, 60%, 67%);
+  --syntax-red: hsl(355, 65%, 65%);
+  --syntax-green: hsl(95, 38%, 62%);
+  --syntax-blue: hsl(207, 82%, 66%);
+  --syntax-cyan: hsl(187, 47%, 55%);
+  --syntax-interpolation: hsl(5, 48%, 51%);
+  --syntax-selection: hsl(220, 13%, 28%);
+  text-shadow: 0 1px rgb(0 0 0 / 30%);
+}
+
+.file-code code {
+  white-space: pre;
+}
+
+.file-code ::selection {
+  background: var(--syntax-selection);
+  color: inherit;
+  text-shadow: none;
+}
+
+.file-code .react-syntax-highlighter-line-number {
+  display: inline-block;
+  user-select: none;
+  font-style: normal;
+}
+
+.file-code .token.comment {
+  color: var(--syntax-comment);
+  font-style: italic;
+}
+
+.file-code .token.prolog,
+.file-code .token.cdata {
+  color: var(--syntax-comment);
+}
+
+.file-code .token.doctype,
+.file-code .token.punctuation,
+.file-code .token.entity {
+  color: var(--syntax-text);
+}
+
+.file-code .token.entity {
+  cursor: help;
+}
+
+.file-code .token.attr-name,
+.file-code .token.class-name,
+.file-code .token.boolean,
+.file-code .token.constant,
+.file-code .token.number,
+.file-code .token.atrule {
+  color: var(--syntax-orange);
+}
+
+.file-code .token.keyword {
+  color: var(--syntax-purple);
+}
+
+.file-code .token.property,
+.file-code .token.tag,
+.file-code .token.symbol,
+.file-code .token.deleted,
+.file-code .token.important {
+  color: var(--syntax-red);
+}
+
+.file-code .token.selector,
+.file-code .token.string,
+.file-code .token.char,
+.file-code .token.builtin,
+.file-code .token.inserted,
+.file-code .token.regex,
+.file-code .token.attr-value,
+.file-code .token.attr-value.punctuation {
+  color: var(--syntax-green);
+}
+
+.file-code .token.variable,
+.file-code .token.operator,
+.file-code .token.function {
+  color: var(--syntax-blue);
+}
+
+.file-code .language-javascript .token.operator {
+  color: var(--syntax-purple);
+}
+
+.file-code .token.url {
+  color: var(--syntax-cyan);
+}
+
+.file-code .token.attr-value.punctuation.attr-equals,
+.file-code .token.special-attr.attr-value.value.css {
+  color: var(--syntax-text);
+}
+
+.file-code .language-css .token.selector {
+  color: var(--syntax-red);
+}
+
+.file-code .language-css .token.property,
+.file-code .language-json .token.operator,
+.file-code .language-markdown .token.url,
+.file-code .language-markdown .token.url.operator,
+.file-code .language-markdown .token.url-reference.url.string {
+  color: var(--syntax-text);
+}
+
+.file-code .language-css .token.function,
+.file-code .language-css .token.url.function {
+  color: var(--syntax-cyan);
+}
+
+.file-code .language-css .token.url.string {
+  color: var(--syntax-green);
+}
+
+.file-code .language-css .token.important,
+.file-code .language-css .token.atrule.rule {
+  color: var(--syntax-purple);
+}
+
+.file-code
+  .language-javascript
+  .token.template-string.interpolation.interpolation-punctuation.punctuation {
+  color: var(--syntax-interpolation);
+}
+
+.file-code .language-json .token.null.keyword,
+.file-code .language-markdown .token.bold.content {
+  color: var(--syntax-orange);
+}
+
+.file-code .language-markdown .token.url.content {
+  color: var(--syntax-blue);
+}
+
+.file-code .language-markdown .token.url-reference.url {
+  color: var(--syntax-cyan);
+}
+
+.file-code .language-markdown .token.blockquote.punctuation,
+.file-code .language-markdown .token.hr.punctuation {
+  color: var(--syntax-comment);
+  font-style: italic;
+}
+
+.file-code .language-markdown .token.code-snippet {
+  color: var(--syntax-green);
+}
+
+.file-code .language-markdown .token.italic.content {
+  color: var(--syntax-purple);
+}
+
+.file-code .language-markdown .token.strike.content,
+.file-code .language-markdown .token.strike.punctuation,
+.file-code .language-markdown .token.list.punctuation,
+.file-code .language-markdown .token.title.important.punctuation {
+  color: var(--syntax-red);
+}
+
+.file-code .token.bold {
+  font-weight: bold;
+}
+
+.file-code .token.italic {
+  font-style: italic;
+}
+
+.file-code .token.namespace {
+  opacity: 0.8;
+}
+
+/* wrapLines flattens ancestor classes onto tokens (e.g. tag + attr-name).
+   Prefer the leaf token's color over a conflicting parent token color. */
+.file-code .token.tag.attr-name {
+  color: var(--syntax-orange);
+}
+
+.file-code .token.tag.punctuation {
+  color: var(--syntax-text);
+}
+
+.file-code .token.tag.attr-value.punctuation {
+  color: var(--syntax-green);
+}
+
+.file-code .token.tag.attr-value.punctuation.attr-equals {
+  color: var(--syntax-text);
+}
