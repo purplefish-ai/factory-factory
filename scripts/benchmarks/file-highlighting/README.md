@@ -38,9 +38,13 @@ JSX, TSX, JSON, and Markdown. Capture enlarges the viewport to fit the entire
 matrix, then waits for all 16 samples to finish their workers and display
 visible, differently colored CSS token spans. Assertions record these conditions
 before saving the image, so pending or offscreen plaintext cannot pass as a
-theme preview. Vitest separately covers readable source during loading and after
-worker construction, loading, or message failure, plus theme changes without
-replacing the mounted code element.
+theme preview. One shared browser evaluator supplies polling state and the
+capture report; bounded timeout errors include each unready sample's index,
+theme, language, and readiness flags. The native harness injects a stalled
+sample and verifies that diagnostic before restoring and capturing the matrix.
+Vitest separately covers readable source during loading and after worker
+construction, loading, or message failure, plus theme changes without replacing
+the mounted code element.
 
 The cold-loading fixture uses the actual `ScrollArea` and `usePersistentScroll`:
 for both highlighted code and plaintext, its outer viewport moves 192 pixels,

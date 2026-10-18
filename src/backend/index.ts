@@ -17,6 +17,7 @@ import { createApplication } from './app-context';
 import { registerFatalErrorHandlers } from './fatal-error-handlers';
 import { toError } from './lib/error-utils';
 import { createServer } from './server';
+import { registerShutdownSignalHandlers } from './shutdown-signal-handlers';
 
 const application = createApplication();
 const logger = application.services.createLogger('server');
@@ -32,17 +33,6 @@ serverInstance.start().catch((error) => {
   process.exit(1);
 });
 
-// Graceful shutdown handlers
-process.on('SIGTERM', async () => {
-  logger.info('SIGTERM received, shutting down gracefully');
-  await serverInstance.stop();
-  process.exit(0);
-});
-
-process.on('SIGINT', async () => {
-  logger.info('SIGINT received, shutting down gracefully');
-  await serverInstance.stop();
-  process.exit(0);
-});
+registerShutdownSignalHandlers({ logger, process, server: serverInstance });
 
 registerFatalErrorHandlers({ logger, process, server: serverInstance });

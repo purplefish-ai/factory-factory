@@ -2,6 +2,7 @@ import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
 import { MicrophoneIcon } from '@phosphor-icons/react/dist/csr/Microphone';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -286,7 +287,7 @@ export function VoiceModeSection() {
       // refetching, reads the stale `config.enabled` closure below, and
       // resends it, silently reverting the toggle.
       utils.voice.getConfig.setData(undefined, result);
-      utils.voice.getConfig.invalidate();
+      runInBackground(utils.voice.getConfig.invalidate(), 'Could not refresh data');
     },
     onError: (error) => toast.error(`Failed to save: ${error.message}`),
   });

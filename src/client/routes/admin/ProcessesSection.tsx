@@ -5,6 +5,7 @@ import type { inferRouterOutputs } from '@trpc/server';
 import { useCallback, useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
+import { runInBackground } from '@/client/lib/background-task';
 import type { AppRouter } from '@/client/lib/trpc';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
@@ -193,7 +194,7 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
         } else {
           toast.info('Session was already stopped');
         }
-        utils.admin.getActiveProcesses.invalidate();
+        runInBackground(utils.admin.getActiveProcesses.invalidate(), 'Could not refresh data');
       } catch (error) {
         toast.error(
           `Failed to stop session: ${error instanceof Error ? error.message : String(error)}`
@@ -264,7 +265,9 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
                     key={process.sessionId}
                     process={process}
                     isStopping={stoppingSessionIds.has(process.sessionId)}
-                    onStop={handleStopSession}
+                    onStop={(sessionId) => {
+                      runInBackground(handleStopSession(sessionId), 'Could not stop process');
+                    }}
                   />
                 ))}
               </div>
@@ -324,7 +327,12 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleStopSession(process.sessionId)}
+                            onClick={() => {
+                              runInBackground(
+                                handleStopSession(process.sessionId),
+                                'Could not stop process'
+                              );
+                            }}
                             disabled={
                               stoppingSessionIds.has(process.sessionId) ||
                               process.status === 'COMPLETED' ||

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
+import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { isArchiveGitIndexLockedError } from '@/client/lib/workspace-archive';
 import {
@@ -37,14 +38,17 @@ export function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
 
   // Expose invalidate function for external triggers (e.g., when session stops running)
   const invalidateWorkspace = useCallback(() => {
-    utils.workspace.get.invalidate({ id: workspaceId });
+    runInBackground(utils.workspace.get.invalidate({ id: workspaceId }), 'Could not refresh data');
   }, [utils, workspaceId]);
 
   // Sync PR status from GitHub on page load (if workspace has a PR)
   const syncPRStatus = trpc.workspace.syncPRStatus.useMutation({
     onSuccess: () => {
       // Refresh workspace data after PR sync
-      utils.workspace.get.invalidate({ id: workspaceId });
+      runInBackground(
+        utils.workspace.get.invalidate({ id: workspaceId }),
+        'Could not refresh data'
+      );
     },
   });
 
@@ -158,7 +162,10 @@ export function useSessionManagement({
     onSuccess: (_data) => {
       // Invalidate marks the data as stale, then immediately refetch
       // With staleTime: 0, invalidate will trigger an immediate refetch
-      utils.session.listSessions.invalidate({ workspaceId });
+      runInBackground(
+        utils.session.listSessions.invalidate({ workspaceId }),
+        'Could not refresh data'
+      );
     },
     onError: (error) => {
       toast.error(error.message || 'Failed to create or start session');
@@ -185,7 +192,10 @@ export function useSessionManagement({
       }
     },
     onSettled: () => {
-      utils.session.listSessions.invalidate({ workspaceId });
+      runInBackground(
+        utils.session.listSessions.invalidate({ workspaceId }),
+        'Could not refresh data'
+      );
     },
   });
 

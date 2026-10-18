@@ -2,6 +2,7 @@ import { UploadIcon } from '@phosphor-icons/react/dist/csr/Upload';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type { z } from 'zod';
+import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -141,7 +142,9 @@ export function DataImportButton({
         ref={fileInputRef}
         type="file"
         accept=".json"
-        onChange={handleFileSelect}
+        onChange={(event) => {
+          runInBackground(handleFileSelect(event), 'Could not import backup');
+        }}
         className="hidden"
       />
 

@@ -22,7 +22,7 @@ type InjectedCodexClient = NonNullable<ConstructorParameters<typeof CodexAppServ
 type CodexMocks = {
   start: ReturnType<typeof vi.fn>;
   stop: ReturnType<typeof vi.fn>;
-  request: ReturnType<typeof vi.fn>;
+  request: ReturnType<typeof vi.fn<(method: string, ...args: unknown[]) => Promise<unknown>>>;
   notify: ReturnType<typeof vi.fn>;
   respondSuccess: ReturnType<typeof vi.fn>;
   respondError: ReturnType<typeof vi.fn>;
@@ -710,9 +710,7 @@ describe('CodexAppServerAcpAdapter', () => {
       mcpServers: [],
     });
 
-    const updates = (connection.sessionUpdate as ReturnType<typeof vi.fn>).mock.calls.map(
-      (call) => call[0].update
-    );
+    const updates = vi.mocked(connection.sessionUpdate).mock.calls.map((call) => call[0].update);
     expect(updates.some((update) => update.sessionUpdate === 'user_message_chunk')).toBe(true);
     expect(updates.some((update) => update.sessionUpdate === 'agent_message_chunk')).toBe(true);
     expect(
@@ -772,7 +770,7 @@ describe('CodexAppServerAcpAdapter', () => {
       cwd: '/tmp/workspace',
       mcpServers: [],
     });
-    (connection.sessionUpdate as ReturnType<typeof vi.fn>).mockClear();
+    vi.mocked(connection.sessionUpdate).mockClear();
 
     await sendCodexNotification(adapter, 'item/started', {
       threadId: 'thread_replay_dedupe',
@@ -870,7 +868,7 @@ describe('CodexAppServerAcpAdapter', () => {
       },
     });
 
-    expect((connection.sessionUpdate as ReturnType<typeof vi.fn>).mock.calls).toEqual(
+    expect(vi.mocked(connection.sessionUpdate).mock.calls).toEqual(
       expect.arrayContaining([
         [
           expect.objectContaining({
@@ -955,9 +953,7 @@ describe('CodexAppServerAcpAdapter', () => {
       });
     }
 
-    const updates = (connection.sessionUpdate as ReturnType<typeof vi.fn>).mock.calls.map(
-      (call) => call[0].update
-    );
+    const updates = vi.mocked(connection.sessionUpdate).mock.calls.map((call) => call[0].update);
     const inProgressUpdates = updates.filter(
       (update) =>
         update.sessionUpdate === 'tool_call_update' &&
@@ -1022,9 +1018,7 @@ describe('CodexAppServerAcpAdapter', () => {
       delta: 'still running',
     });
 
-    const updates = (connection.sessionUpdate as ReturnType<typeof vi.fn>).mock.calls.map(
-      (call) => call[0].update
-    );
+    const updates = vi.mocked(connection.sessionUpdate).mock.calls.map((call) => call[0].update);
     const completedUpdates = updates.filter(
       (update) =>
         update.sessionUpdate === 'tool_call_update' &&
@@ -1108,9 +1102,7 @@ describe('CodexAppServerAcpAdapter', () => {
       },
     });
 
-    const updates = (connection.sessionUpdate as ReturnType<typeof vi.fn>).mock.calls.map(
-      (call) => call[0].update
-    );
+    const updates = vi.mocked(connection.sessionUpdate).mock.calls.map((call) => call[0].update);
     const thoughtChunks = updates.filter(
       (update) => update.sessionUpdate === 'agent_thought_chunk'
     );
@@ -1425,7 +1417,7 @@ describe('CodexAppServerAcpAdapter', () => {
 
   it('requests ExitPlanMode approval after completed plan item in plan mode', async () => {
     const { connection } = createMockConnection();
-    (connection.requestPermission as ReturnType<typeof vi.fn>).mockResolvedValue({
+    vi.mocked(connection.requestPermission).mockResolvedValue({
       outcome: { outcome: 'selected', optionId: 'default' },
     } satisfies RequestPermissionResponse);
 
@@ -1496,7 +1488,7 @@ describe('CodexAppServerAcpAdapter', () => {
         ],
       })
     );
-    expect((connection.sessionUpdate as ReturnType<typeof vi.fn>).mock.calls).toEqual(
+    expect(vi.mocked(connection.sessionUpdate).mock.calls).toEqual(
       expect.arrayContaining([
         [
           expect.objectContaining({
@@ -1544,7 +1536,7 @@ describe('CodexAppServerAcpAdapter', () => {
 
   it('requests ExitPlanMode approval after recovered completed plan item in plan mode', async () => {
     const { connection } = createMockConnection();
-    (connection.requestPermission as ReturnType<typeof vi.fn>).mockResolvedValue({
+    vi.mocked(connection.requestPermission).mockResolvedValue({
       outcome: { outcome: 'selected', optionId: 'default' },
     } satisfies RequestPermissionResponse);
 
@@ -1597,7 +1589,7 @@ describe('CodexAppServerAcpAdapter', () => {
         }),
       })
     );
-    expect((connection.sessionUpdate as ReturnType<typeof vi.fn>).mock.calls).toEqual(
+    expect(vi.mocked(connection.sessionUpdate).mock.calls).toEqual(
       expect.arrayContaining([
         [
           expect.objectContaining({
@@ -1632,7 +1624,7 @@ describe('CodexAppServerAcpAdapter', () => {
 
   it('switches to the selected non-plan mode id when plan approval is accepted', async () => {
     const { connection } = createMockConnection();
-    (connection.requestPermission as ReturnType<typeof vi.fn>).mockResolvedValue({
+    vi.mocked(connection.requestPermission).mockResolvedValue({
       outcome: { outcome: 'selected', optionId: 'code' },
     } satisfies RequestPermissionResponse);
 
@@ -1707,7 +1699,7 @@ describe('CodexAppServerAcpAdapter', () => {
       })
     );
 
-    expect((connection.sessionUpdate as ReturnType<typeof vi.fn>).mock.calls).toEqual(
+    expect(vi.mocked(connection.sessionUpdate).mock.calls).toEqual(
       expect.arrayContaining([
         [
           expect.objectContaining({
@@ -1731,7 +1723,7 @@ describe('CodexAppServerAcpAdapter', () => {
       throw new Error('expected plan approval request callback');
     };
     const { connection } = createMockConnection();
-    (connection.requestPermission as ReturnType<typeof vi.fn>).mockImplementation(
+    vi.mocked(connection.requestPermission).mockImplementation(
       () =>
         new Promise<RequestPermissionResponse>((resolve) => {
           resolvePlanApproval = resolve;
@@ -1859,7 +1851,7 @@ describe('CodexAppServerAcpAdapter', () => {
 
   it('marks synthetic ExitPlanMode approval as failed when user rejects', async () => {
     const { connection } = createMockConnection();
-    (connection.requestPermission as ReturnType<typeof vi.fn>).mockResolvedValue({
+    vi.mocked(connection.requestPermission).mockResolvedValue({
       outcome: { outcome: 'selected', optionId: 'plan' },
     } satisfies RequestPermissionResponse);
 
@@ -1918,7 +1910,7 @@ describe('CodexAppServerAcpAdapter', () => {
       },
     });
 
-    expect((connection.sessionUpdate as ReturnType<typeof vi.fn>).mock.calls).toEqual(
+    expect(vi.mocked(connection.sessionUpdate).mock.calls).toEqual(
       expect.arrayContaining([
         [
           expect.objectContaining({
@@ -1937,7 +1929,7 @@ describe('CodexAppServerAcpAdapter', () => {
 
   it('maps tool request_user_input selections into answer payloads', async () => {
     const { connection } = createMockConnection();
-    (connection.requestPermission as ReturnType<typeof vi.fn>).mockResolvedValue({
+    vi.mocked(connection.requestPermission).mockResolvedValue({
       outcome: { outcome: 'selected', optionId: 'answer_1' },
     } satisfies RequestPermissionResponse);
 
@@ -1995,7 +1987,7 @@ describe('CodexAppServerAcpAdapter', () => {
         }),
       })
     );
-    expect((connection.sessionUpdate as ReturnType<typeof vi.fn>).mock.calls).toEqual(
+    expect(vi.mocked(connection.sessionUpdate).mock.calls).toEqual(
       expect.arrayContaining([
         [
           expect.objectContaining({
@@ -2011,7 +2003,7 @@ describe('CodexAppServerAcpAdapter', () => {
 
   it('maps multi-question request_user_input answers from ACP _meta payload', async () => {
     const { connection } = createMockConnection();
-    (connection.requestPermission as ReturnType<typeof vi.fn>).mockResolvedValue({
+    vi.mocked(connection.requestPermission).mockResolvedValue({
       _meta: {
         factoryFactory: {
           toolUserInputAnswers: {
@@ -2092,7 +2084,7 @@ describe('CodexAppServerAcpAdapter', () => {
 
   it('fails multi-question request_user_input when structured answers are missing', async () => {
     const { connection } = createMockConnection();
-    (connection.requestPermission as ReturnType<typeof vi.fn>).mockResolvedValue({
+    vi.mocked(connection.requestPermission).mockResolvedValue({
       outcome: { outcome: 'selected', optionId: 'answer_1' },
     } satisfies RequestPermissionResponse);
 
@@ -2152,7 +2144,7 @@ describe('CodexAppServerAcpAdapter', () => {
         message: 'Failed to map requestUserInput answers',
       })
     );
-    expect((connection.sessionUpdate as ReturnType<typeof vi.fn>).mock.calls).toEqual(
+    expect(vi.mocked(connection.sessionUpdate).mock.calls).toEqual(
       expect.arrayContaining([
         [
           expect.objectContaining({
@@ -2171,7 +2163,7 @@ describe('CodexAppServerAcpAdapter', () => {
 
   it('treats cancelled request_user_input permission outcomes as rejected', async () => {
     const { connection } = createMockConnection();
-    (connection.requestPermission as ReturnType<typeof vi.fn>).mockResolvedValue({
+    vi.mocked(connection.requestPermission).mockResolvedValue({
       outcome: { outcome: 'cancelled' },
     } satisfies RequestPermissionResponse);
 
@@ -2220,7 +2212,7 @@ describe('CodexAppServerAcpAdapter', () => {
     expect(codex.respondSuccess).toHaveBeenCalledWith(21, {
       answers: {},
     });
-    expect((connection.sessionUpdate as ReturnType<typeof vi.fn>).mock.calls).toEqual(
+    expect(vi.mocked(connection.sessionUpdate).mock.calls).toEqual(
       expect.arrayContaining([
         [
           expect.objectContaining({
@@ -2372,7 +2364,7 @@ describe('CodexAppServerAcpAdapter', () => {
     });
 
     expect(response.stopReason).toBe('end_turn');
-    expect((connection.sessionUpdate as ReturnType<typeof vi.fn>).mock.calls).toEqual(
+    expect(vi.mocked(connection.sessionUpdate).mock.calls).toEqual(
       expect.arrayContaining([
         [
           expect.objectContaining({
@@ -2564,7 +2556,7 @@ describe('CodexAppServerAcpAdapter', () => {
 
   it('declines command approvals when permission is rejected', async () => {
     const { connection } = createMockConnection();
-    (connection.requestPermission as ReturnType<typeof vi.fn>).mockResolvedValue({
+    vi.mocked(connection.requestPermission).mockResolvedValue({
       outcome: { outcome: 'selected', optionId: 'reject_once' },
     } satisfies RequestPermissionResponse);
 
@@ -2599,7 +2591,7 @@ describe('CodexAppServerAcpAdapter', () => {
     });
 
     expect(codex.respondSuccess).toHaveBeenCalledWith(18, { decision: 'decline' });
-    const sessionUpdateMock = connection.sessionUpdate as ReturnType<typeof vi.fn>;
+    const sessionUpdateMock = vi.mocked(connection.sessionUpdate);
     const pendingPermissionUpdateIndex = sessionUpdateMock.mock.calls.findIndex(
       (call) =>
         call[0].update?.sessionUpdate === 'tool_call_update' && call[0].update?.status === 'pending'
@@ -2615,7 +2607,7 @@ describe('CodexAppServerAcpAdapter', () => {
     expect(
       (pendingPermissionInvocationOrder as number) < (requestPermissionInvocationOrder as number)
     ).toBe(true);
-    expect((connection.sessionUpdate as ReturnType<typeof vi.fn>).mock.calls).toEqual(
+    expect(vi.mocked(connection.sessionUpdate).mock.calls).toEqual(
       expect.arrayContaining([
         [
           expect.objectContaining({
@@ -2631,7 +2623,7 @@ describe('CodexAppServerAcpAdapter', () => {
 
   it('scopes allow_always command approvals by command pattern and cwd', async () => {
     const { connection } = createMockConnection();
-    (connection.requestPermission as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+    vi.mocked(connection.requestPermission).mockResolvedValueOnce({
       outcome: { outcome: 'selected', optionId: 'allow_always' },
     } satisfies RequestPermissionResponse);
 
@@ -2681,7 +2673,7 @@ describe('CodexAppServerAcpAdapter', () => {
     );
     expect(codex.respondSuccess).toHaveBeenCalledWith(91, { decision: 'accept' });
 
-    (connection.requestPermission as ReturnType<typeof vi.fn>).mockClear();
+    vi.mocked(connection.requestPermission).mockClear();
     codex.respondSuccess.mockClear();
 
     await (
@@ -2724,7 +2716,7 @@ describe('CodexAppServerAcpAdapter', () => {
     expect(connection.requestPermission).toHaveBeenCalledTimes(1);
     expect(codex.respondSuccess).toHaveBeenCalledWith(93, { decision: 'accept' });
 
-    (connection.requestPermission as ReturnType<typeof vi.fn>).mockClear();
+    vi.mocked(connection.requestPermission).mockClear();
     codex.respondSuccess.mockClear();
 
     await (
@@ -2749,7 +2741,7 @@ describe('CodexAppServerAcpAdapter', () => {
 
   it('does not reuse allow_always scope when a chained command changes cwd', async () => {
     const { connection } = createMockConnection();
-    (connection.requestPermission as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+    vi.mocked(connection.requestPermission).mockResolvedValueOnce({
       outcome: { outcome: 'selected', optionId: 'allow_always' },
     } satisfies RequestPermissionResponse);
 
@@ -2787,7 +2779,7 @@ describe('CodexAppServerAcpAdapter', () => {
     expect(connection.requestPermission).toHaveBeenCalledTimes(1);
     expect(codex.respondSuccess).toHaveBeenCalledWith(101, { decision: 'accept' });
 
-    (connection.requestPermission as ReturnType<typeof vi.fn>).mockClear();
+    vi.mocked(connection.requestPermission).mockClear();
     codex.respondSuccess.mockClear();
 
     await (
@@ -2809,7 +2801,7 @@ describe('CodexAppServerAcpAdapter', () => {
     expect(connection.requestPermission).toHaveBeenCalledTimes(1);
     expect(codex.respondSuccess).toHaveBeenCalledWith(102, { decision: 'accept' });
 
-    (connection.requestPermission as ReturnType<typeof vi.fn>).mockClear();
+    vi.mocked(connection.requestPermission).mockClear();
     codex.respondSuccess.mockClear();
 
     await (
@@ -3006,7 +2998,7 @@ describe('CodexAppServerAcpAdapter', () => {
 
   it('responds with codex error payload when approval bridge throws', async () => {
     const { connection } = createMockConnection();
-    (connection.requestPermission as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+    vi.mocked(connection.requestPermission).mockRejectedValueOnce(
       new Error('permission bridge unavailable')
     );
 
@@ -3154,9 +3146,7 @@ describe('CodexAppServerAcpAdapter', () => {
       { toolCallId: 'item_plan_only', kind: 'think', title: 'plan', locations: [] }
     );
 
-    const updates = (connection.sessionUpdate as ReturnType<typeof vi.fn>).mock.calls.map(
-      (call) => call[0].update
-    );
+    const updates = vi.mocked(connection.sessionUpdate).mock.calls.map((call) => call[0].update);
     expect(
       updates.some(
         (update) =>

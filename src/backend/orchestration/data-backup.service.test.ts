@@ -24,12 +24,15 @@ import {
 const mockTx = vi.hoisted(() => ({
   workspacePRMonitoring: { upsert: vi.fn() },
   project: {
-    findUnique: vi.fn(),
+    findUnique: vi.fn<(args: { where: { id: string } }) => Promise<unknown>>(),
     create: vi.fn(),
   },
   workspace: {
-    findUnique: vi.fn(),
-    create: vi.fn(),
+    findUnique: vi.fn<(args: { where: { id?: string } }) => Promise<unknown>>(),
+    create:
+      vi.fn<
+        (args: { data: { id?: string; parentWorkspaceId?: string | null } }) => Promise<unknown>
+      >(),
   },
   agentSession: {
     findUnique: vi.fn(),

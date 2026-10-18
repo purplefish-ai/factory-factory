@@ -3,6 +3,7 @@ import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { DataImportButton } from '@/client/features/data-import/data-import-button';
+import { runInBackground } from '@/client/lib/background-task';
 import { downloadFile } from '@/client/lib/download-file';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -44,7 +45,9 @@ export function DataBackupSection() {
       <CardContent className="space-y-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:gap-4">
           <Button
-            onClick={handleExport}
+            onClick={() => {
+              runInBackground(handleExport(), 'Could not export backup');
+            }}
             disabled={isExporting}
             variant="outline"
             className="w-full sm:w-auto"

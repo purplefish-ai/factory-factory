@@ -6,6 +6,7 @@ import {
   usePasteDropHandler,
   useSlashCommands,
 } from '@/client/features/composer';
+import { runInBackground } from '@/client/lib/background-task';
 import { InputGroup, InputGroupAddon, InputGroupTextarea } from '@/components/ui/input-group';
 import type { ChatSettings, CommandInfo, MessageAttachment, TokenStats } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
@@ -166,6 +167,14 @@ export const ChatInput = memo(function ChatInput({
     onCloseFileMentionMenu: fileMentions.handleFileMentionMenuClose,
   });
 
+  const { handleFileSelect } = actions;
+  const onFileSelect = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      runInBackground(handleFileSelect(event), 'Could not attach file');
+    },
+    [handleFileSelect]
+  );
+
   // Textarea resize hook
   useTextareaResize({
     textareaRef: resolvedInputRef,
@@ -289,7 +298,7 @@ export const ChatInput = memo(function ChatInput({
             modLabel={modLabel}
             modifierHeld={modifierHeld}
             fileInputRef={actions.fileInputRef}
-            onFileSelect={actions.handleFileSelect}
+            onFileSelect={onFileSelect}
             supportedImageTypes={actions.supportedImageTypes}
             disabled={isDisabled}
             onQuickAction={actions.handleQuickAction}

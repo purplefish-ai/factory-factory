@@ -98,8 +98,8 @@
     "check:client-chunks": "node scripts/check-client-chunk-budget.mjs"
   },
   "dependencies": {
-    "@agentclientprotocol/claude-agent-acp": "^0.88.0",
-    "@agentclientprotocol/sdk": "1.7.0",
+    "@agentclientprotocol/claude-agent-acp": "^0.93.0",
+    "@agentclientprotocol/sdk": "1.9.0",
     "@daypicker/react": "^10.0.2",
     "@linear/sdk": "^98.0.0",
     "@phosphor-icons/react": "^2.1.10",
@@ -217,6 +217,7 @@
     "next-themes": "^0.4.6",
     "oxfmt": "0.73.0",
     "oxlint": "1.88.0",
+    "oxlint-tsgolint": "7.0.2004",
     "storybook": "10.6.2",
     "supertest": "^7.3.1",
     "tailwindcss": "^4.3.3",

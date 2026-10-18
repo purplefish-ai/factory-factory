@@ -261,7 +261,7 @@ export class TerminalService {
     this.resourceMonitoringGeneration = monitoringGeneration;
     this.resourceUpdateInFlightGeneration = null;
 
-    this.monitoringInterval = setInterval(async () => {
+    const updateResources = async (): Promise<void> => {
       // Stop monitoring if no terminals
       if (this.getActiveTerminalCount() === 0) {
         this.stopResourceMonitoring();
@@ -285,6 +285,9 @@ export class TerminalService {
           this.resourceUpdateInFlightGeneration = null;
         }
       }
+    };
+    this.monitoringInterval = setInterval(() => {
+      void updateResources();
     }, TerminalService.MONITORING_INTERVAL_MS);
   }
 

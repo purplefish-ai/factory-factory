@@ -2,6 +2,7 @@ import { createContext, type ReactNode, useCallback, useContext, useMemo, useSta
 import { toast } from 'sonner';
 import { useProjectIssues } from '@/client/hooks/use-project-issues';
 import { useToggleRatcheting } from '@/client/hooks/use-toggle-ratcheting';
+import { runInBackground } from '@/client/lib/background-task';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import type { WorkspaceIssueLink } from '@/client/lib/project-issue-visibility';
 import { trpc } from '@/client/lib/trpc';
@@ -141,8 +142,8 @@ export function KanbanProvider({
 
   const syncAndRefetch = () => {
     syncMutation.mutate({ projectId });
-    refetchWorkspaces();
-    refetchIssues();
+    runInBackground(refetchWorkspaces(), 'Could not refresh data');
+    runInBackground(refetchIssues(), 'Could not refresh data');
   };
 
   const toggleWorkspaceRatcheting = async (workspaceId: string, enabled: boolean) => {
@@ -324,8 +325,8 @@ export function KanbanProvider({
   };
 
   const refetch = () => {
-    refetchWorkspaces();
-    refetchIssues();
+    runInBackground(refetchWorkspaces(), 'Could not refresh data');
+    runInBackground(refetchIssues(), 'Could not refresh data');
   };
 
   const visibleWorkspaces = useMemo(

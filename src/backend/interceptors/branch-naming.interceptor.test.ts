@@ -705,7 +705,7 @@ describe('push completion handling', () => {
     await interceptor.onToolComplete!(completion, context);
     await interceptor.onToolComplete!(completion, context);
     await interceptor.onToolStart!({ ...event, toolUseId: 'stopped-push' }, context);
-    interceptor.stop!();
+    await interceptor.stop!();
     await interceptor.onToolComplete!({ ...completion, toolUseId: 'stopped-push' }, context);
 
     expect(mocks.resetPRDiscoveryBackoff).toHaveBeenCalledOnce();

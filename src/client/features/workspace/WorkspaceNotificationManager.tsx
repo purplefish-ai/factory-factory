@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
+import { runInBackground } from '@/client/lib/background-task';
 import { playSound } from '@/client/lib/sound';
 import { trpc } from '@/client/lib/trpc';
 
@@ -93,11 +94,14 @@ function sendWorkspaceNotification(
 
   // Request permission if needed
   if (Notification.permission === 'default') {
-    Notification.requestPermission().then((permission) => {
-      if (permission === 'granted') {
-        showNotification(workspaceName, sessionCount);
-      }
-    });
+    runInBackground(
+      Notification.requestPermission().then((permission) => {
+        if (permission === 'granted') {
+          showNotification(workspaceName, sessionCount);
+        }
+      }),
+      'Could not enable workspace notifications'
+    );
   } else if (Notification.permission === 'granted') {
     showNotification(workspaceName, sessionCount);
   }

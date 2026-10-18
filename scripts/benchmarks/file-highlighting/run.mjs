@@ -10,6 +10,7 @@ import { chromium } from '@playwright/test';
 import react from '@vitejs/plugin-react';
 import { build, loadConfigFromFile, mergeConfig } from 'vite';
 import { workerSafeAliases } from '../../vite-worker-aliases.ts';
+import { waitForHighlightingPreview } from './wait-for-highlighting.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repository = resolve(here, '../../..');
@@ -209,13 +210,13 @@ try {
   );
   assert(grammarWorker, 'Cold-loading fixture must defer the actual grammar worker');
   server = createServer((req, res) => {
-    const handleRequest = async () => {
-      const pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
-      if (pathname.includes('..')) {
-        res.writeHead(400).end();
-        return;
-      }
+    void (async () => {
       try {
+        const pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
+        if (pathname.includes('..')) {
+          res.writeHead(400).end();
+          return;
+        }
         const file = join(outDir, pathname === '/' ? 'index.html' : pathname);
         res.setHeader(
           'Content-Type',
@@ -225,12 +226,8 @@ try {
       } catch {
         res.writeHead(404).end();
       }
-    };
-    void handleRequest().catch(() => {
-      if (!res.headersSent) {
-        res.writeHead(500);
-      }
-      res.end();
+    })().catch(() => {
+      res.writeHead(500).end();
     });
   });
   await new Promise((resolveListen) => server.listen(0, '127.0.0.1', resolveListen));
@@ -388,6 +385,7 @@ try {
   }
   const screenshots = process.argv.find((arg) => arg.startsWith('--screenshots='))?.slice(14);
   let screenshotChecks;
+  let stalledPreviewDiagnostic;
   if (screenshots) {
     await mkdir(screenshots, { recursive: true });
     await page.evaluate(() => window.showHighlightingPreview());
@@ -397,48 +395,30 @@ try {
       Math.ceil(document.documentElement.scrollHeight)
     );
     await page.setViewportSize({ width: 1200, height: Math.max(800, previewHeight) });
-    await page.waitForFunction(
-      () => {
-        const samples = [...document.querySelectorAll('#root pre.file-code')];
-        return (
-          samples.length === 16 &&
-          samples.every((pre) => {
-            const rect = pre.getBoundingClientRect();
-            return (
-              pre.getAttribute('aria-busy') === 'false' &&
-              rect.top >= 0 &&
-              rect.bottom <= innerHeight &&
-              [...pre.querySelectorAll('.token')].some(
-                (token) => getComputedStyle(token).color !== getComputedStyle(pre).color
-              )
-            );
-          })
-        );
-      },
-      undefined,
-      { timeout: 10_000 }
+    await waitForHighlightingPreview(page);
+    // Prove the diagnostic identifies a real stalled sample, then restore it.
+    await page.evaluate(() =>
+      document.querySelector('#root pre.file-code').setAttribute('aria-busy', 'true')
     );
-    screenshotChecks = await page.evaluate(() =>
-      [...document.querySelectorAll('#root pre.file-code')].map((pre) => {
-        const rect = pre.getBoundingClientRect();
-        return {
-          theme: pre.getAttribute('data-syntax-theme'),
-          language: pre.querySelector('code')?.className,
-          settled: pre.getAttribute('aria-busy') === 'false',
-          visible: rect.top >= 0 && rect.bottom <= innerHeight,
-          colored: [...pre.querySelectorAll('.token')].some(
-            (token) => getComputedStyle(token).color !== getComputedStyle(pre).color
-          ),
-        };
-      })
-    );
-    assert.equal(screenshotChecks.length, 16, 'Capture all language/theme samples');
-    for (const sample of screenshotChecks) {
-      assert(
-        sample.settled && sample.visible && sample.colored,
-        `Screenshot must show settled, visible colors: ${JSON.stringify(sample)}`
+    try {
+      await assert.rejects(
+        () => waitForHighlightingPreview(page, 32),
+        (error) => {
+          stalledPreviewDiagnostic = error.message;
+          assert.match(error.message, /Timed out waiting for 16 highlighted preview samples/);
+          assert.match(error.message, /"index":0/);
+          assert.match(error.message, /"theme":"light"/);
+          assert.match(error.message, /"language":"language-typescript"/);
+          assert.match(error.message, /"settled":false/);
+          return true;
+        }
+      );
+    } finally {
+      await page.evaluate(() =>
+        document.querySelector('#root pre.file-code').setAttribute('aria-busy', 'false')
       );
     }
+    screenshotChecks = await waitForHighlightingPreview(page);
     await page.screenshot({
       path: join(screenshots, 'file-highlighting-themes.png'),
       fullPage: true,
@@ -456,6 +436,7 @@ try {
         languageColorAssertions: languageColors.length * 2,
         coldLoadingChecks,
         screenshotChecks,
+        stalledPreviewDiagnostic,
         results,
         bundles,
       },

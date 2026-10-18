@@ -15,6 +15,7 @@ import {
   RunScriptPortBadge,
 } from '@/client/features/workspace';
 import { useInlineWorkspaceRename } from '@/client/hooks/use-inline-workspace-rename';
+import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -179,7 +180,9 @@ export function WorkspaceDetailHeaderSlot({
             hasChanges={hasChanges}
             running={running}
             isCreatingSession={isCreatingSession}
-            handleQuickAction={handleQuickAction}
+            handleQuickAction={(name, prompt) => {
+              runInBackground(handleQuickAction(name, prompt), 'Could not run quick action');
+            }}
           />
           <WorkspaceIssueLink workspace={workspace} />
           <WorkspaceCiStatus workspace={workspace} />

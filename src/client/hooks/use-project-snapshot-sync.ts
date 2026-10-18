@@ -1,3 +1,4 @@
+import type { inferRouterOutputs } from '@trpc/server';
 /**
  * React hook that syncs /snapshots WebSocket messages into the
  * workspace.listForProject (sidebar + kanban) and workspace.get (detail
@@ -16,9 +17,8 @@
  * Follows the use-log-stream.ts pattern: receive-only WebSocket hook with
  * drop queue policy (no outbound messages, reconnect discards stale data).
  */
-
-import type { inferRouterOutputs } from '@trpc/server';
 import { useCallback, useRef } from 'react';
+import { runInBackground } from '@/client/lib/background-task';
 import { overridePendingRatchetToggle } from '@/client/lib/ratchet-toggle-cache';
 import {
   mergeProjectSnapshotIntoWorkspaceDetail,
@@ -65,8 +65,11 @@ function triggerWorkspaceAttention(workspaceId: string): void {
  * no socket for the project was connected.
  */
 function healWorkspaceCachesAfterReconnect(utils: TrpcUtils, projectId: string): void {
-  utils.workspace.get.invalidate();
-  utils.workspace.listForProject.invalidate({ projectId });
+  runInBackground(utils.workspace.get.invalidate(), 'Could not refresh data');
+  runInBackground(
+    utils.workspace.listForProject.invalidate({ projectId }),
+    'Could not refresh data'
+  );
 }
 
 function seedPendingRequests(

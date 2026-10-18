@@ -5,6 +5,7 @@ import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { useAppHeader } from '@/client/components/app-header-context';
 import { ProjectSettingsDialog } from '@/client/features/project/project-settings-dialog';
+import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -78,7 +79,7 @@ export default function ProjectsListPage() {
   const archiveMutation = trpc.project.archive.useMutation({
     onSuccess: () => {
       setArchiveDialogOpen(false);
-      refetch();
+      runInBackground(refetch({ throwOnError: true }), 'Could not refresh data');
     },
     onError: (error) => {
       toast.error(error.message || 'Failed to archive project');

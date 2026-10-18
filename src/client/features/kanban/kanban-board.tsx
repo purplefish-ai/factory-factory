@@ -2,6 +2,7 @@ import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockw
 import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArchiveGitLockDialog, ArchiveWorkspaceDialog } from '@/client/features/workspace';
+import { runInBackground } from '@/client/lib/background-task';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -257,9 +258,16 @@ export function KanbanBoard() {
                 column={activeColumn}
                 workspaces={workspacesByColumn[activeColumn.id as KanbanColumnType] ?? []}
                 projectSlug={projectSlug}
-                onToggleRatcheting={toggleWorkspaceRatcheting}
+                onToggleRatcheting={(workspaceId, enabled) => {
+                  runInBackground(
+                    toggleWorkspaceRatcheting(workspaceId, enabled),
+                    'Could not update workspace'
+                  );
+                }}
                 togglingWorkspaceId={togglingWorkspaceId}
-                onArchive={archiveWorkspace}
+                onArchive={(workspaceId) => {
+                  runInBackground(archiveWorkspace(workspaceId), 'Could not archive workspace');
+                }}
                 onBulkArchive={() => handleBulkArchive(activeColumn.id)}
                 isBulkArchiving={isBulkArchiving}
                 onOpenQuickChat={openQuickChat}
@@ -304,9 +312,16 @@ export function KanbanBoard() {
               column={column}
               workspaces={columnWorkspaces}
               projectSlug={projectSlug}
-              onToggleRatcheting={toggleWorkspaceRatcheting}
+              onToggleRatcheting={(workspaceId, enabled) => {
+                runInBackground(
+                  toggleWorkspaceRatcheting(workspaceId, enabled),
+                  'Could not update workspace'
+                );
+              }}
               togglingWorkspaceId={togglingWorkspaceId}
-              onArchive={archiveWorkspace}
+              onArchive={(workspaceId) => {
+                runInBackground(archiveWorkspace(workspaceId), 'Could not archive workspace');
+              }}
               onBulkArchive={() => handleBulkArchive(column.id)}
               isBulkArchiving={isBulkArchiving}
               onOpenQuickChat={openQuickChat}
@@ -319,7 +334,9 @@ export function KanbanBoard() {
       <ArchiveWorkspaceDialog
         open={bulkArchiveDialogOpen}
         onOpenChange={setBulkArchiveDialogOpen}
-        onConfirm={handleBulkArchiveConfirm}
+        onConfirm={() => {
+          runInBackground(handleBulkArchiveConfirm(), 'Could not archive workspaces');
+        }}
         description={`This will archive all ${workspacesInBulkArchiveColumn.length} workspace(s) in this column. Any uncommitted changes will be committed before the worktrees are removed.`}
       />
 

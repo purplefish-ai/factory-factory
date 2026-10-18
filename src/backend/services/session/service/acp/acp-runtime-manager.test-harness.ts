@@ -11,9 +11,9 @@ import {
 
 const mocks = vi.hoisted(() => ({
   mockSpawn: vi.fn(),
-  mockInitialize: vi.fn(),
-  mockLoadSession: vi.fn(),
-  mockNewSession: vi.fn(),
+  mockInitialize: vi.fn<(...args: unknown[]) => Promise<unknown>>(),
+  mockLoadSession: vi.fn<(...args: unknown[]) => Promise<unknown>>(),
+  mockNewSession: vi.fn<(...args: unknown[]) => Promise<unknown>>(),
   mockPrompt: vi.fn(),
   mockCancel: vi.fn(),
   mockSetSessionConfigOption: vi.fn(),
@@ -27,9 +27,9 @@ const mocks = vi.hoisted(() => ({
 }));
 
 export const mockSpawn: ReturnType<typeof vi.fn> = mocks.mockSpawn;
-export const mockInitialize: ReturnType<typeof vi.fn> = mocks.mockInitialize;
-export const mockLoadSession: ReturnType<typeof vi.fn> = mocks.mockLoadSession;
-export const mockNewSession: ReturnType<typeof vi.fn> = mocks.mockNewSession;
+export const mockInitialize = mocks.mockInitialize;
+export const mockLoadSession = mocks.mockLoadSession;
+export const mockNewSession = mocks.mockNewSession;
 export const mockPrompt: ReturnType<typeof vi.fn> = mocks.mockPrompt;
 export const mockCancel: ReturnType<typeof vi.fn> = mocks.mockCancel;
 export const mockSetSessionConfigOption: ReturnType<typeof vi.fn> =

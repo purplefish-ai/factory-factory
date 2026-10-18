@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { CiStatusChip } from '@/client/components/ci-status-chip';
 import { PrStateBadge } from '@/client/components/pr-state-badge';
 import { useToggleRatcheting } from '@/client/hooks/use-toggle-ratcheting';
+import { runInBackground } from '@/client/lib/background-task';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
@@ -292,10 +293,15 @@ export function ConnectedWorkspacePrMenu({
         description="The pull request stays on GitHub. This workspace will stop watching it."
         confirmText="Remove"
         isPending={actions.pending}
-        onConfirm={async () => {
-          if (removeId && (await actions.remove(removeId))) {
-            setRemoveId(null);
-          }
+        onConfirm={() => {
+          runInBackground(
+            (async () => {
+              if (removeId && (await actions.remove(removeId))) {
+                setRemoveId(null);
+              }
+            })(),
+            'Could not update pull request'
+          );
         }}
       />
       <Dialog open={open} onOpenChange={setOpen}>
@@ -307,16 +313,21 @@ export function ConnectedWorkspacePrMenu({
             </DialogDescription>
           </DialogHeader>
           <form
-            onSubmit={async (event) => {
-              event.preventDefault();
-              setError(null);
-              const result = await actions.add(url.trim());
-              if (result.success) {
-                setOpen(false);
-                setUrl('');
-              } else {
-                setError(result.error);
-              }
+            onSubmit={(event) => {
+              runInBackground(
+                (async () => {
+                  event.preventDefault();
+                  setError(null);
+                  const result = await actions.add(url.trim());
+                  if (result.success) {
+                    setOpen(false);
+                    setUrl('');
+                  } else {
+                    setError(result.error);
+                  }
+                })(),
+                'Could not update pull request'
+              );
             }}
             className="space-y-3"
           >

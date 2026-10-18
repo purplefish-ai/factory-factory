@@ -4,6 +4,7 @@ import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 
@@ -330,7 +331,9 @@ export function CLIHealthBanner() {
       issues={issues}
       isRefetching={isRefetching}
       isUpgrading={upgradeProviderCli.isPending}
-      onRecheck={() => refetch()}
+      onRecheck={() => {
+        runInBackground(refetch({ throwOnError: true }), 'Could not check provider status');
+      }}
       onDismiss={() => {
         rememberDismissedCLIHealthWarning(warningFingerprint);
         setDismissedFingerprint(warningFingerprint);

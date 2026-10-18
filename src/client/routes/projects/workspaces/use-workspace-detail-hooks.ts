@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import {
   forgetSetupWarningDismissed,
@@ -73,7 +74,10 @@ export function useWorkspaceInitStatus(
     // Invalidate workspace data when worktree becomes available so worktreePath,
     // agentSessions, etc. refresh immediately and the chat UI can connect.
     if (hasWorktreePath && !prevHasWorktreePathRef.current) {
-      utils.workspace.get.invalidate({ id: workspaceId });
+      runInBackground(
+        utils.workspace.get.invalidate({ id: workspaceId }),
+        'Could not refresh data'
+      );
     }
     prevHasWorktreePathRef.current = hasWorktreePath;
 
@@ -82,7 +86,10 @@ export function useWorkspaceInitStatus(
       const isStaleOnFirstLoad = prevStatus === undefined && !workspace?.worktreePath;
 
       if (isTransitionToReady || isStaleOnFirstLoad) {
-        utils.workspace.get.invalidate({ id: workspaceId });
+        runInBackground(
+          utils.workspace.get.invalidate({ id: workspaceId }),
+          'Could not refresh data'
+        );
       }
     }
 

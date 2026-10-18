@@ -6,6 +6,7 @@ import {
   usePersistentScroll,
   useWorkspacePanel,
 } from '@/client/features/workspace';
+import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
 import { resolveWorkspaceFileLink } from '@/client/lib/workspace-file-links';
@@ -354,7 +355,12 @@ export function WorkspaceDetailContainer() {
           workspaceLoading,
           workspace,
           workspaceId,
-          handleBackToWorkspaces,
+          handleBackToWorkspaces: () => {
+            runInBackground(
+              Promise.resolve(handleBackToWorkspaces()),
+              'Could not open workspace list'
+            );
+          },
           isScriptFailed,
           workspaceInitStatus,
           setupWarningDismissed,
