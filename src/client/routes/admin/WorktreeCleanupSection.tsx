@@ -15,7 +15,14 @@ function pluralizeWorktrees(count: number): string {
 export function WorktreeCleanupSection() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const utils = trpc.useUtils();
-  const { data: orphans, isLoading } = trpc.admin.listOrphanedWorktrees.useQuery();
+  const {
+    data: orphans,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    isRefetching,
+  } = trpc.admin.listOrphanedWorktrees.useQuery();
 
   const removeOrphans = trpc.admin.removeOrphanedWorktrees.useMutation({
     onSuccess: ({ removed, failed }) => {
@@ -55,6 +62,20 @@ export function WorktreeCleanupSection() {
       <CardContent className="space-y-4">
         {isLoading ? (
           <Skeleton className="h-10 w-full" />
+        ) : isError ? (
+          <div className="space-y-2">
+            <p className="text-sm text-destructive">
+              Could not scan for orphaned worktrees: {error.message}
+            </p>
+            <Button
+              variant="outline"
+              className="w-full sm:w-auto"
+              disabled={isRefetching}
+              onClick={() => runInBackground(refetch(), 'Could not scan for orphaned worktrees')}
+            >
+              Retry
+            </Button>
+          </div>
         ) : (
           <>
             <p className="text-sm text-muted-foreground">

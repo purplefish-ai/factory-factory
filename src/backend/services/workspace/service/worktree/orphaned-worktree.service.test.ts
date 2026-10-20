@@ -59,6 +59,37 @@ describe('orphanedWorktreeService', () => {
     ]);
   });
 
+  it('never reports standalone repositories, which may hold unique commits', async () => {
+    await mkdir(path.join(worktreeBasePath, 'workspace-standalone', '.git'), { recursive: true });
+    await mkdir(path.join(worktreeBasePath, 'workspace-linked'));
+    await writeFile(path.join(worktreeBasePath, 'workspace-linked', '.git'), 'gitdir: /repo');
+    vi.spyOn(workspaceAccessor, 'findNonArchivedWorktreeRefs').mockResolvedValue([]);
+
+    await expect(orphanedWorktreeService.findOrphanedWorktrees()).resolves.toEqual([
+      expect.objectContaining({ path: path.join(worktreeBasePath, 'workspace-linked') }),
+    ]);
+  });
+
+  it('keeps scanning other projects when one worktree base is unreadable', async () => {
+    const brokenBase = path.join(tempRoot, 'not-a-directory');
+    await writeFile(brokenBase, '');
+    await mkdir(path.join(worktreeBasePath, 'workspace-orphan'), { recursive: true });
+    vi.spyOn(projectAccessor, 'list').mockResolvedValue(
+      unsafeCoerce<Awaited<ReturnType<typeof projectAccessor.list>>>([
+        { ...project, id: 'broken', worktreeBasePath: brokenBase },
+        project,
+      ])
+    );
+    vi.spyOn(workspaceAccessor, 'findNonArchivedWorktreeRefs').mockResolvedValue([]);
+
+    await expect(orphanedWorktreeService.findOrphanedWorktrees()).resolves.toEqual([
+      expect.objectContaining({
+        projectId: 'project-1',
+        path: path.join(worktreeBasePath, 'workspace-orphan'),
+      }),
+    ]);
+  });
+
   it('skips projects whose worktree base does not exist', async () => {
     const refsSpy = vi.spyOn(workspaceAccessor, 'findNonArchivedWorktreeRefs');
 

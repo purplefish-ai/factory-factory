@@ -1,5 +1,5 @@
 import type { Dirent } from 'node:fs';
-import { readdir } from 'node:fs/promises';
+import { lstat, readdir } from 'node:fs/promises';
 import * as path from 'node:path';
 import { createLogger } from '@/backend/services/logger.service';
 import { projectAccessor } from '@/backend/services/workspace/resources/project.accessor';
@@ -30,14 +30,31 @@ type ProjectWithPaths = {
   worktreeBasePath: string;
 };
 
+/** Skip one unreadable project base so the other projects can still be cleaned. */
 async function readWorktreeDirs(worktreeBasePath: string): Promise<Dirent[]> {
   try {
     return await readdir(worktreeBasePath, { withFileTypes: true });
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return [];
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      logger.warn('Skipping unreadable worktree base during orphan scan', {
+        worktreeBasePath,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
-    throw error;
+    return [];
+  }
+}
+
+/**
+ * Linked worktrees have a `.git` file and share the project's object store, so
+ * their commits survive removal. A `.git` directory is a standalone repository
+ * whose commits may exist nowhere else; never treat it as an orphan.
+ */
+async function isStandaloneRepository(dirPath: string): Promise<boolean> {
+  try {
+    return (await lstat(path.join(dirPath, '.git'))).isDirectory();
+  } catch {
+    return false;
   }
 }
 
@@ -73,9 +90,13 @@ class OrphanedWorktreeService {
         if (!(entry.isDirectory() && entry.name.startsWith(WORKTREE_DIR_PREFIX))) {
           continue;
         }
+        const dirPath = path.resolve(project.worktreeBasePath, entry.name);
+        if (await isStandaloneRepository(dirPath)) {
+          continue;
+        }
         candidates.push({
           project,
-          path: path.resolve(project.worktreeBasePath, entry.name),
+          path: dirPath,
           workspaceId: entry.name.slice(WORKTREE_DIR_PREFIX.length),
         });
       }

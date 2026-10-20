@@ -301,7 +301,7 @@ export const adminRouter = router({
   /**
    * Remove orphaned worktree directories. Orphans are re-detected server-side.
    */
-  removeOrphanedWorktrees: publicProcedure.mutation(({ ctx }) =>
+  removeOrphanedWorktrees: trustedLocalProcedure.mutation(({ ctx }) =>
     ctx.appContext.services.orphanedWorktreeService.removeOrphanedWorktrees()
   ),
 

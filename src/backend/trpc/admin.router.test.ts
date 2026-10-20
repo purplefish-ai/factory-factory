@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockExportData = vi.hoisted(() => vi.fn());
 const mockImportData = vi.hoisted(() => vi.fn());
+const mockRemoveOrphanedWorktrees = vi.hoisted(() => vi.fn());
 const mockDecisionLogList = vi.hoisted(() => vi.fn());
 const mockFindAgentSessionsByIds = vi.hoisted(() =>
   vi.fn<(...args: unknown[]) => Promise<Record<string, unknown>[]>>(async () => [])
@@ -147,6 +148,9 @@ function createCaller(requestTrust?: Context['requestTrust']) {
         dataBackupService: {
           exportData: (...args: unknown[]) => mockExportData(...args),
           importData: (...args: unknown[]) => mockImportData(...args),
+        },
+        orphanedWorktreeService: {
+          removeOrphanedWorktrees: (...args: unknown[]) => mockRemoveOrphanedWorktrees(...args),
         },
         decisionLogQueryService: {
           list: (...args: unknown[]) => mockDecisionLogList(...args),
@@ -547,6 +551,31 @@ describe('backup import trust boundary', () => {
     expect(mockImportData).toHaveBeenCalledWith({
       ...input,
       meta: { ...input.meta, schemaVersion: 6 },
+    });
+  });
+});
+
+describe('orphaned worktree removal trust boundary', () => {
+  it.each([
+    { remoteAddress: '203.0.113.10', isLocal: false },
+    { remoteAddress: '127.0.0.1', isLocal: true, origin: 'https://untrusted.example' },
+  ])('rejects removal from an untrusted request: %j', async (trust) => {
+    const { caller } = createCaller(trust);
+    mockRemoveOrphanedWorktrees.mockClear();
+    await expect(caller.removeOrphanedWorktrees()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(mockRemoveOrphanedWorktrees).not.toHaveBeenCalled();
+  });
+
+  it('allows removal from a trusted local client', async () => {
+    const { caller } = createCaller({
+      remoteAddress: '127.0.0.1',
+      isLocal: true,
+      origin: 'http://localhost:3000',
+    });
+    mockRemoveOrphanedWorktrees.mockResolvedValue({ removed: ['/wt/workspace-1'], failed: [] });
+    await expect(caller.removeOrphanedWorktrees()).resolves.toEqual({
+      removed: ['/wt/workspace-1'],
+      failed: [],
     });
   });
 });
