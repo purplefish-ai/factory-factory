@@ -64,7 +64,7 @@ export function WorktreeCleanupSection() {
           <Skeleton className="h-10 w-full" />
         ) : isError ? (
           <div className="space-y-2">
-            <p className="text-sm text-destructive">
+            <p role="alert" className="text-sm text-destructive">
               Could not scan for orphaned worktrees: {error.message}
             </p>
             <Button

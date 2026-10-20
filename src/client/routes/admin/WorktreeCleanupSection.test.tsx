@@ -117,7 +117,9 @@ describe('WorktreeCleanupSection', () => {
     mocks.query = { data: undefined, isError: true, error: new Error('EACCES') };
     const container = render();
 
-    expect(container.textContent).toContain('Could not scan for orphaned worktrees: EACCES');
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      'Could not scan for orphaned worktrees: EACCES'
+    );
     expect(container.textContent).not.toContain('No orphaned worktrees found.');
     expect(findButton('Remove Orphaned Worktrees')).toBeUndefined();
 
