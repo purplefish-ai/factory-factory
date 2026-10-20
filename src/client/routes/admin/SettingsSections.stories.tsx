@@ -20,6 +20,7 @@ import { ProjectFactoryConfigCard } from './ProjectFactoryConfigCard';
 import { ProjectSettingsSection } from './ProjectSettingsSection';
 import { RatchetSettingsSection } from './RatchetSettingsSection';
 import { ServerLogsSection } from './ServerLogsSection';
+import { WorktreeCleanupSection } from './WorktreeCleanupSection';
 
 const onRequest = fn<(path: string, input: unknown) => void>();
 const defaultSettings = {
@@ -65,6 +66,18 @@ function SettingsStoryProvider({
   );
   const [client] = useState(() => {
     let settings = { ...defaultSettings, ...initialSettings };
+    let orphanedWorktrees = [
+      {
+        projectId: 'project-1',
+        projectName: 'factory-factory',
+        path: '/Users/me/factory-factory/worktrees/factory-factory/workspace-abc123',
+      },
+      {
+        projectId: 'project-1',
+        projectName: 'factory-factory',
+        path: '/Users/me/factory-factory/worktrees/factory-factory/workspace-def456',
+      },
+    ];
     const responses: Record<string, (input: unknown) => unknown> = {
       'userSettings.get': () => settings,
       'userSettings.update': (input) => {
@@ -109,6 +122,12 @@ function SettingsStoryProvider({
       'admin.triggerRatchetCheck': () => ({ checked: 3, stateChanges: 1, actionsTriggered: 1 }),
       'workspace.getFactoryConfig': () => factoryConfig,
       'workspace.refreshFactoryConfigs': () => ({ updatedCount: 2, errors: [] }),
+      'admin.listOrphanedWorktrees': () => orphanedWorktrees,
+      'admin.removeOrphanedWorktrees': () => {
+        const removed = orphanedWorktrees.map((orphan) => orphan.path);
+        orphanedWorktrees = [];
+        return { removed, failed: [] };
+      },
       'admin.exportData': () => ({
         meta: { exportedAt: '2026-09-08T12:00:00Z', version: '0.4.7', schemaVersion: 4 },
         data: {
@@ -396,6 +415,25 @@ export const Backup: Story = {
       <DataBackupSection />
     </SettingsStoryProvider>
   ),
+};
+
+export const WorktreeCleanup: Story = {
+  render: () => (
+    <SettingsStoryProvider>
+      <WorktreeCleanupSection />
+    </SettingsStoryProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByText('Found 2 orphaned worktrees not used by any active workspace.');
+    await userEvent.click(canvas.getByRole('button', { name: 'Remove Orphaned Worktrees' }));
+    const dialog = within(document.body);
+    await userEvent.click(await dialog.findByRole('button', { name: 'Remove' }));
+    await waitFor(() =>
+      expect(onRequest).toHaveBeenCalledWith('admin.removeOrphanedWorktrees', undefined)
+    );
+    await canvas.findByText('No orphaned worktrees found.');
+  },
 };
 
 export const AppInfo: Story = {

@@ -52,6 +52,17 @@ selected again. Selectors stay disabled until the save and its settings refresh
 finish. Delayed refreshes cannot replace a pending choice; later server changes
 synchronize normally after saves settle.
 
+## Worktree cleanup
+
+Archiving or deleting a workspace removes its worktree. Worktrees can still be
+left behind by a failed cleanup or an older version. **Worktree Cleanup** in
+General Settings lists `workspace-*` folders under each project's worktree
+directory that no non-archived workspace owns. Other folders are never listed.
+**Remove Orphaned Worktrees** asks for confirmation, then removes them through
+Git. Uncommitted files in them are lost; committed work stays on its branch. The
+server re-checks which folders are orphaned before removing anything, and
+reports any folder it could not remove.
+
 ## Factory configuration
 
 The editor waits for the selected project's `factory-factory.json` query to

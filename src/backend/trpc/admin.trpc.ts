@@ -292,6 +292,20 @@ export const adminRouter = router({
   }),
 
   /**
+   * List worktree directories not owned by any non-archived workspace.
+   */
+  listOrphanedWorktrees: publicProcedure.query(({ ctx }) =>
+    ctx.appContext.services.orphanedWorktreeService.findOrphanedWorktrees()
+  ),
+
+  /**
+   * Remove orphaned worktree directories. Orphans are re-detected server-side.
+   */
+  removeOrphanedWorktrees: publicProcedure.mutation(({ ctx }) =>
+    ctx.appContext.services.orphanedWorktreeService.removeOrphanedWorktrees()
+  ),
+
+  /**
    * Get parsed log entries from server.log with filtering and pagination.
    */
   getLogs: publicProcedure

@@ -493,6 +493,14 @@ class WorkspaceAccessor {
     return rows.map(flatten);
   }
 
+  /** Find the IDs and worktree paths of every workspace that still owns its worktree. */
+  findNonArchivedWorktreeRefs(): Promise<Array<{ id: string; worktreePath: string | null }>> {
+    return prisma.workspace.findMany({
+      where: { status: { not: 'ARCHIVED' } },
+      select: { id: true, worktreePath: true },
+    });
+  }
+
   async detachPR(target: { workspaceId: string; prId: string }) {
     return { removed: await workspacePrAccessor.detach(target), dispatchReleased: false };
   }

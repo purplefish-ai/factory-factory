@@ -20,3 +20,4 @@ export { RatchetSettingsSection } from './RatchetSettingsSection';
 export { ServerLogsSection } from './ServerLogsSection';
 export { StatCard, type StatCardProps } from './StatCard';
 export { VoiceModeSection } from './VoiceModeSection';
+export { WorktreeCleanupSection } from './WorktreeCleanupSection';
