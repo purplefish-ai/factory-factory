@@ -43,6 +43,7 @@ vi.mock('./admin/index', () => ({
   IdeSettingsSection: () => createElement('section', null, 'IDE Settings'),
   RatchetSettingsSection: () => createElement('section', null, 'Ratchet Pull Requests'),
   ServerLogsSection: () => createElement('section', null, 'Server Logs'),
+  WorktreeCleanupSection: () => createElement('section', null, 'Worktree Cleanup'),
 }));
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {

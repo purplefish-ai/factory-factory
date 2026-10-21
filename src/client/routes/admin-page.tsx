@@ -25,6 +25,7 @@ import {
   RatchetSettingsSection,
   ServerLogsSection,
   VoiceModeSection,
+  WorktreeCleanupSection,
 } from './admin/index';
 
 type SettingsTab = 'general' | 'appearance' | 'project' | 'periodic-tasks' | 'voice';
@@ -137,6 +138,7 @@ export default function AdminDashboardPage() {
             <AdversarialReviewSection />
             <AppInfoSection />
             <DataBackupSection />
+            <WorktreeCleanupSection />
             <ServerLogsSection />
           </TabsContent>
 
