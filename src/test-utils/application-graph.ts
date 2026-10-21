@@ -166,6 +166,7 @@ vi.mock('@/backend/services/workspace', () => ({
   workspaceSnapshotStore: {},
   workspaceStateMachine: {},
   worktreeLifecycleService: {},
+  orphanedWorktreeService: {},
 }));
 vi.mock('@/backend/services/workspace-git-state.service', () => ({
   workspaceGitStateService: { stop: vi.fn() },
@@ -278,6 +279,7 @@ import {
   workspaceSnapshotStore,
   workspaceStateMachine,
   worktreeLifecycleService,
+  orphanedWorktreeService,
 } from '@/backend/services/workspace';
 import { workspaceGitStateService } from '@/backend/services/workspace-git-state.service';
 
@@ -433,6 +435,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     workspaceSnapshotStore,
     workspaceStateMachine,
     worktreeLifecycleService,
+    orphanedWorktreeService,
   } satisfies ApplicationServices;
 
   graphEventCollector = createEventCollectorOrchestrator(services);

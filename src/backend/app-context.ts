@@ -94,6 +94,7 @@ import {
   getWorkspaceInitPolicy,
   gitCloneService,
   gitOpsService,
+  orphanedWorktreeService,
   projectManagementService,
   WorkspaceCreationService,
   workspaceActivityService,
@@ -160,6 +161,7 @@ export type ApplicationServices = BridgeServices & {
   workspaceNotificationService: typeof workspaceNotificationService;
   workspaceRelationshipsService: typeof workspaceRelationshipsService;
   worktreeLifecycleService: typeof worktreeLifecycleService;
+  orphanedWorktreeService: typeof orphanedWorktreeService;
   computePendingRequestType: typeof computePendingRequestType;
   triggerAdversarialReview: typeof triggerAdversarialReview;
   archiveWorkspace: typeof archiveWorkspace;
@@ -293,6 +295,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     workspaceSnapshotStore,
     workspaceStateMachine,
     worktreeLifecycleService,
+    orphanedWorktreeService,
     archiveWorkspace,
     cleanupWorkspaceRuntimeResources,
     cleanupWorkspaceScopedCaches: (workspaceId) => {
