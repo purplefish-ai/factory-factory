@@ -15,6 +15,20 @@ export async function canonicalPath(filePath: string): Promise<string> {
   }
 }
 
+/** Protect both the target and directory entries needed to reach it via symlinks. */
+export async function protectedPathReferences(filePath: string): Promise<string[]> {
+  let current = path.resolve(filePath);
+  const references = [current];
+  while (true) {
+    references.push(await canonicalPath(current));
+    const parent = path.dirname(current);
+    if (parent === current) {
+      return references;
+    }
+    current = parent;
+  }
+}
+
 export function containsPath(parent: string, child: string): boolean {
   const relative = path.relative(parent, child);
   return (

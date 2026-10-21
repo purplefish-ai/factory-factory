@@ -6,7 +6,12 @@ import { createLogger } from '@/backend/services/logger.service';
 import { projectAccessor } from '@/backend/services/workspace/resources/project.accessor';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
 import { gitOpsService } from './git-ops.service';
-import { canonicalPath, containsPath, isSafeWorktreeDirectory } from './orphaned-worktree-safety';
+import {
+  canonicalPath,
+  containsPath,
+  isSafeWorktreeDirectory,
+  protectedPathReferences,
+} from './orphaned-worktree-safety';
 import { assertWorktreePathSafe } from './worktree-lifecycle.service';
 
 const logger = createLogger('orphaned-worktree-service');
@@ -65,7 +70,16 @@ async function collectCandidates(projects: ProjectWithPaths[]): Promise<Map<stri
         continue;
       }
       const dirPath = path.resolve(project.worktreeBasePath, entry.name);
-      const canonical = await canonicalPath(dirPath);
+      const canonical = await canonicalPath(dirPath).catch((error: unknown) => {
+        logger.warn('Skipping worktree whose path could not be resolved', {
+          path: dirPath,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return null;
+      });
+      if (!canonical) {
+        continue;
+      }
       const owners = candidates.get(canonical) ?? [];
       owners.push({
         project,
@@ -135,12 +149,16 @@ class OrphanedWorktreeService {
 
     const activeWorkspaces = await workspaceAccessor.findNonArchivedWorktreeRefs();
     const activeIds = new Set(activeWorkspaces.map((workspace) => workspace.id));
-    const protectedPaths = await Promise.all([
-      ...projects.flatMap((project) => (project.repoPath ? [canonicalPath(project.repoPath)] : [])),
-      ...activeWorkspaces.flatMap((workspace) =>
-        workspace.worktreePath ? [canonicalPath(workspace.worktreePath)] : []
-      ),
-    ]);
+    const protectedPaths = (
+      await Promise.all([
+        ...projects.flatMap((project) =>
+          project.repoPath ? [protectedPathReferences(project.repoPath)] : []
+        ),
+        ...activeWorkspaces.flatMap((workspace) =>
+          workspace.worktreePath ? [protectedPathReferences(workspace.worktreePath)] : []
+        ),
+      ])
+    ).flat();
     const registrations = new Map<string, Promise<Set<string>>>();
     const orphans: Orphan[] = [];
     for (const [canonical, owners] of candidates) {

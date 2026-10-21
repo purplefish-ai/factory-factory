@@ -6,6 +6,7 @@ import { gitCommandC } from '@/backend/lib/shell';
 import { projectAccessor } from '@/backend/services/workspace/resources/project.accessor';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
+import * as safety from './orphaned-worktree-safety';
 import { orphanedWorktreeService } from './orphaned-worktree.service';
 
 type Project = { id: string; name: string; repoPath: string; worktreeBasePath: string };
@@ -206,4 +207,65 @@ describe('orphaned worktree deletion safety with real Git repositories', () => {
     await orphanedWorktreeService.removeOrphanedWorktrees();
     expect(await readFile(path.join(candidate, 'unsaved.txt'), 'utf8')).toBe('keep me');
   });
+
+  it.each(['EACCES', 'ENOTDIR'])(
+    'continues after a candidate path fails resolution with %s',
+    async (code) => {
+      const broken = path.join(project.worktreeBasePath, 'workspace-broken');
+      const orphan = path.join(project.worktreeBasePath, 'workspace-orphan');
+      await mkdir(broken, { recursive: true });
+      await mkdir(orphan);
+      const resolvePath = safety.canonicalPath;
+      vi.spyOn(safety, 'canonicalPath').mockImplementation(async (filePath) => {
+        if (filePath === broken) {
+          throw Object.assign(new Error('cannot resolve candidate'), { code });
+        }
+        return await resolvePath(filePath);
+      });
+
+      expect(await orphanedWorktreeService.findOrphanedWorktrees()).toEqual([
+        { projectId: project.id, projectName: project.name, path: orphan },
+      ]);
+      expect(await orphanedWorktreeService.removeOrphanedWorktrees()).toEqual({
+        removed: [orphan],
+        failed: [],
+      });
+      expect(await realpath(broken)).toBe(broken);
+    }
+  );
+
+  it.each(['direct', 'base-alias', 'subdirectory'])(
+    'preserves a configured project symlink inside a candidate (%s)',
+    async (kind) => {
+      const candidate = path.join(project.worktreeBasePath, 'workspace-links');
+      await mkdir(candidate, { recursive: true });
+      const link = path.join(candidate, 'repository');
+      await symlink(project.repoPath, link, 'dir');
+      let repoPath = link;
+      if (kind === 'base-alias') {
+        const alias = path.join(root, 'alias');
+        await symlink(project.worktreeBasePath, alias, 'dir');
+        repoPath = path.join(alias, 'workspace-links', 'repository');
+      } else if (kind === 'subdirectory') {
+        await mkdir(path.join(project.repoPath, 'package'));
+        repoPath = path.join(link, 'package');
+      }
+      projects.push({
+        ...project,
+        id: 'two',
+        name: 'Two',
+        repoPath,
+        worktreeBasePath: path.join(root, 'other-worktrees'),
+      });
+
+      expect(await orphanedWorktreeService.findOrphanedWorktrees()).toEqual([]);
+      expect(await orphanedWorktreeService.removeOrphanedWorktrees()).toEqual({
+        removed: [],
+        failed: [],
+      });
+      expect(await git(repoPath, 'rev-parse', 'HEAD')).toBe(
+        await git(project.repoPath, 'rev-parse', 'HEAD')
+      );
+    }
+  );
 });
