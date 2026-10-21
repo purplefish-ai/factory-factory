@@ -8,10 +8,60 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.4.11] - 2026-10-21
+
 ### Changed
 
+- Replace the internal Codex adapter with upstream Codex ACP, preserving native
+  session modes, saved conversations, plan approvals, structured questions,
+  terminal output, and subagent visibility; keep workspace MCP configuration
+  scoped to each session (#2496)
 - Stream completed tRPC reads within HTTP batches so slower queries do not hold
-  up independent results; preserve ordinary batching for mutations.
+  up independent results; preserve ordinary batching for mutations (#2485)
+- Keep large file previews responsive with worker-based syntax blocks, deferred
+  grammar loading, bounded highlighting, and preserved selection and scroll
+  behavior (#2478, #2487)
+- Reduce icon loading overhead with direct module imports, overlap Git snapshot
+  commands with bounded concurrency, and bound subagent transcript processing
+  and retention (#2481, #2488, #2489, #2496)
+- Refresh the Node.js 26.12.0 and pnpm 12.14.0 toolchain and stable
+  dependencies, including Claude ACP 0.93.0, ACP SDK 1.9.0, Electron 44.9,
+  Prisma 7.10.1, Storybook 10.6.2, and Vitest 5.0.5 (#2479, #2480, #2484)
+- Update Oxlint and Oxfmt, enforce type-aware promise checks, and make pending
+  ACP request checks explicit (#2477, #2483, #2486)
+- Remove unused chat tool components, workspace list helpers, agent activity
+  exports, and obsolete types (#2463, #2464, #2465)
+- Update CodeQL actions together to 4.39.0 and coverage reporting to 2.13.1
+  (#2492, #2493)
+
+### Fixed
+
+- Preserve screenshot paths when opening workspace tabs and reuse existing
+  screenshot tabs (#2467)
+- Keep workspace snapshots stable when PR ordering changes, with regression
+  coverage for multi-PR timestamp agreement and retained attachment refresh
+  races (#2466, #2468, #2472)
+- Preserve explicitly detached PRs during discovery and retry failed GitHub
+  identity lookups before observing PRs (#2469, #2470)
+- Preserve PR merge transitions when sibling refreshes fail, serialize manual
+  syncs, and notify parent workspaces from individual PR-open transitions
+  (#2471, #2474)
+- Recover PR update deliveries after provider identity rollover and prevent
+  approval stalls in scheduled Codex tasks (#2473, #2475)
+- Include dependency patches in Docker builds and validate images for merge
+  queue commits (#2490)
+
+### Security
+
+- Restore application dependency visibility for Dependabot, enforce the pinned
+  pnpm version, and add regression coverage for the existing braces depth
+  mitigation (#2491)
+
+### Documentation
+
+- Clarify current documentation, retire obsolete agent guidance, and consolidate
+  contributor verification instructions (#2476, #2495)
+- Record measured xterm WebGL renderer tradeoffs (#2482)
 
 ## [0.4.10] - 2026-10-14
 
