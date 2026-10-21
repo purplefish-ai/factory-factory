@@ -1,10 +1,12 @@
 import type { Dirent } from 'node:fs';
-import { lstat, readdir } from 'node:fs/promises';
+import { readdir } from 'node:fs/promises';
 import * as path from 'node:path';
+import { GitClientFactory } from '@/backend/clients/git.client';
 import { createLogger } from '@/backend/services/logger.service';
 import { projectAccessor } from '@/backend/services/workspace/resources/project.accessor';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
 import { gitOpsService } from './git-ops.service';
+import { canonicalPath, containsPath, isSafeWorktreeDirectory } from './orphaned-worktree-safety';
 import { assertWorktreePathSafe } from './worktree-lifecycle.service';
 
 const logger = createLogger('orphaned-worktree-service');
@@ -30,6 +32,9 @@ type ProjectWithPaths = {
   worktreeBasePath: string;
 };
 
+type Candidate = { project: ProjectWithPaths; path: string; workspaceId: string };
+type Orphan = { project: ProjectWithPaths; path: string; registered: boolean };
+
 /** Skip one unreadable project base so the other projects can still be cleaned. */
 async function readWorktreeDirs(worktreeBasePath: string): Promise<Dirent[]> {
   try {
@@ -45,17 +50,62 @@ async function readWorktreeDirs(worktreeBasePath: string): Promise<Dirent[]> {
   }
 }
 
-/**
- * Linked worktrees have a `.git` file and share the project's object store, so
- * their commits survive removal. A `.git` directory is a standalone repository
- * whose commits may exist nowhere else; never treat it as an orphan.
- */
-async function isStandaloneRepository(dirPath: string): Promise<boolean> {
-  try {
-    return (await lstat(path.join(dirPath, '.git'))).isDirectory();
-  } catch {
-    return false;
+async function collectCandidates(projects: ProjectWithPaths[]): Promise<Map<string, Candidate[]>> {
+  const candidates = new Map<string, Candidate[]>();
+
+  // Read directories before workspaces: a workspace row always exists before
+  // its worktree is created, so anything listed here that is still in use is
+  // protected by the workspace query below.
+  for (const project of projects) {
+    if (!(project.repoPath && project.worktreeBasePath)) {
+      continue;
+    }
+    for (const entry of await readWorktreeDirs(project.worktreeBasePath)) {
+      if (!(entry.isDirectory() && entry.name.startsWith(WORKTREE_DIR_PREFIX))) {
+        continue;
+      }
+      const dirPath = path.resolve(project.worktreeBasePath, entry.name);
+      const canonical = await canonicalPath(dirPath);
+      const owners = candidates.get(canonical) ?? [];
+      owners.push({
+        project,
+        path: dirPath,
+        workspaceId: entry.name.slice(WORKTREE_DIR_PREFIX.length),
+      });
+      candidates.set(canonical, owners);
+    }
   }
+  return candidates;
+}
+
+async function selectOrphan(
+  canonical: string,
+  owners: Candidate[],
+  registrations: Map<string, Promise<Set<string>>>
+): Promise<Orphan | undefined> {
+  // Shared bases must never route a registered worktree through another
+  // repository's recursive deletion fallback. Inspect every potential owner.
+  let registeredOwner: Candidate | undefined;
+  for (const owner of owners) {
+    let paths = registrations.get(owner.project.id);
+    if (!paths) {
+      paths = GitClientFactory.forProject(owner.project)
+        .listWorktreesWithBranches()
+        .then(
+          async (entries) =>
+            new Set(await Promise.all(entries.map((entry) => canonicalPath(entry.path))))
+        );
+      registrations.set(owner.project.id, paths);
+    }
+    if ((await paths).has(canonical)) {
+      registeredOwner ??= owner;
+    }
+  }
+  const owner = registeredOwner ?? owners[0];
+  if (owner && (await isSafeWorktreeDirectory(owner.path, Boolean(registeredOwner)))) {
+    return { project: owner.project, path: owner.path, registered: Boolean(registeredOwner) };
+  }
+  return undefined;
 }
 
 class OrphanedWorktreeService {
@@ -75,50 +125,44 @@ class OrphanedWorktreeService {
     }));
   }
 
-  private async detectOrphans(): Promise<Array<{ project: ProjectWithPaths; path: string }>> {
+  private async detectOrphans(): Promise<Orphan[]> {
     const projects = await projectAccessor.list();
-    const candidates: Array<{ project: ProjectWithPaths; path: string; workspaceId: string }> = [];
+    const candidates = await collectCandidates(projects);
 
-    // Read directories before workspaces: a workspace row always exists before
-    // its worktree is created, so anything listed here that is still in use is
-    // protected by the workspace query below.
-    for (const project of projects) {
-      if (!(project.repoPath && project.worktreeBasePath)) {
-        continue;
-      }
-      for (const entry of await readWorktreeDirs(project.worktreeBasePath)) {
-        if (!(entry.isDirectory() && entry.name.startsWith(WORKTREE_DIR_PREFIX))) {
-          continue;
-        }
-        const dirPath = path.resolve(project.worktreeBasePath, entry.name);
-        if (await isStandaloneRepository(dirPath)) {
-          continue;
-        }
-        candidates.push({
-          project,
-          path: dirPath,
-          workspaceId: entry.name.slice(WORKTREE_DIR_PREFIX.length),
-        });
-      }
-    }
-
-    if (candidates.length === 0) {
+    if (candidates.size === 0) {
       return [];
     }
 
     const activeWorkspaces = await workspaceAccessor.findNonArchivedWorktreeRefs();
     const activeIds = new Set(activeWorkspaces.map((workspace) => workspace.id));
-    const activePaths = new Set(
-      activeWorkspaces.flatMap((workspace) =>
-        workspace.worktreePath ? [path.resolve(workspace.worktreePath)] : []
-      )
-    );
-
-    return candidates
-      .filter(
-        (candidate) => !(activeIds.has(candidate.workspaceId) || activePaths.has(candidate.path))
-      )
-      .map(({ project, path: orphanPath }) => ({ project, path: orphanPath }));
+    const protectedPaths = await Promise.all([
+      ...projects.flatMap((project) => (project.repoPath ? [canonicalPath(project.repoPath)] : [])),
+      ...activeWorkspaces.flatMap((workspace) =>
+        workspace.worktreePath ? [canonicalPath(workspace.worktreePath)] : []
+      ),
+    ]);
+    const registrations = new Map<string, Promise<Set<string>>>();
+    const orphans: Orphan[] = [];
+    for (const [canonical, owners] of candidates) {
+      if (
+        owners.some((owner) => activeIds.has(owner.workspaceId)) ||
+        protectedPaths.some((protectedPath) => containsPath(canonical, protectedPath))
+      ) {
+        continue;
+      }
+      try {
+        const orphan = await selectOrphan(canonical, owners, registrations);
+        if (orphan) {
+          orphans.push(orphan);
+        }
+      } catch (error) {
+        logger.warn('Skipping worktree whose deletion safety could not be verified', {
+          path: canonical,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    return orphans;
   }
 
   /** Remove every orphaned worktree, re-detected server-side at call time. */
@@ -137,6 +181,9 @@ class OrphanedWorktreeService {
     for (const orphan of await this.detectOrphans()) {
       try {
         await assertWorktreePathSafe(orphan.path, orphan.project.worktreeBasePath);
+        if (!(await isSafeWorktreeDirectory(orphan.path, orphan.registered))) {
+          throw new Error('Worktree now contains protected repository data');
+        }
         await gitOpsService.removeWorktree(orphan.path, orphan.project);
         result.removed.push(orphan.path);
       } catch (error) {

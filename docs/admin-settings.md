@@ -57,17 +57,21 @@ synchronize normally after saves settle.
 Archiving or deleting a workspace removes its worktree. Worktrees can still be
 left behind by a failed cleanup or an older version. **Worktree Cleanup** in
 General Settings lists `workspace-*` folders under each project's worktree
-directory that no non-archived workspace owns. Other folders, and folders that
-are standalone Git repositories rather than linked worktrees, are never listed.
-An unreadable worktree directory is skipped and logged.
+directory that no non-archived workspace owns. Cleanup also protects configured
+project repositories, including paths reached through symlinks or inside a
+candidate folder. Standalone repositories, folders containing nested
+repositories (including bare repositories), and linked worktrees whose owning
+repository cannot be identified are never listed. An unreadable directory or
+unverifiable Git registration is skipped and logged.
 
 **Remove Orphaned Worktrees** asks for confirmation. Folders Git still tracks as
-worktrees are removed with `git worktree remove`; other listed folders are
-deleted directly. Uncommitted files are lost either way. Commits made in a
-linked worktree live in the project repository and stay on their branch. The
-server re-checks which folders are orphaned before removing anything and reports
-any folder it could not remove. Removal is only available from a trusted local
-client.
+worktrees are removed through their owning repository with
+`git worktree remove`; shared worktree directories are deduplicated and Git
+locks remain effective. Other listed folders are deleted directly. Uncommitted
+files are lost either way. Commits made in a linked worktree live in the project
+repository and stay on their branch. The server re-checks which folders are
+orphaned before removing anything and reports any folder it could not remove.
+Removal is only available from a trusted local client.
 
 ## Factory configuration
 

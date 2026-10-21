@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { gitCommandC } from '@/backend/lib/shell';
 import { projectAccessor } from '@/backend/services/workspace/resources/project.accessor';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
@@ -23,6 +24,9 @@ describe('orphanedWorktreeService', () => {
       repoPath: path.join(tempRoot, 'repo'),
       worktreeBasePath,
     };
+    await mkdir(project.repoPath);
+    const initialized = await gitCommandC(project.repoPath, ['init']);
+    expect(initialized.code).toBe(0);
     vi.spyOn(projectAccessor, 'list').mockResolvedValue(
       unsafeCoerce<Awaited<ReturnType<typeof projectAccessor.list>>>([project])
     );
@@ -59,15 +63,13 @@ describe('orphanedWorktreeService', () => {
     ]);
   });
 
-  it('never reports standalone repositories, which may hold unique commits', async () => {
+  it('never reports standalone repositories or unrecognized Git metadata', async () => {
     await mkdir(path.join(worktreeBasePath, 'workspace-standalone', '.git'), { recursive: true });
     await mkdir(path.join(worktreeBasePath, 'workspace-linked'));
     await writeFile(path.join(worktreeBasePath, 'workspace-linked', '.git'), 'gitdir: /repo');
     vi.spyOn(workspaceAccessor, 'findNonArchivedWorktreeRefs').mockResolvedValue([]);
 
-    await expect(orphanedWorktreeService.findOrphanedWorktrees()).resolves.toEqual([
-      expect.objectContaining({ path: path.join(worktreeBasePath, 'workspace-linked') }),
-    ]);
+    await expect(orphanedWorktreeService.findOrphanedWorktrees()).resolves.toEqual([]);
   });
 
   it('keeps scanning other projects when one worktree base is unreadable', async () => {
