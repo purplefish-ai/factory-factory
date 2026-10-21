@@ -10,6 +10,12 @@ and this project adheres to
 
 ## [0.4.11] - 2026-10-21
 
+### Added
+
+- Add orphaned worktree cleanup in General Settings, with a preview of unowned
+  workspace folders, removal confirmation, and repository ownership checks
+  (#2498)
+
 ### Changed
 
 - Replace the internal Codex adapter with upstream Codex ACP, preserving native
