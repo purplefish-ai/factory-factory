@@ -19,7 +19,6 @@ import type { inferRouterOutputs } from '@trpc/server';
  */
 import { useCallback, useRef } from 'react';
 import { runInBackground } from '@/client/lib/background-task';
-import { overridePendingRatchetToggle } from '@/client/lib/ratchet-toggle-cache';
 import {
   mergeProjectSnapshotIntoWorkspaceDetail,
   projectSnapshotToWorkspace,
@@ -211,7 +210,7 @@ function applySnapshotFullMessage(
   alreadyInvalidated: Set<string>,
   repairedWorktreePaths: Set<string>
 ): void {
-  const entries = message.entries.map(overridePendingRatchetToggle);
+  const entries = message.entries;
 
   seedPendingRequests(pendingRequests, entries);
 
@@ -262,7 +261,7 @@ function applySnapshotChangedMessage(
   alreadyInvalidated: Set<string>,
   repairedWorktreePaths: Set<string>
 ): void {
-  const entry = overridePendingRatchetToggle(message.entry);
+  const entry = message.entry;
 
   maybeTriggerPendingRequestAttention(pendingRequests, entry);
 

@@ -1,8 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  resetPendingRatchetTogglesForTests,
-  setPendingRatchetToggle,
-} from '@/client/lib/ratchet-toggle-cache';
 import { projectSnapshotToWorkspace } from '@/client/lib/snapshot-to-workspace';
 import type { UseWebSocketTransportOptions } from '@/hooks/use-websocket-transport';
 import { makeWorkspaceSnapshotEntry as makeEntry } from '@/test-utils/workspace-snapshot';
@@ -83,7 +79,6 @@ describe('useProjectSnapshotSync', () => {
     mockListInvalidate.mockResolvedValue(undefined);
     mockWorkspaceGetInvalidate.mockClear();
     mockGlobalDispatchEvent.mockClear();
-    resetPendingRatchetTogglesForTests();
     vi.stubGlobal('dispatchEvent', mockGlobalDispatchEvent);
   });
 
@@ -693,61 +688,6 @@ describe('useProjectSnapshotSync', () => {
       });
 
       expect(mockListInvalidate).toHaveBeenCalledTimes(2);
-    });
-  });
-
-  describe('pending ratchet toggle override', () => {
-    it('snapshot_changed entries are overridden while a toggle is in flight', () => {
-      useProjectSnapshotSync('proj-1');
-      const onMessage = capturedOptions!.onMessage!;
-
-      setPendingRatchetToggle('ws-1', false);
-      onMessage({
-        type: 'snapshot_changed',
-        workspaceId: 'ws-1',
-        entry: makeEntry({ workspaceId: 'ws-1', ratchetEnabled: true, ratchetState: 'READY' }),
-      });
-
-      const [, updater] = mockSetData.mock.calls[0]!;
-      const result = updater(undefined);
-      expect(result.workspaces[0].ratchetEnabled).toBe(false);
-      expect(result.workspaces[0].ratchetState).toBe('IDLE');
-
-      const [, detailUpdater] = mockWorkspaceGetSetData.mock.calls[0]!;
-      const detail = detailUpdater({ id: 'ws-1' });
-      expect(detail.ratchetEnabled).toBe(false);
-    });
-
-    it('snapshot_full entries are overridden while a toggle is in flight', () => {
-      useProjectSnapshotSync('proj-1');
-      const onMessage = capturedOptions!.onMessage!;
-
-      setPendingRatchetToggle('ws-1', true);
-      onMessage({
-        type: 'snapshot_full',
-        projectId: 'proj-1',
-        entries: [makeEntry({ workspaceId: 'ws-1', ratchetEnabled: false })],
-      });
-
-      const [, updater] = mockSetData.mock.calls[0]!;
-      const result = updater(undefined);
-      expect(result.workspaces[0].ratchetEnabled).toBe(true);
-    });
-
-    it('entries pass through untouched when no toggle is pending', () => {
-      useProjectSnapshotSync('proj-1');
-      const onMessage = capturedOptions!.onMessage!;
-
-      onMessage({
-        type: 'snapshot_changed',
-        workspaceId: 'ws-1',
-        entry: makeEntry({ workspaceId: 'ws-1', ratchetEnabled: true, ratchetState: 'READY' }),
-      });
-
-      const [, updater] = mockSetData.mock.calls[0]!;
-      const result = updater(undefined);
-      expect(result.workspaces[0].ratchetEnabled).toBe(true);
-      expect(result.workspaces[0].ratchetState).toBe('READY');
     });
   });
 
