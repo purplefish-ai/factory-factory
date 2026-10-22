@@ -72,28 +72,6 @@ export function applyRatchetToggleState<T extends Omit<RatchetToggleCacheShape, 
 // consistent with the pending toggle until the mutation settles.
 
 const pendingRatchetToggles = new Map<string, { enabled: boolean; token: number }>();
-let nextPendingRatchetToggleToken = 0;
-
-/**
- * Registers an in-flight toggle and returns a token identifying it. A newer
- * toggle for the same workspace replaces the previous registration, and the
- * older mutation's clear (with its stale token) becomes a no-op.
- */
-export function setPendingRatchetToggle(workspaceId: string, enabled: boolean): number {
-  nextPendingRatchetToggleToken += 1;
-  pendingRatchetToggles.set(workspaceId, { enabled, token: nextPendingRatchetToggleToken });
-  return nextPendingRatchetToggleToken;
-}
-
-export function clearPendingRatchetToggle(workspaceId: string, token: number): void {
-  if (pendingRatchetToggles.get(workspaceId)?.token === token) {
-    pendingRatchetToggles.delete(workspaceId);
-  }
-}
-
-export function resetPendingRatchetTogglesForTests(): void {
-  pendingRatchetToggles.clear();
-}
 
 /**
  * Applies an in-flight ratchet toggle to a snapshot entry. Returns the entry
@@ -108,14 +86,4 @@ export function overridePendingRatchetToggle<
     return entry;
   }
   return applyRatchetToggleState(entry, pending.enabled);
-}
-
-export function updateWorkspaceRatchetState<T extends RatchetToggleCacheShape>(
-  items: T[],
-  workspaceId: string,
-  enabled: boolean
-): T[] {
-  return items.map((item) =>
-    item.id === workspaceId ? applyRatchetToggleState(item, enabled) : item
-  );
 }

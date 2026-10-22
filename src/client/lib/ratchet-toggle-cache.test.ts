@@ -1,12 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import {
-  applyRatchetToggleState,
-  clearPendingRatchetToggle,
-  overridePendingRatchetToggle,
-  resetPendingRatchetTogglesForTests,
-  setPendingRatchetToggle,
-  updateWorkspaceRatchetState,
-} from './ratchet-toggle-cache';
+import { describe, expect, it } from 'vitest';
+import { applyRatchetToggleState, overridePendingRatchetToggle } from './ratchet-toggle-cache';
 
 describe('ratchet-toggle-cache', () => {
   it('recomputes sidebarStatus when sidebar fields are present', () => {
@@ -29,29 +22,9 @@ describe('ratchet-toggle-cache', () => {
     expect(updated.ratchetButtonAnimated).toBe(false);
     expect(updated.sidebarStatus).toEqual({ activityState: 'IDLE', ciState: 'UNKNOWN' });
   });
-
-  it('updates only matching workspace entries', () => {
-    const updated = updateWorkspaceRatchetState(
-      [
-        { id: 'ws-1', ratchetEnabled: true, ratchetState: 'CI_RUNNING' as const },
-        { id: 'ws-2', ratchetEnabled: true, ratchetState: 'READY' as const },
-      ],
-      'ws-1',
-      false
-    );
-
-    expect(updated).toEqual([
-      { id: 'ws-1', ratchetEnabled: false, ratchetState: 'IDLE', ratchetButtonAnimated: false },
-      { id: 'ws-2', ratchetEnabled: true, ratchetState: 'READY' },
-    ]);
-  });
 });
 
 describe('pending ratchet toggle override', () => {
-  beforeEach(() => {
-    resetPendingRatchetTogglesForTests();
-  });
-
   function makeEntry(ratchetEnabled: boolean) {
     return {
       workspaceId: 'ws-1',
@@ -69,46 +42,5 @@ describe('pending ratchet toggle override', () => {
   it('returns the entry unchanged when no toggle is pending', () => {
     const entry = makeEntry(true);
     expect(overridePendingRatchetToggle(entry)).toBe(entry);
-  });
-
-  it('returns the entry unchanged when the pending value matches', () => {
-    setPendingRatchetToggle('ws-1', true);
-    const entry = makeEntry(true);
-    expect(overridePendingRatchetToggle(entry)).toBe(entry);
-  });
-
-  it('overrides a snapshot entry that would revert an in-flight toggle', () => {
-    setPendingRatchetToggle('ws-1', false);
-    const overridden = overridePendingRatchetToggle(makeEntry(true));
-
-    expect(overridden.ratchetEnabled).toBe(false);
-    expect(overridden.ratchetState).toBe('IDLE');
-    expect(overridden.ratchetButtonAnimated).toBe(false);
-    expect(overridden.sidebarStatus).toEqual({ activityState: 'IDLE', ciState: 'UNKNOWN' });
-  });
-
-  it('only overrides the workspace with the pending toggle', () => {
-    setPendingRatchetToggle('ws-other', false);
-    const entry = makeEntry(true);
-    expect(overridePendingRatchetToggle(entry)).toBe(entry);
-  });
-
-  it('stops overriding after the toggle is cleared', () => {
-    const token = setPendingRatchetToggle('ws-1', false);
-    clearPendingRatchetToggle('ws-1', token);
-    const entry = makeEntry(true);
-    expect(overridePendingRatchetToggle(entry)).toBe(entry);
-  });
-
-  it('keeps the newer toggle when an older mutation settles late', () => {
-    const firstToken = setPendingRatchetToggle('ws-1', true);
-    setPendingRatchetToggle('ws-1', false);
-
-    // The first mutation settles after the second was registered; its clear
-    // must not remove the second mutation's pending value.
-    clearPendingRatchetToggle('ws-1', firstToken);
-
-    const overridden = overridePendingRatchetToggle(makeEntry(true));
-    expect(overridden.ratchetEnabled).toBe(false);
   });
 });
