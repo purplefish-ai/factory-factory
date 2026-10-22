@@ -9,13 +9,6 @@ export type WorkspaceHeaderWorkspace = NonNullable<
 >;
 export type WorkspaceSessionManagement = ReturnType<typeof useSessionManagement>;
 
-export type WorkspacePrChipProps = {
-  prUrl: NonNullable<WorkspaceHeaderWorkspace['prUrl']>;
-  prNumber: NonNullable<WorkspaceHeaderWorkspace['prNumber']>;
-  variant?: 'default' | 'merged' | 'closed';
-  className?: string;
-};
-
 export type WorkspaceSwitchGroups = {
   todo: ServerWorkspace[];
   waiting: ServerWorkspace[];
