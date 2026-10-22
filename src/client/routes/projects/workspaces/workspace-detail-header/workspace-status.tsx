@@ -1,13 +1,10 @@
-import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
 import { DotOutlineIcon } from '@phosphor-icons/react/dist/csr/DotOutline';
 import { GitPullRequestIcon } from '@phosphor-icons/react/dist/csr/GitPullRequest';
-import { XCircleIcon } from '@phosphor-icons/react/dist/csr/XCircle';
 import { CiStatusChip } from '@/client/components/ci-status-chip';
 import { PrStateBadge } from '@/client/components/pr-state-badge';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { cn } from '@/lib/utils';
-import type { WorkspaceHeaderWorkspace, WorkspacePrChipProps } from './types';
+import type { WorkspaceHeaderWorkspace } from './types';
 
 type WorkspacePrActionProps = {
   workspace: WorkspaceHeaderWorkspace;
@@ -16,37 +13,6 @@ type WorkspacePrActionProps = {
   isCreatingSession: boolean;
   handleQuickAction: (title: string, prompt: string) => void;
 };
-
-export function WorkspacePrChip({
-  prUrl,
-  prNumber,
-  variant = 'default',
-  className,
-}: WorkspacePrChipProps) {
-  const isMerged = variant === 'merged';
-  const isClosed = variant === 'closed';
-
-  return (
-    <a
-      href={prUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={cn(
-        'flex items-center gap-1 text-xs hover:opacity-80 transition-opacity',
-        isMerged
-          ? 'text-green-500'
-          : isClosed
-            ? 'text-slate-500'
-            : 'text-muted-foreground hover:text-foreground',
-        className
-      )}
-    >
-      <GitPullRequestIcon className="h-3 w-3" />#{prNumber}
-      {isMerged && <CheckCircleIcon className="h-3 w-3 text-green-500" />}
-      {isClosed && <XCircleIcon className="h-3 w-3 text-slate-500" />}
-    </a>
-  );
-}
 
 export function WorkspacePrAction({
   workspace,
