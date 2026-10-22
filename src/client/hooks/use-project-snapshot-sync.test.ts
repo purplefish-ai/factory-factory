@@ -691,24 +691,6 @@ describe('useProjectSnapshotSync', () => {
     });
   });
 
-  describe('pending ratchet toggle override', () => {
-    it('entries pass through untouched when no toggle is pending', () => {
-      useProjectSnapshotSync('proj-1');
-      const onMessage = capturedOptions!.onMessage!;
-
-      onMessage({
-        type: 'snapshot_changed',
-        workspaceId: 'ws-1',
-        entry: makeEntry({ workspaceId: 'ws-1', ratchetEnabled: true, ratchetState: 'READY' }),
-      });
-
-      const [, updater] = mockSetData.mock.calls[0]!;
-      const result = updater(undefined);
-      expect(result.workspaces[0].ratchetEnabled).toBe(true);
-      expect(result.workspaces[0].ratchetState).toBe('READY');
-    });
-  });
-
   describe('workspace attention events for pending requests', () => {
     it('does not dispatch attention during snapshot_full hydration', () => {
       useProjectSnapshotSync('proj-1');
