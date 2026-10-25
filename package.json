@@ -95,7 +95,7 @@
     "test:acp:manual:prompt": "RUN_REAL_CODEX_APP_SERVER_PROMPT_TESTS=1 pnpm test:acp:manual"
   },
   "dependencies": {
-    "@agentclientprotocol/claude-agent-acp": "^0.93.0",
+    "@agentclientprotocol/claude-agent-acp": "^0.94.0",
     "@agentclientprotocol/codex-acp": "2.2.2",
     "@agentclientprotocol/sdk": "1.9.0",
     "@daypicker/react": "^10.0.2",
