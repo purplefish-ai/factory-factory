@@ -118,7 +118,7 @@ it('keeps a stop made while startup was pending after the old start finishes', a
     prepare: () => Promise.resolve({ status: 'discard' }),
     validate: () => Promise.resolve(false),
     complete: () => Promise.resolve(),
-    fail: () => Promise.resolve(),
+    fail: () => Promise.resolve({ paused: false }),
     recover: () => Promise.resolve(),
     pause: (_id, reason) => {
       pauseReason = reason;

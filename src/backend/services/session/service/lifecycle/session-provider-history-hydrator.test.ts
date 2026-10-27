@@ -46,6 +46,43 @@ describe('history hydration after provider identity rollover', () => {
     sessionDomainService.clearAllSessions();
   });
 
+  it.each(['CLAUDE', 'CODEX'] as const)(
+    'hydrates %s provider history alongside a local failed PR update',
+    async (provider) => {
+      sessionDomainService.failMessage(
+        'history-session',
+        {
+          id: 'pr-event-local-outcome',
+          text: 'Review feedback',
+          timestamp: '2026-10-27T00:00:00Z',
+          source: {
+            type: 'pr_event',
+            request: { workspaceId: 'w', prId: null, bindingRevision: 1 },
+          },
+          settings: {
+            selectedModel: null,
+            reasoningEffort: null,
+            thinkingEnabled: false,
+            planModeEnabled: false,
+          },
+        },
+        'Provider unavailable'
+      );
+      sessionDomainService.clearSession('history-session', { preserveRejections: true });
+      sessionDomainService.resetProviderHistory('history-session', 'saved');
+      (provider === 'CLAUDE' ? loadClaude : loadCodex).mockResolvedValue(loaded('saved turn'));
+      await hydrateProviderHistoryIfNeeded('history-session', record('saved', provider));
+      const transcript = sessionDomainService.getTranscriptSnapshot('history-session');
+      expect(transcript).toHaveLength(2);
+      expect(transcript[0]?.text).toBe('saved turn');
+      expect(transcript[1]?.message).toMatchObject({
+        type: 'pr_update',
+        prDeliveryState: 'failed',
+      });
+      expect(transcript[1]!.order).toBeGreaterThan(transcript[0]!.order);
+    }
+  );
+
   it('loads only the reconciled identity in process and after backend restart', async () => {
     sessionDomainService.replaceTranscript('history-session', [oldMessage], {
       historySource: 'jsonl',

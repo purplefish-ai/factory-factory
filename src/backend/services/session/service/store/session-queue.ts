@@ -1,7 +1,9 @@
 import { SERVICE_LIMITS } from '@/backend/services/constants';
 import type { QueuedMessage } from '@/shared/acp-protocol';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
+import { recordPRUpdateOutcome } from './session-pr-update';
 import type { SessionStore } from './session-store.types';
+import { removeTranscriptMessageById } from './session-transcript';
 
 export function enqueueMessage(
   store: SessionStore,
@@ -11,6 +13,10 @@ export function enqueueMessage(
     return { error: `Queue full (max ${SERVICE_LIMITS.sessionStoreMaxQueueSize} messages)` };
   }
 
+  const prior = store.transcript.find((entry) => entry.id === message.id);
+  if (message.source && prior?.message?.prDeliveryState) {
+    removeTranscriptMessageById(store, message.id);
+  }
   const firstBackground = store.queue.findIndex((item) => item.source?.type === 'pr_event');
   if (!message.source && firstBackground >= 0) {
     store.queue.splice(firstBackground, 0, message);
@@ -20,12 +26,19 @@ export function enqueueMessage(
   return { position: store.queue.length - 1 };
 }
 
-export function removeQueuedMessage(store: SessionStore, messageId: string): boolean {
+export function removeQueuedMessage(
+  store: SessionStore,
+  messageId: string,
+  options?: { recordCancellation?: boolean; expectedMessage?: QueuedMessage }
+): boolean {
   const idx = store.queue.findIndex((message) => message.id === messageId);
-  if (idx < 0) {
+  if (idx < 0 || (options?.expectedMessage && store.queue[idx] !== options.expectedMessage)) {
     return false;
   }
-  store.queue.splice(idx, 1);
+  const [message] = store.queue.splice(idx, 1);
+  if (options?.recordCancellation !== false && message?.source?.type === 'pr_event') {
+    recordPRUpdateOutcome(store, message, 'cancelled');
+  }
   return true;
 }
 
@@ -69,6 +82,11 @@ export function clearPendingInteractiveRequestIfMatches(
 
 export function clearQueuedWork(store: SessionStore): boolean {
   const hadQueuedWork = store.queue.length > 0 || store.pendingInteractiveRequest !== null;
+  for (const message of store.queue) {
+    if (message.source?.type === 'pr_event') {
+      recordPRUpdateOutcome(store, message, 'cancelled');
+    }
+  }
   store.queue = [];
   store.pendingInteractiveRequest = null;
   return hadQueuedWork;

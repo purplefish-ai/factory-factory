@@ -11,6 +11,8 @@ import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import { sessionResumeFences } from './session-resume-fence';
 import { mergeLifecycleMessage } from './store/session-lifecycle-transcript';
+import { isLocalTranscriptMessage } from './store/session-local-transcript';
+import { buildMessageFailure, recordPRUpdateOutcome } from './store/session-pr-update';
 import { handleProcessExit } from './store/session-process-exit';
 import { SessionPublisher } from './store/session-publisher';
 import {
@@ -144,31 +146,34 @@ export class SessionDomainService extends EventEmitter {
       queueCount: store.queue.length,
     });
   }
-
   emitDelta(sessionId: string, event: SessionDeltaEvent): void {
     this.publisher.emitDelta(sessionId, event);
   }
-
   rejectMessage(sessionId: string, messageId: string, errorMessage: string): void {
     this.recordRecentMessageRejection(sessionId, {
       id: messageId,
       errorMessage,
     });
   }
-
-  failMessage(sessionId: string, message: QueuedMessage, errorMessage: string): void {
-    this.recordRecentMessageRejection(sessionId, {
-      id: message.id,
-      errorMessage,
-      state: MessageState.FAILED,
-      userMessage: {
-        text: message.text,
-        timestamp: message.timestamp,
-        attachments: message.attachments,
-        voiceMode: message.voiceMode,
-        sessionId,
-      },
-    });
+  failMessage(
+    sessionId: string,
+    message: QueuedMessage,
+    errorMessage: string,
+    deliveryState: 'failed' | 'cancelled' = 'failed'
+  ): void {
+    if (message.source?.type === 'pr_event') {
+      const store = this.registry.getOrCreateActive(sessionId);
+      if (!recordPRUpdateOutcome(store, message, deliveryState, errorMessage)) {
+        return;
+      }
+      removeQueuedMessage(store, message.id, { recordCancellation: false });
+      this.publisher.forwardSnapshot(store, { reason: 'manual_emit' });
+      return;
+    }
+    this.recordRecentMessageRejection(
+      sessionId,
+      buildMessageFailure(sessionId, message, errorMessage)
+    );
   }
 
   private recordRecentMessageRejection(
@@ -229,9 +234,13 @@ export class SessionDomainService extends EventEmitter {
     return result;
   }
 
-  removeQueuedMessage(sessionId: string, messageId: string): boolean {
+  removeQueuedMessage(
+    sessionId: string,
+    messageId: string,
+    options?: { expectedMessage?: QueuedMessage }
+  ): boolean {
     const store = this.registry.getOrCreateActive(sessionId);
-    const removed = removeQueuedMessage(store, messageId);
+    const removed = removeQueuedMessage(store, messageId, options);
     if (!removed) {
       return false;
     }
@@ -296,19 +305,14 @@ export class SessionDomainService extends EventEmitter {
   removeTranscriptMessageById(
     sessionId: string,
     messageId: string,
-    options?: { emitSnapshot?: boolean }
+    options?: { emitSnapshot?: boolean; preservePRUpdateOutcome?: boolean }
   ): boolean {
     const store = this.registry.getOrCreateActive(sessionId);
-    const removed = removeTranscriptMessageById(store, messageId);
-    if (!removed) {
-      return false;
-    }
-
-    if (options?.emitSnapshot !== false) {
+    const removed = removeTranscriptMessageById(store, messageId, options);
+    if (removed && options?.emitSnapshot !== false) {
       this.publisher.forwardSnapshot(store, { reason: 'remove_transcript_message' });
     }
-
-    return true;
+    return removed;
   }
 
   appendClaudeEvent(sessionId: string, claudeMessage: AgentMessage): number {
@@ -576,12 +580,7 @@ export class SessionDomainService extends EventEmitter {
     store.historyHydratedAt = undefined;
     this.clearHistoryRetryCooldown(sessionId);
     // Stop evidence belongs to the AgentSession; provider messages belong to the archived identity.
-    this.replaceTranscript(
-      sessionId,
-      store.transcript.filter(
-        (entry) => entry.source === 'agent' && entry.message?.type === 'session_lifecycle'
-      )
-    );
+    this.replaceTranscript(sessionId, store.transcript.filter(isLocalTranscriptMessage));
     this.publisher.forwardSnapshot(store, { reason: 'manual_emit' });
   }
 

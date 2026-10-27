@@ -3,6 +3,7 @@ import { codexSessionHistoryLoaderService } from '@/backend/services/session/ser
 import { claudeSessionHistoryLoaderService } from '@/backend/services/session/service/data/session-history-loader.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { mergeLifecycleMessage } from '@/backend/services/session/service/store/session-lifecycle-transcript';
+import { isLocalTranscriptMessage } from '@/backend/services/session/service/store/session-local-transcript';
 import { buildTranscriptFromHistory } from '@/backend/services/session/service/store/session-transcript';
 import type { ChatMessage } from '@/shared/acp-protocol';
 
@@ -49,16 +50,12 @@ function getProviderSessionId(dbSession: ProviderHistorySession): string | null 
   return getProviderSessionIdFromMetadata(dbSession);
 }
 
-function isLifecycleMessage(message: ChatMessage): boolean {
-  return message.source === 'agent' && message.message?.type === 'session_lifecycle';
-}
-
 function providerMessages(transcript: ChatMessage[]): ChatMessage[] {
-  return transcript.filter((message) => !isLifecycleMessage(message));
+  return transcript.filter((message) => !isLocalTranscriptMessage(message));
 }
 
-function lifecycleMessages(transcript: ChatMessage[]): ChatMessage[] {
-  return transcript.filter(isLifecycleMessage);
+function localMessages(transcript: ChatMessage[]): ChatMessage[] {
+  return transcript.filter(isLocalTranscriptMessage);
 }
 
 export async function hydrateProviderHistoryIfNeeded(
@@ -182,11 +179,11 @@ function handleLoadedProviderHistory({
     return;
   }
 
-  const retainedLifecycleMessages = lifecycleMessages(latestTranscript);
+  const retainedLocalMessages = localMessages(latestTranscript);
   const mergedTranscript =
-    retainedLifecycleMessages.length === 0
+    retainedLocalMessages.length === 0
       ? loadedTranscript
-      : mergeLifecycleMessage(loadedTranscript, retainedLifecycleMessages);
+      : mergeLifecycleMessage(loadedTranscript, retainedLocalMessages);
   sessionDomainService.replaceTranscript(sessionId, mergedTranscript, {
     historySource: 'jsonl',
   });
@@ -430,8 +427,8 @@ function backfillMissingCodexToolTranscript(
     ...providerMessages(existingTranscript),
     ...missingToolMessages,
   ]);
-  const retainedLifecycleMessages = lifecycleMessages(existingTranscript);
-  return retainedLifecycleMessages.length === 0
+  const retainedLocalMessages = localMessages(existingTranscript);
+  return retainedLocalMessages.length === 0
     ? normalizedProviderTranscript
-    : mergeLifecycleMessage(normalizedProviderTranscript, retainedLifecycleMessages);
+    : mergeLifecycleMessage(normalizedProviderTranscript, retainedLocalMessages);
 }

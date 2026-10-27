@@ -7,6 +7,7 @@ import {
   shouldPersistAgentMessage,
   shouldSuppressDuplicateResultMessage,
 } from '@/shared/acp-protocol';
+import { isPRUpdateOutcomeMessage } from './session-local-transcript';
 import type { SessionStore } from './session-store.types';
 
 export function messageSort(a: ChatMessage, b: ChatMessage): number {
@@ -221,12 +222,20 @@ export function upsertTranscriptMessage(store: SessionStore, message: ChatMessag
   insertTranscriptMessage(store, message);
 }
 
-export function removeTranscriptMessageById(store: SessionStore, messageId: string): boolean {
+export function removeTranscriptMessageById(
+  store: SessionStore,
+  messageId: string,
+  options?: { preservePRUpdateOutcome?: boolean }
+): boolean {
   const index = store.transcriptIdToIndex.get(messageId);
   if (index === undefined || store.transcript[index]?.id !== messageId) {
     return false;
   }
 
+  const message = store.transcript[index];
+  if (options?.preservePRUpdateOutcome && message && isPRUpdateOutcomeMessage(message)) {
+    return false;
+  }
   store.transcript.splice(index, 1);
   store.transcriptIdToIndex.delete(messageId);
   reindexTranscriptFrom(store, index);

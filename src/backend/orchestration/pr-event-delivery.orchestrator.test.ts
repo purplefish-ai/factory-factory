@@ -331,7 +331,7 @@ it.each([1, 0])(
   'publishes a failed delivery pause only when its fence applies (count %s)',
   async (count) => {
     mocks.pause.mockResolvedValue({ count });
-    await prBackgroundDeliveryPort.fail(
+    const outcome = await prBackgroundDeliveryPort.fail(
       {
         deliveryId: 'delivery',
         sessionId: 'main',
@@ -342,6 +342,7 @@ it.each([1, 0])(
       },
       new Error('transport failure')
     );
+    expect(outcome).toEqual({ paused: count > 0 });
     expect(mocks.pause).toHaveBeenCalledWith('w', 'DELIVERY_FAILED', 1);
     expect(mocks.emit.mock.calls).toEqual(
       count ? [['ratchet_dispatch_changed', { workspaceId: 'w' }]] : []

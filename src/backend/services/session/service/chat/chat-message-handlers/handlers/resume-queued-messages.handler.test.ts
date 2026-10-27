@@ -17,7 +17,7 @@ it('does not enable or dispatch queued messages when a newer stop supersedes res
     prepare: () => Promise.resolve({ status: 'discard' }),
     validate: () => Promise.resolve(false),
     complete: () => Promise.resolve(),
-    fail: () => Promise.resolve(),
+    fail: () => Promise.resolve({ paused: false }),
     recover: () => Promise.resolve(),
     pause: (_id, reason) => {
       pauseReason = reason;

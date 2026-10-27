@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { createElement } from 'react';
+import { act, createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { toast } from 'sonner';
@@ -493,4 +493,57 @@ describe('form elicitation answer submission', () => {
       }
     }
   );
+});
+
+it('keeps a failed PR update out of an empty composer', async () => {
+  let harness!: ReturnType<typeof renderChatState>;
+  await act(() => {
+    harness = renderChatState('session-A');
+  });
+  try {
+    await act(() =>
+      harness.chatRef.current?.dispatch({
+        type: 'MESSAGE_SENDING',
+        payload: {
+          id: 'pr-event-failed-composer',
+          text: '<!-- factory-factory-pr-event:test -->\nReview feedback',
+          sessionId: 'session-A',
+        },
+      })
+    );
+    await act(() =>
+      harness.chatRef.current?.dispatch({
+        type: 'MESSAGE_STATE_CHANGED',
+        payload: {
+          id: 'pr-event-failed-composer',
+          newState: MessageState.ACCEPTED,
+          userMessage: {
+            text: '<!-- factory-factory-pr-event:test -->\nReview feedback',
+            timestamp: '2026-10-27T00:00:00Z',
+          },
+        },
+      })
+    );
+    expect(harness.chatRef.current?.queuedMessages).toEqual([
+      expect.objectContaining({ id: 'pr-event-failed-composer', sessionId: 'session-A' }),
+    ]);
+    await act(() =>
+      harness.chatRef.current?.dispatch({
+        type: 'MESSAGE_STATE_CHANGED',
+        payload: {
+          id: 'pr-event-failed-composer',
+          newState: MessageState.FAILED,
+          errorMessage: 'Provider unavailable',
+        },
+      })
+    );
+    expect(harness.chatRef.current?.inputDraft).toBe('');
+    expect(harness.chatRef.current?.messages).toEqual([
+      expect.objectContaining({
+        message: expect.objectContaining({ type: 'pr_update', prDeliveryState: 'failed' }),
+      }),
+    ]);
+  } finally {
+    await act(() => harness.cleanup());
+  }
 });
