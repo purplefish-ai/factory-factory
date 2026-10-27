@@ -1,4 +1,4 @@
-import type { ContentBlock } from '@agentclientprotocol/sdk';
+import type { ContentBlock } from '@agentclientprotocol/sdk/unstable';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AcpPermissionBridge } from './acp-permission-bridge';
 import { AcpPromptController, type AcpPromptRuntimePort } from './acp-prompt-controller';

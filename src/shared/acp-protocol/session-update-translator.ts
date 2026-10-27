@@ -1,4 +1,4 @@
-import type { SessionUpdate } from '@agentclientprotocol/sdk';
+import type { SessionUpdate } from '@agentclientprotocol/sdk/unstable';
 import { z } from 'zod';
 import type { SessionDeltaEvent } from './protocol';
 import type { SubagentTranscriptUpdate } from './subagents';

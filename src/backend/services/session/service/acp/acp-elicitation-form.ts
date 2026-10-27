@@ -1,4 +1,4 @@
-import type { ElicitationContentValue } from '@agentclientprotocol/sdk';
+import type { ElicitationContentValue } from '@agentclientprotocol/sdk/unstable';
 import { z } from 'zod';
 import {
   type AskUserQuestion,

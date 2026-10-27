@@ -1,9 +1,9 @@
 import type { ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
-import type { ClientSideConnection } from '@agentclientprotocol/sdk';
 import { vi } from 'vitest';
 import { SUBAGENTS_CAPABILITY_META_KEY } from '@/shared/acp-protocol/subagents';
+import type { AcpConnection } from './acp-connection';
 import { AcpProcessHandle } from './acp-process-handle';
 import type { AcpRuntimeEventHandlers } from './acp-runtime-events';
 import type { AcpRuntimeManager } from './acp-runtime-manager';
@@ -81,10 +81,10 @@ export function createTestProcessHandle(params?: {
   providerSessionId?: string;
   sessionCreationOutcome?: AcpProcessHandle['sessionCreationOutcome'];
   agentCapabilities?: Record<string, unknown>;
-  connection?: Partial<ClientSideConnection>;
+  connection?: Partial<AcpConnection>;
 }): AcpProcessHandle {
   return new AcpProcessHandle({
-    connection: unsafeCoerce<ClientSideConnection>(params?.connection ?? {}),
+    connection: unsafeCoerce<AcpConnection>(params?.connection ?? {}),
     child: unsafeCoerce<ChildProcess>(createMockChildProcess()),
     provider: params?.provider ?? 'CODEX',
     sessionCreationOutcome: params?.sessionCreationOutcome,

@@ -1,7 +1,7 @@
 import type { ChildProcess } from 'node:child_process';
-import type { ClientSideConnection } from '@agentclientprotocol/sdk';
 import { describe, expect, it } from 'vitest';
 import { SUBAGENTS_CAPABILITY_META_KEY } from '@/shared/acp-protocol/subagents';
+import type { AcpConnection } from './acp-connection';
 import { AcpProcessHandle } from './acp-process-handle';
 import {
   createMockChildProcess,
@@ -11,7 +11,7 @@ import {
 
 function createHandle(agentCapabilities: Record<string, unknown>): AcpProcessHandle {
   return new AcpProcessHandle({
-    connection: {} as ClientSideConnection,
+    connection: {} as AcpConnection,
     child: { exitCode: null, killed: false } as ChildProcess,
     provider: 'CLAUDE',
     providerSessionId: 'provider-session-123',
@@ -105,7 +105,7 @@ describe('AcpProcessHandle.isRunning', () => {
     const child = createMockChildProcess();
     exitChildAfterSigterm(child);
     const handle = new AcpProcessHandle({
-      connection: {} as ClientSideConnection,
+      connection: {} as AcpConnection,
       child: child as unknown as ChildProcess,
       provider: 'CLAUDE',
       providerSessionId: 'provider-session-123',

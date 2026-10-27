@@ -1,4 +1,7 @@
-import type { RequestPermissionRequest, RequestPermissionResponse } from '@agentclientprotocol/sdk';
+import type {
+  RequestPermissionRequest,
+  RequestPermissionResponse,
+} from '@agentclientprotocol/sdk/unstable';
 import { createLogger } from '@/backend/services/logger.service';
 
 const logger = createLogger('acp-permission-bridge');

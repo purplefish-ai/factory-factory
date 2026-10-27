@@ -4,7 +4,7 @@ import type {
   SessionConfigSelectGroup,
   SessionConfigSelectOption,
   SessionModeState,
-} from '@agentclientprotocol/sdk';
+} from '@agentclientprotocol/sdk/unstable';
 import { createLogger } from '@/backend/services/logger.service';
 import { formatClaudeModelOptionName } from './claude-model-options';
 

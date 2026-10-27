@@ -1,7 +1,7 @@
 import type { ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
-import type { RequestPermissionRequest } from '@agentclientprotocol/sdk';
+import type { RequestPermissionRequest } from '@agentclientprotocol/sdk/unstable';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AcpClientFactory } from './acp-client-factory';
 import type { AcpPermissionBridge } from './acp-permission-bridge';
@@ -31,27 +31,21 @@ vi.mock('node:child_process', () => ({
   spawn: (...args: unknown[]) => mocks.spawn(...args),
 }));
 
-vi.mock('@agentclientprotocol/sdk', () => {
-  class MockClientSideConnection {
-    readonly toClient: (agent: unknown) => unknown;
-    readonly stream: unknown;
-    initialize = mocks.initialize;
-    loadSession = mocks.loadSession;
-    newSession = mocks.newSession;
+vi.mock('@agentclientprotocol/sdk/unstable', () => ({
+  ndJsonStream: (...args: unknown[]) => mocks.ndJsonStream(...args),
+  PROTOCOL_VERSION: 1,
+}));
 
-    constructor(toClient: (agent: unknown) => unknown, stream: unknown) {
-      this.toClient = toClient;
-      this.stream = stream;
-      mocks.connections.push(this);
-    }
-  }
-
-  return {
-    ClientSideConnection: MockClientSideConnection,
-    ndJsonStream: (...args: unknown[]) => mocks.ndJsonStream(...args),
-    PROTOCOL_VERSION: 1,
-  };
-});
+vi.mock('./acp-connection', () => ({
+  createAcpConnection: (handler: unknown, stream: unknown) => {
+    mocks.connections.push({ toClient: () => handler, stream });
+    return {
+      initialize: mocks.initialize,
+      loadSession: mocks.loadSession,
+      newSession: mocks.newSession,
+    };
+  },
+}));
 
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => mocks.logger,

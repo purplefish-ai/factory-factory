@@ -1,4 +1,4 @@
-import type { SessionUpdate } from '@agentclientprotocol/sdk';
+import type { SessionUpdate } from '@agentclientprotocol/sdk/unstable';
 import { describe, expect, it, vi } from 'vitest';
 import { AcpEventTranslator } from './session-update-translator';
 

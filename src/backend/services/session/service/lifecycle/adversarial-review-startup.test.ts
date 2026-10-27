@@ -1,4 +1,4 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk';
+import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';

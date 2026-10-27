@@ -1,4 +1,4 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk';
+import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { describe, expect, it, vi } from 'vitest';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { AcpProcessHandle } from '@/backend/services/session/service/acp';

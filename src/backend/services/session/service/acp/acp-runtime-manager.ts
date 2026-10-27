@@ -1,4 +1,4 @@
-import type { ContentBlock, SessionConfigOption } from '@agentclientprotocol/sdk';
+import type { ContentBlock, SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import type {
   SubagentBrowseCapability,
   SubagentListParams,

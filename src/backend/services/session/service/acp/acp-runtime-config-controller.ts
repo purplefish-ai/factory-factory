@@ -1,4 +1,4 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk';
+import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { createLogger } from '@/backend/services/logger.service';
 import type { AcpProcessHandle } from './acp-process-handle';
 import { requireSessionConfigOptions } from './acp-session-config-options';

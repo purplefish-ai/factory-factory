@@ -1,14 +1,14 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { Readable, Writable } from 'node:stream';
 import {
-  ClientSideConnection,
   type LoadSessionResponse,
   ndJsonStream,
   PROTOCOL_VERSION,
   type SessionConfigOption,
-} from '@agentclientprotocol/sdk';
+} from '@agentclientprotocol/sdk/unstable';
 import { createLogger, getCurrentProcessEnv } from '@/backend/services/logger.service';
 import { AcpClientHandler } from './acp-client-handler';
+import { createAcpConnection, type AcpConnection } from './acp-connection';
 import { AcpNativeSessionTracker } from './acp-native-session-tracker';
 import { AcpProcessHandle } from './acp-process-handle';
 import type { AcpRuntimeMetadata, AcpStartupSignal } from './acp-runtime-contracts';
@@ -160,9 +160,8 @@ export class AcpClientFactory {
         : (_sid: string, _event: AcpRuntimeEvent) => {
             logger.debug('ACP event received but no handler registered', { sessionId });
           };
-      const connection = new ClientSideConnection(
-        (_agent) =>
-          new AcpClientHandler(sessionId, onEvent, handlers.permissionBridge, handlers.onAcpLog),
+      const connection = createAcpConnection(
+        new AcpClientHandler(sessionId, onEvent, handlers.permissionBridge, handlers.onAcpLog),
         normalizedStream
       );
       const startupCancelOn = Promise.race([
@@ -252,7 +251,7 @@ export class AcpClientFactory {
   }
 
   private async createOrResumeSession(
-    connection: ClientSideConnection,
+    connection: AcpConnection,
     sessionId: string,
     options: AcpClientOptions,
     agentCapabilities: Record<string, unknown>,
@@ -314,7 +313,7 @@ export class AcpClientFactory {
   }
 
   private async tryLoadStoredSession(
-    connection: ClientSideConnection,
+    connection: AcpConnection,
     sessionId: string,
     options: AcpClientOptions,
     agentCapabilities: Record<string, unknown>,

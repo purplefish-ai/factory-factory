@@ -1,10 +1,11 @@
 import type { ChildProcess } from 'node:child_process';
-import type { ClientSideConnection, SessionConfigOption } from '@agentclientprotocol/sdk';
+import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import {
   SUBAGENTS_CAPABILITY_META_KEY,
   type SubagentBrowseCapability,
   subagentBrowseCapabilitySchema,
 } from '@/shared/acp-protocol/subagents';
+import type { AcpConnection } from './acp-connection';
 import type { AcpNativeSessionTracker } from './acp-native-session-tracker';
 import type { AcpPermissionBridge } from './acp-permission-bridge';
 import { type AcpConfigurationLease, AcpPromptReadiness } from './acp-prompt-readiness';
@@ -17,7 +18,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export class AcpProcessHandle {
-  readonly connection: ClientSideConnection;
+  readonly connection: AcpConnection;
   readonly child: ChildProcess;
   readonly permissionBridge?: AcpPermissionBridge;
   readonly provider: AcpProvider;
@@ -32,7 +33,7 @@ export class AcpProcessHandle {
   private initialConfiguration?: AcpConfigurationLease;
 
   constructor(params: {
-    connection: ClientSideConnection;
+    connection: AcpConnection;
     child: ChildProcess;
     permissionBridge?: AcpPermissionBridge;
     nativeSessionTracker?: AcpNativeSessionTracker;

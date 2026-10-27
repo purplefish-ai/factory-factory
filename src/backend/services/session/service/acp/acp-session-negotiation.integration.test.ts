@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { SessionConfigOption } from '@agentclientprotocol/sdk';
+import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AcpRuntimeManager } from './acp-runtime-manager';
 import type { AcpClientOptions } from './types';

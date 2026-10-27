@@ -1,4 +1,4 @@
-import type { ContentBlock } from '@agentclientprotocol/sdk';
+import type { ContentBlock } from '@agentclientprotocol/sdk/unstable';
 import pLimit, { type LimitFunction } from 'p-limit';
 import { createLogger } from '@/backend/services/logger.service';
 import { type AcpRuntimeManager, PromptTimeoutError } from '@/backend/services/session/service/acp';

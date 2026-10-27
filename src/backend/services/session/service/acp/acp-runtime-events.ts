@@ -1,4 +1,7 @@
-import type { RequestPermissionRequest, SessionNotification } from '@agentclientprotocol/sdk';
+import type {
+  RequestPermissionRequest,
+  SessionNotification,
+} from '@agentclientprotocol/sdk/unstable';
 import type { SubagentsChangedParams } from '@/shared/acp-protocol/subagents';
 import type { AcpPermissionBridge } from './acp-permission-bridge';
 import type { AcpSessionCreationOutcome } from './acp-session-creation-outcome';
@@ -27,7 +30,7 @@ export type AcpProviderIdentityEvent = Readonly<{
   provider: 'CLAUDE' | 'CODEX';
   incarnationId: string;
   outcome: Extract<AcpSessionCreationOutcome, { kind: 'resume_fallback' }>;
-  configOptions: import('@agentclientprotocol/sdk').SessionConfigOption[];
+  configOptions: import('@agentclientprotocol/sdk/unstable').SessionConfigOption[];
   /** Checked again after every asynchronous preparation, before durable reconciliation. */
   assertCurrent(): void;
 }>;
