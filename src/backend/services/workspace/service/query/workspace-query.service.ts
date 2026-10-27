@@ -52,7 +52,9 @@ function deriveLastActivityAt(workspace: {
     return null;
   }
 
-  return sessionDates.reduce((latest, date) => (date > latest ? date : latest)).toISOString();
+  return new Date(
+    sessionDates.reduce((max, d) => Math.max(max, d.getTime()), -Infinity)
+  ).toISOString();
 }
 
 class WorkspaceQueryService {

@@ -249,7 +249,9 @@ export class SnapshotReconciliationService {
 
     const lastActivityAt =
       sessionDates.length > 0
-        ? sessionDates.reduce((latest, d) => (d > latest ? d : latest)).toISOString()
+        ? new Date(
+            sessionDates.reduce((max, d) => Math.max(max, d.getTime()), -Infinity)
+          ).toISOString()
         : null;
 
     return {

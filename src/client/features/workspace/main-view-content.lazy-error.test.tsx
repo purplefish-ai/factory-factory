@@ -19,6 +19,19 @@ const chunk = vi.hoisted(() => {
 });
 vi.mock('./file-viewer', () => chunk.promise);
 
+function StatefulChat({ mounted, unmounted }: { mounted: () => void; unmounted: () => void }) {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    mounted();
+    return () => unmounted();
+  }, [mounted, unmounted]);
+  return (
+    <button type="button" data-testid="chat" onClick={() => setCount((value) => value + 1)}>
+      Chat state {count}
+    </button>
+  );
+}
+
 it('contains a rejected viewer chunk while retaining the mounted chat', async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   vi.stubGlobal('reportError', vi.fn());
@@ -30,23 +43,11 @@ it('contains a rejected viewer chunk while retaining the mounted chat', async ()
   });
   const mounted = vi.fn();
   const unmounted = vi.fn();
-  function StatefulChat() {
-    const [count, setCount] = useState(0);
-    useEffect(() => {
-      mounted();
-      return () => unmounted();
-    }, []);
-    return (
-      <button type="button" data-testid="chat" onClick={() => setCount((value) => value + 1)}>
-        Chat state {count}
-      </button>
-    );
-  }
   try {
     await act(() =>
       root.render(
         <MainViewContent workspaceId="workspace">
-          <StatefulChat />
+          <StatefulChat mounted={mounted} unmounted={unmounted} />
         </MainViewContent>
       )
     );

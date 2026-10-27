@@ -70,15 +70,16 @@ function ScrollableCode({ language }) {
   );
 }
 
+function Tabs({ language, toggleRef }) {
+  const [visible, setVisible] = useState(true);
+  toggleRef.current = setVisible;
+  return visible ? createElement(ScrollableCode, { language }) : null;
+}
+
 window.verifyScrollRestoration = async (language) => {
   mounted?.unmount();
   mounted = createRoot(node);
-  let toggle;
-  function Tabs() {
-    const [visible, setVisible] = useState(true);
-    toggle = setVisible;
-    return visible ? createElement(ScrollableCode, { language }) : null;
-  }
+  const toggleRef = { current: undefined };
   try {
     flushSync(() =>
       mounted.render(
@@ -87,7 +88,7 @@ window.verifyScrollRestoration = async (language) => {
           {
             workspaceId: `highlighting-scroll-${language}`,
           },
-          createElement(Tabs)
+          createElement(Tabs, { language, toggleRef })
         )
       )
     );
@@ -104,8 +105,8 @@ window.verifyScrollRestoration = async (language) => {
       preOverflow: getComputedStyle(pre).overflowX,
       outerOverflow: getComputedStyle(viewport).overflowX,
     };
-    flushSync(() => toggle(false));
-    flushSync(() => toggle(true));
+    flushSync(() => toggleRef.current(false));
+    flushSync(() => toggleRef.current(true));
     await twoFrames();
     return {
       ...ownership,

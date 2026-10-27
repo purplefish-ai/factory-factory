@@ -36,6 +36,17 @@ vi.mock('@/client/hooks/use-workspace-attention', () => ({
 
 import { getProjectSlugFromPath, useAppNavigationData } from './use-app-navigation-data';
 
+function NavigationHarness({
+  selected,
+}: {
+  selected: { selectedProjectSlug?: string; selectedProjectId?: string };
+}) {
+  const navigation = useAppNavigationData();
+  selected.selectedProjectSlug = navigation.selectedProjectSlug;
+  selected.selectedProjectId = navigation.selectedProjectId;
+  return null;
+}
+
 describe('project route selection', () => {
   it.each(['/projects/new', '/projects/new/'])('keeps %s as the project creation route', (path) => {
     expect(getProjectSlugFromPath(path)).toBeNull();
@@ -53,14 +64,7 @@ describe('project route selection', () => {
     window.history.replaceState({}, '', '/projects/new/workspaces');
     const container = document.createElement('div');
     const root = createRoot(container);
-    let selectedProjectSlug: string | undefined;
-    let selectedProjectId: string | undefined;
-    function Harness() {
-      const navigation = useAppNavigationData();
-      selectedProjectSlug = navigation.selectedProjectSlug;
-      selectedProjectId = navigation.selectedProjectId;
-      return null;
-    }
+    const selected: { selectedProjectSlug?: string; selectedProjectId?: string } = {};
     try {
       flushSync(() =>
         root.render(
@@ -69,12 +73,12 @@ describe('project route selection', () => {
             {
               initialEntries: ['/projects/new/workspaces'],
             },
-            createElement(Harness)
+            createElement(NavigationHarness, { selected })
           )
         )
       );
-      expect(selectedProjectSlug).toBe('new');
-      expect(selectedProjectId).toBe('new-id');
+      expect(selected.selectedProjectSlug).toBe('new');
+      expect(selected.selectedProjectId).toBe('new-id');
       expect(localStorage.getItem(SELECTED_PROJECT_KEY)).toBe('new');
       expect(mocks.listForProject).toHaveBeenLastCalledWith(
         { projectId: 'new-id' },
