@@ -33,6 +33,7 @@ import {
   recoverStaleProvisioningWorkspace,
   retryQueuedDispatchAfterWorkspaceReady,
 } from './orchestration/workspace-init.orchestrator';
+import { launchWorkspace } from './orchestration/workspace-launch.orchestrator';
 import { deliverWorkspaceNotification } from './orchestration/workspace-notification-delivery.orchestrator';
 import { getQuickAction, listQuickActions } from './prompts/quick-actions';
 import { autoIterationService, insightsService, logbookService } from './services/auto-iteration';
@@ -172,6 +173,9 @@ export type ApplicationServices = BridgeServices & {
   createWorkspaceCreationService: (
     dependencies: ConstructorParameters<typeof WorkspaceCreationService>[0]
   ) => Pick<WorkspaceCreationService, 'create'>;
+  launchWorkspace: (
+    source: Parameters<typeof launchWorkspace>[0]
+  ) => ReturnType<typeof launchWorkspace>;
   fireLifecycleNotification: typeof fireLifecycleNotification;
   persistChildNotification: typeof persistChildNotification;
   persistParentNotification: typeof persistParentNotification;
@@ -308,6 +312,21 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     deliverWorkspaceNotification,
     createWorkspaceCreationService: (creationDependencies) =>
       new WorkspaceCreationService(creationDependencies),
+    launchWorkspace: (source) => {
+      const logger = services.createLogger('workspace-trpc');
+      return launchWorkspace(source, {
+        getMaxSessionsPerWorkspace: () => services.configService.getMaxSessionsPerWorkspace(),
+        resolveProvider: (provider) =>
+          services.sessionProviderResolverService.resolveProviderForWorkspaceCreation(provider),
+        checkCliHealth: () => services.cliHealthService.checkHealth(),
+        createWorkspace: (input) =>
+          services.createWorkspaceCreationService({ logger }).create(input),
+        createDefaultSession: (input) => services.sessionDataService.createAgentSession(input),
+        initializeWorktree: (workspaceId, options) =>
+          services.initializeWorkspaceWorktree(workspaceId, options),
+        logger,
+      });
+    },
     fireLifecycleNotification,
     persistChildNotification,
     persistParentNotification,

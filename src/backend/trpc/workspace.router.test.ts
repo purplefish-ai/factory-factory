@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppContext, ApplicationServices } from '@/backend/app-context';
 import { ApplicationError } from '@/backend/lib/application-error';
 import type { CLIHealthStatus } from '@/backend/orchestration/cli-health.service';
+import { launchWorkspace } from '@/backend/orchestration/workspace-launch.orchestrator';
 import { applicationGraphMocks, createFakeApplicationGraph } from '@/test-utils/application-graph';
 import { PRState, RatchetState, WorkspaceStatus } from '@prisma-gen/client';
 
@@ -118,7 +119,7 @@ function createCaller(requestTrust?: {
     terminalService
   );
 
-  const services = {
+  const services: ApplicationServices = {
     ...fakeGraph.services,
     configService: Object.assign({}, fakeGraph.services.configService, {
       getWorktreeBaseDir: () => '/tmp/worktrees',
@@ -206,9 +207,17 @@ function createCaller(requestTrust?: {
     archiveWorkspace: (...args) => mockArchiveWorkspace(...args),
     cleanupWorkspaceRuntimeResources: (...args) => mockCleanupWorkspaceRuntimeResources(...args),
     initializeWorkspaceWorktree: (...args) => mockInitializeWorkspaceWorktree(...args),
-    createWorkspaceCreationService: () => ({
-      create: (...args) => mockWorkspaceCreationCreate(...args),
-    }),
+    launchWorkspace: (source) =>
+      launchWorkspace(source, {
+        getMaxSessionsPerWorkspace: () => services.configService.getMaxSessionsPerWorkspace(),
+        resolveProvider: (provider) =>
+          services.sessionProviderResolverService.resolveProviderForWorkspaceCreation(provider),
+        checkCliHealth: () => services.cliHealthService.checkHealth(),
+        createWorkspace: (...args) => mockWorkspaceCreationCreate(...args),
+        createDefaultSession: (input) => services.sessionDataService.createAgentSession(input),
+        initializeWorktree: (...args) => mockInitializeWorkspaceWorktree(...args),
+        logger,
+      }),
     createChildWorkspace: vi.fn(),
     deliverWorkspaceNotification: vi.fn(),
     fireLifecycleNotification: vi.fn(),
@@ -227,6 +236,7 @@ function createCaller(requestTrust?: {
 
   return {
     caller,
+    services,
     sessionLifecycleService: composedSessionLifecycleService,
     runScriptService: composedRunScriptService,
     sessionDomainService: services.sessionDomainService,
@@ -699,6 +709,143 @@ describe('workspaceCoreRouter', () => {
     ).rejects.toThrow('Cannot create workspace: Claude provider is unavailable');
     expect(mockWorkspaceCreationCreate).not.toHaveBeenCalled();
   });
+
+  describe.each([
+    {
+      source: { type: 'MANUAL', projectId: 'p1', name: 'Manual', branchName: 'feature/manual' },
+      branchName: 'feature/manual',
+      useExistingBranch: false,
+    },
+    {
+      source: { type: 'RESUME_BRANCH', projectId: 'p1', branchName: 'feature/resume' },
+      branchName: 'feature/resume',
+      useExistingBranch: true,
+    },
+    {
+      source: {
+        type: 'GITHUB_ISSUE',
+        projectId: 'p1',
+        issueNumber: 42,
+        issueUrl: 'https://github.com/org/repo/issues/42',
+      },
+      branchName: undefined,
+      useExistingBranch: false,
+    },
+    {
+      source: {
+        type: 'LINEAR_ISSUE',
+        projectId: 'p1',
+        issueId: 'linear-42',
+        issueIdentifier: 'ENG-42',
+        issueUrl: 'https://linear.app/org/issue/ENG-42',
+      },
+      branchName: undefined,
+      useExistingBranch: false,
+    },
+  ] as const)(
+    '$source.type interactive launch policy',
+    ({ source, branchName, useExistingBranch }) => {
+      it('returns the created workspace and provisions Chat 1 before background initialization', async () => {
+        const { caller } = createCaller();
+        const workspace = { id: 'w-created', name: 'Persisted name' };
+        mockWorkspaceCreationCreate.mockResolvedValue(workspace);
+
+        await expect(caller.create(source)).resolves.toEqual(workspace);
+
+        expect(mockResolveProviderForWorkspaceCreation).toHaveBeenCalledWith(undefined);
+        expect(mockCreateAgentSession).toHaveBeenCalledWith({
+          workspaceId: 'w-created',
+          workflow: 'followup',
+          name: 'Chat 1',
+          provider: 'CLAUDE',
+          providerProjectPath: null,
+        });
+        expect(mockInitializeWorkspaceWorktree).toHaveBeenCalledWith('w-created', {
+          branchName,
+          useExistingBranch,
+        });
+        expect(mockCreateAgentSession.mock.invocationCallOrder[0]).toBeLessThan(
+          mockInitializeWorkspaceWorktree.mock.invocationCallOrder[0]!
+        );
+      });
+
+      it('skips provider preflight and session provisioning at zero capacity', async () => {
+        const { caller, services, cliHealthService } = createCaller();
+        services.configService.getMaxSessionsPerWorkspace = () => 0;
+        mockWorkspaceCreationCreate.mockResolvedValue({ id: 'w-created' });
+
+        await expect(caller.create(source)).resolves.toEqual({ id: 'w-created' });
+
+        expect(mockResolveProviderForWorkspaceCreation).not.toHaveBeenCalled();
+        expect(cliHealthService.checkHealth).not.toHaveBeenCalled();
+        expect(mockCreateAgentSession).not.toHaveBeenCalled();
+        expect(mockInitializeWorkspaceWorktree).toHaveBeenCalledWith('w-created', {
+          branchName,
+          useExistingBranch,
+        });
+      });
+
+      it('rejects unavailable providers before workspace persistence', async () => {
+        const { caller, cliHealthService } = createCaller();
+        cliHealthService.checkHealth.mockResolvedValue({
+          claude: { isInstalled: false },
+          codex: { isInstalled: true },
+          github: { isInstalled: true, isAuthenticated: true },
+          allHealthy: false,
+        });
+
+        await expect(caller.create(source)).rejects.toMatchObject({
+          code: 'PRECONDITION_FAILED',
+          message:
+            'Cannot create workspace: Claude provider is unavailable: Claude CLI is not installed.',
+        });
+
+        expect(mockWorkspaceCreationCreate).not.toHaveBeenCalled();
+        expect(mockCreateAgentSession).not.toHaveBeenCalled();
+        expect(mockInitializeWorkspaceWorktree).not.toHaveBeenCalled();
+      });
+
+      it('propagates provider-resolution failure without persistence', async () => {
+        const { caller, cliHealthService } = createCaller();
+        const failure = new Error('Provider settings unavailable');
+        mockResolveProviderForWorkspaceCreation.mockRejectedValueOnce(failure);
+
+        await expect(caller.create(source)).rejects.toMatchObject({ cause: failure });
+        expect(cliHealthService.checkHealth).not.toHaveBeenCalled();
+        expect(mockWorkspaceCreationCreate).not.toHaveBeenCalled();
+        expect(mockInitializeWorkspaceWorktree).not.toHaveBeenCalled();
+      });
+
+      it('propagates workspace creation failure without starting sessions or initialization', async () => {
+        const { caller } = createCaller();
+        const failure = new ApplicationError('NOT_FOUND', 'Project not found: p1');
+        mockWorkspaceCreationCreate.mockRejectedValueOnce(failure);
+
+        await expect(caller.create(source)).rejects.toMatchObject({
+          code: 'NOT_FOUND',
+          message: 'Project not found: p1',
+        });
+        expect(mockCreateAgentSession).not.toHaveBeenCalled();
+        expect(mockInitializeWorkspaceWorktree).not.toHaveBeenCalled();
+      });
+
+      it('tolerates default-session failure and still initializes the retained workspace', async () => {
+        const { caller, logger } = createCaller();
+        mockWorkspaceCreationCreate.mockResolvedValue({ id: 'w-created' });
+        mockCreateAgentSession.mockRejectedValueOnce(new Error('Session insert failed'));
+
+        await expect(caller.create(source)).resolves.toEqual({ id: 'w-created' });
+        expect(logger.warn).toHaveBeenCalledWith('Failed to create default session for workspace', {
+          workspaceId: 'w-created',
+          error: 'Session insert failed',
+        });
+        expect(mockInitializeWorkspaceWorktree).toHaveBeenCalledWith('w-created', {
+          branchName,
+          useExistingBranch,
+        });
+      });
+    }
+  );
 
   it('cleans up on delete and delegates summary procedures', async () => {
     const worktreeCleanup = createDeferredPromise<void>();
