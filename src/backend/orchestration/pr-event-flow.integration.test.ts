@@ -1,4 +1,9 @@
-import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import {
+  PR_SNAPSHOT_UPDATED,
+  prObservationService,
+  prSnapshotService,
+} from '@/backend/services/github';
 import { sessionBackgroundDeliveryService } from '@/backend/services/session';
 import {
   workspacePRMonitoringService,
@@ -24,6 +29,7 @@ vi.mock('@/backend/db', () => ({
 vi.mock('@/backend/services/session', () => ({
   acpRuntimeManager: { isSessionWorking: () => state.busy },
   sessionDomainService: { getPendingInteractiveRequest: () => null },
+  sessionLifecycleService: {},
   sessionDataService: {
     findPRDedicatedSession: async ({
       workspaceId,
@@ -47,17 +53,32 @@ vi.mock('@/backend/services/session', () => ({
 }));
 
 vi.mock('./pr-delivery-readiness', () => ({ recipientCanDispatch: vi.fn(async () => true) }));
-vi.mock('./pr-observation.orchestrator', () => ({
-  observeMonitoredPR: vi.fn(async () => true),
-}));
 vi.mock('@/backend/services/settings', () => ({
   userSettingsService: { get: vi.fn(async () => ({ ratchetReplyToPrComments: true })) },
 }));
 
+import { createPRDeliveryPorts, defaultPRDeliveryPorts } from './pr-delivery-dependencies';
 import { prBackgroundDeliveryPort } from './pr-event-delivery-port';
 import { preparePRDelivery } from './pr-event-delivery.orchestrator';
+import {
+  createPRObservationPorts,
+  defaultPRMonitoringServices,
+} from './pr-monitoring-dependencies';
+import { observeMonitoredPR } from './pr-observation.orchestrator';
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
 
 let db: IntegrationDatabase;
+beforeEach(() => {
+  // Delivery integration controls its freshness prerequisite at the delivery port.
+  vi.spyOn(defaultPRDeliveryPorts, 'refreshObservation').mockResolvedValue(true);
+});
 beforeAll(async () => {
   db = await createIntegrationDatabase();
   state.prisma = db.prisma;
@@ -332,6 +353,57 @@ it('retains a competing dedicated request and wakes it after the workspace claim
     status: 'ready',
     delivery: { attempt: 1 },
   });
+});
+
+it('coalesces poll, manual refresh, and delivery through separately composed observation ports', async () => {
+  const workspaceId = 'observation-graph';
+  const prId = 'observation-pr';
+  await db.prisma.workspace.create({
+    data: {
+      id: workspaceId,
+      projectId: 'project',
+      name: 'Observation graph',
+      status: 'READY',
+      prMonitoring: { create: { enabled: true, eventEpoch: 1 } },
+      prs: { create: { id: prId, url: redObservation.url } },
+    },
+  });
+  const graph = { ...defaultPRMonitoringServices };
+  const fetched = deferred<typeof redObservation>();
+  const fetch = vi.spyOn(prObservationService, 'fetch').mockReturnValue(fetched.promise);
+  const publish = vi.spyOn(prSnapshotService, 'emit');
+  const target = { workspaceId, prId };
+  const pollPorts = createPRObservationPorts(graph);
+  const manualPorts = createPRObservationPorts(graph);
+  const deliveryPorts = createPRDeliveryPorts(graph);
+  const results = [
+    observeMonitoredPR(pollPorts, target),
+    observeMonitoredPR(manualPorts, target, { force: true }),
+    deliveryPorts.refreshObservation(target),
+  ];
+  fetched.resolve(redObservation);
+  expect(await Promise.all(results)).toEqual([true, true, true]);
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(await workspacePrSnapshotService.find(target)).toMatchObject({ revision: 1 });
+  expect(await workspacePRMonitoringService.listPending(workspaceId, prId)).toMatchObject([
+    { kind: 'CI_FAILED' },
+  ]);
+  expect(publish).toHaveBeenCalledExactlyOnceWith(PR_SNAPSHOT_UPDATED, {
+    workspaceId,
+    prId,
+    prUrl: redObservation.url,
+    prNumber: 1,
+    prState: 'OPEN',
+    previousPrState: 'NONE',
+    prCiStatus: 'FAILURE',
+    prReviewState: null,
+  });
+  // A new wrapper reuses the accepted revision without another GitHub fetch.
+  expect(await observeMonitoredPR(createPRObservationPorts(graph), target)).toBe(true);
+  expect(fetch).toHaveBeenCalledTimes(1);
+  // Another application graph with the same underlying services has its own cache.
+  expect(await observeMonitoredPR(createPRObservationPorts({ ...graph }), target)).toBe(true);
+  expect(fetch).toHaveBeenCalledTimes(2);
 });
 
 it('accepts a changed head without superseding an in-flight frozen failure', async () => {

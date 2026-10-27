@@ -1,5 +1,9 @@
 import { configService } from '@/backend/services/config.service';
-import { prObservationService, prSnapshotService } from '@/backend/services/github';
+import {
+  PR_SNAPSHOT_UPDATED,
+  prObservationService,
+  prSnapshotService,
+} from '@/backend/services/github';
 import { ratchetService } from '@/backend/services/ratchet';
 import {
   acpRuntimeManager,
@@ -15,6 +19,7 @@ import {
   workspacePRMonitoringService,
   workspacePrSnapshotService,
 } from '@/backend/services/workspace';
+import type { PRObservationPorts } from './pr-observation-ports';
 
 export type PRMonitoringServices = {
   configService: typeof configService;
@@ -76,3 +81,34 @@ export const defaultPRMonitoringServices: PRMonitoringServices = {
     return workspacePrSnapshotService;
   },
 };
+
+const observationCacheScopes = new WeakMap<object, object>();
+
+// A graph may create fresh wrappers for poll, manual refresh, and delivery.
+// Keep their coalescing identity stable without exposing services to the producer.
+export function createPRObservationPorts(
+  services: Pick<
+    PRMonitoringServices,
+    | 'prObservationService'
+    | 'prSnapshotService'
+    | 'workspacePRMonitoringService'
+    | 'workspacePrSnapshotService'
+  >
+): PRObservationPorts {
+  let cacheScope = observationCacheScopes.get(services);
+  if (!cacheScope) {
+    cacheScope = {};
+    observationCacheScopes.set(services, cacheScope);
+  }
+  return {
+    cacheScope,
+    findPR: (target) => services.workspacePrSnapshotService.find(target),
+    getMonitoring: (workspaceId) => services.workspacePRMonitoringService.get(workspaceId),
+    fetchObservation: (target, signal) => services.prObservationService.fetch(target, signal),
+    acceptObservation: (input) =>
+      services.workspacePrSnapshotService.acceptMonitoredObservation(input),
+    publishAcceptedObservation: (event) => {
+      services.prSnapshotService.emit(PR_SNAPSHOT_UPDATED, event);
+    },
+  };
+}

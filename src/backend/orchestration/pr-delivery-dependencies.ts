@@ -1,5 +1,6 @@
 import {
   defaultPRMonitoringServices,
+  createPRObservationPorts,
   type PRMonitoringServices,
 } from './pr-monitoring-dependencies';
 import type { PRDeliveryPorts } from './pr-monitoring-ports';
@@ -7,9 +8,9 @@ import { observeMonitoredPR } from './pr-observation.orchestrator';
 
 // Composition is the only place delivery is connected to the observation producer.
 export function createPRDeliveryPorts(services: PRMonitoringServices): PRDeliveryPorts {
+  const observationPorts = createPRObservationPorts(services);
   return {
-    refreshObservation: (target) =>
-      observeMonitoredPR(target, undefined, { force: true }, services),
+    refreshObservation: (target) => observeMonitoredPR(observationPorts, target, { force: true }),
     get configService() {
       return services.configService;
     },

@@ -1,7 +1,5 @@
-import { PR_SNAPSHOT_UPDATED } from '@/backend/services/github';
 import type { PRTarget } from '@/shared/pr-monitoring';
-import { defaultPRMonitoringServices } from './pr-monitoring-dependencies';
-import type { PRObservationPorts } from './pr-monitoring-ports';
+import type { PRObservationPorts } from './pr-observation-ports';
 const states = new WeakMap<
   object,
   {
@@ -9,27 +7,21 @@ const states = new WeakMap<
     observing: Map<string, Promise<boolean>>;
   }
 >();
-function observationState(services: PRObservationPorts) {
-  let state = states.get(services.workspacePRMonitoringService);
+function observationState(ports: PRObservationPorts) {
+  let state = states.get(ports.cacheScope);
   if (!state) {
     state = { recent: new Map(), observing: new Map() };
-    states.set(services.workspacePRMonitoringService, state);
+    states.set(ports.cacheScope, state);
   }
   return state;
 }
 export async function observeMonitoredPR(
+  ports: PRObservationPorts,
   target: PRTarget,
-  signal?: AbortSignal,
-  options?: { force?: boolean },
-  services: PRObservationPorts = defaultPRMonitoringServices
+  options?: { signal?: AbortSignal; force?: boolean }
 ): Promise<boolean> {
-  const {
-    workspacePrSnapshotService,
-    workspacePRMonitoringService,
-    prObservationService,
-    prSnapshotService,
-  } = services;
-  const { recent, observing } = observationState(services);
+  const { signal } = options ?? {};
+  const { recent, observing } = observationState(ports);
   const key = `${target.workspaceId}:${target.prId}`;
   const existing = observing.get(key);
   if (existing !== undefined) {
@@ -37,8 +29,8 @@ export async function observeMonitoredPR(
   }
   const pending = (async () => {
     const [row, config] = await Promise.all([
-      workspacePrSnapshotService.find(target),
-      workspacePRMonitoringService.get(target.workspaceId),
+      ports.findPR(target),
+      ports.getMonitoring(target.workspaceId),
     ]);
     if (!(row && config)) {
       return false;
@@ -52,9 +44,9 @@ export async function observeMonitoredPR(
     ) {
       return true;
     }
-    const observation = await prObservationService.fetch(target, signal);
+    const observation = await ports.fetchObservation(target, signal);
     signal?.throwIfAborted();
-    const result = await workspacePrSnapshotService.acceptMonitoredObservation({
+    const result = await ports.acceptObservation({
       target,
       expectedPrRevision: row.revision,
       expectedEventEpoch: config.eventEpoch,
@@ -69,7 +61,7 @@ export async function observeMonitoredPR(
       if (recent.size > 1000) {
         recent.delete(recent.keys().next().value ?? key);
       }
-      prSnapshotService.emit(PR_SNAPSHOT_UPDATED, {
+      ports.publishAcceptedObservation({
         workspaceId: target.workspaceId,
         prId: target.prId,
         prUrl: observation.url,
