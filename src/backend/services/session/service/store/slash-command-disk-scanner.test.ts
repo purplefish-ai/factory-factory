@@ -25,7 +25,9 @@ describe('slash command disk scanner', () => {
     const worktreePath = mkdtempSync(join(tmpdir(), 'ff-nested-commands-'));
     tempDirs.push(worktreePath);
     const commandsPath = join(worktreePath, '.claude', 'commands');
-    for (const namespace of ['team', 'release']) {
+    mkdirSync(commandsPath, { recursive: true });
+    writeFileSync(join(commandsPath, 'deploy.md'), '---\ndescription: root\n---\n');
+    for (const namespace of ['team', 'release', 'user']) {
       mkdirSync(join(commandsPath, namespace), { recursive: true });
       writeFileSync(
         join(commandsPath, namespace, 'deploy.md'),
@@ -38,8 +40,10 @@ describe('slash command disk scanner', () => {
     symlinkSync(escapedPath, join(commandsPath, 'external'));
     symlinkSync(commandsPath, join(commandsPath, 'cycle'));
     expect(scanClaudeWorkspaceCommandsFromDisk(worktreePath)).toEqual([
+      { name: 'deploy', description: 'root' },
       { name: 'release:deploy', description: 'release' },
       { name: 'team:deploy', description: 'team' },
+      { name: 'user:deploy', description: 'user' },
     ]);
   });
 

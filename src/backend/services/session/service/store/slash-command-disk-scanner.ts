@@ -88,7 +88,7 @@ function scanCommandsFromDir(
       continue;
     }
     const name = `${namespace}${basename(file.name, '.md')}`;
-    const key = commandNameKey(name);
+    const key = name;
     if (seen.has(key)) {
       continue;
     }
