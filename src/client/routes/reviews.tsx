@@ -6,6 +6,7 @@ import { PRDetailPanel } from '@/client/components/pr-detail-panel';
 import { PRInboxItem } from '@/client/components/pr-inbox-item';
 import { WorkspacesBackLink } from '@/client/features/workspace';
 import { runInBackground } from '@/client/lib/background-task';
+import { resolveSelectedProjectSlug } from '@/client/lib/project-selection';
 import { trpc } from '@/client/lib/trpc';
 import {
   Sheet,
@@ -458,7 +459,7 @@ function ReviewsPageContent() {
     refetchInterval: 30_000,
   });
   const { data: projects } = trpc.project.list.useQuery();
-  const projectSlug = projects?.[0]?.slug;
+  const projectSlug = resolveSelectedProjectSlug(projects);
   const headerBackLink = projectSlug ? (
     <HeaderLeftExtraSlot>
       <WorkspacesBackLink projectSlug={projectSlug} />

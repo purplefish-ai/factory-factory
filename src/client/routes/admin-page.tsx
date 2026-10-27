@@ -3,7 +3,7 @@ import { HeaderLeftExtraSlot, useAppHeader } from '@/client/components/app-heade
 import { Loading } from '@/client/components/loading';
 import { WorkspacesBackLink } from '@/client/features/workspace';
 import { runInBackground } from '@/client/lib/background-task';
-import { readSelectedProjectSlug } from '@/client/lib/project-selection';
+import { resolveSelectedProjectSlug } from '@/client/lib/project-selection';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -29,21 +29,6 @@ import {
 } from './admin/index';
 
 type SettingsTab = 'general' | 'appearance' | 'project' | 'periodic-tasks' | 'voice';
-
-function resolveSelectedProjectSlug(
-  projects: Array<{ slug: string }> | undefined
-): string | undefined {
-  if (!projects || projects.length === 0) {
-    return undefined;
-  }
-
-  const storedSlug = readSelectedProjectSlug();
-  if (storedSlug && projects.some((project) => project.slug === storedSlug)) {
-    return storedSlug;
-  }
-
-  return projects[0]?.slug;
-}
 
 export default function AdminDashboardPage() {
   useAppHeader({ title: 'Settings' });
