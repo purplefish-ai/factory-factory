@@ -99,10 +99,12 @@ and the `auto-iteration.trpc.ts` entry guard), so it is the group's discriminant
 — the same call the ratchet split made for `ratchetEnabled`.
 
 `mode` and `autoIterationStatus` travel on the snapshot wire and update both
-client workspace caches through `projectSnapshotToLiveFields`. Status changes,
-including a cleared status, reach the kanban badge and workspace detail without
-a mutation or HTTP refetch. `config` and `progress` remain mutation-cached;
-their freshness is independent of these live status updates.
+client workspace caches through `projectSnapshotToLiveFields`. Non-null status
+transitions announced by `AUTO_ITERATION_STATUS_CHANGED` reach the kanban badge
+and workspace detail without a mutation or HTTP refetch. A received snapshot
+with `autoIterationStatus: null` also clears cached status, but that event does
+not emit null values; reconciliation can supply them. `config` and `progress`
+remain mutation-cached; their freshness is independent of these status updates.
 
 Only `mode` and `config` are exported — `status`, `progress` and `sessionId`
 describe a loop that does not survive a backup, so a workspace whose loop was
