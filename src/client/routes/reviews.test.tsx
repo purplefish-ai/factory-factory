@@ -4,6 +4,7 @@ import { act, createElement, forwardRef, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { SELECTED_PROJECT_KEY } from '@/client/lib/project-selection';
 import type { PRWithFullDetails } from '@/shared/github-types';
 import ReviewsPage from './reviews';
 
@@ -152,6 +153,7 @@ beforeEach(() => {
     writable: true,
     value: true,
   });
+  localStorage.clear();
   reviewMocks.detailsByKey.clear();
   reviewMocks.submitReviewMutationOptions = undefined;
   reviewMocks.submittedReviewVariables = undefined;
@@ -228,6 +230,28 @@ describe('ReviewsPage header', () => {
     expect(link).not.toBeNull();
 
     root.unmount();
+  });
+
+  it.each([
+    ['beta', 'beta'],
+    ['deleted-project', 'alpha'],
+  ])('resolves stored project %s to %s for the back link', (storedSlug, expectedSlug) => {
+    localStorage.setItem(SELECTED_PROJECT_KEY, storedSlug);
+    listProjectsMock.mockReturnValue({ data: [{ slug: 'alpha' }, { slug: 'beta' }] });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    void act(() => {
+      root.render(createElement(ReviewsPage));
+    });
+
+    expect(container.querySelector('a')?.getAttribute('href')).toBe(
+      `/projects/${expectedSlug}/workspaces`
+    );
+
+    void act(() => root.unmount());
   });
 
   it('does not render workspaces back link when no project exists', () => {

@@ -210,6 +210,9 @@ as the creation route. Deeper routes such as `/projects/new/workspaces` select
 and persist the actual project with slug `new`, keeping sidebar, board, and
 snapshot synchronization aligned with the URL.
 
+Global Reviews and Settings headers return to the persisted selected project
+when it still exists, falling back to the first available project otherwise.
+
 ## Completion notifications
 
 Workspace completion notifications count the distinct sessions that worked in
