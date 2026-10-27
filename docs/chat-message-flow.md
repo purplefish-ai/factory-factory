@@ -26,8 +26,9 @@ flowchart TD
 `ChatMessageHandlerService` routes incoming WebSocket messages and temporarily
 forwards its existing dispatch APIs to the single `SessionDispatchService`
 constructed in `session-services.ts`. The dispatcher owns queue execution,
-concurrent-dispatch tokens, busy-turn retry timers and attempts, manual resume,
-and lifecycle generation fences. It validates dispatch eligibility and starts
+concurrent-dispatch tokens, busy-turn retry timers and attempts, and manual
+resume. `SessionLifecycleGate` owns lifecycle generations; the dispatcher
+applies its generation checks when validating dispatch eligibility and starting
 the runtime through injected capabilities. The queued message stays visible
 until dispatch is ready, so refreshing during startup does not remove it from
 the queue.

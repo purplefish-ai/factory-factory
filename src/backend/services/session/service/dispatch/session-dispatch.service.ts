@@ -111,7 +111,7 @@ export class SessionDispatchService {
   private get initPolicy(): SessionInitPolicyBridge {
     if (!this.initPolicyBridge) {
       throw new Error(
-        'ChatMessageHandlerService not configured: initPolicy bridge missing. Call configure() first.'
+        'SessionDispatchService not configured: initPolicy bridge missing. Call configure() first.'
       );
     }
     return this.initPolicyBridge;
@@ -123,7 +123,7 @@ export class SessionDispatchService {
     notificationDelivery: SessionDispatchLifecycleDependencies['notificationDelivery'];
   } {
     if (!(this.lifecycleGate && this.startupService && this.notificationDeliveryService)) {
-      throw new Error('ChatMessageHandlerService not configured: lifecycle gate/startup missing');
+      throw new Error('SessionDispatchService not configured: lifecycle gate/startup missing');
     }
     return {
       gate: this.lifecycleGate,
