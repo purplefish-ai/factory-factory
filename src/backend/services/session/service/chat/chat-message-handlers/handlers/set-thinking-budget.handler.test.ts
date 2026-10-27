@@ -1,64 +1,30 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-const mocks = vi.hoisted(() => ({
-  setSessionThinkingBudget: vi.fn(),
-}));
-
-vi.mock('@/backend/services/session/service/lifecycle/session-core-services', () => ({
-  sessionConfigService: {
-    setSessionThinkingBudget: mocks.setSessionThinkingBudget,
-  },
-}));
-
-vi.mock('@/backend/services/logger.service', () => ({
-  createLogger: () => ({
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  }),
-}));
-
 import { createSetThinkingBudgetHandler } from './set-thinking-budget.handler';
+
+const setSessionThinkingBudget = vi.fn();
+const handler = createSetThinkingBudgetHandler({
+  sessionConfigService: { setSessionThinkingBudget },
+});
+const context = { sessionId: 'session-1', workingDir: '/tmp/work' };
 
 describe('createSetThinkingBudgetHandler', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('updates session thinking budget', async () => {
-    mocks.setSessionThinkingBudget.mockResolvedValue(undefined);
-    const ws = { send: vi.fn() };
-    const handler = createSetThinkingBudgetHandler();
-
-    await handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp/work',
-      message: { type: 'set_thinking_budget', max_tokens: 12_000 } as never,
+  it('updates the injected session thinking budget without a socket', async () => {
+    setSessionThinkingBudget.mockResolvedValue(undefined);
+    expect(await handler(context, { type: 'set_thinking_budget', max_tokens: 12_000 })).toEqual({
+      replies: [],
     });
-
-    expect(mocks.setSessionThinkingBudget).toHaveBeenCalledWith('session-1', 12_000);
-    expect(ws.send).not.toHaveBeenCalled();
+    expect(setSessionThinkingBudget).toHaveBeenCalledWith('session-1', 12_000);
   });
 
-  it('sends websocket error when update fails', async () => {
-    mocks.setSessionThinkingBudget.mockRejectedValue(new Error('invalid token budget'));
-    const ws = { send: vi.fn() };
-    const handler = createSetThinkingBudgetHandler();
-
-    await handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp/work',
-      message: { type: 'set_thinking_budget', max_tokens: 0 } as never,
+  it('returns the failed update for transport error formatting', async () => {
+    const cause = new Error('invalid token budget');
+    setSessionThinkingBudget.mockRejectedValue(cause);
+    expect(await handler(context, { type: 'set_thinking_budget', max_tokens: 0 })).toEqual({
+      replies: [{ type: 'error', error: { kind: 'set_thinking_budget_failed', cause } }],
     });
-
-    expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({
-        type: 'error',
-        message: 'Failed to set thinking budget: invalid token budget',
-      })
-    );
   });
 });

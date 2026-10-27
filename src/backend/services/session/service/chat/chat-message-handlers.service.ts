@@ -2,6 +2,10 @@ import type { WebSocket } from 'ws';
 import { createLogger } from '@/backend/services/logger.service';
 import { acpRuntimeManager } from '@/backend/services/session/service/acp';
 import type { SessionInitPolicyBridge } from '@/backend/services/session/service/bridges';
+import {
+  isSessionCommandMessage,
+  type SessionCommandOutcome,
+} from '@/backend/services/session/service/chat/session-command.types';
 import type { SessionDispatchService } from '@/backend/services/session/service/dispatch/session-dispatch.service';
 import type {
   DispatchOptions,
@@ -64,8 +68,25 @@ export class ChatMessageHandlerService {
     dbSessionId: string | null,
     workingDir: string,
     message: ChatMessageInput
-  ): Promise<void> {
-    const handler = this.lifecycleHandlerRegistry[message.type] as
+  ): Promise<SessionCommandOutcome | undefined> {
+    const registry = this.lifecycleHandlerRegistry;
+    if (isSessionCommandMessage(message)) {
+      if (!dbSessionId) {
+        return { replies: [{ type: 'error', error: { kind: 'no_session' } }] };
+      }
+      const context = { sessionId: dbSessionId, workingDir };
+      switch (message.type) {
+        case 'set_model':
+          return registry.set_model(context, message);
+        case 'set_config_option':
+          return registry.set_config_option(context, message);
+        case 'set_thinking_budget':
+          return registry.set_thinking_budget(context, message);
+        case 'permission_response':
+          return registry.permission_response(context, message);
+      }
+    }
+    const handler = registry[message.type] as
       | ((context: {
           ws: WebSocket;
           sessionId: string;
@@ -91,6 +112,7 @@ export class ChatMessageHandlerService {
     }
 
     await handler({ ws, sessionId: dbSessionId, workingDir, message });
+    return undefined;
   }
 
   private get lifecycleHandlerRegistry(): ChatMessageHandlerRegistry {
