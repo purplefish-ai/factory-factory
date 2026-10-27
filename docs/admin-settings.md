@@ -84,3 +84,9 @@ Use **Edit factory configuration** to edit the loaded scripts. If loading fails
 while the editor is open, the editor closes to prevent saving stale scripts.
 Save failures appear both in the editor and in an error toast; the editor stays
 open so you can correct the configuration or retry.
+
+## Server logs
+
+Relative log time ranges use minute boundaries and advance automatically while
+the page polls every ten seconds. Rendering or expanding a log row does not
+trigger another request. Custom date ranges keep their selected day boundaries.
