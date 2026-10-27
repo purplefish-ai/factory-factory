@@ -1,7 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { ApplicationError } from '@/backend/lib/application-error';
-import { getProviderUnavailableMessage } from '@/backend/lib/provider-cli-availability';
 import {
   buildWorkspaceSessionSummaries,
   hasWorkingSessionSummary,
@@ -191,82 +190,7 @@ export const workspaceCoreRouter = router({
   create: trustedLocalProcedure
     .input(workspaceCreationSourceSchema)
     .mutation(async ({ ctx, input }) => {
-      const logger = getLogger(ctx);
-      const {
-        configService,
-        createWorkspaceCreationService,
-        initializeWorkspaceWorktree,
-        sessionDataService,
-        sessionProviderResolverService,
-      } = ctx.appContext.services;
-      const maxSessionsPerWorkspace = configService.getMaxSessionsPerWorkspace();
-      const explicitProvider =
-        input.type === 'MANUAL' || input.type === 'GITHUB_ISSUE' || input.type === 'LINEAR_ISSUE'
-          ? input.provider
-          : undefined;
-      let defaultSessionProvider: SessionProvider | undefined;
-
-      // Workspace creation provisions a default session when session capacity is enabled.
-      // Block creation if the effective provider cannot be used on this machine.
-      if (maxSessionsPerWorkspace > 0) {
-        defaultSessionProvider =
-          await sessionProviderResolverService.resolveProviderForWorkspaceCreation(
-            explicitProvider
-          );
-        const cliHealth = await ctx.appContext.services.cliHealthService.checkHealth();
-        const providerUnavailableMessage = getProviderUnavailableMessage(
-          defaultSessionProvider,
-          cliHealth
-        );
-        if (providerUnavailableMessage) {
-          throw new TRPCError({
-            code: 'PRECONDITION_FAILED',
-            message: `Cannot create workspace: ${providerUnavailableMessage}`,
-          });
-        }
-      }
-
-      // Use the canonical workspace creation service
-      const workspaceCreationService = createWorkspaceCreationService({
-        logger,
-      });
-
-      const workspace = await workspaceCreationService.create(input);
-
-      if (maxSessionsPerWorkspace > 0 && defaultSessionProvider) {
-        try {
-          await sessionDataService.createAgentSession({
-            workspaceId: workspace.id,
-            workflow: 'followup',
-            name: 'Chat 1',
-            provider: defaultSessionProvider,
-            providerProjectPath: null,
-          });
-        } catch (error) {
-          logger.warn('Failed to create default session for workspace', {
-            workspaceId: workspace.id,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
-
-      const branchName =
-        input.type === 'MANUAL'
-          ? input.branchName
-          : input.type === 'RESUME_BRANCH'
-            ? input.branchName
-            : undefined;
-      const useExistingBranch = input.type === 'RESUME_BRANCH';
-
-      void initializeWorkspaceWorktree(workspace.id, {
-        branchName,
-        useExistingBranch,
-      }).catch((error) => {
-        const initError = error instanceof Error ? error : new Error(String(error));
-        logger.error('Unexpected error during background workspace initialization', initError, {
-          workspaceId: workspace.id,
-        });
-      });
+      const { workspace } = await ctx.appContext.services.launchWorkspace(input);
 
       return workspace;
     }),
