@@ -66,6 +66,14 @@ import {
 } from './pr-monitoring-dependencies';
 import { observeMonitoredPR } from './pr-observation.orchestrator';
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
 let db: IntegrationDatabase;
 beforeEach(() => {
   // Delivery integration controls its freshness prerequisite at the delivery port.
@@ -354,7 +362,7 @@ it('coalesces poll, manual refresh, and delivery through separately composed obs
     },
   });
   const graph = { ...defaultPRMonitoringServices };
-  const fetched = Promise.withResolvers<typeof redObservation>();
+  const fetched = deferred<typeof redObservation>();
   const fetch = vi.spyOn(prObservationService, 'fetch').mockReturnValue(fetched.promise);
   const publish = vi.spyOn(prSnapshotService, 'emit');
   const target = { workspaceId, prId };

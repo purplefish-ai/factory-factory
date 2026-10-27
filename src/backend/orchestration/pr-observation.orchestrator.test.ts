@@ -3,6 +3,14 @@ import { redObservation } from '@/shared/pr-monitoring.test-helpers';
 import type { PRObservationPorts } from './pr-observation-ports';
 import { observeMonitoredPR } from './pr-observation.orchestrator';
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
 function observationPorts() {
   return {
     cacheScope: {},
@@ -61,7 +69,7 @@ it('coalesces concurrent refreshes and releases the producer after a fetch failu
 
 it('shares in-flight work across separately created poll, manual, and delivery wrappers', async () => {
   const ports = observationPorts();
-  const pending = Promise.withResolvers<typeof redObservation>();
+  const pending = deferred<typeof redObservation>();
   ports.fetchObservation.mockReturnValue(pending.promise);
   const target = { workspaceId: 'w', prId: 'p' };
   const results = [
@@ -97,7 +105,7 @@ it('shares recent acceptance by scope while honoring forced refresh, revision, a
 it('does not share in-flight or recent observations between distinct scopes', async () => {
   const first = observationPorts();
   const second = { ...first, cacheScope: {} };
-  const pending = Promise.withResolvers<typeof redObservation>();
+  const pending = deferred<typeof redObservation>();
   first.fetchObservation.mockReturnValue(pending.promise);
   const target = { workspaceId: 'w', prId: 'p' };
   const results = [observeMonitoredPR(first, target), observeMonitoredPR(second, target)];
