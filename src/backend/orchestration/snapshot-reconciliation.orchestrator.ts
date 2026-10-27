@@ -132,7 +132,9 @@ type DriftComparableField =
   | 'linearIssueIdentifier'
   | 'linearIssueUrl'
   | 'creationSource'
-  | 'autoIteration';
+  | 'autoIteration'
+  | 'mode'
+  | 'autoIterationStatus';
 
 const DRIFT_FIELD_GROUPS: { group: string; fields: DriftComparableField[] }[] = [
   {
@@ -148,7 +150,7 @@ const DRIFT_FIELD_GROUPS: { group: string; fields: DriftComparableField[] }[] = 
       'creationSource',
     ],
   },
-  { group: 'autoIteration', fields: ['autoIteration'] },
+  { group: 'autoIteration', fields: ['mode', 'autoIterationStatus', 'autoIteration'] },
   { group: 'workspace', fields: ['status', 'branchName'] },
   { group: 'name', fields: ['name'] },
   { group: 'pr', fields: ['prs', 'prSummary', 'prState', 'prCiStatus', 'prNumber'] },
