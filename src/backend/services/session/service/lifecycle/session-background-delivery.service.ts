@@ -32,7 +32,7 @@ export class SessionBackgroundDeliveryService {
     string,
     { sessionId: string; messageId: string; request: PRDeliveryRequest; message: QueuedMessage }
   >();
-  private deliveries = new Map<string, ClaimedPRDelivery>();
+  private deliveries = new Map<string, { delivery: ClaimedPRDelivery; message: QueuedMessage }>();
   constructor(private readonly resumeFences = new SessionResumeFences()) {}
   configure(port: PRBackgroundDeliveryPort) {
     this.port = port;
@@ -77,7 +77,11 @@ export class SessionBackgroundDeliveryService {
         const terminal = sessionDomainService
           .getTranscriptSnapshot(token.sessionId)
           .find((entry) => entry.id === token.messageId)?.message?.prDeliveryState;
-        if (!removed && this.deliveries.has(token.messageId) && !terminal) {
+        if (
+          !removed &&
+          this.deliveries.get(token.messageId)?.message === token.message &&
+          !terminal
+        ) {
           sessionDomainService.failMessage(
             token.sessionId,
             token.message,
@@ -102,8 +106,17 @@ export class SessionBackgroundDeliveryService {
       this.forgetToken(message.id);
     }
     if (result.status === 'ready') {
+      const currentToken = [...this.tokens.values()].find(
+        (entry) => entry.messageId === message.id
+      );
+      if (!token || currentToken !== token || token.message !== message) {
+        // Receipt recovery checks active deliveries before settling. A direct
+        // stale failure could settle a replacement that reused the frozen ID.
+        await this.port.recover(sessionId);
+        return { status: 'discard' as const };
+      }
       message.text = result.delivery.text;
-      this.deliveries.set(message.id, result.delivery);
+      this.deliveries.set(message.id, { delivery: result.delivery, message });
     }
     return result;
   }
@@ -116,26 +129,55 @@ export class SessionBackgroundDeliveryService {
   }
   isDeliveryActive(deliveryId: string): boolean {
     for (const delivery of this.deliveries.values()) {
-      if (delivery.deliveryId === deliveryId) {
+      if (delivery.delivery.deliveryId === deliveryId) {
         return true;
       }
     }
     return false;
   }
   async validate(message: QueuedMessage) {
-    const delivery = this.deliveries.get(message.id);
-    return !!delivery && !!this.port && (await this.port.validate(delivery));
+    const entry = this.deliveries.get(message.id);
+    return (
+      !!entry &&
+      entry.message === message &&
+      !!this.port &&
+      (await this.port.validate(entry.delivery))
+    );
   }
   async complete(message: QueuedMessage) {
-    const delivery = this.deliveries.get(message.id);
-    if (delivery && this.port) {
-      try {
-        await this.port.complete(delivery);
-      } finally {
+    const entry = this.deliveries.get(message.id);
+    if (!(entry && entry.message === message && this.port)) {
+      return;
+    }
+    try {
+      await this.port.complete(entry.delivery);
+      const token = [...this.tokens.values()].find((item) => item.messageId === message.id);
+      if (this.deliveries.get(message.id) !== entry || (token && token.message !== message)) {
+        return;
+      }
+      const terminal = sessionDomainService
+        .getTranscriptSnapshot(entry.delivery.sessionId)
+        .find((item) => item.id === message.id && item.message?.prDeliveryState === 'cancelled');
+      if (
+        terminal &&
+        !sessionDomainService.hasQueuedMessage(entry.delivery.sessionId, message.id)
+      ) {
+        sessionDomainService.commitSentUserMessageAtOrder(
+          entry.delivery.sessionId,
+          message,
+          terminal.order
+        );
+      }
+    } finally {
+      if (this.deliveries.get(message.id) === entry) {
         this.deliveries.delete(message.id);
-        if (!sessionDomainService.hasQueuedMessage(delivery.sessionId, message.id)) {
-          this.forgetToken(message.id);
-        }
+      }
+      const token = [...this.tokens.values()].find((item) => item.messageId === message.id);
+      if (
+        token?.message === message &&
+        !sessionDomainService.hasQueuedMessage(entry.delivery.sessionId, message.id)
+      ) {
+        this.forgetToken(message.id);
       }
     }
   }
@@ -144,9 +186,10 @@ export class SessionBackgroundDeliveryService {
     error: unknown,
     deliveryState: 'failed' | 'cancelled' = 'failed'
   ) {
-    const delivery = this.deliveries.get(message.id);
+    const entry = this.deliveries.get(message.id);
+    const delivery = entry?.delivery;
     const token = [...this.tokens.values()].find((entry) => entry.messageId === message.id);
-    if (delivery && this.port) {
+    if (entry?.message === message && delivery && this.port) {
       try {
         const outcome = await this.port.fail(delivery, error);
         const currentToken = [...this.tokens.values()].find(
@@ -157,7 +200,7 @@ export class SessionBackgroundDeliveryService {
           token !== undefined &&
           token.message === message &&
           currentToken === token &&
-          this.deliveries.get(message.id) === delivery
+          this.deliveries.get(message.id) === entry
         ) {
           sessionDomainService.failMessage(
             delivery.sessionId,
@@ -168,7 +211,7 @@ export class SessionBackgroundDeliveryService {
           this.forgetToken(message.id);
         }
       } finally {
-        if (this.deliveries.get(message.id) === delivery) {
+        if (this.deliveries.get(message.id) === entry) {
           this.deliveries.delete(message.id);
         }
       }

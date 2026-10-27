@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import {
   SessionBackgroundDeliveryService,
@@ -435,4 +435,235 @@ it('does not forget a replacement token when failure begins after replacement en
   service.enqueue(sessionId, request);
   expect(sessionDomainService.peekNextMessage(sessionId)).toBe(replacement);
   expect(sessionDomainService.getQueueLength(sessionId)).toBe(1);
+});
+
+it.each([false, true])(
+  'keeps replacement delivery ownership when an old ready result settles (same receipt=%s)',
+  async (sameReceipt) => {
+    const service = new SessionBackgroundDeliveryService();
+    const sessionId = `late-ready-${sameReceipt}`;
+    const oldDelivery = {
+      deliveryId: 'old',
+      sessionId,
+      bindingRevision: 1,
+      eventIds: ['e'],
+      text: 'old facts',
+      attempt: 1,
+    };
+    const replacementDelivery = {
+      ...oldDelivery,
+      deliveryId: sameReceipt ? 'old' : 'replacement',
+      text: 'replacement facts',
+      attempt: 2,
+    };
+    let release!: (result: { status: 'ready'; delivery: typeof oldDelivery }) => void;
+    const pending = new Promise<{ status: 'ready'; delivery: typeof oldDelivery }>((resolve) => {
+      release = resolve;
+    });
+    const complete = vi.fn(async () => undefined);
+    const fail = vi.fn(async () => ({ paused: false }));
+    const recover = vi.fn(() => {
+      expect(service.isDeliveryActive(replacementDelivery.deliveryId)).toBe(true);
+      return Promise.resolve();
+    });
+    let prepares = 0;
+    service.configure({
+      prepare: () =>
+        ++prepares === 1
+          ? pending
+          : Promise.resolve({ status: 'ready', delivery: replacementDelivery }),
+      validate: async () => true,
+      complete,
+      fail,
+      recover,
+      pause: async () => undefined,
+      resume: async () => undefined,
+    });
+    service.enqueue(sessionId, request);
+    const old = sessionDomainService.peekNextMessage(sessionId)!;
+    const preparing = service.prepare(sessionId, old);
+    service.invalidate('w', 1);
+    service.enqueue(sessionId, request);
+    const replacement = sessionDomainService.peekNextMessage(sessionId)!;
+    await service.prepare(sessionId, replacement);
+
+    release({ status: 'ready', delivery: oldDelivery });
+    await expect(preparing).resolves.toEqual({ status: 'discard' });
+
+    expect(recover).toHaveBeenCalledWith(sessionId);
+    expect(fail).not.toHaveBeenCalled();
+    expect(replacement.text).toBe('replacement facts');
+    await service.complete(replacement);
+    expect(complete).toHaveBeenCalledWith(replacementDelivery);
+    service.enqueue(sessionId, request);
+    expect(sessionDomainService.getQueueLength(sessionId)).toBe(1);
+  }
+);
+
+it('uses receipt recovery for an obsolete ready claim without reviving its cancelled token', async () => {
+  const service = new SessionBackgroundDeliveryService();
+  const sessionId = 'late-ready-no-replacement';
+  const delivery = {
+    deliveryId: 'obsolete',
+    sessionId,
+    bindingRevision: 1,
+    eventIds: ['e'],
+    text: 'old facts',
+    attempt: 1,
+  };
+  let release!: (result: { status: 'ready'; delivery: typeof delivery }) => void;
+  const pending = new Promise<{ status: 'ready'; delivery: typeof delivery }>((resolve) => {
+    release = resolve;
+  });
+  const recover = vi.fn(() => {
+    expect(service.isDeliveryActive(delivery.deliveryId)).toBe(false);
+    return Promise.resolve();
+  });
+  const fail = vi.fn(async () => ({ paused: false }));
+  service.configure({
+    prepare: () => pending,
+    validate: async () => true,
+    complete: async () => undefined,
+    fail,
+    recover,
+    pause: async () => undefined,
+    resume: async () => undefined,
+  });
+  service.enqueue(sessionId, request);
+  const message = sessionDomainService.peekNextMessage(sessionId)!;
+  const preparing = service.prepare(sessionId, message);
+  service.invalidate('w', 1);
+  release({ status: 'ready', delivery });
+
+  await expect(preparing).resolves.toEqual({ status: 'discard' });
+  expect(recover).toHaveBeenCalledWith(sessionId);
+  expect(fail).not.toHaveBeenCalled();
+  expect(service.isDeliveryActive(delivery.deliveryId)).toBe(false);
+  expect(sessionDomainService.getQueueLength(sessionId)).toBe(0);
+  expect(sessionDomainService.getTranscriptSnapshot(sessionId)[0]?.message?.prDeliveryState).toBe(
+    'cancelled'
+  );
+});
+
+it('does not activate a ready claim without captured queue ownership', async () => {
+  const service = new SessionBackgroundDeliveryService();
+  const sessionId = 'ready-without-token';
+  const delivery = {
+    deliveryId: 'unowned',
+    sessionId,
+    bindingRevision: 1,
+    eventIds: ['e'],
+    text: 'facts',
+    attempt: 1,
+  };
+  const recover = vi.fn(() => Promise.resolve());
+  service.configure({
+    prepare: async () => ({ status: 'ready', delivery }),
+    validate: async () => true,
+    complete: async () => undefined,
+    fail: async () => ({ paused: false }),
+    recover,
+    pause: async () => undefined,
+    resume: async () => undefined,
+  });
+  const message = {
+    id: 'pr-event-unowned',
+    text: 'queued',
+    timestamp: '',
+    settings,
+    source: { type: 'pr_event' as const, request },
+  };
+  await expect(service.prepare(sessionId, message)).resolves.toEqual({ status: 'discard' });
+  expect(service.isDeliveryActive(delivery.deliveryId)).toBe(false);
+  expect(recover).toHaveBeenCalledWith(sessionId);
+});
+
+it.each(['complete', 'fail'] as const)(
+  'reconciles cancellation with the actual in-flight %s outcome',
+  async (settlement) => {
+    const service = new SessionBackgroundDeliveryService();
+    const sessionId = `invalidated-send-${settlement}`;
+    const delivery = {
+      deliveryId: settlement,
+      sessionId,
+      bindingRevision: 1,
+      eventIds: ['e'],
+      text: 'sent facts',
+      attempt: 1,
+    };
+    service.configure({
+      prepare: async () => ({ status: 'ready', delivery }),
+      validate: async () => true,
+      complete: async () => undefined,
+      fail: async () => ({ paused: false }),
+      recover: async () => undefined,
+      pause: async () => undefined,
+      resume: async () => undefined,
+    });
+    service.enqueue(sessionId, request);
+    const message = sessionDomainService.peekNextMessage(sessionId)!;
+    await service.prepare(sessionId, message);
+    sessionDomainService.dequeueNext(sessionId);
+    sessionDomainService.commitSentUserMessage(sessionId, message);
+    const order = sessionDomainService.getTranscriptSnapshot(sessionId)[0]?.order;
+    service.invalidate('w', 1);
+    expect(sessionDomainService.getTranscriptSnapshot(sessionId)[0]?.message?.prDeliveryState).toBe(
+      'cancelled'
+    );
+    if (settlement === 'complete') {
+      await service.complete(message);
+      expect(sessionDomainService.getTranscriptSnapshot(sessionId)[0]).toMatchObject({
+        order,
+        message: { type: 'pr_update', text: 'sent facts' },
+      });
+      expect(
+        sessionDomainService.getTranscriptSnapshot(sessionId)[0]?.message?.prDeliveryState
+      ).toBeUndefined();
+    } else {
+      await service.fail(message, new Error('Stopped'));
+      expect(
+        sessionDomainService.getTranscriptSnapshot(sessionId)[0]?.message?.prDeliveryState
+      ).toBe('cancelled');
+    }
+  }
+);
+
+it('does not validate or complete a replacement claim for an older message object', async () => {
+  const service = new SessionBackgroundDeliveryService();
+  const sessionId = 'replacement-claim-selection';
+  const first = {
+    deliveryId: 'first',
+    sessionId,
+    bindingRevision: 1,
+    eventIds: ['e1'],
+    text: 'first',
+    attempt: 1,
+  };
+  const second = { ...first, deliveryId: 'second', text: 'second', attempt: 2 };
+  const validate = vi.fn(async () => true);
+  const complete = vi.fn(async () => undefined);
+  let prepares = 0;
+  service.configure({
+    prepare: async () => ({ status: 'ready', delivery: ++prepares === 1 ? first : second }),
+    validate,
+    complete,
+    fail: async () => ({ paused: false }),
+    recover: async () => undefined,
+    pause: async () => undefined,
+    resume: async () => undefined,
+  });
+  service.enqueue(sessionId, request);
+  const old = sessionDomainService.peekNextMessage(sessionId)!;
+  await service.prepare(sessionId, old);
+  sessionDomainService.dequeueNext(sessionId);
+  service.enqueue(sessionId, request);
+  const replacement = sessionDomainService.peekNextMessage(sessionId)!;
+  await service.prepare(sessionId, replacement);
+  expect(await service.validate(old)).toBe(false);
+  expect(validate).not.toHaveBeenCalled();
+  await service.complete(old);
+  expect(complete).not.toHaveBeenCalled();
+  expect(service.isDeliveryActive(second.deliveryId)).toBe(true);
+  await service.complete(replacement);
+  expect(complete).toHaveBeenCalledWith(second);
 });
