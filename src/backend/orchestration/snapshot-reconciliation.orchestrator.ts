@@ -76,7 +76,7 @@ export interface SnapshotReconciliationDependencies extends ReconciliationBridge
   >;
   workspaceSnapshotStore: Pick<
     typeof workspaceSnapshotStore,
-    'getAllWorkspaceIds' | 'getByWorkspaceId' | 'remove' | 'upsert'
+    'getAllWorkspaceIds' | 'getByWorkspaceId' | 'remove' | 'upsert' | 'canAcceptNameObservation'
   >;
   /**
    * Defaults to the process-wide runner. Injected so a test can drive this
@@ -149,7 +149,8 @@ const DRIFT_FIELD_GROUPS: { group: string; fields: DriftComparableField[] }[] = 
     ],
   },
   { group: 'autoIteration', fields: ['autoIteration'] },
-  { group: 'workspace', fields: ['status', 'name', 'branchName'] },
+  { group: 'workspace', fields: ['status', 'branchName'] },
+  { group: 'name', fields: ['name'] },
   { group: 'pr', fields: ['prs', 'prSummary', 'prState', 'prCiStatus', 'prNumber'] },
   {
     group: 'ratchet',
@@ -284,6 +285,7 @@ export class SnapshotReconciliationService {
       autoIteration: projectAutoIterationSummary(ws),
       projectId: ws.projectId,
       name: ws.name,
+      nameUpdatedAt: ws.updatedAt.getTime(),
       status: ws.status,
       createdAt: ws.createdAt.toISOString(),
       branchName: ws.branchName,
@@ -388,7 +390,14 @@ export class SnapshotReconciliationService {
         // Drift detection (RCNL-04)
         const existing = this.dependencies.workspaceSnapshotStore.getByWorkspaceId(ws.id);
         if (existing) {
-          const drifts = detectDrift(existing, authoritativeFields);
+          const drifts = detectDrift(existing, authoritativeFields).filter(
+            ({ field }) =>
+              field !== 'name' ||
+              this.dependencies.workspaceSnapshotStore.canAcceptNameObservation(
+                ws.id,
+                ws.updatedAt.getTime()
+              )
+          );
           if (drifts.length > 0) {
             driftsDetected += drifts.length;
             this.logger.warn('Snapshot drift detected', {
