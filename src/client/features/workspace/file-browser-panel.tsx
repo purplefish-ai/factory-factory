@@ -1,5 +1,7 @@
 import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
+import { runInBackground } from '@/client/lib/background-task';
+import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { FileTree } from './file-tree';
@@ -20,7 +22,7 @@ interface FileBrowserPanelProps {
 
 export function FileBrowserPanel({ workspaceId }: FileBrowserPanelProps) {
   const { openTab } = useWorkspacePanel();
-  const [refreshKey, setRefreshKey] = useState(0);
+  const utils = trpc.useUtils();
 
   const handleFileSelect = useCallback(
     (path: string, name: string) => {
@@ -30,8 +32,11 @@ export function FileBrowserPanel({ workspaceId }: FileBrowserPanelProps) {
   );
 
   const handleRefresh = useCallback(() => {
-    setRefreshKey((prev) => prev + 1);
-  }, []);
+    runInBackground(
+      utils.workspace.listFiles.invalidate({ workspaceId }),
+      'Could not refresh file tree'
+    );
+  }, [utils, workspaceId]);
 
   return (
     <FileTreeProvider workspaceId={workspaceId}>
@@ -52,7 +57,7 @@ export function FileBrowserPanel({ workspaceId }: FileBrowserPanelProps) {
         {/* File tree */}
         <ScrollArea className="flex-1">
           <div className="p-1">
-            <FileTree key={refreshKey} workspaceId={workspaceId} onFileSelect={handleFileSelect} />
+            <FileTree workspaceId={workspaceId} onFileSelect={handleFileSelect} />
           </div>
         </ScrollArea>
       </div>
