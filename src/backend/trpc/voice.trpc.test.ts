@@ -155,6 +155,25 @@ describe('voiceRouter', () => {
   });
 
   describe('updateConfig', () => {
+    it.each([true, false])(
+      'preserves enabled=%s when saving an unrelated setting',
+      async (enabled) => {
+        mockUserSettingsQueryService.get.mockResolvedValue({
+          voiceModeEnabled: enabled,
+          deepgramApiKeyEncrypted: 'encrypted:dg_secret',
+          voiceTtsModel: 'flux-haley-en',
+          voiceTtsSpeed: 1.25,
+        });
+
+        const result = await createCaller().updateConfig({ ttsSpeed: 1.25 });
+
+        expect(mockUserSettingsQueryService.update).toHaveBeenCalledWith(
+          expect.objectContaining({ voiceModeEnabled: undefined, voiceTtsSpeed: 1.25 })
+        );
+        expect(result.enabled).toBe(enabled);
+      }
+    );
+
     it('encrypts and persists a newly provided key', async () => {
       mockUserSettingsQueryService.update.mockResolvedValue(undefined);
       mockUserSettingsQueryService.get.mockResolvedValue({

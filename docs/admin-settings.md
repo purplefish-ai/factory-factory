@@ -84,3 +84,9 @@ Use **Edit factory configuration** to edit the loaded scripts. If loading fails
 while the editor is open, the editor closes to prevent saving stale scripts.
 Save failures appear both in the editor and in an error toast; the editor stays
 open so you can correct the configuration or retry.
+
+## Voice mode
+
+Voice, speed, sensitivity, and API-key changes save independently. Only the
+**Enable voice mode** switch changes whether voice mode is enabled, so another
+open tab can tune settings without overwriting that switch.
