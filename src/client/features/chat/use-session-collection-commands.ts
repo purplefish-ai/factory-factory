@@ -60,13 +60,14 @@ export function useSessionCollectionCommands({
       utils.session.listSessions.setData(key, (old) => old?.filter((session) => session.id !== id));
       return { workspaceId: operationWorkspaceId, previousSessions };
     },
-    onError: (_error, _variables, context) => {
+    onError: (error, _variables, context) => {
       if (context?.previousSessions) {
         utils.session.listSessions.setData(
           { workspaceId: context.workspaceId },
           context.previousSessions
         );
       }
+      toast.error(error.message || 'Failed to delete session');
     },
     onSettled: (_data, _error, _variables, context) => {
       if (context?.workspaceId) {

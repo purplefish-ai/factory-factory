@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TRPCClientError } from '@trpc/client';
 import { getQueryKey } from '@trpc/react-query';
 import { observable } from '@trpc/server/observable';
-import { useRef } from 'react';
+import { startTransition, Suspense, useLayoutEffect, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router';
@@ -46,12 +46,33 @@ function readWorkspaceId(input: unknown): string {
     : '';
 }
 
+interface SuspendedWorkspace {
+  workspaceId: string;
+  onAttempt: () => void;
+  gate: Promise<void>;
+}
+
+function SuspendWorkspace({
+  workspaceId,
+  suspended,
+}: {
+  workspaceId: string;
+  suspended?: SuspendedWorkspace;
+}) {
+  if (suspended?.workspaceId === workspaceId) {
+    suspended.onAttempt();
+    throw suspended.gate;
+  }
+  return null;
+}
+
 interface SurfaceProps {
   workspaceId: string;
   provider: SessionProviderValue;
   onResult: (commands: Commands) => void;
+  suspended?: SuspendedWorkspace;
 }
-function Full({ workspaceId, provider, onResult }: SurfaceProps) {
+function Full({ workspaceId, provider, onResult, suspended }: SurfaceProps) {
   const { data: sessions } = trpc.session.listSessions.useQuery({ workspaceId });
   const { selectedDbSessionId, setSelectedDbSessionId } = useSelectedSessionId(
     workspaceId,
@@ -70,27 +91,36 @@ function Full({ workspaceId, provider, onResult }: SurfaceProps) {
     selectedProvider: provider,
     onArchiveGitIndexLocked: vi.fn(),
   });
-  onResult({
-    selected: selectedDbSessionId,
-    newChat: management.handleNewChat,
-    quickAction: () => management.handleQuickAction('Review', 'Review prompt'),
-    close: management.handleCloseSession,
-    select: management.handleSelectSession,
-    pending: management.createSession.isPending,
+  useLayoutEffect(() => {
+    onResult({
+      selected: selectedDbSessionId,
+      newChat: management.handleNewChat,
+      quickAction: () => management.handleQuickAction('Review', 'Review prompt'),
+      close: management.handleCloseSession,
+      select: management.handleSelectSession,
+      pending: management.createSession.isPending,
+    });
   });
-  return <textarea ref={inputRef} />;
+  return (
+    <>
+      <textarea ref={inputRef} />
+      <SuspendWorkspace workspaceId={workspaceId} suspended={suspended} />
+    </>
+  );
 }
-function Quick({ workspaceId, onResult }: SurfaceProps) {
+function Quick({ workspaceId, onResult, suspended }: SurfaceProps) {
   const chat = useQuickChat(workspaceId);
-  onResult({
-    selected: chat.selectedSessionId,
-    newChat: chat.handleNewChat,
-    quickAction: () => chat.handleQuickAction('Review', 'Review prompt'),
-    close: chat.handleCloseSession,
-    select: chat.setSelectedSessionId,
-    pending: chat.isCreatingSession,
+  useLayoutEffect(() => {
+    onResult({
+      selected: chat.selectedSessionId,
+      newChat: chat.handleNewChat,
+      quickAction: () => chat.handleQuickAction('Review', 'Review prompt'),
+      close: chat.handleCloseSession,
+      select: chat.setSelectedSessionId,
+      pending: chat.isCreatingSession,
+    });
   });
-  return null;
+  return <SuspendWorkspace workspaceId={workspaceId} suspended={suspended} />;
 }
 
 function renderSurface(surface: Surface, provider: SessionProviderValue = 'CLAUDE') {
@@ -135,29 +165,32 @@ function renderSurface(surface: Surface, provider: SessionProviderValue = 'CLAUD
     ],
   });
   let result: Commands | undefined;
+  let committedWorkspaceId: string | undefined;
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
   roots.push(root);
   const SurfaceComponent = surface === 'full' ? Full : Quick;
-  const render = (workspaceId: string) =>
-    flushSync(() =>
-      root.render(
-        <QueryClientProvider client={queryClient}>
-          <trpc.Provider client={client} queryClient={queryClient}>
-            <MemoryRouter>
-              <SurfaceComponent
-                workspaceId={workspaceId}
-                provider={provider}
-                onResult={(commands) => {
-                  result = commands;
-                }}
-              />
-            </MemoryRouter>
-          </trpc.Provider>
-        </QueryClientProvider>
-      )
-    );
+  const renderTree = (workspaceId: string, suspended?: SuspendedWorkspace) => (
+    <QueryClientProvider client={queryClient}>
+      <trpc.Provider client={client} queryClient={queryClient}>
+        <MemoryRouter>
+          <Suspense fallback={<div data-testid="pending-workspace" />}>
+            <SurfaceComponent
+              workspaceId={workspaceId}
+              provider={provider}
+              suspended={suspended}
+              onResult={(commands) => {
+                result = commands;
+                committedWorkspaceId = workspaceId;
+              }}
+            />
+          </Suspense>
+        </MemoryRouter>
+      </trpc.Provider>
+    </QueryClientProvider>
+  );
+  const render = (workspaceId: string) => flushSync(() => root.render(renderTree(workspaceId)));
   render('a');
   return {
     get: () => {
@@ -167,6 +200,13 @@ function renderSurface(surface: Surface, provider: SessionProviderValue = 'CLAUD
       return result;
     },
     render,
+    transitionToSuspended: (workspaceId: string, onAttempt: () => void) => {
+      const gate = new Promise<void>(() => {
+        // Keep this render suspended until a synchronous render abandons the transition.
+      });
+      startTransition(() => root.render(renderTree(workspaceId, { workspaceId, onAttempt, gate })));
+    },
+    committedWorkspace: () => committedWorkspaceId,
     requests,
     pending,
     queryClient,
@@ -207,6 +247,38 @@ describe.each<Surface>(['full', 'quick'])('%s chat session collection', (surface
       expect(view.requests.filter((r) => r.path === 'session.createAndStartSession')).toHaveLength(
         1
       );
+    }
+  );
+
+  it.each(['chat', 'action'])(
+    'selects a completed %s in the committed workspace during an interrupted workspace transition',
+    async (kind) => {
+      const view = renderSurface(surface);
+      await vi.waitFor(() => expect(view.get().selected).toBe('a1'));
+      const operation = kind === 'chat' ? view.get().newChat() : view.get().quickAction();
+      await vi.waitFor(() => expect(view.get().pending).toBe(true));
+      const attempted = vi.fn();
+      view.transitionToSuspended('b', attempted);
+      await vi.waitFor(() => expect(attempted).toHaveBeenCalled());
+      expect(view.committedWorkspace()).toBe('a');
+      expect(document.querySelector('[data-testid="pending-workspace"]')).toBeNull();
+
+      view.pending[0]?.resolve({ id: 'created-a' });
+      await operation;
+      await vi.waitFor(() => expect(view.get().selected).toBe('created-a'));
+      expect(view.committedWorkspace()).toBe('a');
+      expect(localStorage.getItem('workspace-selected-session-a')).toBe(
+        surface === 'full' ? 'created-a' : null
+      );
+      expect(localStorage.getItem('workspace-selected-session-b')).toBeNull();
+
+      // Interrupt the suspended transition and keep the original workspace committed.
+      view.render('a');
+      expect(view.committedWorkspace()).toBe('a');
+      expect(view.get().selected).toBe('created-a');
+      expect(
+        view.requests.filter((request) => request.path === 'session.createAndStartSession')
+      ).toHaveLength(1);
     }
   );
 
@@ -325,6 +397,7 @@ describe.each<Surface>(['full', 'quick'])('%s chat session collection', (surface
     ).toHaveLength(2);
     await vi.waitFor(() => expect(view.cache('a')).toEqual([{ id: 'a1', name: 'Chat 2' }]));
     view.render('a');
+    expect(toast.error).not.toHaveBeenCalled();
     view.get().close('a1');
     await vi.waitFor(() => expect(view.get().selected).toBeNull());
     expect(view.requests.filter((r) => r.path === 'session.deleteSession')).toHaveLength(2);
@@ -342,39 +415,46 @@ describe.each<Surface>(['full', 'quick'])('%s chat session collection', (surface
     ]);
   });
 
-  it('rolls back a failed delete in the originating cache after navigation', async () => {
-    const view = renderSurface(surface);
-    await vi.waitFor(() => expect(view.get().selected).toBe('a1'));
-    view.get().close('a1');
-    await vi.waitFor(() => expect(view.cache('a')).toEqual([{ id: 'a2', name: 'Chat 7' }]));
-    expect(view.get().selected).toBe('a2');
-    view.render('b');
-    await vi.waitFor(() => expect(view.get().selected).toBe('b1'));
-    view.pending[0]?.reject(new Error('Delete failed'));
-    await vi.waitFor(() =>
-      expect(view.cache('a')).toEqual([
-        { id: 'a1', name: 'Chat 2' },
-        { id: 'a2', name: 'Chat 7' },
-      ])
-    );
-    await vi.waitFor(() =>
+  it.each([
+    { message: 'Delete failed', notification: 'Delete failed' },
+    { message: '', notification: 'Failed to delete session' },
+  ])(
+    'reports deletion failure and rolls back the originating cache after navigation: $notification',
+    async ({ message, notification }) => {
+      const view = renderSurface(surface);
+      await vi.waitFor(() => expect(view.get().selected).toBe('a1'));
+      view.get().close('a1');
+      await vi.waitFor(() => expect(view.cache('a')).toEqual([{ id: 'a2', name: 'Chat 7' }]));
+      expect(view.get().selected).toBe('a2');
+      view.render('b');
+      await vi.waitFor(() => expect(view.get().selected).toBe('b1'));
+      view.pending[0]?.reject(new Error(message));
+      await vi.waitFor(() =>
+        expect(view.cache('a')).toEqual([
+          { id: 'a1', name: 'Chat 2' },
+          { id: 'a2', name: 'Chat 7' },
+        ])
+      );
+      await vi.waitFor(() =>
+        expect(
+          view.queryClient.getQueryState(
+            getQueryKey(trpc.session.listSessions, { workspaceId: 'a' }, 'query')
+          )?.isInvalidated
+        ).toBe(true)
+      );
       expect(
         view.queryClient.getQueryState(
-          getQueryKey(trpc.session.listSessions, { workspaceId: 'a' }, 'query')
+          getQueryKey(trpc.session.listSessions, { workspaceId: 'b' }, 'query')
         )?.isInvalidated
-      ).toBe(true)
-    );
-    expect(
-      view.queryClient.getQueryState(
-        getQueryKey(trpc.session.listSessions, { workspaceId: 'b' }, 'query')
-      )?.isInvalidated
-    ).toBe(false);
-    expect(view.cache('b')).toEqual([{ id: 'b1', name: 'Other' }]);
-    expect(view.get().selected).toBe('b1');
-    expect(view.requests.filter((r) => r.path === 'session.deleteSession')).toEqual([
-      { path: 'session.deleteSession', input: { id: 'a1' } },
-    ]);
-  });
+      ).toBe(false);
+      expect(toast.error).toHaveBeenCalledExactlyOnceWith(notification);
+      expect(view.cache('b')).toEqual([{ id: 'b1', name: 'Other' }]);
+      expect(view.get().selected).toBe('b1');
+      expect(view.requests.filter((r) => r.path === 'session.deleteSession')).toEqual([
+        { path: 'session.deleteSession', input: { id: 'a1' } },
+      ]);
+    }
+  );
 });
 
 it('uses Codex model defaults for both full-chat commands', async () => {

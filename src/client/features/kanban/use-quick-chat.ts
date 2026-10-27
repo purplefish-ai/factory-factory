@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useChatWebSocket, useSessionCollectionCommands } from '@/client/features/chat';
 import { trpc } from '@/client/lib/trpc';
 import { useAutoScroll } from '@/hooks/use-auto-scroll';
@@ -67,7 +67,9 @@ export function useQuickChat(workspaceId: string | null) {
   });
 
   const activeWorkspaceRef = useRef(workspaceId);
-  activeWorkspaceRef.current = workspaceId;
+  useLayoutEffect(() => {
+    activeWorkspaceRef.current = workspaceId;
+  }, [workspaceId]);
   const {
     createSession,
     deleteSession,

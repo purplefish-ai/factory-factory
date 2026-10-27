@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { useSessionCollectionCommands } from '@/client/features/chat';
@@ -160,7 +160,9 @@ export function useSessionManagement({
   const utils = trpc.useUtils();
 
   const activeWorkspaceRef = useRef(workspaceId);
-  activeWorkspaceRef.current = workspaceId;
+  useLayoutEffect(() => {
+    activeWorkspaceRef.current = workspaceId;
+  }, [workspaceId]);
   const {
     createSession,
     deleteSession,
