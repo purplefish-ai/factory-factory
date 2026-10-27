@@ -9,7 +9,7 @@ import {
 } from '@/backend/services/run-script';
 import {
   buildChildWorkspaceContext,
-  chatMessageHandlerService,
+  sessionDispatchService,
   sessionDataService,
   sessionDomainService,
   sessionLifecycleService,
@@ -438,7 +438,7 @@ async function startDefaultAgentSession(workspaceId: string): Promise<string | n
 
     // Trigger queue dispatch after init/session start so messages queued during
     // workspace provisioning are picked up immediately when dispatch is allowed.
-    await chatMessageHandlerService.tryDispatchNextMessage(session.id);
+    await sessionDispatchService.tryDispatchNextMessage(session.id);
 
     logger.debug('Auto-started default Claude session for workspace', {
       workspaceId,
@@ -464,7 +464,7 @@ export async function retryQueuedDispatchAfterWorkspaceReady(
     // Prefer the specific session we just started; it may now be RUNNING.
     if (startedSessionId) {
       await bindInitialMonitoringSession(workspaceId, startedSessionId);
-      await chatMessageHandlerService.tryDispatchNextMessage(startedSessionId);
+      await sessionDispatchService.tryDispatchNextMessage(startedSessionId);
       return;
     }
 
@@ -474,7 +474,7 @@ export async function retryQueuedDispatchAfterWorkspaceReady(
     const runningSession = runningSessions.find(isPRMonitoringRecipient);
     if (runningSession) {
       await bindInitialMonitoringSession(workspaceId, runningSession.id);
-      await chatMessageHandlerService.tryDispatchNextMessage(runningSession.id);
+      await sessionDispatchService.tryDispatchNextMessage(runningSession.id);
       return;
     }
 
@@ -487,7 +487,7 @@ export async function retryQueuedDispatchAfterWorkspaceReady(
     }
 
     await bindInitialMonitoringSession(workspaceId, idleSession.id);
-    await chatMessageHandlerService.tryDispatchNextMessage(idleSession.id);
+    await sessionDispatchService.tryDispatchNextMessage(idleSession.id);
   } catch (error) {
     logger.warn('Failed to retry queued dispatch after workspace became ready', {
       workspaceId,

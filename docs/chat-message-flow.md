@@ -23,21 +23,23 @@ flowchart TD
     Transport --> Reducer[chatReducer]
 ```
 
-`ChatMessageHandlerService` routes incoming WebSocket messages and temporarily
-forwards its existing dispatch APIs to the single `SessionDispatchService`
-constructed in `session-services.ts`. The dispatcher owns queue execution,
-concurrent-dispatch tokens, busy-turn retry timers and attempts, and manual
-resume. `SessionLifecycleGate` owns lifecycle generations; the dispatcher
-applies its generation checks when validating dispatch eligibility and starting
-the runtime through injected capabilities. The queued message stays visible
-until dispatch is ready, so refreshing during startup does not remove it from
-the queue.
+`ChatMessageHandlerService` only routes incoming WebSocket messages through a
+registry constructed in `session-services.ts`. That composition root configures
+one `SessionDispatchService` and supplies its callbacks to the registry. The
+dispatcher owns queue execution, concurrent-dispatch tokens, busy-turn retry
+timers and attempts, and manual resume. `SessionLifecycleGate` owns lifecycle
+generations; the dispatcher applies its generation checks when validating
+dispatch eligibility and starting the runtime through injected capabilities. The
+queued message stays visible until dispatch is ready, so refreshing during
+startup does not remove it from the queue.
 
 The dispatcher uses notification and background-delivery capabilities for
 claims, preparation, validation, and completion. Those services retain claim and
 delivery authority; GitHub trigger interpretation remains outside queue
-execution. Existing consumers continue through the chat handler facade, sharing
-the dispatcher's state with direct service calls.
+execution. Workspace initialization, workspace notifications, PR delivery,
+lifecycle queue recovery, and prompt completion use the same dispatcher directly
+through their dispatch capabilities. Queue reset and manual resume callbacks
+also target that instance; the chat router has no dispatch facade.
 
 `AcpEventProcessor` translates provider updates with `AcpEventTranslator`,
 stores transcript changes, and emits session deltas. Streaming text accumulates

@@ -7,7 +7,7 @@ import {
 import { ratchetService } from '@/backend/services/ratchet';
 import {
   acpRuntimeManager,
-  chatMessageHandlerService,
+  sessionDispatchService,
   findPRDeliveryReceipt,
   sessionBackgroundDeliveryService,
   sessionDataService,
@@ -27,7 +27,7 @@ export type PRMonitoringServices = {
   prSnapshotService: typeof prSnapshotService;
   ratchetService: typeof ratchetService;
   acpRuntimeManager: typeof acpRuntimeManager;
-  chatMessageHandlerService: typeof chatMessageHandlerService;
+  sessionDispatchService: Pick<typeof sessionDispatchService, 'tryDispatchNextMessage'>;
   findPRDeliveryReceipt: typeof findPRDeliveryReceipt;
   sessionBackgroundDeliveryService: typeof sessionBackgroundDeliveryService;
   sessionDataService: typeof sessionDataService;
@@ -53,8 +53,8 @@ export const defaultPRMonitoringServices: PRMonitoringServices = {
   get acpRuntimeManager() {
     return acpRuntimeManager;
   },
-  get chatMessageHandlerService() {
-    return chatMessageHandlerService;
+  get sessionDispatchService() {
+    return sessionDispatchService;
   },
   get findPRDeliveryReceipt() {
     return findPRDeliveryReceipt;

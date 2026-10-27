@@ -51,7 +51,6 @@ function createTestContext(worktreeBaseDir: string, eventBus: SessionEventBus = 
         isSessionRunning: vi.fn(() => false),
       },
       chatMessageHandlerService: {
-        tryDispatchNextMessage: vi.fn(),
         handleMessage: vi.fn(async () => undefined),
       },
       configService: {

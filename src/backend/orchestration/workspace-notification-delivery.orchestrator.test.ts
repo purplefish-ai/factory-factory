@@ -13,7 +13,7 @@ const mockPersistParentNotification = vi.hoisted(() => vi.fn());
 const mockWarn = vi.hoisted(() => vi.fn());
 
 vi.mock('@/backend/services/session', () => ({
-  chatMessageHandlerService: {
+  sessionDispatchService: {
     tryDispatchNextMessage: (...args: unknown[]) => mockTryDispatchNextMessage(...args),
   },
   sessionDataService: {

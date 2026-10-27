@@ -230,6 +230,14 @@ banner if persistence recovers. Stops that suppress their own event still
 receive shutdown history. The supervisor's closed shutdown admission remains in
 effect after gate cleanup.
 
+Queue execution belongs to the single `SessionDispatchService` configured in
+`session-services.ts`. Initialization, notification delivery, lifecycle queue
+recovery, and prompt completion use its dispatch capability directly. The chat
+registry's dispatch, reset, and manual-resume callbacks reach that same
+instance; `ChatMessageHandlerService` only routes messages. Lifecycle
+generation, delivery claim, and transcript-commit ownership remain with their
+existing services.
+
 Startup, termination, runtime exit, notifications, context, and workflow
 finalization each have one coordinator or service.
 

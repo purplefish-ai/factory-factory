@@ -15,12 +15,7 @@ export interface ChatMessageHandlerPromptService {
   sendSessionMessage: (sessionId: string, content: string | AgentContentItem[]) => Promise<void>;
 }
 
-export type {
-  SessionDispatchStartOptions as ChatClientStartOptions,
-  SessionDispatchLifecycleGate as ChatMessageHandlerLifecycleGate,
-  SessionDispatchStartupService as ChatMessageHandlerStartupService,
-  SessionDispatchNotificationDeliveryService as ChatMessageHandlerNotificationDeliveryService,
-} from '@/backend/services/session/service/dispatch/session-dispatch.types';
+export type { SessionDispatchStartupService as ChatMessageHandlerStartupService } from '@/backend/services/session/service/dispatch/session-dispatch.types';
 
 export interface HandlerContext<T extends ChatMessageInput = ChatMessageInput> {
   ws: WebSocket;

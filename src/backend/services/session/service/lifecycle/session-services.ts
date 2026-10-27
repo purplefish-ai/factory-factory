@@ -1,6 +1,8 @@
 import { acpRuntimeManager } from '@/backend/services/session/service/acp';
 import { ChatMessageHandlerService } from '@/backend/services/session/service/chat/chat-message-handlers.service';
+import { createChatMessageHandlerRegistry } from '@/backend/services/session/service/chat/chat-message-handlers/registry';
 import { SessionDispatchService } from '@/backend/services/session/service/dispatch/session-dispatch.service';
+import type { SessionDispatchStartOptions } from '@/backend/services/session/service/dispatch/session-dispatch.types';
 import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
 import {
   acpEventProcessor,
@@ -37,14 +39,12 @@ export const sessionDispatchService = new SessionDispatchService({
   promptService: sessionService,
   backgroundDelivery: sessionBackgroundDeliveryService,
 });
-export const chatMessageHandlerService = new ChatMessageHandlerService(sessionDispatchService);
-
-chatMessageHandlerService.configureLifecycle({
+const dispatchLifecycle = {
   gate: sessionLifecycleGate,
   notificationDelivery: sessionNotificationDeliveryService,
   startup: {
-    getSessionClient: (sessionId) => sessionLifecycleService.getSessionClient(sessionId),
-    getOrCreateSessionClient: (sessionId, options) =>
+    getSessionClient: (sessionId: string) => sessionLifecycleService.getSessionClient(sessionId),
+    getOrCreateSessionClient: (sessionId: string, options: SessionDispatchStartOptions) =>
       sessionLifecycleService.getOrCreateSessionClient(sessionId, {
         resumePolicy: options.resumePolicy,
         thinkingEnabled: options.thinkingEnabled,
@@ -52,4 +52,19 @@ chatMessageHandlerService.configureLifecycle({
         reasoningEffort: options.reasoningEffort,
       }),
   },
-});
+};
+
+sessionDispatchService.configureLifecycle(dispatchLifecycle);
+export const chatMessageHandlerService = new ChatMessageHandlerService(
+  createChatMessageHandlerRegistry({
+    acpRuntimeManager,
+    sessionConfigService,
+    sessionPermissionService,
+    sessionService,
+    startupService: dispatchLifecycle.startup,
+    tryDispatchNextMessage: (sessionId) => sessionDispatchService.tryDispatchNextMessage(sessionId),
+    setManualDispatchResume: (sessionId, resumed) =>
+      sessionDispatchService.setManualDispatchResume(sessionId, resumed),
+    resetDispatchState: (sessionId) => sessionDispatchService.resetDispatchState(sessionId),
+  })
+);

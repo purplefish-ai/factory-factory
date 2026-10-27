@@ -80,7 +80,7 @@ vi.mock('@/backend/services/session', () => ({
     enqueue: mocks.enqueue,
     emitDelta: mocks.emitDelta,
   },
-  chatMessageHandlerService: {
+  sessionDispatchService: {
     tryDispatchNextMessage: mocks.tryDispatchNextMessage,
   },
   sessionDataService: {

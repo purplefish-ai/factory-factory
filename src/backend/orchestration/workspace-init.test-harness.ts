@@ -38,7 +38,7 @@ vi.mock('@/backend/services/session', () => ({
     (input: { reportBackOn?: string | null }) =>
       `## Child Workspace Context\nUse send_message_to_parent.${input.reportBackOn ? `\nReport back when: ${input.reportBackOn}` : ''}\n`
   ),
-  chatMessageHandlerService: {
+  sessionDispatchService: {
     tryDispatchNextMessage: vi.fn(),
   },
   sessionDataService: {
@@ -117,7 +117,7 @@ import {
   startupScriptService,
 } from '@/backend/services/run-script';
 import {
-  chatMessageHandlerService,
+  sessionDispatchService,
   sessionDataService,
   sessionLifecycleService,
 } from '@/backend/services/session';
@@ -192,7 +192,7 @@ export function setupHappyPath(overrides = {}) {
   vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([]);
   vi.mocked(sessionLifecycleService.stopWorkspaceSessions).mockResolvedValue(undefined as never);
   vi.mocked(sessionLifecycleService.startSession).mockResolvedValue(undefined as never);
-  vi.mocked(chatMessageHandlerService.tryDispatchNextMessage).mockResolvedValue(undefined as never);
+  vi.mocked(sessionDispatchService.tryDispatchNextMessage).mockResolvedValue(undefined as never);
   vi.mocked(terminalSessionService.registerSession).mockResolvedValue(unsafeCoerce({}));
   vi.mocked(terminalSessionService.releaseSessionPid).mockResolvedValue(undefined);
   vi.mocked(terminalService.createTerminal).mockResolvedValue({

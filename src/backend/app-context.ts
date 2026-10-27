@@ -71,6 +71,7 @@ import {
   acpTraceLogger,
   chatEventForwarderService,
   chatMessageHandlerService,
+  sessionDispatchService,
   claudeModelCatalogService,
   codexModelCatalogService,
   type SessionFileLogger,
@@ -117,6 +118,7 @@ import { workspaceGitStateService } from './services/workspace-git-state.service
 export type ApplicationServices = BridgeServices & {
   acpRuntimeManager: typeof acpRuntimeManager;
   acpTraceLogger: AcpTraceLogger;
+  chatMessageHandlerService: Pick<typeof chatMessageHandlerService, 'handleMessage'>;
   checkGithubAuth: typeof checkGithubAuth;
   cliHealthService: typeof cliHealthService;
   configService: typeof configService;
@@ -224,6 +226,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     autoIterationService,
     chatEventForwarderService,
     chatMessageHandlerService,
+    sessionDispatchService,
     checkGithubAuth,
     cliHealthService,
     configService,

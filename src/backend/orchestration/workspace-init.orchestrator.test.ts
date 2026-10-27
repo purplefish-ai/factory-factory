@@ -9,7 +9,7 @@ import {
 } from '@/backend/services/run-script';
 import {
   buildChildWorkspaceContext,
-  chatMessageHandlerService,
+  sessionDispatchService,
   sessionDataService,
   sessionDomainService,
   sessionLifecycleService,
@@ -759,8 +759,8 @@ describe('initializeWorkspaceWorktree', () => {
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledTimes(2);
-      expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
+      expect(sessionDispatchService.tryDispatchNextMessage).toHaveBeenCalledTimes(2);
+      expect(sessionDispatchService.tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
     });
 
     it('does not throw when session auto-start fails', async () => {
@@ -1663,8 +1663,8 @@ describe('initializeWorkspaceWorktree', () => {
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledTimes(2);
-      expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
+      expect(sessionDispatchService.tryDispatchNextMessage).toHaveBeenCalledTimes(2);
+      expect(sessionDispatchService.tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
     });
 
     it('retries ready dispatch even when factory setup fails (non-blocking)', async () => {
@@ -1683,8 +1683,8 @@ describe('initializeWorkspaceWorktree', () => {
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
       // Dispatch is retried because workspace reaches READY (with warning)
-      expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledTimes(2);
-      expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
+      expect(sessionDispatchService.tryDispatchNextMessage).toHaveBeenCalledTimes(2);
+      expect(sessionDispatchService.tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
     });
 
     it('retries dispatch using the started session id without re-querying session status', async () => {
@@ -1704,12 +1704,12 @@ describe('initializeWorkspaceWorktree', () => {
         status: SessionStatus.IDLE,
         limit: 1,
       });
-      expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledTimes(2);
-      expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenNthCalledWith(
+      expect(sessionDispatchService.tryDispatchNextMessage).toHaveBeenCalledTimes(2);
+      expect(sessionDispatchService.tryDispatchNextMessage).toHaveBeenNthCalledWith(
         1,
         'session-idle'
       );
-      expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenNthCalledWith(
+      expect(sessionDispatchService.tryDispatchNextMessage).toHaveBeenNthCalledWith(
         2,
         'session-idle'
       );
