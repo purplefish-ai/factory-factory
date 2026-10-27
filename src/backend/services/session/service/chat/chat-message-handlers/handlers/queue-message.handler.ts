@@ -1,15 +1,13 @@
 import { createLogger } from '@/backend/services/logger.service';
 import { validateAttachment } from '@/backend/services/session/service/chat/chat-message-handlers/attachment-processing';
-import type {
-  ChatMessageHandler,
-  HandlerRegistryDependencies,
-} from '@/backend/services/session/service/chat/chat-message-handlers/types';
 import {
   buildAcceptedMessageStateChange,
   buildQueuedMessage,
 } from '@/backend/services/session/service/chat/chat-message-handlers/utils';
-import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
-import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import type {
+  SessionCommandHandler,
+  SessionExecutionCommandServices,
+} from '@/backend/services/session/service/chat/session-command.types';
 import { PR_EVENT_MESSAGE_ID_PREFIX } from '@/shared/pr-monitoring';
 import type { QueueMessageInput } from '@/shared/websocket';
 import { WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX } from '@/shared/workspace-notifications';
@@ -56,39 +54,49 @@ function validateQueueMessageInput(
 }
 
 export function createQueueMessageHandler(
-  deps: HandlerRegistryDependencies
-): ChatMessageHandler<QueueMessageInput> {
-  return async ({ ws, sessionId, message }) => {
+  deps: Pick<SessionExecutionCommandServices, 'backgroundDelivery'> & {
+    domain: Pick<
+      SessionExecutionCommandServices['domain'],
+      'enqueue' | 'emitDelta' | 'rejectMessage'
+    >;
+    tryDispatchNextMessage: (sessionId: string) => Promise<void>;
+  }
+): SessionCommandHandler<QueueMessageInput> {
+  return async ({ sessionId }, message) => {
     const text = message.text?.trim();
     const validationError = validateQueueMessageInput(message, text);
     if (validationError) {
       if (message.id) {
-        sessionDomainService.rejectMessage(sessionId, message.id, validationError);
-        return;
+        deps.domain.rejectMessage(sessionId, message.id, validationError);
+        return { replies: [] };
       }
 
-      ws.send(JSON.stringify({ type: 'error', message: validationError }));
-      return;
+      return {
+        replies: [
+          { type: 'error', error: { kind: 'queue_input_invalid', reason: validationError } },
+        ],
+      };
     }
 
-    const isCurrent = sessionBackgroundDeliveryService.captureResumeGuard(sessionId);
+    const isCurrent = deps.backgroundDelivery.captureResumeGuard(sessionId);
     const messageId = message.id;
     const queuedMsg = buildQueuedMessage(messageId, message, text ?? '');
-    const result = sessionDomainService.enqueue(sessionId, queuedMsg);
+    const result = deps.domain.enqueue(sessionId, queuedMsg);
 
     if ('error' in result) {
-      sessionDomainService.rejectMessage(sessionId, messageId, result.error);
-      return;
+      deps.domain.rejectMessage(sessionId, messageId, result.error);
+      return { replies: [] };
     }
 
-    sessionDomainService.emitDelta(
+    deps.domain.emitDelta(
       sessionId,
       buildAcceptedMessageStateChange(messageId, queuedMsg, result.position)
     );
 
-    void sessionBackgroundDeliveryService.userResume(sessionId, isCurrent).catch((error) => {
+    void deps.backgroundDelivery.userResume(sessionId, isCurrent).catch((error) => {
       logger.warn('Failed to resume PR delivery after queued human input', { sessionId, error });
     });
     await deps.tryDispatchNextMessage(sessionId);
+    return { replies: [] };
   };
 }

@@ -1,6 +1,7 @@
 import type { WebSocket } from 'ws';
 import type {
   SessionCommandConfigService,
+  SessionExecutionCommandServices,
   SessionPermissionCommandService,
 } from '@/backend/services/session/service/chat/session-command.types';
 import type { SessionDispatchStartupService as ChatMessageHandlerStartupService } from '@/backend/services/session/service/dispatch/session-dispatch.types';
@@ -34,6 +35,7 @@ export type ChatMessageHandler<T extends ChatMessageInput = ChatMessageInput> = 
 ) => Promise<void> | void;
 
 export interface HandlerRegistryDependencies {
+  executionServices?: SessionExecutionCommandServices;
   acpRuntimeManager?: ChatMessageHandlerRuntimeManager;
   sessionConfigService?: SessionCommandConfigService;
   sessionPermissionService?: SessionPermissionCommandService;

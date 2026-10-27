@@ -1,10 +1,12 @@
 import { createLogger } from '@/backend/services/logger.service';
 import type {
-  ChatMessageHandler,
   ChatMessageHandlerPromptService,
   ChatMessageHandlerRuntimeManager,
 } from '@/backend/services/session/service/chat/chat-message-handlers/types';
-import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
+import type {
+  SessionCommandHandler,
+  SessionExecutionCommandServices,
+} from '@/backend/services/session/service/chat/session-command.types';
 import type { AgentContentItem } from '@/shared/acp-protocol';
 import type { UserInputMessage } from '@/shared/websocket';
 
@@ -13,17 +15,18 @@ const logger = createLogger('chat-message-handlers');
 export function createUserInputHandler(deps: {
   acpRuntimeManager: ChatMessageHandlerRuntimeManager;
   sessionService: ChatMessageHandlerPromptService;
-}): ChatMessageHandler<UserInputMessage> {
+  backgroundDelivery: SessionExecutionCommandServices['backgroundDelivery'];
+}): SessionCommandHandler<UserInputMessage> {
   const { acpRuntimeManager, sessionService } = deps;
 
-  return ({ ws, sessionId, message }) => {
+  return ({ sessionId }, message) => {
     const rawContent = message.content || message.text;
     if (!rawContent) {
-      return;
+      return { replies: [] };
     }
 
     if (typeof rawContent === 'string' && !rawContent.trim()) {
-      return;
+      return { replies: [] };
     }
 
     // Cast content array to AgentContentItem[] - validation is done at WebSocket handler level
@@ -31,21 +34,16 @@ export function createUserInputHandler(deps: {
       typeof rawContent === 'string' ? rawContent : (rawContent as AgentContentItem[]);
 
     if (acpRuntimeManager.isSessionRunning(sessionId)) {
-      const isCurrent = sessionBackgroundDeliveryService.captureResumeGuard(sessionId);
+      const isCurrent = deps.backgroundDelivery.captureResumeGuard(sessionId);
       void sessionService.sendSessionMessage(sessionId, messageContent).catch((error) => {
         logger.error('Failed to send message to provider', { sessionId, error });
       });
-      void sessionBackgroundDeliveryService.userResume(sessionId, isCurrent).catch((error) => {
+      void deps.backgroundDelivery.userResume(sessionId, isCurrent).catch((error) => {
         logger.warn('Failed to resume PR delivery after human input', { sessionId, error });
       });
-      return;
+      return { replies: [] };
     }
 
-    ws.send(
-      JSON.stringify({
-        type: 'error',
-        message: 'No active session. Use queue_message to queue messages.',
-      })
-    );
+    return { replies: [{ type: 'error', error: { kind: 'no_active_session' } }] };
   };
 }

@@ -27,27 +27,22 @@ describe('createStartHandler', () => {
 
   it('marks runtime error when session options are missing', async () => {
     mocks.getSessionOptions.mockResolvedValue(null);
-    const ws = { send: vi.fn() } as unknown as { send: (message: string) => void };
     const handler = createStartHandler({
+      domain: { markError: mocks.markError },
+      lifecycle: { getSessionOptions: mocks.getSessionOptions },
+      backgroundDelivery: sessionBackgroundDeliveryService,
       startupService: {
         getSessionClient: vi.fn(),
         getOrCreateSessionClient: vi.fn(),
       },
     });
 
-    await handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp',
-      message: {
-        type: 'start',
-      } as never,
-    });
+    const outcome = await handler({ sessionId: 'session-1', workingDir: '/tmp' }, {
+      type: 'start',
+    } as never);
 
     expect(mocks.markError).toHaveBeenCalledWith('session-1', 'Session not found');
-    expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({ type: 'error', message: 'Session not found' })
-    );
+    expect(outcome).toEqual({ replies: [{ type: 'error', error: { kind: 'session_not_found' } }] });
   });
 
   it.each(['ARCHIVING', 'ARCHIVED'] as const)(
@@ -60,30 +55,24 @@ describe('createStartHandler', () => {
         workspaceStatus,
       });
       const getOrCreate = vi.fn();
-      const ws = { send: vi.fn() } as unknown as { send: (message: string) => void };
       const handler = createStartHandler({
+        domain: { markError: mocks.markError },
+        lifecycle: { getSessionOptions: mocks.getSessionOptions },
+        backgroundDelivery: sessionBackgroundDeliveryService,
         startupService: {
           getSessionClient: vi.fn(),
           getOrCreateSessionClient: getOrCreate,
         },
       });
 
-      await handler({
-        ws: ws as never,
-        sessionId: 'session-1',
-        workingDir: '/tmp',
-        message: {
-          type: 'start',
-        } as never,
-      });
+      const outcome = await handler({ sessionId: 'session-1', workingDir: '/tmp' }, {
+        type: 'start',
+      } as never);
 
       expect(getOrCreate).not.toHaveBeenCalled();
-      expect(ws.send).toHaveBeenCalledWith(
-        JSON.stringify({
-          type: 'error',
-          message: 'Workspace is archived or archiving and cannot start sessions.',
-        })
-      );
+      expect(outcome).toEqual({
+        replies: [{ type: 'error', error: { kind: 'workspace_archived' } }],
+      });
     }
   );
 });
@@ -94,13 +83,11 @@ it('keeps the PR delivery fence when explicit startup fails', async () => {
   const startup = vi.fn().mockRejectedValue(new Error('provider unavailable'));
   try {
     await createStartHandler({
+      domain: { markError: mocks.markError },
+      lifecycle: { getSessionOptions: mocks.getSessionOptions },
+      backgroundDelivery: sessionBackgroundDeliveryService,
       startupService: { getSessionClient: vi.fn(), getOrCreateSessionClient: startup },
-    })({
-      ws: { send: vi.fn() } as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp',
-      message: { type: 'start' } as never,
-    });
+    })({ sessionId: 'session-1', workingDir: '/tmp' }, { type: 'start' } as never);
     expect(resume).not.toHaveBeenCalled();
   } finally {
     resume.mockRestore();
@@ -134,14 +121,12 @@ it('keeps a stop made while startup was pending after the old start finishes', a
   mocks.getSessionOptions.mockResolvedValue({ workspaceStatus: 'READY' });
   const startup = vi.fn().mockReturnValue(pending);
   const handler = createStartHandler({
+    domain: { markError: mocks.markError },
+    lifecycle: { getSessionOptions: mocks.getSessionOptions },
+    backgroundDelivery: sessionBackgroundDeliveryService,
     startupService: { getSessionClient: vi.fn(), getOrCreateSessionClient: startup },
   });
-  const start = handler({
-    ws: { send: vi.fn() } as never,
-    sessionId,
-    workingDir: '/tmp',
-    message: { type: 'start' } as never,
-  });
+  const start = handler({ sessionId, workingDir: '/tmp' }, { type: 'start' } as never);
   await vi.waitFor(() => expect(startup).toHaveBeenCalled());
   await sessionBackgroundDeliveryService.userStop(sessionId);
   release();

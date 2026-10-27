@@ -1,43 +1,38 @@
 import { createLogger } from '@/backend/services/logger.service';
-import type {
-  ChatMessageHandler,
-  ChatMessageHandlerStartupService,
-} from '@/backend/services/session/service/chat/chat-message-handlers/types';
+import type { ChatMessageHandlerStartupService } from '@/backend/services/session/service/chat/chat-message-handlers/types';
 import {
   getValidModel,
   getValidReasoningEffort,
 } from '@/backend/services/session/service/chat/chat-message-handlers/utils';
-import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
-import { sessionLifecycleService } from '@/backend/services/session/service/lifecycle/session-core-services';
-import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import type {
+  SessionCommandHandler,
+  SessionExecutionCommandServices,
+} from '@/backend/services/session/service/chat/session-command.types';
 import { WorkspaceStatus } from '@/shared/core';
 import type { StartMessageInput } from '@/shared/websocket';
 
 const logger = createLogger('chat-message-handlers');
 
-export function createStartHandler(deps: {
-  startupService: ChatMessageHandlerStartupService;
-}): ChatMessageHandler<StartMessageInput> {
-  return async ({ ws, sessionId, message }) => {
-    const isCurrent = sessionBackgroundDeliveryService.captureResumeGuard(sessionId);
-    const sessionOpts = await sessionLifecycleService.getSessionOptions(sessionId);
+export function createStartHandler(
+  deps: Pick<SessionExecutionCommandServices, 'backgroundDelivery'> & {
+    domain: Pick<SessionExecutionCommandServices['domain'], 'markError'>;
+    lifecycle: Pick<SessionExecutionCommandServices['lifecycle'], 'getSessionOptions'>;
+    startupService: ChatMessageHandlerStartupService;
+  }
+): SessionCommandHandler<StartMessageInput> {
+  return async ({ sessionId }, message) => {
+    const isCurrent = deps.backgroundDelivery.captureResumeGuard(sessionId);
+    const sessionOpts = await deps.lifecycle.getSessionOptions(sessionId);
     if (!sessionOpts) {
       logger.error('[Chat WS] Failed to get session options', { sessionId });
-      sessionDomainService.markError(sessionId, 'Session not found');
-      ws.send(JSON.stringify({ type: 'error', message: 'Session not found' }));
-      return;
+      deps.domain.markError(sessionId, 'Session not found');
+      return { replies: [{ type: 'error', error: { kind: 'session_not_found' } }] };
     }
     if (
       sessionOpts.workspaceStatus === WorkspaceStatus.ARCHIVING ||
       sessionOpts.workspaceStatus === WorkspaceStatus.ARCHIVED
     ) {
-      ws.send(
-        JSON.stringify({
-          type: 'error',
-          message: 'Workspace is archived or archiving and cannot start sessions.',
-        })
-      );
-      return;
+      return { replies: [{ type: 'error', error: { kind: 'workspace_archived' } }] };
     }
 
     try {
@@ -47,14 +42,15 @@ export function createStartHandler(deps: {
         model: getValidModel(message),
         reasoningEffort: getValidReasoningEffort(message),
       });
-      void sessionBackgroundDeliveryService.userResume(sessionId, isCurrent).catch((error) => {
+      void deps.backgroundDelivery.userResume(sessionId, isCurrent).catch((error) => {
         logger.warn('Failed to resume PR delivery after session startup', { sessionId, error });
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('[Chat WS] Failed to start session client', { sessionId, error: errorMessage });
-      sessionDomainService.markError(sessionId, `Failed to start agent: ${errorMessage}`);
-      ws.send(JSON.stringify({ type: 'error', message: `Failed to start agent: ${errorMessage}` }));
+      deps.domain.markError(sessionId, `Failed to start agent: ${errorMessage}`);
+      return { replies: [{ type: 'error', error: { kind: 'start_failed', cause: error } }] };
     }
+    return { replies: [] };
   };
 }

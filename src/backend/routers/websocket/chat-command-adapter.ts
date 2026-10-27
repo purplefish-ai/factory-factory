@@ -39,11 +39,25 @@ function formatCommandError(error: SessionCommandError): string {
       return 'No session selected. Please create or select a session first.';
     case 'permission_not_pending':
       return 'No pending ACP permission request found for this request ID';
+    case 'session_not_found':
+      return 'Session not found';
+    case 'workspace_archived':
+      return 'Workspace is archived or archiving and cannot start sessions.';
+    case 'no_active_session':
+      return 'No active session. Use queue_message to queue messages.';
+    case 'background_monitoring_required':
+      return 'Disable PR updates to cancel background monitoring';
+    case 'message_not_queued':
+      return 'Message not found in queue';
+    case 'queue_input_invalid':
+      return error.reason;
     case 'set_config_option_failed':
       return `Failed to set config option: ${getErrorMessage(error.cause)}`;
     default: {
       const detail = error.cause instanceof Error ? error.cause.message : String(error.cause);
       switch (error.kind) {
+        case 'start_failed':
+          return `Failed to start agent: ${detail}`;
         case 'set_model_failed':
           return `Failed to set model: ${detail}`;
         case 'set_thinking_budget_failed':

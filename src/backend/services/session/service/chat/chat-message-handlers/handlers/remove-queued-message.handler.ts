@@ -1,28 +1,26 @@
 import { createLogger } from '@/backend/services/logger.service';
 import { DEBUG_CHAT_WS } from '@/backend/services/session/service/chat/chat-message-handlers/constants';
-import type { ChatMessageHandler } from '@/backend/services/session/service/chat/chat-message-handlers/types';
-import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import type {
+  SessionCommandHandler,
+  SessionExecutionCommandServices,
+} from '@/backend/services/session/service/chat/session-command.types';
 import { MessageState } from '@/shared/acp-protocol';
 import type { RemoveQueuedMessageInput } from '@/shared/websocket';
 
 const logger = createLogger('chat-message-handlers');
 
-export function createRemoveQueuedMessageHandler(): ChatMessageHandler<RemoveQueuedMessageInput> {
-  return ({ ws, sessionId, message }) => {
+export function createRemoveQueuedMessageHandler(deps: {
+  domain: Pick<SessionExecutionCommandServices['domain'], 'removeQueuedMessage' | 'emitDelta'>;
+}): SessionCommandHandler<RemoveQueuedMessageInput> {
+  return ({ sessionId }, message) => {
     const { messageId } = message;
     if (messageId.startsWith('pr-event-')) {
-      ws.send(
-        JSON.stringify({
-          type: 'error',
-          message: 'Disable PR updates to cancel background monitoring',
-        })
-      );
-      return;
+      return { replies: [{ type: 'error', error: { kind: 'background_monitoring_required' } }] };
     }
-    const removed = sessionDomainService.removeQueuedMessage(sessionId, messageId);
+    const removed = deps.domain.removeQueuedMessage(sessionId, messageId);
 
     if (removed) {
-      sessionDomainService.emitDelta(sessionId, {
+      deps.domain.emitDelta(sessionId, {
         type: 'message_state_changed',
         id: messageId,
         newState: MessageState.CANCELLED,
@@ -31,7 +29,8 @@ export function createRemoveQueuedMessageHandler(): ChatMessageHandler<RemoveQue
         logger.info('[Chat WS] Queued message cancelled', { sessionId, messageId });
       }
     } else {
-      ws.send(JSON.stringify({ type: 'error', message: 'Message not found in queue' }));
+      return { replies: [{ type: 'error', error: { kind: 'message_not_queued' } }] };
     }
+    return { replies: [] };
   };
 }
