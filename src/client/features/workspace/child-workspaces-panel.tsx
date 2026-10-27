@@ -47,7 +47,7 @@ function NewChildWorkspaceDialog({
   const [initialPrompt, setInitialPrompt] = useState('');
   const [reportBackOn, setReportBackOn] = useState('');
 
-  const { data: projects } = trpc.project.list.useQuery();
+  const { data: projects } = trpc.project.list.useQuery({ isArchived: false });
   const utils = trpc.useUtils();
 
   const createChild = trpc.workspace.createChild.useMutation({
