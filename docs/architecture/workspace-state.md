@@ -241,10 +241,14 @@ install compatible cache options and preserve an existing detail. Compact
 summaries never seed a full fetched detail, so missing details keep loading
 until HTTP returns. Detail response tags are consumed once, preserving
 deliberate optimistic writes and unchanged nested references and dates. Detail
-owners are released with QueryCache removal/garbage collection; creation seeds
-build compatible queries without retaining per-workspace query defaults.
-Deferred recovery checks the same query and owner identity, preserves a fresh
-active cache write, and settles inactive queries without starting more HTTP.
+owners are released with QueryCache removal/garbage collection. Reusable query
+options select the current owner when fetching; weak response provenance still
+routes each HTTP commit to its originating owner. Every request receives a
+unique shallow result identity, preserving nested objects and dates even when a
+fetcher returns the same immutable object again. Creation seeds build compatible
+queries without retaining per-workspace query defaults. Deferred recovery checks
+the same query and owner identity, preserves a fresh active cache write, and
+settles inactive queries without starting more HTTP.
 
 Live-list removal still resets the exact detail query and cancels its in-flight
 request before active observers refetch persisted detail. Reintroduction cancels
