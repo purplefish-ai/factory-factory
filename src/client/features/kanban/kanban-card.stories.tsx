@@ -118,6 +118,51 @@ export const NoPR: Story = {
   },
 };
 
+export const AutoIterationRunning: Story = {
+  args: {
+    workspace: {
+      ...baseWorkspace,
+      mode: 'AUTO_ITERATION',
+      autoIterationStatus: 'RUNNING',
+      autoIterationConfig: { maxIterations: 25 },
+      autoIterationProgress: { currentIteration: 3 },
+      statusReason: {
+        code: 'AUTO_ITERATING',
+        label: 'Auto-iterating',
+        tone: 'working',
+        needsUser: false,
+      },
+    },
+    projectSlug: 'my-project',
+  },
+};
+
+export const AutoIterationPaused: Story = {
+  args: {
+    workspace: {
+      ...baseWorkspace,
+      mode: 'AUTO_ITERATION',
+      autoIterationStatus: 'PAUSED',
+      autoIterationConfig: { maxIterations: 25 },
+      autoIterationProgress: { currentIteration: 3 },
+    },
+    projectSlug: 'my-project',
+  },
+};
+
+export const AutoIterationCompleted: Story = {
+  args: {
+    workspace: {
+      ...baseWorkspace,
+      mode: 'AUTO_ITERATION',
+      autoIterationStatus: 'COMPLETED',
+      autoIterationConfig: { maxIterations: 25 },
+      autoIterationProgress: { currentIteration: 25 },
+    },
+    projectSlug: 'my-project',
+  },
+};
+
 export const GitHubIssue: Story = {
   args: {
     workspace: {
