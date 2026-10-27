@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AcpConfigOption } from '@/client/features/chat/reducer';
+import { ProviderUsageControl } from '@/client/features/chat/usage-stats/provider-usage-control';
 import {
   FileMentionPalette,
   SlashCommandPalette,
@@ -22,10 +23,13 @@ import { useTextareaResize } from './hooks/use-textarea-resize';
 
 export interface ChatInputProps {
   onSend: (text: string) => void;
+  // Sends /compact while preserving the current draft and attachments.
+  onCompact?: () => void;
   onStop?: () => void;
   disabled?: boolean;
   running?: boolean;
   stopping?: boolean;
+  isCompacting?: boolean;
   inputRef?: React.RefObject<HTMLTextAreaElement | null>;
   placeholder?: string;
   className?: string;
@@ -70,10 +74,12 @@ export interface ChatInputProps {
  */
 export const ChatInput = memo(function ChatInput({
   onSend,
+  onCompact,
   onStop,
   disabled = false,
   running = false,
   stopping = false,
+  isCompacting = false,
   inputRef,
   placeholder = 'Type a message...',
   className,
@@ -304,7 +310,6 @@ export const ChatInput = memo(function ChatInput({
             onQuickAction={actions.handleQuickAction}
             quickActionsOpen={quickActionsOpen}
             onQuickActionsOpenChange={setQuickActionsOpen}
-            tokenStats={tokenStats}
             acpConfigOptions={acpConfigOptions}
             onSetConfigOption={onSetConfigOption}
           />
@@ -318,7 +323,20 @@ export const ChatInput = memo(function ChatInput({
             onSendClick={actions.handleSendClick}
             disabled={isDisabled}
             inputRef={resolvedInputRef}
-          />
+          >
+            {capabilities?.usageStats.enabled &&
+              (capabilities.provider === 'CLAUDE' || capabilities.provider === 'CODEX') && (
+                <ProviderUsageControl
+                  key={capabilities.provider}
+                  provider={capabilities.provider}
+                  tokenStats={tokenStats}
+                  busy={running || stopping || pendingMessageCount > 0}
+                  compacting={isCompacting}
+                  disabled={isDisabled}
+                  onCompact={onCompact}
+                />
+              )}
+          </RightControls>
         </InputGroupAddon>
       </InputGroup>
     </div>
