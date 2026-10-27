@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApplicationError } from '@/backend/lib/application-error';
 
+const { mockCreateWorkspace } = vi.hoisted(() => ({ mockCreateWorkspace: vi.fn() }));
+
 // --- Module mocks (before imports) ---
 
 vi.mock('@/backend/services/session', () => ({
@@ -17,7 +19,7 @@ vi.mock('@/backend/services/workspace', () => ({
     findById: vi.fn(),
   },
   WorkspaceCreationService: class {
-    create = vi.fn();
+    create = mockCreateWorkspace;
   },
   workspaceDataService: {
     findByIdWithProject: vi.fn(),
@@ -30,7 +32,7 @@ vi.mock('@/backend/services/workspace', () => ({
 }));
 
 vi.mock('./workspace-init.orchestrator', () => ({
-  initializeWorkspaceWorktree: vi.fn(),
+  initializeWorkspaceWorktree: vi.fn(async () => undefined),
 }));
 
 import {
@@ -49,9 +51,63 @@ const mockExists = vi.mocked(workspaceDataService.exists);
 const mockNotifyParent = vi.mocked(workspaceNotificationService.notifyParent);
 const mockNotifyChild = vi.mocked(workspaceNotificationService.notifyChild);
 
+function createProject(
+  isArchived: boolean
+): NonNullable<Awaited<ReturnType<typeof projectManagementService.findById>>> {
+  return {
+    id: 'archived-project',
+    name: 'Archived project',
+    slug: 'archived-project',
+    workspaces: [],
+    repoPath: '/repo',
+    worktreeBasePath: '/worktrees',
+    defaultBranch: 'main',
+    githubOwner: null,
+    githubRepo: null,
+    isArchived,
+    issueProvider: 'GITHUB',
+    issueTrackerConfig: null,
+    startupScriptCommand: null,
+    startupScriptPath: null,
+    startupScriptTimeout: 300,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+}
+
 describe('createChildWorkspace', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('rejects an archived target project before creating a workspace', async () => {
+    vi.mocked(projectManagementService.findById).mockResolvedValue(createProject(true));
+    mockCreateWorkspace.mockResolvedValue({ id: 'unexpected-child' });
+    const error = await createChildWorkspace({
+      parentWorkspaceId: 'parent-1',
+      projectId: 'archived-project',
+      name: 'Child workspace',
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(ApplicationError);
+    expect(error).toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'Cannot create a child workspace in an archived project',
+    });
+    expect(mockCreateWorkspace).not.toHaveBeenCalled();
+  });
+
+  it('continues to create child workspaces in active projects', async () => {
+    vi.mocked(projectManagementService.findById).mockResolvedValue(createProject(false));
+    mockCreateWorkspace.mockResolvedValue({ id: 'active-child' });
+
+    await expect(
+      createChildWorkspace({
+        parentWorkspaceId: 'parent-1',
+        projectId: 'active-project',
+        name: 'Child workspace',
+      })
+    ).resolves.toBe('active-child');
   });
 
   it('throws a not-found application error when the target project is missing', async () => {

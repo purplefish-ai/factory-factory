@@ -16,6 +16,12 @@ while their provider dispatch is unsettled, including across session stop/reset.
 Only settled transcript evidence can acknowledge delivery; a failed send leaves
 its durable notification pending for a later startup to recover.
 
+Child workspace creation offers active projects only and rejects archived target
+projects at the orchestration boundary, including requests from MCP clients or
+stale browser selections. Child inserts also connect only to active projects
+inside their nested-write transaction, so concurrent archival cannot bypass the
+preflight check. Existing children of archived projects remain visible.
+
 ## ACP runtime
 
 All agent sessions use Agent Client Protocol over stdio JSON-RPC through

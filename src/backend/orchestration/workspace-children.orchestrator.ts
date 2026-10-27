@@ -34,10 +34,17 @@ export async function createChildWorkspace(input: CreateChildWorkspaceInput): Pr
     projectId: input.projectId,
   });
 
-  // Validate that the target project exists
+  // Validate that the target project is available for new child workspaces
   const project = await projectManagementService.findById(input.projectId);
   if (!project) {
     throw new ApplicationError('NOT_FOUND', `Project not found: ${input.projectId}`);
+  }
+
+  if (project.isArchived) {
+    throw new ApplicationError(
+      'PRECONDITION_FAILED',
+      'Cannot create a child workspace in an archived project'
+    );
   }
 
   // WorkspaceCreationService validates parent existence, status, and depth
