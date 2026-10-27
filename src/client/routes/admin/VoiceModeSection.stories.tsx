@@ -13,8 +13,8 @@ function StaleVoiceSettings() {
     hasApiKey: true,
     ttsSpeed: 1,
     ttsModel: 'flux-haley-en',
-    utteranceEndMs: 1200,
-    bargeInSustainedMs: 200,
+    utteranceEndMs: 1000,
+    bargeInSustainedMs: 16,
   });
   const [queryClient] = useState(() => new QueryClient());
   const [client] = useState(() =>

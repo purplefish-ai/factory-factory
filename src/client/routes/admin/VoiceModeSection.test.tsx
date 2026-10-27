@@ -68,19 +68,21 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-it.each(['voice-speed', 'voice-utterance-end', 'voice-barge-in', 'voice-select'])(
-  'does not resend cached enabled when adjusting %s',
-  (id) => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = createRoot(container);
-    void act(() => root.render(<VoiceModeSection />));
-    void act(() => container.querySelector<HTMLButtonElement>(`[data-testid="${id}"]`)?.click());
-    expect(mocks.mutate).toHaveBeenCalled();
-    expect(mocks.mutate.mock.calls[0]?.[0]).not.toHaveProperty('enabled');
-    void act(() => root.unmount());
-  }
-);
+it.each([
+  ['voice-speed', { ttsSpeed: 1.05 }],
+  ['voice-utterance-end', { utteranceEndMs: 1250 }],
+  ['voice-barge-in', { bargeInSustainedMs: 24 }],
+  ['voice-select', { ttsModel: 'flux-jack-en' }],
+])('does not resend cached enabled when adjusting %s', (id, expected) => {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  void act(() => root.render(<VoiceModeSection />));
+  void act(() => container.querySelector<HTMLButtonElement>(`[data-testid="${id}"]`)?.click());
+  expect(mocks.mutate).toHaveBeenCalled();
+  expect(mocks.mutate.mock.calls[0]?.[0]).toEqual(expected);
+  void act(() => root.unmount());
+});
 
 it('does not resend cached enabled when saving a validated API key', () => {
   const container = document.createElement('div');
