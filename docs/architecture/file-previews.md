@@ -24,3 +24,7 @@ files larger than 1 MiB produce a `PAYLOAD_TOO_LARGE` error that directs the
 user to the file preview, instead of expanding a partial file into a misleading
 unified diff. Files within the limit retain the existing diff format. Diffs
 produced by Git and screenshot reads follow their existing paths.
+
+The file browser refresh action invalidates directory listings for the current
+workspace, including expanded subdirectories, so it fetches current files even
+while cached listings are fresh. Expanded folders stay open during refresh.
