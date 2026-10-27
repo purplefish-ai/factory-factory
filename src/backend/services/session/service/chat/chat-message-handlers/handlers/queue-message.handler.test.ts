@@ -24,65 +24,60 @@ describe('createQueueMessageHandler', () => {
   });
 
   it('emits rejected state for empty queue messages with an id', async () => {
-    const ws = { send: vi.fn() };
     const handler = createQueueMessageHandler({
+      domain: mocks,
+      backgroundDelivery: sessionBackgroundDeliveryService,
       tryDispatchNextMessage: vi.fn(),
-      setManualDispatchResume: vi.fn(),
     });
 
-    await handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp/work',
-      message: { type: 'queue_message', id: 'msg-1', text: '   ', attachments: [] } as never,
-    });
+    const outcome = await handler({ sessionId: 'session-1', workingDir: '/tmp/work' }, {
+      type: 'queue_message',
+      id: 'msg-1',
+      text: '   ',
+      attachments: [],
+    } as never);
 
-    expect(ws.send).not.toHaveBeenCalled();
+    expect(outcome).toEqual({ replies: [] });
     expect(mocks.rejectMessage).toHaveBeenCalledWith('session-1', 'msg-1', 'Empty message');
     expect(mocks.enqueue).not.toHaveBeenCalled();
   });
 
   it('rejects queue messages without an id', async () => {
-    const ws = { send: vi.fn() };
     const handler = createQueueMessageHandler({
+      domain: mocks,
+      backgroundDelivery: sessionBackgroundDeliveryService,
       tryDispatchNextMessage: vi.fn(),
-      setManualDispatchResume: vi.fn(),
     });
 
-    await handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp/work',
-      message: { type: 'queue_message', text: 'hello' } as never,
-    });
+    const outcome = await handler({ sessionId: 'session-1', workingDir: '/tmp/work' }, {
+      type: 'queue_message',
+      text: 'hello',
+    } as never);
 
-    expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({ type: 'error', message: 'Missing message id' })
-    );
+    expect(outcome).toEqual({
+      replies: [
+        { type: 'error', error: { kind: 'queue_input_invalid', reason: 'Missing message id' } },
+      ],
+    });
     expect(mocks.enqueue).not.toHaveBeenCalled();
   });
 
   it('rejects client messages that use the workspace notification id namespace', async () => {
     mocks.enqueue.mockReturnValue({ position: 0 });
-    const ws = { send: vi.fn() };
     const tryDispatchNextMessage = vi.fn();
     const handler = createQueueMessageHandler({
+      domain: mocks,
+      backgroundDelivery: sessionBackgroundDeliveryService,
       tryDispatchNextMessage,
-      setManualDispatchResume: vi.fn(),
     });
 
-    await handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp/work',
-      message: {
-        type: 'queue_message',
-        id: 'workspace-notification-user-controlled',
-        text: 'hello',
-      } as never,
-    });
+    const outcome = await handler({ sessionId: 'session-1', workingDir: '/tmp/work' }, {
+      type: 'queue_message',
+      id: 'workspace-notification-user-controlled',
+      text: 'hello',
+    } as never);
 
-    expect(ws.send).not.toHaveBeenCalled();
+    expect(outcome).toEqual({ replies: [] });
     expect(mocks.rejectMessage).toHaveBeenCalledWith(
       'session-1',
       'workspace-notification-user-controlled',
@@ -93,34 +88,29 @@ describe('createQueueMessageHandler', () => {
   });
 
   it('emits rejected state for queue messages with invalid attachments', async () => {
-    const ws = { send: vi.fn() };
     const tryDispatchNextMessage = vi.fn();
     const handler = createQueueMessageHandler({
+      domain: mocks,
+      backgroundDelivery: sessionBackgroundDeliveryService,
       tryDispatchNextMessage,
-      setManualDispatchResume: vi.fn(),
     });
 
-    await handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp/work',
-      message: {
-        type: 'queue_message',
-        id: 'msg-1',
-        text: 'hello',
-        attachments: [
-          {
-            id: 'img-1',
-            name: 'broken.png',
-            type: 'image/png',
-            size: 10,
-            data: 'invalid base64 with spaces!',
-          },
-        ],
-      } as never,
-    });
+    const outcome = await handler({ sessionId: 'session-1', workingDir: '/tmp/work' }, {
+      type: 'queue_message',
+      id: 'msg-1',
+      text: 'hello',
+      attachments: [
+        {
+          id: 'img-1',
+          name: 'broken.png',
+          type: 'image/png',
+          size: 10,
+          data: 'invalid base64 with spaces!',
+        },
+      ],
+    } as never);
 
-    expect(ws.send).not.toHaveBeenCalled();
+    expect(outcome).toEqual({ replies: [] });
     expect(mocks.rejectMessage).toHaveBeenCalledWith(
       'session-1',
       'msg-1',
@@ -132,50 +122,46 @@ describe('createQueueMessageHandler', () => {
 
   it('emits rejected state when enqueue fails', async () => {
     mocks.enqueue.mockReturnValue({ error: 'Queue full' });
-    const ws = { send: vi.fn() };
     const tryDispatchNextMessage = vi.fn();
     const handler = createQueueMessageHandler({
+      domain: mocks,
+      backgroundDelivery: sessionBackgroundDeliveryService,
       tryDispatchNextMessage,
-      setManualDispatchResume: vi.fn(),
     });
 
-    await handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp/work',
-      message: { type: 'queue_message', id: 'msg-1', text: 'hello' } as never,
-    });
+    const outcome = await handler({ sessionId: 'session-1', workingDir: '/tmp/work' }, {
+      type: 'queue_message',
+      id: 'msg-1',
+      text: 'hello',
+    } as never);
 
+    expect(outcome).toEqual({ replies: [] });
     expect(mocks.rejectMessage).toHaveBeenCalledWith('session-1', 'msg-1', 'Queue full');
     expect(tryDispatchNextMessage).not.toHaveBeenCalled();
   });
 
   it('accepts queued message and dispatches next message', async () => {
     mocks.enqueue.mockReturnValue({ position: 2 });
-    const ws = { send: vi.fn() };
     const tryDispatchNextMessage = vi.fn(async () => undefined);
     const handler = createQueueMessageHandler({
+      domain: mocks,
+      backgroundDelivery: sessionBackgroundDeliveryService,
       tryDispatchNextMessage,
-      setManualDispatchResume: vi.fn(),
     });
 
-    await handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp/work',
-      message: {
-        type: 'queue_message',
-        id: 'msg-1',
-        text: 'hello',
-        settings: {
-          selectedModel: 'sonnet',
-          reasoningEffort: 'medium',
-          thinkingEnabled: true,
-          planModeEnabled: false,
-        },
-      } as never,
-    });
+    const outcome = await handler({ sessionId: 'session-1', workingDir: '/tmp/work' }, {
+      type: 'queue_message',
+      id: 'msg-1',
+      text: 'hello',
+      settings: {
+        selectedModel: 'sonnet',
+        reasoningEffort: 'medium',
+        thinkingEnabled: true,
+        planModeEnabled: false,
+      },
+    } as never);
 
+    expect(outcome).toEqual({ replies: [] });
     expect(mocks.emitDelta).toHaveBeenCalledWith(
       'session-1',
       expect.objectContaining({
@@ -205,15 +191,15 @@ it('acknowledges and dispatches human input when delivery resume fails', async (
   try {
     await expect(
       createQueueMessageHandler({
+        domain: mocks,
+        backgroundDelivery: sessionBackgroundDeliveryService,
         tryDispatchNextMessage: dispatch,
-        setManualDispatchResume: vi.fn(),
-      })({
-        ws: { send: vi.fn() } as never,
-        sessionId: 'session-1',
-        workingDir: '/tmp',
-        message: { type: 'queue_message', id: 'human', text: 'continue' } as never,
-      })
-    ).resolves.toBeUndefined();
+      })({ sessionId: 'session-1', workingDir: '/tmp' }, {
+        type: 'queue_message',
+        id: 'human',
+        text: 'continue',
+      } as never)
+    ).resolves.toEqual({ replies: [] });
     expect(resume).toHaveBeenCalledWith('session-1', expect.any(Function));
     expect(mocks.emitDelta).toHaveBeenCalledWith(
       'session-1',

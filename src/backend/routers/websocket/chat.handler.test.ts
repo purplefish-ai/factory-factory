@@ -329,6 +329,54 @@ describe('createChatUpgradeHandler', () => {
     }
   );
 
+  it('delivers execution-command requester errors privately to one of two viewers', async () => {
+    const { appContext, chatMessageHandlerService, sessionDomainService } = createTestContext(
+      tempRootDir,
+      new SessionEventBus()
+    );
+    const handler = createChatUpgradeHandler(appContext);
+    const requester = new MockWebSocket();
+    const second = new MockWebSocket();
+    const sockets = [requester, second];
+    const wss = {
+      handleUpgrade: (
+        _request: IncomingMessage,
+        _socket: Duplex,
+        _head: Buffer,
+        callback: (socket: WebSocket) => void
+      ) => callback(sockets.shift() as unknown as WebSocket),
+    } as unknown as WebSocketServer;
+    for (const connectionId of ['requester', 'second']) {
+      handler(
+        {
+          headers: { origin: allowedOrigin },
+          socket: { remoteAddress: '127.0.0.1' },
+        } as unknown as IncomingMessage,
+        { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex,
+        Buffer.alloc(0),
+        new URL(`http://localhost/chat?connectionId=${connectionId}&sessionId=session-1`),
+        wss,
+        new WeakMap<WebSocket, boolean>()
+      );
+    }
+    vi.mocked(chatMessageHandlerService.handleMessage).mockResolvedValueOnce({
+      replies: [{ type: 'error', error: { kind: 'background_monitoring_required' } }],
+    });
+    requester.emit(
+      'message',
+      JSON.stringify({ type: 'remove_queued_message', messageId: 'pr-event-held' })
+    );
+    await vi.waitFor(() => expect(requester.send).toHaveBeenCalledTimes(1));
+    expect(requester.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        type: 'error',
+        message: 'Disable PR updates to cancel background monitoring',
+      })
+    );
+    expect(second.send).not.toHaveBeenCalled();
+    expect(sessionDomainService.emitDelta).not.toHaveBeenCalled();
+  });
+
   it('keeps the session log open until the last viewer disconnects', () => {
     const { appContext, sessionFileLogger } = createTestContext(tempRootDir);
     const handler = createChatUpgradeHandler(appContext);

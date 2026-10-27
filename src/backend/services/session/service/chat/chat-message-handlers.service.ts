@@ -2,6 +2,7 @@ import type { WebSocket } from 'ws';
 import { createLogger } from '@/backend/services/logger.service';
 import { acpRuntimeManager } from '@/backend/services/session/service/acp';
 import type { SessionInitPolicyBridge } from '@/backend/services/session/service/bridges';
+import { chatEventForwarderService } from '@/backend/services/session/service/chat/chat-event-forwarder.service';
 import {
   isSessionCommandMessage,
   type SessionCommandOutcome,
@@ -11,11 +12,14 @@ import type {
   DispatchOptions,
   SessionDispatchLifecycleDependencies,
 } from '@/backend/services/session/service/dispatch/session-dispatch.types';
+import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
 import {
   sessionConfigService,
+  sessionLifecycleService,
   sessionPermissionService,
   sessionService,
 } from '@/backend/services/session/service/lifecycle/session-core-services';
+import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type { ChatMessageInput } from '@/shared/websocket';
 import {
   type ChatMessageHandlerRegistry,
@@ -37,6 +41,13 @@ export class ChatMessageHandlerService {
   configureLifecycle(dependencies: SessionDispatchLifecycleDependencies): void {
     this.dispatcher.configureLifecycle(dependencies);
     this.handlerRegistry = createChatMessageHandlerRegistry({
+      executionServices: {
+        domain: sessionDomainService,
+        lifecycle: sessionLifecycleService,
+        backgroundDelivery: sessionBackgroundDeliveryService,
+        clearPendingRequest:
+          chatEventForwarderService.clearPendingRequest.bind(chatEventForwarderService),
+      },
       acpRuntimeManager,
       sessionConfigService,
       sessionPermissionService,
@@ -76,6 +87,18 @@ export class ChatMessageHandlerService {
       }
       const context = { sessionId: dbSessionId, workingDir };
       switch (message.type) {
+        case 'start':
+          return registry.start(context, message);
+        case 'stop':
+          return registry.stop(context, message);
+        case 'user_input':
+          return registry.user_input(context, message);
+        case 'queue_message':
+          return registry.queue_message(context, message);
+        case 'remove_queued_message':
+          return registry.remove_queued_message(context, message);
+        case 'resume_queued_messages':
+          return registry.resume_queued_messages(context, message);
         case 'set_model':
           return registry.set_model(context, message);
         case 'set_config_option':
@@ -84,6 +107,10 @@ export class ChatMessageHandlerService {
           return registry.set_thinking_budget(context, message);
         case 'permission_response':
           return registry.permission_response(context, message);
+        default: {
+          const unhandled: never = message;
+          throw new Error(`Unsupported session command: ${unhandled}`);
+        }
       }
     }
     const handler = registry[message.type] as
