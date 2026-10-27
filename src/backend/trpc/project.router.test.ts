@@ -716,6 +716,35 @@ describe('projectRouter', () => {
     ).rejects.toThrow('Project not found');
   });
 
+  it('validates a newly cloned repository and creates it through project management', async () => {
+    mockParseGithubUrl.mockReturnValue({ owner: 'org', repo: 'new-repo' });
+    mockGetClonePath.mockResolvedValueOnce({ path: '/repos/org/new-repo', status: 'not_exists' });
+    mockCloneRepo.mockResolvedValueOnce({ success: true });
+    mockProjectManagementService.validateRepoPath.mockResolvedValueOnce({ valid: true });
+    mockProjectManagementService.create.mockResolvedValueOnce({ id: 'cloned-project' });
+
+    await expect(
+      createCaller().createFromGithub({ githubUrl: 'https://github.com/org/new-repo' })
+    ).resolves.toEqual({ id: 'cloned-project' });
+    expect(mockGetClonePath).toHaveBeenCalledWith('/repos', 'org', 'new-repo');
+    expect(mockCloneRepo).toHaveBeenCalledWith(
+      'https://github.com/org/new-repo',
+      '/repos/org/new-repo'
+    );
+    expect(mockProjectManagementService.validateRepoPath).toHaveBeenCalledWith(
+      '/repos/org/new-repo'
+    );
+    expect(mockProjectManagementService.create).toHaveBeenCalledWith(
+      {
+        repoPath: '/repos/org/new-repo',
+        startupScriptCommand: undefined,
+        startupScriptPath: undefined,
+        startupScriptTimeout: undefined,
+      },
+      { worktreeBaseDir: '/tmp/worktrees' }
+    );
+  });
+
   it('checks GitHub auth and handles GitHub clone flow branches', async () => {
     const caller = createCaller();
     await expect(caller.checkGithubAuth()).resolves.toEqual({
