@@ -93,9 +93,19 @@ with the same number in different repositories. Failed or incomplete transitions
 retry on later polls, and a seeded merged snapshot is attempted after startup.
 Removing a workspace or stopping the collector clears completion tracking.
 
-Archiving a project returns the same sanitized issue tracker configuration as
-project reads and updates: the encrypted key is omitted and replaced with
-`hasApiKey`.
+Project settings updates enter through trusted-local tRPC input validation, then
+`updateProjectSettings` coordinates repository validation, the final startup
+command/path exclusivity check, and credential encryption before persistence.
+Application composition injects only its project and encryption capabilities.
+Omitted fields retain their stored values; explicit null clears nullable
+settings. Omitting issue tracker configuration leaves the existing encrypted key
+intact.
+
+Project list, ID/slug reads, updates and archives share `toPublicProject`: the
+encrypted key is omitted and replaced with `hasApiKey`, preserving other public
+fields. Internal project service reads remain raw so trusted Linear and runtime
+consumers can decrypt stored credentials. Public projection never mutates the
+stored record.
 
 API key validation in admin settings clears earlier team choices before each
 request. Editing the key requires fresh validation and team selection before

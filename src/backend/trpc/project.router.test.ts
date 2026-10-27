@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { updateProjectSettings } from '@/backend/orchestration/project-settings.orchestrator';
 import type { CorsConfig } from '@/backend/services/config.service';
 import { IssueProvider } from '@/shared/core/enums';
 
@@ -79,6 +80,13 @@ function createCaller(
           clone: (...args: unknown[]) => mockCloneRepo(...args),
         },
         projectManagementService: mockProjectManagementService,
+        updateProjectSettings: (input: Parameters<typeof updateProjectSettings>[0]) =>
+          updateProjectSettings(input, {
+            validateRepoPath: mockProjectManagementService.validateRepoPath,
+            findById: mockProjectManagementService.findById,
+            update: mockProjectManagementService.update,
+            encrypt: mockEncrypt,
+          }),
       },
     },
   } as never);
@@ -125,6 +133,56 @@ describe('projectRouter', () => {
     await expect(caller.list({ limit: 10 })).resolves.toEqual([project]);
     await expect(caller.getById({ id: 'p1' })).resolves.toEqual(project);
     await expect(caller.getBySlug({ slug: 'demo' })).resolves.toEqual(project);
+  });
+
+  it('uses the same public projection for list, id, slug, update and archive without changing raw data', async () => {
+    const raw = {
+      id: 'p1',
+      slug: 'demo',
+      name: 'Demo',
+      repoPath: '/repo',
+      createdAt: new Date(0),
+      _count: { workspaces: 2 },
+      issueTrackerConfig: {
+        linear: {
+          apiKey: 'encrypted-key',
+          teamId: 'team-1',
+          teamName: 'Core',
+          viewerName: 'Alice',
+        },
+      },
+    };
+    const expected = {
+      ...raw,
+      issueTrackerConfig: {
+        linear: { teamId: 'team-1', teamName: 'Core', viewerName: 'Alice', hasApiKey: true },
+      },
+    };
+    mockProjectManagementService.list.mockResolvedValue([raw]);
+    mockProjectManagementService.findById.mockResolvedValue(raw);
+    mockProjectManagementService.findBySlug.mockResolvedValue(raw);
+    mockProjectManagementService.update.mockResolvedValue(raw);
+    mockProjectManagementService.archive.mockResolvedValue(raw);
+    const caller = createCaller();
+    await expect(caller.list()).resolves.toEqual([expected]);
+    await expect(caller.getById({ id: 'p1' })).resolves.toEqual(expected);
+    await expect(caller.getBySlug({ slug: 'demo' })).resolves.toEqual(expected);
+    await expect(caller.update({ id: 'p1', name: 'Demo' })).resolves.toEqual(expected);
+    await expect(caller.archive({ id: 'p1' })).resolves.toEqual(expected);
+    expect(raw.issueTrackerConfig.linear.apiKey).toBe('encrypted-key');
+    expect(mockEncrypt).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed settings at the transport before the application writes', async () => {
+    await expect(
+      createCaller().update({ id: 'p1', startupScriptTimeout: 0 })
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await expect(createCaller().update({ id: 'p1', repoPath: '' })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+    expect(mockProjectManagementService.update).not.toHaveBeenCalled();
+    expect(mockProjectManagementService.validateRepoPath).not.toHaveBeenCalled();
+    expect(mockEncrypt).not.toHaveBeenCalled();
   });
 
   it('throws when getById/getBySlug/listBranches cannot find project', async () => {

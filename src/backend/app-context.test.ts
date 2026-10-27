@@ -14,6 +14,40 @@ describe('createApplication', () => {
     expect(dependencies.services.serverInstanceService).toBe(serverInstanceService);
   });
 
+  it('binds project settings to the graph-owned repository and crypto capabilities', async () => {
+    const { services } = createDefaultApplicationDependencies();
+    const update = vi.fn().mockRejectedValue(new Error('storage unavailable'));
+    const validateRepoPath = vi.fn().mockResolvedValue({ valid: true });
+    const encrypt = vi.fn((key: string) => `encrypted:${key}`);
+    services.projectManagementService = Object.assign({}, services.projectManagementService, {
+      validateRepoPath,
+      update,
+    });
+    services.cryptoService = Object.assign({}, services.cryptoService, { encrypt });
+    await expect(
+      services.updateProjectSettings({
+        id: 'p1',
+        repoPath: '/repo',
+        issueTrackerConfig: {
+          linear: { apiKey: 'new-key', teamId: 'team-1', teamName: 'Core', viewerName: 'Alice' },
+        },
+      })
+    ).rejects.toThrow('storage unavailable');
+    expect(validateRepoPath).toHaveBeenCalledWith('/repo');
+    expect(encrypt).toHaveBeenCalledExactlyOnceWith('new-key');
+    expect(update).toHaveBeenCalledWith('p1', {
+      repoPath: '/repo',
+      issueTrackerConfig: {
+        linear: {
+          apiKey: 'encrypted:new-key',
+          teamId: 'team-1',
+          teamName: 'Core',
+          viewerName: 'Alice',
+        },
+      },
+    });
+  });
+
   it('keeps two complete fake graphs isolated', () => {
     const firstDependencies = createFakeApplicationGraph('first');
     const secondDependencies = createFakeApplicationGraph('second');
