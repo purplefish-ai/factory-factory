@@ -71,7 +71,11 @@ export class SessionPermissionService {
       return false;
     }
 
-    return bridge.resolvePermission(requestId, optionId, answers);
+    const resolved = bridge.resolvePermission(requestId, optionId, answers);
+    if (resolved) {
+      this.sessionDomainService.clearPendingInteractiveRequestIfMatches(sessionId, requestId);
+    }
+    return resolved;
   }
 
   handlePermissionRequest(sessionId: string, event: AcpPermissionRequestEvent): void {

@@ -5,7 +5,7 @@ import type {
   ChatMessageHandlerPermissionService,
 } from '@/backend/services/session/service/chat/chat-message-handlers/types';
 import type { PermissionResponseMessage } from '@/shared/websocket';
-import { clearPendingInteractiveRequest, sendWebSocketError } from './utils';
+import { sendWebSocketError } from './utils';
 
 const logger = createLogger('chat-message-handlers');
 
@@ -29,7 +29,6 @@ export function createPermissionResponseHandler(deps: {
         sendWebSocketError(ws, 'No pending ACP permission request found for this request ID');
         return;
       }
-      clearPendingInteractiveRequest(sessionId, requestId);
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Responded to permission request', {
           sessionId,
