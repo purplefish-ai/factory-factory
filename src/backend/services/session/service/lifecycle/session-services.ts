@@ -1,11 +1,14 @@
+import { agentSessionAccessor } from '@/backend/services/session/resources/agent-session.accessor';
 import { acpRuntimeManager } from '@/backend/services/session/service/acp';
-import { chatEventForwarderService } from '@/backend/services/session/service/chat/chat-event-forwarder.service';
-import { ChatMessageHandlerService } from '@/backend/services/session/service/chat/chat-message-handlers.service';
-import { createChatMessageHandlerRegistry } from '@/backend/services/session/service/chat/chat-message-handlers/registry';
+import {
+  SessionLoadService,
+  type SessionLoadDependencies,
+} from '@/backend/services/session/service/chat/session-load.service';
 import { SessionDispatchService } from '@/backend/services/session/service/dispatch/session-dispatch.service';
 import type { SessionDispatchStartOptions } from '@/backend/services/session/service/dispatch/session-dispatch.types';
+import { projectSessionStartupOptions } from '@/backend/services/session/service/dispatch/session-startup-options';
 import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
-import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { slashCommandCacheService } from '@/backend/services/session/service/store/slash-command-cache.service';
 import {
   acpEventProcessor,
   claudeModelCatalogService,
@@ -21,6 +24,10 @@ import {
   sessionRetryService,
   sessionService,
 } from './session-core-services';
+import {
+  createProviderHistoryHydrator,
+  type ProviderHistoryHydrationDomain,
+} from './session-provider-history-hydrator';
 
 export type { SessionPromptService } from './session-core-services';
 export {
@@ -49,33 +56,25 @@ const dispatchLifecycle = {
   startup: {
     getSessionClient: (sessionId: string) => sessionLifecycleService.getSessionClient(sessionId),
     getOrCreateSessionClient: (sessionId: string, options: SessionDispatchStartOptions) =>
-      sessionLifecycleService.getOrCreateSessionClient(sessionId, {
-        resumePolicy: options.resumePolicy,
-        thinkingEnabled: options.thinkingEnabled,
-        model: options.model,
-        reasoningEffort: options.reasoningEffort,
-      }),
+      sessionLifecycleService.getOrCreateSessionClient(
+        sessionId,
+        projectSessionStartupOptions(options)
+      ),
   },
 };
 
 sessionDispatchService.configureLifecycle(dispatchLifecycle);
-export const chatMessageHandlerService = new ChatMessageHandlerService(
-  createChatMessageHandlerRegistry({
-    executionServices: {
-      domain: sessionDomainService,
-      lifecycle: sessionLifecycleService,
-      backgroundDelivery: sessionBackgroundDeliveryService,
-      clearPendingRequest:
-        chatEventForwarderService.clearPendingRequest.bind(chatEventForwarderService),
-    },
-    acpRuntimeManager,
-    sessionConfigService,
-    sessionPermissionService,
-    sessionService,
-    startupService: dispatchLifecycle.startup,
-    tryDispatchNextMessage: (sessionId) => sessionDispatchService.tryDispatchNextMessage(sessionId),
-    setManualDispatchResume: (sessionId, resumed) =>
-      sessionDispatchService.setManualDispatchResume(sessionId, resumed),
-    resetDispatchState: (sessionId) => sessionDispatchService.resetDispatchState(sessionId),
-  })
-);
+/** Resource adapters stay in the capsule; application composition supplies runtime capabilities. */
+export function createSessionLoadService(
+  ports: Omit<
+    SessionLoadDependencies,
+    'findSession' | 'hydrateProviderHistory' | 'getCachedCommands' | 'domain'
+  > & { domain: SessionLoadDependencies['domain'] & ProviderHistoryHydrationDomain }
+): SessionLoadService {
+  return new SessionLoadService({
+    ...ports,
+    findSession: (sessionId) => agentSessionAccessor.findById(sessionId),
+    hydrateProviderHistory: createProviderHistoryHydrator(ports.domain),
+    getCachedCommands: (provider) => slashCommandCacheService.getCachedCommands(provider),
+  });
+}

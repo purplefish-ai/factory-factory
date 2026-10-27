@@ -268,6 +268,15 @@ access preset and scheduled Claude tasks retain their configured access preset.
 PR updates inherit their main conversation’s configuration and do not use a
 workflow-specific permission preset.
 
+Chat command composition belongs to `routers/websocket/chat-message-router.ts`;
+application commands receive plain contexts and typed outcomes. Loading prepares
+history asynchronously, captures current runtime/recovery/replay synchronously,
+then publishes replay at the transport boundary without yielding. Application
+completion owns runtime updates, capabilities, options, slash commands, and
+initial-message activation in that order. Load activation uses the supplied
+application graph's dispatcher. See [chat message flow](../chat-message-flow.md)
+for reconnect, recipient, and failure contracts.
+
 ## Session lifecycle ownership
 
 `SessionLifecycleGate` owns domain startup/stop eligibility.
@@ -296,10 +305,9 @@ effect after gate cleanup.
 Queue execution belongs to the single `SessionDispatchService` configured in
 `session-services.ts`. Initialization, notification delivery, lifecycle queue
 recovery, and prompt completion use its dispatch capability directly. The chat
-registry's dispatch, reset, and manual-resume callbacks reach that same
-instance; `ChatMessageHandlerService` only routes messages. Lifecycle
-generation, delivery claim, and transcript-commit ownership remain with their
-existing services.
+registry's dispatch, reset, and manual-resume callbacks reach that same instance
+through the transport-owned chat router. Lifecycle generation, delivery claim,
+and transcript-commit ownership remain with their existing services.
 
 Startup, termination, runtime exit, notifications, context, and workflow
 finalization each have one coordinator or service.

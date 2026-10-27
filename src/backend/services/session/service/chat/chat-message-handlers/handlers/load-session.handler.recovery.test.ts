@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
   getRuntimeSnapshot: vi.fn(),
   getChatBarCapabilities: vi.fn(),
   getSessionConfigOptionsWithFallback: vi.fn(),
-  subscribe: vi.fn(),
+  prepareLoad: vi.fn(),
   emitDelta: vi.fn(),
   getTranscriptSnapshot: vi.fn(),
   isHistoryHydrated: vi.fn(),
@@ -48,7 +48,8 @@ vi.mock('@/backend/services/session/service/lifecycle/session-core-services', ()
 
 vi.mock('@/backend/services/session/service/session-domain.service', () => ({
   sessionDomainService: {
-    subscribe: mocks.subscribe,
+    prepareLoad: mocks.prepareLoad,
+    finishLoad: vi.fn(),
     emitDelta: mocks.emitDelta,
     createProviderHistoryFence: () => () => true,
     getTranscriptSnapshot: mocks.getTranscriptSnapshot,
@@ -77,7 +78,7 @@ vi.mock('@/backend/services/logger.service', () => ({
   }),
 }));
 
-import { createLoadSessionHandler } from './load-session.handler';
+import { createLoadSessionTestHandler } from './load-session.test-helpers';
 
 function unmatchedToolCall(): ChatMessage {
   return {
@@ -124,15 +125,12 @@ function matchingToolResult(): ChatMessage {
 }
 
 async function loadSession(): Promise<void> {
-  const handler = createLoadSessionHandler({
+  const handler = createLoadSessionTestHandler({
     tryDispatchNextMessage: mocks.tryDispatchNextMessage,
-    setManualDispatchResume: vi.fn(),
   });
 
   await handler({
-    ws: { send: vi.fn() } as never,
     sessionId: 'session-crashed',
-    workingDir: '/tmp/worktree',
     message: { type: 'load_session' } as never,
   });
 }
@@ -151,6 +149,10 @@ describe('load session tool-call recovery', () => {
     mocks.isHistoryHydrated.mockReturnValue(true);
     mocks.getHistoryHydrationSource.mockReturnValue('jsonl');
     mocks.getTranscriptSnapshot.mockReturnValue([unmatchedToolCall()]);
+    mocks.prepareLoad.mockImplementation((_id, runtime) => ({
+      replayEvents: [],
+      sessionRuntime: runtime,
+    }));
     mocks.getRuntimeSnapshot.mockReturnValue({
       phase: 'idle',
       processState: 'stopped',

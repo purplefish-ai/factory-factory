@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
   getRuntimeSnapshot: vi.fn(),
   getChatBarCapabilities: vi.fn(),
   getSessionConfigOptionsWithFallback: vi.fn(),
-  subscribe: vi.fn(),
+  prepareLoad: vi.fn(),
   emitDelta: vi.fn(),
   getTranscriptSnapshot: vi.fn(),
   isHistoryHydrated: vi.fn(),
@@ -61,7 +61,8 @@ vi.mock('@/backend/services/session/service/lifecycle/session-core-services', ()
 
 vi.mock('@/backend/services/session/service/session-domain.service', () => ({
   sessionDomainService: {
-    subscribe: mocks.subscribe,
+    prepareLoad: mocks.prepareLoad,
+    finishLoad: vi.fn(),
     emitDelta: mocks.emitDelta,
     createProviderHistoryFence: () => () => true,
     getTranscriptSnapshot: mocks.getTranscriptSnapshot,
@@ -92,9 +93,9 @@ vi.mock('@/backend/services/logger.service', () => ({
   }),
 }));
 
-import { createLoadSessionHandler } from './load-session.handler';
+import { createLoadSessionTestHandler } from './load-session.test-helpers';
 
-describe('createLoadSessionHandler', () => {
+describe('load application history hydration', () => {
   const tempDirs: string[] = [];
 
   beforeEach(() => {
@@ -146,6 +147,10 @@ describe('createLoadSessionHandler', () => {
     mocks.clearHistoryRetryCooldown.mockImplementation((sessionId: string) => {
       historyRetryAtBySession.delete(sessionId);
     });
+    mocks.prepareLoad.mockImplementation((_id, runtime) => ({
+      replayEvents: [],
+      sessionRuntime: runtime,
+    }));
     mocks.getRuntimeSnapshot.mockReturnValue({
       phase: 'idle',
       processState: 'stopped',
@@ -201,15 +206,12 @@ describe('createLoadSessionHandler', () => {
       ],
     });
 
-    const handler = createLoadSessionHandler({
+    const handler = createLoadSessionTestHandler({
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
-      setManualDispatchResume: vi.fn(),
     });
-    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+
     await handler({
-      ws: ws as never,
       sessionId: 'session-1',
-      workingDir: '/tmp/worktree',
       message: { type: 'load_session', loadRequestId: 'load-1' } as never,
     });
     expect(mocks.loadClaudeSessionHistory).toHaveBeenCalledWith({
@@ -226,11 +228,9 @@ describe('createLoadSessionHandler', () => {
       ]),
       { historySource: 'jsonl' }
     );
-    expect(mocks.subscribe).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sessionId: 'session-1',
-        loadRequestId: 'load-1',
-      })
+    expect(mocks.prepareLoad).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({ processState: 'stopped' })
     );
   });
 
@@ -244,15 +244,12 @@ describe('createLoadSessionHandler', () => {
     });
     mocks.isHistoryHydrated.mockReturnValue(false);
 
-    const handler = createLoadSessionHandler({
+    const handler = createLoadSessionTestHandler({
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
-      setManualDispatchResume: vi.fn(),
     });
 
     await handler({
-      ws: { send: vi.fn() } as never,
       sessionId: 'session-1',
-      workingDir: '/tmp/worktree',
       message: { type: 'load_session' } as never,
     });
 
@@ -260,10 +257,10 @@ describe('createLoadSessionHandler', () => {
       mocks.loadClaudeSessionHistory.mock.invocationCallOrder[0];
     const hydrateLifecycleEventsInvocation =
       mocks.hydrateLifecycleEvents.mock.invocationCallOrder[0];
-    const subscribeInvocation = mocks.subscribe.mock.invocationCallOrder[0];
+    const prepareLoadInvocation = mocks.prepareLoad.mock.invocationCallOrder[0];
 
     expect(hydrateProviderHistoryInvocation).toBeLessThan(hydrateLifecycleEventsInvocation!);
-    expect(hydrateLifecycleEventsInvocation).toBeLessThan(subscribeInvocation!);
+    expect(hydrateLifecycleEventsInvocation).toBeLessThan(prepareLoadInvocation!);
     expect(mocks.hydrateLifecycleEvents).toHaveBeenCalledWith('session-1');
   });
 
@@ -287,15 +284,12 @@ describe('createLoadSessionHandler', () => {
     });
     mocks.loadClaudeSessionHistory.mockReturnValue(historyLoadPromise);
 
-    const handler = createLoadSessionHandler({
+    const handler = createLoadSessionTestHandler({
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
-      setManualDispatchResume: vi.fn(),
     });
-    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+
     const pendingHandle = handler({
-      ws: ws as never,
       sessionId: 'session-race-1',
-      workingDir: '/tmp/worktree',
       message: { type: 'load_session' } as never,
     });
 
@@ -343,15 +337,12 @@ describe('createLoadSessionHandler', () => {
     mocks.isHistoryHydrated.mockReturnValue(false);
     mocks.loadClaudeSessionHistory.mockResolvedValue({ status: 'not_found' });
 
-    const handler = createLoadSessionHandler({
+    const handler = createLoadSessionTestHandler({
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
-      setManualDispatchResume: vi.fn(),
     });
-    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+
     await handler({
-      ws: ws as never,
       sessionId: 'session-1',
-      workingDir: '/tmp/worktree',
       message: { type: 'load_session' } as never,
     });
 
@@ -377,15 +368,12 @@ describe('createLoadSessionHandler', () => {
       filePath: '/tmp/.claude/projects/-tmp-worktree/provider-session-1.jsonl',
     });
 
-    const handler = createLoadSessionHandler({
+    const handler = createLoadSessionTestHandler({
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
-      setManualDispatchResume: vi.fn(),
     });
-    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+
     await handler({
-      ws: ws as never,
       sessionId: 'session-1',
-      workingDir: '/tmp/worktree',
       message: { type: 'load_session' } as never,
     });
 
@@ -452,14 +440,12 @@ describe('createLoadSessionHandler', () => {
           ],
         });
 
-        const handler = createLoadSessionHandler({
+        const handler = createLoadSessionTestHandler({
           tryDispatchNextMessage: mocks.tryDispatchNextMessage,
-          setManualDispatchResume: vi.fn(),
         });
         const context = {
-          ws: { send: vi.fn() } as never,
           sessionId,
-          workingDir: '/tmp/worktree',
+
           message: { type: 'load_session' } as never,
         };
 
@@ -502,21 +488,16 @@ describe('createLoadSessionHandler', () => {
       filePath: '/tmp/.claude/projects/-tmp-worktree/provider-session-1.jsonl',
     });
 
-    const handler = createLoadSessionHandler({
+    const handler = createLoadSessionTestHandler({
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
-      setManualDispatchResume: vi.fn(),
     });
-    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+
     await handler({
-      ws: ws as never,
       sessionId: 'session-retry-1',
-      workingDir: '/tmp/worktree',
       message: { type: 'load_session' } as never,
     });
     await handler({
-      ws: ws as never,
       sessionId: 'session-retry-1',
-      workingDir: '/tmp/worktree',
       message: { type: 'load_session' } as never,
     });
 
@@ -540,25 +521,20 @@ describe('createLoadSessionHandler', () => {
       filePath: '/tmp/.claude/projects/-tmp-worktree/provider-session.jsonl',
     });
 
-    const handler = createLoadSessionHandler({
+    const handler = createLoadSessionTestHandler({
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
-      setManualDispatchResume: vi.fn(),
     });
-    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
 
     for (let i = 0; i <= 1024; i += 1) {
       await handler({
-        ws: ws as never,
         sessionId: `retry-cap-${i}`,
-        workingDir: '/tmp/worktree',
+
         message: { type: 'load_session' } as never,
       });
     }
 
     await handler({
-      ws: ws as never,
       sessionId: 'retry-cap-0',
-      workingDir: '/tmp/worktree',
       message: { type: 'load_session' } as never,
     });
 
@@ -583,41 +559,32 @@ describe('createLoadSessionHandler', () => {
         filePath: '/tmp/.claude/projects/-tmp-worktree/provider-session.jsonl',
       });
 
-      const handler = createLoadSessionHandler({
+      const handler = createLoadSessionTestHandler({
         tryDispatchNextMessage: mocks.tryDispatchNextMessage,
-        setManualDispatchResume: vi.fn(),
       });
-      const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
 
       await handler({
-        ws: ws as never,
         sessionId: 'retry-expiry-oldest',
-        workingDir: '/tmp/worktree',
         message: { type: 'load_session' } as never,
       });
 
       nowMs = Date.parse('2026-02-14T00:00:00.000Z');
       for (let i = 0; i < 1023; i += 1) {
         await handler({
-          ws: ws as never,
           sessionId: `retry-expiry-fill-${i}`,
-          workingDir: '/tmp/worktree',
+
           message: { type: 'load_session' } as never,
         });
       }
 
       await handler({
-        ws: ws as never,
         sessionId: 'retry-expiry-trigger',
-        workingDir: '/tmp/worktree',
         message: { type: 'load_session' } as never,
       });
 
       const loadCallsBeforeRecheck = mocks.loadClaudeSessionHistory.mock.calls.length;
       await handler({
-        ws: ws as never,
         sessionId: 'retry-expiry-oldest',
-        workingDir: '/tmp/worktree',
         message: { type: 'load_session' } as never,
       });
 
@@ -636,15 +603,12 @@ describe('createLoadSessionHandler', () => {
       providerProjectPath: null,
     });
 
-    const handler = createLoadSessionHandler({
+    const handler = createLoadSessionTestHandler({
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
-      setManualDispatchResume: vi.fn(),
     });
-    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+
     await handler({
-      ws: ws as never,
       sessionId: 'session-1',
-      workingDir: '/tmp/worktree',
       message: { type: 'load_session' } as never,
     });
 
@@ -683,15 +647,12 @@ describe('createLoadSessionHandler', () => {
       ],
     });
 
-    const handler = createLoadSessionHandler({
+    const handler = createLoadSessionTestHandler({
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
-      setManualDispatchResume: vi.fn(),
     });
-    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+
     await handler({
-      ws: ws as never,
       sessionId: 'session-codex-metadata-id',
-      workingDir: '/tmp/worktree',
       message: { type: 'load_session' } as never,
     });
 
@@ -731,15 +692,12 @@ describe('createLoadSessionHandler', () => {
     mocks.isHistoryHydrated.mockReturnValue(false);
     mocks.loadCodexSessionHistory.mockResolvedValue({ status: 'not_found' });
 
-    const handler = createLoadSessionHandler({
+    const handler = createLoadSessionTestHandler({
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
-      setManualDispatchResume: vi.fn(),
     });
-    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+
     await handler({
-      ws: ws as never,
       sessionId: 'session-codex-empty-column-id',
-      workingDir: '/tmp/worktree',
       message: { type: 'load_session' } as never,
     });
 
@@ -768,15 +726,12 @@ describe('createLoadSessionHandler', () => {
     mocks.isHistoryHydrated.mockReturnValue(false);
     mocks.loadCodexSessionHistory.mockResolvedValue({ status: 'not_found' });
 
-    const handler = createLoadSessionHandler({
+    const handler = createLoadSessionTestHandler({
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
-      setManualDispatchResume: vi.fn(),
     });
-    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+
     await handler({
-      ws: ws as never,
       sessionId: 'session-codex-column-id',
-      workingDir: '/tmp/worktree',
       message: { type: 'load_session' } as never,
     });
 
@@ -804,15 +759,12 @@ describe('createLoadSessionHandler', () => {
     });
     mocks.isHistoryHydrated.mockReturnValue(false);
 
-    const handler = createLoadSessionHandler({
+    const handler = createLoadSessionTestHandler({
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
-      setManualDispatchResume: vi.fn(),
     });
-    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+
     await handler({
-      ws: ws as never,
       sessionId: 'session-codex-mismatched-metadata-id',
-      workingDir: '/tmp/worktree',
       message: { type: 'load_session' } as never,
     });
 
@@ -845,15 +797,12 @@ describe('createLoadSessionHandler', () => {
       ],
     });
 
-    const handler = createLoadSessionHandler({
+    const handler = createLoadSessionTestHandler({
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
-      setManualDispatchResume: vi.fn(),
     });
-    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+
     await handler({
-      ws: ws as never,
       sessionId: 'session-codex-1',
-      workingDir: '/tmp/worktree',
       message: { type: 'load_session', loadRequestId: 'load-codex-1' } as never,
     });
 
@@ -871,11 +820,9 @@ describe('createLoadSessionHandler', () => {
       ]),
       { historySource: 'jsonl' }
     );
-    expect(mocks.subscribe).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sessionId: 'session-codex-1',
-        loadRequestId: 'load-codex-1',
-      })
+    expect(mocks.prepareLoad).toHaveBeenCalledWith(
+      'session-codex-1',
+      expect.objectContaining({ processState: 'stopped' })
     );
   });
 
@@ -968,15 +915,12 @@ describe('createLoadSessionHandler', () => {
       ],
     });
 
-    const handler = createLoadSessionHandler({
+    const handler = createLoadSessionTestHandler({
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
-      setManualDispatchResume: vi.fn(),
     });
-    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+
     await handler({
-      ws: ws as never,
       sessionId: 'session-codex-backfill',
-      workingDir: '/tmp/worktree',
       message: { type: 'load_session' } as never,
     });
 
@@ -1111,15 +1055,12 @@ describe('createLoadSessionHandler', () => {
       ],
     });
 
-    const handler = createLoadSessionHandler({
+    const handler = createLoadSessionTestHandler({
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
-      setManualDispatchResume: vi.fn(),
     });
-    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+
     await handler({
-      ws: ws as never,
       sessionId: 'session-codex-no-dup',
-      workingDir: '/tmp/worktree',
       message: { type: 'load_session' } as never,
     });
 
@@ -1232,21 +1173,16 @@ describe('createLoadSessionHandler', () => {
     );
     mocks.loadCodexSessionHistory.mockReturnValueOnce(firstLoad).mockReturnValueOnce(secondLoad);
 
-    const handler = createLoadSessionHandler({
+    const handler = createLoadSessionTestHandler({
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
-      setManualDispatchResume: vi.fn(),
     });
-    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+
     const firstHandle = handler({
-      ws: ws as never,
       sessionId: 'session-codex-concurrent',
-      workingDir: '/tmp/worktree',
       message: { type: 'load_session' } as never,
     });
     const secondHandle = handler({
-      ws: ws as never,
       sessionId: 'session-codex-concurrent',
-      workingDir: '/tmp/worktree',
       message: { type: 'load_session' } as never,
     });
 
@@ -1372,15 +1308,12 @@ describe('createLoadSessionHandler', () => {
         ],
       });
 
-    const handler = createLoadSessionHandler({
+    const handler = createLoadSessionTestHandler({
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
-      setManualDispatchResume: vi.fn(),
     });
-    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+
     await handler({
-      ws: ws as never,
       sessionId: 'session-codex-recheck',
-      workingDir: '/tmp/worktree',
       message: { type: 'load_session' } as never,
     });
 
@@ -1389,9 +1322,7 @@ describe('createLoadSessionHandler', () => {
     expect(mocks.markHistoryHydrated).toHaveBeenCalledWith('session-codex-recheck', 'none');
 
     await handler({
-      ws: ws as never,
       sessionId: 'session-codex-recheck',
-      workingDir: '/tmp/worktree',
       message: { type: 'load_session' } as never,
     });
 
@@ -1399,9 +1330,7 @@ describe('createLoadSessionHandler', () => {
 
     await vi.advanceTimersByTimeAsync(5000);
     await handler({
-      ws: ws as never,
       sessionId: 'session-codex-recheck',
-      workingDir: '/tmp/worktree',
       message: { type: 'load_session' } as never,
     });
 
@@ -1462,15 +1391,12 @@ describe('createLoadSessionHandler', () => {
         options: [{ value: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5' }],
       },
     ]);
-    const handler = createLoadSessionHandler({
+    const handler = createLoadSessionTestHandler({
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
-      setManualDispatchResume: vi.fn(),
     });
-    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+
     await handler({
-      ws: ws as never,
       sessionId: 'session-1',
-      workingDir: '/tmp/worktree',
       message: { type: 'load_session' } as never,
     });
 
@@ -1517,15 +1443,12 @@ describe('createLoadSessionHandler', () => {
       { name: '/workspace:team:deploy', description: 'Nested foreign command' },
     ]);
 
-    const handler = createLoadSessionHandler({
+    const handler = createLoadSessionTestHandler({
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
-      setManualDispatchResume: vi.fn(),
     });
-    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+
     await handler({
-      ws: ws as never,
       sessionId: 'session-1',
-      workingDir: worktreePath,
       message: { type: 'load_session' } as never,
     });
 
@@ -1550,15 +1473,12 @@ describe('createLoadSessionHandler', () => {
     });
     mocks.consumeInitialMessage.mockReturnValue('Take a screenshot of the app');
 
-    const handler = createLoadSessionHandler({
+    const handler = createLoadSessionTestHandler({
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
-      setManualDispatchResume: vi.fn(),
     });
-    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+
     await handler({
-      ws: ws as never,
       sessionId: 'session-1',
-      workingDir: '/tmp/worktree',
       message: { type: 'load_session', loadRequestId: 'load-1' } as never,
     });
 

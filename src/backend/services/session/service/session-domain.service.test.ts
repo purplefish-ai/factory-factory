@@ -14,30 +14,6 @@ beforeEach(() => {
   publishToSessionMock = spyOnPublishToSession();
 });
 
-function getLatestReplayBatch(): {
-  type?: string;
-  loadRequestId?: string;
-  replayEvents?: Record<string, unknown>[];
-} {
-  const latest = publishToSessionMock.mock.calls
-    .map(
-      ([, payload]) =>
-        payload as {
-          type?: string;
-          loadRequestId?: string;
-          replayEvents?: Record<string, unknown>[];
-        }
-    )
-    .filter((payload) => payload.type === 'session_replay_batch')
-    .at(-1);
-
-  if (!latest) {
-    throw new Error('Expected at least one session_replay_batch payload');
-  }
-
-  return latest;
-}
-
 describe('SessionDomainService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -108,30 +84,65 @@ describe('SessionDomainService', () => {
     ).toEqual([-0.5, 0]);
   });
 
-  it('subscribes and emits replay plus runtime delta', async () => {
-    await sessionDomainService.subscribe({
-      sessionId: 's1',
-      sessionRuntime: {
-        phase: 'idle',
-        processState: 'stopped',
-        activity: 'IDLE',
-        updatedAt: '2026-02-14T00:00:00.000Z',
+  it('prepares replay without publishing frames and finishes loading after replay delivery', () => {
+    const prepared = sessionDomainService.prepareLoad('s1', {
+      phase: 'loading',
+      processState: 'stopped',
+      activity: 'IDLE',
+      updatedAt: '2026-10-27T12:00:00.000Z',
+    });
+    expect(prepared.replayEvents).toEqual([
+      {
+        type: 'session_runtime_snapshot',
+        sessionRuntime: {
+          phase: 'loading',
+          processState: 'stopped',
+          activity: 'IDLE',
+          updatedAt: '2026-10-27T12:00:00.000Z',
+        },
       },
-      loadRequestId: 'load-1',
+    ]);
+    expect(publishToSessionMock).not.toHaveBeenCalled();
+    sessionDomainService.finishLoad('s1');
+    expect(publishToSessionMock.mock.calls).toEqual([
+      [
+        's1',
+        {
+          type: 'session_delta',
+          data: {
+            type: 'session_runtime_updated',
+            sessionRuntime: expect.objectContaining({ phase: 'idle', processState: 'stopped' }),
+          },
+        },
+      ],
+    ]);
+    expect(sessionDomainService.getRuntimeSnapshot('s1').phase).toBe('idle');
+  });
+
+  it('prepares current runtime for replay and emits its update on completion', () => {
+    const prepared = sessionDomainService.prepareLoad('s1', {
+      phase: 'idle',
+      processState: 'stopped',
+      activity: 'IDLE',
+      updatedAt: '2026-02-14T00:00:00.000Z',
     });
 
-    expect(publishToSessionMock).toHaveBeenCalledTimes(2);
+    expect(publishToSessionMock).not.toHaveBeenCalled();
+    expect(prepared.replayEvents).toEqual([
+      {
+        type: 'session_runtime_snapshot',
+        sessionRuntime: expect.objectContaining({ processState: 'stopped' }),
+      },
+    ]);
+    sessionDomainService.finishLoad('s1');
+    expect(publishToSessionMock).toHaveBeenCalledTimes(1);
     expect(publishToSessionMock.mock.calls[0]?.[1]).toMatchObject({
-      type: 'session_replay_batch',
-      loadRequestId: 'load-1',
-    });
-    expect(publishToSessionMock.mock.calls[1]?.[1]).toMatchObject({
       type: 'session_delta',
       data: expect.objectContaining({ type: 'session_runtime_updated' }),
     });
   });
 
-  it('includes queued message and committed user message in replay', async () => {
+  it('includes queued message and committed user message in replay', () => {
     sessionDomainService.enqueue('s1', {
       id: 'q1',
       text: 'queued',
@@ -156,17 +167,14 @@ describe('SessionDomainService', () => {
       },
     });
 
-    await sessionDomainService.subscribe({
-      sessionId: 's1',
-      sessionRuntime: {
-        phase: 'idle',
-        processState: 'alive',
-        activity: 'IDLE',
-        updatedAt: '2026-02-14T00:00:02.000Z',
-      },
+    const prepared = sessionDomainService.prepareLoad('s1', {
+      phase: 'idle',
+      processState: 'alive',
+      activity: 'IDLE',
+      updatedAt: '2026-02-14T00:00:02.000Z',
     });
 
-    const replayEvents = getLatestReplayBatch().replayEvents ?? [];
+    const replayEvents = prepared.replayEvents ?? [];
     expect(replayEvents).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -183,20 +191,17 @@ describe('SessionDomainService', () => {
     );
   });
 
-  it('includes recent rejected message states in reconnect replay', async () => {
+  it('includes recent rejected message states in reconnect replay', () => {
     sessionDomainService.rejectMessage('s1', 'rejected-1', 'Attachment is too large');
 
-    await sessionDomainService.subscribe({
-      sessionId: 's1',
-      sessionRuntime: {
-        phase: 'idle',
-        processState: 'alive',
-        activity: 'IDLE',
-        updatedAt: '2026-02-14T00:00:02.000Z',
-      },
+    const prepared = sessionDomainService.prepareLoad('s1', {
+      phase: 'idle',
+      processState: 'alive',
+      activity: 'IDLE',
+      updatedAt: '2026-02-14T00:00:02.000Z',
     });
 
-    const replayEvents = getLatestReplayBatch().replayEvents ?? [];
+    const replayEvents = prepared.replayEvents ?? [];
     expect(replayEvents).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -209,7 +214,7 @@ describe('SessionDomainService', () => {
     );
   });
 
-  it('includes failed message recovery content in reconnect replay', async () => {
+  it('includes failed message recovery content in reconnect replay', () => {
     const attachment = {
       id: 'attachment-1',
       name: 'notes.txt',
@@ -235,18 +240,15 @@ describe('SessionDomainService', () => {
       'code -32603: Internal error'
     );
 
-    await sessionDomainService.subscribe({
-      sessionId: 's1',
-      sessionRuntime: {
-        phase: 'error',
-        processState: 'alive',
-        activity: 'WORKING',
-        errorMessage: 'code -32603: Internal error',
-        updatedAt: '2026-02-14T00:00:02.000Z',
-      },
+    const prepared = sessionDomainService.prepareLoad('s1', {
+      phase: 'error',
+      processState: 'alive',
+      activity: 'WORKING',
+      errorMessage: 'code -32603: Internal error',
+      updatedAt: '2026-02-14T00:00:02.000Z',
     });
 
-    const replayEvents = getLatestReplayBatch().replayEvents ?? [];
+    const replayEvents = prepared.replayEvents ?? [];
     expect(replayEvents).toEqual(
       expect.arrayContaining([
         {
@@ -265,7 +267,7 @@ describe('SessionDomainService', () => {
     );
   });
 
-  it('replays failed message recovery content after preserving session cleanup', async () => {
+  it('replays failed message recovery content after preserving session cleanup', () => {
     const attachment = {
       id: 'attachment-after-crash',
       name: 'crash-notes.txt',
@@ -308,18 +310,15 @@ describe('SessionDomainService', () => {
     expect(sessionDomainService.getQueueLength('s1')).toBe(0);
     expect(sessionDomainService.consumeInitialMessage('s1')).toBeNull();
 
-    await sessionDomainService.subscribe({
-      sessionId: 's1',
-      sessionRuntime: {
-        phase: 'error',
-        processState: 'stopped',
-        activity: 'IDLE',
-        errorMessage: 'runtime crashed',
-        updatedAt: '2026-07-29T12:00:01.000Z',
-      },
+    const prepared = sessionDomainService.prepareLoad('s1', {
+      phase: 'error',
+      processState: 'stopped',
+      activity: 'IDLE',
+      errorMessage: 'runtime crashed',
+      updatedAt: '2026-07-29T12:00:01.000Z',
     });
 
-    expect(getLatestReplayBatch().replayEvents).toEqual(
+    expect(prepared.replayEvents).toEqual(
       expect.arrayContaining([
         {
           type: 'message_state_changed',

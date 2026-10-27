@@ -3,7 +3,7 @@ import {
   DEFAULT_CHAT_SETTINGS,
   MessageState,
   QUEUED_MESSAGE_ORDER_BASE,
-  type WebSocketMessage as ReplayEventMessage,
+  type SessionDeltaEvent as ReplayEventMessage,
   resolveSelectedModel,
   trimTranscriptForRenderer,
 } from '@/shared/acp-protocol';

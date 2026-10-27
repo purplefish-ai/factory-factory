@@ -19,6 +19,8 @@ export { AcpClientHandler, AcpProcessHandle, AcpRuntimeManager, acpRuntimeManage
 // Bridge interfaces for orchestration layer wiring
 export type { SessionInitPolicyBridge, SessionWorkspaceBridge } from './bridges';
 // Chat services
+export { sessionCommandFactories } from './chat/session-command-factories';
+export type { SessionCommandFactories } from './chat/session-command-factories';
 export type { EventForwarderContext } from './chat/chat-event-forwarder.service';
 export { chatEventForwarderService } from './chat/chat-event-forwarder.service';
 export type {
@@ -26,8 +28,17 @@ export type {
   SessionCommandOutcome,
   SessionCommandError,
   SessionCommandReply,
+  SessionCommandConfigService,
+  SessionCommandHandler,
+  SessionExecutionCommandServices,
+  SessionPermissionCommandService,
 } from './chat/session-command.types';
-export { ChatMessageHandlerService } from './chat/chat-message-handlers.service';
+export { SessionLoadService } from './chat/session-load.service';
+export type {
+  PreparedSessionLoad,
+  SessionLoadResult,
+  SessionLoadDependencies,
+} from './chat/session-load.service';
 export { SessionDispatchService } from './dispatch/session-dispatch.service';
 export type { DispatchOptions } from './dispatch/session-dispatch.types';
 export { sessionDataService } from './data/session-data.service';
@@ -59,7 +70,7 @@ export { findPRDeliveryReceipt } from './lifecycle/session-pr-receipt';
 export type { SessionPromptService } from './lifecycle/session-services';
 export {
   acpEventProcessor,
-  chatMessageHandlerService,
+  createSessionLoadService,
   claudeModelCatalogService,
   codexModelCatalogService,
   providerUsageService,

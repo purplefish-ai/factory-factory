@@ -15,6 +15,9 @@ const TRPC_ROOT = resolve(REPOSITORY_ROOT, 'src/backend/trpc');
 const TRPC_RUNTIME_FILES = discoverProductionTypeScriptFiles(TRPC_ROOT);
 
 const ALLOWED_PURE_BACKEND_IMPORTS = new Map<string, ReadonlySet<string>>([
+  // This projection's runtime closure is the shared config schema and Zod only;
+  // it reads no service or application graph, unlike the settings use case.
+  ['src/backend/orchestration/project-query-projection', new Set(['toPublicProject'])],
   ['src/backend/services/github', new Set(['classifyGitHubCLIError'])],
   [
     'src/backend/services/workspace',
@@ -172,6 +175,25 @@ describe('tRPC context dependencies', () => {
       ).toEqual([
         'src/backend/services/workspace#workspaceService',
         'src/backend/services/session/index#default',
+      ]);
+    });
+
+    it('allows only the named pure public projector from its orchestration module', () => {
+      expect(
+        findForbiddenBackendImports(`
+        import { toPublicProject as projectResponse } from '@/backend/orchestration/project-query-projection';
+      `)
+      ).toEqual([]);
+      expect(
+        findForbiddenBackendImports(`
+        import { otherBinding } from '@/backend/orchestration/project-query-projection';
+        import * as projection from '@/backend/orchestration/project-query-projection';
+        import { updateProjectSettings } from '@/backend/orchestration/project-settings.orchestrator';
+      `)
+      ).toEqual([
+        'src/backend/orchestration/project-query-projection#otherBinding',
+        'src/backend/orchestration/project-query-projection#*',
+        'src/backend/orchestration/project-settings.orchestrator#updateProjectSettings',
       ]);
     });
 

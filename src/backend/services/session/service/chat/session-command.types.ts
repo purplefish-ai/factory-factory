@@ -2,6 +2,7 @@ import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import type { SessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
 import type { SessionLifecycleService } from '@/backend/services/session/service/lifecycle/session.lifecycle.service';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import type { AgentContentItem } from '@/shared/acp-protocol';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import type { ChatMessageInput } from '@/shared/websocket';
 
@@ -9,24 +10,6 @@ export interface SessionCommandContext {
   sessionId: string;
   workingDir: string;
 }
-
-const sessionCommandTypes = [
-  'set_model',
-  'set_config_option',
-  'set_thinking_budget',
-  'permission_response',
-  'start',
-  'stop',
-  'user_input',
-  'queue_message',
-  'remove_queued_message',
-  'resume_queued_messages',
-] as const satisfies readonly ChatMessageInput['type'][];
-
-export type SessionCommandMessage = Extract<
-  ChatMessageInput,
-  { type: (typeof sessionCommandTypes)[number] }
->;
 
 export type SessionCommandError =
   | {
@@ -60,7 +43,7 @@ export interface SessionCommandOutcome {
   configOptionsCorrection?: [SessionConfigOption, ...SessionConfigOption[]];
 }
 
-export type SessionCommandHandler<T extends SessionCommandMessage> = (
+export type SessionCommandHandler<T extends ChatMessageInput> = (
   context: SessionCommandContext,
   message: T
 ) => SessionCommandOutcome | Promise<SessionCommandOutcome>;
@@ -89,12 +72,6 @@ export interface SessionCommandConfigService extends SessionModelCommandService 
   getSessionConfigOptions(sessionId: string): SessionConfigOption[];
 }
 
-export function isSessionCommandMessage(
-  message: ChatMessageInput
-): message is SessionCommandMessage {
-  return sessionCommandTypes.some((type) => type === message.type);
-}
-
 /** Execution capabilities; leaf commands neither own the runtime graph nor its transports. */
 export interface SessionExecutionCommandServices {
   domain: Pick<
@@ -105,3 +82,11 @@ export interface SessionExecutionCommandServices {
   backgroundDelivery: Pick<SessionBackgroundDeliveryService, 'captureResumeGuard' | 'userResume'>;
   clearPendingRequest(sessionId: string): void;
 }
+
+export interface SessionCommandRuntimeManager {
+  isSessionRunning(sessionId: string): boolean;
+}
+export interface SessionCommandPromptService {
+  sendSessionMessage(sessionId: string, content: string | AgentContentItem[]): Promise<void>;
+}
+export type { SessionDispatchStartupService as SessionCommandStartupService } from '@/backend/services/session/service/dispatch/session-dispatch.types';

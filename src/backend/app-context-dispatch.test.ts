@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { userSettingsService } from '@/backend/services/settings';
+import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { SessionStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { createDefaultApplicationDependencies } from './app-context';
@@ -20,6 +22,8 @@ function createGraph(label: string) {
     delivered,
     attempts,
     configure: vi.fn(),
+    setManualDispatchResume: vi.fn(),
+    resetDispatchState: vi.fn(),
     tryDispatchNextMessage(sessionId: string) {
       this.attempts.push(sessionId);
       const message = sessionDomainService.dequeueNext(sessionId);
@@ -210,4 +214,30 @@ describe('application queue producer composition', () => {
       expect(sessionDispatchService.tryDispatchNextMessage).not.toHaveBeenCalled();
     }
   );
+  it('activates stored initial messages through each load command graph dispatcher', async () => {
+    const first = createGraph('first');
+    const second = createGraph('second');
+    vi.spyOn(first.services.sessionConfigService, 'getChatBarCapabilities').mockResolvedValue(
+      EMPTY_CHAT_BAR_CAPABILITIES
+    );
+    vi.spyOn(
+      first.services.sessionConfigService,
+      'getSessionConfigOptionsWithFallback'
+    ).mockResolvedValue([]);
+    vi.spyOn(userSettingsService, 'get').mockResolvedValue(
+      unsafeCoerce({ cachedSlashCommands: null })
+    );
+    for (const graph of [first, second]) {
+      sessionDomainService.storeInitialMessage(`load-${graph.label}`, `Initial ${graph.label}`);
+      await graph.services.sessionLoadService.completeLoad({
+        status: 'ready',
+        sessionId: `load-${graph.label}`,
+        provider: 'CODEX',
+        worktreePath: null,
+      });
+    }
+    expect(first.delivered).toEqual([{ sessionId: 'load-first', text: 'Initial first' }]);
+    expect(second.delivered).toEqual([{ sessionId: 'load-second', text: 'Initial second' }]);
+    expect(sessionDispatchService.tryDispatchNextMessage).not.toHaveBeenCalled();
+  });
 });
