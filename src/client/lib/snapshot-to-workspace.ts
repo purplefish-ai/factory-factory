@@ -31,6 +31,7 @@ function mutationOnlyFieldDefaults() {
     worktreePath: null,
     autoIterationConfig: null,
     autoIterationProgress: null,
+    autoIteration: null,
     githubIssueNumber: null,
     githubIssueUrl: null,
     linearIssueId: null,

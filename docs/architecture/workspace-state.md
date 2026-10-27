@@ -184,6 +184,25 @@ One endpoint (`workspace.listForProject`) serves both the board and the sidebar,
 and one React Query cache backs both — the snapshot WebSocket patches that
 single cache.
 
+`WorkspaceSummarySchema` defines the required board/sidebar fields independently
+of backend and client code. The HTTP list projector retains every legacy list
+field, including raw `autoIterationConfig` and `autoIterationProgress`, and adds
+a compact `autoIteration` projection. That projection is null for standard
+workspaces; for loop workspaces its status, iteration, limit, and metric may be
+null when unknown. Configuration input defaults do not turn missing summary
+values into iteration zero or a limit of 25; those remain UI presentation
+choices. Large configuration, progress, and logbook data are outside the shared
+summary contract.
+
+The list still returns `createdAt` as a Date through tRPC. Explicit summary
+adapters convert only that field to/from ISO for serialized summaries; session
+and last-activity timestamps keep their existing string representation. One
+client constructor creates complete optimistic list rows, while detail cache
+hydration retains its extra fields and existing initial sidebar status. The
+sidebar consumes a required Pick of the same summary instead of an optional
+parallel interface. Shared validation schemas do not change the flat snapshot
+wire, and existing list/detail hydration fallbacks remain in place.
+
 When a snapshot removes a workspace from that live list, including omission from
 a full baseline, the client resets its exact existing detail query. Reset
 synchronously clears the old data and cancels its request; active detail views

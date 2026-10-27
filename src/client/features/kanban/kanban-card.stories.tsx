@@ -42,6 +42,7 @@ export const baseWorkspace: WorkspaceWithKanban = {
   initErrorMessage: null,
   mode: 'STANDARD',
   autoIterationStatus: null,
+  autoIteration: null,
   autoIterationConfig: null,
   autoIterationProgress: null,
   prs: [],
