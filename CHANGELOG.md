@@ -18,6 +18,7 @@ and this project adheres to
 ### Fixed
 
 - Preserve Calendar DOM, focus, and custom day state across parent rerenders.
+- Select backend integration tests through a dedicated Vitest configuration.
 
 ## [0.4.11] - 2026-10-21
 
