@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { getQueryKey } from '@trpc/react-query';
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -108,6 +110,7 @@ vi.mock('@/client/lib/trpc', () => ({
       workspace: {
         listForProject: {
           cancel: mocks.cancel,
+          invalidate: ({ projectId }: { projectId: string }) => mocks.refetch(projectId),
           getData: ({ projectId }: { projectId: string }) => mocks.lists.get(projectId),
           setData: (
             { projectId }: { projectId: string },
@@ -121,6 +124,7 @@ vi.mock('@/client/lib/trpc', () => ({
     }),
     workspace: {
       listForProject: {
+        _def: () => ({ path: ['workspace', 'listForProject'] }),
         useQuery: ({ projectId }: { projectId: string }) => ({
           data: mocks.lists.get(projectId),
           isLoading: !mocks.lists.has(projectId),
@@ -163,6 +167,7 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
+let queryClient: QueryClient;
 let root: Root;
 let container: HTMLDivElement;
 let actDescriptor: PropertyDescriptor | undefined;
@@ -170,15 +175,17 @@ let actDescriptor: PropertyDescriptor | undefined;
 async function render(projectId: string) {
   await act(async () =>
     root.render(
-      <WorkspacesBoardView
-        projectId={projectId}
-        selectedProjectSlug={projectId}
-        slug={projectId}
-        onProjectChange={vi.fn()}
-        onCurrentProjectSelect={vi.fn()}
-        projects={[]}
-        issueProvider="GITHUB"
-      />
+      <QueryClientProvider client={queryClient}>
+        <WorkspacesBoardView
+          projectId={projectId}
+          selectedProjectSlug={projectId}
+          slug={projectId}
+          onProjectChange={vi.fn()}
+          onCurrentProjectSelect={vi.fn()}
+          projects={[]}
+          issueProvider="GITHUB"
+        />
+      </QueryClientProvider>
     )
   );
 }
@@ -200,6 +207,23 @@ beforeEach(() => {
   mocks.isMobile = false;
   mocks.context = null;
   mocks.lists = new Map(['a', 'b', 'c'].map((id) => [id, list(id)]));
+  queryClient = new QueryClient();
+  for (const [projectId, data] of mocks.lists) {
+    queryClient.setQueryData(
+      getQueryKey(trpc.workspace.listForProject, { projectId }, 'query'),
+      data
+    );
+  }
+  queryClient.getQueryCache().subscribe((event) => {
+    for (const projectId of mocks.lists.keys()) {
+      if (
+        event.query.queryHash ===
+        JSON.stringify(getQueryKey(trpc.workspace.listForProject, { projectId }, 'query'))
+      ) {
+        mocks.lists.set(projectId, event.query.state.data as WorkspaceList);
+      }
+    }
+  });
   mocks.archive.mockResolvedValue(undefined);
   mocks.bulkArchive.mockResolvedValue({ results: [] });
   container = document.createElement('div');
@@ -209,6 +233,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   await act(async () => root.unmount());
+  queryClient.clear();
   document.body.innerHTML = '';
   if (actDescriptor) {
     Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', actDescriptor);

@@ -252,6 +252,26 @@ snapshot hook also rejects callbacks from retired project activations. Existing
 unknown-workspace, worktree-path, and reconnect metadata repairs continue
 through the same query options.
 
+Both workspace archive callers use `useWorkspaceArchiveCommand` for single and
+column archive mutations. Each command captures its project and IDs, and the
+project reconciler assigns its optimistic removal an operation ID. Pending IDs
+stay hidden after accepted stream or HTTP commits, including reconnects. Only
+pending IDs retain rollback candidates; each accepted base updates those
+candidates, and authoritative removal deletes them. Failure releases only its
+own overlay and restores eligible failed IDs from that latest base, preserving
+unrelated updates and overlapping operations. A successful overlapping archive
+cannot be undone by another command's failure or a later accepted base while
+that overlap remains pending. The per-ID success fence ends with the last
+overlapping operation; later authoritative introductions remain eligible. Extra
+server-selected bulk successes participate in that same settlement. Repair
+failures never change the archive's per-workspace outcome.
+
+The board keeps issue intake suppressed per pending operation and owns locked
+subset recovery, retries and selection. The detail route owns its dialogs and
+post-success navigation; leaving its committed workspace lifetime suppresses
+late navigation and dialog callbacks. IDE commands live separately in
+`useWorkspaceIdeActions` and have no archive cache policy.
+
 The route and right panel share `useWorkspaceDetailQuery` and the existing
 `workspace.get` key. At HTTP success commit, accepted snapshots from that same
 connection overlay live fields on the fetched detail; initialization metadata,
