@@ -4,10 +4,16 @@
 the user's saved defaults, and preserve explicit choices through creation,
 configuration loading, stopped edits, and resume.
 
-**Spec:** The approved findings and recommendation in this chat: fix all
-reproduced selection failures, use one compact provider/model control, create a
-new conversation when choosing another provider, and deliver a reviewed PR that
-merges only with green checks and no outstanding comments.
+**Spec:**
+[Provider and model selection](../../architecture/agent-runtime.md#provider-and-model-selection).
+New launches use the user's saved provider-specific defaults; explicit choices
+survive loading, settings refreshes, and failures. One compact picker serves
+creation and current-session model changes. Another provider starts a new
+conversation. Startup and resume apply the stored choice before prompts; stale
+results cannot replace a newer selection, and failures restore confirmed state.
+
+**Delivery:** A reviewed PR merges only with green checks and no outstanding
+comments.
 
 **Architecture:** Backend startup applies the stored model before publishing a
 ready configuration or permitting prompts. Client hydration distinguishes
@@ -129,3 +135,11 @@ controls, stories and tests.
   203 integration tests passed (three skipped), mobile 3/3, typecheck,
   repository checks, production and Storybook builds passed.
   Narrow/light/dark/keyboard states and real provider transitions were checked.
+- Review fixes serialize complete configuration transactions, validate explicit
+  cross-provider models before workspace persistence, preserve stopped edits
+  through startup failures, and expose retryable defaults errors. Additional
+  regressions cover real keyboard activation, Storybook Controls updates,
+  confirmed-empty capabilities, and session-loading safety timers.
+- After review fixes: 7,662 full-suite tests and 210 integration tests passed
+  (three skipped), mobile 3/3, typecheck, production and Storybook builds
+  passed.

@@ -39,8 +39,6 @@ export type SessionCommandReply =
 
 export interface SessionCommandOutcome {
   replies: SessionCommandReply[];
-  /** The command chooses the confirmed rollback value; the adapter delivers it after requester replies. */
-  configOptionsCorrection?: [SessionConfigOption, ...SessionConfigOption[]];
 }
 
 export type SessionCommandHandler<T extends ChatMessageInput> = (
@@ -68,6 +66,7 @@ export interface SessionModelCommandService {
 
 export interface SessionCommandConfigService extends SessionModelCommandService {
   setSessionThinkingBudget(sessionId: string, maxTokens: number | null): Promise<void>;
+  /** Completes configuration publication, including rejection corrections, before settling. */
   setSessionConfigOption(sessionId: string, configId: string, value: string): Promise<void>;
   getSessionConfigOptions(sessionId: string): SessionConfigOption[];
 }

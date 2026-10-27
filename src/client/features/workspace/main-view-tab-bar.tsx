@@ -308,10 +308,16 @@ export function MainViewTabBar({
 
   // Check if active session limit is reached
   const isAtLimit = isWorkspaceSessionLimitReached(sessions, maxSessions);
-  const isButtonDisabled = disabled || isAtLimit || creationSelection?.loading;
-  const providerTriggerLabel = getSessionProviderLabel(
-    creationSelection?.provider ?? selectedProvider
-  );
+  const isButtonDisabled =
+    disabled || isAtLimit || creationSelection?.loading || Boolean(creationSelection?.error);
+  const pickerProps = creationSelection ?? {
+    provider: selectedProvider,
+    models: [],
+    onProviderChange: setSelectedProvider,
+  };
+  const newSessionLabel = pickerProps.provider
+    ? `New ${getSessionProviderLabel(pickerProps.provider)} session`
+    : 'New conversation';
 
   return (
     <div className={cn('flex items-center bg-muted/50', className)}>
@@ -347,11 +353,8 @@ export function MainViewTabBar({
           <div className="ml-0.5 flex shrink-0 items-center gap-0.5">
             <span className="px-1 text-xs text-muted-foreground">New</span>
             <ProviderModelPicker
-              provider={selectedProvider}
-              models={[]}
-              onProviderChange={setSelectedProvider}
-              {...creationSelection}
-              disabled={isButtonDisabled}
+              {...pickerProps}
+              disabled={disabled || isAtLimit}
               disabledReason={
                 isAtLimit
                   ? `Maximum ${maxSessions} sessions per workspace`
@@ -373,15 +376,13 @@ export function MainViewTabBar({
                     'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground',
                     'transition-colors disabled:pointer-events-none disabled:opacity-50'
                   )}
-                  aria-label={`New ${providerTriggerLabel} session`}
+                  aria-label={newSessionLabel}
                 >
                   <PlusIcon className="h-3.5 w-3.5" />
                 </button>
               </TooltipTrigger>
               <TooltipContent>
-                {isAtLimit
-                  ? `Maximum ${maxSessions} sessions per workspace`
-                  : `New ${providerTriggerLabel} session`}
+                {isAtLimit ? `Maximum ${maxSessions} sessions per workspace` : newSessionLabel}
               </TooltipContent>
             </Tooltip>
           </div>

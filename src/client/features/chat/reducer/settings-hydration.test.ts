@@ -85,6 +85,7 @@ describe('settings hydration', () => {
   it.each([
     ['sonnet', 'claude-sonnet-5', true],
     ['sonnet[1m]', 'claude-sonnet-5[1m]', true],
+    ['fable[1m]', 'claude-fable-5[1m]', true],
     ['sonnet', 'claude-sonnet-5[1m]', false],
     ['sonnet[1m]', 'claude-sonnet-5', false],
     ['sonnet', 'claude-opus-5', false],
@@ -137,13 +138,17 @@ describe('settings hydration', () => {
   it('treats a received empty capability payload as confirmed unsupported settings', () => {
     const restored = chatReducer(createInitialChatState(), {
       type: 'SET_SETTINGS',
-      payload: restoredSettings,
+      payload: { ...restoredSettings, selectedModel: 'sonnet' },
     });
     const unsupported = chatReducer(restored, {
       type: 'WS_CHAT_CAPABILITIES',
       payload: { capabilities: EMPTY_CHAT_BAR_CAPABILITIES },
     });
-    expect(unsupported.chatSettings).toEqual({ ...DEFAULT_CHAT_SETTINGS, reasoningEffort: null });
+    expect(unsupported.chatSettings).toEqual({
+      ...DEFAULT_CHAT_SETTINGS,
+      selectedModel: 'sonnet',
+      reasoningEffort: null,
+    });
   });
 
   it('resets selection authority when switching sessions', () => {

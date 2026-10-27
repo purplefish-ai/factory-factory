@@ -36,6 +36,7 @@ export interface ChatInputProps {
   // Settings
   settings?: ChatSettings;
   capabilities?: ChatBarCapabilities;
+  capabilitiesLoaded?: boolean;
   onSettingsChange?: (settings: Partial<ChatSettings>) => void;
   // Called when textarea height changes (for scroll adjustment)
   onHeightChange?: () => void;
@@ -85,6 +86,7 @@ export const ChatInput = memo(function ChatInput({
   className,
   settings,
   capabilities,
+  capabilitiesLoaded,
   onSettingsChange,
   onHeightChange,
   value,
@@ -296,6 +298,7 @@ export const ChatInput = memo(function ChatInput({
           <LeftControls
             settings={settings}
             capabilities={capabilities}
+            capabilitiesLoaded={capabilitiesLoaded}
             onModelChange={actions.handleModelChange}
             onReasoningChange={actions.handleReasoningChange}
             onThinkingChange={actions.handleThinkingChange}

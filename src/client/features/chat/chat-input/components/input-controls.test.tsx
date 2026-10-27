@@ -235,6 +235,7 @@ it('keeps loading selection visible until capabilities resolve', () => {
   mocks.mobile = false;
   const mounted = renderSelectionControls({
     capabilities: EMPTY_CHAT_BAR_CAPABILITIES,
+    capabilitiesLoaded: false,
     acpConfigOptions: undefined,
   });
   try {
@@ -380,6 +381,7 @@ it('hides bootstrap settings behind loading until provider capabilities resolve'
   mocks.mobile = false;
   const mounted = renderSelectionControls({
     capabilities: EMPTY_CHAT_BAR_CAPABILITIES,
+    capabilitiesLoaded: false,
     settings: DEFAULT_CHAT_SETTINGS,
     acpConfigOptions: [rapidModelOption],
   });
@@ -389,6 +391,26 @@ it('hides bootstrap settings behind loading until provider capabilities resolve'
     );
     expect(trigger?.disabled).toBe(true);
     expect(mounted.container.textContent).not.toContain('Opus');
+    expect(trigger?.getAttribute('aria-busy')).toBe('false');
+  } finally {
+    mounted.unmount();
+  }
+});
+
+it('shows unavailable selection after an empty capability response has finished loading', () => {
+  mocks.mobile = false;
+  const mounted = renderSelectionControls({
+    capabilities: EMPTY_CHAT_BAR_CAPABILITIES,
+    capabilitiesLoaded: true,
+    acpConfigOptions: undefined,
+  });
+  try {
+    const trigger = mounted.container.querySelector<HTMLButtonElement>(
+      '[aria-label="Provider and model: Claude · Select model"]'
+    );
+    expect(trigger?.disabled).toBe(true);
+    expect(trigger?.title).toContain('does not support model changes');
+    expect(mounted.container.textContent).not.toContain('Loading');
   } finally {
     mounted.unmount();
   }

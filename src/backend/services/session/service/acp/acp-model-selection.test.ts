@@ -18,6 +18,22 @@ function modelOptions(values: string[]): SessionConfigOption[] {
 }
 
 describe('provider model identities', () => {
+  it.each(['fable', 'fable[1m]'])(
+    'restores supported %s aliases and canonical identities',
+    (alias) => {
+      const suffix = alias.endsWith('[1m]') ? '[1m]' : '';
+      const canonical = `claude-fable-5${suffix}`;
+      expect(resolveAcpModelSelection('CLAUDE', modelOptions([canonical]), alias).value).toBe(
+        canonical
+      );
+      const options = modelOptions([alias]);
+      const model = options[0];
+      if (model?.type === 'select') {
+        model.options = [{ value: alias, name: suffix ? 'Fable 5 (1M)' : 'Fable 5' }];
+      }
+      expect(resolveAcpModelSelection('CLAUDE', options, canonical).value).toBe(alias);
+    }
+  );
   it('resolves the legacy Codex default alias to the advertised native model', () => {
     expect(resolveAcpModelSelection('CODEX', modelOptions(['gpt-6.1-sol']), 'default')).toEqual({
       configId: 'provider-model',

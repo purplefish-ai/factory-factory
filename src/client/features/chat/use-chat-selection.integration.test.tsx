@@ -313,9 +313,26 @@ describe('session selection hydration and outbound settings', () => {
         settings: expect.objectContaining({ selectedModel: 'sonnet' }),
       })
     );
+    // Backend configuration transactions publish in request order. An earlier
+    // command cannot publish a stale model after this matching acknowledgement.
     await act(() => acknowledge('sonnet'));
     expect(harness.chat.modelSelectionSource).toBe('server');
-    await act(() => acknowledge('opus'));
+    expect(harness.chat.chatSettings.selectedModel).toBe('sonnet');
+  });
+
+  it('adopts a subsequent server model change when no local request is pending', async () => {
+    const harness = await mount();
+    await harness.capabilities();
+    expect(harness.chat.pendingModelRequestId).toBeNull();
+    // A later change from another viewer is authoritative after local work ends.
+    await act(() =>
+      harness.chat.handleMessage({
+        type: 'config_options_update',
+        configOptions: [
+          { id: 'model', name: 'Model', type: 'select', currentValue: 'opus', options: [] },
+        ],
+      })
+    );
     expect(harness.chat.chatSettings.selectedModel).toBe('opus');
   });
 
@@ -329,6 +346,55 @@ describe('session selection hydration and outbound settings', () => {
         type: 'set_model',
         model: 'opus',
         reasoningEffort: 'high',
+      })
+    );
+  });
+
+  it('uses the new model default when the previous reasoning choice is unsupported', async () => {
+    persistSettings('session-A', restoredSettings);
+    const harness = await mount();
+    await harness.capabilities();
+    await act(() => harness.chat.updateSettings({ selectedModel: 'opus' }));
+    expect(harness.send).toHaveBeenLastCalledWith(
+      expect.objectContaining({ model: 'opus', reasoningEffort: 'high' })
+    );
+    await act(() => {
+      harness.chat.handleMessage({
+        type: 'config_options_update',
+        configOptions: [
+          {
+            id: 'model',
+            name: 'Model',
+            type: 'select',
+            currentValue: 'opus',
+            options: [],
+          },
+        ],
+      });
+      // The backend validates the carried effort against the newly selected
+      // model. Unsupported high leaves its provider-selected medium in place.
+      harness.chat.handleMessage({
+        type: 'chat_capabilities',
+        capabilities: {
+          ...capabilities,
+          model: { ...capabilities.model, selected: 'opus' },
+          reasoning: {
+            enabled: true,
+            selected: 'medium',
+            options: [
+              { value: 'low', label: 'Low' },
+              { value: 'medium', label: 'Medium' },
+            ],
+          },
+        },
+      });
+      harness.chat.sendMessage('Use the supported effort');
+    });
+    expect(harness.chat.chatSettings.reasoningEffort).toBe('medium');
+    expect(harness.send).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        type: 'queue_message',
+        settings: expect.objectContaining({ selectedModel: 'opus', reasoningEffort: 'medium' }),
       })
     );
   });

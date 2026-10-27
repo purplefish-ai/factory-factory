@@ -71,6 +71,7 @@ export interface UseChatWebSocketReturn {
   // Chat settings
   chatSettings: ChatSettings;
   chatCapabilities: ChatBarCapabilities;
+  chatCapabilitiesLoaded: boolean;
   // Input draft (preserved across tab switches)
   inputDraft: string;
   // Input attachments (for recovery on rejection)
@@ -336,6 +337,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     pendingRequest: chat.pendingRequest,
     chatSettings: chat.chatSettings,
     chatCapabilities: chat.chatCapabilities,
+    chatCapabilitiesLoaded: chat.chatCapabilitiesLoaded,
     inputDraft: chat.inputDraft,
     inputAttachments: chat.inputAttachments,
     queuedMessages: chat.queuedMessages,

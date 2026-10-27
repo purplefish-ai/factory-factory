@@ -873,7 +873,6 @@ describe('SessionConfigService', () => {
     );
 
     await service.setSessionConfigOption('session-1', 'mode', 'agent');
-
     expect(runtimeManager.setConfigOption).not.toHaveBeenCalled();
     expect(runtimeManager.setSessionMode).not.toHaveBeenCalled();
     expect(runtimeManager.setSessionModel).not.toHaveBeenCalled();
@@ -890,7 +889,8 @@ describe('SessionConfigService', () => {
             ]),
           }),
         }),
-      })
+      }),
+      expect.any(Function)
     );
   });
 

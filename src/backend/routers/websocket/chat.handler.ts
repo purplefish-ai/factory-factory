@@ -218,7 +218,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
             workingDir ?? '',
             message
           );
-          applySessionCommandOutcome(ws, dbSessionId, outcome, sessionDomainService);
+          applySessionCommandOutcome(ws, outcome);
         } catch (error) {
           logger.error('Error handling chat message', toError(error));
           sendChatError(ws, dbSessionId, 'Invalid message format');

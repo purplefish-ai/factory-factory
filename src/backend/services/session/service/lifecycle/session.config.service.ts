@@ -14,6 +14,7 @@ import { type ChatBarCapabilities, EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/
 import type { SessionPermissionPreset } from '@prisma-gen/client';
 import { parseAcpConfigSnapshot, type StoredAcpConfigSnapshot } from './acp-config-snapshot';
 import type { CodexModelCatalogService } from './codex-model-catalog.service';
+import { SessionConfigMutationQueue } from './session-config-mutation-queue';
 import {
   buildCapabilitiesFromConfigOptions,
   buildCodexConfigOptionsWithModelCatalog,
@@ -33,7 +34,6 @@ import type { SessionRepository } from './session.repository';
 const logger = createLogger('session');
 
 type SessionStartupModePreset = 'non_interactive' | 'plan';
-
 export type PersistAcpConfigSnapshotParams = {
   provider: SessionProvider;
   providerSessionId: string;
@@ -50,6 +50,7 @@ export type SessionConfigServiceDependencies = {
 };
 
 export class SessionConfigService {
+  private readonly configUpdates: SessionConfigMutationQueue;
   private readonly repository: SessionRepository;
   private readonly runtimeManager: AcpRuntimeManager;
   private readonly sessionDomainService: SessionDomainService;
@@ -60,6 +61,15 @@ export class SessionConfigService {
     this.runtimeManager = options.runtimeManager;
     this.codexModelCatalogService = options.codexModelCatalogService;
     this.sessionDomainService = options.sessionDomainService ?? sessionDomainService;
+    this.configUpdates = new SessionConfigMutationQueue(
+      this.runtimeManager,
+      (sessionId, configOptions) => {
+        this.sessionDomainService.emitDelta(sessionId, {
+          type: 'config_options_update',
+          configOptions,
+        } as SessionDeltaEvent);
+      }
+    );
   }
 
   applyConfigOptionsUpdateDelta(
@@ -299,6 +309,12 @@ export class SessionConfigService {
   }
 
   async setSessionModel(sessionId: string, model?: string): Promise<void> {
+    await this.configUpdates.run(sessionId, () =>
+      this.setSessionModelUnserialized(sessionId, model)
+    );
+  }
+
+  private async setSessionModelUnserialized(sessionId: string, model?: string): Promise<void> {
     if (!model) {
       return;
     }
@@ -306,7 +322,7 @@ export class SessionConfigService {
     if (handle) {
       await withConfiguredAcpHandle(this.runtimeManager, sessionId, handle, async () => {
         const target = resolveAcpModelSelection(handle.provider, handle.configOptions, model);
-        await this.setSessionConfigOption(sessionId, target.configId, target.value);
+        await this.setSessionConfigOptionUnserialized(sessionId, target.configId, target.value);
       });
       return;
     }
@@ -316,14 +332,23 @@ export class SessionConfigService {
     }
     const snapshot = parseAcpConfigSnapshot(session.providerMetadata);
     if (!snapshot) {
-      await this.setSessionConfigOption(sessionId, 'model', model);
+      await this.setSessionConfigOptionUnserialized(sessionId, 'model', model);
       return;
     }
     const target = resolveAcpModelSelection(session.provider, snapshot.configOptions, model);
-    await this.setSessionConfigOption(sessionId, target.configId, target.value);
+    await this.setSessionConfigOptionUnserialized(sessionId, target.configId, target.value);
   }
 
   async setSessionCollaborationMode(sessionId: string, mode: 'plan'): Promise<void> {
+    await this.configUpdates.run(sessionId, () =>
+      this.setSessionCollaborationModeUnserialized(sessionId, mode)
+    );
+  }
+
+  private async setSessionCollaborationModeUnserialized(
+    sessionId: string,
+    mode: 'plan'
+  ): Promise<void> {
     const acpHandle = this.runtimeManager.getClient(sessionId);
     if (!acpHandle) {
       logger.debug('No ACP handle for setSessionCollaborationMode', { sessionId, mode });
@@ -345,10 +370,19 @@ export class SessionConfigService {
       return;
     }
 
-    await this.setSessionConfigOption(sessionId, modeOption.id, targetMode);
+    await this.setSessionConfigOptionUnserialized(sessionId, modeOption.id, targetMode);
   }
 
   async setSessionThinkingBudget(sessionId: string, maxTokens: number | null): Promise<void> {
+    await this.configUpdates.run(sessionId, () =>
+      this.setSessionThinkingBudgetUnserialized(sessionId, maxTokens)
+    );
+  }
+
+  private async setSessionThinkingBudgetUnserialized(
+    sessionId: string,
+    maxTokens: number | null
+  ): Promise<void> {
     const acpHandle = this.runtimeManager.getClient(sessionId);
     if (acpHandle) {
       const thoughtOption = acpHandle.configOptions.find(
@@ -367,7 +401,7 @@ export class SessionConfigService {
           return;
         }
 
-        await this.setSessionConfigOption(sessionId, thoughtOption.id, thinkingBudget);
+        await this.setSessionConfigOptionUnserialized(sessionId, thoughtOption.id, thinkingBudget);
       }
       return;
     }
@@ -376,6 +410,15 @@ export class SessionConfigService {
   }
 
   async setSessionReasoningEffort(
+    sessionId: string,
+    reasoningEffort: string | null
+  ): Promise<void> {
+    await this.configUpdates.run(sessionId, () =>
+      this.setSessionReasoningEffortUnserialized(sessionId, reasoningEffort)
+    );
+  }
+
+  private async setSessionReasoningEffortUnserialized(
     sessionId: string,
     reasoningEffort: string | null
   ): Promise<void> {
@@ -434,6 +477,16 @@ export class SessionConfigService {
   }
 
   async setSessionConfigOption(sessionId: string, configId: string, value: string): Promise<void> {
+    await this.configUpdates.run(sessionId, () =>
+      this.setSessionConfigOptionUnserialized(sessionId, configId, value)
+    );
+  }
+
+  private async setSessionConfigOptionUnserialized(
+    sessionId: string,
+    configId: string,
+    value: string
+  ): Promise<void> {
     const acpHandle = this.runtimeManager.getClient(sessionId);
     if (!acpHandle) {
       const update = await setInactiveSessionConfigOption(sessionId, configId, value, {
@@ -443,7 +496,7 @@ export class SessionConfigService {
         persistSnapshot: this.persistAcpConfigSnapshot.bind(this),
       });
       if (!update) {
-        await this.setSessionConfigOption(sessionId, configId, value);
+        await this.setSessionConfigOptionUnserialized(sessionId, configId, value);
         return;
       }
       const { provider, configOptions } = update;

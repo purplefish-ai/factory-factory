@@ -70,3 +70,13 @@ export const NewConversation: Story = {
     );
   },
 };
+
+export const DefaultsFailed: Story = {
+  args: {
+    provider: null,
+    model: undefined,
+    models: [],
+    error: 'Could not load chat defaults',
+    onRetry: fn(),
+  },
+};

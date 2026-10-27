@@ -1,3 +1,4 @@
+import { ArrowClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowClockwise';
 import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
 import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { Button } from '@/components/ui/button';
@@ -21,16 +22,48 @@ export interface ProviderModelPickerProps {
   loading?: boolean;
   modelsLoading?: boolean;
   updating?: boolean;
+  error?: string;
+  onRetry?: () => void;
   disabled?: boolean;
   disabledReason?: string;
   label?: string;
 }
+
+const PROVIDER_NAMES = { CLAUDE: 'Claude', CODEX: 'Codex' };
 
 function getDisabledReason(unavailable: boolean, loading: boolean, reason?: string) {
   if (!unavailable) {
     return undefined;
   }
   return reason ?? (loading ? 'Loading model options' : undefined);
+}
+
+function SelectionRetry({
+  error,
+  onRetry,
+  disabled,
+  label,
+}: {
+  error: string;
+  onRetry?: () => void;
+  disabled: boolean;
+  label: string;
+}) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      className="h-6 gap-1 px-2 text-xs text-muted-foreground"
+      disabled={disabled || !onRetry}
+      onClick={onRetry}
+      title={error}
+      aria-label={`${label}: ${error}. Retry selection`}
+    >
+      <ArrowClockwiseIcon className="h-3 w-3 shrink-0" />
+      <span>Retry selection</span>
+    </Button>
+  );
 }
 
 /** Selection is controlled by the caller; this component never discovers or substitutes a model. */
@@ -43,11 +76,16 @@ export function ProviderModelPicker({
   loading = false,
   modelsLoading = false,
   updating = false,
+  error,
+  onRetry,
   disabled = false,
   disabledReason,
   label = 'Provider and model',
 }: ProviderModelPickerProps) {
-  const providerName = provider === 'CODEX' ? 'Codex' : provider === 'CLAUDE' ? 'Claude' : null;
+  if (error) {
+    return <SelectionRetry error={error} onRetry={onRetry} disabled={disabled} label={label} />;
+  }
+  const providerName = provider ? PROVIDER_NAMES[provider] : null;
   const modelName = loading
     ? 'Loading model…'
     : (models.find((option) => option.value === model)?.label ?? model ?? 'Select model');

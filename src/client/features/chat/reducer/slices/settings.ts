@@ -13,7 +13,7 @@ function confirmsModelSelection(state: ChatState, currentModel: string | undefin
   if (state.chatCapabilities.provider !== 'CLAUDE' || !currentModel) {
     return false;
   }
-  const family = /^(sonnet|opus|haiku)(\[1m\])?$/.exec(selected)?.[1];
+  const family = /^(sonnet|opus|haiku|fable)(\[1m\])?$/.exec(selected)?.[1];
   return Boolean(
     family &&
     new RegExp(`^claude-${family}-\\d`).test(currentModel) &&

@@ -22,11 +22,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useIsMobile } from '@/hooks/use-mobile';
 import type { ChatSettings, MessageAttachment } from '@/lib/chat-protocol';
-import {
-  type ChatBarCapabilities,
-  type ChatModelOption,
-  hasResolvedChatBarCapabilities,
-} from '@/shared/chat-capabilities';
+import { type ChatBarCapabilities, type ChatModelOption } from '@/shared/chat-capabilities';
 import { AcpConfigSelector } from './acp-config-selector';
 import { ModelSelector } from './model-selector';
 import { QuickActionsDropdown } from './quick-actions-dropdown';
@@ -107,6 +103,7 @@ const FileUploadButton = memo(function FileUploadButton({
 export interface LeftControlsProps {
   settings?: ChatSettings;
   capabilities?: ChatBarCapabilities;
+  capabilitiesLoaded?: boolean;
   onModelChange: (model: string) => void;
   onReasoningChange: (effort: string) => void;
   onThinkingChange: (enabled: boolean) => void;
@@ -143,7 +140,8 @@ function getRuntimeControls(props: LeftControlsProps) {
           : [{ value: entry.value, label: entry.name }]
       )
     : (capabilities?.model.options ?? []);
-  const loading = !hasResolvedChatBarCapabilities(capabilities);
+  const loaded = props.capabilitiesLoaded ?? capabilities !== undefined;
+  const loading = !loaded;
   const model =
     settings?.selectedModel ?? modelOption?.currentValue ?? capabilities?.model.selected;
   return {
@@ -151,7 +149,7 @@ function getRuntimeControls(props: LeftControlsProps) {
     modelOptions,
     model,
     updating: Boolean(modelOption && model !== modelOption.currentValue),
-    provider: hasResolvedChatBarCapabilities(capabilities) ? capabilities.provider : null,
+    provider: loaded ? (capabilities?.provider ?? null) : null,
     loading,
     modelEditable: modelOption ? Boolean(onSetConfigOption) : capabilities?.model.enabled === true,
     onModelChange:
@@ -296,19 +294,27 @@ const MobileSettingsSheet = memo(function MobileSettingsSheet({
   );
 });
 
+function getModelDisabledReason(props: LeftControlsProps, controls: RuntimeControls) {
+  if (props.running || props.stopping) {
+    return 'Wait for the agent to stop before changing models';
+  }
+  if (props.disabled) {
+    return 'Model selection is unavailable while the session is disconnected or starting';
+  }
+  if (controls.loading) {
+    return 'Loading model options';
+  }
+  if (!controls.modelEditable) {
+    return 'This session does not support model changes';
+  }
+  return undefined;
+}
+
 export const LeftControls = memo(function LeftControls(props: LeftControlsProps) {
   const isMobile = useIsMobile();
   const controls = getRuntimeControls(props);
   const busy = props.running || props.stopping;
-  const disabledReason = busy
-    ? 'Wait for the agent to stop before changing models'
-    : props.disabled
-      ? 'Model selection is unavailable while the session is disconnected or starting'
-      : controls.loading
-        ? 'Loading model options'
-        : !controls.modelEditable
-          ? 'This session does not support model changes'
-          : undefined;
+  const disabledReason = getModelDisabledReason(props, controls);
   const showAttachments =
     props.capabilities?.attachments.enabled === true &&
     props.capabilities.attachments.kinds.includes('image');
@@ -321,7 +327,7 @@ export const LeftControls = memo(function LeftControls(props: LeftControlsProps)
         models={controls.modelOptions}
         onModelChange={controls.onModelChange}
         loading={controls.loading}
-        updating={controls.updating}
+        updating={!controls.loading && controls.updating}
         disabled={Boolean(props.disabled || busy || !controls.modelEditable)}
         disabledReason={disabledReason}
       />

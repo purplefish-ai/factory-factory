@@ -2,13 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createSetConfigOptionHandler } from './set-config-option.handler';
 
 const setSessionConfigOption = vi.fn();
-const getSessionConfigOptions = vi.fn();
 const { logError } = vi.hoisted(() => ({ logError: vi.fn() }));
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({ info: vi.fn(), error: logError }),
 }));
 const handler = createSetConfigOptionHandler({
-  sessionConfigService: { setSessionConfigOption, getSessionConfigOptions },
+  sessionConfigService: { setSessionConfigOption },
 });
 const context = { sessionId: 'session-1', workingDir: '/tmp/work' };
 
@@ -16,7 +15,6 @@ describe('createSetConfigOptionHandler', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     setSessionConfigOption.mockResolvedValue(undefined);
-    getSessionConfigOptions.mockReturnValue([]);
   });
 
   it('updates the injected session configuration with plain values and no socket', async () => {
@@ -31,32 +29,19 @@ describe('createSetConfigOptionHandler', () => {
       'on-request'
     );
     expect(outcome).toEqual({ replies: [] });
-    expect(getSessionConfigOptions).not.toHaveBeenCalled();
   });
 
   it.each([undefined, 'config-request'])(
-    'returns confirmed config with requester correlation %s',
+    'returns requester correlation %s while the service owns configuration correction',
     async (requestId) => {
       const cause = new Error('boom');
       setSessionConfigOption.mockRejectedValue(cause);
-      const configOptions = [
-        {
-          id: 'model',
-          name: 'Model',
-          type: 'select',
-          category: 'model',
-          currentValue: 'gpt-5',
-          options: [],
-        },
-      ];
-      getSessionConfigOptions.mockReturnValue(configOptions);
       const outcome = await handler(context, {
         type: 'set_config_option',
         ...(requestId !== undefined ? { requestId } : {}),
         configId: 'model',
         value: 'gpt-5-mini',
       });
-      expect(getSessionConfigOptions).toHaveBeenCalledWith('session-1');
       expect(outcome).toEqual({
         replies: [
           {
@@ -65,7 +50,6 @@ describe('createSetConfigOptionHandler', () => {
             ...(requestId !== undefined ? { requestId } : {}),
           },
         ],
-        configOptionsCorrection: configOptions,
       });
     }
   );

@@ -116,19 +116,20 @@ function explicitSessionModel(source: InteractiveLaunchSource): { model?: string
   return source.type === 'MANUAL' && source.model !== undefined ? { model: source.model } : {};
 }
 
-/** Coordinate the existing interactive launch policy. */
-async function launchInteractiveWorkspace(
+async function preflightInteractiveLaunch(
   source: InteractiveLaunchSource,
+  capacity: number,
   ports: WorkspaceLaunchPorts
-): Promise<{ workspace: CreatedWorkspace; defaultSessionId: string | null }> {
-  const capacity = ports.getMaxSessionsPerWorkspace();
-  let provider: Awaited<ReturnType<WorkspaceLaunchPorts['resolveProvider']>> | undefined;
-
-  // Capacity enables provisioning; it is not a per-workspace session limit check.
+): Promise<Awaited<ReturnType<WorkspaceLaunchPorts['resolveProvider']>> | undefined> {
+  const { model } = explicitSessionModel(source);
+  if (capacity <= 0 && model === undefined) {
+    return undefined;
+  }
+  const provider = await ports.resolveProvider(
+    source.type === 'RESUME_BRANCH' ? undefined : source.provider,
+    ...(model === undefined ? ([] as const) : ([model] as const))
+  );
   if (capacity > 0) {
-    provider = await ports.resolveProvider(
-      source.type === 'RESUME_BRANCH' ? undefined : source.provider
-    );
     const health = await ports.checkCliHealth();
     const unavailableMessage = getProviderUnavailableMessage(provider, health);
     if (unavailableMessage) {
@@ -138,6 +139,17 @@ async function launchInteractiveWorkspace(
       );
     }
   }
+  return provider;
+}
+
+/** Coordinate the existing interactive launch policy. */
+async function launchInteractiveWorkspace(
+  source: InteractiveLaunchSource,
+  ports: WorkspaceLaunchPorts
+): Promise<{ workspace: CreatedWorkspace; defaultSessionId: string | null }> {
+  const capacity = ports.getMaxSessionsPerWorkspace();
+  // Explicit model validation also runs when capacity disables session provisioning.
+  const provider = await preflightInteractiveLaunch(source, capacity, ports);
 
   const workspace = await ports.createWorkspace(source);
   let defaultSessionId: string | null = null;

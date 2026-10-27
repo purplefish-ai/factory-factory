@@ -58,7 +58,25 @@ vi.mock('@/client/lib/trpc', () => ({
       },
     }),
     userSettings: {
-      getProviderOptions: { useQuery: () => ({ data: undefined, isLoading: false }) },
+      getProviderOptions: {
+        useQuery: () => ({
+          data: {
+            CLAUDE: {
+              models: [
+                { value: 'saved-sonnet', label: 'Saved Sonnet' },
+                { value: 'catalog-opus', label: 'Opus' },
+              ],
+            },
+            CODEX: {
+              models: [
+                { value: 'saved-sol', label: 'Saved Sol' },
+                { value: 'chosen-model', label: 'Catalog Luna' },
+              ],
+            },
+          },
+          isLoading: false,
+        }),
+      },
       get: {
         useQuery: () => ({
           data: mocks.userSettings,
@@ -153,6 +171,7 @@ vi.mock('@/client/features/session-selection', async (importOriginal) => ({
     model,
     onProviderChange,
     onModelChange,
+    models,
   }: import('@/client/features/session-selection').ProviderModelPickerProps) =>
     createElement(
       'div',
@@ -170,7 +189,15 @@ vi.mock('@/client/features/session-selection', async (importOriginal) => ({
       ),
       createElement(
         'button',
-        { onClick: () => onModelChange?.('chosen-model'), 'aria-label': 'Choose model' },
+        {
+          onClick: () => {
+            const option = models.find((entry) => entry.value !== model);
+            if (option) {
+              onModelChange?.(option.value);
+            }
+          },
+          'aria-label': 'Choose model',
+        },
         model
       )
     ),

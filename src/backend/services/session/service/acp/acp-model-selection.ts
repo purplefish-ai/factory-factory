@@ -10,7 +10,7 @@ function confirmsModelSelection(provider: string, expected: string, observed: un
   if (provider !== 'CLAUDE' || typeof observed !== 'string') {
     return false;
   }
-  const family = /^(sonnet|opus|haiku)(\[1m\])?$/.exec(expected)?.[1];
+  const family = /^(sonnet|opus|haiku|fable)(\[1m\])?$/.exec(expected)?.[1];
   return Boolean(
     family &&
     new RegExp(`^claude-${family}-\\d`).test(observed) &&
@@ -40,7 +40,7 @@ export function resolveAcpModelSelection(
   if (provider === 'CODEX' && requested === 'default') {
     return { configId: option.id, value: option.currentValue };
   }
-  if (provider === 'CLAUDE' && /^(sonnet|opus|haiku)(\[1m\])?$/.test(requested)) {
+  if (provider === 'CLAUDE' && /^(sonnet|opus|haiku|fable)(\[1m\])?$/.test(requested)) {
     const [family] = requested.split('[');
     const matches = choices.filter(
       (entry) =>
@@ -53,7 +53,7 @@ export function resolveAcpModelSelection(
   }
   const canonical =
     provider === 'CLAUDE'
-      ? /^claude-(sonnet|opus|haiku)-(\d+(?:-\d+)*)(\[1m\])?$/.exec(requested)
+      ? /^claude-(sonnet|opus|haiku|fable)-(\d+(?:-\d+)*)(\[1m\])?$/.exec(requested)
       : null;
   if (canonical) {
     const [, family, version, context = ''] = canonical;

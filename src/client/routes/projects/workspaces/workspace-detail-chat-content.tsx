@@ -43,6 +43,7 @@ export interface ChatContentProps {
   inputRef: ReturnType<typeof useChatWebSocket>['inputRef'];
   chatSettings: ReturnType<typeof useChatWebSocket>['chatSettings'];
   chatCapabilities: ReturnType<typeof useChatWebSocket>['chatCapabilities'];
+  chatCapabilitiesLoaded?: boolean;
   updateSettings: ReturnType<typeof useChatWebSocket>['updateSettings'];
   inputDraft: ReturnType<typeof useChatWebSocket>['inputDraft'];
   setInputDraft: ReturnType<typeof useChatWebSocket>['setInputDraft'];
@@ -329,6 +330,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
             placeholder={placeholder}
             settings={props.chatSettings}
             capabilities={props.chatCapabilities}
+            capabilitiesLoaded={props.chatCapabilitiesLoaded}
             onSettingsChange={props.updateSettings}
             value={props.inputDraft}
             onChange={props.setInputDraft}

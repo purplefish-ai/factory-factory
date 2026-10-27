@@ -94,7 +94,7 @@ function Full({ workspaceId, provider, onResult, suspended }: SurfaceProps) {
     selectedDbSessionId,
     setSelectedDbSessionId,
     creationDefaults: launchSelection.creationDefaults,
-    canCreate: !launchSelection.loading,
+    canCreate: launchSelection.ready,
     onCreated: launchSelection.reset,
     selectedProvider: provider,
     onArchiveGitIndexLocked: vi.fn(),

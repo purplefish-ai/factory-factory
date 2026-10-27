@@ -103,6 +103,7 @@ export function WorkspaceDetailContainer() {
     pendingRequest,
     chatSettings,
     chatCapabilities,
+    chatCapabilitiesLoaded,
     inputDraft,
     inputAttachments,
     queuedMessages,
@@ -189,7 +190,7 @@ export function WorkspaceDetailContainer() {
     selectedDbSessionId,
     setSelectedDbSessionId,
     creationDefaults: launchSelection.creationDefaults,
-    canCreate: !launchSelection.loading,
+    canCreate: launchSelection.ready,
     onCreated: launchSelection.reset,
     selectedProvider,
     onArchiveGitIndexLocked: () => setArchiveGitLockDialogOpen(true),
@@ -302,6 +303,7 @@ export function WorkspaceDetailContainer() {
     inputRef,
     chatSettings,
     chatCapabilities,
+    chatCapabilitiesLoaded,
     updateSettings,
     inputDraft,
     setInputDraft,
@@ -341,7 +343,7 @@ export function WorkspaceDetailContainer() {
           onArchiveRequest={handleArchiveRequest}
           handleQuickAction={handleQuickAction}
           running={workspaceRunning}
-          isCreatingSession={createSession.isPending}
+          isCreatingSession={createSession.isPending || !launchSelection.ready}
           hasChanges={hasChanges}
         />
       )}

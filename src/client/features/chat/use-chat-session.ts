@@ -82,15 +82,14 @@ export function useChatSession(options: UseChatSessionOptions): UseChatSessionRe
       // For session switches, SESSION_SWITCH_START already set loadingSession: true
       if (prevDbSessionId === undefined) {
         dispatch({ type: 'SESSION_LOADING_START' });
-
-        // Safety timeout: if loading takes more than 10 seconds, clear the loading state
-        // This prevents sessions from getting stuck in loading state forever
-        loadingTimeoutRef.current = setTimeout(() => {
-          debug.log('Loading timeout reached, clearing loading state');
-          dispatch({ type: 'SESSION_LOADING_END' });
-          loadingTimeoutRef.current = null;
-        }, 10_000);
       }
+      // Both the initial mount and later selections enter loading, including
+      // Quick Chat's null -> created-session transition.
+      loadingTimeoutRef.current = setTimeout(() => {
+        debug.log('Loading timeout reached, clearing loading state');
+        dispatch({ type: 'SESSION_LOADING_END' });
+        loadingTimeoutRef.current = null;
+      }, 10_000);
     } else {
       loadedDraftRef.current = '';
       dispatch({ type: 'SET_SETTINGS', payload: DEFAULT_CHAT_SETTINGS });
@@ -100,6 +99,7 @@ export function useChatSession(options: UseChatSessionOptions): UseChatSessionRe
     return () => {
       if (loadingTimeoutRef.current) {
         clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
       }
     };
   }, [dbSessionId, dispatch, toolInputAccumulatorRef]);

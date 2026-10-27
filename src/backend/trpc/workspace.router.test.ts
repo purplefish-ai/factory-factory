@@ -40,7 +40,7 @@ const mockCheckWorkspaceById = vi.hoisted(() => vi.fn());
 const mockSessionRuntimeSnapshot = vi.hoisted(() => vi.fn());
 const mockCreateAgentSession = vi.hoisted(() => vi.fn());
 const mockResolveProviderForWorkspaceCreation = vi.hoisted(() =>
-  vi.fn(async (_explicitProvider?: unknown) => 'CLAUDE')
+  vi.fn(async (_explicitProvider?: unknown, _explicitModel?: unknown) => 'CLAUDE')
 );
 const mockFindByIdWithProject = vi.hoisted(() => vi.fn());
 const mockFindSessionsByWorkspaceId = vi.hoisted(() => vi.fn());
@@ -148,8 +148,8 @@ function createCaller(requestTrust?: {
       {},
       fakeGraph.services.sessionProviderResolverService,
       {
-        resolveProviderForWorkspaceCreation: (explicitProvider?: unknown) =>
-          mockResolveProviderForWorkspaceCreation(explicitProvider),
+        resolveProviderForWorkspaceCreation: (...args: [unknown?, unknown?]) =>
+          mockResolveProviderForWorkspaceCreation(...args),
       }
     ),
     sessionDispatchService: Object.assign({}, fakeGraph.services.sessionDispatchService, {
@@ -210,8 +210,8 @@ function createCaller(requestTrust?: {
     launchWorkspace: (source) =>
       launchWorkspace(source, {
         getMaxSessionsPerWorkspace: () => services.configService.getMaxSessionsPerWorkspace(),
-        resolveProvider: (provider) =>
-          services.sessionProviderResolverService.resolveProviderForWorkspaceCreation(provider),
+        resolveProvider: (...args) =>
+          services.sessionProviderResolverService.resolveProviderForWorkspaceCreation(...args),
         checkCliHealth: () => services.cliHealthService.checkHealth(),
         createWorkspace: (...args) => mockWorkspaceCreationCreate(...args),
         createDefaultSession: (input) => services.sessionDataService.createAgentSession(input),

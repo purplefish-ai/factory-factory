@@ -69,6 +69,8 @@ export interface SessionLaunchSelection {
   provider: ChatProvider | null;
   model?: string;
   loading: boolean;
+  ready: boolean;
+  error?: string;
   pickerProps: ProviderModelPickerProps;
   creationDefaults: { provider?: ChatProvider; model?: string };
   reset: () => void;
@@ -76,9 +78,18 @@ export interface SessionLaunchSelection {
 
 export function useSessionLaunchSelection(
   scopeKey: string | null,
-  options: { defaultProvider?: string | null; ready?: boolean } = {}
+  options: {
+    defaultProvider?: string | null;
+    ready?: boolean;
+    error?: string;
+    onRetry?: () => void;
+  } = {}
 ): SessionLaunchSelection {
-  const { data: settings } = trpc.userSettings.get.useQuery();
+  const {
+    data: settings,
+    error: settingsError,
+    refetch: refetchSettings,
+  } = trpc.userSettings.get.useQuery();
   const { data: catalog, isLoading: modelsLoading } = trpc.userSettings.getProviderOptions.useQuery(
     undefined,
     {
@@ -98,6 +109,15 @@ export function useSessionLaunchSelection(
         }
       : undefined
   );
+  const error =
+    options.error ?? (!settings && settingsError ? 'Could not load chat defaults' : undefined);
+  const loading = selection.loading && !error;
+  const retry = () => {
+    if (!settings && settingsError) {
+      void refetchSettings();
+    }
+    options.onRetry?.();
+  };
   const catalogModels = selection.provider ? (catalog?.[selection.provider]?.models ?? []) : [];
   // A saved alias or custom value remains visible even before (or outside) catalog discovery.
   const models: readonly ChatModelOption[] =
@@ -116,12 +136,16 @@ export function useSessionLaunchSelection(
   return {
     provider: selection.provider,
     model: selection.model,
-    loading: selection.loading,
+    loading,
+    ready: !(selection.loading || error),
+    error,
     pickerProps: {
       provider: selection.provider,
       model: selection.model,
       models,
-      loading: selection.loading,
+      loading,
+      error,
+      onRetry: retry,
       modelsLoading,
       onProviderChange: selection.onProviderChange,
       onModelChange: selection.onModelChange,

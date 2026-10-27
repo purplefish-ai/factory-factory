@@ -8,20 +8,39 @@ import { SessionConfigService } from './session.config.service';
 
 vi.mock('@/backend/services/settings', () => ({ userSettingsService: {} }));
 
-function fixture() {
+function fixture(cached = false) {
   const session = {
     id: 'session',
     provider: 'CODEX',
     providerSessionId: null,
     model: 'first',
     workflow: 'code',
-    providerMetadata: null,
+    providerMetadata: cached
+      ? {
+          acpConfigSnapshot: {
+            provider: 'CODEX',
+            providerSessionId: 'thread',
+            configOptions: [
+              {
+                id: 'model',
+                category: 'model',
+                name: 'Model',
+                type: 'select',
+                currentValue: 'first',
+                options: ['first', 'second'].map((value) => ({ value, name: value })),
+              },
+            ],
+          },
+        }
+      : null,
   };
   const repository = {
     getSessionById: vi.fn().mockResolvedValue(session),
     updateSession: vi
       .fn()
-      .mockImplementation((_id, update) => Promise.resolve(Object.assign(session, update))),
+      .mockImplementation((_id: string, update: object, _assertCurrent?: () => void) =>
+        Promise.resolve(Object.assign(session, update))
+      ),
   };
   const runtime = {
     getClient: vi.fn(),
@@ -96,6 +115,56 @@ describe('inactive Codex model intent before first startup', () => {
     await expect(f.service.setSessionConfigOption('session', id, value)).rejects.toThrow();
     expect(f.repository.updateSession).not.toHaveBeenCalled();
     expect(f.domain.emitDelta).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])(
+    'keeps an edit after pending startup fails, with cached configuration %s',
+    async (cached) => {
+      const f = fixture(cached);
+      const pending = createDeferred<ReturnType<typeof createTestProcessHandle>>();
+      f.runtime.getPendingClient.mockReturnValueOnce(pending.promise);
+      const setting = f.service
+        .setSessionConfigOption('session', 'model', 'second')
+        .catch((error: unknown) => error);
+      await vi.waitFor(() => expect(f.runtime.getPendingClient).toHaveBeenCalled());
+      expect(f.repository.updateSession).not.toHaveBeenCalled();
+      pending.reject(new Error('Session startup cancelled'));
+      expect(await setting).toBeUndefined();
+      expect(f.session.model).toBe('second');
+    }
+  );
+
+  it('routes a cached edit to a runtime that starts at the persistence guard', async () => {
+    const f = fixture(true);
+    const handle = createTestProcessHandle({ provider: 'CODEX', providerSessionId: 'thread' });
+    handle.configOptions = [
+      {
+        id: 'model',
+        category: 'model',
+        name: 'Model',
+        type: 'select',
+        currentValue: 'first',
+        options: f.models.map((model) => ({ value: model.id, name: model.displayName })),
+      },
+    ];
+    f.runtime.setSessionModel.mockResolvedValue(
+      handle.configOptions.map((option) =>
+        option.type === 'select' ? { ...option, currentValue: 'second' } : option
+      )
+    );
+    let guarded = false;
+    f.repository.updateSession.mockImplementationOnce(
+      (_id, _update, assertCurrent?: () => void) => {
+        f.runtime.getClient.mockReturnValue(handle);
+        guarded = typeof assertCurrent === 'function';
+        assertCurrent?.();
+        return Promise.resolve(f.session);
+      }
+    );
+    await f.service.setSessionConfigOption('session', 'model', 'second');
+    expect(guarded).toBe(true);
+    expect(f.runtime.setSessionModel).toHaveBeenCalledWith('session', 'second');
+    expect(f.session.model).toBe('second');
   });
 
   it('preserves the legacy native-default intent instead of storing the displayed catalog default', async () => {

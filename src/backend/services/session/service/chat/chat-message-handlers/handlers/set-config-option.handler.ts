@@ -1,4 +1,3 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { createLogger } from '@/backend/services/logger.service';
 import { DEBUG_CHAT_WS } from '@/backend/services/session/service/chat/chat-message-handlers/constants';
 import type {
@@ -9,17 +8,8 @@ import type { SetConfigOptionMessage } from '@/shared/websocket';
 
 const logger = createLogger('chat-message-handlers');
 
-function hasConfigOptions(
-  options: SessionConfigOption[]
-): options is [SessionConfigOption, ...SessionConfigOption[]] {
-  return options.length > 0;
-}
-
 export function createSetConfigOptionHandler(deps: {
-  sessionConfigService: Pick<
-    SessionCommandConfigService,
-    'setSessionConfigOption' | 'getSessionConfigOptions'
-  >;
+  sessionConfigService: Pick<SessionCommandConfigService, 'setSessionConfigOption'>;
 }): SessionCommandHandler<SetConfigOptionMessage> {
   const { sessionConfigService } = deps;
   return async ({ sessionId }, message) => {
@@ -41,7 +31,6 @@ export function createSetConfigOptionHandler(deps: {
         value: message.value,
         error: errorMessage,
       });
-      const configOptions = sessionConfigService.getSessionConfigOptions(sessionId);
       return {
         replies: [
           {
@@ -50,8 +39,6 @@ export function createSetConfigOptionHandler(deps: {
             ...(message.requestId !== undefined ? { requestId: message.requestId } : {}),
           },
         ],
-        // Empty options would wipe the optimistic selector rather than restore confirmed values.
-        ...(hasConfigOptions(configOptions) ? { configOptionsCorrection: configOptions } : {}),
       };
     }
   };

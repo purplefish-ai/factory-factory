@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ApplicationError } from '@/backend/lib/application-error';
+import { resolveSessionModelForProvider } from '@/backend/lib/session-model';
 import {
   type CreatedWorkspace,
   launchWorkspace,
@@ -64,8 +65,9 @@ function createPorts() {
   const events: string[] = [];
   const ports = {
     getMaxSessionsPerWorkspace: vi.fn(() => 2),
-    resolveProvider: vi.fn(() => {
+    resolveProvider: vi.fn((_provider?: 'CLAUDE' | 'CODEX', model?: string) => {
       events.push('provider');
+      resolveSessionModelForProvider(model, 'CODEX');
       return Promise.resolve('CODEX' as const);
     }),
     checkCliHealth: vi.fn(() => {
@@ -201,6 +203,28 @@ describe.each(sources)(
         );
       }
     );
+  }
+);
+
+it.each([0, 2])(
+  'rejects an explicit cross-provider model before persistence at capacity %s',
+  async (capacity) => {
+    const { ports } = createPorts();
+    ports.getMaxSessionsPerWorkspace.mockReturnValue(capacity);
+    await expect(
+      launchWorkspace(
+        {
+          type: 'MANUAL',
+          projectId: 'p1',
+          name: 'Wrong model',
+          provider: 'CODEX',
+          model: 'sonnet',
+        },
+        ports
+      )
+    ).rejects.toThrow('not compatible');
+    expect(ports.createWorkspace).not.toHaveBeenCalled();
+    expect(ports.createDefaultSession).not.toHaveBeenCalled();
   }
 );
 

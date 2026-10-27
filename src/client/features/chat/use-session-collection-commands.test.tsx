@@ -3,7 +3,9 @@
 import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
+import { toast } from 'sonner';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+vi.mock('sonner', () => ({ toast: { error: vi.fn() } }));
 import { useSessionCollectionCommands } from '@/client/features/chat/use-session-collection-commands';
 
 const { mutate, mutateAsync } = vi.hoisted(() => ({ mutate: vi.fn(), mutateAsync: vi.fn() }));
@@ -102,4 +104,5 @@ it('does not launch chats or quick actions before creation defaults are availabl
   await commands.createQuickActionAsync('Review', 'Review prompt');
   expect(mutate).not.toHaveBeenCalled();
   expect(mutateAsync).not.toHaveBeenCalled();
+  expect(toast.error).toHaveBeenCalledWith('Chat defaults are not ready. Wait or retry selection.');
 });

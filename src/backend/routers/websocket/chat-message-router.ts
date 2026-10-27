@@ -110,7 +110,18 @@ export function createChatMessageRouter(services: ChatMessageRouterServices) {
       message: ChatMessageInput
     ): Promise<SessionCommandOutcome> {
       if (!sessionId) {
-        return { replies: [{ type: 'error', error: { kind: 'no_session' } }] };
+        return {
+          replies: [
+            {
+              type: 'error',
+              error: { kind: 'no_session' },
+              ...((message.type === 'set_model' || message.type === 'set_config_option') &&
+              message.requestId !== undefined
+                ? { requestId: message.requestId }
+                : {}),
+            },
+          ],
+        };
       }
       const context = { sessionId, workingDir };
       switch (message.type) {

@@ -23,13 +23,12 @@ class SessionProviderResolverService {
   }
 
   async resolveProviderForWorkspaceCreation(
-    explicitProvider?: SessionProvider
+    explicitProvider?: SessionProvider,
+    explicitModel?: string
   ): Promise<SessionProvider> {
-    if (explicitProvider) {
-      return explicitProvider;
-    }
-
-    return await userSettingsService.getDefaultSessionProvider();
+    const provider = explicitProvider ?? (await userSettingsService.getDefaultSessionProvider());
+    resolveSessionModelForProvider(explicitModel, provider);
+    return provider;
   }
 
   async resolveSessionProvider(params: {

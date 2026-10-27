@@ -66,18 +66,19 @@ it does not attach legacy `ClaudeClient` listeners.
 The `set_model`, `set_config_option`, `set_thinking_budget`, and
 `permission_response` handlers take a plain `SessionCommandContext` and typed
 message. Their injected capabilities perform session operations; their
-`SessionCommandOutcome` describes requester replies and any confirmed
-configuration correction. These leaf handlers receive no WebSocket and do not
-serialize frames.
+`SessionCommandOutcome` describes requester replies. These leaf handlers receive
+no WebSocket and do not serialize frames.
 
 `chat-command-adapter.ts` owns requester serialization and existing error copy.
-A rejected configuration change returns its confirmed options only when a live
-handle supplies them. The adapter delivers the requester error first, then
-forwards that correction through `SessionDomainService.emitDelta` and the
-existing session event bus, even if requester delivery fails during disconnect.
-Other connected viewers still receive the correction; only the requesting viewer
-receives the error or explicit model capabilities reply. Permission completion
-and matching-request cleanup remain owned by the permission service.
+The session configuration service serializes each configuration write through
+provider completion, persistence and state publication. A rejected change emits
+its confirmed configuration correction through `SessionDomainService.emitDelta`
+before releasing that write's queue slot. This prevents a delayed rollback from
+overwriting a newer successful choice. Correction delivery is independent of the
+requester's connection; only the requester receives the error and its optional
+request correlation ID. Explicit model capabilities replies are requester-only.
+Permission completion and matching-request cleanup remain owned by the
+permission service.
 
 The `start`, `stop`, `user_input`, `queue_message`, `remove_queued_message`, and
 `resume_queued_messages` commands use the same plain context and typed outcomes.

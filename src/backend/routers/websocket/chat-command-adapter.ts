@@ -1,8 +1,4 @@
-import type {
-  SessionCommandError,
-  SessionCommandOutcome,
-  SessionDomainService,
-} from '@/backend/services/session';
+import type { SessionCommandError, SessionCommandOutcome } from '@/backend/services/session';
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
@@ -69,45 +65,34 @@ function formatCommandError(error: SessionCommandError): string {
   }
 }
 
-/** Adapt requester outcomes while keeping session-wide correction delivery on the domain event bus. */
+/** Format requester outcomes; configuration publication belongs to the serialized service. */
 export function applySessionCommandOutcome(
   requester: { send(payload: string): void },
-  sessionId: string | null,
-  outcome: SessionCommandOutcome | undefined,
-  domain: Pick<SessionDomainService, 'emitDelta'>
+  outcome: SessionCommandOutcome | undefined
 ): void {
   if (!outcome) {
     return;
   }
-  try {
-    for (const reply of outcome.replies) {
-      if (reply.type === 'error') {
+  for (const reply of outcome.replies) {
+    if (reply.type === 'error') {
+      requester.send(
+        JSON.stringify({
+          type: 'error',
+          ...(reply.requestId !== undefined ? { requestId: reply.requestId } : {}),
+          message: formatCommandError(reply.error),
+        })
+      );
+    } else {
+      try {
+        requester.send(JSON.stringify(reply));
+      } catch (cause) {
         requester.send(
           JSON.stringify({
             type: 'error',
-            ...(reply.requestId !== undefined ? { requestId: reply.requestId } : {}),
-            message: formatCommandError(reply.error),
+            message: formatCommandError({ kind: 'set_model_failed', cause }),
           })
         );
-      } else {
-        try {
-          requester.send(JSON.stringify(reply));
-        } catch (cause) {
-          requester.send(
-            JSON.stringify({
-              type: 'error',
-              message: formatCommandError({ kind: 'set_model_failed', cause }),
-            })
-          );
-        }
       }
-    }
-  } finally {
-    if (sessionId && outcome.configOptionsCorrection) {
-      domain.emitDelta(sessionId, {
-        type: 'config_options_update',
-        configOptions: outcome.configOptionsCorrection,
-      });
     }
   }
 }

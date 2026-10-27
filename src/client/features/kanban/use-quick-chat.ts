@@ -13,13 +13,21 @@ function isPendingCreatedSelection(
 }
 
 export function useQuickChat(workspaceId: string | null) {
-  const { data: workspace } = trpc.workspace.get.useQuery(
+  const {
+    data: workspace,
+    error: workspaceError,
+    refetch: refetchWorkspace,
+  } = trpc.workspace.get.useQuery(
     { id: workspaceId ?? '' },
     { enabled: !!workspaceId, staleTime: Number.POSITIVE_INFINITY }
   );
   const launchSelection = useSessionLaunchSelection(workspaceId, {
     defaultProvider: workspace?.defaultSessionProvider,
     ready: workspace !== undefined,
+    error: !workspace && workspaceError ? 'Could not load workspace defaults' : undefined,
+    onRetry: () => {
+      void refetchWorkspace();
+    },
   });
   const viewportRef = useRef<HTMLDivElement>(null);
   const { onScroll, isNearBottom, scrollToBottom } = useAutoScroll(viewportRef);
@@ -88,7 +96,7 @@ export function useQuickChat(workspaceId: string | null) {
     workspaceId,
     sessions,
     creationDefaults: launchSelection.creationDefaults,
-    canCreate: !launchSelection.loading,
+    canCreate: launchSelection.ready,
     onCreated: (session, originatingWorkspaceId) => {
       if (activeWorkspaceRef.current !== originatingWorkspaceId) {
         return;

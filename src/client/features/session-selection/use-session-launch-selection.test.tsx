@@ -11,6 +11,8 @@ import {
 
 const mocks = vi.hoisted(() => ({
   settings: undefined as SessionLaunchDefaults | undefined,
+  settingsError: null as Error | null,
+  refetchSettings: vi.fn().mockResolvedValue({}),
   catalog: undefined as
     | {
         CLAUDE: { models: { value: string; label: string }[] };
@@ -21,7 +23,13 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
     userSettings: {
-      get: { useQuery: () => ({ data: mocks.settings }) },
+      get: {
+        useQuery: () => ({
+          data: mocks.settings,
+          error: mocks.settingsError,
+          refetch: mocks.refetchSettings,
+        }),
+      },
       getProviderOptions: { useQuery: () => ({ data: mocks.catalog, isLoading: !mocks.catalog }) },
     },
   },
@@ -167,4 +175,33 @@ describe('connected launch options', () => {
     expect(result?.pickerProps.modelsLoading).toBe(true);
     expect(result?.loading).toBe(false);
   });
+});
+
+it('offers a retry after saved defaults fail instead of leaving selection loading forever', () => {
+  mocks.settings = undefined;
+  mocks.settingsError = new Error('Connection failed');
+  let result: ReturnType<typeof useSessionLaunchSelection> | undefined;
+  const root = createRoot(document.createElement('div'));
+  roots.push(root);
+  const render = () =>
+    flushSync(() =>
+      root.render(
+        createElement(ConnectedLaunchHarness, {
+          onResult: (next) => {
+            result = next;
+          },
+        })
+      )
+    );
+  render();
+  expect(result?.loading).toBe(false);
+  expect(result?.ready).toBe(false);
+  expect(result?.pickerProps.error).toBe('Could not load chat defaults');
+  result?.pickerProps.onRetry?.();
+  expect(mocks.refetchSettings).toHaveBeenCalledOnce();
+  mocks.settingsError = null;
+  mocks.settings = defaults;
+  render();
+  expect(result?.ready).toBe(true);
+  expect(result?.pickerProps.error).toBeUndefined();
 });

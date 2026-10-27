@@ -75,7 +75,9 @@ export const PartialAcp: Story = {
   },
 };
 export const PartialAcpDark: Story = { ...PartialAcp, globals: { theme: 'dark' } };
-export const Loading: Story = { args: { capabilities: EMPTY_CHAT_BAR_CAPABILITIES } };
+export const Loading: Story = {
+  args: { capabilities: EMPTY_CHAT_BAR_CAPABILITIES, capabilitiesLoaded: false },
+};
 export const Narrow: Story = { ...PartialAcp, parameters: { viewport: { value: 'mobile1' } } };
 
 export const PendingNativeAcknowledgement: Story = {
@@ -95,4 +97,8 @@ export const PendingNativeAcknowledgement: Story = {
       },
     ],
   },
+};
+
+export const LoadedEmptyCapabilities: Story = {
+  args: { capabilities: EMPTY_CHAT_BAR_CAPABILITIES, capabilitiesLoaded: true },
 };

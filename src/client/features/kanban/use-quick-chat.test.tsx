@@ -8,6 +8,11 @@ import { useQuickChat } from './use-quick-chat';
 
 const launchMocks = vi.hoisted(() => ({
   inputs: [] as unknown[],
+  workspace: { defaultSessionProvider: 'WORKSPACE_DEFAULT' } as
+    | { defaultSessionProvider: string }
+    | undefined,
+  workspaceError: null as Error | null,
+  refetchWorkspace: vi.fn().mockResolvedValue({}),
   settings: {
     defaultSessionProvider: 'CODEX',
     defaultClaudeModel: 'saved-sonnet',
@@ -45,7 +50,13 @@ vi.mock('@/client/lib/trpc', () => ({
       getProviderOptions: { useQuery: () => ({ data: undefined, isLoading: false }) },
     },
     workspace: {
-      get: { useQuery: () => ({ data: { defaultSessionProvider: 'WORKSPACE_DEFAULT' } }) },
+      get: {
+        useQuery: () => ({
+          data: launchMocks.workspace,
+          error: launchMocks.workspaceError,
+          refetch: launchMocks.refetchWorkspace,
+        }),
+      },
     },
     session: {
       listSessions: {
@@ -145,6 +156,8 @@ function renderHook(workspaceId: string | null): RenderedHook {
 beforeEach(() => {
   sessionsByWorkspace.clear();
   launchMocks.inputs.length = 0;
+  launchMocks.workspace = { defaultSessionProvider: 'WORKSPACE_DEFAULT' };
+  launchMocks.workspaceError = null;
 });
 
 afterEach(() => {
@@ -218,3 +231,22 @@ it.each(['chat', 'quick action'])(
     expect(mounted.getResult().launchSelection.model).toBe('saved-sol');
   }
 );
+
+it('exposes workspace defaults failure with retry and recovers without reopening Quick Chat', () => {
+  launchMocks.workspace = undefined;
+  launchMocks.workspaceError = new Error('Workspace lookup failed');
+  const mounted = renderHook('workspace-a');
+  expect(mounted.getResult().launchSelection.loading).toBe(false);
+  expect(mounted.getResult().launchSelection.ready).toBe(false);
+  expect(mounted.getResult().launchSelection.error).toBe('Could not load workspace defaults');
+  mounted.getResult().launchSelection.pickerProps.onRetry?.();
+  expect(launchMocks.refetchWorkspace).toHaveBeenCalledOnce();
+  launchMocks.workspaceError = null;
+  launchMocks.workspace = { defaultSessionProvider: 'CLAUDE' };
+  mounted.rerender('workspace-a');
+  expect(mounted.getResult().launchSelection.ready).toBe(true);
+  expect(mounted.getResult().launchSelection.creationDefaults).toEqual({
+    provider: 'CLAUDE',
+    model: 'saved-sonnet',
+  });
+});

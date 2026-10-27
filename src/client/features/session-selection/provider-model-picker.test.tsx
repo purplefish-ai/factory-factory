@@ -56,7 +56,13 @@ describe('ProviderModelPicker', () => {
     const menu = open(trigger);
     expect(menu).not.toBeNull();
     expect(menu.textContent).not.toContain('Claude');
-    choose(menu, '6 Luna');
+    const luna = [...menu.querySelectorAll<HTMLElement>('[role="menuitemradio"]')].find(
+      (option) => option.textContent === '6 Luna'
+    );
+    flushSync(() => {
+      luna?.focus();
+      luna?.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }));
+    });
     expect(props.onModelChange).toHaveBeenCalledWith('six-luna');
   });
   it('offers a provider change only for a new conversation', () => {
@@ -88,4 +94,20 @@ describe('ProviderModelPicker', () => {
     choose(menu, 'Claude');
     expect(onProviderChange).toHaveBeenCalledWith('CLAUDE');
   });
+});
+
+it('shows a compact retry action when selection defaults cannot load', () => {
+  const onRetry = vi.fn();
+  const { trigger } = mount({
+    provider: null,
+    model: undefined,
+    models: [],
+    error: 'Could not load chat defaults',
+    onRetry,
+  });
+  expect(trigger.textContent).toContain('Retry selection');
+  expect(trigger.disabled).toBe(false);
+  expect(trigger.title).toBe('Could not load chat defaults');
+  flushSync(() => trigger.click());
+  expect(onRetry).toHaveBeenCalledOnce();
 });

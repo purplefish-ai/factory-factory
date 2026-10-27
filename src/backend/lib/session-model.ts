@@ -1,3 +1,4 @@
+import { ApplicationError } from '@/backend/lib/application-error';
 import type { SessionProvider } from '@prisma-gen/client';
 
 const CLAUDE_MODEL_ALIASES = new Set(['opus', 'sonnet', 'haiku', 'fable']);
@@ -9,7 +10,7 @@ export const DEFAULT_SESSION_MODEL_BY_PROVIDER: Record<SessionProvider, string> 
 
 function isClaudeModel(model: string): boolean {
   const lower = model.toLowerCase();
-  return CLAUDE_MODEL_ALIASES.has(lower) || lower.startsWith('claude-');
+  return CLAUDE_MODEL_ALIASES.has(lower.replace(/\[1m\]$/, '')) || lower.startsWith('claude-');
 }
 
 function isLikelyCodexModel(model: string): boolean {
@@ -61,8 +62,15 @@ export function resolveSessionModelForProvider(
   provider: SessionProvider,
   fallbackModel?: string | null
 ): string {
+  const explicit = normalizeSessionModelForProvider(model, provider);
+  if (model !== undefined && model !== null && !explicit) {
+    throw new ApplicationError(
+      'INVALID_INPUT',
+      `Model "${model}" is not compatible with ${provider}`
+    );
+  }
   return (
-    normalizeSessionModelForProvider(model, provider) ??
+    explicit ??
     normalizeSessionModelForProvider(fallbackModel, provider) ??
     DEFAULT_SESSION_MODEL_BY_PROVIDER[provider]
   );

@@ -82,7 +82,11 @@ export function useSessionCollectionCommands({
   });
 
   const createChat = useCallback(() => {
-    if (!(workspaceId && canCreate)) {
+    if (!workspaceId) {
+      return;
+    }
+    if (!canCreate) {
+      toast.error('Chat defaults are not ready. Wait or retry selection.');
       return;
     }
     const existingNumbers = (sessions ?? [])
@@ -105,17 +109,23 @@ export function useSessionCollectionCommands({
   }, [workspaceId, sessions, creationDefaults, canCreate, createSession, onCreated]);
 
   const quickActionInput = useCallback(
-    (name: string, prompt: string): CreateSessionInput | null =>
-      workspaceId && canCreate
-        ? {
-            workspaceId,
-            workflow: 'followup',
-            ...creationDefaults,
-            name,
-            initialMessage: prompt,
-            initialPrompt: '',
-          }
-        : null,
+    (name: string, prompt: string): CreateSessionInput | null => {
+      if (!workspaceId) {
+        return null;
+      }
+      if (!canCreate) {
+        toast.error('Chat defaults are not ready. Wait or retry selection.');
+        return null;
+      }
+      return {
+        workspaceId,
+        workflow: 'followup',
+        ...creationDefaults,
+        name,
+        initialMessage: prompt,
+        initialPrompt: '',
+      };
+    },
     [workspaceId, creationDefaults, canCreate]
   );
   const createQuickAction = useCallback(

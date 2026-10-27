@@ -487,7 +487,7 @@ export function InlineWorkspaceForm({
 
   const isCreating = createWorkspaceMutation.isPending || createPeriodicTaskMutation.isPending;
   const supportsWorkspaceOptions = mode !== 'PERIODIC_TASK';
-  const isLaunchDisabled = isCreating || isLoadingSettings || launchSelection.loading;
+  const isLaunchDisabled = isCreating || isLoadingSettings || !launchSelection.ready;
 
   const pasteDropHandler = usePasteDropHandler({
     setAttachments,

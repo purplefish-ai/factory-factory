@@ -22,6 +22,7 @@ type InactiveConfigDependencies = {
       providerSessionId: string;
       configOptions: SessionConfigOption[];
       existingMetadata?: unknown;
+      assertCurrent?: () => void;
     }
   ): Promise<void>;
 };
@@ -33,6 +34,7 @@ export async function setInactiveSessionConfigOption(
   value: string,
   deps: InactiveConfigDependencies
 ): Promise<InactiveConfigOptions | null> {
+  await settlePendingRuntime(sessionId, deps);
   const session = await deps.repository.getSessionById(sessionId);
   if (!session) {
     throw new Error(`Session not found: ${sessionId}`);
@@ -50,13 +52,18 @@ export async function setInactiveSessionConfigOption(
       session.provider
     );
     const configOptions = updateCachedConfigOptions(snapshot.configOptions, configId, value);
-    await deps.persistSnapshot(sessionId, {
-      provider: snapshot.provider,
-      providerSessionId: snapshot.providerSessionId,
-      configOptions,
-      existingMetadata: session.providerMetadata,
-    });
-    return { provider: session.provider, configOptions };
+    const persisted = await persistWhileInactive(sessionId, deps, (assertCurrent) =>
+      deps.persistSnapshot(sessionId, {
+        provider: snapshot.provider,
+        providerSessionId: snapshot.providerSessionId,
+        configOptions,
+        existingMetadata: session.providerMetadata,
+        assertCurrent,
+      })
+    );
+    return persisted
+      ? { provider: session.provider, configOptions }
+      : await setInactiveSessionConfigOption(sessionId, configId, value, deps);
   }
   if (session.provider !== 'CODEX' || configId !== 'model') {
     throw new Error(
@@ -64,7 +71,7 @@ export async function setInactiveSessionConfigOption(
     );
   }
   const models = await deps.catalog.getModels();
-  await deps.runtimeManager.getPendingClient?.(sessionId);
+  await settlePendingRuntime(sessionId, deps);
   const latest = await deps.repository.getSessionById(sessionId);
   if (deps.runtimeManager.getClient(sessionId)) {
     return null;
@@ -86,27 +93,49 @@ export async function setInactiveSessionConfigOption(
     configOptions.find((option) => option.id === configId),
     latest.provider
   );
-  const assertInactive = () => {
-    if (
-      deps.runtimeManager.getClient(sessionId) ||
-      deps.runtimeManager.getPendingClient?.(sessionId) !== undefined
-    ) {
-      throw new Error('Session runtime changed before model intent update');
-    }
-  };
-  try {
-    await deps.repository.updateSession(sessionId, { model: value }, assertInactive);
-  } catch (error) {
-    if (deps.runtimeManager.getClient(sessionId)) {
-      return null;
-    }
-    throw error;
-  }
-  if (deps.runtimeManager.getClient(sessionId)) {
-    return null;
+  if (
+    !(await persistWhileInactive(sessionId, deps, (assertCurrent) =>
+      deps.repository.updateSession(sessionId, { model: value }, assertCurrent)
+    ))
+  ) {
+    return await setInactiveSessionConfigOption(sessionId, configId, value, deps);
   }
   // This is explicit intent, not observed native configuration: leave provider metadata untouched.
   return { provider: 'CODEX', configOptions };
+}
+
+async function settlePendingRuntime(
+  sessionId: string,
+  deps: InactiveConfigDependencies
+): Promise<void> {
+  await deps.runtimeManager.getPendingClient?.(sessionId)?.catch(() => undefined);
+}
+
+async function persistWhileInactive(
+  sessionId: string,
+  deps: InactiveConfigDependencies,
+  operation: (assertCurrent: () => void) => Promise<unknown>
+): Promise<boolean> {
+  const hasRuntime = () =>
+    Boolean(
+      deps.runtimeManager.getClient(sessionId) ||
+      deps.runtimeManager.getPendingClient?.(sessionId) !== undefined
+    );
+  const assertCurrent = () => {
+    if (hasRuntime()) {
+      throw new Error('Session runtime changed before inactive configuration update');
+    }
+  };
+  try {
+    assertCurrent();
+    await operation(assertCurrent);
+  } catch (error) {
+    if (!hasRuntime()) {
+      throw error;
+    }
+    return false;
+  }
+  return !hasRuntime();
 }
 
 function updateCachedConfigOptions(

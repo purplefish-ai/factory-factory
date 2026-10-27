@@ -11,7 +11,7 @@ const onCreate = fn();
 const onCancel = fn();
 
 /** All requests stay inside this preview transport, including launch button clicks. */
-function WorkspaceCreationPreview({
+function WorkspaceCreationPreviewSession({
   provider = 'CODEX',
   loading = false,
   catalogLoading = false,
@@ -92,6 +92,15 @@ function WorkspaceCreationPreview({
       </trpc.Provider>
     </QueryClientProvider>
   );
+}
+
+function WorkspaceCreationPreview(props: {
+  provider?: ChatProvider;
+  loading?: boolean;
+  catalogLoading?: boolean;
+}) {
+  const key = `${props.provider ?? 'CODEX'}:${Boolean(props.loading)}:${Boolean(props.catalogLoading)}`;
+  return <WorkspaceCreationPreviewSession key={key} {...props} />;
 }
 
 const meta = {
