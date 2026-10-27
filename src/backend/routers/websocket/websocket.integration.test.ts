@@ -41,10 +41,12 @@ let createChatUpgradeHandler: typeof import('./chat.handler').createChatUpgradeH
 
 let terminalConnections: typeof import('./terminal.handler').terminalConnections;
 let disposeSnapshotsHandlerState: typeof import('./snapshots.handler').disposeSnapshotsHandlerState;
+let getChatConnectionRegistryForApplication: typeof import('./chat-connection-registry').getChatConnectionRegistryForApplication;
 let disposeChatTransportForApplication: typeof import('./chat-connection-registry').disposeChatTransportForApplication;
 let workspaceSnapshotStore: typeof import('@/backend/services/workspace').workspaceSnapshotStore;
 let workspaceQueryService: typeof import('@/backend/services/workspace').workspaceQueryService;
 let workspaceDataService: typeof import('@/backend/services/workspace').workspaceDataService;
+let sessionCommandFactories: typeof import('@/backend/services/session').sessionCommandFactories;
 let sessionDataService: typeof import('@/backend/services/session').sessionDataService;
 let terminalSessionService: typeof import('@/backend/services/terminal').terminalSessionService;
 let sessionEventBus: typeof import('@/backend/services/session').sessionEventBus;
@@ -69,13 +71,14 @@ beforeAll(async () => {
     await vi.importActual<typeof import('./snapshots.handler')>('./snapshots.handler'));
   ({ createChatUpgradeHandler } =
     await vi.importActual<typeof import('./chat.handler')>('./chat.handler'));
-  ({ disposeChatTransportForApplication } = await vi.importActual<
-    typeof import('./chat-connection-registry')
-  >('./chat-connection-registry'));
+  ({ getChatConnectionRegistryForApplication, disposeChatTransportForApplication } =
+    await vi.importActual<typeof import('./chat-connection-registry')>(
+      './chat-connection-registry'
+    ));
   ({ workspaceDataService, workspaceQueryService, workspaceSnapshotStore } = await vi.importActual<
     typeof import('@/backend/services/workspace')
   >('@/backend/services/workspace'));
-  ({ sessionDataService, sessionEventBus } = await vi.importActual<
+  ({ sessionCommandFactories, sessionDataService, sessionEventBus } = await vi.importActual<
     typeof import('@/backend/services/session')
   >('@/backend/services/session'));
   ({ terminalSessionService } = await vi.importActual<typeof import('@/backend/services/terminal')>(
@@ -229,13 +232,23 @@ function trackTransportApplication(application: AppContext): AppContext {
 function createChatAppContext(worktreeBaseDir: string) {
   const appContext = unsafeCoerce<AppContext>({
     services: {
+      sessionCommandFactories,
       chatEventForwarderService: {
         setupClientEvents: vi.fn(),
         setupWorkspaceNotifications: vi.fn(),
       },
-      chatMessageHandlerService: {
-        handleMessage: vi.fn(),
+      sessionLoadService: {
+        prepareLoad: vi.fn(async () => ({ status: 'error', outcome: { replies: [] } })),
+        captureReplay: vi.fn(),
+        completeLoad: vi.fn(),
       },
+      sessionDomainService: { clearSession: vi.fn() },
+      sessionLifecycleService: {},
+      sessionBackgroundDeliveryService: {},
+      sessionDispatchService: {},
+      sessionService: {},
+      sessionPermissionService: {},
+      sessionConfigService: {},
       configService: {
         ...createConfigService(),
         getDebugConfig: () => ({ chatWebSocket: false }),
@@ -618,7 +631,7 @@ describe('websocket integration', () => {
     const message = (await waitForWebSocketMessage(ws)) as { message: string; type: string };
     expect(message).toEqual({ type: 'error', message: 'Invalid message format' });
 
-    expect(appContext.services.chatMessageHandlerService.handleMessage).not.toHaveBeenCalled();
+    expect(appContext.services.sessionLoadService.prepareLoad).not.toHaveBeenCalled();
   });
 
   it('chat handler rejects workingDir path traversal at upgrade time', async () => {
@@ -652,7 +665,7 @@ describe('websocket integration', () => {
     openServers.add(server);
 
     const ws = await connectWebSocket(
-      `ws://127.0.0.1:${server.port}/chat?workingDir=${encodeURIComponent(validWorkingDir)}`,
+      `ws://127.0.0.1:${server.port}/chat?connectionId=valid-dir&sessionId=integration-session&workingDir=${encodeURIComponent(validWorkingDir)}`,
       { headers: { Origin: allowedOrigin } }
     );
     openSockets.add(ws);
@@ -660,11 +673,12 @@ describe('websocket integration', () => {
     ws.send(JSON.stringify({ type: 'load_session' }));
 
     await vi.waitFor(() => {
-      expect(appContext.services.chatMessageHandlerService.handleMessage).toHaveBeenCalledWith(
-        expect.any(Object),
-        null,
-        normalizedWorkingDir,
-        { type: 'load_session' }
+      expect(appContext.services.sessionLoadService.prepareLoad).toHaveBeenCalledWith({
+        sessionId: 'integration-session',
+        loadRequestId: undefined,
+      });
+      expect(getChatConnectionRegistryForApplication(appContext).get('valid-dir')?.workingDir).toBe(
+        normalizedWorkingDir
       );
     });
   });

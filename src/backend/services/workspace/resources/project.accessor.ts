@@ -43,6 +43,15 @@ interface ListProjectsFilters {
   offset?: number;
 }
 
+function projectUpdateData({ issueTrackerConfig, ...rest }: UpdateProjectInput) {
+  return {
+    ...rest,
+    ...(issueTrackerConfig !== undefined && {
+      issueTrackerConfig: issueTrackerConfig === null ? Prisma.JsonNull : issueTrackerConfig,
+    }),
+  };
+}
+
 class ProjectAccessor {
   /** Keep candidate allocation and uniqueness handling beside the insert. */
   async create(
@@ -92,16 +101,24 @@ class ProjectAccessor {
   }
 
   update(id: string, data: UpdateProjectInput): Promise<Project> {
-    const { issueTrackerConfig, ...rest } = data;
-    return prisma.project.update({
-      where: { id },
-      data: {
-        ...rest,
-        ...(issueTrackerConfig !== undefined && {
-          issueTrackerConfig: issueTrackerConfig === null ? Prisma.JsonNull : issueTrackerConfig,
-        }),
+    return prisma.project.update({ where: { id }, data: projectUpdateData(data) });
+  }
+
+  /** Match both observed nullable fields in the write itself, returning its raw row. */
+  async updateIfStartupUnchanged(
+    id: string,
+    expected: Pick<Project, 'startupScriptCommand' | 'startupScriptPath'>,
+    data: UpdateProjectInput
+  ): Promise<Project | null> {
+    const [written] = await prisma.project.updateManyAndReturn({
+      where: {
+        id,
+        startupScriptCommand: expected.startupScriptCommand,
+        startupScriptPath: expected.startupScriptPath,
       },
+      data: projectUpdateData(data),
     });
+    return written ?? null;
   }
 
   list(filters?: ListProjectsFilters) {

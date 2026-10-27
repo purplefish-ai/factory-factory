@@ -1,8 +1,8 @@
 import { createLogger } from '@/backend/services/logger.service';
 import type {
-  ChatMessageHandlerPromptService,
-  ChatMessageHandlerRuntimeManager,
-} from '@/backend/services/session/service/chat/chat-message-handlers/types';
+  SessionCommandPromptService,
+  SessionCommandRuntimeManager,
+} from '@/backend/services/session/service/chat/session-command.types';
 import type {
   SessionCommandHandler,
   SessionExecutionCommandServices,
@@ -13,8 +13,8 @@ import type { UserInputMessage } from '@/shared/websocket';
 const logger = createLogger('chat-message-handlers');
 
 export function createUserInputHandler(deps: {
-  acpRuntimeManager: ChatMessageHandlerRuntimeManager;
-  sessionService: ChatMessageHandlerPromptService;
+  acpRuntimeManager: SessionCommandRuntimeManager;
+  sessionService: SessionCommandPromptService;
   backgroundDelivery: SessionExecutionCommandServices['backgroundDelivery'];
 }): SessionCommandHandler<UserInputMessage> {
   const { acpRuntimeManager, sessionService } = deps;

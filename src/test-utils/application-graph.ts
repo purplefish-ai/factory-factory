@@ -1,5 +1,12 @@
 import { type Mock, vi } from 'vitest';
 import { defaultPRMonitoringServices } from '@/backend/orchestration/pr-monitoring-dependencies';
+import type {
+  PreparedSessionLoad,
+  SessionLoadDependencies,
+  SessionLoadResult,
+  SessionLoadService,
+} from '@/backend/services/session';
+import { createInitialSessionRuntimeState } from '@/shared/session-runtime';
 
 const hoistedApplicationGraphMocks = vi.hoisted(() => ({
   computePendingRequestType: vi.fn(),
@@ -77,7 +84,9 @@ vi.mock('@/backend/services/auto-iteration', () => ({
   insightsService: {},
   logbookService: {},
 }));
-vi.mock('@/backend/services/config.service', () => ({ configService: {} }));
+vi.mock('@/backend/services/config.service', () => ({
+  configService: { getDebugConfig: () => ({ chatWebSocket: false }) },
+}));
 vi.mock('@/backend/services/crypto.service', () => ({ cryptoService: {} }));
 vi.mock('@/backend/services/decision-log', () => ({ decisionLogService: {} }));
 vi.mock('@/backend/services/github', () => ({
@@ -117,29 +126,65 @@ vi.mock('@/backend/services/server-instance.service', () => ({
   createServerInstanceService: vi.fn(() => ({})),
   serverInstanceService: {},
 }));
-vi.mock('@/backend/services/session', () => ({
-  sessionBackgroundDeliveryService: { configure: vi.fn() },
-  findPRDeliveryReceipt: vi.fn(),
-  acpRuntimeManager: {},
-  acpTraceLogger: {},
-  chatEventForwarderService: {},
-  chatMessageHandlerService: {},
-  sessionDispatchService: {},
-  claudeModelCatalogService: { getModels: vi.fn() },
-  codexModelCatalogService: { getModels: vi.fn() },
-  providerUsageService: { getUsage: vi.fn() },
-  sessionDataService: {},
-  sessionDomainService: {},
-  sessionEventBus: {},
-  sessionFileLogger: {},
-  sessionLifecycleEventService: {},
-  sessionLifecycleService: {},
-  sessionProviderResolverService: {},
-  sessionPromptTurnCompletionService: {},
-  sessionRepository: {},
-  sessionService: {},
-  voiceNarrationService: {},
-}));
+vi.mock('@/backend/services/session', async () => {
+  const { sessionCommandFactories } = await vi.importActual<
+    typeof import('@/backend/services/session/service/chat/session-command-factories')
+  >('@/backend/services/session/service/chat/session-command-factories');
+  return {
+    sessionBackgroundDeliveryService: { configure: vi.fn() },
+    findPRDeliveryReceipt: vi.fn(),
+    acpRuntimeManager: {},
+    acpTraceLogger: {},
+    chatEventForwarderService: {},
+    createSessionLoadService: vi.fn(
+      (ports: Pick<SessionLoadDependencies, 'getRuntimeSnapshot'>) =>
+        ({
+          prepareLoad: vi.fn(
+            (input: { sessionId: string; loadRequestId?: string }): Promise<SessionLoadResult> =>
+              Promise.resolve({
+                status: 'ready',
+                ...input,
+                provider: 'CODEX',
+                worktreePath: null,
+              })
+          ),
+          captureReplay: vi.fn((prepared: PreparedSessionLoad) => {
+            const sessionRuntime = ports.getRuntimeSnapshot(prepared.sessionId);
+            return {
+              replayEvents: [{ type: 'session_runtime_snapshot' as const, sessionRuntime }],
+              sessionRuntime,
+            };
+          }),
+          completeLoad: vi.fn((_prepared: PreparedSessionLoad): Promise<void> => Promise.resolve()),
+        }) satisfies Pick<SessionLoadService, 'prepareLoad' | 'captureReplay' | 'completeLoad'>
+    ),
+    sessionCommandFactories,
+    sessionConfigService: {},
+    sessionPermissionService: {},
+    sessionDispatchService: {},
+    claudeModelCatalogService: { getModels: vi.fn() },
+    codexModelCatalogService: { getModels: vi.fn() },
+    providerUsageService: { getUsage: vi.fn() },
+    sessionDataService: {},
+    sessionDomainService: {},
+    sessionEventBus: { publishToSession: vi.fn() },
+    sessionFileLogger: { log: vi.fn() },
+    sessionLifecycleEventService: {},
+    sessionLifecycleService: {
+      getRuntimeSnapshot: vi.fn(() => ({
+        phase: 'idle',
+        processState: 'stopped',
+        activity: 'IDLE',
+        updatedAt: '2026-10-27T00:00:00Z',
+      })),
+    },
+    sessionProviderResolverService: {},
+    sessionPromptTurnCompletionService: {},
+    sessionRepository: {},
+    sessionService: {},
+    voiceNarrationService: {},
+  };
+});
 vi.mock('@/backend/services/settings', () => ({ userSettingsService: {} }));
 vi.mock('@/backend/services/terminal', () => ({
   terminalService: {},
@@ -245,7 +290,10 @@ import {
   acpRuntimeManager,
   acpTraceLogger,
   chatEventForwarderService,
-  chatMessageHandlerService,
+  createSessionLoadService,
+  sessionCommandFactories,
+  sessionConfigService,
+  sessionPermissionService,
   sessionDispatchService,
   claudeModelCatalogService,
   codexModelCatalogService,
@@ -342,8 +390,11 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
   }) satisfies typeof configService;
   const graphSessionService = Object.assign({}, sessionService, {}) satisfies typeof sessionService;
   const graphSessionLifecycleService = Object.assign({}, sessionLifecycleService, {
-    getRuntimeSnapshot: vi.fn(),
+    getRuntimeSnapshot: vi.fn(() => createInitialSessionRuntimeState()),
   }) satisfies typeof sessionLifecycleService;
+  const graphSessionEventBus = Object.assign({}, sessionEventBus, {
+    publishToSession: vi.fn(),
+  }) satisfies typeof sessionEventBus;
   const graphChatEventForwarderService = Object.assign({}, chatEventForwarderService, {
     getAllPendingRequests: vi.fn(() => new Map()),
   }) satisfies typeof chatEventForwarderService;
@@ -355,7 +406,16 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     autoIterationService,
     archiveWorkspace,
     chatEventForwarderService: graphChatEventForwarderService,
-    chatMessageHandlerService,
+    sessionCommandFactories,
+    sessionLoadService: createSessionLoadService({
+      domain: sessionDomainService,
+      config: sessionConfigService,
+      hydrateLifecycleEvents: (id) => sessionLifecycleEventService.hydrate(id),
+      getRuntimeSnapshot: (id) => graphSessionLifecycleService.getRuntimeSnapshot(id),
+      tryDispatchNextMessage: (id) => sessionDispatchService.tryDispatchNextMessage(id),
+    }),
+    sessionConfigService,
+    sessionPermissionService,
     sessionDispatchService,
     checkGithubAuth,
     cleanupWorkspaceRuntimeResources,
@@ -370,6 +430,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     createLogger,
     createWorkspaceCreationService: () => ({ create: vi.fn() }),
     launchWorkspace: vi.fn(),
+    updateProjectSettings: vi.fn(),
     renameWorkspace: vi.fn(),
     cryptoService,
     dataBackupService,
@@ -413,7 +474,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     serverInstanceService: createServerInstanceService(),
     sessionDataService,
     sessionDomainService,
-    sessionEventBus,
+    sessionEventBus: graphSessionEventBus,
     sessionFileLogger,
     sessionLifecycleEventService,
     sessionLifecycleService: graphSessionLifecycleService,

@@ -9,7 +9,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WebSocket, WebSocketServer } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
-import { SessionEventBus, sessionEventBus } from '@/backend/services/session';
+import {
+  SessionEventBus,
+  sessionEventBus,
+  sessionCommandFactories,
+} from '@/backend/services/session';
 import type { SessionDeltaEvent } from '@/shared/acp-protocol';
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import {
@@ -43,6 +47,7 @@ function createTestContext(worktreeBaseDir: string, eventBus: SessionEventBus = 
 
   const appContext = {
     services: {
+      sessionCommandFactories,
       chatEventForwarderService: {
         setupClientEvents: vi.fn(),
         setupWorkspaceNotifications: vi.fn(),
@@ -50,8 +55,21 @@ function createTestContext(worktreeBaseDir: string, eventBus: SessionEventBus = 
       acpRuntimeManager: {
         isSessionRunning: vi.fn(() => false),
       },
-      chatMessageHandlerService: {
-        handleMessage: vi.fn(async () => undefined),
+      sessionLoadService: {
+        prepareLoad: vi.fn(async () => ({ status: 'error', outcome: { replies: [] } })),
+        captureReplay: vi.fn(),
+        completeLoad: vi.fn(),
+      },
+      sessionLifecycleService: {},
+      sessionBackgroundDeliveryService: {},
+      sessionDispatchService: {},
+      sessionService: {},
+      sessionPermissionService: {},
+      sessionConfigService: {
+        setSessionModel: vi.fn(async () => undefined),
+        getChatBarCapabilities: vi.fn(async () => EMPTY_CHAT_BAR_CAPABILITIES),
+        setSessionConfigOption: vi.fn(async () => undefined),
+        getSessionConfigOptions: vi.fn(() => []),
       },
       configService: {
         getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
@@ -78,7 +96,7 @@ function createTestContext(worktreeBaseDir: string, eventBus: SessionEventBus = 
 
   return {
     appContext,
-    chatMessageHandlerService: appContext.services.chatMessageHandlerService,
+    sessionLoadService: appContext.services.sessionLoadService,
     chatEventForwarderService: appContext.services.chatEventForwarderService,
     logger,
     sessionFileLogger: appContext.services.sessionFileLogger,
@@ -191,7 +209,7 @@ describe('createChatUpgradeHandler', () => {
     const workingDir = join(tempRootDir, 'workspace-1');
     mkdirSync(workingDir, { recursive: true });
 
-    const { appContext, chatMessageHandlerService, chatEventForwarderService, sessionFileLogger } =
+    const { appContext, sessionLoadService, chatEventForwarderService, sessionFileLogger } =
       createTestContext(tempRootDir);
     const handler = createChatUpgradeHandler(appContext);
 
@@ -227,12 +245,11 @@ describe('createChatUpgradeHandler', () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(chatMessageHandlerService.handleMessage).toHaveBeenCalledWith(
-      ws,
-      'session-1',
-      realpathSync(workingDir),
-      { type: 'load_session' }
-    );
+    expect(sessionLoadService.prepareLoad).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      loadRequestId: undefined,
+    });
+    expect(chatConnectionRegistry.get('conn-1')?.workingDir).toBe(realpathSync(workingDir));
     expect(sessionFileLogger.log).toHaveBeenCalledWith('session-1', 'IN_FROM_CLIENT', {
       type: 'load_session',
     });
@@ -247,10 +264,7 @@ describe('createChatUpgradeHandler', () => {
     'corrects every viewer when requester disconnects: %s',
     async (disconnect) => {
       const bus = new SessionEventBus();
-      const { appContext, chatMessageHandlerService, sessionDomainService } = createTestContext(
-        tempRootDir,
-        bus
-      );
+      const { appContext, sessionDomainService } = createTestContext(tempRootDir, bus);
       const handler = createChatUpgradeHandler(appContext);
       const requester = new MockWebSocket();
       const second = new MockWebSocket();
@@ -276,9 +290,6 @@ describe('createChatUpgradeHandler', () => {
           new WeakMap<WebSocket, boolean>()
         );
       }
-      vi.mocked(chatMessageHandlerService.handleMessage).mockResolvedValueOnce({
-        replies: [{ type: 'chat_capabilities', capabilities: EMPTY_CHAT_BAR_CAPABILITIES }],
-      });
       requester.emit('message', JSON.stringify({ type: 'set_model', model: 'model-1' }));
       await vi.waitFor(() => expect(requester.send).toHaveBeenCalledTimes(1));
       expect(requester.send).toHaveBeenLastCalledWith(
@@ -297,15 +308,12 @@ describe('createChatUpgradeHandler', () => {
       const configOptions: [SessionConfigOption, ...SessionConfigOption[]] = [
         { id: 'model', name: 'Model', type: 'select', currentValue: 'old', options: [] },
       ];
-      vi.mocked(chatMessageHandlerService.handleMessage).mockResolvedValueOnce({
-        replies: [
-          {
-            type: 'error',
-            error: { kind: 'set_config_option_failed', cause: new Error('rejected') },
-          },
-        ],
-        configOptionsCorrection: configOptions,
-      });
+      vi.mocked(
+        appContext.services.sessionConfigService.setSessionConfigOption
+      ).mockRejectedValueOnce(new Error('rejected'));
+      vi.mocked(appContext.services.sessionConfigService.getSessionConfigOptions).mockReturnValue(
+        configOptions
+      );
       requester.emit(
         'message',
         JSON.stringify({ type: 'set_config_option', configId: 'model', value: 'bad' })
@@ -329,7 +337,7 @@ describe('createChatUpgradeHandler', () => {
   );
 
   it('delivers execution-command requester errors privately to one of two viewers', async () => {
-    const { appContext, chatMessageHandlerService, sessionDomainService } = createTestContext(
+    const { appContext, sessionDomainService } = createTestContext(
       tempRootDir,
       new SessionEventBus()
     );
@@ -358,9 +366,6 @@ describe('createChatUpgradeHandler', () => {
         new WeakMap<WebSocket, boolean>()
       );
     }
-    vi.mocked(chatMessageHandlerService.handleMessage).mockResolvedValueOnce({
-      replies: [{ type: 'error', error: { kind: 'background_monitoring_required' } }],
-    });
     requester.emit(
       'message',
       JSON.stringify({ type: 'remove_queued_message', messageId: 'pr-event-held' })
@@ -565,7 +570,7 @@ describe('createChatUpgradeHandler', () => {
   });
 
   it('waits for in-flight message handling before clearing disconnected session state', async () => {
-    const { appContext, chatMessageHandlerService, sessionDomainService, acpRuntimeManager } =
+    const { appContext, sessionLoadService, sessionDomainService, acpRuntimeManager } =
       createTestContext(tempRootDir);
     const handler = createChatUpgradeHandler(appContext);
     vi.mocked(acpRuntimeManager.isSessionRunning).mockReturnValue(false);
@@ -574,8 +579,9 @@ describe('createChatUpgradeHandler', () => {
     const messageHandled = new Promise<void>((resolve) => {
       releaseMessage = resolve;
     });
-    vi.mocked(chatMessageHandlerService.handleMessage).mockImplementation(async () => {
+    vi.mocked(sessionLoadService.prepareLoad).mockImplementation(async () => {
       await messageHandled;
+      return { status: 'error', outcome: { replies: [] } };
     });
 
     const ws = new MockWebSocket();
@@ -613,19 +619,16 @@ describe('createChatUpgradeHandler', () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(sessionDomainService.clearSession).toHaveBeenCalledWith('session-1', {
-      preserveRejections: true,
-    });
+    await vi.waitFor(() =>
+      expect(sessionDomainService.clearSession).toHaveBeenCalledWith('session-1', {
+        preserveRejections: true,
+      })
+    );
   });
 
   it('reports a failure in disconnected-session cleanup at the message boundary', async () => {
-    const {
-      appContext,
-      chatMessageHandlerService,
-      sessionDomainService,
-      acpRuntimeManager,
-      logger,
-    } = createTestContext(tempRootDir);
+    const { appContext, sessionLoadService, sessionDomainService, acpRuntimeManager, logger } =
+      createTestContext(tempRootDir);
     const cleanupError = new Error('session cleanup failed');
     vi.mocked(sessionDomainService.clearSession).mockImplementation(() => {
       throw cleanupError;
@@ -637,8 +640,9 @@ describe('createChatUpgradeHandler', () => {
     const messageHandled = new Promise<void>((resolve) => {
       releaseMessage = resolve;
     });
-    vi.mocked(chatMessageHandlerService.handleMessage).mockImplementation(async () => {
+    vi.mocked(sessionLoadService.prepareLoad).mockImplementation(async () => {
       await messageHandled;
+      return { status: 'error', outcome: { replies: [] } };
     });
 
     const ws = new MockWebSocket();
@@ -729,7 +733,7 @@ describe('createChatUpgradeHandler', () => {
   });
 
   it('sends chat errors for invalid JSON/schema messages and logs websocket errors', async () => {
-    const { appContext, chatMessageHandlerService, sessionFileLogger, logger } =
+    const { appContext, sessionLoadService, sessionFileLogger, logger } =
       createTestContext(tempRootDir);
     const handler = createChatUpgradeHandler(appContext);
 
@@ -763,7 +767,7 @@ describe('createChatUpgradeHandler', () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(chatMessageHandlerService.handleMessage).not.toHaveBeenCalled();
+    expect(sessionLoadService.prepareLoad).not.toHaveBeenCalled();
     expect(ws.send).toHaveBeenCalledWith(
       JSON.stringify({ type: 'error', message: 'Invalid message format' })
     );

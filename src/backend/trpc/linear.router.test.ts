@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { toPublicProject } from '@/backend/orchestration/project-query-projection';
 
 const mockFindProjectById = vi.hoisted(() => vi.fn());
 const mockFindWorkspacesByProjectId = vi.hoisted(() => vi.fn());
@@ -87,6 +88,38 @@ describe('linearRouter', () => {
       issues: [],
       error: 'linear down',
     });
+  });
+
+  it('decrypts raw service credentials after public projection of the same project', async () => {
+    const raw = {
+      issueTrackerConfig: {
+        linear: {
+          apiKey: 'encrypted-key',
+          teamId: 'team-1',
+          teamName: 'Core',
+          viewerName: 'Alice',
+        },
+      },
+    };
+    const publicProject = toPublicProject(raw);
+    expect(publicProject.issueTrackerConfig?.linear).not.toHaveProperty('apiKey');
+    mockFindProjectById.mockResolvedValue(raw);
+    mockDecrypt.mockReturnValue('decrypted-key');
+    mockListMyIssues.mockResolvedValue([]);
+    mockGetIssue.mockResolvedValue({ id: 'issue-1' });
+    const caller = createCaller();
+    await expect(caller.listIssuesForProject({ projectId: 'p1' })).resolves.toEqual({
+      issues: [],
+      error: null,
+    });
+    await expect(caller.getIssue({ projectId: 'p1', issueId: 'issue-1' })).resolves.toEqual({
+      issue: { id: 'issue-1' },
+      error: null,
+    });
+    expect(mockDecrypt).toHaveBeenNthCalledWith(1, 'encrypted-key');
+    expect(mockDecrypt).toHaveBeenNthCalledWith(2, 'encrypted-key');
+    expect(mockListMyIssues).toHaveBeenCalledWith('decrypted-key', 'team-1');
+    expect(mockGetIssue).toHaveBeenCalledWith('decrypted-key', 'issue-1');
   });
 
   it('filters issues that already have active workspaces', async () => {
