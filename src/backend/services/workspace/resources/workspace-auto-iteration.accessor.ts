@@ -65,6 +65,14 @@ export function flattenWorkspaceAutoIteration(
   };
 }
 
+/** Same-row inputs returned by an accepted write, before any later mutation. */
+export type WorkspaceAutoIterationWriteResult = Pick<
+  WorkspaceAutoIteration,
+  'mode' | 'status' | 'config' | 'progress'
+>;
+
+const publicationSelect = { mode: true, status: true, config: true, progress: true } as const;
+
 class WorkspaceAutoIterationAccessor {
   /**
    * Write to a row that must exist, and report the row as the statement wrote
@@ -81,11 +89,11 @@ class WorkspaceAutoIterationAccessor {
   private async write(
     workspaceId: string,
     data: Prisma.WorkspaceAutoIterationUpdateManyMutationInput
-  ): Promise<{ mode: WorkspaceMode }> {
+  ): Promise<WorkspaceAutoIterationWriteResult> {
     const [written] = await prisma.workspaceAutoIteration.updateManyAndReturn({
       where: { workspaceId },
       data,
-      select: { mode: true },
+      select: publicationSelect,
     });
     if (!written) {
       throw new Error(`WorkspaceAutoIteration row not found for workspace: ${workspaceId}`);
@@ -102,20 +110,30 @@ class WorkspaceAutoIterationAccessor {
    * iterations inside that window would be derived against a `STANDARD` it never
    * had. It comes from the write itself, so the pair is a row that existed.
    */
-  async setStatus(
+  setStatus(
     workspaceId: string,
     status: AutoIterationStatus
-  ): Promise<{ mode: WorkspaceMode; status: AutoIterationStatus }> {
-    const written = await this.write(workspaceId, { status });
-    return { mode: written.mode, status };
+  ): Promise<WorkspaceAutoIterationWriteResult> {
+    return this.write(workspaceId, { status });
   }
 
-  async setProgress(workspaceId: string, progress: Prisma.InputJsonValue): Promise<void> {
-    await this.write(workspaceId, { progress });
+  setProgress(
+    workspaceId: string,
+    progress: Prisma.InputJsonValue
+  ): Promise<WorkspaceAutoIterationWriteResult> {
+    return this.write(workspaceId, { progress });
   }
 
   async setSession(workspaceId: string, sessionId: string | null): Promise<void> {
-    await this.write(workspaceId, { sessionId });
+    // Session changes do not affect compact progress; avoid reading JSON payloads.
+    const [written] = await prisma.workspaceAutoIteration.updateManyAndReturn({
+      where: { workspaceId },
+      data: { sessionId },
+      select: { mode: true },
+    });
+    if (!written) {
+      throw new Error(`WorkspaceAutoIteration row not found for workspace: ${workspaceId}`);
+    }
   }
 
   /**
@@ -127,7 +145,7 @@ class WorkspaceAutoIterationAccessor {
     workspaceId: string,
     sessionId: string,
     status: AutoIterationStatus
-  ): Promise<{ settled: boolean; mode: WorkspaceMode | null }> {
+  ): Promise<WorkspaceAutoIterationWriteResult | null> {
     // The mode comes back from the compare-and-swap itself, so the announced
     // transition is the row this statement settled rather than whatever a later
     // read would have found. A swap that matched nothing returns no row, and has
@@ -135,12 +153,9 @@ class WorkspaceAutoIterationAccessor {
     const [settled] = await prisma.workspaceAutoIteration.updateManyAndReturn({
       where: { workspaceId, sessionId },
       data: { status, sessionId: null },
-      select: { mode: true },
+      select: publicationSelect,
     });
-    if (!settled) {
-      return { settled: false, mode: null };
-    }
-    return { settled: true, mode: settled.mode };
+    return settled ?? null;
   }
 
   async clearSessionIfMatches(workspaceId: string, sessionId: string): Promise<boolean> {
@@ -168,7 +183,9 @@ class WorkspaceAutoIterationAccessor {
    * it out of the returned list, so no status-changed event is emitted for a
    * workspace this did not touch.
    */
-  async resetStaleRunningStatuses(): Promise<Array<{ id: string }>> {
+  async resetStaleRunningStatuses(): Promise<
+    Array<{ id: string; written: WorkspaceAutoIterationWriteResult }>
+  > {
     const stale = await prisma.workspaceAutoIteration.findMany({
       where: { status: 'RUNNING' },
       select: { workspaceId: true, sessionId: true },
@@ -180,12 +197,13 @@ class WorkspaceAutoIterationAccessor {
 
     const outcomes = await Promise.all(
       stale.map(async (row) => {
-        const result = await prisma.workspaceAutoIteration.updateMany({
+        const [written] = await prisma.workspaceAutoIteration.updateManyAndReturn({
           where: { workspaceId: row.workspaceId, status: 'RUNNING', sessionId: row.sessionId },
           data: { status: 'FAILED', sessionId: null },
+          select: publicationSelect,
         });
         // Callers keyed off `id` before the split and still do.
-        return result.count === 1 ? { id: row.workspaceId } : null;
+        return written ? { id: row.workspaceId, written } : null;
       })
     );
 

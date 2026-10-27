@@ -36,6 +36,8 @@ describe('workspace state capabilities', () => {
     vi.mocked(workspaceAccessor.setAutoIterationStatus).mockResolvedValue({
       mode: 'AUTO_ITERATION',
       status: 'RUNNING',
+      config: null,
+      progress: null,
     });
     const events: AutoIterationStatusChangedEvent[] = [];
     workspaceAutoIterationService.on(
@@ -50,8 +52,10 @@ describe('workspace state capabilities', () => {
 
   it('announces the settled status when a matching session finishes the loop', async () => {
     vi.mocked(workspaceAccessor.finishAutoIterationIfSessionMatches).mockResolvedValue({
-      settled: true,
       mode: 'AUTO_ITERATION',
+      status: 'COMPLETED',
+      config: null,
+      progress: null,
     });
     const events: AutoIterationStatusChangedEvent[] = [];
     workspaceAutoIterationService.on(
@@ -65,10 +69,7 @@ describe('workspace state capabilities', () => {
   });
 
   it('announces nothing when the compare-and-swap settles no loop', async () => {
-    vi.mocked(workspaceAccessor.finishAutoIterationIfSessionMatches).mockResolvedValue({
-      settled: false,
-      mode: null,
-    });
+    vi.mocked(workspaceAccessor.finishAutoIterationIfSessionMatches).mockResolvedValue(null);
     const events: AutoIterationStatusChangedEvent[] = [];
     workspaceAutoIterationService.on(
       AUTO_ITERATION_STATUS_CHANGED,
@@ -82,8 +83,10 @@ describe('workspace state capabilities', () => {
 
   it('finishes auto-iteration only when the active session still matches', async () => {
     vi.mocked(workspaceAccessor.finishAutoIterationIfSessionMatches).mockResolvedValue({
-      settled: true,
       mode: 'AUTO_ITERATION',
+      status: 'COMPLETED',
+      config: null,
+      progress: null,
     });
 
     await expect(

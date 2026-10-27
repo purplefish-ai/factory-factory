@@ -86,3 +86,27 @@ describe('compact auto-iteration summary', () => {
     }
   });
 });
+
+it('retains each known progress field when its peer is malformed', () => {
+  expect(
+    projectAutoIterationSummary({
+      mode: 'AUTO_ITERATION',
+      autoIterationStatus: null,
+      autoIterationConfig: { maxIterations: 5 },
+      autoIterationProgress: { currentIteration: 2, currentMetricSummary: 42 },
+    })
+  ).toEqual({ status: null, currentIteration: 2, maxIterations: 5, currentMetricSummary: null });
+  expect(
+    projectAutoIterationSummary({
+      mode: 'AUTO_ITERATION',
+      autoIterationStatus: null,
+      autoIterationConfig: null,
+      autoIterationProgress: { currentIteration: -1, currentMetricSummary: 'known metric' },
+    })
+  ).toEqual({
+    status: null,
+    currentIteration: null,
+    maxIterations: null,
+    currentMetricSummary: 'known metric',
+  });
+});

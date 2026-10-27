@@ -21,6 +21,7 @@ vi.mock('@/backend/services/run-script', () => ({
 }));
 vi.mock('@/backend/services/workspace', () => ({
   AUTO_ITERATION_STATUS_CHANGED: 'auto_iteration_status_changed',
+  AUTO_ITERATION_SUMMARY_CHANGED: 'auto_iteration_summary_changed',
   WORKSPACE_STATE_CHANGED: 'workspace_state_changed',
 }));
 
