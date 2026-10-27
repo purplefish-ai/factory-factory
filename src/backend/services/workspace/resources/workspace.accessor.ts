@@ -281,7 +281,22 @@ class WorkspaceAccessor {
   async create(data: CreateWorkspaceInput): Promise<WorkspaceWithRatchet> {
     const created = await prisma.workspace.create({
       data: {
-        projectId: data.projectId,
+        // Keep the active-project condition in the nested write transaction.
+        ...(data.creationSource === 'CHILD_WORKSPACE'
+          ? {
+              project: { connect: { id: data.projectId, isArchived: false } },
+              parentWorkspace: data.parentWorkspaceId
+                ? { connect: { id: data.parentWorkspaceId } }
+                : undefined,
+              periodicTask: data.periodicTaskId
+                ? { connect: { id: data.periodicTaskId } }
+                : undefined,
+            }
+          : {
+              projectId: data.projectId,
+              parentWorkspaceId: data.parentWorkspaceId,
+              periodicTaskId: data.periodicTaskId,
+            }),
         name: data.name,
         description: data.description,
         branchName: data.branchName,
@@ -311,8 +326,6 @@ class WorkspaceAccessor {
 
         creationSource: data.creationSource,
         creationMetadata: data.creationMetadata,
-        periodicTaskId: data.periodicTaskId,
-        parentWorkspaceId: data.parentWorkspaceId,
       },
       include: sideTables,
     });

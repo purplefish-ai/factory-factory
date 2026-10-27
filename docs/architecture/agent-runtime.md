@@ -16,7 +16,9 @@ its durable notification pending for a later startup to recover.
 
 Child workspace creation offers active projects only and rejects archived target
 projects at the orchestration boundary, including requests from MCP clients or
-stale browser selections. Existing children of archived projects remain visible.
+stale browser selections. Child inserts also connect only to active projects
+inside their nested-write transaction, so concurrent archival cannot bypass the
+preflight check. Existing children of archived projects remain visible.
 
 ## ACP runtime
 
