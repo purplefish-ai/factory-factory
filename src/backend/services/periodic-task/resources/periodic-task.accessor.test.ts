@@ -56,6 +56,25 @@ function localTime(date: Date, timezone: string): string {
 }
 
 describe('periodicTaskAccessor.computeNextRunAt', () => {
+  beforeEach(() => vi.stubEnv('TZ', 'UTC'));
+  afterEach(() => vi.unstubAllEnvs());
+  it.each([
+    ['DAILY', '2024-11-03T04:00:00.000Z', '00:00', '2024-11-04T05:00:00.000Z'],
+    ['DAILY', '2024-03-10T04:00:00.000Z', '23:00', '2024-03-11T03:00:00.000Z'],
+    ['WEEKLY', '2024-11-03T04:00:00.000Z', '00:00', '2024-11-10T05:00:00.000Z'],
+    ['WEEKLY', '2024-03-10T04:00:00.000Z', '23:00', '2024-03-17T03:00:00.000Z'],
+    ['WEEKLY', '2024-12-29T05:00:00.000Z', '00:00', '2025-01-05T05:00:00.000Z'],
+  ] as const)('advances %s by local calendar days from %s', (cadence, from, time, expected) => {
+    const nextRunAt = periodicTaskAccessor.computeNextRunAt(
+      cadence,
+      new Date(from),
+      time,
+      'America/New_York'
+    );
+    expect(nextRunAt.toISOString()).toBe(expected);
+    expect(nextRunAt.getTime()).toBeGreaterThan(new Date(from).getTime());
+  });
+
   it('keeps scheduled time on the spring-forward DST transition day', () => {
     const nextRunAt = periodicTaskAccessor.computeNextRunAt(
       'DAILY',
