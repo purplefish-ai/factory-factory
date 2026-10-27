@@ -258,7 +258,7 @@ export const projectRouter = router({
         throw new Error(`Invalid repository path: ${repoValidation.error}`);
       }
 
-      return projectManagementService.create(
+      const project = await projectManagementService.create(
         {
           repoPath: input.repoPath,
           startupScriptCommand,
@@ -269,6 +269,7 @@ export const projectRouter = router({
           worktreeBaseDir: configService.getWorktreeBaseDir(),
         }
       );
+      return toPublicProject(project);
     }),
 
   // Update a project
@@ -401,7 +402,7 @@ export const projectRouter = router({
         throw new Error(`Invalid repository after clone: ${repoValidation.error}`);
       }
 
-      return projectManagementService.create(
+      const project = await projectManagementService.create(
         {
           repoPath: clonePath,
           startupScriptCommand,
@@ -412,5 +413,6 @@ export const projectRouter = router({
           worktreeBaseDir: configService.getWorktreeBaseDir(),
         }
       );
+      return toPublicProject(project);
     }),
 });

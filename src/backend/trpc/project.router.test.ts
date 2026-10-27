@@ -173,6 +173,46 @@ describe('projectRouter', () => {
     expect(mockEncrypt).not.toHaveBeenCalled();
   });
 
+  it.each(['local', 'github'] as const)(
+    'projects the %s creation response without changing raw credentials',
+    async (source) => {
+      const raw = {
+        id: 'created',
+        name: 'Demo',
+        slug: 'demo',
+        repoPath: '/repo',
+        createdAt: new Date(0),
+        startupScriptTimeout: 300,
+        issueTrackerConfig: {
+          linear: {
+            apiKey: 'encrypted-key',
+            teamId: 'team-1',
+            teamName: 'Core',
+            viewerName: 'Alice',
+          },
+        },
+      };
+      mockProjectManagementService.validateRepoPath.mockResolvedValueOnce({ valid: true });
+      mockProjectManagementService.create.mockResolvedValueOnce(raw);
+      const caller = createCaller();
+      const result =
+        source === 'local'
+          ? await caller.create({ repoPath: '/repo' })
+          : await caller.createFromGithub({
+              githubUrl: 'https://github.com/purplefish-ai/factory-factory',
+            });
+      expect(result).toEqual({
+        ...raw,
+        issueTrackerConfig: {
+          linear: { teamId: 'team-1', teamName: 'Core', viewerName: 'Alice', hasApiKey: true },
+        },
+      });
+      expect(result.issueTrackerConfig?.linear).not.toHaveProperty('apiKey');
+      expect(raw.issueTrackerConfig.linear.apiKey).toBe('encrypted-key');
+      expect(mockEncrypt).not.toHaveBeenCalled();
+    }
+  );
+
   it('rejects malformed settings at the transport before the application writes', async () => {
     await expect(
       createCaller().update({ id: 'p1', startupScriptTimeout: 0 })
@@ -399,10 +439,14 @@ describe('projectRouter', () => {
 
   it('trims a repository path before validating and creating a project', async () => {
     mockProjectManagementService.validateRepoPath.mockResolvedValue({ valid: true });
-    mockProjectManagementService.create.mockResolvedValue({ id: 'created' });
+    mockProjectManagementService.create.mockResolvedValue({
+      id: 'created',
+      issueTrackerConfig: null,
+    });
 
     await expect(createCaller().create({ repoPath: '  /good/path  ' })).resolves.toEqual({
       id: 'created',
+      issueTrackerConfig: null,
     });
 
     expect(mockProjectManagementService.validateRepoPath).toHaveBeenCalledWith('/good/path');
@@ -463,14 +507,17 @@ describe('projectRouter', () => {
       isLocal: true,
     });
     mockProjectManagementService.validateRepoPath.mockResolvedValue({ valid: true });
-    mockProjectManagementService.create.mockResolvedValue({ id: 'created' });
+    mockProjectManagementService.create.mockResolvedValue({
+      id: 'created',
+      issueTrackerConfig: null,
+    });
 
     await expect(
       caller.create({
         repoPath: '/good/path',
         startupScriptPath: 'scripts/start.sh',
       })
-    ).resolves.toEqual({ id: 'created' });
+    ).resolves.toEqual({ id: 'created', issueTrackerConfig: null });
     expect(mockProjectManagementService.create).toHaveBeenCalledWith(
       {
         repoPath: '/good/path',
@@ -489,9 +536,15 @@ describe('projectRouter', () => {
       isLocal: true,
     });
     mockProjectManagementService.validateRepoPath.mockResolvedValue({ valid: true });
-    mockProjectManagementService.create.mockResolvedValue({ id: 'created' });
+    mockProjectManagementService.create.mockResolvedValue({
+      id: 'created',
+      issueTrackerConfig: null,
+    });
 
-    await expect(caller.create({ repoPath: '/good/path' })).resolves.toEqual({ id: 'created' });
+    await expect(caller.create({ repoPath: '/good/path' })).resolves.toEqual({
+      id: 'created',
+      issueTrackerConfig: null,
+    });
     expect(mockProjectManagementService.create).toHaveBeenCalled();
   });
 
@@ -508,9 +561,15 @@ describe('projectRouter', () => {
       }
     );
     mockProjectManagementService.validateRepoPath.mockResolvedValue({ valid: true });
-    mockProjectManagementService.create.mockResolvedValue({ id: 'created' });
+    mockProjectManagementService.create.mockResolvedValue({
+      id: 'created',
+      issueTrackerConfig: null,
+    });
 
-    await expect(caller.create({ repoPath: '/good/path' })).resolves.toEqual({ id: 'created' });
+    await expect(caller.create({ repoPath: '/good/path' })).resolves.toEqual({
+      id: 'created',
+      issueTrackerConfig: null,
+    });
     expect(mockProjectManagementService.create).toHaveBeenCalled();
   });
 
@@ -540,9 +599,15 @@ describe('projectRouter', () => {
       }
     );
     mockProjectManagementService.validateRepoPath.mockResolvedValue({ valid: true });
-    mockProjectManagementService.create.mockResolvedValue({ id: 'created' });
+    mockProjectManagementService.create.mockResolvedValue({
+      id: 'created',
+      issueTrackerConfig: null,
+    });
 
-    await expect(caller.create({ repoPath: '/good/path' })).resolves.toEqual({ id: 'created' });
+    await expect(caller.create({ repoPath: '/good/path' })).resolves.toEqual({
+      id: 'created',
+      issueTrackerConfig: null,
+    });
     expect(mockProjectManagementService.create).toHaveBeenCalled();
   });
 
@@ -568,7 +633,10 @@ describe('projectRouter', () => {
   it('creates projects successfully and validates update edge cases', async () => {
     const caller = createCaller();
     mockProjectManagementService.validateRepoPath.mockResolvedValue({ valid: true });
-    mockProjectManagementService.create.mockResolvedValue({ id: 'created' });
+    mockProjectManagementService.create.mockResolvedValue({
+      id: 'created',
+      issueTrackerConfig: null,
+    });
 
     await expect(
       caller.create({
@@ -576,7 +644,7 @@ describe('projectRouter', () => {
         startupScriptCommand: 'pnpm dev',
         startupScriptTimeout: 120,
       })
-    ).resolves.toEqual({ id: 'created' });
+    ).resolves.toEqual({ id: 'created', issueTrackerConfig: null });
     expect(mockProjectManagementService.create).toHaveBeenCalledWith(
       {
         repoPath: '/good/path',
@@ -721,11 +789,14 @@ describe('projectRouter', () => {
     mockGetClonePath.mockResolvedValueOnce({ path: '/repos/org/new-repo', status: 'not_exists' });
     mockCloneRepo.mockResolvedValueOnce({ success: true });
     mockProjectManagementService.validateRepoPath.mockResolvedValueOnce({ valid: true });
-    mockProjectManagementService.create.mockResolvedValueOnce({ id: 'cloned-project' });
+    mockProjectManagementService.create.mockResolvedValueOnce({
+      id: 'cloned-project',
+      issueTrackerConfig: null,
+    });
 
     await expect(
       createCaller().createFromGithub({ githubUrl: 'https://github.com/org/new-repo' })
-    ).resolves.toEqual({ id: 'cloned-project' });
+    ).resolves.toEqual({ id: 'cloned-project', issueTrackerConfig: null });
     expect(mockGetClonePath).toHaveBeenCalledWith('/repos', 'org', 'new-repo');
     expect(mockCloneRepo).toHaveBeenCalledWith(
       'https://github.com/org/new-repo',
@@ -811,13 +882,16 @@ describe('projectRouter', () => {
       status: 'valid_repo',
     });
     mockProjectManagementService.validateRepoPath.mockResolvedValueOnce({ valid: true });
-    mockProjectManagementService.create.mockResolvedValueOnce({ id: 'created-from-github' });
+    mockProjectManagementService.create.mockResolvedValueOnce({
+      id: 'created-from-github',
+      issueTrackerConfig: null,
+    });
     await expect(
       caller.createFromGithub({
         githubUrl: 'https://github.com/purplefish-ai/factory-factory',
         startupScriptCommand: 'pnpm dev',
       })
-    ).resolves.toEqual({ id: 'created-from-github' });
+    ).resolves.toEqual({ id: 'created-from-github', issueTrackerConfig: null });
 
     expect(mockGetClonePath).toHaveBeenCalledWith('/repos', 'purplefish-ai', 'factory-factory');
     expect(mockCheckExistingClone).not.toHaveBeenCalled();
