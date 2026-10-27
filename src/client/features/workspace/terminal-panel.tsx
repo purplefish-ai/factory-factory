@@ -225,13 +225,23 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
       [updateTabs]
     );
 
-    // Handle terminal list restoration (after page refresh)
+    // Restore tabs after refresh and replay server output after reconnect.
     const handleTerminalList = useCallback(
       (terminals: Array<{ id: string; createdAt: string; outputBuffer?: string }>) => {
-        // Only restore if we don't already have tabs (avoid duplicates on reconnect)
         updateTabs((prev) => {
           if (prev.length > 0) {
-            return prev;
+            const buffers = new Map(
+              terminals.map((terminal) => [terminal.id, terminal.outputBuffer])
+            );
+            return prev.map((tab) => {
+              const output = tab.terminalId ? buffers.get(tab.terminalId) : undefined;
+              return output === undefined
+                ? tab
+                : {
+                    ...tab,
+                    output: trimRollingOutput(output, TERMINAL_ROLLING_OUTPUT_OPTIONS),
+                  };
+            });
           }
 
           // Create tabs for each existing terminal, restoring buffered output

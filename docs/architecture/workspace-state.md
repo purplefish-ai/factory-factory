@@ -35,6 +35,10 @@ Unified diff parsing removes the terminating stdout newline before splitting
 lines, preserving real blank context lines without fabricating a final row or
 line number in the workspace viewer or PR panel.
 
+Workspace terminal reconnects replace each existing tab's output with its server
+rolling buffer by terminal ID. Tab identity and selection are preserved; output
+outside the server's bounded buffer cannot be recovered.
+
 ## Run script
 
 Startup output accumulates across factory setup and project startup phases. The
