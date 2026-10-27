@@ -18,6 +18,7 @@ import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
 import { toError } from '@/backend/lib/error-utils';
 import { ChatMessageSchema } from '@/backend/schemas/websocket';
+import { applySessionCommandOutcome } from './chat-command-adapter';
 import {
   attachChatTransport,
   type ConnectionInfo,
@@ -211,7 +212,13 @@ export function createChatUpgradeHandler(appContext: AppContext) {
           if (dbSessionId) {
             sessionFileLogger.log(dbSessionId, 'IN_FROM_CLIENT', message);
           }
-          await chatMessageHandlerService.handleMessage(ws, dbSessionId, workingDir ?? '', message);
+          const outcome = await chatMessageHandlerService.handleMessage(
+            ws,
+            dbSessionId,
+            workingDir ?? '',
+            message
+          );
+          applySessionCommandOutcome(ws, dbSessionId, outcome, sessionDomainService);
         } catch (error) {
           logger.error('Error handling chat message', toError(error));
           sendChatError(ws, dbSessionId, 'Invalid message format');

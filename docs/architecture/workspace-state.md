@@ -184,6 +184,47 @@ One endpoint (`workspace.listForProject`) serves both the board and the sidebar,
 and one React Query cache backs both — the snapshot WebSocket patches that
 single cache.
 
+`WorkspaceSummarySchema` defines the required board/sidebar fields independently
+of backend and client code. The HTTP list projector retains every legacy list
+field, including raw `autoIterationConfig` and `autoIterationProgress`, and adds
+a compact `autoIteration` projection. That projection is null for standard
+workspaces; for loop workspaces its status, iteration, limit, and metric may be
+null when unknown. Configuration input defaults do not turn missing summary
+values into iteration zero or a limit of 25; those remain UI presentation
+choices. Large configuration, progress, and logbook data are outside the shared
+summary contract.
+
+The list still returns `createdAt` as a Date through tRPC. Explicit summary
+adapters convert only that field to/from ISO for serialized summaries; session
+and last-activity timestamps keep their existing string representation. One
+client constructor creates complete optimistic list rows, while detail cache
+hydration retains its extra fields and existing initial sidebar status. The
+sidebar consumes a required Pick of the same summary instead of an optional
+parallel interface. Shared validation schemas do not change the flat snapshot
+wire, and existing list/detail hydration fallbacks remain in place.
+
+Snapshot entries may advertise `summaryVersion: 1` once every required summary
+input has been accepted from an authoritative read or event. The flat entry
+includes issue links, creation source, worktree path, initialization error, and
+the compact `autoIteration` object; raw configuration, progress and logbook
+remain on legacy/detail paths. A complete claim requires explicit nullable
+fields and does not inherit legacy schema defaults. Unversioned entries remain
+valid and still use consumer repair.
+
+The store tracks accepted hydration separately from values: a default-shaped
+field or a value rejected by a timestamp guard cannot make an entry complete.
+Metadata and compact loop state have independent timestamp groups, so a newer
+lifecycle transition does not block older unknown metadata from a reconciliation
+seed. Mode changes invalidate prior compact-loop hydration; accepted current
+mode/status determine its shape and status while known counters are preserved.
+
+Committed lifecycle events publish their row's metadata immediately, including
+initial provisioning, READY paths and setup errors. A NEW-only workspace before
+initialization gains metadata through reconciliation; no separate creation event
+is introduced. Reconciliation seeds metadata, validated compact loop data and
+runtime inputs before releasing its seed barrier and starting slow Git work.
+Existing incomplete-row repair remains necessary.
+
 Each snapshot WebSocket starts from a full read of current store state after its
 optional startup seed wait. Changes emitted before that baseline are already
 reflected in the read and are not replayed: an older removal must not override a

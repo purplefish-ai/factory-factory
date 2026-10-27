@@ -5,6 +5,7 @@ import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
+import { createOptimisticWorkspaceSummary } from '@/client/lib/workspace-summary';
 import { WorkspaceItemContent } from './workspace-item-content';
 
 vi.mock('@/client/features/workspace', () => ({ WorkspacePrMenu: () => null }));
@@ -20,34 +21,16 @@ vi.mock('@/client/components/workspace-status-icon', () => ({
   WorkspaceStatusIcon: () => createElement('span', null),
 }));
 
-const baseWorkspace = {
-  id: 'ws-1',
-  name: 'Workspace',
-  branchName: null,
-  prUrl: null,
-  prNumber: null,
-  prState: 'NONE',
-  prCiStatus: 'UNKNOWN',
+const baseWorkspace: ServerWorkspace = {
+  ...createOptimisticWorkspaceSummary({
+    id: 'ws-1',
+    projectId: 'project',
+    name: 'Workspace',
+    ratchetEnabled: true,
+  }),
   isWorking: false,
-  sessionSummaries: [],
-  gitStats: null,
-  lastActivityAt: null,
-  ratchetEnabled: true,
-  ratchetState: 'IDLE',
-  sidebarStatus: { activityState: 'IDLE', ciState: 'NONE' },
-  ratchetButtonAnimated: false,
-  flowPhase: 'NO_PR',
-  ciObservation: 'NOT_FETCHED',
-  statusReason: null,
-  runScriptStatus: 'IDLE',
-  pendingRequestType: null,
   kanbanColumn: null,
-  githubIssueNumber: null,
-  githubIssueUrl: null,
-  linearIssueId: null,
-  linearIssueIdentifier: null,
-  linearIssueUrl: null,
-} as unknown as ServerWorkspace;
+};
 
 function renderContent(
   workspace: ServerWorkspace,

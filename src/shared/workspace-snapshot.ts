@@ -6,24 +6,19 @@ import {
   PRState,
   RatchetState,
   RunScriptStatus,
-  SessionProvider,
-  SessionStatus,
-  WORKSPACE_SIDEBAR_ACTIVITY_STATES,
-  WORKSPACE_SIDEBAR_CI_STATES,
   WorkspaceMode,
   WorkspaceStatus,
 } from '@/shared/core';
-import {
-  SESSION_RUNTIME_ACTIVITIES,
-  SESSION_RUNTIME_PHASES,
-  SESSION_RUNTIME_PROCESS_STATES,
-} from '@/shared/session-runtime';
 import { WORKSPACE_CI_OBSERVATIONS, WORKSPACE_FLOW_PHASES } from '@/shared/workspace-flow-state';
+import { WORKSPACE_PENDING_REQUEST_TYPES } from '@/shared/workspace-status-reason';
 import {
-  WORKSPACE_PENDING_REQUEST_TYPES,
-  WORKSPACE_STATUS_REASON_CODES,
-  WORKSPACE_STATUS_REASON_TONES,
-} from '@/shared/workspace-status-reason';
+  WorkspaceSessionSummarySchema,
+  WorkspaceGitStatsSchema,
+  WorkspaceSidebarStatusSchema,
+  WorkspaceStatusReasonSchema,
+  WorkspaceSummarySchema,
+  WorkspaceAutoIterationSummarySchema,
+} from '@/shared/workspace-summary';
 import { prDeliveryModeSchema } from './schemas/pr-event.schema';
 import { WorkspacePullRequestSchema } from './workspace-pr';
 import { WorkspacePRSummarySchema } from './workspace-pr-summary';
@@ -36,51 +31,33 @@ const SnapshotFieldGroupSchema = z.enum([
   'runScript',
   'reconciliation',
   'git',
+  'metadata',
+  'autoIteration',
 ]);
 
 export type SnapshotFieldGroup = z.infer<typeof SnapshotFieldGroupSchema>;
 
-const SessionRuntimeLastExitSchema = z.object({
-  code: z.number().nullable(),
-  timestamp: z.string(),
-  unexpected: z.boolean(),
+export const WorkspaceSnapshotMetadataSchema = WorkspaceSummarySchema.pick({
+  worktreePath: true,
+  initErrorMessage: true,
+  githubIssueNumber: true,
+  githubIssueUrl: true,
+  linearIssueId: true,
+  linearIssueIdentifier: true,
+  linearIssueUrl: true,
+  creationSource: true,
 });
+export type WorkspaceSnapshotMetadata = z.infer<typeof WorkspaceSnapshotMetadataSchema>;
 
-const WorkspaceSessionSummarySchema = z.object({
-  sessionId: z.string(),
-  name: z.string().nullable(),
-  workflow: z.string().nullable(),
-  model: z.string().nullable(),
-  provider: z.nativeEnum(SessionProvider).optional(),
-  persistedStatus: z.nativeEnum(SessionStatus),
-  runtimePhase: z.enum(SESSION_RUNTIME_PHASES),
-  processState: z.enum(SESSION_RUNTIME_PROCESS_STATES),
-  activity: z.enum(SESSION_RUNTIME_ACTIVITIES),
-  updatedAt: z.string(),
-  lastExit: SessionRuntimeLastExitSchema.nullable(),
-  errorMessage: z.string().nullable().optional(),
-});
+const snapshotMetadataFields = WorkspaceSnapshotMetadataSchema.partial();
+/** Preserve only supplied metadata; unknown nullable fields remain absent. */
+export function projectWorkspaceSnapshotMetadata(source: Partial<WorkspaceSnapshotMetadata>) {
+  return snapshotMetadataFields.parse(source);
+}
 
-const WorkspaceGitStatsSchema = z.object({
-  total: z.number(),
-  additions: z.number(),
-  deletions: z.number(),
-  hasUncommitted: z.boolean(),
-});
-
-const WorkspaceSidebarStatusSchema = z.object({
-  activityState: z.enum(WORKSPACE_SIDEBAR_ACTIVITY_STATES),
-  ciState: z.enum(WORKSPACE_SIDEBAR_CI_STATES),
-});
-
-const WorkspaceStatusReasonSchema = z.object({
-  code: z.enum(WORKSPACE_STATUS_REASON_CODES),
-  label: z.string(),
-  tone: z.enum(WORKSPACE_STATUS_REASON_TONES),
-  needsUser: z.boolean(),
-});
-
-export const WorkspaceSnapshotEntrySchema = z.object({
+const SnapshotEntrySchema = z.object({
+  ...WorkspaceSnapshotMetadataSchema.partial().shape,
+  autoIteration: WorkspaceAutoIterationSummarySchema.nullable().optional(),
   workspaceId: z.string(),
   projectId: z.string(),
   version: z.number(),
@@ -140,9 +117,46 @@ export const WorkspaceSnapshotEntrySchema = z.object({
     runScript: z.number(),
     reconciliation: z.number(),
     git: z.number().optional(),
+    metadata: z.number().optional(),
+    autoIteration: z.number().optional(),
   }),
 });
 
+// The complete branch validates before legacy defaults are applied: a version
+// claim cannot turn an omitted nullable field into known authoritative data.
+const CompleteSnapshotEntrySchema = SnapshotEntrySchema.extend({
+  ...WorkspaceSnapshotMetadataSchema.shape,
+  summaryVersion: z.literal(1),
+  autoIteration: WorkspaceAutoIterationSummarySchema.nullable(),
+  prs: z.array(WorkspacePullRequestSchema),
+  prSummary: WorkspacePRSummarySchema,
+  prMonitoring: WorkspaceSummarySchema.shape.prMonitoring,
+}).superRefine((entry, context) => {
+  const result = WorkspaceSummarySchema.safeParse({ ...entry, id: entry.workspaceId });
+  if (!result.success) {
+    for (const issue of result.error.issues) {
+      context.addIssue({ code: 'custom', message: issue.message, path: issue.path });
+    }
+  }
+  if ((entry.mode === 'AUTO_ITERATION') !== (entry.autoIteration !== null)) {
+    context.addIssue({
+      code: 'custom',
+      path: ['autoIteration'],
+      message: 'Compact loop must match workspace mode',
+    });
+  } else if (entry.autoIteration && entry.autoIteration.status !== entry.autoIterationStatus) {
+    context.addIssue({
+      code: 'custom',
+      path: ['autoIteration', 'status'],
+      message: 'Compact loop status must match workspace status',
+    });
+  }
+});
+
+export const WorkspaceSnapshotEntrySchema = z.union([
+  CompleteSnapshotEntrySchema,
+  SnapshotEntrySchema.extend({ summaryVersion: z.undefined().optional() }),
+]);
 export type WorkspaceSnapshotEntry = z.infer<typeof WorkspaceSnapshotEntrySchema>;
 
 export const SnapshotFullMessageSchema = z.object({

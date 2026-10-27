@@ -99,6 +99,14 @@ GitHub owns process-wide spawn limits, in-flight read deduplication, and rate
 limit backoff. Watcher concurrency remains bounded at three workspaces, with a
 90-second timeout and shutdown cancellation.
 
+PR attachment and discovery refreshes require that same normalized observer. The
+snapshot service owns association lifecycle operations and reads the committed
+fields after observation; it has no alternate GitHub fetch or scalar snapshot
+writer. Its workspace bridge supplies only collection/context reads, attachment,
+discovery attachment, and detachment. Atomic normalized acceptance owns
+revision/epoch rejection and ledger updates, and only accepted observations
+publish PR transitions for projections and parent notifications.
+
 Observation receives five explicit function ports: PR lookup, monitoring config
 lookup, normalized fetching, atomic acceptance, and typed publication of an
 accepted observation. The producer imports no runtime application dependencies

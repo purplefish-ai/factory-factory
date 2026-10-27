@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ChatMessageHandlerConfigService } from '@/backend/services/session/service/chat/chat-message-handlers/types';
+import type { SessionModelCommandService } from '@/backend/services/session/service/chat/session-command.types';
 
 const mocks = vi.hoisted(() => ({
   setSessionModel: vi.fn(),
@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
 import { createSetModelHandler } from './set-model.handler';
 
 describe('createSetModelHandler', () => {
-  const deps: { sessionConfigService: ChatMessageHandlerConfigService } = {
+  const deps: { sessionConfigService: SessionModelCommandService } = {
     sessionConfigService: {
       setSessionModel: mocks.setSessionModel,
       setSessionReasoningEffort: mocks.setSessionReasoningEffort,
@@ -37,84 +37,80 @@ describe('createSetModelHandler', () => {
 
   it('applies model and reasoning effort when provided', async () => {
     const handler = createSetModelHandler(deps);
-    const ws = {
-      send: vi.fn(),
-    };
 
-    await handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp/project',
-      message: {
+    const outcome = await handler(
+      {
+        sessionId: 'session-1',
+        workingDir: '/tmp/project',
+      },
+      {
         type: 'set_model',
         model: 'gpt-5.3-codex',
         reasoningEffort: 'high',
-      },
-    });
+      }
+    );
 
     expect(mocks.setSessionModel).toHaveBeenCalledWith('session-1', 'gpt-5.3-codex');
     expect(mocks.setSessionReasoningEffort).toHaveBeenCalledWith('session-1', 'high');
     expect(mocks.getChatBarCapabilities).toHaveBeenCalledWith('session-1');
-    expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({
-        type: 'chat_capabilities',
-        capabilities: {
-          provider: 'CODEX',
-          model: { enabled: true, options: [], selected: 'gpt-5' },
-          reasoning: { enabled: false, options: [] },
-          thinking: { enabled: false },
-          planMode: { enabled: true },
-          attachments: { enabled: false, kinds: [] },
-          slashCommands: { enabled: false },
-          usageStats: { enabled: false, contextWindow: false },
-          rewind: { enabled: false },
+    expect(outcome).toEqual({
+      replies: [
+        {
+          type: 'chat_capabilities',
+          capabilities: {
+            provider: 'CODEX',
+            model: { enabled: true, options: [], selected: 'gpt-5' },
+            reasoning: { enabled: false, options: [] },
+            thinking: { enabled: false },
+            planMode: { enabled: true },
+            attachments: { enabled: false, kinds: [] },
+            slashCommands: { enabled: false },
+            usageStats: { enabled: false, contextWindow: false },
+            rewind: { enabled: false },
+          },
         },
-      })
-    );
+      ],
+    });
   });
 
   it('does not update reasoning effort when field is omitted', async () => {
     const handler = createSetModelHandler(deps);
-    const ws = {
-      send: vi.fn(),
-    };
 
-    await handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp/project',
-      message: {
+    const outcome = await handler(
+      {
+        sessionId: 'session-1',
+        workingDir: '/tmp/project',
+      },
+      {
         type: 'set_model',
         model: 'gpt-5.3-codex',
-      },
-    });
+      }
+    );
 
     expect(mocks.setSessionModel).toHaveBeenCalledWith('session-1', 'gpt-5.3-codex');
     expect(mocks.setSessionReasoningEffort).not.toHaveBeenCalled();
     expect(mocks.getChatBarCapabilities).toHaveBeenCalledWith('session-1');
-    expect(ws.send).toHaveBeenCalledTimes(1);
+    expect(outcome.replies).toHaveLength(1);
   });
 
-  it('sends websocket error when model update fails', async () => {
+  it('returns the model failure for requester error formatting', async () => {
     const handler = createSetModelHandler(deps);
-    const ws = {
-      send: vi.fn(),
-    };
     mocks.setSessionModel.mockRejectedValue(new Error('boom'));
 
-    await handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp/project',
-      message: {
+    const outcome = await handler(
+      {
+        sessionId: 'session-1',
+        workingDir: '/tmp/project',
+      },
+      {
         type: 'set_model',
         model: 'gpt-5.3-codex',
         reasoningEffort: 'high',
-      },
-    });
-
-    expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({ type: 'error', message: 'Failed to set model: boom' })
+      }
     );
+
+    expect(outcome.replies).toEqual([
+      { type: 'error', error: { kind: 'set_model_failed', cause: new Error('boom') } },
+    ]);
   });
 });

@@ -21,6 +21,12 @@ export type { SessionInitPolicyBridge, SessionWorkspaceBridge } from './bridges'
 // Chat services
 export type { EventForwarderContext } from './chat/chat-event-forwarder.service';
 export { chatEventForwarderService } from './chat/chat-event-forwarder.service';
+export type {
+  SessionCommandContext,
+  SessionCommandOutcome,
+  SessionCommandError,
+  SessionCommandReply,
+} from './chat/session-command.types';
 export { ChatMessageHandlerService } from './chat/chat-message-handlers.service';
 export { SessionDispatchService } from './dispatch/session-dispatch.service';
 export type { DispatchOptions } from './dispatch/session-dispatch.types';
