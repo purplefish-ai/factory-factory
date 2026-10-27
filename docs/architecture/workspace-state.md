@@ -203,6 +203,28 @@ sidebar consumes a required Pick of the same summary instead of an optional
 parallel interface. Shared validation schemas do not change the flat snapshot
 wire, and existing list/detail hydration fallbacks remain in place.
 
+Snapshot entries may advertise `summaryVersion: 1` once every required summary
+input has been accepted from an authoritative read or event. The flat entry
+includes issue links, creation source, worktree path, initialization error, and
+the compact `autoIteration` object; raw configuration, progress and logbook
+remain on legacy/detail paths. A complete claim requires explicit nullable
+fields and does not inherit legacy schema defaults. Unversioned entries remain
+valid and still use consumer repair.
+
+The store tracks accepted hydration separately from values: a default-shaped
+field or a value rejected by a timestamp guard cannot make an entry complete.
+Metadata and compact loop state have independent timestamp groups, so a newer
+lifecycle transition does not block older unknown metadata from a reconciliation
+seed. Mode changes invalidate prior compact-loop hydration; accepted current
+mode/status determine its shape and status while known counters are preserved.
+
+Committed lifecycle events publish their row's metadata immediately, including
+initial provisioning, READY paths and setup errors. A NEW-only workspace before
+initialization gains metadata through reconciliation; no separate creation event
+is introduced. Reconciliation seeds metadata, validated compact loop data and
+runtime inputs before releasing its seed barrier and starting slow Git work.
+Existing incomplete-row repair remains necessary.
+
 Each snapshot WebSocket starts from a full read of current store state after its
 optional startup seed wait. Changes emitted before that baseline are already
 reflected in the read and are not replayed: an older removal must not override a
