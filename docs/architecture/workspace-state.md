@@ -167,6 +167,15 @@ One endpoint (`workspace.listForProject`) serves both the board and the sidebar,
 and one React Query cache backs both — the snapshot WebSocket patches that
 single cache.
 
+When a snapshot removes a workspace from that live list, including omission from
+a full baseline, the client resets its exact existing detail query. Reset
+synchronously clears the old data and cancels its request; active detail views
+refetch persisted state, which may be ARCHIVING, ARCHIVED, or not found.
+Inactive queries stay empty until opened, and absent queries are not created.
+Detail queries have no configured initialData. Repeated removals do not reset a
+detail again until a snapshot reintroduces the workspace, so an intentionally
+opened archived detail remains usable.
+
 That endpoint never spawns `git` on its response path: `gitStats` is served from
 `workspaceGitStateService`'s cache via `getCachedWorkspaceGitStats`, and a miss
 returns null while a background warm recomputes it. Awaiting those recomputes is

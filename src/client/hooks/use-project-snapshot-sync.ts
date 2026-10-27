@@ -1,3 +1,5 @@
+import { type QueryClient, useQueryClient } from '@tanstack/react-query';
+import { getQueryKey } from '@trpc/react-query';
 import type { inferRouterOutputs } from '@trpc/server';
 /**
  * React hook that syncs /snapshots WebSocket messages into the
@@ -203,12 +205,36 @@ function healReadyWorktreePaths(
   );
 }
 
+/** Reset existing detail observers once per departure from the live list. */
+function resetRemovedWorkspaceDetail(
+  queryClient: QueryClient,
+  workspaceId: string,
+  removedWorkspaceIds: Set<string>
+): void {
+  if (removedWorkspaceIds.has(workspaceId)) {
+    return;
+  }
+  removedWorkspaceIds.add(workspaceId);
+  // Unlike setData(undefined), reset clears old data and synchronously cancels
+  // its request before active observers refetch persisted (possibly archived)
+  // detail. No initialData is configured for workspace.get.
+  runInBackground(
+    queryClient.resetQueries({
+      queryKey: getQueryKey(trpc.workspace.get, { id: workspaceId }, 'query'),
+      exact: true,
+    }),
+    'Could not refresh data'
+  );
+}
+
 function applySnapshotFullMessage(
   utils: TrpcUtils,
+  queryClient: QueryClient,
   message: SnapshotFullMessage,
   pendingRequests: Map<string, PendingRequestType>,
   alreadyInvalidated: Set<string>,
-  repairedWorktreePaths: Set<string>
+  repairedWorktreePaths: Set<string>,
+  removedWorkspaceIds: Set<string>
 ): void {
   const entries = message.entries;
 
@@ -219,6 +245,16 @@ function applySnapshotFullMessage(
       utils.workspace.listForProject.getData({ projectId: message.projectId })?.workspaces ?? []
     ).map((w) => w.id)
   );
+
+  const liveWorkspaceIds = new Set(entries.map((entry) => entry.workspaceId));
+  for (const workspaceId of knownWorkspaceIds) {
+    if (!liveWorkspaceIds.has(workspaceId)) {
+      resetRemovedWorkspaceDetail(queryClient, workspaceId, removedWorkspaceIds);
+    }
+  }
+  for (const workspaceId of liveWorkspaceIds) {
+    removedWorkspaceIds.delete(workspaceId);
+  }
 
   utils.workspace.listForProject.setData({ projectId: message.projectId }, (prev) => {
     const existingById = new Map(prev?.workspaces.map((workspace) => [workspace.id, workspace]));
@@ -259,9 +295,11 @@ function applySnapshotChangedMessage(
   message: SnapshotChangedMessage,
   pendingRequests: Map<string, PendingRequestType>,
   alreadyInvalidated: Set<string>,
-  repairedWorktreePaths: Set<string>
+  repairedWorktreePaths: Set<string>,
+  removedWorkspaceIds: Set<string>
 ): void {
   const entry = message.entry;
+  removedWorkspaceIds.delete(entry.workspaceId);
 
   maybeTriggerPendingRequestAttention(pendingRequests, entry);
 
@@ -294,9 +332,11 @@ function applySnapshotChangedMessage(
 
 function applySnapshotRemovedMessage(
   utils: TrpcUtils,
+  queryClient: QueryClient,
   projectId: string,
   message: SnapshotRemovedMessage,
-  pendingRequests: Map<string, PendingRequestType>
+  pendingRequests: Map<string, PendingRequestType>,
+  removedWorkspaceIds: Set<string>
 ): void {
   pendingRequests.delete(message.workspaceId);
 
@@ -310,7 +350,7 @@ function applySnapshotRemovedMessage(
     };
   });
 
-  utils.workspace.get.setData({ id: message.workspaceId }, undefined);
+  resetRemovedWorkspaceDetail(queryClient, message.workspaceId, removedWorkspaceIds);
 }
 
 // =============================================================================
@@ -327,6 +367,7 @@ function applySnapshotRemovedMessage(
  */
 export function useProjectSnapshotSync(projectId: string | undefined): void {
   const utils = trpc.useUtils();
+  const queryClient = useQueryClient();
   const previousPendingRequestsRef = useRef<Map<string, PendingRequestType>>(new Map());
   // A project's first snapshot_full arrives alongside its initial query
   // fetches, so it needs no refetch. Every later baseline for that project
@@ -340,6 +381,7 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
   // same newly-introduced workspace doesn't trigger a refetch storm.
   const invalidatedForUnknownWorkspaceRef = useRef<Set<string>>(new Set());
   const repairedWorktreePathsRef = useRef<Set<string>>(new Set());
+  const removedWorkspaceIdsRef = useRef<Set<string>>(new Set());
 
   const url = projectId ? buildWebSocketUrl('/snapshots', { projectId }) : null;
 
@@ -349,10 +391,12 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
         case 'snapshot_full': {
           applySnapshotFullMessage(
             utils,
+            queryClient,
             message,
             previousPendingRequestsRef.current,
             invalidatedForUnknownWorkspaceRef.current,
-            repairedWorktreePathsRef.current
+            repairedWorktreePathsRef.current,
+            removedWorkspaceIdsRef.current
           );
           if (baselineProjectsRef.current.has(message.projectId)) {
             healWorkspaceCachesAfterReconnect(utils, message.projectId);
@@ -372,7 +416,8 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
             message,
             previousPendingRequestsRef.current,
             invalidatedForUnknownWorkspaceRef.current,
-            repairedWorktreePathsRef.current
+            repairedWorktreePathsRef.current,
+            removedWorkspaceIdsRef.current
           );
           break;
         }
@@ -383,15 +428,17 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
           }
           applySnapshotRemovedMessage(
             utils,
+            queryClient,
             projectId,
             message,
-            previousPendingRequestsRef.current
+            previousPendingRequestsRef.current,
+            removedWorkspaceIdsRef.current
           );
           break;
         }
       }
     },
-    [projectId, utils]
+    [projectId, queryClient, utils]
   );
 
   useWebSocketChannel({

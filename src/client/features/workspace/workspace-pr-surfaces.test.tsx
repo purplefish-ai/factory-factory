@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router';
@@ -178,13 +179,16 @@ describe('workspace PR actions across surfaces', () => {
       useProjectSnapshotSync('proj-1');
       return <WorkspaceItemContent workspace={cache.workspaces[0]!} />;
     }
+    const queryClient = new QueryClient();
     const rerender = () =>
       root.render(
-        <MemoryRouter>
-          <TooltipProvider>
-            <LiveSidebar />
-          </TooltipProvider>
-        </MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter>
+            <TooltipProvider>
+              <LiveSidebar />
+            </TooltipProvider>
+          </MemoryRouter>
+        </QueryClientProvider>
       );
     let completeRefetch!: () => void;
     snapshot.utils = {
