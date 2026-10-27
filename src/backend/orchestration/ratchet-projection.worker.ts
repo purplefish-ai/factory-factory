@@ -5,8 +5,11 @@ import { WorkspaceStatus } from '@/shared/core';
 const PROJECTION_RETRY_BASE_MS = 1000;
 const MAX_PROJECTION_READ_ATTEMPTS = 3;
 
+export type ProjectionInvalidationReason = 'pr' | 'monitoring';
+
 interface ProjectionRefresh {
   revision: number;
+  reasons: Set<ProjectionInvalidationReason>;
 }
 
 function getNewerRevision(refresh: ProjectionRefresh, target: number): number | null {
@@ -19,19 +22,18 @@ interface RetryWaiter {
 }
 
 interface RatchetProjectionDependencies {
-  read(workspaceId: string): Promise<
-    | (NonNullable<Awaited<ReturnType<typeof workspaceDataService.findRatchetProjection>>> & {
-        snapshotFields?: SnapshotUpdateInput;
-      })
-    | null
-  >;
-  publish(workspaceId: string, fields: SnapshotUpdateInput): void;
+  read(workspaceId: string): ReturnType<typeof workspaceDataService.findRatchetProjection>;
+  publish(
+    workspaceId: string,
+    fields: SnapshotUpdateInput,
+    reasons: ReadonlySet<ProjectionInvalidationReason>
+  ): void;
   logger: Pick<ReturnType<typeof createLogger>, 'warn'>;
 }
 
 /**
- * One collector lifetime's authoritative Ratchet reads. Requests arriving during
- * a read advance its revision so superseded observations are discarded and the
+ * One collector lifetime's authoritative PR collection and monitoring reads.
+ * Requests arriving during a read advance its revision so superseded observations are discarded and the
  * latest observation is published.
  * Create a new worker on restart; a stopped worker never publishes again.
  */
@@ -43,17 +45,18 @@ export class RatchetProjectionWorker {
 
   constructor(private readonly dependencies: RatchetProjectionDependencies) {}
 
-  request(workspaceId: string): void {
+  request(workspaceId: string, reason: ProjectionInvalidationReason = 'monitoring'): void {
     if (!this.isActive(workspaceId)) {
       return;
     }
     const existing = this.refreshes.get(workspaceId);
     if (existing) {
       existing.revision += 1;
+      existing.reasons.add(reason);
       return;
     }
 
-    const refresh = { revision: 1 };
+    const refresh = { revision: 1, reasons: new Set([reason]) };
     this.refreshes.set(workspaceId, refresh);
     void this.refresh(workspaceId, refresh);
   }
@@ -98,7 +101,7 @@ export class RatchetProjectionWorker {
       ) {
         return true;
       }
-      this.dependencies.publish(workspaceId, {
+      const fields: SnapshotUpdateInput = {
         prs: workspace.prs,
         prSummary: workspace.prSummary,
         prUrl: workspace.prUrl,
@@ -110,8 +113,19 @@ export class RatchetProjectionWorker {
         ratchetState: workspace.ratchetState,
         prMonitoring: workspace.prMonitoring,
         hasMergeConflict: workspace.prHasMergeConflict,
-        ...workspace.snapshotFields,
-      });
+      };
+      // Clear only accepted intent, before callbacks can synchronously invalidate
+      // the projection again. Superseded reads and failed reads retain it.
+      const reasons = new Set(refresh.reasons);
+      refresh.reasons.clear();
+      try {
+        this.dependencies.publish(workspaceId, fields, reasons);
+      } catch (error) {
+        for (const reason of reasons) {
+          refresh.reasons.add(reason);
+        }
+        throw error;
+      }
       return true;
     } catch (error) {
       this.dependencies.logger.warn('Failed to refresh authoritative Ratchet snapshot projection', {
