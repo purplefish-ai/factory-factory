@@ -4,6 +4,7 @@ import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { useKanban } from '@/client/features/kanban/kanban-context';
+import { trpc } from '@/client/lib/trpc';
 import { WorkspacesBoardView } from './workspaces-board-view';
 
 type Workspace = { id: string; kanbanColumn: 'WAITING' | 'WORKING'; createdAt: string };
@@ -91,6 +92,16 @@ vi.mock('@/client/features/kanban/quick-chat-sheet', () => ({
   QuickChatSheet: ({ workspaceId }: { workspaceId: string | null }) =>
     workspaceId ? <div>Quick Chat: {workspaceId}</div> : null,
 }));
+vi.mock('@/client/hooks/use-project-workspace-query', () => {
+  return {
+    useProjectWorkspaceQuery: (projectId: string | undefined) =>
+      trpc.workspace.listForProject.useQuery(
+        { projectId: projectId ?? '' },
+        { enabled: Boolean(projectId), staleTime: Infinity, refetchOnWindowFocus: false }
+      ),
+  };
+});
+
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
     useUtils: () => ({

@@ -5,6 +5,7 @@ import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GitHubIssueRaw } from '@/client/lib/issue-normalization';
+import { trpc } from '@/client/lib/trpc';
 import { KanbanProvider, useKanban } from './kanban-context';
 
 interface ArchiveError {
@@ -86,6 +87,16 @@ function rejectingMutation(
     }),
   };
 }
+
+vi.mock('@/client/hooks/use-project-workspace-query', () => {
+  return {
+    useProjectWorkspaceQuery: (projectId: string | undefined) =>
+      trpc.workspace.listForProject.useQuery(
+        { projectId: projectId ?? '' },
+        { enabled: Boolean(projectId), staleTime: Infinity, refetchOnWindowFocus: false }
+      ),
+  };
+});
 
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {

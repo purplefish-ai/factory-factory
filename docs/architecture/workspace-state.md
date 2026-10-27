@@ -209,6 +209,24 @@ One endpoint (`workspace.listForProject`) serves both the board and the sidebar,
 and one React Query cache backs both — the snapshot WebSocket patches that
 single cache.
 
+Navigation, the board, and the workspace switcher use
+`useProjectWorkspaceQuery`, which retains the tRPC query key and installs the
+project-list reconciler at React Query's synchronous cache commit. Before the
+current connection's full baseline, HTTP owns membership and live fields.
+Afterward, HTTP can hydrate metadata omitted by snapshots but cannot restore
+removed rows or overwrite newer live fields or a supplied stream review count.
+The reconciler consumes each HTTP response's identity tag once, so explicit
+optimistic mutation writes retain their existing behavior.
+
+Reconciliation ownership is scoped to the QueryClient, project, and connection
+lifetime. Disconnecting or leaving a project retires that token, cancels its
+pending HTTP request, and invalidates the project list once for HTTP fallback.
+The next full establishes fresh stream authority without comparing versions
+across server lifetimes. The transport rejects events from replaced physical
+sockets; the snapshot hook also rejects callbacks from retired project
+activations. Existing unknown-workspace, worktree-path, and reconnect metadata
+repairs continue through the same query options.
+
 `WorkspaceSummarySchema` defines the required board/sidebar fields independently
 of backend and client code. The HTTP list projector retains every legacy list
 field, including raw `autoIterationConfig` and `autoIterationProgress`, and adds

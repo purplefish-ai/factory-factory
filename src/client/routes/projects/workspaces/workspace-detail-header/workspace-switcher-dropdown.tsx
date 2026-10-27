@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
 import { WorkspaceItemContent } from '@/client/components/workspace-item-content';
-import { trpc } from '@/client/lib/trpc';
+import { useProjectWorkspaceQuery } from '@/client/hooks/use-project-workspace-query';
 import {
   Select,
   SelectContent,
@@ -31,14 +31,7 @@ export function WorkspaceSwitcherDropdown({
     'h-auto items-start py-1.5 data-[state=checked]:bg-accent data-[state=checked]:text-accent-foreground [&>span:first-child]:hidden [&>span:last-child]:block [&>span:last-child]:w-full';
 
   const navigate = useNavigate();
-  const { data: projectState } = trpc.workspace.listForProject.useQuery(
-    { projectId },
-    {
-      enabled: Boolean(projectId),
-      staleTime: Number.POSITIVE_INFINITY,
-      refetchOnWindowFocus: false,
-    }
-  );
+  const { data: projectState } = useProjectWorkspaceQuery(projectId);
 
   const grouped = useMemo(
     () => groupWorkspaceSwitcherItems((projectState?.workspaces ?? []) as ServerWorkspace[]),

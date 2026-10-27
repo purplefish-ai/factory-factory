@@ -61,6 +61,27 @@ function seedDetail(listed: ProjectWorkspace): WorkspaceDetail {
 }
 
 describe('workspace snapshot cache projections', () => {
+  it('reuses an unchanged creation date but replaces changed or invalid date values', () => {
+    const snapshot = makeEntry();
+    const before = projectSnapshotToWorkspace(snapshot);
+    expect(projectSnapshotToWorkspace(snapshot, before).createdAt).toBe(before.createdAt);
+    expect(mergeProjectSnapshotIntoWorkspaceDetail(snapshot, seedDetail(before))?.createdAt).toBe(
+      before.createdAt
+    );
+    const changed = projectSnapshotToWorkspace(
+      { ...snapshot, createdAt: '2026-02-01T00:00:00Z' },
+      before
+    );
+    expect(changed.createdAt).toEqual(new Date('2026-02-01T00:00:00Z'));
+    expect(changed.createdAt).not.toBe(before.createdAt);
+    const invalid = projectSnapshotToWorkspace({ ...snapshot, createdAt: 'invalid' }, before);
+    expect(Number.isNaN(invalid.createdAt.getTime())).toBe(true);
+    const stillInvalid = projectSnapshotToWorkspace({ ...snapshot, createdAt: 'invalid' }, invalid);
+    expect(Number.isNaN(stillInvalid.createdAt.getTime())).toBe(true);
+    expect(stillInvalid.createdAt).not.toBe(invalid.createdAt);
+    expect(projectSnapshotToWorkspace(snapshot, invalid).createdAt).toEqual(before.createdAt);
+  });
+
   it.each(['RUNNING', 'PAUSED', 'COMPLETED', null] as const)(
     'constructs snapshot-first compact auto-iteration state for %s without fabricated counters',
     (status) => {

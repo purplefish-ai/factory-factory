@@ -16,6 +16,10 @@ vi.mock('react', async (importOriginal) => ({
   ...(await importOriginal<typeof import('react')>()),
   useCallback: (fn: (...args: never[]) => unknown) => fn,
   useRef: <T>(value: T) => ({ current: value }),
+  useMemo: <T>(factory: () => T) => factory(),
+  useEffect: (effect: () => unknown) => {
+    effect();
+  },
 }));
 
 let channel: UseWebSocketTransportOptions;

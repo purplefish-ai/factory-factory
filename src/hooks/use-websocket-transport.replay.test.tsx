@@ -75,15 +75,23 @@ function getLastSocket(): MockWebSocket {
 interface TransportHarnessProps {
   url: string | null;
   onConnected?: () => void;
+  onDisconnected?: () => void;
   onMessage?: (message: unknown) => void;
   transportRef: { current: UseWebSocketTransportReturn | null };
 }
 
-function TransportHarness({ url, onConnected, onMessage, transportRef }: TransportHarnessProps) {
+function TransportHarness({
+  url,
+  onConnected,
+  onDisconnected,
+  onMessage,
+  transportRef,
+}: TransportHarnessProps) {
   const transport = useWebSocketTransport({
     url,
     onMessage,
     onConnected,
+    onDisconnected,
     queuePolicy: 'replay',
   });
   transportRef.current = transport;
@@ -94,6 +102,7 @@ function createHarness(
   options: {
     initialUrl?: string | null;
     onConnected?: () => void;
+    onDisconnected?: () => void;
     onMessage?: (message: unknown) => void;
   } = {}
 ) {
@@ -106,6 +115,7 @@ function createHarness(
       createElement(TransportHarness, {
         url,
         onConnected: options.onConnected,
+        onDisconnected: options.onDisconnected,
         onMessage: options.onMessage,
         transportRef,
       })
@@ -543,5 +553,38 @@ describe('useWebSocketTransport replay queue', () => {
     expect(connectedCount).toBe(1);
 
     harness.cleanup();
+  });
+
+  it('fences stale messages and closes at the socket boundary after same-URL reconnect', async () => {
+    const onMessage = vi.fn();
+    const onDisconnected = vi.fn();
+    const harness = createHarness({ onMessage, onDisconnected });
+    const retired = getLastSocket();
+    flushSync(() => retired.simulateOpen());
+    let deliverClose: () => void = () => {
+      throw new Error('Retired socket was not closed');
+    };
+    const close = vi.spyOn(retired, 'close').mockImplementationOnce(() => {
+      retired.readyState = WS_CLOSING;
+      const onClose = retired.onclose;
+      deliverClose = () => {
+        retired.readyState = WS_CLOSED;
+        onClose?.({ type: 'close' });
+      };
+    });
+    flushSync(() => harness.transportRef.current?.reconnect());
+    expect(close).toHaveBeenCalledTimes(1);
+    const current = getLastSocket();
+    expect(current).not.toBe(retired);
+    flushSync(() => current.simulateOpen());
+    const disconnects = onDisconnected.mock.calls.length;
+    retired.simulateMessage({ name: 'retired baseline' });
+    flushSync(() => deliverClose());
+    current.simulateMessage({ name: 'current baseline' });
+    expect(onMessage).toHaveBeenCalledExactlyOnceWith({ name: 'current baseline' });
+    expect(onDisconnected).toHaveBeenCalledTimes(disconnects);
+    expect(harness.transportRef.current?.connected).toBe(true);
+    harness.cleanup();
+    await flushEffects();
   });
 });

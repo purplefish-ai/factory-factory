@@ -19,13 +19,15 @@ import type { inferRouterOutputs } from '@trpc/server';
  * Follows the use-log-stream.ts pattern: receive-only WebSocket hook with
  * drop queue policy (no outbound messages, reconnect discards stale data).
  */
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { runInBackground } from '@/client/lib/background-task';
-import {
-  mergeProjectSnapshotIntoWorkspaceDetail,
-  projectSnapshotToWorkspace,
-} from '@/client/lib/snapshot-to-workspace';
+import { mergeProjectSnapshotIntoWorkspaceDetail } from '@/client/lib/snapshot-to-workspace';
 import { type AppRouter, trpc } from '@/client/lib/trpc';
+import {
+  getProjectWorkspaceCacheReconciler,
+  type ProjectWorkspaceCacheReconciler,
+  type WorkspaceConnection,
+} from '@/client/lib/workspace-cache-reconciler';
 import { useWebSocketChannel } from '@/hooks/use-websocket-channel';
 import { buildWebSocketUrl } from '@/lib/websocket-config';
 import {
@@ -38,8 +40,6 @@ import {
 } from '@/shared/workspace-snapshot';
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
-type ProjectWorkspaceCache = RouterOutputs['workspace']['listForProject'];
-type ProjectWorkspace = ProjectWorkspaceCache['workspaces'][number];
 type PendingRequestType = WorkspaceSnapshotEntry['pendingRequestType'];
 type TrpcUtils = ReturnType<typeof trpc.useUtils>;
 
@@ -94,23 +94,6 @@ function maybeTriggerPendingRequestAttention(
     triggerWorkspaceAttention(entry.workspaceId);
   }
   pendingRequests.set(entry.workspaceId, nextPending);
-}
-
-/** Upsert one entry into the project list, preserving its position. */
-function upsertProjectWorkspace(
-  workspaces: ProjectWorkspace[],
-  entry: WorkspaceSnapshotEntry
-): ProjectWorkspace[] {
-  const existingIndex = workspaces.findIndex((workspace) => workspace.id === entry.workspaceId);
-  const mapped = projectSnapshotToWorkspace(entry, workspaces[existingIndex]);
-
-  if (existingIndex < 0) {
-    return [...workspaces, mapped];
-  }
-
-  const next = [...workspaces];
-  next[existingIndex] = mapped;
-  return next;
 }
 
 /**
@@ -262,7 +245,9 @@ function applySnapshotFullMessage(
   pendingRequests: Map<string, PendingRequestType>,
   alreadyInvalidated: Set<string>,
   repairedWorktreePaths: Set<string>,
-  removedWorkspaceIds: Set<string>
+  removedWorkspaceIds: Set<string>,
+  reconciler: ProjectWorkspaceCacheReconciler,
+  connection: WorkspaceConnection
 ): void {
   const entries = message.entries;
 
@@ -293,15 +278,7 @@ function applySnapshotFullMessage(
       resetRemovedWorkspaceDetail(queryClient, workspaceId, removedWorkspaceIds);
     }
   }
-  utils.workspace.listForProject.setData({ projectId: message.projectId }, (prev) => {
-    const existingById = new Map(prev?.workspaces.map((workspace) => [workspace.id, workspace]));
-    return {
-      workspaces: entries.map((entry) =>
-        projectSnapshotToWorkspace(entry, existingById.get(entry.workspaceId))
-      ),
-      reviewCount: message.reviewCount ?? prev?.reviewCount ?? 0,
-    };
-  });
+  reconciler.apply(connection, message);
 
   invalidateForUnknownWorkspaces(
     utils,
@@ -332,7 +309,9 @@ function applySnapshotChangedMessage(
   pendingRequests: Map<string, PendingRequestType>,
   alreadyInvalidated: Set<string>,
   repairedWorktreePaths: Set<string>,
-  removedWorkspaceIds: Set<string>
+  removedWorkspaceIds: Set<string>,
+  reconciler: ProjectWorkspaceCacheReconciler,
+  connection: WorkspaceConnection
 ): void {
   const entry = message.entry;
 
@@ -342,19 +321,7 @@ function applySnapshotChangedMessage(
     (utils.workspace.listForProject.getData({ projectId })?.workspaces ?? []).map((w) => w.id)
   );
 
-  utils.workspace.listForProject.setData({ projectId }, (prev) => {
-    if (!prev) {
-      return {
-        workspaces: [projectSnapshotToWorkspace(entry)],
-        reviewCount: message.reviewCount ?? 0,
-      };
-    }
-
-    return {
-      workspaces: upsertProjectWorkspace(prev.workspaces, entry),
-      reviewCount: message.reviewCount ?? prev.reviewCount,
-    };
-  });
+  reconciler.apply(connection, message);
 
   invalidateForUnknownWorkspaces(utils, projectId, [entry], knownWorkspaceIds, alreadyInvalidated);
 
@@ -364,24 +331,16 @@ function applySnapshotChangedMessage(
 }
 
 function applySnapshotRemovedMessage(
-  utils: TrpcUtils,
   queryClient: QueryClient,
-  projectId: string,
   message: SnapshotRemovedMessage,
   pendingRequests: Map<string, PendingRequestType>,
-  removedWorkspaceIds: Set<string>
+  removedWorkspaceIds: Set<string>,
+  reconciler: ProjectWorkspaceCacheReconciler,
+  connection: WorkspaceConnection
 ): void {
   pendingRequests.delete(message.workspaceId);
 
-  utils.workspace.listForProject.setData({ projectId }, (prev) => {
-    if (!prev) {
-      return prev;
-    }
-    return {
-      workspaces: prev.workspaces.filter((workspace) => workspace.id !== message.workspaceId),
-      reviewCount: message.reviewCount ?? prev.reviewCount,
-    };
-  });
+  reconciler.apply(connection, message);
 
   resetRemovedWorkspaceDetail(queryClient, message.workspaceId, removedWorkspaceIds);
 }
@@ -416,10 +375,79 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
   const repairedWorktreePathsRef = useRef<Set<string>>(new Set());
   const removedWorkspaceIdsRef = useRef<Set<string>>(new Set());
 
+  const lifecycle = useMemo(
+    () => ({
+      owner: projectId ? getProjectWorkspaceCacheReconciler(queryClient, projectId) : undefined,
+      connection: undefined as WorkspaceConnection | undefined,
+      opened: false,
+      disposed: false,
+    }),
+    [queryClient, projectId]
+  );
+  const fallbackToHttp = useCallback(() => {
+    if (!projectId) {
+      return;
+    }
+    const filter = {
+      queryKey: getQueryKey(trpc.workspace.listForProject, { projectId }, 'query'),
+      exact: true,
+    };
+    // Cancel synchronously before invalidating, including an uncached bootstrap
+    // whose old connection result must not win over the fallback request.
+    runInBackground(queryClient.cancelQueries(filter), 'Could not refresh data');
+    runInBackground(
+      utils.workspace.listForProject.invalidate({ projectId }),
+      'Could not refresh data'
+    );
+  }, [projectId, queryClient, utils]);
+  useEffect(() => {
+    lifecycle.disposed = false;
+    lifecycle.connection = lifecycle.owner?.beginConnection();
+    return () => {
+      lifecycle.disposed = true;
+      if (lifecycle.connection && lifecycle.owner?.retireConnection(lifecycle.connection)) {
+        fallbackToHttp();
+      }
+    };
+  }, [lifecycle, fallbackToHttp]);
+  const onConnected = useCallback(() => {
+    if (lifecycle.disposed || !lifecycle.owner) {
+      return;
+    }
+    const previous = lifecycle.connection;
+    if (previous && lifecycle.owner.isCurrent(previous) && !lifecycle.opened) {
+      lifecycle.opened = true;
+      return;
+    }
+    if (previous && lifecycle.owner.retireConnection(previous)) {
+      fallbackToHttp();
+    }
+    lifecycle.connection = lifecycle.owner.beginConnection();
+    lifecycle.opened = true;
+  }, [lifecycle, fallbackToHttp]);
+  const onDisconnected = useCallback(() => {
+    if (
+      !lifecycle.disposed &&
+      lifecycle.connection &&
+      lifecycle.owner?.retireConnection(lifecycle.connection)
+    ) {
+      fallbackToHttp();
+    }
+  }, [lifecycle, fallbackToHttp]);
   const url = projectId ? buildWebSocketUrl('/snapshots', { projectId }) : null;
 
   const handleMessage = useCallback(
     (message: SnapshotServerMessage) => {
+      const connection = lifecycle.connection;
+      const reconciler = lifecycle.owner;
+      if (
+        !projectId ||
+        lifecycle.disposed ||
+        !connection ||
+        !reconciler?.accepts(connection, message)
+      ) {
+        return;
+      }
       switch (message.type) {
         case 'snapshot_full': {
           applySnapshotFullMessage(
@@ -429,7 +457,9 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
             previousPendingRequestsRef.current,
             invalidatedForUnknownWorkspaceRef.current,
             repairedWorktreePathsRef.current,
-            removedWorkspaceIdsRef.current
+            removedWorkspaceIdsRef.current,
+            reconciler,
+            connection
           );
           if (baselineProjectsRef.current.has(message.projectId)) {
             healWorkspaceCachesAfterReconnect(utils, message.projectId);
@@ -440,9 +470,6 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
         }
 
         case 'snapshot_changed': {
-          if (!projectId) {
-            break;
-          }
           applySnapshotChangedMessage(
             utils,
             queryClient,
@@ -451,34 +478,35 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
             previousPendingRequestsRef.current,
             invalidatedForUnknownWorkspaceRef.current,
             repairedWorktreePathsRef.current,
-            removedWorkspaceIdsRef.current
+            removedWorkspaceIdsRef.current,
+            reconciler,
+            connection
           );
           break;
         }
 
         case 'snapshot_removed': {
-          if (!projectId) {
-            break;
-          }
           applySnapshotRemovedMessage(
-            utils,
             queryClient,
-            projectId,
             message,
             previousPendingRequestsRef.current,
-            removedWorkspaceIdsRef.current
+            removedWorkspaceIdsRef.current,
+            reconciler,
+            connection
           );
           break;
         }
       }
     },
-    [projectId, queryClient, utils]
+    [projectId, queryClient, utils, lifecycle]
   );
 
   useWebSocketChannel({
     url,
     schema: SnapshotServerMessageSchema,
     onMessage: handleMessage,
+    onConnected,
+    onDisconnected,
     queuePolicy: 'drop',
   });
 }

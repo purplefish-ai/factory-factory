@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { trpc } from '@/client/lib/trpc';
 import { WorkspaceSwitcherDropdown } from './workspace-switcher-dropdown';
 
 vi.mock('@phosphor-icons/react/dist/csr/CaretUpDown', () => ({ CaretUpDownIcon: () => null }));
@@ -11,6 +12,16 @@ vi.mock('@phosphor-icons/react/dist/csr/CaretUpDown', () => ({ CaretUpDownIcon: 
 vi.mock('react-router', () => ({
   useNavigate: () => vi.fn(),
 }));
+
+vi.mock('@/client/hooks/use-project-workspace-query', () => {
+  return {
+    useProjectWorkspaceQuery: (projectId: string | undefined) =>
+      trpc.workspace.listForProject.useQuery(
+        { projectId: projectId ?? '' },
+        { enabled: Boolean(projectId), staleTime: Infinity, refetchOnWindowFocus: false }
+      ),
+  };
+});
 
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {

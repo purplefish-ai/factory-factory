@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { getQueryKey } from '@trpc/react-query';
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router';
@@ -11,6 +12,7 @@ import {
   type ProjectWorkspace,
   projectSnapshotToWorkspace,
 } from '@/client/lib/snapshot-to-workspace';
+import { trpc } from '@/client/lib/trpc';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import type { UseWebSocketTransportOptions } from '@/hooks/use-websocket-transport';
 import type { WorkspacePullRequest } from '@/shared/workspace-pr';
@@ -60,11 +62,15 @@ const pr: WorkspacePullRequest = {
   syncedAt: null,
 };
 let root: Root;
+const cleanupCallbacks: Array<() => void> = [];
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   vi.clearAllMocks();
 });
 afterEach(async () => {
+  for (const cleanup of cleanupCallbacks.splice(0)) {
+    cleanup();
+  }
   await act(() => root?.unmount());
   document.body.innerHTML = '';
 });
@@ -184,6 +190,8 @@ describe('workspace PR actions across surfaces', () => {
       reviewCount: 0,
     };
     const queryClient = new QueryClient();
+    const queryKey = getQueryKey(trpc.workspace.listForProject, { projectId: 'proj-1' }, 'query');
+    queryClient.setQueryData(queryKey, cache);
     const rerender = () =>
       root.render(
         <QueryClientProvider client={queryClient}>
@@ -198,22 +206,20 @@ describe('workspace PR actions across surfaces', () => {
     snapshot.utils = {
       workspace: {
         listForProject: {
-          getData: () => cache,
+          getData: () => queryClient.getQueryData(queryKey),
           setData: (_input: unknown, updater: (previous: typeof cache) => typeof cache) => {
-            cache = updater(cache);
-            rerender();
+            queryClient.setQueryData(queryKey, updater);
           },
           invalidate: () =>
             new Promise<void>((resolve) => {
               completeRefetch = () => {
-                cache = {
+                queryClient.setQueryData(queryKey, {
                   ...cache,
                   workspaces: cache.workspaces.map((workspace) => ({
                     ...workspace,
                     worktreePath: '/actual/provisioned/worktree',
                   })),
-                };
-                rerender();
+                });
                 resolve();
               };
             }),
@@ -221,6 +227,17 @@ describe('workspace PR actions across surfaces', () => {
         get: { setData: vi.fn() },
       },
     };
+    const unsubscribe = queryClient.getQueryCache().subscribe(() => {
+      const next = queryClient.getQueryData<typeof cache>(queryKey);
+      if (next && next !== cache) {
+        cache = next;
+        rerender();
+      }
+    });
+    cleanupCallbacks.push(() => {
+      unsubscribe();
+      queryClient.clear();
+    });
     const host = document.createElement('div');
     document.body.append(host);
     root = createRoot(host);

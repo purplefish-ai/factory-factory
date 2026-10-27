@@ -15,6 +15,10 @@ vi.mock('react', async (importOriginal) => {
     ...actual,
     useCallback: (fn: (...args: never[]) => unknown) => fn,
     useRef: <T>(value: T) => ({ current: value }),
+    useMemo: <T>(factory: () => T) => factory(),
+    useEffect: (effect: () => unknown) => {
+      effect();
+    },
   };
 });
 
@@ -38,11 +42,19 @@ vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({
     resetQueries: mockWorkspaceGetReset,
     getQueriesData: () => [],
+    cancelQueries: () => Promise.resolve(),
+    setQueryData: (key: readonly [unknown, { input: unknown }], updater: unknown) =>
+      mockSetData(key[1].input, updater),
   }),
 }));
 vi.mock('@trpc/react-query', () => ({
   getQueryKey: (_procedure: unknown, input: unknown, type: string) => [
-    ['workspace', 'get'],
+    [
+      'workspace',
+      typeof input === 'object' && input !== null && 'projectId' in input
+        ? 'listForProject'
+        : 'get',
+    ],
     { input, type },
   ],
 }));
@@ -50,7 +62,7 @@ const mockGlobalDispatchEvent = vi.fn();
 
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
-    workspace: { get: {} },
+    workspace: { get: {}, listForProject: {} },
     useUtils: () => ({
       workspace: {
         listForProject: {
@@ -685,7 +697,7 @@ describe('useProjectSnapshotSync', () => {
       expect(mockListInvalidate).toHaveBeenCalledTimes(2);
     });
 
-    it('tracks the first baseline per project', () => {
+    it('ignores a foreign baseline without changing current project baseline history', () => {
       useProjectSnapshotSync('proj-1');
       const onMessage = capturedOptions!.onMessage!;
 
@@ -702,6 +714,7 @@ describe('useProjectSnapshotSync', () => {
         entries: [],
       });
       expectNoInvalidations();
+      expect(mockSetData).toHaveBeenCalledTimes(1);
 
       // Returning to proj-1 (its second baseline) heals proj-1 only.
       onMessage({
