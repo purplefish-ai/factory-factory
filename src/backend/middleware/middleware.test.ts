@@ -259,7 +259,7 @@ describe('corsMiddleware', () => {
       corsMiddleware(mockReq, toResponse(mockRes), mockNext);
 
       expect(mockRes.headers['Access-Control-Allow-Headers']).toBe(
-        'Origin, X-Requested-With, Content-Type, Accept, Authorization'
+        'Origin, X-Requested-With, Content-Type, Accept, Authorization, trpc-accept'
       );
     });
 
@@ -273,6 +273,26 @@ describe('corsMiddleware', () => {
   });
 
   describe('preflight request handling', () => {
+    it('allows the tRPC streaming header in a cross-origin query preflight', () => {
+      const mockReq = createMockReq({
+        method: 'OPTIONS',
+        headers: {
+          origin: 'http://localhost:3000',
+          'access-control-request-method': 'GET',
+          'access-control-request-headers': 'trpc-accept',
+        },
+      });
+
+      corsMiddleware(mockReq, toResponse(mockRes), mockNext);
+
+      expect(mockRes.headers['Access-Control-Allow-Origin']).toBe('http://localhost:3000');
+      expect(
+        mockRes.headers['Access-Control-Allow-Headers']?.toLowerCase().split(/,\s*/)
+      ).toContain('trpc-accept');
+      expect(mockRes.sendStatus).toHaveBeenCalledWith(200);
+      expect(mockNext).not.toHaveBeenCalled();
+    });
+
     it('should handle OPTIONS preflight requests with 200 status', () => {
       const mockReq = createMockReq({
         method: 'OPTIONS',
