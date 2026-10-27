@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { launchWorkspace } from '@/backend/orchestration/workspace-launch.orchestrator';
+import {
+  launchWorkspace,
+  type WorkspaceLaunchPorts,
+} from '@/backend/orchestration/workspace-launch.orchestrator';
 import { autoIterationService, logbookService } from '@/backend/services/auto-iteration';
 
 const mockLogger = vi.hoisted(() => ({
@@ -183,8 +186,11 @@ function getBridge<T>(mockFn: (arg: T) => void): T {
   return vi.mocked(mockFn).mock.calls[0]![0];
 }
 
-function createBridgeServices(overrides: Partial<BridgeServices> = {}): BridgeServices {
-  return {
+function createBridgeServices(
+  overrides: Partial<BridgeServices> = {},
+  createWorkspace: WorkspaceLaunchPorts['createWorkspace'] = mockWorkspaceCreationService.create
+): BridgeServices {
+  const services: BridgeServices = {
     ...defaultPRMonitoringServices,
     autoIterationService,
     chatEventForwarderService,
@@ -206,13 +212,13 @@ function createBridgeServices(overrides: Partial<BridgeServices> = {}): BridgeSe
     workspaceAutoIterationService,
     launchWorkspace: (source) =>
       launchWorkspace(source, {
-        createWorkspace: mockWorkspaceCreationService.create,
-        createDefaultSession: (input) => sessionDataService.createAgentSession(input),
-        initializeWorktree: (id, options) => initializeWorkspaceWorktree(id, options),
+        createWorkspace,
+        createDefaultSession: (input) => services.sessionDataService.createAgentSession(input),
+        initializeWorktree: (id, options) => services.initializeWorkspaceWorktree(id, options),
         getMaxSessionsPerWorkspace: vi.fn(),
         resolveProvider: vi.fn(),
         checkCliHealth: vi.fn(),
-        logger: mockLogger,
+        logger: services.createLogger('domain-bridges'),
       }),
     workspaceDataService,
     workspaceMaintenanceService,
@@ -224,6 +230,7 @@ function createBridgeServices(overrides: Partial<BridgeServices> = {}): BridgeSe
     initializeWorkspaceWorktree,
     ...overrides,
   };
+  return services;
 }
 
 describe('configureDomainBridges', () => {
@@ -436,6 +443,75 @@ describe('configureDomainBridges', () => {
         })
       ).rejects.toBe(failure);
       expect(mockWorkspaceCreationService.create).toHaveBeenCalledOnce();
+      expect(initializeWorkspaceWorktree).not.toHaveBeenCalled();
+    });
+
+    it('launches periodic tasks through overridden creation, session and initialization capabilities', async () => {
+      const events: string[] = [];
+      mockWorkspaceCreationService.create.mockResolvedValue({ id: 'global-workspace' });
+      vi.mocked(sessionDataService.createAgentSession).mockResolvedValue({
+        id: 'global-session',
+      } as Awaited<ReturnType<typeof sessionDataService.createAgentSession>>);
+      vi.mocked(initializeWorkspaceWorktree).mockResolvedValue(undefined);
+      const createWorkspace = vi.fn(() => {
+        events.push('workspace');
+        return Promise.resolve({ id: 'overridden-workspace' } as Awaited<
+          ReturnType<BridgeServices['launchWorkspace']>
+        >['workspace']);
+      });
+      const createAgentSession = vi.fn(() => {
+        events.push('session');
+        return Promise.resolve({ id: 'overridden-session' } as Awaited<
+          ReturnType<typeof sessionDataService.createAgentSession>
+        >);
+      });
+      const initialize = vi.fn(() => {
+        events.push('initialize');
+        return Promise.resolve();
+      });
+      const overriddenSessionData = new Proxy(sessionDataService, {
+        get(target, property, receiver) {
+          return property === 'createAgentSession'
+            ? createAgentSession
+            : Reflect.get(target, property, receiver);
+        },
+      });
+      configureDomainBridges(
+        createBridgeServices(
+          {
+            sessionDataService: overriddenSessionData,
+            initializeWorkspaceWorktree: initialize,
+          },
+          createWorkspace
+        )
+      );
+      const bridge = getBridge(periodicTaskService.configure);
+      const input = {
+        projectId: 'p1',
+        name: 'Overridden task',
+        prompt: 'Run scheduled work',
+        periodicTaskId: 'task-override',
+      };
+      await expect(bridge.workspace.createWorkspaceForTask(input)).resolves.toEqual({
+        workspaceId: 'overridden-workspace',
+      });
+      expect(events).toEqual(['workspace', 'session', 'initialize']);
+      expect(createWorkspace).toHaveBeenCalledExactlyOnceWith({
+        type: 'PERIODIC_TASK',
+        projectId: 'p1',
+        name: 'Overridden task',
+        initialPrompt: 'Run scheduled work',
+        periodicTaskId: 'task-override',
+        ratchetEnabled: true,
+      });
+      expect(createAgentSession).toHaveBeenCalledExactlyOnceWith({
+        workspaceId: 'overridden-workspace',
+        workflow: 'periodic-task',
+        name: 'Periodic task',
+      });
+      expect(initialize).toHaveBeenCalledExactlyOnceWith('overridden-workspace', undefined);
+      expect(mockWorkspaceCreationService.create).not.toHaveBeenCalled();
+      expect(sessionDataService.createAgentSession).not.toHaveBeenCalled();
       expect(initializeWorkspaceWorktree).not.toHaveBeenCalled();
     });
 

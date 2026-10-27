@@ -276,10 +276,11 @@ Child creation validates the target project's active status before delegating to
 its injected workspace-launch owner. The workspace capsule still validates the
 parent and depth and persists the parent, prompt, and report-back metadata.
 Unlike interactive launch, the child policy resolves its provider after
-persistence, always attempts a `followup` / `Chat 1` session, and performs no
-capacity or CLI-health preflight. Provider or session failure is best-effort;
-initialization still starts once in the background. Parent notifications and
-child context handoff remain with their existing owners.
+persistence and attempts a `followup` / `Chat 1` session only when provider
+resolution succeeds. It performs no capacity or CLI-health preflight. Provider
+or session failure is best-effort; initialization still starts once in the
+background. Parent notifications and child context handoff remain with their
+existing owners.
 
 UI: `ChildWorkspacesPanel` in the right panel, a child badge on kanban cards,
 and an archive warning when a parent has active children.

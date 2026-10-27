@@ -124,7 +124,9 @@ workspace ID. Its separate policy persists first and requires a `periodic-task`
 or a capacity gate. Session failure propagates with the workspace retained and
 no initialization scheduled. Successful provisioning starts initialization once
 in the background. The scheduler reserves the execution and advances the next
-run before launch, then records its workspace ID or marks the execution failed.
+run before launch. Launch failures are marked failed; a failed workspace-ID
+update leaves the reserved execution running without a workspace link until
+reservation-timeout recovery.
 
 Managed via the "Periodic Tasks" admin tab and created from the Kanban launch
 dropdown. The workspace right panel shows execution history for
