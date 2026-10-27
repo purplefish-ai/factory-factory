@@ -561,13 +561,25 @@ describe('useWebSocketTransport replay queue', () => {
     const harness = createHarness({ onMessage, onDisconnected });
     const retired = getLastSocket();
     flushSync(() => retired.simulateOpen());
+    let deliverClose: () => void = () => {
+      throw new Error('Retired socket was not closed');
+    };
+    const close = vi.spyOn(retired, 'close').mockImplementationOnce(() => {
+      retired.readyState = WS_CLOSING;
+      const onClose = retired.onclose;
+      deliverClose = () => {
+        retired.readyState = WS_CLOSED;
+        onClose?.({ type: 'close' });
+      };
+    });
     flushSync(() => harness.transportRef.current?.reconnect());
+    expect(close).toHaveBeenCalledTimes(1);
     const current = getLastSocket();
     expect(current).not.toBe(retired);
     flushSync(() => current.simulateOpen());
     const disconnects = onDisconnected.mock.calls.length;
     retired.simulateMessage({ name: 'retired baseline' });
-    retired.close();
+    flushSync(() => deliverClose());
     current.simulateMessage({ name: 'current baseline' });
     expect(onMessage).toHaveBeenCalledExactlyOnceWith({ name: 'current baseline' });
     expect(onDisconnected).toHaveBeenCalledTimes(disconnects);
