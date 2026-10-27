@@ -628,7 +628,7 @@ it.each(['complete', 'fail'] as const)(
   }
 );
 
-it('does not validate or complete a replacement claim for an older message object', async () => {
+it('does not validate or settle a replacement claim for an older message object', async () => {
   const service = new SessionBackgroundDeliveryService();
   const sessionId = 'replacement-claim-selection';
   const first = {
@@ -642,12 +642,13 @@ it('does not validate or complete a replacement claim for an older message objec
   const second = { ...first, deliveryId: 'second', text: 'second', attempt: 2 };
   const validate = vi.fn(async () => true);
   const complete = vi.fn(async () => undefined);
+  const fail = vi.fn(async () => ({ paused: false }));
   let prepares = 0;
   service.configure({
     prepare: async () => ({ status: 'ready', delivery: ++prepares === 1 ? first : second }),
     validate,
     complete,
-    fail: async () => ({ paused: false }),
+    fail,
     recover: async () => undefined,
     pause: async () => undefined,
     resume: async () => undefined,
@@ -661,6 +662,8 @@ it('does not validate or complete a replacement claim for an older message objec
   await service.prepare(sessionId, replacement);
   expect(await service.validate(old)).toBe(false);
   expect(validate).not.toHaveBeenCalled();
+  await service.fail(old, new Error('Old send failed after replacement prepared'));
+  expect(fail).not.toHaveBeenCalled();
   await service.complete(old);
   expect(complete).not.toHaveBeenCalled();
   expect(service.isDeliveryActive(second.deliveryId)).toBe(true);
