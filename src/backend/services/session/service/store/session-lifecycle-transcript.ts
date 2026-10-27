@@ -1,5 +1,6 @@
 import type { SessionLifecycleEventRecord } from '@/backend/services/session/resources/session-lifecycle-event.accessor';
 import type { ChatMessage } from '@/shared/acp-protocol';
+import { isLocalTranscriptMessage } from './session-local-transcript';
 
 type IndexedMessage = {
   message: ChatMessage;
@@ -53,7 +54,7 @@ export function mergeLifecycleMessage(
     return {
       message,
       originalIndex,
-      isLifecycle: message.message?.type === 'session_lifecycle',
+      isLifecycle: isLocalTranscriptMessage(message),
       timestampMs: Number.isNaN(parsedTimestamp) ? Number.POSITIVE_INFINITY : parsedTimestamp,
     };
   };

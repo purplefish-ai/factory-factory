@@ -156,7 +156,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
         text: 'facts',
         attempt: 1,
       };
-      const fail = vi.fn().mockResolvedValue(undefined);
+      const fail = vi.fn().mockResolvedValue({ paused: false });
       sessionBackgroundDeliveryService.configure({
         prepare: () => Promise.resolve({ status: 'ready', delivery }),
         validate: () => Promise.resolve(true),

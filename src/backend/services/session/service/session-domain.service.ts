@@ -11,6 +11,7 @@ import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import { sessionResumeFences } from './session-resume-fence';
 import { mergeLifecycleMessage } from './store/session-lifecycle-transcript';
+import { buildMessageFailure, recordPRUpdateOutcome } from './store/session-pr-update';
 import { handleProcessExit } from './store/session-process-exit';
 import { SessionPublisher } from './store/session-publisher';
 import {
@@ -144,31 +145,29 @@ export class SessionDomainService extends EventEmitter {
       queueCount: store.queue.length,
     });
   }
-
   emitDelta(sessionId: string, event: SessionDeltaEvent): void {
     this.publisher.emitDelta(sessionId, event);
   }
-
   rejectMessage(sessionId: string, messageId: string, errorMessage: string): void {
     this.recordRecentMessageRejection(sessionId, {
       id: messageId,
       errorMessage,
     });
   }
-
   failMessage(sessionId: string, message: QueuedMessage, errorMessage: string): void {
-    this.recordRecentMessageRejection(sessionId, {
-      id: message.id,
-      errorMessage,
-      state: MessageState.FAILED,
-      userMessage: {
-        text: message.text,
-        timestamp: message.timestamp,
-        attachments: message.attachments,
-        voiceMode: message.voiceMode,
-        sessionId,
-      },
-    });
+    if (message.source?.type === 'pr_event') {
+      const store = this.registry.getOrCreateActive(sessionId);
+      if (!recordPRUpdateOutcome(store, message, 'failed', errorMessage)) {
+        return;
+      }
+      removeQueuedMessage(store, message.id, { recordCancellation: false });
+      this.publisher.forwardSnapshot(store, { reason: 'manual_emit' });
+      return;
+    }
+    this.recordRecentMessageRejection(
+      sessionId,
+      buildMessageFailure(sessionId, message, errorMessage)
+    );
   }
 
   private recordRecentMessageRejection(

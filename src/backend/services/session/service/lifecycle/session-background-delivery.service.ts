@@ -21,7 +21,7 @@ export interface PRBackgroundDeliveryPort {
   >;
   validate(delivery: ClaimedPRDelivery): Promise<boolean>;
   complete(delivery: ClaimedPRDelivery): Promise<void>;
-  fail(delivery: ClaimedPRDelivery, error: unknown): Promise<void>;
+  fail(delivery: ClaimedPRDelivery, error: unknown): Promise<{ paused: boolean }>;
   recover(sessionId: string): Promise<void>;
   pause(sessionId: string, reason: 'USER_STOPPED' | 'SESSION_FAILED'): Promise<void>;
   resume(sessionId: string, isCurrent?: () => boolean): Promise<void>;
@@ -124,11 +124,29 @@ export class SessionBackgroundDeliveryService {
   }
   async fail(message: QueuedMessage, error: unknown) {
     const delivery = this.deliveries.get(message.id);
+    const token = [...this.tokens.values()].find((entry) => entry.messageId === message.id);
     if (delivery && this.port) {
       try {
-        await this.port.fail(delivery, error);
+        const outcome = await this.port.fail(delivery, error);
+        const currentToken = [...this.tokens.values()].find(
+          (entry) => entry.messageId === message.id
+        );
+        if (
+          outcome.paused &&
+          currentToken === token &&
+          this.deliveries.get(message.id) === delivery
+        ) {
+          sessionDomainService.failMessage(
+            delivery.sessionId,
+            message,
+            error instanceof Error ? error.message : String(error)
+          );
+          this.forgetToken(message.id);
+        }
       } finally {
-        this.deliveries.delete(message.id);
+        if (this.deliveries.get(message.id) === delivery) {
+          this.deliveries.delete(message.id);
+        }
       }
     }
   }

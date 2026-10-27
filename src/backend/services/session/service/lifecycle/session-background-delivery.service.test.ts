@@ -75,9 +75,7 @@ it('keeps a frozen retry coalesced until its queue item is removed', async () =>
     complete: async () => {
       /* No transport work in this queue test. */
     },
-    fail: async () => {
-      /* No transport work in this queue test. */
-    },
+    fail: async () => ({ paused: false }),
     recover: async () => {
       /* No transport work in this queue test. */
     },
@@ -139,7 +137,10 @@ it.each(['complete', 'fail'] as const)(
       prepare: async () => ({ status: 'ready', delivery }),
       validate: async () => true,
       complete: async () => settlement,
-      fail: async () => settlement,
+      fail: async () => {
+        await settlement;
+        return { paused: false };
+      },
       recover: async () => undefined,
       pause: async () => undefined,
       resume: async () => undefined,
@@ -180,7 +181,7 @@ it.each(['userStop', 'runtimeFailure'] as const)(
       prepare: () => Promise.resolve({ status: 'discard' }),
       validate: () => Promise.resolve(false),
       complete: () => Promise.resolve(),
-      fail: () => Promise.resolve(),
+      fail: () => Promise.resolve({ paused: false }),
       recover: () => Promise.resolve(),
       pause: (_id, reason) => {
         pauseReason = reason;
@@ -231,7 +232,7 @@ it('retains a newly queued token when the prior delivery with its stable ID comp
     prepare: () => Promise.resolve({ status: 'ready', delivery }),
     validate: () => Promise.resolve(true),
     complete: () => Promise.resolve(),
-    fail: () => Promise.resolve(),
+    fail: () => Promise.resolve({ paused: false }),
     recover: () => Promise.resolve(),
     pause: () => Promise.resolve(),
     resume: () => Promise.resolve(),
@@ -241,6 +242,77 @@ it('retains a newly queued token when the prior delivery with its stable ID comp
   await service.prepare(sessionId, old);
   service.enqueue(sessionId, request);
   await service.complete(old);
+  service.enqueue(sessionId, request);
+  expect(sessionDomainService.getQueueLength(sessionId)).toBe(1);
+});
+
+it('surfaces a paused delivery failure while removing its queued token', async () => {
+  const service = new SessionBackgroundDeliveryService();
+  const sessionId = 'paused-delivery-state';
+  const delivery = {
+    deliveryId: 'paused',
+    sessionId,
+    bindingRevision: 1,
+    eventIds: ['e'],
+    text: 'Review feedback',
+    attempt: 3,
+  };
+  service.configure({
+    prepare: async () => ({ status: 'ready', delivery }),
+    validate: async () => true,
+    complete: async () => undefined,
+    fail: async () => ({ paused: true }),
+    recover: async () => undefined,
+    pause: async () => undefined,
+    resume: async () => undefined,
+  });
+  service.enqueue(sessionId, request);
+  const queued = sessionDomainService.peekNextMessage(sessionId)!;
+  await service.prepare(sessionId, queued);
+  await service.fail(queued, new Error('Provider unavailable'));
+  expect(sessionDomainService.getQueueLength(sessionId)).toBe(0);
+  expect(sessionDomainService.getTranscriptSnapshot(sessionId)).toEqual([
+    expect.objectContaining({
+      message: expect.objectContaining({ type: 'pr_update', prDeliveryState: 'failed' }),
+    }),
+  ]);
+});
+
+it('does not fail a replacement queue token when an older failure settles late', async () => {
+  const service = new SessionBackgroundDeliveryService();
+  const sessionId = 'replacement-failure-token';
+  const delivery = {
+    deliveryId: 'old',
+    sessionId,
+    bindingRevision: 1,
+    eventIds: ['e'],
+    text: 'old facts',
+    attempt: 3,
+  };
+  let release!: (result: { paused: boolean }) => void;
+  const settlement = new Promise<{ paused: boolean }>((resolve) => {
+    release = resolve;
+  });
+  service.configure({
+    prepare: async () => ({ status: 'ready', delivery }),
+    validate: async () => true,
+    complete: async () => undefined,
+    fail: () => settlement,
+    recover: async () => undefined,
+    pause: async () => undefined,
+    resume: async () => undefined,
+  });
+  service.enqueue(sessionId, request);
+  const original = sessionDomainService.peekNextMessage(sessionId)!;
+  await service.prepare(sessionId, original);
+  const failing = service.fail(original, new Error('old failure'));
+  service.invalidate('w', 1);
+  service.enqueue(sessionId, request);
+  const replacement = sessionDomainService.peekNextMessage(sessionId)!;
+  expect(replacement).not.toBe(original);
+  release({ paused: true });
+  await failing;
+  expect(sessionDomainService.peekNextMessage(sessionId)).toBe(replacement);
   service.enqueue(sessionId, request);
   expect(sessionDomainService.getQueueLength(sessionId)).toBe(1);
 });

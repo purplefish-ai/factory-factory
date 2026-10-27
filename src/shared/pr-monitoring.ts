@@ -271,3 +271,5 @@ function addConflictTransition(
   }
   return sequence;
 }
+
+export type PRUpdateDeliveryState = 'queued' | 'delivered' | 'failed' | 'cancelled';

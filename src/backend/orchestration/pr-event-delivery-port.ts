@@ -64,7 +64,7 @@ export function createPRBackgroundDeliveryPort(
         message.includes('human message queued during preparation')
       ) {
         await workspacePRMonitoringService.deferBusy(delivery.deliveryId);
-        return;
+        return { paused: false };
       }
       await workspacePRMonitoringService.settleDelivery({ ...delivery, result: 'retry' });
       const session = await sessionDataService.findAgentSessionById(delivery.sessionId);
@@ -77,7 +77,9 @@ export function createPRBackgroundDeliveryPort(
         if (paused.count) {
           ratchetService.emit(RATCHET_DISPATCH_CHANGED, { workspaceId: session.workspaceId });
         }
+        return { paused: paused.count > 0 };
       }
+      return { paused: false };
     },
     recover: (sessionId) => recoverPRDeliveries(sessionId, undefined, services),
     async pause(sessionId, reason) {

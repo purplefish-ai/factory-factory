@@ -494,3 +494,42 @@ describe('form elicitation answer submission', () => {
     }
   );
 });
+
+it('keeps a failed PR update out of an empty composer', async () => {
+  const harness = renderChatState('session-A');
+  await flushEffects();
+  try {
+    flushSync(() =>
+      harness.chatRef.current?.dispatch({
+        type: 'MESSAGE_STATE_CHANGED',
+        payload: {
+          id: 'pr-event-failed-composer',
+          newState: MessageState.ACCEPTED,
+          userMessage: {
+            text: '<!-- factory-factory-pr-event:test -->\nReview feedback',
+            timestamp: '2026-10-27T00:00:00Z',
+          },
+        },
+      })
+    );
+    flushSync(() =>
+      harness.chatRef.current?.dispatch({
+        type: 'MESSAGE_STATE_CHANGED',
+        payload: {
+          id: 'pr-event-failed-composer',
+          newState: MessageState.FAILED,
+          errorMessage: 'Provider unavailable',
+        },
+      })
+    );
+    await flushEffects();
+    expect(harness.chatRef.current?.inputDraft).toBe('');
+    expect(harness.chatRef.current?.messages).toEqual([
+      expect.objectContaining({
+        message: expect.objectContaining({ type: 'pr_update', prDeliveryState: 'failed' }),
+      }),
+    ]);
+  } finally {
+    harness.cleanup();
+  }
+});

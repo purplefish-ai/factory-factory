@@ -86,6 +86,8 @@ export const MessageItem = memo(function MessageItem({
         <PRUpdateRenderer
           text={message.message?.text ?? message.text ?? 'PR update'}
           queued={isQueued}
+          deliveryState={message.message?.prDeliveryState}
+          error={message.message?.error}
         />
       </MessageWrapper>
     );

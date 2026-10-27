@@ -1,4 +1,5 @@
 import type { SessionLifecycleEventKind, SessionLifecycleEventReason } from '@/shared/core';
+import type { PRUpdateDeliveryState } from '@/shared/pr-monitoring';
 import type {
   AgentContentItem,
   AgentStreamEvent,
@@ -32,6 +33,8 @@ type AgentMessageType =
   | 'pr_update';
 
 interface AgentMessageCommon {
+  /** Delivery outcome for backend-owned PR update cards. */
+  prDeliveryState?: PRUpdateDeliveryState;
   timestamp?: string;
   // child_workspace_update fields (only present when type === 'child_workspace_update')
   childWorkspaceId?: string;

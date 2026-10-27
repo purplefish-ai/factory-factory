@@ -6,6 +6,7 @@ import {
 import type { ChatAction, ChatState } from '@/client/features/chat/reducer/types';
 import type { ChatMessage } from '@/lib/chat-protocol';
 import { MessageState, QUEUED_MESSAGE_ORDER_BASE } from '@/lib/chat-protocol';
+import { retainPRUpdateOutcome } from './pr-update-delivery';
 
 type StateChangeUserMessage = Extract<
   Extract<ChatAction, { type: 'MESSAGE_STATE_CHANGED' }>['payload']['userMessage'],
@@ -43,10 +44,16 @@ function applyMessageStateChange(
     case MessageState.COMPLETE:
       return handleRemoveFromQueue(state, id);
     case MessageState.CANCELLED:
-      return handleCancelledState(state, id);
+      return (
+        retainPRUpdateOutcome(state, id, 'cancelled', errorMessage, userMessage) ??
+        handleCancelledState(state, id)
+      );
     case MessageState.REJECTED:
     case MessageState.FAILED:
-      return handleRejectedOrFailedState(state, id, errorMessage, userMessage);
+      return (
+        retainPRUpdateOutcome(state, id, 'failed', errorMessage, userMessage) ??
+        handleRejectedOrFailedState(state, id, errorMessage, userMessage)
+      );
     default:
       debugLog(`[chat-reducer] Ignoring state transition to ${newState} for message ${id}`);
       return state;

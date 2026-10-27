@@ -12,3 +12,12 @@ export const Delivered: Story = {
   },
 };
 export const Queued: Story = { args: { ...Delivered.args, queued: true } };
+
+export const Failed: Story = {
+  args: {
+    ...Delivered.args,
+    deliveryState: 'failed',
+    error: 'Provider unavailable. PR updates are paused.',
+  },
+};
+export const Cancelled: Story = { args: { ...Delivered.args, deliveryState: 'cancelled' } };
