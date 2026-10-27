@@ -84,8 +84,10 @@ batches as well as live events; replay uses the same event-to-action mapping.
 | `user_question` / `permission_request`                 | Interactive request state                              |
 
 Questions and permissions are stored in `SessionStore.pendingInteractiveRequest`
-and included in replay. Responses resolve through the permission service;
-request IDs ensure clearing an older response does not remove a newer request.
+and included in replay. The permission service resolves responses and clears the
+matching pending request only after successful resolution, including for callers
+outside WebSocket handlers. Request IDs ensure an older response cannot clear a
+newer request; unresolved responses leave pending state unchanged.
 
 Main chat and quick chat use `useGroupedChatMessages` to retain stable tool
 groups between updates. An unchanged message array and length return the cached
