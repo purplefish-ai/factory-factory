@@ -464,6 +464,31 @@ describe('resource accessors integration', () => {
       expect(second.slug).toBe(`${first.slug}-2`);
     });
 
+    it('keeps concurrent project identities and paths aligned after database collisions', async () => {
+      const repoPath = createGitRepository();
+      const projects = await Promise.all(
+        Array.from({ length: 3 }, () =>
+          projectManagementService.create({ repoPath }, { worktreeBaseDir: '/tmp/worktrees' })
+        )
+      );
+      const first = projects.find(
+        (project) => !(project.slug.endsWith('-2') || project.slug.endsWith('-3'))
+      );
+      expect(first).toBeDefined();
+      expect(new Set(projects.map((project) => project.slug)).size).toBe(3);
+      expect(new Set(projects.map((project) => project.name)).size).toBe(3);
+      expect(new Set(projects.map((project) => project.worktreeBasePath)).size).toBe(3);
+      for (const project of projects) {
+        const suffix =
+          project.slug === first?.slug ? '' : project.slug.slice((first?.slug.length ?? 0) + 1);
+        expect(project.name).toBe(suffix ? `${first?.name} ${suffix}` : first?.name);
+        expect(project.worktreeBasePath).toBe(`/tmp/worktrees/${project.slug}`);
+        expect(project.startupScriptCommand).toBeNull();
+        expect(project.startupScriptPath).toBeNull();
+        expect(project.startupScriptTimeout).toBe(300);
+      }
+    });
+
     it('validates repository paths against git metadata', async () => {
       const gitRepo = createGitRepository();
       const nonGitDir = mkdtempSync(join(tmpdir(), 'ff-nongit-'));
