@@ -22,7 +22,10 @@ export function recordPRUpdateOutcome(
     order,
     message: {
       type: 'pr_update',
-      text: message.text,
+      text:
+        deliveryState === 'cancelled' && message.text === 'PR update queued for the next turn'
+          ? 'PR update cancelled before dispatch'
+          : message.text,
       prDeliveryState: deliveryState,
       ...(error ? { error } : {}),
     },

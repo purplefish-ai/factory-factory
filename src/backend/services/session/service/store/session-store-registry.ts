@@ -1,7 +1,9 @@
 import type { QueuedMessage } from '@/shared/acp-protocol';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 import { createInitialSessionRuntimeState } from '@/shared/session-runtime';
+import { isPRUpdateOutcomeMessage } from './session-local-transcript';
 import type { SessionStore } from './session-store.types';
+import { rebuildTranscriptIndex, setNextOrderFromTranscript } from './session-transcript';
 
 const MAX_TRACKED_HISTORY_RETRY_SESSIONS = 1024;
 
@@ -47,20 +49,28 @@ export class SessionStoreRegistry {
   }
 
   clearSession(sessionId: string, options?: { preserveRejections?: boolean }): void {
+    const existing = this.stores.get(sessionId);
+    const outcomesToPreserve = options?.preserveRejections
+      ? existing?.transcript.filter(isPRUpdateOutcomeMessage)
+      : undefined;
     const rejectionsToPreserve = options?.preserveRejections
-      ? this.stores
-          .get(sessionId)
-          ?.recentRejections.filter((rejection) => rejection.expiresAt > Date.now())
+      ? existing?.recentRejections.filter((rejection) => rejection.expiresAt > Date.now())
       : undefined;
     this.cancelPreservedRejectionCleanup(sessionId);
     this.preservationOnlyStores.delete(sessionId);
     this.nextHistoryRetryAtBySession.delete(sessionId);
     this.stores.delete(sessionId);
-    if (rejectionsToPreserve?.length) {
+    if (rejectionsToPreserve?.length || outcomesToPreserve?.length) {
       const preservedStore = this.getOrCreate(sessionId);
-      preservedStore.recentRejections = rejectionsToPreserve;
+      preservedStore.recentRejections = rejectionsToPreserve ?? [];
+      preservedStore.transcript = outcomesToPreserve ?? [];
+      rebuildTranscriptIndex(preservedStore);
+      setNextOrderFromTranscript(preservedStore);
+      preservedStore.nextOrder = Math.ceil(preservedStore.nextOrder);
       this.preservationOnlyStores.set(sessionId, preservedStore);
-      this.schedulePreservedRejectionCleanup(sessionId, preservedStore);
+      if (preservedStore.recentRejections.length > 0) {
+        this.schedulePreservedRejectionCleanup(sessionId, preservedStore);
+      }
     }
   }
 
@@ -175,7 +185,7 @@ export class SessionStoreRegistry {
           this.schedulePreservedRejectionCleanup(sessionId, store);
           return;
         }
-        if (this.preservationOnlyStores.get(sessionId) === store) {
+        if (this.preservationOnlyStores.get(sessionId) === store && store.transcript.length === 0) {
           this.preservationOnlyStores.delete(sessionId);
           this.stores.delete(sessionId);
         }

@@ -68,6 +68,8 @@ describe('history hydration after provider identity rollover', () => {
         },
         'Provider unavailable'
       );
+      sessionDomainService.clearSession('history-session', { preserveRejections: true });
+      sessionDomainService.resetProviderHistory('history-session', 'saved');
       (provider === 'CLAUDE' ? loadClaude : loadCodex).mockResolvedValue(loaded('saved turn'));
       await hydrateProviderHistoryIfNeeded('history-session', record('saved', provider));
       const transcript = sessionDomainService.getTranscriptSnapshot('history-session');

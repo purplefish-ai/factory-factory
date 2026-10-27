@@ -29,10 +29,10 @@ export function enqueueMessage(
 export function removeQueuedMessage(
   store: SessionStore,
   messageId: string,
-  options?: { recordCancellation?: boolean }
+  options?: { recordCancellation?: boolean; expectedMessage?: QueuedMessage }
 ): boolean {
   const idx = store.queue.findIndex((message) => message.id === messageId);
-  if (idx < 0) {
+  if (idx < 0 || (options?.expectedMessage && store.queue[idx] !== options.expectedMessage)) {
     return false;
   }
   const [message] = store.queue.splice(idx, 1);

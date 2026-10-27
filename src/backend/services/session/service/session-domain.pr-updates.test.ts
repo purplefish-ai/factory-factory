@@ -80,6 +80,26 @@ describe('PR update transcript outcomes', () => {
         data: expect.objectContaining({ type: 'message_state_changed' }),
       })
     );
+    service.subscribe({
+      sessionId: 'session',
+      sessionRuntime: service.getRuntimeSnapshot('session'),
+    });
+    expect(publish).toHaveBeenCalledWith(
+      'session',
+      expect.objectContaining({
+        type: 'session_replay_batch',
+        replayEvents: expect.arrayContaining([
+          expect.objectContaining({
+            type: 'agent_message',
+            data: expect.objectContaining({
+              type: 'pr_update',
+              prDeliveryState: 'failed',
+              error: 'Provider unavailable',
+            }),
+          }),
+        ]),
+      })
+    );
   });
   it('clears queued PR work into a cancelled card and replaces it on an explicit retry', () => {
     const service = new SessionDomainService();
@@ -102,5 +122,57 @@ describe('PR update transcript outcomes', () => {
     service.failMessage('session', message, 'Old dispatch failed');
     expect(service.peekNextMessage('session')).toBe(replacement);
     expect(service.getTranscriptSnapshot('session')).toEqual([]);
+  });
+  it('preserves a cancelled PR outcome through inactive session cleanup and rejection expiry', () => {
+    vi.useFakeTimers();
+    const service = new SessionDomainService();
+    try {
+      service.enqueue('session', message);
+      service.removeQueuedMessage('session', message.id);
+      service.rejectMessage('session', 'human-message', 'Rejected');
+      service.clearSession('session', { preserveRejections: true });
+      expect(service.getTranscriptSnapshot('session')[0]?.message).toMatchObject({
+        prDeliveryState: 'cancelled',
+      });
+      vi.advanceTimersByTime(60_001);
+      expect(service.getTranscriptSnapshot('session')[0]?.message).toMatchObject({
+        prDeliveryState: 'cancelled',
+      });
+      service.clearSession('session', { permanentlyDeleted: true });
+      expect(service.getTranscriptSnapshot('session')).toEqual([]);
+    } finally {
+      service.clearAllSessions();
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not cancel a replacement queued PR update during stale async cleanup', () => {
+    const service = new SessionDomainService();
+    service.enqueue('session', message);
+    service.removeQueuedMessage('session', message.id);
+    const replacement = { ...message, text: 'Newer facts' };
+    service.enqueue('session', replacement);
+    expect(service.removeQueuedMessage('session', message.id, { expectedMessage: message })).toBe(
+      false
+    );
+    expect(service.peekNextMessage('session')).toBe(replacement);
+    expect(service.getTranscriptSnapshot('session')).toEqual([]);
+  });
+  it('replaces an unprepared queued placeholder with cancellation copy', () => {
+    const service = new SessionDomainService();
+    service.enqueue('session', { ...message, text: 'PR update queued for the next turn' });
+    service.removeQueuedMessage('session', message.id);
+    expect(service.getTranscriptSnapshot('session')[0]?.message).toMatchObject({
+      prDeliveryState: 'cancelled',
+      text: 'PR update cancelled before dispatch',
+    });
+  });
+  it('records explicit session-stop cancellation separately from delivery failure', () => {
+    const service = new SessionDomainService();
+    service.failMessage('session', message, 'Session stopped before dispatch', 'cancelled');
+    expect(service.getTranscriptSnapshot('session')[0]?.message).toMatchObject({
+      prDeliveryState: 'cancelled',
+      error: 'Session stopped before dispatch',
+    });
   });
 });

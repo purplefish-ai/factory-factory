@@ -3,9 +3,9 @@ import { codexSessionHistoryLoaderService } from '@/backend/services/session/ser
 import { claudeSessionHistoryLoaderService } from '@/backend/services/session/service/data/session-history-loader.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { mergeLifecycleMessage } from '@/backend/services/session/service/store/session-lifecycle-transcript';
+import { isLocalTranscriptMessage } from '@/backend/services/session/service/store/session-local-transcript';
 import { buildTranscriptFromHistory } from '@/backend/services/session/service/store/session-transcript';
 import type { ChatMessage } from '@/shared/acp-protocol';
-import { isLocalTranscriptMessage } from '../store/session-local-transcript';
 
 const logger = createLogger('session-provider-history-hydrator');
 const HISTORY_READ_RETRY_COOLDOWN_MS = 30_000;
