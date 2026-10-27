@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentMessage, ChatMessage } from '@/lib/chat-protocol';
 import {
+  createEmptyTokenStats,
+  updateTokenStatsFromResult,
   filterDuplicateResultMessages,
   groupAdjacentToolCalls,
   isReasoningToolCall,
@@ -493,5 +495,46 @@ describe('filterDuplicateResultMessages', () => {
     // and the scan must not cross the result boundary at order 1 to reach assistant at order 0
     expect(filtered).toHaveLength(3);
     expect(filtered.map((m) => m.id)).toEqual(['assistant-0', 'assistant-2', 'result-3']);
+  });
+});
+
+describe('ACP context occupancy', () => {
+  it('replaces occupancy after compaction while retaining cumulative accounting', () => {
+    const stats = { ...createEmptyTokenStats(), inputTokens: 90_000, outputTokens: 20_000 };
+    const before = updateTokenStatsFromResult(stats, {
+      type: 'result',
+      result: { sessionUpdate: 'usage_update', used: 80_000, size: 200_000 },
+    });
+    const after = updateTokenStatsFromResult(before, {
+      type: 'result',
+      result: { sessionUpdate: 'usage_update', used: 0, size: 100_000 },
+    });
+    expect(before.contextUsedTokens).toBe(80_000);
+    expect(after.contextUsedTokens).toBe(0);
+    expect(after.contextWindow).toBe(100_000);
+    expect(after.inputTokens).toBe(90_000);
+    expect(after.outputTokens).toBe(20_000);
+  });
+
+  it.each([
+    { sessionUpdate: 'usage_update', used: -1, size: 200_000 },
+    { sessionUpdate: 'usage_update', used: '12', size: 200_000 },
+    { sessionUpdate: 'usage_update', used: 12, size: 0 },
+    { sessionUpdate: 'usage_update', used: 12 },
+    { used: 12, size: 200_000 },
+  ])('ignores malformed occupancy updates: %j', (result) => {
+    const stats = { ...createEmptyTokenStats(), contextUsedTokens: 5000, contextWindow: 200_000 };
+    const updated = updateTokenStatsFromResult(stats, { type: 'result', result });
+    expect(updated.contextUsedTokens).toBe(5000);
+    expect(updated.contextWindow).toBe(200_000);
+  });
+
+  it('does not infer occupancy from cumulative tokens', () => {
+    const updated = updateTokenStatsFromResult(createEmptyTokenStats(), {
+      type: 'result',
+      usage: { input_tokens: 50_000, output_tokens: 1000 },
+    });
+    expect(updated.contextUsedTokens).toBeNull();
+    expect(updated.inputTokens).toBe(50_000);
   });
 });

@@ -288,7 +288,7 @@ export function buildCapabilitiesFromConfigOptions(
       ? { enabled: false, kinds: [] }
       : { enabled: true, kinds: ['image', 'text'] },
     slashCommands: { enabled: !isCodexProvider },
-    usageStats: { enabled: false, contextWindow: false },
+    usageStats: { enabled: true, contextWindow: true },
     rewind: { enabled: false },
   };
 }

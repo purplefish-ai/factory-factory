@@ -266,6 +266,16 @@ export class AcpEventProcessor {
       return;
     }
 
+    if (delta.type === 'compact_boundary') {
+      // Use the transcript message path so reconnect/replay retains the same ordered marker.
+      // Emitting only this canonical message also avoids a duplicate live UI boundary.
+      this.handleAcpDelta(sid, {
+        type: 'agent_message',
+        data: { type: 'system', subtype: 'compact_boundary' },
+      });
+      return;
+    }
+
     this.trackPendingAcpToolCalls(sid, delta);
 
     // When configOptions change mid-session, sync the handle and re-emit capabilities

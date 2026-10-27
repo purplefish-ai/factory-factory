@@ -1,4 +1,21 @@
 import { expect, test } from '@playwright/test';
+import { initTRPC } from '@trpc/server';
+import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
+import superjson from 'superjson';
+
+const fixture = initTRPC.create({ transformer: superjson });
+const usageRouter = fixture.router({
+  session: fixture.router({
+    getProviderUsage: fixture.procedure.query(() => ({
+      provider: 'CLAUDE',
+      status: 'available',
+      updatedAt: '2026-01-12T12:00:00.000Z',
+      windows: [
+        { id: 'five_hour', label: '5-hour window', usedPercent: 38, resetsAt: 1_768_233_600 },
+      ],
+    })),
+  }),
+});
 
 const mobileViewports = [
   { name: 'iphone-se', width: 375, height: 667 },
@@ -10,6 +27,19 @@ for (const viewport of mobileViewports) {
   test(`mobile baseline layout - ${viewport.name}`, async ({ page }) => {
     // PR fixture timestamps are fixed; keep relative-age labels stable in screenshots.
     await page.clock.setFixedTime(new Date('2026-01-12T12:00:00.000Z'));
+    await page.route('**/api/trpc/session.getProviderUsage*', async (route) => {
+      const response = await fetchRequestHandler({
+        endpoint: '/api/trpc',
+        req: new Request(route.request().url(), { headers: route.request().headers() }),
+        router: usageRouter,
+        createContext: () => ({}),
+      });
+      await route.fulfill({
+        status: response.status,
+        headers: Object.fromEntries(response.headers),
+        body: await response.text(),
+      });
+    });
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await page.goto('/__mobile-baseline');
     await page.waitForLoadState('networkidle');
@@ -45,6 +75,16 @@ for (const viewport of mobileViewports) {
     await expect(optionsSheet.getByRole('heading', { name: 'Chat Options' })).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(optionsSheet).toBeHidden();
+
+    const messageInput = composer.getByRole('textbox');
+    await messageInput.fill('Keep this draft');
+    await composer.getByRole('button', { name: /Usage: 3% context/ }).click();
+    await expect(page.getByText('38% used')).toBeVisible();
+    await page.getByRole('button', { name: 'Compact', exact: true }).click();
+    await expect(chatDemo).toHaveAttribute('data-sent-commands', '["/compact"]');
+    await expect(messageInput).toHaveValue('Keep this draft');
+    await page.keyboard.press('Escape');
+    await messageInput.fill('');
 
     const composerBefore = await composer.boundingBox();
     expect(composerBefore).not.toBeNull();

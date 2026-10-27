@@ -107,33 +107,48 @@ describe('application queue producer composition', () => {
     expect(sessionDispatchService.tryDispatchNextMessage).not.toHaveBeenCalled();
   });
 
-  it('starts child initialization with the owning graph dispatcher', async () => {
-    const graph = createGraph('child');
-    setupInitialization(graph.services);
-    vi.spyOn(graph.services.projectManagementService, 'findById').mockResolvedValue(
-      unsafeCoerce({ id: 'project', isArchived: false })
-    );
-    vi.spyOn(WorkspaceCreationService.prototype, 'create').mockResolvedValue(
-      unsafeCoerce({ id: 'workspace-init' })
-    );
-    vi.spyOn(
-      graph.services.sessionProviderResolverService,
-      'resolveProviderForWorkspaceCreation'
-    ).mockResolvedValue('CLAUDE');
-    vi.spyOn(graph.services.sessionDataService, 'createAgentSession').mockResolvedValue(
-      unsafeCoerce({ id: 'session-init' })
-    );
-    await graph.services.createChildWorkspace({
-      parentWorkspaceId: 'parent',
-      projectId: 'project',
-      name: 'Child',
-    });
-    await vi.waitFor(() => {
-      expect(graph.delivered).toEqual([{ sessionId: 'session-init', text: 'Implement the issue' }]);
-      expect(graph.attempts).toEqual(['session-init', 'session-init']);
-    });
-    expect(sessionDispatchService.tryDispatchNextMessage).not.toHaveBeenCalled();
-  });
+  it.each(['child', 'periodic'] as const)(
+    'starts %s initialization with the owning graph dispatcher',
+    async (source) => {
+      const graph = createGraph(source);
+      setupInitialization(graph.services);
+      vi.spyOn(graph.services.projectManagementService, 'findById').mockResolvedValue(
+        unsafeCoerce({ id: 'project', isArchived: false })
+      );
+      vi.spyOn(WorkspaceCreationService.prototype, 'create').mockResolvedValue(
+        unsafeCoerce({ id: 'workspace-init' })
+      );
+      vi.spyOn(
+        graph.services.sessionProviderResolverService,
+        'resolveProviderForWorkspaceCreation'
+      ).mockResolvedValue('CLAUDE');
+      vi.spyOn(graph.services.sessionDataService, 'createAgentSession').mockResolvedValue(
+        unsafeCoerce({ id: 'session-init' })
+      );
+      if (source === 'child') {
+        await graph.services.createChildWorkspace({
+          parentWorkspaceId: 'parent',
+          projectId: 'project',
+          name: 'Child',
+        });
+      } else {
+        await graph.services.launchWorkspace({
+          type: 'PERIODIC_TASK',
+          projectId: 'project',
+          name: 'Periodic',
+          initialPrompt: 'Periodic task prompt',
+          periodicTaskId: 'task',
+        });
+      }
+      await vi.waitFor(() => {
+        expect(graph.delivered).toEqual([
+          { sessionId: 'session-init', text: 'Implement the issue' },
+        ]);
+        expect(graph.attempts).toEqual(['session-init', 'session-init']);
+      });
+      expect(sessionDispatchService.tryDispatchNextMessage).not.toHaveBeenCalled();
+    }
+  );
 
   it.each(['CHILD_TO_PARENT', 'PARENT_TO_CHILD'] as const)(
     'queues and delivers %s notifications through each supplied graph',

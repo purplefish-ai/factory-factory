@@ -35,6 +35,7 @@ import {
 } from './orchestration/workspace-init.orchestrator';
 import { launchWorkspace } from './orchestration/workspace-launch.orchestrator';
 import { deliverWorkspaceNotification } from './orchestration/workspace-notification-delivery.orchestrator';
+import { createWorkspaceRename } from './orchestration/workspace-rename.orchestrator';
 import { getQuickAction, listQuickActions } from './prompts/quick-actions';
 import { autoIterationService, insightsService, logbookService } from './services/auto-iteration';
 import { configService } from './services/config.service';
@@ -74,6 +75,7 @@ import {
   sessionDispatchService,
   claudeModelCatalogService,
   codexModelCatalogService,
+  providerUsageService,
   type SessionFileLogger,
   sessionDataService,
   sessionBackgroundDeliveryService,
@@ -129,6 +131,7 @@ export type ApplicationServices = BridgeServices & {
   executeStartupScriptPipeline: typeof executeStartupScriptPipeline;
   claudeModelCatalogService: Pick<typeof claudeModelCatalogService, 'getModels'>;
   codexModelCatalogService: Pick<typeof codexModelCatalogService, 'getModels'>;
+  providerUsageService: Pick<typeof providerUsageService, 'getUsage'>;
   factoryConfigService: Pick<typeof FactoryConfigService, 'readConfig'>;
   findAvailablePort: typeof findAvailablePort;
   gitCloneService: typeof gitCloneService;
@@ -170,14 +173,16 @@ export type ApplicationServices = BridgeServices & {
   archiveWorkspace: typeof archiveWorkspace;
   cleanupWorkspaceRuntimeResources: typeof cleanupWorkspaceRuntimeResources;
   cleanupWorkspaceScopedCaches(workspaceId: string): void;
-  createChildWorkspace: typeof createChildWorkspace;
+  createChildWorkspace: (input: Parameters<typeof createChildWorkspace>[0]) => Promise<string>;
   deliverWorkspaceNotification: typeof deliverWorkspaceNotification;
+  workspaceCreationService: WorkspaceCreationService;
   createWorkspaceCreationService: (
     dependencies: ConstructorParameters<typeof WorkspaceCreationService>[0]
   ) => Pick<WorkspaceCreationService, 'create'>;
   launchWorkspace: (
     source: Parameters<typeof launchWorkspace>[0]
   ) => ReturnType<typeof launchWorkspace>;
+  renameWorkspace: ReturnType<typeof createWorkspaceRename>['rename'];
   fireLifecycleNotification: typeof fireLifecycleNotification;
   persistChildNotification: typeof persistChildNotification;
   persistParentNotification: typeof persistParentNotification;
@@ -220,6 +225,11 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
   const workspaceCreationService = new WorkspaceCreationService({
     logger: createLogger('workspace-creation'),
   });
+  const workspaceRename = createWorkspaceRename({
+    rename: (id, name) => services.workspaceDataService.rename(id, name),
+    publishAcceptedName: (id, name, updatedAt) =>
+      services.workspaceSnapshotStore.publishAcceptedName(id, name, updatedAt),
+  });
   const services: ApplicationServices = {
     acpRuntimeManager,
     acpTraceLogger,
@@ -239,6 +249,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     executeStartupScriptPipeline,
     claudeModelCatalogService,
     codexModelCatalogService,
+    providerUsageService,
     factoryConfigService: FactoryConfigService,
     findAvailablePort,
     gitCloneService,
@@ -294,6 +305,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     workspaceAutoIterationService,
     workspaceCreationService,
     workspaceDataService,
+    renameWorkspace: workspaceRename.rename,
     workspaceMaintenanceService,
     workspaceGitStateService,
     workspaceNotificationService,
@@ -316,8 +328,8 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     },
     createChildWorkspace: (input) =>
       createChildWorkspace(input, {
-        initializeWorktree: (workspaceId, options) =>
-          services.initializeWorkspaceWorktree(workspaceId, options),
+        findProject: (projectId) => services.projectManagementService.findById(projectId),
+        launchWorkspace: (source) => services.launchWorkspace(source),
       }),
     deliverWorkspaceNotification: (input) =>
       deliverWorkspaceNotification(input, {
@@ -326,14 +338,22 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     createWorkspaceCreationService: (creationDependencies) =>
       new WorkspaceCreationService(creationDependencies),
     launchWorkspace: (source) => {
-      const logger = services.createLogger('workspace-trpc');
+      const logger = services.createLogger(
+        source.type === 'CHILD_WORKSPACE'
+          ? 'workspace-children-orchestrator'
+          : source.type === 'PERIODIC_TASK'
+            ? 'domain-bridges'
+            : 'workspace-trpc'
+      );
       return launchWorkspace(source, {
         getMaxSessionsPerWorkspace: () => services.configService.getMaxSessionsPerWorkspace(),
         resolveProvider: (provider) =>
           services.sessionProviderResolverService.resolveProviderForWorkspaceCreation(provider),
         checkCliHealth: () => services.cliHealthService.checkHealth(),
         createWorkspace: (input) =>
-          services.createWorkspaceCreationService({ logger }).create(input),
+          source.type === 'PERIODIC_TASK'
+            ? services.workspaceCreationService.create(input)
+            : services.createWorkspaceCreationService({ logger }).create(input),
         createDefaultSession: (input) => services.sessionDataService.createAgentSession(input),
         initializeWorktree: (workspaceId, options) =>
           services.initializeWorkspaceWorktree(workspaceId, options),

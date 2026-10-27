@@ -35,6 +35,7 @@ export const MinimalStats: Story = {
       turnCount: 1,
       webSearchRequests: 0,
       contextWindow: 200_000,
+      contextUsedTokens: 700,
     }),
   },
 };
@@ -53,6 +54,7 @@ export const ActiveSession: Story = {
       turnCount: 8,
       webSearchRequests: 0,
       contextWindow: 200_000,
+      contextUsedTokens: 57_000,
     }),
   },
 };
@@ -71,6 +73,7 @@ export const WithWebSearches: Story = {
       turnCount: 5,
       webSearchRequests: 3,
       contextWindow: 200_000,
+      contextUsedTokens: 38_000,
     }),
   },
 };
@@ -89,6 +92,7 @@ export const HighCacheHitRate: Story = {
       turnCount: 10,
       webSearchRequests: 0,
       contextWindow: 200_000,
+      contextUsedTokens: 30_000,
     }),
   },
 };
@@ -107,6 +111,7 @@ export const WarningUsage: Story = {
       turnCount: 25,
       webSearchRequests: 2,
       contextWindow: 200_000,
+      contextUsedTokens: 170_000,
     }),
   },
 };
@@ -125,6 +130,7 @@ export const CriticalUsage: Story = {
       turnCount: 35,
       webSearchRequests: 5,
       contextWindow: 200_000,
+      contextUsedTokens: 194_000,
     }),
   },
 };
@@ -140,6 +146,7 @@ export const WithServiceTier: Story = {
       totalDurationApiMs: 15_000,
       turnCount: 4,
       contextWindow: 200_000,
+      contextUsedTokens: 25_000,
       serviceTier: 'scale',
     }),
   },

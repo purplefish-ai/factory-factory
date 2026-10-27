@@ -204,7 +204,7 @@ export const workspaceCoreRouter = router({
       if (!workspace) {
         throw new TRPCError({ code: 'NOT_FOUND', message: `Workspace not found: ${input.id}` });
       }
-      return workspaceDataService.rename(input.id, input.name);
+      return ctx.appContext.services.renameWorkspace(input.id, input.name);
     }),
 
   // Manually associate a GitHub PR URL with a workspace

@@ -135,6 +135,34 @@ describe('accepted summary hydration', () => {
     expect(value.getByWorkspaceId('ws')?.summaryVersion).toBeUndefined();
   });
 
+  it('requires an accepted name even when its unhydrated default satisfies the shape', () => {
+    const value = store();
+    const { name: _omitted, ...partial } = seed();
+    value.upsert('ws', partial, 'all except name', 100);
+    expect(value.getByWorkspaceId('ws')?.summaryVersion).toBeUndefined();
+    expect(
+      value.upsert('ws', { name: 'Invalid clock', nameUpdatedAt: Number.NaN }, 'rejected name', 150)
+        .accepted
+    ).toBe(false);
+    expect(value.getByWorkspaceId('ws')?.summaryVersion).toBeUndefined();
+    const result = value.publishAcceptedName('ws', '', 200);
+    expect(result).toEqual({ accepted: true, changed: true, emitted: true });
+    expect(value.getByWorkspaceId('ws')).toMatchObject({ name: '', summaryVersion: 1 });
+  });
+
+  it('accepted rename hydrates only name, then an older canonical name cannot undo it while other fields hydrate', () => {
+    const value = store();
+    value.upsert('ws', { projectId: 'project-1' }, 'partial', 50);
+    value.publishAcceptedName('ws', 'Confirmed name', 200);
+    expect(value.getByWorkspaceId('ws')?.summaryVersion).toBeUndefined();
+    value.upsert('ws', { ...seed(), nameUpdatedAt: 100 }, 'older canonical seed', 100);
+    expect(value.getByWorkspaceId('ws')).toMatchObject({
+      name: 'Confirmed name',
+      summaryVersion: 1,
+      worktreePath: '/work/issue',
+    });
+  });
+
   it('does not count rejected mode or session history even when stored defaults have valid shapes', () => {
     const value = store();
     value.upsert(
