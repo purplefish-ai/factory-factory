@@ -1,7 +1,17 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { SnapshotUpdateInput } from '@/backend/services/workspace';
+import type { SnapshotUpdateInput, WorkspaceStateChangedEvent } from '@/backend/services/workspace';
 import { prProjectionDefaults } from '@/backend/testing/pr-projection-fixture';
+
+type WorkspaceEventFixture = {
+  workspaceId: string;
+  fromStatus: string;
+  toStatus: string;
+  workspace: Pick<
+    WorkspaceStateChangedEvent['workspace'],
+    'projectId' | 'name' | 'branchName' | 'createdAt' | 'updatedAt'
+  > | null;
+};
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -645,18 +655,7 @@ describe('configureEventCollector', () => {
     const onCall = vi
       .mocked(workspaceStateMachine.on)
       .mock.calls.find((call) => call[0] === 'workspace_state_changed');
-    const handler = onCall![1] as (event: {
-      workspaceId: string;
-      fromStatus: string;
-      toStatus: string;
-      workspace: {
-        projectId: string;
-        name: string;
-        branchName: string | null;
-        createdAt: Date;
-        updatedAt: Date;
-      };
-    }) => void;
+    const handler = onCall![1] as (event: WorkspaceEventFixture) => void;
 
     handler({
       workspaceId: 'ws-1',
@@ -690,18 +689,7 @@ describe('configureEventCollector', () => {
     const onCall = vi
       .mocked(workspaceStateMachine.on)
       .mock.calls.find((call) => call[0] === 'workspace_state_changed');
-    const handler = onCall![1] as (event: {
-      workspaceId: string;
-      fromStatus: string;
-      toStatus: string;
-      workspace: {
-        projectId: string;
-        name: string;
-        branchName: string | null;
-        createdAt: Date;
-        updatedAt: Date;
-      } | null;
-    }) => void;
+    const handler = onCall![1] as (event: WorkspaceEventFixture) => void;
 
     handler({
       workspaceId: 'ws-1',
@@ -739,18 +727,7 @@ describe('configureEventCollector', () => {
     const onCall = vi
       .mocked(workspaceStateMachine.on)
       .mock.calls.find((call) => call[0] === 'workspace_state_changed');
-    const handler = onCall![1] as (event: {
-      workspaceId: string;
-      fromStatus: string;
-      toStatus: string;
-      workspace: {
-        projectId: string;
-        name: string;
-        branchName: string | null;
-        createdAt: Date;
-        updatedAt: Date;
-      } | null;
-    }) => void;
+    const handler = onCall![1] as (event: WorkspaceEventFixture) => void;
 
     handler({
       workspaceId: 'ws-new',
@@ -1287,18 +1264,7 @@ describe('configureEventCollector', () => {
     const onCall = vi
       .mocked(workspaceStateMachine.on)
       .mock.calls.find((call) => call[0] === 'workspace_state_changed');
-    const handler = onCall![1] as (event: {
-      workspaceId: string;
-      fromStatus: string;
-      toStatus: string;
-      workspace: {
-        projectId: string;
-        name: string;
-        branchName: string | null;
-        createdAt: Date;
-        updatedAt: Date;
-      };
-    }) => void;
+    const handler = onCall![1] as (event: WorkspaceEventFixture) => void;
 
     handler({
       workspaceId: 'ws-1',

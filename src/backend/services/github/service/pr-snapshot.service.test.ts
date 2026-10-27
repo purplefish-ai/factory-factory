@@ -1,7 +1,10 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import type { GitHubWorkspaceBridge } from './bridges';
-import { githubCLIService } from './github-cli.service';
-import { PR_SNAPSHOT_UPDATED, PR_URL_ATTACHED, prSnapshotService } from './pr-snapshot.service';
+import { PR_URL_ATTACHED, prSnapshotService } from './pr-snapshot.service';
+
+vi.mock('./github-cli.service', () => {
+  throw new Error('Snapshot attachment must not import the GitHub CLI dependency graph');
+});
 
 const url = 'https://github.com/org/repo/pull/1';
 const row = {
@@ -21,11 +24,6 @@ const bridge = {
   detachPR: vi.fn(),
   attachDiscoveredPRsIfClaimMatches: vi.fn(),
   findPRContext: vi.fn(),
-  recordSnapshot: vi.fn(),
-  applyPrSnapshotWithDispatchReset: vi.fn(),
-  applyPrObservationWithDispatchReset: vi.fn(),
-  attachDiscoveredPRIfClaimMatches: vi.fn(),
-  updatePRSnapshotIfUrlMatches: vi.fn(),
 } satisfies GitHubWorkspaceBridge;
 const observe = vi.fn();
 beforeEach(() => {
@@ -61,7 +59,6 @@ it('routes manual refresh through the same full observation pipeline', async () 
     success: true,
   });
   expect(observe).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'w', prId: 'p' }, { force: true });
-  expect(bridge.applyPrSnapshotWithDispatchReset).not.toHaveBeenCalled();
 });
 it('refreshes every explicit association and reports a sibling failure', async () => {
   bridge.listPRs.mockResolvedValue([row, { ...row, id: 'p2' }]);
@@ -112,40 +109,19 @@ it('returns an error result when a discovery attachment fails', async () => {
   ).resolves.toEqual({ success: false, reason: 'error' });
 });
 
-it('publishes the prior association state after an accepted fallback refresh', async () => {
-  prSnapshotService.configure({ workspace: bridge });
-  bridge.findPR.mockResolvedValue({ ...row, state: 'NONE' });
-  bridge.applyPrSnapshotWithDispatchReset.mockResolvedValue({
-    applied: true,
-    dispatchReset: false,
+it('returns the accepted association fields rather than its pre-refresh cache', async () => {
+  bridge.findPR.mockResolvedValueOnce({ ...row, state: 'NONE' }).mockResolvedValueOnce({
+    ...row,
+    state: 'MERGED',
+    ciStatus: 'SUCCESS',
   });
-  const fetch = vi.spyOn(githubCLIService, 'fetchAndComputePRState').mockResolvedValue({
-    prNumber: 1,
-    prState: 'OPEN',
-    prCiStatus: 'SUCCESS',
-    prReviewState: null,
-    headRefName: null,
+  expect(await prSnapshotService.refreshPR({ workspaceId: 'w', prId: 'p' })).toEqual({
+    success: true,
+    snapshot: {
+      prNumber: 1,
+      prState: 'MERGED',
+      prCiStatus: 'SUCCESS',
+      prReviewState: null,
+    },
   });
-  const listener = vi.fn();
-  prSnapshotService.on(PR_SNAPSHOT_UPDATED, listener);
-  try {
-    await expect(
-      prSnapshotService.refreshPR({ workspaceId: 'w', prId: 'p' })
-    ).resolves.toMatchObject({ success: true });
-    expect(listener).toHaveBeenCalledWith(
-      expect.objectContaining({
-        prId: 'p',
-        previousPrState: 'NONE',
-        prState: 'OPEN',
-      })
-    );
-    bridge.applyPrSnapshotWithDispatchReset.mockResolvedValue({
-      applied: false,
-      dispatchReset: false,
-    });
-    await prSnapshotService.refreshPR({ workspaceId: 'w', prId: 'p' });
-    expect(listener).toHaveBeenCalledTimes(1);
-  } finally {
-    fetch.mockRestore();
-  }
 });

@@ -2,13 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { workspacePrSnapshotService } from '@/backend/services/workspace';
 import type { GitHubWorkspaceBridge } from './bridges';
 
-const fetchSnapshot = vi.hoisted(() => vi.fn());
-vi.mock('./github-cli.service', () => ({
-  githubCLIService: {
-    fetchAndComputePRState: fetchSnapshot,
-    extractPRInfo: () => ({ number: 42 }),
-  },
-}));
+const observe = vi.fn();
 
 import {
   PR_DETACHED,
@@ -44,12 +38,6 @@ const makePR = (
   observationEpoch: 0,
   transitionSequence: 0,
 });
-const snapshot = {
-  prNumber: 42,
-  prState: 'OPEN' as const,
-  prReviewState: 'APPROVED',
-  prCiStatus: 'SUCCESS' as const,
-};
 const claim = {
   githubOwner: 'org',
   githubRepo: 'repo',
@@ -65,11 +53,6 @@ const bridge = {
   attachPR: vi.fn(),
   detachPR: vi.fn(),
   attachDiscoveredPRsIfClaimMatches: vi.fn(),
-  applyPrSnapshotWithDispatchReset: vi.fn(),
-  applyPrObservationWithDispatchReset: vi.fn(),
-  recordSnapshot: vi.fn(),
-  attachDiscoveredPRIfClaimMatches: vi.fn(),
-  updatePRSnapshotIfUrlMatches: vi.fn(),
 } satisfies GitHubWorkspaceBridge;
 beforeEach(() => {
   vi.resetAllMocks();
@@ -80,21 +63,13 @@ beforeEach(() => {
   );
   bridge.attachPR.mockResolvedValue({ prId: 'a', created: true, reattached: false });
   bridge.attachDiscoveredPRsIfClaimMatches.mockResolvedValue(['a', 'b']);
-  bridge.applyPrSnapshotWithDispatchReset.mockResolvedValue({
-    applied: true,
-    dispatchReset: false,
-  });
-  bridge.applyPrObservationWithDispatchReset.mockResolvedValue({
-    applied: true,
-    dispatchReset: false,
-  });
-  fetchSnapshot.mockResolvedValue(snapshot);
-  prSnapshotService.configure({ workspace: bridge });
+  observe.mockResolvedValue(true);
+  prSnapshotService.configure({ workspace: bridge, observe });
 });
 afterEach(() => prSnapshotService.removeAllListeners());
 describe('PRSnapshotService collection targets', () => {
-  it('reports a retained attachment when its initial fetch throws', async () => {
-    fetchSnapshot.mockRejectedValue(new Error('offline'));
+  it('reports a retained attachment when its initial observation throws', async () => {
+    observe.mockRejectedValue(new Error('offline'));
     expect(await prSnapshotService.attachAndRefreshPR('w', makePR('a').url)).toEqual({
       success: false,
       reason: 'error',
@@ -110,17 +85,16 @@ describe('PRSnapshotService collection targets', () => {
     });
     expect(bridge.attachPR).not.toHaveBeenCalled();
   });
-  it('publishes the retained attachment before a failed fetch', async () => {
-    fetchSnapshot.mockResolvedValue(null);
+  it('publishes the retained attachment before a rejected observation', async () => {
+    observe.mockResolvedValue(false);
     const attached = vi.fn();
     prSnapshotService.on(PR_URL_ATTACHED, attached);
     expect(await prSnapshotService.attachAndRefreshPR('w', makePR('a').url)).toEqual({
       success: false,
-      reason: 'fetch_failed',
+      reason: 'stale_observation',
       prId: 'a',
     });
     expect(attached).toHaveBeenCalledWith({ workspaceId: 'w', prId: 'a', prUrl: makePR('a').url });
-    expect(bridge.applyPrSnapshotWithDispatchReset).not.toHaveBeenCalled();
   });
   it.each([
     { created: false, reattached: false },
@@ -132,21 +106,23 @@ describe('PRSnapshotService collection targets', () => {
     await prSnapshotService.attachAndRefreshPR('w', makePR('a').url);
     expect(attached).toHaveBeenCalledTimes(flags.reattached ? 1 : 0);
   });
-  it('pins identity and revision before fetching, without overwriting the workspace branch', async () => {
-    await prSnapshotService.refreshPR({ workspaceId: 'w', prId: 'b' });
-    expect(fetchSnapshot).toHaveBeenCalledWith(makePR('b').url);
-    expect(bridge.applyPrSnapshotWithDispatchReset).toHaveBeenCalledWith('w', {
-      ...snapshot,
-      prId: 'b',
-      expectedRevision: 3,
-      prUpdatedAt: expect.any(Date),
+  it('observes the explicit association and reads its committed fields', async () => {
+    expect(await prSnapshotService.refreshPR({ workspaceId: 'w', prId: 'b' })).toEqual({
+      success: true,
+      snapshot: {
+        prNumber: 42,
+        prState: 'OPEN',
+        prReviewState: null,
+        prCiStatus: 'SUCCESS',
+      },
     });
+    expect(observe).toHaveBeenCalledExactlyOnceWith(
+      { workspaceId: 'w', prId: 'b' },
+      { force: true }
+    );
   });
   it('publishes nothing when a delayed refresh loses its revision guard', async () => {
-    bridge.applyPrSnapshotWithDispatchReset.mockResolvedValue({
-      applied: false,
-      dispatchReset: false,
-    });
+    observe.mockResolvedValue(false);
     const listener = vi.fn();
     prSnapshotService.on(PR_SNAPSHOT_UPDATED, listener);
     expect(await prSnapshotService.refreshPR({ workspaceId: 'w', prId: 'a' })).toEqual({
@@ -155,23 +131,26 @@ describe('PRSnapshotService collection targets', () => {
     });
     expect(listener).not.toHaveBeenCalled();
   });
-  it('rejects cross-workspace and detached targets before fetching', async () => {
+  it('rejects cross-workspace and detached targets before observing', async () => {
     expect(await prSnapshotService.refreshPR({ workspaceId: 'other', prId: 'a' })).toEqual({
       success: false,
       reason: 'no_pr_url',
     });
-    expect(fetchSnapshot).not.toHaveBeenCalled();
+    expect(observe).not.toHaveBeenCalled();
     bridge.findPR.mockResolvedValue(null);
     expect(await prSnapshotService.refreshPR({ workspaceId: 'w', prId: 'detached' })).toEqual({
       success: false,
       reason: 'no_pr_url',
     });
-    expect(fetchSnapshot).not.toHaveBeenCalled();
+    expect(observe).not.toHaveBeenCalled();
   });
   it('refreshes every attached PR, including terminal siblings', async () => {
     bridge.listPRs.mockResolvedValue([makePR('a'), { ...makePR('b'), state: 'CLOSED' }]);
     expect((await prSnapshotService.refreshWorkspace('w')).success).toBe(true);
-    expect(fetchSnapshot.mock.calls).toEqual([[makePR('a').url], [makePR('b').url]]);
+    expect(observe.mock.calls).toEqual([
+      [{ workspaceId: 'w', prId: 'a' }, { force: true }],
+      [{ workspaceId: 'w', prId: 'b' }, { force: true }],
+    ]);
   });
   it.each(['findPRContext', 'listPRs'] as const)(
     'maps %s read failures to an error result',
@@ -181,16 +160,16 @@ describe('PRSnapshotService collection targets', () => {
         success: false,
         reason: 'error',
       });
-      expect(fetchSnapshot).not.toHaveBeenCalled();
+      expect(observe).not.toHaveBeenCalled();
     }
   );
-  it('continues refreshing siblings after a fetch failure', async () => {
-    fetchSnapshot.mockResolvedValueOnce(null);
+  it('continues refreshing siblings after an observation failure', async () => {
+    observe.mockResolvedValueOnce(false);
     expect(await prSnapshotService.refreshWorkspace('w')).toEqual({
       success: false,
-      reason: 'fetch_failed',
+      reason: 'stale_observation',
     });
-    expect(fetchSnapshot).toHaveBeenCalledTimes(2);
+    expect(observe).toHaveBeenCalledTimes(2);
   });
   it('reports an empty collection and a missing workspace separately', async () => {
     bridge.listPRs.mockResolvedValue([]);
@@ -216,17 +195,17 @@ describe('PRSnapshotService collection targets', () => {
       makePR('a').url,
       makePR('b').url,
     ]);
-    expect(fetchSnapshot).toHaveBeenCalledTimes(2);
+    expect(observe).toHaveBeenCalledTimes(2);
   });
-  it('does not fetch when discovery loses its claim', async () => {
+  it('does not observe when discovery loses its claim', async () => {
     bridge.attachDiscoveredPRsIfClaimMatches.mockResolvedValue([]);
     expect(
       await prSnapshotService.attachDiscoveredPRAndRefresh('w', makePR('a').url, claim)
     ).toEqual({ success: false, reason: 'claim_stale' });
-    expect(fetchSnapshot).not.toHaveBeenCalled();
+    expect(observe).not.toHaveBeenCalled();
   });
   it('counts retained discoveries even when snapshots fail', async () => {
-    fetchSnapshot.mockResolvedValue(null);
+    observe.mockResolvedValue(false);
     expect(
       await prSnapshotService.attachDiscoveredPRsAndRefresh(
         'w',
@@ -234,78 +213,6 @@ describe('PRSnapshotService collection targets', () => {
         claim
       )
     ).toBe(2);
-  });
-  it.each([undefined, null, new Date('2026-01-01')])(
-    'preserves absent failure cursors and writes explicit values %s',
-    async (failedAt) => {
-      await prSnapshotService.recordPrObservation('w', {
-        prId: 'b',
-        expectedRevision: 2,
-        prUrl: makePR('b').url,
-        prNumber: 42,
-        ciStatus: 'FAILURE',
-        prState: 'OPEN',
-        reviewState: null,
-        hasMergeConflict: false,
-        failedAt,
-      });
-      const written = bridge.applyPrObservationWithDispatchReset.mock.calls[0]?.[1];
-      expect(written).toMatchObject({
-        prId: 'b',
-        expectedRevision: 2,
-        expectedPrUrl: makePR('b').url,
-      });
-      if (failedAt === undefined) {
-        expect(written).not.toHaveProperty('prCiFailedAt');
-      } else {
-        expect(written?.prCiFailedAt).toEqual(failedAt);
-      }
-    }
-  );
-  it('refuses mismatched identity and URL observations', async () => {
-    await prSnapshotService.recordPrObservation('w', {
-      prId: 'a',
-      prUrl: makePR('b').url,
-      prNumber: 42,
-      ciStatus: 'SUCCESS',
-      prState: 'OPEN',
-      reviewState: null,
-      hasMergeConflict: false,
-    });
-    expect(bridge.applyPrObservationWithDispatchReset).not.toHaveBeenCalled();
-  });
-  it('publishes an association update only for applied writes', async () => {
-    const listener = vi.fn();
-    prSnapshotService.on(PR_SNAPSHOT_UPDATED, listener);
-    bridge.applyPrSnapshotWithDispatchReset
-      .mockResolvedValueOnce({ applied: true, dispatchReset: true })
-      .mockResolvedValueOnce({ applied: false, dispatchReset: false });
-    await prSnapshotService.applySnapshot('w', snapshot, { prId: 'b' });
-    await prSnapshotService.applySnapshot('w', snapshot, { prId: 'a' });
-    expect(listener).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({
-        workspaceId: 'w',
-        prId: 'b',
-        prUrl: makePR('b').url,
-      })
-    );
-  });
-  it('requires a target for ambiguous review cursors and scopes explicit cursors', async () => {
-    await prSnapshotService.recordReviewCheck('w');
-    expect(bridge.applyPrSnapshotWithDispatchReset).not.toHaveBeenCalled();
-    await prSnapshotService.recordReviewCheck('w', {
-      prId: 'b',
-      checkedAt: null,
-      latestCommentId: 'comment-b',
-    });
-    expect(bridge.applyPrSnapshotWithDispatchReset).toHaveBeenCalledWith(
-      'w',
-      expect.objectContaining({
-        prId: 'b',
-        prReviewLastCheckedAt: null,
-        prReviewLastCommentId: 'comment-b',
-      })
-    );
   });
   it('publishes detachment only when the exact association was removed', async () => {
     bridge.detachPR
@@ -318,8 +225,8 @@ describe('PRSnapshotService collection targets', () => {
     await prSnapshotService.detachPR(target);
     expect(listener).toHaveBeenCalledExactlyOnceWith(target);
   });
-  it('handles fetch exceptions without publishing snapshots', async () => {
-    fetchSnapshot.mockRejectedValue(new Error('offline'));
+  it('handles observation exceptions without publishing snapshots', async () => {
+    observe.mockRejectedValue(new Error('offline'));
     const listener = vi.fn();
     prSnapshotService.on(PR_SNAPSHOT_UPDATED, listener);
     expect(await prSnapshotService.refreshPR({ workspaceId: 'w', prId: 'a' })).toEqual({

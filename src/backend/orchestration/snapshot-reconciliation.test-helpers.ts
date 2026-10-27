@@ -1,6 +1,9 @@
 import { vi } from 'vitest';
-import type { WorkspaceSnapshotEntry } from '@/backend/services/workspace';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
+import {
+  WorkspaceSnapshotEntrySchema,
+  type WorkspaceSnapshotEntry,
+} from '@/shared/workspace-snapshot';
 import type { ReconciliationBridges } from './snapshot-reconciliation.orchestrator';
 
 export function createMockWorkspace(
@@ -77,7 +80,7 @@ export function createMockBridges(): ReconciliationBridges {
 export function createSnapshotEntry(
   overrides: Partial<WorkspaceSnapshotEntry> = {}
 ): WorkspaceSnapshotEntry {
-  return {
+  const entry: Omit<WorkspaceSnapshotEntry, 'summaryVersion'> & { summaryVersion?: 1 } = {
     workspaceId: 'ws-1',
     projectId: 'proj-1',
     version: 1,
@@ -131,6 +134,47 @@ export function createSnapshotEntry(
       runScript: 0,
       reconciliation: 0,
     },
+    // Complete fixtures explicitly represent a manual workspace with no issues or PRs.
+    // These are test defaults only; the wire parser must reject omitted fields.
+    ...(overrides.summaryVersion === 1
+      ? {
+          worktreePath: null,
+          initErrorMessage: null,
+          githubIssueNumber: null,
+          githubIssueUrl: null,
+          linearIssueId: null,
+          linearIssueIdentifier: null,
+          linearIssueUrl: null,
+          creationSource: 'MANUAL',
+          autoIteration:
+            overrides.mode === 'AUTO_ITERATION'
+              ? {
+                  status: overrides.autoIterationStatus ?? null,
+                  currentIteration: null,
+                  maxIterations: null,
+                  currentMetricSummary: null,
+                }
+              : null,
+          prs: [],
+          prSummary: {
+            totalCount: 0,
+            openCount: 0,
+            hasNonterminal: false,
+            state: 'NONE',
+            ciStatus: 'UNKNOWN',
+            hasMergeConflict: false,
+            ratchetState: 'IDLE',
+          },
+          prUrl: null,
+          prNumber: null,
+          prState: 'NONE',
+          prCiStatus: 'UNKNOWN',
+          prUpdatedAt: null,
+          ratchetEnabled: false,
+        }
+      : {}),
     ...overrides,
   };
+  const { summaryVersion, ...legacy } = entry;
+  return summaryVersion === 1 ? WorkspaceSnapshotEntrySchema.parse(entry) : legacy;
 }

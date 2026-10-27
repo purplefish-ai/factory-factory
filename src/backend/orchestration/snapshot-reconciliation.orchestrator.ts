@@ -40,6 +40,8 @@ import {
   type workspaceMaintenanceService,
   type workspaceSnapshotStore,
 } from '@/backend/services/workspace';
+import { projectWorkspaceSnapshotMetadata } from '@/shared/workspace-snapshot';
+import { projectAutoIterationSummary } from '@/shared/workspace-summary';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -121,10 +123,34 @@ type DriftComparableField =
   | 'runScriptStatus'
   | 'isWorking'
   | 'pendingRequestType'
-  | 'sessionSummaries';
+  | 'sessionSummaries'
+  | 'worktreePath'
+  | 'initErrorMessage'
+  | 'githubIssueNumber'
+  | 'githubIssueUrl'
+  | 'linearIssueId'
+  | 'linearIssueIdentifier'
+  | 'linearIssueUrl'
+  | 'creationSource'
+  | 'autoIteration';
 
 const DRIFT_FIELD_GROUPS: { group: string; fields: DriftComparableField[] }[] = [
-  { group: 'workspace', fields: ['status', 'name', 'branchName'] },
+  {
+    group: 'metadata',
+    fields: [
+      'worktreePath',
+      'initErrorMessage',
+      'githubIssueNumber',
+      'githubIssueUrl',
+      'linearIssueId',
+      'linearIssueIdentifier',
+      'linearIssueUrl',
+      'creationSource',
+    ],
+  },
+  { group: 'autoIteration', fields: ['autoIteration'] },
+  { group: 'workspace', fields: ['status', 'branchName'] },
+  { group: 'name', fields: ['name'] },
   { group: 'pr', fields: ['prs', 'prSummary', 'prState', 'prCiStatus', 'prNumber'] },
   {
     group: 'ratchet',
@@ -255,6 +281,8 @@ export class SnapshotReconciliationService {
         : null;
 
     return {
+      ...projectWorkspaceSnapshotMetadata(ws),
+      autoIteration: projectAutoIterationSummary(ws),
       projectId: ws.projectId,
       name: ws.name,
       nameUpdatedAt: ws.updatedAt.getTime(),

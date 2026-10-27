@@ -208,7 +208,7 @@ describe('createSnapshotsUpgradeHandler', () => {
       rename: async () => canonical,
       publishAcceptedName: (...args) => store.publishAcceptedName(...args),
     });
-    expect(await rename.rename('ws-1', 'Requested')).toBe(canonical);
+    expect(await rename.rename('ws-1', 'Requested')).toEqual(canonical);
     for (const viewer of [ws, second]) {
       expect(sentMessages(viewer)).toEqual([
         expect.objectContaining({

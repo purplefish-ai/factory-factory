@@ -47,11 +47,11 @@ describe('createApplication', () => {
       { publishAcceptedName: publishB }
     );
     const pending = first.services.renameWorkspace('same-id', 'Requested A');
-    expect(await second.services.renameWorkspace('same-id', 'Requested B')).toBe(b);
+    expect(await second.services.renameWorkspace('same-id', 'Requested B')).toEqual(b);
     expect(publishA).not.toHaveBeenCalled();
     expect(publishB).toHaveBeenCalledExactlyOnceWith('same-id', b.name, 200);
     finish(a);
-    expect(await pending).toBe(a);
+    expect(await pending).toEqual(a);
     expect(publishA).toHaveBeenCalledExactlyOnceWith('same-id', a.name, 200);
   });
 

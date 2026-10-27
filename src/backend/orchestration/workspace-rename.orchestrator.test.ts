@@ -61,7 +61,7 @@ describe('accepted workspace rename publication', () => {
     expect(f.changed).not.toHaveBeenCalled();
     await vi.waitFor(() => expect(f.rename).toHaveBeenCalledTimes(1));
     resolve(f.renamed);
-    expect(await result).toBe(f.renamed);
+    expect(await result).toEqual(f.renamed);
     expect(f.rename).toHaveBeenCalledExactlyOnceWith('workspace', 'Requested name');
     expect(f.store.getByWorkspaceId('workspace')).toMatchObject({
       name: f.renamed.name,
@@ -166,8 +166,8 @@ describe('accepted workspace rename publication', () => {
       return Promise.resolve(newer);
     });
     finishFirst(f.renamed);
-    await expect(first).resolves.toBe(f.renamed);
-    await expect(second).resolves.toBe(newer);
+    await expect(first).resolves.toEqual(f.renamed);
+    await expect(second).resolves.toEqual(newer);
     expect(f.store.getByWorkspaceId('workspace')?.name).toBe(newer.name);
     expect(f.changed).toHaveBeenCalledTimes(2);
     expect(f.useCase.pendingWorkspaceCount).toBe(0);
@@ -180,7 +180,7 @@ describe('accepted workspace rename publication', () => {
     const first = f.renameWorkspace('workspace', 'First');
     const second = f.renameWorkspace('workspace', 'Second');
     await expect(first).rejects.toBe(failure);
-    await expect(second).resolves.toBe(f.renamed);
+    await expect(second).resolves.toEqual(f.renamed);
     expect(f.changed).toHaveBeenCalledTimes(1);
     expect(f.useCase.pendingWorkspaceCount).toBe(0);
   });
@@ -189,8 +189,8 @@ describe('accepted workspace rename publication', () => {
     const f = fixture();
     const newer = { ...f.renamed, name: 'Newer canonical', updatedAt: new Date(300) };
     f.rename.mockResolvedValueOnce(newer).mockResolvedValueOnce(f.renamed);
-    await expect(f.renameWorkspace('workspace', 'Newer')).resolves.toBe(newer);
-    await expect(f.renameWorkspace('workspace', 'Older')).resolves.toBe(f.renamed);
+    await expect(f.renameWorkspace('workspace', 'Newer')).resolves.toEqual(newer);
+    await expect(f.renameWorkspace('workspace', 'Older')).resolves.toEqual(f.renamed);
     expect(f.store.getByWorkspaceId('workspace')?.name).toBe(newer.name);
     expect(f.changed).toHaveBeenCalledTimes(1);
     expect(f.useCase.pendingWorkspaceCount).toBe(0);
@@ -208,7 +208,7 @@ describe('accepted workspace rename publication', () => {
     const first = f.renameWorkspace('workspace', 'Slow');
     const other = { ...f.renamed, id: 'other' };
     f.rename.mockResolvedValueOnce(other);
-    await expect(f.renameWorkspace('other', 'Fast')).resolves.toBe(other);
+    await expect(f.renameWorkspace('other', 'Fast')).resolves.toEqual(other);
     expect(f.useCase.pendingWorkspaceCount).toBe(1);
     finishFirst(f.renamed);
     await first;

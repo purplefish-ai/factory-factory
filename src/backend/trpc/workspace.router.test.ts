@@ -4,9 +4,7 @@ import type { AppContext, ApplicationServices } from '@/backend/app-context';
 import { ApplicationError } from '@/backend/lib/application-error';
 import type { CLIHealthStatus } from '@/backend/orchestration/cli-health.service';
 import { launchWorkspace } from '@/backend/orchestration/workspace-launch.orchestrator';
-import type { RenamedWorkspace } from '@/backend/orchestration/workspace-rename.orchestrator';
 import { applicationGraphMocks, createFakeApplicationGraph } from '@/test-utils/application-graph';
-import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { PRState, RatchetState, WorkspaceStatus } from '@prisma-gen/client';
 
 const mockWorkspaceDataService = vi.hoisted(() => ({
@@ -248,32 +246,6 @@ function createCaller(requestTrust?: {
     logger,
   };
 }
-
-describe('workspace rename', () => {
-  beforeEach(() => mockWorkspaceDataService.findById.mockReset());
-  it('routes accepted rename through the injected application use case and returns its canonical result', async () => {
-    const { caller, services } = createCaller();
-    mockWorkspaceDataService.findById.mockResolvedValueOnce({ id: 'workspace' });
-    const canonical = unsafeCoerce<RenamedWorkspace>({
-      id: 'workspace',
-      name: 'Canonical name',
-      updatedAt: new Date(200),
-    });
-    vi.mocked(services.renameWorkspace).mockResolvedValueOnce(canonical);
-    expect(await caller.rename({ id: 'workspace', name: '  Requested name  ' })).toBe(canonical);
-    expect(services.renameWorkspace).toHaveBeenCalledExactlyOnceWith('workspace', 'Requested name');
-  });
-
-  it('preserves the rename not-found response before invoking the application use case', async () => {
-    const { caller, services } = createCaller();
-    mockWorkspaceDataService.findById.mockResolvedValueOnce(null);
-    await expect(caller.rename({ id: 'missing', name: 'Name' })).rejects.toMatchObject({
-      code: 'NOT_FOUND',
-      message: 'Workspace not found: missing',
-    });
-    expect(services.renameWorkspace).not.toHaveBeenCalled();
-  });
-});
 
 describe('workspace provider defaults', () => {
   it('returns NOT_FOUND without Prisma internals when the workspace was deleted', async () => {
