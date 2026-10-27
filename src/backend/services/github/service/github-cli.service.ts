@@ -6,20 +6,13 @@ import type { CIStatus, PRState } from '@/shared/core';
 import type { PRWithFullDetails, ReviewAction } from '@/shared/github-types';
 import { GH_MAX_BUFFER_BYTES, GH_TIMEOUT_MS, ghExecLimit } from './github-cli/constants';
 import { classifyError, logGitHubCLIError } from './github-cli/errors';
-import {
-  computeCIStatus,
-  computePRState,
-  mapComments,
-  mapLabels,
-  mapStatusChecks,
-} from './github-cli/mappers';
+import { computeCIStatus, computePRState } from './github-cli/mappers';
+import { getPRFullDetails, getPRReviewDetails, getPRStatusDetails } from './github-cli/pr-details';
 import {
   collectResolvedReviewCommentIds,
   type TruncatedResolvedThread,
 } from './github-cli/resolved-review-comments';
-import { getChronologicalReviews } from './github-cli/reviews';
 import {
-  fullPRDetailsSchema,
   issueSchema,
   openPullRequestsGraphQLSchema,
   prStatusSchema,
@@ -37,6 +30,8 @@ import type {
   OpenPullRequest,
   PRInfo,
   PRStatusFromGitHub,
+  PRStatusDetails,
+  PRReviewDetails,
   ReviewRequestedPR,
 } from './github-cli/types';
 import { parseGhJson } from './github-cli/utils';
@@ -449,87 +444,31 @@ class GitHubCLIService {
     }
   }
 
-  /**
-   * Get full PR details including reviews, comments, labels, and CI status.
-   */
-  async getPRFullDetails(
+  /** Mandatory monitoring facts, independent of review enrichment. */
+  getPRStatusDetails(
+    repo: string,
+    prNumber: number,
+    signal?: AbortSignal
+  ): Promise<PRStatusDetails> {
+    return getPRStatusDetails(repo, prNumber, (args, options) => this.exec(args, options), signal);
+  }
+
+  /** Optional review bodies and conversation comments. */
+  getPRReviewDetails(
+    repo: string,
+    prNumber: number,
+    signal?: AbortSignal
+  ): Promise<PRReviewDetails> {
+    return getPRReviewDetails(repo, prNumber, (args, options) => this.exec(args, options), signal);
+  }
+
+  /** Full PR details retained for existing detail callers. */
+  getPRFullDetails(
     repo: string,
     prNumber: number,
     signal?: AbortSignal
   ): Promise<PRWithFullDetails> {
-    const fields = [
-      'number',
-      'title',
-      'url',
-      'author',
-      'createdAt',
-      'updatedAt',
-      'isDraft',
-      'state',
-      'reviewDecision',
-      'statusCheckRollup',
-      'comments',
-      'labels',
-      'additions',
-      'deletions',
-      'changedFiles',
-      'headRefName',
-      'headRefOid',
-      'baseRefName',
-      'mergeStateStatus',
-    ].join(',');
-
-    try {
-      const { stdout } = await this.exec(
-        ['pr', 'view', String(prNumber), '--repo', repo, '--json', fields],
-        { timeout: GH_TIMEOUT_MS.default, maxBuffer: GH_MAX_BUFFER_BYTES.fullPRDetails, signal }
-      );
-
-      const data = parseGhJson(fullPRDetailsSchema, stdout, 'getPRFullDetails');
-      const reviews = await getChronologicalReviews(repo, prNumber, (args, options) =>
-        this.exec(args, { ...options, timeout: GH_TIMEOUT_MS.default, signal })
-      );
-
-      return {
-        number: data.number,
-        title: data.title,
-        url: data.url,
-        author: data.author,
-        repository: {
-          name: repo.split('/')[1] ?? '',
-          nameWithOwner: repo,
-        },
-        createdAt: data.createdAt,
-        updatedAt: data.updatedAt,
-        isDraft: data.isDraft,
-        state: data.state,
-        reviewDecision: data.reviewDecision,
-        statusCheckRollup: data.statusCheckRollup ? mapStatusChecks(data.statusCheckRollup) : null,
-        reviews,
-        comments: mapComments(data.comments),
-        labels: mapLabels(data.labels),
-        additions: data.additions || 0,
-        deletions: data.deletions || 0,
-        changedFiles: data.changedFiles || 0,
-        headRefOid: data.headRefOid,
-        headRefName: data.headRefName || '',
-        baseRefName: data.baseRefName || '',
-        mergeStateStatus: data.mergeStateStatus || 'UNKNOWN',
-      };
-    } catch (error) {
-      signal?.throwIfAborted();
-      const errorType = classifyError(error);
-      const errorMessage = error instanceof Error ? error.message : String(error);
-
-      logger.error('Failed to fetch PR details via gh CLI', {
-        repo,
-        prNumber,
-        errorType,
-        error: errorMessage,
-      });
-
-      throw new Error(`Failed to fetch PR details: ${errorMessage}`);
-    }
+    return getPRFullDetails(repo, prNumber, (args, options) => this.exec(args, options), signal);
   }
 
   /**
