@@ -316,3 +316,123 @@ it('does not fail a replacement queue token when an older failure settles late',
   service.enqueue(sessionId, request);
   expect(sessionDomainService.getQueueLength(sessionId)).toBe(1);
 });
+
+it('does not overwrite cancellation when failure starts after token invalidation', async () => {
+  const service = new SessionBackgroundDeliveryService();
+  const sessionId = 'invalidated-before-failure';
+  const delivery = {
+    deliveryId: 'invalidated',
+    sessionId,
+    bindingRevision: 1,
+    eventIds: ['e'],
+    text: 'facts',
+    attempt: 3,
+  };
+  service.configure({
+    prepare: async () => ({ status: 'ready', delivery }),
+    validate: async () => true,
+    complete: async () => undefined,
+    fail: async () => ({ paused: true }),
+    recover: async () => undefined,
+    pause: async () => undefined,
+    resume: async () => undefined,
+  });
+  service.enqueue(sessionId, request);
+  const message = sessionDomainService.peekNextMessage(sessionId)!;
+  await service.prepare(sessionId, message);
+  service.invalidate('w', 1);
+  await service.fail(message, new Error('Late failure'));
+  expect(sessionDomainService.getTranscriptSnapshot(sessionId)[0]?.message?.prDeliveryState).toBe(
+    'cancelled'
+  );
+});
+
+it('records cancellation when an invalidated token has already left the queue', async () => {
+  const service = new SessionBackgroundDeliveryService();
+  const sessionId = 'invalidated-dequeued-token';
+  const delivery = {
+    deliveryId: 'dequeued',
+    sessionId,
+    bindingRevision: 1,
+    eventIds: ['e'],
+    text: 'facts',
+    attempt: 1,
+  };
+  service.configure({
+    prepare: async () => ({ status: 'ready', delivery }),
+    validate: async () => true,
+    complete: async () => undefined,
+    fail: async () => ({ paused: false }),
+    recover: async () => undefined,
+    pause: async () => undefined,
+    resume: async () => undefined,
+  });
+  service.enqueue(sessionId, request);
+  const message = sessionDomainService.peekNextMessage(sessionId)!;
+  await service.prepare(sessionId, message);
+  sessionDomainService.dequeueNext(sessionId);
+  sessionDomainService.commitSentUserMessage(sessionId, message);
+  service.invalidate('w', 1);
+  expect(sessionDomainService.getTranscriptSnapshot(sessionId)[0]?.message?.prDeliveryState).toBe(
+    'cancelled'
+  );
+});
+
+it('keeps replacement token ownership when an older prepare discards late', async () => {
+  const service = new SessionBackgroundDeliveryService();
+  const sessionId = 'replacement-after-discard';
+  let discard!: (value: { status: 'discard' }) => void;
+  const preparation = new Promise<{ status: 'discard' }>((resolve) => {
+    discard = resolve;
+  });
+  service.configure({
+    prepare: () => preparation,
+    validate: async () => true,
+    complete: async () => undefined,
+    fail: async () => ({ paused: false }),
+    recover: async () => undefined,
+    pause: async () => undefined,
+    resume: async () => undefined,
+  });
+  service.enqueue(sessionId, request);
+  const old = sessionDomainService.peekNextMessage(sessionId)!;
+  const pending = service.prepare(sessionId, old);
+  service.invalidate('w', 1);
+  service.enqueue(sessionId, request);
+  discard({ status: 'discard' });
+  await pending;
+  service.enqueue(sessionId, request);
+  expect(sessionDomainService.getQueueLength(sessionId)).toBe(1);
+});
+
+it('does not forget a replacement token when failure begins after replacement enqueue', async () => {
+  const service = new SessionBackgroundDeliveryService();
+  const sessionId = 'replacement-before-failure';
+  const delivery = {
+    deliveryId: 'old',
+    sessionId,
+    bindingRevision: 1,
+    eventIds: ['e'],
+    text: 'old facts',
+    attempt: 3,
+  };
+  service.configure({
+    prepare: async () => ({ status: 'ready', delivery }),
+    validate: async () => true,
+    complete: async () => undefined,
+    fail: async () => ({ paused: true }),
+    recover: async () => undefined,
+    pause: async () => undefined,
+    resume: async () => undefined,
+  });
+  service.enqueue(sessionId, request);
+  const original = sessionDomainService.peekNextMessage(sessionId)!;
+  await service.prepare(sessionId, original);
+  sessionDomainService.dequeueNext(sessionId);
+  service.enqueue(sessionId, request);
+  const replacement = sessionDomainService.peekNextMessage(sessionId)!;
+  await service.fail(original, new Error('Old dispatch failed'));
+  service.enqueue(sessionId, request);
+  expect(sessionDomainService.peekNextMessage(sessionId)).toBe(replacement);
+  expect(sessionDomainService.getQueueLength(sessionId)).toBe(1);
+});

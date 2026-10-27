@@ -30,7 +30,7 @@ export class SessionBackgroundDeliveryService {
   private port: PRBackgroundDeliveryPort | null = null;
   private tokens = new Map<
     string,
-    { sessionId: string; messageId: string; request: PRDeliveryRequest }
+    { sessionId: string; messageId: string; request: PRDeliveryRequest; message: QueuedMessage }
   >();
   private deliveries = new Map<string, ClaimedPRDelivery>();
   constructor(private readonly resumeFences = new SessionResumeFences()) {}
@@ -46,7 +46,7 @@ export class SessionBackgroundDeliveryService {
     }
     this.tokens.delete(key);
     const messageId = `${PR_EVENT_MESSAGE_ID_PREFIX}queued-${key}`;
-    const result = sessionDomainService.enqueue(sessionId, {
+    const message: QueuedMessage = {
       id: messageId,
       text: 'PR update queued for the next turn',
       timestamp: new Date().toISOString(),
@@ -57,11 +57,12 @@ export class SessionBackgroundDeliveryService {
         thinkingEnabled: false,
         planModeEnabled: false,
       },
-    });
+    };
+    const result = sessionDomainService.enqueue(sessionId, message);
     if ('error' in result) {
       return { queued: false, reason: result.error };
     }
-    this.tokens.set(key, { sessionId, messageId, request });
+    this.tokens.set(key, { sessionId, messageId, request, message });
     return { queued: true };
   }
   invalidate(workspaceId: string, bindingRevision: number) {
@@ -70,8 +71,23 @@ export class SessionBackgroundDeliveryService {
         token.request.workspaceId === workspaceId &&
         token.request.bindingRevision === bindingRevision
       ) {
-        sessionDomainService.removeQueuedMessage(token.sessionId, token.messageId);
-        this.tokens.delete(key);
+        const removed = sessionDomainService.removeQueuedMessage(token.sessionId, token.messageId, {
+          expectedMessage: token.message,
+        });
+        const terminal = sessionDomainService
+          .getTranscriptSnapshot(token.sessionId)
+          .find((entry) => entry.id === token.messageId)?.message?.prDeliveryState;
+        if (!removed && this.deliveries.has(token.messageId) && !terminal) {
+          sessionDomainService.failMessage(
+            token.sessionId,
+            token.message,
+            'PR delivery cancelled',
+            'cancelled'
+          );
+        }
+        if (this.tokens.get(key) === token) {
+          this.tokens.delete(key);
+        }
       }
     }
   }
@@ -80,8 +96,9 @@ export class SessionBackgroundDeliveryService {
       this.forgetToken(message.id);
       return { status: 'discard' as const };
     }
+    const token = [...this.tokens.values()].find((entry) => entry.messageId === message.id);
     const result = await this.port.prepare({ sessionId, request: message.source.request });
-    if (result.status === 'discard') {
+    if (result.status === 'discard' && token && [...this.tokens.values()].includes(token)) {
       this.forgetToken(message.id);
     }
     if (result.status === 'ready') {
@@ -122,7 +139,11 @@ export class SessionBackgroundDeliveryService {
       }
     }
   }
-  async fail(message: QueuedMessage, error: unknown) {
+  async fail(
+    message: QueuedMessage,
+    error: unknown,
+    deliveryState: 'failed' | 'cancelled' = 'failed'
+  ) {
     const delivery = this.deliveries.get(message.id);
     const token = [...this.tokens.values()].find((entry) => entry.messageId === message.id);
     if (delivery && this.port) {
@@ -132,14 +153,17 @@ export class SessionBackgroundDeliveryService {
           (entry) => entry.messageId === message.id
         );
         if (
-          outcome.paused &&
+          (outcome.paused || deliveryState === 'cancelled') &&
+          token !== undefined &&
+          token.message === message &&
           currentToken === token &&
           this.deliveries.get(message.id) === delivery
         ) {
           sessionDomainService.failMessage(
             delivery.sessionId,
             message,
-            error instanceof Error ? error.message : String(error)
+            error instanceof Error ? error.message : String(error),
+            deliveryState
           );
           this.forgetToken(message.id);
         }

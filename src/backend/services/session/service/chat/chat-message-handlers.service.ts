@@ -318,7 +318,7 @@ export class ChatMessageHandlerService {
       return;
     }
 
-    if (peeked.source && sessionDomainService.peekNextMessage(dbSessionId)?.id !== peeked.id) {
+    if (peeked.source && sessionDomainService.peekNextMessage(dbSessionId) !== peeked) {
       await sessionBackgroundDeliveryService.fail(
         peeked,
         new Error('Turn in progress: human message queued during preparation')
@@ -336,7 +336,11 @@ export class ChatMessageHandlerService {
       this.turnInProgressRetryAttempts.delete(dbSessionId);
     } catch (error) {
       if (msg.source) {
-        await sessionBackgroundDeliveryService.fail(msg, error);
+        await sessionBackgroundDeliveryService.fail(
+          msg,
+          error,
+          this.isDispatchGenerationCurrent(dbSessionId, stopGeneration) ? 'failed' : 'cancelled'
+        );
       }
       this.handleDispatchError(dbSessionId, msg, error, stopGeneration);
     }
@@ -346,7 +350,8 @@ export class ChatMessageHandlerService {
     if (message.source) {
       await sessionBackgroundDeliveryService.fail(
         message,
-        new Error('Session stopped before dispatch')
+        new Error('Session stopped before dispatch'),
+        'cancelled'
       );
     }
   }
@@ -377,9 +382,10 @@ export class ChatMessageHandlerService {
     if (peeked.source && !(await sessionBackgroundDeliveryService.validate(peeked))) {
       await sessionBackgroundDeliveryService.fail(
         peeked,
-        new Error('PR delivery invalidated before dispatch')
+        new Error('PR delivery invalidated before dispatch'),
+        'cancelled'
       );
-      sessionDomainService.removeQueuedMessage(dbSessionId, peeked.id);
+      sessionDomainService.removeQueuedMessage(dbSessionId, peeked.id, { expectedMessage: peeked });
       return null;
     }
     return clientResult;
@@ -399,7 +405,9 @@ export class ChatMessageHandlerService {
       }
       const prepared = await sessionBackgroundDeliveryService.prepare(dbSessionId, peeked);
       if (prepared.status === 'discard') {
-        sessionDomainService.removeQueuedMessage(dbSessionId, peeked.id);
+        sessionDomainService.removeQueuedMessage(dbSessionId, peeked.id, {
+          expectedMessage: peeked,
+        });
         return false;
       }
       if (prepared.status !== 'ready') {
@@ -408,7 +416,8 @@ export class ChatMessageHandlerService {
       if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
         await sessionBackgroundDeliveryService.fail(
           peeked,
-          new Error('Session stopped before dispatch')
+          new Error('Session stopped before dispatch'),
+          'cancelled'
         );
         return false;
       }
@@ -477,6 +486,7 @@ export class ChatMessageHandlerService {
     if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
       sessionDomainService.removeTranscriptMessageById(dbSessionId, msg.id, {
         emitSnapshot: false,
+        preservePRUpdateOutcome: true,
       });
       return;
     }
@@ -743,7 +753,8 @@ export class ChatMessageHandlerService {
       if (!(valid && this.isDispatchGenerationCurrent(dbSessionId, stopGeneration))) {
         await sessionBackgroundDeliveryService.fail(
           msg,
-          new Error('PR delivery invalidated before provider enqueue')
+          new Error('PR delivery invalidated before provider enqueue'),
+          'cancelled'
         );
         return false;
       }
