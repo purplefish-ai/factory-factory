@@ -166,6 +166,33 @@ describe('AcpEventProcessor slash command caching', () => {
     });
   });
 
+  it.each([undefined, '/missing-worktree'])(
+    'filters scoped commands without a readable disk scan (%s)',
+    (workingDir) => {
+      const deps = makeDeps();
+      const processor = new AcpEventProcessor(deps);
+      processor.registerSessionContext('session-1', {
+        workspaceId: 'workspace-1',
+        workingDir: workingDir ?? '',
+        provider: 'CLAUDE',
+      });
+      const commands = [
+        { name: '/project:foreign', description: 'Another workspace' },
+        { name: 'workspace:foreign', description: 'Another workspace' },
+        { name: '/project:team:deploy', description: 'Nested project command' },
+        { name: '/workspace:team:deploy', description: 'Nested workspace command' },
+        { name: '/user:global', description: 'User command' },
+        { name: '/global', description: 'Unscoped command' },
+      ];
+      processor.handleAcpDelta('session-1', { type: 'slash_commands', slashCommands: commands });
+      expect(mocks.setCachedCommands).toHaveBeenCalledWith('CLAUDE', commands.slice(4));
+      expect(deps.sessionDomainService.emitDelta).toHaveBeenCalledWith('session-1', {
+        type: 'slash_commands',
+        slashCommands: commands,
+      });
+    }
+  );
+
   it('writes an empty provider cache for explicit empty command updates', () => {
     const worktreePath = mkdtempSync(join(tmpdir(), 'ff-acp-slash-commands-'));
     tempDirs.push(worktreePath);

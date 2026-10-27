@@ -21,6 +21,28 @@ describe('slash command disk scanner', () => {
     }
   });
 
+  it('restores nested commands and preserves their namespaces', () => {
+    const worktreePath = mkdtempSync(join(tmpdir(), 'ff-nested-commands-'));
+    tempDirs.push(worktreePath);
+    const commandsPath = join(worktreePath, '.claude', 'commands');
+    for (const namespace of ['team', 'release']) {
+      mkdirSync(join(commandsPath, namespace), { recursive: true });
+      writeFileSync(
+        join(commandsPath, namespace, 'deploy.md'),
+        `---\ndescription: ${namespace}\n---\n`
+      );
+    }
+    const escapedPath = mkdtempSync(join(tmpdir(), 'ff-escaped-nested-'));
+    tempDirs.push(escapedPath);
+    writeFileSync(join(escapedPath, 'foreign.md'), 'Foreign');
+    symlinkSync(escapedPath, join(commandsPath, 'external'));
+    symlinkSync(commandsPath, join(commandsPath, 'cycle'));
+    expect(scanClaudeWorkspaceCommandsFromDisk(worktreePath)).toEqual([
+      { name: 'release:deploy', description: 'release' },
+      { name: 'team:deploy', description: 'team' },
+    ]);
+  });
+
   it('does not scan workspace command directories that resolve outside the worktree', () => {
     const worktreePath = mkdtempSync(join(tmpdir(), 'ff-worktree-commands-'));
     const escapedCommandsPath = mkdtempSync(join(tmpdir(), 'ff-escaped-commands-'));
