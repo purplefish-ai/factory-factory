@@ -85,11 +85,11 @@ export type WorkspaceAutoIterationSummary = z.infer<typeof WorkspaceAutoIteratio
 const summaryConfigSchema = z.object({
   maxIterations: autoIterationConfigSchema.shape.maxIterations.removeDefault().optional(),
 });
-const summaryProgressSchema = autoIterationProgressSchema
-  .pick({
-    currentIteration: true,
-    currentMetricSummary: true,
-  })
+const summaryIterationSchema = autoIterationProgressSchema
+  .pick({ currentIteration: true })
+  .partial();
+const summaryMetricSchema = autoIterationProgressSchema
+  .pick({ currentMetricSummary: true })
   .partial();
 
 export function projectAutoIterationSummary(input: {
@@ -102,12 +102,13 @@ export function projectAutoIterationSummary(input: {
     return null;
   }
   const config = summaryConfigSchema.safeParse(input.autoIterationConfig);
-  const progress = summaryProgressSchema.safeParse(input.autoIterationProgress);
+  const iteration = summaryIterationSchema.safeParse(input.autoIterationProgress);
+  const metric = summaryMetricSchema.safeParse(input.autoIterationProgress);
   return {
     status: input.autoIterationStatus,
-    currentIteration: progress.success ? (progress.data.currentIteration ?? null) : null,
+    currentIteration: iteration.success ? (iteration.data.currentIteration ?? null) : null,
     maxIterations: config.success ? (config.data.maxIterations ?? null) : null,
-    currentMetricSummary: progress.success ? (progress.data.currentMetricSummary ?? null) : null,
+    currentMetricSummary: metric.success ? (metric.data.currentMetricSummary ?? null) : null,
   };
 }
 

@@ -28,7 +28,9 @@ describe('workspaceAutoIterationAccessor', () => {
     // The writes that publish a transition return the row they landed on, so
     // the caller never reads the mode back in a second statement.
     mockUpdateManyAndReturn.mockReset();
-    mockUpdateManyAndReturn.mockResolvedValue([{ mode: 'AUTO_ITERATION' }]);
+    mockUpdateManyAndReturn.mockResolvedValue([
+      { mode: 'AUTO_ITERATION', status: 'RUNNING', config: null, progress: null },
+    ]);
   });
 
   describe('flattenWorkspaceAutoIteration', () => {
@@ -79,14 +81,14 @@ describe('workspaceAutoIterationAccessor', () => {
       expect(mockUpdateManyAndReturn).toHaveBeenCalledWith({
         where: { workspaceId: 'ws-1' },
         data: { status: 'RUNNING' },
-        select: { mode: true },
+        select: { mode: true, status: true, config: true, progress: true },
       });
 
       await workspaceAutoIterationAccessor.setProgress('ws-1', { currentIteration: 3 });
       expect(mockUpdateManyAndReturn).toHaveBeenLastCalledWith({
         where: { workspaceId: 'ws-1' },
         data: { progress: { currentIteration: 3 } },
-        select: { mode: true },
+        select: { mode: true, status: true, config: true, progress: true },
       });
 
       await workspaceAutoIterationAccessor.setSession('ws-1', 'sess-2');
@@ -101,11 +103,15 @@ describe('workspaceAutoIterationAccessor', () => {
       // Not from a second read: the pair is published to the snapshot stream, so
       // it has to describe a row that existed rather than one row's status
       // beside another read's mode.
-      mockUpdateManyAndReturn.mockResolvedValue([{ mode: 'AUTO_ITERATION' }]);
+      mockUpdateManyAndReturn.mockResolvedValue([
+        { mode: 'AUTO_ITERATION', status: 'RUNNING', config: null, progress: null },
+      ]);
 
       await expect(workspaceAutoIterationAccessor.setStatus('ws-1', 'RUNNING')).resolves.toEqual({
         mode: 'AUTO_ITERATION',
         status: 'RUNNING',
+        config: null,
+        progress: null,
       });
     });
 
@@ -135,14 +141,22 @@ describe('workspaceAutoIterationAccessor', () => {
     it('guards on the session and clears it as it settles', async () => {
       // Returns the mode alongside the outcome so the caller can announce the
       // transition to the snapshot stream without a second read.
+      mockUpdateManyAndReturn.mockResolvedValue([
+        { mode: 'AUTO_ITERATION', status: 'COMPLETED', config: null, progress: null },
+      ]);
       await expect(
         workspaceAutoIterationAccessor.finishIfSessionMatches('ws-1', 'sess-1', 'COMPLETED')
-      ).resolves.toEqual({ settled: true, mode: 'AUTO_ITERATION' });
+      ).resolves.toEqual({
+        mode: 'AUTO_ITERATION',
+        status: 'COMPLETED',
+        config: null,
+        progress: null,
+      });
 
       expect(mockUpdateManyAndReturn).toHaveBeenCalledWith({
         where: { workspaceId: 'ws-1', sessionId: 'sess-1' },
         data: { status: 'COMPLETED', sessionId: null },
-        select: { mode: true },
+        select: { mode: true, status: true, config: true, progress: true },
       });
     });
 
@@ -151,7 +165,7 @@ describe('workspaceAutoIterationAccessor', () => {
 
       await expect(
         workspaceAutoIterationAccessor.finishIfSessionMatches('ws-1', 'stale', 'FAILED')
-      ).resolves.toEqual({ settled: false, mode: null });
+      ).resolves.toBeNull();
     });
   });
 
@@ -177,11 +191,16 @@ describe('workspaceAutoIterationAccessor', () => {
   });
 
   describe('resetStaleRunningStatuses', () => {
+    beforeEach(() => {
+      mockUpdateManyAndReturn.mockResolvedValue([
+        { mode: 'AUTO_ITERATION', status: 'FAILED', config: null, progress: null },
+      ]);
+    });
     it('returns an empty array and skips the update when nothing is stale', async () => {
       mockFindMany.mockResolvedValue([]);
 
       await expect(workspaceAutoIterationAccessor.resetStaleRunningStatuses()).resolves.toEqual([]);
-      expect(mockUpdateMany).not.toHaveBeenCalled();
+      expect(mockUpdateManyAndReturn).not.toHaveBeenCalled();
     });
 
     it('fails the stale loops, clears their sessions, and reports them under `id`', async () => {
@@ -193,8 +212,14 @@ describe('workspaceAutoIterationAccessor', () => {
       // The caller emits one status-changed event per entry and keyed off `id`
       // before the split, so the column rename stops at this boundary.
       await expect(workspaceAutoIterationAccessor.resetStaleRunningStatuses()).resolves.toEqual([
-        { id: 'ws-1' },
-        { id: 'ws-2' },
+        {
+          id: 'ws-1',
+          written: { mode: 'AUTO_ITERATION', status: 'FAILED', config: null, progress: null },
+        },
+        {
+          id: 'ws-2',
+          written: { mode: 'AUTO_ITERATION', status: 'FAILED', config: null, progress: null },
+        },
       ]);
 
       expect(mockFindMany).toHaveBeenCalledWith({
@@ -203,13 +228,15 @@ describe('workspaceAutoIterationAccessor', () => {
       });
       // Each write is guarded on the session the row was read with, so a loop
       // that started between the two steps is not failed by this sweep.
-      expect(mockUpdateMany).toHaveBeenCalledWith({
+      expect(mockUpdateManyAndReturn).toHaveBeenCalledWith({
         where: { workspaceId: 'ws-1', status: 'RUNNING', sessionId: 'sess-1' },
         data: { status: 'FAILED', sessionId: null },
+        select: { mode: true, status: true, config: true, progress: true },
       });
-      expect(mockUpdateMany).toHaveBeenCalledWith({
+      expect(mockUpdateManyAndReturn).toHaveBeenCalledWith({
         where: { workspaceId: 'ws-2', status: 'RUNNING', sessionId: null },
         data: { status: 'FAILED', sessionId: null },
+        select: { mode: true, status: true, config: true, progress: true },
       });
     });
 
@@ -220,14 +247,21 @@ describe('workspaceAutoIterationAccessor', () => {
       ]);
       // The restarted row is RUNNING again under a different session, so its
       // guard matches nothing and the sweep leaves the live loop alone.
-      mockUpdateMany.mockImplementation((args: { where: { sessionId: string | null } }) =>
-        Promise.resolve({ count: args.where.sessionId === 'old-session' ? 0 : 1 })
+      mockUpdateManyAndReturn.mockImplementation((args: { where: { sessionId: string | null } }) =>
+        Promise.resolve(
+          args.where.sessionId === 'old-session'
+            ? []
+            : [{ mode: 'AUTO_ITERATION', status: 'FAILED', config: null, progress: null }]
+        )
       );
 
       // Only the row actually reset is reported, so no status-changed event is
       // emitted for a workspace this did not touch.
       await expect(workspaceAutoIterationAccessor.resetStaleRunningStatuses()).resolves.toEqual([
-        { id: 'ws-still-stale' },
+        {
+          id: 'ws-still-stale',
+          written: { mode: 'AUTO_ITERATION', status: 'FAILED', config: null, progress: null },
+        },
       ]);
     });
 
@@ -241,6 +275,63 @@ describe('workspaceAutoIterationAccessor', () => {
 
       const [call] = mockFindMany.mock.calls as [[{ where: { status: string } }]];
       expect(call[0].where.status).toBe('RUNNING');
+    });
+  });
+});
+
+describe('atomic loop publication facts', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mockUpdateMany.mockResolvedValue({ count: 1 });
+  });
+  const written = {
+    mode: 'AUTO_ITERATION',
+    status: 'RUNNING',
+    config: { maxIterations: 9 },
+    progress: { currentIteration: 4, currentMetricSummary: 'score=5' },
+  };
+
+  it('returns all persisted projection fields from the accepted statement, not caller progress', async () => {
+    mockUpdateManyAndReturn.mockResolvedValue([written]);
+    await expect(
+      workspaceAutoIterationAccessor.setProgress('ws', { currentIteration: 99 })
+    ).resolves.toEqual(written);
+    expect(mockUpdateManyAndReturn).toHaveBeenCalledOnce();
+    expect(mockUpdateManyAndReturn).toHaveBeenCalledWith({
+      where: { workspaceId: 'ws' },
+      data: { progress: { currentIteration: 99 } },
+      select: { mode: true, status: true, config: true, progress: true },
+    });
+  });
+
+  it('buffers only accepted recovery facts until the existing batch completes', async () => {
+    mockFindMany.mockResolvedValue([
+      { workspaceId: 'fast', sessionId: 'dead' },
+      { workspaceId: 'slow', sessionId: 'old' },
+    ]);
+    let finishSlow!: (rows: (typeof written)[]) => void;
+    mockUpdateManyAndReturn.mockImplementation((args: { where: { workspaceId: string } }) =>
+      args.where.workspaceId === 'fast'
+        ? Promise.resolve([{ ...written, status: 'FAILED' }])
+        : new Promise((resolve) => {
+            finishSlow = resolve;
+          })
+    );
+    let settled = false;
+    const recovery = workspaceAutoIterationAccessor.resetStaleRunningStatuses().then((rows) => {
+      settled = true;
+      return rows;
+    });
+    await vi.waitFor(() => expect(mockUpdateManyAndReturn).toHaveBeenCalledTimes(2));
+    expect(settled).toBe(false);
+    finishSlow([]);
+    await expect(recovery).resolves.toEqual([
+      { id: 'fast', written: { ...written, status: 'FAILED' } },
+    ]);
+    expect(mockUpdateManyAndReturn).toHaveBeenCalledWith({
+      where: { workspaceId: 'slow', status: 'RUNNING', sessionId: 'old' },
+      data: { status: 'FAILED', sessionId: null },
+      select: { mode: true, status: true, config: true, progress: true },
     });
   });
 });

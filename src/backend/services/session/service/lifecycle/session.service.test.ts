@@ -1700,21 +1700,13 @@ describe('SessionService', () => {
     exitUpdate.resolve(session);
     await exitPromise;
 
-    const publishToSessionSpy = vi.spyOn(sessionEventBus, 'publishToSession');
-    sessionDomainService.subscribe({
-      sessionId,
-      sessionRuntime: {
-        phase: 'error',
-        processState: 'stopped',
-        activity: 'IDLE',
-        errorMessage: 'ACP runtime crashed',
-        updatedAt: '2026-07-29T12:00:01.000Z',
-      },
+    const replayBatch = sessionDomainService.prepareLoad(sessionId, {
+      phase: 'error',
+      processState: 'stopped',
+      activity: 'IDLE',
+      errorMessage: 'ACP runtime crashed',
+      updatedAt: '2026-07-29T12:00:01.000Z',
     });
-
-    const replayBatch = publishToSessionSpy.mock.calls
-      .map(([, payload]) => payload)
-      .find((payload) => payload.type === 'session_replay_batch');
     expect(replayBatch).toMatchObject({
       replayEvents: expect.arrayContaining([
         {

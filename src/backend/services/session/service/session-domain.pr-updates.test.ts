@@ -25,7 +25,6 @@ afterEach(() => {
 describe('PR update transcript outcomes', () => {
   it('retains cancellation in snapshots and replay when removing queued PR work', () => {
     const service = new SessionDomainService();
-    const publish = vi.spyOn(sessionEventBus, 'publishToSession');
     service.enqueue('session', message);
     expect(service.removeQueuedMessage('session', message.id)).toBe(true);
     expect(service.getQueueLength('session')).toBe(0);
@@ -40,22 +39,15 @@ describe('PR update transcript outcomes', () => {
         }),
       }),
     ]);
-    service.subscribe({
-      sessionId: 'session',
-      sessionRuntime: service.getRuntimeSnapshot('session'),
+    const replay = service.prepareLoad('session', service.getRuntimeSnapshot('session'));
+    expect(replay).toMatchObject({
+      replayEvents: expect.arrayContaining([
+        expect.objectContaining({
+          type: 'agent_message',
+          data: expect.objectContaining({ prDeliveryState: 'cancelled' }),
+        }),
+      ]),
     });
-    expect(publish).toHaveBeenCalledWith(
-      'session',
-      expect.objectContaining({
-        type: 'session_replay_batch',
-        replayEvents: expect.arrayContaining([
-          expect.objectContaining({
-            type: 'agent_message',
-            data: expect.objectContaining({ prDeliveryState: 'cancelled' }),
-          }),
-        ]),
-      })
-    );
   });
   it('retains a failed dispatch without emitting rejected-message recovery', () => {
     const service = new SessionDomainService();
@@ -80,26 +72,19 @@ describe('PR update transcript outcomes', () => {
         data: expect.objectContaining({ type: 'message_state_changed' }),
       })
     );
-    service.subscribe({
-      sessionId: 'session',
-      sessionRuntime: service.getRuntimeSnapshot('session'),
-    });
-    expect(publish).toHaveBeenCalledWith(
-      'session',
-      expect.objectContaining({
-        type: 'session_replay_batch',
-        replayEvents: expect.arrayContaining([
-          expect.objectContaining({
-            type: 'agent_message',
-            data: expect.objectContaining({
-              type: 'pr_update',
-              prDeliveryState: 'failed',
-              error: 'Provider unavailable',
-            }),
+    const replay = service.prepareLoad('session', service.getRuntimeSnapshot('session'));
+    expect(replay).toMatchObject({
+      replayEvents: expect.arrayContaining([
+        expect.objectContaining({
+          type: 'agent_message',
+          data: expect.objectContaining({
+            type: 'pr_update',
+            prDeliveryState: 'failed',
+            error: 'Provider unavailable',
           }),
-        ]),
-      })
-    );
+        }),
+      ]),
+    });
   });
   it('clears queued PR work into a cancelled card and replaces it on an explicit retry', () => {
     const service = new SessionDomainService();

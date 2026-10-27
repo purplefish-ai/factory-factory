@@ -380,6 +380,81 @@ it('seeds the compact loop from validated authoritative configuration and progre
   });
 });
 
+it('hydrates compact loop config and progress after restart without a recurring delta loop', async () => {
+  const store = createStore();
+  const ws = {
+    ...makeWorkspace('loop', null),
+    mode: 'AUTO_ITERATION',
+    autoIterationStatus: 'PAUSED' as const,
+    autoIterationConfig: { maxIterations: 7 },
+    autoIterationProgress: {
+      currentIteration: 2,
+      currentMetricSummary: 'score=3',
+      lastTestOutput: 'x'.repeat(100_000),
+    },
+  };
+  const service = makeService([ws], async () => null, store);
+  try {
+    await service.reconcile();
+    expect(store.getByWorkspaceId('loop')).toMatchObject({
+      summaryVersion: 1,
+      autoIteration: {
+        status: 'PAUSED',
+        currentIteration: 2,
+        maxIterations: 7,
+        currentMetricSummary: 'score=3',
+      },
+    });
+    const version = store.getVersion('loop');
+    const second = await service.reconcile();
+    expect(store.getVersion('loop')).toBe(version);
+    expect(second.deltasEmitted).toBe(0);
+    ws.autoIterationConfig.maxIterations = 12;
+    ws.autoIterationProgress.currentMetricSummary = 'score=4';
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    await service.reconcile();
+    expect(store.getByWorkspaceId('loop')?.autoIteration).toEqual({
+      status: 'PAUSED',
+      currentIteration: 2,
+      maxIterations: 12,
+      currentMetricSummary: 'score=4',
+    });
+    expect(JSON.stringify(store.getByWorkspaceId('loop')).length).toBeLessThan(4000);
+  } finally {
+    store.clear();
+  }
+});
+
+it('retains a newly accepted reset while an older reconciliation read is in flight', async () => {
+  const store = createStore();
+  const ws = {
+    ...makeWorkspace('loop', null),
+    mode: 'AUTO_ITERATION',
+    autoIterationStatus: 'RUNNING' as const,
+    autoIterationConfig: { maxIterations: 7 },
+    autoIterationProgress: { currentIteration: 9, currentMetricSummary: 'old loop' },
+  };
+  const service = makeService([ws], async () => null, store);
+  const pending = service.reconcile();
+  const readStarted = Date.now();
+  store.upsert(
+    'loop',
+    { projectId: 'project-1', mode: 'STANDARD', autoIterationStatus: null, autoIteration: null },
+    'accepted reset',
+    readStarted + 1
+  );
+  try {
+    await pending;
+    expect(store.getByWorkspaceId('loop')).toMatchObject({
+      mode: 'STANDARD',
+      autoIterationStatus: null,
+      autoIteration: null,
+    });
+    expect(store.getByWorkspaceId('loop')?.summaryVersion).toBeUndefined();
+  } finally {
+    store.clear();
+  }
+});
 it.each(['older', 'equal-ms'] as const)(
   'does not count or log a deferred %s name observation rejected after an accepted rename',
   async (provenance) => {
@@ -428,3 +503,67 @@ it.each(['older', 'equal-ms'] as const)(
     store.clear();
   }
 );
+
+it('repairs compact loop drift while suppressing a stale canonical-name diagnostic', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(1000);
+  const store = createStore();
+  const ws = {
+    ...makeWorkspace('loop', null),
+    mode: 'AUTO_ITERATION',
+    autoIterationStatus: 'RUNNING' as const,
+    autoIterationConfig: { maxIterations: 10 },
+    autoIterationProgress: { currentIteration: 3, currentMetricSummary: 'score=3' },
+  };
+  const warn = vi.fn();
+  const service = makeService([ws], async () => null, store, warn);
+  try {
+    await service.reconcile();
+    store.publishAcceptedName(
+      'loop',
+      'Accepted loop name',
+      new Date('2026-01-03T00:00:00.000Z').getTime()
+    );
+    ws.autoIterationProgress.currentIteration = 4;
+    ws.autoIterationProgress.currentMetricSummary = 'score=4';
+    vi.setSystemTime(2000);
+    const result = await service.reconcile();
+    expect(result.driftsDetected).toBe(1);
+    expect(warn).toHaveBeenCalledExactlyOnceWith('Snapshot drift detected', {
+      workspaceId: 'loop',
+      driftCount: 1,
+      drifts: [
+        {
+          field: 'autoIteration',
+          group: 'autoIteration',
+          snapshot: {
+            status: 'RUNNING',
+            currentIteration: 3,
+            maxIterations: 10,
+            currentMetricSummary: 'score=3',
+          },
+          authoritative: {
+            status: 'RUNNING',
+            currentIteration: 4,
+            maxIterations: 10,
+            currentMetricSummary: 'score=4',
+          },
+        },
+      ],
+    });
+    expect(store.getByWorkspaceId('loop')).toMatchObject({
+      name: 'Accepted loop name',
+      summaryVersion: 1,
+      autoIteration: {
+        status: 'RUNNING',
+        currentIteration: 4,
+        maxIterations: 10,
+        currentMetricSummary: 'score=4',
+      },
+    });
+    expect(store.getByWorkspaceId('loop')).not.toHaveProperty('nameUpdatedAt');
+  } finally {
+    store.clear();
+    vi.useRealTimers();
+  }
+});

@@ -55,8 +55,8 @@ import type {
 import type { terminalService } from '@/backend/services/terminal';
 import type { SnapshotUpdateInput } from '@/backend/services/workspace';
 import {
-  AUTO_ITERATION_STATUS_CHANGED,
-  type AutoIterationStatusChangedEvent,
+  AUTO_ITERATION_SUMMARY_CHANGED,
+  type AutoIterationSummaryChangedEvent,
   type computePendingRequestType,
   WORKSPACE_STATE_CHANGED,
   type WorkspaceStateChangedEvent,
@@ -825,26 +825,18 @@ function startEventCollectorWithState(state: EventCollectorState): void {
     dependencies.runScriptStateMachine.off(RUN_SCRIPT_STATUS_CHANGED, runScriptStatusChangedHandler)
   );
 
-  // 7. Auto-iteration status changes
-  //
-  // `mode` rides along because the snapshot store's copy is otherwise seeded
-  // only by reconciliation, and the status reason needs both to report
-  // AUTO_ITERATING.
-  const autoIterationStatusChangedHandler = (event: AutoIterationStatusChangedEvent) => {
-    coalescer.enqueue(
-      event.workspaceId,
-      { mode: event.mode, autoIterationStatus: event.status },
-      'event:auto_iteration_status_changed'
-    );
+  // Accepted compact state is the sole loop projection owner. Legacy status
+  // events remain available to other consumers without racing this full fact.
+  const loopSummaryChanged = ({ workspaceId, ...fields }: AutoIterationSummaryChangedEvent) => {
+    coalescer.enqueue(workspaceId, fields, 'event:auto_iteration_summary_changed', {
+      immediate: true,
+    });
   };
-  dependencies.workspaceAutoIterationService.on(
-    AUTO_ITERATION_STATUS_CHANGED,
-    autoIterationStatusChangedHandler
-  );
+  dependencies.workspaceAutoIterationService.on(AUTO_ITERATION_SUMMARY_CHANGED, loopSummaryChanged);
   state.teardownListeners.push(() =>
     dependencies.workspaceAutoIterationService.off(
-      AUTO_ITERATION_STATUS_CHANGED,
-      autoIterationStatusChangedHandler
+      AUTO_ITERATION_SUMMARY_CHANGED,
+      loopSummaryChanged
     )
   );
 

@@ -3,16 +3,13 @@ import { writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, isAbsolute, join, relative } from 'node:path';
 import { z } from 'zod';
-import type { ApplicationServices } from '@/backend/app-context';
 import { searchFilesRecursive } from '@/backend/lib/file-helpers';
 import { gitCommandC } from '@/backend/lib/shell';
+import { toPublicProject } from '@/backend/orchestration/project-query-projection';
 import { IssueProvider } from '@/shared/core/enums';
 import { parseGithubUrl } from '@/shared/github-url';
 import { FactoryConfigSchema } from '@/shared/schemas/factory-config.schema';
-import {
-  IssueTrackerConfigSchema,
-  sanitizeIssueTrackerConfig,
-} from '@/shared/schemas/issue-tracker-config.schema';
+import { IssueTrackerConfigSchema } from '@/shared/schemas/issue-tracker-config.schema';
 import { publicProcedure, router, trustedLocalProcedure } from './trpc';
 
 function parseCommandFileDescription(filePath: string): string {
@@ -128,40 +125,6 @@ function buildRemoteEntries(
   return entries;
 }
 
-async function validateStartupScriptFields(
-  projectManagementService: ApplicationServices['projectManagementService'],
-  id: string,
-  updates: {
-    startupScriptCommand?: string | null;
-    startupScriptPath?: string | null;
-  }
-) {
-  if (updates.startupScriptCommand === undefined && updates.startupScriptPath === undefined) {
-    return;
-  }
-
-  const currentProject = await projectManagementService.findById(id);
-  if (!currentProject) {
-    throw new Error(`Project not found: ${id}`);
-  }
-
-  const finalCommand =
-    updates.startupScriptCommand !== undefined
-      ? updates.startupScriptCommand
-      : currentProject.startupScriptCommand;
-
-  const finalPath =
-    updates.startupScriptPath !== undefined
-      ? updates.startupScriptPath
-      : currentProject.startupScriptPath;
-
-  if (finalCommand && finalPath) {
-    throw new Error(
-      'Cannot have both startupScriptCommand and startupScriptPath set. Please clear one by setting it to null.'
-    );
-  }
-}
-
 export const projectRouter = router({
   // List all projects
   list: publicProcedure
@@ -177,10 +140,7 @@ export const projectRouter = router({
     .query(async ({ ctx, input }) => {
       const { projectManagementService } = ctx.appContext.services;
       const projects = await projectManagementService.list(input);
-      return projects.map((project) => ({
-        ...project,
-        issueTrackerConfig: sanitizeIssueTrackerConfig(project.issueTrackerConfig),
-      }));
+      return projects.map(toPublicProject);
     }),
 
   // Get project by ID
@@ -190,10 +150,7 @@ export const projectRouter = router({
     if (!project) {
       throw new Error(`Project not found: ${input.id}`);
     }
-    return {
-      ...project,
-      issueTrackerConfig: sanitizeIssueTrackerConfig(project.issueTrackerConfig),
-    };
+    return toPublicProject(project);
   }),
 
   // Get project by slug
@@ -203,10 +160,7 @@ export const projectRouter = router({
     if (!project) {
       throw new Error(`Project not found: ${input.slug}`);
     }
-    return {
-      ...project,
-      issueTrackerConfig: sanitizeIssueTrackerConfig(project.issueTrackerConfig),
-    };
+    return toPublicProject(project);
   }),
 
   // List local + remote branches for a project
@@ -304,7 +258,7 @@ export const projectRouter = router({
         throw new Error(`Invalid repository path: ${repoValidation.error}`);
       }
 
-      return projectManagementService.create(
+      const project = await projectManagementService.create(
         {
           repoPath: input.repoPath,
           startupScriptCommand,
@@ -315,6 +269,7 @@ export const projectRouter = router({
           worktreeBaseDir: configService.getWorktreeBaseDir(),
         }
       );
+      return toPublicProject(project);
     }),
 
   // Update a project
@@ -337,44 +292,14 @@ export const projectRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { cryptoService, projectManagementService } = ctx.appContext.services;
-      const { id, ...updates } = input;
-
-      // Validate new repo path if provided
-      if (updates.repoPath) {
-        const repoValidation = await projectManagementService.validateRepoPath(updates.repoPath);
-        if (!repoValidation.valid) {
-          throw new Error(`Invalid repository path: ${repoValidation.error}`);
-        }
-      }
-
-      await validateStartupScriptFields(projectManagementService, id, updates);
-
-      // Encrypt Linear API key before persisting
-      if (updates.issueTrackerConfig?.linear?.apiKey) {
-        updates.issueTrackerConfig = {
-          ...updates.issueTrackerConfig,
-          linear: {
-            ...updates.issueTrackerConfig.linear,
-            apiKey: cryptoService.encrypt(updates.issueTrackerConfig.linear.apiKey),
-          },
-        };
-      }
-
-      const project = await projectManagementService.update(id, updates);
-      return {
-        ...project,
-        issueTrackerConfig: sanitizeIssueTrackerConfig(project.issueTrackerConfig),
-      };
+      const project = await ctx.appContext.services.updateProjectSettings(input);
+      return toPublicProject(project);
     }),
 
   // Archive a project (soft delete)
   archive: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
     const project = await ctx.appContext.services.projectManagementService.archive(input.id);
-    return {
-      ...project,
-      issueTrackerConfig: sanitizeIssueTrackerConfig(project.issueTrackerConfig),
-    };
+    return toPublicProject(project);
   }),
 
   // Validate repo path
@@ -477,7 +402,7 @@ export const projectRouter = router({
         throw new Error(`Invalid repository after clone: ${repoValidation.error}`);
       }
 
-      return projectManagementService.create(
+      const project = await projectManagementService.create(
         {
           repoPath: clonePath,
           startupScriptCommand,
@@ -488,5 +413,6 @@ export const projectRouter = router({
           worktreeBaseDir: configService.getWorktreeBaseDir(),
         }
       );
+      return toPublicProject(project);
     }),
 });
