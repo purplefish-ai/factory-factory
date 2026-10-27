@@ -8,6 +8,8 @@ const {
   mockNotificationDeliveryService,
 } = vi.hoisted(() => ({
   mockSessionDomainService: {
+    enqueue: vi.fn<(sessionId: string, message: QueuedMessage) => { position: number }>(),
+    hasQueuedMessage: vi.fn(),
     peekNextMessage: vi.fn(),
     dequeueNext: vi.fn(),
     requeueFront: vi.fn(),
@@ -107,6 +109,8 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
       startup: mockSessionService,
       notificationDelivery: mockNotificationDeliveryService,
     });
+    mockSessionDomainService.enqueue.mockReturnValue({ position: 0 });
+    mockSessionDomainService.hasQueuedMessage.mockReturnValue(false);
     mockSessionDomainService.peekNextMessage.mockReturnValue(queuedMessage);
     mockSessionDomainService.dequeueNext.mockReturnValue(queuedMessage);
     mockSessionDomainService.allocateOrder.mockReturnValue(0);
@@ -143,11 +147,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
   it.each(['runtime-stopped', 'generation-stopped'] as const)(
     'releases the prepared PR claim when the recipient becomes %s during client resolution',
     async (stop) => {
-      const background: QueuedMessage = {
-        ...queuedMessage,
-        id: `pr-event-${stop}`,
-        source: { type: 'pr_event', request: { workspaceId: 'w', prId: 'p', bindingRevision: 1 } },
-      };
+      const request = { workspaceId: 'w', prId: 'p', bindingRevision: 1 };
       const delivery = {
         deliveryId: `delivery-${stop}`,
         sessionId: 's1',
@@ -166,6 +166,8 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
         pause: () => Promise.resolve(),
         resume: () => Promise.resolve(),
       });
+      sessionBackgroundDeliveryService.enqueue('s1', request);
+      const background = mockSessionDomainService.enqueue.mock.calls.at(-1)![1];
       mockSessionDomainService.peekNextMessage.mockReturnValue(background);
       mockSessionDomainService.getPendingInteractiveRequest.mockReturnValue(null);
       mockSessionService.getSessionClient.mockReturnValue({ providerSessionId: 'existing' });
