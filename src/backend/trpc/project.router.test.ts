@@ -659,6 +659,7 @@ describe('projectRouter', () => {
   });
 
   it('validates a newly cloned repository and creates it through project management', async () => {
+    mockParseGithubUrl.mockReturnValue({ owner: 'org', repo: 'new-repo' });
     mockGetClonePath.mockResolvedValueOnce({ path: '/repos/org/new-repo', status: 'not_exists' });
     mockCloneRepo.mockResolvedValueOnce({ success: true });
     mockProjectManagementService.validateRepoPath.mockResolvedValueOnce({ valid: true });
@@ -667,7 +668,11 @@ describe('projectRouter', () => {
     await expect(
       createCaller().createFromGithub({ githubUrl: 'https://github.com/org/new-repo' })
     ).resolves.toEqual({ id: 'cloned-project' });
-    expect(mockCloneRepo).toHaveBeenCalled();
+    expect(mockGetClonePath).toHaveBeenCalledWith('/repos', 'org', 'new-repo');
+    expect(mockCloneRepo).toHaveBeenCalledWith(
+      'https://github.com/org/new-repo',
+      '/repos/org/new-repo'
+    );
     expect(mockProjectManagementService.validateRepoPath).toHaveBeenCalledWith(
       '/repos/org/new-repo'
     );
