@@ -1,8 +1,8 @@
 import { afterEach, expect, it } from 'vitest';
+import { createTestSessionDispatcher } from '@/backend/services/session/service/dispatch/session-dispatch.test-helpers';
 import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type { QueuedMessage } from '@/shared/acp-protocol';
-import { ChatMessageHandlerService } from './chat-message-handlers.service';
 
 afterEach(() => {
   sessionBackgroundDeliveryService.invalidate('w', 1);
@@ -25,7 +25,7 @@ function createPRMessage(): QueuedMessage {
 }
 
 function rollBackStoppedDispatch(message: QueuedMessage): void {
-  const handler = new ChatMessageHandlerService();
+  const handler = createTestSessionDispatcher();
   Object.defineProperty(handler, 'isDispatchGenerationCurrent', { value: () => false });
   Reflect.apply(Reflect.get(handler, 'handleDispatchError'), handler, [
     'session',
@@ -88,7 +88,7 @@ it('keeps a replacement queue message when obsolete async preparation discards',
   const request = { workspaceId: 'w', prId: 'p', bindingRevision: 1 };
   sessionBackgroundDeliveryService.enqueue(sessionId, request);
   const old = sessionDomainService.peekNextMessage(sessionId)!;
-  const handler = new ChatMessageHandlerService();
+  const handler = createTestSessionDispatcher();
   const pending = Reflect.apply(Reflect.get(handler, 'prepareBackgroundForDispatch'), handler, [
     sessionId,
     old,
@@ -129,7 +129,7 @@ it('records a stopped prepared delivery as cancelled before the retry limit', as
   });
   const message = sessionDomainService.peekNextMessage(sessionId)!;
   await sessionBackgroundDeliveryService.prepare(sessionId, message);
-  const handler = new ChatMessageHandlerService();
+  const handler = createTestSessionDispatcher();
   await Reflect.apply(Reflect.get(handler, 'releaseStoppedBackground'), handler, [message]);
   expect(sessionDomainService.getTranscriptSnapshot(sessionId)[0]?.message?.prDeliveryState).toBe(
     'cancelled'

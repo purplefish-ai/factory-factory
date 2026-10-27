@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createTestSessionDispatcher } from '@/backend/services/session/service/dispatch/session-dispatch.test-helpers';
 import type { QueuedMessage } from '@/shared/acp-protocol';
 
 const {
@@ -82,7 +83,7 @@ vi.mock('./chat-message-handlers/registry', () => ({
 import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
 import { ChatMessageHandlerService } from './chat-message-handlers.service';
 
-const chatMessageHandlerService = new ChatMessageHandlerService();
+const chatMessageHandlerService = new ChatMessageHandlerService(createTestSessionDispatcher());
 
 describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
   const queuedMessage: QueuedMessage = {

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   chatMessageHandlerService as publicChatMessageHandlerService,
   sessionLifecycleService as publicSessionLifecycleService,
+  sessionDispatchService as publicSessionDispatchService,
 } from '@/backend/services/session';
 import { WorkspaceStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
@@ -10,7 +11,11 @@ import {
   createLifecycleHarness,
   createLifecycleTestSession,
 } from './session-lifecycle.test-helpers';
-import { chatMessageHandlerService, sessionLifecycleService } from './session-services';
+import {
+  chatMessageHandlerService,
+  sessionLifecycleService,
+  sessionDispatchService,
+} from './session-services';
 
 describe('session services composition', () => {
   afterEach(() => {
@@ -50,6 +55,29 @@ describe('session services composition', () => {
       model: 'opus',
       reasoningEffort: 'high',
     });
+  });
+
+  it('forwards compatibility dispatch APIs to the publicly exported dispatcher', async () => {
+    expect(publicSessionDispatchService).toBe(sessionDispatchService);
+    const dispatch = vi.spyOn(sessionDispatchService, 'tryDispatchNextMessage').mockResolvedValue();
+    const resume = vi
+      .spyOn(sessionDispatchService, 'setManualDispatchResume')
+      .mockImplementation(() => undefined);
+    const reset = vi
+      .spyOn(sessionDispatchService, 'resetDispatchState')
+      .mockImplementation(() => undefined);
+
+    await chatMessageHandlerService.tryDispatchNextMessage('session-1', {
+      bypassTurnInProgressBackoff: true,
+    });
+    chatMessageHandlerService.setManualDispatchResume('session-1', true);
+    chatMessageHandlerService.resetDispatchState('session-1');
+
+    expect(dispatch).toHaveBeenCalledExactlyOnceWith('session-1', {
+      bypassTurnInProgressBackoff: true,
+    });
+    expect(resume).toHaveBeenCalledExactlyOnceWith('session-1', true);
+    expect(reset).toHaveBeenCalledExactlyOnceWith('session-1');
   });
 
   it('composes browse startup through the real startup coordinator', async () => {
