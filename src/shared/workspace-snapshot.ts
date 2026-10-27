@@ -16,6 +16,8 @@ import {
   WorkspaceGitStatsSchema,
   WorkspaceSidebarStatusSchema,
   WorkspaceStatusReasonSchema,
+  WorkspaceSummarySchema,
+  WorkspaceAutoIterationSummarySchema,
 } from '@/shared/workspace-summary';
 import { prDeliveryModeSchema } from './schemas/pr-event.schema';
 import { WorkspacePullRequestSchema } from './workspace-pr';
@@ -29,11 +31,33 @@ const SnapshotFieldGroupSchema = z.enum([
   'runScript',
   'reconciliation',
   'git',
+  'metadata',
+  'autoIteration',
 ]);
 
 export type SnapshotFieldGroup = z.infer<typeof SnapshotFieldGroupSchema>;
 
-export const WorkspaceSnapshotEntrySchema = z.object({
+export const WorkspaceSnapshotMetadataSchema = WorkspaceSummarySchema.pick({
+  worktreePath: true,
+  initErrorMessage: true,
+  githubIssueNumber: true,
+  githubIssueUrl: true,
+  linearIssueId: true,
+  linearIssueIdentifier: true,
+  linearIssueUrl: true,
+  creationSource: true,
+});
+export type WorkspaceSnapshotMetadata = z.infer<typeof WorkspaceSnapshotMetadataSchema>;
+
+const snapshotMetadataFields = WorkspaceSnapshotMetadataSchema.partial();
+/** Preserve only supplied metadata; unknown nullable fields remain absent. */
+export function projectWorkspaceSnapshotMetadata(source: Partial<WorkspaceSnapshotMetadata>) {
+  return snapshotMetadataFields.parse(source);
+}
+
+const SnapshotEntrySchema = z.object({
+  ...WorkspaceSnapshotMetadataSchema.partial().shape,
+  autoIteration: WorkspaceAutoIterationSummarySchema.nullable().optional(),
   workspaceId: z.string(),
   projectId: z.string(),
   version: z.number(),
@@ -93,9 +117,46 @@ export const WorkspaceSnapshotEntrySchema = z.object({
     runScript: z.number(),
     reconciliation: z.number(),
     git: z.number().optional(),
+    metadata: z.number().optional(),
+    autoIteration: z.number().optional(),
   }),
 });
 
+// The complete branch validates before legacy defaults are applied: a version
+// claim cannot turn an omitted nullable field into known authoritative data.
+const CompleteSnapshotEntrySchema = SnapshotEntrySchema.extend({
+  ...WorkspaceSnapshotMetadataSchema.shape,
+  summaryVersion: z.literal(1),
+  autoIteration: WorkspaceAutoIterationSummarySchema.nullable(),
+  prs: z.array(WorkspacePullRequestSchema),
+  prSummary: WorkspacePRSummarySchema,
+  prMonitoring: WorkspaceSummarySchema.shape.prMonitoring,
+}).superRefine((entry, context) => {
+  const result = WorkspaceSummarySchema.safeParse({ ...entry, id: entry.workspaceId });
+  if (!result.success) {
+    for (const issue of result.error.issues) {
+      context.addIssue({ code: 'custom', message: issue.message, path: issue.path });
+    }
+  }
+  if ((entry.mode === 'AUTO_ITERATION') !== (entry.autoIteration !== null)) {
+    context.addIssue({
+      code: 'custom',
+      path: ['autoIteration'],
+      message: 'Compact loop must match workspace mode',
+    });
+  } else if (entry.autoIteration && entry.autoIteration.status !== entry.autoIterationStatus) {
+    context.addIssue({
+      code: 'custom',
+      path: ['autoIteration', 'status'],
+      message: 'Compact loop status must match workspace status',
+    });
+  }
+});
+
+export const WorkspaceSnapshotEntrySchema = z.union([
+  CompleteSnapshotEntrySchema,
+  SnapshotEntrySchema.extend({ summaryVersion: z.undefined().optional() }),
+]);
 export type WorkspaceSnapshotEntry = z.infer<typeof WorkspaceSnapshotEntrySchema>;
 
 export const SnapshotFullMessageSchema = z.object({

@@ -1,9 +1,12 @@
-import type { WorkspaceSnapshotEntry } from '@/shared/workspace-snapshot';
+import {
+  WorkspaceSnapshotEntrySchema,
+  type WorkspaceSnapshotEntry,
+} from '@/shared/workspace-snapshot';
 
 export function makeWorkspaceSnapshotEntry(
   overrides: Partial<WorkspaceSnapshotEntry> = {}
 ): WorkspaceSnapshotEntry {
-  return {
+  const entry: Omit<WorkspaceSnapshotEntry, 'summaryVersion'> & { summaryVersion?: 1 } = {
     workspaceId: 'ws-1',
     projectId: 'proj-1',
     version: 1,
@@ -59,4 +62,6 @@ export function makeWorkspaceSnapshotEntry(
     },
     ...overrides,
   };
+  const { summaryVersion, ...legacy } = entry;
+  return summaryVersion === 1 ? WorkspaceSnapshotEntrySchema.parse(entry) : legacy;
 }
