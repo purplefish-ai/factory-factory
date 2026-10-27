@@ -125,6 +125,11 @@ async function openPR() {
   await key(row, 'ArrowRight');
   await vi.waitFor(() => expect(item('Remove from workspace')).toBeTruthy());
 }
+function LiveSidebar({ workspace }: { workspace: ProjectWorkspace }) {
+  useProjectSnapshotSync('proj-1');
+  return <WorkspaceItemContent workspace={workspace} />;
+}
+
 describe('workspace PR actions across surfaces', () => {
   for (const surface of ['card', 'sidebar'] as const) {
     async function renderSurface() {
@@ -184,10 +189,6 @@ describe('workspace PR actions across surfaces', () => {
       ],
       reviewCount: 0,
     };
-    function LiveSidebar() {
-      useProjectSnapshotSync('proj-1');
-      return <WorkspaceItemContent workspace={cache.workspaces[0]!} />;
-    }
     const queryClient = new QueryClient();
     const queryKey = getQueryKey(trpc.workspace.listForProject, { projectId: 'proj-1' }, 'query');
     queryClient.setQueryData(queryKey, cache);
@@ -196,7 +197,7 @@ describe('workspace PR actions across surfaces', () => {
         <QueryClientProvider client={queryClient}>
           <MemoryRouter>
             <TooltipProvider>
-              <LiveSidebar />
+              <LiveSidebar workspace={cache.workspaces[0]!} />
             </TooltipProvider>
           </MemoryRouter>
         </QueryClientProvider>

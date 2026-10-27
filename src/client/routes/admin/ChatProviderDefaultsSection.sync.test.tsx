@@ -49,6 +49,12 @@ let reads: Request[];
 let saves: Request[];
 let invalidate: () => Promise<void>;
 
+function SettingsHarness() {
+  const utils = trpc.useUtils();
+  invalidate = () => utils.userSettings.get.invalidate();
+  return createElement(ChatProviderDefaultsSection);
+}
+
 async function waitFor(check: () => void) {
   await vi.waitFor(async () => {
     await act(async () => {
@@ -128,16 +134,11 @@ beforeEach(async () => {
           }),
     ],
   });
-  function Settings() {
-    const utils = trpc.useUtils();
-    invalidate = () => utils.userSettings.get.invalidate();
-    return createElement(ChatProviderDefaultsSection);
-  }
   await act(() => {
     root.render(
       <trpc.Provider client={client} queryClient={queryClient}>
         <QueryClientProvider client={queryClient}>
-          <Settings />
+          <SettingsHarness />
         </QueryClientProvider>
       </trpc.Provider>
     );

@@ -23,6 +23,7 @@ import {
   createOptimisticWorkspaceCacheData,
   removeWorkspaceFromProjectWorkspaceCache,
 } from '@/client/lib/workspace-cache-helpers';
+import { createOptimisticWorkspaceSummary } from '@/client/lib/workspace-summary';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -45,8 +46,6 @@ import { Textarea } from '@/components/ui/textarea';
 import type { MessageAttachment } from '@/lib/chat-protocol';
 import { SUPPORTED_IMAGE_TYPES, SUPPORTED_TEXT_EXTENSIONS } from '@/lib/image-utils';
 import { cn } from '@/lib/utils';
-import { kanbanColumnForStatusReason } from '@/shared/kanban-column-projection';
-import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
 import {
   generateUniqueWorkspaceName,
   generateWorkspaceNameFromPrompt,
@@ -117,70 +116,6 @@ type ProjectWorkspaceCache = RouterOutputs['workspace']['listForProject'];
 
 interface CreateWorkspaceMutationContext {
   optimisticWorkspaceId: string;
-}
-
-function createOptimisticWorkingWorkspace(params: {
-  id: string;
-  projectId: string;
-  name: string;
-  ratchetEnabled: boolean;
-  mode?: 'STANDARD' | 'AUTO_ITERATION';
-  createdAt?: Date;
-}): ProjectWorkspaceCache['workspaces'][number] {
-  return {
-    id: params.id,
-    projectId: params.projectId,
-    name: params.name,
-    status: 'NEW',
-    createdAt: params.createdAt ?? new Date(),
-    branchName: null,
-    worktreePath: null,
-    initErrorMessage: null,
-    mode: params.mode ?? 'STANDARD',
-    autoIterationStatus: null,
-    autoIterationConfig: null,
-    autoIterationProgress: null,
-    prs: [],
-    prSummary: deriveWorkspacePRSummary([], true),
-    prUrl: null,
-    prNumber: null,
-    prState: 'NONE',
-    prCiStatus: 'UNKNOWN',
-    ratchetEnabled: params.ratchetEnabled,
-    prMonitoring: {
-      deliveryMode: 'MAIN',
-      enabled: params.ratchetEnabled,
-      recipientSessionId: null,
-      bindingRevision: 0,
-      pauseReason: null,
-      pendingEventCount: 0,
-    },
-    ratchetState: 'IDLE',
-    runScriptStatus: 'IDLE',
-    githubIssueNumber: null,
-    githubIssueUrl: null,
-    linearIssueId: null,
-    linearIssueIdentifier: null,
-    linearIssueUrl: null,
-    creationSource: 'MANUAL',
-    sessionSummaries: [],
-    pendingRequestType: null,
-    gitStats: null,
-    lastActivityAt: null,
-    isWorking: true,
-    // A freshly created workspace is always NEW, which derives as WORKING.
-    kanbanColumn: kanbanColumnForStatusReason('SETTING_UP'),
-    sidebarStatus: { activityState: 'WORKING', ciState: 'NONE' },
-    ratchetButtonAnimated: false,
-    flowPhase: 'NO_PR',
-    ciObservation: 'NOT_FETCHED',
-    statusReason: {
-      code: 'SETTING_UP',
-      label: 'Setting up workspace',
-      tone: 'working',
-      needsUser: false,
-    },
-  };
 }
 
 /** Put an optimistic row at the head of the shared project list. */
@@ -477,7 +412,7 @@ export function InlineWorkspaceForm({
   const createWorkspaceMutation = trpc.workspace.create.useMutation({
     onMutate: async (input): Promise<CreateWorkspaceMutationContext> => {
       const optimisticWorkspaceId = `optimistic-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const optimisticWorkspace = createOptimisticWorkingWorkspace({
+      const optimisticWorkspace = createOptimisticWorkspaceSummary({
         id: optimisticWorkspaceId,
         projectId,
         name: input.type === 'MANUAL' ? input.name : 'New Workspace',
@@ -494,7 +429,7 @@ export function InlineWorkspaceForm({
       return { optimisticWorkspaceId };
     },
     onSuccess: (workspace, _input, context) => {
-      const optimisticWorkspace = createOptimisticWorkingWorkspace({
+      const optimisticWorkspace = createOptimisticWorkspaceSummary({
         id: workspace.id,
         projectId: workspace.projectId,
         name: workspace.name,

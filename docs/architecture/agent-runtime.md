@@ -28,8 +28,8 @@ All agent sessions use Agent Client Protocol over stdio JSON-RPC through
 `@agentclientprotocol/sdk` 2.0.2 through its v1 `/unstable` entrypoint. Typed
 client app handlers preserve elicitation and native subagent features;
 `acp-connection.ts` owns SDK registration and peer-context calls. Claude uses
-`claude-agent-acp` 0.94 and Codex uses the released
-`@agentclientprotocol/codex-acp` 2.2.2. Factory Factory does not implement a
+`claude-agent-acp` 0.98 and Codex uses the released
+`@agentclientprotocol/codex-acp` 2.3.0. Factory Factory does not implement a
 Codex harness adapter. Codex's compatible runtime is packaged with its adapter;
 `ff codex login` authenticates that same runtime.
 
@@ -188,6 +188,15 @@ Claude ACP retains its bare Claude Code preset and existing prompt snapshot
 behavior. Before introducing custom system-prompt metadata, revisit the SDK's
 custom/append snapshot semantics. See
 [the upgrade validation](../superpowers/plans/2026-09-09-remaining-dependencies.md).
+
+Auto-iteration session start, prompt, transcript reads, stop, recycle, and their
+compensation belong to `auto-iteration-session.orchestrator.ts`.
+`configureDomainBridges` constructs that bridge from narrow session and
+workspace capabilities. Recycling stops the predecessor, creates and starts its
+replacement, writes the loop pointer, sends the handoff, then retires the
+predecessor. Failed handoffs settle only matching session IDs and clean up the
+replacement without masking the original error. Successful pointer writes remain
+unconditional; the auto-iteration caller also writes the returned session ID.
 
 Auto-iteration sessions use `autoIterationPermissions`, with YOLO as the
 fallback if settings cannot be read. Auto-iteration uses the same native

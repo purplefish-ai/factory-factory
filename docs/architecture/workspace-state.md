@@ -202,6 +202,25 @@ sockets; the snapshot hook also rejects callbacks from retired project
 activations. Existing unknown-workspace, worktree-path, and reconnect metadata
 repairs continue through the same query options.
 
+`WorkspaceSummarySchema` defines the required board/sidebar fields independently
+of backend and client code. The HTTP list projector retains every legacy list
+field, including raw `autoIterationConfig` and `autoIterationProgress`, and adds
+a compact `autoIteration` projection. That projection is null for standard
+workspaces; for loop workspaces its status, iteration, limit, and metric may be
+null when unknown. Configuration input defaults do not turn missing summary
+values into iteration zero or a limit of 25; those remain UI presentation
+choices. Large configuration, progress, and logbook data are outside the shared
+summary contract.
+
+The list still returns `createdAt` as a Date through tRPC. Explicit summary
+adapters convert only that field to/from ISO for serialized summaries; session
+and last-activity timestamps keep their existing string representation. One
+client constructor creates complete optimistic list rows, while detail cache
+hydration retains its extra fields and existing initial sidebar status. The
+sidebar consumes a required Pick of the same summary instead of an optional
+parallel interface. Shared validation schemas do not change the flat snapshot
+wire, and existing list/detail hydration fallbacks remain in place.
+
 Each snapshot WebSocket starts from a full read of current store state after its
 optional startup seed wait. Changes emitted before that baseline are already
 reflected in the read and are not replayed: an older removal must not override a

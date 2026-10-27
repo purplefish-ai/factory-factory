@@ -7,6 +7,17 @@ import { expect, it } from 'vitest';
 import type { ChatMessage } from '@/lib/chat-protocol';
 import { useGroupedChatMessages } from './use-grouped-chat-messages';
 
+function Harness({
+  messages,
+  filterDuplicateResults,
+}: {
+  messages: ChatMessage[];
+  filterDuplicateResults?: boolean;
+}) {
+  const grouped = useGroupedChatMessages(messages, { filterDuplicateResults });
+  return createElement('div', null, grouped.map((item) => item.id).join(','));
+}
+
 it('updates duplicate filtering when options change with the same message array', () => {
   const messages: ChatMessage[] = [
     {
@@ -27,14 +38,10 @@ it('updates duplicate filtering when options change with the same message array'
       order: 1,
     },
   ];
-  function Harness({ filterDuplicateResults }: { filterDuplicateResults?: boolean }) {
-    const grouped = useGroupedChatMessages(messages, { filterDuplicateResults });
-    return createElement('div', null, grouped.map((item) => item.id).join(','));
-  }
   const container = document.createElement('div');
   const root = createRoot(container);
   const render = (filterDuplicateResults?: boolean) => {
-    flushSync(() => root.render(createElement(Harness, { filterDuplicateResults })));
+    flushSync(() => root.render(createElement(Harness, { messages, filterDuplicateResults })));
     return container.textContent;
   };
 

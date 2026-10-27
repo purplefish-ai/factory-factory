@@ -144,11 +144,15 @@ preserves queued facts so the new recipient can receive them.
 
 Review policy defaults to `CHANGES_REQUESTED`: changes-requested review bodies
 and unresolved inline threads. `ALL_REVIEW_FEEDBACK` also includes commented
-review summaries. Ordinary PR conversation comments do not trigger updates.
-GitHub identity must be known before accepting an observation, so failed
-identity lookups are retried without disabling self-review filtering. The app's
-own [adversarial-review marker](../design/adversarial-review.md) remains an
-explicit exception under its authenticated GitHub identity.
+review summaries. Ordinary PR conversation comments do not trigger updates. Core
+PR, head and check facts are fetched separately from optional review enrichment.
+Failed identity, review settings, review or comment lookups mark reviews
+incomplete without blocking CI, conflict or terminal-state observations. They
+claim no review resolutions, and the existing incomplete-review acceptance
+retains pending feedback. Identity must be known before accepting review facts;
+failed lookups retry on the next poll without disabling self-review filtering.
+The app's own [adversarial-review marker](../design/adversarial-review.md)
+remains an explicit exception under its authenticated GitHub identity.
 
 Approvals supersede earlier feedback only with reliable same-author ordering.
 Submission times and REST review ordinals provide that ordering; opaque IDs do

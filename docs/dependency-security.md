@@ -47,8 +47,8 @@ These commands send dependency names and versions to the npm advisory service.
 Inspect each finding and its dependency path. Do not treat an arbitrary nonzero
 exit as expected or suppress an advisory solely to obtain a passing audit.
 
-The audit on October 18, 2026 found no production advisories. The complete audit
-reported one high-severity development-tooling advisory:
+The complete registry audit on October 27, 2026 reported no known advisories.
+The repository still carries a local development-tooling mitigation for
 [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm).
 `tsc-alias` reaches `braces@3.0.3` through both Chokidar and Micromatch. No
 upstream fixed release is available at the time of this check.
@@ -58,10 +58,53 @@ recursive AST traversal to a bounded depth.
 `src/backend/testing/dependency-security-patches.test.ts` verifies both
 installed dependency paths: normal glob behavior still works, deeply nested
 braces and parentheses fail with a controlled `SyntaxError`, and pre-parsed ASTs
-cannot bypass the compile, expand or stringify guards. The raw advisory remains
-visible because registry scanners identify the upstream version, not the local
-patch. No audit ignore rule is configured.
+cannot bypass the compile, expand or stringify guards. Registry scanners
+identify the upstream version, not the local patch, so this advisory may be
+reported even when the mitigation is installed. No audit ignore rule is
+configured.
 
 Keep the patch and regressions until an upstream release or dependency change
 removes the vulnerable code. Re-run the full audit before removing a mitigation;
 check new findings independently of this known, locally patched advisory.
+
+## Upgrade compatibility
+
+Keep Prisma, its client, and the SQLite adapter aligned on the latest stable
+Prisma 7 release. The Prisma CLI's `latest` registry tag currently points to an
+8.0 release candidate; it is not a routine upgrade for this SQLite application.
+The TypeScript 6 compatibility API alias is intentional; compilation uses the
+TypeScript 7 native compiler.
+
+Prisma 7's SQLite adapter still requests better-sqlite3 12, whose native V8
+bindings do not build against Electron 45. Its targeted override uses the same
+better-sqlite3 13 driver as the application. Version 13 uses N-API across Node
+and Electron. Validate the real Prisma database tests and Electron native
+rebuilds together before changing this override. The runtime switcher caches
+only ABI-specific modules; it leaves the installed N-API SQLite binary untouched
+when switching between Node and Electron.
+
+Undici security overrides follow each consumer's requested major: Node-gyp uses
+6, Electron's downloader uses 7, and jsdom uses 8. Keep these selectors separate
+when updating patched releases; a global override silently forces tools onto a
+different major than they support. Verify native rebuilds, Electron downloads,
+and browser-environment tests after changes.
+
+Some maintained parent packages still require older dependency APIs. Storybook's
+React doc generator uses Babel 7 and its companion packages. `tsc-alias` uses
+Picomatch 2 through its glob/watch dependencies, including the locally patched
+Braces paths above. Keep their latest supported releases rather than forcing
+unrelated majors. Revisit the parent dependency or a replacement when its
+maintenance or security posture warrants the migration; a newer transitive major
+alone does not establish that replacing Storybook or the build tool is worth the
+compatibility cost.
+
+Electron-builder's CommonJS plist consumers use plist 4 with xmldom 0.9. Plist 3
+omits the MIME type required by xmldom 0.9, while plist 5's import-only exports
+cannot be resolved by those consumers. Test actual macOS packaging when changing
+either parser; a successful application build does not exercise that path.
+
+For transitive major overrides, verify the actual consumer: Ajv's relative
+schema references for fast-uri, application and MCP routes for path-to-regexp,
+Electron-builder configuration and packaging for js-yaml, and the released ACP
+adapter contracts for Anthropic's SDK. Package installation and peer dependency
+resolution are necessary checks but do not establish runtime compatibility.

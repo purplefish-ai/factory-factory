@@ -10,26 +10,32 @@ import type { ChatAction } from './reducer';
 import { createToolInputAccumulatorState, handleToolInputStreaming } from './streaming-utils';
 import { useChatTransport } from './use-chat-transport';
 
+function TransportHarness({
+  dispatch,
+  result,
+}: {
+  dispatch: (action: ChatAction) => void;
+  result: { handleMessage?: (data: unknown) => void };
+}) {
+  result.handleMessage = useChatTransport({
+    dispatch,
+    stateRef: { current: {} } as never,
+    toolInputAccumulatorRef: { current: createToolInputAccumulatorState() },
+  }).handleMessage;
+  return null;
+}
+
 function renderTransport(dispatch: (action: ChatAction) => void) {
   const container = document.createElement('div');
   const root = createRoot(container);
-  let handleMessage: ((data: unknown) => void) | undefined;
+  const result: { handleMessage?: (data: unknown) => void } = {};
 
-  function Harness() {
-    handleMessage = useChatTransport({
-      dispatch,
-      stateRef: { current: {} } as never,
-      toolInputAccumulatorRef: { current: createToolInputAccumulatorState() },
-    }).handleMessage;
-    return null;
-  }
-
-  flushSync(() => root.render(createElement(Harness)));
-  if (!handleMessage) {
+  flushSync(() => root.render(createElement(TransportHarness, { dispatch, result })));
+  if (!result.handleMessage) {
     throw new Error('Expected the hook harness to expose handleMessage');
   }
   return {
-    handleMessage,
+    handleMessage: result.handleMessage,
     cleanup: () => flushSync(() => root.unmount()),
   };
 }
