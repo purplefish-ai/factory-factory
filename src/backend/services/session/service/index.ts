@@ -62,6 +62,7 @@ export {
   chatMessageHandlerService,
   claudeModelCatalogService,
   codexModelCatalogService,
+  providerUsageService,
   sessionConfigService,
   sessionDispatchService,
   sessionLifecycleEventService,

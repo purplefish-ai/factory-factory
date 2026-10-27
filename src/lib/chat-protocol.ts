@@ -7,6 +7,7 @@
 
 export * from '@/shared/acp-protocol';
 
+import { z } from 'zod';
 import type {
   AgentContentItem,
   AgentMessage,
@@ -820,6 +821,8 @@ export interface TokenStats {
   webSearchRequests: number;
   /** Context window size from the latest result (null if not yet received) */
   contextWindow: number | null;
+  /** Latest ACP occupancy snapshot, independent of cumulative token accounting. */
+  contextUsedTokens?: number | null;
   /** Max output tokens from the latest result (null if not yet received) */
   maxOutputTokens: number | null;
   /** Service tier from the latest usage (null if not yet received) */
@@ -857,6 +860,7 @@ export function createEmptyTokenStats(): TokenStats {
     turnCount: 0,
     webSearchRequests: 0,
     contextWindow: null,
+    contextUsedTokens: null,
     maxOutputTokens: null,
     serviceTier: null,
   };
@@ -880,12 +884,19 @@ function extractFirstModelUsage(
  * Updates token stats from a result message.
  * Accumulates tokens, duration, and cost while taking the latest context window info.
  */
+const contextUsageUpdateSchema = z.object({
+  sessionUpdate: z.literal('usage_update'),
+  used: z.number().finite().nonnegative(),
+  size: z.number().finite().positive(),
+});
+
 export function updateTokenStatsFromResult(stats: TokenStats, msg: AgentMessage): TokenStats {
   if (msg.type !== 'result') {
     return stats;
   }
 
   const modelUsage = extractFirstModelUsage(msg.model_usage);
+  const snapshot = contextUsageUpdateSchema.safeParse(msg.result).data;
 
   return {
     // Accumulate token counts
@@ -904,7 +915,8 @@ export function updateTokenStatsFromResult(stats: TokenStats, msg: AgentMessage)
     // Accumulate web search requests from model usage
     webSearchRequests: stats.webSearchRequests + (modelUsage?.webSearchRequests ?? 0),
     // Take latest context window info
-    contextWindow: modelUsage?.contextWindow ?? stats.contextWindow,
+    contextWindow: snapshot?.size ?? modelUsage?.contextWindow ?? stats.contextWindow,
+    contextUsedTokens: snapshot?.used ?? stats.contextUsedTokens ?? null,
     maxOutputTokens: modelUsage?.maxOutputTokens ?? stats.maxOutputTokens,
     // Take latest service tier
     serviceTier: msg.usage?.service_tier ?? stats.serviceTier,

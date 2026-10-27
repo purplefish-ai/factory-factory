@@ -7,7 +7,6 @@ import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { SquareIcon } from '@phosphor-icons/react/dist/csr/Square';
 import { memo, useState } from 'react';
 import type { AcpConfigOption } from '@/client/features/chat/reducer';
-import { ContextWindowIndicator } from '@/client/features/chat/usage-stats';
 import { AttachmentPreview } from '@/client/features/composer';
 import { Button } from '@/components/ui/button';
 import { InputGroupButton } from '@/components/ui/input-group';
@@ -21,7 +20,7 @@ import {
 } from '@/components/ui/sheet';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useIsMobile } from '@/hooks/use-mobile';
-import type { ChatSettings, MessageAttachment, TokenStats } from '@/lib/chat-protocol';
+import type { ChatSettings, MessageAttachment } from '@/lib/chat-protocol';
 import {
   type ChatBarCapabilities,
   hasResolvedChatBarCapabilities,
@@ -112,13 +111,11 @@ interface LeftControlsVisibility {
   showThinkingToggle: boolean;
   showPlanModeToggle: boolean;
   showAttachments: boolean;
-  showUsageIndicator: boolean;
 }
 
 function deriveLeftControlsVisibility(
   settings: ChatSettings | undefined,
-  capabilities: ChatBarCapabilities | undefined,
-  tokenStats: TokenStats | undefined
+  capabilities: ChatBarCapabilities | undefined
 ): LeftControlsVisibility {
   const showModelSelector =
     capabilities?.model.enabled === true && (capabilities.model.options.length ?? 0) > 0;
@@ -128,10 +125,6 @@ function deriveLeftControlsVisibility(
   const showPlanModeToggle = capabilities?.planMode.enabled === true;
   const showAttachments =
     capabilities?.attachments.enabled === true && capabilities.attachments.kinds.includes('image');
-  const showUsageIndicator =
-    capabilities?.usageStats.enabled === true &&
-    capabilities.usageStats.contextWindow === true &&
-    tokenStats !== undefined;
   const selectedModel =
     settings?.selectedModel ??
     capabilities?.model.selected ??
@@ -153,7 +146,6 @@ function deriveLeftControlsVisibility(
     showThinkingToggle,
     showPlanModeToggle,
     showAttachments,
-    showUsageIndicator,
   };
 }
 
@@ -259,25 +251,6 @@ const ModeToggles = memo(function ModeToggles({
   );
 });
 
-const UsageIndicatorSection = memo(function UsageIndicatorSection({
-  showUsageIndicator,
-  tokenStats,
-}: {
-  showUsageIndicator: boolean;
-  tokenStats?: TokenStats;
-}) {
-  if (!(showUsageIndicator && tokenStats)) {
-    return null;
-  }
-
-  return (
-    <>
-      <div className="h-4 w-px bg-border" />
-      <ContextWindowIndicator tokenStats={tokenStats} />
-    </>
-  );
-});
-
 const AcpConfigControls = memo(function AcpConfigControls({
   acpConfigOptions,
   onSetConfigOption,
@@ -321,8 +294,6 @@ const MobileSettingsSheet = memo(function MobileSettingsSheet({
   hasAcpConfigOptions,
   acpConfigOptions,
   onSetConfigOption,
-  showUsageIndicator,
-  tokenStats,
 }: {
   running: boolean;
   showModelSelector: boolean;
@@ -341,8 +312,6 @@ const MobileSettingsSheet = memo(function MobileSettingsSheet({
   hasAcpConfigOptions: boolean;
   acpConfigOptions?: AcpConfigOption[] | null;
   onSetConfigOption?: (configId: string, value: string) => void;
-  showUsageIndicator: boolean;
-  tokenStats?: TokenStats;
 }) {
   const [open, setOpen] = useState(false);
   const hasAnyControls =
@@ -350,8 +319,7 @@ const MobileSettingsSheet = memo(function MobileSettingsSheet({
     showModelSelector ||
     showReasoningSelector ||
     showThinkingToggle ||
-    showPlanModeToggle ||
-    showUsageIndicator;
+    showPlanModeToggle;
 
   if (!hasAnyControls) {
     return null;
@@ -450,11 +418,6 @@ const MobileSettingsSheet = memo(function MobileSettingsSheet({
               )}
             </>
           )}
-          {showUsageIndicator && tokenStats && (
-            <div className="rounded-md border p-2">
-              <ContextWindowIndicator tokenStats={tokenStats} />
-            </div>
-          )}
         </div>
       </SheetContent>
     </Sheet>
@@ -478,7 +441,6 @@ interface LeftControlsProps {
   onQuickAction: (action: string) => void;
   quickActionsOpen: boolean;
   onQuickActionsOpenChange: (open: boolean) => void;
-  tokenStats?: TokenStats;
   acpConfigOptions?: AcpConfigOption[] | null;
   onSetConfigOption?: (configId: string, value: string) => void;
 }
@@ -492,7 +454,6 @@ interface LeftControlsViewState {
   showThinkingToggle: boolean;
   showPlanModeToggle: boolean;
   showAttachments: boolean;
-  showUsageIndicator: boolean;
   hasModeToggles: boolean;
   hasAcpConfigOptions: boolean;
 }
@@ -521,7 +482,6 @@ const MobileLeftControls = memo(function MobileLeftControls({
     onQuickAction,
     quickActionsOpen,
     onQuickActionsOpenChange,
-    tokenStats,
     acpConfigOptions,
     onSetConfigOption,
   } = props;
@@ -547,8 +507,6 @@ const MobileLeftControls = memo(function MobileLeftControls({
         hasAcpConfigOptions={view.hasAcpConfigOptions}
         acpConfigOptions={acpConfigOptions}
         onSetConfigOption={onSetConfigOption}
-        showUsageIndicator={view.showUsageIndicator}
-        tokenStats={tokenStats}
       />
       {view.showAttachments && (
         <FileUploadButton
@@ -597,7 +555,6 @@ const DesktopLeftControls = memo(function DesktopLeftControls({
     onQuickAction,
     quickActionsOpen,
     onQuickActionsOpenChange,
-    tokenStats,
     acpConfigOptions,
     onSetConfigOption,
   } = props;
@@ -678,14 +635,13 @@ const DesktopLeftControls = memo(function DesktopLeftControls({
         shortcut={`${modLabel}+Shift+A`}
         showShortcut={modifierHeld}
       />
-      <UsageIndicatorSection showUsageIndicator={view.showUsageIndicator} tokenStats={tokenStats} />
     </div>
   );
 });
 
 export const LeftControls = memo(function LeftControls(props: LeftControlsProps) {
   const isMobile = useIsMobile();
-  const view = deriveLeftControlsVisibility(props.settings, props.capabilities, props.tokenStats);
+  const view = deriveLeftControlsVisibility(props.settings, props.capabilities);
   const viewState: LeftControlsViewState = {
     ...view,
     hasModeToggles: view.showThinkingToggle || view.showPlanModeToggle,
@@ -710,7 +666,9 @@ export const RightControls = memo(function RightControls({
   onSendClick,
   disabled,
   inputRef,
+  children,
 }: {
+  children?: React.ReactNode;
   pendingMessageCount: number;
   running: boolean;
   stopping: boolean;
@@ -721,6 +679,7 @@ export const RightControls = memo(function RightControls({
 }) {
   return (
     <div className="ml-auto flex shrink-0 items-center gap-1">
+      {children}
       {pendingMessageCount > 0 && (
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
           <SpinnerGapIcon className="h-3 w-3 animate-spin" />

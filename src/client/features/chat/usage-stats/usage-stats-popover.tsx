@@ -98,7 +98,7 @@ function StatRow({ icon, label, value, subValue, className }: StatRowProps) {
  * Shows token breakdown, cost, cache stats, and timing.
  */
 export function UsageStatsPopover({ tokenStats }: UsageStatsPopoverProps) {
-  const usedTokens = tokenStats.inputTokens + tokenStats.outputTokens;
+  const usedTokens = tokenStats.contextUsedTokens;
   const usagePercentage = calculateContextUsagePercentage(tokenStats);
   const cacheHitRate = calculateCacheHitRate(tokenStats);
   const hasCacheData =
@@ -109,7 +109,7 @@ export function UsageStatsPopover({ tokenStats }: UsageStatsPopoverProps) {
       <h4 className="mb-3 text-sm font-medium">Session Usage</h4>
 
       {/* Context Window Progress */}
-      {tokenStats.contextWindow && (
+      {tokenStats.contextWindow && usedTokens != null && (
         <div className="mb-3">
           <div className="mb-1 flex items-center justify-between">
             <span className="text-xs text-muted-foreground">Context Window</span>

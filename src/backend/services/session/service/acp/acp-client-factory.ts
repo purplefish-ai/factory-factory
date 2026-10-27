@@ -175,6 +175,7 @@ export class AcpClientFactory {
           promise: connection.initialize({
             protocolVersion: PROTOCOL_VERSION,
             clientCapabilities: {
+              session: { compaction: {} },
               subagents: {},
               elicitation: { form: {}, url: {} },
               _meta: {
