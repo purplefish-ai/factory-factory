@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { launchWorkspace } from '@/backend/orchestration/workspace-launch.orchestrator';
 import { autoIterationService, logbookService } from '@/backend/services/auto-iteration';
 
 const mockLogger = vi.hoisted(() => ({
@@ -203,8 +204,16 @@ function createBridgeServices(overrides: Partial<BridgeServices> = {}): BridgeSe
     terminalSessionService,
     workspaceActivityService,
     workspaceAutoIterationService,
-    workspaceCreationService:
-      mockWorkspaceCreationService as unknown as BridgeServices['workspaceCreationService'],
+    launchWorkspace: (source) =>
+      launchWorkspace(source, {
+        createWorkspace: mockWorkspaceCreationService.create,
+        createDefaultSession: (input) => sessionDataService.createAgentSession(input),
+        initializeWorktree: (id, options) => initializeWorkspaceWorktree(id, options),
+        getMaxSessionsPerWorkspace: vi.fn(),
+        resolveProvider: vi.fn(),
+        checkCliHealth: vi.fn(),
+        logger: mockLogger,
+      }),
     workspaceDataService,
     workspaceMaintenanceService,
     workspacePrSnapshotService,
@@ -382,6 +391,52 @@ describe('configureDomainBridges', () => {
         expect.any(Error),
         { workspaceId: 'ws-periodic' }
       );
+    });
+
+    it('adapts the supplied launch result without creating or initializing a second workspace', async () => {
+      const launch = vi.fn().mockResolvedValue({
+        workspace: { id: 'injected-periodic' },
+        defaultSessionId: 'session-injected',
+      });
+      configureDomainBridges(createBridgeServices({ launchWorkspace: launch }));
+      const bridge = getBridge(periodicTaskService.configure);
+      await expect(
+        bridge.workspace.createWorkspaceForTask({
+          projectId: 'p1',
+          name: 'Scheduled name',
+          prompt: 'Scheduled prompt',
+          periodicTaskId: 'task-1',
+        })
+      ).resolves.toEqual({ workspaceId: 'injected-periodic' });
+      expect(launch).toHaveBeenCalledExactlyOnceWith({
+        type: 'PERIODIC_TASK',
+        projectId: 'p1',
+        name: 'Scheduled name',
+        initialPrompt: 'Scheduled prompt',
+        periodicTaskId: 'task-1',
+        ratchetEnabled: true,
+      });
+      expect(mockWorkspaceCreationService.create).not.toHaveBeenCalled();
+      expect(sessionDataService.createAgentSession).not.toHaveBeenCalled();
+      expect(initializeWorkspaceWorktree).not.toHaveBeenCalled();
+    });
+
+    it('propagates required-session failure without starting background initialization', async () => {
+      mockWorkspaceCreationService.create.mockResolvedValue({ id: 'retained-periodic' });
+      const failure = new Error('required session failed');
+      vi.mocked(sessionDataService.createAgentSession).mockRejectedValueOnce(failure);
+      configureDomainBridges(createBridgeServices());
+      const bridge = getBridge(periodicTaskService.configure);
+      await expect(
+        bridge.workspace.createWorkspaceForTask({
+          projectId: 'p1',
+          name: 'Scheduled name',
+          prompt: 'Scheduled prompt',
+          periodicTaskId: 'task-1',
+        })
+      ).rejects.toBe(failure);
+      expect(mockWorkspaceCreationService.create).toHaveBeenCalledOnce();
+      expect(initializeWorkspaceWorktree).not.toHaveBeenCalled();
     });
 
     it('includes agent working state in periodic task workspace status', async () => {

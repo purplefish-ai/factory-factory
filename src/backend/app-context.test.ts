@@ -14,6 +14,39 @@ describe('createApplication', () => {
     expect(dependencies.services.serverInstanceService).toBe(serverInstanceService);
   });
 
+  it('routes child creation through the graph-owned project lookup and launch capability', async () => {
+    const actualChildren = await vi.importActual<
+      typeof import('@/backend/orchestration/workspace-children.orchestrator')
+    >('@/backend/orchestration/workspace-children.orchestrator');
+    const children = await vi.importMock<
+      typeof import('@/backend/orchestration/workspace-children.orchestrator')
+    >('@/backend/orchestration/workspace-children.orchestrator');
+    vi.mocked(children.createChildWorkspace).mockImplementationOnce(
+      actualChildren.createChildWorkspace
+    );
+    const { services } = createDefaultApplicationDependencies();
+    const findProject = vi.fn().mockResolvedValue({ id: 'project-1', isArchived: false });
+    const launch = vi
+      .fn()
+      .mockResolvedValue({ workspace: { id: 'injected-child' }, defaultSessionId: null });
+    services.projectManagementService = new Proxy(services.projectManagementService, {
+      get(target, property, receiver) {
+        return property === 'findById' ? findProject : Reflect.get(target, property, receiver);
+      },
+    });
+    services.launchWorkspace = launch;
+    const input = {
+      projectId: 'project-1',
+      parentWorkspaceId: 'parent-1',
+      name: 'Child',
+      initialPrompt: 'Child task',
+      reportBackOn: 'Done',
+    };
+    await expect(services.createChildWorkspace(input)).resolves.toBe('injected-child');
+    expect(findProject).toHaveBeenCalledExactlyOnceWith('project-1');
+    expect(launch).toHaveBeenCalledExactlyOnceWith({ type: 'CHILD_WORKSPACE', ...input });
+  });
+
   it('keeps two complete fake graphs isolated', () => {
     const firstDependencies = createFakeApplicationGraph('first');
     const secondDependencies = createFakeApplicationGraph('second');
