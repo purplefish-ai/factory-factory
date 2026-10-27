@@ -288,7 +288,6 @@ describe('workspace detail HTTP/stream commit ownership', () => {
     const replacement = workspaceDetailQueryOptions(f.client, 'ws-1', () =>
       Promise.resolve(detail({ name: 'Replacement detail' }))
     );
-    expect(replacement.structuralSharing).not.toBe(f.options.structuralSharing);
     await f.client.fetchQuery(replacement);
     f.resolve(detail({ name: 'Removed request' }));
     await pending;
@@ -511,6 +510,163 @@ describe('workspace detail HTTP/stream commit ownership', () => {
     }
   });
 
+  it.each(['removal', 'garbage collection'] as const)(
+    'reuses the same detail query options after %s',
+    async (departure) => {
+      vi.useFakeTimers();
+      const client = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false, gcTime: departure === 'removal' ? Infinity : 0 },
+        },
+      });
+      clients.push(client);
+      try {
+        const responses = [
+          detail({ name: 'First fetch', worktreePath: '/first' }),
+          detail({ name: 'Second fetch', worktreePath: '/second' }),
+        ];
+        let calls = 0;
+        const options = workspaceDetailQueryOptions(client, 'ws-1', () =>
+          Promise.resolve(responses[calls++]!)
+        );
+        await client.fetchQuery(options);
+        if (departure === 'removal') {
+          client.removeQueries({ queryKey: options.queryKey, exact: true });
+        } else {
+          await vi.advanceTimersByTimeAsync(0);
+        }
+        expect(client.getQueryCache().find({ queryKey: options.queryKey })).toBeUndefined();
+        await client.fetchQuery(options);
+        expect(calls).toBe(2);
+        expect(client.getQueryData(options.queryKey)).toMatchObject({
+          name: 'Second fetch',
+          worktreePath: '/second',
+        });
+        client.setQueryData(
+          options.queryKey,
+          detail({ name: 'Manual cache write', worktreePath: '/manual' })
+        );
+        expect(client.getQueryData(options.queryKey)).toMatchObject({
+          name: 'Manual cache write',
+          worktreePath: '/manual',
+        });
+      } finally {
+        client.clear();
+        vi.useRealTimers();
+      }
+    }
+  );
+
+  it('keeps late old HTTP provenance separate from a replacement using the same options', async () => {
+    const f = fixture();
+    const requests: Array<(data: WorkspaceDetail) => void> = [];
+    const base = workspaceDetailQueryOptions(
+      f.client,
+      'ws-1',
+      () => new Promise<WorkspaceDetail>((resolve) => requests.push(resolve))
+    );
+    const fetch = base.queryFn;
+    if (typeof fetch !== 'function') {
+      throw new Error('Expected a detail query function');
+    }
+    let call = 0;
+    let oldResult: WorkspaceDetail | undefined;
+    const options = {
+      ...base,
+      queryFn: async (context: Parameters<typeof fetch>[0]) => {
+        const currentCall = call++;
+        const data = await fetch(context);
+        if (currentCall === 0) {
+          oldResult = data;
+        }
+        return data;
+      },
+    };
+    const old = f.client.fetchQuery(options).catch(() => undefined);
+    f.client.removeQueries({ queryKey: options.queryKey, exact: true });
+    const current = f.client.fetchQuery(options);
+    const replacement = detail({ name: 'Replacement HTTP', worktreePath: '/replacement' });
+    requests[1]!(replacement);
+    await current;
+    const stale = detail({ name: 'Cancelled old HTTP', worktreePath: '/old' });
+    requests[0]!(stale);
+    await old;
+    await vi.waitFor(() => expect(oldResult).toBeDefined());
+    const before = f.client.getQueryData(options.queryKey);
+    expect(before).toMatchObject({ name: 'Replacement HTTP', worktreePath: '/replacement' });
+    // Its first attempted cache commit must retain HTTP provenance even though
+    // the originating Query has already been removed.
+    f.client.setQueryData(options.queryKey, oldResult);
+    expect(f.client.getQueryData(options.queryKey)).toBe(before);
+    f.client.setQueryData(options.queryKey, { ...replacement, name: 'Normal manual write' });
+    expect(f.client.getQueryData(options.queryKey)).toMatchObject({ name: 'Normal manual write' });
+  });
+
+  it('keeps reused immutable HTTP objects distinct across old and replacement commit provenance', async () => {
+    const f = fixture();
+    f.full([entry({ name: 'Current stream' })]);
+    const shared = Object.freeze(
+      detail({ name: 'Shared HTTP name', worktreePath: '/http/shared' })
+    );
+    const requests: Array<(data: WorkspaceDetail) => void> = [];
+    const base = workspaceDetailQueryOptions(
+      f.client,
+      'ws-1',
+      () => new Promise<WorkspaceDetail>((resolve) => requests.push(resolve))
+    );
+    const fetch = base.queryFn;
+    if (typeof fetch !== 'function') {
+      throw new Error('Expected a detail query function');
+    }
+    let call = 0;
+    let oldResult: WorkspaceDetail | undefined;
+    let afterOldCommit: unknown;
+    const options = {
+      ...base,
+      staleTime: 0,
+      queryFn: async (context: Parameters<typeof fetch>[0]) => {
+        const currentCall = call++;
+        const data = await fetch(context);
+        if (currentCall === 0) {
+          oldResult = data;
+        } else {
+          // Old completion runs after replacement tagging but before its success
+          // continuation, with the exact same immutable fetcher response object.
+          f.client.setQueryData(base.queryKey, oldResult);
+          afterOldCommit = f.client.getQueryData(base.queryKey);
+        }
+        return data;
+      },
+    };
+    const old = f.client.fetchQuery(options).catch(() => undefined);
+    f.client.removeQueries({ queryKey: options.queryKey, exact: true });
+    requests[0]!(shared);
+    await vi.waitFor(() => expect(oldResult).toBeDefined());
+    f.client.setQueryData(
+      options.queryKey,
+      detail({ name: 'Cached current', worktreePath: '/cached/current' })
+    );
+    const current = f.client.fetchQuery(options);
+    requests[1]!(shared);
+    const returned = await current;
+    await old;
+    expect(afterOldCommit).toMatchObject({
+      name: 'Cached current',
+      worktreePath: '/cached/current',
+    });
+    expect(f.client.getQueryData(options.queryKey)).toMatchObject({
+      name: 'Current stream',
+      worktreePath: '/http/shared',
+    });
+    expect(returned.createdAt).toBe(shared.createdAt);
+    expect(returned.agentSessions).toBe(shared.agentSessions);
+    expect(returned.terminalSessions).toBe(shared.terminalSessions);
+    // The replacement's consumed HTTP identity remains a deliberate manual
+    // write when explicitly reused after its automatic success commit.
+    f.client.setQueryData(options.queryKey, returned);
+    expect(f.client.getQueryData(options.queryKey)).toMatchObject({ name: 'Shared HTTP name' });
+  });
+
   it('releases cached owners when an inactive detail query is garbage-collected', async () => {
     vi.useFakeTimers();
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
@@ -526,7 +682,6 @@ describe('workspace detail HTTP/stream commit ownership', () => {
       const replacement = workspaceDetailQueryOptions(client, 'collected', () =>
         Promise.resolve(detail({ id: 'collected', name: 'After collection' }))
       );
-      expect(replacement.structuralSharing).not.toBe(first.structuralSharing);
       await client.fetchQuery(replacement);
       expect(client.getQueryData(replacement.queryKey)).toMatchObject({ name: 'After collection' });
     } finally {
@@ -555,7 +710,7 @@ describe('workspace detail HTTP/stream commit ownership', () => {
     const response = detail({ name: 'HTTP' });
     f.resolve(response);
     const returned = await pending;
-    expect(returned).toBe(response);
+    expect(returned).toEqual(response);
     expect(f.client.getQueryData(f.options.queryKey)).toMatchObject({ name: 'Stream' });
     f.client.setQueryData(f.options.queryKey, returned);
     expect(f.client.getQueryData(f.options.queryKey)).toMatchObject({ name: 'HTTP' });
