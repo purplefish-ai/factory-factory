@@ -86,7 +86,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
   it('fails fast when dispatch occurs before lifecycle configuration', async () => {
     await expect(
       new ChatMessageHandlerService(createTestSessionDispatcher()).tryDispatchNextMessage('s1')
-    ).rejects.toThrow('ChatMessageHandlerService not configured: lifecycle gate/startup missing');
+    ).rejects.toThrow('SessionDispatchService not configured: lifecycle gate/startup missing');
   });
   const queuedMessage: QueuedMessage = {
     id: 'm1',
