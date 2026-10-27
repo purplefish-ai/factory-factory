@@ -507,6 +507,30 @@ describe('workspace snapshot cache projections', () => {
     expect(projectSnapshotToWorkspace(entry, existing).mode).toBe('AUTO_ITERATION');
   });
 
+  it.each(['PAUSED', 'COMPLETED', null] as const)(
+    'replaces cached RUNNING auto-iteration status with %s in both caches',
+    (autoIterationStatus) => {
+      const existing: ProjectWorkspace = {
+        ...projectSnapshotToWorkspace(makeEntry({ mode: 'AUTO_ITERATION' })),
+        autoIterationStatus: 'RUNNING',
+      };
+      const entry = makeEntry({ mode: 'AUTO_ITERATION', autoIterationStatus });
+
+      expect(projectSnapshotToWorkspace(entry, existing).autoIterationStatus).toBe(
+        autoIterationStatus
+      );
+      expect(
+        mergeProjectSnapshotIntoWorkspaceDetail(entry, seedDetail(existing))?.autoIterationStatus
+      ).toBe(autoIterationStatus);
+    }
+  );
+
+  it('projects auto-iteration status when a snapshot introduces a workspace', () => {
+    const entry = makeEntry({ mode: 'AUTO_ITERATION', autoIterationStatus: 'RUNNING' });
+
+    expect(projectSnapshotToWorkspace(entry).autoIterationStatus).toBe('RUNNING');
+  });
+
   it('supplies mutation-only defaults for a workspace the snapshot introduces first', () => {
     expect(projectSnapshotToWorkspace(makeEntry())).toMatchObject({
       creationSource: 'MANUAL',

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AcpClientHandler } from '@/backend/services/session/service/acp/acp-client-handler';
+import { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionPermissionService } from './session.permission.service';
@@ -424,5 +425,78 @@ describe('SessionPermissionService', () => {
         planContent: '# My Plan',
       })
     );
+  });
+});
+
+describe('permission response pending state', () => {
+  function setup() {
+    const domain = new SessionDomainService();
+    const service = new SessionPermissionService({ sessionDomainService: domain });
+    const bridge = service.createPermissionBridge('session-1');
+    const params = {
+      sessionId: 'session-1',
+      toolCall: { toolCallId: 'tool-1', title: 'Command' },
+      options: [
+        { optionId: 'allow_once', kind: 'allow_once' as const, name: 'Allow once' },
+        { optionId: 'reject_once', kind: 'reject_once' as const, name: 'Reject once' },
+      ],
+    };
+    function request(requestId: string) {
+      const response = bridge.waitForUserResponse(requestId, params);
+      service.handlePermissionRequest('session-1', {
+        type: 'acp_permission_request',
+        requestId,
+        params,
+      });
+      return response;
+    }
+    return { domain, service, bridge, request };
+  }
+
+  it.each(['allow_once', 'reject_once'])(
+    'clears the matching pending request after a direct %s response',
+    async (optionId) => {
+      const { domain, service, request } = setup();
+      const response = request('req-1');
+      expect(service.respondToPermission('session-1', 'req-1', optionId)).toBe(true);
+      expect(domain.getPendingInteractiveRequest('session-1')).toBeNull();
+      await expect(response).resolves.toEqual({ outcome: { outcome: 'selected', optionId } });
+    }
+  );
+
+  it.each(['unknown-request', 'invalid-option'])(
+    'preserves the pending request when resolution fails for %s',
+    async (failure) => {
+      const { domain, service, bridge, request } = setup();
+      const response = request('req-1');
+      const pending = domain.getPendingInteractiveRequest('session-1');
+      expect(
+        service.respondToPermission(
+          'session-1',
+          failure === 'unknown-request' ? 'stale-request' : 'req-1',
+          failure === 'invalid-option' ? 'invalid' : 'allow_once'
+        )
+      ).toBe(false);
+      expect(domain.getPendingInteractiveRequest('session-1')).toBe(pending);
+      expect(bridge.hasPending('req-1')).toBe(true);
+      service.cancelPendingRequests('session-1');
+      await expect(response).resolves.toEqual({ outcome: { outcome: 'cancelled' } });
+      expect(domain.getPendingInteractiveRequest('session-1')).toBeNull();
+    }
+  );
+
+  it('preserves a replacement request after successful and duplicate older responses', async () => {
+    const { domain, service, request } = setup();
+    const older = request('req-1');
+    const replacement = request('req-2');
+    const pending = domain.getPendingInteractiveRequest('session-1');
+    expect(service.respondToPermission('session-1', 'req-1', 'allow_once')).toBe(true);
+    expect(domain.getPendingInteractiveRequest('session-1')).toBe(pending);
+    expect(service.respondToPermission('session-1', 'req-1', 'allow_once')).toBe(false);
+    expect(domain.getPendingInteractiveRequest('session-1')).toBe(pending);
+    expect(service.respondToPermission('session-1', 'req-2', 'allow_once')).toBe(true);
+    expect(domain.getPendingInteractiveRequest('session-1')).toBeNull();
+    await expect(older).resolves.toMatchObject({ outcome: { outcome: 'selected' } });
+    await expect(replacement).resolves.toMatchObject({ outcome: { outcome: 'selected' } });
   });
 });

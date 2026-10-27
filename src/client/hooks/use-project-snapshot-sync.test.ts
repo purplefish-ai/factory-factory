@@ -35,7 +35,10 @@ const mockListInvalidate = vi.fn();
 const mockWorkspaceGetInvalidate = vi.fn();
 const mockWorkspaceGetReset = vi.fn();
 vi.mock('@tanstack/react-query', () => ({
-  useQueryClient: () => ({ resetQueries: mockWorkspaceGetReset }),
+  useQueryClient: () => ({
+    resetQueries: mockWorkspaceGetReset,
+    getQueriesData: () => [],
+  }),
 }));
 vi.mock('@trpc/react-query', () => ({
   getQueryKey: (_procedure: unknown, input: unknown, type: string) => [
@@ -440,6 +443,42 @@ describe('useProjectSnapshotSync', () => {
       expect(mockWorkspaceGetSetData).toHaveBeenCalledTimes(1);
       expect(mockWorkspaceGetSetData).toHaveBeenCalledWith({ id: 'ws-1' }, expect.any(Function));
     });
+
+    it.each([
+      ['snapshot_changed', 'PAUSED'],
+      ['snapshot_changed', 'COMPLETED'],
+      ['snapshot_changed', null],
+      ['snapshot_full', 'PAUSED'],
+      ['snapshot_full', 'COMPLETED'],
+      ['snapshot_full', null],
+    ] as const)(
+      '%s updates cached RUNNING auto-iteration status to %s without a refetch',
+      (type, autoIterationStatus) => {
+        const existing = {
+          ...projectSnapshotToWorkspace(makeEntry({ mode: 'AUTO_ITERATION' })),
+          autoIterationStatus: 'RUNNING' as const,
+          worktreePath: '/tmp/existing-worktree',
+        };
+        const previousList = { workspaces: [existing], reviewCount: 0 };
+        mockGetData.mockReturnValue(previousList);
+        useProjectSnapshotSync('proj-1');
+        const entry = makeEntry({ mode: 'AUTO_ITERATION', autoIterationStatus });
+
+        capturedOptions!.onMessage!(
+          type === 'snapshot_full'
+            ? { type, projectId: 'proj-1', entries: [entry] }
+            : { type, workspaceId: 'ws-1', entry }
+        );
+
+        const [, updateList] = mockSetData.mock.calls[0]!;
+        const [, updateDetail] = mockWorkspaceGetSetData.mock.calls[0]!;
+        expect(updateList(previousList).workspaces[0].autoIterationStatus).toBe(
+          autoIterationStatus
+        );
+        expect(updateDetail(existing).autoIterationStatus).toBe(autoIterationStatus);
+        expectNoInvalidations();
+      }
+    );
 
     it('snapshot_removed resets the exact workspace.get cache entry', () => {
       useProjectSnapshotSync('proj-1');

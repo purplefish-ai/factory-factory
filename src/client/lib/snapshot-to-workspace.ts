@@ -29,7 +29,6 @@ function mutationOnlyFieldDefaults() {
   return {
     initErrorMessage: null,
     worktreePath: null,
-    autoIterationStatus: null,
     autoIterationConfig: null,
     autoIterationProgress: null,
     githubIssueNumber: null,
@@ -153,6 +152,7 @@ function projectSnapshotToLiveFields(
     name: entry.name,
     status: entry.status,
     mode: entry.mode,
+    autoIterationStatus: entry.autoIterationStatus,
     createdAt: new Date(entry.createdAt),
     branchName: entry.branchName,
     prs,

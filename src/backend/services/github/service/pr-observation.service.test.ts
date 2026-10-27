@@ -145,6 +145,19 @@ it('preserves CI and conflicts when the auxiliary resolved-thread lookup fails',
   });
   await expect(prObservationService.fetch({ workspaceId: 'w', prId: 'p' })).resolves.toMatchObject({
     ciStatus: 'FAILURE',
+    checks: [
+      {
+        identity: 'https://github.com/org/repo/actions/runs/1',
+        attempt: null,
+        name: 'test',
+        workflowName: null,
+        status: 'COMPLETED',
+        conclusion: 'FAILURE',
+        detailsUrl: 'https://github.com/org/repo/actions/runs/1',
+        startedAt: null,
+        completedAt: null,
+      },
+    ],
     hasMergeConflict: true,
     reviewsComplete: false,
     resolvedReviewIds: [],

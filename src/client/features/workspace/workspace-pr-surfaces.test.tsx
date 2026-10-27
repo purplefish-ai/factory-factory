@@ -33,7 +33,10 @@ const snapshot = vi.hoisted(() => ({
   utils: null as unknown,
   onMessage: undefined as UseWebSocketTransportOptions['onMessage'],
 }));
-vi.mock('@/client/lib/trpc', () => ({ trpc: { useUtils: () => snapshot.utils } }));
+vi.mock('@/client/lib/trpc', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/client/lib/trpc')>();
+  return { ...actual, trpc: { workspace: actual.trpc.workspace, useUtils: () => snapshot.utils } };
+});
 vi.mock('@/hooks/use-websocket-transport', () => ({
   useWebSocketTransport: (options: UseWebSocketTransportOptions) => {
     snapshot.onMessage = options.onMessage;

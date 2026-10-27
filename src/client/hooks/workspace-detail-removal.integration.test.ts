@@ -227,6 +227,91 @@ describe('snapshot live-membership removal with real detail queries', () => {
     await vi.waitFor(() => expect(observer.getCurrentResult().data?.status).toBe('ARCHIVED'));
   });
 
+  it.each(['snapshot_changed', 'snapshot_full'] as const)(
+    'cancels the removal fetch and fetches fresh full detail when %s reintroduces a workspace',
+    async (type) => {
+      const { observer, signals } = await fixture();
+      useProjectSnapshotSync('proj-1');
+      remove();
+      await waitForRequests(1);
+      channel.onMessage!(
+        type === 'snapshot_full'
+          ? { type, projectId: 'proj-1', entries: [makeEntry({ name: 'Restored' })] }
+          : { type, workspaceId: 'ws-1', entry: makeEntry({ name: 'Restored' }) }
+      );
+      expect(signals[0]?.aborted).toBe(true);
+      // A live summary cannot supply the missing DB-backed detail fields.
+      expect(observer.getCurrentResult().data).toBeUndefined();
+      await waitForRequests(2);
+      requests[1]!.resolve({ ...detail(), name: 'Restored', githubIssueNumber: 42 });
+      await vi.waitFor(() =>
+        expect(observer.getCurrentResult().data).toMatchObject({
+          status: 'READY',
+          name: 'Restored',
+          githubIssueNumber: 42,
+        })
+      );
+      requests[0]!.resolve(detail('ARCHIVING'));
+      await requests[0]!.promise;
+      expect(observer.getCurrentResult().data?.status).toBe('READY');
+      remove();
+      expect(observer.getCurrentResult().data).toBeUndefined();
+      await waitForRequests(3);
+    }
+  );
+
+  it('resets same-project live detail omitted from a full baseline with an empty list cache', async () => {
+    const { observer } = await fixture();
+    useProjectSnapshotSync('proj-1');
+    utils.workspace.listForProject.setData(
+      { projectId: 'proj-1' },
+      { workspaces: [], reviewCount: 0 }
+    );
+    channel.onMessage!({ type: 'snapshot_full', projectId: 'proj-1', entries: [] });
+    expect(observer.getCurrentResult().data).toBeUndefined();
+    await waitForRequests(1);
+    requests[0]!.resolve(detail('ARCHIVED'));
+    await vi.waitFor(() => expect(observer.getCurrentResult().data?.status).toBe('ARCHIVED'));
+  });
+
+  it('preserves intentionally opened hidden detail and other projects when a full baseline omits them', async () => {
+    await fixture(false);
+    useProjectSnapshotSync('proj-1');
+    utils.workspace.listForProject.setData(
+      { projectId: 'proj-1' },
+      { workspaces: [], reviewCount: 0 }
+    );
+    utils.workspace.get.setData({ id: 'ws-1' }, detail('ARCHIVED'));
+    utils.workspace.get.setData({ id: 'archiving' }, { ...detail('ARCHIVING'), id: 'archiving' });
+    utils.workspace.get.setData(
+      { id: 'other-project' },
+      { ...detail(), id: 'other-project', projectId: 'proj-2' }
+    );
+    channel.onMessage!({ type: 'snapshot_full', projectId: 'proj-1', entries: [] });
+    expect(utils.workspace.get.getData({ id: 'ws-1' })?.status).toBe('ARCHIVED');
+    expect(utils.workspace.get.getData({ id: 'archiving' })?.status).toBe('ARCHIVING');
+    expect(utils.workspace.get.getData({ id: 'other-project' })?.status).toBe('READY');
+    expect(requests).toHaveLength(0);
+  });
+
+  it('keeps inactive or absent reintroduced detail unfetched until opened', async () => {
+    await fixture(false);
+    useProjectSnapshotSync('proj-1');
+    remove();
+    remove('absent');
+    channel.onMessage!({
+      type: 'snapshot_full',
+      projectId: 'proj-1',
+      entries: [makeEntry(), makeEntry({ workspaceId: 'absent' })],
+    });
+    expect(utils.workspace.get.getData({ id: 'ws-1' })).toBeUndefined();
+    expect(utils.workspace.get.getData({ id: 'absent' })).toBeUndefined();
+    expect(queryClient.getQueryCache().findAll({ queryKey: [['workspace', 'get']] })).toHaveLength(
+      1
+    );
+    expect(requests).toHaveLength(0);
+  });
+
   it('does not fabricate a missing detail when a full baseline introduces a workspace', async () => {
     await fixture(false);
     useProjectSnapshotSync('proj-1');

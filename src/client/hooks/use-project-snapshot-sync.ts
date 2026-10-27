@@ -227,6 +227,34 @@ function resetRemovedWorkspaceDetail(
   );
 }
 
+/** A rollback summary must not race a removal's outstanding detail fetch. */
+function mergeLiveWorkspaceDetail(
+  utils: TrpcUtils,
+  queryClient: QueryClient,
+  entry: WorkspaceSnapshotEntry,
+  removedWorkspaceIds: Set<string>
+): void {
+  const reintroduced = removedWorkspaceIds.delete(entry.workspaceId);
+  const filter = {
+    queryKey: getQueryKey(trpc.workspace.get, { id: entry.workspaceId }, 'query'),
+    exact: true,
+  };
+  if (reintroduced) {
+    // Cancellation takes effect synchronously; do not await before merging.
+    runInBackground(queryClient.cancelQueries(filter), 'Could not refresh data');
+  }
+  utils.workspace.get.setData({ id: entry.workspaceId }, (prev) =>
+    mergeProjectSnapshotIntoWorkspaceDetail(entry, prev)
+  );
+  if (reintroduced) {
+    // Reset may have cleared the full detail, which a summary cannot recreate.
+    runInBackground(
+      queryClient.refetchQueries({ ...filter, type: 'active' }),
+      'Could not refresh data'
+    );
+  }
+}
+
 function applySnapshotFullMessage(
   utils: TrpcUtils,
   queryClient: QueryClient,
@@ -247,15 +275,24 @@ function applySnapshotFullMessage(
   );
 
   const liveWorkspaceIds = new Set(entries.map((entry) => entry.workspaceId));
-  for (const workspaceId of knownWorkspaceIds) {
+  const removalCandidates = new Set(knownWorkspaceIds);
+  // A detail can outlive an empty/evicted project list across navigation.
+  for (const [, detail] of queryClient.getQueriesData<RouterOutputs['workspace']['get']>({
+    queryKey: getQueryKey(trpc.workspace.get, undefined, 'query'),
+  })) {
+    if (
+      detail?.projectId === message.projectId &&
+      detail.status !== 'ARCHIVING' &&
+      detail.status !== 'ARCHIVED'
+    ) {
+      removalCandidates.add(detail.id);
+    }
+  }
+  for (const workspaceId of removalCandidates) {
     if (!liveWorkspaceIds.has(workspaceId)) {
       resetRemovedWorkspaceDetail(queryClient, workspaceId, removedWorkspaceIds);
     }
   }
-  for (const workspaceId of liveWorkspaceIds) {
-    removedWorkspaceIds.delete(workspaceId);
-  }
-
   utils.workspace.listForProject.setData({ projectId: message.projectId }, (prev) => {
     const existingById = new Map(prev?.workspaces.map((workspace) => [workspace.id, workspace]));
     return {
@@ -283,14 +320,13 @@ function applySnapshotFullMessage(
   );
 
   for (const entry of entries) {
-    utils.workspace.get.setData({ id: entry.workspaceId }, (prev) =>
-      mergeProjectSnapshotIntoWorkspaceDetail(entry, prev)
-    );
+    mergeLiveWorkspaceDetail(utils, queryClient, entry, removedWorkspaceIds);
   }
 }
 
 function applySnapshotChangedMessage(
   utils: TrpcUtils,
+  queryClient: QueryClient,
   projectId: string,
   message: SnapshotChangedMessage,
   pendingRequests: Map<string, PendingRequestType>,
@@ -299,7 +335,6 @@ function applySnapshotChangedMessage(
   removedWorkspaceIds: Set<string>
 ): void {
   const entry = message.entry;
-  removedWorkspaceIds.delete(entry.workspaceId);
 
   maybeTriggerPendingRequestAttention(pendingRequests, entry);
 
@@ -325,9 +360,7 @@ function applySnapshotChangedMessage(
 
   healReadyWorktreePaths(utils, projectId, [entry], knownWorkspaceIds, repairedWorktreePaths);
 
-  utils.workspace.get.setData({ id: entry.workspaceId }, (prev) =>
-    mergeProjectSnapshotIntoWorkspaceDetail(entry, prev)
-  );
+  mergeLiveWorkspaceDetail(utils, queryClient, entry, removedWorkspaceIds);
 }
 
 function applySnapshotRemovedMessage(
@@ -412,6 +445,7 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
           }
           applySnapshotChangedMessage(
             utils,
+            queryClient,
             projectId,
             message,
             previousPendingRequestsRef.current,

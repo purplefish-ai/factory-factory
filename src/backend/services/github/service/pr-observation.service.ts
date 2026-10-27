@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
-import { deriveCiStatusFromCheckRollup, reduceCheckRollupToLatestRunAttempts } from '@/shared/core';
 import type { PRObservation, PRTarget } from '@/shared/pr-monitoring';
 import { prObservationSchema } from '@/shared/schemas/pr-event.schema';
 import type { RatchetReviewTriggerMode } from '@prisma-gen/client';
+import { normalizeGitHubCheckFacts } from './github-check-facts';
 import { githubCLIService } from './github-cli.service';
 import {
   isIgnoredReviewAuthor,
@@ -71,18 +71,7 @@ class PRObservationService {
     if (!details.headRefOid) {
       throw new Error('GitHub observation is missing head SHA');
     }
-    const checks =
-      reduceCheckRollupToLatestRunAttempts(details.statusCheckRollup)?.map((c) => ({
-        identity: c.detailsUrl || `${c.workflowName ?? ''}:${c.name ?? ''}`,
-        attempt: null,
-        name: c.name ?? '',
-        workflowName: c.workflowName ?? null,
-        status: c.status ?? 'UNKNOWN',
-        conclusion: c.conclusion ?? null,
-        detailsUrl: c.detailsUrl || null,
-        startedAt: timestamp(c.startedAt),
-        completedAt: timestamp(c.completedAt),
-      })) ?? [];
+    const { checks, ciStatus } = normalizeGitHubCheckFacts(details.statusCheckRollup);
     const actionableReviews = [
       ...selectActionableReviews(details.reviews, username, policy.reviewTriggerMode).map((r) => ({
         identity: `review:${r.id}`,
@@ -132,10 +121,7 @@ class PRObservationService {
       baseBranch: details.baseRefName,
       observedAt: new Date().toISOString(),
       prState: observationState(details),
-      ciStatus:
-        details.statusCheckRollup === null
-          ? 'UNKNOWN'
-          : deriveCiStatusFromCheckRollup(details.statusCheckRollup),
+      ciStatus,
       reviewState: details.reviewDecision,
       hasMergeConflict: details.mergeStateStatus === 'DIRTY',
       checks,
