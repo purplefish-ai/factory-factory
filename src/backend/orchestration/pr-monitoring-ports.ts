@@ -1,5 +1,4 @@
 import type { configService } from '@/backend/services/config.service';
-import type { prObservationService, prSnapshotService } from '@/backend/services/github';
 import type { ratchetService } from '@/backend/services/ratchet';
 import type {
   acpRuntimeManager,
@@ -16,16 +15,6 @@ import type {
   workspacePrSnapshotService,
 } from '@/backend/services/workspace';
 import type { PRTarget } from '@/shared/pr-monitoring';
-
-export interface PRObservationPorts {
-  prObservationService: Pick<typeof prObservationService, 'fetch'>;
-  prSnapshotService: Pick<typeof prSnapshotService, 'emit'>;
-  workspacePRMonitoringService: Pick<typeof workspacePRMonitoringService, 'get'>;
-  workspacePrSnapshotService: Pick<
-    typeof workspacePrSnapshotService,
-    'find' | 'acceptMonitoredObservation'
-  >;
-}
 
 export interface PRRecipientReadinessPorts {
   sessionDataService: Pick<typeof sessionDataService, 'findAgentSessionsByWorkspaceId'>;

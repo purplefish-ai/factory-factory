@@ -84,11 +84,15 @@ GitHub owns process-wide spawn limits, in-flight read deduplication, and rate
 limit backoff. Watcher concurrency remains bounded at three workspaces, with a
 90-second timeout and shutdown cancellation.
 
-Observation depends on four method-level ports: normalized fetching, PR/config
-reads, atomic observation acceptance, and snapshot notifications. It has no
-session or delivery dependencies. Delivery receives a `refreshObservation`
-callback from composition wiring and awaits it before claiming events, then
-rechecks the recipient binding. Recipient readiness belongs to delivery.
+Observation receives five explicit function ports: PR lookup, monitoring config
+lookup, normalized fetching, atomic acceptance, and typed publication of an
+accepted observation. The producer imports no runtime application dependencies
+and receives no service objects or event emitters. Composition supplies a stable
+opaque `cacheScope` shared by polling, manual refresh, and delivery wrappers for
+one application graph; distinct graphs have independent in-flight and recent
+observation caches. Delivery receives a `refreshObservation` callback from
+composition wiring and awaits it before claiming events, then rechecks the
+recipient binding. Recipient readiness belongs to delivery.
 
 `prFactPayloadSchema` validates GitHub-derived facts; the transition reducer
 accepts and emits only those facts. `prMonitoringControlPayloadSchema` validates

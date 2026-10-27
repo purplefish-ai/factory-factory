@@ -2,6 +2,22 @@
 module.exports = {
   forbidden: [
     {
+      name: 'pr-observation-producer-has-no-runtime-backend-dependencies',
+      severity: 'error',
+      comment:
+        'Observation receives capabilities from composition and must not load application services or delivery.',
+      from: { path: '^src/backend/orchestration/pr-observation\\.orchestrator\\.ts$' },
+      to: { path: '^src/backend/', dependencyTypesNot: ['type-only'] },
+    },
+    {
+      name: 'pr-observation-ports-are-application-independent',
+      severity: 'error',
+      comment:
+        'Observation ports describe narrow contracts without importing application service types.',
+      from: { path: '^src/backend/orchestration/pr-observation-ports\\.ts$' },
+      to: { path: '^src/backend/' },
+    },
+    {
       name: 'no-circular',
       severity: 'error',
       comment:
