@@ -37,20 +37,22 @@ function createHarness(prState: 'OPEN' | 'MERGED' | 'CLOSED' | null = 'OPEN') {
   const findById = vi.fn().mockResolvedValue(null);
   const findRatchetProjection = vi.fn().mockImplementation(async () => await findById());
   const checkWorkspaceById = vi.fn().mockResolvedValue(null);
+  const ratchetService = Object.assign(new EventEmitter(), { checkWorkspaceById });
+  const workspaceStateMachine = new EventEmitter();
   const collector = createEventCollectorOrchestrator({
     createLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }),
     getWorkspaceLinearContext,
     linearStateSyncService: { markIssueCompleted },
     prSnapshotService,
     prFetchCoordinator: { removeWorkspace: vi.fn() },
-    ratchetService: Object.assign(new EventEmitter(), {
-      checkWorkspaceById,
-    }),
+    ratchetService,
     runScriptStateMachine: new EventEmitter(),
     workspaceAutoIterationService: new EventEmitter(),
     sessionDomainService: new EventEmitter(),
     workspaceActivityService: Object.assign(new EventEmitter(), { clearWorkspace: vi.fn() }),
-    workspaceStateMachine: new EventEmitter(),
+    workspaceStateMachine,
+    sessionLifecycleService: { stopWorkspaceSessions: vi.fn().mockResolvedValue(undefined) },
+    terminalService: { destroyWorkspaceTerminals: vi.fn() },
     workspaceDataService: {
       findById,
       findRatchetProjection,
@@ -82,6 +84,8 @@ function createHarness(prState: 'OPEN' | 'MERGED' | 'CLOSED' | null = 'OPEN') {
     findRatchetProjection,
     prSnapshotService,
     checkWorkspaceById,
+    ratchetService,
+    workspaceStateMachine,
   };
 }
 
@@ -475,3 +479,155 @@ it('completes an association-aware merge after its final open sibling is detache
     collector.stop();
   }
 });
+
+it('shares PR and monitoring freshness without a broad workspace read or repeated PR effects', async () => {
+  const {
+    collector,
+    findById,
+    findRatchetProjection,
+    prSnapshotService,
+    ratchetService,
+    checkWorkspaceById,
+    markIssueCompleted,
+    store,
+  } = createHarness();
+  let resolveRead!: (value: unknown) => void;
+  const projection = {
+    status: 'READY',
+    prNumber: 8,
+    prUrl: 'https://github.com/org/repo/pull/8',
+    prState: 'OPEN',
+    prCiStatus: 'FAILURE',
+    prUpdatedAt: null,
+    ratchetState: 'CI_FAILED',
+    ratchetEnabled: true,
+    prHasMergeConflict: false,
+  };
+  findById.mockRejectedValue(new Error('broad workspace reads are forbidden'));
+  findRatchetProjection
+    .mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveRead = resolve;
+      })
+    )
+    .mockResolvedValue(projection);
+  checkWorkspaceById.mockImplementationOnce(() => {
+    ratchetService.emit('ratchet_dispatch_changed', { workspaceId: 'ws-1' });
+    return Promise.resolve(null);
+  });
+  try {
+    prSnapshotService.emit(PR_SNAPSHOT_UPDATED, {
+      workspaceId: 'ws-1',
+      prId: 'selected',
+      prNumber: 8,
+      prState: 'OPEN',
+      prCiStatus: 'FAILURE',
+      prReviewState: null,
+    });
+    ratchetService.emit('ratchet_dispatch_changed', { workspaceId: 'ws-1' });
+    expect(findRatchetProjection).toHaveBeenCalledTimes(1);
+    resolveRead({ ...projection, prNumber: 99 });
+    await vi.waitFor(() => expect(findRatchetProjection).toHaveBeenCalledTimes(3));
+    expect(store.getByWorkspaceId('ws-1')).toMatchObject({ prNumber: 8, prState: 'OPEN' });
+    expect(checkWorkspaceById).toHaveBeenCalledExactlyOnceWith('ws-1', {
+      bypassPrFetchCooldown: true,
+    });
+    expect(markIssueCompleted).not.toHaveBeenCalled();
+    expect(findById).not.toHaveBeenCalled();
+
+    findRatchetProjection.mockResolvedValue({ ...projection, prNumber: 9, prState: 'MERGED' });
+    ratchetService.emit('ratchet_dispatch_changed', { workspaceId: 'ws-1' });
+    await vi.waitFor(() => expect(store.getByWorkspaceId('ws-1')?.prState).toBe('MERGED'));
+    expect(checkWorkspaceById).toHaveBeenCalledTimes(1);
+    expect(markIssueCompleted).not.toHaveBeenCalled();
+    expect(findRatchetProjection).toHaveBeenCalledTimes(4);
+  } finally {
+    collector.stop();
+  }
+});
+
+it('uses the accepted association projection for Linear completion without another read', async () => {
+  const { collector, emitMerge, findRatchetProjection, findById, markIssueCompleted } =
+    createHarness();
+  findById.mockRejectedValue(new Error('broad workspace reads are forbidden'));
+  findRatchetProjection.mockResolvedValue({
+    status: 'READY',
+    prNumber: 7,
+    prUrl: 'https://github.com/org/repo/pull/7',
+    prState: 'MERGED',
+    prCiStatus: 'SUCCESS',
+    prUpdatedAt: null,
+    ratchetState: 'MERGED',
+    ratchetEnabled: true,
+    prHasMergeConflict: false,
+  });
+  try {
+    emitMerge(7, 'https://github.com/org/repo/pull/7', 'selected');
+    await vi.waitFor(() => expect(markIssueCompleted).toHaveBeenCalledTimes(1));
+    expect(findRatchetProjection).toHaveBeenCalledTimes(1);
+    expect(findById).not.toHaveBeenCalled();
+  } finally {
+    collector.stop();
+  }
+});
+
+it.each(['ARCHIVED', 'STOPPED'] as const)(
+  'discards mixed PR and monitoring effects after %s',
+  async (lifecycle) => {
+    const {
+      collector,
+      emitMerge,
+      findRatchetProjection,
+      prSnapshotService,
+      ratchetService,
+      checkWorkspaceById,
+      markIssueCompleted,
+      store,
+      workspaceStateMachine,
+    } = createHarness();
+    let resolveRead!: (value: unknown) => void;
+    findRatchetProjection.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveRead = resolve;
+      })
+    );
+    try {
+      emitMerge(8, 'https://github.com/org/repo/pull/8', 'selected');
+      ratchetService.emit('ratchet_dispatch_changed', { workspaceId: 'ws-1' });
+      if (lifecycle === 'ARCHIVED') {
+        workspaceStateMachine.emit('workspace_state_changed', {
+          workspaceId: 'ws-1',
+          fromStatus: 'READY',
+          toStatus: 'ARCHIVED',
+        });
+      } else {
+        collector.stop();
+      }
+      resolveRead({
+        status: 'READY',
+        prNumber: 8,
+        prUrl: 'https://github.com/org/repo/pull/8',
+        prState: 'MERGED',
+        prCiStatus: 'SUCCESS',
+        prUpdatedAt: null,
+        ratchetState: 'MERGED',
+        ratchetEnabled: true,
+        prHasMergeConflict: false,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(checkWorkspaceById).not.toHaveBeenCalled();
+      expect(markIssueCompleted).not.toHaveBeenCalled();
+      expect(findRatchetProjection).toHaveBeenCalledTimes(1);
+      if (lifecycle === 'ARCHIVED') {
+        expect(store.getByWorkspaceId('ws-1')).toBeUndefined();
+      } else {
+        expect(store.getByWorkspaceId('ws-1')?.prNumber).toBe(7);
+      }
+      expect(prSnapshotService.listenerCount(PR_SNAPSHOT_UPDATED)).toBe(
+        lifecycle === 'STOPPED' ? 0 : 1
+      );
+    } finally {
+      collector.stop();
+    }
+  }
+);

@@ -30,13 +30,8 @@ type SnapshotHandlerServices = Pick<
   'workspaceQueryService' | 'workspaceSnapshotStore'
 >;
 
-/**
- * Deltas that arrive for a socket before its snapshot_full baseline has been
- * sent. Entries exist only between connection setup and the baseline send;
- * flushing after snapshot_full may replay deltas already reflected in the
- * baseline, which is safe because clients upsert by workspaceId.
- */
-const pendingDeltaBuffers = new WeakMap<WebSocket, string[]>();
+/** Sockets cannot receive deltas until their current snapshot_full is sent. */
+const awaitingBaseline = new WeakSet<WebSocket>();
 
 // ============================================================================
 // Store Event Fan-Out
@@ -59,9 +54,6 @@ class SnapshotStoreSubscriptionState {
     const { workspaceQueryService, workspaceSnapshotStore } = services;
     this.store = workspaceSnapshotStore;
 
-    // Buffered replays omit reviewCount: it is computed before the
-    // snapshot_full baseline, and clients keep their current count when the
-    // field is absent, so replaying it would regress the baseline's count.
     const fanOutToProject = (
       projectId: string,
       payload: SnapshotChangedMessage | SnapshotRemovedMessage,
@@ -74,14 +66,8 @@ class SnapshotStoreSubscriptionState {
 
       const reviewCount = getSnapshotReviewCount(workspaceQueryService, logger);
       const message = JSON.stringify({ ...payload, reviewCount });
-      let bufferedMessage: string | null = null;
-
       for (const ws of projectClients) {
-        const pendingDeltas = pendingDeltaBuffers.get(ws);
-        if (pendingDeltas) {
-          bufferedMessage ??= JSON.stringify(payload);
-          pendingDeltas.push(bufferedMessage);
-        } else {
+        if (!awaitingBaseline.has(ws)) {
           safeSend(ws, message, logger, description);
         }
       }
@@ -241,18 +227,17 @@ export function createSnapshotsUpgradeHandler(
 
       logger.info('Snapshots WebSocket connection established', { projectId });
 
-      // Add to connection set FIRST so we don't miss any delta events during
-      // the optional reconciliation wait below. Deltas that arrive before the
-      // snapshot_full baseline are buffered and flushed after it.
+      // Subscribe before the reconciliation wait. The full snapshot reads
+      // current store state, so earlier deltas must not be replayed over it.
       const untrack = connections.subscribe(projectId, ws);
-      pendingDeltaBuffers.set(ws, []);
+      awaitingBaseline.add(ws);
 
       // If a startup reconciliation is in progress and the store has no entries
       // yet for this project, wait for it before sending snapshot_full so the
       // client receives populated data rather than an empty array.
       const sendSnapshot = () => {
         if (ws.readyState !== WS_READY_STATE.OPEN) {
-          // Keep buffering; the close handler cleans the buffer up.
+          // The client still has no baseline; the close handler removes it.
           return;
         }
         const reviewCount = getSnapshotReviewCount(workspaceQueryService, logger);
@@ -270,11 +255,9 @@ export function createSnapshotsUpgradeHandler(
           // The client has no baseline, so deltas must not start flowing.
           return;
         }
-        const pendingDeltas = pendingDeltaBuffers.get(ws) ?? [];
-        pendingDeltaBuffers.delete(ws);
-        for (const delta of pendingDeltas) {
-          safeSend(ws, delta, logger, 'buffered snapshot delta');
-        }
+        // Reading, serializing, sending, and releasing this guard are
+        // synchronous: a later store update must flow as a live delta.
+        awaitingBaseline.delete(ws);
       };
 
       const storeHasEntries = workspaceSnapshotStore.getByProjectId(projectId).length > 0;
@@ -290,7 +273,7 @@ export function createSnapshotsUpgradeHandler(
       ws.on('close', () => {
         logger.info('Snapshots WebSocket connection closed', { projectId });
 
-        pendingDeltaBuffers.delete(ws);
+        awaitingBaseline.delete(ws);
         untrack();
       });
 

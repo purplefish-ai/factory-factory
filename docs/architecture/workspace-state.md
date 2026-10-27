@@ -203,6 +203,14 @@ sidebar consumes a required Pick of the same summary instead of an optional
 parallel interface. Shared validation schemas do not change the flat snapshot
 wire, and existing list/detail hydration fallbacks remain in place.
 
+Each snapshot WebSocket starts from a full read of current store state after its
+optional startup seed wait. Changes emitted before that baseline are already
+reflected in the read and are not replayed: an older removal must not override a
+workspace restored in the full snapshot. Reading, serializing, sending, and
+enabling live deltas run synchronously. Deltas stay suppressed if the full send
+fails or the socket closes; a new connection reads a fresh baseline. This
+changes no snapshot message shapes.
+
 When a snapshot removes a workspace from that live list, including omission from
 a full baseline, the client resets its exact existing detail query. Reset
 synchronously clears the old data and cancels its request; active detail views

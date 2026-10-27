@@ -71,6 +71,21 @@ The ratchet projection and reconciliation select one association for the PR URL,
 number, and sync timestamp, preferring a nonterminal PR. State, CI status, and
 merge conflicts come from the aggregate summary.
 
+The event collector uses one per-lifetime projection worker for PR collection
+and monitoring invalidations. Its narrow database read publishes the complete PR
+and monitoring field set together; it does not fetch the broad workspace record.
+Invalidations during a read supersede that read and retain their reasons until a
+current projection is accepted. For association-aware events, only accepted PR
+invalidations run PR-switch refresh and Linear-completion effects.
+Monitoring-only refreshes publish facts without invoking those effects. The
+worker owns retries and archive/stop fences, and has no GitHub, delivery,
+session, or Linear runtime dependency.
+
+Legacy events without an association ID retain immediate scalar cache updates
+and PR-switch handling. Their Linear-completion gate retains its narrow read and
+missing-row fallback; association-aware completion uses the accepted projection
+without another database read.
+
 Manual workspace PR refreshes serialize per workspace so concurrent requests
 report a committed lifecycle transition only once. Sibling refresh failures log
 their reason while preserving transitions already written by successful reads.

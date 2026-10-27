@@ -10,7 +10,9 @@ provider startup, cancellation, and lifecycle ownership, see
 flowchart TD
     UI[Chat composer] -->|queue_message over WebSocket| Handler[ChatMessageHandlerService]
     Handler --> Store[SessionDomainService: queue and transcript]
-    Handler -->|dispatch through session lifecycle| Runtime[AcpRuntimeManager]
+    Handler --> Dispatcher[SessionDispatchService]
+    Dispatcher --> Store
+    Dispatcher -->|dispatch through session lifecycle| Runtime[AcpRuntimeManager]
     Runtime -->|session/prompt| Provider[Claude or Codex ACP adapter]
     Provider -->|session/update| Processor[AcpEventProcessor and AcpEventTranslator]
     Processor --> Store
@@ -21,9 +23,21 @@ flowchart TD
     Transport --> Reducer[chatReducer]
 ```
 
-`ChatMessageHandlerService` validates dispatch eligibility and starts the
-runtime when needed. The queued message stays visible until dispatch is ready,
-so refreshing during startup does not remove it from the queue.
+`ChatMessageHandlerService` routes incoming WebSocket messages and temporarily
+forwards its existing dispatch APIs to the single `SessionDispatchService`
+constructed in `session-services.ts`. The dispatcher owns queue execution,
+concurrent-dispatch tokens, busy-turn retry timers and attempts, and manual
+resume. `SessionLifecycleGate` owns lifecycle generations; the dispatcher
+applies its generation checks when validating dispatch eligibility and starting
+the runtime through injected capabilities. The queued message stays visible
+until dispatch is ready, so refreshing during startup does not remove it from
+the queue.
+
+The dispatcher uses notification and background-delivery capabilities for
+claims, preparation, validation, and completion. Those services retain claim and
+delivery authority; GitHub trigger interpretation remains outside queue
+execution. Existing consumers continue through the chat handler facade, sharing
+the dispatcher's state with direct service calls.
 
 `AcpEventProcessor` translates provider updates with `AcpEventTranslator`,
 stores transcript changes, and emits session deltas. Streaming text accumulates

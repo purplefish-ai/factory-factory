@@ -5,7 +5,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WebSocket, WebSocketServer } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
-import type { SnapshotChangedEvent, SnapshotRemovedEvent } from '@/backend/services/workspace';
+import {
+  type SnapshotChangedEvent,
+  type SnapshotRemovedEvent,
+  WorkspaceSnapshotStore,
+} from '@/backend/services/workspace';
+import { SnapshotServerMessageSchema } from '@/shared/workspace-snapshot';
 import {
   createSnapshotsUpgradeHandler,
   disposeSnapshotsHandlerState,
@@ -14,6 +19,7 @@ import {
 
 const allowedOrigin = 'http://localhost:3000';
 const testApplications = new Set<AppContext>();
+const testStores = new Set<WorkspaceSnapshotStore>();
 
 // ============================================================================
 // Mocks
@@ -130,6 +136,39 @@ async function waitForInitialSnapshot(ws: MockWebSocket): Promise<void> {
   });
 }
 
+function createPendingBaseline() {
+  let finishSeed: () => void = () => undefined;
+  mockWaitForSeed.mockReturnValueOnce(
+    new Promise<void>((resolve) => {
+      finishSeed = resolve;
+    })
+  );
+  const store = new WorkspaceSnapshotStore();
+  store.configure({
+    deriveFlowState: () => ({
+      phase: 'NO_PR',
+      ciObservation: 'CHECKS_UNKNOWN',
+      hasActivePr: false,
+      isWorking: false,
+      shouldAnimateRatchetButton: false,
+    }),
+    deriveSidebarStatus: () => ({ activityState: 'IDLE', ciState: 'NONE' }),
+  });
+  testStores.add(store);
+  const handler = createSnapshotsUpgradeHandler(
+    createAppContextMock({ workspaceSnapshotStore: store })
+  );
+  const ws = new MockWebSocket();
+  callHandler(handler, ws, 'proj-1');
+  return { store, handler, ws, finishSeed };
+}
+
+function sentMessages(ws: MockWebSocket) {
+  return ws.send.mock.calls.map(([message]) =>
+    SnapshotServerMessageSchema.parse(JSON.parse(message))
+  );
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
@@ -144,6 +183,10 @@ describe('createSnapshotsUpgradeHandler', () => {
       disposeSnapshotsHandlerState(application);
     }
     testApplications.clear();
+    for (const store of testStores) {
+      store.clear();
+    }
+    testStores.clear();
     storeListeners.clear();
     mockWaitForSeed.mockImplementation(() => Promise.resolve());
   });
@@ -464,56 +507,112 @@ describe('createSnapshotsUpgradeHandler', () => {
     );
   });
 
-  it('buffers deltas emitted before snapshot_full and flushes them after it', async () => {
-    let resolveWait: (() => void) | undefined;
-    mockWaitForSeed.mockReturnValueOnce(
-      new Promise<void>((resolve) => {
-        resolveWait = resolve;
-      })
-    );
-    mockGetByProjectId.mockReturnValue([] as never);
+  it.each(['archiving', 'removed'] as const)(
+    'starts from the current full snapshot after a workspace is %s and restored during seed',
+    async (transition) => {
+      const { store, ws, finishSeed } = createPendingBaseline();
+      store.upsert('ws-1', { projectId: 'proj-1', name: 'Early', status: 'READY' }, 'test', 100);
+      if (transition === 'archiving') {
+        store.upsert('ws-1', { status: 'ARCHIVING' }, 'test', 200);
+      } else {
+        store.remove('ws-1', 200);
+      }
+      store.upsert('ws-1', { projectId: 'proj-1', name: 'Restored', status: 'READY' }, 'test', 300);
+      expect(ws.send).not.toHaveBeenCalled();
 
-    const handler = createSnapshotsUpgradeHandler(createAppContextMock());
-    const ws = new MockWebSocket();
-    callHandler(handler, ws, 'proj-1');
+      finishSeed();
+      await waitForInitialSnapshot(ws);
 
-    const changedListener = storeListeners.get('snapshot_changed');
-    expect(changedListener).toBeDefined();
+      expect(sentMessages(ws)).toEqual([
+        expect.objectContaining({
+          type: 'snapshot_full',
+          projectId: 'proj-1',
+          entries: [
+            expect.objectContaining({ workspaceId: 'ws-1', name: 'Restored', status: 'READY' }),
+          ],
+          reviewCount: 5,
+        }),
+      ]);
+    }
+  );
 
-    const event: SnapshotChangedEvent = {
-      workspaceId: 'ws-1',
-      projectId: 'proj-1',
-      entry: {
-        workspaceId: 'ws-1',
-        projectId: 'proj-1',
-        name: 'Early',
-        status: 'READY',
-      } as never,
-    };
-    await changedListener!(event);
+  it.each(['removed', 'ARCHIVING', 'ARCHIVED'] as const)(
+    'does not replay a workspace changed before an empty %s baseline',
+    async (transition) => {
+      const { store, ws, finishSeed } = createPendingBaseline();
+      store.upsert('ws-1', { projectId: 'proj-1', name: 'Early', status: 'READY' }, 'test', 100);
+      if (transition === 'removed') {
+        store.remove('ws-1', 200);
+      } else {
+        store.upsert('ws-1', { status: transition }, 'test', 200);
+      }
+      expect(ws.send).not.toHaveBeenCalled();
 
-    // The client has no baseline yet, so the delta must not be sent.
-    expect(ws.send).not.toHaveBeenCalled();
+      finishSeed();
+      await waitForInitialSnapshot(ws);
 
-    resolveWait?.();
+      expect(sentMessages(ws)).toEqual([
+        { type: 'snapshot_full', projectId: 'proj-1', entries: [], reviewCount: 5 },
+      ]);
+    }
+  );
 
-    await vi.waitFor(() => {
-      expect(ws.send).toHaveBeenCalledTimes(2);
+  it('releases live deltas synchronously with the full snapshot send', async () => {
+    const { store, ws, finishSeed } = createPendingBaseline();
+    store.upsert('ws-1', { projectId: 'proj-1', name: 'Baseline', status: 'READY' }, 'test', 100);
+    const readProject = store.getByProjectId.bind(store);
+    vi.spyOn(store, 'getByProjectId').mockImplementationOnce((projectId) => {
+      const entries = readProject(projectId);
+      // This update can run at the next await boundary. It must be a live
+      // delta, because the synchronous baseline already captured its state.
+      queueMicrotask(() => store.upsert('ws-1', { name: 'After baseline' }, 'test', 200));
+      return entries;
     });
 
-    expect(ws.send.mock.calls[0]?.[0]).toContain('"type":"snapshot_full"');
-    // Replayed deltas omit reviewCount so a count computed before the
-    // baseline cannot overwrite the newer one carried by snapshot_full.
-    expect(ws.send.mock.calls[1]?.[0]).toBe(
-      JSON.stringify({
+    finishSeed();
+    await vi.waitFor(() => expect(ws.send).toHaveBeenCalledTimes(2));
+
+    expect(sentMessages(ws)).toEqual([
+      expect.objectContaining({
+        type: 'snapshot_full',
+        entries: [expect.objectContaining({ workspaceId: 'ws-1', name: 'Baseline' })],
+      }),
+      expect.objectContaining({
         type: 'snapshot_changed',
         workspaceId: 'ws-1',
-        entry: event.entry,
-      })
-    );
+        entry: expect.objectContaining({ name: 'After baseline' }),
+        reviewCount: 5,
+      }),
+    ]);
   });
 
-  it('keeps buffering deltas when the snapshot_full send fails', async () => {
+  it('does not establish a baseline after the socket closes while seeding', async () => {
+    const { store, handler, ws, finishSeed } = createPendingBaseline();
+    store.upsert(
+      'ws-1',
+      { projectId: 'proj-1', name: 'Before close', status: 'READY' },
+      'test',
+      100
+    );
+    ws.readyState = WS_READY_STATE.CLOSED;
+    ws.emit('close');
+    store.upsert('ws-1', { name: 'After close' }, 'test', 200);
+
+    const reconnect = new MockWebSocket();
+    callHandler(handler, reconnect, 'proj-1');
+    finishSeed();
+    await waitForInitialSnapshot(reconnect);
+
+    expect(ws.send).not.toHaveBeenCalled();
+    expect(sentMessages(reconnect)).toEqual([
+      expect.objectContaining({
+        type: 'snapshot_full',
+        entries: [expect.objectContaining({ workspaceId: 'ws-1', name: 'After close' })],
+      }),
+    ]);
+  });
+
+  it('keeps suppressing deltas when the snapshot_full send fails', async () => {
     mockGetByProjectId.mockReturnValue([
       {
         workspaceId: 'ws-1',
@@ -548,8 +647,8 @@ describe('createSnapshotsUpgradeHandler', () => {
       } as never,
     });
 
-    // The baseline never reached the client, so deltas must stay buffered
-    // rather than being sent (or flushed) without a snapshot_full first.
+    // The baseline never reached the client, so subsequent deltas cannot
+    // be sent without a snapshot_full first.
     expect(ws.send).toHaveBeenCalledTimes(1);
   });
 

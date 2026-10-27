@@ -72,7 +72,8 @@ describe('RatchetProjectionWorker', () => {
     await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
     expect(publish).toHaveBeenCalledWith(
       'ws-retry',
-      expect.objectContaining({ prMonitoring: expect.objectContaining({ pauseReason: null }) })
+      expect.objectContaining({ prMonitoring: expect.objectContaining({ pauseReason: null }) }),
+      new Set(['monitoring'])
     );
   });
 
@@ -161,21 +162,25 @@ describe('RatchetProjectionWorker', () => {
     await vi.advanceTimersByTimeAsync(0);
 
     expect(read).toHaveBeenCalledTimes(2);
-    expect(publish).toHaveBeenLastCalledWith('ws', {
-      ...prProjectionDefaults,
-      prUpdatedAt: null,
-      ratchetEnabled: true,
-      ratchetState: 'CI_FAILED',
-      prMonitoring: {
-        deliveryMode: 'MAIN',
-        enabled: true,
-        recipientSessionId: 'main',
-        bindingRevision: 1,
-        pauseReason: 'DELIVERY_FAILED',
-        pendingEventCount: 0,
+    expect(publish).toHaveBeenLastCalledWith(
+      'ws',
+      {
+        ...prProjectionDefaults,
+        prUpdatedAt: null,
+        ratchetEnabled: true,
+        ratchetState: 'CI_FAILED',
+        prMonitoring: {
+          deliveryMode: 'MAIN',
+          enabled: true,
+          recipientSessionId: 'main',
+          bindingRevision: 1,
+          pauseReason: 'DELIVERY_FAILED',
+          pendingEventCount: 0,
+        },
+        hasMergeConflict: false,
       },
-      hasMergeConflict: false,
-    });
+      new Set(['monitoring'])
+    );
     worker.request('ws');
     await vi.advanceTimersByTimeAsync(0);
     expect(read).toHaveBeenCalledTimes(3);
@@ -212,7 +217,8 @@ describe('RatchetProjectionWorker', () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(publish).toHaveBeenCalledWith(
       'ws',
-      expect.objectContaining({ ratchetState: 'CI_FAILED' })
+      expect.objectContaining({ ratchetState: 'CI_FAILED' }),
+      new Set(['monitoring'])
     );
   });
 
@@ -232,7 +238,45 @@ describe('RatchetProjectionWorker', () => {
     expect(publish).toHaveBeenCalledTimes(1);
     expect(publish).toHaveBeenCalledWith(
       'ws',
-      expect.objectContaining({ ratchetState: 'CI_FAILED' })
+      expect.objectContaining({ ratchetState: 'CI_FAILED' }),
+      new Set(['monitoring'])
     );
+  });
+
+  it('keeps PR invalidation intent when monitoring invalidates an in-flight read', async () => {
+    const pendingRead = deferred<Projection>();
+    read.mockReturnValueOnce(pendingRead.promise);
+    worker.request('ws', 'pr');
+    worker.request('ws', 'monitoring');
+    pendingRead.resolve(readyProjection);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(publish).toHaveBeenCalledExactlyOnceWith(
+      'ws',
+      expect.objectContaining({ ratchetState: 'CI_FAILED' }),
+      new Set(['pr', 'monitoring'])
+    );
+  });
+
+  it('retains PR intent through retries and clears it after accepted publication', async () => {
+    read.mockRejectedValueOnce(new Error('read failed'));
+    worker.request('ws', 'pr');
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(publish).toHaveBeenLastCalledWith('ws', expect.any(Object), new Set(['pr']));
+
+    worker.request('ws', 'monitoring');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(publish).toHaveBeenLastCalledWith('ws', expect.any(Object), new Set(['monitoring']));
+  });
+
+  it('does not carry accepted PR intent into a synchronous monitoring invalidation', async () => {
+    publish.mockImplementationOnce(() => worker.request('ws', 'monitoring'));
+    worker.request('ws', 'pr');
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(publish).toHaveBeenNthCalledWith(1, 'ws', expect.any(Object), new Set(['pr']));
+    expect(publish).toHaveBeenNthCalledWith(2, 'ws', expect.any(Object), new Set(['monitoring']));
   });
 });

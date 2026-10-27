@@ -189,6 +189,15 @@ behavior. Before introducing custom system-prompt metadata, revisit the SDK's
 custom/append snapshot semantics. See
 [the upgrade validation](../superpowers/plans/2026-09-09-remaining-dependencies.md).
 
+Auto-iteration session start, prompt, transcript reads, stop, recycle, and their
+compensation belong to `auto-iteration-session.orchestrator.ts`.
+`configureDomainBridges` constructs that bridge from narrow session and
+workspace capabilities. Recycling stops the predecessor, creates and starts its
+replacement, writes the loop pointer, sends the handoff, then retires the
+predecessor. Failed handoffs settle only matching session IDs and clean up the
+replacement without masking the original error. Successful pointer writes remain
+unconditional; the auto-iteration caller also writes the returned session ID.
+
 Auto-iteration sessions use `autoIterationPermissions`, with YOLO as the
 fallback if settings cannot be read. Auto-iteration uses the same native
 access-mode mapping as manual sessions. Scheduled Codex tasks retain their YOLO
