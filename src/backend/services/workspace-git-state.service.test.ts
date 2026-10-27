@@ -110,6 +110,31 @@ describe('WorkspaceGitStateService', () => {
     service = new WorkspaceGitStateService({ runGit, now: () => now, readFile, watchPath });
   });
 
+  it('decodes base and upstream filenames without losing surrounding spaces', async () => {
+    runGit.mockImplementation((args) => {
+      if (args[1] === '--name-status') {
+        return resolvedResult(
+          'A\t"r\\303\\251sum\\303\\251.txt"\nM\tfile with spaces.txt\nR100\t"old\\tname.txt"\t"new\\nname.txt"\nC100\told.txt\t"copy\\"name.txt"\n'
+        );
+      }
+      if (args[1] === '--name-only') {
+        return resolvedResult('"r\\303\\251sum\\303\\251.txt"\n leading space.txt \n');
+      }
+      return Promise.resolve(defaultGitResult(args));
+    });
+
+    const snapshot = await service.getSnapshot(input);
+
+    expect(snapshot.base.added).toEqual([
+      { path: 'résumé.txt', status: 'added' },
+      { path: 'new\nname.txt', status: 'added' },
+      { path: 'copy"name.txt', status: 'added' },
+    ]);
+    expect(snapshot.base.modified).toEqual([{ path: 'file with spaces.txt', status: 'modified' }]);
+    expect(snapshot.base.deleted).toEqual([{ path: 'old\tname.txt', status: 'deleted' }]);
+    expect(snapshot.upstream.files).toEqual(['résumé.txt', ' leading space.txt ']);
+  });
+
   it('calculates a sectioned snapshot from one aggregate numstat command', async () => {
     const snapshot = await service.getSnapshot(input);
 

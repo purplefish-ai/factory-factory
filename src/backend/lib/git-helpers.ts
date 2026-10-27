@@ -5,6 +5,8 @@
  * and computing workspace statistics.
  */
 
+import { decodeGitPath } from '@/shared/git-path';
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -20,6 +22,16 @@ export interface GitStatusFile {
 // =============================================================================
 // Helper Functions
 // =============================================================================
+
+function parseStatusPath(line: string): string {
+  const rawPath = line.slice(3);
+  // Renames/copies identify both paths; diffs address the destination.
+  if (/[RC]/.test(line.slice(0, 2))) {
+    const renamePaths = rawPath.match(/^("(?:\\.|[^"\\])*"|.+?) -> ("(?:\\.|[^"\\])*"|.+)$/);
+    return decodeGitPath(renamePaths?.[2] ?? rawPath);
+  }
+  return decodeGitPath(rawPath);
+}
 
 /**
  * Parse git status --porcelain output into structured data.
@@ -41,7 +53,7 @@ export function parseGitStatusOutput(output: string): GitStatusFile[] {
     // X = staged status, Y = unstaged status
     const stagedStatus = line[0];
     const unstagedStatus = line[1];
-    const filePath = line.slice(3);
+    const filePath = parseStatusPath(line);
 
     // Determine if file is staged (has a non-space/non-? in first column)
     const staged = stagedStatus !== ' ' && stagedStatus !== '?';
