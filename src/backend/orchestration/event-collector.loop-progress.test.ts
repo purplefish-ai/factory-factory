@@ -96,6 +96,16 @@ it('keeps same-ms compact updates coherent with lifecycle and stale legacy event
     service.emit('auto_iteration_summary_changed', { ...fields, autoIteration: null });
     expect(store.getVersion('ws')).toBe(version);
     expect(store.getByWorkspaceId('ws')?.summaryVersion).toBeUndefined();
+    collector.start();
+    store.remove('ws');
+    // The previously accepted atomic row still exists in an event, but it has
+    // no membership authority after deletion/removal and cannot resurrect it.
+    service.emit('auto_iteration_summary_changed', fields);
+    expect(store.getByWorkspaceId('ws')).toBeUndefined();
+    expect(
+      store.upsert('ws', { projectId: 'project' }, 'pre-removal seed', readStarted).accepted
+    ).toBe(false);
+    expect(store.getByWorkspaceId('ws')).toBeUndefined();
   } finally {
     collector.stop();
     store.clear();

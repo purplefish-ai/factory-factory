@@ -139,14 +139,22 @@ missing row (the pre-split path used `prisma.workspace.update`, which threw);
 moved on.
 
 `workspaceAutoIterationService` retains `AUTO_ITERATION_STATUS_CHANGED` for
-status writes and successful completion compare-and-swaps. After accepted status
-or progress writes, successful completion, and affected startup recovery rows,
-it narrowly rereads persisted loop state and publishes
-`AUTO_ITERATION_SUMMARY_CHANGED` using the same compact projector as HTTP and
-reconciliation. Failed writes and missed compare-and-swaps publish nothing.
-Publication-read tokens discard superseded reads; they do not grant workflow or
-session authority. Read failures leave the accepted mutation successful and
-reconciliation repairs the stream.
+status writes and successful completion compare-and-swaps. Status/progress
+writes, successful completion, and guarded startup recovery return mode, status,
+config, and progress from the same `updateManyAndReturn` statement. The service
+publishes `AUTO_ITERATION_SUMMARY_CHANGED` from those accepted rows using the
+shared HTTP/reconciliation projector. Failed writes, missing rows, and missed
+compare-and-swaps publish nothing. There is no post-write reread, publication
+read token, or existence check: the event describes the accepted write even if
+the row has since been changed or deleted. Loop/session authority remains with
+the existing workflow and persistence guards.
+
+Startup recovery retains its parallel per-row session/status guards and batch
+result ordering. It publishes the accepted rows when the batch completes, then
+returns only their IDs. Recovery runs before the startup HTTP/WebSocket command
+gate opens and before recurring tasks start; it is not a user-triggered repair
+operation. A rejected batch retains its existing rejection behavior, with any
+partially landed rows repaired by reconciliation.
 
 The collector immediately flushes compact updates as the sole loop projection
 owner; legacy status events remain available to other consumers. Its timestamp

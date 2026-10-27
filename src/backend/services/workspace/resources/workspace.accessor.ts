@@ -2,6 +2,7 @@ import { prisma } from '@/backend/db';
 import {
   flattenWorkspaceAutoIteration,
   type WorkspaceAutoIterationFields,
+  type WorkspaceAutoIterationWriteResult,
   workspaceAutoIterationAccessor,
 } from '@/backend/services/workspace/resources/workspace-auto-iteration.accessor';
 import {
@@ -37,7 +38,6 @@ import type {
   AutoIterationStatus,
   RatchetState,
   RunScriptStatus,
-  WorkspaceMode,
   WorkspaceStatus,
 } from '@/shared/core';
 import type { WorkspacePullRequest } from '@/shared/workspace-pr';
@@ -419,15 +419,6 @@ class WorkspaceAccessor {
     });
   }
 
-  /** Narrow authoritative reread after an accepted loop write. */
-  async findAutoIterationSnapshot(id: string) {
-    const workspace = await prisma.workspace.findUnique({
-      where: { id },
-      select: { autoIteration: true },
-    });
-    return workspace ? flattenWorkspaceAutoIteration(workspace.autoIteration) : null;
-  }
-
   async findAutoIterationExecutionContext(
     id: string
   ): Promise<AutoIterationExecutionContext | null> {
@@ -575,11 +566,14 @@ class WorkspaceAccessor {
   setAutoIterationStatus(
     id: string,
     status: AutoIterationStatus
-  ): Promise<{ mode: WorkspaceMode; status: AutoIterationStatus }> {
+  ): Promise<WorkspaceAutoIterationWriteResult> {
     return workspaceAutoIterationAccessor.setStatus(id, status);
   }
 
-  setAutoIterationProgress(id: string, progress: Prisma.InputJsonValue): Promise<void> {
+  setAutoIterationProgress(
+    id: string,
+    progress: Prisma.InputJsonValue
+  ): Promise<WorkspaceAutoIterationWriteResult> {
     return workspaceAutoIterationAccessor.setProgress(id, progress);
   }
 
@@ -591,7 +585,7 @@ class WorkspaceAccessor {
     id: string,
     sessionId: string,
     status: AutoIterationStatus
-  ): Promise<{ settled: boolean; mode: WorkspaceMode | null }> {
+  ): Promise<WorkspaceAutoIterationWriteResult | null> {
     return workspaceAutoIterationAccessor.finishIfSessionMatches(id, sessionId, status);
   }
 
@@ -603,7 +597,9 @@ class WorkspaceAccessor {
    * Reset auto-iteration loops left RUNNING by a crash or restart. Called at
    * server startup; see the accessor for why FAILED rather than PAUSED.
    */
-  resetStaleAutoIterationStatuses(): Promise<Array<{ id: string }>> {
+  resetStaleAutoIterationStatuses(): Promise<
+    Array<{ id: string; written: WorkspaceAutoIterationWriteResult }>
+  > {
     return workspaceAutoIterationAccessor.resetStaleRunningStatuses();
   }
 

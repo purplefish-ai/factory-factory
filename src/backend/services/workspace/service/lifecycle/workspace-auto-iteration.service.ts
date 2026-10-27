@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { createLogger } from '@/backend/services/logger.service';
+import type { WorkspaceAutoIterationWriteResult } from '@/backend/services/workspace/resources/workspace-auto-iteration.accessor';
 import {
   type AutoIterationExecutionContext,
   workspaceAccessor,
@@ -11,7 +11,6 @@ import {
   type WorkspaceAutoIterationSummary,
 } from '@/shared/workspace-summary';
 
-const logger = createLogger('workspace-auto-iteration');
 export const AUTO_ITERATION_SUMMARY_CHANGED = 'auto_iteration_summary_changed' as const;
 export interface AutoIterationSummaryChangedEvent {
   workspaceId: string;
@@ -41,33 +40,21 @@ export interface AutoIterationStatusChangedEvent {
  * new caller cannot forget it.
  */
 class WorkspaceAutoIterationService extends EventEmitter {
-  // These tokens fence asynchronous publication reads only. Session CAS and
-  // loop ownership remain the persistence/workflow authority.
-  private readonly pendingSummaryReads = new Map<string, symbol>();
-
-  private async publishAcceptedSummary(workspaceId: string): Promise<void> {
-    const token = Symbol();
-    this.pendingSummaryReads.set(workspaceId, token);
-    try {
-      const persisted = await workspaceAccessor.findAutoIterationSnapshot(workspaceId);
-      if (!persisted || this.pendingSummaryReads.get(workspaceId) !== token) {
-        return;
-      }
-      this.emit(AUTO_ITERATION_SUMMARY_CHANGED, {
-        workspaceId,
-        mode: persisted.mode,
-        autoIterationStatus: persisted.autoIterationStatus,
-        autoIteration: projectAutoIterationSummary(persisted),
-      } satisfies AutoIterationSummaryChangedEvent);
-    } catch (error) {
-      // Persistence already succeeded. Reconciliation repairs a failed read;
-      // do not report that accepted mutation as a failed write to the caller.
-      logger.warn('Failed to read accepted loop summary', { workspaceId, error });
-    } finally {
-      if (this.pendingSummaryReads.get(workspaceId) === token) {
-        this.pendingSummaryReads.delete(workspaceId);
-      }
-    }
+  private publishAcceptedSummary(
+    workspaceId: string,
+    written: WorkspaceAutoIterationWriteResult
+  ): void {
+    this.emit(AUTO_ITERATION_SUMMARY_CHANGED, {
+      workspaceId,
+      mode: written.mode,
+      autoIterationStatus: written.status,
+      autoIteration: projectAutoIterationSummary({
+        mode: written.mode,
+        autoIterationStatus: written.status,
+        autoIterationConfig: written.config,
+        autoIterationProgress: written.progress,
+      }),
+    } satisfies AutoIterationSummaryChangedEvent);
   }
 
   getExecutionContext(workspaceId: string): Promise<AutoIterationExecutionContext | null> {
@@ -76,13 +63,15 @@ class WorkspaceAutoIterationService extends EventEmitter {
 
   async setStatus(workspaceId: string, status: AutoIterationStatus): Promise<void> {
     const written = await workspaceAccessor.setAutoIterationStatus(workspaceId, status);
-    this.emitStatusChanged(workspaceId, written.mode, written.status);
-    await this.publishAcceptedSummary(workspaceId);
+    if (written.status !== null) {
+      this.emitStatusChanged(workspaceId, written.mode, written.status);
+    }
+    this.publishAcceptedSummary(workspaceId, written);
   }
 
   async setProgress(workspaceId: string, progress: AutoIterationProgress) {
-    await workspaceAccessor.setAutoIterationProgress(workspaceId, progress);
-    await this.publishAcceptedSummary(workspaceId);
+    const written = await workspaceAccessor.setAutoIterationProgress(workspaceId, progress);
+    this.publishAcceptedSummary(workspaceId, written);
   }
 
   setSession(workspaceId: string, sessionId: string | null) {
@@ -94,18 +83,20 @@ class WorkspaceAutoIterationService extends EventEmitter {
     sessionId: string,
     status: AutoIterationStatus
   ): Promise<boolean> {
-    const result = await workspaceAccessor.finishAutoIterationIfSessionMatches(
+    const written = await workspaceAccessor.finishAutoIterationIfSessionMatches(
       workspaceId,
       sessionId,
       status
     );
-    // A compare-and-swap that matched nothing settled no loop, so there is no
-    // transition to announce.
-    if (result.settled && result.mode !== null) {
-      this.emitStatusChanged(workspaceId, result.mode, status);
-      await this.publishAcceptedSummary(workspaceId);
+    // A no-row compare-and-swap settled no loop and has nothing to publish.
+    if (!written) {
+      return false;
     }
-    return result.settled;
+    if (written.status !== null) {
+      this.emitStatusChanged(workspaceId, written.mode, written.status);
+    }
+    this.publishAcceptedSummary(workspaceId, written);
+    return true;
   }
 
   clearSessionIfMatching(workspaceId: string, sessionId: string): Promise<boolean> {
@@ -114,8 +105,12 @@ class WorkspaceAutoIterationService extends EventEmitter {
 
   async recoverStaleStatuses() {
     const recovered = await workspaceAccessor.resetStaleAutoIterationStatuses();
-    await Promise.all(recovered.map(({ id }) => this.publishAcceptedSummary(id)));
-    return recovered;
+    // Recovery runs behind the startup command gate. Retain the existing batch
+    // contract, and publish exactly the rows each guarded write accepted.
+    for (const { id, written } of recovered) {
+      this.publishAcceptedSummary(id, written);
+    }
+    return recovered.map(({ id }) => ({ id }));
   }
 
   private emitStatusChanged(
