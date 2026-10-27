@@ -66,3 +66,45 @@ it('updates provider and loading preview state when Storybook Controls change ar
     container.remove();
   }
 });
+
+it('allows opening the real launch menu and switching to periodic mode before chat defaults finish loading', async () => {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  try {
+    await act(() =>
+      root.render(
+        <TooltipProvider>
+          <SavedCodexDefaults loading />
+        </TooltipProvider>
+      )
+    );
+    await vi.waitFor(() =>
+      expect(
+        container.querySelector(
+          '[aria-label="New conversation provider and model: Loading model…"]'
+        )
+      ).not.toBeNull()
+    );
+    const modeTrigger = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Choose launch mode"]'
+    );
+    expect(modeTrigger?.disabled).toBe(false);
+    await act(() =>
+      modeTrigger?.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowDown' }))
+    );
+    const periodic = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+      (item) => item.textContent === 'Create Periodic Task'
+    );
+    expect(periodic).toBeDefined();
+    await act(() => periodic?.click());
+    expect(
+      [...container.querySelectorAll<HTMLButtonElement>('button')].find(
+        (button) => button.textContent === 'Create Periodic Task'
+      )?.disabled
+    ).toBe(false);
+  } finally {
+    await act(() => root.unmount());
+    container.remove();
+  }
+});

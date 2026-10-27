@@ -36,9 +36,20 @@ describe('resolveSessionModelForProvider', () => {
     expect(resolveSessionModelForProvider(undefined, 'CLAUDE')).toBe('sonnet');
   });
 
+  it.each(['', '   ', '\t\n'])('treats blank explicit model %j as omitted', (model) => {
+    expect(resolveSessionModelForProvider(model, 'CLAUDE')).toBe('sonnet');
+    expect(resolveSessionModelForProvider(model, 'CODEX')).toBe('default');
+    expect(resolveSessionModelForProvider(model, 'CLAUDE', 'opus')).toBe('opus');
+    expect(resolveSessionModelForProvider(model, 'CODEX', 'gpt-6-sol')).toBe('gpt-6-sol');
+    expect(resolveSessionModelForProvider(model, 'CLAUDE', 'gpt-6-sol')).toBe('sonnet');
+    expect(resolveSessionModelForProvider(model, 'CODEX', 'opus')).toBe('default');
+  });
+
   it.each([
     ['opus', 'CODEX'],
     ['gpt-5', 'CLAUDE'],
+    ['  opus  ', 'CODEX'],
+    ['\t gpt-5 \n', 'CLAUDE'],
   ] as const)('rejects explicit %s for %s instead of replacing the choice', (model, provider) => {
     expect(() => resolveSessionModelForProvider(model, provider)).toThrow('not compatible');
   });

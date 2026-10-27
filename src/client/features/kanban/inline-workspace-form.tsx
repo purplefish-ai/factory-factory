@@ -487,7 +487,8 @@ export function InlineWorkspaceForm({
 
   const isCreating = createWorkspaceMutation.isPending || createPeriodicTaskMutation.isPending;
   const supportsWorkspaceOptions = mode !== 'PERIODIC_TASK';
-  const isLaunchDisabled = isCreating || isLoadingSettings || !launchSelection.ready;
+  const isLaunchDisabled =
+    isCreating || (supportsWorkspaceOptions && (isLoadingSettings || !launchSelection.ready));
 
   const pasteDropHandler = usePasteDropHandler({
     setAttachments,
@@ -742,7 +743,8 @@ export function InlineWorkspaceForm({
                   <Button
                     size="sm"
                     className="h-7 rounded-l-none border-l border-primary-foreground/20 px-1.5"
-                    disabled={isLaunchDisabled}
+                    disabled={isCreating}
+                    aria-label="Choose launch mode"
                   >
                     <CaretDownIcon className="h-3 w-3" />
                   </Button>

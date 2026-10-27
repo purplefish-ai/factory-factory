@@ -255,3 +255,19 @@ export const WithCreationSelection: Story = {
     ),
   ],
 };
+
+export const CreationDefaultsUnavailable: Story = {
+  ...WithCreationSelection,
+  args: {
+    ...WithCreationSelection.args,
+    createDisabled: true,
+    creationControl: (
+      <ProviderModelPicker
+        provider={null}
+        models={[]}
+        error="Could not load chat defaults"
+        onRetry={fn()}
+      />
+    ),
+  },
+};

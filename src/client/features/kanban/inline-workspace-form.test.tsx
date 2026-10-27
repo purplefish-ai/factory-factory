@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { createElement, forwardRef, type ReactNode } from 'react';
+import { act, createElement, forwardRef, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -13,6 +13,10 @@ const mocks = vi.hoisted(() => ({
     defaultClaudeModel: 'saved-sonnet',
     defaultCodexModel: 'saved-sol',
   },
+  settingsUnavailable: false,
+  settingsLoading: false,
+  settingsError: null as Error | null,
+  createPeriodicTaskMutateMock: vi.fn(),
   detectFileMentionMock: vi.fn(),
   toastErrorMock: vi.fn(),
   listForProjectCancelMock: vi.fn(),
@@ -79,8 +83,9 @@ vi.mock('@/client/lib/trpc', () => ({
       },
       get: {
         useQuery: () => ({
-          data: mocks.userSettings,
-          isLoading: false,
+          data: mocks.settingsUnavailable ? undefined : mocks.userSettings,
+          isLoading: mocks.settingsLoading,
+          error: mocks.settingsError,
         }),
       },
     },
@@ -104,7 +109,7 @@ vi.mock('@/client/lib/trpc', () => ({
     periodicTask: {
       create: {
         useMutation: () => ({
-          mutate: vi.fn(),
+          mutate: mocks.createPeriodicTaskMutateMock,
           isPending: false,
         }),
       },
@@ -152,12 +157,13 @@ vi.mock('@/client/features/composer', () => ({
     detectFileMention: mocks.detectFileMentionMock,
     paletteRef: { current: null },
   }),
-  useSlashCommands: () => ({
+  useSlashCommands: ({ onChange }: { onChange?: (value: string) => void }) => ({
     slashMenuOpen: false,
     slashFilter: '',
     commandsReady: true,
     paletteRef: { current: null },
-    handleInputChange: vi.fn(),
+    handleInputChange: (event: React.ChangeEvent<HTMLTextAreaElement>) =>
+      onChange?.(event.target.value),
     handleSlashCommandSelect: vi.fn(),
     handleSlashMenuClose: vi.fn(),
     delegateToSlashMenu: () => 'passthrough',
@@ -295,6 +301,9 @@ beforeEach(() => {
     defaultClaudeModel: 'saved-sonnet',
     defaultCodexModel: 'saved-sol',
   };
+  mocks.settingsUnavailable = false;
+  mocks.settingsLoading = false;
+  mocks.settingsError = null;
   mocks.workspaceListCache = undefined;
   mocks.createWorkspaceMutationOptions = undefined;
   mocks.listForProjectCancelMock.mockResolvedValue(undefined);
@@ -490,3 +499,50 @@ it('retains the chosen provider and model when saved settings refetch during a w
     flushSync(() => root.unmount());
   }
 });
+
+it.each(['loading', 'failed'])(
+  'allows periodic task creation while chat defaults are %s',
+  async (status) => {
+    await act(() => {
+      mocks.settingsUnavailable = true;
+      mocks.settingsLoading = status === 'loading';
+      mocks.settingsError = status === 'failed' ? new Error('Defaults failed') : null;
+      const { container, root, textarea } = renderForm();
+      try {
+        const modeButton = [...container.querySelectorAll<HTMLButtonElement>('button')].find(
+          (button) => button.className.includes('rounded-l-none')
+        );
+        expect(modeButton?.disabled).toBe(false);
+        expect(
+          [...container.querySelectorAll<HTMLButtonElement>('button')].find(
+            (button) => button.textContent === 'Launch'
+          )?.disabled
+        ).toBe(true);
+        const periodicMode = [...container.querySelectorAll('div')].find(
+          (element) => element.textContent === 'Create Periodic Task'
+        );
+        flushSync(() => periodicMode?.click());
+        const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+        flushSync(() => {
+          setter?.call(textarea, 'Run the periodic review');
+          textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        const create = [...container.querySelectorAll<HTMLButtonElement>('button')].find(
+          (button) => button.textContent === 'Create Periodic Task'
+        );
+        expect(create?.disabled).toBe(false);
+        flushSync(() => create?.click());
+        expect(mocks.createPeriodicTaskMutateMock).toHaveBeenCalledWith(
+          expect.objectContaining({
+            projectId: 'project-1',
+            prompt: 'Run the periodic review',
+            cadence: 'DAILY',
+          })
+        );
+        expect(mocks.createWorkspaceMutateMock).not.toHaveBeenCalled();
+      } finally {
+        flushSync(() => root.unmount());
+      }
+    });
+  }
+);

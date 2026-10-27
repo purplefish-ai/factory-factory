@@ -63,7 +63,7 @@ export function resolveSessionModelForProvider(
   fallbackModel?: string | null
 ): string {
   const explicit = normalizeSessionModelForProvider(model, provider);
-  if (model !== undefined && model !== null && !explicit) {
+  if (model?.trim() && !explicit) {
     throw new ApplicationError(
       'INVALID_INPUT',
       `Model "${model}" is not compatible with ${provider}`

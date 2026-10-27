@@ -55,7 +55,8 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
 
   const runningSessionId = useMemo(() => sessions.find((s) => s.isWorking)?.id ?? null, [sessions]);
 
-  const tabBarDisabled = isCreatingSession || !workspaceId || !launchSelection.ready;
+  const tabBarDisabled = isCreatingSession || !workspaceId;
+  const creationDisabled = tabBarDisabled || !launchSelection.ready;
 
   return (
     <Sheet open={!!workspaceId} onOpenChange={(open) => !open && onClose()}>
@@ -81,6 +82,7 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
               onCreateSession={handleNewChat}
               onCloseSession={handleCloseSession}
               disabled={tabBarDisabled}
+              createDisabled={creationDisabled}
               creationControl={
                 <div className="flex min-w-0 items-center gap-0.5">
                   <span className="px-1 text-xs text-muted-foreground">New</span>
@@ -98,7 +100,7 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
                 handleQuickAction(action.name, action.content);
               }
             }}
-            disabled={tabBarDisabled}
+            disabled={creationDisabled}
           />
         </div>
 

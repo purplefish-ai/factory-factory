@@ -22,7 +22,11 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useIsMobile } from '@/hooks/use-mobile';
 import type { ChatSettings, MessageAttachment } from '@/lib/chat-protocol';
-import { type ChatBarCapabilities, type ChatModelOption } from '@/shared/chat-capabilities';
+import {
+  type ChatBarCapabilities,
+  type ChatModelOption,
+  hasResolvedChatBarCapabilities,
+} from '@/shared/chat-capabilities';
 import { AcpConfigSelector } from './acp-config-selector';
 import { ModelSelector } from './model-selector';
 import { QuickActionsDropdown } from './quick-actions-dropdown';
@@ -140,7 +144,7 @@ function getRuntimeControls(props: LeftControlsProps) {
           : [{ value: entry.value, label: entry.name }]
       )
     : (capabilities?.model.options ?? []);
-  const loaded = props.capabilitiesLoaded ?? capabilities !== undefined;
+  const loaded = props.capabilitiesLoaded ?? hasResolvedChatBarCapabilities(capabilities);
   const loading = !loaded;
   const model =
     settings?.selectedModel ?? modelOption?.currentValue ?? capabilities?.model.selected;

@@ -42,13 +42,16 @@ function SelectionRetry({
   error,
   onRetry,
   disabled,
+  disabledReason,
   label,
 }: {
   error: string;
   onRetry?: () => void;
   disabled: boolean;
+  disabledReason?: string;
   label: string;
 }) {
+  const reason = disabled ? disabledReason : undefined;
   return (
     <Button
       type="button"
@@ -57,7 +60,8 @@ function SelectionRetry({
       className="h-6 gap-1 px-2 text-xs text-muted-foreground"
       disabled={disabled || !onRetry}
       onClick={onRetry}
-      title={error}
+      title={reason ?? error}
+      aria-description={reason}
       aria-label={`${label}: ${error}. Retry selection`}
     >
       <ArrowClockwiseIcon className="h-3 w-3 shrink-0" />
@@ -83,7 +87,15 @@ export function ProviderModelPicker({
   label = 'Provider and model',
 }: ProviderModelPickerProps) {
   if (error) {
-    return <SelectionRetry error={error} onRetry={onRetry} disabled={disabled} label={label} />;
+    return (
+      <SelectionRetry
+        error={error}
+        onRetry={onRetry}
+        disabled={disabled}
+        disabledReason={disabledReason}
+        label={label}
+      />
+    );
   }
   const providerName = provider ? PROVIDER_NAMES[provider] : null;
   const modelName = loading

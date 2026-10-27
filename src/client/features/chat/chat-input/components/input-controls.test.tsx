@@ -415,3 +415,20 @@ it('shows unavailable selection after an empty capability response has finished 
     mounted.unmount();
   }
 });
+
+it('keeps an unconfirmed placeholder loading for legacy callers without a loaded flag', () => {
+  mocks.mobile = false;
+  const mounted = renderSelectionControls({
+    capabilities: EMPTY_CHAT_BAR_CAPABILITIES,
+    acpConfigOptions: undefined,
+  });
+  try {
+    const trigger = mounted.container.querySelector<HTMLButtonElement>(
+      '[aria-label="Provider and model: Loading model…"]'
+    );
+    expect(trigger?.disabled).toBe(true);
+    expect(trigger?.title).toBe('Loading model options');
+  } finally {
+    mounted.unmount();
+  }
+});

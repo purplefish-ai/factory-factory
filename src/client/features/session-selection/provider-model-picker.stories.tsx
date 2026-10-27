@@ -80,3 +80,12 @@ export const DefaultsFailed: Story = {
     onRetry: fn(),
   },
 };
+
+export const DefaultsFailedAtSessionLimit: Story = {
+  ...DefaultsFailed,
+  args: {
+    ...DefaultsFailed.args,
+    disabled: true,
+    disabledReason: 'Maximum 3 sessions per workspace',
+  },
+};

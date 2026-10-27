@@ -71,10 +71,12 @@ no WebSocket and do not serialize frames.
 
 `chat-command-adapter.ts` owns requester serialization and existing error copy.
 The session configuration service serializes each configuration write through
-provider completion, persistence and state publication. A rejected change emits
-its confirmed configuration correction through `SessionDomainService.emitDelta`
-before releasing that write's queue slot. This prevents a delayed rollback from
-overwriting a newer successful choice. Correction delivery is independent of the
+provider completion, persistence and state publication. When a live configured
+handle supplies confirmed options, a rejected change emits its configuration
+correction through `SessionDomainService.emitDelta` before releasing that
+write's queue slot. This prevents a delayed rollback from overwriting a newer
+successful choice. Inactive or unavailable-session failures can return an error
+without a configuration correction. Correction delivery is independent of the
 requester's connection; only the requester receives the error and its optional
 request correlation ID. Explicit model capabilities replies are requester-only.
 Permission completion and matching-request cleanup remain owned by the

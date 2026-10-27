@@ -34,6 +34,7 @@ interface SessionTabBarProps {
   className?: string;
   readOnly?: boolean;
   creationControl?: ReactNode;
+  createDisabled?: boolean;
 }
 
 // =============================================================================
@@ -193,6 +194,7 @@ export function SessionTabBar({
   className,
   readOnly = false,
   creationControl,
+  createDisabled = false,
 }: SessionTabBarProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
@@ -320,7 +322,7 @@ export function SessionTabBar({
           <button
             type="button"
             onClick={onCreateSession}
-            disabled={disabled}
+            disabled={disabled || createDisabled}
             title="New Session"
             aria-label="New session"
             className="h-7 w-7 shrink-0 ml-1 flex items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-sidebar-accent hover:text-foreground disabled:opacity-50 disabled:pointer-events-none"
