@@ -312,3 +312,23 @@ export const LiteralOtherValue: Story = {
     ]),
   },
 };
+
+export const DeclineAnswer: Story = {
+  args: {
+    question: {
+      ...createUserQuestion([
+        {
+          question: 'Should the proposed change go ahead?',
+          options: [
+            { label: 'Decline', description: 'Keep the current behavior' },
+            { label: 'Proceed', description: 'Apply the proposed change' },
+          ],
+        },
+      ]),
+      acpOptions: [
+        { optionId: 'accept', kind: 'allow_once', name: 'Submit' },
+        { optionId: 'decline', kind: 'reject_once', name: 'Decline' },
+      ],
+    },
+  },
+};

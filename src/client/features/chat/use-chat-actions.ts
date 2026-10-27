@@ -146,20 +146,6 @@ function getLegacyPermissionOptionId(toolName: string, allow: boolean): string {
   return allow ? 'allow' : 'reject';
 }
 
-function flattenAnswerValues(answers: Record<string, string | string[]>): string[] {
-  const values: string[] = [];
-  for (const value of Object.values(answers)) {
-    if (Array.isArray(value)) {
-      values.push(...value);
-      continue;
-    }
-    if (value) {
-      values.push(value);
-    }
-  }
-  return values;
-}
-
 function normalizeQuestionAnswers(
   answers: Record<string, string | string[]>
 ): Record<string, string[]> {
@@ -173,26 +159,6 @@ function normalizeQuestionAnswers(
     }
   }
   return normalized;
-}
-
-function findQuestionOptionId(
-  options: AcpPermissionOption[] | undefined,
-  answers: Record<string, string | string[]>
-): string | undefined {
-  if (!options || options.length === 0) {
-    return undefined;
-  }
-
-  const selected = new Set(flattenAnswerValues(answers).map((v) => v.trim().toLowerCase()));
-  if (selected.size > 0) {
-    const matched = options.find((option) => selected.has(option.name.trim().toLowerCase()));
-    if (matched) {
-      return matched.optionId;
-    }
-  }
-
-  // Fallback to first allow option (or first option if no allow kinds).
-  return findOptionIdByDecision(options, true);
 }
 
 function isAllowOptionId(optionId: string, options: AcpPermissionOption[] | undefined): boolean {
@@ -323,8 +289,7 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
         return;
       }
       const normalizedAnswers = normalizeQuestionAnswers(answers);
-      const optionId =
-        findQuestionOptionId(pendingRequest.request.acpOptions, normalizedAnswers) ?? 'allow';
+      const optionId = findOptionIdByDecision(pendingRequest.request.acpOptions, true) ?? 'allow';
       const msg: PermissionResponseMessage = {
         type: 'permission_response',
         requestId,

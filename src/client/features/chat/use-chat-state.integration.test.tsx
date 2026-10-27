@@ -456,3 +456,41 @@ describe('useChatState plan mode persistence', () => {
     }
   );
 });
+
+describe('form elicitation answer submission', () => {
+  it.each(['Decline', ' decline ', ['Decline', 'Submit']])(
+    'accepts the form when an answer contains %j',
+    async (answer) => {
+      const harness = renderChatState('session-A');
+      await flushEffects();
+      try {
+        flushSync(() => {
+          harness.chatRef.current?.dispatch({
+            type: 'WS_USER_QUESTION',
+            payload: {
+              requestId: 'elicitation-question',
+              timestamp: '2026-10-27T00:00:00Z',
+              questions: [{ id: 'decision', question: 'Proceed?', options: [] }],
+              acpOptions: [
+                { optionId: 'decline', name: 'Decline', kind: 'reject_once' },
+                { optionId: 'accept', name: 'Submit', kind: 'allow_once' },
+              ],
+            },
+          });
+        });
+        flushSync(() => {
+          harness.chatRef.current?.answerQuestion('elicitation-question', { decision: answer });
+        });
+        expect(harness.send).toHaveBeenCalledWith({
+          type: 'permission_response',
+          requestId: 'elicitation-question',
+          optionId: 'accept',
+          answers: { decision: Array.isArray(answer) ? answer : [answer.trim()] },
+        });
+        expect(harness.chatRef.current?.pendingRequest).toEqual({ type: 'none' });
+      } finally {
+        harness.cleanup();
+      }
+    }
+  );
+});
