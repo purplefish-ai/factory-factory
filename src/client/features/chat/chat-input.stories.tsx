@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { useRef, useState } from 'react';
 import { fn } from 'storybook/test';
 import type { MessageAttachment } from '@/lib/chat-protocol';
+import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { ChatInput } from './chat-input/chat-input';
 
 // Action handler for Storybook
@@ -201,5 +202,28 @@ export const RuntimeError: Story = {
   args: {
     onSend: onSendAction,
     placeholder: 'Agent encountered an error. Type a message to retry...',
+  },
+};
+
+export const AcpWithImageUpload: Story = {
+  args: {
+    onSend: onSendAction,
+    capabilities: {
+      ...EMPTY_CHAT_BAR_CAPABILITIES,
+      attachments: { enabled: true, kinds: ['image', 'text'] },
+    },
+    acpConfigOptions: [
+      {
+        id: 'mode',
+        name: 'Mode',
+        type: 'select',
+        currentValue: 'default',
+        options: [
+          { value: 'default', name: 'Default' },
+          { value: 'plan', name: 'Plan' },
+        ],
+      },
+    ],
+    onSetConfigOption: fn(),
   },
 };
