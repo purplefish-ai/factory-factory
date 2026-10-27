@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { RenamedWorkspace } from '@/backend/orchestration/workspace-rename.orchestrator';
 import { createFakeApplicationGraph } from '@/test-utils/application-graph';
+import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import {
   createApplication,
   createDefaultApplicationDependencies,
@@ -8,10 +10,88 @@ import {
 import { serverInstanceService } from './services/server-instance.service';
 
 describe('createApplication', () => {
+  it('binds accepted rename to each application service graph without sharing its queue or publication target', async () => {
+    const first = createDefaultApplicationDependencies();
+    const second = createDefaultApplicationDependencies();
+    const a = unsafeCoerce<RenamedWorkspace>({
+      id: 'same-id',
+      name: 'First graph',
+      status: 'READY',
+      updatedAt: new Date(200),
+    });
+    const b = { ...a, name: 'Second graph' };
+    let finish!: (workspace: RenamedWorkspace) => void;
+    const slow = vi.fn(
+      () =>
+        new Promise<RenamedWorkspace>((resolve) => {
+          finish = resolve;
+        })
+    );
+    const fast = vi.fn(() => Promise.resolve(b));
+    const publishA = vi.fn();
+    const publishB = vi.fn();
+    first.services.workspaceDataService = Object.assign({}, first.services.workspaceDataService, {
+      rename: slow,
+    });
+    second.services.workspaceDataService = Object.assign({}, second.services.workspaceDataService, {
+      rename: fast,
+    });
+    first.services.workspaceSnapshotStore = Object.assign(
+      {},
+      first.services.workspaceSnapshotStore,
+      { publishAcceptedName: publishA }
+    );
+    second.services.workspaceSnapshotStore = Object.assign(
+      {},
+      second.services.workspaceSnapshotStore,
+      { publishAcceptedName: publishB }
+    );
+    const pending = first.services.renameWorkspace('same-id', 'Requested A');
+    expect(await second.services.renameWorkspace('same-id', 'Requested B')).toEqual(b);
+    expect(publishA).not.toHaveBeenCalled();
+    expect(publishB).toHaveBeenCalledExactlyOnceWith('same-id', b.name, 200);
+    finish(a);
+    expect(await pending).toEqual(a);
+    expect(publishA).toHaveBeenCalledExactlyOnceWith('same-id', a.name, 200);
+  });
+
   it('shares the runtime server endpoint with lifecycle composition', () => {
     const dependencies = createDefaultApplicationDependencies();
 
     expect(dependencies.services.serverInstanceService).toBe(serverInstanceService);
+  });
+
+  it('routes child creation through the graph-owned project lookup and launch capability', async () => {
+    const actualChildren = await vi.importActual<
+      typeof import('@/backend/orchestration/workspace-children.orchestrator')
+    >('@/backend/orchestration/workspace-children.orchestrator');
+    const children = await vi.importMock<
+      typeof import('@/backend/orchestration/workspace-children.orchestrator')
+    >('@/backend/orchestration/workspace-children.orchestrator');
+    vi.mocked(children.createChildWorkspace).mockImplementationOnce(
+      actualChildren.createChildWorkspace
+    );
+    const { services } = createDefaultApplicationDependencies();
+    const findProject = vi.fn().mockResolvedValue({ id: 'project-1', isArchived: false });
+    const launch = vi
+      .fn()
+      .mockResolvedValue({ workspace: { id: 'injected-child' }, defaultSessionId: null });
+    services.projectManagementService = new Proxy(services.projectManagementService, {
+      get(target, property, receiver) {
+        return property === 'findById' ? findProject : Reflect.get(target, property, receiver);
+      },
+    });
+    services.launchWorkspace = launch;
+    const input = {
+      projectId: 'project-1',
+      parentWorkspaceId: 'parent-1',
+      name: 'Child',
+      initialPrompt: 'Child task',
+      reportBackOn: 'Done',
+    };
+    await expect(services.createChildWorkspace(input)).resolves.toBe('injected-child');
+    expect(findProject).toHaveBeenCalledExactlyOnceWith('project-1');
+    expect(launch).toHaveBeenCalledExactlyOnceWith({ type: 'CHILD_WORKSPACE', ...input });
   });
 
   it('keeps two complete fake graphs isolated', () => {

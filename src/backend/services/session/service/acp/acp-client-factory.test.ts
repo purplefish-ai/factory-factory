@@ -321,6 +321,7 @@ describe('AcpClientFactory', () => {
     expect(mocks.initialize).toHaveBeenCalledWith({
       protocolVersion: 1,
       clientCapabilities: expect.objectContaining({
+        session: { compaction: {} },
         elicitation: { form: {}, url: {} },
         subagents: {},
         _meta: {

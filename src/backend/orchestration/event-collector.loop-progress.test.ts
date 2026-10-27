@@ -64,6 +64,7 @@ it('keeps same-ms compact updates coherent with lifecycle and stale legacy event
         name: 'lifecycle name',
         branchName: null,
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-02T00:00:00.000Z'),
       },
     });
     // Legacy status remains available to other consumers, but cannot regress

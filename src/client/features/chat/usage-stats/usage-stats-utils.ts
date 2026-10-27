@@ -9,22 +9,28 @@ import {
  * Returns 0 if context window is not available.
  */
 export function calculateContextUsagePercentage(stats: TokenStats): number {
-  if (!stats.contextWindow || stats.contextWindow === 0) {
+  if (!stats.contextWindow || stats.contextUsedTokens == null) {
     return 0;
   }
-  const usedTokens = stats.inputTokens + stats.outputTokens;
+  const usedTokens = stats.contextUsedTokens;
   return Math.min((usedTokens / stats.contextWindow) * 100, 100);
 }
 
 /**
  * Gets the text color class based on usage percentage.
  */
-export function getUsageColorClass(percentage: number): string {
+export function getUsageColorClass(
+  percentage: number | null,
+  warningClass = 'text-yellow-500'
+): string {
+  if (percentage === null) {
+    return 'text-muted-foreground';
+  }
   if (percentage >= CONTEXT_CRITICAL_THRESHOLD * 100) {
     return 'text-red-500';
   }
   if (percentage >= CONTEXT_WARNING_THRESHOLD * 100) {
-    return 'text-yellow-500';
+    return warningClass;
   }
   return 'text-muted-foreground';
 }

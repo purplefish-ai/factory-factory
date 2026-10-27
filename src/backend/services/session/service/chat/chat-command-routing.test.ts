@@ -5,6 +5,7 @@ import {
   sessionConfigService,
 } from '@/backend/services/session/service/lifecycle/session-services';
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
+import type { ChatMessageInput } from '@/shared/websocket';
 
 describe('chat command routing during transport migration', () => {
   it('returns a typed missing-session error without touching the socket', async () => {
@@ -38,3 +39,26 @@ describe('chat command routing during transport migration', () => {
     expect(ws.send).not.toHaveBeenCalled();
   });
 });
+
+it.each([
+  { type: 'start' },
+  { type: 'stop' },
+  { type: 'user_input', text: 'human' },
+  { type: 'queue_message', id: 'human', text: 'human' },
+  { type: 'remove_queued_message', messageId: 'human' },
+  { type: 'resume_queued_messages' },
+] satisfies ChatMessageInput[])(
+  'routes missing-session %o as a typed outcome without touching a socket',
+  async (message) => {
+    const ws = { send: vi.fn() };
+    expect(
+      await chatMessageHandlerService.handleMessage(
+        ws as unknown as WebSocket,
+        null,
+        '/tmp',
+        message
+      )
+    ).toEqual({ replies: [{ type: 'error', error: { kind: 'no_session' } }] });
+    expect(ws.send).not.toHaveBeenCalled();
+  }
+);

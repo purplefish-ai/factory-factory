@@ -15,6 +15,7 @@ export function createMockWorkspace(
     name: 'Test Workspace',
     status: 'READY',
     createdAt: new Date('2026-01-01T00:00:00Z'),
+    updatedAt: new Date('2026-01-01T01:00:00Z'),
     branchName: 'feature/test',
     hasHadSessions: true,
     worktreePath: '/path/to/worktree',

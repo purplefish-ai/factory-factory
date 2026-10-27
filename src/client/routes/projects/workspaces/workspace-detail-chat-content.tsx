@@ -319,10 +319,12 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
           <ChatInput
             className="flex-1 min-w-0"
             onSend={props.sendMessage}
+            onCompact={() => props.sendMessage('/compact', { preserveInput: true })}
             onStop={props.stopChat}
             disabled={!props.connected || loadingSession}
             running={running}
             stopping={stopping}
+            isCompacting={props.isCompacting}
             inputRef={props.inputRef}
             placeholder={placeholder}
             settings={props.chatSettings}

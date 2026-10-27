@@ -462,8 +462,7 @@ export function createPlanApprovalRequest(planContent = DEFAULT_PLAN_CONTENT): P
 // =============================================================================
 
 /**
- * Creates token stats with optional overrides.
- */
+ * Creates token stats with optional overrides. */
 export function createTokenStats(overrides: Partial<TokenStats> = {}): TokenStats {
   return {
     inputTokens: overrides.inputTokens ?? 1500,
@@ -476,6 +475,7 @@ export function createTokenStats(overrides: Partial<TokenStats> = {}): TokenStat
     turnCount: overrides.turnCount ?? 3,
     webSearchRequests: overrides.webSearchRequests ?? 0,
     contextWindow: overrides.contextWindow === undefined ? 200_000 : overrides.contextWindow,
+    contextUsedTokens: overrides.contextUsedTokens ?? null,
     maxOutputTokens: overrides.maxOutputTokens ?? 16_384,
     serviceTier: overrides.serviceTier ?? null,
   };

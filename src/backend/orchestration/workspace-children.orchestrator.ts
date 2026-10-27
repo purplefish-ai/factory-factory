@@ -1,18 +1,22 @@
 import { ApplicationError } from '@/backend/lib/application-error';
 import { createLogger } from '@/backend/services/logger.service';
-import { sessionDataService, sessionProviderResolverService } from '@/backend/services/session';
 import {
-  projectManagementService,
-  WorkspaceCreationService,
+  type projectManagementService,
   workspaceDataService,
   workspaceNotificationService,
 } from '@/backend/services/workspace';
 import type { WorkspaceNotification } from '@prisma-gen/client';
-import { initializeWorkspaceWorktree } from './workspace-init.orchestrator';
+import type {
+  ChildWorkspaceLaunchSource,
+  WorkspaceLauncher,
+} from './workspace-launch.orchestrator';
 
 const logger = createLogger('workspace-children-orchestrator');
 
-const creationService = new WorkspaceCreationService({ logger });
+export interface ChildWorkspaceLaunchPorts {
+  findProject: typeof projectManagementService.findById;
+  launchWorkspace: WorkspaceLauncher<ChildWorkspaceLaunchSource>;
+}
 
 export interface CreateChildWorkspaceInput {
   parentWorkspaceId: string;
@@ -28,14 +32,17 @@ export interface CreateChildWorkspaceInput {
  * Validates the parent/child relationship then delegates to WorkspaceCreationService
  * and fires workspace initialization in the background.
  */
-export async function createChildWorkspace(input: CreateChildWorkspaceInput): Promise<string> {
+export async function createChildWorkspace(
+  input: CreateChildWorkspaceInput,
+  ports: ChildWorkspaceLaunchPorts
+): Promise<string> {
   logger.debug('Creating child workspace', {
     parentWorkspaceId: input.parentWorkspaceId,
     projectId: input.projectId,
   });
 
   // Validate that the target project is available for new child workspaces
-  const project = await projectManagementService.findById(input.projectId);
+  const project = await ports.findProject(input.projectId);
   if (!project) {
     throw new ApplicationError('NOT_FOUND', `Project not found: ${input.projectId}`);
   }
@@ -48,7 +55,7 @@ export async function createChildWorkspace(input: CreateChildWorkspaceInput): Pr
   }
 
   // WorkspaceCreationService validates parent existence, status, and depth
-  const workspace = await creationService.create({
+  const { workspace } = await ports.launchWorkspace({
     type: 'CHILD_WORKSPACE',
     parentWorkspaceId: input.parentWorkspaceId,
     projectId: input.projectId,
@@ -56,28 +63,6 @@ export async function createChildWorkspace(input: CreateChildWorkspaceInput): Pr
     description: input.description,
     initialPrompt: input.initialPrompt,
     reportBackOn: input.reportBackOn,
-  });
-
-  // Provision a default agent session so the workspace auto-starts on init
-  try {
-    const provider = await sessionProviderResolverService.resolveProviderForWorkspaceCreation();
-    await sessionDataService.createAgentSession({
-      workspaceId: workspace.id,
-      workflow: 'followup',
-      name: 'Chat 1',
-      provider,
-      providerProjectPath: null,
-    });
-  } catch (err) {
-    logger.warn('Failed to create default session for child workspace', {
-      workspaceId: workspace.id,
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
-
-  // Fire initialization in the background — same pattern as workspace.create tRPC mutation
-  initializeWorkspaceWorktree(workspace.id).catch((err: unknown) => {
-    logger.error('Child workspace init failed', { workspaceId: workspace.id, error: err });
   });
 
   return workspace.id;

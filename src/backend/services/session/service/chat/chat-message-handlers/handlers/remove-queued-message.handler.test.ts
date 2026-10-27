@@ -31,15 +31,12 @@ describe('createRemoveQueuedMessageHandler', () => {
 
   it('emits cancelled state when queued message is removed', () => {
     mocks.removeQueuedMessage.mockReturnValue(true);
-    const ws = { send: vi.fn() };
-    const handler = createRemoveQueuedMessageHandler();
+    const handler = createRemoveQueuedMessageHandler({ domain: mocks });
 
-    void handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp/work',
-      message: { type: 'remove_queued_message', messageId: 'msg-1' } as never,
-    });
+    const outcome = handler({ sessionId: 'session-1', workingDir: '/tmp/work' }, {
+      type: 'remove_queued_message',
+      messageId: 'msg-1',
+    } as never);
 
     expect(mocks.removeQueuedMessage).toHaveBeenCalledWith('session-1', 'msg-1');
     expect(mocks.emitDelta).toHaveBeenCalledWith('session-1', {
@@ -47,23 +44,20 @@ describe('createRemoveQueuedMessageHandler', () => {
       id: 'msg-1',
       newState: MessageState.CANCELLED,
     });
-    expect(ws.send).not.toHaveBeenCalled();
+    expect(outcome).toEqual({ replies: [] });
   });
 
   it('sends error when message id is not in queue', () => {
     mocks.removeQueuedMessage.mockReturnValue(false);
-    const ws = { send: vi.fn() };
-    const handler = createRemoveQueuedMessageHandler();
+    const handler = createRemoveQueuedMessageHandler({ domain: mocks });
 
-    void handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp/work',
-      message: { type: 'remove_queued_message', messageId: 'missing' } as never,
+    const outcome = handler({ sessionId: 'session-1', workingDir: '/tmp/work' }, {
+      type: 'remove_queued_message',
+      messageId: 'missing',
+    } as never);
+
+    expect(outcome).toEqual({
+      replies: [{ type: 'error', error: { kind: 'message_not_queued' } }],
     });
-
-    expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({ type: 'error', message: 'Message not found in queue' })
-    );
   });
 });

@@ -49,6 +49,7 @@ it.each(['PROVISIONING', 'READY', 'FAILED'] as const)(
           name: 'issue',
           branchName: 'branch',
           createdAt: new Date('2026-01-01T00:00:00.000Z'),
+          updatedAt: new Date('2026-01-02T00:00:00.000Z'),
           worktreePath: status === 'PROVISIONING' ? null : '/work',
           initErrorMessage: status === 'FAILED' ? 'setup failed' : null,
           githubIssueNumber: 42,

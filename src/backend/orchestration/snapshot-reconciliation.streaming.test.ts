@@ -26,6 +26,7 @@ function makeWorkspace(id: string, worktreePath: string | null) {
     name: `Workspace ${id}`,
     status: 'READY',
     createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    updatedAt: new Date('2026-01-02T00:00:00.000Z'),
     branchName: `feature/${id}`,
     hasHadSessions: false,
     worktreePath,
@@ -74,9 +75,10 @@ function makeWorkspace(id: string, worktreePath: string | null) {
 }
 
 function makeService(
-  workspaces: ReturnType<typeof makeWorkspace>[],
+  workspaces: ReturnType<typeof makeWorkspace>[] | Promise<ReturnType<typeof makeWorkspace>[]>,
   getWorkspaceGitStats: (path: string) => Promise<GitStats | null>,
   workspaceSnapshotStore: {
+    canAcceptNameObservation(id: string, nameUpdatedAt: number): boolean;
     getAllWorkspaceIds(): string[];
     getByWorkspaceId(id: string): unknown;
     remove(id: string): boolean;
@@ -90,10 +92,11 @@ function makeService(
       changed: boolean;
       emitted: boolean;
     };
-  }
+  },
+  warn = vi.fn()
 ) {
   return new SnapshotReconciliationService({
-    createLogger: () => ({ debug: vi.fn(), error: vi.fn(), info: vi.fn(), warn: vi.fn() }),
+    createLogger: () => ({ debug: vi.fn(), error: vi.fn(), info: vi.fn(), warn }),
     gitOpsService: { getWorkspaceGitStats },
     session: {
       getAllPendingRequests: () => new Map(),
@@ -205,6 +208,7 @@ it('releases the seed barrier when there are no workspaces', async () => {
   const service = makeService([], vi.fn(), {
     getAllWorkspaceIds: () => [],
     getByWorkspaceId: () => undefined,
+    canAcceptNameObservation: () => true,
     remove: () => false,
     upsert,
   });
@@ -221,6 +225,7 @@ it('keeps shutdown pending until streamed git work settles', async () => {
   const service = makeService([makeWorkspace('ws-1', '/path/1')], () => pendingGitStats.promise, {
     getAllWorkspaceIds: () => [],
     getByWorkspaceId: () => undefined,
+    canAcceptNameObservation: () => true,
     remove: () => false,
     upsert: () => ({ accepted: true, changed: true, emitted: true }),
   });
@@ -253,6 +258,7 @@ it('publishes each git result as it settles and keeps accurate accounting', asyn
   const store = {
     getAllWorkspaceIds: () => [],
     getByWorkspaceId: () => undefined,
+    canAcceptNameObservation: () => true,
     remove: () => false,
     upsert,
   };
@@ -447,5 +453,117 @@ it('retains a newly accepted reset while an older reconciliation read is in flig
     expect(store.getByWorkspaceId('loop')?.summaryVersion).toBeUndefined();
   } finally {
     store.clear();
+  }
+});
+it.each(['older', 'equal-ms'] as const)(
+  'does not count or log a deferred %s name observation rejected after an accepted rename',
+  async (provenance) => {
+    const workspace = makeWorkspace('ws-1', null);
+    const store = createStore();
+    await makeService([workspace], () => Promise.resolve(null), store).reconcile();
+    const pendingRead = deferred<ReturnType<typeof makeWorkspace>[]>();
+    const warn = vi.fn();
+    const reconciliation = makeService(
+      pendingRead.promise,
+      () => Promise.resolve(null),
+      store,
+      warn
+    ).reconcile();
+    const acceptedAt = workspace.updatedAt.getTime() + 1;
+    expect(store.publishAcceptedName(workspace.id, 'Accepted rename', acceptedAt).accepted).toBe(
+      true
+    );
+    pendingRead.resolve([
+      {
+        ...workspace,
+        updatedAt: provenance === 'equal-ms' ? new Date(acceptedAt) : workspace.updatedAt,
+      },
+    ]);
+
+    expect((await reconciliation).driftsDetected).toBe(0);
+    expect(warn).not.toHaveBeenCalled();
+    expect(store.getByWorkspaceId(workspace.id)?.name).toBe('Accepted rename');
+
+    const newer = { ...workspace, name: 'New canonical name', updatedAt: new Date(acceptedAt + 1) };
+    const result = await makeService([newer], () => Promise.resolve(null), store, warn).reconcile();
+    expect(result.driftsDetected).toBe(1);
+    expect(warn).toHaveBeenCalledExactlyOnceWith('Snapshot drift detected', {
+      workspaceId: workspace.id,
+      driftCount: 1,
+      drifts: [
+        {
+          field: 'name',
+          group: 'name',
+          snapshot: 'Accepted rename',
+          authoritative: 'New canonical name',
+        },
+      ],
+    });
+    expect(store.getByWorkspaceId(workspace.id)?.name).toBe('New canonical name');
+    store.clear();
+  }
+);
+
+it('repairs compact loop drift while suppressing a stale canonical-name diagnostic', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(1000);
+  const store = createStore();
+  const ws = {
+    ...makeWorkspace('loop', null),
+    mode: 'AUTO_ITERATION',
+    autoIterationStatus: 'RUNNING' as const,
+    autoIterationConfig: { maxIterations: 10 },
+    autoIterationProgress: { currentIteration: 3, currentMetricSummary: 'score=3' },
+  };
+  const warn = vi.fn();
+  const service = makeService([ws], async () => null, store, warn);
+  try {
+    await service.reconcile();
+    store.publishAcceptedName(
+      'loop',
+      'Accepted loop name',
+      new Date('2026-01-03T00:00:00.000Z').getTime()
+    );
+    ws.autoIterationProgress.currentIteration = 4;
+    ws.autoIterationProgress.currentMetricSummary = 'score=4';
+    vi.setSystemTime(2000);
+    const result = await service.reconcile();
+    expect(result.driftsDetected).toBe(1);
+    expect(warn).toHaveBeenCalledExactlyOnceWith('Snapshot drift detected', {
+      workspaceId: 'loop',
+      driftCount: 1,
+      drifts: [
+        {
+          field: 'autoIteration',
+          group: 'autoIteration',
+          snapshot: {
+            status: 'RUNNING',
+            currentIteration: 3,
+            maxIterations: 10,
+            currentMetricSummary: 'score=3',
+          },
+          authoritative: {
+            status: 'RUNNING',
+            currentIteration: 4,
+            maxIterations: 10,
+            currentMetricSummary: 'score=4',
+          },
+        },
+      ],
+    });
+    expect(store.getByWorkspaceId('loop')).toMatchObject({
+      name: 'Accepted loop name',
+      summaryVersion: 1,
+      autoIteration: {
+        status: 'RUNNING',
+        currentIteration: 4,
+        maxIterations: 10,
+        currentMetricSummary: 'score=4',
+      },
+    });
+    expect(store.getByWorkspaceId('loop')).not.toHaveProperty('nameUpdatedAt');
+  } finally {
+    store.clear();
+    vi.useRealTimers();
   }
 });

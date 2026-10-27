@@ -1,7 +1,17 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { SnapshotUpdateInput } from '@/backend/services/workspace';
+import type { SnapshotUpdateInput, WorkspaceStateChangedEvent } from '@/backend/services/workspace';
 import { prProjectionDefaults } from '@/backend/testing/pr-projection-fixture';
+
+type WorkspaceEventFixture = {
+  workspaceId: string;
+  fromStatus: string;
+  toStatus: string;
+  workspace: Pick<
+    WorkspaceStateChangedEvent['workspace'],
+    'projectId' | 'name' | 'branchName' | 'createdAt' | 'updatedAt'
+  > | null;
+};
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -645,17 +655,7 @@ describe('configureEventCollector', () => {
     const onCall = vi
       .mocked(workspaceStateMachine.on)
       .mock.calls.find((call) => call[0] === 'workspace_state_changed');
-    const handler = onCall![1] as (event: {
-      workspaceId: string;
-      fromStatus: string;
-      toStatus: string;
-      workspace: {
-        projectId: string;
-        name: string;
-        branchName: string | null;
-        createdAt: Date;
-      };
-    }) => void;
+    const handler = onCall![1] as (event: WorkspaceEventFixture) => void;
 
     handler({
       workspaceId: 'ws-1',
@@ -666,6 +666,7 @@ describe('configureEventCollector', () => {
         name: 'ws',
         branchName: null,
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-01T01:00:00.000Z'),
       },
     });
 
@@ -688,17 +689,7 @@ describe('configureEventCollector', () => {
     const onCall = vi
       .mocked(workspaceStateMachine.on)
       .mock.calls.find((call) => call[0] === 'workspace_state_changed');
-    const handler = onCall![1] as (event: {
-      workspaceId: string;
-      fromStatus: string;
-      toStatus: string;
-      workspace: {
-        projectId: string;
-        name: string;
-        branchName: string | null;
-        createdAt: Date;
-      } | null;
-    }) => void;
+    const handler = onCall![1] as (event: WorkspaceEventFixture) => void;
 
     handler({
       workspaceId: 'ws-1',
@@ -709,6 +700,7 @@ describe('configureEventCollector', () => {
         name: 'My workspace',
         branchName: 'feature/test',
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-01T01:00:00.000Z'),
       },
     });
 
@@ -718,6 +710,7 @@ describe('configureEventCollector', () => {
         status: 'READY',
         projectId: 'proj-1',
         name: 'My workspace',
+        nameUpdatedAt: Date.parse('2026-01-01T01:00:00.000Z'),
         branchName: 'feature/test',
         createdAt: '2026-01-01T00:00:00.000Z',
       },
@@ -734,17 +727,7 @@ describe('configureEventCollector', () => {
     const onCall = vi
       .mocked(workspaceStateMachine.on)
       .mock.calls.find((call) => call[0] === 'workspace_state_changed');
-    const handler = onCall![1] as (event: {
-      workspaceId: string;
-      fromStatus: string;
-      toStatus: string;
-      workspace: {
-        projectId: string;
-        name: string;
-        branchName: string | null;
-        createdAt: Date;
-      } | null;
-    }) => void;
+    const handler = onCall![1] as (event: WorkspaceEventFixture) => void;
 
     handler({
       workspaceId: 'ws-new',
@@ -755,6 +738,7 @@ describe('configureEventCollector', () => {
         name: 'Fresh workspace',
         branchName: null,
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-01T01:00:00.000Z'),
       },
     });
 
@@ -1280,17 +1264,7 @@ describe('configureEventCollector', () => {
     const onCall = vi
       .mocked(workspaceStateMachine.on)
       .mock.calls.find((call) => call[0] === 'workspace_state_changed');
-    const handler = onCall![1] as (event: {
-      workspaceId: string;
-      fromStatus: string;
-      toStatus: string;
-      workspace: {
-        projectId: string;
-        name: string;
-        branchName: string | null;
-        createdAt: Date;
-      };
-    }) => void;
+    const handler = onCall![1] as (event: WorkspaceEventFixture) => void;
 
     handler({
       workspaceId: 'ws-1',
@@ -1301,6 +1275,7 @@ describe('configureEventCollector', () => {
         name: 'ws',
         branchName: null,
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-01T01:00:00.000Z'),
       },
     });
 

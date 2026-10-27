@@ -5,6 +5,8 @@ import {
   fetchClaudeModelCatalogFromAcp,
   fetchCodexModelCatalogFromAppServer,
 } from '@/backend/services/session/service/acp';
+import { fetchClaudePlanUsage } from '@/backend/services/session/service/acp/claude-plan-usage-loader';
+import { fetchCodexPlanUsage } from '@/backend/services/session/service/acp/codex-plan-usage-loader';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
 import { workspaceDataService, workspaceNotificationService } from '@/backend/services/workspace';
@@ -12,6 +14,7 @@ import { AcpEventProcessor } from './acp-event-processor';
 import { ClaudeModelCatalogService } from './claude-model-catalog.service';
 import { closedSessionPersistenceService } from './closed-session-persistence.service';
 import { CodexModelCatalogService } from './codex-model-catalog.service';
+import { ProviderUsageService } from './provider-usage.service';
 import { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import { sessionAcpEnvironment, sessionContextService } from './session-lifecycle-external-ports';
 import { SessionLifecycleGate } from './session-lifecycle-gate';
@@ -68,6 +71,11 @@ export const codexModelCatalogService = new CodexModelCatalogService({
 
 export const claudeModelCatalogService = new ClaudeModelCatalogService({
   fetchModels: fetchClaudeModelCatalogFromAcp,
+});
+
+export const providerUsageService = new ProviderUsageService({
+  fetchUsage: (provider) =>
+    provider === 'CLAUDE' ? fetchClaudePlanUsage() : fetchCodexPlanUsage(),
 });
 
 export const sessionConfigService = new SessionConfigService({

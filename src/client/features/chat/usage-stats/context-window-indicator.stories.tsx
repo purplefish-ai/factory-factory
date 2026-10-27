@@ -25,6 +25,7 @@ function createStatsWithUsage(usagePercent: number, contextWindow = 200_000): To
     inputTokens,
     outputTokens,
     contextWindow,
+    contextUsedTokens: usedTokens,
     totalCostUsd: usedTokens * 0.000_01,
     turnCount: Math.ceil(usagePercent / 10),
   });

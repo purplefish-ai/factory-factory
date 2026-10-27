@@ -118,6 +118,20 @@ describe('applySessionCommandOutcome', () => {
   });
 
   it.each([
+    [{ kind: 'session_not_found' }, 'Session not found'],
+    [
+      { kind: 'workspace_archived' },
+      'Workspace is archived or archiving and cannot start sessions.',
+    ],
+    [{ kind: 'no_active_session' }, 'No active session. Use queue_message to queue messages.'],
+    [
+      { kind: 'background_monitoring_required' },
+      'Disable PR updates to cancel background monitoring',
+    ],
+    [{ kind: 'message_not_queued' }, 'Message not found in queue'],
+    [{ kind: 'queue_input_invalid', reason: 'Missing message id' }, 'Missing message id'],
+    [{ kind: 'start_failed', cause: new Error('boom') }, 'Failed to start agent: boom'],
+    [{ kind: 'start_failed', cause: 42 }, 'Failed to start agent: 42'],
     [{ kind: 'no_session' }, 'No session selected. Please create or select a session first.'],
     [
       { kind: 'permission_not_pending' },

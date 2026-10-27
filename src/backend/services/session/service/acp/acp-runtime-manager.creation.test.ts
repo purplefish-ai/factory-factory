@@ -77,6 +77,7 @@ describe('AcpRuntimeManager', () => {
         expect.objectContaining({
           protocolVersion: 1,
           clientCapabilities: {
+            session: { compaction: {} },
             subagents: {},
             elicitation: { form: {}, url: {} },
             _meta: {

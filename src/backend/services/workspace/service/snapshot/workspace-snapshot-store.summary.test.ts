@@ -135,6 +135,34 @@ describe('accepted summary hydration', () => {
     expect(value.getByWorkspaceId('ws')?.summaryVersion).toBeUndefined();
   });
 
+  it('requires an accepted name even when its unhydrated default satisfies the shape', () => {
+    const value = store();
+    const { name: _omitted, ...partial } = seed();
+    value.upsert('ws', partial, 'all except name', 100);
+    expect(value.getByWorkspaceId('ws')?.summaryVersion).toBeUndefined();
+    expect(
+      value.upsert('ws', { name: 'Invalid clock', nameUpdatedAt: Number.NaN }, 'rejected name', 150)
+        .accepted
+    ).toBe(false);
+    expect(value.getByWorkspaceId('ws')?.summaryVersion).toBeUndefined();
+    const result = value.publishAcceptedName('ws', '', 200);
+    expect(result).toEqual({ accepted: true, changed: true, emitted: true });
+    expect(value.getByWorkspaceId('ws')).toMatchObject({ name: '', summaryVersion: 1 });
+  });
+
+  it('accepted rename hydrates only name, then an older canonical name cannot undo it while other fields hydrate', () => {
+    const value = store();
+    value.upsert('ws', { projectId: 'project-1' }, 'partial', 50);
+    value.publishAcceptedName('ws', 'Confirmed name', 200);
+    expect(value.getByWorkspaceId('ws')?.summaryVersion).toBeUndefined();
+    value.upsert('ws', { ...seed(), nameUpdatedAt: 100 }, 'older canonical seed', 100);
+    expect(value.getByWorkspaceId('ws')).toMatchObject({
+      name: 'Confirmed name',
+      summaryVersion: 1,
+      worktreePath: '/work/issue',
+    });
+  });
+
   it('does not count rejected mode or session history even when stored defaults have valid shapes', () => {
     const value = store();
     value.upsert(
@@ -410,4 +438,115 @@ it('clears previous loop metrics when accepted mode changes before compact hydra
     currentMetricSummary: null,
   });
   expect(value.getByWorkspaceId('ws')?.summaryVersion).toBeUndefined();
+});
+
+it('keeps accepted rename provenance independent of compact loop updates and resets', () => {
+  const value = store();
+  value.upsert('ws', seed(), 'seed', 100);
+  value.upsert('ws', { status: 'READY' }, 'lifecycle', 900);
+  value.publishAcceptedName('ws', 'First accepted name', 200);
+  value.upsert(
+    'ws',
+    {
+      mode: 'AUTO_ITERATION',
+      autoIterationStatus: 'RUNNING',
+      autoIteration: {
+        status: 'RUNNING',
+        currentIteration: 4,
+        maxIterations: 10,
+        currentMetricSummary: 'score=4',
+      },
+    },
+    'accepted compact',
+    300
+  );
+  value.publishAcceptedName('ws', 'Second accepted name', 200);
+  expect(
+    value.upsert(
+      'ws',
+      { name: 'First accepted name', nameUpdatedAt: 200 },
+      'late name observation',
+      5000
+    ).accepted
+  ).toBe(false);
+  expect(value.getByWorkspaceId('ws')).toMatchObject({
+    name: 'Second accepted name',
+    mode: 'AUTO_ITERATION',
+    autoIterationStatus: 'RUNNING',
+    autoIteration: { currentIteration: 4, currentMetricSummary: 'score=4' },
+    fieldTimestamps: { workspace: 900, autoIteration: 300 },
+    summaryVersion: 1,
+  });
+  value.upsert(
+    'ws',
+    { mode: 'STANDARD', autoIterationStatus: null, autoIteration: null },
+    'accepted reset',
+    400
+  );
+  value.publishAcceptedName('ws', 'Name after reset', 250);
+  value.upsert(
+    'ws',
+    {
+      mode: 'AUTO_ITERATION',
+      autoIterationStatus: 'RUNNING',
+      autoIteration: {
+        status: 'RUNNING',
+        currentIteration: 9,
+        maxIterations: 10,
+        currentMetricSummary: 'stale loop',
+      },
+    },
+    'older compact',
+    350
+  );
+  const entry = value.getByWorkspaceId('ws');
+  expect(entry).toMatchObject({
+    name: 'Name after reset',
+    mode: 'STANDARD',
+    autoIterationStatus: null,
+    autoIteration: null,
+    fieldTimestamps: { workspace: 900, autoIteration: 400 },
+    summaryVersion: 1,
+  });
+  expect(entry).not.toHaveProperty('nameUpdatedAt');
+  expect(entry?.fieldTimestamps).not.toHaveProperty('name');
+});
+
+it('requires accepted name and compact hydration independently before claiming a complete loop summary', () => {
+  const value = store();
+  const { name: _name, autoIteration: _compact, ...known } = seed();
+  value.upsert(
+    'ws',
+    { ...known, mode: 'AUTO_ITERATION', autoIterationStatus: 'RUNNING' },
+    'partial seed',
+    100
+  );
+  value.upsert('ws', { status: 'READY' }, 'lifecycle', 900);
+  expect(value.getByWorkspaceId('ws')?.summaryVersion).toBeUndefined();
+  expect(value.publishAcceptedName('ws', '', 200).accepted).toBe(true);
+  expect(value.getByWorkspaceId('ws')?.summaryVersion).toBeUndefined();
+  value.upsert(
+    'ws',
+    {
+      autoIteration: {
+        status: 'RUNNING',
+        currentIteration: null,
+        maxIterations: null,
+        currentMetricSummary: null,
+      },
+    },
+    'accepted unknown compact',
+    300
+  );
+  expect(value.getByWorkspaceId('ws')).toMatchObject({
+    name: '',
+    summaryVersion: 1,
+    autoIteration: {
+      status: 'RUNNING',
+      currentIteration: null,
+      maxIterations: null,
+      currentMetricSummary: null,
+    },
+    fieldTimestamps: { workspace: 900, autoIteration: 300 },
+  });
 });
