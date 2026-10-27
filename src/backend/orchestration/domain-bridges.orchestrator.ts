@@ -189,15 +189,6 @@ export function configureDomainBridges(services: BridgeServices): void {
       attachDiscoveredPRsIfClaimMatches: (id, claim, urls) =>
         workspacePrSnapshotService.attachDiscoveredPRsIfClaimMatches(id, claim, urls),
       findPRContext: (id) => workspaceDataService.findPRContext(id),
-      recordSnapshot: (id, data) => workspacePrSnapshotService.record(id, data),
-      applyPrSnapshotWithDispatchReset: (id, observation) =>
-        workspacePrSnapshotService.applyPrSnapshotWithDispatchReset(id, observation),
-      applyPrObservationWithDispatchReset: (id, observation) =>
-        workspacePrSnapshotService.applyPrObservationWithDispatchReset(id, observation),
-      attachDiscoveredPRIfClaimMatches: (id, url, claim, updatedAt) =>
-        workspacePrSnapshotService.attachDiscoveredPRIfClaimMatches(id, url, claim, updatedAt),
-      updatePRSnapshotIfUrlMatches: (id, url, snapshot, updatedAt) =>
-        workspacePrSnapshotService.updatePRSnapshotIfUrlMatches(id, url, snapshot, updatedAt),
     },
   });
 
