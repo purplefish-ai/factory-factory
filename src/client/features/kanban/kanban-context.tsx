@@ -1,6 +1,7 @@
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useProjectIssues } from '@/client/hooks/use-project-issues';
+import { useProjectWorkspaceQuery } from '@/client/hooks/use-project-workspace-query';
 import { useToggleRatcheting } from '@/client/hooks/use-toggle-ratcheting';
 import { runInBackground } from '@/client/lib/background-task';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
@@ -73,15 +74,7 @@ export function KanbanProvider({
     isError: isErrorWorkspaces,
     error: errorWorkspaces,
     refetch: refetchWorkspaces,
-  } = trpc.workspace.listForProject.useQuery(
-    { projectId },
-    {
-      // Kanban workspace state is live-synced via /snapshots (useProjectSnapshotSync).
-      // Keep tRPC query as bootstrap/fallback, not a periodic poller.
-      staleTime: Number.POSITIVE_INFINITY,
-      refetchOnWindowFocus: false,
-    }
-  );
+  } = useProjectWorkspaceQuery(projectId);
 
   // The board and the sidebar read one list. A null column means the board
   // excludes the workspace (it is archiving), so that filter is the board's

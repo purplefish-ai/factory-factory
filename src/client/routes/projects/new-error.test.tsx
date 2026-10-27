@@ -10,6 +10,7 @@ import {
   useAppNavigationData,
 } from '@/client/hooks/use-app-navigation-data';
 import { SELECTED_PROJECT_KEY } from '@/client/lib/project-selection';
+import { trpc } from '@/client/lib/trpc';
 import NewProjectPage from './new';
 
 const { listProjects } = vi.hoisted(() => ({ listProjects: vi.fn() }));
@@ -17,6 +18,16 @@ const projects = [
   { id: 'alpha-id', slug: 'alpha', name: 'Alpha' },
   { id: 'beta-id', slug: 'beta', name: 'Beta' },
 ];
+
+vi.mock('@/client/hooks/use-project-workspace-query', () => {
+  return {
+    useProjectWorkspaceQuery: (projectId: string | undefined) =>
+      trpc.workspace.listForProject.useQuery(
+        { projectId: projectId ?? '' },
+        { enabled: Boolean(projectId), staleTime: Infinity, refetchOnWindowFocus: false }
+      ),
+  };
+});
 
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {

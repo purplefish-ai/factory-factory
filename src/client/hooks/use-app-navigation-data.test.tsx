@@ -1,16 +1,27 @@
-// @vitest-environment jsdom
 import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 import { SELECTED_PROJECT_KEY } from '@/client/lib/project-selection';
+// @vitest-environment jsdom
+import { trpc } from '@/client/lib/trpc';
 
 const mocks = vi.hoisted(() => ({
   listForProject: vi.fn(() => ({ data: { workspaces: [], reviewCount: 0 } })),
   mutate: vi.fn(),
 }));
 const mutation = { mutate: mocks.mutate };
+vi.mock('@/client/hooks/use-project-workspace-query', () => {
+  return {
+    useProjectWorkspaceQuery: (projectId: string | undefined) =>
+      trpc.workspace.listForProject.useQuery(
+        { projectId: projectId ?? '' },
+        { enabled: Boolean(projectId), staleTime: Infinity, refetchOnWindowFocus: false }
+      ),
+  };
+});
+
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
     project: {

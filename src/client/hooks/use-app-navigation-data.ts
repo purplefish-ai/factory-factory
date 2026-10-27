@@ -11,6 +11,7 @@ import {
 import { useLocation } from 'react-router';
 import { toast } from 'sonner';
 import { useProjectSnapshotSync } from '@/client/hooks/use-project-snapshot-sync';
+import { useProjectWorkspaceQuery } from '@/client/hooks/use-project-workspace-query';
 import { useWorkspaceAttention } from '@/client/hooks/use-workspace-attention';
 import { readSelectedProjectSlug, writeSelectedProjectSlug } from '@/client/lib/project-selection';
 import { trpc } from '@/client/lib/trpc';
@@ -105,16 +106,7 @@ export function useAppNavigationData() {
   const selectedProjectId = selectedProject?.id;
   const issueProvider = selectedProject?.issueProvider ?? 'GITHUB';
 
-  const { data: projectState } = trpc.workspace.listForProject.useQuery(
-    { projectId: selectedProjectId ?? '' },
-    {
-      enabled: !!selectedProjectId,
-      // Sidebar/project state is live-synced via /snapshots (useProjectSnapshotSync).
-      // Keep tRPC query as bootstrap/fallback, not a periodic poller.
-      staleTime: Number.POSITIVE_INFINITY,
-      refetchOnWindowFocus: false,
-    }
-  );
+  const { data: projectState } = useProjectWorkspaceQuery(selectedProjectId);
 
   // Sync PR statuses from GitHub once when project changes
   usePRStatusSync(selectedProjectId);
