@@ -180,12 +180,10 @@ export function createChatMessageRouterForApplication(
     startup: {
       getSessionClient: (sessionId) => services.sessionLifecycleService.getSessionClient(sessionId),
       getOrCreateSessionClient: (sessionId, options) =>
-        services.sessionLifecycleService.getOrCreateSessionClient(sessionId, {
-          resumePolicy: options.resumePolicy,
-          thinkingEnabled: options.thinkingEnabled,
-          model: options.model,
-          reasoningEffort: options.reasoningEffort,
-        }),
+        services.sessionLifecycleService.getOrCreateSessionClient(
+          sessionId,
+          services.sessionCommandFactories.projectSessionStartupOptions(options)
+        ),
     },
     dispatch: services.sessionDispatchService,
     load: services.sessionLoadService,

@@ -1,3 +1,4 @@
+import { projectSessionStartupOptions } from '@/backend/services/session/service/dispatch/session-startup-options';
 import { createPermissionResponseHandler } from './chat-message-handlers/handlers/permission-response.handler';
 import { createQueueMessageHandler } from './chat-message-handlers/handlers/queue-message.handler';
 import { createRemoveQueuedMessageHandler } from './chat-message-handlers/handlers/remove-queued-message.handler';
@@ -9,8 +10,9 @@ import { createStartHandler } from './chat-message-handlers/handlers/start.handl
 import { createStopHandler } from './chat-message-handlers/handlers/stop.handler';
 import { createUserInputHandler } from './chat-message-handlers/handlers/user-input.handler';
 
-/** Stateless constructors; the transport composes them using its owning application's capabilities. */
+/** Stateless command helpers; the transport composes them using its owning application's capabilities. */
 export const sessionCommandFactories = {
+  projectSessionStartupOptions,
   createPermissionResponseHandler,
   createQueueMessageHandler,
   createRemoveQueuedMessageHandler,

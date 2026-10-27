@@ -105,7 +105,8 @@ Registering a chat WebSocket does not hydrate history. The client explicitly
 sends `load_session`, whose transport adapter runs these application stages:
 
 1. `prepareLoad` reads the `AgentSession`, hydrates provider history, and merges
-   durable lifecycle events.
+   durable lifecycle events. History fences, transcript writes, hydration flags,
+   and retry cooldowns use the same application domain that supplies replay.
 2. `captureReplay` synchronously reads the current runtime, recovers interrupted
    tool calls for stopped sessions, and captures domain replay data. The adapter
    immediately publishes the `session_replay_batch` envelope on the existing
