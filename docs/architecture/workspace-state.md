@@ -145,7 +145,9 @@ and the `auto-iteration.trpc.ts` entry guard), so it is the group's discriminant
 snapshot wire. The compact projection contains only status, current iteration,
 maximum iterations, and the current metric summary. Unknown individual values
 remain null, and explicit nulls clear prior progress. Full configuration, test
-output, progress, and logbook data remain on their existing detail paths.
+output, progress, and logbook data stay outside the compact snapshot. Existing
+detail and legacy list paths retain their current payloads, including raw
+`autoIterationConfig` and `autoIterationProgress` on legacy lists.
 
 The loop fields share their own snapshot timestamp group, independent of
 lifecycle and metadata freshness. An accepted reset or newer loop update fences
