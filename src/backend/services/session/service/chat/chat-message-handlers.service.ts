@@ -107,6 +107,10 @@ export class ChatMessageHandlerService {
           return registry.set_thinking_budget(context, message);
         case 'permission_response':
           return registry.permission_response(context, message);
+        default: {
+          const unhandled: never = message;
+          throw new Error(`Unsupported session command: ${unhandled}`);
+        }
       }
     }
     const handler = registry[message.type] as
