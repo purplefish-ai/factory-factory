@@ -72,6 +72,7 @@ import {
   acpTraceLogger,
   chatEventForwarderService,
   chatMessageHandlerService,
+  sessionDispatchService,
   claudeModelCatalogService,
   codexModelCatalogService,
   providerUsageService,
@@ -119,6 +120,7 @@ import { workspaceGitStateService } from './services/workspace-git-state.service
 export type ApplicationServices = BridgeServices & {
   acpRuntimeManager: typeof acpRuntimeManager;
   acpTraceLogger: AcpTraceLogger;
+  chatMessageHandlerService: Pick<typeof chatMessageHandlerService, 'handleMessage'>;
   checkGithubAuth: typeof checkGithubAuth;
   cliHealthService: typeof cliHealthService;
   configService: typeof configService;
@@ -171,8 +173,9 @@ export type ApplicationServices = BridgeServices & {
   archiveWorkspace: typeof archiveWorkspace;
   cleanupWorkspaceRuntimeResources: typeof cleanupWorkspaceRuntimeResources;
   cleanupWorkspaceScopedCaches(workspaceId: string): void;
-  createChildWorkspace: typeof createChildWorkspace;
+  createChildWorkspace: (input: Parameters<typeof createChildWorkspace>[0]) => Promise<string>;
   deliverWorkspaceNotification: typeof deliverWorkspaceNotification;
+  workspaceCreationService: WorkspaceCreationService;
   createWorkspaceCreationService: (
     dependencies: ConstructorParameters<typeof WorkspaceCreationService>[0]
   ) => Pick<WorkspaceCreationService, 'create'>;
@@ -233,6 +236,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     autoIterationService,
     chatEventForwarderService,
     chatMessageHandlerService,
+    sessionDispatchService,
     checkGithubAuth,
     cliHealthService,
     configService,
@@ -254,7 +258,10 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     getQuickAction,
     getWorkspaceLinearContext,
     healthService,
-    initializeWorkspaceWorktree,
+    initializeWorkspaceWorktree: (workspaceId, options) =>
+      initializeWorkspaceWorktree(workspaceId, options, {
+        sessionDispatch: services.sessionDispatchService,
+      }),
     insightsService,
     getWorkspaceInitPolicy,
     githubCLIService,
@@ -319,19 +326,34 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
       }
       eventCollector.removeWorkspace(workspaceId);
     },
-    createChildWorkspace,
-    deliverWorkspaceNotification,
+    createChildWorkspace: (input) =>
+      createChildWorkspace(input, {
+        findProject: (projectId) => services.projectManagementService.findById(projectId),
+        launchWorkspace: (source) => services.launchWorkspace(source),
+      }),
+    deliverWorkspaceNotification: (input) =>
+      deliverWorkspaceNotification(input, {
+        sessionDispatch: services.sessionDispatchService,
+      }),
     createWorkspaceCreationService: (creationDependencies) =>
       new WorkspaceCreationService(creationDependencies),
     launchWorkspace: (source) => {
-      const logger = services.createLogger('workspace-trpc');
+      const logger = services.createLogger(
+        source.type === 'CHILD_WORKSPACE'
+          ? 'workspace-children-orchestrator'
+          : source.type === 'PERIODIC_TASK'
+            ? 'domain-bridges'
+            : 'workspace-trpc'
+      );
       return launchWorkspace(source, {
         getMaxSessionsPerWorkspace: () => services.configService.getMaxSessionsPerWorkspace(),
         resolveProvider: (provider) =>
           services.sessionProviderResolverService.resolveProviderForWorkspaceCreation(provider),
         checkCliHealth: () => services.cliHealthService.checkHealth(),
         createWorkspace: (input) =>
-          services.createWorkspaceCreationService({ logger }).create(input),
+          source.type === 'PERIODIC_TASK'
+            ? services.workspaceCreationService.create(input)
+            : services.createWorkspaceCreationService({ logger }).create(input),
         createDefaultSession: (input) => services.sessionDataService.createAgentSession(input),
         initializeWorktree: (workspaceId, options) =>
           services.initializeWorkspaceWorktree(workspaceId, options),
@@ -341,7 +363,10 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     fireLifecycleNotification,
     persistChildNotification,
     persistParentNotification,
-    retryQueuedDispatchAfterWorkspaceReady,
+    retryQueuedDispatchAfterWorkspaceReady: (workspaceId, startedSessionId) =>
+      retryQueuedDispatchAfterWorkspaceReady(workspaceId, startedSessionId, {
+        sessionDispatch: services.sessionDispatchService,
+      }),
   };
 
   eventCollector = createEventCollectorOrchestrator(services);

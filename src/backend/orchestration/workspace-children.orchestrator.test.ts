@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApplicationError } from '@/backend/lib/application-error';
+import { initializeWorkspaceWorktree } from '@/backend/orchestration/workspace-init.orchestrator';
+import { launchWorkspace } from '@/backend/orchestration/workspace-launch.orchestrator';
+import { sessionDataService, sessionProviderResolverService } from '@/backend/services/session';
+import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
 const { mockCreateWorkspace } = vi.hoisted(() => ({ mockCreateWorkspace: vi.fn() }));
 
@@ -46,6 +50,21 @@ import {
   persistParentNotification,
 } from './workspace-children.orchestrator';
 
+const childPorts = {
+  findProject: (projectId: string) => projectManagementService.findById(projectId),
+  launchWorkspace: vi.fn((source: Parameters<typeof launchWorkspace>[0]) =>
+    launchWorkspace(source, {
+      createWorkspace: mockCreateWorkspace,
+      createDefaultSession: (input) => sessionDataService.createAgentSession(input),
+      resolveProvider: () => sessionProviderResolverService.resolveProviderForWorkspaceCreation(),
+      initializeWorktree: (id) => initializeWorkspaceWorktree(id),
+      getMaxSessionsPerWorkspace: vi.fn(),
+      checkCliHealth: vi.fn(),
+      logger: { warn: vi.fn(), error: vi.fn() },
+    })
+  ),
+};
+
 const mockFindByIdWithProject = vi.mocked(workspaceDataService.findByIdWithProject);
 const mockExists = vi.mocked(workspaceDataService.exists);
 const mockNotifyParent = vi.mocked(workspaceNotificationService.notifyParent);
@@ -78,16 +97,25 @@ function createProject(
 describe('createChildWorkspace', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(sessionProviderResolverService.resolveProviderForWorkspaceCreation).mockResolvedValue(
+      'CODEX'
+    );
+    vi.mocked(sessionDataService.createAgentSession).mockResolvedValue(
+      unsafeCoerce({ id: 'child-session' })
+    );
   });
 
   it('rejects an archived target project before creating a workspace', async () => {
     vi.mocked(projectManagementService.findById).mockResolvedValue(createProject(true));
     mockCreateWorkspace.mockResolvedValue({ id: 'unexpected-child' });
-    const error = await createChildWorkspace({
-      parentWorkspaceId: 'parent-1',
-      projectId: 'archived-project',
-      name: 'Child workspace',
-    }).catch((caught: unknown) => caught);
+    const error = await createChildWorkspace(
+      {
+        parentWorkspaceId: 'parent-1',
+        projectId: 'archived-project',
+        name: 'Child workspace',
+      },
+      childPorts
+    ).catch((caught: unknown) => caught);
 
     expect(error).toBeInstanceOf(ApplicationError);
     expect(error).toMatchObject({
@@ -95,6 +123,7 @@ describe('createChildWorkspace', () => {
       message: 'Cannot create a child workspace in an archived project',
     });
     expect(mockCreateWorkspace).not.toHaveBeenCalled();
+    expect(childPorts.launchWorkspace).not.toHaveBeenCalled();
   });
 
   it('continues to create child workspaces in active projects', async () => {
@@ -102,22 +131,48 @@ describe('createChildWorkspace', () => {
     mockCreateWorkspace.mockResolvedValue({ id: 'active-child' });
 
     await expect(
-      createChildWorkspace({
-        parentWorkspaceId: 'parent-1',
-        projectId: 'active-project',
-        name: 'Child workspace',
-      })
+      createChildWorkspace(
+        {
+          parentWorkspaceId: 'parent-1',
+          projectId: 'active-project',
+          name: 'Child workspace',
+        },
+        childPorts
+      )
     ).resolves.toBe('active-child');
+  });
+
+  it('passes parent context and handoff metadata through the injected launch owner', async () => {
+    vi.mocked(projectManagementService.findById).mockResolvedValue(createProject(false));
+    mockCreateWorkspace.mockResolvedValue({ id: 'child-metadata' });
+    const input = {
+      parentWorkspaceId: 'parent-1',
+      projectId: 'active-project',
+      name: 'Named child',
+      description: 'Description',
+      initialPrompt: 'Implement work',
+      reportBackOn: 'When done',
+    };
+    await expect(createChildWorkspace(input, childPorts)).resolves.toBe('child-metadata');
+    expect(childPorts.launchWorkspace).toHaveBeenCalledExactlyOnceWith({
+      type: 'CHILD_WORKSPACE',
+      ...input,
+    });
+    expect(mockCreateWorkspace).toHaveBeenCalledWith({ type: 'CHILD_WORKSPACE', ...input });
+    expect(initializeWorkspaceWorktree).toHaveBeenCalledWith('child-metadata');
   });
 
   it('throws a not-found application error when the target project is missing', async () => {
     vi.mocked(projectManagementService.findById).mockResolvedValue(null);
 
-    const error = await createChildWorkspace({
-      parentWorkspaceId: 'parent-1',
-      projectId: 'missing-project',
-      name: 'Child workspace',
-    }).catch((caught: unknown) => caught);
+    const error = await createChildWorkspace(
+      {
+        parentWorkspaceId: 'parent-1',
+        projectId: 'missing-project',
+        name: 'Child workspace',
+      },
+      childPorts
+    ).catch((caught: unknown) => caught);
 
     expect(error).toBeInstanceOf(ApplicationError);
     expect(error).toMatchObject({

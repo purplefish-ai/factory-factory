@@ -1,137 +1,58 @@
-import { describe, expect, it, vi } from 'vitest';
-import { prisma } from '@/backend/db';
-import { parseGitHubRemoteUrl, projectAccessor } from './project.accessor';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { projectAccessor } from '@/backend/services/workspace/resources/project.accessor';
 
-vi.mock('@/backend/db', () => ({
-  prisma: { project: { create: vi.fn().mockResolvedValue({ id: 'project-1' }) } },
-}));
-
-vi.mock('@/backend/lib/shell', () => ({
-  gitCommandC: vi.fn().mockResolvedValue({ code: 1, stdout: '', stderr: '' }),
-}));
-
-describe('project creation', () => {
-  it.each(['.', '/home/user/myrepo/.', '/', '/repos/---', '/repos/日本語'])(
-    'rejects a repository path with an empty derived slug: %s',
-    async (repoPath) => {
-      await expect(
-        projectAccessor.create({ repoPath }, { worktreeBaseDir: '/worktrees' })
-      ).rejects.toThrow('does not produce a valid slug');
-      expect(prisma.project.create).not.toHaveBeenCalled();
-    }
-  );
-
-  it('keeps a valid slug scoped beneath the shared worktree base', async () => {
-    await projectAccessor.create(
-      { repoPath: '/repos/My_Project' },
-      { worktreeBaseDir: '/worktrees' }
-    );
-    expect(prisma.project.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        slug: 'my-project',
-        worktreeBasePath: '/worktrees/my-project',
-      }),
-    });
-  });
+const { create } = vi.hoisted(() => ({ create: vi.fn() }));
+vi.mock('@/backend/db', () => ({ prisma: { project: { create } } }));
+vi.mock('node:child_process', () => {
+  throw new Error('resource must not spawn');
+});
+vi.mock('node:fs/promises', () => {
+  throw new Error('resource must not inspect filesystem');
+});
+vi.mock('@/backend/lib/shell', () => {
+  throw new Error('resource must not inspect Git');
 });
 
-describe('parseGitHubRemoteUrl', () => {
-  describe('SSH URLs', () => {
-    it('should parse standard SSH URL with .git suffix', () => {
-      const result = parseGitHubRemoteUrl('git@github.com:owner/repo.git');
-      expect(result).toEqual({ owner: 'owner', repo: 'repo' });
-    });
+const data = {
+  repoPath: '/repos/demo',
+  defaultBranch: 'main',
+  githubOwner: null,
+  githubRepo: null,
+  startupScriptCommand: null,
+  startupScriptPath: null,
+  startupScriptTimeout: 300,
+};
+const candidate = (attempt: number) => ({
+  name: `Demo ${attempt}`,
+  slug: `demo-${attempt}`,
+  worktreeBasePath: `/worktrees/demo-${attempt}`,
+});
+beforeEach(() => {
+  create.mockReset().mockResolvedValue({ id: 'project' });
+});
 
-    it('should parse SSH URL without .git suffix', () => {
-      const result = parseGitHubRemoteUrl('git@github.com:owner/repo');
-      expect(result).toEqual({ owner: 'owner', repo: 'repo' });
-    });
-
-    it('should handle organization names with hyphens', () => {
-      const result = parseGitHubRemoteUrl('git@github.com:my-org/my-repo.git');
-      expect(result).toEqual({ owner: 'my-org', repo: 'my-repo' });
-    });
-
-    it('should handle repo names with dots', () => {
-      const result = parseGitHubRemoteUrl('git@github.com:owner/repo.name.git');
-      expect(result).toEqual({ owner: 'owner', repo: 'repo.name' });
-    });
-
-    it('should handle repo names with underscores', () => {
-      const result = parseGitHubRemoteUrl('git@github.com:owner/my_repo.git');
-      expect(result).toEqual({ owner: 'owner', repo: 'my_repo' });
-    });
+describe('project persistence', () => {
+  it('allocates all identity fields again after each slug collision', async () => {
+    const allocate = vi.fn(candidate);
+    create.mockRejectedValueOnce(new Error('Unique constraint failed on slug'));
+    await projectAccessor.create(data, allocate);
+    expect(allocate.mock.calls).toEqual([[1], [2]]);
+    expect(create.mock.calls.map(([input]) => input.data)).toEqual([
+      { ...data, ...candidate(1) },
+      { ...data, ...candidate(2) },
+    ]);
   });
-
-  describe('HTTPS URLs', () => {
-    it('should parse standard HTTPS URL with .git suffix', () => {
-      const result = parseGitHubRemoteUrl('https://github.com/owner/repo.git');
-      expect(result).toEqual({ owner: 'owner', repo: 'repo' });
-    });
-
-    it('should parse HTTPS URL without .git suffix', () => {
-      const result = parseGitHubRemoteUrl('https://github.com/owner/repo');
-      expect(result).toEqual({ owner: 'owner', repo: 'repo' });
-    });
-
-    it('should parse HTTP URL (not HTTPS)', () => {
-      const result = parseGitHubRemoteUrl('http://github.com/owner/repo.git');
-      expect(result).toEqual({ owner: 'owner', repo: 'repo' });
-    });
-
-    it('should handle organization names with hyphens', () => {
-      const result = parseGitHubRemoteUrl('https://github.com/my-org/my-repo.git');
-      expect(result).toEqual({ owner: 'my-org', repo: 'my-repo' });
-    });
-
-    it('should handle repo names with dots', () => {
-      const result = parseGitHubRemoteUrl('https://github.com/owner/repo.name.git');
-      expect(result).toEqual({ owner: 'owner', repo: 'repo.name' });
-    });
+  it('propagates unrelated database failures unchanged', async () => {
+    const error = new Error('Unique constraint failed on repoPath');
+    create.mockRejectedValue(error);
+    await expect(projectAccessor.create(data, candidate)).rejects.toBe(error);
+    expect(create).toHaveBeenCalledTimes(1);
   });
-
-  describe('Non-GitHub URLs', () => {
-    it('should return null for GitLab SSH URL', () => {
-      const result = parseGitHubRemoteUrl('git@gitlab.com:owner/repo.git');
-      expect(result).toBeNull();
-    });
-
-    it('should return null for GitLab HTTPS URL', () => {
-      const result = parseGitHubRemoteUrl('https://gitlab.com/owner/repo.git');
-      expect(result).toBeNull();
-    });
-
-    it('should return null for Bitbucket URL', () => {
-      const result = parseGitHubRemoteUrl('git@bitbucket.org:owner/repo.git');
-      expect(result).toBeNull();
-    });
-
-    it('should return null for self-hosted Git URL', () => {
-      const result = parseGitHubRemoteUrl('git@git.company.com:owner/repo.git');
-      expect(result).toBeNull();
-    });
-  });
-
-  describe('Invalid URLs', () => {
-    it('should return null for empty string', () => {
-      const result = parseGitHubRemoteUrl('');
-      expect(result).toBeNull();
-    });
-
-    it('should return null for malformed URL', () => {
-      const result = parseGitHubRemoteUrl('not-a-url');
-      expect(result).toBeNull();
-    });
-
-    it('should return null for URL without repo', () => {
-      const result = parseGitHubRemoteUrl('https://github.com/owner');
-      expect(result).toBeNull();
-    });
-
-    it('should return null for URL with extra path segments', () => {
-      // This is technically valid GitHub URL structure but we only want owner/repo
-      const result = parseGitHubRemoteUrl('https://github.com/owner/repo/tree/main');
-      expect(result).toBeNull();
-    });
+  it('stops after 100 collisions with the historical error', async () => {
+    create.mockRejectedValue(new Error('Unique constraint failed on slug'));
+    await expect(projectAccessor.create(data, candidate)).rejects.toThrow(
+      'Unable to create project: too many projects with similar names'
+    );
+    expect(create).toHaveBeenCalledTimes(100);
   });
 });

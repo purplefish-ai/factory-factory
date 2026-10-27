@@ -1,4 +1,3 @@
-import { toError } from '@/backend/lib/error-utils';
 import type {
   AutoIterationLogbookBridge,
   AutoIterationWorkspaceBridge,
@@ -26,7 +25,7 @@ import type { startupScriptService } from '@/backend/services/run-script';
 import type {
   acpRuntimeManager,
   chatEventForwarderService,
-  chatMessageHandlerService,
+  sessionDispatchService,
   sessionDataService,
   sessionDomainService,
   sessionLifecycleService,
@@ -37,7 +36,6 @@ import type { terminalSessionService } from '@/backend/services/terminal';
 import {
   deriveWorkspaceFlowState,
   type getWorkspaceInitPolicy,
-  type WorkspaceCreationService,
   type WorkspaceInitPolicyInput,
   type workspaceActivityService,
   type workspaceAutoIterationService,
@@ -63,10 +61,14 @@ import type {
   initializeWorkspaceWorktree,
   recoverStaleProvisioningWorkspace,
 } from './workspace-init.orchestrator';
+import type { PeriodicTaskLaunchSource, WorkspaceLauncher } from './workspace-launch.orchestrator';
 export type BridgeServices = PRMonitoringServices & {
   autoIterationService: typeof autoIterationService;
   chatEventForwarderService: typeof chatEventForwarderService;
-  chatMessageHandlerService: typeof chatMessageHandlerService;
+  sessionDispatchService: Pick<
+    typeof sessionDispatchService,
+    'configure' | 'tryDispatchNextMessage'
+  >;
   createLogger: typeof createLogger;
   getWorkspaceInitPolicy: typeof getWorkspaceInitPolicy;
   githubCLIService: typeof githubCLIService;
@@ -88,7 +90,7 @@ export type BridgeServices = PRMonitoringServices & {
   terminalSessionService: typeof terminalSessionService;
   workspaceActivityService: typeof workspaceActivityService;
   workspaceAutoIterationService: typeof workspaceAutoIterationService;
-  workspaceCreationService: WorkspaceCreationService;
+  launchWorkspace: WorkspaceLauncher<PeriodicTaskLaunchSource>;
   workspaceDataService: typeof workspaceDataService;
   workspaceMaintenanceService: typeof workspaceMaintenanceService;
   workspacePrSnapshotService: typeof workspacePrSnapshotService;
@@ -103,7 +105,7 @@ export function configureDomainBridges(services: BridgeServices): void {
     acpRuntimeManager,
     autoIterationService,
     chatEventForwarderService,
-    chatMessageHandlerService,
+    sessionDispatchService,
     createLogger,
     getWorkspaceInitPolicy,
     githubCLIService,
@@ -123,7 +125,7 @@ export function configureDomainBridges(services: BridgeServices): void {
     terminalSessionService,
     workspaceActivityService,
     workspaceAutoIterationService,
-    workspaceCreationService,
+    launchWorkspace,
     workspaceDataService,
     workspaceMaintenanceService,
     workspacePrSnapshotService,
@@ -228,7 +230,7 @@ export function configureDomainBridges(services: BridgeServices): void {
     workspace: sessionWorkspaceBridge,
     messageQueue: {
       tryDispatchNextMessage: (sessionId) =>
-        chatMessageHandlerService.tryDispatchNextMessage(sessionId),
+        sessionDispatchService.tryDispatchNextMessage(sessionId),
     },
     autoIterationExit: {
       onAutoIterationSessionExit: (workspaceId, sessionId) =>
@@ -236,13 +238,13 @@ export function configureDomainBridges(services: BridgeServices): void {
     },
   });
 
-  chatMessageHandlerService.configure({
+  sessionDispatchService.configure({
     initPolicy: {
       getWorkspaceInitPolicy: (input) => getWorkspaceInitPolicy(input as WorkspaceInitPolicyInput),
     },
   });
   sessionPromptTurnCompletionService.setHandler((sessionId) =>
-    chatMessageHandlerService.tryDispatchNextMessage(sessionId, {
+    sessionDispatchService.tryDispatchNextMessage(sessionId, {
       bypassTurnInProgressBackoff: true,
     })
   );
@@ -303,27 +305,13 @@ export function configureDomainBridges(services: BridgeServices): void {
   periodicTaskService.configure({
     workspace: {
       async createWorkspaceForTask({ projectId, name, prompt, periodicTaskId }) {
-        const workspace = await workspaceCreationService.create({
+        const { workspace } = await launchWorkspace({
           type: 'PERIODIC_TASK',
           projectId,
           name,
           periodicTaskId,
           initialPrompt: prompt,
           ratchetEnabled: true,
-        });
-
-        // Create default session
-        await sessionDataService.createAgentSession({
-          workspaceId: workspace.id,
-          workflow: 'periodic-task',
-          name: 'Periodic task',
-        });
-
-        // Initialize worktree in background
-        void initializeWorkspaceWorktree(workspace.id).catch((error) => {
-          logger.error('Failed to initialize workspace for periodic task', toError(error), {
-            workspaceId: workspace.id,
-          });
         });
 
         return { workspaceId: workspace.id };

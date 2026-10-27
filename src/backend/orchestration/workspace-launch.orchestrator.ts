@@ -1,4 +1,5 @@
 import { ApplicationError } from '@/backend/lib/application-error';
+import { toError } from '@/backend/lib/error-utils';
 import {
   getProviderUnavailableMessage,
   type ProviderCliHealthStatus,
@@ -13,12 +14,23 @@ import type { WorkspaceCreationService } from '@/backend/services/workspace';
 
 type WorkspaceCreation = WorkspaceCreationService['create'];
 
-// This concrete adapter owns the interactive policy only. Child and scheduled
-// launches retain their own policies and callers.
-export type WorkspaceLaunchSource = Extract<
-  Parameters<WorkspaceCreation>[0],
-  { type: 'MANUAL' | 'RESUME_BRANCH' | 'GITHUB_ISSUE' | 'LINEAR_ISSUE' }
+export type WorkspaceLaunchSource = Parameters<WorkspaceCreation>[0];
+export type ChildWorkspaceLaunchSource = Extract<
+  WorkspaceLaunchSource,
+  { type: 'CHILD_WORKSPACE' }
 >;
+export type PeriodicTaskLaunchSource = Extract<WorkspaceLaunchSource, { type: 'PERIODIC_TASK' }>;
+type InteractiveLaunchSource = Exclude<
+  WorkspaceLaunchSource,
+  ChildWorkspaceLaunchSource | PeriodicTaskLaunchSource
+>;
+export type WorkspaceLaunchResult = {
+  workspace: CreatedWorkspace;
+  defaultSessionId: string | null;
+};
+export type WorkspaceLauncher<Source extends WorkspaceLaunchSource = WorkspaceLaunchSource> = (
+  source: Source
+) => Promise<WorkspaceLaunchResult>;
 export type CreatedWorkspace = Awaited<ReturnType<WorkspaceCreation>>;
 
 export interface WorkspaceLaunchPorts {
@@ -33,9 +45,76 @@ export interface WorkspaceLaunchPorts {
   logger: Pick<ReturnType<typeof createLogger>, 'warn' | 'error'>;
 }
 
-/** Coordinate interactive launch without taking ownership of persistence or runtime. */
-export async function launchWorkspace(
+/** Select the source policy; persistence and runtime remain with their capsule owners. */
+export function launchWorkspace(
   source: WorkspaceLaunchSource,
+  ports: WorkspaceLaunchPorts
+): Promise<WorkspaceLaunchResult> {
+  switch (source.type) {
+    case 'CHILD_WORKSPACE':
+      return launchChildWorkspace(source, ports);
+    case 'PERIODIC_TASK':
+      return launchPeriodicTask(source, ports);
+    default:
+      return launchInteractiveWorkspace(source, ports);
+  }
+}
+
+type PersistedLaunchPorts = Pick<
+  WorkspaceLaunchPorts,
+  'createWorkspace' | 'createDefaultSession' | 'initializeWorktree' | 'logger'
+>;
+
+async function launchChildWorkspace(
+  source: ChildWorkspaceLaunchSource,
+  ports: PersistedLaunchPorts & Pick<WorkspaceLaunchPorts, 'resolveProvider'>
+): Promise<WorkspaceLaunchResult> {
+  const workspace = await ports.createWorkspace(source);
+  let defaultSessionId: string | null = null;
+  try {
+    const provider = await ports.resolveProvider();
+    const session = await ports.createDefaultSession({
+      workspaceId: workspace.id,
+      workflow: 'followup',
+      name: 'Chat 1',
+      provider,
+      providerProjectPath: null,
+    });
+    defaultSessionId = session.id;
+  } catch (error) {
+    ports.logger.warn('Failed to create default session for child workspace', {
+      workspaceId: workspace.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+  void ports.initializeWorktree(workspace.id).catch((error: unknown) => {
+    ports.logger.error('Child workspace init failed', { workspaceId: workspace.id, error });
+  });
+  return { workspace, defaultSessionId };
+}
+
+async function launchPeriodicTask(
+  source: PeriodicTaskLaunchSource,
+  ports: PersistedLaunchPorts
+): Promise<WorkspaceLaunchResult> {
+  const workspace = await ports.createWorkspace(source);
+  // Required provisioning: retain the persisted workspace on failure and do not initialize it.
+  const session = await ports.createDefaultSession({
+    workspaceId: workspace.id,
+    workflow: 'periodic-task',
+    name: 'Periodic task',
+  });
+  void ports.initializeWorktree(workspace.id).catch((error: unknown) => {
+    ports.logger.error('Failed to initialize workspace for periodic task', toError(error), {
+      workspaceId: workspace.id,
+    });
+  });
+  return { workspace, defaultSessionId: session.id };
+}
+
+/** Coordinate the existing interactive launch policy. */
+async function launchInteractiveWorkspace(
+  source: InteractiveLaunchSource,
   ports: WorkspaceLaunchPorts
 ): Promise<{ workspace: CreatedWorkspace; defaultSessionId: string | null }> {
   const capacity = ports.getMaxSessionsPerWorkspace();

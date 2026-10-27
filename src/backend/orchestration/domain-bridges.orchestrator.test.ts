@@ -1,4 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  launchWorkspace,
+  type WorkspaceLaunchPorts,
+} from '@/backend/orchestration/workspace-launch.orchestrator';
 import { autoIterationService, logbookService } from '@/backend/services/auto-iteration';
 
 const mockLogger = vi.hoisted(() => ({
@@ -98,7 +102,7 @@ vi.mock('@/backend/services/session', () => ({
     getQueueLength: vi.fn(),
   },
   chatEventForwarderService: { configure: vi.fn(), getAllPendingRequests: vi.fn() },
-  chatMessageHandlerService: { configure: vi.fn(), tryDispatchNextMessage: vi.fn() },
+  sessionDispatchService: { configure: vi.fn(), tryDispatchNextMessage: vi.fn() },
 }));
 
 vi.mock('@/backend/services/github', () => ({
@@ -150,7 +154,7 @@ import { startupScriptService } from '@/backend/services/run-script';
 import {
   acpRuntimeManager,
   chatEventForwarderService,
-  chatMessageHandlerService,
+  sessionDispatchService,
   sessionDataService,
   sessionDomainService,
   sessionLifecycleService,
@@ -182,11 +186,15 @@ function getBridge<T>(mockFn: (arg: T) => void): T {
   return vi.mocked(mockFn).mock.calls[0]![0];
 }
 
-function createBridgeServices(overrides: Partial<BridgeServices> = {}): BridgeServices {
-  return {
+function createBridgeServices(
+  overrides: Partial<BridgeServices> = {},
+  createWorkspace: WorkspaceLaunchPorts['createWorkspace'] = mockWorkspaceCreationService.create
+): BridgeServices {
+  const services: BridgeServices = {
     ...defaultPRMonitoringServices,
     autoIterationService,
     chatEventForwarderService,
+    sessionDispatchService,
     createLogger,
     getWorkspaceInitPolicy,
     githubCLIService,
@@ -203,8 +211,16 @@ function createBridgeServices(overrides: Partial<BridgeServices> = {}): BridgeSe
     terminalSessionService,
     workspaceActivityService,
     workspaceAutoIterationService,
-    workspaceCreationService:
-      mockWorkspaceCreationService as unknown as BridgeServices['workspaceCreationService'],
+    launchWorkspace: (source) =>
+      launchWorkspace(source, {
+        createWorkspace,
+        createDefaultSession: (input) => services.sessionDataService.createAgentSession(input),
+        initializeWorktree: (id, options) => services.initializeWorkspaceWorktree(id, options),
+        getMaxSessionsPerWorkspace: vi.fn(),
+        resolveProvider: vi.fn(),
+        checkCliHealth: vi.fn(),
+        logger: services.createLogger('domain-bridges'),
+      }),
     workspaceDataService,
     workspaceMaintenanceService,
     workspacePrSnapshotService,
@@ -215,11 +231,48 @@ function createBridgeServices(overrides: Partial<BridgeServices> = {}): BridgeSe
     initializeWorkspaceWorktree,
     ...overrides,
   };
+  return services;
 }
 
 describe('configureDomainBridges', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('uses each injected dispatcher for lifecycle and prompt-completion queue requests', async () => {
+    const first = { configure: vi.fn(), tryDispatchNextMessage: vi.fn(async () => undefined) };
+    const second = { configure: vi.fn(), tryDispatchNextMessage: vi.fn(async () => undefined) };
+    configureDomainBridges(createBridgeServices({ sessionDispatchService: first }));
+    const firstLifecycle = vi.mocked(sessionLifecycleService.configure).mock.calls.at(-1)?.[0];
+    const firstCompletion = vi
+      .mocked(sessionPromptTurnCompletionService.setHandler)
+      .mock.calls.at(-1)?.[0];
+    await firstLifecycle?.messageQueue?.tryDispatchNextMessage('first-session');
+    await firstCompletion?.('first-session');
+
+    configureDomainBridges(createBridgeServices({ sessionDispatchService: second }));
+    const secondLifecycle = vi.mocked(sessionLifecycleService.configure).mock.calls.at(-1)?.[0];
+    const secondCompletion = vi
+      .mocked(sessionPromptTurnCompletionService.setHandler)
+      .mock.calls.at(-1)?.[0];
+    await secondLifecycle?.messageQueue?.tryDispatchNextMessage('second-session');
+    await secondCompletion?.('second-session');
+    await firstLifecycle?.messageQueue?.tryDispatchNextMessage('first-after-reconfigure');
+    await firstCompletion?.('first-after-reconfigure');
+
+    expect(first.configure).toHaveBeenCalledOnce();
+    expect(second.configure).toHaveBeenCalledOnce();
+    expect(first.tryDispatchNextMessage.mock.calls).toEqual([
+      ['first-session'],
+      ['first-session', { bypassTurnInProgressBackoff: true }],
+      ['first-after-reconfigure'],
+      ['first-after-reconfigure', { bypassTurnInProgressBackoff: true }],
+    ]);
+    expect(second.tryDispatchNextMessage.mock.calls).toEqual([
+      ['second-session'],
+      ['second-session', { bypassTurnInProgressBackoff: true }],
+    ]);
+    expect(sessionDispatchService.tryDispatchNextMessage).not.toHaveBeenCalled();
   });
 
   it('configures all ratchet domain services', () => {
@@ -260,7 +313,7 @@ describe('configureDomainBridges', () => {
     configureDomainBridges(createBridgeServices());
 
     expect(chatEventForwarderService.configure).toHaveBeenCalledTimes(1);
-    expect(chatMessageHandlerService.configure).toHaveBeenCalledTimes(1);
+    expect(sessionDispatchService.configure).toHaveBeenCalledTimes(1);
     expect(sessionService.configure).toHaveBeenCalledTimes(1);
     expect(sessionLifecycleService.configure).toHaveBeenCalledTimes(1);
     expect(sessionPromptTurnCompletionService.setHandler).toHaveBeenCalledTimes(1);
@@ -382,6 +435,121 @@ describe('configureDomainBridges', () => {
         expect.any(Error),
         { workspaceId: 'ws-periodic' }
       );
+    });
+
+    it('adapts the supplied launch result without creating or initializing a second workspace', async () => {
+      const launch = vi.fn().mockResolvedValue({
+        workspace: { id: 'injected-periodic' },
+        defaultSessionId: 'session-injected',
+      });
+      configureDomainBridges(createBridgeServices({ launchWorkspace: launch }));
+      const bridge = getBridge(periodicTaskService.configure);
+      await expect(
+        bridge.workspace.createWorkspaceForTask({
+          projectId: 'p1',
+          name: 'Scheduled name',
+          prompt: 'Scheduled prompt',
+          periodicTaskId: 'task-1',
+        })
+      ).resolves.toEqual({ workspaceId: 'injected-periodic' });
+      expect(launch).toHaveBeenCalledExactlyOnceWith({
+        type: 'PERIODIC_TASK',
+        projectId: 'p1',
+        name: 'Scheduled name',
+        initialPrompt: 'Scheduled prompt',
+        periodicTaskId: 'task-1',
+        ratchetEnabled: true,
+      });
+      expect(mockWorkspaceCreationService.create).not.toHaveBeenCalled();
+      expect(sessionDataService.createAgentSession).not.toHaveBeenCalled();
+      expect(initializeWorkspaceWorktree).not.toHaveBeenCalled();
+    });
+
+    it('propagates required-session failure without starting background initialization', async () => {
+      mockWorkspaceCreationService.create.mockResolvedValue({ id: 'retained-periodic' });
+      const failure = new Error('required session failed');
+      vi.mocked(sessionDataService.createAgentSession).mockRejectedValueOnce(failure);
+      configureDomainBridges(createBridgeServices());
+      const bridge = getBridge(periodicTaskService.configure);
+      await expect(
+        bridge.workspace.createWorkspaceForTask({
+          projectId: 'p1',
+          name: 'Scheduled name',
+          prompt: 'Scheduled prompt',
+          periodicTaskId: 'task-1',
+        })
+      ).rejects.toBe(failure);
+      expect(mockWorkspaceCreationService.create).toHaveBeenCalledOnce();
+      expect(initializeWorkspaceWorktree).not.toHaveBeenCalled();
+    });
+
+    it('launches periodic tasks through overridden creation, session and initialization capabilities', async () => {
+      const events: string[] = [];
+      mockWorkspaceCreationService.create.mockResolvedValue({ id: 'global-workspace' });
+      vi.mocked(sessionDataService.createAgentSession).mockResolvedValue({
+        id: 'global-session',
+      } as Awaited<ReturnType<typeof sessionDataService.createAgentSession>>);
+      vi.mocked(initializeWorkspaceWorktree).mockResolvedValue(undefined);
+      const createWorkspace = vi.fn(() => {
+        events.push('workspace');
+        return Promise.resolve({ id: 'overridden-workspace' } as Awaited<
+          ReturnType<BridgeServices['launchWorkspace']>
+        >['workspace']);
+      });
+      const createAgentSession = vi.fn(() => {
+        events.push('session');
+        return Promise.resolve({ id: 'overridden-session' } as Awaited<
+          ReturnType<typeof sessionDataService.createAgentSession>
+        >);
+      });
+      const initialize = vi.fn(() => {
+        events.push('initialize');
+        return Promise.resolve();
+      });
+      const overriddenSessionData = new Proxy(sessionDataService, {
+        get(target, property, receiver) {
+          return property === 'createAgentSession'
+            ? createAgentSession
+            : Reflect.get(target, property, receiver);
+        },
+      });
+      configureDomainBridges(
+        createBridgeServices(
+          {
+            sessionDataService: overriddenSessionData,
+            initializeWorkspaceWorktree: initialize,
+          },
+          createWorkspace
+        )
+      );
+      const bridge = getBridge(periodicTaskService.configure);
+      const input = {
+        projectId: 'p1',
+        name: 'Overridden task',
+        prompt: 'Run scheduled work',
+        periodicTaskId: 'task-override',
+      };
+      await expect(bridge.workspace.createWorkspaceForTask(input)).resolves.toEqual({
+        workspaceId: 'overridden-workspace',
+      });
+      expect(events).toEqual(['workspace', 'session', 'initialize']);
+      expect(createWorkspace).toHaveBeenCalledExactlyOnceWith({
+        type: 'PERIODIC_TASK',
+        projectId: 'p1',
+        name: 'Overridden task',
+        initialPrompt: 'Run scheduled work',
+        periodicTaskId: 'task-override',
+        ratchetEnabled: true,
+      });
+      expect(createAgentSession).toHaveBeenCalledExactlyOnceWith({
+        workspaceId: 'overridden-workspace',
+        workflow: 'periodic-task',
+        name: 'Periodic task',
+      });
+      expect(initialize).toHaveBeenCalledExactlyOnceWith('overridden-workspace', undefined);
+      expect(mockWorkspaceCreationService.create).not.toHaveBeenCalled();
+      expect(sessionDataService.createAgentSession).not.toHaveBeenCalled();
+      expect(initializeWorkspaceWorktree).not.toHaveBeenCalled();
     });
 
     it('includes agent working state in periodic task workspace status', async () => {
@@ -531,9 +699,9 @@ describe('configureDomainBridges', () => {
       expect(workspaceActivityService.on).toHaveBeenCalledWith('request_notification', handler);
     });
 
-    it('chatMessageHandler initPolicy bridge delegates getWorkspaceInitPolicy', () => {
+    it('dispatcher initPolicy bridge delegates getWorkspaceInitPolicy', () => {
       configureDomainBridges(createBridgeServices());
-      const bridge = getBridge(chatMessageHandlerService.configure);
+      const bridge = getBridge(sessionDispatchService.configure);
 
       bridge.initPolicy.getWorkspaceInitPolicy({ status: 'READY' });
       expect(getWorkspaceInitPolicy).toHaveBeenCalledWith({ status: 'READY' });
@@ -558,22 +726,22 @@ describe('configureDomainBridges', () => {
       );
     });
 
-    it('session lifecycle message queue bridge delegates pending dispatch to chat handlers', async () => {
+    it('session lifecycle message queue bridge delegates pending dispatch to the dispatcher', async () => {
       configureDomainBridges(createBridgeServices());
       const bridge = getBridge(sessionLifecycleService.configure);
 
       await bridge.messageQueue?.tryDispatchNextMessage('s1');
-      expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledWith('s1');
+      expect(sessionDispatchService.tryDispatchNextMessage).toHaveBeenCalledWith('s1');
     });
 
-    it('prompt completion service delegates queue dispatch to chat handlers', async () => {
+    it('prompt completion service delegates queue dispatch to the dispatcher', async () => {
       configureDomainBridges(createBridgeServices());
       const onPromptTurnComplete = vi.mocked(sessionPromptTurnCompletionService.setHandler).mock
         .calls[0]?.[0];
 
       expect(onPromptTurnComplete).toBeTypeOf('function');
       await onPromptTurnComplete?.('s1');
-      expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledWith('s1', {
+      expect(sessionDispatchService.tryDispatchNextMessage).toHaveBeenCalledWith('s1', {
         bypassTurnInProgressBackoff: true,
       });
     });

@@ -124,6 +124,7 @@ vi.mock('@/backend/services/session', () => ({
   acpTraceLogger: {},
   chatEventForwarderService: {},
   chatMessageHandlerService: {},
+  sessionDispatchService: {},
   claudeModelCatalogService: { getModels: vi.fn() },
   codexModelCatalogService: { getModels: vi.fn() },
   providerUsageService: { getUsage: vi.fn() },
@@ -199,7 +200,6 @@ import {
   recoverStaleArchivingWorkspaces,
 } from '@/backend/orchestration/workspace-archive.orchestrator';
 import {
-  createChildWorkspace,
   fireLifecycleNotification,
   persistChildNotification,
   persistParentNotification,
@@ -246,6 +246,7 @@ import {
   acpTraceLogger,
   chatEventForwarderService,
   chatMessageHandlerService,
+  sessionDispatchService,
   claudeModelCatalogService,
   codexModelCatalogService,
   providerUsageService,
@@ -355,6 +356,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     archiveWorkspace,
     chatEventForwarderService: graphChatEventForwarderService,
     chatMessageHandlerService,
+    sessionDispatchService,
     checkGithubAuth,
     cleanupWorkspaceRuntimeResources,
     cleanupWorkspaceScopedCaches: (workspaceId: string) =>
@@ -363,7 +365,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     configService: graphConfigService,
     computePendingRequestType,
     triggerAdversarialReview,
-    createChildWorkspace,
+    createChildWorkspace: vi.fn<ApplicationServices['createChildWorkspace']>(),
     deliverWorkspaceNotification,
     createLogger,
     createWorkspaceCreationService: () => ({ create: vi.fn() }),

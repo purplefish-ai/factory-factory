@@ -74,19 +74,13 @@ vi.mock('@/backend/services/session/service/data/session-data.service', () => ({
   sessionDataService: mockSessionDataService,
 }));
 
-vi.mock('./chat-message-handlers/registry', () => ({
-  createChatMessageHandlerRegistry: () => ({}),
-}));
+const sessionDispatchService = createTestSessionDispatcher();
 
-import { ChatMessageHandlerService } from './chat-message-handlers.service';
-
-const chatMessageHandlerService = new ChatMessageHandlerService(createTestSessionDispatcher());
-
-describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
+describe('sessionDispatchService.tryDispatchNextMessage', () => {
   it('fails fast when dispatch occurs before lifecycle configuration', async () => {
-    await expect(
-      new ChatMessageHandlerService(createTestSessionDispatcher()).tryDispatchNextMessage('s1')
-    ).rejects.toThrow('SessionDispatchService not configured: lifecycle gate/startup missing');
+    await expect(createTestSessionDispatcher().tryDispatchNextMessage('s1')).rejects.toThrow(
+      'SessionDispatchService not configured: lifecycle gate/startup missing'
+    );
   });
   const queuedMessage: QueuedMessage = {
     id: 'm1',
@@ -116,13 +110,13 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    chatMessageHandlerService.resetDispatchState('s1');
-    chatMessageHandlerService.configure({
+    sessionDispatchService.resetDispatchState('s1');
+    sessionDispatchService.configure({
       initPolicy: {
         getWorkspaceInitPolicy: () => ({ dispatchPolicy: 'allowed' }),
       },
     });
-    chatMessageHandlerService.configureLifecycle({
+    sessionDispatchService.configureLifecycle({
       gate: mockSessionService,
       startup: mockSessionService,
       notificationDelivery: mockNotificationDeliveryService,
@@ -161,7 +155,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
   it('leaves queued messages untouched while the session is stopping', async () => {
     mockSessionService.isSessionStopping.mockReturnValue(true);
 
-    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+    await sessionDispatchService.tryDispatchNextMessage('s1');
 
     expect(mockSessionDomainService.peekNextMessage).not.toHaveBeenCalled();
     expect(mockSessionDomainService.dequeueNext).not.toHaveBeenCalled();
@@ -183,7 +177,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
       })
     );
 
-    const dispatchPromise = chatMessageHandlerService.tryDispatchNextMessage('s1');
+    const dispatchPromise = sessionDispatchService.tryDispatchNextMessage('s1');
     await vi.waitFor(() => {
       expect(mockSessionDataService.findAgentSessionById).toHaveBeenCalledWith('s1');
     });
@@ -203,7 +197,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
   });
 
   it('does not reject a queued message when stop begins during permanent gate evaluation', async () => {
-    chatMessageHandlerService.configure({
+    sessionDispatchService.configure({
       initPolicy: {
         getWorkspaceInitPolicy: () => ({ dispatchPolicy: 'blocked' }),
       },
@@ -221,7 +215,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
       })
     );
 
-    const dispatchPromise = chatMessageHandlerService.tryDispatchNextMessage('s1');
+    const dispatchPromise = sessionDispatchService.tryDispatchNextMessage('s1');
     await vi.waitFor(() => {
       expect(mockSessionDataService.findAgentSessionById).toHaveBeenCalledWith('s1');
     });
@@ -250,7 +244,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     mockSessionService.getSessionClient.mockReturnValue({});
     mockSessionService.setSessionModel.mockReturnValue(modelUpdate);
 
-    const dispatchPromise = chatMessageHandlerService.tryDispatchNextMessage('s1');
+    const dispatchPromise = sessionDispatchService.tryDispatchNextMessage('s1');
     await vi.waitFor(() => {
       expect(mockSessionService.setSessionModel).toHaveBeenCalledWith('s1', undefined);
     });
@@ -280,7 +274,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     mockSessionService.getSessionClient.mockReturnValue({});
     mockSessionService.setSessionModel.mockReturnValue(modelUpdate);
 
-    const dispatchPromise = chatMessageHandlerService.tryDispatchNextMessage('s1');
+    const dispatchPromise = sessionDispatchService.tryDispatchNextMessage('s1');
     await vi.waitFor(() => {
       expect(mockSessionService.setSessionModel).toHaveBeenCalledWith('s1', undefined);
     });
@@ -312,7 +306,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     mockSessionService.getSessionClient.mockReturnValue({});
     mockSessionService.setSessionModel.mockReturnValue(modelUpdate);
 
-    const dispatchPromise = chatMessageHandlerService.tryDispatchNextMessage('s1');
+    const dispatchPromise = sessionDispatchService.tryDispatchNextMessage('s1');
     await vi.waitFor(() => {
       expect(mockSessionService.setSessionModel).toHaveBeenCalledWith('s1', undefined);
     });
@@ -348,7 +342,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     mockSessionService.setSessionModel.mockReturnValue(modelUpdate);
     mockNotificationDeliveryService.isNotificationMessage.mockReturnValue(true);
 
-    const dispatchPromise = chatMessageHandlerService.tryDispatchNextMessage('s1');
+    const dispatchPromise = sessionDispatchService.tryDispatchNextMessage('s1');
     await vi.waitFor(() => {
       expect(mockSessionService.setSessionModel).toHaveBeenCalledWith('s1', undefined);
     });
@@ -377,7 +371,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     mockSessionService.getSessionClient.mockReturnValue(client);
     mockSessionService.sendSessionMessage.mockRejectedValue(internalError);
 
-    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+    await sessionDispatchService.tryDispatchNextMessage('s1');
 
     expect(mockSessionService.sendSessionMessage).toHaveBeenCalledOnce();
     expect(mockSessionDomainService.removeTranscriptMessageById).toHaveBeenCalledWith('s1', 'm1', {
@@ -411,7 +405,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     mockSessionDomainService.peekNextMessage.mockReturnValue(notificationMessage);
     mockSessionDomainService.dequeueNext.mockReturnValue(notificationMessage);
 
-    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+    await sessionDispatchService.tryDispatchNextMessage('s1');
 
     expect(mockSessionService.sendSessionMessage).toHaveBeenCalledWith('s1', 'hello');
     expect(mockNotificationDeliveryService.acknowledgeSuccessfulDispatch).toHaveBeenCalledWith(
@@ -439,7 +433,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
       .mockReturnValueOnce({ status: 'duplicate' })
       .mockReturnValue({ status: 'not_notification' });
 
-    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+    await sessionDispatchService.tryDispatchNextMessage('s1');
 
     // The duplicate is removed with a queue-state update, not silently dequeued.
     expect(mockNotificationDeliveryService.removeDuplicateFromQueue).toHaveBeenCalledWith(
@@ -470,7 +464,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     mockSessionService.sendSessionMessage.mockRejectedValue(new Error('send failed'));
     mockSessionService.isSessionRunning.mockReturnValueOnce(true).mockReturnValue(false);
 
-    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+    await sessionDispatchService.tryDispatchNextMessage('s1');
 
     expect(mockSessionDomainService.markRunning).toHaveBeenCalledWith('s1');
     expect(mockSessionDomainService.removeTranscriptMessageById).toHaveBeenCalledWith(
@@ -535,7 +529,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
       mockSessionDomainService.peekNextMessage.mockReturnValue(malformedAttachmentMessage);
       mockSessionDomainService.dequeueNext.mockReturnValue(malformedAttachmentMessage);
 
-      await chatMessageHandlerService.tryDispatchNextMessage('s1');
+      await sessionDispatchService.tryDispatchNextMessage('s1');
 
       expect(mockSessionService.sendSessionMessage).not.toHaveBeenCalled();
       expect(mockSessionDomainService.removeTranscriptMessageById).toHaveBeenCalledWith(
@@ -574,14 +568,14 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
         })
         .mockResolvedValueOnce(undefined);
 
-      await chatMessageHandlerService.tryDispatchNextMessage('s1');
+      await sessionDispatchService.tryDispatchNextMessage('s1');
 
       expect(mockSessionDomainService.markRunning).toHaveBeenCalledWith('s1');
       expect(mockSessionDomainService.markIdle).not.toHaveBeenCalled();
       expect(mockSessionDomainService.requeueFront).toHaveBeenCalledWith('s1', queuedMessage);
       expect(mockSessionService.sendSessionMessage).toHaveBeenCalledTimes(1);
 
-      await chatMessageHandlerService.tryDispatchNextMessage('s1');
+      await sessionDispatchService.tryDispatchNextMessage('s1');
       expect(mockSessionService.sendSessionMessage).toHaveBeenCalledTimes(1);
 
       await vi.advanceTimersByTimeAsync(1000);
@@ -589,7 +583,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
         expect(mockSessionService.sendSessionMessage).toHaveBeenCalledTimes(2);
       });
     } finally {
-      chatMessageHandlerService.resetDispatchState('s1');
+      sessionDispatchService.resetDispatchState('s1');
       vi.useRealTimers();
     }
   });
@@ -615,13 +609,13 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
         .mockRejectedValueOnce(turnInProgressError)
         .mockResolvedValueOnce(undefined);
 
-      await chatMessageHandlerService.tryDispatchNextMessage('s1');
+      await sessionDispatchService.tryDispatchNextMessage('s1');
       await vi.advanceTimersByTimeAsync(1000);
       await vi.waitFor(() => {
         expect(mockSessionDomainService.markError).toHaveBeenCalledWith('s1', 'send failed');
       });
 
-      await chatMessageHandlerService.tryDispatchNextMessage('s1');
+      await sessionDispatchService.tryDispatchNextMessage('s1');
       expect(mockSessionService.sendSessionMessage).toHaveBeenCalledTimes(3);
 
       await vi.advanceTimersByTimeAsync(1000);
@@ -629,7 +623,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
         expect(mockSessionService.sendSessionMessage).toHaveBeenCalledTimes(4);
       });
     } finally {
-      chatMessageHandlerService.resetDispatchState('s1');
+      sessionDispatchService.resetDispatchState('s1');
       vi.useRealTimers();
     }
   });
@@ -652,10 +646,10 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
         })
         .mockResolvedValueOnce(undefined);
 
-      await chatMessageHandlerService.tryDispatchNextMessage('s1');
+      await sessionDispatchService.tryDispatchNextMessage('s1');
       expect(mockSessionService.sendSessionMessage).toHaveBeenCalledTimes(1);
 
-      await chatMessageHandlerService.tryDispatchNextMessage('s1', {
+      await sessionDispatchService.tryDispatchNextMessage('s1', {
         bypassTurnInProgressBackoff: true,
       });
       expect(mockSessionService.sendSessionMessage).toHaveBeenCalledTimes(2);
@@ -663,7 +657,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
       await vi.advanceTimersByTimeAsync(1000);
       expect(mockSessionService.sendSessionMessage).toHaveBeenCalledTimes(2);
     } finally {
-      chatMessageHandlerService.resetDispatchState('s1');
+      sessionDispatchService.resetDispatchState('s1');
       vi.useRealTimers();
     }
   });
@@ -680,7 +674,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     mockSessionDomainService.dequeueNext.mockReturnValue(codexMessage);
     mockSessionService.getSessionClient.mockReturnValue({ sessionId: 's1', threadId: 't1' });
 
-    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+    await sessionDispatchService.tryDispatchNextMessage('s1');
 
     expect(mockSessionService.setSessionThinkingBudget).not.toHaveBeenCalled();
     expect(mockSessionService.setSessionModel).toHaveBeenCalledWith('s1', undefined);
@@ -713,7 +707,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     mockSessionDomainService.dequeueNext.mockReturnValue(planMessage);
     mockSessionService.getSessionClient.mockReturnValue({ sessionId: 's1', threadId: 't1' });
 
-    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+    await sessionDispatchService.tryDispatchNextMessage('s1');
 
     expect(mockSessionService.setSessionCollaborationMode).toHaveBeenCalledWith('s1', 'plan');
     expect(mockSessionService.setSessionCollaborationMode.mock.invocationCallOrder[0]).toBeLessThan(
@@ -724,7 +718,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
   it('does not change collaboration mode for a non-plan queued message', async () => {
     mockSessionService.getSessionClient.mockReturnValue({ sessionId: 's1', threadId: 't1' });
 
-    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+    await sessionDispatchService.tryDispatchNextMessage('s1');
 
     expect(mockSessionService.setSessionCollaborationMode).not.toHaveBeenCalled();
   });
@@ -735,7 +729,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     mockSessionDomainService.dequeueNext.mockReturnValue(voiceMessage);
     mockSessionService.getSessionClient.mockReturnValue({ sessionId: 's1', threadId: 't1' });
 
-    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+    await sessionDispatchService.tryDispatchNextMessage('s1');
 
     expect(mockSessionService.sendSessionMessage).toHaveBeenCalledWith('s1', [
       { type: 'text', text: 'hello' },
@@ -762,7 +756,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     mockSessionDomainService.dequeueNext.mockReturnValue(voiceMessageWithImage);
     mockSessionService.getSessionClient.mockReturnValue({ sessionId: 's1', threadId: 't1' });
 
-    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+    await sessionDispatchService.tryDispatchNextMessage('s1');
 
     const call = mockSessionService.sendSessionMessage.mock.calls[0];
     if (!call) {
@@ -793,7 +787,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     mockSessionDomainService.dequeueNext.mockReturnValue(voiceMessageWithText);
     mockSessionService.getSessionClient.mockReturnValue({ sessionId: 's1', threadId: 't1' });
 
-    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+    await sessionDispatchService.tryDispatchNextMessage('s1');
 
     expect(mockSessionService.sendSessionMessage).toHaveBeenCalledWith('s1', [
       { type: 'text', text: 'hello\n\n[Pasted content: notes.txt]\npasted data' },
@@ -816,7 +810,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     });
     mockSessionService.sendSessionMessage.mockReturnValue(sendPromise);
 
-    const dispatchPromise = chatMessageHandlerService.tryDispatchNextMessage('s1');
+    const dispatchPromise = sessionDispatchService.tryDispatchNextMessage('s1');
 
     await vi.waitFor(() => {
       expect(mockSessionService.sendSessionMessage).toHaveBeenCalledWith('s1', 'hello');
@@ -859,7 +853,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     mockSessionService.getSessionClient.mockReturnValue(client);
     mockSessionDataService.findAgentSessionById.mockRejectedValue(new Error('db down'));
 
-    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+    await sessionDispatchService.tryDispatchNextMessage('s1');
 
     expect(mockSessionDomainService.dequeueNext).not.toHaveBeenCalled();
     expect(mockSessionDomainService.requeueFront).not.toHaveBeenCalled();
@@ -867,7 +861,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
   });
 
   it('rejects queued messages for archived workspaces instead of leaving them stuck', async () => {
-    chatMessageHandlerService.configure({
+    sessionDispatchService.configure({
       initPolicy: {
         getWorkspaceInitPolicy: () => ({ dispatchPolicy: 'blocked' }),
       },
@@ -880,7 +874,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
       },
     });
 
-    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+    await sessionDispatchService.tryDispatchNextMessage('s1');
 
     expect(mockSessionDomainService.dequeueNext).toHaveBeenCalledWith('s1', {
       emitSnapshot: false,
@@ -898,7 +892,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
   });
 
   it('keeps queued messages during temporary blocked states (e.g. provisioning)', async () => {
-    chatMessageHandlerService.configure({
+    sessionDispatchService.configure({
       initPolicy: {
         getWorkspaceInitPolicy: () => ({ dispatchPolicy: 'blocked' }),
       },
@@ -911,7 +905,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
       },
     });
 
-    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+    await sessionDispatchService.tryDispatchNextMessage('s1');
 
     expect(mockSessionDomainService.dequeueNext).not.toHaveBeenCalled();
     expect(mockSessionDomainService.emitDelta).not.toHaveBeenCalledWith(
@@ -954,13 +948,13 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
       .mockReturnValueOnce(firstSendPromise)
       .mockResolvedValueOnce(undefined);
 
-    const firstDispatch = chatMessageHandlerService.tryDispatchNextMessage('s1');
+    const firstDispatch = sessionDispatchService.tryDispatchNextMessage('s1');
     await vi.waitFor(() => {
       expect(mockSessionService.sendSessionMessage).toHaveBeenCalledWith('s1', 'hello');
     });
 
-    chatMessageHandlerService.resetDispatchState('s1');
-    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+    sessionDispatchService.resetDispatchState('s1');
+    await sessionDispatchService.tryDispatchNextMessage('s1');
 
     expect(mockSessionService.sendSessionMessage).toHaveBeenNthCalledWith(2, 's1', 'after stop');
 
@@ -982,7 +976,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     mockSessionDomainService.dequeueNext.mockReturnValue(planMessage);
     mockSessionService.getSessionClient.mockReturnValueOnce(undefined).mockReturnValue(client);
 
-    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+    await sessionDispatchService.tryDispatchNextMessage('s1');
 
     expect(mockSessionService.getOrCreateSessionClient).toHaveBeenCalledWith('s1', {
       thinkingEnabled: false,

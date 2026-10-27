@@ -271,6 +271,14 @@ banner if persistence recovers. Stops that suppress their own event still
 receive shutdown history. The supervisor's closed shutdown admission remains in
 effect after gate cleanup.
 
+Queue execution belongs to the single `SessionDispatchService` configured in
+`session-services.ts`. Initialization, notification delivery, lifecycle queue
+recovery, and prompt completion use its dispatch capability directly. The chat
+registry's dispatch, reset, and manual-resume callbacks reach that same
+instance; `ChatMessageHandlerService` only routes messages. Lifecycle
+generation, delivery claim, and transcript-commit ownership remain with their
+existing services.
+
 Startup, termination, runtime exit, notifications, context, and workflow
 finalization each have one coordinator or service.
 
@@ -312,6 +320,16 @@ bind addresses remain the connection destination.
 Messages are persisted first as `WorkspaceNotification` rows, then delivered
 live to active sessions when available; undelivered rows are delivered at the
 next session start. Max depth is 1 — children cannot have children.
+
+Child creation validates the target project's active status before delegating to
+its injected workspace-launch owner. The workspace capsule still validates the
+parent and depth and persists the parent, prompt, and report-back metadata.
+Unlike interactive launch, the child policy resolves its provider after
+persistence and attempts a `followup` / `Chat 1` session only when provider
+resolution succeeds. It performs no capacity or CLI-health preflight. Provider
+or session failure is best-effort; initialization still starts once in the
+background. Parent notifications and child context handoff remain with their
+existing owners.
 
 UI: `ChildWorkspacesPanel` in the right panel, a child badge on kanban cards,
 and an archive warning when a parent has active children.
