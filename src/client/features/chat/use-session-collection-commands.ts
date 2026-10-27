@@ -11,6 +11,7 @@ interface SessionCollectionCommandsOptions {
   workspaceId: string | null;
   sessions: readonly { name?: string | null }[] | undefined;
   creationDefaults: Pick<CreateSessionInput, 'model' | 'provider'>;
+  canCreate?: boolean;
   onCreated: (session: { id: string }, workspaceId: string, kind: CreationKind) => void;
 }
 
@@ -36,6 +37,7 @@ export function useSessionCollectionCommands({
   workspaceId,
   sessions,
   creationDefaults,
+  canCreate = true,
   onCreated,
 }: SessionCollectionCommandsOptions): SessionCollectionCommands {
   const utils = trpc.useUtils();
@@ -83,6 +85,10 @@ export function useSessionCollectionCommands({
     if (!workspaceId) {
       return;
     }
+    if (!canCreate) {
+      toast.error('Chat defaults are not ready. Wait or retry selection.');
+      return;
+    }
     const existingNumbers = (sessions ?? [])
       .map((session) => {
         const match = session.name?.match(/^Chat (\d+)$/);
@@ -100,21 +106,27 @@ export function useSessionCollectionCommands({
       },
       { onSuccess: (session) => onCreated(session, workspaceId, 'chat') }
     );
-  }, [workspaceId, sessions, creationDefaults, createSession, onCreated]);
+  }, [workspaceId, sessions, creationDefaults, canCreate, createSession, onCreated]);
 
   const quickActionInput = useCallback(
-    (name: string, prompt: string): CreateSessionInput | null =>
-      workspaceId
-        ? {
-            workspaceId,
-            workflow: 'followup',
-            ...creationDefaults,
-            name,
-            initialMessage: prompt,
-            initialPrompt: '',
-          }
-        : null,
-    [workspaceId, creationDefaults]
+    (name: string, prompt: string): CreateSessionInput | null => {
+      if (!workspaceId) {
+        return null;
+      }
+      if (!canCreate) {
+        toast.error('Chat defaults are not ready. Wait or retry selection.');
+        return null;
+      }
+      return {
+        workspaceId,
+        workflow: 'followup',
+        ...creationDefaults,
+        name,
+        initialMessage: prompt,
+        initialPrompt: '',
+      };
+    },
+    [workspaceId, creationDefaults, canCreate]
   );
   const createQuickAction = useCallback(
     (name: string, prompt: string) => {

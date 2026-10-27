@@ -179,6 +179,12 @@ export interface ChatState {
   chatSettings: ChatSettings;
   /** Provider-owned capabilities for chat bar controls. */
   chatCapabilities: ChatBarCapabilities;
+  /** Whether capabilities were received, including a confirmed unsupported payload. */
+  chatCapabilitiesLoaded: boolean;
+  /** Restored/bootstrap models yield to the first confirmed session model. */
+  modelSelectionSource: 'bootstrap' | 'local' | 'server';
+  /** Latest model command; failures from superseded requests cannot clear it. */
+  pendingModelRequestId: string | null;
   /**
    * Queued messages waiting to be sent.
    * Map from message ID to QueuedMessage - enforces uniqueness by design.
@@ -263,7 +269,7 @@ export type ChatAction =
       type: 'WS_ASSISTANT_TEXT_DELTA';
       payload: { messageId: string; order: number; offset: number; text: string };
     }
-  | { type: 'WS_ERROR'; payload: { message: string } }
+  | { type: 'WS_ERROR'; payload: { message: string; requestId?: string } }
   | { type: 'WS_SESSIONS'; payload: { sessions: SessionInfo[] } }
   | { type: 'WS_PERMISSION_REQUEST'; payload: PermissionRequest }
   | { type: 'WS_USER_QUESTION'; payload: UserQuestionRequest }
@@ -299,7 +305,7 @@ export type ChatAction =
   // Message used as interactive response (clears pending request and adds message)
   | { type: 'MESSAGE_USED_AS_RESPONSE'; payload: { id: string; text: string; order: number } }
   // Settings action
-  | { type: 'UPDATE_SETTINGS'; payload: Partial<ChatSettings> }
+  | { type: 'UPDATE_SETTINGS'; payload: Partial<ChatSettings>; requestId?: string }
   | { type: 'SET_SETTINGS'; payload: ChatSettings }
   // Clear/reset actions
   | { type: 'CLEAR_CHAT' }

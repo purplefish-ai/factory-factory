@@ -93,24 +93,32 @@ describe('createSetModelHandler', () => {
     expect(outcome.replies).toHaveLength(1);
   });
 
-  it('returns the model failure for requester error formatting', async () => {
-    const handler = createSetModelHandler(deps);
-    mocks.setSessionModel.mockRejectedValue(new Error('boom'));
+  it.each([undefined, 'model-request'])(
+    'returns the model failure with requester correlation %s',
+    async (requestId) => {
+      const handler = createSetModelHandler(deps);
+      mocks.setSessionModel.mockRejectedValue(new Error('boom'));
 
-    const outcome = await handler(
-      {
-        sessionId: 'session-1',
-        workingDir: '/tmp/project',
-      },
-      {
-        type: 'set_model',
-        model: 'gpt-5.3-codex',
-        reasoningEffort: 'high',
-      }
-    );
+      const outcome = await handler(
+        {
+          sessionId: 'session-1',
+          workingDir: '/tmp/project',
+        },
+        {
+          type: 'set_model',
+          ...(requestId !== undefined ? { requestId } : {}),
+          model: 'gpt-5.3-codex',
+          reasoningEffort: 'high',
+        }
+      );
 
-    expect(outcome.replies).toEqual([
-      { type: 'error', error: { kind: 'set_model_failed', cause: new Error('boom') } },
-    ]);
-  });
+      expect(outcome.replies).toEqual([
+        {
+          type: 'error',
+          error: { kind: 'set_model_failed', cause: new Error('boom') },
+          ...(requestId !== undefined ? { requestId } : {}),
+        },
+      ]);
+    }
+  );
 });

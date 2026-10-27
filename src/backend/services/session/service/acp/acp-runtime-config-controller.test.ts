@@ -139,6 +139,21 @@ describe('AcpRuntimeConfigController', () => {
     expect(handle.configOptions).toEqual(configOptions());
   });
 
+  it('uses the advertised configuration id for the model category', async () => {
+    const options = configOptions().map((option) =>
+      option.category === 'model' ? { ...option, id: 'provider-model' } : option
+    );
+    const setSessionConfigOption = vi.fn().mockResolvedValue({ configOptions: options });
+    const handle = createTestProcessHandle({ connection: { setSessionConfigOption } });
+    handle.configOptions = options;
+    await controller.setSessionModel(handle, 'opus', LOGICAL_SESSION_ID);
+    expect(setSessionConfigOption).toHaveBeenCalledWith({
+      sessionId: handle.acpSessionId,
+      configId: 'provider-model',
+      value: 'opus',
+    });
+  });
+
   it('rejects a generic response missing required config categories', async () => {
     const setSessionConfigOption = vi.fn().mockResolvedValue({
       configOptions: [

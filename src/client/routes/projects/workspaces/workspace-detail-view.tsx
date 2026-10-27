@@ -1,5 +1,6 @@
 import { type Dispatch, type SetStateAction, useCallback, useState } from 'react';
 import { Loading } from '@/client/components/loading';
+import type { ProviderModelPickerProps } from '@/client/features/session-selection';
 import type { SubagentSelection } from '@/client/features/subagents';
 import {
   ArchiveWorkspaceDialog,
@@ -61,7 +62,8 @@ interface SessionTabsProps {
   maxSessions: ReturnType<typeof useWorkspaceData>['maxSessions'];
   hasWorktreePath: boolean;
   selectedProvider: SessionProviderValue;
-  setSelectedProvider: Dispatch<SetStateAction<SessionProviderValue>>;
+  setSelectedProvider: (provider: SessionProviderValue) => void;
+  creationSelection?: ProviderModelPickerProps;
 }
 
 interface ArchiveDialogProps {
@@ -211,6 +213,7 @@ export function WorkspaceDetailView({
         hasWorktreePath={sessionTabs.hasWorktreePath}
         selectedProvider={sessionTabs.selectedProvider}
         setSelectedProvider={sessionTabs.setSelectedProvider}
+        creationSelection={sessionTabs.creationSelection}
       >
         <ChatContent {...chat} />
       </WorkspaceContentView>

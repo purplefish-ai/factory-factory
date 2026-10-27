@@ -107,6 +107,7 @@ export function QuickChatContent({
           placeholder={running ? 'Message will be queued...' : 'Type a message...'}
           settings={chatState.chatSettings}
           capabilities={chatState.chatCapabilities}
+          capabilitiesLoaded={chatState.chatCapabilitiesLoaded}
           onSettingsChange={chatState.updateSettings}
           slashCommands={chatState.slashCommands}
           slashCommandsLoaded={chatState.slashCommandsLoaded}

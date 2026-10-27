@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useChatWebSocket } from '@/client/features/chat';
+import { useSessionLaunchSelection } from '@/client/features/session-selection';
 import {
   ArchiveGitLockDialog,
   usePersistentScroll,
@@ -12,10 +13,6 @@ import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
 import { resolveWorkspaceFileLink } from '@/client/lib/workspace-file-links';
 import { WorkspaceDetailHeaderSlot } from '@/client/routes/projects/workspaces/workspace-detail-header';
 import { useAutoScroll } from '@/hooks/use-auto-scroll';
-import {
-  resolveEffectiveSessionProvider,
-  type SessionProviderValue,
-} from '@/lib/session-provider-selection';
 import { isSessionSummaryWorking } from '@/shared/session-runtime';
 import { forgetResumeWorkspace } from './resume-workspace-storage';
 import { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
@@ -63,7 +60,6 @@ export function WorkspaceDetailContainer() {
     openTab,
     openSubagentTab,
   } = useWorkspacePanel();
-  const { data: userSettings } = trpc.userSettings.get.useQuery();
 
   const { workspaceInitStatus, isScriptFailed, setupWarningDismissed, dismissSetupWarning } =
     useWorkspaceInitStatus(workspaceId, workspace, utils);
@@ -83,15 +79,12 @@ export function WorkspaceDetailContainer() {
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [archiveGitLockDialogOpen, setArchiveGitLockDialogOpen] = useState(false);
   const isParentWorkspace = workspace?.creationSource !== 'CHILD_WORKSPACE';
-  const effectiveDefaultProvider = resolveEffectiveSessionProvider(
-    workspace?.defaultSessionProvider,
-    userSettings?.defaultSessionProvider
-  );
-  const [selectedProvider, setSelectedProvider] =
-    useState<SessionProviderValue>(effectiveDefaultProvider);
-  useEffect(() => {
-    setSelectedProvider(effectiveDefaultProvider);
-  }, [effectiveDefaultProvider]);
+  const launchSelection = useSessionLaunchSelection(workspaceId, {
+    defaultProvider: workspace?.defaultSessionProvider,
+    ready: workspace !== undefined,
+  });
+  const selectedProvider = launchSelection.provider ?? 'CLAUDE';
+  const setSelectedProvider = launchSelection.pickerProps.onProviderChange ?? (() => undefined);
 
   const isDoneOrMergedWorkspace = isWorkspaceDoneOrMerged(workspace);
   const { data: childWorkspaces } = trpc.workspace.listChildren.useQuery(
@@ -110,6 +103,7 @@ export function WorkspaceDetailContainer() {
     pendingRequest,
     chatSettings,
     chatCapabilities,
+    chatCapabilitiesLoaded,
     inputDraft,
     inputAttachments,
     queuedMessages,
@@ -195,7 +189,9 @@ export function WorkspaceDetailContainer() {
     inputRef,
     selectedDbSessionId,
     setSelectedDbSessionId,
-    selectedModel: chatSettings.selectedModel,
+    creationDefaults: launchSelection.creationDefaults,
+    canCreate: launchSelection.ready,
+    onCreated: launchSelection.reset,
     selectedProvider,
     onArchiveGitIndexLocked: () => setArchiveGitLockDialogOpen(true),
   });
@@ -307,6 +303,7 @@ export function WorkspaceDetailContainer() {
     inputRef,
     chatSettings,
     chatCapabilities,
+    chatCapabilitiesLoaded,
     updateSettings,
     inputDraft,
     setInputDraft,
@@ -346,7 +343,7 @@ export function WorkspaceDetailContainer() {
           onArchiveRequest={handleArchiveRequest}
           handleQuickAction={handleQuickAction}
           running={workspaceRunning}
-          isCreatingSession={createSession.isPending}
+          isCreatingSession={createSession.isPending || !launchSelection.ready}
           hasChanges={hasChanges}
         />
       )}
@@ -387,6 +384,7 @@ export function WorkspaceDetailContainer() {
           hasWorktreePath: !!workspace?.worktreePath,
           selectedProvider,
           setSelectedProvider,
+          creationSelection: launchSelection.pickerProps,
         }}
         chat={chatViewModel}
         rightPanelVisible={rightPanelVisible}

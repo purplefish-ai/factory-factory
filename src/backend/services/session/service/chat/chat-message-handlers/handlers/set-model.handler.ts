@@ -39,7 +39,15 @@ export function createSetModelHandler(deps: {
         reasoningEffort: message.reasoningEffort,
         error: errorMessage,
       });
-      return { replies: [{ type: 'error', error: { kind: 'set_model_failed', cause: error } }] };
+      return {
+        replies: [
+          {
+            type: 'error',
+            error: { kind: 'set_model_failed', cause: error },
+            ...(message.requestId !== undefined ? { requestId: message.requestId } : {}),
+          },
+        ],
+      };
     }
   };
 }

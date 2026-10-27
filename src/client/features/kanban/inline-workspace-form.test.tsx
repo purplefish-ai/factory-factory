@@ -1,13 +1,23 @@
 // @vitest-environment jsdom
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createElement, forwardRef, type ReactNode } from 'react';
+import { act, createElement, forwardRef, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InlineWorkspaceForm } from './inline-workspace-form';
 
 const mocks = vi.hoisted(() => ({
+  userSettings: {
+    ratchetEnabled: false,
+    defaultSessionProvider: 'CLAUDE',
+    defaultClaudeModel: 'saved-sonnet',
+    defaultCodexModel: 'saved-sol',
+  },
+  settingsUnavailable: false,
+  settingsLoading: false,
+  settingsError: null as Error | null,
+  createPeriodicTaskMutateMock: vi.fn(),
   detectFileMentionMock: vi.fn(),
   toastErrorMock: vi.fn(),
   listForProjectCancelMock: vi.fn(),
@@ -53,13 +63,30 @@ vi.mock('@/client/lib/trpc', () => ({
       },
     }),
     userSettings: {
-      get: {
+      getProviderOptions: {
         useQuery: () => ({
           data: {
-            ratchetEnabled: false,
-            defaultSessionProvider: 'CLAUDE',
+            CLAUDE: {
+              models: [
+                { value: 'saved-sonnet', label: 'Saved Sonnet' },
+                { value: 'catalog-opus', label: 'Opus' },
+              ],
+            },
+            CODEX: {
+              models: [
+                { value: 'saved-sol', label: 'Saved Sol' },
+                { value: 'chosen-model', label: 'Catalog Luna' },
+              ],
+            },
           },
           isLoading: false,
+        }),
+      },
+      get: {
+        useQuery: () => ({
+          data: mocks.settingsUnavailable ? undefined : mocks.userSettings,
+          isLoading: mocks.settingsLoading,
+          error: mocks.settingsError,
         }),
       },
     },
@@ -83,7 +110,7 @@ vi.mock('@/client/lib/trpc', () => ({
     periodicTask: {
       create: {
         useMutation: () => ({
-          mutate: vi.fn(),
+          mutate: mocks.createPeriodicTaskMutateMock,
           isPending: false,
         }),
       },
@@ -131,16 +158,56 @@ vi.mock('@/client/features/composer', () => ({
     detectFileMention: mocks.detectFileMentionMock,
     paletteRef: { current: null },
   }),
-  useSlashCommands: () => ({
+  useSlashCommands: ({ onChange }: { onChange?: (value: string) => void }) => ({
     slashMenuOpen: false,
     slashFilter: '',
     commandsReady: true,
     paletteRef: { current: null },
-    handleInputChange: vi.fn(),
+    handleInputChange: (event: React.ChangeEvent<HTMLTextAreaElement>) =>
+      onChange?.(event.target.value),
     handleSlashCommandSelect: vi.fn(),
     handleSlashMenuClose: vi.fn(),
     delegateToSlashMenu: () => 'passthrough',
   }),
+}));
+
+vi.mock('@/client/features/session-selection', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/client/features/session-selection')>()),
+  ProviderModelPicker: ({
+    provider,
+    model,
+    onProviderChange,
+    onModelChange,
+    models,
+  }: import('@/client/features/session-selection').ProviderModelPickerProps) =>
+    createElement(
+      'div',
+      { 'aria-label': 'New conversation provider and model' },
+      `${provider} ${model}`,
+      createElement(
+        'button',
+        { onClick: () => onProviderChange?.('CLAUDE'), 'aria-label': 'Choose Claude' },
+        'Claude'
+      ),
+      createElement(
+        'button',
+        { onClick: () => onProviderChange?.('CODEX'), 'aria-label': 'Choose Codex' },
+        'Codex'
+      ),
+      createElement(
+        'button',
+        {
+          onClick: () => {
+            const option = models.find((entry) => entry.value !== model);
+            if (option) {
+              onModelChange?.(option.value);
+            }
+          },
+          'aria-label': 'Choose model',
+        },
+        model
+      )
+    ),
 }));
 
 vi.mock('@/components/ui/button', () => ({
@@ -233,6 +300,15 @@ beforeEach(() => {
     writable: true,
     value: true,
   });
+  mocks.userSettings = {
+    ratchetEnabled: false,
+    defaultSessionProvider: 'CLAUDE',
+    defaultClaudeModel: 'saved-sonnet',
+    defaultCodexModel: 'saved-sol',
+  };
+  mocks.settingsUnavailable = false;
+  mocks.settingsLoading = false;
+  mocks.settingsError = null;
   mocks.workspaceListCache = undefined;
   mocks.createWorkspaceMutationOptions = undefined;
   mocks.listForProjectCancelMock.mockResolvedValue(undefined);
@@ -254,8 +330,10 @@ describe('InlineWorkspaceForm', () => {
     const { container, root } = renderForm();
 
     expect(container.querySelector('[aria-label="Toggle ratchet"]')).not.toBeNull();
-    expect(container.textContent).toContain('Claude');
-    expect(container.textContent).toContain('Codex');
+    expect(container.textContent).toContain('CLAUDE');
+    expect(
+      container.querySelector('[aria-label^="New conversation provider and model"]')
+    ).not.toBeNull();
     expect(container.textContent).toContain('Default');
     expect(container.textContent).toContain('Plan');
     expect(container.querySelectorAll('[aria-label="Attach files"]')).toHaveLength(2);
@@ -279,7 +357,7 @@ describe('InlineWorkspaceForm', () => {
     });
 
     expect(container.querySelector('[aria-label="Toggle ratchet"]')).toBeNull();
-    expect(container.textContent).not.toContain('Claude');
+    expect(container.textContent).not.toContain('CLAUDE');
     expect(container.textContent).not.toContain('Codex');
     expect(container.textContent).not.toContain('Default');
     expect(container.textContent).not.toContain('Plan');
@@ -374,3 +452,102 @@ describe('InlineWorkspaceForm', () => {
     container.remove();
   });
 });
+
+it('sends the saved provider model when launching a workspace', () => {
+  const { container, root } = renderForm();
+  try {
+    const launch = [...container.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent === 'Launch'
+    );
+    expect(launch).toBeDefined();
+    flushSync(() => launch?.click());
+    expect(mocks.createWorkspaceMutateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'CLAUDE', model: 'saved-sonnet' })
+    );
+  } finally {
+    flushSync(() => root.unmount());
+  }
+});
+
+it('retains the chosen provider and model when saved settings refetch during a workspace draft', () => {
+  const { container, root } = renderForm();
+  try {
+    flushSync(() =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Choose Codex"]')?.click()
+    );
+    flushSync(() =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Choose model"]')?.click()
+    );
+    mocks.userSettings = {
+      ...mocks.userSettings,
+      defaultSessionProvider: 'CLAUDE',
+      defaultCodexModel: 'changed-default',
+    };
+    flushSync(() =>
+      root.render(
+        createElement(InlineWorkspaceForm, {
+          projectId: 'project-1',
+          existingNames: [],
+          onCancel: vi.fn(),
+          onCreated: vi.fn(),
+        })
+      )
+    );
+    const launch = [...container.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent === 'Launch'
+    );
+    flushSync(() => launch?.click());
+    expect(mocks.createWorkspaceMutateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'CODEX', model: 'chosen-model' })
+    );
+  } finally {
+    flushSync(() => root.unmount());
+  }
+});
+
+it.each(['loading', 'failed'])(
+  'allows periodic task creation while chat defaults are %s',
+  async (status) => {
+    await act(() => {
+      mocks.settingsUnavailable = true;
+      mocks.settingsLoading = status === 'loading';
+      mocks.settingsError = status === 'failed' ? new Error('Defaults failed') : null;
+      const { container, root, textarea } = renderForm();
+      try {
+        const modeButton = [...container.querySelectorAll<HTMLButtonElement>('button')].find(
+          (button) => button.className.includes('rounded-l-none')
+        );
+        expect(modeButton?.disabled).toBe(false);
+        expect(
+          [...container.querySelectorAll<HTMLButtonElement>('button')].find(
+            (button) => button.textContent === 'Launch'
+          )?.disabled
+        ).toBe(true);
+        const periodicMode = [...container.querySelectorAll('div')].find(
+          (element) => element.textContent === 'Create Periodic Task'
+        );
+        flushSync(() => periodicMode?.click());
+        const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+        flushSync(() => {
+          setter?.call(textarea, 'Run the periodic review');
+          textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        const create = [...container.querySelectorAll<HTMLButtonElement>('button')].find(
+          (button) => button.textContent === 'Create Periodic Task'
+        );
+        expect(create?.disabled).toBe(false);
+        flushSync(() => create?.click());
+        expect(mocks.createPeriodicTaskMutateMock).toHaveBeenCalledWith(
+          expect.objectContaining({
+            projectId: 'project-1',
+            prompt: 'Run the periodic review',
+            cadence: 'DAILY',
+          })
+        );
+        expect(mocks.createWorkspaceMutateMock).not.toHaveBeenCalled();
+      } finally {
+        flushSync(() => root.unmount());
+      }
+    });
+  }
+);

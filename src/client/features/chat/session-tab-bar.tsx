@@ -7,7 +7,7 @@ import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { PulseIcon } from '@phosphor-icons/react/dist/csr/Pulse';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import { XCircleIcon } from '@phosphor-icons/react/dist/csr/XCircle';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { SessionStatus } from '@/shared/core';
@@ -33,6 +33,8 @@ interface SessionTabBarProps {
   disabled?: boolean;
   className?: string;
   readOnly?: boolean;
+  creationControl?: ReactNode;
+  createDisabled?: boolean;
 }
 
 // =============================================================================
@@ -191,6 +193,8 @@ export function SessionTabBar({
   disabled = false,
   className,
   readOnly = false,
+  creationControl,
+  createDisabled = false,
 }: SessionTabBarProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
@@ -270,7 +274,7 @@ export function SessionTabBar({
         ref={scrollContainerRef}
         role="tablist"
         onScroll={handleScroll}
-        className="flex items-center gap-1 overflow-x-auto scrollbar-none"
+        className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-none"
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
       >
         {sortedSessions.length === 0 ? (
@@ -313,15 +317,19 @@ export function SessionTabBar({
 
       {/* New session button — hidden in readOnly mode */}
       {!readOnly && (
-        <button
-          type="button"
-          onClick={onCreateSession}
-          disabled={disabled}
-          title="New Session"
-          className="h-7 w-7 shrink-0 ml-1 flex items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-sidebar-accent hover:text-foreground disabled:opacity-50 disabled:pointer-events-none"
-        >
-          <PlusIcon className="h-4 w-4" />
-        </button>
+        <div className="flex min-w-0 items-center">
+          {creationControl}
+          <button
+            type="button"
+            onClick={onCreateSession}
+            disabled={disabled || createDisabled}
+            title="New Session"
+            aria-label="New session"
+            className="h-7 w-7 shrink-0 ml-1 flex items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-sidebar-accent hover:text-foreground disabled:opacity-50 disabled:pointer-events-none"
+          >
+            <PlusIcon className="h-4 w-4" />
+          </button>
+        </div>
       )}
     </div>
   );

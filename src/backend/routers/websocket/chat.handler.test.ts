@@ -310,10 +310,13 @@ describe('createChatUpgradeHandler', () => {
       ];
       vi.mocked(
         appContext.services.sessionConfigService.setSessionConfigOption
-      ).mockRejectedValueOnce(new Error('rejected'));
-      vi.mocked(appContext.services.sessionConfigService.getSessionConfigOptions).mockReturnValue(
-        configOptions
-      );
+      ).mockImplementationOnce(() => {
+        sessionDomainService.emitDelta('session-1', {
+          type: 'config_options_update',
+          configOptions,
+        });
+        return Promise.reject(new Error('rejected'));
+      });
       requester.emit(
         'message',
         JSON.stringify({ type: 'set_config_option', configId: 'model', value: 'bad' })
@@ -327,7 +330,7 @@ describe('createChatUpgradeHandler', () => {
         type: 'session_delta',
         data: { type: 'config_options_update', configOptions },
       });
-      expect(requester.send.mock.calls).toEqual(disconnect ? [[error]] : [[error], [correction]]);
+      await vi.waitFor(() => expect(requester.send.mock.calls).toEqual([[correction], [error]]));
       expect(second.send.mock.calls).toEqual([[correction]]);
       expect(sessionDomainService.emitDelta).toHaveBeenCalledWith('session-1', {
         type: 'config_options_update',

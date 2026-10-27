@@ -406,8 +406,8 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
       );
       return launchWorkspace(source, {
         getMaxSessionsPerWorkspace: () => services.configService.getMaxSessionsPerWorkspace(),
-        resolveProvider: (provider) =>
-          services.sessionProviderResolverService.resolveProviderForWorkspaceCreation(provider),
+        resolveProvider: (...args) =>
+          services.sessionProviderResolverService.resolveProviderForWorkspaceCreation(...args),
         checkCliHealth: () => services.cliHealthService.checkHealth(),
         createWorkspace: (input) =>
           source.type === 'PERIODIC_TASK'

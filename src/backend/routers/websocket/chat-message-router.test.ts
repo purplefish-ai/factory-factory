@@ -32,6 +32,21 @@ describe('chat message routing at the transport boundary', () => {
     }
   );
 
+  it.each([
+    { type: 'set_model', model: 'chosen', requestId: 'model-request' },
+    { type: 'set_config_option', configId: 'model', value: 'chosen', requestId: 'config-request' },
+  ] satisfies ChatMessageInput[])(
+    'preserves missing-session correlation for %o',
+    async (message) => {
+      const services = createChatRouterServices(sessionCommandFactories);
+      expect(
+        await createChatMessageRouter(services).handleMessage(null, '/tmp/work', message)
+      ).toEqual({
+        replies: [{ type: 'error', error: { kind: 'no_session' }, requestId: message.requestId }],
+      });
+    }
+  );
+
   it('returns model capabilities as a requester outcome without publishing a session event', async () => {
     const services = createChatRouterServices(sessionCommandFactories);
     const outcome = await createChatMessageRouter(services).handleMessage(

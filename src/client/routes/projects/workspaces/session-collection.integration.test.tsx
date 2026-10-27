@@ -11,6 +11,7 @@ import { MemoryRouter } from 'react-router';
 import { toast } from 'sonner';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useQuickChat } from '@/client/features/kanban/use-quick-chat';
+import { useSessionLaunchSelection } from '@/client/features/session-selection';
 import { trpc } from '@/client/lib/trpc';
 import { useSessionManagement } from '@/client/routes/projects/workspaces/use-workspace-detail';
 import { useSelectedSessionId } from '@/client/routes/projects/workspaces/use-workspace-detail-hooks';
@@ -27,6 +28,10 @@ interface Commands {
   close: (id: string) => void;
   select: (id: string) => void;
   pending: boolean;
+  creationProvider: SessionProviderValue | null;
+  creationModel?: string;
+  selectCreationProvider: (provider: SessionProviderValue) => void;
+  selectCreationModel: (model: string) => void;
 }
 const roots: Root[] = [];
 const clients: QueryClient[] = [];
@@ -80,6 +85,7 @@ function Full({ workspaceId, provider, onResult, suspended }: SurfaceProps) {
     (sessions ?? []).map((s) => s.id)
   );
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const launchSelection = useSessionLaunchSelection(workspaceId, { defaultProvider: provider });
   const management = useSessionManagement({
     workspaceId,
     slug: 'project',
@@ -87,7 +93,9 @@ function Full({ workspaceId, provider, onResult, suspended }: SurfaceProps) {
     inputRef,
     selectedDbSessionId,
     setSelectedDbSessionId,
-    selectedModel: 'claude-model',
+    creationDefaults: launchSelection.creationDefaults,
+    canCreate: launchSelection.ready,
+    onCreated: launchSelection.reset,
     selectedProvider: provider,
     onArchiveGitIndexLocked: vi.fn(),
   });
@@ -99,6 +107,11 @@ function Full({ workspaceId, provider, onResult, suspended }: SurfaceProps) {
       close: management.handleCloseSession,
       select: management.handleSelectSession,
       pending: management.createSession.isPending,
+      creationProvider: launchSelection.provider,
+      creationModel: launchSelection.model,
+      selectCreationProvider: (provider) =>
+        launchSelection.pickerProps.onProviderChange?.(provider),
+      selectCreationModel: (model) => launchSelection.pickerProps.onModelChange?.(model),
     });
   });
   return (
@@ -118,9 +131,38 @@ function Quick({ workspaceId, onResult, suspended }: SurfaceProps) {
       close: chat.handleCloseSession,
       select: chat.setSelectedSessionId,
       pending: chat.isCreatingSession,
+      creationProvider: chat.launchSelection.provider,
+      creationModel: chat.launchSelection.model,
+      selectCreationProvider: (provider) =>
+        chat.launchSelection.pickerProps.onProviderChange?.(provider),
+      selectCreationModel: (model) => chat.launchSelection.pickerProps.onModelChange?.(model),
     });
   });
   return <SuspendWorkspace workspaceId={workspaceId} suspended={suspended} />;
+}
+
+function queryResponse(
+  path: string,
+  input: unknown,
+  provider: SessionProviderValue,
+  rosters: ReadonlyMap<string, Array<{ id: string; name: string }>>
+): unknown {
+  switch (path) {
+    case 'userSettings.get':
+      return {
+        defaultSessionProvider: 'CLAUDE',
+        defaultClaudeModel: 'saved-sonnet',
+        defaultCodexModel: 'saved-sol',
+      };
+    case 'userSettings.getProviderOptions':
+      return { CLAUDE: { models: [] }, CODEX: { models: [] } };
+    case 'workspace.get':
+      return { defaultSessionProvider: provider };
+    case 'session.listSessions':
+      return rosters.get(readWorkspaceId(input)) ?? [];
+    default:
+      return { ides: [], preferredIde: 'cursor' };
+  }
 }
 
 function renderSurface(surface: Surface, provider: SessionProviderValue = 'CLAUDE') {
@@ -155,11 +197,8 @@ function renderSurface(surface: Surface, provider: SessionProviderValue = 'CLAUD
                 resolve: respond,
                 reject: (error) => observer.error(TRPCClientError.from(error)),
               });
-            } else if (op.path === 'session.listSessions') {
-              const workspaceId = readWorkspaceId(op.input);
-              respond(rosters.get(workspaceId) ?? []);
             } else {
-              respond({ ides: [], preferredIde: 'cursor' });
+              respond(queryResponse(op.path, op.input, provider, rosters));
             }
           }),
     ],
@@ -296,7 +335,8 @@ describe.each<Surface>(['full', 'quick'])('%s chat session collection', (surface
             workspaceId: 'a',
             workflow: 'followup',
             initialPrompt: '',
-            ...(surface === 'full' ? { provider: 'CLAUDE', model: 'claude-model' } : { model: '' }),
+            provider: 'CLAUDE',
+            model: 'saved-sonnet',
             ...(kind === 'chat'
               ? { name: 'Chat 8' }
               : { name: 'Review', initialMessage: 'Review prompt' }),
@@ -317,6 +357,41 @@ describe.each<Surface>(['full', 'quick'])('%s chat session collection', (surface
       }
     }
   );
+
+  it('retains explicit selection after refetch and failed creation, then resets only after success', async () => {
+    const view = renderSurface(surface);
+    await vi.waitFor(() => expect(view.get().creationModel).toBe('saved-sonnet'));
+    flushSync(() => view.get().selectCreationProvider('CODEX'));
+    expect(view.get().creationModel).toBe('saved-sol');
+    flushSync(() => view.get().selectCreationModel('chosen-luna'));
+    flushSync(() =>
+      view.queryClient.setQueryData(getQueryKey(trpc.userSettings.get, undefined, 'query'), {
+        defaultSessionProvider: 'CLAUDE',
+        defaultClaudeModel: 'fresh-sonnet',
+        defaultCodexModel: 'fresh-sol',
+      })
+    );
+    expect(view.get().creationProvider).toBe('CODEX');
+    expect(view.get().creationModel).toBe('chosen-luna');
+    view.get().newChat();
+    await vi.waitFor(() => expect(view.pending).toHaveLength(1));
+    view.pending[0]?.reject(new Error('Try again'));
+    await vi.waitFor(() => expect(view.get().pending).toBe(false));
+    expect(view.get().creationProvider).toBe('CODEX');
+    expect(view.get().creationModel).toBe('chosen-luna');
+    view.get().newChat();
+    await vi.waitFor(() => expect(view.pending).toHaveLength(2));
+    const inputs = view.requests
+      .filter((request) => request.path === 'session.createAndStartSession')
+      .map((request) => request.input);
+    expect(inputs).toEqual([
+      expect.objectContaining({ provider: 'CODEX', model: 'chosen-luna' }),
+      expect.objectContaining({ provider: 'CODEX', model: 'chosen-luna' }),
+    ]);
+    view.pending[1]?.resolve({ id: 'created' });
+    await vi.waitFor(() => expect(view.get().creationProvider).toBe('CLAUDE'));
+    expect(view.get().creationModel).toBe('fresh-sonnet');
+  });
 
   it.each(['chat', 'action'])(
     'reports a failed %s once without changing selection or retrying creation',
@@ -471,7 +546,7 @@ it('uses Codex model defaults for both full-chat commands', async () => {
         workflow: 'followup',
         name: 'Chat 8',
         provider: 'CODEX',
-        model: undefined,
+        model: 'saved-sol',
         initialPrompt: '',
       },
     },
@@ -482,7 +557,7 @@ it('uses Codex model defaults for both full-chat commands', async () => {
         workflow: 'followup',
         name: 'Review',
         provider: 'CODEX',
-        model: undefined,
+        model: 'saved-sol',
         initialPrompt: '',
         initialMessage: 'Review prompt',
       },

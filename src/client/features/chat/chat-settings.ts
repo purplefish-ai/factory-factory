@@ -3,26 +3,13 @@ import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 
 export function clampChatSettingsForCapabilities(
   settings: ChatSettings,
-  capabilities: ChatBarCapabilities
+  capabilities: ChatBarCapabilities | undefined
 ): ChatSettings {
-  const modelValues = new Set(capabilities.model.options.map((option) => option.value));
+  // Missing capabilities mean configuration is still loading, not unsupported.
+  if (!capabilities) {
+    return settings;
+  }
   const reasoningValues = new Set(capabilities.reasoning.options.map((option) => option.value));
-  const selectedModel = (() => {
-    if (!capabilities.model.enabled) {
-      return settings.selectedModel;
-    }
-
-    if (settings.selectedModel && modelValues.has(settings.selectedModel)) {
-      return settings.selectedModel;
-    }
-
-    if (capabilities.model.selected && modelValues.has(capabilities.model.selected)) {
-      return capabilities.model.selected;
-    }
-
-    return capabilities.model.options[0]?.value ?? settings.selectedModel;
-  })();
-
   const reasoningEffort = (() => {
     if (!capabilities.reasoning.enabled) {
       return null;
@@ -40,7 +27,9 @@ export function clampChatSettingsForCapabilities(
   })();
 
   return {
-    selectedModel,
+    // The model is owned by confirmed server configuration or an explicit user edit.
+    // A partial/stale catalog must never silently substitute another model.
+    selectedModel: settings.selectedModel,
     reasoningEffort,
     thinkingEnabled: capabilities.thinking.enabled ? settings.thinkingEnabled : false,
     planModeEnabled: capabilities.planMode.enabled ? settings.planModeEnabled : false,

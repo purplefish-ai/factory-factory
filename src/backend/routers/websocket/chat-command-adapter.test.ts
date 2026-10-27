@@ -1,39 +1,13 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { describe, expect, it, vi } from 'vitest';
-import { SessionEventBus } from '@/backend/services/session';
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { applySessionCommandOutcome } from './chat-command-adapter';
 
 describe('applySessionCommandOutcome', () => {
-  it('delivers requester errors before session-wide config correction, without leaking replies', () => {
-    const bus = new SessionEventBus();
-    const requester: string[] = [];
-    const secondViewer: string[] = [];
-    const order: string[] = [];
-    bus.on('session_outbound', ({ payload }) => {
-      order.push('correction');
-      requester.push(JSON.stringify(payload));
-      secondViewer.push(JSON.stringify(payload));
-    });
-    const ws = {
-      send: (payload: string) => {
-        order.push('reply');
-        requester.push(payload);
-      },
-    };
-    const configOptions: [SessionConfigOption, ...SessionConfigOption[]] = [
-      { id: 'model', name: 'Model', type: 'select', currentValue: 'old', options: [] },
-    ];
-    const domain = {
-      emitDelta: vi.fn((sessionId, event) =>
-        bus.publishToSession(sessionId, { type: 'session_delta', data: event })
-      ),
-    };
-
-    applySessionCommandOutcome(
-      ws,
-      'session-1',
-      {
+  it.each([undefined, 'config-request'])(
+    'delivers correlated requester errors without publishing configuration',
+    (requestId) => {
+      const ws = { send: vi.fn() };
+      applySessionCommandOutcome(ws, {
         replies: [
           {
             type: 'error',
@@ -41,47 +15,29 @@ describe('applySessionCommandOutcome', () => {
               kind: 'set_config_option_failed',
               cause: { data: { reason: 'invalid preset' } },
             },
+            ...(requestId !== undefined ? { requestId } : {}),
           },
         ],
-        configOptionsCorrection: configOptions,
-      },
-      domain
-    );
-
-    expect(order).toEqual(['reply', 'correction']);
-    expect(requester[0]).toBe(
-      JSON.stringify({
-        type: 'error',
-        message: 'Failed to set config option: {"reason":"invalid preset"}',
-      })
-    );
-    expect(secondViewer).toEqual([
-      JSON.stringify({
-        type: 'session_delta',
-        data: { type: 'config_options_update', configOptions },
-      }),
-    ]);
-    expect(requester.slice(1)).toEqual(secondViewer);
-    expect(domain.emitDelta).toHaveBeenCalledWith('session-1', {
-      type: 'config_options_update',
-      configOptions,
-    });
-  });
+      });
+      expect(ws.send).toHaveBeenCalledExactlyOnceWith(
+        JSON.stringify({
+          type: 'error',
+          ...(requestId !== undefined ? { requestId } : {}),
+          message: 'Failed to set config option: {"reason":"invalid preset"}',
+        })
+      );
+    }
+  );
 
   it('sends capabilities only to the requesting viewer and tolerates legacy void outcomes', () => {
     const ws = { send: vi.fn() };
-    const domain = { emitDelta: vi.fn() };
-    applySessionCommandOutcome(
-      ws,
-      'session-1',
-      { replies: [{ type: 'chat_capabilities', capabilities: EMPTY_CHAT_BAR_CAPABILITIES }] },
-      domain
-    );
+    applySessionCommandOutcome(ws, {
+      replies: [{ type: 'chat_capabilities', capabilities: EMPTY_CHAT_BAR_CAPABILITIES }],
+    });
     expect(ws.send).toHaveBeenCalledWith(
       JSON.stringify({ type: 'chat_capabilities', capabilities: EMPTY_CHAT_BAR_CAPABILITIES })
     );
-    expect(domain.emitDelta).not.toHaveBeenCalled();
-    applySessionCommandOutcome(ws, 'session-1', undefined, domain);
+    applySessionCommandOutcome(ws, undefined);
     expect(ws.send).toHaveBeenCalledTimes(1);
   });
 
@@ -89,12 +45,9 @@ describe('applySessionCommandOutcome', () => {
     const cause: { self?: unknown } = {};
     cause.self = cause;
     const ws = { send: vi.fn() };
-    applySessionCommandOutcome(
-      ws,
-      'session-1',
-      { replies: [{ type: 'error', error: { kind: 'set_config_option_failed', cause } }] },
-      { emitDelta: vi.fn() }
-    );
+    applySessionCommandOutcome(ws, {
+      replies: [{ type: 'error', error: { kind: 'set_config_option_failed', cause } }],
+    });
     expect(ws.send).toHaveBeenCalledWith(
       JSON.stringify({ type: 'error', message: 'Failed to set config option: [object Object]' })
     );
@@ -106,12 +59,9 @@ describe('applySessionCommandOutcome', () => {
         throw new Error('send failed');
       }),
     };
-    applySessionCommandOutcome(
-      ws,
-      'session-1',
-      { replies: [{ type: 'chat_capabilities', capabilities: EMPTY_CHAT_BAR_CAPABILITIES }] },
-      { emitDelta: vi.fn() }
-    );
+    applySessionCommandOutcome(ws, {
+      replies: [{ type: 'chat_capabilities', capabilities: EMPTY_CHAT_BAR_CAPABILITIES }],
+    });
     expect(ws.send).toHaveBeenLastCalledWith(
       JSON.stringify({ type: 'error', message: 'Failed to set model: send failed' })
     );
@@ -151,12 +101,7 @@ describe('applySessionCommandOutcome', () => {
     ],
   ] as const)('preserves error copy for %o', (error, message) => {
     const ws = { send: vi.fn() };
-    applySessionCommandOutcome(
-      ws,
-      'session-1',
-      { replies: [{ type: 'error', error }] },
-      { emitDelta: vi.fn() }
-    );
+    applySessionCommandOutcome(ws, { replies: [{ type: 'error', error }] });
     expect(ws.send).toHaveBeenCalledWith(JSON.stringify({ type: 'error', message }));
   });
 });

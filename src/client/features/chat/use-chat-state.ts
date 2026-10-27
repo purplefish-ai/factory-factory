@@ -31,8 +31,10 @@ import {
   clearInputAttachments as clearPersistedInputAttachments,
   loadInputAttachments,
   persistInputAttachments,
+  persistSettings,
 } from './chat-persistence';
 import { type ChatAction, type ChatState, chatReducer, createInitialChatState } from './reducer';
+import { reduceSettingsSlice } from './reducer/slices/settings';
 import { createToolInputAccumulatorState } from './streaming-utils';
 import type { SendMessageOptions } from './use-chat-actions';
 import { useChatActions } from './use-chat-actions';
@@ -132,10 +134,14 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   // Track rewind preview timeout for cleanup
   const rewindTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Update dbSessionId ref
-  useEffect(() => {
-    dbSessionIdRef.current = dbSessionId;
-  }, [dbSessionId]);
+  // Use an identity token so callbacks from an earlier visit to the same session
+  // also expire when switching away and back.
+  const sessionContextRef = useRef({ dbSessionId });
+  if (sessionContextRef.current.dbSessionId !== dbSessionId) {
+    sessionContextRef.current = { dbSessionId };
+  }
+  const sessionContext = sessionContextRef.current;
+  dbSessionIdRef.current = dbSessionId;
 
   // Load persisted attachments when switching sessions.
   useEffect(() => {
@@ -191,11 +197,34 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   // Transport Hook
   // =============================================================================
 
-  const { handleMessage } = useChatTransport({
-    dispatch,
+  // Settings confirmations and rollbacks must be visible to an immediate send,
+  // including multiple transport events batched before React commits a render.
+  const dispatchTransportAction = useCallback((action: ChatAction) => {
+    const nextState = reduceSettingsSlice(stateRef.current, action);
+    if (nextState !== stateRef.current) {
+      stateRef.current = nextState;
+      if (nextState.modelSelectionSource === 'server') {
+        persistSettings(dbSessionIdRef.current, nextState.chatSettings);
+      }
+    }
+    dispatch(action);
+  }, []);
+
+  const { handleMessage: handleTransportMessage } = useChatTransport({
+    dispatch: dispatchTransportAction,
     stateRef,
     toolInputAccumulatorRef,
   });
+
+  // Transport callbacks captured by a previous session cannot mutate this session.
+  const handleMessage = useCallback(
+    (data: unknown) => {
+      if (sessionContextRef.current === sessionContext) {
+        handleTransportMessage(data);
+      }
+    },
+    [sessionContext, handleTransportMessage]
+  );
 
   // =============================================================================
   // Rejected Message Recovery Effect

@@ -69,6 +69,7 @@ export class AcpRuntimeConfigController {
     modelId: string,
     sessionId: string
   ): Promise<SessionConfigOption[]> {
-    return await this.setConfigOption(handle, 'model', modelId, sessionId);
+    const modelOption = handle.configOptions.find((option) => option.category === 'model');
+    return await this.setConfigOption(handle, modelOption?.id ?? 'model', modelId, sessionId);
   }
 }

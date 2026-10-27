@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { fn } from 'storybook/test';
+import { ProviderModelPicker } from '@/client/features/session-selection';
 import type { SessionData } from './session-tab-bar';
 import { SessionTabBar } from './session-tab-bar';
 
@@ -219,5 +220,54 @@ export const DisabledState: Story = {
         story: 'The tab bar can be disabled to prevent interaction during loading or processing.',
       },
     },
+  },
+};
+
+export const WithCreationSelection: Story = {
+  args: {
+    sessions: [
+      {
+        id: 'existing',
+        name: 'Existing chat',
+        status: 'RUNNING',
+        createdAt: new Date('2026-10-27T12:00:00Z'),
+      },
+    ],
+    currentSessionId: 'existing',
+    creationControl: (
+      <div className="flex min-w-0 items-center">
+        <span className="px-1 text-xs text-muted-foreground">New</span>
+        <ProviderModelPicker
+          provider="CODEX"
+          model="six-sol"
+          models={[{ value: 'six-sol', label: '6 Sol' }]}
+          onModelChange={fn()}
+          onProviderChange={fn()}
+        />
+      </div>
+    ),
+  },
+  decorators: [
+    (Story) => (
+      <div className="w-80">
+        <Story />
+      </div>
+    ),
+  ],
+};
+
+export const CreationDefaultsUnavailable: Story = {
+  ...WithCreationSelection,
+  args: {
+    ...WithCreationSelection.args,
+    createDisabled: true,
+    creationControl: (
+      <ProviderModelPicker
+        provider={null}
+        models={[]}
+        error="Could not load chat defaults"
+        onRetry={fn()}
+      />
+    ),
   },
 };
