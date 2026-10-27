@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router';
@@ -32,7 +33,10 @@ const snapshot = vi.hoisted(() => ({
   utils: null as unknown,
   onMessage: undefined as UseWebSocketTransportOptions['onMessage'],
 }));
-vi.mock('@/client/lib/trpc', () => ({ trpc: { useUtils: () => snapshot.utils } }));
+vi.mock('@/client/lib/trpc', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/client/lib/trpc')>();
+  return { ...actual, trpc: { workspace: actual.trpc.workspace, useUtils: () => snapshot.utils } };
+});
 vi.mock('@/hooks/use-websocket-transport', () => ({
   useWebSocketTransport: (options: UseWebSocketTransportOptions) => {
     snapshot.onMessage = options.onMessage;
@@ -178,13 +182,16 @@ describe('workspace PR actions across surfaces', () => {
       useProjectSnapshotSync('proj-1');
       return <WorkspaceItemContent workspace={cache.workspaces[0]!} />;
     }
+    const queryClient = new QueryClient();
     const rerender = () =>
       root.render(
-        <MemoryRouter>
-          <TooltipProvider>
-            <LiveSidebar />
-          </TooltipProvider>
-        </MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter>
+            <TooltipProvider>
+              <LiveSidebar />
+            </TooltipProvider>
+          </MemoryRouter>
+        </QueryClientProvider>
       );
     let completeRefetch!: () => void;
     snapshot.utils = {

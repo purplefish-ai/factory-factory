@@ -33,10 +33,24 @@ const mockGetData = vi.fn();
 const mockWorkspaceGetSetData = vi.fn();
 const mockListInvalidate = vi.fn();
 const mockWorkspaceGetInvalidate = vi.fn();
+const mockWorkspaceGetReset = vi.fn();
+vi.mock('@tanstack/react-query', () => ({
+  useQueryClient: () => ({
+    resetQueries: mockWorkspaceGetReset,
+    getQueriesData: () => [],
+  }),
+}));
+vi.mock('@trpc/react-query', () => ({
+  getQueryKey: (_procedure: unknown, input: unknown, type: string) => [
+    ['workspace', 'get'],
+    { input, type },
+  ],
+}));
 const mockGlobalDispatchEvent = vi.fn();
 
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
+    workspace: { get: {} },
     useUtils: () => ({
       workspace: {
         listForProject: {
@@ -73,6 +87,8 @@ describe('useProjectSnapshotSync', () => {
       reviewCount: 0,
     });
     mockWorkspaceGetSetData.mockReset();
+    mockWorkspaceGetReset.mockReset();
+    mockWorkspaceGetReset.mockResolvedValue(undefined);
     // Real tRPC `invalidate` returns a promise; the repair path chains .catch()
     // onto it to release its guard when a refetch fails.
     mockListInvalidate.mockReset();
@@ -464,7 +480,7 @@ describe('useProjectSnapshotSync', () => {
       }
     );
 
-    it('snapshot_removed clears the workspace.get cache entry', () => {
+    it('snapshot_removed resets the exact workspace.get cache entry', () => {
       useProjectSnapshotSync('proj-1');
       const onMessage = capturedOptions!.onMessage!;
 
@@ -473,8 +489,11 @@ describe('useProjectSnapshotSync', () => {
         workspaceId: 'ws-1',
       });
 
-      expect(mockWorkspaceGetSetData).toHaveBeenCalledTimes(1);
-      expect(mockWorkspaceGetSetData).toHaveBeenCalledWith({ id: 'ws-1' }, undefined);
+      expect(mockWorkspaceGetSetData).not.toHaveBeenCalled();
+      expect(mockWorkspaceGetReset).toHaveBeenCalledExactlyOnceWith({
+        queryKey: [['workspace', 'get'], { input: { id: 'ws-1' }, type: 'query' }],
+        exact: true,
+      });
     });
   });
 
