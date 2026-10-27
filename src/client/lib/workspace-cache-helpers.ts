@@ -1,6 +1,6 @@
 import type { inferRouterOutputs } from '@trpc/server';
 import type { AppRouter } from '@/client/lib/trpc';
-import { kanbanColumnForStatusReason } from '@/shared/kanban-column-projection';
+import { createOptimisticWorkspaceSummary } from '@/client/lib/workspace-summary';
 
 /**
  * A newly created workspace, as the create endpoint returns it. Typed from the
@@ -19,9 +19,10 @@ export type CreatedWorkspace = inferRouterOutputs<AppRouter>['workspace']['creat
  * This must match the shape returned by the backend workspace.get endpoint.
  */
 export function createOptimisticWorkspaceCacheData(workspace: CreatedWorkspace) {
+  const summary = createOptimisticWorkspaceSummary(workspace);
   return {
     ...workspace,
-    sessionSummaries: [],
+    sessionSummaries: summary.sessionSummaries,
     agentSessions: [],
     terminalSessions: [],
     sidebarStatus: {
@@ -29,16 +30,11 @@ export function createOptimisticWorkspaceCacheData(workspace: CreatedWorkspace) 
       ciState: 'NONE' as const,
     },
     // A freshly created workspace is always NEW, which the server derives as WORKING.
-    kanbanColumn: kanbanColumnForStatusReason('SETTING_UP'),
-    ratchetButtonAnimated: false,
-    flowPhase: 'NO_PR' as const,
-    ciObservation: 'NOT_FETCHED' as const,
-    statusReason: {
-      code: 'SETTING_UP' as const,
-      label: 'Setting up workspace',
-      tone: 'working' as const,
-      needsUser: false,
-    },
+    kanbanColumn: summary.kanbanColumn,
+    ratchetButtonAnimated: summary.ratchetButtonAnimated,
+    flowPhase: summary.flowPhase,
+    ciObservation: summary.ciObservation,
+    statusReason: summary.statusReason,
     pendingRequestType: null,
   };
 }

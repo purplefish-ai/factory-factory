@@ -6,24 +6,17 @@ import {
   PRState,
   RatchetState,
   RunScriptStatus,
-  SessionProvider,
-  SessionStatus,
-  WORKSPACE_SIDEBAR_ACTIVITY_STATES,
-  WORKSPACE_SIDEBAR_CI_STATES,
   WorkspaceMode,
   WorkspaceStatus,
 } from '@/shared/core';
-import {
-  SESSION_RUNTIME_ACTIVITIES,
-  SESSION_RUNTIME_PHASES,
-  SESSION_RUNTIME_PROCESS_STATES,
-} from '@/shared/session-runtime';
 import { WORKSPACE_CI_OBSERVATIONS, WORKSPACE_FLOW_PHASES } from '@/shared/workspace-flow-state';
+import { WORKSPACE_PENDING_REQUEST_TYPES } from '@/shared/workspace-status-reason';
 import {
-  WORKSPACE_PENDING_REQUEST_TYPES,
-  WORKSPACE_STATUS_REASON_CODES,
-  WORKSPACE_STATUS_REASON_TONES,
-} from '@/shared/workspace-status-reason';
+  WorkspaceSessionSummarySchema,
+  WorkspaceGitStatsSchema,
+  WorkspaceSidebarStatusSchema,
+  WorkspaceStatusReasonSchema,
+} from '@/shared/workspace-summary';
 import { prDeliveryModeSchema } from './schemas/pr-event.schema';
 import { WorkspacePullRequestSchema } from './workspace-pr';
 import { WorkspacePRSummarySchema } from './workspace-pr-summary';
@@ -39,46 +32,6 @@ const SnapshotFieldGroupSchema = z.enum([
 ]);
 
 export type SnapshotFieldGroup = z.infer<typeof SnapshotFieldGroupSchema>;
-
-const SessionRuntimeLastExitSchema = z.object({
-  code: z.number().nullable(),
-  timestamp: z.string(),
-  unexpected: z.boolean(),
-});
-
-const WorkspaceSessionSummarySchema = z.object({
-  sessionId: z.string(),
-  name: z.string().nullable(),
-  workflow: z.string().nullable(),
-  model: z.string().nullable(),
-  provider: z.nativeEnum(SessionProvider).optional(),
-  persistedStatus: z.nativeEnum(SessionStatus),
-  runtimePhase: z.enum(SESSION_RUNTIME_PHASES),
-  processState: z.enum(SESSION_RUNTIME_PROCESS_STATES),
-  activity: z.enum(SESSION_RUNTIME_ACTIVITIES),
-  updatedAt: z.string(),
-  lastExit: SessionRuntimeLastExitSchema.nullable(),
-  errorMessage: z.string().nullable().optional(),
-});
-
-const WorkspaceGitStatsSchema = z.object({
-  total: z.number(),
-  additions: z.number(),
-  deletions: z.number(),
-  hasUncommitted: z.boolean(),
-});
-
-const WorkspaceSidebarStatusSchema = z.object({
-  activityState: z.enum(WORKSPACE_SIDEBAR_ACTIVITY_STATES),
-  ciState: z.enum(WORKSPACE_SIDEBAR_CI_STATES),
-});
-
-const WorkspaceStatusReasonSchema = z.object({
-  code: z.enum(WORKSPACE_STATUS_REASON_CODES),
-  label: z.string(),
-  tone: z.enum(WORKSPACE_STATUS_REASON_TONES),
-  needsUser: z.boolean(),
-});
 
 export const WorkspaceSnapshotEntrySchema = z.object({
   workspaceId: z.string(),

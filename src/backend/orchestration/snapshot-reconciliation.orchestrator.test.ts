@@ -561,6 +561,33 @@ describe('SnapshotReconciliationService', () => {
       expect(upsertFields.lastActivityAt).toBe('2026-01-03T14:00:00.000Z');
     });
 
+    it.each([
+      { dates: ['invalid', '2026-01-03T14:00:00Z'], expected: '2026-01-03T14:00:00.000Z' },
+      { dates: ['invalid'], expected: null },
+      { dates: [], expected: null },
+    ])('reconciles last activity with session dates $dates', async ({ dates, expected }) => {
+      mockFindAllNonArchived.mockResolvedValue([
+        createMockWorkspace({
+          worktreePath: null,
+          agentSessions: [],
+          terminalSessions: dates.map((date, index) => ({
+            id: `terminal-${index}`,
+            updatedAt: new Date(date),
+          })),
+        }),
+      ]);
+
+      const result = await service.reconcile();
+
+      expect(result.workspacesSkipped).toBe(0);
+      expect(mockUpsert).toHaveBeenCalledWith(
+        'ws-1',
+        expect.objectContaining({ lastActivityAt: expected }),
+        'reconciliation',
+        expect.any(Number)
+      );
+    });
+
     it('computes pendingRequestType from session bridges', async () => {
       const ws = createMockWorkspace({
         id: 'ws-1',

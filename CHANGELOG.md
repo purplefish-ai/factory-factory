@@ -8,6 +8,18 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Changed
+
+- Refresh stable dependencies and transitive compatibility overrides, including
+  Electron 45, Claude ACP 0.98, Codex ACP 2.3, Anthropic SDK 1, and the Node.js
+  26.12.1/pnpm 12.15.0 toolchain; retain Prisma 7 and supported Babel/Picomatch
+  dependency lines.
+
+### Fixed
+
+- Preserve Calendar DOM, focus, and custom day state across parent rerenders.
+- Select backend integration tests through a dedicated Vitest configuration.
+
 ## [0.4.11] - 2026-10-21
 
 ### Added

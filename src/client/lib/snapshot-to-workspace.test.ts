@@ -61,6 +61,52 @@ function seedDetail(listed: ProjectWorkspace): WorkspaceDetail {
 }
 
 describe('workspace snapshot cache projections', () => {
+  it.each(['RUNNING', 'PAUSED', 'COMPLETED', null] as const)(
+    'constructs snapshot-first compact auto-iteration state for %s without fabricated counters',
+    (status) => {
+      const row = projectSnapshotToWorkspace(
+        makeEntry({ mode: 'AUTO_ITERATION', autoIterationStatus: status })
+      );
+      expect(row.autoIteration).toEqual({
+        status,
+        currentIteration: null,
+        maxIterations: null,
+        currentMetricSummary: null,
+      });
+    }
+  );
+
+  it('refreshes compact status while preserving known iteration values, including unlimited zero', () => {
+    const running = projectSnapshotToWorkspace(
+      makeEntry({ mode: 'AUTO_ITERATION', autoIterationStatus: 'RUNNING' })
+    );
+    const existing = {
+      ...running,
+      autoIteration: {
+        status: 'RUNNING' as const,
+        currentIteration: 7,
+        maxIterations: 0,
+        currentMetricSummary: '12 tests passing',
+      },
+    };
+    const paused = projectSnapshotToWorkspace(
+      makeEntry({ mode: 'AUTO_ITERATION', autoIterationStatus: 'PAUSED' }),
+      existing
+    );
+    expect(paused.autoIteration).toEqual({ ...existing.autoIteration, status: 'PAUSED' });
+    const clearedStatus = projectSnapshotToWorkspace(
+      makeEntry({ mode: 'AUTO_ITERATION', autoIterationStatus: null }),
+      paused
+    );
+    expect(clearedStatus.autoIteration).toEqual({ ...existing.autoIteration, status: null });
+    expect(
+      projectSnapshotToWorkspace(
+        makeEntry({ mode: 'STANDARD', autoIterationStatus: null }),
+        existing
+      ).autoIteration
+    ).toBeNull();
+  });
+
   it('projects the same live fields into the list and detail caches', () => {
     const entry = makeEntry({
       sessionSummaries: [

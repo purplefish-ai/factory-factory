@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
- * Ensures native modules (better-sqlite3, node-pty) are compiled for the correct target.
- * Caches compiled binaries to enable instant switching between Electron and Node.js.
+ * Ensures ABI-specific native modules are compiled for the correct target.
+ * Caches node-pty and legacy SQLite binaries for switching between Electron and Node.js.
+ * better-sqlite3 v13+ uses N-API and shares its installed binary across both runtimes.
  *
  * Usage:
  *   node scripts/ensure-native-modules.mjs node      # For web/CLI development
@@ -22,6 +23,7 @@ import {
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { z } from 'zod';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -30,6 +32,7 @@ const MARKER_FILE = join(CACHE_DIR, '.current-target');
 
 // Get Node.js ABI version (process.versions.modules gives the NODE_MODULE_VERSION)
 const NODE_ABI_VERSION = process.versions.modules;
+const packageVersionSchema = z.object({ version: z.string().regex(/^\d+\./) });
 
 const NATIVE_MODULES = [
   {
@@ -42,14 +45,24 @@ const NATIVE_MODULES = [
   },
 ];
 
+function getPrismaDriverPackage() {
+  const adapterPath = realpathSync(join(ROOT, 'node_modules', '@prisma', 'adapter-better-sqlite3'));
+  const adapterRequire = createRequire(join(adapterPath, 'package.json'));
+  return adapterRequire.resolve('better-sqlite3/package.json');
+}
+
+function getAbiSpecificModules() {
+  const require = createRequire(import.meta.url);
+  const { version } = packageVersionSchema.parse(require(getPrismaDriverPackage()));
+  // N-API SQLite binaries must never be overwritten by an older ABI-specific cache.
+  return NATIVE_MODULES.filter(
+    (mod) => mod.name !== 'better-sqlite3' || Number.parseInt(version, 10) < 13
+  );
+}
+
 function findModulePath(moduleName) {
   if (moduleName === 'better-sqlite3') {
-    // Only Prisma's driver is ABI-specific; the direct v13 copy ships N-API binaries.
-    const adapterPath = realpathSync(
-      join(ROOT, 'node_modules', '@prisma', 'adapter-better-sqlite3')
-    );
-    const adapterRequire = createRequire(join(adapterPath, 'package.json'));
-    return join(dirname(adapterRequire.resolve('better-sqlite3/package.json')), 'build', 'Release');
+    return join(dirname(getPrismaDriverPackage()), 'build', 'Release');
   }
   // Find the module in pnpm's node_modules structure
   const pnpmDir = join(ROOT, 'node_modules', '.pnpm');
@@ -108,7 +121,7 @@ function getCachePath(target, moduleName) {
 }
 
 function cacheExists(target) {
-  for (const mod of NATIVE_MODULES) {
+  for (const mod of getAbiSpecificModules()) {
     const cachePath = getCachePath(target, mod.name);
     for (const file of mod.files) {
       if (!existsSync(join(cachePath, file))) {
@@ -121,7 +134,7 @@ function cacheExists(target) {
 
 function cacheExistsForMarker(marker) {
   // Check if cache exists for a specific marker (e.g., 'node-abi127', 'electron')
-  for (const mod of NATIVE_MODULES) {
+  for (const mod of getAbiSpecificModules()) {
     const cachePath = join(CACHE_DIR, marker, mod.name);
     for (const file of mod.files) {
       if (!existsSync(join(cachePath, file))) {
@@ -135,7 +148,7 @@ function cacheExistsForMarker(marker) {
 function copyToCacheWithMarker(marker) {
   // Cache current binaries under a specific marker path
   console.log(`  Caching binaries for ${marker}...`);
-  for (const mod of NATIVE_MODULES) {
+  for (const mod of getAbiSpecificModules()) {
     const srcPath = findModulePath(mod.name);
     if (!srcPath) {
       console.warn(`  Warning: Could not find ${mod.name} build directory`);
@@ -155,7 +168,7 @@ function copyToCacheWithMarker(marker) {
 
 function copyToCache(target) {
   console.log(`  Caching binaries for ${target}...`);
-  for (const mod of NATIVE_MODULES) {
+  for (const mod of getAbiSpecificModules()) {
     const srcPath = findModulePath(mod.name);
     if (!srcPath) {
       console.warn(`  Warning: Could not find ${mod.name} build directory`);
@@ -175,7 +188,7 @@ function copyToCache(target) {
 
 function restoreFromCache(target) {
   console.log(`  Restoring binaries from cache...`);
-  for (const mod of NATIVE_MODULES) {
+  for (const mod of getAbiSpecificModules()) {
     const dstPath = findModulePath(mod.name);
     if (!dstPath) {
       console.warn(`  Warning: Could not find ${mod.name} build directory`);
@@ -194,29 +207,30 @@ function restoreFromCache(target) {
 
 function rebuild(target) {
   console.log(`  Rebuilding native modules for ${target}...`);
+  const moduleNames = getAbiSpecificModules().map((mod) => mod.name);
   if (target === 'electron') {
     // Resolve once from this project. Running pnpm from an installed dependency
     // can trigger a separate install there instead of using our rebuild tool.
     const require = createRequire(import.meta.url);
     const rebuildCli = join(dirname(require.resolve('@electron/rebuild')), 'cli.js');
-    execFileSync(process.execPath, [rebuildCli, '-f', '-m', '.', '-o', 'better-sqlite3,node-pty'], {
+    execFileSync(process.execPath, [rebuildCli, '-f', '-m', '.', '-o', moduleNames.join(',')], {
       cwd: ROOT,
       stdio: 'inherit',
     });
-    // The direct v13 driver uses N-API, but Prisma still owns an ABI-specific v12.
-    // Resolve the adapter symlink so electron-rebuild scans its pnpm siblings,
-    // instead of discovering only the root's direct dependencies a second time.
-    const adapterPath = realpathSync(
-      join(ROOT, 'node_modules', '@prisma', 'adapter-better-sqlite3')
-    );
-    execFileSync(process.execPath, [rebuildCli, '-f', '-m', '.', '-o', 'better-sqlite3'], {
-      cwd: adapterPath,
-      stdio: 'inherit',
-    });
+    if (moduleNames.includes('better-sqlite3')) {
+      // Legacy Prisma drivers may live outside electron-rebuild's root dependency scan.
+      const adapterPath = realpathSync(
+        join(ROOT, 'node_modules', '@prisma', 'adapter-better-sqlite3')
+      );
+      execFileSync(process.execPath, [rebuildCli, '-f', '-m', '.', '-o', 'better-sqlite3'], {
+        cwd: adapterPath,
+        stdio: 'inherit',
+      });
+    }
   } else {
     // Rebuild native modules for Node.js
     // Use pnpm rebuild which handles the pnpm structure correctly
-    execSync('pnpm rebuild better-sqlite3 node-pty', {
+    execSync(`pnpm rebuild ${moduleNames.join(' ')}`, {
       cwd: ROOT,
       stdio: 'inherit',
     });
