@@ -26,7 +26,7 @@ describe('createPermissionResponseHandler', () => {
     vi.clearAllMocks();
   });
 
-  it('responds to pending ACP permission request', () => {
+  it('delegates permission completion to the service', () => {
     const ws = { send: vi.fn() };
     const respondToPermission = vi.fn(() => true);
     const handler = createPermissionResponseHandler({
@@ -51,10 +51,7 @@ describe('createPermissionResponseHandler', () => {
       mode: ['default'],
     });
     expect(ws.send).not.toHaveBeenCalled();
-    expect(mocks.clearPendingInteractiveRequestIfMatches).toHaveBeenCalledWith(
-      'session-1',
-      'req-1'
-    );
+    expect(mocks.clearPendingInteractiveRequestIfMatches).not.toHaveBeenCalled();
   });
 
   it('sends websocket error when no pending request is found', () => {

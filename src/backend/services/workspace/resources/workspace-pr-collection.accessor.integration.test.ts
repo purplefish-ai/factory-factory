@@ -4,7 +4,7 @@ import {
   destroyIntegrationDatabase,
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
-import type { PrismaClient } from '@prisma-gen/client';
+import type { Prisma, PrismaClient } from '@prisma-gen/client';
 import { workspacePrDiscoveryAccessor } from './workspace-pr-discovery.accessor';
 import {
   flattenWorkspacePR,
@@ -319,3 +319,192 @@ it('keeps scalar PR selection stable across workspace and ratchet snapshot reads
   expect(await workspaceAccessor.findByIdWithProject(row.id)).toMatchObject(expected);
   expect(await workspaceRatchetAccessor.findSnapshotProjection(row.id)).toMatchObject(expected);
 });
+
+it.each<{
+  name: string;
+  enabled: boolean;
+  prs: Pick<
+    Prisma.WorkspacePRCreateManyInput,
+    'state' | 'ciStatus' | 'detachedAt' | 'hasMergeConflict'
+  >[];
+  selected: number | null;
+  state: string;
+  ciStatus: string;
+  conflict: boolean;
+  ratchetState: string;
+  openCount: number;
+}>([
+  {
+    name: 'no PR',
+    enabled: true,
+    prs: [],
+    selected: null,
+    state: 'NONE',
+    ciStatus: 'UNKNOWN',
+    conflict: false,
+    ratchetState: 'IDLE',
+    openCount: 0,
+  },
+  {
+    name: 'detached PR',
+    enabled: true,
+    prs: [{ state: 'OPEN', ciStatus: 'FAILURE', detachedAt: new Date('2026-10-01') }],
+    selected: null,
+    state: 'NONE',
+    ciStatus: 'UNKNOWN',
+    conflict: false,
+    ratchetState: 'IDLE',
+    openCount: 0,
+  },
+  {
+    name: 'closed siblings',
+    enabled: true,
+    prs: [
+      { state: 'MERGED', ciStatus: 'SUCCESS' },
+      { state: 'CLOSED', ciStatus: 'FAILURE' },
+    ],
+    selected: 0,
+    state: 'CLOSED',
+    ciStatus: 'UNKNOWN',
+    conflict: false,
+    ratchetState: 'IDLE',
+    openCount: 0,
+  },
+  {
+    name: 'active sibling',
+    enabled: true,
+    prs: [
+      { state: 'CLOSED', ciStatus: 'FAILURE', hasMergeConflict: true },
+      { state: 'OPEN', ciStatus: 'SUCCESS' },
+    ],
+    selected: 1,
+    state: 'OPEN',
+    ciStatus: 'SUCCESS',
+    conflict: false,
+    ratchetState: 'READY',
+    openCount: 1,
+  },
+  {
+    name: 'mixed CI siblings',
+    enabled: true,
+    prs: [
+      { state: 'OPEN', ciStatus: 'SUCCESS' },
+      { state: 'OPEN', ciStatus: 'PENDING' },
+      { state: 'OPEN', ciStatus: 'FAILURE', hasMergeConflict: true },
+    ],
+    selected: 0,
+    state: 'OPEN',
+    ciStatus: 'FAILURE',
+    conflict: true,
+    ratchetState: 'CI_FAILED',
+    openCount: 3,
+  },
+  {
+    name: 'disabled monitoring',
+    enabled: false,
+    prs: [{ state: 'OPEN', ciStatus: 'FAILURE', hasMergeConflict: true }],
+    selected: 0,
+    state: 'OPEN',
+    ciStatus: 'FAILURE',
+    conflict: true,
+    ratchetState: 'IDLE',
+    openCount: 1,
+  },
+])(
+  'preserves scalar, collection and discovery fields for $name across workspace readers',
+  async (testCase) => {
+    const row = await workspace(`projection-${testCase.name}`);
+    const checkedAt = new Date('2026-10-20T12:00:00Z');
+    const nextCheckAt = new Date('2026-10-20T12:10:00Z');
+    const syncedAt = new Date('2026-10-20T11:00:00Z');
+    await db.prisma.workspacePRMonitoring.update({
+      where: { workspaceId: row.id },
+      data: { enabled: testCase.enabled },
+    });
+    await db.prisma.workspacePRDiscovery.update({
+      where: { workspaceId: row.id },
+      data: { lastCheckedAt: checkedAt, retryCount: 4, nextCheckAt },
+    });
+    for (const [index, pr] of testCase.prs.entries()) {
+      await db.prisma.workspacePR.create({
+        data: {
+          id: `${row.id}-${index}`,
+          workspaceId: row.id,
+          url: `https://github.com/org/repo/pull/${100 + index}`,
+          number: 100 + index,
+          title: `PR ${index}`,
+          headRefName: `feature-${index}`,
+          baseRefName: 'main',
+          syncedAt,
+          reviewState: 'REVIEW_REQUIRED',
+          ciFailedAt: checkedAt,
+          ciLastNotifiedAt: checkedAt,
+          reviewLastCheckedAt: checkedAt,
+          reviewLastCommentId: `comment-${index}`,
+          ...pr,
+        },
+      });
+    }
+    const full = await workspaceAccessor.findById(row.id);
+    const project = await workspaceAccessor.findByIdWithProject(row.id);
+    const selected = testCase.selected;
+    const expected = {
+      prUrl: selected === null ? null : `https://github.com/org/repo/pull/${100 + selected}`,
+      prNumber: selected === null ? null : 100 + selected,
+      prState: testCase.state,
+      prReviewState: selected === null ? null : 'REVIEW_REQUIRED',
+      prCiStatus: testCase.ciStatus,
+      prHasMergeConflict: testCase.conflict,
+      prUpdatedAt: selected === null ? null : syncedAt,
+      prCiFailedAt: selected === null ? null : checkedAt,
+      prCiLastNotifiedAt: selected === null ? null : checkedAt,
+      prReviewLastCheckedAt: selected === null ? null : checkedAt,
+      prReviewLastCommentId: selected === null ? null : `comment-${selected}`,
+      prDiscoveryLastCheckedAt: checkedAt,
+      prDiscoveryRetryCount: 4,
+      prDiscoveryNextCheckAt: nextCheckAt,
+      prSummary: {
+        totalCount: testCase.prs.filter((pr) => !pr.detachedAt).length,
+        openCount: testCase.openCount,
+        hasNonterminal: testCase.openCount > 0,
+        state: testCase.state,
+        ciStatus: testCase.ciStatus,
+        hasMergeConflict: testCase.conflict,
+        ratchetState: testCase.ratchetState,
+      },
+    };
+    for (const result of [full, project]) {
+      expect(result).toMatchObject(expected);
+      expect(result?.prs).toEqual(
+        testCase.prs.flatMap((pr, index) =>
+          pr.detachedAt
+            ? []
+            : [
+                {
+                  id: `${row.id}-${index}`,
+                  url: `https://github.com/org/repo/pull/${100 + index}`,
+                  number: 100 + index,
+                  title: `PR ${index}`,
+                  headRefName: `feature-${index}`,
+                  baseRefName: 'main',
+                  state: pr.state,
+                  reviewState: 'REVIEW_REQUIRED',
+                  ciStatus: pr.ciStatus,
+                  hasMergeConflict: pr.hasMergeConflict ?? false,
+                  syncedAt: syncedAt.toISOString(),
+                },
+              ]
+        )
+      );
+      expect(result).not.toHaveProperty('prDiscovery');
+    }
+    expect(full).toMatchObject({
+      ratchetEnabled: testCase.enabled,
+      ratchetState: testCase.ratchetState,
+    });
+    expect(project).not.toHaveProperty('ratchetState');
+    expect(project).not.toHaveProperty('ratchetEnabled');
+    expect(project).not.toHaveProperty('runScriptStatus');
+    expect(project).not.toHaveProperty('prMonitoring');
+  }
+);

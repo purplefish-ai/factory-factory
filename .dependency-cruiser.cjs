@@ -18,6 +18,29 @@ module.exports = {
       to: { path: '^src/backend/' },
     },
     {
+      name: 'pr-trigger-policy-imports-only-contracts',
+      severity: 'error',
+      comment:
+        'Trigger decisions depend only on their types and shared schemas, never delivery or app code.',
+      from: { path: '^src/shared/pr-trigger-policy\\.ts$' },
+      to: { pathNot: '^src/shared/(pr-trigger-policy\\.types\\.ts$|schemas/)' },
+    },
+    {
+      name: 'pr-trigger-policy-types-import-only-schemas',
+      severity: 'error',
+      comment:
+        'Trigger drafts and ledger summaries must not depend back on the monitoring facade or policy.',
+      from: { path: '^src/shared/pr-trigger-policy\\.types\\.ts$' },
+      to: { pathNot: '^src/shared/schemas/' },
+    },
+    {
+      name: 'pr-trigger-policy-has-no-runtime-dependencies',
+      severity: 'error',
+      comment: 'Trigger policy and its types consume contracts through type-only imports.',
+      from: { path: '^src/shared/pr-trigger-policy(\\.types)?\\.ts$' },
+      to: { dependencyTypesNot: ['type-only'] },
+    },
+    {
       name: 'no-circular',
       severity: 'error',
       comment:

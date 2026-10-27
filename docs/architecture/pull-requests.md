@@ -109,6 +109,16 @@ the enable-time setting and remains in compatible payloads; it does not override
 a later preference change. After a delivery is claimed, retries reuse its frozen
 text and identity.
 
+Trigger decisions live in the pure `src/shared/pr-trigger-policy.ts` module. Its
+draft and ledger-summary types live in `pr-trigger-policy.types.ts`, which
+imports only shared schemas. Dependency checks reject runtime dependencies and
+imports back through `pr-monitoring.ts`, including type-only imports. The
+monitoring facade retains delivery eligibility, pause rules, markers, and the
+draft compatibility export used by ledger persistence. The workspace PR accessor
+still reduces observations inside the existing revision/epoch transaction; the
+policy does not fetch GitHub data, select recipients, or dispatch messages. New
+event kinds require an explicit shared schema change.
+
 The reducer emits changed CI failures, recovery after a delivered failure,
 actionable review additions or edits, conflict transitions, and merge/close
 transitions. Check details, head SHA, and transition sequence distinguish reruns
