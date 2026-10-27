@@ -72,7 +72,7 @@ type AutoIterationRollbackReason =
   | 'auto_iteration_startup_failed_after_create'
   | 'auto_iteration_recycle_failed_after_create';
 
-import type { PRMonitoringServices } from './pr-monitoring-dependencies';
+import { createPRObservationPorts, type PRMonitoringServices } from './pr-monitoring-dependencies';
 export type BridgeServices = PRMonitoringServices & {
   autoIterationService: typeof autoIterationService;
   chatEventForwarderService: typeof chatEventForwarderService;
@@ -294,11 +294,12 @@ export function configureDomainBridges(services: BridgeServices): void {
   const logger = createLogger('domain-bridges');
 
   const { prObservationService, sessionBackgroundDeliveryService, userSettingsService } = services;
+  const observationPorts = createPRObservationPorts(services);
   const deliveryPorts = createPRDeliveryPorts(services);
   // === Ratchet domain bridges ===
   ratchetService.configure({
     retireLegacy: () => retireLegacyRatchetSessions(services),
-    observe: (target, signal) => observeMonitoredPR(target, signal, undefined, services),
+    observe: (target, signal) => observeMonitoredPR(observationPorts, target, { signal }),
     wake: (workspaceId) => wakePRDelivery(workspaceId, deliveryPorts),
     setMonitoring: (input) => setPRMonitoring(input, services),
   });
@@ -338,7 +339,7 @@ export function configureDomainBridges(services: BridgeServices): void {
 
   // === GitHub domain bridges ===
   prSnapshotService.configure({
-    observe: (target, options) => observeMonitoredPR(target, undefined, options, services),
+    observe: (target, options) => observeMonitoredPR(observationPorts, target, options),
     workspace: {
       listPRs: (id) => workspacePrSnapshotService.list(id),
       findPR: (target) => workspacePrSnapshotService.find(target),

@@ -208,10 +208,9 @@ it('forces a fresh observation before freezing a PR update', async () => {
     request: { workspaceId: 'w', prId: 'p', bindingRevision: 1 },
   });
   expect(mocks.observe).toHaveBeenCalledWith(
+    expect.objectContaining({ cacheScope: expect.anything() }),
     { workspaceId: 'w', prId: 'p' },
-    undefined,
-    { force: true },
-    expect.anything()
+    { force: true }
   );
 });
 it('awaits the injected refresh and rechecks authorization before reading pending events', async () => {
