@@ -1,6 +1,9 @@
 import { vi } from 'vitest';
-import type { WorkspaceSnapshotEntry } from '@/backend/services/workspace';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
+import {
+  WorkspaceSnapshotEntrySchema,
+  type WorkspaceSnapshotEntry,
+} from '@/shared/workspace-snapshot';
 import type { ReconciliationBridges } from './snapshot-reconciliation.orchestrator';
 
 export function createMockWorkspace(
@@ -76,7 +79,7 @@ export function createMockBridges(): ReconciliationBridges {
 export function createSnapshotEntry(
   overrides: Partial<WorkspaceSnapshotEntry> = {}
 ): WorkspaceSnapshotEntry {
-  return {
+  const entry: Omit<WorkspaceSnapshotEntry, 'summaryVersion'> & { summaryVersion?: 1 } = {
     workspaceId: 'ws-1',
     projectId: 'proj-1',
     version: 1,
@@ -132,4 +135,6 @@ export function createSnapshotEntry(
     },
     ...overrides,
   };
+  const { summaryVersion, ...legacy } = entry;
+  return summaryVersion === 1 ? WorkspaceSnapshotEntrySchema.parse(entry) : legacy;
 }

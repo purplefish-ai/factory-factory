@@ -41,8 +41,10 @@ in `start()`, or a restart would inherit the previous stop's aborted signal.
 `waitForCurrentRun(name)` resolves on the run already in flight, not the next
 one. Snapshot reconciliation has a narrower `waitForSeed()` barrier: the
 `/snapshots` WebSocket handler waits only until database/runtime fields are in
-the store and stale entries are removed. Git stats continue streaming while the
-job remains in flight, so `stop()` still waits for every Git task to settle.
+the store and stale entries are removed. Authoritative metadata and compact loop
+hydration are part of that seed; rejected timestamp groups do not count as
+accepted complete-summary inputs. Git stats continue streaming while the job
+remains in flight, so `stop()` still waits for every Git task to settle.
 
 There is deliberately no "run this job now" API. The two loops with a
 cancellable sleep only ever cancelled it from their own `stop()`, so
