@@ -143,3 +143,7 @@ controls, stories and tests.
 - After review fixes: 7,662 full-suite tests and 210 integration tests passed
   (three skipped), mobile 3/3, typecheck, production and Storybook builds
   passed.
+- Latest main was integrated in an isolated checkout. The combined revision
+  passed 7,709 full-suite tests, 210 integration tests (three skipped), mobile
+  3/3, typecheck, and both builds. The only merge conflict retained both sets of
+  test imports.

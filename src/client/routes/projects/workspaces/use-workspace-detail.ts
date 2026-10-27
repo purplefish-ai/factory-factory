@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { useSessionCollectionCommands } from '@/client/features/chat';
+import { useWorkspaceDetailQuery } from '@/client/hooks/use-workspace-detail-query';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { isArchiveGitIndexLockedError } from '@/client/lib/workspace-archive';
@@ -26,16 +27,7 @@ interface UseWorkspaceDataOptions {
 export function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
   const utils = trpc.useUtils();
 
-  // Increased staleTime to reduce unnecessary re-renders from background fetches
-  const { data: workspace, isLoading: workspaceLoading } = trpc.workspace.get.useQuery(
-    { id: workspaceId },
-    {
-      // Workspace state is live-synced via /snapshots (useProjectSnapshotSync).
-      // Keep tRPC query as bootstrap/fallback, not a periodic poller.
-      staleTime: Number.POSITIVE_INFINITY,
-      refetchOnWindowFocus: false, // Don't refetch on tab focus
-    }
-  );
+  const { data: workspace, isLoading: workspaceLoading } = useWorkspaceDetailQuery(workspaceId);
 
   // Expose invalidate function for external triggers (e.g., when session stops running)
   const invalidateWorkspace = useCallback(() => {

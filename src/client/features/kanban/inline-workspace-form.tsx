@@ -3,6 +3,7 @@ import { CalendarIcon } from '@phosphor-icons/react/dist/csr/Calendar';
 import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
 import { PaperclipIcon } from '@phosphor-icons/react/dist/csr/Paperclip';
 import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
+import { useQueryClient } from '@tanstack/react-query';
 import type { inferRouterOutputs } from '@trpc/server';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -24,7 +25,7 @@ import { runInBackground } from '@/client/lib/background-task';
 import type { AppRouter } from '@/client/lib/trpc';
 import { trpc } from '@/client/lib/trpc';
 import {
-  createOptimisticWorkspaceCacheData,
+  seedCreatedWorkspaceDetail,
   removeWorkspaceFromProjectWorkspaceCache,
 } from '@/client/lib/workspace-cache-helpers';
 import { createOptimisticWorkspaceSummary } from '@/client/lib/workspace-summary';
@@ -344,6 +345,7 @@ export function InlineWorkspaceForm({
   onCreated,
 }: InlineWorkspaceFormProps) {
   const utils = trpc.useUtils();
+  const queryClient = useQueryClient();
   const { data: userSettings, isLoading: isLoadingSettings } = trpc.userSettings.get.useQuery();
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -448,12 +450,7 @@ export function InlineWorkspaceForm({
         ])
       );
 
-      utils.workspace.get.setData({ id: workspace.id }, (old) => {
-        if (old) {
-          return old;
-        }
-        return createOptimisticWorkspaceCacheData(workspace);
-      });
+      seedCreatedWorkspaceDetail(queryClient, workspace);
       runInBackground(
         utils.workspace.listForProject.invalidate({ projectId }),
         'Could not refresh data'

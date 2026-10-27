@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, createElement, forwardRef, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
@@ -127,7 +128,7 @@ vi.mock('@/client/lib/trpc', () => ({
 
 vi.mock('@/client/lib/workspace-cache-helpers', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/client/lib/workspace-cache-helpers')>()),
-  createOptimisticWorkspaceCacheData: vi.fn(),
+  seedCreatedWorkspaceDetail: vi.fn(),
 }));
 
 // One factory for the whole composer, because the form now consumes it through
@@ -269,6 +270,10 @@ function renderForm(): {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
+  const queryClient = new QueryClient();
+  const render = root.render.bind(root);
+  root.render = (children) =>
+    render(createElement(QueryClientProvider, { client: queryClient }, children));
 
   flushSync(() => {
     root.render(

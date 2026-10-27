@@ -1,12 +1,13 @@
 import { ArrowSquareOutIcon } from '@phosphor-icons/react/dist/csr/ArrowSquareOut';
 import { PlayIcon } from '@phosphor-icons/react/dist/csr/Play';
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { RatchetToggleButton } from '@/client/features/workspace';
 import { runInBackground } from '@/client/lib/background-task';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import { trpc } from '@/client/lib/trpc';
-import { createOptimisticWorkspaceCacheData } from '@/client/lib/workspace-cache-helpers';
+import { seedCreatedWorkspaceDetail } from '@/client/lib/workspace-cache-helpers';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import {
@@ -93,6 +94,7 @@ export function IssueLaunchSheet({
   onStarted,
 }: IssueLaunchSheetProps) {
   const utils = trpc.useUtils();
+  const queryClient = useQueryClient();
   const { data: userSettings, isLoading: isLoadingSettings } = trpc.userSettings.get.useQuery();
   const { data: project, isLoading: isLoadingProject } = trpc.project.getById.useQuery({
     id: projectId,
@@ -160,13 +162,7 @@ export function IssueLaunchSheet({
 
   const createWorkspaceMutation = trpc.workspace.create.useMutation({
     onSuccess: (workspace) => {
-      utils.workspace.get.setData({ id: workspace.id }, (old) => {
-        if (old) {
-          return old;
-        }
-
-        return createOptimisticWorkspaceCacheData(workspace);
-      });
+      seedCreatedWorkspaceDetail(queryClient, workspace);
 
       runInBackground(
         utils.workspace.listForProject.invalidate({ projectId }),

@@ -43,6 +43,7 @@ vi.mock('@tanstack/react-query', () => ({
     resetQueries: mockWorkspaceGetReset,
     getQueriesData: () => [],
     cancelQueries: () => Promise.resolve(),
+    invalidateQueries: () => Promise.resolve(),
     setQueryData: (key: readonly [unknown, { input: unknown }], updater: unknown) =>
       mockSetData(key[1].input, updater),
   }),

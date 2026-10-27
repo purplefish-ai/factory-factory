@@ -252,12 +252,42 @@ optimistic mutation writes retain their existing behavior.
 
 Reconciliation ownership is scoped to the QueryClient, project, and connection
 lifetime. Disconnecting or leaving a project retires that token, cancels its
-pending HTTP request, and invalidates the project list once for HTTP fallback.
-The next full establishes fresh stream authority without comparing versions
-across server lifetimes. The transport rejects events from replaced physical
-sockets; the snapshot hook also rejects callbacks from retired project
-activations. Existing unknown-workspace, worktree-path, and reconnect metadata
-repairs continue through the same query options.
+pending list and detail HTTP requests, and invalidates them for HTTP fallback.
+Only detail queries with known project ownership are cancelled for that project.
+Unassociated initial details keep loading independently; if their HTTP response
+reveals a retired project generation, its cache commit is rejected and the same
+active query retries under the current generation. Each post-retirement
+connection starts a fresh epoch and restarts pending fallback requests; the very
+first connection still accepts its initial HTTP bootstrap. The next full
+establishes fresh stream authority without comparing versions across server
+lifetimes. The transport rejects events from replaced physical sockets; the
+snapshot hook also rejects callbacks from retired project activations. Existing
+unknown-workspace, worktree-path, and reconnect metadata repairs continue
+through the same query options.
+
+The route and right panel share `useWorkspaceDetailQuery` and the existing
+`workspace.get` key. At HTTP success commit, accepted snapshots from that same
+connection overlay live fields on the fetched detail; initialization metadata,
+provider selection, agent and terminal records remain HTTP-owned. Creation seeds
+install compatible cache options and preserve an existing detail. Compact
+summaries never seed a full fetched detail, so missing details keep loading
+until HTTP returns. Detail response tags are consumed once, preserving
+deliberate optimistic writes and unchanged nested references and dates. Detail
+owners are released with QueryCache removal/garbage collection. Reusable query
+options select the current owner when fetching; weak response provenance still
+routes each HTTP commit to its originating owner. Every request receives a
+unique shallow result identity, preserving nested objects and dates even when a
+fetcher returns the same immutable object again. Creation seeds build compatible
+queries without retaining per-workspace query defaults. Deferred recovery checks
+the same query and owner identity, preserves a fresh active cache write, and
+settles inactive queries without starting more HTTP.
+
+Live-list removal still resets the exact detail query and cancels its in-flight
+request before active observers refetch persisted detail. Reintroduction cancels
+that removal fetch and refetches missing full detail. Repeated removal messages
+do not erase deliberately reopened archived detail. Initialization retains
+`getInitStatus` polling and readiness/worktree-path invalidations; those repairs
+hydrate omitted metadata through the shared detail options.
 
 `WorkspaceSummarySchema` defines the required board/sidebar fields independently
 of backend and client code. The HTTP list projector retains every legacy list

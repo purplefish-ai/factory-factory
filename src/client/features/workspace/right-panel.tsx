@@ -10,6 +10,7 @@ import { TreeStructureIcon } from '@phosphor-icons/react/dist/csr/TreeStructure'
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ChatMessage } from '@/client/features/chat';
 import type { SubagentSelection } from '@/client/features/subagents';
+import { useWorkspaceDetailQuery } from '@/client/hooks/use-workspace-detail-query';
 import { trpc } from '@/client/lib/trpc';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { TabButton } from '@/components/ui/tab-button';
@@ -252,10 +253,7 @@ export function RightPanel({
     setTerminalTabState(state);
   }, []);
 
-  const { data: workspace } = trpc.workspace.get.useQuery(
-    { id: workspaceId },
-    { enabled: !!workspaceId }
-  );
+  const { data: workspace } = useWorkspaceDetailQuery(workspaceId);
   const isAutoIteration = workspace?.mode === 'AUTO_ITERATION';
   const periodicTaskId =
     (workspace as { periodicTaskId?: string | null } | undefined)?.periodicTaskId ?? null;
