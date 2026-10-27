@@ -45,8 +45,6 @@ export function collectIssues(health: CliHealthForBanner): HealthIssue[] {
     issues.push({
       title: 'Claude update available',
       description: `Installed ${health.claude.version ?? 'unknown'}; latest is ${health.claude.latestVersion ?? 'latest'}.`,
-      link: 'https://claude.ai/download',
-      linkLabel: 'Upgrade',
       upgradeProvider: 'CLAUDE',
     });
   }
@@ -150,9 +148,9 @@ export function CLIHealthBannerContent({
         {warnings.length > 0 && (
           <ul className="min-w-0 flex-1 basis-full space-y-2 sm:basis-0">
             {warnings.map((issue) => (
-              <li key={issue.title} role="alert" className="flex items-start gap-2 text-xs">
+              <li key={issue.title} className="flex items-start gap-2 text-xs">
                 <WarningIcon className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
-                <div className="min-w-0 space-y-0.5">
+                <div role="alert" className="min-w-0 space-y-0.5">
                   <p className="font-medium text-amber-800 dark:text-amber-300">{issue.title}</p>
                   <p className="text-muted-foreground [overflow-wrap:anywhere]">
                     {issue.description}

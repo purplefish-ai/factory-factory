@@ -106,3 +106,36 @@ describe('CLI notice actions', () => {
     }
   });
 });
+
+describe('CLI warning accessibility', () => {
+  it('preserves list-item semantics while announcing warning contents', () => {
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    try {
+      flushSync(() =>
+        root.render(
+          createElement(CLIHealthBannerContent, {
+            issues: collectIssues({
+              claude: { isInstalled: true },
+              codex: { isInstalled: true, isAuthenticated: true },
+              github: { isInstalled: true, isAuthenticated: false },
+            }),
+            isRefetching: false,
+            isUpgrading: false,
+            onRecheck: vi.fn(),
+            onUpgrade: vi.fn(),
+            onDismiss: vi.fn(),
+          })
+        )
+      );
+      const item = container.querySelector('ul > li');
+      expect(item).not.toBeNull();
+      expect(item?.getAttribute('role')).toBeNull();
+      expect(item?.querySelector('[role="alert"]')?.textContent).toContain(
+        'GitHub sign-in required'
+      );
+    } finally {
+      flushSync(() => root.unmount());
+    }
+  });
+});

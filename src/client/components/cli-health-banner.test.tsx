@@ -225,8 +225,6 @@ describe('CLIHealthBannerContent', () => {
   const update = {
     title: 'Claude update available',
     description: 'Installed 1.0.0; latest is 1.1.0.',
-    link: 'https://claude.ai/download',
-    linkLabel: 'Upgrade',
     upgradeProvider: 'CLAUDE' as const,
   };
   const warning = {
