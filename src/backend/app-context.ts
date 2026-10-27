@@ -13,6 +13,7 @@ import {
 } from './orchestration/event-collector.orchestrator';
 import { healthService } from './orchestration/health.service';
 import { getWorkspaceLinearContext } from './orchestration/linear-config.helper';
+import { updateProjectSettings } from './orchestration/project-settings.orchestrator';
 import { reconciliationService } from './orchestration/reconciliation.service';
 import { schedulerService } from './orchestration/scheduler.service';
 import { SnapshotReconciliationService } from './orchestration/snapshot-reconciliation.orchestrator';
@@ -146,6 +147,9 @@ export type ApplicationServices = BridgeServices & {
   linearStateSyncService: typeof linearStateSyncService;
   listQuickActions: typeof listQuickActions;
   projectManagementService: typeof projectManagementService;
+  updateProjectSettings: (
+    input: Parameters<typeof updateProjectSettings>[0]
+  ) => ReturnType<typeof updateProjectSettings>;
   rateLimiter: typeof rateLimiter;
   runScriptConfigPersistenceService: typeof runScriptConfigPersistenceService;
   runScriptService: RunScriptService;
@@ -271,6 +275,16 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     listQuickActions,
     periodicTaskService,
     projectManagementService,
+    updateProjectSettings: (input) =>
+      updateProjectSettings(input, {
+        validateRepoPath: (repoPath) =>
+          services.projectManagementService.validateRepoPath(repoPath),
+        findById: (id) => services.projectManagementService.findById(id),
+        update: (id, updates) => services.projectManagementService.update(id, updates),
+        updateIfStartupUnchanged: (id, expected, updates) =>
+          services.projectManagementService.updateIfStartupUnchanged(id, expected, updates),
+        encrypt: (apiKey) => services.cryptoService.encrypt(apiKey),
+      }),
     prFetchCoordinator,
     prSnapshotService,
     prObservationService,
