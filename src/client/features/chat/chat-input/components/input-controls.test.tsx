@@ -15,9 +15,14 @@ afterEach(() => {
 });
 
 describe('capability-driven image upload controls', () => {
-  it.each([false, true])(
-    'keeps the file input mounted with ACP selectors (mobile=%s)',
-    (mobile) => {
+  it.each([
+    { mobile: false, acp: true, attachments: true },
+    { mobile: true, acp: true, attachments: true },
+    { mobile: false, acp: false, attachments: true },
+    { mobile: false, acp: true, attachments: false },
+  ])(
+    'honors upload capability (mobile=$mobile, ACP=$acp, attachments=$attachments)',
+    ({ mobile, acp, attachments }) => {
       mocks.mobile = mobile;
       const fileInputRef = createRef<HTMLInputElement>();
       const container = document.createElement('div');
@@ -29,17 +34,19 @@ describe('capability-driven image upload controls', () => {
             createElement(LeftControls, {
               capabilities: {
                 ...EMPTY_CHAT_BAR_CAPABILITIES,
-                attachments: { enabled: true, kinds: ['image'] },
+                attachments: { enabled: attachments, kinds: ['image'] },
               },
-              acpConfigOptions: [
-                {
-                  id: 'mode',
-                  name: 'Mode',
-                  type: 'select',
-                  currentValue: 'default',
-                  options: [{ value: 'default', name: 'Default' }],
-                },
-              ],
+              acpConfigOptions: acp
+                ? [
+                    {
+                      id: 'mode',
+                      name: 'Mode',
+                      type: 'select',
+                      currentValue: 'default',
+                      options: [{ value: 'default', name: 'Default' }],
+                    },
+                  ]
+                : undefined,
               onSetConfigOption: vi.fn(),
               onModelChange: vi.fn(),
               onReasoningChange: vi.fn(),
@@ -59,6 +66,11 @@ describe('capability-driven image upload controls', () => {
           )
         );
         const upload = container.querySelector<HTMLButtonElement>('[aria-label="Upload image"]');
+        if (!attachments) {
+          expect(upload).toBeNull();
+          expect(fileInputRef.current).toBeNull();
+          return;
+        }
         expect(upload).not.toBeNull();
         expect(fileInputRef.current?.type).toBe('file');
         expect(fileInputRef.current?.accept).toBe('image/png');
