@@ -133,6 +133,45 @@ export function createSnapshotEntry(
       runScript: 0,
       reconciliation: 0,
     },
+    // Complete fixtures explicitly represent a manual workspace with no issues or PRs.
+    // These are test defaults only; the wire parser must reject omitted fields.
+    ...(overrides.summaryVersion === 1
+      ? {
+          worktreePath: null,
+          initErrorMessage: null,
+          githubIssueNumber: null,
+          githubIssueUrl: null,
+          linearIssueId: null,
+          linearIssueIdentifier: null,
+          linearIssueUrl: null,
+          creationSource: 'MANUAL',
+          autoIteration:
+            overrides.mode === 'AUTO_ITERATION'
+              ? {
+                  status: overrides.autoIterationStatus ?? null,
+                  currentIteration: null,
+                  maxIterations: null,
+                  currentMetricSummary: null,
+                }
+              : null,
+          prs: [],
+          prSummary: {
+            totalCount: 0,
+            openCount: 0,
+            hasNonterminal: false,
+            state: 'NONE',
+            ciStatus: 'UNKNOWN',
+            hasMergeConflict: false,
+            ratchetState: 'IDLE',
+          },
+          prUrl: null,
+          prNumber: null,
+          prState: 'NONE',
+          prCiStatus: 'UNKNOWN',
+          prUpdatedAt: null,
+          ratchetEnabled: false,
+        }
+      : {}),
     ...overrides,
   };
   const { summaryVersion, ...legacy } = entry;

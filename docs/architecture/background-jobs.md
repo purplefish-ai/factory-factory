@@ -42,9 +42,12 @@ in `start()`, or a restart would inherit the previous stop's aborted signal.
 one. Snapshot reconciliation has a narrower `waitForSeed()` barrier: the
 `/snapshots` WebSocket handler waits only until database/runtime fields are in
 the store and stale entries are removed. Authoritative metadata and compact loop
-hydration are part of that seed; rejected timestamp groups do not count as
-accepted complete-summary inputs. Git stats continue streaming while the job
-remains in flight, so `stop()` still waits for every Git task to settle.
+hydration are part of that seed. The store sets `summaryVersion: 1` only after
+its field-timestamp merge has accepted authoritative values for every required
+summary field. Fields may be accepted across multiple updates; attempted values
+in rejected timestamp groups and unhydrated defaults do not count. Git stats
+continue streaming while the job remains in flight, so `stop()` still waits for
+every Git task to settle.
 
 There is deliberately no "run this job now" API. The two loops with a
 cancellable sleep only ever cancelled it from their own `stop()`, so
