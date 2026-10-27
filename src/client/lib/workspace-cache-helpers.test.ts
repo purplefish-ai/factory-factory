@@ -46,7 +46,8 @@ describe('workspace-cache-helpers', () => {
     const reopened = workspaceDetailQueryOptions(client, workspace.id, () =>
       Promise.resolve(cached)
     );
-    expect(reopened.structuralSharing).not.toBe(options.structuralSharing);
+    await client.fetchQuery(reopened);
+    expect(client.getQueryData(reopened.queryKey)).toMatchObject({ name: 'Created' });
     client.clear();
   });
 

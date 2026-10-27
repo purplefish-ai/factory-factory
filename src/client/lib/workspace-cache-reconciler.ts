@@ -358,11 +358,21 @@ export function projectWorkspaceQueryOptions(
 
 const detailReconcilers = new WeakMap<QueryClient, Map<string, WorkspaceDetailCacheReconciler>>();
 
+interface WorkspaceDetailHttpResult {
+  owner: WorkspaceDetailCacheReconciler;
+  epochs: Map<string, symbol>;
+  data: WorkspaceDetail;
+}
+
+const detailHttpCommits = new WeakMap<
+  QueryClient,
+  {
+    results: WeakMap<object, WorkspaceDetailHttpResult>;
+    structuralSharing: (previous: unknown, next: unknown) => unknown;
+  }
+>();
+
 class WorkspaceDetailCacheReconciler {
-  private readonly httpResults = new WeakMap<
-    object,
-    { epochs: Map<string, symbol>; data: WorkspaceDetail }
-  >();
   readonly queryKey;
   private active = true;
   private projectId: string | undefined;
@@ -415,11 +425,19 @@ class WorkspaceDetailCacheReconciler {
         owner.captureEpoch(),
       ])
     );
-    const data = await fetchDetail(signal);
+    // Fetchers may reuse an immutable object. Each HTTP attempt needs its own
+    // identity so one lifetime cannot consume another attempt's provenance.
+    const data = { ...(await fetchDetail(signal)) };
     if (this.active) {
       this.projectId = data.projectId;
-      this.httpResults.set(data, { epochs, data });
     }
+    // Even a late cancelled response keeps its originating lifetime. A reusable
+    // options object must not mistake it for a manual write in a replacement.
+    getWorkspaceDetailCommitState(this.queryClient).results.set(data, {
+      owner: this,
+      epochs,
+      data,
+    });
     return data;
   }
 
@@ -448,15 +466,10 @@ class WorkspaceDetailCacheReconciler {
     runInBackground(reset, 'Could not refresh data');
   }
 
-  readonly structuralSharing = (previous: unknown, next: unknown): unknown => {
+  commitHttpResult(previous: unknown, http: WorkspaceDetailHttpResult): unknown {
     if (!this.active) {
       return previous;
     }
-    const http = typeof next === 'object' && next !== null ? this.httpResults.get(next) : undefined;
-    if (!http) {
-      return replaceEqualDeep(previous, next);
-    }
-    this.httpResults.delete(http.data);
     const owner = getProjectWorkspaceCacheReconciler(this.queryClient, http.data.projectId);
     const requestEpoch = http.epochs.get(http.data.projectId);
     if (!owner.acceptsHttpEpoch(requestEpoch)) {
@@ -473,7 +486,28 @@ class WorkspaceDetailCacheReconciler {
     }
     const current = this.queryClient.getQueryData<WorkspaceDetail>(this.queryKey);
     return replaceEqualDeep(previous, owner.reconcileDetail(http.data, requestEpoch, current));
-  };
+  }
+}
+
+/** Weak response identities outlive removed queries without pinning workspace IDs. */
+function getWorkspaceDetailCommitState(queryClient: QueryClient) {
+  let state = detailHttpCommits.get(queryClient);
+  if (!state) {
+    const results = new WeakMap<object, WorkspaceDetailHttpResult>();
+    state = {
+      results,
+      structuralSharing: (previous: unknown, next: unknown): unknown => {
+        const http = typeof next === 'object' && next !== null ? results.get(next) : undefined;
+        if (!http) {
+          return replaceEqualDeep(previous, next);
+        }
+        results.delete(http.data);
+        return http.owner.commitHttpResult(previous, http);
+      },
+    };
+    detailHttpCommits.set(queryClient, state);
+  }
+  return state;
 }
 
 function getWorkspaceDetailCacheReconciler(queryClient: QueryClient, workspaceId: string) {
@@ -523,7 +557,7 @@ export function workspaceDetailCacheOptions(queryClient: QueryClient, workspaceI
   const owner = getWorkspaceDetailCacheReconciler(queryClient, workspaceId);
   return {
     queryKey: owner.queryKey,
-    structuralSharing: owner.structuralSharing,
+    structuralSharing: getWorkspaceDetailCommitState(queryClient).structuralSharing,
     staleTime: Number.POSITIVE_INFINITY,
     refetchOnWindowFocus: false,
   };
@@ -534,10 +568,9 @@ export function workspaceDetailQueryOptions(
   workspaceId: string,
   fetchDetail: (signal: AbortSignal) => Promise<WorkspaceDetail>
 ) {
-  const options = workspaceDetailCacheOptions(queryClient, workspaceId);
-  const owner = getWorkspaceDetailCacheReconciler(queryClient, workspaceId);
   return queryOptions({
-    ...options,
-    queryFn: ({ signal }) => owner.fetch(fetchDetail, signal),
+    ...workspaceDetailCacheOptions(queryClient, workspaceId),
+    queryFn: ({ signal }) =>
+      getWorkspaceDetailCacheReconciler(queryClient, workspaceId).fetch(fetchDetail, signal),
   });
 }
