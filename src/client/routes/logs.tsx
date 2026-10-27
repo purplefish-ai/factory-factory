@@ -116,7 +116,8 @@ function DatePicker({
 function computeTimeRange(
   timeRange: string,
   sinceDate: Date | undefined,
-  untilDate: Date | undefined
+  untilDate: Date | undefined,
+  relativeMinute: number
 ): { since?: string; until?: string } {
   if (timeRange === 'custom') {
     return {
@@ -137,7 +138,9 @@ function computeTimeRange(
     };
   }
   if (timeRange !== 'all') {
-    return { since: new Date(Date.now() - Number.parseInt(timeRange, 10) * 60_000).toISOString() };
+    return {
+      since: new Date((relativeMinute - Number.parseInt(timeRange, 10)) * 60_000).toISOString(),
+    };
   }
   return {};
 }
@@ -178,6 +181,17 @@ export default function LogsPage() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [level, setLevel] = useState<LogLevel | 'all'>('all');
   const [timeRange, setTimeRange] = useState<string>('all');
+  const [relativeMinute, setRelativeMinute] = useState(() => Math.floor(Date.now() / 60_000));
+
+  // Advance relative windows even when polling returns structurally identical data.
+  // Minute precision keeps ordinary renders from creating new query keys.
+  useEffect(() => {
+    if (timeRange === 'all' || timeRange === 'custom') {
+      return;
+    }
+    const timer = setInterval(() => setRelativeMinute(Math.floor(Date.now() / 60_000)), 10_000);
+    return () => clearInterval(timer);
+  }, [timeRange]);
   const [sinceDate, setSinceDate] = useState<Date | undefined>();
   const [untilDate, setUntilDate] = useState<Date | undefined>();
   const [offset, setOffset] = useState(0);
@@ -199,6 +213,7 @@ export default function LogsPage() {
 
   const handleTimeRangeChange = (v: string) => {
     setTimeRange(v);
+    setRelativeMinute(Math.floor(Date.now() / 60_000));
     if (v !== 'custom') {
       setSinceDate(undefined);
       setUntilDate(undefined);
@@ -225,7 +240,7 @@ export default function LogsPage() {
     setOffset(0);
   };
 
-  const { since, until } = computeTimeRange(timeRange, sinceDate, untilDate);
+  const { since, until } = computeTimeRange(timeRange, sinceDate, untilDate, relativeMinute);
 
   const { data, isLoading } = trpc.admin.getLogs.useQuery(
     {
