@@ -23,12 +23,23 @@ export interface CreateChildWorkspaceInput {
   reportBackOn?: string;
 }
 
+interface ChildWorkspaceInitializationDependencies {
+  initializeWorktree: typeof initializeWorkspaceWorktree;
+}
+
+const defaultChildWorkspaceInitializationDependencies: ChildWorkspaceInitializationDependencies = {
+  initializeWorktree: initializeWorkspaceWorktree,
+};
+
 /**
  * Create a child workspace under a parent workspace, optionally in a different project.
  * Validates the parent/child relationship then delegates to WorkspaceCreationService
  * and fires workspace initialization in the background.
  */
-export async function createChildWorkspace(input: CreateChildWorkspaceInput): Promise<string> {
+export async function createChildWorkspace(
+  input: CreateChildWorkspaceInput,
+  dependencies: ChildWorkspaceInitializationDependencies = defaultChildWorkspaceInitializationDependencies
+): Promise<string> {
   logger.debug('Creating child workspace', {
     parentWorkspaceId: input.parentWorkspaceId,
     projectId: input.projectId,
@@ -76,7 +87,7 @@ export async function createChildWorkspace(input: CreateChildWorkspaceInput): Pr
   }
 
   // Fire initialization in the background — same pattern as workspace.create tRPC mutation
-  initializeWorkspaceWorktree(workspace.id).catch((err: unknown) => {
+  dependencies.initializeWorktree(workspace.id).catch((err: unknown) => {
     logger.error('Child workspace init failed', { workspaceId: workspace.id, error: err });
   });
 

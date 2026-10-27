@@ -247,7 +247,10 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     getQuickAction,
     getWorkspaceLinearContext,
     healthService,
-    initializeWorkspaceWorktree,
+    initializeWorkspaceWorktree: (workspaceId, options) =>
+      initializeWorkspaceWorktree(workspaceId, options, {
+        sessionDispatch: services.sessionDispatchService,
+      }),
     insightsService,
     getWorkspaceInitPolicy,
     githubCLIService,
@@ -311,8 +314,15 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
       }
       eventCollector.removeWorkspace(workspaceId);
     },
-    createChildWorkspace,
-    deliverWorkspaceNotification,
+    createChildWorkspace: (input) =>
+      createChildWorkspace(input, {
+        initializeWorktree: (workspaceId, options) =>
+          services.initializeWorkspaceWorktree(workspaceId, options),
+      }),
+    deliverWorkspaceNotification: (input) =>
+      deliverWorkspaceNotification(input, {
+        sessionDispatch: services.sessionDispatchService,
+      }),
     createWorkspaceCreationService: (creationDependencies) =>
       new WorkspaceCreationService(creationDependencies),
     launchWorkspace: (source) => {
@@ -333,7 +343,10 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     fireLifecycleNotification,
     persistChildNotification,
     persistParentNotification,
-    retryQueuedDispatchAfterWorkspaceReady,
+    retryQueuedDispatchAfterWorkspaceReady: (workspaceId, startedSessionId) =>
+      retryQueuedDispatchAfterWorkspaceReady(workspaceId, startedSessionId, {
+        sessionDispatch: services.sessionDispatchService,
+      }),
   };
 
   eventCollector = createEventCollectorOrchestrator(services);

@@ -40,7 +40,10 @@ delivery authority; GitHub trigger interpretation remains outside queue
 execution. Workspace initialization, workspace notifications, PR delivery,
 lifecycle queue recovery, and prompt completion use the same dispatcher directly
 through their dispatch capabilities. Queue reset and manual resume callbacks
-also target that instance; the chat router has no dispatch facade.
+also target that instance; the chat router has no dispatch facade. Application
+composition binds workspace startup, READY retries, child initialization, and
+live notification delivery to the supplied graph's dispatcher. Direct legacy
+orchestrator calls retain an explicit default dispatcher binding.
 
 `AcpEventProcessor` translates provider updates with `AcpEventTranslator`,
 stores transcript changes, and emits session deltas. Streaming text accumulates

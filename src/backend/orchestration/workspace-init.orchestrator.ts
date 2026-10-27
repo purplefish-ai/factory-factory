@@ -58,6 +58,14 @@ type WorkspaceInitializationOptions = {
   provisioningAlreadyStarted?: boolean;
 };
 
+interface WorkspaceDispatchDependencies {
+  sessionDispatch: Pick<typeof sessionDispatchService, 'tryDispatchNextMessage'>;
+}
+
+const defaultWorkspaceDispatchDependencies: WorkspaceDispatchDependencies = {
+  sessionDispatch: sessionDispatchService,
+};
+
 const gitHubUsernameCache = new GitHubUsernameCache(githubCLIService);
 const workspaceInitializationTails = new Map<string, Promise<unknown>>();
 
@@ -381,7 +389,10 @@ async function bindInitialMonitoringSession(workspaceId: string, sessionId: stri
   }
 }
 
-async function startDefaultAgentSession(workspaceId: string): Promise<string | null> {
+async function startDefaultAgentSession(
+  workspaceId: string,
+  dependencies: WorkspaceDispatchDependencies
+): Promise<string | null> {
   try {
     const sessions = await sessionDataService.findAgentSessionsByWorkspaceId(workspaceId, {
       status: SessionStatus.IDLE,
@@ -438,7 +449,7 @@ async function startDefaultAgentSession(workspaceId: string): Promise<string | n
 
     // Trigger queue dispatch after init/session start so messages queued during
     // workspace provisioning are picked up immediately when dispatch is allowed.
-    await sessionDispatchService.tryDispatchNextMessage(session.id);
+    await dependencies.sessionDispatch.tryDispatchNextMessage(session.id);
 
     logger.debug('Auto-started default Claude session for workspace', {
       workspaceId,
@@ -458,13 +469,14 @@ async function startDefaultAgentSession(workspaceId: string): Promise<string | n
 
 export async function retryQueuedDispatchAfterWorkspaceReady(
   workspaceId: string,
-  startedSessionId: string | null
+  startedSessionId: string | null,
+  dependencies: WorkspaceDispatchDependencies = defaultWorkspaceDispatchDependencies
 ): Promise<void> {
   try {
     // Prefer the specific session we just started; it may now be RUNNING.
     if (startedSessionId) {
       await bindInitialMonitoringSession(workspaceId, startedSessionId);
-      await sessionDispatchService.tryDispatchNextMessage(startedSessionId);
+      await dependencies.sessionDispatch.tryDispatchNextMessage(startedSessionId);
       return;
     }
 
@@ -474,7 +486,7 @@ export async function retryQueuedDispatchAfterWorkspaceReady(
     const runningSession = runningSessions.find(isPRMonitoringRecipient);
     if (runningSession) {
       await bindInitialMonitoringSession(workspaceId, runningSession.id);
-      await sessionDispatchService.tryDispatchNextMessage(runningSession.id);
+      await dependencies.sessionDispatch.tryDispatchNextMessage(runningSession.id);
       return;
     }
 
@@ -487,7 +499,7 @@ export async function retryQueuedDispatchAfterWorkspaceReady(
     }
 
     await bindInitialMonitoringSession(workspaceId, idleSession.id);
-    await sessionDispatchService.tryDispatchNextMessage(idleSession.id);
+    await dependencies.sessionDispatch.tryDispatchNextMessage(idleSession.id);
   } catch (error) {
     logger.warn('Failed to retry queued dispatch after workspace became ready', {
       workspaceId,
@@ -663,11 +675,12 @@ function getCreatedWorktreeCleanupCandidate(
 async function awaitSessionAndDispatchIfSuccess(
   workspaceId: string,
   agentSessionPromise: Promise<string | null>,
-  success: boolean
+  success: boolean,
+  dependencies: WorkspaceDispatchDependencies
 ) {
   const startedSessionId = await agentSessionPromise;
   if (success) {
-    await retryQueuedDispatchAfterWorkspaceReady(workspaceId, startedSessionId);
+    await retryQueuedDispatchAfterWorkspaceReady(workspaceId, startedSessionId, dependencies);
   }
 }
 
@@ -715,20 +728,22 @@ async function handlePostInitSessionStart(
   workspaceId: string,
   isAutoIteration: boolean,
   agentSessionPromise: Promise<string | null>,
-  success: boolean
+  success: boolean,
+  dependencies: WorkspaceDispatchDependencies
 ): Promise<void> {
   if (isAutoIteration) {
     if (success) {
       void maybeStartAutoIteration(workspaceId);
     }
   } else {
-    await awaitSessionAndDispatchIfSuccess(workspaceId, agentSessionPromise, success);
+    await awaitSessionAndDispatchIfSuccess(workspaceId, agentSessionPromise, success, dependencies);
   }
 }
 
 async function runWorkspaceInitialization(
   workspaceId: string,
-  options?: WorkspaceInitializationOptions
+  options: WorkspaceInitializationOptions | undefined,
+  dependencies: WorkspaceDispatchDependencies
 ): Promise<void> {
   if (!options?.provisioningAlreadyStarted) {
     const startedProvisioning = await startProvisioningOrLog(workspaceId);
@@ -805,7 +820,7 @@ async function runWorkspaceInitialization(
     if (!isAutoIteration) {
       // Start Claude session eagerly - runs in parallel with setup scripts.
       // If scripts fail, stopWorkspaceSessions() in the failure handlers will clean it up.
-      agentSessionPromise = startDefaultAgentSession(workspaceId).catch((error) => {
+      agentSessionPromise = startDefaultAgentSession(workspaceId, dependencies).catch((error) => {
         logger.error('Failed to start default Claude session', {
           workspaceId,
           error: error instanceof Error ? error.message : String(error),
@@ -825,14 +840,21 @@ async function runWorkspaceInitialization(
         workspaceId,
         isAutoIteration,
         agentSessionPromise,
-        startupScriptPipelineResult.success
+        startupScriptPipelineResult.success,
+        dependencies
       );
       return;
     }
 
     // No setup scripts ran, mark ready
     await workspaceStateMachine.markReady(workspaceId);
-    await handlePostInitSessionStart(workspaceId, isAutoIteration, agentSessionPromise, true);
+    await handlePostInitSessionStart(
+      workspaceId,
+      isAutoIteration,
+      agentSessionPromise,
+      true,
+      dependencies
+    );
   } catch (error) {
     // Ensure any eager session start attempt has settled before cleanup so we
     // do not race stopWorkspaceSessions() with a late startSession() call.
@@ -891,9 +913,10 @@ export function recoverStaleProvisioningWorkspace(
 
 export function initializeWorkspaceWorktree(
   workspaceId: string,
-  options?: WorkspaceInitializationOptions
+  options?: WorkspaceInitializationOptions,
+  dependencies: WorkspaceDispatchDependencies = defaultWorkspaceDispatchDependencies
 ): Promise<void> {
   return enqueueWorkspaceInitializationTask(workspaceId, () =>
-    runWorkspaceInitialization(workspaceId, options)
+    runWorkspaceInitialization(workspaceId, options, dependencies)
   );
 }
