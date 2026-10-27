@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { createElement } from 'react';
+import { act, createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { toast } from 'sonner';
@@ -496,10 +496,22 @@ describe('form elicitation answer submission', () => {
 });
 
 it('keeps a failed PR update out of an empty composer', async () => {
-  const harness = renderChatState('session-A');
-  await flushEffects();
+  let harness!: ReturnType<typeof renderChatState>;
+  await act(() => {
+    harness = renderChatState('session-A');
+  });
   try {
-    flushSync(() =>
+    await act(() =>
+      harness.chatRef.current?.dispatch({
+        type: 'MESSAGE_SENDING',
+        payload: {
+          id: 'pr-event-failed-composer',
+          text: '<!-- factory-factory-pr-event:test -->\nReview feedback',
+          sessionId: 'session-A',
+        },
+      })
+    );
+    await act(() =>
       harness.chatRef.current?.dispatch({
         type: 'MESSAGE_STATE_CHANGED',
         payload: {
@@ -512,7 +524,10 @@ it('keeps a failed PR update out of an empty composer', async () => {
         },
       })
     );
-    flushSync(() =>
+    expect(harness.chatRef.current?.queuedMessages).toEqual([
+      expect.objectContaining({ id: 'pr-event-failed-composer', sessionId: 'session-A' }),
+    ]);
+    await act(() =>
       harness.chatRef.current?.dispatch({
         type: 'MESSAGE_STATE_CHANGED',
         payload: {
@@ -522,7 +537,6 @@ it('keeps a failed PR update out of an empty composer', async () => {
         },
       })
     );
-    await flushEffects();
     expect(harness.chatRef.current?.inputDraft).toBe('');
     expect(harness.chatRef.current?.messages).toEqual([
       expect.objectContaining({
@@ -530,6 +544,6 @@ it('keeps a failed PR update out of an empty composer', async () => {
       }),
     ]);
   } finally {
-    harness.cleanup();
+    await act(() => harness.cleanup());
   }
 });

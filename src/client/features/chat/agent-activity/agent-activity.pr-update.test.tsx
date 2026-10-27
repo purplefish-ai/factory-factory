@@ -40,7 +40,7 @@ it.each(['queued', 'committed', 'restored', 'failed', 'cancelled'] as const)(
     expect(html).toContain('CI_FAILED: test failed');
     expect(html.includes('queued for next turn')).toBe(phase === 'queued');
     if (phase === 'failed' || phase === 'cancelled') {
-      expect(html).toContain(phase);
+      expect(html).toContain(`PR update · ${phase}`);
     }
     expect(html).not.toContain('factory-factory-pr-event');
     expect(html).not.toContain('Rewind');

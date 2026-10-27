@@ -24,7 +24,12 @@ describe('PR update terminal delivery states', () => {
     expect(state.messages[0]).toMatchObject({
       id,
       source: 'agent',
-      message: { type: 'pr_update', text, prDeliveryState: deliveryState },
+      message: {
+        type: 'pr_update',
+        text,
+        prDeliveryState: deliveryState,
+        error: 'Delivery unavailable',
+      },
     });
     expect(state.lastRejectedMessage).toBeNull();
     expect(state.queuedMessages.has(id)).toBe(false);
