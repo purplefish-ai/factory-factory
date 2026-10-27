@@ -23,9 +23,7 @@ export type ProjectWorkspace = RouterOutputs['workspace']['listForProject']['wor
 export type WorkspaceDetail = RouterOutputs['workspace']['get'];
 
 /** A version claim alone cannot retire repairs for imperative/non-wire callers. */
-export function isCompleteWorkspaceSnapshot(
-  entry: WorkspaceSnapshotEntry
-): entry is Extract<WorkspaceSnapshotEntry, { summaryVersion: 1 }> {
+export function isCompleteWorkspaceSnapshot(entry: WorkspaceSnapshotEntry): boolean {
   return entry.summaryVersion === 1 && WorkspaceSnapshotEntrySchema.safeParse(entry).success;
 }
 
@@ -200,7 +198,7 @@ export function projectSnapshotToWorkspace(
   const complete = isCompleteWorkspaceSnapshot(entry);
   const hasLegacyPR = !(complete || entry.prs?.length) && Boolean(entry.prUrl);
   const liveFields = projectSnapshotToLiveFields(entry, hasLegacyPR, existing);
-  if (complete) {
+  if (complete && entry.summaryVersion === 1) {
     return {
       ...mutationOnlyFieldDefaults(),
       ...existing,
