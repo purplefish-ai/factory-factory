@@ -14,6 +14,7 @@ const mockProjectManagementService = vi.hoisted(() => ({
   validateRepoPath: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
+  updateIfStartupUnchanged: vi.fn(),
   archive: vi.fn(),
 }));
 
@@ -85,6 +86,7 @@ function createCaller(
             validateRepoPath: mockProjectManagementService.validateRepoPath,
             findById: mockProjectManagementService.findById,
             update: mockProjectManagementService.update,
+            updateIfStartupUnchanged: mockProjectManagementService.updateIfStartupUnchanged,
             encrypt: mockEncrypt,
           }),
       },
@@ -212,6 +214,43 @@ describe('projectRouter', () => {
       expect(mockEncrypt).not.toHaveBeenCalled();
     }
   );
+
+  it('projects conditional startup update results and returns bounded contention as a transport conflict', async () => {
+    const raw = {
+      id: 'p1',
+      startupScriptCommand: 'pnpm dev',
+      startupScriptPath: null,
+      issueTrackerConfig: {
+        linear: {
+          apiKey: 'encrypted-key',
+          teamId: 'team-1',
+          teamName: 'Core',
+          viewerName: 'Alice',
+        },
+      },
+    };
+    mockProjectManagementService.findById.mockResolvedValue({
+      startupScriptCommand: null,
+      startupScriptPath: null,
+    });
+    mockProjectManagementService.updateIfStartupUnchanged.mockResolvedValueOnce(raw);
+    const caller = createCaller();
+    await expect(caller.update({ id: 'p1', startupScriptCommand: 'pnpm dev' })).resolves.toEqual({
+      ...raw,
+      issueTrackerConfig: {
+        linear: { teamId: 'team-1', teamName: 'Core', viewerName: 'Alice', hasApiKey: true },
+      },
+    });
+    expect(raw.issueTrackerConfig.linear.apiKey).toBe('encrypted-key');
+    mockProjectManagementService.updateIfStartupUnchanged.mockResolvedValue(null);
+    await expect(
+      caller.update({ id: 'p1', startupScriptCommand: 'pnpm dev' })
+    ).rejects.toMatchObject({
+      code: 'CONFLICT',
+      message: 'Project startup settings changed concurrently. Please retry.',
+    });
+    expect(mockProjectManagementService.update).not.toHaveBeenCalled();
+  });
 
   it('rejects malformed settings at the transport before the application writes', async () => {
     await expect(

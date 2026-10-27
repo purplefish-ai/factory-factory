@@ -91,6 +91,14 @@ class ProjectManagementService {
     return projectAccessor.update(id, data);
   }
 
+  updateIfStartupUnchanged(
+    id: string,
+    expected: Pick<Project, 'startupScriptCommand' | 'startupScriptPath'>,
+    data: Parameters<ProjectManagementService['update']>[1]
+  ): Promise<Project | null> {
+    return projectAccessor.updateIfStartupUnchanged(id, expected, data);
+  }
+
   archive(id: string): Promise<Project> {
     return projectAccessor.archive(id);
   }

@@ -39,6 +39,9 @@ function createPorts() {
       .mockResolvedValue({ valid: true }),
     findById: vi.fn<ProjectSettingsPorts['findById']>().mockResolvedValue(project),
     update: vi.fn<ProjectSettingsPorts['update']>().mockResolvedValue(project),
+    updateIfStartupUnchanged: vi
+      .fn<ProjectSettingsPorts['updateIfStartupUnchanged']>()
+      .mockResolvedValue(project),
     encrypt: vi
       .fn<ProjectSettingsPorts['encrypt']>()
       .mockImplementation((value) => `encrypted:${value}`),
@@ -66,10 +69,14 @@ describe('updateProjectSettings', () => {
       { id: 'p1', startupScriptCommand: null, issueTrackerConfig: null },
       ports
     );
-    expect(ports.update).toHaveBeenCalledWith('p1', {
-      startupScriptCommand: null,
-      issueTrackerConfig: null,
-    });
+    expect(ports.updateIfStartupUnchanged).toHaveBeenCalledWith(
+      'p1',
+      { startupScriptCommand: 'pnpm dev', startupScriptPath: null },
+      {
+        startupScriptCommand: null,
+        issueTrackerConfig: null,
+      }
+    );
     expect(ports.encrypt).not.toHaveBeenCalled();
   });
 
@@ -105,10 +112,14 @@ describe('updateProjectSettings', () => {
       { id: 'p1', startupScriptCommand: null, startupScriptPath: 'scripts/start.sh' },
       ports
     );
-    expect(ports.update).toHaveBeenCalledWith('p1', {
-      startupScriptCommand: null,
-      startupScriptPath: 'scripts/start.sh',
-    });
+    expect(ports.updateIfStartupUnchanged).toHaveBeenCalledWith(
+      'p1',
+      { startupScriptCommand: 'pnpm dev', startupScriptPath: null },
+      {
+        startupScriptCommand: null,
+        startupScriptPath: 'scripts/start.sh',
+      }
+    );
   });
 
   it('rejects startup updates to a missing project', async () => {
@@ -156,6 +167,108 @@ describe('updateProjectSettings', () => {
     await expect(
       updateProjectSettings({ id: 'p1', issueTrackerConfig: { linear } }, ports)
     ).rejects.toThrow('Encryption unavailable');
+    expect(ports.update).not.toHaveBeenCalled();
+  });
+
+  it('revalidates on contention and reuses the once-encrypted patch', async () => {
+    ports.findById
+      .mockResolvedValueOnce({ startupScriptCommand: null, startupScriptPath: null })
+      .mockResolvedValueOnce({ startupScriptCommand: 'other command', startupScriptPath: null });
+    ports.updateIfStartupUnchanged.mockResolvedValueOnce(null).mockResolvedValueOnce(project);
+    const input = {
+      id: 'p1',
+      startupScriptCommand: 'pnpm dev',
+      issueTrackerConfig: { linear: { ...linear, apiKey: 'new-key' } },
+    };
+    await updateProjectSettings(input, ports);
+    const patch = {
+      startupScriptCommand: 'pnpm dev',
+      issueTrackerConfig: { linear: { ...linear, apiKey: 'encrypted:new-key' } },
+    };
+    expect(ports.updateIfStartupUnchanged).toHaveBeenNthCalledWith(
+      1,
+      'p1',
+      { startupScriptCommand: null, startupScriptPath: null },
+      patch
+    );
+    expect(ports.updateIfStartupUnchanged).toHaveBeenNthCalledWith(
+      2,
+      'p1',
+      { startupScriptCommand: 'other command', startupScriptPath: null },
+      patch
+    );
+    expect(ports.encrypt).toHaveBeenCalledExactlyOnceWith('new-key');
+    expect(ports.update).not.toHaveBeenCalled();
+    expect(input.issueTrackerConfig.linear.apiKey).toBe('new-key');
+  });
+
+  it('rejects the existing invariant error when a conditional conflict makes the merged pair invalid', async () => {
+    ports.findById
+      .mockResolvedValueOnce({ startupScriptCommand: null, startupScriptPath: null })
+      .mockResolvedValueOnce({ startupScriptCommand: null, startupScriptPath: 'start.sh' });
+    ports.updateIfStartupUnchanged.mockResolvedValueOnce(null);
+    await expect(
+      updateProjectSettings(
+        { id: 'p1', startupScriptCommand: 'pnpm dev', issueTrackerConfig: { linear } },
+        ports
+      )
+    ).rejects.toThrow('Cannot have both startupScriptCommand and startupScriptPath set');
+    expect(ports.encrypt).toHaveBeenCalledTimes(1);
+    expect(ports.updateIfStartupUnchanged).toHaveBeenCalledTimes(1);
+    expect(ports.update).not.toHaveBeenCalled();
+  });
+
+  it('preserves the project-not-found error if the project disappears after validation', async () => {
+    ports.findById.mockResolvedValueOnce(project).mockResolvedValueOnce(null);
+    ports.updateIfStartupUnchanged.mockResolvedValueOnce(null);
+    await expect(
+      updateProjectSettings({ id: 'p1', startupScriptCommand: null }, ports)
+    ).rejects.toThrow('Project not found: p1');
+    expect(ports.updateIfStartupUnchanged).toHaveBeenCalledTimes(1);
+  });
+
+  it('terminates repeated contention with a retryable conflict and no repeated encryption', async () => {
+    ports.updateIfStartupUnchanged.mockResolvedValue(null);
+    await expect(
+      updateProjectSettings(
+        { id: 'p1', startupScriptCommand: 'pnpm test', issueTrackerConfig: { linear } },
+        ports
+      )
+    ).rejects.toMatchObject({
+      code: 'CONFLICT',
+      message: 'Project startup settings changed concurrently. Please retry.',
+    });
+    expect(ports.updateIfStartupUnchanged).toHaveBeenCalledTimes(5);
+    expect(ports.findById).toHaveBeenCalledTimes(6);
+    expect(ports.encrypt).toHaveBeenCalledTimes(1);
+    expect(ports.update).not.toHaveBeenCalled();
+  });
+
+  it('checks the final conflicted snapshot for deletion before reporting exhaustion', async () => {
+    ports.updateIfStartupUnchanged.mockResolvedValue(null);
+    ports.findById
+      .mockResolvedValueOnce(project)
+      .mockResolvedValueOnce(project)
+      .mockResolvedValueOnce(project)
+      .mockResolvedValueOnce(project)
+      .mockResolvedValueOnce(project)
+      .mockResolvedValueOnce(null);
+    await expect(
+      updateProjectSettings({ id: 'p1', startupScriptCommand: null }, ports)
+    ).rejects.toThrow('Project not found: p1');
+  });
+
+  it('does not attempt a conditional write when encryption fails after startup validation', async () => {
+    ports.encrypt.mockImplementation(() => {
+      throw new Error('Encryption unavailable');
+    });
+    await expect(
+      updateProjectSettings(
+        { id: 'p1', startupScriptCommand: null, issueTrackerConfig: { linear } },
+        ports
+      )
+    ).rejects.toThrow('Encryption unavailable');
+    expect(ports.updateIfStartupUnchanged).not.toHaveBeenCalled();
     expect(ports.update).not.toHaveBeenCalled();
   });
 

@@ -275,6 +275,8 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
           services.projectManagementService.validateRepoPath(repoPath),
         findById: (id) => services.projectManagementService.findById(id),
         update: (id, updates) => services.projectManagementService.update(id, updates),
+        updateIfStartupUnchanged: (id, expected, updates) =>
+          services.projectManagementService.updateIfStartupUnchanged(id, expected, updates),
         encrypt: (apiKey) => services.cryptoService.encrypt(apiKey),
       }),
     prFetchCoordinator,

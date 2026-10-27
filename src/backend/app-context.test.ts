@@ -95,6 +95,28 @@ describe('createApplication', () => {
     });
   });
 
+  it('binds conditional project settings writes to the graph-owned project capability', async () => {
+    const { services } = createDefaultApplicationDependencies();
+    const findById = vi
+      .fn()
+      .mockResolvedValue({ startupScriptCommand: null, startupScriptPath: null });
+    const updateIfStartupUnchanged = vi
+      .fn()
+      .mockRejectedValue(new Error('conditional storage unavailable'));
+    services.projectManagementService = Object.assign({}, services.projectManagementService, {
+      findById,
+      updateIfStartupUnchanged,
+    });
+    await expect(
+      services.updateProjectSettings({ id: 'p1', startupScriptCommand: 'pnpm dev' })
+    ).rejects.toThrow('conditional storage unavailable');
+    expect(updateIfStartupUnchanged).toHaveBeenCalledExactlyOnceWith(
+      'p1',
+      { startupScriptCommand: null, startupScriptPath: null },
+      { startupScriptCommand: 'pnpm dev' }
+    );
+  });
+
   it('routes child creation through the graph-owned project lookup and launch capability', async () => {
     const actualChildren = await vi.importActual<
       typeof import('@/backend/orchestration/workspace-children.orchestrator')

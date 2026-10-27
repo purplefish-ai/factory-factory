@@ -99,13 +99,18 @@ command/path exclusivity check, and credential encryption before persistence.
 Application composition injects only its project and encryption capabilities.
 Omitted fields retain their stored values; explicit null clears nullable
 settings. Omitting issue tracker configuration leaves the existing encrypted key
-intact.
+intact. Startup command/path changes use a conditional database write matching
+both observed nullable fields, then reread and revalidate on contention. At most
+five writes are attempted before returning a conflict for retry; deletion and
+invalid final pairs retain their existing errors. Encryption runs once after
+validation and the encrypted patch is reused, with no transaction held across
+validation or encryption.
 
-Project list, ID/slug reads, updates and archives share `toPublicProject`: the
-encrypted key is omitted and replaced with `hasApiKey`, preserving other public
-fields. Internal project service reads remain raw so trusted Linear and runtime
-consumers can decrypt stored credentials. Public projection never mutates the
-stored record.
+Project list, ID/slug reads, local and GitHub creations, updates and archives
+share `toPublicProject`: the encrypted key is omitted and replaced with
+`hasApiKey`, preserving other public fields. Internal project service reads
+remain raw so trusted Linear and runtime consumers can decrypt stored
+credentials. Public projection never mutates the stored record.
 
 API key validation in admin settings clears earlier team choices before each
 request. Editing the key requires fresh validation and team selection before
