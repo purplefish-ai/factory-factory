@@ -44,30 +44,26 @@ vi.mock('node:child_process', () => ({
   spawn: (...args: unknown[]) => mocks.mockSpawn(...args),
 }));
 
-vi.mock('@agentclientprotocol/sdk', () => {
-  class MockCSC {
-    toClient: (agent: unknown) => unknown;
-    initialize = mockInitialize;
-    loadSession = mockLoadSession;
-    newSession = mockNewSession;
-    prompt = mockPrompt;
-    cancel = mockCancel;
-    setSessionConfigOption = mockSetSessionConfigOption;
-    setSessionMode = mockSetSessionMode;
-    extMethod = mockExtMethod;
+vi.mock('@agentclientprotocol/sdk/unstable', () => ({
+  ndJsonStream: (...args: unknown[]) => mocks.mockNdJsonStream(...args),
+  PROTOCOL_VERSION: 1,
+}));
 
-    constructor(toClient: (agent: unknown) => unknown, _stream: unknown) {
-      this.toClient = toClient;
-      mocks.mockAcpClients.push(toClient({}));
-    }
-  }
-
-  return {
-    ClientSideConnection: MockCSC,
-    ndJsonStream: (...args: unknown[]) => mocks.mockNdJsonStream(...args),
-    PROTOCOL_VERSION: 1,
-  };
-});
+vi.mock('./acp-connection', () => ({
+  createAcpConnection: (handler: unknown) => {
+    mocks.mockAcpClients.push(handler);
+    return {
+      initialize: mockInitialize,
+      loadSession: mockLoadSession,
+      newSession: mockNewSession,
+      prompt: mockPrompt,
+      cancel: mockCancel,
+      setSessionConfigOption: mockSetSessionConfigOption,
+      setSessionMode: mockSetSessionMode,
+      extMethod: mockExtMethod,
+    };
+  },
+}));
 
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({

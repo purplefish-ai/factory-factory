@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { SessionConfigOption } from '@agentclientprotocol/sdk';
+import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { interceptorRegistry } from '@/backend/interceptors/registry';
 import type { InterceptorContext, ToolEvent } from '@/backend/interceptors/types';
 import { createLogger } from '@/backend/services/logger.service';

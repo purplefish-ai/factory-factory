@@ -3,13 +3,12 @@ import { tmpdir } from 'node:os';
 import { Readable, Writable } from 'node:stream';
 import type { NewSessionMeta } from '@agentclientprotocol/claude-agent-acp';
 import {
-  type Client,
-  ClientSideConnection,
   ndJsonStream,
   PROTOCOL_VERSION,
   type SessionConfigSelectOption,
-} from '@agentclientprotocol/sdk';
+} from '@agentclientprotocol/sdk/unstable';
 import { createLogger, getCurrentProcessEnv } from '@/backend/services/logger.service';
+import { createAcpConnection, type AcpClientCallbacks } from './acp-connection';
 import {
   createAcpSpawnError,
   resolveAcpBinary,
@@ -32,12 +31,10 @@ const appLogger = createLogger('claude-model-catalog-loader');
 const unexpectedCallback = (): Promise<never> =>
   Promise.reject(new Error('Claude catalog discovery cannot service ACP callbacks'));
 
-function createCatalogClient(): Client {
+function createCatalogClient(): AcpClientCallbacks {
   return {
     sessionUpdate: () => Promise.resolve(),
     requestPermission: unexpectedCallback,
-    readTextFile: unexpectedCallback,
-    writeTextFile: unexpectedCallback,
     extNotification: () => Promise.resolve(),
   };
 }
@@ -72,10 +69,7 @@ export async function fetchClaudeModelCatalogFromAcp(): Promise<ClaudeModelCatal
 
   const input = Readable.toWeb(child.stdout) as ReadableStream<Uint8Array>;
   const output = Writable.toWeb(child.stdin) as WritableStream<Uint8Array>;
-  const connection = new ClientSideConnection(
-    () => createCatalogClient(),
-    ndJsonStream(output, input)
-  );
+  const connection = createAcpConnection(createCatalogClient(), ndJsonStream(output, input));
   const runOperation = async <T>(promise: Promise<T>, description: string): Promise<T> =>
     await Promise.race([
       withTimeout({

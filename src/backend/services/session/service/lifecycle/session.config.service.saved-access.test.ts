@@ -1,4 +1,4 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk';
+import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { describe, expect, it, vi } from 'vitest';
 import type { AcpProcessHandle } from '@/backend/services/session/service/acp';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';

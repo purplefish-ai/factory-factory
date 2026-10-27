@@ -1,4 +1,4 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk';
+import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { workspaceNotificationService } from '@/backend/services/workspace';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';

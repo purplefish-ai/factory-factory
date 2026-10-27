@@ -38,20 +38,20 @@ vi.mock('node:child_process', async (importOriginal) => ({
   spawn: mocks.spawn,
 }));
 
-vi.mock('@agentclientprotocol/sdk', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@agentclientprotocol/sdk')>()),
-  ClientSideConnection: class {
-    constructor(...args: unknown[]) {
-      mocks.connectionConstructor(...args);
-    }
-
-    initialize = mocks.initialize;
-    newSession = mocks.newSession;
-    closeSession = mocks.closeSession;
-    extMethod = mocks.extMethod;
-    prompt = mocks.prompt;
-  },
+vi.mock('@agentclientprotocol/sdk/unstable', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agentclientprotocol/sdk/unstable')>()),
   ndJsonStream: mocks.ndJsonStream,
+}));
+
+vi.mock('./acp-connection', () => ({
+  createAcpConnection: (...args: unknown[]) => {
+    mocks.connectionConstructor(...args);
+    return {
+      initialize: mocks.initialize,
+      newSession: mocks.newSession,
+      extMethod: mocks.extMethod,
+    };
+  },
 }));
 
 vi.mock('@/backend/services/logger.service', async (importOriginal) => ({

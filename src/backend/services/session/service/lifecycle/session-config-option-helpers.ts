@@ -1,4 +1,7 @@
-import type { SessionConfigOption, SessionConfigSelectOption } from '@agentclientprotocol/sdk';
+import type {
+  SessionConfigOption,
+  SessionConfigSelectOption,
+} from '@agentclientprotocol/sdk/unstable';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 
 export type SessionProvider = 'CLAUDE' | 'CODEX';

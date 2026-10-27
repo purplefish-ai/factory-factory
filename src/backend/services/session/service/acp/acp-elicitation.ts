@@ -4,7 +4,7 @@ import type {
   CreateElicitationResponse,
   RequestPermissionRequest,
   RequestPermissionResponse,
-} from '@agentclientprotocol/sdk';
+} from '@agentclientprotocol/sdk/unstable';
 import { z } from 'zod';
 import { type AcpElicitationForm, createAcpElicitationForm } from './acp-elicitation-form';
 

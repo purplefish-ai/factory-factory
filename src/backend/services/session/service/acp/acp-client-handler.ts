@@ -1,18 +1,18 @@
 import crypto from 'node:crypto';
 import type {
-  Client,
   CompleteElicitationNotification,
   CreateElicitationRequest,
   CreateElicitationResponse,
   RequestPermissionRequest,
   RequestPermissionResponse,
   SessionNotification,
-} from '@agentclientprotocol/sdk';
+} from '@agentclientprotocol/sdk/unstable';
 import { createLogger } from '@/backend/services/logger.service';
 import {
   SUBAGENTS_CHANGED_METHOD,
   subagentsChangedParamsSchema,
 } from '@/shared/acp-protocol/subagents';
+import type { AcpClientCallbacks } from './acp-connection';
 import { createAcpElicitation } from './acp-elicitation';
 import type { AcpPermissionBridge } from './acp-permission-bridge';
 import type { AcpRuntimeEvent } from './acp-runtime-events';
@@ -92,7 +92,7 @@ function resolveFailClosedOutcome(params: {
   };
 }
 
-export class AcpClientHandler implements Client {
+export class AcpClientHandler implements AcpClientCallbacks {
   private readonly sessionId: string;
   private readonly onEvent: AcpEventCallback;
   private readonly permissionBridge: AcpPermissionBridge | null;
@@ -127,7 +127,7 @@ export class AcpClientHandler implements Client {
     return Promise.resolve();
   }
 
-  extNotification(method: string, params: Record<string, unknown>): Promise<void> {
+  extNotification(method: string, params: unknown): Promise<void> {
     this.onLog?.(this.sessionId, {
       eventType: 'acp_extension_notification',
       method,
