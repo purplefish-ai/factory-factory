@@ -1,116 +1,76 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-const mocks = vi.hoisted(() => ({
-  clearPendingInteractiveRequestIfMatches: vi.fn(),
-}));
-
-vi.mock('@/backend/services/session/service/session-domain.service', () => ({
-  sessionDomainService: {
-    clearPendingInteractiveRequestIfMatches: mocks.clearPendingInteractiveRequestIfMatches,
-  },
-}));
-
-vi.mock('@/backend/services/logger.service', () => ({
-  createLogger: () => ({
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  }),
-}));
-
+import { describe, expect, it, vi } from 'vitest';
 import { createPermissionResponseHandler } from './permission-response.handler';
 
-describe('createPermissionResponseHandler', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+const context = { sessionId: 'session-1', workingDir: '/tmp/work' };
 
-  it('delegates permission completion to the service', () => {
-    const ws = { send: vi.fn() };
+describe('createPermissionResponseHandler', () => {
+  it('delegates permission completion to the injected service without a socket', async () => {
     const respondToPermission = vi.fn(() => true);
     const handler = createPermissionResponseHandler({
-      sessionPermissionService: {
-        respondToPermission,
-      },
+      sessionPermissionService: { respondToPermission },
     });
-
-    void handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp/work',
-      message: {
+    expect(
+      await handler(context, {
         type: 'permission_response',
         requestId: 'req-1',
         optionId: 'allow_once',
         answers: { mode: ['default'] },
-      } as never,
-    });
-
+      })
+    ).toEqual({ replies: [] });
     expect(respondToPermission).toHaveBeenCalledWith('session-1', 'req-1', 'allow_once', {
       mode: ['default'],
     });
-    expect(ws.send).not.toHaveBeenCalled();
-    expect(mocks.clearPendingInteractiveRequestIfMatches).not.toHaveBeenCalled();
+    expect(respondToPermission).toHaveBeenCalledTimes(1);
   });
 
-  it('sends websocket error when no pending request is found', () => {
-    const ws = { send: vi.fn() };
+  it('returns a requester-only error when no pending request is found', async () => {
     const respondToPermission = vi.fn(() => false);
     const handler = createPermissionResponseHandler({
-      sessionPermissionService: {
-        respondToPermission,
-      },
+      sessionPermissionService: { respondToPermission },
     });
-
-    void handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp/work',
-      message: {
+    expect(
+      await handler(context, {
         type: 'permission_response',
         requestId: 'req-2',
         optionId: 'deny_once',
-      } as never,
-    });
-
-    expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({
-        type: 'error',
-        message: 'No pending ACP permission request found for this request ID',
       })
-    );
-    expect(mocks.clearPendingInteractiveRequestIfMatches).not.toHaveBeenCalled();
+    ).toEqual({ replies: [{ type: 'error', error: { kind: 'permission_not_pending' } }] });
+    expect(respondToPermission).toHaveBeenCalledWith('session-1', 'req-2', 'deny_once', undefined);
   });
 
-  it('sends websocket error when permission response throws', () => {
-    const ws = { send: vi.fn() };
+  it('leaves a newer pending request alone when a stale response is rejected', async () => {
+    const pending = { id: 'newer-request' };
+    const respondToPermission = vi.fn((_sessionId, requestId) => requestId === pending.id);
+    const handler = createPermissionResponseHandler({
+      sessionPermissionService: { respondToPermission },
+    });
+    const outcome = await handler(context, {
+      type: 'permission_response',
+      requestId: 'old-request',
+      optionId: 'invalid-option',
+    });
+    expect(outcome).toEqual({
+      replies: [{ type: 'error', error: { kind: 'permission_not_pending' } }],
+    });
+    expect(pending.id).toBe('newer-request');
+  });
+
+  it('returns the original permission response failure', async () => {
+    const cause = new Error('bridge down');
     const respondToPermission = vi.fn(() => {
-      throw new Error('bridge down');
+      throw cause;
     });
     const handler = createPermissionResponseHandler({
-      sessionPermissionService: {
-        respondToPermission,
-      },
+      sessionPermissionService: { respondToPermission },
     });
-
-    void handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp/work',
-      message: {
+    expect(
+      await handler(context, {
         type: 'permission_response',
         requestId: 'req-3',
         optionId: 'allow_once',
-      } as never,
-    });
-
-    expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({
-        type: 'error',
-        message: 'Failed to respond to permission: bridge down',
       })
-    );
-    expect(mocks.clearPendingInteractiveRequestIfMatches).not.toHaveBeenCalled();
+    ).toEqual({
+      replies: [{ type: 'error', error: { kind: 'permission_response_failed', cause } }],
+    });
   });
 });

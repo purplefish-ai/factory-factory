@@ -4,11 +4,14 @@ import type { IncomingMessage } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Duplex } from 'node:stream';
+import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WebSocket, WebSocketServer } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
 import { SessionEventBus, sessionEventBus } from '@/backend/services/session';
+import type { SessionDeltaEvent } from '@/shared/acp-protocol';
+import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import {
   type ChatConnectionRegistry,
   disposeChatTransportForApplication,
@@ -65,6 +68,9 @@ function createTestContext(worktreeBaseDir: string, eventBus: SessionEventBus = 
       sessionEventBus: eventBus,
       sessionDomainService: {
         clearSession: vi.fn(),
+        emitDelta: vi.fn((sessionId: string, data: SessionDeltaEvent) =>
+          eventBus.publishToSession(sessionId, { type: 'session_delta', data })
+        ),
       },
     },
   } as unknown as AppContext;
@@ -236,6 +242,81 @@ describe('createChatUpgradeHandler', () => {
     expect(chatConnectionRegistry.has('conn-1')).toBe(false);
     expect(chatConnectionRegistry.countViewers('session-1')).toBe(0);
     expect(sessionFileLogger.closeSession).toHaveBeenCalledWith('session-1');
+  });
+
+  it('adapts command replies only to the requester before correcting every session viewer', async () => {
+    const bus = new SessionEventBus();
+    const { appContext, chatMessageHandlerService, sessionDomainService } = createTestContext(
+      tempRootDir,
+      bus
+    );
+    const handler = createChatUpgradeHandler(appContext);
+    const requester = new MockWebSocket();
+    const second = new MockWebSocket();
+    const sockets = [requester, second];
+    const wss = {
+      handleUpgrade: (
+        _request: IncomingMessage,
+        _socket: Duplex,
+        _head: Buffer,
+        callback: (socket: WebSocket) => void
+      ) => callback(sockets.shift() as unknown as WebSocket),
+    } as unknown as WebSocketServer;
+    for (const connectionId of ['requester', 'second']) {
+      handler(
+        {
+          headers: { origin: allowedOrigin },
+          socket: { remoteAddress: '127.0.0.1' },
+        } as unknown as IncomingMessage,
+        { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex,
+        Buffer.alloc(0),
+        new URL(`http://localhost/chat?connectionId=${connectionId}&sessionId=session-1`),
+        wss,
+        new WeakMap<WebSocket, boolean>()
+      );
+    }
+    vi.mocked(chatMessageHandlerService.handleMessage).mockResolvedValueOnce({
+      replies: [{ type: 'chat_capabilities', capabilities: EMPTY_CHAT_BAR_CAPABILITIES }],
+    });
+    requester.emit('message', JSON.stringify({ type: 'set_model', model: 'model-1' }));
+    await vi.waitFor(() => expect(requester.send).toHaveBeenCalledTimes(1));
+    expect(requester.send).toHaveBeenLastCalledWith(
+      JSON.stringify({ type: 'chat_capabilities', capabilities: EMPTY_CHAT_BAR_CAPABILITIES })
+    );
+    expect(second.send).not.toHaveBeenCalled();
+
+    requester.send.mockClear();
+    const configOptions: SessionConfigOption[] = [
+      { id: 'model', name: 'Model', type: 'select', currentValue: 'old', options: [] },
+    ];
+    vi.mocked(chatMessageHandlerService.handleMessage).mockResolvedValueOnce({
+      replies: [
+        {
+          type: 'error',
+          error: { kind: 'set_config_option_failed', cause: new Error('rejected') },
+        },
+      ],
+      configOptionsCorrection: configOptions,
+    });
+    requester.emit(
+      'message',
+      JSON.stringify({ type: 'set_config_option', configId: 'model', value: 'bad' })
+    );
+    await vi.waitFor(() => expect(second.send).toHaveBeenCalledTimes(1));
+    const error = JSON.stringify({
+      type: 'error',
+      message: 'Failed to set config option: rejected',
+    });
+    const correction = JSON.stringify({
+      type: 'session_delta',
+      data: { type: 'config_options_update', configOptions },
+    });
+    expect(requester.send.mock.calls).toEqual([[error], [correction]]);
+    expect(second.send.mock.calls).toEqual([[correction]]);
+    expect(sessionDomainService.emitDelta).toHaveBeenCalledWith('session-1', {
+      type: 'config_options_update',
+      configOptions,
+    });
   });
 
   it('keeps the session log open until the last viewer disconnects', () => {

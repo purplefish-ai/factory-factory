@@ -54,6 +54,28 @@ the bus.
 pending-request access. Agent stream translation belongs to the ACP processor;
 it does not attach legacy `ClaudeClient` listeners.
 
+## Configuration and permission commands
+
+The `set_model`, `set_config_option`, `set_thinking_budget`, and
+`permission_response` handlers take a plain `SessionCommandContext` and typed
+message. Their injected capabilities perform session operations; their
+`SessionCommandOutcome` describes requester replies and any confirmed
+configuration correction. These leaf handlers receive no WebSocket and do not
+serialize frames.
+
+`chat-command-adapter.ts` owns requester serialization and existing error copy.
+A rejected configuration change returns its confirmed options only when a live
+handle supplies them. The adapter delivers the requester error first, then
+forwards that correction through `SessionDomainService.emitDelta` and the
+existing session event bus. All viewers receive the correction; only the
+requesting viewer receives the error or explicit model capabilities reply.
+Permission completion and matching-request cleanup remain owned by the
+permission service.
+
+The mixed handler registry temporarily retains the existing socket-bearing
+queue, lifecycle, and load handlers. The WebSocket boundary accepts their void
+result as well as migrated command outcomes.
+
 ## Loading and reconnecting
 
 Registering a chat WebSocket does not hydrate history. The client explicitly

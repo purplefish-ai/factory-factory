@@ -1,45 +1,21 @@
 import { createLogger } from '@/backend/services/logger.service';
 import { DEBUG_CHAT_WS } from '@/backend/services/session/service/chat/chat-message-handlers/constants';
-import type { ChatMessageHandler } from '@/backend/services/session/service/chat/chat-message-handlers/types';
-import { sessionConfigService } from '@/backend/services/session/service/lifecycle/session-core-services';
-import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
-import type { SessionDeltaEvent } from '@/shared/acp-protocol';
+import type {
+  SessionCommandHandler,
+  SessionCommandConfigService,
+} from '@/backend/services/session/service/chat/session-command.types';
 import type { SetConfigOptionMessage } from '@/shared/websocket';
-import { sendWebSocketError } from './utils';
 
 const logger = createLogger('chat-message-handlers');
 
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  if (typeof error === 'object' && error !== null) {
-    const candidate = error as { message?: unknown; code?: unknown; data?: unknown };
-    if (typeof candidate.message === 'string' && candidate.message.length > 0) {
-      return candidate.message;
-    }
-    if (typeof candidate.data !== 'undefined') {
-      try {
-        return JSON.stringify(candidate.data);
-      } catch {
-        // Fall through to generic object serialization
-      }
-    }
-    if (typeof candidate.code === 'number' || typeof candidate.code === 'string') {
-      return `ACP error (${String(candidate.code)})`;
-    }
-  }
-
-  try {
-    return JSON.stringify(error);
-  } catch {
-    return String(error);
-  }
-}
-
-export function createSetConfigOptionHandler(): ChatMessageHandler<SetConfigOptionMessage> {
-  return async ({ ws, sessionId, message }) => {
+export function createSetConfigOptionHandler(deps: {
+  sessionConfigService: Pick<
+    SessionCommandConfigService,
+    'setSessionConfigOption' | 'getSessionConfigOptions'
+  >;
+}): SessionCommandHandler<SetConfigOptionMessage> {
+  const { sessionConfigService } = deps;
+  return async ({ sessionId }, message) => {
     try {
       await sessionConfigService.setSessionConfigOption(sessionId, message.configId, message.value);
       if (DEBUG_CHAT_WS) {
@@ -49,28 +25,21 @@ export function createSetConfigOptionHandler(): ChatMessageHandler<SetConfigOpti
           value: message.value,
         });
       }
+      return { replies: [] };
     } catch (error) {
-      const errorMessage = getErrorMessage(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('[Chat WS] Failed to set config option', {
         sessionId,
         configId: message.configId,
         value: message.value,
         error: errorMessage,
       });
-      sendWebSocketError(ws, `Failed to set config option: ${errorMessage}`);
-
-      // Re-emit the actual (unchanged) config options so the client's optimistic
-      // chatSettings update (see use-chat-actions.ts setConfigOption) gets rolled back
-      // to the real server-confirmed value instead of sticking to the rejected one.
-      // Skip if there's no live ACP handle to read the real options from, since an
-      // empty list would wipe the client's config selector instead of correcting it.
       const configOptions = sessionConfigService.getSessionConfigOptions(sessionId);
-      if (configOptions.length > 0) {
-        sessionDomainService.emitDelta(sessionId, {
-          type: 'config_options_update',
-          configOptions,
-        } as SessionDeltaEvent);
-      }
+      return {
+        replies: [{ type: 'error', error: { kind: 'set_config_option_failed', cause: error } }],
+        // Empty options would wipe the optimistic selector rather than restore confirmed values.
+        ...(configOptions.length > 0 ? { configOptionsCorrection: configOptions } : {}),
+      };
     }
   };
 }

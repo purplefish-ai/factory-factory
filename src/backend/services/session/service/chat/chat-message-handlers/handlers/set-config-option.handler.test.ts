@@ -1,217 +1,103 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-const mocks = vi.hoisted(() => ({
-  setSessionConfigOption: vi.fn(),
-  getSessionConfigOptions: vi.fn(),
-  emitDelta: vi.fn(),
-}));
-
-vi.mock('@/backend/services/session/service/lifecycle/session-core-services', () => ({
-  sessionConfigService: {
-    setSessionConfigOption: mocks.setSessionConfigOption,
-    getSessionConfigOptions: mocks.getSessionConfigOptions,
-  },
-}));
-
-vi.mock('@/backend/services/session/service/session-domain.service', () => ({
-  sessionDomainService: {
-    emitDelta: mocks.emitDelta,
-  },
-}));
-
-vi.mock('@/backend/services/logger.service', () => ({
-  createLogger: () => ({
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  }),
-}));
-
 import { createSetConfigOptionHandler } from './set-config-option.handler';
+
+const setSessionConfigOption = vi.fn();
+const getSessionConfigOptions = vi.fn();
+const handler = createSetConfigOptionHandler({
+  sessionConfigService: { setSessionConfigOption, getSessionConfigOptions },
+});
+const context = { sessionId: 'session-1', workingDir: '/tmp/work' };
 
 describe('createSetConfigOptionHandler', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.getSessionConfigOptions.mockReturnValue([]);
+    setSessionConfigOption.mockResolvedValue(undefined);
+    getSessionConfigOptions.mockReturnValue([]);
   });
 
-  it('updates session config option', async () => {
-    mocks.setSessionConfigOption.mockResolvedValue(undefined);
-    const ws = { send: vi.fn() };
-    const handler = createSetConfigOptionHandler();
-
-    await handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp/work',
-      message: {
-        type: 'set_config_option',
-        configId: 'execution_mode',
-        value: 'on-request',
-      } as never,
+  it('updates the injected session configuration with plain values and no socket', async () => {
+    const outcome = await handler(context, {
+      type: 'set_config_option',
+      configId: 'execution_mode',
+      value: 'on-request',
     });
-
-    expect(mocks.setSessionConfigOption).toHaveBeenCalledWith(
+    expect(setSessionConfigOption).toHaveBeenCalledWith(
       'session-1',
       'execution_mode',
       'on-request'
     );
-    expect(ws.send).not.toHaveBeenCalled();
+    expect(outcome).toEqual({ replies: [] });
+    expect(getSessionConfigOptions).not.toHaveBeenCalled();
   });
 
-  it('sends websocket error when update throws an Error', async () => {
-    mocks.setSessionConfigOption.mockRejectedValue(new Error('boom'));
-    const ws = { send: vi.fn() };
-    const handler = createSetConfigOptionHandler();
-
-    await handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp/work',
-      message: { type: 'set_config_option', configId: 'model', value: 'gpt-5' } as never,
+  it('returns the current config options on rejection so all viewers can roll back', async () => {
+    const cause = new Error('boom');
+    setSessionConfigOption.mockRejectedValue(cause);
+    const configOptions = [
+      {
+        id: 'model',
+        name: 'Model',
+        type: 'select',
+        category: 'model',
+        currentValue: 'gpt-5',
+        options: [],
+      },
+    ];
+    getSessionConfigOptions.mockReturnValue(configOptions);
+    const outcome = await handler(context, {
+      type: 'set_config_option',
+      configId: 'model',
+      value: 'gpt-5-mini',
     });
-
-    expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({ type: 'error', message: 'Failed to set config option: boom' })
-    );
-  });
-
-  it('re-emits the current config options on failure so the client can roll back', async () => {
-    mocks.setSessionConfigOption.mockRejectedValue(new Error('boom'));
-    const currentConfigOptions = [{ id: 'model', category: 'model', currentValue: 'gpt-5' }];
-    mocks.getSessionConfigOptions.mockReturnValue(currentConfigOptions);
-    const ws = { send: vi.fn() };
-    const handler = createSetConfigOptionHandler();
-
-    await handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp/work',
-      message: { type: 'set_config_option', configId: 'model', value: 'gpt-5-mini' } as never,
-    });
-
-    expect(mocks.getSessionConfigOptions).toHaveBeenCalledWith('session-1');
-    expect(mocks.emitDelta).toHaveBeenCalledWith('session-1', {
-      type: 'config_options_update',
-      configOptions: currentConfigOptions,
+    expect(getSessionConfigOptions).toHaveBeenCalledWith('session-1');
+    expect(outcome).toEqual({
+      replies: [{ type: 'error', error: { kind: 'set_config_option_failed', cause } }],
+      configOptionsCorrection: configOptions,
     });
   });
 
-  it('does not emit config options update on failure when there is no live ACP handle', async () => {
-    mocks.setSessionConfigOption.mockRejectedValue(new Error('boom'));
-    const ws = { send: vi.fn() };
-    const handler = createSetConfigOptionHandler();
-
-    await handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp/work',
-      message: { type: 'set_config_option', configId: 'model', value: 'gpt-5-mini' } as never,
+  it('does not correct with empty options when there is no live ACP handle', async () => {
+    const cause = new Error('boom');
+    setSessionConfigOption.mockRejectedValue(cause);
+    const outcome = await handler(context, {
+      type: 'set_config_option',
+      configId: 'model',
+      value: 'gpt-5-mini',
     });
-
-    expect(mocks.emitDelta).not.toHaveBeenCalled();
+    expect(outcome).toEqual({
+      replies: [{ type: 'error', error: { kind: 'set_config_option_failed', cause } }],
+    });
   });
 
-  it('uses structured data payload when error object has no message', async () => {
-    mocks.setSessionConfigOption.mockRejectedValue({ data: { reason: 'invalid preset' } });
-    const ws = { send: vi.fn() };
-    const handler = createSetConfigOptionHandler();
-
-    await handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp/work',
-      message: { type: 'set_config_option', configId: 'execution_mode', value: 'bad' } as never,
+  it.each([
+    new Error('boom'),
+    { data: { reason: 'invalid preset' } },
+    { code: 403 },
+    { message: 'invalid option' },
+    42,
+  ])('returns the original rejection %o for transport error formatting', async (cause) => {
+    setSessionConfigOption.mockRejectedValue(cause);
+    const outcome = await handler(context, {
+      type: 'set_config_option',
+      configId: 'mode',
+      value: 'bad',
     });
-
-    expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({
-        type: 'error',
-        message: 'Failed to set config option: {"reason":"invalid preset"}',
-      })
-    );
+    expect(outcome.replies).toEqual([
+      { type: 'error', error: { kind: 'set_config_option_failed', cause } },
+    ]);
   });
 
-  it('falls back to ACP error code label for code-only errors', async () => {
-    mocks.setSessionConfigOption.mockRejectedValue({ code: 403 });
-    const ws = { send: vi.fn() };
-    const handler = createSetConfigOptionHandler();
-
-    await handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp/work',
-      message: { type: 'set_config_option', configId: 'mode', value: 'blocked' } as never,
+  it('passes circular rejections to the adapter without serializing them', async () => {
+    const cause: { self?: unknown } = {};
+    cause.self = cause;
+    setSessionConfigOption.mockRejectedValue(cause);
+    const outcome = await handler(context, {
+      type: 'set_config_option',
+      configId: 'mode',
+      value: 'bad',
     });
-
-    expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({
-        type: 'error',
-        message: 'Failed to set config option: ACP error (403)',
-      })
-    );
-  });
-
-  it('uses message property for non-Error objects', async () => {
-    mocks.setSessionConfigOption.mockRejectedValue({ message: 'invalid option' });
-    const ws = { send: vi.fn() };
-    const handler = createSetConfigOptionHandler();
-
-    await handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp/work',
-      message: { type: 'set_config_option', configId: 'model', value: 'bad' } as never,
-    });
-
-    expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({
-        type: 'error',
-        message: 'Failed to set config option: invalid option',
-      })
-    );
-  });
-
-  it('falls back to JSON serialization for non-object errors', async () => {
-    mocks.setSessionConfigOption.mockRejectedValue(42);
-    const ws = { send: vi.fn() };
-    const handler = createSetConfigOptionHandler();
-
-    await handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp/work',
-      message: { type: 'set_config_option', configId: 'mode', value: 'bad' } as never,
-    });
-
-    expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({
-        type: 'error',
-        message: 'Failed to set config option: 42',
-      })
-    );
-  });
-
-  it('falls back to String(error) when JSON serialization throws', async () => {
-    const circular: { self?: unknown } = {};
-    circular.self = circular;
-    mocks.setSessionConfigOption.mockRejectedValue(circular);
-    const ws = { send: vi.fn() };
-    const handler = createSetConfigOptionHandler();
-
-    await handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp/work',
-      message: { type: 'set_config_option', configId: 'mode', value: 'bad' } as never,
-    });
-
-    expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({
-        type: 'error',
-        message: 'Failed to set config option: [object Object]',
-      })
-    );
+    expect(outcome.replies).toEqual([
+      { type: 'error', error: { kind: 'set_config_option_failed', cause } },
+    ]);
   });
 });
