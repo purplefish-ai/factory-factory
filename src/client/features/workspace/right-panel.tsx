@@ -40,6 +40,15 @@ import { type BottomPanelTab, useWorkspacePanel } from './workspace-panel-contex
 
 type LogsBottomTab = Exclude<BottomPanelTab, 'terminal'>;
 
+interface WorkspaceTopTabState {
+  workspaceId: string;
+  tab: TopPanelTab;
+}
+
+function getActiveTopTab(state: WorkspaceTopTabState, workspaceId: string): TopPanelTab {
+  return state.workspaceId === workspaceId ? state.tab : 'changes';
+}
+
 function isLogsBottomTab(tab: BottomPanelTab): tab is LogsBottomTab {
   return tab === 'setup-logs' || tab === 'dev-logs' || tab === 'post-run-logs';
 }
@@ -216,7 +225,12 @@ export function RightPanel({
 }: RightPanelProps) {
   // Track which workspaceId has been loaded to handle workspace changes
   const loadedForWorkspaceRef = useRef<string | null>(null);
-  const [activeTopTab, setActiveTopTab] = useState<TopPanelTab>('changes');
+  const [topTabState, setTopTabState] = useState<WorkspaceTopTabState>({
+    workspaceId,
+    tab: 'changes',
+  });
+  // A previous workspace's tab must not reset the new workspace's preference.
+  const activeTopTab = getActiveTopTab(topTabState, workspaceId);
   const { activeBottomTab, setActiveBottomTab } = useWorkspacePanel();
   const terminalPanelRef = useRef<TerminalPanelRef>(null);
 
@@ -285,13 +299,13 @@ export function RightPanel({
       // Ignore storage errors
     }
     const persisted = loadPersistedTopPanelState(storage, workspaceId);
-    setActiveTopTab(persisted.topTab);
+    setTopTabState({ workspaceId, tab: persisted.topTab });
   }, [workspaceId]);
 
   // Persist top-level tab selection to localStorage
   const handleTopTabChange = useCallback(
     (tab: TopPanelTab) => {
-      setActiveTopTab(tab);
+      setTopTabState({ workspaceId, tab });
       try {
         localStorage.setItem(`${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`, tab);
       } catch {
@@ -300,6 +314,18 @@ export function RightPanel({
     },
     [workspaceId]
   );
+
+  useEffect(() => {
+    if (workspace === undefined) {
+      return;
+    }
+    if (
+      (activeTopTab === 'auto-iteration' && !isAutoIteration) ||
+      (activeTopTab === 'periodic-task' && !periodicTaskId)
+    ) {
+      handleTopTabChange('changes');
+    }
+  }, [workspace, activeTopTab, isAutoIteration, periodicTaskId, handleTopTabChange]);
 
   const handleTakeScreenshots = useCallback(() => {
     handleTopTabChange('screenshots');

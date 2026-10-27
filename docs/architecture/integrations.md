@@ -112,7 +112,10 @@ execution mode and tool approval prompts cannot stall scheduled runs.
 
 Managed via the "Periodic Tasks" admin tab and created from the Kanban launch
 dropdown. The workspace right panel shows execution history for
-periodic-task-sourced workspaces.
+periodic-task-sourced workspaces. Once workspace data loads, a stored
+right-panel selection falls back to Changes if its periodic task or
+auto-iteration mode is no longer available. Deleting a task therefore cannot
+leave that panel blank.
 
 Service capsule: `src/backend/services/periodic-task/`.
 

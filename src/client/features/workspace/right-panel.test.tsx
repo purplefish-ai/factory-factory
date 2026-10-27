@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
   agentsProps: vi.fn(),
   workspaceData: undefined as
     | undefined
-    | { mode: string; periodicTaskId: null; creationSource: string },
+    | { mode: string; periodicTaskId: string | null; creationSource: string },
 }));
 
 vi.mock('@phosphor-icons/react/dist/csr/ArrowsClockwise', () => ({
@@ -104,11 +104,17 @@ vi.mock('./agents-panel', () => ({
   },
 }));
 
-vi.mock('./auto-iteration-panel', () => ({ AutoIterationPanel: () => null }));
-vi.mock('./combined-changes-panel', () => ({ CombinedChangesPanel: () => null }));
+vi.mock('./auto-iteration-panel', () => ({
+  AutoIterationPanel: () => createElement('div', { 'data-testid': 'auto-iteration-panel' }),
+}));
+vi.mock('./combined-changes-panel', () => ({
+  CombinedChangesPanel: () => createElement('div', { 'data-testid': 'changes-panel' }),
+}));
 vi.mock('./dev-logs-panel', () => ({ DevLogsPanel: () => null }));
 vi.mock('./file-browser-panel', () => ({ FileBrowserPanel: () => null }));
-vi.mock('./periodic-task-panel', () => ({ PeriodicTaskPanel: () => null }));
+vi.mock('./periodic-task-panel', () => ({
+  PeriodicTaskPanel: () => createElement('div', { 'data-testid': 'periodic-task-panel' }),
+}));
 vi.mock('./screenshots-panel', () => ({ ScreenshotsPanel: () => null }));
 vi.mock('./setup-logs-panel', () => ({ SetupLogsPanel: () => null }));
 vi.mock('./todo-panel-container', () => ({ TodoPanelContainer: () => null }));
@@ -149,11 +155,11 @@ describe('RightPanel Agents tab', () => {
     vi.clearAllMocks();
   });
 
-  function render() {
+  function render(workspaceId = 'workspace-1') {
     void act(() =>
       root.render(
         createElement(RightPanel, {
-          workspaceId: 'workspace-1',
+          workspaceId,
           selectedSessionId: 'session-1',
           selectedSessionName: 'Session 1',
           selectedSessionReady: true,
@@ -162,6 +168,54 @@ describe('RightPanel Agents tab', () => {
       )
     );
   }
+
+  it.each(['periodic-task', 'auto-iteration'])(
+    'falls back from unavailable persisted %s tab',
+    (tab) => {
+      localStorage.setItem('workspace-right-panel-tab-workspace-1', tab);
+      render();
+      expect(container.querySelector('[data-testid="changes-panel"]')).not.toBeNull();
+      expect(localStorage.getItem('workspace-right-panel-tab-workspace-1')).toBe('changes');
+      expect(
+        [...container.querySelectorAll('button')]
+          .find((button) => button.textContent === 'Changes')
+          ?.getAttribute('aria-pressed')
+      ).toBe('true');
+    }
+  );
+
+  it('waits for workspace capabilities before rejecting a periodic-task preference', () => {
+    localStorage.setItem('workspace-right-panel-tab-workspace-1', 'periodic-task');
+    mocks.workspaceData = undefined;
+    render();
+    expect(localStorage.getItem('workspace-right-panel-tab-workspace-1')).toBe('periodic-task');
+    mocks.workspaceData = { mode: 'STANDARD', periodicTaskId: 'task-1', creationSource: 'MANUAL' };
+    render();
+    expect(container.querySelector('[data-testid="periodic-task-panel"]')).not.toBeNull();
+    expect(localStorage.getItem('workspace-right-panel-tab-workspace-1')).toBe('periodic-task');
+  });
+
+  it('falls back when an open workspace loses its periodic task', () => {
+    localStorage.setItem('workspace-right-panel-tab-workspace-1', 'periodic-task');
+    mocks.workspaceData = { mode: 'STANDARD', periodicTaskId: 'task-1', creationSource: 'MANUAL' };
+    render();
+    expect(container.querySelector('[data-testid="periodic-task-panel"]')).not.toBeNull();
+    mocks.workspaceData = { mode: 'STANDARD', periodicTaskId: null, creationSource: 'MANUAL' };
+    render();
+    expect(container.querySelector('[data-testid="changes-panel"]')).not.toBeNull();
+    expect(localStorage.getItem('workspace-right-panel-tab-workspace-1')).toBe('changes');
+  });
+
+  it('preserves another workspace preference when switching from a periodic task', () => {
+    localStorage.setItem('workspace-right-panel-tab-workspace-1', 'periodic-task');
+    localStorage.setItem('workspace-right-panel-tab-workspace-2', 'agents');
+    mocks.workspaceData = { mode: 'STANDARD', periodicTaskId: 'task-1', creationSource: 'MANUAL' };
+    render();
+    mocks.workspaceData = { mode: 'STANDARD', periodicTaskId: null, creationSource: 'MANUAL' };
+    render('workspace-2');
+    expect(container.querySelector('[data-testid="agents-panel"]')).not.toBeNull();
+    expect(localStorage.getItem('workspace-right-panel-tab-workspace-2')).toBe('agents');
+  });
 
   it.each([
     ['parent', 'MANUAL', 'true'],
