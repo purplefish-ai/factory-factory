@@ -1,7 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { toast } from 'sonner';
-import { useChatWebSocket } from '@/client/features/chat';
-import { runInBackground } from '@/client/lib/background-task';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useChatWebSocket, useSessionCollectionCommands } from '@/client/features/chat';
 import { trpc } from '@/client/lib/trpc';
 import { useAutoScroll } from '@/hooks/use-auto-scroll';
 
@@ -14,7 +12,6 @@ function isPendingCreatedSelection(
 }
 
 export function useQuickChat(workspaceId: string | null) {
-  const utils = trpc.useUtils();
   const viewportRef = useRef<HTMLDivElement>(null);
   const { onScroll, isNearBottom, scrollToBottom } = useAutoScroll(viewportRef);
 
@@ -69,46 +66,25 @@ export function useQuickChat(workspaceId: string | null) {
     dbSessionId: workspaceId ? selectedSessionId : null,
   });
 
-  // Session creation mutations
-  const createSession = trpc.session.createAndStartSession.useMutation({
-    onSuccess: () => {
-      if (workspaceId) {
-        runInBackground(
-          utils.session.listSessions.invalidate({ workspaceId }),
-          'Could not refresh data'
-        );
+  const activeWorkspaceRef = useRef(workspaceId);
+  useLayoutEffect(() => {
+    activeWorkspaceRef.current = workspaceId;
+  }, [workspaceId]);
+  const {
+    createSession,
+    deleteSession,
+    createChat: handleNewChat,
+    createQuickAction: handleQuickAction,
+  } = useSessionCollectionCommands({
+    workspaceId,
+    sessions,
+    creationDefaults: { model: '' },
+    onCreated: (session, originatingWorkspaceId) => {
+      if (activeWorkspaceRef.current !== originatingWorkspaceId) {
+        return;
       }
-    },
-    onError: (error) => {
-      toast.error(error.message || 'Failed to create or start session');
-    },
-  });
-  const deleteSession = trpc.session.deleteSession.useMutation({
-    onMutate: async ({ id }) => {
-      await utils.session.listSessions.cancel({ workspaceId: workspaceId ?? '' });
-      const previousSessions = utils.session.listSessions.getData({
-        workspaceId: workspaceId ?? '',
-      });
-      utils.session.listSessions.setData({ workspaceId: workspaceId ?? '' }, (old) =>
-        old?.filter((s) => s.id !== id)
-      );
-      return { previousSessions };
-    },
-    onError: (_err, _variables, context) => {
-      if (context?.previousSessions) {
-        utils.session.listSessions.setData(
-          { workspaceId: workspaceId ?? '' },
-          context.previousSessions
-        );
-      }
-    },
-    onSettled: () => {
-      if (workspaceId) {
-        runInBackground(
-          utils.session.listSessions.invalidate({ workspaceId }),
-          'Could not refresh data'
-        );
-      }
+      pendingCreatedSessionRef.current = { id: session.id, workspaceId: originatingWorkspaceId };
+      setSelectedSessionId(session.id);
     },
   });
 
@@ -132,58 +108,6 @@ export function useQuickChat(workspaceId: string | null) {
       }
     },
     [sessions, selectedSessionId, deleteSession]
-  );
-
-  const getNextChatName = useCallback(() => {
-    const existingNumbers = (sessions ?? [])
-      .map((s) => {
-        const match = s.name?.match(/^Chat (\d+)$/);
-        return match ? Number.parseInt(match[1] as string, 10) : 0;
-      })
-      .filter((n) => n > 0);
-    const nextNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : 1;
-    return `Chat ${nextNumber}`;
-  }, [sessions]);
-
-  const handleNewChat = useCallback(() => {
-    if (!workspaceId) {
-      return;
-    }
-    const name = getNextChatName();
-    createSession.mutate(
-      { workspaceId, workflow: 'followup', model: '', name, initialPrompt: '' },
-      {
-        onSuccess: (session) => {
-          pendingCreatedSessionRef.current = { id: session.id, workspaceId };
-          setSelectedSessionId(session.id);
-        },
-      }
-    );
-  }, [workspaceId, getNextChatName, createSession]);
-
-  const handleQuickAction = useCallback(
-    (name: string, prompt: string) => {
-      if (!workspaceId) {
-        return;
-      }
-      createSession.mutate(
-        {
-          workspaceId,
-          workflow: 'followup',
-          model: '',
-          name,
-          initialMessage: prompt,
-          initialPrompt: '',
-        },
-        {
-          onSuccess: (session) => {
-            pendingCreatedSessionRef.current = { id: session.id, workspaceId };
-            setSelectedSessionId(session.id);
-          },
-        }
-      );
-    },
-    [workspaceId, createSession]
   );
 
   return {
