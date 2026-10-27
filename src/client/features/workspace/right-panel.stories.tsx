@@ -24,6 +24,7 @@ function RightPanelStory({ hasTask = false }: { hasTask?: boolean }) {
               const responses: Record<string, () => unknown> = {
                 'workspace.get': () => ({
                   id: workspaceId,
+                  projectId: 'right-panel-project',
                   mode: 'STANDARD',
                   periodicTaskId: taskPresent.current ? 'task-1' : null,
                   creationSource: 'MANUAL',

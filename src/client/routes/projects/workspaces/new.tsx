@@ -1,10 +1,11 @@
 import { ArrowLeftIcon } from '@phosphor-icons/react/dist/csr/ArrowLeft';
+import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { FactoryConfigScripts } from '@/client/components/factory-config-scripts';
 import { Loading } from '@/client/components/loading';
 import { trpc } from '@/client/lib/trpc';
-import { createOptimisticWorkspaceCacheData } from '@/client/lib/workspace-cache-helpers';
+import { seedCreatedWorkspaceDetail } from '@/client/lib/workspace-cache-helpers';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -28,19 +29,12 @@ export default function NewWorkspacePage() {
     { enabled: !!project?.id }
   );
 
-  const utils = trpc.useUtils();
+  const queryClient = useQueryClient();
   const createWorkspace = trpc.workspace.create.useMutation({
     onSuccess: (workspace) => {
       // Optimistically populate the workspace detail query cache so the status
       // is immediately visible when navigating to the detail page
-      utils.workspace.get.setData({ id: workspace.id }, (old) => {
-        // If there's already data (shouldn't happen for a new workspace), keep it
-        if (old) {
-          return old;
-        }
-
-        return createOptimisticWorkspaceCacheData(workspace);
-      });
+      seedCreatedWorkspaceDetail(queryClient, workspace);
 
       void navigate(`/projects/${slug}/workspaces/${workspace.id}`);
     },

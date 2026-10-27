@@ -221,7 +221,11 @@ export function mergeProjectSnapshotIntoWorkspaceDetail(
     prHasMergeConflict: hasLegacyPR
       ? liveFields.prSummary.hasMergeConflict
       : entry.hasMergeConflict,
-    prUpdatedAt: entry.prUpdatedAt ? new Date(entry.prUpdatedAt) : null,
+    prUpdatedAt: entry.prUpdatedAt
+      ? existing.prUpdatedAt?.getTime() === new Date(entry.prUpdatedAt).getTime()
+        ? existing.prUpdatedAt
+        : new Date(entry.prUpdatedAt)
+      : null,
     hasHadSessions: entry.hasHadSessions,
   };
 }

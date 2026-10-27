@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
@@ -11,7 +12,7 @@ const mocks = vi.hoisted(() => ({
   getSetDataMock: vi.fn(),
   createWorkspaceMutateMock: vi.fn(),
   createWorkspaceMutationOptions: undefined as Record<string, unknown> | undefined,
-  createOptimisticWorkspaceCacheDataMock: vi.fn(),
+  seedCreatedWorkspaceDetailMock: vi.fn(),
   toastErrorMock: vi.fn(),
 }));
 
@@ -24,7 +25,7 @@ vi.mock('@phosphor-icons/react/dist/csr/User', () => ({ UserIcon: () => null }))
 vi.mock('@phosphor-icons/react/dist/csr/X', () => ({ XIcon: () => null }));
 
 vi.mock('@/client/lib/workspace-cache-helpers', () => ({
-  createOptimisticWorkspaceCacheData: mocks.createOptimisticWorkspaceCacheDataMock,
+  seedCreatedWorkspaceDetail: mocks.seedCreatedWorkspaceDetailMock,
 }));
 
 vi.mock('sonner', () => ({
@@ -114,6 +115,10 @@ function renderCard(): { container: HTMLDivElement; root: Root } {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
+  const queryClient = new QueryClient();
+  const render = root.render.bind(root);
+  root.render = (children) =>
+    render(createElement(QueryClientProvider, { client: queryClient }, children));
 
   flushSync(() => {
     root.render(
@@ -188,7 +193,7 @@ describe('IssueCard', () => {
       onSuccess: (workspace: { id: string }) => void;
     };
 
-    mocks.createOptimisticWorkspaceCacheDataMock.mockReturnValue({ id: 'ws-1' });
+    mocks.seedCreatedWorkspaceDetailMock.mockReturnValue({ id: 'ws-1' });
 
     mutationOptions.onSuccess({ id: 'ws-1' });
 

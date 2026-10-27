@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
@@ -20,7 +21,7 @@ const mocks = vi.hoisted(() => ({
   listForProjectInvalidateMock: vi.fn(),
   getSetDataMock: vi.fn(),
   createWorkspaceMutateMock: vi.fn(),
-  createOptimisticWorkspaceCacheDataMock: vi.fn(),
+  seedCreatedWorkspaceDetailMock: vi.fn(),
   toastErrorMock: vi.fn(),
 }));
 
@@ -30,7 +31,7 @@ vi.mock('@phosphor-icons/react/dist/csr/ArrowSquareOut', () => ({
 vi.mock('@phosphor-icons/react/dist/csr/Play', () => ({ PlayIcon: () => null }));
 
 vi.mock('@/client/lib/workspace-cache-helpers', () => ({
-  createOptimisticWorkspaceCacheData: mocks.createOptimisticWorkspaceCacheDataMock,
+  seedCreatedWorkspaceDetail: mocks.seedCreatedWorkspaceDetailMock,
 }));
 
 vi.mock('sonner', () => ({
@@ -170,6 +171,10 @@ function renderSheet(sheetIssue: NormalizedIssue = issue): {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
+  const queryClient = new QueryClient();
+  const render = root.render.bind(root);
+  root.render = (children) =>
+    render(createElement(QueryClientProvider, { client: queryClient }, children));
 
   flushSync(() => {
     root.render(
