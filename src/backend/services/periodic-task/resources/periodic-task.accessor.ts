@@ -4,7 +4,6 @@ import type { PeriodicTask, PeriodicTaskExecution } from '@prisma-gen/client';
 
 // ─── Cadence helpers ────────────────────────────────────────────────────────
 
-const LONG_CADENCES = new Set<PeriodicTaskCadence>(['DAILY', 'WEEKLY', 'MONTHLY']);
 const MIN_TIMEZONE_OFFSET_MINUTES = -14 * 60;
 const MAX_TIMEZONE_OFFSET_MINUTES = 12 * 60;
 
@@ -180,18 +179,6 @@ function computeNextMonthlyRunAtInTimeZone(
   return target;
 }
 
-/**
- * When a task has a scheduledTime + timezone, snap the computed next date to
- * that clock time in the user's timezone.
- */
-function applyScheduledTime(date: Date, scheduledTime: string, timezone: string): Date {
-  return dateFromTimeZoneDateTime(
-    getTimeZoneDateParts(date, timezone),
-    parseScheduledTime(scheduledTime),
-    timezone
-  );
-}
-
 function getDayOfMonth(date: Date, timezone?: string | null): number {
   if (!timezone) {
     return date.getDate();
@@ -235,6 +222,17 @@ function computeNextRunAt(
   timezone?: string | null,
   scheduledDayOfMonth?: number | null
 ): Date {
+  if (scheduledTime && timezone && (cadence === 'DAILY' || cadence === 'WEEKLY')) {
+    const { year, month, day } = getTimeZoneDateParts(from, timezone);
+    // Advance the task's calendar date, independent of server timezone and DST.
+    const target = new Date(Date.UTC(year, month - 1, day + (cadence === 'DAILY' ? 1 : 7)));
+    return dateFromTimeZoneDateTime(
+      { year: target.getUTCFullYear(), month: target.getUTCMonth() + 1, day: target.getUTCDate() },
+      parseScheduledTime(scheduledTime),
+      timezone
+    );
+  }
+
   const next = new Date(from);
   switch (cadence) {
     case 'EVERY_MINUTE':
@@ -267,10 +265,6 @@ function computeNextRunAt(
       next.setDate(Math.min(targetDay, lastDay));
       break;
     }
-  }
-
-  if (scheduledTime && timezone && LONG_CADENCES.has(cadence)) {
-    return applyScheduledTime(next, scheduledTime, timezone);
   }
 
   return next;

@@ -101,7 +101,9 @@ changes, or newer validation have superseded the submission.
 Scheduled recurring tasks that create a fresh workspace on a configured cadence
 (daily, weekly, monthly, or testing cadences every minute / five minutes).
 Daily/weekly/monthly tasks can optionally run at a specific time of day in the
-user's browser timezone (`scheduledTime` HH:MM + IANA `timezone` fields).
+user's browser timezone (`scheduledTime` HH:MM + IANA `timezone` fields). Daily
+and weekly periodic tasks with a scheduled time advance calendar dates in the
+task timezone, preserving the scheduled day across daylight saving changes.
 
 Each execution runs the configured prompt, monitors for PR creation, and
 advances the schedule. Concurrent runs are skipped. Default sessions use the
