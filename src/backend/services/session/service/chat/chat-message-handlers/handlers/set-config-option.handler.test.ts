@@ -3,6 +3,10 @@ import { createSetConfigOptionHandler } from './set-config-option.handler';
 
 const setSessionConfigOption = vi.fn();
 const getSessionConfigOptions = vi.fn();
+const { logError } = vi.hoisted(() => ({ logError: vi.fn() }));
+vi.mock('@/backend/services/logger.service', () => ({
+  createLogger: () => ({ info: vi.fn(), error: logError }),
+}));
 const handler = createSetConfigOptionHandler({
   sessionConfigService: { setSessionConfigOption, getSessionConfigOptions },
 });
@@ -99,5 +103,17 @@ describe('createSetConfigOptionHandler', () => {
     expect(outcome.replies).toEqual([
       { type: 'error', error: { kind: 'set_config_option_failed', cause } },
     ]);
+  });
+
+  it('retains structured ACP rejection details in the log context', async () => {
+    const cause = { code: -32_602, message: 'Invalid configuration', data: { option: 'mode' } };
+    setSessionConfigOption.mockRejectedValue(cause);
+    await handler(context, { type: 'set_config_option', configId: 'mode', value: 'bad' });
+    expect(logError).toHaveBeenCalledWith('[Chat WS] Failed to set config option', {
+      sessionId: 'session-1',
+      configId: 'mode',
+      value: 'bad',
+      error: cause,
+    });
   });
 });

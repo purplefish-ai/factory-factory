@@ -67,10 +67,10 @@ serialize frames.
 A rejected configuration change returns its confirmed options only when a live
 handle supplies them. The adapter delivers the requester error first, then
 forwards that correction through `SessionDomainService.emitDelta` and the
-existing session event bus. All viewers receive the correction; only the
-requesting viewer receives the error or explicit model capabilities reply.
-Permission completion and matching-request cleanup remain owned by the
-permission service.
+existing session event bus, even if requester delivery fails during disconnect.
+Other connected viewers still receive the correction; only the requesting viewer
+receives the error or explicit model capabilities reply. Permission completion
+and matching-request cleanup remain owned by the permission service.
 
 The mixed handler registry temporarily retains the existing socket-bearing
 queue, lifecycle, and load handlers. The WebSocket boundary accepts their void

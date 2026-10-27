@@ -7,11 +7,16 @@ export interface SessionCommandContext {
   workingDir: string;
 }
 
+const sessionCommandTypes = [
+  'set_model',
+  'set_config_option',
+  'set_thinking_budget',
+  'permission_response',
+] as const satisfies readonly ChatMessageInput['type'][];
+
 export type SessionCommandMessage = Extract<
   ChatMessageInput,
-  {
-    type: 'set_model' | 'set_config_option' | 'set_thinking_budget' | 'permission_response';
-  }
+  { type: (typeof sessionCommandTypes)[number] }
 >;
 
 export type SessionCommandError =
@@ -32,7 +37,7 @@ export type SessionCommandReply =
 export interface SessionCommandOutcome {
   replies: SessionCommandReply[];
   /** The command chooses the confirmed rollback value; the adapter delivers it after requester replies. */
-  configOptionsCorrection?: SessionConfigOption[];
+  configOptionsCorrection?: [SessionConfigOption, ...SessionConfigOption[]];
 }
 
 export type SessionCommandHandler<T extends SessionCommandMessage> = (
@@ -67,10 +72,5 @@ export interface SessionCommandConfigService extends SessionModelCommandService 
 export function isSessionCommandMessage(
   message: ChatMessageInput
 ): message is SessionCommandMessage {
-  return (
-    message.type === 'set_model' ||
-    message.type === 'set_config_option' ||
-    message.type === 'set_thinking_budget' ||
-    message.type === 'permission_response'
-  );
+  return sessionCommandTypes.some((type) => type === message.type);
 }

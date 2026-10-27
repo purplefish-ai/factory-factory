@@ -42,6 +42,14 @@ Full PR metadata reads use a 10 MiB stdout buffer, like bulk diff and review
 comment reads, to accommodate paginated reviews, comments, and status checks.
 Responses above that limit still fail rather than returning truncated metadata.
 
+Monitoring's `getPRStatusDetails` reads only PR/head/check metadata. Optional
+`getPRReviewDetails`, review comments and resolved threads share the existing
+CLI budget but cannot block core observations when enrichment fails. Review
+facts then remain explicitly incomplete, preserving earlier feedback until a
+complete read or confirmed resolved IDs supersede it. Abort and core-fetch
+failures still fail the observation. `getPRFullDetails` retains its full
+detail-view contract. No extra polling loop is introduced.
+
 Check-run conclusions preserve `STARTUP_FAILURE` through PR-detail mapping, so
 both PR sync and Ratchet classify startup failures as failing CI, including when
 other checks are still running. Sidebar and Kanban projections therefore agree

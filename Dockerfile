@@ -1,7 +1,7 @@
 # FactoryFactory Dockerfile
 # Multi-stage build for cloud deployment
 
-ARG NODE_VERSION=26.12.0
+ARG NODE_VERSION=26.12.1
 
 # Node 26 does not bundle Corepack. Share one pinned pnpm installation across stages.
 FROM node:${NODE_VERSION}-alpine AS base
@@ -9,10 +9,10 @@ ENV PNPM_HOME=/pnpm
 ENV PATH="${PNPM_HOME}/bin:${PNPM_HOME}:${PATH}"
 # Keep the pnpm version and release asset SHA-256 digests pinned together.
 # Use musl release archives on Alpine and verify before extraction.
-RUN PNPM_VERSION=12.14.0 \
+RUN PNPM_VERSION=12.15.0 \
   && case "$(uname -m)" in \
-       x86_64) PNPM_ARCH=x64; PNPM_SHA256=d7115e2f2791d79bf9e7e448609537595bb7787de1ef5292ce91ff3d1be2629e ;; \
-       aarch64) PNPM_ARCH=arm64; PNPM_SHA256=511a54809bdfd28270d30011d1697f582c8130d555b4fa0e2856b1a7534c98bf ;; \
+       x86_64) PNPM_ARCH=x64; PNPM_SHA256=d33802cc987dcfbe02a991473764ba25ad1b2344189e2097a2570baed66f008a ;; \
+       aarch64) PNPM_ARCH=arm64; PNPM_SHA256=1188ef8a57bfc5786f3f739a98067242e531a4636e3f52e9e9ddc75564ea804d ;; \
        *) echo "Unsupported pnpm architecture: $(uname -m)" >&2; exit 1 ;; \
      esac \
   && mkdir -p "${PNPM_HOME}" \
@@ -76,6 +76,7 @@ WORKDIR /app
 # python3, make, g++ are needed so workspace `pnpm install` can compile
 # native modules (node-pty has no Linux prebuilds)
 # uv, pip, pipx, virtualenv for Python development in agent workspaces
+# Resolve pipx and virtualenv together to avoid conflicting Alpine dependencies.
 RUN apk add --no-cache \
     git \
     bash \
@@ -86,7 +87,6 @@ RUN apk add --no-cache \
     libstdc++ \
     python3 \
     py3-pip \
-    py3-virtualenv \
     make \
     g++ \
     github-cli \
@@ -100,11 +100,11 @@ RUN apk add --no-cache \
   && curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}" \
        -o /usr/local/bin/cloudflared \
   && chmod +x /usr/local/bin/cloudflared \
-  && UV_VERSION="0.10.6" \
+  && UV_VERSION="0.13.6" \
   && curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" -o /tmp/uv-install.sh \
   && UV_UNMANAGED_INSTALL="/usr/local/bin" sh /tmp/uv-install.sh \
   && rm /tmp/uv-install.sh \
-  && pip3 install --no-cache-dir --break-system-packages pipx \
+  && pip3 install --no-cache-dir --break-system-packages pipx==1.18.5 virtualenv==21.15.0 \
   && python3 -m pipx ensurepath
 
 # Install Claude CLI and Codex CLI globally

@@ -65,26 +65,29 @@ export function applySessionCommandOutcome(
   if (!outcome) {
     return;
   }
-  for (const reply of outcome.replies) {
-    if (reply.type === 'error') {
-      requester.send(JSON.stringify({ type: 'error', message: formatCommandError(reply.error) }));
-    } else {
-      try {
-        requester.send(JSON.stringify(reply));
-      } catch (cause) {
-        requester.send(
-          JSON.stringify({
-            type: 'error',
-            message: formatCommandError({ kind: 'set_model_failed', cause }),
-          })
-        );
+  try {
+    for (const reply of outcome.replies) {
+      if (reply.type === 'error') {
+        requester.send(JSON.stringify({ type: 'error', message: formatCommandError(reply.error) }));
+      } else {
+        try {
+          requester.send(JSON.stringify(reply));
+        } catch (cause) {
+          requester.send(
+            JSON.stringify({
+              type: 'error',
+              message: formatCommandError({ kind: 'set_model_failed', cause }),
+            })
+          );
+        }
       }
     }
-  }
-  if (sessionId && outcome.configOptionsCorrection) {
-    domain.emitDelta(sessionId, {
-      type: 'config_options_update',
-      configOptions: outcome.configOptionsCorrection,
-    });
+  } finally {
+    if (sessionId && outcome.configOptionsCorrection) {
+      domain.emitDelta(sessionId, {
+        type: 'config_options_update',
+        configOptions: outcome.configOptionsCorrection,
+      });
+    }
   }
 }

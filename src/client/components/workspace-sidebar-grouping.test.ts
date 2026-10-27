@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createOptimisticWorkspaceSummary } from '@/client/lib/workspace-summary';
 import type { ServerWorkspace } from './use-workspace-list-state';
 import { groupWorkspacesForSidebar } from './workspace-sidebar-grouping';
 
@@ -7,16 +8,15 @@ function makeWorkspace(
 ): ServerWorkspace {
   const { id, name, createdAt, ...rest } = overrides;
   return {
-    id,
-    name,
+    ...createOptimisticWorkspaceSummary({ id, projectId: 'project', name, ratchetEnabled: true }),
     createdAt,
     isWorking: false,
     gitStats: null,
     branchName: null,
     prUrl: null,
     prNumber: null,
-    prState: null,
-    prCiStatus: null,
+    prState: 'NONE',
+    prCiStatus: 'UNKNOWN',
     kanbanColumn: 'WAITING',
     ...rest,
   };

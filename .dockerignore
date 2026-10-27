@@ -1,5 +1,11 @@
 node_modules
 dist
+release
+storybook-static
+dist-bundle
+.native-cache
+worktrees
+.worktrees
 .git
 .gitignore
 

@@ -245,11 +245,13 @@ export class SnapshotReconciliationService {
     const sessionDates = [
       ...(ws.agentSessions?.map((s) => s.updatedAt) ?? []),
       ...(ws.terminalSessions?.map((s) => s.updatedAt) ?? []),
-    ].filter(Boolean) as Date[];
+    ].filter((date) => Number.isFinite(date?.getTime())) as Date[];
 
     const lastActivityAt =
       sessionDates.length > 0
-        ? sessionDates.reduce((latest, d) => (d > latest ? d : latest)).toISOString()
+        ? new Date(
+            sessionDates.reduce((max, d) => Math.max(max, d.getTime()), -Infinity)
+          ).toISOString()
         : null;
 
     return {

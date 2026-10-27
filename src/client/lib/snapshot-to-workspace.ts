@@ -186,6 +186,16 @@ export function projectSnapshotToWorkspace(
     ...mutationOnlyFieldDefaults(),
     ...existing,
     ...projectSnapshotToLiveFields(entry, existing),
+    autoIteration:
+      entry.mode === 'AUTO_ITERATION'
+        ? {
+            currentIteration: null,
+            maxIterations: null,
+            currentMetricSummary: null,
+            ...existing?.autoIteration,
+            status: entry.autoIterationStatus,
+          }
+        : null,
     gitStats: entry.gitStats,
     lastActivityAt: entry.lastActivityAt,
   };

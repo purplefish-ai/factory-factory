@@ -1,3 +1,4 @@
+import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { createLogger } from '@/backend/services/logger.service';
 import { DEBUG_CHAT_WS } from '@/backend/services/session/service/chat/chat-message-handlers/constants';
 import type {
@@ -7,6 +8,12 @@ import type {
 import type { SetConfigOptionMessage } from '@/shared/websocket';
 
 const logger = createLogger('chat-message-handlers');
+
+function hasConfigOptions(
+  options: SessionConfigOption[]
+): options is [SessionConfigOption, ...SessionConfigOption[]] {
+  return options.length > 0;
+}
 
 export function createSetConfigOptionHandler(deps: {
   sessionConfigService: Pick<
@@ -27,7 +34,7 @@ export function createSetConfigOptionHandler(deps: {
       }
       return { replies: [] };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage = error instanceof Error ? error.message : error;
       logger.error('[Chat WS] Failed to set config option', {
         sessionId,
         configId: message.configId,
@@ -38,7 +45,7 @@ export function createSetConfigOptionHandler(deps: {
       return {
         replies: [{ type: 'error', error: { kind: 'set_config_option_failed', cause: error } }],
         // Empty options would wipe the optimistic selector rather than restore confirmed values.
-        ...(configOptions.length > 0 ? { configOptionsCorrection: configOptions } : {}),
+        ...(hasConfigOptions(configOptions) ? { configOptionsCorrection: configOptions } : {}),
       };
     }
   };

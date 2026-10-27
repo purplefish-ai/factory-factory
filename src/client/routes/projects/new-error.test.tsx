@@ -85,6 +85,24 @@ function deferred<T>() {
 }
 
 const cleanups: Array<() => void> = [];
+function Layout() {
+  const navigation = useAppNavigationData();
+  const { pathname } = useLocation();
+  return (
+    <AppNavigationDataProvider value={navigation}>
+      <div data-testid="location">{pathname}</div>
+      <Link data-testid="leave-page" to="/projects/beta/workspaces">
+        Leave page
+      </Link>
+      <Routes>
+        <Route path="/projects/new" element={<NewProjectPage />} />
+        <Route path="/projects" element={<div>Projects page</div>} />
+        <Route path="/projects/:slug/workspaces" element={<div>Workspace board</div>} />
+      </Routes>
+    </AppNavigationDataProvider>
+  );
+}
+
 function renderPage() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: Number.POSITIVE_INFINITY } },
@@ -92,23 +110,6 @@ function renderPage() {
   const container = document.createElement('div');
   document.body.append(container);
   const root = createRoot(container);
-  function Layout() {
-    const navigation = useAppNavigationData();
-    const { pathname } = useLocation();
-    return (
-      <AppNavigationDataProvider value={navigation}>
-        <div data-testid="location">{pathname}</div>
-        <Link data-testid="leave-page" to="/projects/beta/workspaces">
-          Leave page
-        </Link>
-        <Routes>
-          <Route path="/projects/new" element={<NewProjectPage />} />
-          <Route path="/projects" element={<div>Projects page</div>} />
-          <Route path="/projects/:slug/workspaces" element={<div>Workspace board</div>} />
-        </Routes>
-      </AppNavigationDataProvider>
-    );
-  }
   act(() => {
     root.render(
       <QueryClientProvider client={client}>

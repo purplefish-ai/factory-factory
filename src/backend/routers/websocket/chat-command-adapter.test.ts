@@ -21,7 +21,7 @@ describe('applySessionCommandOutcome', () => {
         requester.push(payload);
       },
     };
-    const configOptions: SessionConfigOption[] = [
+    const configOptions: [SessionConfigOption, ...SessionConfigOption[]] = [
       { id: 'model', name: 'Model', type: 'select', currentValue: 'old', options: [] },
     ];
     const domain = {

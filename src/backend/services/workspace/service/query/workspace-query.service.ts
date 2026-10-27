@@ -11,6 +11,7 @@ import type {
   WorkspacePRSnapshotBridge,
   WorkspaceQuerySessionBridge,
 } from '@/backend/services/workspace/service/bridges';
+import { projectWorkspaceSummary } from '@/backend/services/workspace/service/query/workspace-summary-projector';
 import { computePendingRequestType } from '@/backend/services/workspace/service/state/pending-request-type';
 import { deriveWorkspaceRuntimeState } from '@/backend/services/workspace/service/state/workspace-runtime-state';
 import { gitOpsService } from '@/backend/services/workspace/service/worktree/git-ops.service';
@@ -46,13 +47,15 @@ function deriveLastActivityAt(workspace: {
   const sessionDates = [
     ...(workspace.agentSessions?.map((session) => session.updatedAt) ?? []),
     ...(workspace.terminalSessions?.map((session) => session.updatedAt) ?? []),
-  ].filter(Boolean);
+  ].filter((date) => Number.isFinite(date?.getTime()));
 
   if (sessionDates.length === 0) {
     return null;
   }
 
-  return sessionDates.reduce((latest, date) => (date > latest ? date : latest)).toISOString();
+  return new Date(
+    sessionDates.reduce((max, d) => Math.max(max, d.getTime()), -Infinity)
+  ).toISOString();
 }
 
 class WorkspaceQueryService {
@@ -307,47 +310,13 @@ class WorkspaceQueryService {
     this.refreshReviewCountIfStale();
 
     return {
-      workspaces: derived.map(
-        ({ workspace: w, sessionSummaries, pendingRequestType, derivedState }) => ({
-          id: w.id,
-          projectId: w.projectId,
-          name: w.name,
-          status: w.status,
-          createdAt: w.createdAt,
-          branchName: w.branchName,
-          worktreePath: w.worktreePath,
-          initErrorMessage: w.initErrorMessage,
-          mode: w.mode,
-          autoIterationStatus: w.autoIterationStatus,
-          autoIterationConfig: w.autoIterationConfig,
-          autoIterationProgress: w.autoIterationProgress,
-          prs: w.prs,
-          prSummary: w.prSummary,
-          prUrl: w.prUrl,
-          prNumber: w.prNumber,
-          prState: w.prState,
-          prCiStatus: w.prCiStatus,
-          ratchetEnabled: w.ratchetEnabled,
-          ratchetState: w.ratchetState,
-          prMonitoring: w.prMonitoring,
-          runScriptStatus: w.runScriptStatus,
-          githubIssueNumber: w.githubIssueNumber,
-          githubIssueUrl: w.githubIssueUrl,
-          linearIssueId: w.linearIssueId,
-          linearIssueIdentifier: w.linearIssueIdentifier,
-          linearIssueUrl: w.linearIssueUrl,
-          creationSource: w.creationSource,
+      workspaces: derived.map(({ workspace, sessionSummaries, pendingRequestType, derivedState }) =>
+        projectWorkspaceSummary(workspace, {
           sessionSummaries,
           pendingRequestType,
-          gitStats: gitStatsByWorkspace[w.id] ?? null,
-          lastActivityAt: deriveLastActivityAt(w),
-          isWorking: derivedState.isWorking,
-          kanbanColumn: derivedState.kanbanColumn,
-          sidebarStatus: derivedState.sidebarStatus,
-          ratchetButtonAnimated: derivedState.ratchetButtonAnimated,
-          flowPhase: derivedState.flowPhase,
-          ciObservation: derivedState.ciObservation,
-          statusReason: derivedState.statusReason,
+          derivedState,
+          gitStats: gitStatsByWorkspace[workspace.id] ?? null,
+          lastActivityAt: deriveLastActivityAt(workspace),
         })
       ),
       reviewCount,

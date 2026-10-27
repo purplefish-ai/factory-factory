@@ -49,33 +49,33 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe('useWorkspaceHasChanges', () => {
-  function Probe({
-    workspaceId = 'workspace-1',
-    running,
-    prState = 'NONE',
-  }: {
-    workspaceId?: string;
-    running: boolean;
-    prState?: 'NONE' | 'OPEN';
-  }) {
-    const utils = trpc.useUtils();
-    useWorkspaceHasChanges(workspaceId, { hasHadSessions: true, prState }, running, utils);
-    return null;
-  }
+function HasChangesProbe({
+  workspaceId = 'workspace-1',
+  running,
+  prState = 'NONE',
+}: {
+  workspaceId?: string;
+  running: boolean;
+  prState?: 'NONE' | 'OPEN';
+}) {
+  const utils = trpc.useUtils();
+  useWorkspaceHasChanges(workspaceId, { hasHadSessions: true, prState }, running, utils);
+  return null;
+}
 
+describe('useWorkspaceHasChanges', () => {
   it('invalidates hasChanges when a running session stops', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
 
     flushSync(() => {
-      root.render(createElement(Probe, { running: true }));
+      root.render(createElement(HasChangesProbe, { running: true }));
     });
     expect(workspaceHasChangesInvalidateMock).not.toHaveBeenCalled();
 
     flushSync(() => {
-      root.render(createElement(Probe, { running: false }));
+      root.render(createElement(HasChangesProbe, { running: false }));
     });
     expect(workspaceHasChangesInvalidateMock).toHaveBeenCalledOnce();
     expect(workspaceHasChangesInvalidateMock).toHaveBeenCalledWith({
@@ -91,7 +91,7 @@ describe('useWorkspaceHasChanges', () => {
     const root = createRoot(container);
 
     flushSync(() => {
-      root.render(createElement(Probe, { running: false }));
+      root.render(createElement(HasChangesProbe, { running: false }));
     });
 
     expect(workspaceHasChangesInvalidateMock).not.toHaveBeenCalled();
@@ -104,10 +104,10 @@ describe('useWorkspaceHasChanges', () => {
     const root = createRoot(container);
 
     flushSync(() => {
-      root.render(createElement(Probe, { workspaceId: 'workspace-1', running: true }));
+      root.render(createElement(HasChangesProbe, { workspaceId: 'workspace-1', running: true }));
     });
     flushSync(() => {
-      root.render(createElement(Probe, { workspaceId: 'workspace-2', running: false }));
+      root.render(createElement(HasChangesProbe, { workspaceId: 'workspace-2', running: false }));
     });
 
     expect(workspaceHasChangesInvalidateMock).not.toHaveBeenCalled();
@@ -120,10 +120,10 @@ describe('useWorkspaceHasChanges', () => {
     const root = createRoot(container);
 
     flushSync(() => {
-      root.render(createElement(Probe, { running: true, prState: 'OPEN' }));
+      root.render(createElement(HasChangesProbe, { running: true, prState: 'OPEN' }));
     });
     flushSync(() => {
-      root.render(createElement(Probe, { running: false, prState: 'OPEN' }));
+      root.render(createElement(HasChangesProbe, { running: false, prState: 'OPEN' }));
     });
 
     expect(workspaceHasChangesInvalidateMock).not.toHaveBeenCalled();
@@ -131,24 +131,37 @@ describe('useWorkspaceHasChanges', () => {
   });
 });
 
+function InitialInitStatusProbe({ observedStates }: { observedStates: Array<boolean | null> }) {
+  const utils = trpc.useUtils();
+  const { setupWarningDismissed } = useWorkspaceInitStatus('workspace-1', undefined, utils);
+  observedStates.push(setupWarningDismissed);
+  return null;
+}
+
+function WorkspaceInitStatusProbe({
+  workspaceId,
+  observedStates,
+}: {
+  workspaceId: string;
+  observedStates: Array<{ workspaceId: string; dismissed: boolean | null }>;
+}) {
+  const utils = trpc.useUtils();
+  const { setupWarningDismissed } = useWorkspaceInitStatus(workspaceId, undefined, utils);
+  observedStates.push({ workspaceId, dismissed: setupWarningDismissed });
+  return null;
+}
+
 describe('useWorkspaceInitStatus', () => {
   it('starts with an unhydrated setup warning dismissal state', () => {
     getInitStatusUseQueryMock.mockReturnValue({ data: undefined, isPending: true });
     const observedStates: Array<boolean | null> = [];
-
-    function Probe() {
-      const utils = trpc.useUtils();
-      const { setupWarningDismissed } = useWorkspaceInitStatus('workspace-1', undefined, utils);
-      observedStates.push(setupWarningDismissed);
-      return null;
-    }
 
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
 
     flushSync(() => {
-      root.render(createElement(Probe));
+      root.render(createElement(InitialInitStatusProbe, { observedStates }));
     });
 
     expect(observedStates[0]).toBeNull();
@@ -166,19 +179,14 @@ describe('useWorkspaceInitStatus', () => {
     getInitStatusUseQueryMock.mockReturnValue({ data: initStatus, isPending: false });
     const observedStates: Array<{ workspaceId: string; dismissed: boolean | null }> = [];
 
-    function Probe({ workspaceId }: { workspaceId: string }) {
-      const utils = trpc.useUtils();
-      const { setupWarningDismissed } = useWorkspaceInitStatus(workspaceId, undefined, utils);
-      observedStates.push({ workspaceId, dismissed: setupWarningDismissed });
-      return null;
-    }
-
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
 
     flushSync(() => {
-      root.render(createElement(Probe, { workspaceId: 'workspace-1' }));
+      root.render(
+        createElement(WorkspaceInitStatusProbe, { workspaceId: 'workspace-1', observedStates })
+      );
     });
     await vi.waitFor(() => {
       expect(observedStates.at(-1)).toEqual({ workspaceId: 'workspace-1', dismissed: false });
@@ -186,7 +194,9 @@ describe('useWorkspaceInitStatus', () => {
 
     observedStates.length = 0;
     flushSync(() => {
-      root.render(createElement(Probe, { workspaceId: 'workspace-2' }));
+      root.render(
+        createElement(WorkspaceInitStatusProbe, { workspaceId: 'workspace-2', observedStates })
+      );
     });
 
     expect(observedStates[0]).toEqual({ workspaceId: 'workspace-2', dismissed: null });

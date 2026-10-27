@@ -217,9 +217,8 @@ describe('AutoIterationService resume', () => {
       if (failureSite === 'logbook') {
         vi.mocked(logbookBridge.appendEntry).mockRejectedValueOnce(persistenceError);
       } else {
-        vi.mocked(workspaceBridge.updateAutoIterationProgress).mockImplementation(
-          (_id, progress) =>
-            progress.currentPhase === 'idle' ? Promise.reject(persistenceError) : Promise.resolve()
+        vi.mocked(workspaceBridge.updateAutoIterationProgress).mockImplementation((_id, progress) =>
+          progress.currentPhase === 'idle' ? Promise.reject(persistenceError) : Promise.resolve()
         );
       }
 
