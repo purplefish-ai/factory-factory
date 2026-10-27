@@ -8,11 +8,11 @@ import type { inferRouterOutputs } from '@trpc/server';
  *
  * Merge strategy — one strategy per cache per message:
  * - Ordinary snapshot_changed / snapshot_removed deltas patch caches directly.
- *   Ready workspaces missing a cached worktree path refetch the project list
- *   once so PR review actions can use the actual provisioned path.
+ *   Legacy ready workspaces missing a cached worktree path refetch the project
+ *   list once; complete summaries already carry the authoritative nullable path.
  * - snapshot_full is the (re)connect baseline. Any baseline after a
  *   project's first follows a gap (network reconnect, or a switch away and
- *   back) during which deltas were dropped, and snapshot entries don't carry
+ *   back) during which deltas were dropped, and legacy entries don't carry
  *   every DB-backed field, so those baselines additionally invalidate the
  *   workspace caches to let them self-heal.
  *
@@ -21,7 +21,10 @@ import type { inferRouterOutputs } from '@trpc/server';
  */
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { runInBackground } from '@/client/lib/background-task';
-import { mergeProjectSnapshotIntoWorkspaceDetail } from '@/client/lib/snapshot-to-workspace';
+import {
+  isCompleteWorkspaceSnapshot,
+  mergeProjectSnapshotIntoWorkspaceDetail,
+} from '@/client/lib/snapshot-to-workspace';
 import { type AppRouter, trpc } from '@/client/lib/trpc';
 import {
   getProjectWorkspaceCacheReconciler,
@@ -98,7 +101,7 @@ function maybeTriggerPendingRequestAttention(
 }
 
 /**
- * A snapshot entry carries only live fields. Mutation-sourced fields —
+ * Legacy snapshot entries carry only live fields. Mutation-sourced fields —
  * including `githubIssueNumber` and `linearIssueId`, which the Todo column
  * matches issues against — fall back to nulls for a workspace no fetch has
  * returned yet, so the workspace lands on the board while its issue is still
@@ -117,7 +120,11 @@ function invalidateForUnknownWorkspaces(
 ): void {
   const introduced = entriesToCheck.filter(
     (entry) =>
-      !(alreadyInvalidated.has(entry.workspaceId) || knownWorkspaceIds.has(entry.workspaceId))
+      !(
+        isCompleteWorkspaceSnapshot(entry) ||
+        alreadyInvalidated.has(entry.workspaceId) ||
+        knownWorkspaceIds.has(entry.workspaceId)
+      )
   );
   if (introduced.length === 0) {
     return;
@@ -142,7 +149,7 @@ function invalidateForUnknownWorkspaces(
   });
 }
 
-/** Snapshots carry readiness but omit the worktree path required for PR review. */
+/** Legacy snapshots omit the worktree path required for PR review. */
 function healReadyWorktreePaths(
   utils: TrpcUtils,
   projectId: string,
@@ -157,6 +164,7 @@ function healReadyWorktreePaths(
   );
   const missingPaths = entries.filter(
     (entry) =>
+      !isCompleteWorkspaceSnapshot(entry) &&
       entry.status === 'READY' &&
       knownWorkspaceIds.has(entry.workspaceId) &&
       !cachedById.get(entry.workspaceId)?.worktreePath &&

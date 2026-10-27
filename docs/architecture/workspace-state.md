@@ -248,9 +248,11 @@ connection starts a fresh epoch and restarts pending fallback requests; the very
 first connection still accepts its initial HTTP bootstrap. The next full
 establishes fresh stream authority without comparing versions across server
 lifetimes. The transport rejects events from replaced physical sockets; the
-snapshot hook also rejects callbacks from retired project activations. Existing
-unknown-workspace, worktree-path, and reconnect metadata repairs continue
-through the same query options.
+snapshot hook also rejects callbacks from retired project activations. Legacy
+unknown-workspace and READY worktree-path list repairs continue through the same
+query options. Valid complete version-1 summaries seed their canonical metadata
+immediately and skip those two repairs, including when an authoritative worktree
+path is null. Reconnect invalidation and detail hydration remain in place.
 
 The route and right panel share `useWorkspaceDetailQuery` and the existing
 `workspace.get` key. At HTTP success commit, accepted snapshots from that same
@@ -289,7 +291,7 @@ client constructor creates complete optimistic list rows, while detail cache
 hydration retains its extra fields and existing initial sidebar status. The
 sidebar consumes a required Pick of the same summary instead of an optional
 parallel interface. Shared validation schemas do not change the flat snapshot
-wire, and existing list/detail hydration fallbacks remain in place.
+wire, and legacy list/detail hydration fallbacks remain in place.
 
 Snapshot entries may advertise `summaryVersion: 1` once every required summary
 input has been accepted from an authoritative read or event. The flat entry
@@ -310,8 +312,17 @@ Committed lifecycle events publish their row's metadata immediately, including
 initial provisioning, READY paths and setup errors. A NEW-only workspace before
 initialization gains metadata through reconciliation; no separate creation event
 is introduced. Reconciliation seeds metadata, validated compact loop data and
-runtime inputs before releasing its seed barrier and starting slow Git work.
-Existing incomplete-row repair remains necessary.
+runtime inputs before releasing its seed barrier and starting slow Git work. The
+client validates a complete claim before adopting the canonical flat summary.
+Complete metadata and compact loop values, including explicit nulls, replace old
+list values. Legacy entries preserve HTTP metadata repair and retry. Malformed
+version claims fail wire validation. Board and navigation consumers use the
+shared summary type; the loop badge reads its compact counters and metric. Null
+counters remain unknown in cache, with the existing 0/25 display fallback
+applied only in the badge. Raw loop payloads remain available for legacy/detail
+consumers. Complete summaries still never create fetched full detail, and
+detail-only initialization fields remain HTTP-owned. Existing incomplete-row
+repair remains necessary.
 
 Each snapshot WebSocket starts from a full read of current store state after its
 optional startup seed wait. Changes emitted before that baseline are already

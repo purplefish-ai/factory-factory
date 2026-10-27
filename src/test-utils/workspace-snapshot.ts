@@ -1,3 +1,4 @@
+import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
 import {
   WorkspaceSnapshotEntrySchema,
   type WorkspaceSnapshotEntry,
@@ -64,4 +65,25 @@ export function makeWorkspaceSnapshotEntry(
   };
   const { summaryVersion, ...legacy } = entry;
   return summaryVersion === 1 ? WorkspaceSnapshotEntrySchema.parse(entry) : legacy;
+}
+
+/** A complete wire fixture with explicit nullable metadata and compact loop state. */
+export function makeCompleteWorkspaceSnapshotEntry(
+  overrides: Partial<WorkspaceSnapshotEntry> = {}
+) {
+  return makeWorkspaceSnapshotEntry({
+    summaryVersion: 1,
+    worktreePath: '/worktrees/live',
+    initErrorMessage: null,
+    githubIssueNumber: 42,
+    githubIssueUrl: 'https://github.com/org/repo/issues/42',
+    linearIssueId: null,
+    linearIssueIdentifier: null,
+    linearIssueUrl: null,
+    creationSource: 'GITHUB_ISSUE',
+    autoIteration: null,
+    prs: [],
+    prSummary: deriveWorkspacePRSummary([], false),
+    ...overrides,
+  });
 }

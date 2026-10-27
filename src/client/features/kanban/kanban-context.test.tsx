@@ -5,7 +5,9 @@ import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GitHubIssueRaw } from '@/client/lib/issue-normalization';
+import { projectSnapshotToWorkspace } from '@/client/lib/snapshot-to-workspace';
 import { trpc } from '@/client/lib/trpc';
+import { makeCompleteWorkspaceSnapshotEntry } from '@/test-utils/workspace-snapshot';
 import { KanbanProvider, useKanban } from './kanban-context';
 
 interface ArchiveError {
@@ -15,7 +17,7 @@ interface ArchiveError {
 
 interface WorkspaceListItem {
   id: string;
-  kanbanColumn: 'WORKING' | 'WAITING' | null;
+  kanbanColumn: 'WORKING' | 'WAITING' | 'DONE' | null;
   githubIssueNumber: number | null;
   linearIssueId: string | null;
 }
@@ -381,6 +383,26 @@ describe('KanbanProvider archive failure handling', () => {
     ]);
     expectVisibleWorkspaceIds(['workspace-2']);
     expect(mocks.toastErrorMock).not.toHaveBeenCalled();
+  });
+
+  it('suppresses issue intake immediately from a complete snapshot-first board row', () => {
+    mocks.githubIssues = [
+      {
+        number: 42,
+        title: 'Fix the thing',
+        body: '',
+        url: 'https://github.com/org/repo/issues/42',
+        state: 'OPEN',
+        createdAt: '2026-01-01T00:00:00Z',
+        author: { login: 'octocat' },
+      },
+    ];
+    const row = projectSnapshotToWorkspace(makeCompleteWorkspaceSnapshotEntry());
+    mocks.workspaceListState = { workspaces: [row], reviewCount: 0 };
+    const context = renderProvider();
+    expect(context.workspaces?.map((workspace) => workspace.id)).toEqual(['ws-1']);
+    expect(context.issues).toEqual([]);
+    expect(mocks.refetchWorkspacesMock).not.toHaveBeenCalled();
   });
 
   it('keeps an archiving workspace suppressing its issue', () => {
