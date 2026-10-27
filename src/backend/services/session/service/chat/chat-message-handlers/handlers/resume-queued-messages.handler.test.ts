@@ -34,14 +34,10 @@ it('does not enable or dispatch queued messages when a newer stop supersedes res
   const dispatch = vi.fn().mockResolvedValue(undefined);
   const manual = vi.fn();
   const resume = createResumeQueuedMessagesHandler({
+    backgroundDelivery: sessionBackgroundDeliveryService,
     tryDispatchNextMessage: dispatch,
     setManualDispatchResume: manual,
-  })({
-    ws: { send: vi.fn() } as never,
-    sessionId,
-    workingDir: '/tmp',
-    message: { type: 'resume_queued_messages' } as never,
-  });
+  })({ sessionId, workingDir: '/tmp' }, { type: 'resume_queued_messages' } as never);
   await started;
   await sessionBackgroundDeliveryService.userStop(sessionId);
   release();

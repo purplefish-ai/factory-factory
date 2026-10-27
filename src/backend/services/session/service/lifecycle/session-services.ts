@@ -1,9 +1,11 @@
 import { acpRuntimeManager } from '@/backend/services/session/service/acp';
+import { chatEventForwarderService } from '@/backend/services/session/service/chat/chat-event-forwarder.service';
 import { ChatMessageHandlerService } from '@/backend/services/session/service/chat/chat-message-handlers.service';
 import { createChatMessageHandlerRegistry } from '@/backend/services/session/service/chat/chat-message-handlers/registry';
 import { SessionDispatchService } from '@/backend/services/session/service/dispatch/session-dispatch.service';
 import type { SessionDispatchStartOptions } from '@/backend/services/session/service/dispatch/session-dispatch.types';
 import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
+import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import {
   acpEventProcessor,
   claudeModelCatalogService,
@@ -57,6 +59,13 @@ const dispatchLifecycle = {
 sessionDispatchService.configureLifecycle(dispatchLifecycle);
 export const chatMessageHandlerService = new ChatMessageHandlerService(
   createChatMessageHandlerRegistry({
+    executionServices: {
+      domain: sessionDomainService,
+      lifecycle: sessionLifecycleService,
+      backgroundDelivery: sessionBackgroundDeliveryService,
+      clearPendingRequest:
+        chatEventForwarderService.clearPendingRequest.bind(chatEventForwarderService),
+    },
     acpRuntimeManager,
     sessionConfigService,
     sessionPermissionService,

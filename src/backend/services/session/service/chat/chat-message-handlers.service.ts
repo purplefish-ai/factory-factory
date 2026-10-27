@@ -29,6 +29,18 @@ export class ChatMessageHandlerService {
       }
       const context = { sessionId: dbSessionId, workingDir };
       switch (message.type) {
+        case 'start':
+          return registry.start(context, message);
+        case 'stop':
+          return registry.stop(context, message);
+        case 'user_input':
+          return registry.user_input(context, message);
+        case 'queue_message':
+          return registry.queue_message(context, message);
+        case 'remove_queued_message':
+          return registry.remove_queued_message(context, message);
+        case 'resume_queued_messages':
+          return registry.resume_queued_messages(context, message);
         case 'set_model':
           return registry.set_model(context, message);
         case 'set_config_option':
@@ -37,6 +49,10 @@ export class ChatMessageHandlerService {
           return registry.set_thinking_budget(context, message);
         case 'permission_response':
           return registry.permission_response(context, message);
+        default: {
+          const unhandled: never = message;
+          throw new Error(`Unsupported session command: ${unhandled}`);
+        }
       }
     }
     const handler = registry[message.type] as

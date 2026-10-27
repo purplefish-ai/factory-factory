@@ -39,22 +39,44 @@ export function createChatMessageHandlerRegistry(
       deps.sessionConfigService &&
       deps.sessionPermissionService &&
       deps.sessionService &&
-      deps.startupService
+      deps.startupService &&
+      deps.executionServices
     )
   ) {
     throw new Error('focused session dependencies are required for chat message handlers');
   }
 
   return {
-    start: createStartHandler({ startupService: deps.startupService }),
+    start: createStartHandler({
+      startupService: deps.startupService,
+      lifecycle: deps.executionServices.lifecycle,
+      domain: deps.executionServices.domain,
+      backgroundDelivery: deps.executionServices.backgroundDelivery,
+    }),
     user_input: createUserInputHandler({
       acpRuntimeManager: deps.acpRuntimeManager,
       sessionService: deps.sessionService,
+      backgroundDelivery: deps.executionServices.backgroundDelivery,
     }),
-    queue_message: createQueueMessageHandler(deps),
-    remove_queued_message: createRemoveQueuedMessageHandler(),
-    resume_queued_messages: createResumeQueuedMessagesHandler(deps),
-    stop: createStopHandler(deps),
+    queue_message: createQueueMessageHandler({
+      domain: deps.executionServices.domain,
+      backgroundDelivery: deps.executionServices.backgroundDelivery,
+      tryDispatchNextMessage: deps.tryDispatchNextMessage,
+    }),
+    remove_queued_message: createRemoveQueuedMessageHandler({
+      domain: deps.executionServices.domain,
+    }),
+    resume_queued_messages: createResumeQueuedMessagesHandler({
+      backgroundDelivery: deps.executionServices.backgroundDelivery,
+      tryDispatchNextMessage: deps.tryDispatchNextMessage,
+      setManualDispatchResume: deps.setManualDispatchResume,
+    }),
+    stop: createStopHandler({
+      lifecycle: deps.executionServices.lifecycle,
+      clearPendingRequest: deps.executionServices.clearPendingRequest,
+      resetDispatchState: deps.resetDispatchState,
+      tryDispatchNextMessage: deps.tryDispatchNextMessage,
+    }),
     load_session: createLoadSessionHandler(deps),
     permission_response: createPermissionResponseHandler({
       sessionPermissionService: deps.sessionPermissionService,

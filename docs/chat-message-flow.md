@@ -9,8 +9,9 @@ provider startup, cancellation, and lifecycle ownership, see
 ```mermaid
 flowchart TD
     UI[Chat composer] -->|queue_message over WebSocket| Handler[ChatMessageHandlerService]
-    Handler --> Store[SessionDomainService: queue and transcript]
-    Handler --> Dispatcher[SessionDispatchService]
+    Handler --> Command[Socket-free execution command]
+    Command --> Store[SessionDomainService: queue and transcript]
+    Command --> Dispatcher[SessionDispatchService]
     Dispatcher --> Store
     Dispatcher -->|dispatch through session lifecycle| Runtime[AcpRuntimeManager]
     Runtime -->|session/prompt| Provider[Claude or Codex ACP adapter]
@@ -56,7 +57,7 @@ the bus.
 pending-request access. Agent stream translation belongs to the ACP processor;
 it does not attach legacy `ClaudeClient` listeners.
 
-## Configuration and permission commands
+## Session commands
 
 The `set_model`, `set_config_option`, `set_thinking_budget`, and
 `permission_response` handlers take a plain `SessionCommandContext` and typed
@@ -74,9 +75,24 @@ Other connected viewers still receive the correction; only the requesting viewer
 receives the error or explicit model capabilities reply. Permission completion
 and matching-request cleanup remain owned by the permission service.
 
-The mixed handler registry temporarily retains the existing socket-bearing
-queue, lifecycle, and load handlers. The WebSocket boundary accepts their void
-result as well as migrated command outcomes.
+The `start`, `stop`, `user_input`, `queue_message`, `remove_queued_message`, and
+`resume_queued_messages` commands use the same plain context and typed outcomes.
+Their lifecycle, domain, background-delivery and dispatcher capabilities are
+supplied by session composition. Queue acceptance, rejection, and cancellation
+stay on the session-wide event channel; only requester errors are returned to
+the adapter.
+
+Direct `user_input` still sends without waiting for a provider turn or
+background resume persistence. Start and queue acceptance also trigger
+background resume without awaiting it. Explicit queue resume awaits persistence
+and rechecks its captured generation before enabling manual dispatch. Stop
+awaits termination, clears pending interaction, resets dispatch state, and then
+retries the queue. The lifecycle and background-delivery owners retain
+generation and PR pause policy; commands coordinate those capabilities without
+taking ownership.
+
+Only the load handler temporarily retains its socket-bearing context. The
+WebSocket boundary accepts its void result alongside migrated command outcomes.
 
 ## Loading and reconnecting
 
