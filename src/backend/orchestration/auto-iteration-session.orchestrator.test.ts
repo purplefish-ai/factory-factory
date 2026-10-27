@@ -274,14 +274,33 @@ describe('createAutoIterationSessionBridge', () => {
   });
 
   it('does not clear a newer auto-iteration session after recycle cleanup', async () => {
+    let currentSessionId: string | null = 'old-session';
     vi.mocked(workspaceAutoIterationService.getExecutionContext).mockResolvedValue({
       autoIterationSessionId: 'old-session',
     } as Awaited<ReturnType<typeof workspaceAutoIterationService.getExecutionContext>>);
-    vi.mocked(workspaceAutoIterationService.finishSessionIfMatching).mockResolvedValue(false);
+    vi.mocked(workspaceAutoIterationService.setSession).mockImplementation(
+      (_workspaceId, sessionId) => {
+        currentSessionId = sessionId;
+        return Promise.resolve();
+      }
+    );
+    vi.mocked(workspaceAutoIterationService.finishSessionIfMatching).mockImplementation(
+      (_workspaceId, expectedSessionId) => {
+        if (currentSessionId !== expectedSessionId) {
+          return Promise.resolve(false);
+        }
+        currentSessionId = null;
+        return Promise.resolve(true);
+      }
+    );
     vi.mocked(sessionDataService.createAgentSession).mockResolvedValue({
       id: 'new-session',
     } as Awaited<ReturnType<typeof sessionDataService.createAgentSession>>);
-    vi.mocked(sessionService.sendAcpMessage).mockRejectedValue(new Error('prompt failed'));
+    vi.mocked(sessionService.sendAcpMessage).mockImplementation(() => {
+      // Another loop takes ownership while this handoff is in flight.
+      currentSessionId = 'newer-session';
+      return Promise.reject(new Error('prompt failed'));
+    });
 
     const sessionBridge = createAutoIterationSessionBridge(ports);
 
@@ -292,7 +311,9 @@ describe('createAutoIterationSessionBridge', () => {
     expect(sessionLifecycleService.stopSession).toHaveBeenCalledWith('new-session', {
       recordLifecycleEvent: false,
     });
+    expect(currentSessionId).toBe('newer-session');
     expect(sessionDomainService.clearSession).toHaveBeenCalledWith('new-session');
+    expect(sessionDomainService.clearSession).not.toHaveBeenCalledWith('newer-session');
     expect(sessionDataService.deleteAgentSession).toHaveBeenCalledWith('new-session');
     expect(workspaceAutoIterationService.setSession).toHaveBeenCalledTimes(1);
     expect(workspaceAutoIterationService.finishSessionIfMatching).toHaveBeenCalledWith(
