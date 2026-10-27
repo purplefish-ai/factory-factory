@@ -116,13 +116,17 @@ a general workspace attribute, but every consumer is an auto-iteration consumer
 and the `auto-iteration.trpc.ts` entry guard), so it is the group's discriminant
 — the same call the ratchet split made for `ratchetEnabled`.
 
-`mode` and `autoIterationStatus` travel on the snapshot wire and update both
-client workspace caches through `projectSnapshotToLiveFields`. Non-null status
-transitions announced by `AUTO_ITERATION_STATUS_CHANGED` reach the kanban badge
-and workspace detail without a mutation or HTTP refetch. A received snapshot
-with `autoIterationStatus: null` also clears cached status, but that event does
-not emit null values; reconciliation can supply them. `config` and `progress`
-remain mutation-cached; their freshness is independent of these status updates.
+`mode`, `autoIterationStatus`, and compact `autoIteration` travel on the
+snapshot wire. The compact projection contains only status, current iteration,
+maximum iterations, and the current metric summary. Unknown individual values
+remain null, and explicit nulls clear prior progress. Full configuration, test
+output, progress, and logbook data remain on their existing detail paths.
+
+The loop fields share their own snapshot timestamp group, independent of
+lifecycle and metadata freshness. An accepted reset or newer loop update fences
+older reconciliation reads; changing mode invalidates compact hydration until
+new compact input is accepted. Default or rejected values never earn the
+complete-summary version.
 
 Only `mode` and `config` are exported — `status`, `progress` and `sessionId`
 describe a loop that does not survive a backup, so a workspace whose loop was
@@ -134,19 +138,24 @@ missing row (the pre-split path used `prisma.workspace.update`, which threw);
 `sessionId`, so a recycled session cannot stamp its outcome over a loop that has
 moved on.
 
-`workspaceAutoIterationService` is an `EventEmitter`: it announces
-`AUTO_ITERATION_STATUS_CHANGED` from `setStatus` and from a
-`finishSessionIfMatching` that actually settled, and the event collector
-enqueues the pair. Without that event the snapshot store learned about a
-transition only from the reconciliation sweep, so for up to one sweep interval
-the live stream re-derived every card from a stale status and a running loop
-read as waiting between iterations. The event carries `mode` as well as `status`
-— the store's copy of `mode` is otherwise seeded only by reconciliation, so a
-loop reaching a gap inside that window would be derived against a `STANDARD` it
-never had. The two status writes report the row they landed on
-(`{ mode, status }`, and `{ settled, mode }` for the compare-and-swap) so the
-service never infers the mode from the fact that an auto-iteration code path is
-running.
+`workspaceAutoIterationService` retains `AUTO_ITERATION_STATUS_CHANGED` for
+status writes and successful completion compare-and-swaps. After accepted status
+or progress writes, successful completion, and affected startup recovery rows,
+it narrowly rereads persisted loop state and publishes
+`AUTO_ITERATION_SUMMARY_CHANGED` using the same compact projector as HTTP and
+reconciliation. Failed writes and missed compare-and-swaps publish nothing.
+Publication-read tokens discard superseded reads; they do not grant workflow or
+session authority. Read failures leave the accepted mutation successful and
+reconciliation repairs the stream.
+
+The collector immediately flushes compact updates as the sole loop projection
+owner; legacy status events remain available to other consumers. Its timestamp
+fences a reconciliation pass started before the accepted event. Equal compact
+values produce no delta. Creation is currently the only config writer;
+reconciliation seeds that configuration, missing entries, and restart state. An
+accepted initial progress write publishes the current persisted configuration as
+well. Unknown workspaces still await the existing lifecycle membership event or
+reconciliation before loop events can update them.
 
 A rejected auto-iteration loop stops its backing session before settling
 terminal state. Session teardown is best-effort so a failed stop does not

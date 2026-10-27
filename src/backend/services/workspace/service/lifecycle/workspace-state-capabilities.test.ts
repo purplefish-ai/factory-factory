@@ -10,6 +10,7 @@ import { workspaceRunScriptService } from './workspace-run-script.service';
 vi.mock('@/backend/services/workspace/resources/workspace.accessor', () => ({
   workspaceAccessor: {
     findAutoIterationExecutionContext: vi.fn(),
+    findAutoIterationSnapshot: vi.fn().mockResolvedValue(null),
     setAutoIterationStatus: vi.fn(),
     findRunScriptExecutionState: vi.fn(),
     findRunScriptExecutionStateOrThrow: vi.fn(),

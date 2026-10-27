@@ -419,6 +419,15 @@ class WorkspaceAccessor {
     });
   }
 
+  /** Narrow authoritative reread after an accepted loop write. */
+  async findAutoIterationSnapshot(id: string) {
+    const workspace = await prisma.workspace.findUnique({
+      where: { id },
+      select: { autoIteration: true },
+    });
+    return workspace ? flattenWorkspaceAutoIteration(workspace.autoIteration) : null;
+  }
+
   async findAutoIterationExecutionContext(
     id: string
   ): Promise<AutoIterationExecutionContext | null> {

@@ -172,8 +172,6 @@ const WORKSPACE_FIELDS = [
   'createdAt',
   'branchName',
   'hasHadSessions',
-  'mode',
-  'autoIterationStatus',
 ] as const;
 const PR_FIELDS = [
   'prs',
@@ -200,7 +198,7 @@ const METADATA_FIELDS = [
   'linearIssueUrl',
   'creationSource',
 ] as const;
-const AUTO_ITERATION_FIELDS = ['autoIteration'] as const;
+const AUTO_ITERATION_FIELDS = ['mode', 'autoIterationStatus', 'autoIteration'] as const;
 
 type SnapshotField = keyof SnapshotUpdateInput & keyof WorkspaceSnapshotEntry;
 
@@ -481,10 +479,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     ) {
       return false;
     }
-    // A stale seed from a different mode cannot hydrate or erase this loop.
-    return (
-      mapping.group !== 'autoIteration' || update.mode === undefined || update.mode === entry.mode
-    );
+    return true;
   }
 
   private mergeFieldGroups(
@@ -511,7 +506,12 @@ export class WorkspaceSnapshotStore extends EventEmitter {
           hydrated.add(field);
         }
       }
-      if (mapping.group === 'workspace' && previousMode !== entry.mode) {
+      if (
+        mapping.group === 'autoIteration' &&
+        previousMode !== entry.mode &&
+        update.autoIteration === undefined
+      ) {
+        entry.autoIteration = undefined;
         hydrated.delete('autoIteration');
       }
     }

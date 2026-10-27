@@ -156,6 +156,10 @@ describe('accepted summary hydration', () => {
     value.upsert('ws', { mode: 'STANDARD' }, 'mode accepted', 600);
     expect(value.getByWorkspaceId('ws')?.summaryVersion).toBeUndefined();
     value.upsert('ws', { hasHadSessions: false }, 'history accepted', 700);
+    expect(value.getByWorkspaceId('ws')?.summaryVersion).toBeUndefined();
+    // Compact loop input was rejected with the older group, so it must be
+    // explicitly accepted before a complete summary can be claimed.
+    value.upsert('ws', { autoIteration: null }, 'compact accepted', 800);
     expect(value.getByWorkspaceId('ws')?.summaryVersion).toBe(1);
   });
 
@@ -324,4 +328,86 @@ describe('summary completeness protocol', () => {
       }).success
     ).toBe(false);
   });
+});
+
+it('keeps accepted loop progress independent of newer lifecycle metadata and fences resets', () => {
+  const value = store();
+  value.upsert('ws', seed(), 'seed', 100);
+  value.upsert('ws', { status: 'READY', name: 'new name' }, 'lifecycle', 900);
+  value.upsert(
+    'ws',
+    {
+      mode: 'AUTO_ITERATION',
+      autoIterationStatus: 'RUNNING',
+      autoIteration: {
+        status: 'RUNNING',
+        currentIteration: 4,
+        maxIterations: 10,
+        currentMetricSummary: 'score=4',
+      },
+    },
+    'accepted progress',
+    200
+  );
+  expect(value.getByWorkspaceId('ws')).toMatchObject({
+    mode: 'AUTO_ITERATION',
+    autoIterationStatus: 'RUNNING',
+    autoIteration: { currentIteration: 4 },
+    name: 'new name',
+  });
+  value.upsert(
+    'ws',
+    { mode: 'STANDARD', autoIterationStatus: null, autoIteration: null },
+    'reset',
+    300
+  );
+  value.upsert(
+    'ws',
+    {
+      mode: 'AUTO_ITERATION',
+      autoIterationStatus: 'RUNNING',
+      autoIteration: {
+        status: 'RUNNING',
+        currentIteration: 9,
+        maxIterations: 10,
+        currentMetricSummary: 'stale',
+      },
+    },
+    'stale reconciliation',
+    250
+  );
+  expect(value.getByWorkspaceId('ws')).toMatchObject({
+    mode: 'STANDARD',
+    autoIterationStatus: null,
+    autoIteration: null,
+  });
+});
+
+it('clears previous loop metrics when accepted mode changes before compact hydration', () => {
+  const value = store();
+  value.upsert(
+    'ws',
+    {
+      ...seed(),
+      mode: 'AUTO_ITERATION',
+      autoIterationStatus: 'RUNNING',
+      autoIteration: {
+        status: 'RUNNING',
+        currentIteration: 9,
+        maxIterations: 12,
+        currentMetricSummary: 'old loop',
+      },
+    },
+    'old loop',
+    100
+  );
+  value.upsert('ws', { mode: 'STANDARD', autoIterationStatus: null }, 'reset', 200);
+  value.upsert('ws', { mode: 'AUTO_ITERATION', autoIterationStatus: 'RUNNING' }, 'new loop', 300);
+  expect(value.getByWorkspaceId('ws')?.autoIteration).toEqual({
+    status: 'RUNNING',
+    currentIteration: null,
+    maxIterations: null,
+    currentMetricSummary: null,
+  });
+  expect(value.getByWorkspaceId('ws')?.summaryVersion).toBeUndefined();
 });

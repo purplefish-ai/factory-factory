@@ -48,7 +48,7 @@ vi.mock('@/backend/services/workspace', () => ({
     remove: vi.fn(),
   },
   computePendingRequestType: vi.fn().mockReturnValue(null),
-  AUTO_ITERATION_STATUS_CHANGED: 'auto_iteration_status_changed',
+  AUTO_ITERATION_SUMMARY_CHANGED: 'auto_iteration_summary_changed',
   workspaceAutoIterationService: { on: vi.fn(), off: vi.fn() },
 }));
 
@@ -568,9 +568,9 @@ describe('configureEventCollector', () => {
       expect.any(Function)
     );
 
-    // workspaceAutoIterationService: 1 listener (AUTO_ITERATION_STATUS_CHANGED)
+    // workspaceAutoIterationService: accepted compact state
     expect(workspaceAutoIterationService.on).toHaveBeenCalledWith(
-      'auto_iteration_status_changed',
+      'auto_iteration_summary_changed',
       expect.any(Function)
     );
 
