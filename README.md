@@ -30,8 +30,8 @@ terminals, issues, and pull request status together in one place.
 
 You will need:
 
-- Node.js 26.12.0+ for the CLI and development (pinned in `.node-version`); the
-  desktop app uses Electron 44.9's bundled Node.js 24.22 runtime
+- Node.js 26.12.1+ for the CLI and development (pinned in `.node-version`); the
+  desktop app uses Electron 45.0's bundled Node.js 24.22 runtime
 - macOS 13 (Ventura) or newer for the macOS desktop app
 - A local git repository
 - At least one agent provider:
@@ -149,7 +149,7 @@ consider a VM or container when working with untrusted code.
 
 ## Development
 
-Use pnpm 12.14.0, pinned in `package.json`. Dependency build permissions live in
+Use pnpm 12.15.0, pinned in `package.json`. Dependency build permissions live in
 `pnpm-workspace.yaml` under `allowBuilds`; review new build scripts with
 `pnpm approve-builds` when adding or updating dependencies.
 

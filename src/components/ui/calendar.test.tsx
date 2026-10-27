@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
-import { act } from 'react';
+import { act, type ComponentProps, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { Calendar } from './calendar';
+import { Calendar, CalendarDayButton } from './calendar';
 
 Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', { configurable: true, value: true });
 let container: HTMLDivElement;
@@ -28,6 +28,53 @@ function dayButton(day: number): HTMLButtonElement {
   }
   return button;
 }
+
+function StatefulDayButton(props: ComponentProps<typeof CalendarDayButton>) {
+  const [clicks, setClicks] = useState(0);
+  return (
+    <CalendarDayButton
+      {...props}
+      onClick={(event) => {
+        setClicks((previous) => previous + 1);
+        props.onClick?.(event);
+      }}
+    >
+      {props.children}
+      <span data-clicks={clicks} />
+    </CalendarDayButton>
+  );
+}
+
+it('preserves day DOM, focus and custom component state across ordinary rerenders', async () => {
+  const components = { DayButton: StatefulDayButton };
+  await act(() =>
+    root.render(<Calendar mode="single" defaultMonth={new Date(2026, 8)} components={components} />)
+  );
+  const day = dayButton(9);
+  const calendarRoot = container.querySelector('[data-slot="calendar"]');
+  await act(() => {
+    day.click();
+    day.focus();
+  });
+  expect(day.querySelector('[data-clicks]')?.getAttribute('data-clicks')).toBe('1');
+  expect(document.activeElement).toBe(day);
+
+  await act(() =>
+    root.render(
+      <Calendar
+        mode="single"
+        defaultMonth={new Date(2026, 8)}
+        components={components}
+        className="updated-calendar"
+      />
+    )
+  );
+
+  expect(container.querySelector('[data-slot="calendar"]')).toBe(calendarRoot);
+  expect(dayButton(9)).toBe(day);
+  expect(document.activeElement).toBe(day);
+  expect(dayButton(9).querySelector('[data-clicks]')?.getAttribute('data-clicks')).toBe('1');
+});
 
 it('selects an enabled date while preserving disabled dates and selected styling', async () => {
   const onSelect = vi.fn();

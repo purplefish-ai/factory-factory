@@ -7,7 +7,7 @@ provides guidelines and information for contributors.
 
 ### Prerequisites
 
-- Node.js 26.12.0+ (pinned in `.node-version`)
+- Node.js 26.12.1+ (pinned in `.node-version`)
 - pnpm
 - GitHub CLI (`gh`) - authenticated
 - Claude Code - authenticated via `claude login`

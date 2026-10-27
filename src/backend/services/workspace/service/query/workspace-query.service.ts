@@ -46,13 +46,15 @@ function deriveLastActivityAt(workspace: {
   const sessionDates = [
     ...(workspace.agentSessions?.map((session) => session.updatedAt) ?? []),
     ...(workspace.terminalSessions?.map((session) => session.updatedAt) ?? []),
-  ].filter(Boolean);
+  ].filter((date) => Number.isFinite(date?.getTime()));
 
   if (sessionDates.length === 0) {
     return null;
   }
 
-  return sessionDates.reduce((latest, date) => (date > latest ? date : latest)).toISOString();
+  return new Date(
+    sessionDates.reduce((max, d) => Math.max(max, d.getTime()), -Infinity)
+  ).toISOString();
 }
 
 class WorkspaceQueryService {

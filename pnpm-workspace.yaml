@@ -21,67 +21,78 @@ allowBuilds:
   electron-winstaller: false
 
 packageExtensions:
-  'electron-builder@26.17.0':
+  'electron-builder@26.18.0':
     dependencies:
-      electron-builder-squirrel-windows: 26.17.0
+      electron-builder-squirrel-windows: 26.18.0
 
 overrides:
   # Prisma 7 still pins versions affected by GHSA-ggr8-5vv4-36mx and MySQL2 advisories.
   '@prisma/config>deepmerge-ts': 8.0.2
-  'prisma>mysql2': 3.24.5
+  # Prisma 7's v12 driver cannot build against Electron 45's V8 headers.
+  '@prisma/adapter-better-sqlite3>better-sqlite3': 13.0.3
+  'prisma>mysql2': 3.24.6
   '@isaacs/brace-expansion': '>=5.0.1'
   '@modelcontextprotocol/sdk>ajv': '>=8.18.0'
-  '@anthropic-ai/sdk': 0.132.1
+  '@anthropic-ai/sdk': 1.3.0
+  # Storybook's react-docgen still requires Babel 7's APIs and companion packages.
   '@babel/core': 7.29.7
-  '@hono/node-server': 2.1.4
-  '@xmldom/xmldom': 0.8.15
+  '@hono/node-server': 2.1.5
+  '@xmldom/xmldom': 0.9.12
+  # v4 accepts xmldom 0.9 and remains loadable by Electron-builder's CJS callers.
+  # v5 exposes import-only package exports, which those callers cannot resolve.
+  plist: 4.0.0
   'app-builder-lib>minimatch': '>=10.2.1'
-  axios: 1.20.0
+  axios: 1.21.0
   body-parser: 2.4.0
-  fast-uri: 3.1.9
+  fast-uri: 4.2.3
   brace-expansion: 5.0.12
   braces: '>=3.0.3'
   'filelist>minimatch': '>=10.2.1'
-  follow-redirects: 1.16.1
+  follow-redirects: 1.16.2
   micromatch: '>=4.0.8'
-  postcss: 8.5.29
+  postcss: 8.5.32
   tar: 7.5.22
-  hono: 4.13.13
-  ip-address: 10.7.4
+  hono: 4.13.14
+  ip-address: 10.7.5
   lodash: 4.18.1
   lodash-es: 4.18.1
-  next: 16.4.0
-  path-to-regexp: 8.4.2
+  next: 16.4.3
+  path-to-regexp: 9.0.0
+  # tsc-alias's glob/watch consumers still request Picomatch 2.
   'picomatch@^2': 2.3.2
   'picomatch@^4': 4.0.7
-  serialize-javascript: 7.1.2
-  smol-toml: 1.9.0
+  serialize-javascript: 7.1.4
+  smol-toml: 1.9.1
   dompurify: 3.4.17
   esbuild: 0.28.2
-  electron-builder-squirrel-windows: 26.17.0
-  find-my-way: 9.9.0
-  qs: 6.16.1
+  electron-builder-squirrel-windows: 26.18.0
+  find-my-way: 9.10.0
+  qs: 6.17.0
   sharp: 0.35.5
   tmp: 0.2.7
   form-data: 4.0.6
-  js-yaml: 4.3.2
+  js-yaml: 5.5.0
   shell-quote: 1.12.0
-  undici: 7.30.1
+  # Keep each consumer on its supported, patched major: node-gyp 6, Electron 7,
+  # and jsdom 8. A global pin would force incompatible APIs across those tools.
+  'undici@^6': 6.29.1
+  'undici@^7': 7.30.1
+  'undici@^8': 8.12.3
   tough-cookie: '>=4.1.3'
-  uuid: 14.0.2
+  uuid: 14.0.3
   valibot: 1.5.0
-  webpack: 5.111.1
+  webpack: 5.112.2
   yaml: 2.9.1
 
   # Security fixes pending upstream dependency range updates.
   http-cache-semantics: 4.3.0
   # Mermaid 12 still requests the older vulnerable KaTeX line.
-  katex: 0.18.2
+  katex: 0.19.1
   source-map-js: 1.2.2
   proxy-addr: 2.0.8
-  postcss-selector-parser: 7.1.6
-  '@modelcontextprotocol/sdk': 1.32.1
-  '@electron/get>global-agent': 4.1.3
+  postcss-selector-parser: 7.1.7
+  '@modelcontextprotocol/sdk': 1.32.2
+  '@electron/get>global-agent': 4.1.6
 
 # Remove these local mitigations once upstream publishes fixed releases.
 patchedDependencies:

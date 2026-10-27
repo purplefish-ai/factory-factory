@@ -214,7 +214,7 @@ describe('AcpClientHandler', () => {
   });
 });
 
-describe('AcpClientHandler', () => {
+describe('AcpClientHandler callbacks', () => {
   it('AcpEventCallback is a discriminated ACP runtime event union', () => {
     const onEvent: AcpEventCallback = (_sessionId, event) => {
       if (event.type === 'acp_session_update') {
