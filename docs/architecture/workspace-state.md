@@ -57,6 +57,29 @@ provisioning, preserves manual/resume branch options, and logs unexpected
 failures without changing the response or deleting the workspace. Child and
 periodic-task launch policies remain with their existing callers.
 
+## Accepted workspace names
+
+The rename RPC keeps its input validation, not-found response, and persisted
+workspace result. Its injected application use case coordinates the existing
+persistence writer with snapshot publication. Renames for the same workspace are
+serialized within one application; other workspaces remain independent, and
+completed or rejected operations release their queue entries.
+
+The snapshot store tracks name freshness independently of unrelated workspace
+and lifecycle fields. Accepted renames publish the canonical returned name and
+DB `updatedAt`, with equal-millisecond commits ordered by that serialized
+writer. Ordinary name observations must be strictly newer. State-change and
+reconciliation producers carry canonical DB name provenance, so a delayed older
+read cannot overwrite a rename merely because it was observed later. Generic
+store callers without provenance retain observation-timestamp ordering.
+
+Name publication changes only an existing live entry and emits the existing
+snapshot change synchronously. Missing, removed, ARCHIVING, and ARCHIVED entries
+are not recreated. Name updates do not advance other field fences; their private
+freshness metadata is not added to full or changed wire payloads. Workspace
+persistence remains independent of the snapshot store, and clients retain their
+normal stream authority rather than overlaying HTTP names.
+
 ## Run script
 
 Startup output accumulates across factory setup and project startup phases. The

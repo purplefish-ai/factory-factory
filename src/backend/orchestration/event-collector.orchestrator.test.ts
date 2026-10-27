@@ -654,6 +654,7 @@ describe('configureEventCollector', () => {
         name: string;
         branchName: string | null;
         createdAt: Date;
+        updatedAt: Date;
       };
     }) => void;
 
@@ -666,6 +667,7 @@ describe('configureEventCollector', () => {
         name: 'ws',
         branchName: null,
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-01T01:00:00.000Z'),
       },
     });
 
@@ -697,6 +699,7 @@ describe('configureEventCollector', () => {
         name: string;
         branchName: string | null;
         createdAt: Date;
+        updatedAt: Date;
       } | null;
     }) => void;
 
@@ -709,6 +712,7 @@ describe('configureEventCollector', () => {
         name: 'My workspace',
         branchName: 'feature/test',
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-01T01:00:00.000Z'),
       },
     });
 
@@ -718,6 +722,7 @@ describe('configureEventCollector', () => {
         status: 'READY',
         projectId: 'proj-1',
         name: 'My workspace',
+        nameUpdatedAt: Date.parse('2026-01-01T01:00:00.000Z'),
         branchName: 'feature/test',
         createdAt: '2026-01-01T00:00:00.000Z',
       },
@@ -743,6 +748,7 @@ describe('configureEventCollector', () => {
         name: string;
         branchName: string | null;
         createdAt: Date;
+        updatedAt: Date;
       } | null;
     }) => void;
 
@@ -755,6 +761,7 @@ describe('configureEventCollector', () => {
         name: 'Fresh workspace',
         branchName: null,
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-01T01:00:00.000Z'),
       },
     });
 
@@ -1289,6 +1296,7 @@ describe('configureEventCollector', () => {
         name: string;
         branchName: string | null;
         createdAt: Date;
+        updatedAt: Date;
       };
     }) => void;
 
@@ -1301,6 +1309,7 @@ describe('configureEventCollector', () => {
         name: 'ws',
         branchName: null,
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-01T01:00:00.000Z'),
       },
     });
 

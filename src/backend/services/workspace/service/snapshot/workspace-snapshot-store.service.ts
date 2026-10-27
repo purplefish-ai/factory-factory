@@ -58,6 +58,8 @@ export interface SnapshotUpdateInput {
 
   // Workspace fields (group: 'workspace')
   name?: string;
+  /** Input-only canonical DB provenance; never part of a snapshot payload. */
+  nameUpdatedAt?: number;
   status?: WorkspaceStatus;
   createdAt?: string;
   branchName?: string | null;
@@ -161,7 +163,6 @@ export interface SnapshotUpsertResult {
 
 const WORKSPACE_FIELDS = [
   'projectId',
-  'name',
   'status',
   'createdAt',
   'branchName',
@@ -313,6 +314,8 @@ export class WorkspaceSnapshotStore extends EventEmitter {
   private entries = new Map<string, WorkspaceSnapshotEntry>();
   private projectIndex = new Map<string, Set<string>>();
   private rawSessionIsWorkingByWorkspaceId = new Map<string, boolean>();
+  /** Name freshness is independent of unrelated workspace/lifecycle observations. */
+  private readonly nameTimestamps = new Map<string, number>();
   private deriveFns: SnapshotDerivationFns | null = null;
   /**
    * Removal timestamps per workspace. An upsert whose timestamp is not newer
@@ -438,6 +441,30 @@ export class WorkspaceSnapshotStore extends EventEmitter {
       },
       fieldTimestamps: createDefaultFieldTimestamps(),
     };
+  }
+
+  private mergeName(
+    entry: WorkspaceSnapshotEntry,
+    update: SnapshotUpdateInput,
+    observedAt: number,
+    acceptedRename = false
+  ): { accepted: boolean; rawChanged: boolean } {
+    if (update.name === undefined) {
+      return { accepted: false, rawChanged: false };
+    }
+    const timestamp = update.nameUpdatedAt ?? observedAt;
+    const previous = this.nameTimestamps.get(entry.workspaceId);
+    if (
+      !Number.isFinite(timestamp) ||
+      (previous !== undefined &&
+        (timestamp < previous || (!acceptedRename && timestamp === previous)))
+    ) {
+      return { accepted: false, rawChanged: false };
+    }
+    this.nameTimestamps.set(entry.workspaceId, timestamp);
+    const rawChanged = entry.name !== update.name;
+    entry.name = update.name;
+    return { accepted: true, rawChanged };
   }
 
   /**
@@ -606,7 +633,12 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     }
 
     // Field-level timestamp merge
-    const mergeResult = this.mergeFieldGroups(entry, update, ts);
+    const grouped = this.mergeFieldGroups(entry, update, ts);
+    const name = this.mergeName(entry, update, ts);
+    const mergeResult = {
+      accepted: grouped.accepted || name.accepted,
+      rawChanged: grouped.rawChanged || name.rawChanged,
+    };
 
     if (!(isNewEntry || mergeResult.accepted)) {
       logger.debug('Snapshot update ignored (stale)', { workspaceId, source });
@@ -626,6 +658,38 @@ export class WorkspaceSnapshotStore extends EventEmitter {
       return { accepted: true, changed: false, emitted: false };
     }
 
+    this.publishEntry(workspaceId, entry, source, oldProjectId);
+    return { accepted: true, changed: true, emitted: true };
+  }
+
+  /**
+   * Publish a committed name from the application's serialized rename writer.
+   * Equal DB milliseconds are allowed only on this ordered accepted-write path;
+   * ordinary observations must be strictly newer. Other field fences do not move.
+   */
+  publishAcceptedName(
+    workspaceId: string,
+    name: string,
+    nameUpdatedAt: number
+  ): SnapshotUpsertResult {
+    const entry = this.entries.get(workspaceId);
+    if (!entry || entry.status === 'ARCHIVING' || entry.status === 'ARCHIVED') {
+      return { accepted: false, changed: false, emitted: false };
+    }
+    const result = this.mergeName(entry, { name, nameUpdatedAt }, nameUpdatedAt, true);
+    if (!(result.accepted && result.rawChanged)) {
+      return { accepted: result.accepted, changed: false, emitted: false };
+    }
+    this.publishEntry(workspaceId, entry, 'mutation:workspace_rename', entry.projectId);
+    return { accepted: true, changed: true, emitted: true };
+  }
+
+  private publishEntry(
+    workspaceId: string,
+    entry: WorkspaceSnapshotEntry,
+    source: string,
+    oldProjectId: string | undefined
+  ): void {
     // Bump version and update metadata
     entry.version += 1;
     entry.computedAt = new Date().toISOString();
@@ -643,7 +707,6 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     } satisfies SnapshotChangedEvent);
 
     logger.debug('Snapshot updated', { workspaceId, version: entry.version, source });
-    return { accepted: true, changed: true, emitted: true };
   }
 
   /**
@@ -673,6 +736,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     }, SERVICE_CACHE_TTL_MS.workspaceSnapshotRemovalGrace);
     timer.unref();
     this.removalTimestamps.set(workspaceId, { removedAt, expiresAt, timer });
+    this.nameTimestamps.delete(workspaceId);
 
     const entry = this.entries.get(workspaceId);
     if (!entry) {
@@ -760,6 +824,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     this.entries.clear();
     this.projectIndex.clear();
     this.rawSessionIsWorkingByWorkspaceId.clear();
+    this.nameTimestamps.clear();
     for (const tombstone of this.removalTimestamps.values()) {
       clearTimeout(tombstone.timer);
     }

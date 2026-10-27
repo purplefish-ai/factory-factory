@@ -426,6 +426,7 @@ function buildWorkspaceStateChangeFields(event: WorkspaceStateChangedEvent): Sna
     status: event.toStatus,
     projectId: event.workspace.projectId,
     name: event.workspace.name,
+    nameUpdatedAt: event.workspace.updatedAt.getTime(),
     branchName: event.workspace.branchName,
     createdAt: event.workspace.createdAt.toISOString(),
   };

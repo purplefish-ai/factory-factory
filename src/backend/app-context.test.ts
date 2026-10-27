@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { RenamedWorkspace } from '@/backend/orchestration/workspace-rename.orchestrator';
 import { createFakeApplicationGraph } from '@/test-utils/application-graph';
+import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import {
   createApplication,
   createDefaultApplicationDependencies,
@@ -8,6 +10,51 @@ import {
 import { serverInstanceService } from './services/server-instance.service';
 
 describe('createApplication', () => {
+  it('binds accepted rename to each application service graph without sharing its queue or publication target', async () => {
+    const first = createDefaultApplicationDependencies();
+    const second = createDefaultApplicationDependencies();
+    const a = unsafeCoerce<RenamedWorkspace>({
+      id: 'same-id',
+      name: 'First graph',
+      status: 'READY',
+      updatedAt: new Date(200),
+    });
+    const b = { ...a, name: 'Second graph' };
+    let finish!: (workspace: RenamedWorkspace) => void;
+    const slow = vi.fn(
+      () =>
+        new Promise<RenamedWorkspace>((resolve) => {
+          finish = resolve;
+        })
+    );
+    const fast = vi.fn(() => Promise.resolve(b));
+    const publishA = vi.fn();
+    const publishB = vi.fn();
+    first.services.workspaceDataService = Object.assign({}, first.services.workspaceDataService, {
+      rename: slow,
+    });
+    second.services.workspaceDataService = Object.assign({}, second.services.workspaceDataService, {
+      rename: fast,
+    });
+    first.services.workspaceSnapshotStore = Object.assign(
+      {},
+      first.services.workspaceSnapshotStore,
+      { publishAcceptedName: publishA }
+    );
+    second.services.workspaceSnapshotStore = Object.assign(
+      {},
+      second.services.workspaceSnapshotStore,
+      { publishAcceptedName: publishB }
+    );
+    const pending = first.services.renameWorkspace('same-id', 'Requested A');
+    expect(await second.services.renameWorkspace('same-id', 'Requested B')).toBe(b);
+    expect(publishA).not.toHaveBeenCalled();
+    expect(publishB).toHaveBeenCalledExactlyOnceWith('same-id', b.name, 200);
+    finish(a);
+    expect(await pending).toBe(a);
+    expect(publishA).toHaveBeenCalledExactlyOnceWith('same-id', a.name, 200);
+  });
+
   it('shares the runtime server endpoint with lifecycle composition', () => {
     const dependencies = createDefaultApplicationDependencies();
 

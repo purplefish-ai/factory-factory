@@ -35,6 +35,7 @@ import {
 } from './orchestration/workspace-init.orchestrator';
 import { launchWorkspace } from './orchestration/workspace-launch.orchestrator';
 import { deliverWorkspaceNotification } from './orchestration/workspace-notification-delivery.orchestrator';
+import { createWorkspaceRename } from './orchestration/workspace-rename.orchestrator';
 import { getQuickAction, listQuickActions } from './prompts/quick-actions';
 import { autoIterationService, insightsService, logbookService } from './services/auto-iteration';
 import { configService } from './services/config.service';
@@ -176,6 +177,7 @@ export type ApplicationServices = BridgeServices & {
   launchWorkspace: (
     source: Parameters<typeof launchWorkspace>[0]
   ) => ReturnType<typeof launchWorkspace>;
+  renameWorkspace: ReturnType<typeof createWorkspaceRename>['rename'];
   fireLifecycleNotification: typeof fireLifecycleNotification;
   persistChildNotification: typeof persistChildNotification;
   persistParentNotification: typeof persistParentNotification;
@@ -217,6 +219,11 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
   let eventCollector: EventCollectorOrchestrator | null = null;
   const workspaceCreationService = new WorkspaceCreationService({
     logger: createLogger('workspace-creation'),
+  });
+  const workspaceRename = createWorkspaceRename({
+    rename: (id, name) => services.workspaceDataService.rename(id, name),
+    publishAcceptedName: (id, name, updatedAt) =>
+      services.workspaceSnapshotStore.publishAcceptedName(id, name, updatedAt),
   });
   const services: ApplicationServices = {
     acpRuntimeManager,
@@ -288,6 +295,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     workspaceAutoIterationService,
     workspaceCreationService,
     workspaceDataService,
+    renameWorkspace: workspaceRename.rename,
     workspaceMaintenanceService,
     workspaceGitStateService,
     workspaceNotificationService,

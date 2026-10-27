@@ -366,6 +366,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     createLogger,
     createWorkspaceCreationService: () => ({ create: vi.fn() }),
     launchWorkspace: vi.fn(),
+    renameWorkspace: vi.fn(),
     cryptoService,
     dataBackupService,
     decisionLogQueryService: decisionLogService,

@@ -257,6 +257,7 @@ export class SnapshotReconciliationService {
     return {
       projectId: ws.projectId,
       name: ws.name,
+      nameUpdatedAt: ws.updatedAt.getTime(),
       status: ws.status,
       createdAt: ws.createdAt.toISOString(),
       branchName: ws.branchName,
