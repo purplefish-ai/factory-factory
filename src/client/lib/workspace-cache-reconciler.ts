@@ -1,5 +1,12 @@
-import { type QueryClient, queryOptions, replaceEqualDeep } from '@tanstack/react-query';
+import {
+  CancelledError,
+  type Query,
+  type QueryClient,
+  queryOptions,
+  replaceEqualDeep,
+} from '@tanstack/react-query';
 import { getQueryKey } from '@trpc/react-query';
+import { runInBackground } from '@/client/lib/background-task';
 import {
   mergeProjectSnapshotIntoWorkspaceDetail,
   projectSnapshotToWorkspace,
@@ -40,7 +47,7 @@ export class ProjectWorkspaceCacheReconciler {
   }
 
   beginConnection(): WorkspaceConnection {
-    if (this.connection) {
+    if (this.connection || this.epoch !== this.initialEpoch) {
       this.epoch = Symbol('connection');
     }
     this.connection = { identity: this.epoch };
@@ -115,6 +122,14 @@ export class ProjectWorkspaceCacheReconciler {
     return replaceEqualDeep(previous, reconciled);
   };
 
+  hasWorkspace(workspaceId: string): boolean {
+    return this.entries.has(workspaceId);
+  }
+
+  acceptsHttpEpoch(requestEpoch: symbol | undefined): boolean {
+    return (requestEpoch ?? this.initialEpoch) === this.epoch;
+  }
+
   captureEpoch(): symbol {
     return this.epoch;
   }
@@ -125,7 +140,7 @@ export class ProjectWorkspaceCacheReconciler {
     current: WorkspaceDetail | undefined
   ): WorkspaceDetail | undefined {
     // A bootstrap can precede creation of this project owner, but not its retirement.
-    if ((requestEpoch ?? this.initialEpoch) !== this.epoch) {
+    if (!this.acceptsHttpEpoch(requestEpoch)) {
       return current;
     }
     const entry = this.entries.get(data.id);
@@ -248,15 +263,50 @@ class WorkspaceDetailCacheReconciler {
     { epochs: Map<string, symbol>; data: WorkspaceDetail }
   >();
   readonly queryKey;
+  private active = true;
+  private projectId: string | undefined;
 
   constructor(
     private readonly queryClient: QueryClient,
-    workspaceId: string
+    private readonly workspaceId: string
   ) {
     this.queryKey = getQueryKey(trpc.workspace.get, { id: workspaceId }, 'query');
   }
 
+  dispose(): void {
+    this.active = false;
+  }
+
+  identifyProject(): string | undefined {
+    const cached = this.queryClient.getQueryData<WorkspaceDetail>(this.queryKey);
+    this.projectId ??= cached?.projectId;
+    if (!this.projectId) {
+      for (const [projectId, owner] of reconcilers.get(this.queryClient) ?? []) {
+        if (owner.hasWorkspace(this.workspaceId)) {
+          this.projectId = projectId;
+          break;
+        }
+      }
+    }
+    if (!this.projectId) {
+      for (const [, data] of this.queryClient.getQueriesData<ProjectWorkspaceCache>({
+        queryKey: getQueryKey(trpc.workspace.listForProject, undefined, 'query'),
+      })) {
+        const row = data?.workspaces.find((workspace) => workspace.id === this.workspaceId);
+        if (row) {
+          this.projectId = row.projectId;
+          break;
+        }
+      }
+    }
+    return this.projectId;
+  }
+
   async fetch(fetchDetail: (signal: AbortSignal) => Promise<WorkspaceDetail>, signal: AbortSignal) {
+    if (!this.active) {
+      throw new CancelledError({ revert: true });
+    }
+    this.identifyProject();
     // The detail route knows only its workspace id until HTTP supplies the project.
     const epochs = new Map(
       [...(reconcilers.get(this.queryClient) ?? [])].map(([id, owner]) => [
@@ -265,37 +315,106 @@ class WorkspaceDetailCacheReconciler {
       ])
     );
     const data = await fetchDetail(signal);
-    this.httpResults.set(data, { epochs, data });
+    if (this.active) {
+      this.projectId = data.projectId;
+      this.httpResults.set(data, { epochs, data });
+    }
     return data;
   }
 
+  private recoverRejectedQuery(query: Query, rejectedRequest: Promise<unknown> | undefined): void {
+    const filter = { queryKey: this.queryKey, exact: true };
+    if (!this.active || query !== this.queryClient.getQueryCache().find(filter)) {
+      return;
+    }
+    if (query.promise && query.promise !== rejectedRequest) {
+      return;
+    }
+    if (query.isActive() && query.state.data !== undefined) {
+      runInBackground(this.queryClient.invalidateQueries(filter), 'Could not refresh data');
+      return;
+    }
+    const reset = this.queryClient.resetQueries(filter);
+    // reset destroys the GC timer; without observers there is no
+    // refetch or later observer removal to schedule collection again.
+    if (
+      query.getObserversCount() === 0 &&
+      query.state.fetchStatus === 'idle' &&
+      query === this.queryClient.getQueryCache().find(filter)
+    ) {
+      this.queryClient.removeQueries(filter);
+    }
+    runInBackground(reset, 'Could not refresh data');
+  }
+
   readonly structuralSharing = (previous: unknown, next: unknown): unknown => {
+    if (!this.active) {
+      return previous;
+    }
     const http = typeof next === 'object' && next !== null ? this.httpResults.get(next) : undefined;
     if (!http) {
       return replaceEqualDeep(previous, next);
     }
     this.httpResults.delete(http.data);
     const owner = getProjectWorkspaceCacheReconciler(this.queryClient, http.data.projectId);
+    const requestEpoch = http.epochs.get(http.data.projectId);
+    if (!owner.acceptsHttpEpoch(requestEpoch)) {
+      const filter = { queryKey: this.queryKey, exact: true };
+      const query = this.queryClient.getQueryCache().find(filter);
+      if (query?.isActive()) {
+        const rejectedRequest = query.promise;
+        // Abort this success commit, then retry the same mounted query after its
+        // old fetch continuation settles. Unknown direct links learn ownership
+        // only from this rejected response, so disconnect could not restart them.
+        queueMicrotask(() => this.recoverRejectedQuery(query, rejectedRequest));
+        throw new CancelledError({ revert: true });
+      }
+    }
     const current = this.queryClient.getQueryData<WorkspaceDetail>(this.queryKey);
-    return replaceEqualDeep(
-      previous,
-      owner.reconcileDetail(http.data, http.epochs.get(http.data.projectId), current)
-    );
+    return replaceEqualDeep(previous, owner.reconcileDetail(http.data, requestEpoch, current));
   };
 }
 
 function getWorkspaceDetailCacheReconciler(queryClient: QueryClient, workspaceId: string) {
   let details = detailReconcilers.get(queryClient);
   if (!details) {
-    details = new Map();
-    detailReconcilers.set(queryClient, details);
+    const owners = new Map<string, WorkspaceDetailCacheReconciler>();
+    details = owners;
+    detailReconcilers.set(queryClient, owners);
+    // QueryCache and its one subscription share the QueryClient lifetime.
+    queryClient.getQueryCache().subscribe((event) => {
+      const owner = owners.get(event.query.queryHash);
+      if (event.type === 'removed') {
+        owner?.dispose();
+        owners.delete(event.query.queryHash);
+      } else if (event.type === 'updated') {
+        owner?.identifyProject();
+      }
+    });
   }
-  let owner = details.get(workspaceId);
+  const queryKey = getQueryKey(trpc.workspace.get, { id: workspaceId }, 'query');
+  const queryHash = queryClient.defaultQueryOptions({ queryKey }).queryHash;
+  let owner = details.get(queryHash);
   if (!owner) {
     owner = new WorkspaceDetailCacheReconciler(queryClient, workspaceId);
-    details.set(workspaceId, owner);
+    details.set(queryHash, owner);
   }
+  owner.identifyProject();
   return owner;
+}
+
+/** Pending requests belong to a project only after independent ownership evidence. */
+export function projectWorkspaceDetailQueryFilter(queryClient: QueryClient, projectId: string) {
+  return {
+    queryKey: getQueryKey(trpc.workspace.get, undefined, 'query'),
+    predicate: (query: { queryHash: string; queryKey: readonly unknown[] }) => {
+      const owner = detailReconcilers.get(queryClient)?.get(query.queryHash);
+      const knownProject =
+        owner?.identifyProject() ??
+        queryClient.getQueryData<WorkspaceDetail>(query.queryKey)?.projectId;
+      return knownProject === projectId;
+    },
+  };
 }
 
 /** Shared cache behavior for ordinary fetches and deliberate creation seeds. */

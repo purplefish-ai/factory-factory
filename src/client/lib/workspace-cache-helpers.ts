@@ -44,7 +44,7 @@ export function createOptimisticWorkspaceCacheData(workspace: CreatedWorkspace) 
 /** Creation returns a full persisted row, so it can seed detail before navigation. */
 export function seedCreatedWorkspaceDetail(queryClient: QueryClient, workspace: CreatedWorkspace) {
   const options = workspaceDetailCacheOptions(queryClient, workspace.id);
-  queryClient.setQueryDefaults(options.queryKey, options);
+  queryClient.getQueryCache().build(queryClient, options);
   queryClient.setQueryData(
     options.queryKey,
     (existing) => existing ?? createOptimisticWorkspaceCacheData(workspace)

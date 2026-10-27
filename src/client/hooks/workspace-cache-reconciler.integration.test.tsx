@@ -178,7 +178,8 @@ describe('shared project query and live connection lifecycle', () => {
       ).toBe('fallback')
     );
     channel.onConnected?.();
-    expect(invalidate).toHaveBeenCalledTimes(2);
+    // Reconnect starts a distinct generation and restarts fallback requests once.
+    expect(invalidate).toHaveBeenCalledTimes(4);
     channel.onMessage?.({
       type: 'snapshot_full',
       projectId: 'proj-1',
