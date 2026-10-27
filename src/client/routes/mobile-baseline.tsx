@@ -127,6 +127,7 @@ const baselineTokenStats: TokenStats = {
   turnCount: 6,
   webSearchRequests: 0,
   contextWindow: 200_000,
+  contextUsedTokens: 6600,
   maxOutputTokens: 8192,
   serviceTier: 'default',
 };

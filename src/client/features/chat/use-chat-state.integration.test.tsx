@@ -108,6 +108,40 @@ describe('useChatState rejected message recovery', () => {
     vi.clearAllMocks();
   });
 
+  it('compacts without attaching or clearing the next message draft', async () => {
+    let harness: ReturnType<typeof renderChatState>;
+    await act(async () => {
+      harness = renderChatState('session-A');
+      await flushEffects();
+    });
+    try {
+      await act(async () => {
+        harness.chatRef.current?.setInputDraft('Keep this next message');
+        harness.chatRef.current?.setInputAttachments([createAttachment()]);
+        await flushEffects();
+      });
+      await act(() => {
+        harness.chatRef.current?.sendMessage('/compact', { preserveInput: true });
+      });
+      expect(harness!.send).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          type: 'queue_message',
+          text: '/compact',
+          attachments: undefined,
+        })
+      );
+      expect(harness!.chatRef.current?.inputDraft).toBe('Keep this next message');
+      expect(harness!.chatRef.current?.inputAttachments).toEqual([createAttachment()]);
+      await act(flushDraftDebounce);
+      expect(sessionStorage.getItem('chat-draft-session-A')).toBe('Keep this next message');
+      expect(sessionStorage.getItem('chat-attachments-session-A')).toContain('secret.txt');
+    } finally {
+      await act(() => {
+        harness!.cleanup();
+      });
+    }
+  });
+
   it('restores rejected message content for the same session', async () => {
     const harness = renderChatState('session-A');
     await flushEffects();

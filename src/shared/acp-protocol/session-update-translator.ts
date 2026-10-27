@@ -41,6 +41,7 @@ type TerminalOutputState = { sessionId: string; text: string; terminalIds: Set<s
  */
 export class AcpEventTranslator {
   private readonly terminalOutput = new Map<string, TerminalOutputState>();
+  private readonly compactions = new Map<string, { sessionId: string; status: string }>();
 
   constructor(private readonly logger: AcpTranslationLogger) {}
 
@@ -72,6 +73,13 @@ export class AcpEventTranslator {
       case 'config_option_update':
         return this.translateConfigOptionUpdate(update);
 
+      case 'compaction_update':
+        return this.translateCompactionUpdate(update, sessionId);
+
+      case 'compaction_summary_chunk':
+        // Retained model context is intentionally represented by the concise boundary.
+        return this.translateCompactionUpdate({ ...update, status: 'in_progress' }, sessionId);
+
       case 'context_compaction':
         return this.translateContextCompactionUpdate(update);
 
@@ -90,6 +98,11 @@ export class AcpEventTranslator {
   }
 
   clearTerminalOutput(sessionId: string): void {
+    for (const [key, state] of this.compactions) {
+      if (state.sessionId === sessionId) {
+        this.compactions.delete(key);
+      }
+    }
     for (const [key, output] of this.terminalOutput) {
       if (output.sessionId === sessionId) {
         this.terminalOutput.delete(key);
@@ -480,6 +493,54 @@ export class AcpEventTranslator {
         },
       },
     ];
+  }
+
+  private translateCompactionUpdate(
+    update: { compactionId: string; status: string; error?: string | null },
+    sessionId: string
+  ): AcpTranslatedDelta[] {
+    const { compactionId, status } = update;
+    if (!(compactionId && ['in_progress', 'completed', 'failed', 'cancelled'].includes(status))) {
+      this.logger.warn('compaction_update: unknown ID or status', { compactionId, status });
+      return [];
+    }
+    const key = JSON.stringify([sessionId, compactionId]);
+    const previous = this.compactions.get(key);
+    // Terminal updates can be repeated to enrich metadata or summaries, not create boundaries.
+    if (previous && (previous.status !== 'in_progress' || previous.status === status)) {
+      return [];
+    }
+    this.compactions.set(key, { sessionId, status });
+    // Bound replay deduplication state for long-lived sessions.
+    if (this.compactions.size > 256) {
+      const oldest = this.compactions.keys().next().value;
+      if (oldest !== undefined) {
+        this.compactions.delete(oldest);
+      }
+    }
+    if (status === 'in_progress') {
+      return [{ type: 'compacting_start' }];
+    }
+    const events: AcpTranslatedDelta[] = [{ type: 'compacting_end' }];
+    if (status === 'completed') {
+      events.push({ type: 'compact_boundary' });
+    } else {
+      events.push(...this.translateCompactionFailure(status, update.error));
+    }
+    return events;
+  }
+
+  private translateCompactionFailure(status: string, error?: string | null): AcpTranslatedDelta[] {
+    const details = error?.trim();
+    const text =
+      status === 'cancelled'
+        ? 'Context compaction cancelled.'
+        : `Context compaction failed.${details ? ` ${details}` : ''}`;
+    // Claude carries failures here and suppresses its duplicate local-command stdout.
+    return this.translateAgentMessageChunk({
+      sessionUpdate: 'agent_message_chunk',
+      content: { type: 'text', text },
+    });
   }
 
   private translateContextCompactionUpdate(update: ContextCompactionUpdate): AcpTranslatedDelta[] {

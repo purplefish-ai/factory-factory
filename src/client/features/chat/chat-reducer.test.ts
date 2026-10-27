@@ -3941,9 +3941,7 @@ describe('createActionFromWebSocketMessage - SDK Events', () => {
   });
 });
 
-// =============================================================================
 // Token Stats Accumulation Tests
-// =============================================================================
 
 describe('Token Stats Accumulation', () => {
   let initialState: ChatState;
@@ -3964,6 +3962,7 @@ describe('Token Stats Accumulation', () => {
       turnCount: 0,
       webSearchRequests: 0,
       contextWindow: null,
+      contextUsedTokens: null,
       maxOutputTokens: null,
       serviceTier: null,
     });
@@ -4130,6 +4129,7 @@ describe('Token Stats Accumulation', () => {
       turnCount: 0,
       webSearchRequests: 0,
       contextWindow: null,
+      contextUsedTokens: null,
       maxOutputTokens: null,
       serviceTier: null,
     });

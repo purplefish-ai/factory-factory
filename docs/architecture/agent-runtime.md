@@ -117,6 +117,44 @@ Provider protocol schemas are maintained by upstream adapters. Keep focused ACP
 client contract tests when upgrading either dependency, including saved-session
 resume, plan approval, questions, native subagents, and reviewer permissions.
 
+### Usage and compaction
+
+The composer usage control shows the latest ACP `usage_update.used` against
+`usage_update.size`. These are current conversation occupancy snapshots,
+including post-compaction readings; cumulative token accounting is separate.
+Unknown occupancy stays unavailable until the provider reports it. Both
+providers support the same control.
+
+Plan limits are account-level readings shared across workspaces. The session
+capsule coalesces and caches provider reads for 30 seconds. Codex uses the
+packaged app-server's `account/read` and `account/rateLimits/read`; Claude uses
+its SDK's experimental structured usage control with behavior scanning disabled.
+These disposable probes submit no model turns and do not alter active
+conversations. Missing subscription data is unavailable, and failed reads offer
+refresh rather than implying an unused quota. Claude's experimental response is
+validated at the boundary and may need updating with future SDK releases.
+
+Compact sends `/compact` through the normal session queue, preserving the
+composer draft and excluding draft attachments. It is disabled while work is
+running, compaction is active or the connection is unavailable. Native
+`clientCapabilities.session.compaction` negotiation enables typed compaction
+updates. Start updates show progress; only completed updates add the concise
+context boundary. Duplicate terminal metadata patches do not create duplicate
+boundaries. Failed and cancelled compactions end progress with their outcome and
+never claim success. Retained model summaries are not rendered as new assistant
+answers; conversation history remains visible.
+
+Run the opt-in live check with:
+
+```sh
+RUN_REAL_PROVIDER_COMPACTION_TESTS=1 pnpm exec vitest run src/backend/services/session/service/acp/acp-compaction.manual.integration.test.ts
+```
+
+It creates disposable sessions for both providers, seeds a marker, compacts,
+checks native usage/lifecycle updates and verifies follow-up recall without tool
+calls. Native compaction can increase occupancy for short conversations, so the
+UI reports the provider reading without promising a particular reduction.
+
 ### Failed provider resume
 
 An active session whose provider cannot load its stored identity explicitly

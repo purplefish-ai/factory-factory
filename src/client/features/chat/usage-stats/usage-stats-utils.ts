@@ -9,10 +9,10 @@ import {
  * Returns 0 if context window is not available.
  */
 export function calculateContextUsagePercentage(stats: TokenStats): number {
-  if (!stats.contextWindow || stats.contextWindow === 0) {
+  if (!stats.contextWindow || stats.contextUsedTokens == null) {
     return 0;
   }
-  const usedTokens = stats.inputTokens + stats.outputTokens;
+  const usedTokens = stats.contextUsedTokens;
   return Math.min((usedTokens / stats.contextWindow) * 100, 100);
 }
 

@@ -58,6 +58,8 @@ export interface UseChatActionsOptions {
 
 export interface SendMessageOptions {
   voiceMode?: boolean;
+  /** Send a context command without consuming the next message draft or attachments. */
+  preserveInput?: boolean;
 }
 
 export interface UseChatActionsReturn {
@@ -191,7 +193,7 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
   const sendMessage = useCallback(
     (text: string, options?: SendMessageOptions) => {
       const trimmedText = text.trim();
-      const attachments = inputAttachmentsRef.current;
+      const attachments = options?.preserveInput ? [] : inputAttachmentsRef.current;
       if (!trimmedText && attachments.length === 0) {
         return;
       }
@@ -211,8 +213,10 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
         },
       });
 
-      // Clear draft and attachments when sending a message
-      onClearInput();
+      // Context commands leave the next message draft intact.
+      if (!options?.preserveInput) {
+        onClearInput();
+      }
 
       // Send to backend for queueing/dispatch
       // Message will be added to state when MESSAGE_ACCEPTED is received

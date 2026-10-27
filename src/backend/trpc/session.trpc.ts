@@ -7,6 +7,7 @@ import {
   subagentReadParamsSchema,
 } from '@/shared/acp-protocol/subagents';
 import { SessionStatus } from '@/shared/core';
+import { providerPlanUsageSchema, usageProviderSchema } from '@/shared/provider-usage';
 import { SessionProvider } from '@prisma-gen/client';
 import { type Context, publicProcedure, router } from './trpc';
 
@@ -118,6 +119,13 @@ async function rollbackCreatedSession(
 }
 
 export const sessionRouter = router({
+  getProviderUsage: publicProcedure
+    .input(z.object({ provider: usageProviderSchema }))
+    .output(providerPlanUsageSchema)
+    .query(({ ctx, input }) =>
+      ctx.appContext.services.providerUsageService.getUsage(input.provider)
+    ),
+
   // Session limits
 
   // Get the maximum number of sessions allowed per workspace

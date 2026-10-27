@@ -73,6 +73,7 @@ import {
   chatMessageHandlerService,
   claudeModelCatalogService,
   codexModelCatalogService,
+  providerUsageService,
   type SessionFileLogger,
   sessionDataService,
   sessionBackgroundDeliveryService,
@@ -127,6 +128,7 @@ export type ApplicationServices = BridgeServices & {
   executeStartupScriptPipeline: typeof executeStartupScriptPipeline;
   claudeModelCatalogService: Pick<typeof claudeModelCatalogService, 'getModels'>;
   codexModelCatalogService: Pick<typeof codexModelCatalogService, 'getModels'>;
+  providerUsageService: Pick<typeof providerUsageService, 'getUsage'>;
   factoryConfigService: Pick<typeof FactoryConfigService, 'readConfig'>;
   findAvailablePort: typeof findAvailablePort;
   gitCloneService: typeof gitCloneService;
@@ -236,6 +238,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     executeStartupScriptPipeline,
     claudeModelCatalogService,
     codexModelCatalogService,
+    providerUsageService,
     factoryConfigService: FactoryConfigService,
     findAvailablePort,
     gitCloneService,
