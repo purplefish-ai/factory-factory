@@ -33,6 +33,20 @@ afterEach(() => {
 });
 
 describe('independent accepted-name freshness', () => {
+  it('checks observation freshness without advancing the fence or mutating snapshot state', () => {
+    const store = fixture();
+    const before = structuredClone(store.getByWorkspaceId('workspace'));
+    expect(store.canAcceptNameObservation('workspace', 100)).toBe(false);
+    expect(store.canAcceptNameObservation('workspace', 99)).toBe(false);
+    expect(store.canAcceptNameObservation('workspace', Number.NaN)).toBe(false);
+    expect(store.canAcceptNameObservation('workspace', Infinity)).toBe(false);
+    expect(store.canAcceptNameObservation('workspace', 200)).toBe(true);
+    expect(store.getByWorkspaceId('workspace')).toEqual(before);
+    expect(store.publishAcceptedName('workspace', 'Accepted', 150).accepted).toBe(true);
+    expect(store.canAcceptNameObservation('workspace', 150)).toBe(false);
+    expect(store.canAcceptNameObservation('workspace', 151)).toBe(true);
+  });
+
   it('publishes an accepted rename in the same DB millisecond as its initial canonical seed', () => {
     const store = fixture();
     expect(store.publishAcceptedName('workspace', 'Accepted tie', 100)).toEqual({

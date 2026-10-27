@@ -468,6 +468,19 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     };
   }
 
+  /** Read-only diagnostic check using the same fence as ordinary name merges. */
+  canAcceptNameObservation(workspaceId: string, nameUpdatedAt: number): boolean {
+    return this.canMergeName(workspaceId, nameUpdatedAt);
+  }
+
+  private canMergeName(workspaceId: string, timestamp: number, acceptedRename = false): boolean {
+    const previous = this.nameTimestamps.get(workspaceId);
+    return (
+      Number.isFinite(timestamp) &&
+      (previous === undefined || timestamp > previous || (acceptedRename && timestamp === previous))
+    );
+  }
+
   private mergeName(
     entry: WorkspaceSnapshotEntry,
     update: SnapshotUpdateInput,
@@ -478,12 +491,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
       return { accepted: false, rawChanged: false };
     }
     const timestamp = update.nameUpdatedAt ?? observedAt;
-    const previous = this.nameTimestamps.get(entry.workspaceId);
-    if (
-      !Number.isFinite(timestamp) ||
-      (previous !== undefined &&
-        (timestamp < previous || (!acceptedRename && timestamp === previous)))
-    ) {
+    if (!this.canMergeName(entry.workspaceId, timestamp, acceptedRename)) {
       return { accepted: false, rawChanged: false };
     }
     this.nameTimestamps.set(entry.workspaceId, timestamp);
