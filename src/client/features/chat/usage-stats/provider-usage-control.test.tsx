@@ -97,6 +97,12 @@ describe('Combined usage control', () => {
     click(button('Usage: 0% context, plan limit nearly reached'));
     click(button('Compact'));
     expect(props.onCompact).toHaveBeenCalledOnce();
+    expect(props.onRefresh).not.toHaveBeenCalled();
+  });
+  it('disables compaction when no preserve-aware callback is available', () => {
+    render({ onCompact: undefined });
+    click(button('Usage: 20% context, plan limit nearly reached'));
+    expect(button('Compact').disabled).toBe(true);
   });
   it.each(['busy', 'disabled', 'compacting'] as const)('disables compaction when %s', (state) => {
     render({ [state]: true });

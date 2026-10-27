@@ -4,6 +4,7 @@ import { PassThrough } from 'node:stream';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { fetchCodexPlanUsage } from './codex-plan-usage-loader';
+import * as usageSpawn from './codex-plan-usage-spawn';
 
 const mocks = vi.hoisted(() => ({ spawn: vi.fn(), execFile: vi.fn() }));
 vi.mock('node:child_process', () => ({ spawn: mocks.spawn, execFile: mocks.execFile }));
@@ -258,25 +259,41 @@ it('bounds stalled quota reads including process-group force termination', async
   }
 });
 
-it('uses bounded Windows tree termination for the owned launcher pid', async () => {
+it('uses bounded Windows tree termination for the directly owned native runtime', async () => {
   const platformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform');
   if (!platformDescriptor) {
     throw new Error('Missing process platform');
   }
   Object.defineProperty(process, 'platform', { value: 'win32' });
-  mocks.execFile.mockImplementation((_file, _args, _options, callback) => callback(null));
+  const resolveSpawn = vi.spyOn(usageSpawn, 'resolveCodexPlanUsageSpawnCommand').mockReturnValue({
+    command: 'C:\u005ccodex.exe',
+    args: ['app-server'],
+    commandLabel: 'codex app-server',
+  });
+  mocks.execFile.mockImplementation((_file, _args, _options, callback) => {
+    const child = mocks.spawn.mock.results[0]?.value;
+    child.exitCode = 0;
+    child.emit('exit');
+    callback(null);
+  });
   try {
     const reading = fetchCodexPlanUsage();
     const child = mocks.spawn.mock.results[0]?.value;
     child.pid = 424_242;
     await expect(reading).resolves.toMatchObject({ status: 'available' });
+    expect(mocks.spawn).toHaveBeenCalledWith(
+      'C:\u005ccodex.exe',
+      ['app-server'],
+      expect.objectContaining({ detached: false })
+    );
     expect(mocks.execFile).toHaveBeenCalledWith(
       'taskkill',
       ['/PID', '424242', '/T', '/F'],
-      { timeout: 5000, windowsHide: true },
+      { timeout: 4000, windowsHide: true },
       expect.any(Function)
     );
   } finally {
+    resolveSpawn.mockRestore();
     Object.defineProperty(process, 'platform', platformDescriptor);
   }
 });

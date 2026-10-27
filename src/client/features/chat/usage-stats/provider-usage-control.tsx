@@ -7,6 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import type { TokenStats } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
 import type { ProviderPlanUsage, UsageProvider } from '@/shared/provider-usage';
+import { getUsageColorClass } from './usage-stats-utils';
 
 export interface UsageControlProps {
   tokenStats?: TokenStats;
@@ -16,19 +17,13 @@ export interface UsageControlProps {
   disabled?: boolean;
   refreshing?: boolean;
   error?: boolean;
-  onCompact: () => void;
+  onCompact?: () => void;
   onRefresh: () => void;
   onOpenChange?: (open: boolean) => void;
 }
 
 function usageColor(percent: number | null) {
-  if (percent !== null && percent >= 95) {
-    return 'text-red-500';
-  }
-  if (percent !== null && percent >= 80) {
-    return 'text-amber-600 dark:text-amber-400';
-  }
-  return 'text-muted-foreground';
+  return getUsageColorClass(percent, 'text-amber-600 dark:text-amber-400');
 }
 
 function timestamp(value: number | string) {
@@ -58,6 +53,13 @@ function getContextUsage(tokenStats: TokenStats | undefined) {
     return null;
   }
   return { used, capacity, percent: Math.min((used / capacity) * 100, 100) };
+}
+
+function canCompact(
+  context: ReturnType<typeof getContextUsage>,
+  onCompact: UsageControlProps['onCompact']
+) {
+  return Boolean(context && onCompact);
 }
 
 export function UsageControl({
@@ -171,7 +173,7 @@ export function UsageControl({
               size="sm"
               className="h-6 px-2 text-xs"
               onClick={onCompact}
-              disabled={!context || busy || compacting || disabled}
+              disabled={!canCompact(context, onCompact) || busy || compacting || disabled}
             >
               {compacting ? 'Compacting…' : 'Compact'}
             </Button>

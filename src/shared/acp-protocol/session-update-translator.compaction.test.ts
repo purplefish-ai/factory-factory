@@ -53,6 +53,24 @@ describe('native ACP compaction', () => {
     expect(events).not.toContainEqual({ type: 'compact_boundary' });
   });
 
+  it.each([{ error: 42 }, { error: false }, { error: {} }, { error: [] }])(
+    'handles malformed provider failure details: $error',
+    ({ error }) => {
+      const { translator } = createTranslator();
+      translator.translateSessionUpdate(update('in_progress'));
+      const events = translator.translateSessionUpdate(update('failed', { error }));
+      expect(events[0]).toEqual({ type: 'compacting_end' });
+      expect(events[1]).toMatchObject({
+        type: 'agent_message',
+        data: {
+          type: 'assistant',
+          message: { content: [{ type: 'text', text: 'Context compaction failed.' }] },
+        },
+      });
+      expect(events).not.toContainEqual({ type: 'compact_boundary' });
+    }
+  );
+
   it('handles terminal-only replay and ignores duplicate terminal metadata patches', () => {
     const { translator } = createTranslator();
     expect(translator.translateSessionUpdate(update('completed'))).toEqual([
@@ -94,6 +112,31 @@ describe('native ACP compaction', () => {
       { type: 'compacting_start' },
     ]);
   });
+
+  it.each(['completed', 'failed', 'cancelled'])(
+    'deduplicates old %s identities after more than 256 compactions until session teardown',
+    (status) => {
+      const { translator } = createTranslator();
+      for (let index = 0; index < 257; index += 1) {
+        translator.translateSessionUpdate(
+          update(status, { compactionId: `compact-${index}` }),
+          'session-a'
+        );
+      }
+      const replay = { compactionId: 'compact-0' };
+      expect(translator.translateSessionUpdate(update(status, replay), 'session-a')).toEqual([]);
+      expect(translator.translateSessionUpdate(update('completed', replay), 'session-a')).toEqual(
+        []
+      );
+      expect(translator.translateSessionUpdate(update('in_progress', replay), 'session-a')).toEqual(
+        []
+      );
+      translator.clearTerminalOutput('session-a');
+      expect(translator.translateSessionUpdate(update('in_progress', replay), 'session-a')).toEqual(
+        [{ type: 'compacting_start' }]
+      );
+    }
+  );
 
   it.each(['failed', 'cancelled'])(
     'never turns a terminal %s into successful compaction',

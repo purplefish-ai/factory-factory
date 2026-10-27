@@ -81,6 +81,7 @@ for (const viewport of mobileViewports) {
     await composer.getByRole('button', { name: /Usage: 3% context/ }).click();
     await expect(page.getByText('38% used')).toBeVisible();
     await page.getByRole('button', { name: 'Compact', exact: true }).click();
+    await expect(chatDemo).toHaveAttribute('data-sent-commands', '["/compact"]');
     await expect(messageInput).toHaveValue('Keep this draft');
     await page.keyboard.press('Escape');
     await messageInput.fill('');

@@ -85,8 +85,8 @@ and context for Claude and Codex, and verify real compaction for both providers.
 
 ## Progress
 
-- Repository started clean on main. Implementation is in the current checkout on
-  `codex/provider-usage`, with changes left uncommitted for review.
+- Repository started clean on main. The resulting implementation is committed on
+  `codex/provider-usage` and included in this revision.
 - Proto installation fails its offline check, but official HTTPS downloads work.
   Node 26.12.1 was downloaded to `/private/tmp/ff-usage-toolchain/node` and its
   published SHA-256 checksum verified. Pnpm 12.15.0 is available from the same

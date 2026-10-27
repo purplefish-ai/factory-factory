@@ -9,7 +9,7 @@ import {
 import { SessionStatus } from '@/shared/core';
 import { providerPlanUsageSchema, usageProviderSchema } from '@/shared/provider-usage';
 import { SessionProvider } from '@prisma-gen/client';
-import { type Context, publicProcedure, router } from './trpc';
+import { type Context, publicProcedure, router, trustedLocalProcedure } from './trpc';
 
 const createSessionInputSchema = z.object({
   workspaceId: z.string(),
@@ -119,7 +119,7 @@ async function rollbackCreatedSession(
 }
 
 export const sessionRouter = router({
-  getProviderUsage: publicProcedure
+  getProviderUsage: trustedLocalProcedure
     .input(z.object({ provider: usageProviderSchema }))
     .output(providerPlanUsageSchema)
     .query(({ ctx, input }) =>

@@ -41,6 +41,7 @@ type TerminalOutputState = { sessionId: string; text: string; terminalIds: Set<s
  */
 export class AcpEventTranslator {
   private readonly terminalOutput = new Map<string, TerminalOutputState>();
+  // Retain replay identities until clearTerminalOutput tears down their session.
   private readonly compactions = new Map<string, { sessionId: string; status: string }>();
 
   constructor(private readonly logger: AcpTranslationLogger) {}
@@ -511,13 +512,6 @@ export class AcpEventTranslator {
       return [];
     }
     this.compactions.set(key, { sessionId, status });
-    // Bound replay deduplication state for long-lived sessions.
-    if (this.compactions.size > 256) {
-      const oldest = this.compactions.keys().next().value;
-      if (oldest !== undefined) {
-        this.compactions.delete(oldest);
-      }
-    }
     if (status === 'in_progress') {
       return [{ type: 'compacting_start' }];
     }
@@ -531,7 +525,7 @@ export class AcpEventTranslator {
   }
 
   private translateCompactionFailure(status: string, error?: string | null): AcpTranslatedDelta[] {
-    const details = error?.trim();
+    const details = typeof error === 'string' ? error.trim() : undefined;
     const text =
       status === 'cancelled'
         ? 'Context compaction cancelled.'

@@ -1,13 +1,11 @@
-import { type ChildProcess, execFile, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { createInterface } from 'node:readline';
 import { z } from 'zod';
 import { getCurrentProcessEnv } from '@/backend/services/logger.service';
-import {
-  resolveProviderAcpSpawnCommand,
-  terminateCatalogProcess,
-  withTimeout,
-} from './acp-runtime-spawn';
+import { withTimeout } from './acp-runtime-spawn';
+import { resolveCodexPlanUsageSpawnCommand } from './codex-plan-usage-spawn';
+import { terminateDisposableProcessTree } from './disposable-process-cleanup';
 import { normalizeCodexPlanUsage, type PlanUsageReading } from './provider-usage-normalizer';
 
 const responseSchema = z.object({
@@ -18,60 +16,10 @@ const responseSchema = z.object({
 // Only the auth discriminator is needed. Discard account identity fields immediately.
 const accountSchema = z.object({ account: z.object({ type: z.string() }).nullable() });
 
-function signalOwnedGroup(pid: number, signal: NodeJS.Signals | 0): boolean {
-  try {
-    process.kill(-pid, signal);
-    return true;
-  } catch (error) {
-    if (error instanceof Error && 'code' in error && error.code === 'ESRCH') {
-      return false;
-    }
-    throw new Error('Codex plan usage process cleanup failed');
-  }
-}
-
-async function terminateUsageProcessTree(child: ChildProcess): Promise<void> {
-  const pid = child.pid;
-  if (pid === undefined || !Number.isInteger(pid) || pid <= 1 || pid === process.pid) {
-    await terminateCatalogProcess(child);
-    return;
-  }
-  if (process.platform === 'win32') {
-    await new Promise<void>((resolve) => {
-      execFile(
-        'taskkill',
-        ['/PID', String(pid), '/T', '/F'],
-        { timeout: 5000, windowsHide: true },
-        (error) => {
-          if (error) {
-            child.kill('SIGKILL');
-          }
-          resolve();
-        }
-      );
-    });
-    return;
-  }
-  // The launcher may exit before its native app-server descendants or inherited pipes.
-  // Its detached process group remains ours until every descendant has exited.
-  const deadline = Date.now() + 5000;
-  if (!signalOwnedGroup(pid, 'SIGTERM')) {
-    return;
-  }
-  while (signalOwnedGroup(pid, 0)) {
-    const remaining = deadline - Date.now();
-    if (remaining <= 0) {
-      signalOwnedGroup(pid, 'SIGKILL');
-      return;
-    }
-    await new Promise<void>((resolve) => setTimeout(resolve, Math.min(50, remaining)));
-  }
-}
-
 /** Read plan quota through a disposable native process without starting an inference turn. */
 export async function fetchCodexPlanUsage(): Promise<PlanUsageReading> {
-  const command = resolveProviderAcpSpawnCommand('CODEX');
-  const child = spawn(command.command, [...command.args, 'cli', 'app-server'], {
+  const command = resolveCodexPlanUsageSpawnCommand();
+  const child = spawn(command.command, command.args, {
     cwd: tmpdir(),
     detached: process.platform !== 'win32',
     env: {
@@ -164,7 +112,7 @@ export async function fetchCodexPlanUsage(): Promise<PlanUsageReading> {
     reader.close();
     child.stdin.end();
     try {
-      await terminateUsageProcessTree(child);
+      await terminateDisposableProcessTree(child);
     } finally {
       child.stdin.destroy();
       child.stdout.destroy();

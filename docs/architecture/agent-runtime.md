@@ -125,14 +125,17 @@ including post-compaction readings; cumulative token accounting is separate.
 Unknown occupancy stays unavailable until the provider reports it. Both
 providers support the same control.
 
-Plan limits are account-level readings shared across workspaces. The session
-capsule coalesces and caches provider reads for 30 seconds. Codex uses the
-packaged app-server's `account/read` and `account/rateLimits/read`; Claude uses
-its SDK's experimental structured usage control with behavior scanning disabled.
-These disposable probes submit no model turns and do not alter active
-conversations. Missing subscription data is unavailable, and failed reads offer
-refresh rather than implying an unused quota. Claude's experimental response is
-validated at the boundary and may need updating with future SDK releases.
+Plan limits are account-level readings shared across workspaces, available only
+to trusted local clients. The session capsule coalesces and caches provider
+reads for 30 seconds. Codex uses the packaged app-server's `account/read` and
+`account/rateLimits/read`; Claude uses its SDK's experimental structured usage
+control with behavior scanning disabled. These disposable probes submit no model
+turns and do not alter active conversations. Missing subscription data is
+unavailable, and failed reads offer refresh rather than implying an unused
+quota. Claude's experimental response is validated at the boundary and may need
+updating with future SDK releases. Windows quota probes launch the packaged
+native Codex executable directly; Unix probes own a detached process group for
+reliable descendant cleanup.
 
 Compact sends `/compact` through the normal session queue, preserving the
 composer draft and excluding draft attachments. It is disabled while work is

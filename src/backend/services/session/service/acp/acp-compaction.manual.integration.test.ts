@@ -11,9 +11,13 @@ import {
 import { describe, expect, it } from 'vitest';
 import type { SessionDeltaEvent } from '@/shared/acp-protocol/protocol';
 import { AcpEventTranslator } from '@/shared/acp-protocol/session-update-translator';
-import { cleanupFailedAcpClientCreation } from './acp-client-factory';
 import { createAcpConnection } from './acp-connection';
-import { resolveProviderAcpSpawnCommand, withTimeout } from './acp-runtime-spawn';
+import {
+  resolveProviderAcpSpawnCommand,
+  terminateCatalogProcess,
+  withTimeout,
+} from './acp-runtime-spawn';
+import { terminateDisposableProcessTree } from './disposable-process-cleanup';
 
 // Explicit opt-in: three small live requests per provider, including native /compact.
 // Credentials are reused read-only; sessions and Codex auth copies are disposable.
@@ -56,7 +60,7 @@ describeLive('real provider compaction (disposable sessions)', () => {
           cwd,
           env,
           stdio: ['pipe', 'pipe', 'pipe'],
-          detached: true,
+          detached: process.platform !== 'win32',
         });
         // Consume stderr without printing authentication or provider diagnostic payloads.
         child.stderr.resume();
@@ -190,12 +194,13 @@ describeLive('real provider compaction (disposable sessions)', () => {
             await connection.close();
           } finally {
             child.stdin.end();
-            if (child.pid) {
-              signalTestProcessGroup(child.pid, 'SIGTERM');
-            }
-            await cleanupFailedAcpClientCreation(child, 'manual-compaction');
-            if (child.pid) {
-              signalTestProcessGroup(child.pid, 'SIGKILL');
+            try {
+              await terminateDisposableProcessTree(child);
+              await terminateCatalogProcess(child);
+            } finally {
+              child.stdin.destroy();
+              child.stdout.destroy();
+              child.stderr.destroy();
             }
           }
         }
@@ -206,14 +211,3 @@ describeLive('real provider compaction (disposable sessions)', () => {
     600_000
   );
 });
-
-// Own an isolated process group so native runtime grandchildren cannot outlive the test.
-function signalTestProcessGroup(pid: number, signal: NodeJS.Signals): void {
-  try {
-    process.kill(-pid, signal);
-  } catch (error) {
-    if (!(error instanceof Error && 'code' in error && error.code === 'ESRCH')) {
-      throw error;
-    }
-  }
-}

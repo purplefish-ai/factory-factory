@@ -23,6 +23,7 @@ import { useTextareaResize } from './hooks/use-textarea-resize';
 
 export interface ChatInputProps {
   onSend: (text: string) => void;
+  // Sends /compact while preserving the current draft and attachments.
   onCompact?: () => void;
   onStop?: () => void;
   disabled?: boolean;
@@ -332,7 +333,7 @@ export const ChatInput = memo(function ChatInput({
                   busy={running || stopping || pendingMessageCount > 0}
                   compacting={isCompacting}
                   disabled={isDisabled}
-                  onCompact={onCompact ?? (() => onSend('/compact'))}
+                  onCompact={onCompact}
                 />
               )}
           </RightControls>

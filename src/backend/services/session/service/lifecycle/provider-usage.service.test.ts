@@ -39,8 +39,17 @@ describe('ProviderUsageService', () => {
       windows: [],
       message: 'Could not refresh plan limits.',
     });
-    await service.getUsage('CODEX');
-    await service.getUsage('CLAUDE');
+    expect(await service.getUsage('CODEX')).toMatchObject({
+      provider: 'CODEX',
+      status: 'available',
+      windows: available.windows,
+    });
+    expect(await service.getUsage('CLAUDE')).toMatchObject({
+      provider: 'CLAUDE',
+      status: 'available',
+      windows: available.windows,
+    });
     expect(fetchUsage).toHaveBeenCalledTimes(3);
+    expect(fetchUsage.mock.calls).toEqual([['CODEX'], ['CODEX'], ['CLAUDE']]);
   });
 });
