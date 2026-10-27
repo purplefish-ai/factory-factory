@@ -177,7 +177,6 @@ function DeepgramApiKeyField({
 interface VoiceSensitivitySlidersProps {
   utteranceEndMs: number | undefined;
   bargeInSustainedMs: number | undefined;
-  enabled: boolean;
   disabled: boolean;
   updateConfig: VoiceUpdateConfigMutation;
 }
@@ -190,7 +189,6 @@ interface VoiceSensitivitySlidersProps {
 function VoiceSensitivitySliders({
   utteranceEndMs: configUtteranceEndMs,
   bargeInSustainedMs: configBargeInSustainedMs,
-  enabled,
   disabled,
   updateConfig,
 }: VoiceSensitivitySlidersProps) {
@@ -224,7 +222,7 @@ function VoiceSensitivitySliders({
         onChange={setUtteranceEndMs}
         onCommit={(value) =>
           updateConfig.mutate(
-            { enabled, utteranceEndMs: value },
+            { utteranceEndMs: value },
             {
               onError: () =>
                 setUtteranceEndMs(configUtteranceEndMs ?? DEFAULT_VOICE_UTTERANCE_END_MS),
@@ -246,7 +244,7 @@ function VoiceSensitivitySliders({
         onChange={setBargeInSustainedMs}
         onCommit={(value) =>
           updateConfig.mutate(
-            { enabled, bargeInSustainedMs: value },
+            { bargeInSustainedMs: value },
             {
               onError: () =>
                 setBargeInSustainedMs(
@@ -281,11 +279,7 @@ export function VoiceModeSection() {
 
   const updateConfig = trpc.voice.updateConfig.useMutation({
     onSuccess: (result) => {
-      // Seed the cache with this mutation's own result before invalidating —
-      // otherwise a second mutation (e.g. changing Speed right after
-      // toggling Enable) fires while the invalidated query is still
-      // refetching, reads the stale `config.enabled` closure below, and
-      // resends it, silently reverting the toggle.
+      // Show the confirmed settings immediately while fetching any newer changes.
       utils.voice.getConfig.setData(undefined, result);
       runInBackground(utils.voice.getConfig.invalidate(), 'Could not refresh data');
     },
@@ -324,7 +318,7 @@ export function VoiceModeSection() {
       // and re-validating the key after a failed save, even though the
       // validated text the user already typed is still sitting right there.
       updateConfig.mutate(
-        { enabled, apiKey },
+        { apiKey },
         {
           onSuccess: () => {
             setApiKey('');
@@ -394,7 +388,7 @@ export function VoiceModeSection() {
             <Label htmlFor="voice-model">Voice</Label>
             <Select
               value={ttsModel}
-              onValueChange={(value) => updateConfig.mutate({ enabled, ttsModel: value })}
+              onValueChange={(value) => updateConfig.mutate({ ttsModel: value })}
               disabled={updateConfig.isPending || !hasStoredKey}
             >
               <SelectTrigger id="voice-model" className="w-[280px]">
@@ -424,7 +418,7 @@ export function VoiceModeSection() {
               onValueChange={([value]) => setSpeed(value ?? DEFAULT_DEEPGRAM_TTS_SPEED)}
               onValueCommit={([value]) =>
                 updateConfig.mutate(
-                  { enabled, ttsSpeed: value ?? DEFAULT_DEEPGRAM_TTS_SPEED },
+                  { ttsSpeed: value ?? DEFAULT_DEEPGRAM_TTS_SPEED },
                   {
                     // A failed save must not leave the slider showing a
                     // value voice playback isn't actually using — revert to
@@ -443,7 +437,6 @@ export function VoiceModeSection() {
           <VoiceSensitivitySliders
             utteranceEndMs={config?.utteranceEndMs}
             bargeInSustainedMs={config?.bargeInSustainedMs}
-            enabled={enabled}
             disabled={updateConfig.isPending || !hasStoredKey}
             updateConfig={updateConfig}
           />
