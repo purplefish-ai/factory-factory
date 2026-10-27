@@ -141,6 +141,27 @@ export const fullPRDetailsSchema = z.object({
     .optional(),
 });
 
+/** Mandatory monitoring metadata excludes optional review and conversation data. */
+export const prStatusDetailsSchema = fullPRDetailsSchema.pick({
+  number: true,
+  title: true,
+  url: true,
+  updatedAt: true,
+  isDraft: true,
+  state: true,
+  reviewDecision: true,
+  statusCheckRollup: true,
+  headRefOid: true,
+  headRefName: true,
+  baseRefName: true,
+  mergeStateStatus: true,
+});
+
+export const prReviewDetailsSchema = fullPRDetailsSchema.pick({
+  updatedAt: true,
+  comments: true,
+});
+
 export const issueSchema = z.object({
   number: z.number(),
   title: z.string(),

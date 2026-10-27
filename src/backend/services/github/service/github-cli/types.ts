@@ -1,3 +1,5 @@
+import type { PRWithFullDetails } from '@/shared/github-types';
+
 export type GitHubCLIErrorType =
   | 'cli_not_installed'
   | 'auth_required'
@@ -73,3 +75,21 @@ export interface GitHubIssue {
   createdAt: string;
   author: { login: string };
 }
+
+export type PRStatusDetails = Pick<
+  PRWithFullDetails,
+  | 'number'
+  | 'title'
+  | 'url'
+  | 'updatedAt'
+  | 'isDraft'
+  | 'state'
+  | 'reviewDecision'
+  | 'statusCheckRollup'
+  | 'headRefOid'
+  | 'headRefName'
+  | 'baseRefName'
+  | 'mergeStateStatus'
+>;
+
+export type PRReviewDetails = Pick<PRWithFullDetails, 'updatedAt' | 'reviews' | 'comments'>;
