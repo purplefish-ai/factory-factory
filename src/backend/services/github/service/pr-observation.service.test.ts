@@ -190,6 +190,13 @@ it.each(['core', 'review'])(
       1,
       controller.signal
     );
+    if (read === 'review') {
+      expect(githubCLIService.getPRReviewDetails).toHaveBeenCalledWith(
+        'org/repo',
+        1,
+        controller.signal
+      );
+    }
   }
 );
 
