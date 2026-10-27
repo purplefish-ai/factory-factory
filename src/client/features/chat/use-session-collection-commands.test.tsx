@@ -27,8 +27,10 @@ function Harness({
   workspaceId,
   names,
   onCommands,
+  canCreate,
 }: {
   workspaceId: string | null;
+  canCreate?: boolean;
   names: Array<string | null>;
   onCommands: (commands: ReturnType<typeof useSessionCollectionCommands>) => void;
 }) {
@@ -37,13 +39,18 @@ function Harness({
       workspaceId,
       sessions: names.map((name) => ({ name })),
       creationDefaults: { model: '' },
+      canCreate,
       onCreated: vi.fn(),
     })
   );
   return null;
 }
 
-function renderCommands(workspaceId: string | null, names: Array<string | null> = []) {
+function renderCommands(
+  workspaceId: string | null,
+  names: Array<string | null> = [],
+  canCreate = true
+) {
   let commands: ReturnType<typeof useSessionCollectionCommands> | undefined;
   const root = createRoot(document.createElement('div'));
   roots.push(root);
@@ -52,6 +59,7 @@ function renderCommands(workspaceId: string | null, names: Array<string | null> 
       createElement(Harness, {
         workspaceId,
         names,
+        canCreate,
         onCommands: (value) => {
           commands = value;
         },
@@ -85,4 +93,13 @@ describe('useSessionCollectionCommands input policy', () => {
       expect.objectContaining({ onSuccess: expect.any(Function) })
     );
   });
+});
+
+it('does not launch chats or quick actions before creation defaults are available', async () => {
+  const commands = renderCommands('workspace', [], false);
+  commands.createChat();
+  commands.createQuickAction('Review', 'Review prompt');
+  await commands.createQuickActionAsync('Review', 'Review prompt');
+  expect(mutate).not.toHaveBeenCalled();
+  expect(mutateAsync).not.toHaveBeenCalled();
 });

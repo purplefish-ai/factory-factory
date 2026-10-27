@@ -43,7 +43,13 @@ export function createSetConfigOptionHandler(deps: {
       });
       const configOptions = sessionConfigService.getSessionConfigOptions(sessionId);
       return {
-        replies: [{ type: 'error', error: { kind: 'set_config_option_failed', cause: error } }],
+        replies: [
+          {
+            type: 'error',
+            error: { kind: 'set_config_option_failed', cause: error },
+            ...(message.requestId !== undefined ? { requestId: message.requestId } : {}),
+          },
+        ],
         // Empty options would wipe the optimistic selector rather than restore confirmed values.
         ...(hasConfigOptions(configOptions) ? { configOptionsCorrection: configOptions } : {}),
       };

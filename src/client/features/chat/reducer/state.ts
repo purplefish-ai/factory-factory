@@ -96,6 +96,9 @@ function createSessionSwitchResetState(): Pick<
   | 'processStatus'
   | 'sessionRuntime'
   | 'chatCapabilities'
+  | 'chatCapabilitiesLoaded'
+  | 'modelSelectionSource'
+  | 'pendingModelRequestId'
   | 'acpConfigOptions'
 > {
   return {
@@ -110,6 +113,9 @@ function createSessionSwitchResetState(): Pick<
     slashCommands: [], // Clear for new session - populated on session load from cache/disk scan
     slashCommandsLoaded: false,
     chatCapabilities: EMPTY_CHAT_BAR_CAPABILITIES,
+    chatCapabilitiesLoaded: false,
+    modelSelectionSource: 'bootstrap',
+    pendingModelRequestId: null,
   };
 }
 
@@ -124,6 +130,9 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
     pendingRequest: { type: 'none' },
     chatSettings: DEFAULT_CHAT_SETTINGS,
     chatCapabilities: EMPTY_CHAT_BAR_CAPABILITIES,
+    chatCapabilitiesLoaded: false,
+    modelSelectionSource: 'bootstrap',
+    pendingModelRequestId: null,
     queuedMessages: new Map(),
     toolUseIdToIndex: new Map(),
     agentMessageOrderToIndex: new Map(),

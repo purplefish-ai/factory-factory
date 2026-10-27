@@ -7,10 +7,9 @@
  * - Tool input accumulator cleanup
  * - Loading state management
  *
- * Settings precedence (highest to lowest):
- * 1. User-modified settings during the session
- * 2. Stored session settings from sessionStorage
- * 3. Application defaults (DEFAULT_CHAT_SETTINGS)
+ * Stored settings seed the composer while configuration loads. The settings
+ * reducer adopts the initial server-confirmed model, then preserves explicit
+ * current-session edits until a native configuration update confirms a value.
  */
 
 import { useEffect, useRef } from 'react';
@@ -45,7 +44,7 @@ export interface UseChatSessionReturn {
 export function useChatSession(options: UseChatSessionOptions): UseChatSessionReturn {
   const { dbSessionId, dispatch, toolInputAccumulatorRef, sessionRuntimePhase } = options;
 
-  const prevDbSessionIdRef = useRef<string | null>(null);
+  const prevDbSessionIdRef = useRef<string | null | undefined>(undefined);
   const loadedDraftRef = useRef<string>('');
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -57,7 +56,7 @@ export function useChatSession(options: UseChatSessionOptions): UseChatSessionRe
     prevDbSessionIdRef.current = newDbSessionId;
 
     // If switching to a different session, reset local state
-    if (prevDbSessionId !== null && prevDbSessionId !== newDbSessionId) {
+    if (prevDbSessionId !== undefined && prevDbSessionId !== newDbSessionId) {
       debug.log('Session switch detected', { from: prevDbSessionId, to: newDbSessionId });
 
       // Clear any existing loading timeout
@@ -78,10 +77,10 @@ export function useChatSession(options: UseChatSessionOptions): UseChatSessionRe
       loadedDraftRef.current = loadDraft(newDbSessionId);
       dispatch({ type: 'SET_SETTINGS', payload: loadSettingsWithDefaults(newDbSessionId) });
 
-      // Set loading state for initial load (when prevDbSessionId was null)
+      // Set loading state for the initial load.
       // This prevents "No messages yet" flash while WebSocket connects and loads session
       // For session switches, SESSION_SWITCH_START already set loadingSession: true
-      if (prevDbSessionId === null) {
+      if (prevDbSessionId === undefined) {
         dispatch({ type: 'SESSION_LOADING_START' });
 
         // Safety timeout: if loading takes more than 10 seconds, clear the loading state

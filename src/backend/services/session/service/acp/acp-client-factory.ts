@@ -9,6 +9,7 @@ import {
 import { createLogger, getCurrentProcessEnv } from '@/backend/services/logger.service';
 import { AcpClientHandler } from './acp-client-handler';
 import { createAcpConnection, type AcpConnection } from './acp-connection';
+import { applyAcpStartupModel } from './acp-model-selection';
 import { AcpNativeSessionTracker } from './acp-native-session-tracker';
 import { AcpProcessHandle } from './acp-process-handle';
 import type { AcpRuntimeMetadata, AcpStartupSignal } from './acp-runtime-contracts';
@@ -238,7 +239,26 @@ export class AcpClientFactory {
         sessionCreationOutcome: sessionInfo.outcome,
         agentCapabilities,
       });
-      handle.configOptions = sessionInfo.configOptions;
+      handle.configOptions =
+        options.purpose === 'browse'
+          ? sessionInfo.configOptions
+          : await Promise.race([
+              withTimeout({
+                promise: applyAcpStartupModel({
+                  connection,
+                  provider: options.provider,
+                  providerSessionId: handle.acpSessionId,
+                  configOptions: sessionInfo.configOptions,
+                  model: options.model,
+                }),
+                timeoutMs: startupTimeoutMs,
+                description: 'model configuration',
+                cancelOn: startupCancelOn,
+              }),
+              startupError,
+              shutdownSignal.promise,
+              stopSignal.promise,
+            ]);
       return handle;
     } catch (error) {
       await cleanupFailedAcpClientCreation(child, sessionId);

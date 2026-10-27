@@ -8,6 +8,7 @@ import { SquareIcon } from '@phosphor-icons/react/dist/csr/Square';
 import { memo, useState } from 'react';
 import type { AcpConfigOption } from '@/client/features/chat/reducer';
 import { AttachmentPreview } from '@/client/features/composer';
+import { ProviderModelPicker } from '@/client/features/session-selection';
 import { Button } from '@/components/ui/button';
 import { InputGroupButton } from '@/components/ui/input-group';
 import {
@@ -23,6 +24,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import type { ChatSettings, MessageAttachment } from '@/lib/chat-protocol';
 import {
   type ChatBarCapabilities,
+  type ChatModelOption,
   hasResolvedChatBarCapabilities,
 } from '@/shared/chat-capabilities';
 import { AcpConfigSelector } from './acp-config-selector';
@@ -102,229 +104,167 @@ const FileUploadButton = memo(function FileUploadButton({
   );
 });
 
-interface LeftControlsVisibility {
-  provider: ChatBarCapabilities['provider'] | null;
-  selectedModel: string;
-  selectedReasoningEffort: string;
-  showModelSelector: boolean;
-  showReasoningSelector: boolean;
-  showThinkingToggle: boolean;
-  showPlanModeToggle: boolean;
-  showAttachments: boolean;
-}
-
-function deriveLeftControlsVisibility(
-  settings: ChatSettings | undefined,
-  capabilities: ChatBarCapabilities | undefined
-): LeftControlsVisibility {
-  const showModelSelector =
-    capabilities?.model.enabled === true && (capabilities.model.options.length ?? 0) > 0;
-  const showReasoningSelector =
-    capabilities?.reasoning.enabled === true && (capabilities.reasoning.options.length ?? 0) > 0;
-  const showThinkingToggle = capabilities?.thinking.enabled === true;
-  const showPlanModeToggle = capabilities?.planMode.enabled === true;
-  const showAttachments =
-    capabilities?.attachments.enabled === true && capabilities.attachments.kinds.includes('image');
-  const selectedModel =
-    settings?.selectedModel ??
-    capabilities?.model.selected ??
-    capabilities?.model.options[0]?.value ??
-    '';
-  const selectedReasoningEffort =
-    settings?.reasoningEffort ??
-    capabilities?.reasoning.selected ??
-    capabilities?.reasoning.options[0]?.value ??
-    '';
-  const provider = hasResolvedChatBarCapabilities(capabilities) ? capabilities.provider : null;
-
-  return {
-    provider,
-    selectedModel,
-    selectedReasoningEffort,
-    showModelSelector,
-    showReasoningSelector,
-    showThinkingToggle,
-    showPlanModeToggle,
-    showAttachments,
-  };
-}
-
-function getProviderLogo(provider: ChatBarCapabilities['provider'] | null): {
-  light: string;
-  dark: string;
-  alt: string;
-} {
-  if (provider === 'CODEX') {
-    return {
-      light: `${import.meta.env.BASE_URL}logos/codex-light.svg`,
-      dark: `${import.meta.env.BASE_URL}logos/codex-dark.svg`,
-      alt: 'Codex',
-    };
-  }
-  return {
-    light: `${import.meta.env.BASE_URL}logos/claude-light.svg`,
-    dark: `${import.meta.env.BASE_URL}logos/claude-dark.svg`,
-    alt: 'Claude',
-  };
-}
-
-const ProviderIndicator = memo(function ProviderIndicator({
-  provider,
-}: {
-  provider: ChatBarCapabilities['provider'] | null;
-}) {
-  if (!provider) {
-    return null;
-  }
-  const logo = getProviderLogo(provider);
-  return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className="inline-flex h-6 w-6 items-center justify-center rounded-sm text-muted-foreground">
-            <img src={logo.light} alt={logo.alt} className="h-3.5 w-3.5 shrink-0 dark:hidden" />
-            <img
-              src={logo.dark}
-              alt={logo.alt}
-              className="hidden h-3.5 w-3.5 shrink-0 dark:block"
-            />
-          </span>
-        </TooltipTrigger>
-        <TooltipContent side="top">
-          <p>{logo.alt}</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
-});
-
-const ModeToggles = memo(function ModeToggles({
-  showThinkingToggle,
-  showPlanModeToggle,
-  settings,
-  onThinkingChange,
-  onPlanModeChange,
-  running,
-  modLabel,
-  modifierHeld,
-}: {
-  showThinkingToggle: boolean;
-  showPlanModeToggle: boolean;
+export interface LeftControlsProps {
   settings?: ChatSettings;
+  capabilities?: ChatBarCapabilities;
+  onModelChange: (model: string) => void;
+  onReasoningChange: (effort: string) => void;
   onThinkingChange: (enabled: boolean) => void;
   onPlanModeChange: (enabled: boolean) => void;
   running: boolean;
+  stopping?: boolean;
   modLabel: string;
   modifierHeld: boolean;
-}) {
-  if (!(showThinkingToggle || showPlanModeToggle)) {
-    return null;
-  }
+  fileInputRef: React.RefObject<HTMLInputElement | null>;
+  onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  supportedImageTypes: readonly string[];
+  disabled: boolean;
+  onQuickAction: (action: string) => void;
+  quickActionsOpen: boolean;
+  onQuickActionsOpenChange: (open: boolean) => void;
+  acpConfigOptions?: AcpConfigOption[] | null;
+  onSetConfigOption?: (configId: string, value: string) => void;
+}
 
-  return (
-    <>
-      {showThinkingToggle && (
-        <SettingsToggle
-          pressed={settings?.thinkingEnabled ?? false}
-          onPressedChange={onThinkingChange}
-          disabled={running}
-          icon={BrainIcon}
-          label="Extended thinking mode"
-          ariaLabel="Toggle thinking mode"
-          shortcut={`${modLabel}+Shift+T`}
-          showShortcut={modifierHeld}
-        />
-      )}
-      {showPlanModeToggle && (
-        <SettingsToggle
-          pressed={settings?.planModeEnabled ?? false}
-          onPressedChange={onPlanModeChange}
-          disabled={running}
-          icon={MapTrifoldIcon}
-          label="Planning mode"
-          ariaLabel="Toggle planning mode"
-          shortcut={`${modLabel}+Shift+P`}
-          showShortcut={modifierHeld}
-        />
-      )}
-    </>
+function getRuntimeControls(props: LeftControlsProps) {
+  const { capabilities, settings, acpConfigOptions, onSetConfigOption } = props;
+  const modelOption = acpConfigOptions?.find(
+    (option) => option.category === 'model' || option.id === 'model'
   );
-});
+  const nativeOptions = onSetConfigOption
+    ? (acpConfigOptions ?? []).filter((option) => option !== modelOption)
+    : [];
+  const hasNative = (...ids: string[]) =>
+    nativeOptions.some((option) => ids.includes(option.id) || ids.includes(option.category ?? ''));
+  const modelOptions: ChatModelOption[] = modelOption
+    ? modelOption.options.flatMap((entry) =>
+        'group' in entry
+          ? entry.options.map((option) => ({ value: option.value, label: option.name }))
+          : [{ value: entry.value, label: entry.name }]
+      )
+    : (capabilities?.model.options ?? []);
+  const loading = !hasResolvedChatBarCapabilities(capabilities);
+  const model =
+    settings?.selectedModel ?? modelOption?.currentValue ?? capabilities?.model.selected;
+  return {
+    nativeOptions,
+    modelOptions,
+    model,
+    updating: Boolean(modelOption && model !== modelOption.currentValue),
+    provider: hasResolvedChatBarCapabilities(capabilities) ? capabilities.provider : null,
+    loading,
+    modelEditable: modelOption ? Boolean(onSetConfigOption) : capabilities?.model.enabled === true,
+    onModelChange:
+      modelOption && onSetConfigOption
+        ? (value: string) => onSetConfigOption(modelOption.id, value)
+        : props.onModelChange,
+    showReasoning:
+      capabilities?.reasoning.enabled === true &&
+      capabilities.reasoning.options.length > 0 &&
+      !hasNative('reasoning', 'reasoning_effort'),
+    showThinking: capabilities?.thinking.enabled === true && !hasNative('thinking'),
+    showPlanning:
+      capabilities?.planMode.enabled === true && !hasNative('collaboration_mode', 'plan_mode'),
+  };
+}
 
-const AcpConfigControls = memo(function AcpConfigControls({
-  acpConfigOptions,
-  onSetConfigOption,
-  running,
+type RuntimeControls = ReturnType<typeof getRuntimeControls>;
+
+const RuntimeOptions = memo(function RuntimeOptions({
+  props,
+  controls,
+  mobile = false,
 }: {
-  acpConfigOptions: AcpConfigOption[];
-  onSetConfigOption: (configId: string, value: string) => void;
-  running: boolean;
+  props: LeftControlsProps;
+  controls: RuntimeControls;
+  mobile?: boolean;
 }) {
+  const { capabilities, settings, onSetConfigOption } = props;
+  const disabled = props.disabled || props.running || props.stopping;
+  const row = (label: string, control: React.ReactNode) =>
+    mobile ? (
+      <div className="flex items-center justify-between gap-2 rounded-md border p-2">
+        <span className="text-sm text-muted-foreground">{label}</span>
+        {control}
+      </div>
+    ) : (
+      control
+    );
   return (
     <>
-      {acpConfigOptions.map((option, idx) => (
-        <div key={option.id} className="flex items-center gap-1">
-          {idx > 0 && <div className="h-4 w-px bg-border" />}
-          <AcpConfigSelector
-            configOption={option}
-            onSelect={onSetConfigOption}
-            disabled={running}
-          />
+      {controls.nativeOptions.map((option) => (
+        <div key={option.id}>
+          {onSetConfigOption &&
+            row(
+              option.name,
+              <AcpConfigSelector
+                configOption={option}
+                onSelect={onSetConfigOption}
+                disabled={disabled}
+              />
+            )}
         </div>
       ))}
+      {controls.showReasoning &&
+        row(
+          'Reasoning',
+          <ModelSelector
+            selectedModel={settings?.reasoningEffort ?? capabilities?.reasoning.selected ?? ''}
+            options={capabilities?.reasoning.options ?? []}
+            onChange={props.onReasoningChange}
+            disabled={disabled}
+          />
+        )}
+      {controls.showThinking &&
+        row(
+          'Extended thinking',
+          <SettingsToggle
+            pressed={settings?.thinkingEnabled ?? false}
+            onPressedChange={props.onThinkingChange}
+            disabled={disabled}
+            icon={BrainIcon}
+            label="Extended thinking mode"
+            ariaLabel="Toggle thinking mode"
+            shortcut={`${props.modLabel}+Shift+T`}
+            showShortcut={props.modifierHeld}
+          />
+        )}
+      {controls.showPlanning &&
+        row(
+          'Planning mode',
+          <SettingsToggle
+            pressed={settings?.planModeEnabled ?? false}
+            onPressedChange={props.onPlanModeChange}
+            disabled={disabled}
+            icon={MapTrifoldIcon}
+            label="Planning mode"
+            ariaLabel="Toggle planning mode"
+            shortcut={`${props.modLabel}+Shift+P`}
+            showShortcut={props.modifierHeld}
+          />
+        )}
     </>
   );
 });
 
 const MobileSettingsSheet = memo(function MobileSettingsSheet({
-  running,
-  showModelSelector,
-  selectedModel,
-  modelOptions,
-  onModelChange,
-  showReasoningSelector,
-  selectedReasoningEffort,
-  reasoningOptions,
-  onReasoningChange,
-  showThinkingToggle,
-  showPlanModeToggle,
-  settings,
-  onThinkingChange,
-  onPlanModeChange,
-  hasAcpConfigOptions,
-  acpConfigOptions,
-  onSetConfigOption,
+  props,
+  controls,
 }: {
-  running: boolean;
-  showModelSelector: boolean;
-  selectedModel: string;
-  modelOptions: ChatBarCapabilities['model']['options'];
-  onModelChange: (model: string) => void;
-  showReasoningSelector: boolean;
-  selectedReasoningEffort: string;
-  reasoningOptions: ChatBarCapabilities['reasoning']['options'];
-  onReasoningChange: (effort: string) => void;
-  showThinkingToggle: boolean;
-  showPlanModeToggle: boolean;
-  settings?: ChatSettings;
-  onThinkingChange: (enabled: boolean) => void;
-  onPlanModeChange: (enabled: boolean) => void;
-  hasAcpConfigOptions: boolean;
-  acpConfigOptions?: AcpConfigOption[] | null;
-  onSetConfigOption?: (configId: string, value: string) => void;
+  props: LeftControlsProps;
+  controls: RuntimeControls;
 }) {
   const [open, setOpen] = useState(false);
-  const hasAnyControls =
-    hasAcpConfigOptions ||
-    showModelSelector ||
-    showReasoningSelector ||
-    showThinkingToggle ||
-    showPlanModeToggle;
-
-  if (!hasAnyControls) {
+  if (
+    !(
+      controls.nativeOptions.length ||
+      controls.showReasoning ||
+      controls.showThinking ||
+      controls.showPlanning
+    )
+  ) {
     return null;
   }
-
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
@@ -346,316 +286,73 @@ const MobileSettingsSheet = memo(function MobileSettingsSheet({
       >
         <SheetHeader>
           <SheetTitle>Chat Options</SheetTitle>
-          <SheetDescription>Adjust model and runtime settings for this message.</SheetDescription>
+          <SheetDescription>Adjust runtime settings for this conversation.</SheetDescription>
         </SheetHeader>
         <div className="space-y-3 py-4">
-          {hasAcpConfigOptions && onSetConfigOption ? (
-            acpConfigOptions?.map((option) => (
-              <div
-                key={option.id}
-                className="flex items-center justify-between gap-2 rounded-md border p-2"
-              >
-                <span className="text-sm text-muted-foreground">{option.name}</span>
-                <AcpConfigSelector
-                  configOption={option}
-                  onSelect={onSetConfigOption}
-                  disabled={running}
-                />
-              </div>
-            ))
-          ) : (
-            <>
-              {showModelSelector && (
-                <div className="flex items-center justify-between gap-2 rounded-md border p-2">
-                  <span className="text-sm text-muted-foreground">Model</span>
-                  <ModelSelector
-                    selectedModel={selectedModel}
-                    options={modelOptions}
-                    onChange={onModelChange}
-                    disabled={running}
-                  />
-                </div>
-              )}
-              {showReasoningSelector && (
-                <div className="flex items-center justify-between gap-2 rounded-md border p-2">
-                  <span className="text-sm text-muted-foreground">Reasoning</span>
-                  <ModelSelector
-                    selectedModel={selectedReasoningEffort}
-                    options={reasoningOptions.map((option) => ({
-                      value: option.value,
-                      label: option.label,
-                    }))}
-                    onChange={onReasoningChange}
-                    disabled={running}
-                  />
-                </div>
-              )}
-              {showThinkingToggle && (
-                <div className="flex items-center justify-between gap-2 rounded-md border p-2">
-                  <span className="text-sm text-muted-foreground">Extended thinking</span>
-                  <SettingsToggle
-                    pressed={settings?.thinkingEnabled ?? false}
-                    onPressedChange={onThinkingChange}
-                    disabled={running}
-                    icon={BrainIcon}
-                    label="Extended thinking mode"
-                    ariaLabel="Toggle thinking mode"
-                  />
-                </div>
-              )}
-              {showPlanModeToggle && (
-                <div className="flex items-center justify-between gap-2 rounded-md border p-2">
-                  <span className="text-sm text-muted-foreground">Planning mode</span>
-                  <SettingsToggle
-                    pressed={settings?.planModeEnabled ?? false}
-                    onPressedChange={onPlanModeChange}
-                    disabled={running}
-                    icon={MapTrifoldIcon}
-                    label="Planning mode"
-                    ariaLabel="Toggle planning mode"
-                  />
-                </div>
-              )}
-            </>
-          )}
+          <RuntimeOptions props={props} controls={controls} mobile />
         </div>
       </SheetContent>
     </Sheet>
   );
 });
 
-interface LeftControlsProps {
-  settings?: ChatSettings;
-  capabilities?: ChatBarCapabilities;
-  onModelChange: (model: string) => void;
-  onReasoningChange: (effort: string) => void;
-  onThinkingChange: (enabled: boolean) => void;
-  onPlanModeChange: (enabled: boolean) => void;
-  running: boolean;
-  modLabel: string;
-  modifierHeld: boolean;
-  fileInputRef: React.RefObject<HTMLInputElement | null>;
-  onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  supportedImageTypes: readonly string[];
-  disabled: boolean;
-  onQuickAction: (action: string) => void;
-  quickActionsOpen: boolean;
-  onQuickActionsOpenChange: (open: boolean) => void;
-  acpConfigOptions?: AcpConfigOption[] | null;
-  onSetConfigOption?: (configId: string, value: string) => void;
-}
-
-interface LeftControlsViewState {
-  provider: ChatBarCapabilities['provider'] | null;
-  selectedModel: string;
-  selectedReasoningEffort: string;
-  showModelSelector: boolean;
-  showReasoningSelector: boolean;
-  showThinkingToggle: boolean;
-  showPlanModeToggle: boolean;
-  showAttachments: boolean;
-  hasModeToggles: boolean;
-  hasAcpConfigOptions: boolean;
-}
-
-const MobileLeftControls = memo(function MobileLeftControls({
-  props,
-  view,
-}: {
-  props: LeftControlsProps;
-  view: LeftControlsViewState;
-}) {
-  const {
-    settings,
-    capabilities,
-    onModelChange,
-    onReasoningChange,
-    onThinkingChange,
-    onPlanModeChange,
-    running,
-    modLabel,
-    modifierHeld,
-    fileInputRef,
-    onFileSelect,
-    supportedImageTypes,
-    disabled,
-    onQuickAction,
-    quickActionsOpen,
-    onQuickActionsOpenChange,
-    acpConfigOptions,
-    onSetConfigOption,
-  } = props;
+export const LeftControls = memo(function LeftControls(props: LeftControlsProps) {
+  const isMobile = useIsMobile();
+  const controls = getRuntimeControls(props);
+  const busy = props.running || props.stopping;
+  const disabledReason = busy
+    ? 'Wait for the agent to stop before changing models'
+    : props.disabled
+      ? 'Model selection is unavailable while the session is disconnected or starting'
+      : controls.loading
+        ? 'Loading model options'
+        : !controls.modelEditable
+          ? 'This session does not support model changes'
+          : undefined;
+  const showAttachments =
+    props.capabilities?.attachments.enabled === true &&
+    props.capabilities.attachments.kinds.includes('image');
 
   return (
     <div className="flex min-w-0 flex-1 items-center gap-1 pr-1">
-      <ProviderIndicator provider={view.provider} />
-      <MobileSettingsSheet
-        running={running}
-        showModelSelector={view.showModelSelector}
-        selectedModel={view.selectedModel}
-        modelOptions={capabilities?.model.options ?? []}
-        onModelChange={onModelChange}
-        showReasoningSelector={view.showReasoningSelector}
-        selectedReasoningEffort={view.selectedReasoningEffort}
-        reasoningOptions={capabilities?.reasoning.options ?? []}
-        onReasoningChange={onReasoningChange}
-        showThinkingToggle={view.showThinkingToggle}
-        showPlanModeToggle={view.showPlanModeToggle}
-        settings={settings}
-        onThinkingChange={onThinkingChange}
-        onPlanModeChange={onPlanModeChange}
-        hasAcpConfigOptions={view.hasAcpConfigOptions}
-        acpConfigOptions={acpConfigOptions}
-        onSetConfigOption={onSetConfigOption}
+      <ProviderModelPicker
+        provider={controls.provider}
+        model={controls.model}
+        models={controls.modelOptions}
+        onModelChange={controls.onModelChange}
+        loading={controls.loading}
+        updating={controls.updating}
+        disabled={Boolean(props.disabled || busy || !controls.modelEditable)}
+        disabledReason={disabledReason}
       />
-      {view.showAttachments && (
-        <FileUploadButton
-          fileInputRef={fileInputRef}
-          onFileSelect={onFileSelect}
-          supportedImageTypes={supportedImageTypes}
-          running={running}
-          disabled={disabled}
-          modLabel={modLabel}
-          modifierHeld={modifierHeld}
-        />
-      )}
-      <QuickActionsDropdown
-        onAction={onQuickAction}
-        disabled={disabled}
-        open={quickActionsOpen}
-        onOpenChange={onQuickActionsOpenChange}
-        shortcut={`${modLabel}+Shift+A`}
-        showShortcut={modifierHeld}
-      />
-    </div>
-  );
-});
-
-const DesktopLeftControls = memo(function DesktopLeftControls({
-  props,
-  view,
-}: {
-  props: LeftControlsProps;
-  view: LeftControlsViewState;
-}) {
-  const {
-    settings,
-    capabilities,
-    onModelChange,
-    onReasoningChange,
-    onThinkingChange,
-    onPlanModeChange,
-    running,
-    modLabel,
-    modifierHeld,
-    fileInputRef,
-    onFileSelect,
-    supportedImageTypes,
-    disabled,
-    onQuickAction,
-    quickActionsOpen,
-    onQuickActionsOpenChange,
-    acpConfigOptions,
-    onSetConfigOption,
-  } = props;
-
-  return (
-    <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto pr-1 scrollbar-hide">
-      <ProviderIndicator provider={view.provider} />
-      {view.hasAcpConfigOptions && acpConfigOptions && onSetConfigOption ? (
-        <>
-          <div className="h-4 w-px bg-border" />
-          <AcpConfigControls
-            acpConfigOptions={acpConfigOptions}
-            onSetConfigOption={onSetConfigOption}
-            running={running}
-          />
-        </>
+      {isMobile ? (
+        <MobileSettingsSheet props={props} controls={controls} />
       ) : (
-        <>
-          {(view.showModelSelector || view.showReasoningSelector || view.hasModeToggles) && (
-            <div className="h-4 w-px bg-border" />
-          )}
-          {view.showModelSelector && (
-            <ModelSelector
-              selectedModel={view.selectedModel}
-              options={capabilities?.model.options ?? []}
-              onChange={onModelChange}
-              disabled={running}
-            />
-          )}
-          {view.showModelSelector && view.showReasoningSelector && (
-            <div className="h-4 w-px bg-border" />
-          )}
-          {view.showReasoningSelector && (
-            <ModelSelector
-              selectedModel={view.selectedReasoningEffort}
-              options={(capabilities?.reasoning.options ?? []).map((option) => ({
-                value: option.value,
-                label: option.label,
-              }))}
-              onChange={onReasoningChange}
-              disabled={running}
-            />
-          )}
-          {(view.showModelSelector || view.showReasoningSelector) && view.hasModeToggles && (
-            <div className="h-4 w-px bg-border" />
-          )}
-          <ModeToggles
-            showThinkingToggle={view.showThinkingToggle}
-            showPlanModeToggle={view.showPlanModeToggle}
-            settings={settings}
-            onThinkingChange={onThinkingChange}
-            onPlanModeChange={onPlanModeChange}
-            running={running}
-            modLabel={modLabel}
-            modifierHeld={modifierHeld}
-          />
-        </>
+        <div className="flex min-w-0 items-center gap-1 overflow-x-auto scrollbar-hide">
+          <RuntimeOptions props={props} controls={controls} />
+        </div>
       )}
-      {(view.hasAcpConfigOptions || view.hasModeToggles) && view.showAttachments && (
-        <div className="h-4 w-px bg-border" />
-      )}
-      {view.showAttachments && (
+      {showAttachments && (
         <FileUploadButton
-          fileInputRef={fileInputRef}
-          onFileSelect={onFileSelect}
-          supportedImageTypes={supportedImageTypes}
-          running={running}
-          disabled={disabled}
-          modLabel={modLabel}
-          modifierHeld={modifierHeld}
+          fileInputRef={props.fileInputRef}
+          onFileSelect={props.onFileSelect}
+          supportedImageTypes={props.supportedImageTypes}
+          running={Boolean(busy)}
+          disabled={props.disabled}
+          modLabel={props.modLabel}
+          modifierHeld={props.modifierHeld}
         />
       )}
       <QuickActionsDropdown
-        onAction={onQuickAction}
-        disabled={disabled}
-        open={quickActionsOpen}
-        onOpenChange={onQuickActionsOpenChange}
-        shortcut={`${modLabel}+Shift+A`}
-        showShortcut={modifierHeld}
+        onAction={props.onQuickAction}
+        disabled={props.disabled}
+        open={props.quickActionsOpen}
+        onOpenChange={props.onQuickActionsOpenChange}
+        shortcut={`${props.modLabel}+Shift+A`}
+        showShortcut={props.modifierHeld}
       />
     </div>
   );
-});
-
-export const LeftControls = memo(function LeftControls(props: LeftControlsProps) {
-  const isMobile = useIsMobile();
-  const view = deriveLeftControlsVisibility(props.settings, props.capabilities);
-  const viewState: LeftControlsViewState = {
-    ...view,
-    hasModeToggles: view.showThinkingToggle || view.showPlanModeToggle,
-    hasAcpConfigOptions:
-      props.acpConfigOptions != null &&
-      props.acpConfigOptions.length > 0 &&
-      props.onSetConfigOption != null,
-  };
-
-  if (isMobile) {
-    return <MobileLeftControls props={props} view={viewState} />;
-  }
-
-  return <DesktopLeftControls props={props} view={viewState} />;
 });
 
 export const RightControls = memo(function RightControls({

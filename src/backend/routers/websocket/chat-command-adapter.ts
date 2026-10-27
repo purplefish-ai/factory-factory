@@ -82,7 +82,13 @@ export function applySessionCommandOutcome(
   try {
     for (const reply of outcome.replies) {
       if (reply.type === 'error') {
-        requester.send(JSON.stringify({ type: 'error', message: formatCommandError(reply.error) }));
+        requester.send(
+          JSON.stringify({
+            type: 'error',
+            ...(reply.requestId !== undefined ? { requestId: reply.requestId } : {}),
+            message: formatCommandError(reply.error),
+          })
+        );
       } else {
         try {
           requester.send(JSON.stringify(reply));

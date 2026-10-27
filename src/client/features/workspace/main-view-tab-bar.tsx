@@ -5,13 +5,15 @@ import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
 import { GitDiffIcon } from '@phosphor-icons/react/dist/csr/GitDiff';
 import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
-import { type Dispatch, type SetStateAction, useEffect } from 'react';
+import { useEffect } from 'react';
+import {
+  ProviderModelPicker,
+  type ProviderModelPickerProps,
+} from '@/client/features/session-selection';
 import { type SubagentSelection, useLiveSubagentSelection } from '@/client/features/subagents';
-import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
 import { TabButton } from '@/components/ui/tab-button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
-  EXPLICIT_SESSION_PROVIDER_OPTIONS,
   getSessionProviderLabel,
   type SessionProviderValue,
 } from '@/lib/session-provider-selection';
@@ -277,7 +279,8 @@ interface MainViewTabBarProps {
   /** Maximum sessions allowed per workspace */
   maxSessions?: number;
   selectedProvider: SessionProviderValue;
-  setSelectedProvider: Dispatch<SetStateAction<SessionProviderValue>>;
+  setSelectedProvider: (provider: SessionProviderValue) => void;
+  creationSelection?: ProviderModelPickerProps;
 }
 
 export function MainViewTabBar({
@@ -296,6 +299,7 @@ export function MainViewTabBar({
   maxSessions,
   selectedProvider,
   setSelectedProvider,
+  creationSelection,
 }: MainViewTabBarProps) {
   const { tabs, activeTabId, selectTab, closeTab, updateSubagentTab } = useWorkspacePanel();
 
@@ -304,8 +308,10 @@ export function MainViewTabBar({
 
   // Check if active session limit is reached
   const isAtLimit = isWorkspaceSessionLimitReached(sessions, maxSessions);
-  const isButtonDisabled = disabled || isAtLimit;
-  const providerTriggerLabel = getSessionProviderLabel(selectedProvider);
+  const isButtonDisabled = disabled || isAtLimit || creationSelection?.loading;
+  const providerTriggerLabel = getSessionProviderLabel(
+    creationSelection?.provider ?? selectedProvider
+  );
 
   return (
     <div className={cn('flex items-center bg-muted/50', className)}>
@@ -338,28 +344,23 @@ export function MainViewTabBar({
 
         {/* Session creation controls (provider + add button) */}
         {onCreateSession && (
-          <div className="ml-0.5 flex shrink-0 items-center overflow-hidden rounded-md border border-input bg-background">
-            <Select
-              value={selectedProvider}
-              onValueChange={(value) => {
-                setSelectedProvider(value === 'CODEX' ? 'CODEX' : 'CLAUDE');
-              }}
+          <div className="ml-0.5 flex shrink-0 items-center gap-0.5">
+            <span className="px-1 text-xs text-muted-foreground">New</span>
+            <ProviderModelPicker
+              provider={selectedProvider}
+              models={[]}
+              onProviderChange={setSelectedProvider}
+              {...creationSelection}
               disabled={isButtonDisabled}
-            >
-              <SelectTrigger
-                aria-label="New session provider"
-                className="h-7 w-auto shrink-0 rounded-none border-0 border-r border-input px-2 text-xs focus:ring-0 [&>svg]:hidden"
-              >
-                <span>{providerTriggerLabel}</span>
-              </SelectTrigger>
-              <SelectContent>
-                {EXPLICIT_SESSION_PROVIDER_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              disabledReason={
+                isAtLimit
+                  ? `Maximum ${maxSessions} sessions per workspace`
+                  : disabled
+                    ? 'Session creation is unavailable'
+                    : undefined
+              }
+              label="New conversation provider and model"
+            />
 
             <Tooltip>
               <TooltipTrigger asChild>

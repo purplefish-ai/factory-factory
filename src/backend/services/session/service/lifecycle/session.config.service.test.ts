@@ -525,7 +525,7 @@ describe('SessionConfigService', () => {
     expect(capabilities.planMode.enabled).toBe(false);
   });
 
-  it('skips setSessionModel when requested model is not in ACP model options', async () => {
+  it('rejects setSessionModel when requested model is not in ACP model options', async () => {
     runtimeManager.getClient.mockReturnValue(
       unsafeCoerce({
         provider: 'CODEX',
@@ -544,9 +544,9 @@ describe('SessionConfigService', () => {
         ],
       })
     );
-
-    await service.setSessionModel('session-codex', 'opus');
-
+    await expect(service.setSessionModel('session-codex', 'opus')).rejects.toThrow(
+      'Unsupported model'
+    );
     expect(runtimeManager.setConfigOption).not.toHaveBeenCalled();
     expect(runtimeManager.setSessionModel).not.toHaveBeenCalled();
   });

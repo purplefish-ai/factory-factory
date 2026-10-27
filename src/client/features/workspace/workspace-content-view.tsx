@@ -1,5 +1,6 @@
 import type { inferRouterOutputs } from '@trpc/server';
-import type { Dispatch, ReactNode, SetStateAction } from 'react';
+import type { ReactNode } from 'react';
+import type { ProviderModelPickerProps } from '@/client/features/session-selection';
 import { getStatusBannerClassName } from '@/client/lib/status-banner-styles';
 import type { AppRouter } from '@/client/lib/trpc';
 import type { SessionProviderValue } from '@/lib/session-provider-selection';
@@ -33,7 +34,8 @@ interface WorkspaceContentViewProps {
   /** Whether the workspace has a worktree path (required for sessions) */
   hasWorktreePath: boolean;
   selectedProvider: SessionProviderValue;
-  setSelectedProvider: Dispatch<SetStateAction<SessionProviderValue>>;
+  setSelectedProvider: (provider: SessionProviderValue) => void;
+  creationSelection?: ProviderModelPickerProps;
 }
 
 // =============================================================================
@@ -64,6 +66,7 @@ export function WorkspaceContentView({
   hasWorktreePath,
   selectedProvider,
   setSelectedProvider,
+  creationSelection,
 }: WorkspaceContentViewProps) {
   const hasNoSessions = sessions && sessions.length === 0;
   const { openTab } = useWorkspacePanel();
@@ -91,6 +94,7 @@ export function WorkspaceContentView({
           maxSessions={maxSessions}
           selectedProvider={selectedProvider}
           setSelectedProvider={setSelectedProvider}
+          creationSelection={creationSelection}
         />
       </div>
 

@@ -15,6 +15,10 @@ import {
   useProjectFileMentions,
   useSlashCommands,
 } from '@/client/features/composer';
+import {
+  ProviderModelPicker,
+  useSessionLaunchSelection,
+} from '@/client/features/session-selection';
 import { RatchetToggleButton } from '@/client/features/workspace';
 import { runInBackground } from '@/client/lib/background-task';
 import type { AppRouter } from '@/client/lib/trpc';
@@ -347,7 +351,7 @@ export function InlineWorkspaceForm({
   const [initialPrompt, setInitialPrompt] = useState('');
   const [attachments, setAttachments] = useState<MessageAttachment[]>([]);
   const [ratchetEnabled, setRatchetEnabled] = useState(false);
-  const [provider, setProvider] = useState<'CLAUDE' | 'CODEX'>('CLAUDE');
+  const launchSelection = useSessionLaunchSelection(projectId);
   const [startupModePreset, setStartupModePreset] = useState<'non_interactive' | 'plan'>(
     'non_interactive'
   );
@@ -406,7 +410,6 @@ export function InlineWorkspaceForm({
       return;
     }
     setRatchetEnabled(userSettings.ratchetEnabled);
-    setProvider(userSettings.defaultSessionProvider);
   }, [userSettings]);
 
   const createWorkspaceMutation = trpc.workspace.create.useMutation({
@@ -484,7 +487,7 @@ export function InlineWorkspaceForm({
 
   const isCreating = createWorkspaceMutation.isPending || createPeriodicTaskMutation.isPending;
   const supportsWorkspaceOptions = mode !== 'PERIODIC_TASK';
-  const isLaunchDisabled = isCreating || isLoadingSettings;
+  const isLaunchDisabled = isCreating || isLoadingSettings || launchSelection.loading;
 
   const pasteDropHandler = usePasteDropHandler({
     setAttachments,
@@ -546,7 +549,7 @@ export function InlineWorkspaceForm({
       initialAttachments: attachments.length > 0 ? attachments : undefined,
       startupModePreset: startupModePreset === 'plan' ? 'plan' : undefined,
       ratchetEnabled,
-      provider,
+      ...launchSelection.creationDefaults,
       mode: launchMode,
       autoIterationConfig: isAutoIterate ? buildAutoIterationConfig() : undefined,
       branchName: isAutoIterate ? getAutoIterationBranchName() : undefined,
@@ -554,6 +557,9 @@ export function InlineWorkspaceForm({
   };
 
   const handleLaunch = (launchMode: 'STANDARD' | 'AUTO_ITERATION' | 'PERIODIC_TASK' = mode) => {
+    if (isLaunchDisabled) {
+      return;
+    }
     if (launchMode === 'AUTO_ITERATION' && !(testCommand.trim() && targetDescription.trim())) {
       toast.error('Auto-iteration requires a test command and target description.');
       return;
@@ -665,19 +671,11 @@ export function InlineWorkspaceForm({
                     disabled={isLoadingSettings || isCreating}
                   />
                 </div>
-                <Select
-                  value={provider}
-                  onValueChange={(v) => setProvider(v as 'CLAUDE' | 'CODEX')}
-                  disabled={isLoadingSettings || isCreating}
-                >
-                  <SelectTrigger className="h-7 w-24 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="CLAUDE">Claude</SelectItem>
-                    <SelectItem value="CODEX">Codex</SelectItem>
-                  </SelectContent>
-                </Select>
+                <ProviderModelPicker
+                  {...launchSelection.pickerProps}
+                  disabled={isCreating}
+                  disabledReason={isCreating ? 'Creating workspace' : undefined}
+                />
                 <Select
                   value={startupModePreset}
                   onValueChange={(v) => setStartupModePreset(v as 'non_interactive' | 'plan')}

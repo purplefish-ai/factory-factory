@@ -112,6 +112,10 @@ async function launchPeriodicTask(
   return { workspace, defaultSessionId: session.id };
 }
 
+function explicitSessionModel(source: InteractiveLaunchSource): { model?: string } {
+  return source.type === 'MANUAL' && source.model !== undefined ? { model: source.model } : {};
+}
+
 /** Coordinate the existing interactive launch policy. */
 async function launchInteractiveWorkspace(
   source: InteractiveLaunchSource,
@@ -145,6 +149,7 @@ async function launchInteractiveWorkspace(
         name: 'Chat 1',
         provider,
         providerProjectPath: null,
+        ...explicitSessionModel(source),
       });
       defaultSessionId = session.id;
     } catch (error) {

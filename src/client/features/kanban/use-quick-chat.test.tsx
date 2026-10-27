@@ -6,6 +6,15 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useQuickChat } from './use-quick-chat';
 
+const launchMocks = vi.hoisted(() => ({
+  inputs: [] as unknown[],
+  settings: {
+    defaultSessionProvider: 'CODEX',
+    defaultClaudeModel: 'saved-sonnet',
+    defaultCodexModel: 'saved-sol',
+  },
+}));
+
 const sessionsByWorkspace = vi.hoisted(() => new Map<string, Array<{ id: string }> | undefined>());
 
 vi.mock('sonner', () => ({
@@ -31,6 +40,13 @@ vi.mock('@/client/lib/trpc', () => ({
         },
       },
     }),
+    userSettings: {
+      get: { useQuery: () => ({ data: launchMocks.settings }) },
+      getProviderOptions: { useQuery: () => ({ data: undefined, isLoading: false }) },
+    },
+    workspace: {
+      get: { useQuery: () => ({ data: { defaultSessionProvider: 'WORKSPACE_DEFAULT' } }) },
+    },
     session: {
       listSessions: {
         useQuery: ({ workspaceId }: { workspaceId: string }) => ({
@@ -41,10 +57,11 @@ vi.mock('@/client/lib/trpc', () => ({
         useMutation: () => ({
           mutate: vi.fn(
             (
-              { workspaceId }: { workspaceId: string },
+              input: { workspaceId: string },
               options?: { onSuccess?: (session: { id: string }) => void }
             ) => {
-              options?.onSuccess?.({ id: `created-for-${workspaceId}` });
+              launchMocks.inputs.push(input);
+              options?.onSuccess?.({ id: `created-for-${input.workspaceId}` });
             }
           ),
           isPending: false,
@@ -127,6 +144,7 @@ function renderHook(workspaceId: string | null): RenderedHook {
 
 beforeEach(() => {
   sessionsByWorkspace.clear();
+  launchMocks.inputs.length = 0;
 });
 
 afterEach(() => {
@@ -172,3 +190,31 @@ describe('useQuickChat session selection', () => {
     });
   });
 });
+
+it.each(['chat', 'quick action'])(
+  'uses independent saved and explicit provider models for a new %s',
+  (kind) => {
+    sessionsByWorkspace.set('workspace-a', [{ id: 'existing-codex' }]);
+    const mounted = renderHook('workspace-a');
+    const selection = () => mounted.getResult().launchSelection.pickerProps;
+    flushSync(() => selection().onProviderChange?.('CLAUDE'));
+    expect(mounted.getResult().launchSelection.model).toBe('saved-sonnet');
+    flushSync(() => selection().onModelChange?.('chosen-opus'));
+    flushSync(() => {
+      if (kind === 'chat') {
+        mounted.getResult().handleNewChat();
+      } else {
+        mounted.getResult().handleQuickAction('Review', 'Review this');
+      }
+    });
+    expect(launchMocks.inputs).toEqual([
+      expect.objectContaining({
+        workspaceId: 'workspace-a',
+        provider: 'CLAUDE',
+        model: 'chosen-opus',
+      }),
+    ]);
+    expect(mounted.getResult().launchSelection.provider).toBe('CODEX');
+    expect(mounted.getResult().launchSelection.model).toBe('saved-sol');
+  }
+);

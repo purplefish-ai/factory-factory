@@ -31,6 +31,7 @@ export type WorkspaceCreationSource =
       initialAttachments?: MessageAttachment[];
       startupModePreset?: 'non_interactive' | 'plan';
       provider?: SessionProvider;
+      model?: string;
       mode?: 'STANDARD' | 'AUTO_ITERATION';
       autoIterationConfig?: AutoIterationConfig;
     }

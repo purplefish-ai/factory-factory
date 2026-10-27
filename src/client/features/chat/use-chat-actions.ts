@@ -26,6 +26,7 @@ import type {
 import { persistSettings } from './chat-persistence';
 import { clampChatSettingsForCapabilities } from './chat-settings';
 import type { ChatAction, ChatState } from './reducer';
+import { reduceSettingsSlice } from './reducer/slices/settings';
 
 // =============================================================================
 // Types
@@ -101,28 +102,60 @@ function maybeSendModelUpdate(
   send: (message: unknown) => boolean,
   settings: Partial<ChatSettings>,
   newSettings: ChatSettings,
-  capabilities: ChatState['chatCapabilities']
-): void {
+  capabilities: ChatState['chatCapabilities'],
+  requestId: string | undefined
+): boolean {
   const modelChanged = 'selectedModel' in settings;
   const reasoningChanged = 'reasoningEffort' in settings;
   if (!((modelChanged || reasoningChanged) && capabilities.model.enabled)) {
-    return;
+    return true;
   }
 
   const modelMessage: SetModelMessage = {
     type: 'set_model',
     model: newSettings.selectedModel,
+    ...(requestId ? { requestId } : {}),
   };
 
   if (capabilities.reasoning.enabled) {
-    if (reasoningChanged) {
-      modelMessage.reasoningEffort = newSettings.reasoningEffort;
-    } else if (modelChanged) {
-      modelMessage.reasoningEffort = null;
-    }
+    modelMessage.reasoningEffort = newSettings.reasoningEffort;
   }
 
-  send(modelMessage);
+  return send(modelMessage);
+}
+
+function getOutboundSettings(state: ChatState): QueueMessageRequest['settings'] {
+  return !state.chatCapabilitiesLoaded && state.modelSelectionSource === 'bootstrap'
+    ? undefined
+    : {
+        ...clampChatSettingsForCapabilities(
+          state.chatSettings,
+          state.chatCapabilitiesLoaded ? state.chatCapabilities : undefined
+        ),
+        selectedModel:
+          state.modelSelectionSource === 'bootstrap' ? null : state.chatSettings.selectedModel,
+      };
+}
+
+function getConfigOptionSettings(
+  state: ChatState,
+  configId: string,
+  value: string
+): Partial<ChatSettings> {
+  const changedOption = state.acpConfigOptions?.find((option) => option.id === configId);
+  const isModelOption = configId === 'model' || changedOption?.category === 'model';
+  const isPlanningOption =
+    state.chatCapabilities.provider === 'CODEX'
+      ? configId === 'collaboration_mode' || changedOption?.category === 'collaboration_mode'
+      : configId === 'mode' || changedOption?.category === 'mode';
+  const settings: Partial<ChatSettings> = {};
+  if (isPlanningOption) {
+    settings.planModeEnabled = value === 'plan';
+  }
+  if (isModelOption) {
+    settings.selectedModel = value;
+  }
+  return settings;
 }
 
 function findOptionIdByDecision(
@@ -190,6 +223,37 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
     onClearInput,
   } = options;
 
+  // Keep sequential actions (for example selecting a model then immediately sending)
+  // on the same settings even before React commits the reducer render.
+  const applySettings = useCallback(
+    (settings: Partial<ChatSettings>, requestId?: string) => {
+      const action: ChatAction = { type: 'UPDATE_SETTINGS', payload: settings, requestId };
+      stateRef.current = reduceSettingsSlice(stateRef.current, action);
+      dispatch(action);
+      persistSettings(dbSessionIdRef.current, stateRef.current.chatSettings);
+    },
+    [dispatch, stateRef, dbSessionIdRef]
+  );
+
+  const rejectUnsentModelRequest = useCallback(
+    (requestId: string | undefined) => {
+      if (!requestId) {
+        return;
+      }
+      const action: ChatAction = {
+        type: 'WS_ERROR',
+        payload: {
+          requestId,
+          message: 'Model change was not sent. Reconnect and try again.',
+        },
+      };
+      stateRef.current = reduceSettingsSlice(stateRef.current, action);
+      dispatch(action);
+      persistSettings(dbSessionIdRef.current, stateRef.current.chatSettings);
+    },
+    [dispatch, stateRef, dbSessionIdRef]
+  );
+
   const sendMessage = useCallback(
     (text: string, options?: SendMessageOptions) => {
       const trimmedText = text.trim();
@@ -226,27 +290,16 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
         text: trimmedText,
         attachments: attachments.length > 0 ? attachments : undefined,
         voiceMode: options?.voiceMode,
-        settings: clampChatSettingsForCapabilities(
-          stateRef.current.chatSettings,
-          stateRef.current.chatCapabilities
-        ),
+        settings: getOutboundSettings(stateRef.current),
       };
       send(msg);
     },
     [send, dispatch, dbSessionIdRef, inputAttachmentsRef, stateRef, onClearInput]
   );
 
-  const completePlanApproval = useCallback(
-    (state: ChatState) => {
-      dispatch({ type: 'UPDATE_SETTINGS', payload: { planModeEnabled: false } });
-      const syncedSettings = clampChatSettingsForCapabilities(
-        { ...state.chatSettings, planModeEnabled: false },
-        state.chatCapabilities
-      );
-      persistSettings(dbSessionIdRef.current, syncedSettings);
-    },
-    [dispatch, dbSessionIdRef]
-  );
+  const completePlanApproval = useCallback(() => {
+    applySettings({ planModeEnabled: false });
+  }, [applySettings]);
 
   const stopChat = useCallback(() => {
     const { sessionStatus } = stateRef.current;
@@ -278,7 +331,7 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
       dispatch({ type: 'PERMISSION_RESPONSE', payload: { allow } });
 
       if (allow && pendingRequest.request.toolName === 'ExitPlanMode') {
-        completePlanApproval(state);
+        completePlanApproval();
       }
     },
     [send, dispatch, stateRef, completePlanApproval]
@@ -307,7 +360,7 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
         pendingRequest.request.toolName === 'ExitPlanMode' &&
         isAllowOptionId(optionId, pendingRequest.request.acpOptions)
       ) {
-        completePlanApproval(state);
+        completePlanApproval();
       }
     },
     [send, dispatch, stateRef, completePlanApproval]
@@ -315,18 +368,17 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
 
   const updateSettings = useCallback(
     (settings: Partial<ChatSettings>) => {
-      dispatch({ type: 'UPDATE_SETTINGS', payload: settings });
+      const requestId = settings.selectedModel !== undefined ? crypto.randomUUID() : undefined;
+      applySettings(settings, requestId);
       // Persist capability-aware settings to avoid invalid provider combinations.
       const capabilities = stateRef.current.chatCapabilities;
-      const newSettings = clampChatSettingsForCapabilities(
-        { ...stateRef.current.chatSettings, ...settings },
-        capabilities
-      );
-      persistSettings(dbSessionIdRef.current, newSettings);
+      const newSettings = stateRef.current.chatSettings;
       maybeSendThinkingBudgetUpdate(send, settings, capabilities.thinking.enabled);
-      maybeSendModelUpdate(send, settings, newSettings, capabilities);
+      if (!maybeSendModelUpdate(send, settings, newSettings, capabilities, requestId)) {
+        rejectUnsentModelRequest(requestId);
+      }
     },
-    [send, dispatch, stateRef, dbSessionIdRef]
+    [send, applySettings, rejectUnsentModelRequest, stateRef]
   );
 
   const removeQueuedMessage = useCallback(
@@ -348,45 +400,22 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
 
   const setConfigOption = useCallback(
     (configId: string, value: string) => {
+      const settings = getConfigOptionSettings(stateRef.current, configId, value);
+      const requestId = settings.selectedModel !== undefined ? crypto.randomUUID() : undefined;
+      if (Object.keys(settings).length > 0) {
+        applySettings(settings, requestId);
+      }
       const msg: SetConfigOptionMessage = {
         type: 'set_config_option',
         configId,
         value,
+        ...(requestId ? { requestId } : {}),
       };
-      send(msg);
-
-      // When the model is chosen through the ACP config selector, mirror it into chatSettings.
-      // Otherwise chatSettings.selectedModel keeps its stale default and the model re-applied at
-      // message dispatch (setSessionModel) clobbers the user's pick right before the turn runs.
-      const changedOption = stateRef.current.acpConfigOptions?.find(
-        (option) => option.id === configId
-      );
-      const isModelOption = configId === 'model' || changedOption?.category === 'model';
-      const isPlanningOption =
-        stateRef.current.chatCapabilities.provider === 'CODEX'
-          ? configId === 'collaboration_mode' || changedOption?.category === 'collaboration_mode'
-          : configId === 'mode' || changedOption?.category === 'mode';
-      if (isPlanningOption) {
-        const planModeEnabled = value === 'plan';
-        dispatch({ type: 'UPDATE_SETTINGS', payload: { planModeEnabled } });
-        persistSettings(
-          dbSessionIdRef.current,
-          clampChatSettingsForCapabilities(
-            { ...stateRef.current.chatSettings, planModeEnabled },
-            stateRef.current.chatCapabilities
-          )
-        );
-      }
-      if (isModelOption) {
-        dispatch({ type: 'UPDATE_SETTINGS', payload: { selectedModel: value } });
-        const syncedSettings = clampChatSettingsForCapabilities(
-          { ...stateRef.current.chatSettings, selectedModel: value },
-          stateRef.current.chatCapabilities
-        );
-        persistSettings(dbSessionIdRef.current, syncedSettings);
+      if (!send(msg)) {
+        rejectUnsentModelRequest(requestId);
       }
     },
-    [send, dispatch, stateRef, dbSessionIdRef]
+    [send, applySettings, rejectUnsentModelRequest, stateRef]
   );
 
   // Rewind files actions

@@ -27,6 +27,19 @@ Kanban Quick Chat keeps composer attachments in shared chat state, so sending,
 rejection recovery, and session restoration use the same attachments as the full
 workspace chat.
 
+Workspace creation and new-conversation controls share a compact provider/model
+picker. Each launch starts from saved provider-specific defaults; changing an
+active conversation does not copy its model into a new conversation. Explicit
+launch choices survive settings refreshes and retain a separate model choice for
+each provider. Workspace/provider inheritance still applies when no explicit
+provider is selected.
+
+The tab bar's **New** selection configures a new conversation. The composer's
+picker shows the current conversation's provider and changes only its model;
+switching providers requires a new conversation. Model controls remain visible
+through configuration loading and partial ACP updates, with temporary disabled
+states explained instead of silently hiding the control.
+
 Git status and base/upstream file lists decode Git's C-quoted paths, including
 UTF-8 octal escapes. Renamed status entries use the destination path for
 click-to-diff, and upstream filenames retain surrounding spaces.

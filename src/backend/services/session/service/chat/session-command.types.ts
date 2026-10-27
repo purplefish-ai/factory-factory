@@ -52,7 +52,7 @@ export type SessionCommandError =
 
 export type SessionCommandReply =
   | { type: 'chat_capabilities'; capabilities: ChatBarCapabilities }
-  | { type: 'error'; error: SessionCommandError };
+  | { type: 'error'; error: SessionCommandError; requestId?: string };
 
 export interface SessionCommandOutcome {
   replies: SessionCommandReply[];

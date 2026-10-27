@@ -112,3 +112,57 @@ export const ScreenshotTab: Story = {
     </WorkspacePanelProvider>
   ),
 };
+
+function NewConversationTabBar() {
+  const [provider, setProvider] = useState<'CLAUDE' | 'CODEX'>('CLAUDE');
+  const [model, setModel] = useState('sonnet');
+  const options =
+    provider === 'CLAUDE'
+      ? [
+          { value: 'sonnet', label: 'Sonnet' },
+          { value: 'opus', label: 'Opus' },
+        ]
+      : [
+          { value: 'six-sol', label: '6 Sol' },
+          { value: 'six-luna', label: '6 Luna' },
+        ];
+  return (
+    <WorkspacePanelProvider workspaceId="selection-story">
+      <MainViewTabBar
+        workspaceId="selection-story"
+        sessions={[
+          { id: 'existing', name: 'Existing Codex', status: 'RUNNING', provider: 'CODEX' },
+        ]}
+        currentSessionId="existing"
+        selectedProvider={provider}
+        setSelectedProvider={setProvider}
+        onCreateSession={fn()}
+        creationSelection={{
+          provider,
+          model,
+          models: options,
+          onModelChange: setModel,
+          onProviderChange: (next) => {
+            setProvider(next);
+            setModel(next === 'CLAUDE' ? 'sonnet' : 'six-sol');
+          },
+        }}
+      />
+    </WorkspacePanelProvider>
+  );
+}
+export const NewConversationSelection: Story = { render: () => <NewConversationTabBar /> };
+export const NewConversationSelectionDark: Story = {
+  ...NewConversationSelection,
+  globals: { theme: 'dark' },
+};
+export const NewConversationSelectionNarrow: Story = {
+  ...NewConversationSelection,
+  decorators: [
+    (Story) => (
+      <div className="w-80">
+        <Story />
+      </div>
+    ),
+  ],
+};

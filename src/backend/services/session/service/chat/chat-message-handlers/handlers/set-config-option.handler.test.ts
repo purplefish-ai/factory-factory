@@ -34,31 +34,41 @@ describe('createSetConfigOptionHandler', () => {
     expect(getSessionConfigOptions).not.toHaveBeenCalled();
   });
 
-  it('returns the current config options on rejection so all viewers can roll back', async () => {
-    const cause = new Error('boom');
-    setSessionConfigOption.mockRejectedValue(cause);
-    const configOptions = [
-      {
-        id: 'model',
-        name: 'Model',
-        type: 'select',
-        category: 'model',
-        currentValue: 'gpt-5',
-        options: [],
-      },
-    ];
-    getSessionConfigOptions.mockReturnValue(configOptions);
-    const outcome = await handler(context, {
-      type: 'set_config_option',
-      configId: 'model',
-      value: 'gpt-5-mini',
-    });
-    expect(getSessionConfigOptions).toHaveBeenCalledWith('session-1');
-    expect(outcome).toEqual({
-      replies: [{ type: 'error', error: { kind: 'set_config_option_failed', cause } }],
-      configOptionsCorrection: configOptions,
-    });
-  });
+  it.each([undefined, 'config-request'])(
+    'returns confirmed config with requester correlation %s',
+    async (requestId) => {
+      const cause = new Error('boom');
+      setSessionConfigOption.mockRejectedValue(cause);
+      const configOptions = [
+        {
+          id: 'model',
+          name: 'Model',
+          type: 'select',
+          category: 'model',
+          currentValue: 'gpt-5',
+          options: [],
+        },
+      ];
+      getSessionConfigOptions.mockReturnValue(configOptions);
+      const outcome = await handler(context, {
+        type: 'set_config_option',
+        ...(requestId !== undefined ? { requestId } : {}),
+        configId: 'model',
+        value: 'gpt-5-mini',
+      });
+      expect(getSessionConfigOptions).toHaveBeenCalledWith('session-1');
+      expect(outcome).toEqual({
+        replies: [
+          {
+            type: 'error',
+            error: { kind: 'set_config_option_failed', cause },
+            ...(requestId !== undefined ? { requestId } : {}),
+          },
+        ],
+        configOptionsCorrection: configOptions,
+      });
+    }
+  );
 
   it('does not correct with empty options when there is no live ACP handle', async () => {
     const cause = new Error('boom');

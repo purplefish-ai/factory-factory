@@ -301,6 +301,7 @@ export const ChatInput = memo(function ChatInput({
             onThinkingChange={actions.handleThinkingChange}
             onPlanModeChange={actions.handlePlanModeChange}
             running={running}
+            stopping={stopping}
             modLabel={modLabel}
             modifierHeld={modifierHeld}
             fileInputRef={actions.fileInputRef}

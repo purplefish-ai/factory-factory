@@ -11,6 +11,7 @@ interface SessionCollectionCommandsOptions {
   workspaceId: string | null;
   sessions: readonly { name?: string | null }[] | undefined;
   creationDefaults: Pick<CreateSessionInput, 'model' | 'provider'>;
+  canCreate?: boolean;
   onCreated: (session: { id: string }, workspaceId: string, kind: CreationKind) => void;
 }
 
@@ -36,6 +37,7 @@ export function useSessionCollectionCommands({
   workspaceId,
   sessions,
   creationDefaults,
+  canCreate = true,
   onCreated,
 }: SessionCollectionCommandsOptions): SessionCollectionCommands {
   const utils = trpc.useUtils();
@@ -80,7 +82,7 @@ export function useSessionCollectionCommands({
   });
 
   const createChat = useCallback(() => {
-    if (!workspaceId) {
+    if (!(workspaceId && canCreate)) {
       return;
     }
     const existingNumbers = (sessions ?? [])
@@ -100,11 +102,11 @@ export function useSessionCollectionCommands({
       },
       { onSuccess: (session) => onCreated(session, workspaceId, 'chat') }
     );
-  }, [workspaceId, sessions, creationDefaults, createSession, onCreated]);
+  }, [workspaceId, sessions, creationDefaults, canCreate, createSession, onCreated]);
 
   const quickActionInput = useCallback(
     (name: string, prompt: string): CreateSessionInput | null =>
-      workspaceId
+      workspaceId && canCreate
         ? {
             workspaceId,
             workflow: 'followup',
@@ -114,7 +116,7 @@ export function useSessionCollectionCommands({
             initialPrompt: '',
           }
         : null,
-    [workspaceId, creationDefaults]
+    [workspaceId, creationDefaults, canCreate]
   );
   const createQuickAction = useCallback(
     (name: string, prompt: string) => {

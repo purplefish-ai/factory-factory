@@ -7,6 +7,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InlineWorkspaceForm } from './inline-workspace-form';
 
 const mocks = vi.hoisted(() => ({
+  userSettings: {
+    ratchetEnabled: false,
+    defaultSessionProvider: 'CLAUDE',
+    defaultClaudeModel: 'saved-sonnet',
+    defaultCodexModel: 'saved-sol',
+  },
   detectFileMentionMock: vi.fn(),
   toastErrorMock: vi.fn(),
   listForProjectCancelMock: vi.fn(),
@@ -52,12 +58,10 @@ vi.mock('@/client/lib/trpc', () => ({
       },
     }),
     userSettings: {
+      getProviderOptions: { useQuery: () => ({ data: undefined, isLoading: false }) },
       get: {
         useQuery: () => ({
-          data: {
-            ratchetEnabled: false,
-            defaultSessionProvider: 'CLAUDE',
-          },
+          data: mocks.userSettings,
           isLoading: false,
         }),
       },
@@ -140,6 +144,36 @@ vi.mock('@/client/features/composer', () => ({
     handleSlashMenuClose: vi.fn(),
     delegateToSlashMenu: () => 'passthrough',
   }),
+}));
+
+vi.mock('@/client/features/session-selection', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/client/features/session-selection')>()),
+  ProviderModelPicker: ({
+    provider,
+    model,
+    onProviderChange,
+    onModelChange,
+  }: import('@/client/features/session-selection').ProviderModelPickerProps) =>
+    createElement(
+      'div',
+      { 'aria-label': 'New conversation provider and model' },
+      `${provider} ${model}`,
+      createElement(
+        'button',
+        { onClick: () => onProviderChange?.('CLAUDE'), 'aria-label': 'Choose Claude' },
+        'Claude'
+      ),
+      createElement(
+        'button',
+        { onClick: () => onProviderChange?.('CODEX'), 'aria-label': 'Choose Codex' },
+        'Codex'
+      ),
+      createElement(
+        'button',
+        { onClick: () => onModelChange?.('chosen-model'), 'aria-label': 'Choose model' },
+        model
+      )
+    ),
 }));
 
 vi.mock('@/components/ui/button', () => ({
@@ -228,6 +262,12 @@ beforeEach(() => {
     writable: true,
     value: true,
   });
+  mocks.userSettings = {
+    ratchetEnabled: false,
+    defaultSessionProvider: 'CLAUDE',
+    defaultClaudeModel: 'saved-sonnet',
+    defaultCodexModel: 'saved-sol',
+  };
   mocks.workspaceListCache = undefined;
   mocks.createWorkspaceMutationOptions = undefined;
   mocks.listForProjectCancelMock.mockResolvedValue(undefined);
@@ -249,8 +289,10 @@ describe('InlineWorkspaceForm', () => {
     const { container, root } = renderForm();
 
     expect(container.querySelector('[aria-label="Toggle ratchet"]')).not.toBeNull();
-    expect(container.textContent).toContain('Claude');
-    expect(container.textContent).toContain('Codex');
+    expect(container.textContent).toContain('CLAUDE');
+    expect(
+      container.querySelector('[aria-label^="New conversation provider and model"]')
+    ).not.toBeNull();
     expect(container.textContent).toContain('Default');
     expect(container.textContent).toContain('Plan');
     expect(container.querySelectorAll('[aria-label="Attach files"]')).toHaveLength(2);
@@ -274,7 +316,7 @@ describe('InlineWorkspaceForm', () => {
     });
 
     expect(container.querySelector('[aria-label="Toggle ratchet"]')).toBeNull();
-    expect(container.textContent).not.toContain('Claude');
+    expect(container.textContent).not.toContain('CLAUDE');
     expect(container.textContent).not.toContain('Codex');
     expect(container.textContent).not.toContain('Default');
     expect(container.textContent).not.toContain('Plan');
@@ -368,4 +410,56 @@ describe('InlineWorkspaceForm', () => {
     root.unmount();
     container.remove();
   });
+});
+
+it('sends the saved provider model when launching a workspace', () => {
+  const { container, root } = renderForm();
+  try {
+    const launch = [...container.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent === 'Launch'
+    );
+    expect(launch).toBeDefined();
+    flushSync(() => launch?.click());
+    expect(mocks.createWorkspaceMutateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'CLAUDE', model: 'saved-sonnet' })
+    );
+  } finally {
+    flushSync(() => root.unmount());
+  }
+});
+
+it('retains the chosen provider and model when saved settings refetch during a workspace draft', () => {
+  const { container, root } = renderForm();
+  try {
+    flushSync(() =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Choose Codex"]')?.click()
+    );
+    flushSync(() =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Choose model"]')?.click()
+    );
+    mocks.userSettings = {
+      ...mocks.userSettings,
+      defaultSessionProvider: 'CLAUDE',
+      defaultCodexModel: 'changed-default',
+    };
+    flushSync(() =>
+      root.render(
+        createElement(InlineWorkspaceForm, {
+          projectId: 'project-1',
+          existingNames: [],
+          onCancel: vi.fn(),
+          onCreated: vi.fn(),
+        })
+      )
+    );
+    const launch = [...container.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent === 'Launch'
+    );
+    flushSync(() => launch?.click());
+    expect(mocks.createWorkspaceMutateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'CODEX', model: 'chosen-model' })
+    );
+  } finally {
+    flushSync(() => root.unmount());
+  }
 });

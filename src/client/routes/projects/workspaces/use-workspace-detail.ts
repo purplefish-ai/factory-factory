@@ -99,8 +99,10 @@ interface UseSessionManagementOptions {
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   selectedDbSessionId: string | null;
   setSelectedDbSessionId: (id: string | null) => void;
-  /** Selected model from chat settings */
-  selectedModel: string;
+  /** Independent selection for the new conversation. */
+  creationDefaults?: { provider?: SessionProviderValue; model?: string };
+  canCreate?: boolean;
+  onCreated?: () => void;
   /** Provider selection for newly created sessions */
   selectedProvider: SessionProviderValue;
   onArchiveGitIndexLocked: () => void;
@@ -152,7 +154,9 @@ export function useSessionManagement({
   inputRef,
   selectedDbSessionId,
   setSelectedDbSessionId,
-  selectedModel,
+  creationDefaults,
+  canCreate,
+  onCreated,
   selectedProvider,
   onArchiveGitIndexLocked,
 }: UseSessionManagementOptions): UseSessionManagementReturn {
@@ -171,16 +175,14 @@ export function useSessionManagement({
   } = useSessionCollectionCommands({
     workspaceId,
     sessions,
-    // Codex uses its own model defaults instead of the Claude model selection.
-    creationDefaults: {
-      provider: selectedProvider,
-      model: selectedProvider === 'CODEX' ? undefined : selectedModel || undefined,
-    },
+    creationDefaults: creationDefaults ?? { provider: selectedProvider, model: undefined },
+    canCreate,
     onCreated: (session, originatingWorkspaceId, kind) => {
       if (activeWorkspaceRef.current !== originatingWorkspaceId) {
         return;
       }
       setSelectedDbSessionId(session.id);
+      onCreated?.();
       if (kind === 'chat') {
         setTimeout(() => inputRef.current?.focus(), 0);
       }
