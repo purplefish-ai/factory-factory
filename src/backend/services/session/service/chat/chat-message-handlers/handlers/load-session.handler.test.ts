@@ -1462,7 +1462,6 @@ describe('createLoadSessionHandler', () => {
         options: [{ value: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5' }],
       },
     ]);
-
     const handler = createLoadSessionHandler({
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
       setManualDispatchResume: vi.fn(),
@@ -1503,7 +1502,6 @@ describe('createLoadSessionHandler', () => {
       join(commandsDir, 'duplicate.md'),
       '---\ndescription: Workspace duplicate\n---\n'
     );
-
     mocks.findById.mockResolvedValue({
       provider: 'CLAUDE',
       status: 'IDLE',
@@ -1515,6 +1513,8 @@ describe('createLoadSessionHandler', () => {
     mocks.getCachedCommands.mockResolvedValue([
       { name: '/global-only', description: 'Global only' },
       { name: '/duplicate', description: 'Cached global duplicate' },
+      { name: '/project:foreign', description: 'Foreign workspace command' },
+      { name: '/workspace:team:deploy', description: 'Nested foreign command' },
     ]);
 
     const handler = createLoadSessionHandler({

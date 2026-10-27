@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { type Dirent, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, isAbsolute, join, relative } from 'node:path';
 import type { CommandInfo } from '@/shared/acp-protocol';
@@ -39,13 +39,12 @@ function resolveContainedRegularFile(rootReal: string, filePath: string): string
 
 export function commandNameKey(name: string): string {
   const normalized = name.trim().replace(/^\/+/, '');
-  const colonIndex = normalized.lastIndexOf(':');
-  return colonIndex >= 0 ? normalized.slice(colonIndex + 1) : normalized;
+  return normalized.replace(/^(?:project|workspace|user):/, '');
 }
 
 export function isWorkspaceScopedCommandName(name: string): boolean {
   const normalized = name.trim().replace(/^\/+/, '');
-  const colonIndex = normalized.lastIndexOf(':');
+  const colonIndex = normalized.indexOf(':');
   if (colonIndex < 0) {
     return false;
   }
@@ -53,8 +52,13 @@ export function isWorkspaceScopedCommandName(name: string): boolean {
   return scope === 'project' || scope === 'workspace';
 }
 
-function scanCommandsFromDir(dir: string, seen: Set<string>, containmentRoot = dir): CommandInfo[] {
-  let files: string[];
+function scanCommandsFromDir(
+  dir: string,
+  seen: Set<string>,
+  containmentRoot = dir,
+  namespace = ''
+): CommandInfo[] {
+  let files: Dirent[];
   let rootReal: string;
   try {
     rootReal = realpathSync(containmentRoot);
@@ -62,20 +66,29 @@ function scanCommandsFromDir(dir: string, seen: Set<string>, containmentRoot = d
     if (!isRealPathContainedInRoot(rootReal, dirReal)) {
       return [];
     }
-    files = readdirSync(dir).filter((file) => file.endsWith('.md'));
+    files = readdirSync(dir, { withFileTypes: true });
   } catch {
     return [];
   }
 
   const commands: CommandInfo[] = [];
   for (const file of files) {
-    const filePath = join(dir, file);
+    const filePath = join(dir, file.name);
+    if (file.isDirectory()) {
+      commands.push(
+        ...scanCommandsFromDir(filePath, seen, containmentRoot, `${namespace}${file.name}:`)
+      );
+      continue;
+    }
+    if (!file.name.endsWith('.md')) {
+      continue;
+    }
     const fileReal = resolveContainedRegularFile(rootReal, filePath);
     if (!fileReal) {
       continue;
     }
-    const name = basename(file, '.md');
-    const key = commandNameKey(name);
+    const name = `${namespace}${basename(file.name, '.md')}`;
+    const key = name;
     if (seen.has(key)) {
       continue;
     }
@@ -97,10 +110,4 @@ export function scanClaudeWorkspaceCommandsFromDisk(
     return [];
   }
   return scanCommandsFromDir(join(worktreePath, '.claude', 'commands'), seen, worktreePath);
-}
-
-export function scanClaudeWorkspaceCommandNames(worktreePath: string | null): Set<string> {
-  return new Set(
-    scanClaudeWorkspaceCommandsFromDisk(worktreePath).map((command) => commandNameKey(command.name))
-  );
 }

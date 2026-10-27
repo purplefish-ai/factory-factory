@@ -7,7 +7,9 @@ preserved, and clearing it later does not replay the earlier recovery.
 The new-workspace slash-command palette prefers project command descriptions
 over same-named global commands, matching the workspace-first precedence used
 when loading a Claude session. Commands found only in the global directory
-remain available.
+remain available. Claude provider caches exclude `project:` and `workspace:`
+commands, including nested names, regardless of disk-scan availability. Passive
+loads also reject scoped entries left in an older global cache.
 
 Workspace notification recovery ignores provisional user transcript entries
 while their provider dispatch is unsettled, including across session stop/reset.

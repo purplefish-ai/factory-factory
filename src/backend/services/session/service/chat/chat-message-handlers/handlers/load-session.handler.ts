@@ -19,6 +19,7 @@ import { finalizeInterruptedTranscriptToolCalls } from '@/backend/services/sessi
 import { slashCommandCacheService } from '@/backend/services/session/service/store/slash-command-cache.service';
 import {
   commandNameKey,
+  isWorkspaceScopedCommandName,
   scanClaudeGlobalCommandsFromDisk,
   scanClaudeWorkspaceCommandsFromDisk,
 } from '@/backend/services/session/service/store/slash-command-disk-scanner';
@@ -139,6 +140,9 @@ function buildClaudeSlashCommandsForLoad(
   const commands = scanClaudeWorkspaceCommandsFromDisk(worktreePath, seen);
   if (cached) {
     for (const command of cached) {
+      if (isWorkspaceScopedCommandName(command.name)) {
+        continue;
+      }
       const key = commandNameKey(command.name);
       if (seen.has(key)) {
         continue;
