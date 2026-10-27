@@ -102,7 +102,7 @@ vi.mock('@/backend/services/session', () => ({
     getQueueLength: vi.fn(),
   },
   chatEventForwarderService: { configure: vi.fn(), getAllPendingRequests: vi.fn() },
-  chatMessageHandlerService: { configure: vi.fn(), tryDispatchNextMessage: vi.fn() },
+  sessionDispatchService: { configure: vi.fn(), tryDispatchNextMessage: vi.fn() },
 }));
 
 vi.mock('@/backend/services/github', () => ({
@@ -154,7 +154,7 @@ import { startupScriptService } from '@/backend/services/run-script';
 import {
   acpRuntimeManager,
   chatEventForwarderService,
-  chatMessageHandlerService,
+  sessionDispatchService,
   sessionDataService,
   sessionDomainService,
   sessionLifecycleService,
@@ -194,6 +194,7 @@ function createBridgeServices(
     ...defaultPRMonitoringServices,
     autoIterationService,
     chatEventForwarderService,
+    sessionDispatchService,
     createLogger,
     getWorkspaceInitPolicy,
     githubCLIService,
@@ -238,6 +239,42 @@ describe('configureDomainBridges', () => {
     vi.clearAllMocks();
   });
 
+  it('uses each injected dispatcher for lifecycle and prompt-completion queue requests', async () => {
+    const first = { configure: vi.fn(), tryDispatchNextMessage: vi.fn(async () => undefined) };
+    const second = { configure: vi.fn(), tryDispatchNextMessage: vi.fn(async () => undefined) };
+    configureDomainBridges(createBridgeServices({ sessionDispatchService: first }));
+    const firstLifecycle = vi.mocked(sessionLifecycleService.configure).mock.calls.at(-1)?.[0];
+    const firstCompletion = vi
+      .mocked(sessionPromptTurnCompletionService.setHandler)
+      .mock.calls.at(-1)?.[0];
+    await firstLifecycle?.messageQueue?.tryDispatchNextMessage('first-session');
+    await firstCompletion?.('first-session');
+
+    configureDomainBridges(createBridgeServices({ sessionDispatchService: second }));
+    const secondLifecycle = vi.mocked(sessionLifecycleService.configure).mock.calls.at(-1)?.[0];
+    const secondCompletion = vi
+      .mocked(sessionPromptTurnCompletionService.setHandler)
+      .mock.calls.at(-1)?.[0];
+    await secondLifecycle?.messageQueue?.tryDispatchNextMessage('second-session');
+    await secondCompletion?.('second-session');
+    await firstLifecycle?.messageQueue?.tryDispatchNextMessage('first-after-reconfigure');
+    await firstCompletion?.('first-after-reconfigure');
+
+    expect(first.configure).toHaveBeenCalledOnce();
+    expect(second.configure).toHaveBeenCalledOnce();
+    expect(first.tryDispatchNextMessage.mock.calls).toEqual([
+      ['first-session'],
+      ['first-session', { bypassTurnInProgressBackoff: true }],
+      ['first-after-reconfigure'],
+      ['first-after-reconfigure', { bypassTurnInProgressBackoff: true }],
+    ]);
+    expect(second.tryDispatchNextMessage.mock.calls).toEqual([
+      ['second-session'],
+      ['second-session', { bypassTurnInProgressBackoff: true }],
+    ]);
+    expect(sessionDispatchService.tryDispatchNextMessage).not.toHaveBeenCalled();
+  });
+
   it('configures all ratchet domain services', () => {
     configureDomainBridges(createBridgeServices());
 
@@ -276,7 +313,7 @@ describe('configureDomainBridges', () => {
     configureDomainBridges(createBridgeServices());
 
     expect(chatEventForwarderService.configure).toHaveBeenCalledTimes(1);
-    expect(chatMessageHandlerService.configure).toHaveBeenCalledTimes(1);
+    expect(sessionDispatchService.configure).toHaveBeenCalledTimes(1);
     expect(sessionService.configure).toHaveBeenCalledTimes(1);
     expect(sessionLifecycleService.configure).toHaveBeenCalledTimes(1);
     expect(sessionPromptTurnCompletionService.setHandler).toHaveBeenCalledTimes(1);
@@ -662,9 +699,9 @@ describe('configureDomainBridges', () => {
       expect(workspaceActivityService.on).toHaveBeenCalledWith('request_notification', handler);
     });
 
-    it('chatMessageHandler initPolicy bridge delegates getWorkspaceInitPolicy', () => {
+    it('dispatcher initPolicy bridge delegates getWorkspaceInitPolicy', () => {
       configureDomainBridges(createBridgeServices());
-      const bridge = getBridge(chatMessageHandlerService.configure);
+      const bridge = getBridge(sessionDispatchService.configure);
 
       bridge.initPolicy.getWorkspaceInitPolicy({ status: 'READY' });
       expect(getWorkspaceInitPolicy).toHaveBeenCalledWith({ status: 'READY' });
@@ -689,22 +726,22 @@ describe('configureDomainBridges', () => {
       );
     });
 
-    it('session lifecycle message queue bridge delegates pending dispatch to chat handlers', async () => {
+    it('session lifecycle message queue bridge delegates pending dispatch to the dispatcher', async () => {
       configureDomainBridges(createBridgeServices());
       const bridge = getBridge(sessionLifecycleService.configure);
 
       await bridge.messageQueue?.tryDispatchNextMessage('s1');
-      expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledWith('s1');
+      expect(sessionDispatchService.tryDispatchNextMessage).toHaveBeenCalledWith('s1');
     });
 
-    it('prompt completion service delegates queue dispatch to chat handlers', async () => {
+    it('prompt completion service delegates queue dispatch to the dispatcher', async () => {
       configureDomainBridges(createBridgeServices());
       const onPromptTurnComplete = vi.mocked(sessionPromptTurnCompletionService.setHandler).mock
         .calls[0]?.[0];
 
       expect(onPromptTurnComplete).toBeTypeOf('function');
       await onPromptTurnComplete?.('s1');
-      expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledWith('s1', {
+      expect(sessionDispatchService.tryDispatchNextMessage).toHaveBeenCalledWith('s1', {
         bypassTurnInProgressBackoff: true,
       });
     });

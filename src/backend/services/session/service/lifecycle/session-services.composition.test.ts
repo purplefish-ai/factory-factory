@@ -3,6 +3,8 @@ import {
   chatMessageHandlerService as publicChatMessageHandlerService,
   sessionLifecycleService as publicSessionLifecycleService,
   sessionDispatchService as publicSessionDispatchService,
+  sessionBackgroundDeliveryService,
+  sessionDomainService,
 } from '@/backend/services/session';
 import { WorkspaceStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
@@ -19,6 +21,7 @@ import {
 
 describe('session services composition', () => {
   afterEach(() => {
+    sessionDomainService.clearAllSessions();
     vi.restoreAllMocks();
   });
 
@@ -57,27 +60,44 @@ describe('session services composition', () => {
     });
   });
 
-  it('forwards compatibility dispatch APIs to the publicly exported dispatcher', async () => {
+  it('routes user queue, manual resume, and stop requests through the public dispatcher', async () => {
     expect(publicSessionDispatchService).toBe(sessionDispatchService);
     const dispatch = vi.spyOn(sessionDispatchService, 'tryDispatchNextMessage').mockResolvedValue();
-    const resume = vi
-      .spyOn(sessionDispatchService, 'setManualDispatchResume')
-      .mockImplementation(() => undefined);
-    const reset = vi
-      .spyOn(sessionDispatchService, 'resetDispatchState')
-      .mockImplementation(() => undefined);
-
-    await chatMessageHandlerService.tryDispatchNextMessage('session-1', {
-      bypassTurnInProgressBackoff: true,
+    const resume = vi.spyOn(sessionDispatchService, 'setManualDispatchResume');
+    const reset = vi.spyOn(sessionDispatchService, 'resetDispatchState');
+    const stop = vi.spyOn(sessionLifecycleService, 'stopSession').mockResolvedValue();
+    vi.spyOn(sessionBackgroundDeliveryService, 'captureResumeGuard').mockReturnValue(() => true);
+    vi.spyOn(sessionBackgroundDeliveryService, 'userResume').mockResolvedValue();
+    const socket = unsafeCoerce<Parameters<typeof chatMessageHandlerService.handleMessage>[0]>({
+      send: vi.fn(),
     });
-    chatMessageHandlerService.setManualDispatchResume('session-1', true);
-    chatMessageHandlerService.resetDispatchState('session-1');
 
-    expect(dispatch).toHaveBeenCalledExactlyOnceWith('session-1', {
-      bypassTurnInProgressBackoff: true,
+    await chatMessageHandlerService.handleMessage(socket, 'queued-session', '/tmp/worktree', {
+      type: 'queue_message',
+      id: 'user-message',
+      text: 'hello from the user',
     });
-    expect(resume).toHaveBeenCalledExactlyOnceWith('session-1', true);
-    expect(reset).toHaveBeenCalledExactlyOnceWith('session-1');
+    expect(sessionDomainService.peekNextMessage('queued-session')).toMatchObject({
+      id: 'user-message',
+      text: 'hello from the user',
+    });
+    await chatMessageHandlerService.handleMessage(socket, 'queued-session', '/tmp/worktree', {
+      type: 'resume_queued_messages',
+    });
+    await chatMessageHandlerService.handleMessage(socket, 'queued-session', '/tmp/worktree', {
+      type: 'stop',
+    });
+
+    expect(dispatch.mock.calls).toEqual([
+      ['queued-session'],
+      ['queued-session'],
+      ['queued-session'],
+    ]);
+    expect(resume).toHaveBeenCalledExactlyOnceWith('queued-session', true);
+    expect(stop).toHaveBeenCalledExactlyOnceWith('queued-session', { reason: 'USER_STOP' });
+    expect(reset).toHaveBeenCalledExactlyOnceWith('queued-session');
+    expect(stop.mock.invocationCallOrder[0]).toBeLessThan(reset.mock.invocationCallOrder[0]!);
+    expect(sessionDomainService.peekNextMessage('queued-session')?.id).toBe('user-message');
   });
 
   it('composes browse startup through the real startup coordinator', async () => {

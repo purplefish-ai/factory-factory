@@ -253,7 +253,7 @@ async function queueRecipients(
     recipients.add(recipient);
   }
   for (const sessionId of recipients) {
-    void services.chatMessageHandlerService
+    void services.sessionDispatchService
       .tryDispatchNextMessage(sessionId)
       .catch((error) => logger.warn('PR queue dispatch deferred', { workspaceId, error }));
   }

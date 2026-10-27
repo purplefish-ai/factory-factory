@@ -152,7 +152,7 @@ function createCaller(requestTrust?: {
           mockResolveProviderForWorkspaceCreation(explicitProvider),
       }
     ),
-    chatMessageHandlerService: Object.assign({}, fakeGraph.services.chatMessageHandlerService, {
+    sessionDispatchService: Object.assign({}, fakeGraph.services.sessionDispatchService, {
       tryDispatchNextMessage: (...args: unknown[]) => mockTryDispatchNextMessage(...args),
     }),
     workspaceDataService: Object.assign(

@@ -1,6 +1,6 @@
 import { createLogger } from '@/backend/services/logger.service';
 import {
-  chatMessageHandlerService,
+  sessionDispatchService,
   sessionDataService,
   sessionDomainService,
 } from '@/backend/services/session';
@@ -38,8 +38,18 @@ export interface DeliverWorkspaceNotificationInput {
   buildUiEvent: (context: WorkspaceNotificationUiEventContext) => AgentMessage;
 }
 
+interface WorkspaceNotificationDispatchDependencies {
+  sessionDispatch: Pick<typeof sessionDispatchService, 'tryDispatchNextMessage'>;
+}
+
+const defaultWorkspaceNotificationDispatchDependencies: WorkspaceNotificationDispatchDependencies =
+  {
+    sessionDispatch: sessionDispatchService,
+  };
+
 export async function deliverWorkspaceNotification(
-  input: DeliverWorkspaceNotificationInput
+  input: DeliverWorkspaceNotificationInput,
+  dependencies: WorkspaceNotificationDispatchDependencies = defaultWorkspaceNotificationDispatchDependencies
 ): Promise<{ delivered: boolean }> {
   const notification =
     input.direction === 'CHILD_TO_PARENT'
@@ -113,7 +123,7 @@ export async function deliverWorkspaceNotification(
   // docs/design/multi-child-workspace-duplicate-messages-analysis.md, H1). Returning
   // as soon as the message is durably queued keeps the mutation fast; the detached
   // dispatch delivers the already-persisted, already-enqueued notification.
-  void chatMessageHandlerService.tryDispatchNextMessage(activeSession.id).catch((error) => {
+  void dependencies.sessionDispatch.tryDispatchNextMessage(activeSession.id).catch((error) => {
     logger.warn('deliverWorkspaceNotification: detached dispatch failed', {
       direction: input.direction,
       notificationId: notification.id,

@@ -49,7 +49,7 @@ vi.mock('@/backend/services/session', () => ({
   },
   sessionDomainService: { getPendingInteractiveRequest: mocks.interaction },
   sessionLifecycleService: {},
-  chatMessageHandlerService: { tryDispatchNextMessage: mocks.dispatch },
+  sessionDispatchService: { tryDispatchNextMessage: mocks.dispatch },
   sessionBackgroundDeliveryService: {
     invalidate: mocks.invalidate,
     enqueue: mocks.enqueue,

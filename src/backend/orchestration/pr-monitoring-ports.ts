@@ -2,7 +2,7 @@ import type { configService } from '@/backend/services/config.service';
 import type { ratchetService } from '@/backend/services/ratchet';
 import type {
   acpRuntimeManager,
-  chatMessageHandlerService,
+  sessionDispatchService,
   findPRDeliveryReceipt,
   sessionBackgroundDeliveryService,
   sessionDataService,
@@ -62,7 +62,7 @@ export type PRDeliveryPorts = PRDedicatedSessionPorts &
     // Freshness is a delivery prerequisite; the producer and its fetcher stay behind this port.
     refreshObservation: (target: PRTarget) => Promise<boolean>;
     sessionDomainService: Pick<typeof sessionDomainService, 'getPendingInteractiveRequest'>;
-    chatMessageHandlerService: Pick<typeof chatMessageHandlerService, 'tryDispatchNextMessage'>;
+    sessionDispatchService: Pick<typeof sessionDispatchService, 'tryDispatchNextMessage'>;
     userSettingsService: Pick<typeof userSettingsService, 'get'>;
     workspacePrSnapshotService: Pick<typeof workspacePrSnapshotService, 'find'>;
     ratchetService: Pick<typeof ratchetService, 'emit'>;

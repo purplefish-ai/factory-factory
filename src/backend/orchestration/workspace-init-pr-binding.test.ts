@@ -2,7 +2,7 @@
 import './workspace-init.test-harness';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  chatMessageHandlerService,
+  sessionDispatchService,
   sessionDataService,
   sessionDomainService,
   sessionLifecycleService,
@@ -44,7 +44,7 @@ describe('workspace startup PR binding recovery', () => {
       expect(bindIssueMonitoringSession).toHaveBeenLastCalledWith(WORKSPACE_ID, 'session-main');
       expect(sessionLifecycleService.startSession).toHaveBeenCalledTimes(1);
       expect(sessionDomainService.enqueue).toHaveBeenCalledTimes(1);
-      expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledTimes(2);
+      expect(sessionDispatchService.tryDispatchNextMessage).toHaveBeenCalledTimes(2);
       expect(sessionDataService.findAgentSessionsByWorkspaceId).toHaveBeenCalledTimes(1);
       expect(mockLogger.warn).not.toHaveBeenCalledWith(
         'Failed to auto-start default Claude session for workspace',
@@ -76,7 +76,7 @@ describe('workspace-ready recovery selection', () => {
         WORKSPACE_ID,
         'ordinary-session'
       );
-      expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledExactlyOnceWith(
+      expect(sessionDispatchService.tryDispatchNextMessage).toHaveBeenCalledExactlyOnceWith(
         'ordinary-session'
       );
       expect(sessionDataService.findAgentSessionsByWorkspaceId).toHaveBeenCalledWith(WORKSPACE_ID, {
@@ -100,7 +100,7 @@ describe('workspace-ready recovery selection', () => {
       ]);
     await retryQueuedDispatchAfterWorkspaceReady(WORKSPACE_ID, null);
     expect(bindIssueMonitoringSession).toHaveBeenCalledExactlyOnceWith(WORKSPACE_ID, 'idle-main');
-    expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledExactlyOnceWith(
+    expect(sessionDispatchService.tryDispatchNextMessage).toHaveBeenCalledExactlyOnceWith(
       'idle-main'
     );
     expect(sessionDataService.findAgentSessionsByWorkspaceId).toHaveBeenCalledWith(WORKSPACE_ID, {
@@ -122,7 +122,7 @@ describe('workspace-ready recovery selection', () => {
       ]);
     await retryQueuedDispatchAfterWorkspaceReady(WORKSPACE_ID, null);
     expect(bindIssueMonitoringSession).not.toHaveBeenCalled();
-    expect(chatMessageHandlerService.tryDispatchNextMessage).not.toHaveBeenCalled();
+    expect(sessionDispatchService.tryDispatchNextMessage).not.toHaveBeenCalled();
     expect(sessionLifecycleService.startSession).not.toHaveBeenCalled();
   });
 });

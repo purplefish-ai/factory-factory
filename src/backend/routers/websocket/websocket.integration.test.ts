@@ -235,7 +235,6 @@ function createChatAppContext(worktreeBaseDir: string) {
       },
       chatMessageHandlerService: {
         handleMessage: vi.fn(),
-        tryDispatchNextMessage: vi.fn(),
       },
       configService: {
         ...createConfigService(),

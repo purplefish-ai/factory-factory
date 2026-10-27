@@ -20,8 +20,8 @@ export function createPRDeliveryPorts(services: PRMonitoringServices): PRDeliver
     get acpRuntimeManager() {
       return services.acpRuntimeManager;
     },
-    get chatMessageHandlerService() {
-      return services.chatMessageHandlerService;
+    get sessionDispatchService() {
+      return services.sessionDispatchService;
     },
     get findPRDeliveryReceipt() {
       return services.findPRDeliveryReceipt;

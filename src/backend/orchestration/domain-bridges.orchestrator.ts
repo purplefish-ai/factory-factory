@@ -25,7 +25,7 @@ import type { startupScriptService } from '@/backend/services/run-script';
 import type {
   acpRuntimeManager,
   chatEventForwarderService,
-  chatMessageHandlerService,
+  sessionDispatchService,
   sessionDataService,
   sessionDomainService,
   sessionLifecycleService,
@@ -65,7 +65,10 @@ import type { PeriodicTaskLaunchSource, WorkspaceLauncher } from './workspace-la
 export type BridgeServices = PRMonitoringServices & {
   autoIterationService: typeof autoIterationService;
   chatEventForwarderService: typeof chatEventForwarderService;
-  chatMessageHandlerService: typeof chatMessageHandlerService;
+  sessionDispatchService: Pick<
+    typeof sessionDispatchService,
+    'configure' | 'tryDispatchNextMessage'
+  >;
   createLogger: typeof createLogger;
   getWorkspaceInitPolicy: typeof getWorkspaceInitPolicy;
   githubCLIService: typeof githubCLIService;
@@ -102,7 +105,7 @@ export function configureDomainBridges(services: BridgeServices): void {
     acpRuntimeManager,
     autoIterationService,
     chatEventForwarderService,
-    chatMessageHandlerService,
+    sessionDispatchService,
     createLogger,
     getWorkspaceInitPolicy,
     githubCLIService,
@@ -227,7 +230,7 @@ export function configureDomainBridges(services: BridgeServices): void {
     workspace: sessionWorkspaceBridge,
     messageQueue: {
       tryDispatchNextMessage: (sessionId) =>
-        chatMessageHandlerService.tryDispatchNextMessage(sessionId),
+        sessionDispatchService.tryDispatchNextMessage(sessionId),
     },
     autoIterationExit: {
       onAutoIterationSessionExit: (workspaceId, sessionId) =>
@@ -235,13 +238,13 @@ export function configureDomainBridges(services: BridgeServices): void {
     },
   });
 
-  chatMessageHandlerService.configure({
+  sessionDispatchService.configure({
     initPolicy: {
       getWorkspaceInitPolicy: (input) => getWorkspaceInitPolicy(input as WorkspaceInitPolicyInput),
     },
   });
   sessionPromptTurnCompletionService.setHandler((sessionId) =>
-    chatMessageHandlerService.tryDispatchNextMessage(sessionId, {
+    sessionDispatchService.tryDispatchNextMessage(sessionId, {
       bypassTurnInProgressBackoff: true,
     })
   );

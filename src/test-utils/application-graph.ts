@@ -124,6 +124,7 @@ vi.mock('@/backend/services/session', () => ({
   acpTraceLogger: {},
   chatEventForwarderService: {},
   chatMessageHandlerService: {},
+  sessionDispatchService: {},
   claudeModelCatalogService: { getModels: vi.fn() },
   codexModelCatalogService: { getModels: vi.fn() },
   providerUsageService: { getUsage: vi.fn() },
@@ -245,6 +246,7 @@ import {
   acpTraceLogger,
   chatEventForwarderService,
   chatMessageHandlerService,
+  sessionDispatchService,
   claudeModelCatalogService,
   codexModelCatalogService,
   providerUsageService,
@@ -354,6 +356,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     archiveWorkspace,
     chatEventForwarderService: graphChatEventForwarderService,
     chatMessageHandlerService,
+    sessionDispatchService,
     checkGithubAuth,
     cleanupWorkspaceRuntimeResources,
     cleanupWorkspaceScopedCaches: (workspaceId: string) =>

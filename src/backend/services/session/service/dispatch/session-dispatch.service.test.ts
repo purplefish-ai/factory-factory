@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ChatMessageHandlerService } from '@/backend/services/session/service/chat/chat-message-handlers.service';
 import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type { QueuedMessage } from '@/shared/acp-protocol';
@@ -53,9 +52,10 @@ function harness(policy: 'allowed' | 'manual_resume' = 'allowed') {
       complete: vi.fn(),
     },
   });
-  const handler = new ChatMessageHandlerService(dispatcher);
-  handler.configure({ initPolicy: { getWorkspaceInitPolicy: () => ({ dispatchPolicy: policy }) } });
-  handler.configureLifecycle({
+  dispatcher.configure({
+    initPolicy: { getWorkspaceInitPolicy: () => ({ dispatchPolicy: policy }) },
+  });
+  dispatcher.configureLifecycle({
     gate: {
       getGeneration: () => generation,
       isGenerationCurrent: (_sessionId, expected) => expected === generation,
@@ -77,7 +77,6 @@ function harness(policy: 'allowed' | 'manual_resume' = 'allowed') {
   );
   return {
     dispatcher,
-    handler,
     sendSessionMessage,
     startup,
     stop: () => {
@@ -92,9 +91,9 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('session dispatcher shared with the chat facade', () => {
-  it('keeps the queued message visible until startup finishes across both entry points', async () => {
-    const { dispatcher, handler, startup, sendSessionMessage } = harness();
+describe('session dispatcher queue and lifecycle coordination', () => {
+  it('keeps the queued message visible until startup finishes across repeated dispatch requests', async () => {
+    const { dispatcher, startup, sendSessionMessage } = harness();
     const message = enqueue('first');
     const started = deferred();
     startup.getSessionClient.mockReturnValue(undefined);
@@ -103,7 +102,7 @@ describe('session dispatcher shared with the chat facade', () => {
       startup.getSessionClient.mockReturnValue({});
       return {};
     });
-    const pending = handler.tryDispatchNextMessage('session');
+    const pending = dispatcher.tryDispatchNextMessage('session');
     await vi.waitFor(() => expect(startup.getOrCreateSessionClient).toHaveBeenCalledOnce());
     await dispatcher.tryDispatchNextMessage('session');
     expect(sessionDomainService.peekNextMessage('session')).toBe(message);
@@ -114,28 +113,28 @@ describe('session dispatcher shared with the chat facade', () => {
     expect(sessionDomainService.peekNextMessage('session')).toBeUndefined();
   });
 
-  it('does not let an old completion unlock a replacement dispatch started directly', async () => {
-    const { dispatcher, handler, sendSessionMessage, stop } = harness();
+  it('does not let an old completion unlock a replacement dispatch after lifecycle reset', async () => {
+    const { dispatcher, sendSessionMessage, stop } = harness();
     const first = deferred();
     const second = deferred();
     sendSessionMessage.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
     enqueue('first');
-    const oldDispatch = handler.tryDispatchNextMessage('session');
+    const oldDispatch = dispatcher.tryDispatchNextMessage('session');
     await vi.waitFor(() => expect(sendSessionMessage).toHaveBeenCalledTimes(1));
     stop();
-    handler.resetDispatchState('session');
+    dispatcher.resetDispatchState('session');
     enqueue('second');
     const replacement = dispatcher.tryDispatchNextMessage('session');
     await vi.waitFor(() => expect(sendSessionMessage).toHaveBeenCalledTimes(2));
     first.resolve();
     await oldDispatch;
     const third = enqueue('third');
-    await handler.tryDispatchNextMessage('session');
+    await dispatcher.tryDispatchNextMessage('session');
     expect(sendSessionMessage).toHaveBeenCalledTimes(2);
     expect(sessionDomainService.peekNextMessage('session')).toBe(third);
     second.resolve();
     await replacement;
-    await handler.tryDispatchNextMessage('session');
+    await dispatcher.tryDispatchNextMessage('session');
     expect(sendSessionMessage.mock.calls).toEqual([
       ['session', 'first'],
       ['session', 'second'],
@@ -143,19 +142,19 @@ describe('session dispatcher shared with the chat facade', () => {
     ]);
   });
 
-  it('shares manual resume with direct dispatch and preserves it when dispatch state resets', async () => {
-    const { dispatcher, handler, sendSessionMessage } = harness('manual_resume');
+  it('preserves manual resume across dispatch requests and preserves it when dispatch state resets', async () => {
+    const { dispatcher, sendSessionMessage } = harness('manual_resume');
     const message = enqueue('first');
     await dispatcher.tryDispatchNextMessage('session');
     expect(sessionDomainService.peekNextMessage('session')).toBe(message);
-    handler.setManualDispatchResume('session', true);
+    dispatcher.setManualDispatchResume('session', true);
     await dispatcher.tryDispatchNextMessage('session');
-    handler.resetDispatchState('session');
+    dispatcher.resetDispatchState('session');
     enqueue('second');
     await dispatcher.tryDispatchNextMessage('session');
     dispatcher.setManualDispatchResume('session', false);
     const third = enqueue('third');
-    await handler.tryDispatchNextMessage('session');
+    await dispatcher.tryDispatchNextMessage('session');
     expect(sendSessionMessage.mock.calls).toEqual([
       ['session', 'first'],
       ['session', 'second'],
@@ -163,20 +162,20 @@ describe('session dispatcher shared with the chat facade', () => {
     expect(sessionDomainService.peekNextMessage('session')).toBe(third);
   });
 
-  it('shares busy backoff and cancels its retry timer through the facade reset', async () => {
+  it('shares busy backoff and cancels its retry timer through dispatch-state reset', async () => {
     vi.useFakeTimers();
-    const { dispatcher, handler, sendSessionMessage } = harness();
+    const { dispatcher, sendSessionMessage } = harness();
     sendSessionMessage.mockRejectedValueOnce(
       new Error('A turn is already in progress for this session')
     );
     const message = enqueue('first');
     await dispatcher.tryDispatchNextMessage('session');
-    await handler.tryDispatchNextMessage('session');
+    await dispatcher.tryDispatchNextMessage('session');
     expect(sendSessionMessage).toHaveBeenCalledOnce();
     expect(sessionDomainService.peekNextMessage('session')).toBe(message);
     await vi.advanceTimersByTimeAsync(999);
     expect(sendSessionMessage).toHaveBeenCalledOnce();
-    handler.resetDispatchState('session');
+    dispatcher.resetDispatchState('session');
     await vi.advanceTimersByTimeAsync(30_000);
     expect(sendSessionMessage).toHaveBeenCalledOnce();
     await dispatcher.tryDispatchNextMessage('session');
