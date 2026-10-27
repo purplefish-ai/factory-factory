@@ -46,7 +46,7 @@ function deriveLastActivityAt(workspace: {
   const sessionDates = [
     ...(workspace.agentSessions?.map((session) => session.updatedAt) ?? []),
     ...(workspace.terminalSessions?.map((session) => session.updatedAt) ?? []),
-  ].filter(Boolean);
+  ].filter((date) => Number.isFinite(date?.getTime()));
 
   if (sessionDates.length === 0) {
     return null;

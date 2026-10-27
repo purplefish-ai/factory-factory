@@ -245,7 +245,7 @@ export class SnapshotReconciliationService {
     const sessionDates = [
       ...(ws.agentSessions?.map((s) => s.updatedAt) ?? []),
       ...(ws.terminalSessions?.map((s) => s.updatedAt) ?? []),
-    ].filter(Boolean) as Date[];
+    ].filter((date) => Number.isFinite(date?.getTime())) as Date[];
 
     const lastActivityAt =
       sessionDates.length > 0
