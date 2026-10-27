@@ -151,7 +151,7 @@ export const voiceRouter = router({
   updateConfig: trustedLocalProcedure
     .input(
       z.object({
-        enabled: z.boolean(),
+        enabled: z.boolean().optional(),
         apiKey: z.string().trim().min(1).optional(),
         ttsModel: z
           .string()

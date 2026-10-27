@@ -68,6 +68,7 @@ type CommittedNotificationMatch = {
 
 type ActiveDispatchClaim = {
   sessionId: string;
+  notificationId: string;
 };
 
 export class SessionNotificationDeliveryService {
@@ -76,6 +77,9 @@ export class SessionNotificationDeliveryService {
   private readonly transcriptPort: NotificationTranscriptPort;
   private readonly deltaPort: NotificationDeltaPort;
   private readonly dispatchClaims = new Map<string, ActiveDispatchClaim>();
+  // A reset transfers dispatch ownership, but the old send can still reject and
+  // roll back its provisional transcript entry. Retain that evidence until release.
+  private readonly unsettledDispatchClaims = new Set<ActiveDispatchClaim>();
 
   constructor(dependencies: SessionNotificationDeliveryServiceDependencies) {
     this.notificationPort = dependencies.notificationPort;
@@ -182,12 +186,14 @@ export class SessionNotificationDeliveryService {
       return { status: 'duplicate' };
     }
 
-    const claim = { sessionId };
+    const claim = { sessionId, notificationId };
     this.dispatchClaims.set(notificationId, claim);
+    this.unsettledDispatchClaims.add(claim);
     return {
       status: 'claimed',
       notificationId,
       release: () => {
+        this.unsettledDispatchClaims.delete(claim);
         if (this.dispatchClaims.get(notificationId) === claim) {
           this.dispatchClaims.delete(notificationId);
         }
@@ -284,7 +290,9 @@ export class SessionNotificationDeliveryService {
   ): CommittedNotificationMatch | undefined {
     const userEntries = this.transcriptPort
       .getTranscriptSnapshot(sessionId)
-      .filter((entry) => entry.source === 'user');
+      .filter(
+        (entry) => entry.source === 'user' && !this.isTranscriptMessageInFlight(sessionId, entry.id)
+      );
     const exactIdMatch = userEntries.find((entry) => entry.id === messageId);
     if (exactIdMatch) {
       return { id: exactIdMatch.id, matchedByContent: false };
@@ -346,7 +354,17 @@ export class SessionNotificationDeliveryService {
     }
   }
 
+  private isTranscriptMessageInFlight(sessionId: string, messageId: string): boolean {
+    const notificationId = this.getNotificationId(messageId);
+    return [...this.unsettledDispatchClaims].some(
+      (claim) => claim.sessionId === sessionId && claim.notificationId === notificationId
+    );
+  }
+
   private isNotificationCommittedToTranscript(sessionId: string, messageId: string): boolean {
+    if (this.isTranscriptMessageInFlight(sessionId, messageId)) {
+      return false;
+    }
     return this.transcriptPort
       .getTranscriptSnapshot(sessionId)
       .some((entry) => entry.source === 'user' && entry.id === messageId);

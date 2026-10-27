@@ -654,19 +654,21 @@ const DesktopLeftControls = memo(function DesktopLeftControls({
             modLabel={modLabel}
             modifierHeld={modifierHeld}
           />
-          {view.hasModeToggles && view.showAttachments && <div className="h-4 w-px bg-border" />}
-          {view.showAttachments && (
-            <FileUploadButton
-              fileInputRef={fileInputRef}
-              onFileSelect={onFileSelect}
-              supportedImageTypes={supportedImageTypes}
-              running={running}
-              disabled={disabled}
-              modLabel={modLabel}
-              modifierHeld={modifierHeld}
-            />
-          )}
         </>
+      )}
+      {(view.hasAcpConfigOptions || view.hasModeToggles) && view.showAttachments && (
+        <div className="h-4 w-px bg-border" />
+      )}
+      {view.showAttachments && (
+        <FileUploadButton
+          fileInputRef={fileInputRef}
+          onFileSelect={onFileSelect}
+          supportedImageTypes={supportedImageTypes}
+          running={running}
+          disabled={disabled}
+          modLabel={modLabel}
+          modifierHeld={modifierHeld}
+        />
       )}
       <QuickActionsDropdown
         onAction={onQuickAction}

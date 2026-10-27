@@ -27,9 +27,17 @@ Kanban Quick Chat keeps composer attachments in shared chat state, so sending,
 rejection recovery, and session restoration use the same attachments as the full
 workspace chat.
 
+Git status and base/upstream file lists decode Git's C-quoted paths, including
+UTF-8 octal escapes. Renamed status entries use the destination path for
+click-to-diff, and upstream filenames retain surrounding spaces.
+
 Unified diff parsing removes the terminating stdout newline before splitting
 lines, preserving real blank context lines without fabricating a final row or
 line number in the workspace viewer or PR panel.
+
+Workspace terminal reconnects replace each existing tab's output with its server
+rolling buffer by terminal ID. Tab identity and selection are preserved; output
+outside the server's bounded buffer cannot be recovered.
 
 ## Run script
 

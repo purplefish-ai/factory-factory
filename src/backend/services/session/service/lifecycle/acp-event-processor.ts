@@ -13,11 +13,7 @@ import { acpTraceLogger } from '@/backend/services/session/service/logging/acp-t
 import { sessionFileLogger } from '@/backend/services/session/service/logging/session-file-logger.service';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { slashCommandCacheService } from '@/backend/services/session/service/store/slash-command-cache.service';
-import {
-  commandNameKey,
-  isWorkspaceScopedCommandName,
-  scanClaudeWorkspaceCommandNames,
-} from '@/backend/services/session/service/store/slash-command-disk-scanner';
+import { isWorkspaceScopedCommandName } from '@/backend/services/session/service/store/slash-command-disk-scanner';
 import type { AgentMessage, CommandInfo, SessionDeltaEvent } from '@/shared/acp-protocol';
 import type { SessionConfigService } from './session.config.service';
 import { toPublicProviderErrorMessage } from './session.error-message';
@@ -396,7 +392,7 @@ export class AcpEventProcessor {
       return;
     }
 
-    const cacheableCommands = this.getCacheableSlashCommands(sid, provider, commands);
+    const cacheableCommands = this.getCacheableSlashCommands(provider, commands);
     slashCommandCacheService
       .setCachedCommands(provider, cacheableCommands)
       .catch((err: unknown) => {
@@ -405,7 +401,6 @@ export class AcpEventProcessor {
   }
 
   private getCacheableSlashCommands(
-    sessionId: string,
     provider: 'CLAUDE' | 'CODEX',
     commands: CommandInfo[]
   ): CommandInfo[] {
@@ -413,20 +408,7 @@ export class AcpEventProcessor {
       return commands;
     }
 
-    const workspaceCommandNames = scanClaudeWorkspaceCommandNames(
-      this.sessionToWorkingDir.get(sessionId) ?? null
-    );
-    if (workspaceCommandNames.size === 0) {
-      return commands;
-    }
-
-    return commands.filter(
-      (command) =>
-        !(
-          isWorkspaceScopedCommandName(command.name) &&
-          workspaceCommandNames.has(commandNameKey(command.name))
-        )
-    );
+    return commands.filter((command) => !isWorkspaceScopedCommandName(command.name));
   }
 
   /**

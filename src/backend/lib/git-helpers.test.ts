@@ -2,6 +2,24 @@ import { describe, expect, it } from 'vitest';
 import { parseGitStatusOutput, parseNumstatOutput } from './git-helpers';
 
 describe('parseGitStatusOutput', () => {
+  it('decodes C-quoted filenames, including UTF-8 bytes and escaped characters', () => {
+    expect(
+      parseGitStatusOutput(
+        ' M "file with spaces.txt"\n M "r\\303\\251sum\\303\\251.txt"\n?? "quote\\"tab\\t.txt"\n'
+      )
+    ).toEqual([
+      { path: 'file with spaces.txt', status: 'M', staged: false },
+      { path: 'résumé.txt', status: 'M', staged: false },
+      { path: 'quote"tab\t.txt', status: '?', staged: false },
+    ]);
+  });
+
+  it('uses the decoded destination of a renamed file', () => {
+    expect(
+      parseGitStatusOutput('R  "old -> name.txt" -> "new r\\303\\251sum\\303\\251.txt"\n')
+    ).toEqual([{ path: 'new résumé.txt', status: 'M', staged: true }]);
+  });
+
   it('should parse staged modified files', () => {
     const output = 'M  src/file.ts\n';
     const result = parseGitStatusOutput(output);

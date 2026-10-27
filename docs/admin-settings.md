@@ -90,3 +90,9 @@ open so you can correct the configuration or retry.
 Relative log time ranges use minute boundaries and advance automatically while
 the page polls every ten seconds. Rendering or expanding a log row does not
 trigger another request. Custom date ranges keep their selected day boundaries.
+
+## Voice mode
+
+Voice, speed, sensitivity, and API-key changes save independently. Only the
+**Enable voice mode** switch changes whether voice mode is enabled, so another
+open tab can tune settings without overwriting that switch.

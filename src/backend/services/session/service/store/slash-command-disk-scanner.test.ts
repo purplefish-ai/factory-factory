@@ -21,6 +21,34 @@ describe('slash command disk scanner', () => {
     }
   });
 
+  it('restores nested commands and preserves their namespaces', () => {
+    const worktreePath = mkdtempSync(join(tmpdir(), 'ff-nested-commands-'));
+    tempDirs.push(worktreePath);
+    const commandsPath = join(worktreePath, '.claude', 'commands');
+    mkdirSync(commandsPath, { recursive: true });
+    writeFileSync(join(commandsPath, 'deploy.md'), '---\ndescription: root\n---\n');
+    for (const namespace of ['team', 'release', 'user']) {
+      mkdirSync(join(commandsPath, namespace), { recursive: true });
+      writeFileSync(
+        join(commandsPath, namespace, 'deploy.md'),
+        `---\ndescription: ${namespace}\n---\n`
+      );
+    }
+    const escapedPath = mkdtempSync(join(tmpdir(), 'ff-escaped-nested-'));
+    tempDirs.push(escapedPath);
+    writeFileSync(join(escapedPath, 'foreign.md'), 'Foreign');
+    symlinkSync(escapedPath, join(commandsPath, 'external'));
+    symlinkSync(commandsPath, join(commandsPath, 'cycle'));
+    expect(
+      scanClaudeWorkspaceCommandsFromDisk(worktreePath).sort((a, b) => a.name.localeCompare(b.name))
+    ).toEqual([
+      { name: 'deploy', description: 'root' },
+      { name: 'release:deploy', description: 'release' },
+      { name: 'team:deploy', description: 'team' },
+      { name: 'user:deploy', description: 'user' },
+    ]);
+  });
+
   it('does not scan workspace command directories that resolve outside the worktree', () => {
     const worktreePath = mkdtempSync(join(tmpdir(), 'ff-worktree-commands-'));
     const escapedCommandsPath = mkdtempSync(join(tmpdir(), 'ff-escaped-commands-'));

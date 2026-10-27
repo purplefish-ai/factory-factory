@@ -8,6 +8,7 @@ import {
   parseNumstatOutput,
 } from '@/backend/lib/git-helpers';
 import { type ExecResult, gitCommand } from '@/backend/lib/shell';
+import { decodeGitPath } from '@/shared/git-path';
 
 export interface WorkspaceGitStateInput {
   worktreePath: string;
@@ -173,7 +174,9 @@ function parseNameStatus(
   const deleted: WorkspaceGitStateSnapshot['base']['deleted'] = [];
 
   for (const line of output.split('\n')) {
-    const [rawStatus, filePath, destinationPath] = line.split('\t');
+    const [rawStatus, rawPath, rawDestinationPath] = line.split('\t');
+    const filePath = decodeGitPath(rawPath ?? '');
+    const destinationPath = rawDestinationPath ? decodeGitPath(rawDestinationPath) : undefined;
     if (!filePath) {
       continue;
     }
@@ -705,8 +708,8 @@ export class WorkspaceGitStateService {
       hasUpstream: true,
       files: diffResult.stdout
         .split('\n')
-        .map((line) => line.trim())
-        .filter(Boolean),
+        .filter((line) => line.length > 0)
+        .map(decodeGitPath),
     };
   }
 }

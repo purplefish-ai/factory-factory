@@ -142,7 +142,7 @@ describe('parseGitStatusOutput', () => {
       const result = parseGitStatusOutput(output);
 
       expect(result).toHaveLength(1);
-      expect(result[0]!.path).toBe('"file with spaces.txt"');
+      expect(result[0]!.path).toBe('file with spaces.txt');
     });
 
     it('should handle dotfiles', () => {
@@ -239,8 +239,8 @@ describe('parseGitStatusOutput', () => {
       const result = parseGitStatusOutput(output);
 
       expect(result).toHaveLength(1);
-      // The current implementation treats R as modified (falls through to else)
-      expect(result[0]!.path).toBe('old.txt -> new.txt');
+      // Renames address the destination path when opening a diff.
+      expect(result[0]!.path).toBe('new.txt');
       expect(result[0]!.staged).toBe(true);
     });
   });
@@ -251,7 +251,7 @@ describe('parseGitStatusOutput', () => {
       const result = parseGitStatusOutput(output);
 
       expect(result).toHaveLength(1);
-      expect(result[0]!.path).toBe('source.txt -> dest.txt');
+      expect(result[0]!.path).toBe('dest.txt');
       expect(result[0]!.staged).toBe(true);
     });
   });
