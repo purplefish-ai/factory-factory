@@ -22,6 +22,7 @@ export async function fetchCodexPlanUsage(): Promise<PlanUsageReading> {
   const child = spawn(command.command, command.args, {
     cwd: tmpdir(),
     detached: process.platform !== 'win32',
+    windowsHide: true,
     env: {
       ...getCurrentProcessEnv(),
       ELECTRON_RUN_AS_NODE: '1',

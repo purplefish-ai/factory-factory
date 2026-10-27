@@ -92,6 +92,7 @@ it('reads real ChatGPT quota without creating threads or model turns and closes 
     expect.objectContaining({
       cwd: tmpdir(),
       detached: process.platform !== 'win32',
+      windowsHide: true,
       env: expect.objectContaining({ ELECTRON_RUN_AS_NODE: '1' }),
       stdio: ['pipe', 'pipe', 'pipe'],
     })
@@ -284,7 +285,7 @@ it('uses bounded Windows tree termination for the directly owned native runtime'
     expect(mocks.spawn).toHaveBeenCalledWith(
       'C:\u005ccodex.exe',
       ['app-server'],
-      expect.objectContaining({ detached: false })
+      expect.objectContaining({ detached: false, windowsHide: true })
     );
     expect(mocks.execFile).toHaveBeenCalledWith(
       'taskkill',
