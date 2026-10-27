@@ -289,11 +289,11 @@ class EventCollectorState {
     Pick<PRSnapshotUpdatedEvent, 'prNumber' | 'prUrl'> & {
       status: 'pending' | 'running' | 'completed';
       retryRequested: boolean;
+      retryProjection?: Pick<SnapshotUpdateInput, 'prSummary' | 'prState'>;
     }
   >();
   teardownListeners: Array<() => void> = [];
   ratchetProjection: RatchetProjectionWorker | null = null;
-  prProjection: RatchetProjectionWorker | null = null;
 
   constructor(readonly dependencies: Readonly<EventCollectorDependencies>) {
     this.logger = dependencies.createLogger('event-collector');
@@ -435,10 +435,23 @@ function buildWorkspaceStateChangeFields(event: WorkspaceStateChangedEvent): Sna
 // Linear state sync on PR merge
 // ---------------------------------------------------------------------------
 
+function getLinearCompletionProjection(
+  state: EventCollectorState,
+  workspaceId: string,
+  acceptedProjection?: Pick<SnapshotUpdateInput, 'prSummary' | 'prState'>
+) {
+  // Association-aware effects use the accepted worker projection. Legacy
+  // no-prId events keep their independent read/null-row compatibility gate.
+  return acceptedProjection
+    ? Promise.resolve(acceptedProjection)
+    : state.dependencies.workspaceDataService.findRatchetProjection(workspaceId);
+}
+
 async function handleLinearIssueCompletedOnMerge(
   state: EventCollectorState,
   workspaceId: string,
-  prIdentity: Pick<PRSnapshotUpdatedEvent, 'prNumber' | 'prUrl'>
+  prIdentity: Pick<PRSnapshotUpdatedEvent, 'prNumber' | 'prUrl'>,
+  acceptedProjection?: Pick<SnapshotUpdateInput, 'prSummary' | 'prState'>
 ): Promise<void> {
   const previous = state.linearMergeCompletions.get(workspaceId);
   if (
@@ -450,16 +463,15 @@ async function handleLinearIssueCompletedOnMerge(
       return;
     }
   }
-  const attempt = {
+  const attempt: NonNullable<ReturnType<EventCollectorState['linearMergeCompletions']['get']>> = {
     ...prIdentity,
-    status: 'running' as 'pending' | 'running' | 'completed',
+    status: 'running',
     retryRequested: false,
   };
   state.linearMergeCompletions.set(workspaceId, attempt);
   let completed = false;
   try {
-    const projection =
-      await state.dependencies.workspaceDataService.findRatchetProjection(workspaceId);
+    const projection = await getLinearCompletionProjection(state, workspaceId, acceptedProjection);
     if (projection && (projection.prSummary?.state ?? projection.prState) !== 'MERGED') {
       attempt.status = 'pending';
       return;
@@ -501,18 +513,23 @@ function finishLinearCompletionAttempt(
     return;
   }
   if (attempt.status === 'pending' && attempt.retryRequested) {
-    void handleLinearIssueCompletedOnMerge(state, workspaceId, attempt);
+    void handleLinearIssueCompletedOnMerge(state, workspaceId, attempt, attempt.retryProjection);
   } else if (!completed && attempt.status !== 'pending') {
     state.linearMergeCompletions.delete(workspaceId);
   }
 }
 
-function retryDeferredLinearCompletion(state: EventCollectorState, workspaceId: string): void {
+function retryDeferredLinearCompletion(
+  state: EventCollectorState,
+  workspaceId: string,
+  acceptedProjection?: Pick<SnapshotUpdateInput, 'prSummary' | 'prState'>
+): void {
   const pending = state.linearMergeCompletions.get(workspaceId);
   if (pending?.status === 'pending') {
-    void handleLinearIssueCompletedOnMerge(state, workspaceId, pending);
+    void handleLinearIssueCompletedOnMerge(state, workspaceId, pending, acceptedProjection);
   } else if (pending?.status === 'running') {
     pending.retryRequested = true;
+    pending.retryProjection = acceptedProjection;
   }
 }
 
@@ -549,51 +566,36 @@ function startEventCollectorWithState(state: EventCollectorState): void {
   state.activeCoalescer = coalescer;
   const ratchetProjection = new RatchetProjectionWorker({
     read: (workspaceId) => dependencies.workspaceDataService.findRatchetProjection(workspaceId),
-    publish: (workspaceId, fields) =>
-      coalescer.enqueue(workspaceId, fields, 'projection:ratchet_authoritative', {
-        immediate: true,
-      }),
-    logger: state.logger,
-  });
-  state.ratchetProjection = ratchetProjection;
-  const prProjection = new RatchetProjectionWorker({
-    read: async (workspaceId) => {
-      const [workspace, projection] = await Promise.all([
-        dependencies.workspaceDataService.findById(workspaceId),
-        dependencies.workspaceDataService.findRatchetProjection(workspaceId),
-      ]);
-      return workspace && projection
-        ? {
-            ...projection,
-            snapshotFields: {
-              prUrl: workspace.prUrl,
-              prNumber: workspace.prNumber,
-              prState: workspace.prState,
-              prCiStatus: workspace.prCiStatus,
-              prUpdatedAt: workspace.prUpdatedAt?.toISOString() ?? null,
-            },
-          }
-        : null;
-    },
-    publish: (workspaceId, fields) => {
+    publish: (workspaceId, fields, reasons) => {
       const previous = dependencies.workspaceSnapshotStore.getByWorkspaceId(workspaceId);
-      const shouldRefreshRatchet = shouldRefreshRatchetForPrSwitch(previous, fields);
-      coalescer.enqueue(workspaceId, fields, 'projection:pr_authoritative', { immediate: true });
+      const shouldRefreshRatchet =
+        reasons.has('pr') && shouldRefreshRatchetForPrSwitch(previous, fields);
+      coalescer.enqueue(
+        workspaceId,
+        fields,
+        reasons.has('pr') ? 'projection:pr_authoritative' : 'projection:ratchet_authoritative',
+        { immediate: true }
+      );
+      if (!reasons.has('pr')) {
+        return;
+      }
       if (shouldRefreshRatchet) {
         requestImmediateRatchetCheck(state, workspaceId);
       }
-      retryDeferredLinearCompletion(state, workspaceId);
+      retryDeferredLinearCompletion(state, workspaceId, fields);
       // A merged sibling is not workspace completion while the selected PR is open.
       if ((fields.prSummary?.state ?? fields.prState) === 'MERGED' && fields.prNumber != null) {
-        void handleLinearIssueCompletedOnMerge(state, workspaceId, {
-          prNumber: fields.prNumber,
-          prUrl: fields.prUrl,
-        });
+        void handleLinearIssueCompletedOnMerge(
+          state,
+          workspaceId,
+          { prNumber: fields.prNumber, prUrl: fields.prUrl },
+          fields
+        );
       }
     },
     logger: state.logger,
   });
-  state.prProjection = prProjection;
+  state.ratchetProjection = ratchetProjection;
   state.lastIdlePrRefreshByWorkspace.clear();
 
   const refreshPrSnapshotOnIdle = (workspaceId: string): void => {
@@ -639,7 +641,6 @@ function startEventCollectorWithState(state: EventCollectorState): void {
   const workspaceStateChangedHandler = (event: WorkspaceStateChangedEvent) => {
     if (event.toStatus === 'ARCHIVED') {
       ratchetProjection.setArchived(event.workspaceId, true);
-      prProjection.setArchived(event.workspaceId, true);
       // Immediate removal for UI feedback -- no coalescing delay
       removeWorkspaceWithState(state, event.workspaceId);
       void Promise.allSettled([
@@ -669,7 +670,6 @@ function startEventCollectorWithState(state: EventCollectorState): void {
       return;
     }
     ratchetProjection.setArchived(event.workspaceId, false);
-    prProjection.setArchived(event.workspaceId, false);
     coalescer.enqueue(
       event.workspaceId,
       buildWorkspaceStateChangeFields(event),
@@ -696,7 +696,7 @@ function startEventCollectorWithState(state: EventCollectorState): void {
         });
     }
     if (event.prId) {
-      prProjection.request(event.workspaceId);
+      ratchetProjection.request(event.workspaceId, 'pr');
       return;
     }
     const previousSnapshot = dependencies.workspaceSnapshotStore.getByWorkspaceId(
@@ -739,7 +739,7 @@ function startEventCollectorWithState(state: EventCollectorState): void {
 
   const prUrlAttachedHandler = (event: PRUrlAttachedEvent) => {
     if (event.prId) {
-      prProjection.request(event.workspaceId);
+      ratchetProjection.request(event.workspaceId, 'pr');
       return;
     }
     // No snapshot was fetched for this URL. Publish its neutral cache and drop
@@ -761,8 +761,7 @@ function startEventCollectorWithState(state: EventCollectorState): void {
   );
 
   const prDetachedHandler = (event: { workspaceId: string }) => {
-    prProjection.request(event.workspaceId);
-    retryDeferredLinearCompletion(state, event.workspaceId);
+    ratchetProjection.request(event.workspaceId, 'pr');
   };
   dependencies.prSnapshotService.on(PR_DETACHED, prDetachedHandler);
   state.teardownListeners.push(() =>
@@ -959,8 +958,6 @@ function stopEventCollectorWithState(state: EventCollectorState): void {
   }
   state.ratchetProjection?.stop();
   state.ratchetProjection = null;
-  state.prProjection?.stop();
-  state.prProjection = null;
 
   if (state.activeCoalescer) {
     state.activeCoalescer.flushAll();
