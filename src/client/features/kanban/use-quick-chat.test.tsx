@@ -14,7 +14,8 @@ vi.mock('sonner', () => ({
   },
 }));
 
-vi.mock('@/client/features/chat', () => ({
+vi.mock('@/client/features/chat', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/client/features/chat')>()),
   useChatWebSocket: vi.fn(() => ({})),
 }));
 

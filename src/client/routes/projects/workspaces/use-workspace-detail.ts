@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
+import { useSessionCollectionCommands } from '@/client/features/chat';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { isArchiveGitIndexLockedError } from '@/client/lib/workspace-archive';
@@ -158,44 +159,29 @@ export function useSessionManagement({
   const navigate = useNavigate();
   const utils = trpc.useUtils();
 
-  const createSession = trpc.session.createAndStartSession.useMutation({
-    onSuccess: (_data) => {
-      // Invalidate marks the data as stale, then immediately refetch
-      // With staleTime: 0, invalidate will trigger an immediate refetch
-      runInBackground(
-        utils.session.listSessions.invalidate({ workspaceId }),
-        'Could not refresh data'
-      );
+  const activeWorkspaceRef = useRef(workspaceId);
+  activeWorkspaceRef.current = workspaceId;
+  const {
+    createSession,
+    deleteSession,
+    createChat: handleNewChat,
+    createQuickActionAsync: handleQuickAction,
+  } = useSessionCollectionCommands({
+    workspaceId,
+    sessions,
+    // Codex uses its own model defaults instead of the Claude model selection.
+    creationDefaults: {
+      provider: selectedProvider,
+      model: selectedProvider === 'CODEX' ? undefined : selectedModel || undefined,
     },
-    onError: (error) => {
-      toast.error(error.message || 'Failed to create or start session');
-    },
-  });
-
-  const deleteSession = trpc.session.deleteSession.useMutation({
-    onMutate: async ({ id }) => {
-      // Cancel outgoing refetches so they don't overwrite our optimistic update
-      await utils.session.listSessions.cancel({ workspaceId });
-
-      // Snapshot previous value
-      const previousSessions = utils.session.listSessions.getData({ workspaceId });
-
-      // Optimistically remove the session from the list
-      utils.session.listSessions.setData({ workspaceId }, (old) => old?.filter((s) => s.id !== id));
-
-      return { previousSessions };
-    },
-    onError: (_err, _variables, context) => {
-      // Roll back on error
-      if (context?.previousSessions) {
-        utils.session.listSessions.setData({ workspaceId }, context.previousSessions);
+    onCreated: (session, originatingWorkspaceId, kind) => {
+      if (activeWorkspaceRef.current !== originatingWorkspaceId) {
+        return;
       }
-    },
-    onSettled: () => {
-      runInBackground(
-        utils.session.listSessions.invalidate({ workspaceId }),
-        'Could not refresh data'
-      );
+      setSelectedDbSessionId(session.id);
+      if (kind === 'chat') {
+        setTimeout(() => inputRef.current?.focus(), 0);
+      }
     },
   });
 
@@ -291,74 +277,6 @@ export function useSessionManagement({
       }
     },
     [sessions, selectedDbSessionId, deleteSession, setSelectedDbSessionId]
-  );
-
-  // Generate next available "Chat N" name based on existing sessions
-  const getNextChatName = useCallback(() => {
-    const existingNumbers = (sessions ?? [])
-      .map((s) => {
-        const match = s.name?.match(/^Chat (\d+)$/);
-        return match ? Number.parseInt(match[1] as string, 10) : 0;
-      })
-      .filter((n) => n > 0);
-    const nextNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : 1;
-    return `Chat ${nextNumber}`;
-  }, [sessions]);
-
-  const handleNewChat = useCallback(() => {
-    const name = getNextChatName();
-    const provider = selectedProvider;
-    // Only pass the Claude model selection for Claude sessions; Codex uses its own model defaults.
-    const model = provider === 'CODEX' ? undefined : selectedModel || undefined;
-
-    createSession.mutate(
-      {
-        workspaceId,
-        workflow: 'followup',
-        model,
-        name,
-        provider,
-        initialPrompt: '',
-      },
-      {
-        onSuccess: (session) => {
-          // Setting the new session ID triggers WebSocket reconnection automatically
-          setSelectedDbSessionId(session.id);
-          setTimeout(() => inputRef.current?.focus(), 0);
-        },
-      }
-    );
-  }, [
-    createSession,
-    workspaceId,
-    getNextChatName,
-    setSelectedDbSessionId,
-    inputRef,
-    selectedModel,
-    selectedProvider,
-  ]);
-
-  const handleQuickAction = useCallback(
-    async (name: string, prompt: string) => {
-      const provider = selectedProvider;
-      const model = provider === 'CODEX' ? undefined : selectedModel || undefined;
-      try {
-        const session = await createSession.mutateAsync({
-          workspaceId,
-          workflow: 'followup',
-          name,
-          model,
-          provider,
-          initialMessage: prompt,
-          initialPrompt: '',
-        });
-        // Setting the new session ID triggers WebSocket reconnection automatically
-        setSelectedDbSessionId(session.id);
-      } catch {
-        // The mutation's onError handler reports the failure.
-      }
-    },
-    [createSession, workspaceId, setSelectedDbSessionId, selectedModel, selectedProvider]
   );
 
   return {
