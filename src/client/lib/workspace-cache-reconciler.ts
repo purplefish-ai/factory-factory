@@ -1,7 +1,9 @@
 import { type QueryClient, queryOptions, replaceEqualDeep } from '@tanstack/react-query';
 import { getQueryKey } from '@trpc/react-query';
 import {
+  mergeProjectSnapshotIntoWorkspaceDetail,
   projectSnapshotToWorkspace,
+  type WorkspaceDetail,
   type ProjectWorkspace,
 } from '@/client/lib/snapshot-to-workspace';
 import { trpc } from '@/client/lib/trpc';
@@ -19,8 +21,10 @@ export interface WorkspaceConnection {
 /** Coordinates the existing query cache; it is not another rendered data store. */
 export class ProjectWorkspaceCacheReconciler {
   private connection: WorkspaceConnection | undefined;
-  private epoch = Symbol('http');
-  private entries: Map<string, WorkspaceSnapshotEntry> | undefined;
+  private readonly initialEpoch = Symbol('http');
+  private epoch = this.initialEpoch;
+  private entries = new Map<string, WorkspaceSnapshotEntry>();
+  private hasBaseline = false;
   private reviewCount: number | undefined;
   private readonly httpResults = new WeakMap<
     object,
@@ -40,7 +44,8 @@ export class ProjectWorkspaceCacheReconciler {
       this.epoch = Symbol('connection');
     }
     this.connection = { identity: this.epoch };
-    this.entries = undefined;
+    this.entries.clear();
+    this.hasBaseline = false;
     this.reviewCount = undefined;
     return this.connection;
   }
@@ -51,7 +56,8 @@ export class ProjectWorkspaceCacheReconciler {
     }
     this.connection = undefined;
     this.epoch = Symbol('http');
-    this.entries = undefined;
+    this.entries.clear();
+    this.hasBaseline = false;
     this.reviewCount = undefined;
     return true;
   }
@@ -80,7 +86,7 @@ export class ProjectWorkspaceCacheReconciler {
     if (http.epoch !== this.epoch) {
       return previous;
     }
-    if (!this.entries) {
+    if (!this.hasBaseline) {
       return replaceEqualDeep(previous, http.data);
     }
 
@@ -92,7 +98,7 @@ export class ProjectWorkspaceCacheReconciler {
       [...this.entries.values()].map((entry) => projectSnapshotToWorkspace(entry));
     const reconciled = {
       workspaces: rows.map((workspace) => {
-        const entry = this.entries?.get(workspace.id);
+        const entry = this.entries.get(workspace.id);
         // Explicit optimistic additions/removals retain their existing semantics.
         if (!entry) {
           return workspace;
@@ -108,6 +114,31 @@ export class ProjectWorkspaceCacheReconciler {
     };
     return replaceEqualDeep(previous, reconciled);
   };
+
+  captureEpoch(): symbol {
+    return this.epoch;
+  }
+
+  reconcileDetail(
+    data: WorkspaceDetail,
+    requestEpoch: symbol | undefined,
+    current: WorkspaceDetail | undefined
+  ): WorkspaceDetail | undefined {
+    // A bootstrap can precede creation of this project owner, but not its retirement.
+    if ((requestEpoch ?? this.initialEpoch) !== this.epoch) {
+      return current;
+    }
+    const entry = this.entries.get(data.id);
+    if (!entry) {
+      // Removal reset/cancellation owns membership. HTTP can open archived detail.
+      return data;
+    }
+    return mergeProjectSnapshotIntoWorkspaceDetail(entry, {
+      ...data,
+      createdAt: current?.createdAt ?? data.createdAt,
+      prUpdatedAt: current?.prUpdatedAt ?? data.prUpdatedAt,
+    });
+  }
 
   accepts(connection: WorkspaceConnection, message: SnapshotServerMessage): boolean {
     if (!this.isCurrent(connection)) {
@@ -128,10 +159,11 @@ export class ProjectWorkspaceCacheReconciler {
     }
     if (message.type === 'snapshot_full') {
       this.entries = new Map(message.entries.map((entry) => [entry.workspaceId, entry]));
+      this.hasBaseline = true;
     } else if (message.type === 'snapshot_changed') {
-      this.entries?.set(message.entry.workspaceId, message.entry);
+      this.entries.set(message.entry.workspaceId, message.entry);
     } else {
-      this.entries?.delete(message.workspaceId);
+      this.entries.delete(message.workspaceId);
     }
     if (message.reviewCount !== undefined) {
       this.reviewCount = message.reviewCount;
@@ -205,5 +237,87 @@ export function projectWorkspaceQueryOptions(
     structuralSharing: owner.structuralSharing,
     staleTime: Number.POSITIVE_INFINITY,
     refetchOnWindowFocus: false,
+  });
+}
+
+const detailReconcilers = new WeakMap<QueryClient, Map<string, WorkspaceDetailCacheReconciler>>();
+
+class WorkspaceDetailCacheReconciler {
+  private readonly httpResults = new WeakMap<
+    object,
+    { epochs: Map<string, symbol>; data: WorkspaceDetail }
+  >();
+  readonly queryKey;
+
+  constructor(
+    private readonly queryClient: QueryClient,
+    workspaceId: string
+  ) {
+    this.queryKey = getQueryKey(trpc.workspace.get, { id: workspaceId }, 'query');
+  }
+
+  async fetch(fetchDetail: (signal: AbortSignal) => Promise<WorkspaceDetail>, signal: AbortSignal) {
+    // The detail route knows only its workspace id until HTTP supplies the project.
+    const epochs = new Map(
+      [...(reconcilers.get(this.queryClient) ?? [])].map(([id, owner]) => [
+        id,
+        owner.captureEpoch(),
+      ])
+    );
+    const data = await fetchDetail(signal);
+    this.httpResults.set(data, { epochs, data });
+    return data;
+  }
+
+  readonly structuralSharing = (previous: unknown, next: unknown): unknown => {
+    const http = typeof next === 'object' && next !== null ? this.httpResults.get(next) : undefined;
+    if (!http) {
+      return replaceEqualDeep(previous, next);
+    }
+    this.httpResults.delete(http.data);
+    const owner = getProjectWorkspaceCacheReconciler(this.queryClient, http.data.projectId);
+    const current = this.queryClient.getQueryData<WorkspaceDetail>(this.queryKey);
+    return replaceEqualDeep(
+      previous,
+      owner.reconcileDetail(http.data, http.epochs.get(http.data.projectId), current)
+    );
+  };
+}
+
+function getWorkspaceDetailCacheReconciler(queryClient: QueryClient, workspaceId: string) {
+  let details = detailReconcilers.get(queryClient);
+  if (!details) {
+    details = new Map();
+    detailReconcilers.set(queryClient, details);
+  }
+  let owner = details.get(workspaceId);
+  if (!owner) {
+    owner = new WorkspaceDetailCacheReconciler(queryClient, workspaceId);
+    details.set(workspaceId, owner);
+  }
+  return owner;
+}
+
+/** Shared cache behavior for ordinary fetches and deliberate creation seeds. */
+export function workspaceDetailCacheOptions(queryClient: QueryClient, workspaceId: string) {
+  const owner = getWorkspaceDetailCacheReconciler(queryClient, workspaceId);
+  return {
+    queryKey: owner.queryKey,
+    structuralSharing: owner.structuralSharing,
+    staleTime: Number.POSITIVE_INFINITY,
+    refetchOnWindowFocus: false,
+  };
+}
+
+export function workspaceDetailQueryOptions(
+  queryClient: QueryClient,
+  workspaceId: string,
+  fetchDetail: (signal: AbortSignal) => Promise<WorkspaceDetail>
+) {
+  const options = workspaceDetailCacheOptions(queryClient, workspaceId);
+  const owner = getWorkspaceDetailCacheReconciler(queryClient, workspaceId);
+  return queryOptions({
+    ...options,
+    queryFn: ({ signal }) => owner.fetch(fetchDetail, signal),
   });
 }

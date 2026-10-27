@@ -7,8 +7,13 @@ import { createHTTPServer } from '@trpc/server/adapters/standalone';
 import superjson from 'superjson';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { projectSnapshotToWorkspace } from '@/client/lib/snapshot-to-workspace';
+import {
+  type WorkspaceDetail,
+  projectSnapshotToWorkspace,
+} from '@/client/lib/snapshot-to-workspace';
+import { workspaceDetailQueryOptions } from '@/client/lib/workspace-cache-reconciler';
 import type { UseWebSocketTransportOptions } from '@/hooks/use-websocket-transport';
+import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { makeWorkspaceSnapshotEntry as makeEntry } from '@/test-utils/workspace-snapshot';
 import { useProjectSnapshotSync } from './use-project-snapshot-sync';
 
@@ -86,13 +91,15 @@ async function fixture(active = true) {
   );
   utils.workspace.get.setData({ id: 'ws-1' }, detail());
   const signals: AbortSignal[] = [];
-  const observer = new QueryObserver(queryClient, {
-    queryKey,
-    queryFn: ({ signal }) => {
+  const observer = new QueryObserver(
+    queryClient,
+    workspaceDetailQueryOptions(queryClient, 'ws-1', async (signal) => {
       signals.push(signal);
-      return client.workspace.get.query({ id: 'ws-1' }, { signal });
-    },
-  });
+      return unsafeCoerce<WorkspaceDetail>(
+        await client.workspace.get.query({ id: 'ws-1' }, { signal })
+      );
+    })
+  );
   if (active) {
     unsubscribes.push(observer.subscribe(() => undefined));
   }
@@ -125,6 +132,41 @@ afterEach(async () => {
 });
 
 describe('snapshot live-membership removal with real detail queries', () => {
+  it('hydrates detail metadata without regressing a newer accepted stream update', async () => {
+    const { observer } = await fixture();
+    useProjectSnapshotSync('proj-1');
+    channel.onMessage!({ type: 'snapshot_full', projectId: 'proj-1', entries: [makeEntry()] });
+    const pending = observer.refetch();
+    await waitForRequests(1);
+    channel.onMessage!({
+      type: 'snapshot_changed',
+      workspaceId: 'ws-1',
+      entry: makeEntry({ name: 'Newest stream name', runScriptStatus: 'RUNNING' }),
+    });
+    requests[0]!.resolve({ ...detail(), name: 'Old HTTP name', worktreePath: '/ready/path' });
+    await pending;
+    expect(observer.getCurrentResult().data).toMatchObject({
+      name: 'Newest stream name',
+      runScriptStatus: 'RUNNING',
+      worktreePath: '/ready/path',
+    });
+  });
+
+  it('cancels a retired detail fetch and hydrates HTTP fallback after disconnect', async () => {
+    const { observer, signals } = await fixture();
+    useProjectSnapshotSync('proj-1');
+    const pending = observer.refetch();
+    await waitForRequests(1);
+    channel.onDisconnected?.();
+    expect(signals[0]?.aborted).toBe(true);
+    await waitForRequests(2);
+    requests[1]!.resolve({ ...detail(), name: 'HTTP fallback' });
+    await vi.waitFor(() => expect(observer.getCurrentResult().data?.name).toBe('HTTP fallback'));
+    requests[0]!.resolve({ ...detail(), name: 'Retired HTTP' });
+    await pending;
+    expect(observer.getCurrentResult().data?.name).toBe('HTTP fallback');
+  });
+
   it('pins why setData(undefined) cannot clear an existing detail without initialData', async () => {
     const { observer } = await fixture();
     useProjectSnapshotSync('proj-1');

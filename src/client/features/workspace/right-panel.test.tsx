@@ -25,14 +25,13 @@ vi.mock('@phosphor-icons/react/dist/csr/Terminal', () => ({ TerminalIcon: () => 
 vi.mock('@phosphor-icons/react/dist/csr/TreeStructure', () => ({ TreeStructureIcon: () => null }));
 vi.mock('@phosphor-icons/react/dist/csr/X', () => ({ XIcon: () => null }));
 
+vi.mock('@/client/hooks/use-workspace-detail-query', () => ({
+  useWorkspaceDetailQuery: () => ({ data: mocks.workspaceData }),
+}));
+
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
     workspace: {
-      get: {
-        useQuery: () => ({
-          data: mocks.workspaceData,
-        }),
-      },
       getInitStatus: { useQuery: () => ({ data: { status: 'READY' } }) },
     },
   },

@@ -1,4 +1,4 @@
-import { type QueryClient, useQueryClient } from '@tanstack/react-query';
+import { type Query, type QueryClient, useQueryClient } from '@tanstack/react-query';
 import { getQueryKey } from '@trpc/react-query';
 import type { inferRouterOutputs } from '@trpc/server';
 /**
@@ -392,6 +392,16 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
       queryKey: getQueryKey(trpc.workspace.listForProject, { projectId }, 'query'),
       exact: true,
     };
+    const detailFilter = {
+      queryKey: getQueryKey(trpc.workspace.get, undefined, 'query'),
+      predicate: (query: Query) => {
+        const detail = queryClient.getQueryData<RouterOutputs['workspace']['get']>(query.queryKey);
+        // An uncached bootstrap has not supplied its project yet.
+        return !detail || detail.projectId === projectId;
+      },
+    };
+    runInBackground(queryClient.cancelQueries(detailFilter), 'Could not refresh data');
+    runInBackground(queryClient.invalidateQueries(detailFilter), 'Could not refresh data');
     // Cancel synchronously before invalidating, including an uncached bootstrap
     // whose old connection result must not win over the fallback request.
     runInBackground(queryClient.cancelQueries(filter), 'Could not refresh data');

@@ -220,12 +220,29 @@ optimistic mutation writes retain their existing behavior.
 
 Reconciliation ownership is scoped to the QueryClient, project, and connection
 lifetime. Disconnecting or leaving a project retires that token, cancels its
-pending HTTP request, and invalidates the project list once for HTTP fallback.
-The next full establishes fresh stream authority without comparing versions
-across server lifetimes. The transport rejects events from replaced physical
-sockets; the snapshot hook also rejects callbacks from retired project
+pending list and detail HTTP requests, and invalidates them for HTTP fallback.
+Uncached detail requests also fall back because their project is unknown until
+HTTP returns. The next full establishes fresh stream authority without comparing
+versions across server lifetimes. The transport rejects events from replaced
+physical sockets; the snapshot hook also rejects callbacks from retired project
 activations. Existing unknown-workspace, worktree-path, and reconnect metadata
 repairs continue through the same query options.
+
+The route and right panel share `useWorkspaceDetailQuery` and the existing
+`workspace.get` key. At HTTP success commit, accepted snapshots from that same
+connection overlay live fields on the fetched detail; initialization metadata,
+provider selection, agent and terminal records remain HTTP-owned. Creation seeds
+install compatible cache options and preserve an existing detail. Compact
+summaries never seed a full fetched detail, so missing details keep loading
+until HTTP returns. Detail response tags are consumed once, preserving
+deliberate optimistic writes and unchanged nested references and dates.
+
+Live-list removal still resets the exact detail query and cancels its in-flight
+request before active observers refetch persisted detail. Reintroduction cancels
+that removal fetch and refetches missing full detail. Repeated removal messages
+do not erase deliberately reopened archived detail. Initialization retains
+`getInitStatus` polling and readiness/worktree-path invalidations; those repairs
+hydrate omitted metadata through the shared detail options.
 
 `WorkspaceSummarySchema` defines the required board/sidebar fields independently
 of backend and client code. The HTTP list projector retains every legacy list

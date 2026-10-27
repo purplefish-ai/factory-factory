@@ -168,7 +168,7 @@ describe('shared project query and live connection lifecycle', () => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
     channel.onDisconnected?.();
     channel.onDisconnected?.();
-    expect(invalidate).toHaveBeenCalledTimes(1);
+    expect(invalidate).toHaveBeenCalledTimes(2);
     channel.onMessage?.({ type: 'snapshot_full', projectId: 'proj-1', entries: [] });
     await waitForRequests(2);
     requests[1]!.resolve(list('fallback'));
@@ -178,7 +178,7 @@ describe('shared project query and live connection lifecycle', () => {
       ).toBe('fallback')
     );
     channel.onConnected?.();
-    expect(invalidate).toHaveBeenCalledTimes(1);
+    expect(invalidate).toHaveBeenCalledTimes(2);
     channel.onMessage?.({
       type: 'snapshot_full',
       projectId: 'proj-1',
