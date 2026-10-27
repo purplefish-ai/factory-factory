@@ -29,17 +29,13 @@ describe('createStopHandler', () => {
   it('stops via provider-neutral lifecycle API and clears pending request', async () => {
     mocks.stopSession.mockResolvedValue(undefined);
     const handler = createStopHandler({
+      lifecycle: { stopSession: mocks.stopSession },
+      clearPendingRequest: mocks.clearPendingRequest,
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
-      setManualDispatchResume: vi.fn(),
       resetDispatchState: mocks.resetDispatchState,
     });
 
-    await handler({
-      ws: { send: vi.fn() } as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp/work',
-      message: { type: 'stop' } as never,
-    });
+    await handler({ sessionId: 'session-1', workingDir: '/tmp/work' }, { type: 'stop' } as never);
 
     expect(mocks.stopSession).toHaveBeenCalledWith('session-1', { reason: 'USER_STOP' });
     expect(mocks.clearPendingRequest).toHaveBeenCalledWith('session-1');
@@ -55,17 +51,15 @@ describe('createStopHandler', () => {
       })
     );
     const handler = createStopHandler({
+      lifecycle: { stopSession: mocks.stopSession },
+      clearPendingRequest: mocks.clearPendingRequest,
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
-      setManualDispatchResume: vi.fn(),
       resetDispatchState: mocks.resetDispatchState,
     });
 
-    const stopPromise = handler({
-      ws: { send: vi.fn() } as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp/work',
-      message: { type: 'stop' } as never,
-    });
+    const stopPromise = handler({ sessionId: 'session-1', workingDir: '/tmp/work' }, {
+      type: 'stop',
+    } as never);
 
     await Promise.resolve();
 

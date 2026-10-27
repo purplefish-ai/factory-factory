@@ -1,3 +1,7 @@
+import type {
+  SessionCommandHandler,
+  SessionCommandMessage,
+} from '@/backend/services/session/service/chat/session-command.types';
 import type { ChatMessageInput } from '@/shared/websocket';
 import { createLoadSessionHandler } from './handlers/load-session.handler';
 import { createPermissionResponseHandler } from './handlers/permission-response.handler';
@@ -17,7 +21,13 @@ import type { ChatMessageHandler, HandlerRegistryDependencies } from './types';
  * This ensures handlers receive correctly typed messages without needing casts.
  */
 export type ChatMessageHandlerRegistry = {
-  [K in ChatMessageInput['type']]: ChatMessageHandler<Extract<ChatMessageInput, { type: K }>>;
+  [K in Exclude<ChatMessageInput['type'], SessionCommandMessage['type']>]: ChatMessageHandler<
+    Extract<ChatMessageInput, { type: K }>
+  >;
+} & {
+  [K in SessionCommandMessage['type']]: SessionCommandHandler<
+    Extract<SessionCommandMessage, { type: K }>
+  >;
 };
 
 export function createChatMessageHandlerRegistry(
@@ -29,22 +39,44 @@ export function createChatMessageHandlerRegistry(
       deps.sessionConfigService &&
       deps.sessionPermissionService &&
       deps.sessionService &&
-      deps.startupService
+      deps.startupService &&
+      deps.executionServices
     )
   ) {
     throw new Error('focused session dependencies are required for chat message handlers');
   }
 
   return {
-    start: createStartHandler({ startupService: deps.startupService }),
+    start: createStartHandler({
+      startupService: deps.startupService,
+      lifecycle: deps.executionServices.lifecycle,
+      domain: deps.executionServices.domain,
+      backgroundDelivery: deps.executionServices.backgroundDelivery,
+    }),
     user_input: createUserInputHandler({
       acpRuntimeManager: deps.acpRuntimeManager,
       sessionService: deps.sessionService,
+      backgroundDelivery: deps.executionServices.backgroundDelivery,
     }),
-    queue_message: createQueueMessageHandler(deps),
-    remove_queued_message: createRemoveQueuedMessageHandler(),
-    resume_queued_messages: createResumeQueuedMessagesHandler(deps),
-    stop: createStopHandler(deps),
+    queue_message: createQueueMessageHandler({
+      domain: deps.executionServices.domain,
+      backgroundDelivery: deps.executionServices.backgroundDelivery,
+      tryDispatchNextMessage: deps.tryDispatchNextMessage,
+    }),
+    remove_queued_message: createRemoveQueuedMessageHandler({
+      domain: deps.executionServices.domain,
+    }),
+    resume_queued_messages: createResumeQueuedMessagesHandler({
+      backgroundDelivery: deps.executionServices.backgroundDelivery,
+      tryDispatchNextMessage: deps.tryDispatchNextMessage,
+      setManualDispatchResume: deps.setManualDispatchResume,
+    }),
+    stop: createStopHandler({
+      lifecycle: deps.executionServices.lifecycle,
+      clearPendingRequest: deps.executionServices.clearPendingRequest,
+      resetDispatchState: deps.resetDispatchState,
+      tryDispatchNextMessage: deps.tryDispatchNextMessage,
+    }),
     load_session: createLoadSessionHandler(deps),
     permission_response: createPermissionResponseHandler({
       sessionPermissionService: deps.sessionPermissionService,
@@ -52,7 +84,11 @@ export function createChatMessageHandlerRegistry(
     set_model: createSetModelHandler({
       sessionConfigService: deps.sessionConfigService,
     }),
-    set_thinking_budget: createSetThinkingBudgetHandler(),
-    set_config_option: createSetConfigOptionHandler(),
+    set_thinking_budget: createSetThinkingBudgetHandler({
+      sessionConfigService: deps.sessionConfigService,
+    }),
+    set_config_option: createSetConfigOptionHandler({
+      sessionConfigService: deps.sessionConfigService,
+    }),
   };
 }

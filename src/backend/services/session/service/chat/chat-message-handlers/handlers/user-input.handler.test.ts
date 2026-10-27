@@ -13,90 +13,57 @@ function createDeps(options?: { isSessionRunning?: boolean }) {
   const sessionService: ChatMessageHandlerPromptService = {
     sendSessionMessage: vi.fn(async () => undefined),
   };
-  return { acpRuntimeManager, sessionService };
+  return {
+    acpRuntimeManager,
+    sessionService,
+    backgroundDelivery: sessionBackgroundDeliveryService,
+  };
 }
+const context = { sessionId: 'session-1', workingDir: '/tmp/work' };
 
 describe('createUserInputHandler', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('ignores empty or whitespace-only content', () => {
+  it('ignores empty or whitespace-only content', async () => {
     const deps = createDeps();
     const handler = createUserInputHandler(deps);
-    const ws = { send: vi.fn() };
-
-    void handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp/work',
-      message: { type: 'user_input', text: '   ' } as never,
-    });
-
-    void handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp/work',
-      message: { type: 'user_input' } as never,
-    });
-
+    expect(await handler(context, { type: 'user_input', text: '   ' })).toEqual({ replies: [] });
+    expect(await handler(context, { type: 'user_input' })).toEqual({ replies: [] });
     expect(deps.sessionService.sendSessionMessage).not.toHaveBeenCalled();
-    expect(ws.send).not.toHaveBeenCalled();
   });
 
   it('forwards text input to active session', async () => {
     const deps = createDeps({ isSessionRunning: true });
     const handler = createUserInputHandler(deps);
-    const ws = { send: vi.fn() };
-
-    void handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp/work',
-      message: { type: 'user_input', text: 'hello' } as never,
-    });
-
+    expect(await handler(context, { type: 'user_input', text: 'hello' })).toEqual({ replies: [] });
     await vi.waitFor(() => expect(deps.sessionService.sendSessionMessage).toHaveBeenCalled());
     expect(deps.sessionService.sendSessionMessage).toHaveBeenCalledWith('session-1', 'hello');
-    expect(ws.send).not.toHaveBeenCalled();
   });
 
   it('forwards structured content arrays to active session', async () => {
     const deps = createDeps({ isSessionRunning: true });
     const handler = createUserInputHandler(deps);
-    const ws = { send: vi.fn() };
     const content = [{ type: 'text', text: 'from array' }];
-
-    void handler({
-      ws: ws as never,
-      sessionId: 'session-2',
-      workingDir: '/tmp/work',
-      message: { type: 'user_input', content } as never,
-    });
-
+    expect(
+      await handler({ ...context, sessionId: 'session-2' }, { type: 'user_input', content })
+    ).toEqual({ replies: [] });
     await vi.waitFor(() => expect(deps.sessionService.sendSessionMessage).toHaveBeenCalled());
     expect(deps.sessionService.sendSessionMessage).toHaveBeenCalledWith('session-2', content);
-    expect(ws.send).not.toHaveBeenCalled();
   });
 
-  it('returns websocket error when no active session exists', () => {
+  it('returns a typed requester error when no active session exists', async () => {
     const deps = createDeps({ isSessionRunning: false });
-    const handler = createUserInputHandler(deps);
-    const ws = { send: vi.fn() };
-
-    void handler({
-      ws: ws as never,
-      sessionId: 'session-3',
-      workingDir: '/tmp/work',
-      message: { type: 'user_input', text: 'hello' } as never,
+    expect(
+      await createUserInputHandler(deps)(
+        { ...context, sessionId: 'session-3' },
+        { type: 'user_input', text: 'hello' }
+      )
+    ).toEqual({
+      replies: [{ type: 'error', error: { kind: 'no_active_session' } }],
     });
-
-    expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({
-        type: 'error',
-        message: 'No active session. Use queue_message to queue messages.',
-      })
-    );
+    expect(deps.sessionService.sendSessionMessage).not.toHaveBeenCalled();
   });
 });
 
@@ -111,10 +78,9 @@ it('sends concurrent human input in arrival order while delivery resume is pendi
     .mockResolvedValueOnce();
   const deps = createDeps({ isSessionRunning: true });
   const handler = createUserInputHandler(deps);
-  const context = { ws: { send: vi.fn() } as never, sessionId: 'session-1', workingDir: '/tmp' };
   try {
-    const first = handler({ ...context, message: { type: 'user_input', text: 'first' } as never });
-    await handler({ ...context, message: { type: 'user_input', text: 'second' } as never });
+    const first = handler(context, { type: 'user_input', text: 'first' });
+    await handler(context, { type: 'user_input', text: 'second' });
     expect(deps.sessionService.sendSessionMessage).toHaveBeenNthCalledWith(1, 'session-1', 'first');
     expect(deps.sessionService.sendSessionMessage).toHaveBeenNthCalledWith(
       2,
@@ -128,6 +94,7 @@ it('sends concurrent human input in arrival order while delivery resume is pendi
     resume.mockRestore();
   }
 });
+
 it('sends human input when delivery resume persistence rejects', async () => {
   const resume = vi
     .spyOn(sessionBackgroundDeliveryService, 'userResume')
@@ -135,15 +102,8 @@ it('sends human input when delivery resume persistence rejects', async () => {
   const deps = createDeps({ isSessionRunning: true });
   try {
     await expect(
-      Promise.resolve(
-        createUserInputHandler(deps)({
-          ws: { send: vi.fn() } as never,
-          sessionId: 'session-1',
-          workingDir: '/tmp',
-          message: { type: 'user_input', text: 'human' } as never,
-        })
-      )
-    ).resolves.toBeUndefined();
+      Promise.resolve(createUserInputHandler(deps)(context, { type: 'user_input', text: 'human' }))
+    ).resolves.toEqual({ replies: [] });
     expect(deps.sessionService.sendSessionMessage).toHaveBeenCalledWith('session-1', 'human');
   } finally {
     resume.mockRestore();

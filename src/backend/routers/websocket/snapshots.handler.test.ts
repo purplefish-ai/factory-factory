@@ -6,11 +6,16 @@ import type { WebSocket, WebSocketServer } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
 import {
+  createWorkspaceRename,
+  type RenamedWorkspace,
+} from '@/backend/orchestration/workspace-rename.orchestrator';
+import {
   type SnapshotChangedEvent,
   type SnapshotRemovedEvent,
   WorkspaceSnapshotStore,
 } from '@/backend/services/workspace';
 import { SnapshotServerMessageSchema } from '@/shared/workspace-snapshot';
+import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import {
   createSnapshotsUpgradeHandler,
   disposeSnapshotsHandlerState,
@@ -174,6 +179,48 @@ function sentMessages(ws: MockWebSocket) {
 // ============================================================================
 
 describe('createSnapshotsUpgradeHandler', () => {
+  it('delivers a canonical accepted rename synchronously to each existing project viewer', async () => {
+    const { store, handler, ws, finishSeed } = createPendingBaseline();
+    store.upsert(
+      'ws-1',
+      { projectId: 'proj-1', name: 'Before', nameUpdatedAt: 100, status: 'READY' },
+      'seed',
+      100
+    );
+    const second = new MockWebSocket();
+    callHandler(handler, second, 'proj-1');
+    finishSeed();
+    await waitForInitialSnapshot(ws);
+    await waitForInitialSnapshot(second);
+    for (const viewer of [ws, second]) {
+      expect(sentMessages(viewer)[0]).toMatchObject({ type: 'snapshot_full' });
+      expect(viewer.send.mock.calls[0]![0]).not.toContain('nameUpdatedAt');
+    }
+    ws.send.mockClear();
+    second.send.mockClear();
+    const canonical = unsafeCoerce<RenamedWorkspace>({
+      id: 'ws-1',
+      name: 'Canonical renamed',
+      status: 'READY',
+      updatedAt: new Date(200),
+    });
+    const rename = createWorkspaceRename({
+      rename: async () => canonical,
+      publishAcceptedName: (...args) => store.publishAcceptedName(...args),
+    });
+    expect(await rename.rename('ws-1', 'Requested')).toEqual(canonical);
+    for (const viewer of [ws, second]) {
+      expect(sentMessages(viewer)).toEqual([
+        expect.objectContaining({
+          type: 'snapshot_changed',
+          workspaceId: 'ws-1',
+          entry: expect.objectContaining({ name: canonical.name }),
+        }),
+      ]);
+      expect(viewer.send.mock.calls[0]![0]).not.toContain('nameUpdatedAt');
+    }
+  });
+
   beforeEach(() => {
     mockGetCachedReviewCount.mockReturnValue(5);
   });

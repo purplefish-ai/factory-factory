@@ -36,8 +36,8 @@ function formatTokenCount(count: number): string {
  */
 export function ContextWindowIndicator({ tokenStats, className }: ContextWindowIndicatorProps) {
   const usagePercentage = calculateContextUsagePercentage(tokenStats);
-  const usedTokens = tokenStats.inputTokens + tokenStats.outputTokens;
-  const hasData = usedTokens > 0;
+  const usedTokens = tokenStats.contextUsedTokens;
+  const hasData = usedTokens != null;
 
   // Don't show if no data yet
   if (!hasData) {

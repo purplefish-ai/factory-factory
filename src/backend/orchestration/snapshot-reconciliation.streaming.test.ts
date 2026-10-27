@@ -4,8 +4,10 @@ import {
   type SnapshotUpdateInput,
   WorkspaceSnapshotStore,
 } from '@/backend/services/workspace';
-import { deriveWorkspaceSidebarStatus } from '@/shared/core';
+import { type AutoIterationStatus, deriveWorkspaceSidebarStatus } from '@/shared/core';
 import { SnapshotReconciliationService } from './snapshot-reconciliation.orchestrator';
+
+const noLoopData: unknown = null;
 
 type GitStats = NonNullable<SnapshotUpdateInput['gitStats']>;
 
@@ -24,9 +26,29 @@ function makeWorkspace(id: string, worktreePath: string | null) {
     name: `Workspace ${id}`,
     status: 'READY',
     createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    updatedAt: new Date('2026-01-02T00:00:00.000Z'),
     branchName: `feature/${id}`,
     hasHadSessions: false,
     worktreePath,
+    initErrorMessage: null,
+    githubIssueNumber: 42,
+    githubIssueUrl: 'https://github.com/org/repo/issues/42',
+    linearIssueId: null,
+    linearIssueIdentifier: null,
+    linearIssueUrl: null,
+    creationSource: 'GITHUB_ISSUE',
+    autoIterationConfig: noLoopData,
+    autoIterationProgress: noLoopData,
+    prs: [],
+    prSummary: {
+      totalCount: 0,
+      openCount: 0,
+      hasNonterminal: false,
+      state: 'NONE',
+      ciStatus: 'UNKNOWN',
+      hasMergeConflict: false,
+      ratchetState: 'IDLE',
+    },
     prUrl: null,
     prNumber: null,
     prState: 'NONE',
@@ -36,6 +58,7 @@ function makeWorkspace(id: string, worktreePath: string | null) {
     ratchetState: 'IDLE',
     prMonitoring: {
       enabled: true,
+      deliveryMode: 'MAIN',
       recipientSessionId: 'main',
       bindingRevision: 1,
       pauseReason: null,
@@ -43,7 +66,7 @@ function makeWorkspace(id: string, worktreePath: string | null) {
     },
     prHasMergeConflict: false,
     mode: 'STANDARD',
-    autoIterationStatus: null,
+    autoIterationStatus: null as AutoIterationStatus | null,
     runScriptStatus: 'IDLE',
     agentSessions: [],
     terminalSessions: [],
@@ -52,9 +75,10 @@ function makeWorkspace(id: string, worktreePath: string | null) {
 }
 
 function makeService(
-  workspaces: ReturnType<typeof makeWorkspace>[],
+  workspaces: ReturnType<typeof makeWorkspace>[] | Promise<ReturnType<typeof makeWorkspace>[]>,
   getWorkspaceGitStats: (path: string) => Promise<GitStats | null>,
   workspaceSnapshotStore: {
+    canAcceptNameObservation(id: string, nameUpdatedAt: number): boolean;
     getAllWorkspaceIds(): string[];
     getByWorkspaceId(id: string): unknown;
     remove(id: string): boolean;
@@ -68,10 +92,11 @@ function makeService(
       changed: boolean;
       emitted: boolean;
     };
-  }
+  },
+  warn = vi.fn()
 ) {
   return new SnapshotReconciliationService({
-    createLogger: () => ({ debug: vi.fn(), error: vi.fn(), info: vi.fn(), warn: vi.fn() }),
+    createLogger: () => ({ debug: vi.fn(), error: vi.fn(), info: vi.fn(), warn }),
     gitOpsService: { getWorkspaceGitStats },
     session: {
       getAllPendingRequests: () => new Map(),
@@ -120,6 +145,9 @@ it('makes the database seed available while preserving cached git stats', async 
     expect(store.getByWorkspaceId('ws-1')).toMatchObject({
       name: 'Workspace ws-1',
       gitStats: cachedGitStats,
+      summaryVersion: 1,
+      githubIssueNumber: 42,
+      worktreePath: '/path/1',
     });
   } finally {
     pendingGitStats.resolve(freshGitStats);
@@ -180,6 +208,7 @@ it('releases the seed barrier when there are no workspaces', async () => {
   const service = makeService([], vi.fn(), {
     getAllWorkspaceIds: () => [],
     getByWorkspaceId: () => undefined,
+    canAcceptNameObservation: () => true,
     remove: () => false,
     upsert,
   });
@@ -196,6 +225,7 @@ it('keeps shutdown pending until streamed git work settles', async () => {
   const service = makeService([makeWorkspace('ws-1', '/path/1')], () => pendingGitStats.promise, {
     getAllWorkspaceIds: () => [],
     getByWorkspaceId: () => undefined,
+    canAcceptNameObservation: () => true,
     remove: () => false,
     upsert: () => ({ accepted: true, changed: true, emitted: true }),
   });
@@ -228,6 +258,7 @@ it('publishes each git result as it settles and keeps accurate accounting', asyn
   const store = {
     getAllWorkspaceIds: () => [],
     getByWorkspaceId: () => undefined,
+    canAcceptNameObservation: () => true,
     remove: () => false,
     upsert,
   };
@@ -308,3 +339,92 @@ it('does not let a newer session-only event suppress an activity seed', () => {
     fieldTimestamps: { session: 300, reconciliation: 200 },
   });
 });
+
+it('hydrates a newly created NEW workspace through reconciliation without waiting for Git', async () => {
+  const store = createStore();
+  const service = makeService(
+    [{ ...makeWorkspace('new', null), status: 'NEW' }],
+    () => Promise.resolve(null),
+    store
+  );
+  await service.reconcile();
+  expect(store.getByWorkspaceId('new')).toMatchObject({
+    status: 'NEW',
+    summaryVersion: 1,
+    worktreePath: null,
+    githubIssueNumber: 42,
+    creationSource: 'GITHUB_ISSUE',
+    autoIteration: null,
+  });
+});
+
+it('seeds the compact loop from validated authoritative configuration and progress', async () => {
+  const store = createStore();
+  const workspace = {
+    ...makeWorkspace('loop', null),
+    mode: 'AUTO_ITERATION',
+    autoIterationStatus: 'RUNNING' as const,
+    autoIterationConfig: { maxIterations: 0 },
+    autoIterationProgress: { currentIteration: 3, currentMetricSummary: 'score=7' },
+  };
+  const service = makeService([workspace], () => Promise.resolve(null), store);
+  await service.reconcile();
+  expect(store.getByWorkspaceId('loop')).toMatchObject({
+    summaryVersion: 1,
+    autoIteration: {
+      status: 'RUNNING',
+      currentIteration: 3,
+      maxIterations: 0,
+      currentMetricSummary: 'score=7',
+    },
+  });
+});
+
+it.each(['older', 'equal-ms'] as const)(
+  'does not count or log a deferred %s name observation rejected after an accepted rename',
+  async (provenance) => {
+    const workspace = makeWorkspace('ws-1', null);
+    const store = createStore();
+    await makeService([workspace], () => Promise.resolve(null), store).reconcile();
+    const pendingRead = deferred<ReturnType<typeof makeWorkspace>[]>();
+    const warn = vi.fn();
+    const reconciliation = makeService(
+      pendingRead.promise,
+      () => Promise.resolve(null),
+      store,
+      warn
+    ).reconcile();
+    const acceptedAt = workspace.updatedAt.getTime() + 1;
+    expect(store.publishAcceptedName(workspace.id, 'Accepted rename', acceptedAt).accepted).toBe(
+      true
+    );
+    pendingRead.resolve([
+      {
+        ...workspace,
+        updatedAt: provenance === 'equal-ms' ? new Date(acceptedAt) : workspace.updatedAt,
+      },
+    ]);
+
+    expect((await reconciliation).driftsDetected).toBe(0);
+    expect(warn).not.toHaveBeenCalled();
+    expect(store.getByWorkspaceId(workspace.id)?.name).toBe('Accepted rename');
+
+    const newer = { ...workspace, name: 'New canonical name', updatedAt: new Date(acceptedAt + 1) };
+    const result = await makeService([newer], () => Promise.resolve(null), store, warn).reconcile();
+    expect(result.driftsDetected).toBe(1);
+    expect(warn).toHaveBeenCalledExactlyOnceWith('Snapshot drift detected', {
+      workspaceId: workspace.id,
+      driftCount: 1,
+      drifts: [
+        {
+          field: 'name',
+          group: 'name',
+          snapshot: 'Accepted rename',
+          authoritative: 'New canonical name',
+        },
+      ],
+    });
+    expect(store.getByWorkspaceId(workspace.id)?.name).toBe('New canonical name');
+    store.clear();
+  }
+);

@@ -67,6 +67,7 @@ import {
   type workspaceStateMachine,
 } from '@/backend/services/workspace';
 import type { PRState } from '@/shared/core';
+import { projectWorkspaceSnapshotMetadata } from '@/shared/workspace-snapshot';
 import type { getWorkspaceLinearContext } from './linear-config.helper';
 import { projectPrEvent, shouldRefreshRatchetForPrSwitch } from './pr-event-projection';
 import { RatchetProjectionWorker } from './ratchet-projection.worker';
@@ -423,9 +424,11 @@ async function refreshWorkspaceSessionSummariesForSession(
  */
 function buildWorkspaceStateChangeFields(event: WorkspaceStateChangedEvent): SnapshotUpdateInput {
   return {
+    ...projectWorkspaceSnapshotMetadata(event.workspace),
     status: event.toStatus,
     projectId: event.workspace.projectId,
     name: event.workspace.name,
+    nameUpdatedAt: event.workspace.updatedAt.getTime(),
     branchName: event.workspace.branchName,
     createdAt: event.workspace.createdAt.toISOString(),
   };

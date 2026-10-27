@@ -1,25 +1,22 @@
 import { EventEmitter } from 'node:events';
 import { toError } from '@/backend/lib/error-utils';
 import { createLogger } from '@/backend/services/logger.service';
+import type { CIStatus, PRState } from '@/shared/core';
 import type { GitHubPRDiscoveryClaim, GitHubWorkspaceBridge } from './bridges';
-import { githubCLIService } from './github-cli.service';
 
 const logger = createLogger('pr-snapshot');
 
 type SnapshotData = {
   prNumber: number;
-  prState: Awaited<ReturnType<typeof githubCLIService.fetchAndComputePRState>> extends infer T
-    ? T extends { prState: infer S }
-      ? S
-      : never
-    : never;
+  prState: PRState;
   prReviewState: string | null;
-  prCiStatus: Awaited<ReturnType<typeof githubCLIService.fetchAndComputePRState>> extends infer T
-    ? T extends { prCiStatus: infer S }
-      ? S
-      : never
-    : never;
+  prCiStatus: CIStatus;
 };
+
+type ObservePR = (
+  target: { workspaceId: string; prId: string },
+  options?: { force?: boolean }
+) => Promise<boolean>;
 
 export type PRSnapshotRefreshResult =
   | { success: true; snapshot: SnapshotData }
@@ -56,52 +53,14 @@ export interface PRUrlAttachedEvent {
   prUrl: string;
 }
 
-/** One ratchet check's observation of a PR: every input `deriveRatchetState` reads. */
-interface PrObservationInput {
-  prId?: string;
-  expectedRevision?: number;
-  prUrl: string;
-  prNumber: number;
-  ciStatus: SnapshotData['prCiStatus'];
-  prState: SnapshotData['prState'];
-  reviewState: string | null;
-  /** GitHub's `mergeStateStatus == DIRTY`. */
-  hasMergeConflict: boolean;
-  failedAt?: Date | null;
-  observedAt?: Date;
-}
-
-interface ReviewCheckInput {
-  prId?: string;
-  checkedAt?: Date | null;
-  latestCommentId?: string;
-}
-
-interface ApplySnapshotOptions {
-  prId?: string;
-  expectedRevision?: number;
-  eventPrUrl?: string | null;
-  persistPrUrl?: string | null;
-  branchName?: string;
-}
-
 class PRSnapshotService extends EventEmitter {
   private workspaceBridge: GitHubWorkspaceBridge | null = null;
-  private observe:
-    | ((
-        target: { workspaceId: string; prId: string },
-        options?: { force?: boolean }
-      ) => Promise<boolean>)
-    | null = null;
-  configure(bridges: {
-    workspace: GitHubWorkspaceBridge;
-    observe?: (
-      target: { workspaceId: string; prId: string },
-      options?: { force?: boolean }
-    ) => Promise<boolean>;
-  }): void {
+  private observe: ObservePR = () => {
+    throw new Error('PRSnapshotService not configured: observer missing. Call configure() first.');
+  };
+  configure(bridges: { workspace: GitHubWorkspaceBridge; observe: ObservePR }): void {
     this.workspaceBridge = bridges.workspace;
-    this.observe = bridges.observe ?? null;
+    this.observe = bridges.observe;
   }
   private get workspace(): GitHubWorkspaceBridge {
     if (!this.workspaceBridge) {
@@ -146,46 +105,22 @@ class PRSnapshotService extends EventEmitter {
       if (!pr) {
         return { success: false, reason: 'no_pr_url' };
       }
-      if (this.observe) {
-        if (!(await this.observe(target, { force: true }))) {
-          return { success: false, reason: 'stale_observation' };
-        }
-        const current = await this.workspace.findPR(target);
-        if (!current?.number) {
-          return { success: false, reason: 'no_pr_url' };
-        }
-        return {
-          success: true,
-          snapshot: {
-            prNumber: current.number,
-            prState: current.state,
-            prCiStatus: current.ciStatus,
-            prReviewState: current.reviewState,
-          },
-        };
-      }
-      const snapshot = await githubCLIService.fetchAndComputePRState(pr.url);
-      if (!snapshot) {
-        return { success: false, reason: 'fetch_failed' };
-      }
-      const result = await this.workspace.applyPrSnapshotWithDispatchReset(target.workspaceId, {
-        ...snapshot,
-        prId: pr.id,
-        expectedRevision: pr.revision,
-        prUpdatedAt: new Date(),
-      });
-      if (!result.applied) {
+      if (!(await this.observe(target, { force: true }))) {
         return { success: false, reason: 'stale_observation' };
       }
-      this.emit(PR_SNAPSHOT_UPDATED, {
-        workspaceId: target.workspaceId,
-        prId: pr.id,
-        prUrl: pr.url,
-        previousPrState: pr.state,
-        ...snapshot,
-        ...(result.dispatchReset ? { ratchetDispatchChanged: true as const } : {}),
-      } satisfies PRSnapshotUpdatedEvent);
-      return { success: true, snapshot };
+      const current = await this.workspace.findPR(target);
+      if (!current?.number) {
+        return { success: false, reason: 'no_pr_url' };
+      }
+      return {
+        success: true,
+        snapshot: {
+          prNumber: current.number,
+          prState: current.state,
+          prCiStatus: current.ciStatus,
+          prReviewState: current.reviewState,
+        },
+      };
     } catch (error) {
       logger.error('Failed to refresh PR', toError(error), target);
       return { success: false, reason: 'error' };
@@ -255,97 +190,6 @@ class PRSnapshotService extends EventEmitter {
     }
     return ids.length;
   }
-  async recordPrObservation(workspaceId: string, input: PrObservationInput): Promise<void> {
-    const prs = await this.workspace.listPRs(workspaceId);
-    const pr = prs.find((pr) => pr.url === input.prUrl && (!input.prId || pr.id === input.prId));
-    if (!pr) {
-      return;
-    }
-    const result = await this.workspace.applyPrObservationWithDispatchReset(workspaceId, {
-      prId: pr.id,
-      expectedRevision: input.expectedRevision ?? pr.revision,
-      expectedPrUrl: pr.url,
-      expectedPrNumber: input.prNumber,
-      prCiStatus: input.ciStatus,
-      prState: input.prState,
-      prReviewState: input.reviewState,
-      prHasMergeConflict: input.hasMergeConflict,
-      prUpdatedAt: input.observedAt ?? new Date(),
-      ...(input.failedAt !== undefined ? { prCiFailedAt: input.failedAt } : {}),
-    });
-    if (result.applied) {
-      this.emit(PR_SNAPSHOT_UPDATED, {
-        workspaceId,
-        prId: pr.id,
-        prUrl: pr.url,
-        prNumber: input.prNumber,
-        prState: input.prState,
-        previousPrState: pr.state,
-        prCiStatus: input.ciStatus,
-        prReviewState: input.reviewState,
-        ...(result.dispatchReset ? { ratchetDispatchChanged: true as const } : {}),
-      } satisfies PRSnapshotUpdatedEvent);
-    }
-  }
-  async recordReviewCheck(workspaceId: string, input: ReviewCheckInput = {}): Promise<void> {
-    const prs = await this.workspace.listPRs(workspaceId);
-    const pr = input.prId
-      ? prs.find((pr) => pr.id === input.prId)
-      : prs.length === 1
-        ? prs[0]
-        : undefined;
-    if (!pr) {
-      return;
-    }
-    await this.workspace.applyPrSnapshotWithDispatchReset(workspaceId, {
-      prId: pr.id,
-      expectedRevision: pr.revision,
-      prNumber: pr.number ?? githubCLIService.extractPRInfo(pr.url)?.number ?? 0,
-      prState: pr.state,
-      prReviewState: pr.reviewState,
-      prCiStatus: pr.ciStatus,
-      prUpdatedAt: pr.syncedAt ?? new Date(),
-      prReviewLastCheckedAt: input.checkedAt === null ? null : (input.checkedAt ?? new Date()),
-      ...(input.latestCommentId !== undefined
-        ? { prReviewLastCommentId: input.latestCommentId }
-        : {}),
-    });
-  }
-  async applySnapshot(
-    workspaceId: string,
-    snapshot: SnapshotData,
-    options: ApplySnapshotOptions = {}
-  ): Promise<void> {
-    if (options.persistPrUrl) {
-      await this.attachAndRefreshPR(workspaceId, options.persistPrUrl);
-      return;
-    }
-    const prs = await this.workspace.listPRs(workspaceId);
-    const pr = prs.find((pr) =>
-      options.prId
-        ? pr.id === options.prId
-        : options.eventPrUrl
-          ? pr.url === options.eventPrUrl
-          : prs.length === 1
-    );
-    if (!pr) {
-      return;
-    }
-    const result = await this.workspace.applyPrSnapshotWithDispatchReset(workspaceId, {
-      ...snapshot,
-      prId: pr.id,
-      expectedRevision: options.expectedRevision ?? pr.revision,
-      prUpdatedAt: new Date(),
-    });
-    if (result.applied) {
-      this.emit(PR_SNAPSHOT_UPDATED, {
-        workspaceId,
-        prId: pr.id,
-        prUrl: pr.url,
-        previousPrState: pr.state,
-        ...snapshot,
-      } satisfies PRSnapshotUpdatedEvent);
-    }
-  }
 }
+
 export const prSnapshotService = new PRSnapshotService();

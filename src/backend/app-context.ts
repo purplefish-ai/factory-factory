@@ -35,6 +35,7 @@ import {
 } from './orchestration/workspace-init.orchestrator';
 import { launchWorkspace } from './orchestration/workspace-launch.orchestrator';
 import { deliverWorkspaceNotification } from './orchestration/workspace-notification-delivery.orchestrator';
+import { createWorkspaceRename } from './orchestration/workspace-rename.orchestrator';
 import { getQuickAction, listQuickActions } from './prompts/quick-actions';
 import { autoIterationService, insightsService, logbookService } from './services/auto-iteration';
 import { configService } from './services/config.service';
@@ -73,6 +74,7 @@ import {
   chatMessageHandlerService,
   claudeModelCatalogService,
   codexModelCatalogService,
+  providerUsageService,
   type SessionFileLogger,
   sessionDataService,
   sessionBackgroundDeliveryService,
@@ -127,6 +129,7 @@ export type ApplicationServices = BridgeServices & {
   executeStartupScriptPipeline: typeof executeStartupScriptPipeline;
   claudeModelCatalogService: Pick<typeof claudeModelCatalogService, 'getModels'>;
   codexModelCatalogService: Pick<typeof codexModelCatalogService, 'getModels'>;
+  providerUsageService: Pick<typeof providerUsageService, 'getUsage'>;
   factoryConfigService: Pick<typeof FactoryConfigService, 'readConfig'>;
   findAvailablePort: typeof findAvailablePort;
   gitCloneService: typeof gitCloneService;
@@ -176,6 +179,7 @@ export type ApplicationServices = BridgeServices & {
   launchWorkspace: (
     source: Parameters<typeof launchWorkspace>[0]
   ) => ReturnType<typeof launchWorkspace>;
+  renameWorkspace: ReturnType<typeof createWorkspaceRename>['rename'];
   fireLifecycleNotification: typeof fireLifecycleNotification;
   persistChildNotification: typeof persistChildNotification;
   persistParentNotification: typeof persistParentNotification;
@@ -218,6 +222,11 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
   const workspaceCreationService = new WorkspaceCreationService({
     logger: createLogger('workspace-creation'),
   });
+  const workspaceRename = createWorkspaceRename({
+    rename: (id, name) => services.workspaceDataService.rename(id, name),
+    publishAcceptedName: (id, name, updatedAt) =>
+      services.workspaceSnapshotStore.publishAcceptedName(id, name, updatedAt),
+  });
   const services: ApplicationServices = {
     acpRuntimeManager,
     acpTraceLogger,
@@ -236,6 +245,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     executeStartupScriptPipeline,
     claudeModelCatalogService,
     codexModelCatalogService,
+    providerUsageService,
     factoryConfigService: FactoryConfigService,
     findAvailablePort,
     gitCloneService,
@@ -288,6 +298,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     workspaceAutoIterationService,
     workspaceCreationService,
     workspaceDataService,
+    renameWorkspace: workspaceRename.rename,
     workspaceMaintenanceService,
     workspaceGitStateService,
     workspaceNotificationService,

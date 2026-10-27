@@ -443,7 +443,7 @@ describe('WorkspaceSnapshotStore', () => {
   // STORE-06: Field-level timestamps for concurrent update safety
   // -------------------------------------------------------------------------
   describe('STORE-06: Field-level timestamps for concurrent update safety', () => {
-    it('advances ordering metadata without changing the public snapshot for equal scalars', () => {
+    it('advances independent name ordering without changing the public snapshot for equal names', () => {
       const handler = vi.fn();
       store.on(SNAPSHOT_CHANGED, handler);
       store.upsert('ws-1', makeUpdate({ name: 'authoritative' }), 'seed', 100);
@@ -455,7 +455,8 @@ describe('WorkspaceSnapshotStore', () => {
 
       const after = store.getByWorkspaceId('ws-1')!;
       expect(result).toEqual({ accepted: true, changed: false, emitted: false });
-      expect(after.fieldTimestamps.workspace).toBe(200);
+      // Name observations no longer move the unrelated workspace-group fence.
+      expect(after.fieldTimestamps.workspace).toBe(100);
       expect(after.version).toBe(beforeVersion);
       expect(after.computedAt).toBe(beforeComputedAt);
       expect(after.source).toBe('seed');

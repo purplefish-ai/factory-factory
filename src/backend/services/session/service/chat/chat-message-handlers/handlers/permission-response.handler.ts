@@ -1,20 +1,19 @@
 import { createLogger } from '@/backend/services/logger.service';
 import { DEBUG_CHAT_WS } from '@/backend/services/session/service/chat/chat-message-handlers/constants';
 import type {
-  ChatMessageHandler,
-  ChatMessageHandlerPermissionService,
-} from '@/backend/services/session/service/chat/chat-message-handlers/types';
+  SessionCommandHandler,
+  SessionPermissionCommandService,
+} from '@/backend/services/session/service/chat/session-command.types';
 import type { PermissionResponseMessage } from '@/shared/websocket';
-import { sendWebSocketError } from './utils';
 
 const logger = createLogger('chat-message-handlers');
 
 export function createPermissionResponseHandler(deps: {
-  sessionPermissionService: ChatMessageHandlerPermissionService;
-}): ChatMessageHandler<PermissionResponseMessage> {
+  sessionPermissionService: SessionPermissionCommandService;
+}): SessionCommandHandler<PermissionResponseMessage> {
   const { sessionPermissionService } = deps;
 
-  return ({ ws, sessionId, message }) => {
+  return ({ sessionId }, message) => {
     const { requestId, optionId, answers } = message;
 
     try {
@@ -26,8 +25,7 @@ export function createPermissionResponseHandler(deps: {
         answers
       );
       if (!resolved) {
-        sendWebSocketError(ws, 'No pending ACP permission request found for this request ID');
-        return;
+        return { replies: [{ type: 'error', error: { kind: 'permission_not_pending' } }] };
       }
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Responded to permission request', {
@@ -37,6 +35,7 @@ export function createPermissionResponseHandler(deps: {
           answers,
         });
       }
+      return { replies: [] };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('[Chat WS] Failed to respond to permission request', {
@@ -44,7 +43,9 @@ export function createPermissionResponseHandler(deps: {
         requestId,
         error: errorMessage,
       });
-      sendWebSocketError(ws, `Failed to respond to permission: ${errorMessage}`);
+      return {
+        replies: [{ type: 'error', error: { kind: 'permission_response_failed', cause: error } }],
+      };
     }
   };
 }

@@ -1,20 +1,19 @@
 import { createLogger } from '@/backend/services/logger.service';
 import { DEBUG_CHAT_WS } from '@/backend/services/session/service/chat/chat-message-handlers/constants';
 import type {
-  ChatMessageHandler,
-  ChatMessageHandlerConfigService,
-} from '@/backend/services/session/service/chat/chat-message-handlers/types';
+  SessionCommandHandler,
+  SessionModelCommandService,
+} from '@/backend/services/session/service/chat/session-command.types';
 import type { SetModelMessage } from '@/shared/websocket';
-import { sendWebSocketError } from './utils';
 
 const logger = createLogger('chat-message-handlers');
 
 export function createSetModelHandler(deps: {
-  sessionConfigService: ChatMessageHandlerConfigService;
-}): ChatMessageHandler<SetModelMessage> {
+  sessionConfigService: SessionModelCommandService;
+}): SessionCommandHandler<SetModelMessage> {
   const { sessionConfigService } = deps;
 
-  return async ({ ws, sessionId, message }) => {
+  return async ({ sessionId }, message) => {
     try {
       await sessionConfigService.setSessionModel(sessionId, message.model);
       if ('reasoningEffort' in message) {
@@ -24,12 +23,6 @@ export function createSetModelHandler(deps: {
         );
       }
       const capabilities = await sessionConfigService.getChatBarCapabilities(sessionId);
-      ws.send(
-        JSON.stringify({
-          type: 'chat_capabilities',
-          capabilities,
-        })
-      );
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Set model', {
           sessionId,
@@ -37,6 +30,7 @@ export function createSetModelHandler(deps: {
           reasoningEffort: message.reasoningEffort,
         });
       }
+      return { replies: [{ type: 'chat_capabilities', capabilities }] };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('[Chat WS] Failed to set model', {
@@ -45,7 +39,7 @@ export function createSetModelHandler(deps: {
         reasoningEffort: message.reasoningEffort,
         error: errorMessage,
       });
-      sendWebSocketError(ws, `Failed to set model: ${errorMessage}`);
+      return { replies: [{ type: 'error', error: { kind: 'set_model_failed', cause: error } }] };
     }
   };
 }

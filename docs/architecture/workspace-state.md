@@ -57,6 +57,29 @@ provisioning, preserves manual/resume branch options, and logs unexpected
 failures without changing the response or deleting the workspace. Child and
 periodic-task launch policies remain with their existing callers.
 
+## Accepted workspace names
+
+The rename RPC keeps its input validation, not-found response, and persisted
+workspace result. Its injected application use case coordinates the existing
+persistence writer with snapshot publication. Renames for the same workspace are
+serialized within one application; other workspaces remain independent, and
+completed or rejected operations release their queue entries.
+
+The snapshot store tracks name freshness independently of unrelated workspace
+and lifecycle fields. Accepted renames publish the canonical returned name and
+DB `updatedAt`, with equal-millisecond commits ordered by that serialized
+writer. Ordinary name observations must be strictly newer. State-change and
+reconciliation producers carry canonical DB name provenance, so a delayed older
+read cannot overwrite a rename merely because it was observed later. Generic
+store callers without provenance retain observation-timestamp ordering.
+
+Name publication changes only an existing live entry and emits the existing
+snapshot change synchronously. Missing, removed, ARCHIVING, and ARCHIVED entries
+are not recreated. Name updates do not advance other field fences; their private
+freshness metadata is not added to full or changed wire payloads. Workspace
+persistence remains independent of the snapshot store, and clients retain their
+normal stream authority rather than overlaying HTTP names.
+
 ## Run script
 
 Startup output accumulates across factory setup and project startup phases. The
@@ -220,6 +243,28 @@ hydration retains its extra fields and existing initial sidebar status. The
 sidebar consumes a required Pick of the same summary instead of an optional
 parallel interface. Shared validation schemas do not change the flat snapshot
 wire, and existing list/detail hydration fallbacks remain in place.
+
+Snapshot entries may advertise `summaryVersion: 1` once every required summary
+input has been accepted from an authoritative read or event. The flat entry
+includes issue links, creation source, worktree path, initialization error, and
+the compact `autoIteration` object; raw configuration, progress and logbook
+remain on legacy/detail paths. A complete claim requires explicit nullable
+fields and does not inherit legacy schema defaults. Unversioned entries remain
+valid and still use consumer repair.
+
+The store tracks accepted hydration separately from values: a default-shaped
+field or a value rejected by a timestamp guard cannot make an entry complete.
+Metadata and compact loop state have independent timestamp groups, so a newer
+lifecycle transition does not block older unknown metadata from a reconciliation
+seed. Mode changes invalidate prior compact-loop hydration; accepted current
+mode/status determine its shape and status while known counters are preserved.
+
+Committed lifecycle events publish their row's metadata immediately, including
+initial provisioning, READY paths and setup errors. A NEW-only workspace before
+initialization gains metadata through reconciliation; no separate creation event
+is introduced. Reconciliation seeds metadata, validated compact loop data and
+runtime inputs before releasing its seed barrier and starting slow Git work.
+Existing incomplete-row repair remains necessary.
 
 Each snapshot WebSocket starts from a full read of current store state after its
 optional startup seed wait. Changes emitted before that baseline are already

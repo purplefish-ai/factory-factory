@@ -127,6 +127,7 @@ const baselineTokenStats: TokenStats = {
   turnCount: 6,
   webSearchRequests: 0,
   contextWindow: 200_000,
+  contextUsedTokens: 6600,
   maxOutputTokens: 8192,
   serviceTier: 'default',
 };
@@ -141,6 +142,10 @@ export default function MobileBaselinePage() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [draft, setDraft] = useState('');
+  const [sentCommands, setSentCommands] = useState<string[]>([]);
+  const recordCommand = (command: string) => {
+    setSentCommands((commands) => [...commands, command]);
+  };
   const [chatSettings, setChatSettings] = useState<ChatSettings>({
     selectedModel: 'sonnet',
     reasoningEffort: 'medium',
@@ -239,7 +244,11 @@ export default function MobileBaselinePage() {
           </Sheet>
         </div>
 
-        <div data-testid="mobile-chat-demo" className="rounded-lg border bg-card p-2">
+        <div
+          data-testid="mobile-chat-demo"
+          data-sent-commands={JSON.stringify(sentCommands)}
+          className="rounded-lg border bg-card p-2"
+        >
           <div className="px-2 py-1.5 text-sm font-medium border-b">Chat Composer Demo</div>
           <div className="h-[60dvh] min-h-0 flex flex-col overflow-hidden">
             <div
@@ -254,7 +263,8 @@ export default function MobileBaselinePage() {
             </div>
             <div data-testid="mobile-chat-composer" className="z-20 border-t bg-background pb-safe">
               <ChatInput
-                onSend={noop}
+                onSend={recordCommand}
+                onCompact={() => recordCommand('/compact')}
                 disabled={false}
                 running={false}
                 value={draft}
