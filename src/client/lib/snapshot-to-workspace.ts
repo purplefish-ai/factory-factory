@@ -142,10 +142,11 @@ function projectLegacyPRState(entry: WorkspaceSnapshotEntry, prs: WorkspacePullR
 /** The snapshot-backed half of a list row, shared with the detail cache. */
 function projectSnapshotToLiveFields(
   entry: WorkspaceSnapshotEntry,
-  existing?: Pick<ProjectWorkspace, 'prs'>
+  existing?: Pick<ProjectWorkspace, 'prs' | 'createdAt'>
 ) {
   const hasLegacyPR = !entry.prs?.length && Boolean(entry.prUrl);
   const prs = projectSnapshotPRs(entry, existing?.prs ?? []);
+  const createdAt = new Date(entry.createdAt);
   return {
     id: entry.workspaceId,
     projectId: entry.projectId,
@@ -153,7 +154,10 @@ function projectSnapshotToLiveFields(
     status: entry.status,
     mode: entry.mode,
     autoIterationStatus: entry.autoIterationStatus,
-    createdAt: new Date(entry.createdAt),
+    createdAt:
+      existing?.createdAt && existing.createdAt.getTime() === createdAt.getTime()
+        ? existing.createdAt
+        : createdAt,
     branchName: entry.branchName,
     prs,
     prSummary: entry.prSummary ?? deriveWorkspacePRSummary(prs, entry.ratchetEnabled),

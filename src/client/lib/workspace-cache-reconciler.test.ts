@@ -45,6 +45,94 @@ afterEach(() => {
 });
 
 describe('project workspace HTTP/stream commit ownership', () => {
+  it('preserves cache and nested references across unchanged full snapshots and equal HTTP repair', async () => {
+    const f = fixture();
+    const bootstrap = f.client.fetchQuery({ ...f.options, staleTime: 0 });
+    f.resolve(list('baseline'));
+    await bootstrap;
+    const full = {
+      type: 'snapshot_full' as const,
+      projectId: 'proj-1',
+      entries: [entry({ name: 'baseline' })],
+      reviewCount: 3,
+    };
+    f.owner.apply(f.token, full);
+    const before = f.client.getQueryData<ReturnType<typeof list>>(f.options.queryKey)!;
+    f.owner.apply(f.token, structuredClone(full));
+    expect(f.client.getQueryData(f.options.queryKey)).toBe(before);
+    const repair = f.client.fetchQuery({ ...f.options, staleTime: 0 });
+    f.resolve(list('stale HTTP name'));
+    await repair;
+    const after = f.client.getQueryData<ReturnType<typeof list>>(f.options.queryKey)!;
+    expect(after).toBe(before);
+    expect(after.workspaces).toBe(before.workspaces);
+    expect(after.workspaces[0]?.prMonitoring).toBe(before.workspaces[0]?.prMonitoring);
+    expect(after.workspaces[0]?.createdAt).toBe(before.workspaces[0]?.createdAt);
+  });
+
+  it('replaces only changed nested snapshot references and retains other rows', async () => {
+    const f = fixture();
+    const bootstrap = f.client.fetchQuery({ ...f.options, staleTime: 0 });
+    f.resolve(list());
+    await bootstrap;
+    const first = entry({ name: 'first' });
+    const second = entry({ workspaceId: 'ws-2', name: 'second' });
+    f.owner.apply(f.token, {
+      type: 'snapshot_full',
+      projectId: 'proj-1',
+      entries: [first, second],
+    });
+    const before = f.client.getQueryData<ReturnType<typeof list>>(f.options.queryKey)!;
+    const changed = structuredClone(first);
+    changed.prMonitoring = { ...changed.prMonitoring, bindingRevision: 1 };
+    f.owner.apply(f.token, { type: 'snapshot_changed', workspaceId: 'ws-1', entry: changed });
+    const after = f.client.getQueryData<ReturnType<typeof list>>(f.options.queryKey)!;
+    expect(after).not.toBe(before);
+    expect(after.workspaces).not.toBe(before.workspaces);
+    expect(after.workspaces[0]).not.toBe(before.workspaces[0]);
+    expect(after.workspaces[0]?.prMonitoring).not.toBe(before.workspaces[0]?.prMonitoring);
+    expect(after.workspaces[0]?.prMonitoring.bindingRevision).toBe(1);
+    expect(after.workspaces[0]?.sessionSummaries).toBe(before.workspaces[0]?.sessionSummaries);
+    expect(after.workspaces[0]?.createdAt).toBe(before.workspaces[0]?.createdAt);
+    expect(after.workspaces[1]).toBe(before.workspaces[1]);
+    f.owner.apply(f.token, {
+      type: 'snapshot_changed',
+      workspaceId: 'ws-1',
+      entry: { ...changed, createdAt: '2026-02-01T00:00:00Z' },
+    });
+    const redated = f.client.getQueryData<ReturnType<typeof list>>(f.options.queryKey)!;
+    expect(redated.workspaces[0]?.createdAt).toEqual(new Date('2026-02-01T00:00:00Z'));
+    expect(redated.workspaces[0]?.createdAt).not.toBe(after.workspaces[0]?.createdAt);
+    expect(redated.workspaces[1]).toBe(after.workspaces[1]);
+  });
+
+  it('preserves default sharing for bootstrap HTTP and explicit optimistic writes', async () => {
+    const f = fixture();
+    const bootstrap = f.client.fetchQuery({ ...f.options, staleTime: 0 });
+    f.resolve(list());
+    await bootstrap;
+    const before = f.client.getQueryData<ReturnType<typeof list>>(f.options.queryKey)!;
+    const equal = {
+      ...before,
+      workspaces: before.workspaces.map((row) => ({
+        ...row,
+        prMonitoring: { ...row.prMonitoring },
+      })),
+    };
+    const second = f.client.fetchQuery({ ...f.options, staleTime: 0 });
+    f.resolve(equal);
+    await second;
+    expect(f.client.getQueryData(f.options.queryKey)).toBe(before);
+    f.client.setQueryData(f.options.queryKey, {
+      ...equal,
+      workspaces: equal.workspaces.map((row) => ({ ...row, name: 'optimistic name' })),
+    });
+    const optimistic = f.client.getQueryData<ReturnType<typeof list>>(f.options.queryKey)!;
+    expect(optimistic.workspaces[0]?.name).toBe('optimistic name');
+    expect(optimistic.workspaces[0]?.prMonitoring).toBe(before.workspaces[0]?.prMonitoring);
+    expect(optimistic.workspaces[0]?.createdAt).toBe(before.workspaces[0]?.createdAt);
+  });
+
   it('allows HTTP membership and live fields before a current full baseline', async () => {
     const f = fixture();
     const fetch = f.client.fetchQuery({ ...f.options, staleTime: 0 });
@@ -149,9 +237,10 @@ describe('project workspace HTTP/stream commit ownership', () => {
     });
     // A deliberate manual write is not a second HTTP commit of this object.
     f.client.setQueryData(f.options.queryKey, returned);
-    expect(f.client.getQueryData(f.options.queryKey)).toBe(returned);
+    const manual = f.client.getQueryData(f.options.queryKey);
+    expect(manual).toEqual(returned);
     const cached = await f.client.fetchQuery(f.options);
-    expect(cached).toBe(returned);
+    expect(cached).toBe(manual);
   });
 
   it('does not resurrect an optimistic archive during metadata repair', async () => {

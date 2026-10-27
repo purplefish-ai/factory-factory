@@ -1,4 +1,4 @@
-import { type QueryClient, queryOptions } from '@tanstack/react-query';
+import { type QueryClient, queryOptions, replaceEqualDeep } from '@tanstack/react-query';
 import { getQueryKey } from '@trpc/react-query';
 import {
   projectSnapshotToWorkspace,
@@ -74,14 +74,14 @@ export class ProjectWorkspaceCacheReconciler {
   readonly structuralSharing = (previous: unknown, next: unknown): unknown => {
     const http = typeof next === 'object' && next !== null ? this.httpResults.get(next) : undefined;
     if (!http) {
-      return next;
+      return replaceEqualDeep(previous, next);
     }
     this.httpResults.delete(http.data);
     if (http.epoch !== this.epoch) {
       return previous;
     }
     if (!this.entries) {
-      return http.data;
+      return replaceEqualDeep(previous, http.data);
     }
 
     // Read the current cache, not the value captured when HTTP began/resolved.
@@ -90,7 +90,7 @@ export class ProjectWorkspaceCacheReconciler {
     const rows =
       current?.workspaces ??
       [...this.entries.values()].map((entry) => projectSnapshotToWorkspace(entry));
-    return {
+    const reconciled = {
       workspaces: rows.map((workspace) => {
         const entry = this.entries?.get(workspace.id);
         // Explicit optimistic additions/removals retain their existing semantics.
@@ -100,11 +100,13 @@ export class ProjectWorkspaceCacheReconciler {
         const metadata = incoming.get(workspace.id);
         return projectSnapshotToWorkspace(
           entry,
-          metadata ? { ...workspace, ...metadata } : workspace
+          // Creation time belongs to the snapshot; retain its cached Date identity.
+          metadata ? { ...workspace, ...metadata, createdAt: workspace.createdAt } : workspace
         );
       }),
       reviewCount: this.reviewCount ?? http.data.reviewCount,
     };
+    return replaceEqualDeep(previous, reconciled);
   };
 
   accepts(connection: WorkspaceConnection, message: SnapshotServerMessage): boolean {
