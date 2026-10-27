@@ -39,7 +39,9 @@ describe('slash command disk scanner', () => {
     writeFileSync(join(escapedPath, 'foreign.md'), 'Foreign');
     symlinkSync(escapedPath, join(commandsPath, 'external'));
     symlinkSync(commandsPath, join(commandsPath, 'cycle'));
-    expect(scanClaudeWorkspaceCommandsFromDisk(worktreePath)).toEqual([
+    expect(
+      scanClaudeWorkspaceCommandsFromDisk(worktreePath).sort((a, b) => a.name.localeCompare(b.name))
+    ).toEqual([
       { name: 'deploy', description: 'root' },
       { name: 'release:deploy', description: 'release' },
       { name: 'team:deploy', description: 'team' },
