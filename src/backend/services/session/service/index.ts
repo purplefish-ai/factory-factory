@@ -22,6 +22,8 @@ export type { SessionInitPolicyBridge, SessionWorkspaceBridge } from './bridges'
 export type { EventForwarderContext } from './chat/chat-event-forwarder.service';
 export { chatEventForwarderService } from './chat/chat-event-forwarder.service';
 export { ChatMessageHandlerService } from './chat/chat-message-handlers.service';
+export { SessionDispatchService } from './dispatch/session-dispatch.service';
+export type { DispatchOptions } from './dispatch/session-dispatch.types';
 export { sessionDataService } from './data/session-data.service';
 export { sessionProviderResolverService } from './data/session-provider-resolver.service';
 export type { SessionInterceptorBridge } from './interceptor.bridge';
@@ -55,6 +57,7 @@ export {
   claudeModelCatalogService,
   codexModelCatalogService,
   sessionConfigService,
+  sessionDispatchService,
   sessionLifecycleEventService,
   sessionLifecycleService,
   sessionPermissionService,

@@ -1,5 +1,5 @@
 import type { WebSocket } from 'ws';
-import type { NotificationDispatchClaim } from '@/backend/services/session/service/lifecycle/session-notification-delivery.service';
+import type { SessionDispatchStartupService as ChatMessageHandlerStartupService } from '@/backend/services/session/service/dispatch/session-dispatch.types';
 import type { AgentContentItem } from '@/shared/acp-protocol';
 import type { ChatMessageInput } from '@/shared/websocket';
 
@@ -29,38 +29,12 @@ export interface ChatMessageHandlerConfigService {
   getChatBarCapabilities: (sessionId: string) => Promise<unknown>;
 }
 
-export interface ChatClientStartOptions {
-  resumePolicy?: 'allow_fallback' | 'require_existing';
-  thinkingEnabled?: boolean;
-  planModeEnabled?: boolean;
-  model?: string;
-  reasoningEffort?: string;
-}
-
-export interface ChatMessageHandlerLifecycleGate {
-  getGeneration(sessionId: string): number;
-  isGenerationCurrent(sessionId: string, generation: number): boolean;
-  isSessionStopping(sessionId: string): boolean;
-}
-
-export interface ChatMessageHandlerStartupService {
-  getSessionClient(sessionId: string): unknown | undefined;
-  getOrCreateSessionClient(sessionId: string, options: ChatClientStartOptions): Promise<unknown>;
-}
-
-export interface ChatMessageHandlerNotificationDeliveryService {
-  recoverPending(input: {
-    sessionId: string;
-    workspaceId: string;
-    assertAllowed(): void;
-  }): Promise<{ dispatchableCount: number }>;
-  claimForDispatch(sessionId: string, messageId: string): NotificationDispatchClaim;
-  isAlreadyDelivered(notificationId: string): Promise<boolean>;
-  acknowledgeSuccessfulDispatch(messageId: string): Promise<void>;
-  removeDuplicateFromQueue(sessionId: string, messageId: string): boolean;
-  resetSession(sessionId: string): void;
-  isNotificationMessage(messageId: string): boolean;
-}
+export type {
+  SessionDispatchStartOptions as ChatClientStartOptions,
+  SessionDispatchLifecycleGate as ChatMessageHandlerLifecycleGate,
+  SessionDispatchStartupService as ChatMessageHandlerStartupService,
+  SessionDispatchNotificationDeliveryService as ChatMessageHandlerNotificationDeliveryService,
+} from '@/backend/services/session/service/dispatch/session-dispatch.types';
 
 export interface HandlerContext<T extends ChatMessageInput = ChatMessageInput> {
   ws: WebSocket;

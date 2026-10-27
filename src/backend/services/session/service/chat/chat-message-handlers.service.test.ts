@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createTestSessionDispatcher } from '@/backend/services/session/service/dispatch/session-dispatch.test-helpers';
 import { VOICE_MODE_BREVITY_INSTRUCTION } from '@/backend/services/session/service/voice/voice-mode-instructions';
 import type { QueuedMessage } from '@/shared/acp-protocol';
 
@@ -79,13 +80,13 @@ vi.mock('./chat-message-handlers/registry', () => ({
 
 import { ChatMessageHandlerService } from './chat-message-handlers.service';
 
-const chatMessageHandlerService = new ChatMessageHandlerService();
+const chatMessageHandlerService = new ChatMessageHandlerService(createTestSessionDispatcher());
 
 describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
   it('fails fast when dispatch occurs before lifecycle configuration', async () => {
-    await expect(new ChatMessageHandlerService().tryDispatchNextMessage('s1')).rejects.toThrow(
-      'ChatMessageHandlerService not configured: lifecycle gate/startup missing'
-    );
+    await expect(
+      new ChatMessageHandlerService(createTestSessionDispatcher()).tryDispatchNextMessage('s1')
+    ).rejects.toThrow('ChatMessageHandlerService not configured: lifecycle gate/startup missing');
   });
   const queuedMessage: QueuedMessage = {
     id: 'm1',

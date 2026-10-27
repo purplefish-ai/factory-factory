@@ -1,4 +1,7 @@
+import { acpRuntimeManager } from '@/backend/services/session/service/acp';
 import { ChatMessageHandlerService } from '@/backend/services/session/service/chat/chat-message-handlers.service';
+import { SessionDispatchService } from '@/backend/services/session/service/dispatch/session-dispatch.service';
+import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
 import {
   acpEventProcessor,
   claudeModelCatalogService,
@@ -28,7 +31,13 @@ export {
   sessionService,
 };
 
-export const chatMessageHandlerService = new ChatMessageHandlerService();
+export const sessionDispatchService = new SessionDispatchService({
+  runtimeManager: acpRuntimeManager,
+  configService: sessionConfigService,
+  promptService: sessionService,
+  backgroundDelivery: sessionBackgroundDeliveryService,
+});
+export const chatMessageHandlerService = new ChatMessageHandlerService(sessionDispatchService);
 
 chatMessageHandlerService.configureLifecycle({
   gate: sessionLifecycleGate,
