@@ -199,7 +199,6 @@ import {
   recoverStaleArchivingWorkspaces,
 } from '@/backend/orchestration/workspace-archive.orchestrator';
 import {
-  createChildWorkspace,
   fireLifecycleNotification,
   persistChildNotification,
   persistParentNotification,
@@ -363,7 +362,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     configService: graphConfigService,
     computePendingRequestType,
     triggerAdversarialReview,
-    createChildWorkspace,
+    createChildWorkspace: vi.fn<ApplicationServices['createChildWorkspace']>(),
     deliverWorkspaceNotification,
     createLogger,
     createWorkspaceCreationService: () => ({ create: vi.fn() }),

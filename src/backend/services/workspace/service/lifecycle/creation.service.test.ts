@@ -486,6 +486,64 @@ describe('WorkspaceCreationService', () => {
       });
     });
 
+    describe('CHILD_WORKSPACE source', () => {
+      const source = {
+        type: 'CHILD_WORKSPACE',
+        projectId: 'proj-1',
+        parentWorkspaceId: 'parent-1',
+        name: 'Named child',
+        description: 'Child description',
+        initialPrompt: 'Implement child work',
+        reportBackOn: 'After verification',
+      } as const;
+
+      it.each([
+        { parent: null, code: 'NOT_FOUND', message: 'Parent workspace not found: parent-1' },
+        {
+          parent: { status: 'ARCHIVED', parentWorkspaceId: null },
+          code: 'INVALID_INPUT',
+          message: 'Cannot create a child workspace under an archived parent',
+        },
+        {
+          parent: { status: 'READY', parentWorkspaceId: 'grandparent-1' },
+          code: 'INVALID_INPUT',
+          message: 'Child workspaces cannot have children (max depth 1)',
+        },
+      ])(
+        'rejects invalid parent before persistence: $message',
+        async ({ parent, code, message }) => {
+          vi.mocked(workspaceAccessorModule.workspaceAccessor.findRawById).mockResolvedValue(
+            unsafeCoerce(parent)
+          );
+          await expect(service.create(source)).rejects.toMatchObject({ code, message });
+          expect(workspaceAccessorModule.workspaceAccessor.create).not.toHaveBeenCalled();
+        }
+      );
+
+      it('persists child identity, prompt and report-back metadata through canonical defaults', async () => {
+        vi.mocked(workspaceAccessorModule.workspaceAccessor.findRawById).mockResolvedValue(
+          unsafeCoerce({ id: 'parent-1', status: 'READY', parentWorkspaceId: null })
+        );
+        await expect(service.create(source)).resolves.toEqual(mockWorkspace);
+        expect(workspaceAccessorModule.workspaceAccessor.findRawById).toHaveBeenCalledWith(
+          'parent-1'
+        );
+        expect(workspaceAccessorModule.workspaceAccessor.create).toHaveBeenCalledWith({
+          projectId: 'proj-1',
+          parentWorkspaceId: 'parent-1',
+          name: 'Named child',
+          description: 'Child description',
+          creationSource: 'CHILD_WORKSPACE',
+          creationMetadata: {
+            parentWorkspaceId: 'parent-1',
+            initialPrompt: 'Implement child work',
+            reportBackOn: 'After verification',
+          },
+          ratchetEnabled: true,
+        });
+      });
+    });
+
     describe('PERIODIC_TASK source', () => {
       it('creates through canonical defaults and persists the periodic task identity', async () => {
         await service.create({

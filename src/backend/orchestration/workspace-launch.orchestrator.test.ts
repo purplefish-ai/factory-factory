@@ -203,3 +203,142 @@ describe.each(sources)(
     );
   }
 );
+
+const childSource = {
+  type: 'CHILD_WORKSPACE',
+  projectId: 'p1',
+  parentWorkspaceId: 'parent-1',
+  name: 'Child',
+  initialPrompt: 'Implement the child task',
+  reportBackOn: 'Finished implementation',
+} as const;
+const periodicSource = {
+  type: 'PERIODIC_TASK',
+  projectId: 'p1',
+  periodicTaskId: 'task-1',
+  name: 'Daily task',
+  initialPrompt: 'Run scheduled work',
+  ratchetEnabled: true,
+} as const;
+
+describe('child workspace launch policy', () => {
+  it('persists before resolving the provider and provisions even at zero capacity without preflight', async () => {
+    const { ports, events, workspace } = createPorts();
+    ports.getMaxSessionsPerWorkspace.mockReturnValue(0);
+    await expect(launchWorkspace(childSource, ports)).resolves.toEqual({
+      workspace,
+      defaultSessionId: 'session-1',
+    });
+    expect(events).toEqual(['workspace', 'provider', 'session', 'initialize']);
+    expect(ports.getMaxSessionsPerWorkspace).not.toHaveBeenCalled();
+    expect(ports.checkCliHealth).not.toHaveBeenCalled();
+    expect(ports.resolveProvider).toHaveBeenCalledWith();
+    expect(ports.createWorkspace).toHaveBeenCalledWith(childSource);
+    expect(ports.createDefaultSession).toHaveBeenCalledWith({
+      workspaceId: 'w-created',
+      workflow: 'followup',
+      name: 'Chat 1',
+      provider: 'CODEX',
+      providerProjectPath: null,
+    });
+    expect(ports.initializeWorktree).toHaveBeenCalledExactlyOnceWith('w-created');
+  });
+
+  it.each(['provider', 'session'])(
+    'retains and initializes the child after %s failure',
+    async (stage) => {
+      const { ports, workspace } = createPorts();
+      const failure = new Error('provision failed');
+      if (stage === 'provider') {
+        ports.resolveProvider.mockRejectedValue(failure);
+      } else {
+        ports.createDefaultSession.mockRejectedValue(failure);
+      }
+      await expect(launchWorkspace(childSource, ports)).resolves.toEqual({
+        workspace,
+        defaultSessionId: null,
+      });
+      expect(ports.logger.warn).toHaveBeenCalledWith(
+        'Failed to create default session for child workspace',
+        { workspaceId: 'w-created', error: 'provision failed' }
+      );
+      expect(ports.initializeWorktree).toHaveBeenCalledExactlyOnceWith('w-created');
+      if (stage === 'provider') {
+        expect(ports.createDefaultSession).not.toHaveBeenCalled();
+      }
+    }
+  );
+
+  it('propagates creation failure before provisioning or initialization', async () => {
+    const { ports } = createPorts();
+    const failure = new ApplicationError('INVALID_INPUT', 'Invalid parent');
+    ports.createWorkspace.mockRejectedValue(failure);
+    await expect(launchWorkspace(childSource, ports)).rejects.toBe(failure);
+    expect(ports.resolveProvider).not.toHaveBeenCalled();
+    expect(ports.createDefaultSession).not.toHaveBeenCalled();
+    expect(ports.initializeWorktree).not.toHaveBeenCalled();
+  });
+});
+
+describe('periodic task launch policy', () => {
+  it('requires its unattended workflow session without provider resolution, health or capacity checks', async () => {
+    const { ports, events, workspace } = createPorts();
+    ports.getMaxSessionsPerWorkspace.mockReturnValue(0);
+    await expect(launchWorkspace(periodicSource, ports)).resolves.toEqual({
+      workspace,
+      defaultSessionId: 'session-1',
+    });
+    expect(events).toEqual(['workspace', 'session', 'initialize']);
+    expect(ports.getMaxSessionsPerWorkspace).not.toHaveBeenCalled();
+    expect(ports.resolveProvider).not.toHaveBeenCalled();
+    expect(ports.checkCliHealth).not.toHaveBeenCalled();
+    expect(ports.createWorkspace).toHaveBeenCalledWith(periodicSource);
+    expect(ports.createDefaultSession).toHaveBeenCalledWith({
+      workspaceId: 'w-created',
+      workflow: 'periodic-task',
+      name: 'Periodic task',
+    });
+    expect(ports.initializeWorktree).toHaveBeenCalledExactlyOnceWith('w-created');
+  });
+
+  it('propagates required-session failure after persistence without scheduling initialization', async () => {
+    const { ports, events } = createPorts();
+    const failure = new Error('session insert failed');
+    ports.createDefaultSession.mockRejectedValue(failure);
+    await expect(launchWorkspace(periodicSource, ports)).rejects.toBe(failure);
+    expect(events).toEqual(['workspace']);
+    expect(ports.createWorkspace).toHaveBeenCalledOnce();
+    expect(ports.initializeWorktree).not.toHaveBeenCalled();
+    expect(ports.logger.warn).not.toHaveBeenCalled();
+  });
+});
+
+describe.each([childSource, periodicSource])('$type background initialization', (source) => {
+  it('returns before initialization settles and reports failure with the source-specific log', async () => {
+    const { ports, workspace } = createPorts();
+    let rejectInit!: (reason: unknown) => void;
+    ports.initializeWorktree.mockReturnValue(
+      new Promise((_, reject) => {
+        rejectInit = reject;
+      })
+    );
+    await expect(launchWorkspace(source, ports)).resolves.toEqual({
+      workspace,
+      defaultSessionId: 'session-1',
+    });
+    const failure = new Error('init failed');
+    rejectInit(failure);
+    await vi.waitFor(() =>
+      expect(ports.logger.error).toHaveBeenCalledWith(
+        ...(source.type === 'CHILD_WORKSPACE'
+          ? ['Child workspace init failed', { workspaceId: 'w-created', error: failure }]
+          : [
+              'Failed to initialize workspace for periodic task',
+              failure,
+              { workspaceId: 'w-created' },
+            ])
+      )
+    );
+    expect(ports.initializeWorktree).toHaveBeenCalledExactlyOnceWith('w-created');
+  });
+});

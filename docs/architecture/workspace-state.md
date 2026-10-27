@@ -54,8 +54,10 @@ does not enforce a session limit against an existing workspace. Zero capacity
 skips preflight and session provisioning. Session creation failure retains the
 workspace and logs a warning. Initialization starts in the background after
 provisioning, preserves manual/resume branch options, and logs unexpected
-failures without changing the response or deleting the workspace. Child and
-periodic-task launch policies remain with their existing callers.
+failures without changing the response or deleting the workspace. The same owner
+selects separate child and periodic-task policies, described in
+[agent runtime](agent-runtime.md#child-workspaces) and
+[integrations](integrations.md#periodic-tasks).
 
 ## Accepted workspace names
 
