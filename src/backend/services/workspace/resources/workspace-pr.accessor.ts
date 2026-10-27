@@ -6,7 +6,8 @@ import type {
   WorkspacePRIdentity,
 } from '@/backend/services/workspace/types';
 import type { CIStatus, PRState } from '@/shared/core';
-import { type PRObservation, type PRTarget, reducePRObservation } from '@/shared/pr-monitoring';
+import { reducePRObservation } from '@/shared/pr-trigger-policy';
+import type { PRObservation, PRTarget } from '@/shared/schemas/pr-event.schema';
 import { prFactPayloadSchema, prObservationSchema } from '@/shared/schemas/pr-event.schema';
 import type { WorkspacePullRequest } from '@/shared/workspace-pr';
 import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';

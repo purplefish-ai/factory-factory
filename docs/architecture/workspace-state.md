@@ -39,6 +39,24 @@ Workspace terminal reconnects replace each existing tab's output with its server
 rolling buffer by terminal ID. Tab identity and selection are preserved; output
 outside the server's bounded buffer cannot be recovered.
 
+## Interactive workspace launch
+
+`workspace.create` keeps trusted-local authorization, input validation, and its
+workspace response shape. `workspace-launch.orchestrator.ts` coordinates the
+interactive MANUAL, RESUME_BRANCH, GITHUB_ISSUE, and LINEAR_ISSUE sources
+through narrow capabilities wired by `app-context.ts`; the workspace capsule
+still owns source validation and persistence.
+
+For each interactive source, capacity above zero enables effective-provider
+resolution and CLI preflight before persistence, followed by best-effort
+`followup` / `Chat 1` session provisioning. This gate enables provisioning; it
+does not enforce a session limit against an existing workspace. Zero capacity
+skips preflight and session provisioning. Session creation failure retains the
+workspace and logs a warning. Initialization starts in the background after
+provisioning, preserves manual/resume branch options, and logs unexpected
+failures without changing the response or deleting the workspace. Child and
+periodic-task launch policies remain with their existing callers.
+
 ## Run script
 
 Startup output accumulates across factory setup and project startup phases. The

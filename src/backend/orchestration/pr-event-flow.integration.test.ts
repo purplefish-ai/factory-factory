@@ -113,6 +113,13 @@ it('commits facts and events together, rejects stale writes, and preserves a sib
     expectedEventEpoch: 1,
     observation: redObservation,
   };
+  expect(
+    await workspacePrSnapshotService.acceptMonitoredObservation({
+      ...input,
+      expectedEventEpoch: 2,
+    })
+  ).toEqual({ applied: false, eventIds: [] });
+  expect(await db.prisma.workspacePREvent.count({ where: { prId: 'p' } })).toBe(0);
   expect(await workspacePrSnapshotService.acceptMonitoredObservation(input)).toMatchObject({
     applied: true,
   });
@@ -325,4 +332,76 @@ it('retains a competing dedicated request and wakes it after the workspace claim
     status: 'ready',
     delivery: { attempt: 1 },
   });
+});
+
+it('accepts a changed head without superseding an in-flight frozen failure', async () => {
+  const workspaceId = 'policy-flow';
+  const prId = 'policy-pr';
+  const sessionId = 'policy-main';
+  const target = { workspaceId, prId };
+  await db.prisma.workspace.create({
+    data: {
+      id: workspaceId,
+      projectId: 'project',
+      name: 'Policy flow',
+      status: 'READY',
+      prMonitoring: { create: { enabled: true, bindingRevision: 1, eventEpoch: 1 } },
+      prs: { create: { id: prId, url: redObservation.url } },
+    },
+  });
+  await db.prisma.agentSession.create({
+    data: {
+      id: sessionId,
+      workspaceId,
+      workflow: 'implement',
+      provider: 'CODEX',
+      providerSessionId: 'policy-provider',
+    },
+  });
+  await db.prisma.workspacePRMonitoring.update({
+    where: { workspaceId },
+    data: { recipientSessionId: sessionId },
+  });
+  const accepted = await workspacePrSnapshotService.acceptMonitoredObservation({
+    target,
+    expectedPrRevision: 0,
+    expectedEventEpoch: 1,
+    observation: redObservation,
+  });
+  expect(accepted.eventIds).toHaveLength(1);
+  const prepared = await preparePRDelivery({
+    sessionId,
+    request: { workspaceId, prId, bindingRevision: 1 },
+  });
+  if (prepared.status !== 'ready') {
+    throw new Error('Expected a frozen failure delivery');
+  }
+  const changed = await workspacePrSnapshotService.acceptMonitoredObservation({
+    target,
+    expectedPrRevision: 1,
+    expectedEventEpoch: 1,
+    observation: { ...redObservation, headSha: 'next-head' },
+  });
+  expect(changed.eventIds).toHaveLength(1);
+  const frozen = await db.prisma.workspacePREvent.findUniqueOrThrow({
+    where: { id: accepted.eventIds[0]! },
+  });
+  expect(frozen).toMatchObject({
+    state: 'DISPATCHING',
+    deliveryId: prepared.delivery.deliveryId,
+    deliveryText: prepared.delivery.text,
+  });
+  const next = await db.prisma.workspacePREvent.findUniqueOrThrow({
+    where: { id: changed.eventIds[0]! },
+  });
+  expect(next).toMatchObject({
+    state: 'PENDING',
+    deliveryId: null,
+    kind: 'CI_FAILED',
+    payload: { observation: { headSha: 'next-head' } },
+  });
+  await prBackgroundDeliveryPort.complete(prepared.delivery);
+  expect(
+    (await workspacePRMonitoringService.listPending(workspaceId, prId)).map((e) => e.id)
+  ).toEqual(changed.eventIds);
 });
