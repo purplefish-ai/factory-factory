@@ -34,16 +34,19 @@ describe('PR event reduction', () => {
     expect(reduction.events).toEqual([]);
   });
   it('distinguishes new heads and same-head reruns using actual metadata', () => {
-    const key = reduce(redObservation).events[0]?.deduplicationKey;
-    expect(
-      reduce({ ...redObservation, headSha: 'new' }, redObservation).events[0]?.deduplicationKey
-    ).not.toBe(key);
-    expect(
-      reduce(
-        { ...redObservation, checks: [{ ...redObservation.checks[0]!, attempt: 2 }] },
-        redObservation
-      ).events[0]?.deduplicationKey
-    ).not.toBe(key);
+    const base = reduce(redObservation);
+    const newHead = reduce({ ...redObservation, headSha: 'new' }, redObservation);
+    const rerun = reduce(
+      { ...redObservation, checks: [{ ...redObservation.checks[0]!, attempt: 2 }] },
+      redObservation
+    );
+    for (const result of [base, newHead, rerun]) {
+      expect(result.events).toHaveLength(1);
+      expect(result.events[0]).toMatchObject({ kind: 'CI_FAILED' });
+    }
+    const key = base.events[0]!.deduplicationKey;
+    expect(newHead.events[0]!.deduplicationKey).not.toBe(key);
+    expect(rerun.events[0]!.deduplicationKey).not.toBe(key);
   });
   it('supersedes undelivered failures and emits recovery only after delivered failure', () => {
     const event = { ...reduce(redObservation).events[0]!, id: 'failed' };
