@@ -5,9 +5,8 @@ import {
   workspaceAutoIterationAccessor,
 } from '@/backend/services/workspace/resources/workspace-auto-iteration.accessor';
 import {
-  flattenWorkspacePR,
+  projectWorkspacePRCollection,
   selectActiveWorkspacePR,
-  serializeWorkspacePR,
   type WorkspacePRFields,
   type WorkspacePRRow,
   type WorkspacePRWriteFields,
@@ -42,7 +41,7 @@ import type {
   WorkspaceStatus,
 } from '@/shared/core';
 import type { WorkspacePullRequest } from '@/shared/workspace-pr';
-import { deriveWorkspacePRSummary, type WorkspacePRSummary } from '@/shared/workspace-pr-summary';
+import type { WorkspacePRSummary } from '@/shared/workspace-pr-summary';
 import type {
   Prisma,
   Workspace,
@@ -169,24 +168,14 @@ function flatten<
   },
 >(row: T): Flattened<T> {
   const { prMonitoring, prs = [], prDiscovery, runScript, autoIteration, _count, ...rest } = row;
-  const attachedPRs = prs.filter((pr) => !pr.detachedAt);
-  const pr = selectActiveWorkspacePR(attachedPRs) ?? null;
   const ratchetFields = flattenWorkspaceRatchet(prMonitoring, _count?.prEvents ?? 0);
-  const collection = attachedPRs.map(serializeWorkspacePR);
-  const prSummary = deriveWorkspacePRSummary(collection, ratchetFields.ratchetEnabled);
-  const prFields = { ...flattenWorkspacePR(pr), ...flattenPRDiscovery(prDiscovery) };
   return {
     ...rest,
     ...ratchetFields,
-    ...prFields,
-    prs: collection,
-    prSummary,
-    prState: prSummary.state,
-    prCiStatus: prSummary.ciStatus,
-    prHasMergeConflict: prSummary.hasMergeConflict,
+    ...projectWorkspacePRCollection(prs, ratchetFields.ratchetEnabled),
+    ...flattenPRDiscovery(prDiscovery),
     ...flattenWorkspaceRunScript(runScript),
     ...flattenWorkspaceAutoIteration(autoIteration),
-    ratchetState: prSummary.ratchetState,
   };
 }
 
@@ -247,20 +236,16 @@ function withProjectAndPR(
   row: Prisma.WorkspaceGetPayload<{ include: WorkspaceWithProjectInclude }>
 ): WorkspaceWithProject {
   const { prs = [], prDiscovery, autoIteration, prMonitoring, ...rest } = row;
-  const attachedPRs = prs.filter((pr) => !pr.detachedAt);
-  const pr = selectActiveWorkspacePR(attachedPRs) ?? null;
-  const collection = attachedPRs.map(serializeWorkspacePR);
-  const prSummary = deriveWorkspacePRSummary(collection, prMonitoring?.enabled ?? false);
+  // Project metadata reads expose PR facts without the full ratchet fields.
+  const { ratchetState: _ratchetState, ...prFields } = projectWorkspacePRCollection(
+    prs,
+    prMonitoring?.enabled ?? false
+  );
   return {
     ...rest,
-    ...flattenWorkspacePR(pr),
+    ...prFields,
     ...flattenPRDiscovery(prDiscovery),
     ...flattenWorkspaceAutoIteration(autoIteration),
-    prs: collection,
-    prSummary,
-    prState: prSummary.state,
-    prCiStatus: prSummary.ciStatus,
-    prHasMergeConflict: prSummary.hasMergeConflict,
   };
 }
 
