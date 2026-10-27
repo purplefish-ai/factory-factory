@@ -175,8 +175,9 @@ export type ApplicationServices = BridgeServices & {
   archiveWorkspace: typeof archiveWorkspace;
   cleanupWorkspaceRuntimeResources: typeof cleanupWorkspaceRuntimeResources;
   cleanupWorkspaceScopedCaches(workspaceId: string): void;
-  createChildWorkspace: typeof createChildWorkspace;
+  createChildWorkspace: (input: Parameters<typeof createChildWorkspace>[0]) => Promise<string>;
   deliverWorkspaceNotification: typeof deliverWorkspaceNotification;
+  workspaceCreationService: WorkspaceCreationService;
   createWorkspaceCreationService: (
     dependencies: ConstructorParameters<typeof WorkspaceCreationService>[0]
   ) => Pick<WorkspaceCreationService, 'create'>;
@@ -331,19 +332,31 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
       }
       eventCollector.removeWorkspace(workspaceId);
     },
-    createChildWorkspace,
+    createChildWorkspace: (input) =>
+      createChildWorkspace(input, {
+        findProject: (projectId) => services.projectManagementService.findById(projectId),
+        launchWorkspace: (source) => services.launchWorkspace(source),
+      }),
     deliverWorkspaceNotification,
     createWorkspaceCreationService: (creationDependencies) =>
       new WorkspaceCreationService(creationDependencies),
     launchWorkspace: (source) => {
-      const logger = services.createLogger('workspace-trpc');
+      const logger = services.createLogger(
+        source.type === 'CHILD_WORKSPACE'
+          ? 'workspace-children-orchestrator'
+          : source.type === 'PERIODIC_TASK'
+            ? 'domain-bridges'
+            : 'workspace-trpc'
+      );
       return launchWorkspace(source, {
         getMaxSessionsPerWorkspace: () => services.configService.getMaxSessionsPerWorkspace(),
         resolveProvider: (provider) =>
           services.sessionProviderResolverService.resolveProviderForWorkspaceCreation(provider),
         checkCliHealth: () => services.cliHealthService.checkHealth(),
         createWorkspace: (input) =>
-          services.createWorkspaceCreationService({ logger }).create(input),
+          source.type === 'PERIODIC_TASK'
+            ? services.workspaceCreationService.create(input)
+            : services.createWorkspaceCreationService({ logger }).create(input),
         createDefaultSession: (input) => services.sessionDataService.createAgentSession(input),
         initializeWorktree: (workspaceId, options) =>
           services.initializeWorkspaceWorktree(workspaceId, options),
