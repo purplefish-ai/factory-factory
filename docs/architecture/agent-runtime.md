@@ -9,6 +9,11 @@ over same-named global commands, matching the workspace-first precedence used
 when loading a Claude session. Commands found only in the global directory
 remain available.
 
+Workspace notification recovery ignores provisional user transcript entries
+while their provider dispatch is unsettled, including across session stop/reset.
+Only settled transcript evidence can acknowledge delivery; a failed send leaves
+its durable notification pending for a later startup to recover.
+
 ## ACP runtime
 
 All agent sessions use Agent Client Protocol over stdio JSON-RPC through

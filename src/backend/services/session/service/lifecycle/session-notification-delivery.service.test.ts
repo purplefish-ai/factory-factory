@@ -491,6 +491,99 @@ describe('SessionNotificationDeliveryService', () => {
     expect(transcriptPort.appendClaudeEvent).toHaveBeenCalledOnce();
   });
 
+  it.each([false, true])(
+    'keeps in-flight transcript evidence pending across reset=%s',
+    async (reset) => {
+      const { service, notificationPort, queuePort, transcriptPort } = createHarness({
+        pending: [createPendingWorkspaceNotification()],
+      });
+      const messageId = 'workspace-notification-notif-parent';
+      const claim = service.claimForDispatch('session-1', messageId);
+      if (claim.status !== 'claimed') {
+        throw new Error('Expected notification claim');
+      }
+      transcriptPort.getTranscriptSnapshot.mockReturnValue([
+        {
+          id: messageId,
+          source: 'user',
+          text: 'provisionally committed before provider send resolves',
+          timestamp: '2026-06-22T10:30:00.000Z',
+          order: 1,
+        },
+      ]);
+      if (reset) {
+        service.resetSession('session-1');
+      }
+
+      await service.recoverPending({
+        sessionId: 'session-1',
+        workspaceId: 'workspace-1',
+        assertAllowed: vi.fn(),
+      });
+
+      expect(notificationPort.markDelivered).not.toHaveBeenCalled();
+      expect(queuePort.enqueue).toHaveBeenCalledWith(
+        'session-1',
+        expect.objectContaining({ id: messageId })
+      );
+
+      // A stale send rejects: its handler removes the provisional transcript before
+      // releasing the claim. A later startup must still recover the durable row.
+      transcriptPort.getTranscriptSnapshot.mockReturnValue([]);
+      claim.release();
+      queuePort.enqueue.mockClear();
+      await service.recoverPending({
+        sessionId: 'session-1',
+        workspaceId: 'workspace-1',
+        assertAllowed: vi.fn(),
+      });
+      expect(notificationPort.markDelivered).not.toHaveBeenCalled();
+      expect(queuePort.enqueue).toHaveBeenCalledWith(
+        'session-1',
+        expect.objectContaining({ id: messageId })
+      );
+    }
+  );
+
+  it('keeps replacement dispatch evidence provisional when the stale claim releases', async () => {
+    const { service, notificationPort, transcriptPort } = createHarness({
+      pending: [createPendingWorkspaceNotification()],
+    });
+    const messageId = 'workspace-notification-notif-parent';
+    const first = service.claimForDispatch('session-1', messageId);
+    service.resetSession('session-1');
+    transcriptPort.getTranscriptSnapshot.mockReturnValue([
+      {
+        id: messageId,
+        source: 'user',
+        text: 'notification',
+        timestamp: '2026-06-22T10:30:00.000Z',
+        order: 1,
+      },
+    ]);
+    const replacement = service.claimForDispatch('session-1', messageId);
+    if (first.status !== 'claimed' || replacement.status !== 'claimed') {
+      throw new Error('Expected independent dispatch claims');
+    }
+    first.release();
+
+    await service.recoverPending({
+      sessionId: 'session-1',
+      workspaceId: 'workspace-1',
+      assertAllowed: vi.fn(),
+    });
+    expect(notificationPort.markDelivered).not.toHaveBeenCalled();
+
+    // A settled send whose DB acknowledgement failed can use committed evidence.
+    replacement.release();
+    await service.recoverPending({
+      sessionId: 'session-1',
+      workspaceId: 'workspace-1',
+      assertAllowed: vi.fn(),
+    });
+    expect(notificationPort.markDelivered).toHaveBeenCalledWith(['notif-parent']);
+  });
+
   it('claims notification dispatch once and releases it for another session', () => {
     const { service } = createHarness();
 
