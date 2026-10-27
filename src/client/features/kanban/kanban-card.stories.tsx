@@ -125,6 +125,12 @@ export const AutoIterationRunning: Story = {
       ...baseWorkspace,
       mode: 'AUTO_ITERATION',
       autoIterationStatus: 'RUNNING',
+      autoIteration: {
+        status: 'RUNNING',
+        currentIteration: 3,
+        maxIterations: 25,
+        currentMetricSummary: null,
+      },
       autoIterationConfig: { maxIterations: 25 },
       autoIterationProgress: { currentIteration: 3 },
       statusReason: {
@@ -144,6 +150,12 @@ export const AutoIterationPaused: Story = {
       ...baseWorkspace,
       mode: 'AUTO_ITERATION',
       autoIterationStatus: 'PAUSED',
+      autoIteration: {
+        status: 'PAUSED',
+        currentIteration: 3,
+        maxIterations: 25,
+        currentMetricSummary: null,
+      },
       autoIterationConfig: { maxIterations: 25 },
       autoIterationProgress: { currentIteration: 3 },
     },
@@ -157,6 +169,12 @@ export const AutoIterationCompleted: Story = {
       ...baseWorkspace,
       mode: 'AUTO_ITERATION',
       autoIterationStatus: 'COMPLETED',
+      autoIteration: {
+        status: 'COMPLETED',
+        currentIteration: 25,
+        maxIterations: 25,
+        currentMetricSummary: null,
+      },
       autoIterationConfig: { maxIterations: 25 },
       autoIterationProgress: { currentIteration: 25 },
     },

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createOptimisticWorkspaceSummary } from '@/client/lib/workspace-summary';
+import type { AutoIterationProgress } from '@/shared/schemas/auto-iteration.schema';
 import {
   deserializeWorkspaceSummary,
   serializeWorkspaceSummary,
@@ -65,15 +66,31 @@ describe('optimistic workspace summary', () => {
       }),
       lastActivityAt: '2026-10-27T13:00:00Z',
       autoIterationConfig: { testCommand: 'test', maxIterations: 5 },
+      autoIterationProgress: {
+        currentIteration: 2,
+        baselineMetricSummary: '10 tests passing',
+        currentMetricSummary: '12 tests passing',
+        acceptedCount: 1,
+        rejectedRegressionCount: 0,
+        rejectedCritiqueCount: 1,
+        crashedCount: 0,
+        sessionRecycleCount: 0,
+        startedAt: '2026-10-27T12:00:00Z',
+        lastIterationAt: '2026-10-27T12:05:00Z',
+        currentPhase: 'evaluating',
+        lastTestOutput: '12 tests passing',
+      } satisfies AutoIterationProgress,
     };
     const serialized = serializeWorkspaceSummary(row);
     expect(serialized.createdAt).toBe('2026-10-27T12:00:00.000Z');
     expect(serialized.lastActivityAt).toBe('2026-10-27T13:00:00Z');
-    expect(serialized.autoIterationConfig).toBe(row.autoIterationConfig);
+    expect(serialized.autoIterationConfig).toEqual(row.autoIterationConfig);
+    expect(serialized.autoIterationProgress).toEqual(row.autoIterationProgress);
     const restored = deserializeWorkspaceSummary(serialized);
     expect(restored.createdAt).toEqual(row.createdAt);
     expect(restored.lastActivityAt).toBe(row.lastActivityAt);
-    expect(restored.autoIterationConfig).toBe(row.autoIterationConfig);
+    expect(restored.autoIterationConfig).toEqual(row.autoIterationConfig);
+    expect(restored.autoIterationProgress).toEqual(row.autoIterationProgress);
     expect(
       createOptimisticWorkspaceSummary({
         id: 'standard',
