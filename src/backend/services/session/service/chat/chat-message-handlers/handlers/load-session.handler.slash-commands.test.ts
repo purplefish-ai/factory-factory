@@ -24,7 +24,8 @@ vi.mock('@/backend/services/session/service/lifecycle/session-core-services', ()
 }));
 vi.mock('@/backend/services/session/service/session-domain.service', () => ({
   sessionDomainService: {
-    subscribe: vi.fn(),
+    prepareLoad: (_id: string, runtime: unknown) => ({ replayEvents: [], sessionRuntime: runtime }),
+    finishLoad: vi.fn(),
     emitDelta: mocks.emitDelta,
     consumeInitialMessage: () => null,
   },
@@ -32,7 +33,7 @@ vi.mock('@/backend/services/session/service/session-domain.service', () => ({
 vi.mock('@/backend/services/session/service/store/slash-command-cache.service', () => ({
   slashCommandCacheService: { getCachedCommands: mocks.getCachedCommands },
 }));
-import { createLoadSessionHandler } from './load-session.handler';
+import { createLoadSessionTestHandler } from './load-session.test-helpers';
 
 it('merges scoped cached commands against complete workspace disk namespaces', async () => {
   const worktreePath = mkdtempSync(join(tmpdir(), 'ff-scoped-cache-merge-'));
@@ -55,14 +56,11 @@ it('merges scoped cached commands against complete workspace disk namespaces', a
       { name: '/user:inspect', description: 'Global inspect' },
       { name: '/project:foreign', description: 'Foreign project command' },
     ]);
-    const handler = createLoadSessionHandler({
+    const handler = createLoadSessionTestHandler({
       tryDispatchNextMessage: vi.fn(),
-      setManualDispatchResume: vi.fn(),
     });
     await handler({
-      ws: { send: vi.fn() } as never,
       sessionId: 'session-1',
-      workingDir: worktreePath,
       message: { type: 'load_session' },
     });
     const update = mocks.emitDelta.mock.calls.find(

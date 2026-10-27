@@ -71,7 +71,10 @@ import {
   acpRuntimeManager,
   acpTraceLogger,
   chatEventForwarderService,
-  chatMessageHandlerService,
+  createSessionLoadService,
+  sessionCommandFactories,
+  sessionConfigService,
+  sessionPermissionService,
   sessionDispatchService,
   claudeModelCatalogService,
   codexModelCatalogService,
@@ -118,9 +121,16 @@ import {
 import { workspaceGitStateService } from './services/workspace-git-state.service';
 
 export type ApplicationServices = BridgeServices & {
+  sessionDispatchService: Pick<
+    typeof sessionDispatchService,
+    'configure' | 'tryDispatchNextMessage' | 'setManualDispatchResume' | 'resetDispatchState'
+  >;
   acpRuntimeManager: typeof acpRuntimeManager;
   acpTraceLogger: AcpTraceLogger;
-  chatMessageHandlerService: Pick<typeof chatMessageHandlerService, 'handleMessage'>;
+  sessionLoadService: ReturnType<typeof createSessionLoadService>;
+  sessionCommandFactories: typeof sessionCommandFactories;
+  sessionConfigService: typeof sessionConfigService;
+  sessionPermissionService: typeof sessionPermissionService;
   checkGithubAuth: typeof checkGithubAuth;
   cliHealthService: typeof cliHealthService;
   configService: typeof configService;
@@ -235,7 +245,29 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     acpTraceLogger,
     autoIterationService,
     chatEventForwarderService,
-    chatMessageHandlerService,
+    sessionCommandFactories,
+    sessionLoadService: createSessionLoadService({
+      domain: {
+        getTranscriptSnapshot: (id) => services.sessionDomainService.getTranscriptSnapshot(id),
+        replaceTranscript: (id, transcript, options) =>
+          services.sessionDomainService.replaceTranscript(id, transcript, options),
+        consumeInitialMessage: (id) => services.sessionDomainService.consumeInitialMessage(id),
+        enqueue: (id, message) => services.sessionDomainService.enqueue(id, message),
+        emitDelta: (id, event) => services.sessionDomainService.emitDelta(id, event),
+        prepareLoad: (id, runtime) => services.sessionDomainService.prepareLoad(id, runtime),
+        finishLoad: (id) => services.sessionDomainService.finishLoad(id),
+      },
+      config: {
+        getChatBarCapabilities: (id) => services.sessionConfigService.getChatBarCapabilities(id),
+        getSessionConfigOptionsWithFallback: (id) =>
+          services.sessionConfigService.getSessionConfigOptionsWithFallback(id),
+      },
+      hydrateLifecycleEvents: (id) => services.sessionLifecycleEventService.hydrate(id),
+      getRuntimeSnapshot: (id) => services.sessionLifecycleService.getRuntimeSnapshot(id),
+      tryDispatchNextMessage: (id) => services.sessionDispatchService.tryDispatchNextMessage(id),
+    }),
+    sessionConfigService,
+    sessionPermissionService,
     sessionDispatchService,
     checkGithubAuth,
     cliHealthService,

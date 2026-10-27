@@ -38,14 +38,12 @@ function createProcessor() {
 afterEach(() => vi.useRealTimers());
 
 describe('ACP compaction transcript persistence', () => {
-  it('flushes pending text, persists one boundary and replays it to a later viewer', async () => {
+  it('flushes pending text, persists one boundary and replays it to a later viewer', () => {
     vi.useFakeTimers();
     const { domain, update } = createProcessor();
     const append = vi.spyOn(domain, 'appendClaudeEvent');
     const emit = vi.spyOn(domain, 'emitDelta');
-    const publish = vi
-      .spyOn(sessionEventBus, 'publishToSession')
-      .mockImplementation(() => undefined);
+    vi.spyOn(sessionEventBus, 'publishToSession').mockImplementation(() => undefined);
     update({
       sessionUpdate: 'compaction_update',
       compactionId: 'compact-1',
@@ -79,19 +77,12 @@ describe('ACP compaction transcript persistence', () => {
     vi.advanceTimersByTime(25);
     expect(domain.getTranscriptSnapshot('compact-session')).toEqual(snapshot);
 
-    await domain.subscribe({
-      sessionId: 'compact-session',
-      loadRequestId: 'viewer-reconnect',
-      sessionRuntime: {
-        phase: 'idle',
-        processState: 'alive',
-        activity: 'IDLE',
-        updatedAt: new Date().toISOString(),
-      },
+    const replay = domain.prepareLoad('compact-session', {
+      phase: 'idle',
+      processState: 'alive',
+      activity: 'IDLE',
+      updatedAt: new Date().toISOString(),
     });
-    const replay = publish.mock.calls
-      .map(([, payload]) => payload)
-      .find((payload) => payload.type === 'session_replay_batch');
     expect(replay?.replayEvents).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

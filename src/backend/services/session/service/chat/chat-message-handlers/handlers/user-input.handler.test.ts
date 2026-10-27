@@ -1,16 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
-  ChatMessageHandlerPromptService,
-  ChatMessageHandlerRuntimeManager,
-} from '@/backend/services/session/service/chat/chat-message-handlers/types';
+  SessionCommandPromptService,
+  SessionCommandRuntimeManager,
+} from '@/backend/services/session/service/chat/session-command.types';
 import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
 import { createUserInputHandler } from './user-input.handler';
 
 function createDeps(options?: { isSessionRunning?: boolean }) {
-  const acpRuntimeManager: ChatMessageHandlerRuntimeManager = {
+  const acpRuntimeManager: SessionCommandRuntimeManager = {
     isSessionRunning: vi.fn(() => options?.isSessionRunning ?? false),
   };
-  const sessionService: ChatMessageHandlerPromptService = {
+  const sessionService: SessionCommandPromptService = {
     sendSessionMessage: vi.fn(async () => undefined),
   };
   return {

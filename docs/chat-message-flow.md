@@ -8,7 +8,7 @@ provider startup, cancellation, and lifecycle ownership, see
 
 ```mermaid
 flowchart TD
-    UI[Chat composer] -->|queue_message over WebSocket| Handler[ChatMessageHandlerService]
+    UI[Chat composer] -->|queue_message over WebSocket| Handler[WebSocket chat message router]
     Handler --> Command[Socket-free execution command]
     Command --> Store[SessionDomainService: queue and transcript]
     Command --> Dispatcher[SessionDispatchService]
@@ -24,15 +24,16 @@ flowchart TD
     Transport --> Reducer[chatReducer]
 ```
 
-`ChatMessageHandlerService` only routes incoming WebSocket messages through a
-registry constructed in `session-services.ts`. That composition root configures
-one `SessionDispatchService` and supplies its callbacks to the registry. The
-dispatcher owns queue execution, concurrent-dispatch tokens, busy-turn retry
-timers and attempts, and manual resume. `SessionLifecycleGate` owns lifecycle
-generations; the dispatcher applies its generation checks when validating
-dispatch eligibility and starting the runtime through injected capabilities. The
-queued message stays visible until dispatch is ready, so refreshing during
-startup does not remove it from the queue.
+`chat-message-router.ts` composes the command registry at the WebSocket boundary
+from explicit application capabilities. Commands accept plain data and return
+typed outcomes; they receive no sockets. Session composition configures one
+`SessionDispatchService`. The dispatcher owns queue execution,
+concurrent-dispatch tokens, busy-turn retry timers and attempts, and manual
+resume. `SessionLifecycleGate` owns lifecycle generations; the dispatcher
+applies its generation checks when validating dispatch eligibility and starting
+the runtime through injected capabilities. The queued message stays visible
+until dispatch is ready, so refreshing during startup does not remove it from
+the queue.
 
 The dispatcher uses notification and background-delivery capabilities for
 claims, preparation, validation, and completion. Those services retain claim and
@@ -81,9 +82,9 @@ and matching-request cleanup remain owned by the permission service.
 The `start`, `stop`, `user_input`, `queue_message`, `remove_queued_message`, and
 `resume_queued_messages` commands use the same plain context and typed outcomes.
 Their lifecycle, domain, background-delivery and dispatcher capabilities are
-supplied by session composition. Queue acceptance, rejection, and cancellation
-stay on the session-wide event channel; only requester errors are returned to
-the adapter.
+supplied by the transport composition from the application graph. Queue
+acceptance, rejection, and cancellation stay on the session-wide event channel;
+only requester errors are returned to the adapter.
 
 Direct `user_input` still sends without waiting for a provider turn or
 background resume persistence. Start and queue acceptance also trigger
@@ -94,21 +95,31 @@ retries the queue. The lifecycle and background-delivery owners retain
 generation and PR pause policy; commands coordinate those capabilities without
 taking ownership.
 
-Only the load handler temporarily retains its socket-bearing context. The
-WebSocket boundary accepts its void result alongside migrated command outcomes.
+The load command uses explicit preparation, synchronous replay capture, and
+completion through `SessionLoadService`. Its preparation and replay are plain
+data. The transport adapter owns replay framing and requester error delivery.
 
 ## Loading and reconnecting
 
 Registering a chat WebSocket does not hydrate history. The client explicitly
-sends `load_session`, whose handler:
+sends `load_session`, whose transport adapter runs these application stages:
 
-1. Reads the `AgentSession` and hydrates provider history when needed.
-2. Merges durable lifecycle events and recovers interrupted tool calls when the
-   runtime is stopped.
-3. Calls
-   `sessionDomainService.subscribe({ sessionId, sessionRuntime, loadRequestId })`,
-   which publishes a `session_replay_batch` and a runtime update.
-4. Sends capabilities, configuration options, and cached slash commands.
+1. `prepareLoad` reads the `AgentSession`, hydrates provider history, and merges
+   durable lifecycle events.
+2. `captureReplay` synchronously reads the current runtime, recovers interrupted
+   tool calls for stopped sessions, and captures domain replay data. The adapter
+   immediately publishes the `session_replay_batch` envelope on the existing
+   session event bus, preserving `loadRequestId` and broadcast recipient scope.
+   Capture and publication do not yield, so a queued live update cannot precede
+   a stale replay.
+3. `completeLoad` updates the runtime, publishes capabilities, configuration
+   options, and cached slash commands in order, then consumes and dispatches any
+   stored initial message through that application's dispatcher.
+
+Socket subscriptions, serialization, safe delivery, and disconnected-viewer
+cleanup remain owned by the transport. A closed or throwing requester does not
+skip application completion or another viewer's load updates. Concurrent loads
+retain their own request IDs and consume stored initial text once.
 
 Passive loading does not initialize an ACP runtime. A stored initial message may
 subsequently be enqueued and dispatched through the normal message path.
@@ -155,18 +166,18 @@ by length, but same-length in-place edits are unsupported.
 
 ## Sources of truth
 
-| Concern                                               | Source                                                                                                                                                                                                                                      |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Queue, transcript, runtime snapshot, pending requests | [SessionDomainService](../src/backend/services/session/service/session-domain.service.ts) and its `store/` collaborators                                                                                                                    |
-| Provider event translation                            | [AcpEventProcessor](../src/backend/services/session/service/lifecycle/acp-event-processor.ts)                                                                                                                                               |
-| History hydration and replay                          | [Load handler](../src/backend/services/session/service/chat/chat-message-handlers/handlers/load-session.handler.ts) and [provider history hydrator](../src/backend/services/session/service/lifecycle/session-provider-history-hydrator.ts) |
-| Outbound event envelopes                              | [SessionPublisher](../src/backend/services/session/service/store/session-publisher.ts)                                                                                                                                                      |
-| WebSocket subscriptions and delivery                  | [ChatConnectionRegistry](../src/backend/routers/websocket/chat-connection-registry.ts)                                                                                                                                                      |
-| Client transport and event reduction                  | [useChatTransport](../src/client/features/chat/use-chat-transport.ts) and [chat reducer](../src/client/features/chat/reducer/index.ts)                                                                                                      |
-| Persisted provider identity and lifecycle history     | `AgentSession` and `SessionLifecycleEvent` in [Prisma schema](../prisma/schema.prisma)                                                                                                                                                      |
+| Concern                                               | Source                                                                                                                                                                                                             |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Queue, transcript, runtime snapshot, pending requests | [SessionDomainService](../src/backend/services/session/service/session-domain.service.ts) and its `store/` collaborators                                                                                           |
+| Provider event translation                            | [AcpEventProcessor](../src/backend/services/session/service/lifecycle/acp-event-processor.ts)                                                                                                                      |
+| History hydration and replay                          | [SessionLoadService](../src/backend/services/session/service/chat/session-load.service.ts) and [provider history hydrator](../src/backend/services/session/service/lifecycle/session-provider-history-hydrator.ts) |
+| Outbound event envelopes                              | [SessionPublisher](../src/backend/services/session/service/store/session-publisher.ts)                                                                                                                             |
+| WebSocket subscriptions and delivery                  | [ChatConnectionRegistry](../src/backend/routers/websocket/chat-connection-registry.ts)                                                                                                                             |
+| Client transport and event reduction                  | [useChatTransport](../src/client/features/chat/use-chat-transport.ts) and [chat reducer](../src/client/features/chat/reducer/index.ts)                                                                             |
+| Persisted provider identity and lifecycle history     | `AgentSession` and `SessionLifecycleEvent` in [Prisma schema](../prisma/schema.prisma)                                                                                                                             |
 
-Focused load and recovery coverage lives beside the load handler in
-`load-session.handler.test.ts` and `load-session.handler.recovery.test.ts`.
+Focused history and recovery coverage remains in `load-session.handler.test.ts`
+and `load-session.handler.recovery.test.ts`.
 `src/client/features/chat/reducer/result-dedup.test.ts` covers result
 deduplication across live and replay paths. Consult the current tests for exact
 ordering and recovery contracts rather than inferring guarantees from a diagram.
