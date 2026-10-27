@@ -114,6 +114,57 @@ describe('TerminalPanel', () => {
     root.unmount();
   });
 
+  it('replays reconnect buffers for existing tabs without changing their identity or selection', async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const panelRef = createRef<TerminalPanelRef>();
+    const states: TerminalTabState[] = [];
+    flushSync(() => {
+      root.render(
+        createElement(TerminalPanel, {
+          workspaceId: 'workspace-1',
+          ref: panelRef,
+          onStateChange: (state) => states.push(state),
+        })
+      );
+    });
+    flushSync(() => {
+      panelRef.current?.createNewTerminal();
+      panelRef.current?.createNewTerminal();
+    });
+    flushSync(() => {
+      mocks.options?.onCreated?.('terminal-a', mocks.create.mock.calls[0]?.[0], 'before A\r\n');
+      mocks.options?.onCreated?.('terminal-b', mocks.create.mock.calls[1]?.[0], 'before B\r\n');
+    });
+    await vi.dynamicImportSettled();
+    const before = states.at(-1);
+
+    flushSync(() => {
+      mocks.options?.onTerminalList?.([
+        {
+          id: 'terminal-a',
+          createdAt: '2026-08-13T00:00:00.000Z',
+          outputBuffer: 'before A\r\nmissed A\r\n',
+        },
+        {
+          id: 'terminal-b',
+          createdAt: '2026-08-13T00:00:00.000Z',
+          outputBuffer: 'before B\r\nmissed B\r\n',
+        },
+      ]);
+    });
+    expect(mocks.renderedOutput).toBe('before B\r\nmissed B\r\n');
+    expect(states.at(-1)?.tabs).toEqual(before?.tabs);
+    expect(states.at(-1)?.activeTabId).toBe(before?.activeTabId);
+
+    flushSync(() => states.at(-1)?.onSelectTab(before?.tabs[0]?.id ?? ''));
+    expect(mocks.renderedOutput).toBe('before A\r\nmissed A\r\n');
+    flushSync(() => mocks.options?.onOutput?.('terminal-a', 'live A\r\n'));
+    expect(mocks.renderedOutput).toBe('before A\r\nmissed A\r\nlive A\r\n');
+    root.unmount();
+  });
+
   it('keeps the server active terminal aligned with the selected pending tab', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
