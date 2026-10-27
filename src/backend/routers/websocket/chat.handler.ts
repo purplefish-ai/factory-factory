@@ -7,7 +7,7 @@
  * This is the entry point that delegates to specialized services:
  * - ChatConnectionRegistry: Connection tracking and session fan-out (WS adapter)
  * - ChatEventForwarderService: Client event setup and interactive request routing
- * - ChatMessageHandlerService: Message dispatch and all message type handlers
+ * - Chat message router: Transport-owned command composition and dispatch
  */
 
 import { randomUUID } from 'node:crypto';
@@ -24,6 +24,7 @@ import {
   type ConnectionInfo,
   getChatConnectionRegistryForApplication,
 } from './chat-connection-registry';
+import { createChatMessageRouterForApplication } from './chat-message-router';
 import { parseWebSocketMessage } from './message-utils';
 import { createWebSocketUpgradeHandler, sendBadRequest } from './upgrade-utils';
 
@@ -35,13 +36,13 @@ export function createChatUpgradeHandler(appContext: AppContext) {
   const {
     acpRuntimeManager,
     chatEventForwarderService,
-    chatMessageHandlerService,
     configService,
     createLogger,
     sessionFileLogger,
     sessionEventBus,
     sessionDomainService,
   } = appContext.services;
+  const chatMessageRouter = createChatMessageRouterForApplication(appContext.services);
   const chatConnectionRegistry = getChatConnectionRegistryForApplication(appContext);
 
   const logger = createLogger('chat-handler');
@@ -212,8 +213,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
           if (dbSessionId) {
             sessionFileLogger.log(dbSessionId, 'IN_FROM_CLIENT', message);
           }
-          const outcome = await chatMessageHandlerService.handleMessage(
-            ws,
+          const outcome = await chatMessageRouter.handleMessage(
             dbSessionId,
             workingDir ?? '',
             message

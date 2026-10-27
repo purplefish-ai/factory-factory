@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
+import { sessionCommandFactories } from '@/backend/services/session';
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
-import { createChatMessageHandlerRegistry } from './registry';
+import { createChatCommandRegistry } from './chat-message-router';
+import { createChatRouterServices } from './chat-message-router.test-helpers';
 
 describe('socket-free command registry', () => {
   it('uses the supplied application capabilities for every migrated command', async () => {
@@ -13,8 +15,9 @@ describe('socket-free command registry', () => {
       getSessionConfigOptions: vi.fn(() => []),
     };
     const respondToPermission = vi.fn(() => true);
-    const registry = createChatMessageHandlerRegistry({
-      executionServices: {
+    const registry = createChatCommandRegistry({
+      ...createChatRouterServices(sessionCommandFactories),
+      execution: {
         domain: {
           markError: vi.fn(),
           rejectMessage: vi.fn(),
@@ -29,13 +32,16 @@ describe('socket-free command registry', () => {
         },
         clearPendingRequest: vi.fn(),
       },
-      acpRuntimeManager: { isSessionRunning: () => false },
-      sessionConfigService,
-      sessionPermissionService: { respondToPermission },
-      sessionService: { sendSessionMessage: vi.fn() },
-      startupService: { getSessionClient: () => undefined, getOrCreateSessionClient: vi.fn() },
-      tryDispatchNextMessage: vi.fn(),
-      setManualDispatchResume: vi.fn(),
+      runtime: { isSessionRunning: () => false },
+      config: sessionConfigService,
+      permission: { respondToPermission },
+      prompt: { sendSessionMessage: vi.fn() },
+      startup: { getSessionClient: () => undefined, getOrCreateSessionClient: vi.fn() },
+      dispatch: {
+        tryDispatchNextMessage: vi.fn(),
+        setManualDispatchResume: vi.fn(),
+        resetDispatchState: vi.fn(),
+      },
     });
     const context = { sessionId: 'injected-session', workingDir: '/injected/worktree' };
     expect(
@@ -105,12 +111,13 @@ it('routes execution commands using injected application capabilities and typed 
   const setManualDispatchResume = vi.fn();
   const sendSessionMessage = vi.fn().mockResolvedValue(undefined);
   const getOrCreateSessionClient = vi.fn().mockResolvedValue(undefined);
-  const registry = createChatMessageHandlerRegistry({
-    executionServices: { backgroundDelivery, domain, lifecycle, clearPendingRequest },
-    acpRuntimeManager: { isSessionRunning: () => true },
-    sessionService: { sendSessionMessage },
-    startupService: { getSessionClient: vi.fn(), getOrCreateSessionClient },
-    sessionConfigService: {
+  const registry = createChatCommandRegistry({
+    ...createChatRouterServices(sessionCommandFactories),
+    execution: { backgroundDelivery, domain, lifecycle, clearPendingRequest },
+    runtime: { isSessionRunning: () => true },
+    prompt: { sendSessionMessage },
+    startup: { getSessionClient: vi.fn(), getOrCreateSessionClient },
+    config: {
       setSessionModel: vi.fn(),
       setSessionReasoningEffort: vi.fn(),
       getChatBarCapabilities: vi.fn(),
@@ -118,10 +125,8 @@ it('routes execution commands using injected application capabilities and typed 
       setSessionConfigOption: vi.fn(),
       getSessionConfigOptions: vi.fn(),
     },
-    sessionPermissionService: { respondToPermission: vi.fn() },
-    resetDispatchState,
-    tryDispatchNextMessage,
-    setManualDispatchResume,
+    permission: { respondToPermission: vi.fn() },
+    dispatch: { resetDispatchState, tryDispatchNextMessage, setManualDispatchResume },
   });
   const context = { sessionId: 'injected-execution', workingDir: '/injected' };
   expect(await registry.start(context, { type: 'start', model: 'requested' })).toEqual({

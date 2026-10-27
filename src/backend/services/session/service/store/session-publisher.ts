@@ -1,7 +1,7 @@
 import { sessionFileLogger } from '@/backend/services/session/service/logging/session-file-logger.service';
 import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
 import type { SessionDeltaEvent, WebSocketMessage } from '@/shared/acp-protocol';
-import { buildReplayEvents, buildSnapshotMessages } from './session-replay-builder';
+import { buildSnapshotMessages } from './session-replay-builder';
 import type { SessionStore, SnapshotReason } from './session-store.types';
 import { normalizeTranscript } from './session-transcript';
 
@@ -40,29 +40,6 @@ export class SessionPublisher {
         loadRequestId: options.loadRequestId ?? null,
         queuedCount: store.queue.length,
         snapshot: normalizeTranscript(snapshotMessages),
-      });
-    }
-
-    sessionEventBus.publishToSession(store.sessionId, payload);
-  }
-
-  forwardReplayBatch(
-    store: SessionStore,
-    options?: { loadRequestId?: string; reason?: SnapshotReason; includeParitySnapshot?: boolean }
-  ): void {
-    const replayEvents = buildReplayEvents(store);
-    const payload: WebSocketMessage = {
-      type: 'session_replay_batch',
-      replayEvents,
-      ...(options?.loadRequestId ? { loadRequestId: options.loadRequestId } : {}),
-    };
-
-    if (options?.includeParitySnapshot) {
-      this.logParityTrace(store.sessionId, {
-        path: 'replay_batch',
-        reason: options.reason ?? 'manual_emit',
-        loadRequestId: options.loadRequestId ?? null,
-        replayEventCount: replayEvents.length,
       });
     }
 

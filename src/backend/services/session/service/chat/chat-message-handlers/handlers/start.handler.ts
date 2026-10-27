@@ -1,9 +1,9 @@
 import { createLogger } from '@/backend/services/logger.service';
-import type { ChatMessageHandlerStartupService } from '@/backend/services/session/service/chat/chat-message-handlers/types';
 import {
   getValidModel,
   getValidReasoningEffort,
 } from '@/backend/services/session/service/chat/chat-message-handlers/utils';
+import type { SessionCommandStartupService } from '@/backend/services/session/service/chat/session-command.types';
 import type {
   SessionCommandHandler,
   SessionExecutionCommandServices,
@@ -17,7 +17,7 @@ export function createStartHandler(
   deps: Pick<SessionExecutionCommandServices, 'backgroundDelivery'> & {
     domain: Pick<SessionExecutionCommandServices['domain'], 'markError'>;
     lifecycle: Pick<SessionExecutionCommandServices['lifecycle'], 'getSessionOptions'>;
-    startupService: ChatMessageHandlerStartupService;
+    startupService: SessionCommandStartupService;
   }
 ): SessionCommandHandler<StartMessageInput> {
   return async ({ sessionId }, message) => {

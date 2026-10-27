@@ -26,6 +26,7 @@ import {
   requeueFront,
   setPendingInteractiveRequest,
 } from './store/session-queue';
+import { buildReplayEvents } from './store/session-replay-builder';
 import { SessionRuntimeMachine } from './store/session-runtime-machine';
 import { SessionStoreRegistry } from './store/session-store-registry';
 import type { RecentMessageRejection, SessionStore } from './store/session-store.types';
@@ -91,12 +92,7 @@ export class SessionDomainService extends EventEmitter {
     this.runtimeMachine.markRuntime(store, updates);
   }
 
-  subscribe(options: {
-    sessionId: string;
-    sessionRuntime: SessionRuntimeState;
-    loadRequestId?: string;
-  }): void {
-    const { sessionId, sessionRuntime, loadRequestId } = options;
+  prepareLoad(sessionId: string, sessionRuntime: SessionRuntimeState) {
     const store = this.registry.getOrCreateActive(sessionId);
     if (!store.initialized) {
       store.initialized = true;
@@ -117,12 +113,17 @@ export class SessionDomainService extends EventEmitter {
       { emitDelta: false, replace: true }
     );
 
-    this.publisher.forwardReplayBatch(store, {
-      loadRequestId,
-      reason: 'subscribe_load',
-      includeParitySnapshot: true,
+    logger.info('Session load prepared', {
+      sessionId,
+      sessionRuntime,
+      transcriptCount: store.transcript.length,
+      queueCount: store.queue.length,
     });
+    return { replayEvents: buildReplayEvents(store), sessionRuntime: store.runtime };
+  }
 
+  finishLoad(sessionId: string): void {
+    const store = this.registry.getOrCreateActive(sessionId);
     // After hydration and replay, emit a delta to ensure the client transitions
     // out of 'loading' phase. If still in 'loading' after hydration (brand new session),
     // transition to 'idle'. Otherwise, emit the current runtime state.
@@ -138,14 +139,8 @@ export class SessionDomainService extends EventEmitter {
         sessionRuntime: store.runtime,
       });
     }
-
-    logger.info('Session subscribed', {
-      sessionId,
-      sessionRuntime,
-      transcriptCount: store.transcript.length,
-      queueCount: store.queue.length,
-    });
   }
+
   emitDelta(sessionId: string, event: SessionDeltaEvent): void {
     this.publisher.emitDelta(sessionId, event);
   }
