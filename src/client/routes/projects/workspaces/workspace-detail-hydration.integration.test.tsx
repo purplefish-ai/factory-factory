@@ -1,5 +1,10 @@
 // @vitest-environment jsdom
-import { QueryClient, QueryClientProvider, type QueryObserverOptions } from '@tanstack/react-query';
+import {
+  QueryClient,
+  QueryClientProvider,
+  QueryObserver,
+  type QueryObserverOptions,
+} from '@tanstack/react-query';
 import { getQueryKey } from '@trpc/react-query';
 import { observable } from '@trpc/server/observable';
 import { useLayoutEffect } from 'react';
@@ -12,6 +17,10 @@ import {
   type WorkspaceDetail,
 } from '@/client/lib/snapshot-to-workspace';
 import { trpc } from '@/client/lib/trpc';
+import {
+  getProjectWorkspaceCacheReconciler,
+  workspaceDetailQueryOptions,
+} from '@/client/lib/workspace-cache-reconciler';
 import { useWorkspaceData } from '@/client/routes/projects/workspaces/use-workspace-detail';
 import { useWorkspaceInitStatus } from '@/client/routes/projects/workspaces/use-workspace-detail-hooks';
 import type { UseWebSocketTransportOptions } from '@/hooks/use-websocket-transport';
@@ -137,6 +146,78 @@ describe('workspace detail route hydration', () => {
       })
     );
     expect(latest.workspaceLoading).toBe(false);
+  });
+
+  it('disconnects only its pending owned detail while other projects and unassociated detail keep loading', async () => {
+    fixture();
+    await vi.waitFor(() => expect(requests).toHaveLength(1));
+    channel.onConnected?.();
+    channel.onMessage!({ type: 'snapshot_full', projectId: 'proj-1', entries: [entry()] });
+    const b = getProjectWorkspaceCacheReconciler(queryClient, 'proj-2');
+    const bToken = b.beginConnection();
+    b.apply(bToken, {
+      type: 'snapshot_full',
+      projectId: 'proj-2',
+      entries: [entry({ workspaceId: 'ws-b', projectId: 'proj-2' })],
+    });
+    const signals: Record<string, AbortSignal[]> = { 'ws-b': [], 'ws-c': [] };
+    const complete: Record<string, (data: WorkspaceDetail) => void> = {};
+    const observers = ['ws-b', 'ws-c'].map(
+      (id) =>
+        new QueryObserver(
+          queryClient,
+          workspaceDetailQueryOptions(queryClient, id, (signal) => {
+            signals[id]!.push(signal);
+            return new Promise<WorkspaceDetail>((resolve) => {
+              complete[id] = resolve;
+            });
+          })
+        )
+    );
+    const unsubscribe = observers.map((observer) => observer.subscribe(() => undefined));
+    try {
+      const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+      channel.onDisconnected?.();
+      channel.onDisconnected?.();
+      expect(signals['ws-b']![0]!.aborted).toBe(false);
+      expect(signals['ws-c']![0]!.aborted).toBe(false);
+      expect(signals['ws-b']).toHaveLength(1);
+      expect(signals['ws-c']).toHaveLength(1);
+      expect(invalidate).toHaveBeenCalledTimes(2);
+      await vi.waitFor(() => expect(requests).toHaveLength(2));
+      requests[1]!(fetched({ name: 'A fallback' }));
+      await vi.waitFor(() => expect(latest.workspace?.name).toBe('A fallback'));
+      complete['ws-b']!(fetched({ id: 'ws-b', projectId: 'proj-2', worktreePath: '/project-b' }));
+      complete['ws-c']!(
+        fetched({ id: 'ws-c', projectId: 'proj-3', worktreePath: '/unassociated-c' })
+      );
+      await vi.waitFor(() =>
+        expect(observers[0]!.getCurrentResult().data?.worktreePath).toBe('/project-b')
+      );
+      expect(observers[1]!.getCurrentResult().data?.worktreePath).toBe('/unassociated-c');
+    } finally {
+      unsubscribe.forEach((stop) => stop());
+    }
+  });
+
+  it('retries an active unassociated direct detail when its eventual project generation has retired', async () => {
+    fixture();
+    await vi.waitFor(() => expect(requests).toHaveLength(1));
+    channel.onConnected?.();
+    channel.onDisconnected?.();
+    expect(requests).toHaveLength(1);
+    requests[0]!(fetched({ worktreePath: '/retired/direct-link' }));
+    await vi.waitFor(() => expect(requests).toHaveLength(2));
+    expect(latest.workspace).toBeUndefined();
+    expect(latest.workspaceLoading).toBe(true);
+    expect(queryClient.getQueryState(detailKey)?.status).toBe('pending');
+    requests[1]!(fetched({ name: 'Current direct link', worktreePath: '/current/direct-link' }));
+    await vi.waitFor(() =>
+      expect(latest.workspace).toMatchObject({
+        name: 'Current direct link',
+        worktreePath: '/current/direct-link',
+      })
+    );
   });
 
   it('keeps init-status readiness repair and polling while hydrating provisioned metadata', async () => {

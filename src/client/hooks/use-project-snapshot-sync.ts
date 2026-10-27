@@ -1,4 +1,4 @@
-import { type Query, type QueryClient, useQueryClient } from '@tanstack/react-query';
+import { type QueryClient, useQueryClient } from '@tanstack/react-query';
 import { getQueryKey } from '@trpc/react-query';
 import type { inferRouterOutputs } from '@trpc/server';
 /**
@@ -25,6 +25,7 @@ import { mergeProjectSnapshotIntoWorkspaceDetail } from '@/client/lib/snapshot-t
 import { type AppRouter, trpc } from '@/client/lib/trpc';
 import {
   getProjectWorkspaceCacheReconciler,
+  projectWorkspaceDetailQueryFilter,
   type ProjectWorkspaceCacheReconciler,
   type WorkspaceConnection,
 } from '@/client/lib/workspace-cache-reconciler';
@@ -392,14 +393,7 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
       queryKey: getQueryKey(trpc.workspace.listForProject, { projectId }, 'query'),
       exact: true,
     };
-    const detailFilter = {
-      queryKey: getQueryKey(trpc.workspace.get, undefined, 'query'),
-      predicate: (query: Query) => {
-        const detail = queryClient.getQueryData<RouterOutputs['workspace']['get']>(query.queryKey);
-        // An uncached bootstrap has not supplied its project yet.
-        return !detail || detail.projectId === projectId;
-      },
-    };
+    const detailFilter = projectWorkspaceDetailQueryFilter(queryClient, projectId);
     runInBackground(queryClient.cancelQueries(detailFilter), 'Could not refresh data');
     runInBackground(queryClient.invalidateQueries(detailFilter), 'Could not refresh data');
     // Cancel synchronously before invalidating, including an uncached bootstrap
@@ -412,7 +406,11 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
   }, [projectId, queryClient, utils]);
   useEffect(() => {
     lifecycle.disposed = false;
+    const previousEpoch = lifecycle.owner?.captureEpoch();
     lifecycle.connection = lifecycle.owner?.beginConnection();
+    if (previousEpoch && lifecycle.connection?.identity !== previousEpoch) {
+      fallbackToHttp();
+    }
     return () => {
       lifecycle.disposed = true;
       if (lifecycle.connection && lifecycle.owner?.retireConnection(lifecycle.connection)) {
@@ -429,11 +427,14 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
       lifecycle.opened = true;
       return;
     }
-    if (previous && lifecycle.owner.retireConnection(previous)) {
-      fallbackToHttp();
+    if (previous) {
+      lifecycle.owner.retireConnection(previous);
     }
     lifecycle.connection = lifecycle.owner.beginConnection();
     lifecycle.opened = true;
+    // A reconnect begins a fresh epoch, so pending fallback HTTP must restart
+    // after the new token exists rather than carrying the retired HTTP epoch.
+    fallbackToHttp();
   }, [lifecycle, fallbackToHttp]);
   const onDisconnected = useCallback(() => {
     if (

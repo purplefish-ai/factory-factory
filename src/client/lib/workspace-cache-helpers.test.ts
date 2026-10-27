@@ -36,11 +36,17 @@ describe('workspace-cache-helpers', () => {
     expect(
       client.getQueryCache().find({ queryKey: options.queryKey })?.options.initialData
     ).toBeUndefined();
-    expect(client.getQueryDefaults(options.queryKey).structuralSharing).toBe(
-      options.structuralSharing
-    );
+    expect(
+      client.getQueryCache().find({ queryKey: options.queryKey })?.options.structuralSharing
+    ).toBe(options.structuralSharing);
     seedCreatedWorkspaceDetail(client, { ...workspace, name: 'Duplicate response' });
     expect(client.getQueryData(options.queryKey)).toBe(cached);
+    client.removeQueries({ queryKey: options.queryKey, exact: true });
+    expect(client.getQueryDefaults(options.queryKey).structuralSharing).toBeUndefined();
+    const reopened = workspaceDetailQueryOptions(client, workspace.id, () =>
+      Promise.resolve(cached)
+    );
+    expect(reopened.structuralSharing).not.toBe(options.structuralSharing);
     client.clear();
   });
 
