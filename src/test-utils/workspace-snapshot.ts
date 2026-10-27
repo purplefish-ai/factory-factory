@@ -82,8 +82,8 @@ export function makeCompleteWorkspaceSnapshotEntry(
     linearIssueUrl: null,
     creationSource: 'GITHUB_ISSUE',
     autoIteration: null,
-    prs: [],
-    prSummary: deriveWorkspacePRSummary([], false),
+    prs: overrides.prs ?? [],
+    prSummary: deriveWorkspacePRSummary(overrides.prs ?? [], overrides.ratchetEnabled ?? false),
     ...overrides,
   });
 }

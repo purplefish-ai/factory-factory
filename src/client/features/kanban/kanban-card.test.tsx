@@ -8,7 +8,8 @@ import { KanbanCard, type WorkspaceWithKanban } from './kanban-card';
 
 vi.mock('@phosphor-icons/react/dist/csr/Archive', () => ({ ArchiveIcon: () => null }));
 vi.mock('@phosphor-icons/react/dist/csr/ArrowsClockwise', () => ({
-  ArrowsClockwiseIcon: () => null,
+  ArrowsClockwiseIcon: ({ className }: { className?: string }) =>
+    createElement('svg', { className, 'data-testid': 'auto-iteration-icon' }),
 }));
 vi.mock('@phosphor-icons/react/dist/csr/Chat', () => ({ ChatIcon: () => null }));
 vi.mock('@phosphor-icons/react/dist/csr/DotOutline', () => ({ DotOutlineIcon: () => null }));
@@ -125,7 +126,7 @@ describe('compact loop badge', () => {
   it.each(['RUNNING', 'PAUSED', 'COMPLETED', null] as const)(
     'renders canonical %s counters without raw progress',
     (status) => {
-      const { container, root } = renderCard({
+      const workspace: WorkspaceWithKanban = {
         ...baseWorkspace,
         mode: 'AUTO_ITERATION',
         autoIterationStatus: status,
@@ -135,9 +136,17 @@ describe('compact loop badge', () => {
           maxIterations: 0,
           currentMetricSummary: 'score 95',
         },
-      });
+      };
+      expect(workspace).not.toHaveProperty('autoIterationProgress');
+      expect(workspace).not.toHaveProperty('autoIterationConfig');
+      const { container, root } = renderCard(workspace);
       expect(container.textContent).toContain('Iter 7/∞');
       expect(container.textContent).toContain('score 95');
+      expect(
+        container
+          .querySelector('[data-testid="auto-iteration-icon"]')
+          ?.classList.contains('animate-spin') ?? false
+      ).toBe(status === 'RUNNING');
       flushSync(() => root.unmount());
       container.remove();
     }

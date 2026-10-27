@@ -10,11 +10,11 @@ import type { WorkspacePullRequest } from '@/shared/workspace-pr';
 import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import {
+  projectWorkspaceSnapshotMetadata,
   WorkspaceSnapshotEntrySchema,
   type WorkspaceSnapshotEntry,
 } from '@/shared/workspace-snapshot';
 import { deriveWorkspaceStatusReason } from '@/shared/workspace-status-reason';
-import { deserializeWorkspaceSummary, WorkspaceSummarySchema } from '@/shared/workspace-summary';
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 
@@ -23,7 +23,9 @@ export type ProjectWorkspace = RouterOutputs['workspace']['listForProject']['wor
 export type WorkspaceDetail = RouterOutputs['workspace']['get'];
 
 /** A version claim alone cannot retire repairs for imperative/non-wire callers. */
-export function isCompleteWorkspaceSnapshot(entry: WorkspaceSnapshotEntry): boolean {
+export function isCompleteWorkspaceSnapshot(
+  entry: WorkspaceSnapshotEntry
+): entry is Extract<WorkspaceSnapshotEntry, { summaryVersion: 1 }> {
   return entry.summaryVersion === 1 && WorkspaceSnapshotEntrySchema.safeParse(entry).success;
 }
 
@@ -151,13 +153,10 @@ function projectLegacyPRState(entry: WorkspaceSnapshotEntry, prs: WorkspacePullR
 /** The snapshot-backed half of a list row, shared with the detail cache. */
 function projectSnapshotToLiveFields(
   entry: WorkspaceSnapshotEntry,
+  hasLegacyPR: boolean,
   existing?: Pick<ProjectWorkspace, 'prs' | 'createdAt'>
 ) {
-  const hasLegacyPR =
-    !(isCompleteWorkspaceSnapshot(entry) || entry.prs?.length) && Boolean(entry.prUrl);
-  const prs = isCompleteWorkspaceSnapshot(entry)
-    ? (entry.prs ?? [])
-    : projectSnapshotPRs(entry, existing?.prs ?? []);
+  const prs = hasLegacyPR ? projectSnapshotPRs(entry, existing?.prs ?? []) : (entry.prs ?? []);
   const createdAt = new Date(entry.createdAt);
   return {
     id: entry.workspaceId,
@@ -198,24 +197,24 @@ export function projectSnapshotToWorkspace(
   entry: WorkspaceSnapshotEntry,
   existing?: ProjectWorkspace
 ): ProjectWorkspace {
-  if (isCompleteWorkspaceSnapshot(entry)) {
-    const summary = deserializeWorkspaceSummary(
-      WorkspaceSummarySchema.parse({ ...entry, id: entry.workspaceId })
-    );
+  const complete = isCompleteWorkspaceSnapshot(entry);
+  const hasLegacyPR = !(complete || entry.prs?.length) && Boolean(entry.prUrl);
+  const liveFields = projectSnapshotToLiveFields(entry, hasLegacyPR, existing);
+  if (complete) {
     return {
       ...mutationOnlyFieldDefaults(),
       ...existing,
-      ...summary,
-      createdAt:
-        existing?.createdAt.getTime() === summary.createdAt.getTime()
-          ? existing.createdAt
-          : summary.createdAt,
+      ...liveFields,
+      ...projectWorkspaceSnapshotMetadata(entry),
+      autoIteration: entry.autoIteration,
+      gitStats: entry.gitStats,
+      lastActivityAt: entry.lastActivityAt,
     };
   }
   return {
     ...mutationOnlyFieldDefaults(),
     ...existing,
-    ...projectSnapshotToLiveFields(entry, existing),
+    ...liveFields,
     autoIteration:
       entry.mode === 'AUTO_ITERATION'
         ? {
@@ -239,9 +238,9 @@ export function mergeProjectSnapshotIntoWorkspaceDetail(
     return undefined;
   }
 
-  const liveFields = projectSnapshotToLiveFields(entry, existing);
-  const hasLegacyPR =
-    !(isCompleteWorkspaceSnapshot(entry) || entry.prs?.length) && Boolean(entry.prUrl);
+  const complete = isCompleteWorkspaceSnapshot(entry);
+  const hasLegacyPR = !(complete || entry.prs?.length) && Boolean(entry.prUrl);
+  const liveFields = projectSnapshotToLiveFields(entry, hasLegacyPR, existing);
   return {
     ...existing,
     ...liveFields,

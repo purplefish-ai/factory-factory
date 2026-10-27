@@ -294,6 +294,17 @@ describe('complete workspace summary adoption', () => {
     });
   });
 
+  it('revalidates mutable imperative entries on each projection boundary', () => {
+    const snapshot = complete();
+    const existing = { ...projectSnapshotToWorkspace(snapshot), worktreePath: '/http-owned' };
+    // Non-wire callers may mutate the same object; never memoize its complete claim.
+    snapshot.worktreePath = undefined;
+    expect(WorkspaceSnapshotEntrySchema.safeParse(snapshot).success).toBe(false);
+    expect(projectSnapshotToWorkspace(snapshot, existing).worktreePath).toBe('/http-owned');
+    snapshot.worktreePath = null;
+    expect(projectSnapshotToWorkspace(snapshot, existing).worktreePath).toBeNull();
+  });
+
   it('rejects malformed version claims on the wire and defensively retains legacy projection for non-wire callers', () => {
     const { worktreePath: _omitted, ...malformed } = complete();
     expect(WorkspaceSnapshotEntrySchema.safeParse(malformed).success).toBe(false);

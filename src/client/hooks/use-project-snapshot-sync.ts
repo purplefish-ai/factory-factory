@@ -121,9 +121,9 @@ function invalidateForUnknownWorkspaces(
   const introduced = entriesToCheck.filter(
     (entry) =>
       !(
-        isCompleteWorkspaceSnapshot(entry) ||
         alreadyInvalidated.has(entry.workspaceId) ||
-        knownWorkspaceIds.has(entry.workspaceId)
+        knownWorkspaceIds.has(entry.workspaceId) ||
+        isCompleteWorkspaceSnapshot(entry)
       )
   );
   if (introduced.length === 0) {
@@ -164,11 +164,11 @@ function healReadyWorktreePaths(
   );
   const missingPaths = entries.filter(
     (entry) =>
-      !isCompleteWorkspaceSnapshot(entry) &&
       entry.status === 'READY' &&
       knownWorkspaceIds.has(entry.workspaceId) &&
+      !repairedWorkspaceIds.has(entry.workspaceId) &&
       !cachedById.get(entry.workspaceId)?.worktreePath &&
-      !repairedWorkspaceIds.has(entry.workspaceId)
+      !isCompleteWorkspaceSnapshot(entry)
   );
   if (!missingPaths.length) {
     return;
