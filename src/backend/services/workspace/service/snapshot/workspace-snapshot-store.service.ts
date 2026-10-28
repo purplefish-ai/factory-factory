@@ -11,14 +11,14 @@ import { isDeepStrictEqual } from 'node:util';
  * All subsequent phases (event collection, reconciliation, WebSocket transport,
  * client integration) build on this store.
  *
- * ARCH-02: Zero imports from service capsules (for example,
- * @/backend/services/workspace or @/backend/services/session) — derivation
- * functions are injected via configure() at startup through the orchestration
- * layer.
+ * ARCH-02: No runtime service capsule dependencies. The workspace-local pure
+ * read-state adapter is allowed; flow and sidebar derivation functions remain
+ * injected via configure() at startup through the orchestration layer.
  */
 import { assembleWorkspaceDerivedState } from '@/backend/lib/workspace-derived-state';
 import { SERVICE_CACHE_TTL_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
+import { toWorkspaceDerivedStateInput } from '@/backend/services/workspace/service/state/workspace-read-state';
 import type {
   AutoIterationStatus,
   CIStatus,
@@ -40,7 +40,6 @@ import {
   type WorkspaceSnapshotMetadata,
 } from '@/shared/workspace-snapshot';
 import type { WorkspaceStatusReason } from '@/shared/workspace-status-reason';
-import { toWorkspaceDerivedStateInput } from '../state/workspace-read-state';
 import { BranchFreshness } from './branch-freshness';
 
 export type { SnapshotFieldGroup, WorkspaceSnapshotEntry } from '@/shared/workspace-snapshot';

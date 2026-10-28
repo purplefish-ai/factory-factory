@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { assembleWorkspaceDerivedState } from '@/backend/lib/workspace-derived-state';
+import { WorkspaceSnapshotStore } from '@/backend/services/workspace/service/snapshot/workspace-snapshot-store.service';
 import type { SessionSummary } from '@/shared/session-runtime';
 import { deriveWorkspaceFlowState } from '@/shared/workspace-flow-state';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
-import { WorkspaceSnapshotStore } from '../snapshot/workspace-snapshot-store.service';
 import {
   deriveLastActivityAt,
   toWorkspaceDerivedStateInput,
