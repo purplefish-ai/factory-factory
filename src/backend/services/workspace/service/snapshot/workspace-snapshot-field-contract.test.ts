@@ -237,10 +237,34 @@ describe('raw snapshot input contract', () => {
       currentMetricSummary: null,
     });
     expect(store.getByWorkspaceId('ws')?.summaryVersion).toBeUndefined();
-    store.upsert('ws', { autoIteration: null }, 'explicit clear while running', 500);
+    store.upsert(
+      'ws',
+      { autoIteration: changedSnapshotInput().autoIteration },
+      'same-mode progress',
+      500
+    );
     expect(store.getByWorkspaceId('ws')).toMatchObject({
+      mode: 'AUTO_ITERATION',
+      autoIterationStatus: 'RUNNING',
       summaryVersion: 1,
-      autoIteration: { currentIteration: null, maxIterations: null, currentMetricSummary: null },
+      autoIteration: {
+        status: 'RUNNING',
+        currentIteration: 2,
+        maxIterations: 10,
+        currentMetricSummary: 'score=2',
+      },
+    });
+    store.upsert('ws', { autoIteration: null }, 'explicit clear while running', 600);
+    expect(store.getByWorkspaceId('ws')).toMatchObject({
+      mode: 'AUTO_ITERATION',
+      autoIterationStatus: 'RUNNING',
+      summaryVersion: 1,
+      autoIteration: {
+        status: 'RUNNING',
+        currentIteration: null,
+        maxIterations: null,
+        currentMetricSummary: null,
+      },
     });
   });
 
