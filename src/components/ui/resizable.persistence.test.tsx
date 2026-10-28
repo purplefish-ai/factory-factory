@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
 import { createElement, type ReactNode } from 'react';
-import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import type { LayoutChangedMeta } from 'react-resizable-panels';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { actFlushSync } from '@/test-utils/react-act';
 
 let capturedDefaultLayout: unknown;
 let capturedOnLayoutChanged:
@@ -67,7 +67,7 @@ function renderInDom(render: (root: Root) => void): () => void {
   const root = createRoot(container);
   render(root);
   return () => {
-    root.unmount();
+    actFlushSync(() => root.unmount());
     container.remove();
   };
 }
@@ -92,7 +92,7 @@ describe('ResizablePanelGroup persistence', () => {
     localStorage.setItem('resizable-panels:workspace-1', JSON.stringify([30, 70]));
 
     const cleanup = renderInDom((root) => {
-      flushSync(() => {
+      actFlushSync(() => {
         root.render(
           createElement(ResizablePanelGroup, {
             autoSaveId: 'workspace-1',
@@ -113,7 +113,7 @@ describe('ResizablePanelGroup persistence', () => {
     );
 
     const cleanup = renderInDom((root) => {
-      flushSync(() => {
+      actFlushSync(() => {
         root.render(
           createElement(ResizablePanelGroup, {
             autoSaveId: 'workspace-2',
@@ -130,7 +130,7 @@ describe('ResizablePanelGroup persistence', () => {
   it('persists completed layouts and forwards their interaction metadata', () => {
     const onLayoutChanged = vi.fn();
     const cleanup = renderInDom((root) => {
-      flushSync(() => {
+      actFlushSync(() => {
         root.render(
           createElement(ResizablePanelGroup, {
             autoSaveId: 'workspace-3',
@@ -154,7 +154,7 @@ describe('ResizablePanelGroup persistence', () => {
     localStorage.setItem('resizable-panels:workspace-3', stored);
     const onLayoutChanged = vi.fn();
     const cleanup = renderInDom((root) => {
-      flushSync(() => {
+      actFlushSync(() => {
         root.render(
           createElement(ResizablePanelGroup, {
             autoSaveId: 'workspace-3',
@@ -172,7 +172,7 @@ describe('ResizablePanelGroup persistence', () => {
 
   it('keeps full library-driven commits persistent, including default resets', () => {
     const cleanup = renderInDom((root) => {
-      flushSync(() => root.render(createElement(ResizablePanelGroup, { autoSaveId: 'reset' })));
+      actFlushSync(() => root.render(createElement(ResizablePanelGroup, { autoSaveId: 'reset' })));
     });
     capturedOnLayoutChanged?.({ left: 60, right: 40 }, { isUserInteraction: true });
     capturedOnLayoutChanged?.({ left: 70, right: 30 }, { isUserInteraction: false });
@@ -184,7 +184,7 @@ describe('ResizablePanelGroup persistence', () => {
 
   it('persists the requested layout before temporary size constraints', () => {
     const cleanup = renderInDom((root) => {
-      flushSync(() =>
+      actFlushSync(() =>
         root.render(createElement(ResizablePanelGroup, { autoSaveId: 'constraints' }))
       );
     });
@@ -202,7 +202,9 @@ describe('ResizablePanelGroup persistence', () => {
   it('ignores delayed panel removal after a newer user resize', () => {
     vi.useFakeTimers();
     const cleanup = renderInDom((root) => {
-      flushSync(() => root.render(createElement(ResizablePanelGroup, { autoSaveId: 'delayed' })));
+      actFlushSync(() =>
+        root.render(createElement(ResizablePanelGroup, { autoSaveId: 'delayed' }))
+      );
     });
     try {
       capturedOnLayoutChanged?.({ left: 60, right: 40 }, { isUserInteraction: true });

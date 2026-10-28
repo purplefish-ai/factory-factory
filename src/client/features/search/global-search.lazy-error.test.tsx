@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
+
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router';
 import { expect, it, vi } from 'vitest';
+import { waitForReact } from '@/test-utils/react-act';
 import { GlobalSearch } from './global-search';
 
 const chunk = vi.hoisted(() => {
@@ -90,7 +92,7 @@ it('contains a failed launch chunk and keeps the app and search usable', async (
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, '#42');
       input.dispatchEvent(new Event('input', { bubbles: true }));
     });
-    await vi.waitFor(() =>
+    await waitForReact(() =>
       expect(document.querySelector('[role="option"]')?.textContent).toContain('Fix search')
     );
     await act(() =>
@@ -99,7 +101,7 @@ it('contains a failed launch chunk and keeps the app and search usable', async (
         ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     );
     await act(() => chunk.reject(new Error('Failed to fetch launch chunk')));
-    await vi.waitFor(() =>
+    await waitForReact(() =>
       expect(document.querySelector('[role="alert"]')?.textContent).toContain(
         'Unable to load issue launch options'
       )

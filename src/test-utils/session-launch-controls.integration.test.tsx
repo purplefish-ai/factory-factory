@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TRPCClientError } from '@trpc/client';
 import { getQueryKey } from '@trpc/react-query';
@@ -14,6 +15,7 @@ import { trpc } from '@/client/lib/trpc';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import type { ChatProvider } from '@/shared/chat-capabilities';
 import type { SessionLaunchOptions } from '@/shared/session-launch';
+import { waitForReact } from '@/test-utils/react-act';
 
 const inputSchema = z.object({
   provider: z.enum(['CLAUDE', 'CODEX']),
@@ -273,7 +275,7 @@ async function openModels(name: string) {
   });
 }
 async function ready() {
-  await vi.waitFor(() => expect(button('Submit launch')?.disabled).toBe(false));
+  await waitForReact(() => expect(button('Submit launch')?.disabled).toBe(false));
 }
 
 describe('real launch controls and tRPC payloads', () => {
@@ -295,7 +297,7 @@ describe('real launch controls and tRPC payloads', () => {
       await choose(effort);
       await act(() => button('Planning: Default')?.click());
       await act(() => button('Submit launch with message')?.click());
-      await vi.waitFor(() =>
+      await waitForReact(() =>
         expect(
           view.requests.some((request) => request.path === 'session.createAndStartSession')
         ).toBe(true)
@@ -315,7 +317,7 @@ describe('real launch controls and tRPC payloads', () => {
       await ready();
       expect(button('Thinking level: High')).toBeDefined();
       await act(() => button('Submit launch')?.click());
-      await vi.waitFor(() =>
+      await waitForReact(() =>
         expect(
           view.requests.filter((request) => request.path === 'session.createAndStartSession')
         ).toHaveLength(2)
@@ -352,7 +354,7 @@ describe('real launch controls and tRPC payloads', () => {
     });
     expect(button('Thinking level: High')).toBeDefined();
     await act(() => button('Submit launch')?.click());
-    await vi.waitFor(() =>
+    await waitForReact(() =>
       expect(
         view.requests.some((request) => request.path === 'session.createAndStartSession')
       ).toBe(true)
@@ -368,7 +370,7 @@ describe('real launch controls and tRPC payloads', () => {
     await ready();
     expect(button('Thinking level: Default')).toBeDefined();
     await act(() => button('Submit launch')?.click());
-    await vi.waitFor(() =>
+    await waitForReact(() =>
       expect(
         view.requests.some((request) => request.path === 'session.createAndStartSession')
       ).toBe(true)
@@ -386,7 +388,7 @@ describe('real launch controls and tRPC payloads', () => {
     await open('New conversation provider and model: Codex · 6 Sol');
     await openModels('Codex');
     await choose('6 Luna');
-    await vi.waitFor(() =>
+    await waitForReact(() =>
       expect(button('Thinking level: ultra')?.getAttribute('aria-invalid')).toBe('true')
     );
     expect(button('Submit launch')?.disabled).toBe(true);
@@ -397,14 +399,14 @@ describe('real launch controls and tRPC payloads', () => {
     await open('New conversation provider and model: Claude · Sonnet');
     await openModels('Codex');
     await choose('6 Luna');
-    await vi.waitFor(() =>
+    await waitForReact(() =>
       expect(button('Thinking level: ultra')?.getAttribute('aria-invalid')).toBe('true')
     );
     await open('Thinking level: ultra');
     await choose('Default');
     await ready();
     await act(() => button('Submit launch')?.click());
-    await vi.waitFor(() =>
+    await waitForReact(() =>
       expect(
         view.requests.some((request) => request.path === 'session.createAndStartSession')
       ).toBe(true)
@@ -426,7 +428,7 @@ describe('real launch controls and tRPC payloads', () => {
     await open('New conversation provider and model: Codex · 6 Sol');
     await openModels('Codex');
     await choose('Slow model');
-    await vi.waitFor(() => expect(view.pending.has('CODEX:slow')).toBe(true));
+    await waitForReact(() => expect(view.pending.has('CODEX:slow')).toBe(true));
     expect(button('Submit launch')?.disabled).toBe(true);
     await open('New conversation provider and model: Codex · Slow model');
     await chooseProviderDefault('Claude');
@@ -443,7 +445,7 @@ describe('real launch controls and tRPC payloads', () => {
     await open('New conversation provider and model: Codex · 6 Sol');
     await openModels('Codex');
     await choose('6 Luna');
-    await vi.waitFor(() => expect(button('Thinking level: Unavailable')).toBeDefined());
+    await waitForReact(() => expect(button('Thinking level: Unavailable')).toBeDefined());
     expect(button('Submit launch')?.disabled).toBe(true);
     expect(button('New conversation provider and model: Codex · 6 Luna')?.disabled).toBe(false);
     await open('Thinking level: Unavailable');
@@ -464,15 +466,15 @@ describe('real launch controls and tRPC payloads', () => {
   it('launches a workspace with another provider and its nested model in one menu visit', async () => {
     const view = renderLaunch(true);
     await view.render();
-    await vi.waitFor(() => expect(button('Launch')?.disabled).toBe(false));
+    await waitForReact(() => expect(button('Launch')?.disabled).toBe(false));
     await open('New conversation provider and model: Codex · 6 Sol');
     await openModels('Claude');
     expect(button('New conversation provider and model: Codex · 6 Sol')).toBeDefined();
     await choose('Opus');
-    await vi.waitFor(() => expect(button('Launch')?.disabled).toBe(false));
+    await waitForReact(() => expect(button('Launch')?.disabled).toBe(false));
     expect(button('New conversation provider and model: Claude · Opus')).toBeDefined();
     await act(() => button('Launch')?.click());
-    await vi.waitFor(() =>
+    await waitForReact(() =>
       expect(view.requests.some((request) => request.path === 'workspace.create')).toBe(true)
     );
     expect(
@@ -487,12 +489,12 @@ describe('real launch controls and tRPC payloads', () => {
   it('sends the selected thinking and Plan from the actual inline workspace composer', async () => {
     const view = renderLaunch(true);
     await view.render();
-    await vi.waitFor(() => expect(button('Launch')?.disabled).toBe(false));
+    await waitForReact(() => expect(button('Launch')?.disabled).toBe(false));
     await open('Thinking level: High');
     await choose('Ultra');
     await act(() => button('Planning: Default')?.click());
     await act(() => button('Launch')?.click());
-    await vi.waitFor(() =>
+    await waitForReact(() =>
       expect(view.requests.some((request) => request.path === 'workspace.create')).toBe(true)
     );
     expect(

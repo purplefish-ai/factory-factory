@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 
 import { act, createElement, forwardRef, type ReactNode } from 'react';
-import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SELECTED_PROJECT_KEY } from '@/client/lib/project-selection';
 import type { PRWithFullDetails } from '@/shared/github-types';
+import { actFlushSync } from '@/test-utils/react-act';
 import ReviewsPage from './reviews';
 
 const listProjectsMock = vi.fn();
@@ -222,14 +222,14 @@ describe('ReviewsPage header', () => {
     document.body.appendChild(container);
     const root = createRoot(container);
 
-    flushSync(() => {
+    actFlushSync(() => {
       root.render(createElement(ReviewsPage));
     });
 
     const link = container.querySelector('a[href="/projects/alpha/workspaces"]');
     expect(link).not.toBeNull();
 
-    root.unmount();
+    actFlushSync(() => root.unmount());
   });
 
   it.each([
@@ -261,14 +261,14 @@ describe('ReviewsPage header', () => {
     document.body.appendChild(container);
     const root = createRoot(container);
 
-    flushSync(() => {
+    actFlushSync(() => {
       root.render(createElement(ReviewsPage));
     });
 
     const link = container.querySelector('a[href*="/workspaces"]');
     expect(link).toBeNull();
 
-    root.unmount();
+    actFlushSync(() => root.unmount());
   });
 
   it('renders workspaces back link for empty review list when project exists', () => {
@@ -279,14 +279,14 @@ describe('ReviewsPage header', () => {
     document.body.appendChild(container);
     const root = createRoot(container);
 
-    flushSync(() => {
+    actFlushSync(() => {
       root.render(createElement(ReviewsPage));
     });
 
     const link = container.querySelector('a[href="/projects/alpha/workspaces"]');
     expect(link).not.toBeNull();
 
-    root.unmount();
+    actFlushSync(() => root.unmount());
   });
 });
 
@@ -375,7 +375,7 @@ describe('ReviewsPage approval', () => {
     expect(reviewMocks.invalidateReviewRequests).toHaveBeenCalledTimes(1);
 
     void act(() => {
-      root.unmount();
+      actFlushSync(() => root.unmount());
     });
   });
 });

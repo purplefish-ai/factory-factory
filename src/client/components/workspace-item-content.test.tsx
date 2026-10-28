@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 
 import { createElement } from 'react';
-import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
 import { createOptimisticWorkspaceSummary } from '@/client/lib/workspace-summary';
+import { actFlushSync } from '@/test-utils/react-act';
 import { WorkspaceItemContent } from './workspace-item-content';
 
 vi.mock('@/client/features/workspace', () => ({ WorkspacePrMenu: () => null }));
@@ -48,7 +48,7 @@ function renderContent(
   document.body.appendChild(container);
   const root = createRoot(container);
 
-  flushSync(() => {
+  actFlushSync(() => {
     root.render(
       createElement(
         'div',
@@ -96,7 +96,7 @@ describe('WorkspaceItemContent', () => {
     expect(onParentPointerUp).not.toHaveBeenCalled();
     expect(onOpenPr).toHaveBeenCalledOnce();
 
-    root.unmount();
+    actFlushSync(() => root.unmount());
     container.remove();
   });
 
@@ -120,7 +120,7 @@ describe('WorkspaceItemContent', () => {
     expect(onParentPointerUp).not.toHaveBeenCalled();
     expect(onOpenIssue).toHaveBeenCalledOnce();
 
-    root.unmount();
+    actFlushSync(() => root.unmount());
     container.remove();
   });
 
@@ -138,7 +138,7 @@ describe('WorkspaceItemContent', () => {
     expect(container.textContent).toContain('Workspace');
     expect(container.textContent).not.toContain('Ready for next prompt');
 
-    root.unmount();
+    actFlushSync(() => root.unmount());
     container.remove();
   });
 
@@ -155,7 +155,7 @@ describe('WorkspaceItemContent', () => {
 
     expect(container.textContent).toContain('Needs your answer');
 
-    root.unmount();
+    actFlushSync(() => root.unmount());
     container.remove();
   });
 });

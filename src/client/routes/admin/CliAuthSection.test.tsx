@@ -6,6 +6,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { trpc } from '@/client/lib/trpc';
+import { waitForReact } from '@/test-utils/react-act';
 import { CliAuthSection } from './CliAuthSection';
 
 vi.mock('@/client/features/project/use-setup-terminal', () => ({
@@ -70,7 +71,7 @@ describe('CLI authentication refresh', () => {
           </trpc.Provider>
         )
       );
-      await vi.waitFor(() => expect(container.textContent).toContain('run claude login'));
+      await waitForReact(() => expect(container.textContent).toContain('run claude login'));
       // Warm the forced-query cache before the login, within production staleTime.
       await click('Recheck');
       authenticated = true;
@@ -80,7 +81,7 @@ describe('CLI authentication refresh', () => {
       } else {
         await click('Recheck');
       }
-      await vi.waitFor(() => {
+      await waitForReact(() => {
         expect(container.textContent).not.toContain('run claude login');
         expect(container.textContent?.match(/Ready/g)).toHaveLength(3);
       });

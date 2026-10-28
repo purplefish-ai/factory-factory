@@ -2,9 +2,9 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement, type ReactNode } from 'react';
-import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { actFlushSync } from '@/test-utils/react-act';
 import { IssueCard } from './issue-card';
 
 const mocks = vi.hoisted(() => ({
@@ -78,7 +78,11 @@ vi.mock('@/client/lib/trpc', () => ({
 }));
 
 vi.mock('@/components/ui/button', () => ({
-  Button: ({ children, ...props }: import('react').ButtonHTMLAttributes<HTMLButtonElement>) =>
+  Button: ({
+    children,
+    asChild: _asChild,
+    ...props
+  }: import('react').ButtonHTMLAttributes<HTMLButtonElement> & { asChild?: boolean }) =>
     createElement('button', props, children),
 }));
 
@@ -120,7 +124,7 @@ function renderCard(): { container: HTMLDivElement; root: Root } {
   root.render = (children) =>
     render(createElement(QueryClientProvider, { client: queryClient }, children));
 
-  flushSync(() => {
+  actFlushSync(() => {
     root.render(
       createElement(IssueCard, {
         projectId: 'project-1',
@@ -151,7 +155,7 @@ function openLaunchSheet(container: HTMLDivElement) {
     throw new Error('Start button not found');
   }
 
-  flushSync(() => {
+  actFlushSync(() => {
     startButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
   });
 }
@@ -180,7 +184,7 @@ describe('IssueCard', () => {
 
     expect(mocks.createWorkspaceMutationOptions).toBeDefined();
 
-    root.unmount();
+    actFlushSync(() => root.unmount());
     container.remove();
   });
 
@@ -195,13 +199,13 @@ describe('IssueCard', () => {
 
     mocks.seedCreatedWorkspaceDetailMock.mockReturnValue({ id: 'ws-1' });
 
-    mutationOptions.onSuccess({ id: 'ws-1' });
+    actFlushSync(() => mutationOptions.onSuccess({ id: 'ws-1' }));
 
     expect(mocks.listForProjectInvalidateMock).toHaveBeenCalledWith({
       projectId: 'project-1',
     });
 
-    root.unmount();
+    actFlushSync(() => root.unmount());
     container.remove();
   });
 
@@ -218,7 +222,7 @@ describe('IssueCard', () => {
 
     expect(mocks.toastErrorMock).toHaveBeenCalledWith('Workspace creation failed');
 
-    root.unmount();
+    actFlushSync(() => root.unmount());
     container.remove();
   });
 });

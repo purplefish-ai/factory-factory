@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import { act, createElement } from 'react';
-import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -10,6 +9,7 @@ import { type UseChatStateReturn, useChatState } from '@/client/features/chat/us
 import type { MessageAttachment } from '@/lib/chat-protocol';
 import { MessageState } from '@/lib/chat-protocol';
 import { type ChatBarCapabilities, EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
+import { actFlushSync } from '@/test-utils/react-act';
 
 vi.mock('sonner', () => ({
   toast: {
@@ -50,7 +50,7 @@ function renderChatState(
     root.render(createElement(ChatStateHarness, { dbSessionId, send, chatRef, connected }));
   };
 
-  flushSync(() => {
+  actFlushSync(() => {
     render(initialSessionId);
   });
 
@@ -59,15 +59,13 @@ function renderChatState(
     send,
     setConnected: (value: boolean) => {
       connected = value;
-      flushSync(() => render(initialSessionId));
+      actFlushSync(() => render(initialSessionId));
     },
     rerenderSession: (dbSessionId: string | null) => {
       render(dbSessionId);
     },
     cleanup: () => {
-      flushSync(() => {
-        root.unmount();
-      });
+      actFlushSync(() => root.unmount());
       container.remove();
     },
   };
@@ -156,18 +154,18 @@ describe('useChatState rejected message recovery', () => {
     const harness = renderChatState('session-A');
     await flushEffects();
 
-    flushSync(() => {
+    actFlushSync(() => {
       harness.chatRef.current?.setInputAttachments([createAttachment()]);
     });
 
     await flushEffects();
 
-    flushSync(() => {
+    actFlushSync(() => {
       harness.chatRef.current?.sendMessage('sensitive data');
     });
 
     const messageId = getSentMessageId(harness.send);
-    flushSync(() => {
+    actFlushSync(() => {
       harness.chatRef.current?.dispatch({
         type: 'MESSAGE_STATE_CHANGED',
         payload: {
@@ -195,10 +193,10 @@ describe('useChatState rejected message recovery', () => {
       const harness = renderChatState('session-A');
       await flushEffects();
       try {
-        flushSync(() => harness.chatRef.current?.sendMessage('earlier message'));
+        actFlushSync(() => harness.chatRef.current?.sendMessage('earlier message'));
         const messageId = getSentMessageId(harness.send);
-        flushSync(() => harness.chatRef.current?.setInputDraft('new draft'));
-        flushSync(() =>
+        actFlushSync(() => harness.chatRef.current?.setInputDraft('new draft'));
+        actFlushSync(() =>
           harness.chatRef.current?.dispatch({
             type: 'MESSAGE_STATE_CHANGED',
             payload: { id: messageId, newState, errorMessage: 'Failed' },
@@ -207,7 +205,7 @@ describe('useChatState rejected message recovery', () => {
         await flushEffects();
         expect(harness.chatRef.current?.inputDraft).toBe('new draft');
         expect(harness.chatRef.current?.lastRejectedMessage).toBeNull();
-        flushSync(() => harness.chatRef.current?.setInputDraft(''));
+        actFlushSync(() => harness.chatRef.current?.setInputDraft(''));
         await flushEffects();
         expect(harness.chatRef.current?.inputDraft).toBe('');
       } finally {
@@ -220,10 +218,10 @@ describe('useChatState rejected message recovery', () => {
     const harness = renderChatState('session-A');
     await flushEffects();
     try {
-      flushSync(() => harness.chatRef.current?.sendMessage('earlier message'));
+      actFlushSync(() => harness.chatRef.current?.sendMessage('earlier message'));
       const messageId = getSentMessageId(harness.send);
-      flushSync(() => harness.chatRef.current?.setInputAttachments([createAttachment()]));
-      flushSync(() =>
+      actFlushSync(() => harness.chatRef.current?.setInputAttachments([createAttachment()]));
+      actFlushSync(() =>
         harness.chatRef.current?.dispatch({
           type: 'MESSAGE_STATE_CHANGED',
           payload: { id: messageId, newState: MessageState.REJECTED, errorMessage: 'Rejected' },
@@ -245,7 +243,7 @@ describe('useChatState rejected message recovery', () => {
       throw new DOMException('Quota exceeded', 'QuotaExceededError');
     });
 
-    flushSync(() => {
+    actFlushSync(() => {
       harness.chatRef.current?.setInputAttachments([createAttachment()]);
     });
 
@@ -268,7 +266,7 @@ describe('useChatState rejected message recovery', () => {
     const harness = renderChatState('session-A');
     await flushEffects();
 
-    flushSync(() => {
+    actFlushSync(() => {
       harness.chatRef.current?.setInputAttachments([createAttachment()]);
     });
 
@@ -284,7 +282,7 @@ describe('useChatState rejected message recovery', () => {
       return removeItem.call(this, key);
     });
 
-    flushSync(() => {
+    actFlushSync(() => {
       harness.chatRef.current?.sendMessage('send with attachment');
     });
 
@@ -306,18 +304,18 @@ describe('useChatState rejected message recovery', () => {
     const harness = renderChatState('session-A');
     await flushEffects();
 
-    flushSync(() => {
+    actFlushSync(() => {
       harness.chatRef.current?.setInputAttachments([createAttachment()]);
     });
 
     await flushEffects();
 
-    flushSync(() => {
+    actFlushSync(() => {
       harness.chatRef.current?.sendMessage('sensitive data');
     });
 
     const messageId = getSentMessageId(harness.send);
-    flushSync(() => {
+    actFlushSync(() => {
       harness.chatRef.current?.dispatch({
         type: 'MESSAGE_STATE_CHANGED',
         payload: {
@@ -344,18 +342,18 @@ describe('useChatState rejected message recovery', () => {
     const harness = renderChatState(null);
     await flushEffects();
 
-    flushSync(() => {
+    actFlushSync(() => {
       harness.chatRef.current?.setInputAttachments([createAttachment()]);
     });
 
     await flushEffects();
 
-    flushSync(() => {
+    actFlushSync(() => {
       harness.chatRef.current?.sendMessage('sensitive data');
     });
 
     const messageId = getSentMessageId(harness.send);
-    flushSync(() => {
+    actFlushSync(() => {
       harness.chatRef.current?.dispatch({
         type: 'MESSAGE_STATE_CHANGED',
         payload: {
@@ -395,7 +393,7 @@ describe('useChatState plan mode persistence', () => {
     async (provider) => {
       const harness = renderChatState('session-A');
       await flushEffects();
-      flushSync(() =>
+      actFlushSync(() =>
         harness.chatRef.current?.dispatch({
           type: 'WS_CHAT_CAPABILITIES',
           payload: {
@@ -404,12 +402,12 @@ describe('useChatState plan mode persistence', () => {
         })
       );
       const configId = provider === 'CODEX' ? 'collaboration_mode' : 'mode';
-      flushSync(() => harness.chatRef.current?.setConfigOption(configId, 'plan'));
+      actFlushSync(() => harness.chatRef.current?.setConfigOption(configId, 'plan'));
       expect(loadSettings('session-A')?.planModeEnabled).toBe(true);
-      flushSync(() => harness.chatRef.current?.setConfigOption(configId, 'default'));
+      actFlushSync(() => harness.chatRef.current?.setConfigOption(configId, 'default'));
       expect(loadSettings('session-A')?.planModeEnabled).toBe(false);
       if (provider === 'CODEX') {
-        flushSync(() => harness.chatRef.current?.setConfigOption('mode', 'workspace-write'));
+        actFlushSync(() => harness.chatRef.current?.setConfigOption('mode', 'workspace-write'));
         expect(loadSettings('session-A')?.planModeEnabled).toBe(false);
       }
       harness.cleanup();
@@ -433,18 +431,18 @@ describe('useChatState plan mode persistence', () => {
       const harness = renderChatState('session-A');
       await flushEffects();
 
-      flushSync(() => {
+      actFlushSync(() => {
         harness.chatRef.current?.dispatch({
           type: 'WS_CHAT_CAPABILITIES',
           payload: { capabilities },
         });
       });
-      flushSync(() => {
+      actFlushSync(() => {
         harness.chatRef.current?.updateSettings({ planModeEnabled: true });
       });
 
       expect(loadSettings('session-A')?.planModeEnabled).toBe(true);
-      flushSync(() =>
+      actFlushSync(() =>
         harness.chatRef.current?.dispatch({
           type: 'CONFIG_OPTIONS_UPDATE',
           payload: {
@@ -462,7 +460,7 @@ describe('useChatState plan mode persistence', () => {
         })
       );
 
-      flushSync(() => {
+      actFlushSync(() => {
         harness.chatRef.current?.dispatch({
           type: 'WS_PERMISSION_REQUEST',
           payload: {
@@ -476,7 +474,7 @@ describe('useChatState plan mode persistence', () => {
           },
         });
       });
-      flushSync(() => {
+      actFlushSync(() => {
         harness.chatRef.current?.approvePermission('exit-plan', true, 'native-accept-edits');
       });
 
@@ -508,7 +506,7 @@ describe('form elicitation answer submission', () => {
       const harness = renderChatState('session-A');
       await flushEffects();
       try {
-        flushSync(() => {
+        actFlushSync(() => {
           harness.chatRef.current?.dispatch({
             type: 'WS_USER_QUESTION',
             payload: {
@@ -522,7 +520,7 @@ describe('form elicitation answer submission', () => {
             },
           });
         });
-        flushSync(() => {
+        actFlushSync(() => {
           harness.chatRef.current?.answerQuestion('elicitation-question', { decision: answer });
         });
         expect(harness.send).toHaveBeenCalledWith({
@@ -638,13 +636,13 @@ describe('pending native settings', () => {
         { value: 'review', name: 'Review' },
       ],
     };
-    flushSync(() =>
+    actFlushSync(() =>
       harness.chatRef.current?.dispatch({
         type: 'CONFIG_OPTIONS_UPDATE',
         payload: { configOptions: [option] },
       })
     );
-    flushSync(() => harness.chatRef.current?.setConfigOption('mode', 'review'));
+    actFlushSync(() => harness.chatRef.current?.setConfigOption('mode', 'review'));
     const older = harness.send.mock.calls.at(-1)?.[0];
     if (
       !older ||
@@ -655,7 +653,7 @@ describe('pending native settings', () => {
       throw new Error('Expected request correlation');
     }
     expect(harness.chatRef.current?.acpConfigOptions?.[0]?.currentValue).toBe('review');
-    flushSync(() => harness.chatRef.current?.setConfigOption('mode', 'default'));
+    actFlushSync(() => harness.chatRef.current?.setConfigOption('mode', 'default'));
     const latest = harness.send.mock.calls.at(-1)?.[0];
     if (
       !latest ||
@@ -665,13 +663,13 @@ describe('pending native settings', () => {
     ) {
       throw new Error('Expected request correlation');
     }
-    flushSync(() =>
+    actFlushSync(() =>
       harness.chatRef.current?.dispatch({
         type: 'CONFIG_OPTIONS_UPDATE',
         payload: { configOptions: [{ ...option, currentValue: 'review' }] },
       })
     );
-    flushSync(() =>
+    actFlushSync(() =>
       harness.chatRef.current?.handleMessage({
         type: 'error',
         requestId: older.requestId,
@@ -679,7 +677,7 @@ describe('pending native settings', () => {
       })
     );
     expect(harness.chatRef.current?.acpConfigOptions?.[0]?.currentValue).toBe('default');
-    flushSync(() =>
+    actFlushSync(() =>
       harness.chatRef.current?.handleMessage({
         type: 'error',
         requestId: latest.requestId,
@@ -687,7 +685,7 @@ describe('pending native settings', () => {
       })
     );
     expect(harness.chatRef.current?.acpConfigOptions?.[0]?.currentValue).toBe('review');
-    flushSync(() => harness.chatRef.current?.setConfigOption('mode', 'default'));
+    actFlushSync(() => harness.chatRef.current?.setConfigOption('mode', 'default'));
     const applied = harness.send.mock.calls.at(-1)?.[0];
     if (
       !applied ||
@@ -697,30 +695,30 @@ describe('pending native settings', () => {
     ) {
       throw new Error('Expected request correlation');
     }
-    flushSync(() =>
+    actFlushSync(() =>
       harness.chatRef.current?.dispatch({
         type: 'CONFIG_OPTIONS_UPDATE',
         payload: { configOptions: [option] },
       })
     );
-    flushSync(() =>
+    actFlushSync(() =>
       harness.chatRef.current?.handleMessage({
         type: 'config_option_applied',
         requestId: applied.requestId,
       })
     );
-    flushSync(() =>
+    actFlushSync(() =>
       harness.chatRef.current?.dispatch({
         type: 'CONFIG_OPTIONS_UPDATE',
         payload: { configOptions: [{ ...option, currentValue: 'review' }] },
       })
     );
     expect(harness.chatRef.current?.acpConfigOptions?.[0]?.currentValue).toBe('review');
-    flushSync(() => harness.chatRef.current?.setConfigOption('mode', 'default'));
+    actFlushSync(() => harness.chatRef.current?.setConfigOption('mode', 'default'));
     harness.setConnected(false);
     await flushEffects();
     harness.setConnected(true);
-    flushSync(() =>
+    actFlushSync(() =>
       harness.chatRef.current?.dispatch({
         type: 'CONFIG_OPTIONS_UPDATE',
         payload: { configOptions: [{ ...option, currentValue: 'review' }] },
@@ -733,7 +731,7 @@ describe('pending native settings', () => {
   it('uses a selected native reasoning level when queuing the next message', async () => {
     const harness = renderChatState('pending-reasoning');
     await flushEffects();
-    flushSync(() =>
+    actFlushSync(() =>
       harness.chatRef.current?.dispatch({
         type: 'WS_CHAT_CAPABILITIES',
         payload: {
@@ -752,7 +750,7 @@ describe('pending native settings', () => {
         },
       })
     );
-    flushSync(() =>
+    actFlushSync(() =>
       harness.chatRef.current?.dispatch({
         type: 'CONFIG_OPTIONS_UPDATE',
         payload: {
@@ -772,8 +770,8 @@ describe('pending native settings', () => {
         },
       })
     );
-    flushSync(() => harness.chatRef.current?.setConfigOption('reasoning_effort', 'high'));
-    flushSync(() => harness.chatRef.current?.sendMessage('next turn'));
+    actFlushSync(() => harness.chatRef.current?.setConfigOption('reasoning_effort', 'high'));
+    actFlushSync(() => harness.chatRef.current?.sendMessage('next turn'));
     expect(harness.send).toHaveBeenLastCalledWith(
       expect.objectContaining({
         type: 'queue_message',
@@ -783,7 +781,7 @@ describe('pending native settings', () => {
     harness.setConnected(false);
     await flushEffects();
     harness.setConnected(true);
-    flushSync(() =>
+    actFlushSync(() =>
       harness.chatRef.current?.dispatch({
         type: 'CONFIG_OPTIONS_UPDATE',
         payload: {
@@ -803,7 +801,7 @@ describe('pending native settings', () => {
         },
       })
     );
-    flushSync(() => harness.chatRef.current?.sendMessage('after reconnect'));
+    actFlushSync(() => harness.chatRef.current?.sendMessage('after reconnect'));
     expect(harness.send).toHaveBeenLastCalledWith(
       expect.objectContaining({
         type: 'queue_message',

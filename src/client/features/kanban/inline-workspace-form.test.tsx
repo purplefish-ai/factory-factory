@@ -2,9 +2,9 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, createElement, forwardRef, type ReactNode } from 'react';
-import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { actFlushSync } from '@/test-utils/react-act';
 import { InlineWorkspaceForm } from './inline-workspace-form';
 
 const mocks = vi.hoisted(() => ({
@@ -330,7 +330,7 @@ function renderForm(): {
   root.render = (children) =>
     render(createElement(QueryClientProvider, { client: queryClient }, children));
 
-  flushSync(() => {
+  actFlushSync(() => {
     root.render(
       createElement(InlineWorkspaceForm, {
         projectId: 'project-1',
@@ -393,7 +393,7 @@ describe('InlineWorkspaceForm', () => {
     expect(container.textContent).toContain('Plan');
     expect(container.querySelectorAll('[aria-label="Attach files"]')).toHaveLength(2);
 
-    root.unmount();
+    actFlushSync(() => root.unmount());
     container.remove();
   });
 
@@ -407,7 +407,7 @@ describe('InlineWorkspaceForm', () => {
       throw new Error('Expected periodic task menu item to render');
     }
 
-    flushSync(() => {
+    actFlushSync(() => {
       periodicTaskItem.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
@@ -420,7 +420,7 @@ describe('InlineWorkspaceForm', () => {
     expect(container.textContent).toContain('Periodic task config');
     expect(container.textContent).toContain('Daily');
 
-    root.unmount();
+    actFlushSync(() => root.unmount());
     container.remove();
   });
 
@@ -440,7 +440,7 @@ describe('InlineWorkspaceForm', () => {
       throw new Error('Expected textarea value setter');
     }
 
-    flushSync(() => {
+    actFlushSync(() => {
       setTextareaValue.call(textarea, 'Investigate clipping');
       textarea.dispatchEvent(new Event('input', { bubbles: true }));
     });
@@ -449,7 +449,7 @@ describe('InlineWorkspaceForm', () => {
     expect(textarea.style.height).toBe('180px');
     expect(textarea.style.overflowY).toBe('hidden');
 
-    root.unmount();
+    actFlushSync(() => root.unmount());
     container.remove();
   });
 
@@ -503,7 +503,7 @@ describe('InlineWorkspaceForm', () => {
     expect(mocks.workspaceListCache?.reviewCount).toBe(3);
     expect(mocks.toastErrorMock).toHaveBeenCalledWith('Failed to create workspace: boom');
 
-    root.unmount();
+    actFlushSync(() => root.unmount());
     container.remove();
   });
 });
@@ -515,22 +515,22 @@ it('sends the saved provider model when launching a workspace', () => {
       (button) => button.textContent === 'Launch'
     );
     expect(launch).toBeDefined();
-    flushSync(() => launch?.click());
+    actFlushSync(() => launch?.click());
     expect(mocks.createWorkspaceMutateMock).toHaveBeenCalledWith(
       expect.objectContaining({ provider: 'CLAUDE', model: 'saved-sonnet' })
     );
   } finally {
-    flushSync(() => root.unmount());
+    actFlushSync(() => root.unmount());
   }
 });
 
 it('retains the chosen provider and model when saved settings refetch during a workspace draft', () => {
   const { container, root } = renderForm();
   try {
-    flushSync(() =>
+    actFlushSync(() =>
       container.querySelector<HTMLButtonElement>('[aria-label="Choose Codex"]')?.click()
     );
-    flushSync(() =>
+    actFlushSync(() =>
       container.querySelector<HTMLButtonElement>('[aria-label="Choose model"]')?.click()
     );
     mocks.userSettings = {
@@ -538,7 +538,7 @@ it('retains the chosen provider and model when saved settings refetch during a w
       defaultSessionProvider: 'CLAUDE',
       defaultCodexModel: 'changed-default',
     };
-    flushSync(() =>
+    actFlushSync(() =>
       root.render(
         createElement(InlineWorkspaceForm, {
           projectId: 'project-1',
@@ -551,12 +551,12 @@ it('retains the chosen provider and model when saved settings refetch during a w
     const launch = [...container.querySelectorAll<HTMLButtonElement>('button')].find(
       (button) => button.textContent === 'Launch'
     );
-    flushSync(() => launch?.click());
+    actFlushSync(() => launch?.click());
     expect(mocks.createWorkspaceMutateMock).toHaveBeenCalledWith(
       expect.objectContaining({ provider: 'CODEX', model: 'chosen-model' })
     );
   } finally {
-    flushSync(() => root.unmount());
+    actFlushSync(() => root.unmount());
   }
 });
 
@@ -581,9 +581,9 @@ it.each(['loading', 'failed'])(
         const periodicMode = [...container.querySelectorAll('div')].find(
           (element) => element.textContent === 'Create Periodic Task'
         );
-        flushSync(() => periodicMode?.click());
+        actFlushSync(() => periodicMode?.click());
         const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
-        flushSync(() => {
+        actFlushSync(() => {
           setter?.call(textarea, 'Run the periodic review');
           textarea.dispatchEvent(new Event('input', { bubbles: true }));
         });
@@ -591,7 +591,7 @@ it.each(['loading', 'failed'])(
           (button) => button.textContent === 'Create Periodic Task'
         );
         expect(create?.disabled).toBe(false);
-        flushSync(() => create?.click());
+        actFlushSync(() => create?.click());
         expect(mocks.createPeriodicTaskMutateMock).toHaveBeenCalledWith(
           expect.objectContaining({
             projectId: 'project-1',
@@ -601,7 +601,7 @@ it.each(['loading', 'failed'])(
         );
         expect(mocks.createWorkspaceMutateMock).not.toHaveBeenCalled();
       } finally {
-        flushSync(() => root.unmount());
+        actFlushSync(() => root.unmount());
       }
     });
   }
@@ -619,7 +619,7 @@ it('explains why keyboard workspace creation is blocked while defaults are unava
       expect(mocks.createWorkspaceMutateMock).not.toHaveBeenCalled();
       expect(mocks.toastErrorMock).toHaveBeenCalledWith('Could not load chat defaults');
     } finally {
-      flushSync(() => root.unmount());
+      actFlushSync(() => root.unmount());
     }
   });
 });

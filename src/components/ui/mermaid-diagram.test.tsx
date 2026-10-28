@@ -30,21 +30,21 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  await act(() => root.unmount());
+  await act(async () => root.unmount());
   container.remove();
   vi.unstubAllGlobals();
 });
 
 it('recovers when an invalid chart becomes valid', async () => {
   vi.mocked(mermaid.render).mockRejectedValueOnce(new Error('Incomplete diagram'));
-  await act(() => root.render(<MermaidDiagram chart="graph" />));
+  await act(async () => root.render(<MermaidDiagram chart="graph" />));
   expect(container.textContent).toContain('Incomplete diagram');
 
   vi.mocked(mermaid.render).mockResolvedValueOnce({
     svg: '<svg aria-label="Complete diagram"></svg>',
     diagramType: 'flowchart',
   });
-  await act(() => root.render(<MermaidDiagram chart="graph TD; A-->B" />));
+  await act(async () => root.render(<MermaidDiagram chart="graph TD; A-->B" />));
   expect(container.querySelector('svg')?.getAttribute('aria-label')).toBe('Complete diagram');
   expect(container.textContent).not.toContain('Incomplete diagram');
 });
@@ -61,16 +61,17 @@ it.each(['success', 'error'] as const)(
       .mockImplementationOnce(() =>
         latestRender.promise.then((result) => ({ ...result, diagramType: 'flowchart' }))
       );
-    await act(() => root.render(<MermaidDiagram chart="graph TD; A-->B" />));
-    await act(() => root.render(<MermaidDiagram chart="graph TD; A-->C" />));
-    await act(() => latestRender.resolve({ svg: '<svg aria-label="Latest diagram"></svg>' }));
+    await act(async () => root.render(<MermaidDiagram chart="graph TD; A-->B" />));
+    await act(async () => root.render(<MermaidDiagram chart="graph TD; A-->C" />));
+    await act(async () => latestRender.resolve({ svg: '<svg aria-label="Latest diagram"></svg>' }));
 
-    await act(() => {
+    await act(async () => {
       if (outcome === 'success') {
         oldRender.resolve({ svg: '<svg aria-label="Old diagram"></svg>' });
       } else {
         oldRender.reject(new Error('Stale render error'));
       }
+      await oldRender.promise.catch(() => undefined);
     });
     expect(container.querySelector('svg')?.getAttribute('aria-label')).toBe('Latest diagram');
     expect(container.textContent).not.toContain('Stale render error');

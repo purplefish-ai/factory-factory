@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 
-// Mock Prisma client to avoid node: module imports in jsdom - must be before imports
 import { vi } from 'vitest';
+// Mock Prisma client to avoid node: module imports in jsdom - must be before imports
+import { actFlushSync } from '@/test-utils/react-act';
 
 vi.mock('@/shared/core', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
@@ -17,7 +18,6 @@ vi.mock('@/shared/core', async (importOriginal) => {
 });
 
 import { createElement, createRef } from 'react';
-import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -64,7 +64,7 @@ function renderInDom(render: (root: Root, container: HTMLDivElement) => void): (
   const root = createRoot(container);
   render(root, container);
   return () => {
-    root.unmount();
+    actFlushSync(() => root.unmount());
     container.remove();
   };
 }
@@ -113,7 +113,7 @@ describe('session-tab-bar regression coverage', () => {
       const onCreateSession = vi.fn();
       const onCloseSession = vi.fn();
 
-      flushSync(() => {
+      actFlushSync(() => {
         root.render(
           createElement(SessionTabBar, {
             sessions: [makeSession('s1', '2026-01-01T00:00:00Z')],
@@ -133,7 +133,7 @@ describe('session-tab-bar regression coverage', () => {
         scrollWidth: 100,
       });
 
-      flushSync(() => {
+      actFlushSync(() => {
         window.dispatchEvent(new Event('resize'));
       });
       expect(container.querySelector('[aria-label="Scroll session tabs right"]')).toBeNull();
@@ -143,7 +143,7 @@ describe('session-tab-bar regression coverage', () => {
         clientWidth: 100,
         scrollWidth: 300,
       });
-      flushSync(() => {
+      actFlushSync(() => {
         root.render(
           createElement(SessionTabBar, {
             sessions: [
@@ -186,7 +186,7 @@ describe('slash-command-palette regression coverage', () => {
       const paletteRef = createRef<SlashCommandPaletteHandle>();
 
       const cleanup = renderInDom((root) => {
-        flushSync(() => {
+        actFlushSync(() => {
           root.render(
             createElement(SlashCommandPalette, {
               commands,
@@ -200,14 +200,14 @@ describe('slash-command-palette regression coverage', () => {
           );
         });
 
-        flushSync(() => {
+        actFlushSync(() => {
           expect(paletteRef.current?.handleKeyDown('ArrowDown')).toBe('handled');
           expect(paletteRef.current?.handleKeyDown('ArrowDown')).toBe('handled');
           expect(paletteRef.current?.handleKeyDown('ArrowDown')).toBe('handled');
           expect(paletteRef.current?.handleKeyDown('ArrowDown')).toBe('handled');
         });
 
-        flushSync(() => {
+        actFlushSync(() => {
           root.render(
             createElement(SlashCommandPalette, {
               commands,
@@ -221,7 +221,7 @@ describe('slash-command-palette regression coverage', () => {
           );
         });
 
-        flushSync(() => {
+        actFlushSync(() => {
           root.render(
             createElement(SlashCommandPalette, {
               commands,
@@ -235,7 +235,7 @@ describe('slash-command-palette regression coverage', () => {
           );
         });
 
-        flushSync(() => {
+        actFlushSync(() => {
           expect(paletteRef.current?.handleKeyDown(selectionKey)).toBe('handled');
         });
 
@@ -262,7 +262,7 @@ describe('slash-command-palette regression coverage', () => {
     const paletteRef = createRef<SlashCommandPaletteHandle>();
 
     const cleanup = renderInDom((root) => {
-      flushSync(() => {
+      actFlushSync(() => {
         root.render(
           createElement(SlashCommandPalette, {
             commands,
@@ -277,13 +277,13 @@ describe('slash-command-palette regression coverage', () => {
       });
 
       // Move selection from index 0 -> 2
-      flushSync(() => {
+      actFlushSync(() => {
         expect(paletteRef.current?.handleKeyDown('ArrowDown')).toBe('handled');
         expect(paletteRef.current?.handleKeyDown('ArrowDown')).toBe('handled');
       });
 
       // Filter changes but still returns all 3 commands.
-      flushSync(() => {
+      actFlushSync(() => {
         root.render(
           createElement(SlashCommandPalette, {
             commands,
@@ -297,7 +297,7 @@ describe('slash-command-palette regression coverage', () => {
         );
       });
 
-      flushSync(() => {
+      actFlushSync(() => {
         expect(paletteRef.current?.handleKeyDown('Enter')).toBe('handled');
       });
 
@@ -321,7 +321,7 @@ describe('file-mention-palette regression coverage', () => {
     const paletteRef = createRef<FileMentionPaletteHandle>();
 
     const cleanup = renderInDom((root) => {
-      flushSync(() => {
+      actFlushSync(() => {
         root.render(
           createElement(FileMentionPalette, {
             files,
@@ -336,13 +336,13 @@ describe('file-mention-palette regression coverage', () => {
       });
 
       // Move selection from index 0 -> 2.
-      flushSync(() => {
+      actFlushSync(() => {
         expect(paletteRef.current?.handleKeyDown('ArrowDown')).toBe('handled');
         expect(paletteRef.current?.handleKeyDown('ArrowDown')).toBe('handled');
       });
 
       // Filter changes but list remains the same length.
-      flushSync(() => {
+      actFlushSync(() => {
         root.render(
           createElement(FileMentionPalette, {
             files,
@@ -356,7 +356,7 @@ describe('file-mention-palette regression coverage', () => {
         );
       });
 
-      flushSync(() => {
+      actFlushSync(() => {
         expect(paletteRef.current?.handleKeyDown('Enter')).toBe('handled');
       });
 
