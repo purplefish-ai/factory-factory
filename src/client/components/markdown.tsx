@@ -10,6 +10,8 @@ function renderExternalLink(link: ReactElement<ComponentPropsWithoutRef<'a'>>) {
 }
 
 /** Application Markdown adds GitHub previews without coupling the UI primitive to tRPC. */
-export const MarkdownRenderer = memo(function MarkdownRenderer(props: MarkdownRendererProps) {
+export const MarkdownRenderer = memo(function MarkdownRenderer(
+  props: Omit<MarkdownRendererProps, 'renderExternalLink'>
+) {
   return <BaseMarkdownRenderer {...props} renderExternalLink={renderExternalLink} />;
 });

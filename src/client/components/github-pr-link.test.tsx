@@ -25,6 +25,7 @@ afterEach(async () => {
   }
   document.body.innerHTML = '';
   vi.clearAllMocks();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -50,12 +51,13 @@ it('loads PR metadata only when focused and keeps normal link navigation', async
     },
     isError: false,
   });
-  const link = await render('[#42](https://github.com/owner/repo/pull/42#discussion)');
+  const link = await render('[#42](https://github.com/Owner/Repo/pull/42#discussion)');
   expect(useQuery).not.toHaveBeenCalled();
   expect(link.target).toBe('_blank');
-  expect(link.href).toBe('https://github.com/owner/repo/pull/42#discussion');
+  expect(link.href).toBe('https://github.com/Owner/Repo/pull/42#discussion');
   await act(() => link.focus());
   expect(document.body.textContent).toContain('Show PR previews');
+  expect(document.body.textContent).toContain('Owner/Repo #42');
   expect(document.body.textContent).toContain('martin');
   expect(document.body.textContent).toContain('+24');
   expect(document.body.textContent).toContain('−3');
@@ -117,4 +119,33 @@ it('opens the preview after hovering with a mouse', async () => {
   });
   expect(document.body.textContent).toContain('Loading pull request');
   expect(document.querySelector('[data-slot="tooltip-content"] svg')).toBeNull();
+});
+
+it.each([
+  { ageMs: -5000, expected: 'now' },
+  { ageMs: 0, expected: 'now' },
+  { ageMs: 4999, expected: 'now' },
+  { ageMs: 5000, expected: 'now' },
+  { ageMs: 5001, expected: '5 seconds ago' },
+  { ageMs: 60_000, expected: '1 minute ago' },
+])('formats a PR created $ageMs milliseconds ago as $expected', async ({ ageMs, expected }) => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  const now = new Date('2026-10-28T12:00:00Z').getTime();
+  vi.setSystemTime(now);
+  useQuery.mockReturnValue({
+    data: {
+      title: 'New PR',
+      state: 'OPEN',
+      isDraft: false,
+      author: { login: 'martin' },
+      createdAt: new Date(now - ageMs).toISOString(),
+      additions: 1,
+      deletions: 0,
+      changedFiles: 1,
+    },
+    isError: false,
+  });
+  const link = await render('[PR](https://github.com/o/r/pull/42)');
+  await act(() => link.focus());
+  expect(document.querySelector('time')?.textContent).toBe(expected);
 });

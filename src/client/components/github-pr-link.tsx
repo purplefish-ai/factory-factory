@@ -14,6 +14,13 @@ const PR_STATES = {
   DRAFT: { label: 'Draft', color: 'bg-muted text-muted-foreground' },
 };
 
+function formatCreatedAt(createdAt: string) {
+  const date = new Date(createdAt);
+  return Math.abs(Date.now() - date.getTime()) <= 5000
+    ? 'now'
+    : formatDistanceToNowStrict(date, { addSuffix: true });
+}
+
 export function GitHubPRPreviewCard({
   repo,
   number,
@@ -48,7 +55,7 @@ export function GitHubPRPreviewCard({
         </span>
         {data && (
           <time dateTime={data.createdAt} title={new Date(data.createdAt).toLocaleString()}>
-            {formatDistanceToNowStrict(new Date(data.createdAt), { addSuffix: true })}
+            {formatCreatedAt(data.createdAt)}
           </time>
         )}
       </div>
@@ -87,7 +94,7 @@ export function GitHubPRPreviewCard({
 
 function PRPreview({ repo, number }: { repo: string; number: number }) {
   const { data, isError } = trpc.github.getPRPreview.useQuery(
-    { repo, number },
+    { repo: repo.toLowerCase(), number },
     {
       staleTime: 60_000,
       retry: false,

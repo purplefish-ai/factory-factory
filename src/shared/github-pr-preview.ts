@@ -30,7 +30,7 @@ export function parseGitHubPRLink(href: string) {
       return null;
     }
     const result = githubPRPreviewInputSchema.safeParse({
-      repo: `${match[1]}/${match[2]}`.toLowerCase(),
+      repo: `${match[1]}/${match[2]}`,
       number: Number(match[3]),
     });
     return result.success ? result.data : null;

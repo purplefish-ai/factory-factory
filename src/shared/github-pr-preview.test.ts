@@ -5,8 +5,8 @@ describe('parseGitHubPRLink', () => {
   it.each([
     'https://github.com/Owner/Repo/pull/42',
     'https://github.com/Owner/Repo/pull/42/files?diff=split#diff-123',
-  ])('recognizes PR links and normalizes query identity: %s', (url) => {
-    expect(parseGitHubPRLink(url)).toEqual({ repo: 'owner/repo', number: 42 });
+  ])('recognizes PR links and preserves repository display casing: %s', (url) => {
+    expect(parseGitHubPRLink(url)).toEqual({ repo: 'Owner/Repo', number: 42 });
   });
 
   it.each([

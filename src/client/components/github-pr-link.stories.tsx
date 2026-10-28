@@ -34,6 +34,12 @@ export const Open: Story = {};
 export const Draft: Story = { args: { data: { ...data, isDraft: true } } };
 export const Merged: Story = { args: { data: { ...data, state: 'MERGED' } } };
 export const Closed: Story = { args: { data: { ...data, state: 'CLOSED' } } };
+export const MixedCaseRepository: Story = { args: { repo: 'PurpleFish-AI/Iron-Fillet' } };
+export const JustCreated: Story = {
+  render: (args) => (
+    <GitHubPRPreviewCard {...args} data={{ ...data, createdAt: new Date().toISOString() }} />
+  ),
+};
 export const Loading: Story = { args: { data: undefined } };
 export const Unavailable: Story = { args: { data: undefined, isError: true } };
 export const LongTitle: Story = {
