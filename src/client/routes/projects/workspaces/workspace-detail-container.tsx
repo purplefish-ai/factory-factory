@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useChatWebSocket } from '@/client/features/chat';
-import { useSessionLaunchSelection } from '@/client/features/session-selection';
 import {
   ArchiveGitLockDialog,
   usePersistentScroll,
@@ -79,12 +78,6 @@ export function WorkspaceDetailContainer() {
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [archiveGitLockDialogOpen, setArchiveGitLockDialogOpen] = useState(false);
   const isParentWorkspace = workspace?.creationSource !== 'CHILD_WORKSPACE';
-  const launchSelection = useSessionLaunchSelection(workspaceId, {
-    defaultProvider: workspace?.defaultSessionProvider,
-    ready: workspace !== undefined,
-  });
-  const selectedProvider = launchSelection.provider ?? 'CLAUDE';
-  const setSelectedProvider = launchSelection.pickerProps.onProviderChange ?? (() => undefined);
 
   const isDoneOrMergedWorkspace = isWorkspaceDoneOrMerged(workspace);
   const { data: childWorkspaces } = trpc.workspace.listChildren.useQuery(
@@ -189,11 +182,6 @@ export function WorkspaceDetailContainer() {
     inputRef,
     selectedDbSessionId,
     setSelectedDbSessionId,
-    creationDefaults: launchSelection.creationDefaults,
-    canCreate: launchSelection.ready,
-    creationUnavailableReason: launchSelection.unavailableReason,
-    onCreated: launchSelection.reset,
-    selectedProvider,
     onArchiveGitIndexLocked: () => setArchiveGitLockDialogOpen(true),
   });
 
@@ -344,7 +332,7 @@ export function WorkspaceDetailContainer() {
           onArchiveRequest={handleArchiveRequest}
           handleQuickAction={handleQuickAction}
           running={workspaceRunning}
-          isCreatingSession={createSession.isPending || !launchSelection.ready}
+          isCreatingSession={createSession.isPending}
           hasChanges={hasChanges}
         />
       )}
@@ -383,9 +371,6 @@ export function WorkspaceDetailContainer() {
           handleOpenSubagentTab: openSubagentTab,
           maxSessions,
           hasWorktreePath: !!workspace?.worktreePath,
-          selectedProvider,
-          setSelectedProvider,
-          creationSelection: launchSelection.controlsProps,
         }}
         chat={chatViewModel}
         rightPanelVisible={rightPanelVisible}

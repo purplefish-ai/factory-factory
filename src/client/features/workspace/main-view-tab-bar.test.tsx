@@ -84,12 +84,7 @@ async function renderTabBar(workspaceId: string) {
   await act(() => {
     root.render(
       <WorkspacePanelProvider workspaceId={workspaceId}>
-        <MainViewTabBar
-          workspaceId={workspaceId}
-          sessions={[]}
-          selectedProvider="CODEX"
-          setSelectedProvider={vi.fn()}
-        />
+        <MainViewTabBar workspaceId={workspaceId} sessions={[]} />
       </WorkspacePanelProvider>
     );
   });
@@ -176,78 +171,30 @@ describe('MainViewTabBar sub-agent tabs', () => {
   });
 });
 
-it('keeps unknown creation provider labels consistent instead of implying the legacy provider', async () => {
+it('shows a plain new-session button without launch pickers', async () => {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
+  const onCreateSession = vi.fn();
   try {
     await act(() =>
       root.render(
         <TooltipProvider>
-          <WorkspacePanelProvider workspaceId="unknown-creation-provider">
+          <WorkspacePanelProvider workspaceId="plain-create">
             <MainViewTabBar
-              workspaceId="unknown-creation-provider"
+              workspaceId="plain-create"
               sessions={[]}
-              selectedProvider="CODEX"
-              setSelectedProvider={vi.fn()}
-              onCreateSession={vi.fn()}
-              creationSelection={{ provider: null, models: [], loading: true }}
+              onCreateSession={onCreateSession}
             />
           </WorkspacePanelProvider>
         </TooltipProvider>
       )
     );
-    expect(
-      container.querySelector('[aria-label="New conversation provider and model: Loading model…"]')
-    ).not.toBeNull();
-    expect(
-      container.querySelector<HTMLButtonElement>('[aria-label="New conversation"]')?.disabled
-    ).toBe(true);
-    expect(container.querySelector('[aria-label="New Codex session"]')).toBeNull();
-  } finally {
-    await act(() => root.unmount());
-  }
-});
-
-it('keeps the creation retry enabled while creation actions are blocked by defaults failure', async () => {
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-  const root = createRoot(container);
-  const onRetry = vi.fn();
-  try {
-    await act(() =>
-      root.render(
-        <TooltipProvider>
-          <WorkspacePanelProvider workspaceId="failed-creation-provider">
-            <MainViewTabBar
-              workspaceId="failed-creation-provider"
-              sessions={[]}
-              selectedProvider="CODEX"
-              setSelectedProvider={vi.fn()}
-              onCreateSession={vi.fn()}
-              creationSelection={{
-                provider: null,
-                models: [],
-                error: 'Could not load chat defaults',
-                unavailableReason: 'Could not load chat defaults',
-                onRetry,
-              }}
-            />
-          </WorkspacePanelProvider>
-        </TooltipProvider>
-      )
-    );
-    expect(
-      container.querySelector<HTMLButtonElement>('[aria-label="New conversation"]')?.disabled
-    ).toBe(true);
-    const create = container.querySelector<HTMLButtonElement>('[aria-label="New conversation"]');
-    expect(create?.hasAttribute('title')).toBe(false);
-    expect(create?.getAttribute('aria-description')).toBe('Could not load chat defaults');
-    expect(create?.classList.contains('disabled:pointer-events-none')).toBe(false);
-    const retry = container.querySelector<HTMLButtonElement>('[aria-label$="Retry selection"]');
-    expect(retry?.disabled).toBe(false);
-    await act(() => retry?.click());
-    expect(onRetry).toHaveBeenCalledOnce();
+    expect(container.querySelector('[aria-label^="New conversation provider"]')).toBeNull();
+    const create = container.querySelector<HTMLButtonElement>('[aria-label="New session"]');
+    expect(create?.disabled).toBe(false);
+    await act(() => create?.click());
+    expect(onCreateSession).toHaveBeenCalledOnce();
   } finally {
     await act(() => root.unmount());
   }

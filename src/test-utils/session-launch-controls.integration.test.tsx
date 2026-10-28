@@ -7,7 +7,6 @@ import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { useSessionCollectionCommands } from '@/client/features/chat';
 import { InlineWorkspaceForm } from '@/client/features/kanban/inline-workspace-form';
 import { SessionLaunchControls } from '@/client/features/session-selection';
 import { useSessionLaunchSelection } from '@/client/features/session-selection';
@@ -36,16 +35,18 @@ afterEach(async () => {
   clients.splice(0).forEach((client) => client.clear());
   document.body.innerHTML = '';
 });
+/** Submits the selected launch settings the way a creation surface does. */
 function NativeLaunchHarness() {
   const selection = useSessionLaunchSelection('workspace');
-  const commands = useSessionCollectionCommands({
-    workspaceId: 'workspace',
-    sessions: [],
-    creationDefaults: selection.creationDefaults,
-    canCreate: selection.ready,
-    unavailableReason: selection.unavailableReason,
-    onCreated: selection.reset,
-  });
+  const create = trpc.session.createAndStartSession.useMutation({ onSuccess: selection.reset });
+  const submit = (extra: { name: string; initialMessage?: string }) =>
+    create.mutate({
+      workspaceId: 'workspace',
+      workflow: 'followup',
+      ...selection.creationDefaults,
+      ...extra,
+      initialPrompt: '',
+    });
   return (
     <>
       <SessionLaunchControls {...selection.controlsProps} />
@@ -53,14 +54,14 @@ function NativeLaunchHarness() {
         type="button"
         disabled={!selection.ready}
         title={selection.unavailableReason}
-        onClick={commands.createChat}
+        onClick={() => submit({ name: 'Chat 1' })}
       >
         Create chat
       </button>
       <button
         type="button"
         disabled={!selection.ready}
-        onClick={() => commands.createQuickAction('Review', 'Review this')}
+        onClick={() => submit({ name: 'Review', initialMessage: 'Review this' })}
       >
         Quick action
       </button>

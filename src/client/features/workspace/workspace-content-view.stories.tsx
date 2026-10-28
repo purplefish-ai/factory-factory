@@ -29,8 +29,6 @@ const meta = {
     onCloseSession: fn(),
     maxSessions: 5,
     hasWorktreePath: true,
-    selectedProvider: 'CLAUDE',
-    setSelectedProvider: fn(),
     children: <div className="p-4">Chat content</div>,
   },
 } satisfies Meta<typeof WorkspaceContentView>;

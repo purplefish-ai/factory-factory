@@ -6,17 +6,35 @@ import { type AppRouter, trpc } from '@/client/lib/trpc';
 
 type CreateSessionInput = inferRouterInputs<AppRouter>['session']['createAndStartSession'];
 type CreationKind = 'chat' | 'quick-action';
+const SESSIONS_LOADING_MESSAGE = 'Sessions are still loading. Try again in a moment.';
+
+interface CollectionSession {
+  name?: string | null;
+  provider?: CreateSessionInput['provider'];
+  model?: string | null;
+}
 
 interface SessionCollectionCommandsOptions {
   workspaceId: string | null;
-  sessions: readonly { name?: string | null }[] | undefined;
-  creationDefaults: Pick<
-    CreateSessionInput,
-    'model' | 'provider' | 'reasoningEffort' | 'planModeEnabled'
-  >;
-  canCreate?: boolean;
-  unavailableReason?: string;
+  /** Workspace sessions, oldest first. */
+  sessions: readonly CollectionSession[] | undefined;
   onCreated: (session: { id: string }, workspaceId: string, kind: CreationKind) => void;
+}
+
+/**
+ * New conversations reuse the provider and model the workspace started with. Thinking and Plan
+ * stay at their defaults; users change them per conversation in the composer.
+ */
+function getWorkspaceCreationDefaults(
+  sessions: readonly CollectionSession[]
+): Pick<CreateSessionInput, 'provider' | 'model'> {
+  const first = sessions[0];
+  if (!first?.provider) {
+    return {};
+  }
+  return first.model
+    ? { provider: first.provider, model: first.model }
+    : { provider: first.provider };
 }
 
 // Expose the collection capability without leaking tRPC's private inferred result types.
@@ -40,9 +58,6 @@ interface SessionCollectionCommands {
 export function useSessionCollectionCommands({
   workspaceId,
   sessions,
-  creationDefaults,
-  canCreate = true,
-  unavailableReason,
   onCreated,
 }: SessionCollectionCommandsOptions): SessionCollectionCommands {
   const utils = trpc.useUtils();
@@ -90,11 +105,11 @@ export function useSessionCollectionCommands({
     if (!workspaceId) {
       return;
     }
-    if (!canCreate) {
-      toast.error(unavailableReason ?? 'Chat defaults are not ready. Wait or retry selection.');
+    if (!sessions) {
+      toast.error(SESSIONS_LOADING_MESSAGE);
       return;
     }
-    const existingNumbers = (sessions ?? [])
+    const existingNumbers = sessions
       .map((session) => {
         const match = session.name?.match(/^Chat (\d+)$/);
         return match ? Number.parseInt(match[1] as string, 10) : 0;
@@ -105,41 +120,33 @@ export function useSessionCollectionCommands({
       {
         workspaceId,
         workflow: 'followup',
-        ...creationDefaults,
+        ...getWorkspaceCreationDefaults(sessions),
         name: `Chat ${nextNumber}`,
         initialPrompt: '',
       },
       { onSuccess: (session) => onCreated(session, workspaceId, 'chat') }
     );
-  }, [
-    workspaceId,
-    sessions,
-    creationDefaults,
-    canCreate,
-    unavailableReason,
-    createSession,
-    onCreated,
-  ]);
+  }, [workspaceId, sessions, createSession, onCreated]);
 
   const quickActionInput = useCallback(
     (name: string, prompt: string): CreateSessionInput | null => {
       if (!workspaceId) {
         return null;
       }
-      if (!canCreate) {
-        toast.error(unavailableReason ?? 'Chat defaults are not ready. Wait or retry selection.');
+      if (!sessions) {
+        toast.error(SESSIONS_LOADING_MESSAGE);
         return null;
       }
       return {
         workspaceId,
         workflow: 'followup',
-        ...creationDefaults,
+        ...getWorkspaceCreationDefaults(sessions),
         name,
         initialMessage: prompt,
         initialPrompt: '',
       };
     },
-    [workspaceId, creationDefaults, canCreate, unavailableReason]
+    [workspaceId, sessions]
   );
   const createQuickAction = useCallback(
     (name: string, prompt: string) => {

@@ -34,14 +34,7 @@ function SubagentTabBarStory({
     openSubagentTab(selection);
   }, [openSubagentTab, selection]);
 
-  return (
-    <MainViewTabBar
-      workspaceId={workspaceId}
-      sessions={[]}
-      selectedProvider="CODEX"
-      setSelectedProvider={fn()}
-    />
-  );
+  return <MainViewTabBar workspaceId={workspaceId} sessions={[]} />;
 }
 
 function SubagentTabBarStoryFrame({ selection }: SubagentTabBarStoryProps) {
@@ -94,12 +87,7 @@ function ScreenshotTabBarStory() {
       <button type="button" onClick={() => openTab('screenshot', '/tmp/capture.png', 'Capture')}>
         Open screenshot
       </button>
-      <MainViewTabBar
-        workspaceId="screenshot-tab-story"
-        sessions={[]}
-        selectedProvider="CODEX"
-        setSelectedProvider={fn()}
-      />
+      <MainViewTabBar workspaceId="screenshot-tab-story" sessions={[]} />
       <output>{activeTab?.path}</output>
     </>
   );
@@ -113,100 +101,19 @@ export const ScreenshotTab: Story = {
   ),
 };
 
-// Representative native capabilities from the local Claude/Codex probes; no provider is launched.
-const thinkingOptions = [
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
-  { value: 'xhigh', label: 'Extra high' },
-  { value: 'max', label: 'Maximum' },
-];
-function NewConversationTabBar({ unavailable = false }: { unavailable?: boolean }) {
-  const [provider, setProvider] = useState<'CLAUDE' | 'CODEX'>('CLAUDE');
-  const [drafts, setDrafts] = useState({
-    CLAUDE: { model: 'sonnet', effort: 'high' as string | null, plan: false },
-    CODEX: { model: 'six-sol', effort: 'high' as string | null, plan: false },
-  });
-  const draft = drafts[provider];
-  const updateDraft = (patch: Partial<typeof draft>) =>
-    setDrafts((current) => ({ ...current, [provider]: { ...current[provider], ...patch } }));
-  const options =
-    provider === 'CLAUDE'
-      ? [
-          { value: 'sonnet', label: 'Sonnet' },
-          { value: 'opus', label: 'Opus' },
-        ]
-      : [
-          { value: 'six-sol', label: '6 Sol' },
-          { value: 'six-luna', label: '6 Luna' },
-        ];
-  const reasoningOptions =
-    provider === 'CODEX' && draft.model === 'six-sol'
-      ? [...thinkingOptions, { value: 'ultra', label: 'Ultra' }]
-      : thinkingOptions;
-  const invalid =
-    draft.effort !== null && !reasoningOptions.some((option) => option.value === draft.effort);
-  const unavailableReason = unavailable
-    ? 'Could not load thinking options'
-    : invalid
-      ? 'Choose a supported thinking level or Default'
-      : undefined;
-  return (
-    <WorkspacePanelProvider workspaceId="selection-story">
+export const WithSessions: Story = {
+  render: () => (
+    <WorkspacePanelProvider workspaceId="sessions-story">
       <MainViewTabBar
-        workspaceId="selection-story"
+        workspaceId="sessions-story"
         sessions={[
-          { id: 'existing', name: 'Existing Codex', status: 'RUNNING', provider: 'CODEX' },
+          { id: 'existing', name: 'Chat 1', status: 'RUNNING', provider: 'CODEX' },
+          { id: 'second', name: 'Chat 2', status: 'IDLE', provider: 'CODEX' },
         ]}
         currentSessionId="existing"
-        selectedProvider={provider}
-        setSelectedProvider={setProvider}
         onCreateSession={fn()}
-        creationSelection={{
-          provider,
-          model: draft.model,
-          models: options,
-          onModelChange: (model) => updateDraft({ model }),
-          ready: !unavailableReason,
-          unavailableReason,
-          reasoning: {
-            value: draft.effort,
-            options: reasoningOptions,
-            defaultValue: provider === 'CLAUDE' ? 'default' : 'low',
-            loading: false,
-            invalid,
-            error: unavailable ? unavailableReason : undefined,
-            onChange: (effort) => updateDraft({ effort }),
-            onRetry: fn(),
-          },
-          planMode: {
-            enabled: draft.plan,
-            supported: true,
-            loading: false,
-            onChange: (plan) => updateDraft({ plan }),
-          },
-          onProviderChange: setProvider,
-        }}
+        onRestartSession={fn()}
       />
     </WorkspacePanelProvider>
-  );
-}
-export const NewConversationSelection: Story = { render: () => <NewConversationTabBar /> };
-export const NewConversationSelectionDark: Story = {
-  ...NewConversationSelection,
-  globals: { theme: 'dark' },
-};
-export const NewConversationSelectionNarrow: Story = {
-  ...NewConversationSelection,
-  decorators: [
-    (Story) => (
-      <div className="w-80">
-        <Story />
-      </div>
-    ),
-  ],
-};
-
-export const CreationOptionsUnavailable: Story = {
-  render: () => <NewConversationTabBar unavailable />,
+  ),
 };

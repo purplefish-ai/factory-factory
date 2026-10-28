@@ -1,6 +1,5 @@
 import { type Dispatch, type SetStateAction, useCallback, useState } from 'react';
 import { Loading } from '@/client/components/loading';
-import type { SessionLaunchControlsProps } from '@/client/features/session-selection';
 import type { SubagentSelection } from '@/client/features/subagents';
 import {
   ArchiveWorkspaceDialog,
@@ -19,7 +18,6 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { useIsMobile } from '@/hooks/use-mobile';
-import type { SessionProviderValue } from '@/lib/session-provider-selection';
 import { AutoIterationProgressBanner } from './auto-iteration-progress-banner';
 import type { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
 import type { useWorkspaceInitStatus } from './use-workspace-detail-hooks';
@@ -61,9 +59,6 @@ interface SessionTabsProps {
   handleOpenSubagentTab: (selection: SubagentSelection) => void;
   maxSessions: ReturnType<typeof useWorkspaceData>['maxSessions'];
   hasWorktreePath: boolean;
-  selectedProvider: SessionProviderValue;
-  setSelectedProvider: (provider: SessionProviderValue) => void;
-  creationSelection?: SessionLaunchControlsProps;
 }
 
 interface ArchiveDialogProps {
@@ -211,9 +206,6 @@ export function WorkspaceDetailView({
         }}
         maxSessions={sessionTabs.maxSessions}
         hasWorktreePath={sessionTabs.hasWorktreePath}
-        selectedProvider={sessionTabs.selectedProvider}
-        setSelectedProvider={sessionTabs.setSelectedProvider}
-        creationSelection={sessionTabs.creationSelection}
       >
         <ChatContent {...chat} />
       </WorkspaceContentView>

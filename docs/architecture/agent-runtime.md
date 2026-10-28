@@ -92,16 +92,20 @@ This UI timer does not release backend configuration readiness.
 
 ### Launch thinking and Plan
 
-Manual workspace creation, new conversations, and Quick Chat share a compact
-thinking menu and Plan icon toggle. Thinking levels and planning availability
-come from a disposable ACP session configured with the selected provider/model;
-the provider-wide model catalog is not used as a thinking capability list.
-Discovery submits no prompt, rejects permission/tool callbacks, and closes its
-processes. Its endpoint requires the trusted-local boundary used for local
-execution. Successful native results are cached for 30 seconds per
-provider/model, with bounded cache and concurrent discovery counts. Failed
-discovery offers Retry; creation waits for confirmed options while model
-selection remains editable.
+Manual workspace creation offers the provider/model picker, a compact thinking
+menu, and a Plan icon toggle. New conversations in an existing workspace (the
+workspace tab bar, Quick Chat, and quick actions) have no launch pickers: they
+reuse the provider and model of the workspace's oldest session, or the workspace
+provider and saved model default when it has none, and omit thinking and Plan so
+the saved thinking default applies with Plan off. Users change these per
+conversation from the composer. Thinking levels and planning availability come
+from a disposable ACP session configured with the selected provider/model; the
+provider-wide model catalog is not used as a thinking capability list. Discovery
+submits no prompt, rejects permission/tool callbacks, and closes its processes.
+Its endpoint requires the trusted-local boundary used for local execution.
+Successful native results are cached for 30 seconds per provider/model, with
+bounded cache and concurrent discovery counts. Failed discovery offers Retry;
+creation waits for confirmed options while model selection remains editable.
 
 Each launch draft snapshots its saved provider defaults and retains explicit
 thinking/Plan choices across provider switches and settings refreshes. A model
