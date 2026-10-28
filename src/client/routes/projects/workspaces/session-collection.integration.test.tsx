@@ -45,6 +45,8 @@ function readWorkspaceId(input: unknown): string {
     : '';
 }
 
+type RosterSession = { id: string; name: string; provider?: 'CLAUDE' | 'CODEX'; model?: string };
+
 interface SuspendedWorkspace {
   workspaceId: string;
   onAttempt: () => void;
@@ -122,7 +124,7 @@ function Quick({ workspaceId, onResult, suspended }: SurfaceProps) {
 function queryResponse(
   path: string,
   input: unknown,
-  rosters: ReadonlyMap<string, Array<{ id: string; name: string }>>
+  rosters: ReadonlyMap<string, RosterSession[]>
 ): unknown {
   switch (path) {
     case 'session.listSessions':
@@ -137,7 +139,7 @@ function renderSurface(surface: Surface) {
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   clients.push(queryClient);
-  const rosters = new Map([
+  const rosters = new Map<string, RosterSession[]>([
     [
       'a',
       [
@@ -218,7 +220,7 @@ function renderSurface(surface: Surface) {
     rosters,
     cache: (workspaceId: string) =>
       queryClient.getQueryData(getQueryKey(trpc.session.listSessions, { workspaceId }, 'query')),
-    setRoster: (workspaceId: string, value: Array<{ id: string; name: string }>) => {
+    setRoster: (workspaceId: string, value: RosterSession[]) => {
       rosters.set(workspaceId, value);
       queryClient.setQueryData(
         getQueryKey(trpc.session.listSessions, { workspaceId }, 'query'),
@@ -381,6 +383,30 @@ describe.each<Surface>(['full', 'quick'])('%s chat session collection', (surface
     await vi.waitFor(() => expect(view.get().selected).toBe('second'));
     expect(view.requests.filter((r) => r.path === 'session.createAndStartSession')).toHaveLength(2);
   });
+
+  it.each(['chat', 'action'])(
+    "starts a %s with the workspace's first provider and model, without thinking or Plan",
+    async (kind) => {
+      const view = renderSurface(surface);
+      await vi.waitFor(() => expect(view.get().selected).toBe('a1'));
+      flushSync(() =>
+        view.setRoster('a', [
+          { id: 'a1', name: 'Chat 2', provider: 'CODEX', model: 'gpt-sol' },
+          { id: 'a2', name: 'Chat 7', provider: 'CLAUDE', model: 'opus' },
+        ])
+      );
+      // Query cache notifications reach React on a later task.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const operation = kind === 'chat' ? view.get().newChat() : view.get().quickAction();
+      await vi.waitFor(() => expect(view.pending).toHaveLength(1));
+      const input = view.requests.find((r) => r.path === 'session.createAndStartSession')?.input;
+      expect(input).toMatchObject({ workspaceId: 'a', provider: 'CODEX', model: 'gpt-sol' });
+      expect(input).not.toHaveProperty('reasoningEffort');
+      expect(input).not.toHaveProperty('planModeEnabled');
+      view.pending[0]?.resolve({ id: 'created-a' });
+      await operation;
+    }
+  );
 
   it('keeps selection when another tab closes and ignores unknown tabs', async () => {
     const view = renderSurface(surface);
