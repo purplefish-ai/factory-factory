@@ -56,7 +56,7 @@ describe('collectIssues', () => {
 
     expect(issues).toHaveLength(2);
     expect(issues.map((issue) => issue.title)).toEqual([
-      'Claude CLI out of date',
+      'Claude update available',
       'GitHub CLI not installed',
     ]);
   });
@@ -97,7 +97,7 @@ describe('collectIssues', () => {
 
     expect(issues).toContainEqual(
       expect.objectContaining({
-        title: 'GitHub CLI not authenticated',
+        title: 'GitHub sign-in required',
         description: expect.stringContaining('gh auth refresh -h github.com'),
       })
     );
@@ -215,32 +215,62 @@ describe('CLI health warning dismissal storage', () => {
 });
 
 describe('CLIHealthBannerContent', () => {
-  it('renders compact mobile-first structure with accessible actions', () => {
+  const callbacks = {
+    isRefetching: false,
+    isUpgrading: false,
+    onRecheck: vi.fn(),
+    onDismiss: vi.fn(),
+    onUpgrade: vi.fn(),
+  };
+  const update = {
+    title: 'Claude update available',
+    description: 'Installed 1.0.0; latest is 1.1.0.',
+    upgradeProvider: 'CLAUDE' as const,
+  };
+  const warning = {
+    title: 'GitHub sign-in required',
+    description: 'Run "gh auth login" in your terminal to enable PR management.',
+  };
+
+  it('offers one update action without presenting optional updates as warnings', () => {
     const markup = renderToStaticMarkup(
-      <CLIHealthBannerContent
-        issues={[
-          {
-            title: 'Claude CLI out of date',
-            description: 'Installed 1.0.0; latest is 1.1.0.',
-            link: 'https://claude.ai/download',
-            linkLabel: 'Upgrade',
-            upgradeProvider: 'CLAUDE',
-          },
-        ]}
-        isRefetching={false}
-        isUpgrading={false}
-        onRecheck={vi.fn()}
-        onDismiss={vi.fn()}
-        onUpgrade={vi.fn()}
-      />
+      <CLIHealthBannerContent {...callbacks} issues={[update]} />
     );
 
-    expect(markup).toContain('sm:flex-row');
-    expect(markup).toContain('hidden sm:inline');
-    expect(markup).toContain('sm:hidden');
-    expect(markup).toContain('hidden items-center gap-2 self-start sm:flex');
-    expect(markup).toContain('Recheck');
+    expect(markup).toContain('Update Claude');
+    expect(markup.match(/<button[^>]*aria-label="Update Claude"/g)).toHaveLength(1);
+    expect(markup).not.toContain('role="alert"');
+    expect(markup).not.toContain('bg-warning');
+    expect(markup).not.toContain('Some features require additional setup');
+    expect(markup).not.toContain('<a');
     expect(markup).toContain('Dismiss');
-    expect(markup).toContain('Upgrade now');
+  });
+
+  it('keeps a sign-in warning separate from the optional update action', () => {
+    const markup = renderToStaticMarkup(
+      <CLIHealthBannerContent {...callbacks} issues={[update, warning]} />
+    );
+
+    expect(markup.match(/role="alert"/g)).toHaveLength(1);
+    const alert = markup.slice(markup.indexOf('role="alert"'), markup.indexOf('</li>'));
+    expect(alert).toContain('GitHub sign-in required');
+    expect(alert).toContain('gh auth login');
+    expect(alert).not.toContain('Update Claude');
+    expect(markup).toContain('Update Claude');
+    expect(markup).toContain('Recheck');
+  });
+
+  it('disables updates and rechecks while an update is running', () => {
+    const markup = renderToStaticMarkup(
+      <CLIHealthBannerContent {...callbacks} issues={[update, warning]} isUpgrading />
+    );
+
+    expect(markup).toContain('Updating Claude');
+    expect(markup.match(/disabled=""/g)).toHaveLength(2);
+    expect(markup).toContain('aria-busy="true"');
+  });
+
+  it('renders nothing when all issues have cleared', () => {
+    expect(renderToStaticMarkup(<CLIHealthBannerContent {...callbacks} issues={[]} />)).toBe('');
   });
 });

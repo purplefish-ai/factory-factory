@@ -6,7 +6,7 @@ import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { toast } from 'sonner';
 import { describe, expect, it, vi } from 'vitest';
-import { CLIHealthBanner } from './cli-health-banner';
+import { CLIHealthBanner, CLIHealthBannerContent, collectIssues } from './cli-health-banner';
 
 const mocks = vi.hoisted(() => ({
   refetch: vi.fn<(options?: RefetchOptions) => Promise<unknown>>(),
@@ -62,6 +62,80 @@ describe('CLI health recheck', () => {
     } finally {
       flushSync(() => root.unmount());
       client.clear();
+    }
+  });
+});
+
+describe('CLI notice actions', () => {
+  it('updates the selected provider and dismisses from the compact strip', () => {
+    const onUpgrade = vi.fn();
+    const onDismiss = vi.fn();
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    try {
+      flushSync(() =>
+        root.render(
+          createElement(CLIHealthBannerContent, {
+            issues: collectIssues({
+              claude: { isInstalled: true, isOutdated: true },
+              codex: { isInstalled: true, isAuthenticated: true },
+              github: { isInstalled: true, isAuthenticated: true },
+            }),
+            isRefetching: false,
+            isUpgrading: false,
+            onRecheck: vi.fn(),
+            onUpgrade,
+            onDismiss,
+          })
+        )
+      );
+      const update = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Update Claude"]'
+      );
+      expect(update).not.toBeNull();
+      flushSync(() => update?.click());
+      expect(onUpgrade).toHaveBeenCalledExactlyOnceWith('CLAUDE');
+      const dismiss = [...container.querySelectorAll('button')].find(
+        (button) => button.textContent === 'Dismiss'
+      );
+      expect(dismiss).toBeDefined();
+      flushSync(() => dismiss?.click());
+      expect(onDismiss).toHaveBeenCalledOnce();
+    } finally {
+      flushSync(() => root.unmount());
+    }
+  });
+});
+
+describe('CLI warning accessibility', () => {
+  it('preserves list-item semantics while announcing warning contents', () => {
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    try {
+      flushSync(() =>
+        root.render(
+          createElement(CLIHealthBannerContent, {
+            issues: collectIssues({
+              claude: { isInstalled: true },
+              codex: { isInstalled: true, isAuthenticated: true },
+              github: { isInstalled: true, isAuthenticated: false },
+            }),
+            isRefetching: false,
+            isUpgrading: false,
+            onRecheck: vi.fn(),
+            onUpgrade: vi.fn(),
+            onDismiss: vi.fn(),
+          })
+        )
+      );
+      const item = container.querySelector('ul > li');
+      expect(item).not.toBeNull();
+      expect(item?.getAttribute('role')).toBeNull();
+      expect(item?.querySelector('[role="alert"]')?.textContent).toContain(
+        'GitHub sign-in required'
+      );
+    } finally {
+      flushSync(() => root.unmount());
     }
   });
 });
