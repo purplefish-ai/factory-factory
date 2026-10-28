@@ -12,16 +12,19 @@ type ConfigOperation = () => Promise<AcceptedQueuedConfig | undefined> | Promise
 export class SessionQueuedSettings {
   private readonly edits = new Map<
     string,
-    Map<
-      keyof Settings,
-      {
-        requestedAt: number;
-        settings: Partial<Settings>;
-      }
-    >
+    {
+      pendingCaptures: number;
+      values: Map<keyof Settings, { requestedAt: number; settings: Partial<Settings> }>;
+    }
   >();
 
-  constructor(private readonly runtime: Pick<AcpRuntimeManager, 'getClient'>) {}
+  constructor(
+    private readonly runtime: Pick<AcpRuntimeManager, 'getClient'>,
+    private readonly enqueue: (
+      sessionId: string,
+      operation: () => Promise<void>
+    ) => Promise<void> = (_sessionId, operation) => operation()
+  ) {}
 
   capture(
     sessionId: string,
@@ -29,9 +32,10 @@ export class SessionQueuedSettings {
     operation: ConfigOperation
   ): () => Promise<void> {
     if (!configId) {
-      return async () => {
-        await operation();
-      };
+      return () =>
+        this.enqueue(sessionId, async () => {
+          await operation();
+        });
     }
     return this.captureEdit(sessionId, operation, (handle) =>
       settingsForNativeOption(handle, configId)
@@ -65,23 +69,37 @@ export class SessionQueuedSettings {
   ): () => Promise<void> {
     const requestedAt = Date.now();
     const handle = this.runtime.getClient(sessionId);
-    const edits = this.edits.get(sessionId) ?? new Map();
+    const edits = this.edits.get(sessionId) ?? { pendingCaptures: 0, values: new Map() };
+    edits.pendingCaptures += 1;
     this.edits.set(sessionId, edits);
     return async () => {
-      const accepted = await operation();
-      if (
-        this.edits.get(sessionId) !== edits ||
-        (handle && this.runtime.getClient(sessionId) !== handle)
-      ) {
-        return;
-      }
-      const config = accepted ?? handle;
-      if (!config) {
-        return;
-      }
-      const settings = readSettings(config);
-      for (const key of Object.keys(settings) as Array<keyof Settings>) {
-        edits.set(key, { requestedAt, settings: { [key]: settings[key] } });
+      try {
+        await this.enqueue(sessionId, async () => {
+          const accepted = await operation();
+          if (
+            this.edits.get(sessionId) !== edits ||
+            (handle && this.runtime.getClient(sessionId) !== handle)
+          ) {
+            return;
+          }
+          const config = accepted ?? handle;
+          if (!config) {
+            return;
+          }
+          const settings = readSettings(config);
+          for (const key of Object.keys(settings) as Array<keyof Settings>) {
+            edits.values.set(key, { requestedAt, settings: { [key]: settings[key] } });
+          }
+        });
+      } finally {
+        edits.pendingCaptures -= 1;
+        if (
+          edits.pendingCaptures === 0 &&
+          edits.values.size === 0 &&
+          this.edits.get(sessionId) === edits
+        ) {
+          this.edits.delete(sessionId);
+        }
       }
     };
   }
@@ -117,7 +135,7 @@ export class SessionQueuedSettings {
 
   resolve(sessionId: string, message: Pick<QueuedMessage, 'timestamp' | 'settings'>): Settings {
     let settings = message.settings;
-    for (const edit of this.edits.get(sessionId)?.values() ?? []) {
+    for (const edit of this.edits.get(sessionId)?.values.values() ?? []) {
       if (edit.requestedAt >= Date.parse(message.timestamp)) {
         settings = { ...settings, ...edit.settings };
       }

@@ -85,6 +85,44 @@ describe('queued explicit settings', () => {
     expect(f.queued.resolve('session', f.message).reasoningEffort).toBe('high');
   });
 
+  it('keeps an unstarted capture valid when another capture fails', async () => {
+    const f = fixture();
+    f.handle.configOptions = [reasoning({ id: 'thought_level' })];
+    const failure = new Error('Edit rejected');
+    const rejected = f.queued.capture('session', 'thought_level', () =>
+      Promise.reject<never>(failure)
+    );
+    const next = f.queued.capture('session', 'thought_level', async () => undefined);
+    await expect(rejected()).rejects.toBe(failure);
+    await next();
+    expect(f.queued.resolve('session', f.message).reasoningEffort).toBe('low');
+  });
+
+  it('preserves accepted intent when a later capture fails', async () => {
+    const f = fixture();
+    f.handle.configOptions = [reasoning({ id: 'thought_level' })];
+    await f.queued.capture('session', 'thought_level', async () => undefined)();
+    const failure = new Error('Edit rejected');
+    await expect(
+      f.queued.capture('session', 'thought_level', () => Promise.reject<never>(failure))()
+    ).rejects.toBe(failure);
+    expect(f.queued.resolve('session', f.message).reasoningEffort).toBe('low');
+  });
+
+  it('does not let a released capture discard a new session capture when it fails', async () => {
+    const f = fixture();
+    f.handle.configOptions = [reasoning({ id: 'thought_level' })];
+    const operation = createDeferred<void>();
+    const old = f.queued.capture('session', 'thought_level', () => operation.promise)();
+    f.queued.release('session');
+    const next = f.queued.capture('session', 'thought_level', async () => undefined);
+    const rejected = expect(old).rejects.toThrow('Edit rejected');
+    operation.reject(new Error('Edit rejected'));
+    await rejected;
+    await next();
+    expect(f.queued.resolve('session', f.message).reasoningEffort).toBe('low');
+  });
+
   it('preserves confirmed startup planning when queued false has no explicit intent', async () => {
     const f = fixture();
     f.handle.configOptions = [

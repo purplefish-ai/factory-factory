@@ -114,7 +114,6 @@ export class SessionConfigService {
       this.repository
     );
     this.runtimeManager = options.runtimeManager;
-    this.queuedSettings = new SessionQueuedSettings(this.runtimeManager);
     this.codexModelCatalogService = options.codexModelCatalogService;
     this.sessionDomainService = options.sessionDomainService ?? sessionDomainService;
     this.configUpdates = new SessionConfigMutationQueue(
@@ -125,6 +124,9 @@ export class SessionConfigService {
           configOptions,
         } as SessionDeltaEvent);
       }
+    );
+    this.queuedSettings = new SessionQueuedSettings(this.runtimeManager, (sessionId, operation) =>
+      this.configUpdates.run(sessionId, operation)
     );
   }
 
@@ -569,12 +571,9 @@ export class SessionConfigService {
   }
 
   async setSessionModel(sessionId: string, model?: string, source?: 'user'): Promise<void> {
-    await this.configUpdates.run(
-      sessionId,
-      this.queuedSettings.capture(sessionId, source && model ? 'model' : undefined, () =>
-        this.setSessionModelUnserialized(sessionId, model)
-      )
-    );
+    await this.queuedSettings.capture(sessionId, source && model ? 'model' : undefined, () =>
+      this.setSessionModelUnserialized(sessionId, model)
+    )();
   }
 
   private async setSessionModelUnserialized(
@@ -642,12 +641,9 @@ export class SessionConfigService {
   }
 
   async setSessionThinkingBudget(sessionId: string, maxTokens: number | null): Promise<void> {
-    await this.configUpdates.run(
-      sessionId,
-      this.queuedSettings.captureThinking(sessionId, maxTokens, () =>
-        this.setSessionThinkingBudgetUnserialized(sessionId, maxTokens)
-      )
-    );
+    await this.queuedSettings.captureThinking(sessionId, maxTokens, () =>
+      this.setSessionThinkingBudgetUnserialized(sessionId, maxTokens)
+    )();
   }
 
   private async setSessionThinkingBudgetUnserialized(
@@ -685,12 +681,9 @@ export class SessionConfigService {
     reasoningEffort: string | null,
     source?: 'user'
   ): Promise<void> {
-    await this.configUpdates.run(
-      sessionId,
-      this.queuedSettings.capture(sessionId, source ? 'thought_level' : undefined, () =>
-        this.setSessionReasoningEffortUnserialized(sessionId, reasoningEffort)
-      )
-    );
+    await this.queuedSettings.capture(sessionId, source ? 'thought_level' : undefined, () =>
+      this.setSessionReasoningEffortUnserialized(sessionId, reasoningEffort)
+    )();
   }
 
   private async setSessionReasoningEffortUnserialized(
@@ -769,12 +762,9 @@ export class SessionConfigService {
   }
 
   async setSessionConfigOption(sessionId: string, configId: string, value: string): Promise<void> {
-    await this.configUpdates.run(
-      sessionId,
-      this.queuedSettings.capture(sessionId, configId, () =>
-        this.setSessionConfigOptionUnserialized(sessionId, configId, value)
-      )
-    );
+    await this.queuedSettings.capture(sessionId, configId, () =>
+      this.setSessionConfigOptionUnserialized(sessionId, configId, value)
+    )();
   }
 
   private async setSessionConfigOptionUnserialized(
