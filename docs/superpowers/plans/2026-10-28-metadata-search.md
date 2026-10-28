@@ -60,10 +60,7 @@ co-located tests/stories.
 
 The user explicitly authorized implementation of the scoped recommendation.
 Proceed inline; no additional design approval is needed. Metadata remains in its
-current tables. A short-lived read-only SQLite connection registers Unicode
-matching and ranking functions, applies them before limiting results, and
-normalizes both text and numeric timestamps. Transcript indexing remains a later
-release.
+current tables. Transcript indexing remains a later release.
 
 Review fixes cover Unicode names, same-workspace conversation selection, and
 chat navigation taking precedence over a restored file tab. Forty focused tests

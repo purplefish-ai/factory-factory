@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useEffect, useState } from 'react';
+import { expect, fn, userEvent, within } from 'storybook/test';
 import type { SearchResult } from '@/shared/search';
 import { SearchDialog, type SearchDialogProps } from './search-dialog';
 
@@ -94,7 +95,18 @@ export const Recent: Story = {};
 export const Results: Story = { args: { query: 'search' } };
 export const Empty: Story = { args: { query: 'missing', results: [] } };
 export const Loading: Story = { args: { query: 'search', loading: true } };
-export const Unavailable: Story = { args: { error: true, results: [] } };
+export const Unavailable: Story = {
+  args: { error: true, results: [], onRetry: fn(), onSelect: fn() },
+  play: async ({ canvasElement, args }) => {
+    const retry = within(canvasElement.ownerDocument.body).getByRole('button', {
+      name: 'Try again',
+    });
+    retry.focus();
+    await userEvent.keyboard('{Enter}');
+    await expect(args.onRetry).toHaveBeenCalledOnce();
+    await expect(args.onSelect).not.toHaveBeenCalled();
+  },
+};
 export const Archived: Story = { args: { includeArchived: true } };
 export const MetadataMatch: Story = {
   args: {

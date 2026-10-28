@@ -98,7 +98,8 @@ export function SearchResults({
           size="sm"
           onClick={onRetry}
           onKeyDown={(event) => {
-            if (event.key === 'Enter' || event.key === ' ') {
+            // cmdk consumes Enter and prevents the button's native click activation.
+            if (event.key === 'Enter') {
               event.stopPropagation();
             }
           }}

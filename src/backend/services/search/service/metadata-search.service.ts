@@ -38,5 +38,6 @@ function matchedSnippet(
   }
   const start = Math.max(0, index - 40);
   const end = Math.min(text.length, index + 140);
-  return `${start ? '…' : ''}${text.slice(start, end)}${end < text.length ? '…' : ''}`;
+  const snippet = text.slice(start, end).replace(/^[\uDC00-\uDFFF]|[\uD800-\uDBFF]$/g, '');
+  return `${start ? '…' : ''}${snippet}${end < text.length ? '…' : ''}`;
 }

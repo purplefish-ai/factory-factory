@@ -77,7 +77,7 @@ describe('metadata search', () => {
   it('filters Unicode in the database and bounds returned candidates before hydration', async () => {
     const { project } = await seed();
     await db.prisma.workspace.createMany({
-      data: Array.from({ length: 60 }, (_, i) => ({ projectId: project.id, name: `Другой ${i}` })),
+      data: Array.from({ length: 60 }, (_, i) => ({ projectId: project.id, name: `Цель ${i}` })),
     });
     const target = await db.prisma.workspace.create({
       data: { projectId: project.id, name: 'Цель' },
@@ -91,6 +91,16 @@ describe('metadata search', () => {
       limit: 1,
     });
     expect(candidates.map((r) => r.id)).toEqual([target.id]);
+  });
+
+  it('keeps snippet edges well formed when the window splits emoji', async () => {
+    const { workspace } = await seed();
+    await db.prisma.workspace.update({
+      where: { id: workspace.id },
+      data: { description: `😀${'a'.repeat(39)}needle${'b'.repeat(133)}😀tail` },
+    });
+    const [result] = await search.search({ query: 'needle' });
+    expect(result?.matchSnippet).toBe(`…${'a'.repeat(39)}needle${'b'.repeat(133)}…`);
   });
 
   it('excludes issue and PR URL boilerplate and exposes the matched metadata snippet', async () => {

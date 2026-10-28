@@ -153,6 +153,26 @@ describe('SearchDialog', () => {
     expect(document.body.textContent).not.toContain('No results');
   });
 
+  it('allows Enter on Try again to activate retry instead of cmdk selection', async () => {
+    const props = await render({ results: [], error: true });
+    const retry = Array.from(document.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Try again'
+    );
+    expect(retry).toBeDefined();
+    retry?.focus();
+    const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    await act(() => {
+      retry?.dispatchEvent(event);
+      // jsdom does not implement the browser's default Enter-to-click activation.
+      if (!event.defaultPrevented) {
+        retry?.click();
+      }
+    });
+    expect(event.defaultPrevented).toBe(false);
+    expect(props.onRetry).toHaveBeenCalledOnce();
+    expect(props.onSelect).not.toHaveBeenCalled();
+  });
+
   it('closes with Escape and exposes an archive toggle', async () => {
     const props = await render({ results: [] });
     const toggle = document.querySelector('button[aria-pressed]');
