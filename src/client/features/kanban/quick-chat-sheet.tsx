@@ -1,7 +1,6 @@
 import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { useMemo } from 'react';
 import { type SessionData, SessionTabBar } from '@/client/features/chat';
-import { SessionLaunchControls } from '@/client/features/session-selection';
 import { QuickActionsMenu } from '@/client/features/workspace';
 import {
   Sheet,
@@ -39,7 +38,7 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
     handleCloseSession,
     handleQuickAction,
     isCreatingSession,
-    launchSelection,
+    sessionsLoaded,
   } = useQuickChat(workspaceId);
 
   const sessionTabData: SessionData[] = useMemo(
@@ -55,8 +54,8 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
 
   const runningSessionId = useMemo(() => sessions.find((s) => s.isWorking)?.id ?? null, [sessions]);
 
-  const tabBarDisabled = isCreatingSession || !workspaceId;
-  const creationDisabled = tabBarDisabled || !launchSelection.ready;
+  // There are no tabs until sessions load, and new chats need the list for their defaults.
+  const tabBarDisabled = isCreatingSession || !workspaceId || !sessionsLoaded;
 
   return (
     <Sheet open={!!workspaceId} onOpenChange={(open) => !open && onClose()}>
@@ -82,17 +81,6 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
               onCreateSession={handleNewChat}
               onCloseSession={handleCloseSession}
               disabled={tabBarDisabled}
-              createDisabled={creationDisabled}
-              createDisabledReason={launchSelection.unavailableReason}
-              creationControl={
-                <div className="flex min-w-0 items-center gap-0.5">
-                  <span className="px-1 text-xs text-muted-foreground">New</span>
-                  <SessionLaunchControls
-                    {...launchSelection.controlsProps}
-                    disabled={isCreatingSession || !workspaceId}
-                  />
-                </div>
-              }
             />
           </div>
           <QuickActionsMenu
@@ -101,7 +89,7 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
                 handleQuickAction(action.name, action.content);
               }
             }}
-            disabled={creationDisabled}
+            disabled={tabBarDisabled}
           />
         </div>
 

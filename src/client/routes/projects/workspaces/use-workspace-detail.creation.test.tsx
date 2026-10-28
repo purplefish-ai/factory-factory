@@ -46,8 +46,6 @@ function SessionManagementHarness({
       inputRef: createRef(),
       selectedDbSessionId: 'active-codex',
       setSelectedDbSessionId: vi.fn(),
-      ...{ selectedModel: 'gpt-6-sol' },
-      selectedProvider: 'CLAUDE',
       onArchiveGitIndexLocked: vi.fn(),
     })
   );
@@ -56,7 +54,7 @@ function SessionManagementHarness({
 
 describe('new session provider boundary', () => {
   it.each(['chat', 'quick action'])(
-    'does not forward the active Codex model to a new Claude %s',
+    'leaves provider and model to the workspace for a new %s without sessions',
     async (kind) => {
       mocks.mutate.mockClear();
       mocks.mutateAsync.mockClear();
@@ -79,15 +77,14 @@ describe('new session provider boundary', () => {
         );
         if (kind === 'chat') {
           result?.handleNewChat();
-          expect(mocks.mutate).toHaveBeenCalledWith(
-            expect.objectContaining({ provider: 'CLAUDE', model: undefined }),
-            expect.anything()
-          );
+          expect(mocks.mutate).toHaveBeenCalledOnce();
+          expect(mocks.mutate.mock.calls[0]?.[0]).not.toHaveProperty('provider');
+          expect(mocks.mutate.mock.calls[0]?.[0]).not.toHaveProperty('model');
         } else {
           await result?.handleQuickAction('Review', 'Review this');
-          expect(mocks.mutateAsync).toHaveBeenCalledWith(
-            expect.objectContaining({ provider: 'CLAUDE', model: undefined })
-          );
+          expect(mocks.mutateAsync).toHaveBeenCalledOnce();
+          expect(mocks.mutateAsync.mock.calls[0]?.[0]).not.toHaveProperty('provider');
+          expect(mocks.mutateAsync.mock.calls[0]?.[0]).not.toHaveProperty('model');
         }
       } finally {
         flushSync(() => root.unmount());

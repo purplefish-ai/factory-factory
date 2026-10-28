@@ -7,7 +7,6 @@ import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { useSessionCollectionCommands } from '@/client/features/chat';
 import { InlineWorkspaceForm } from '@/client/features/kanban/inline-workspace-form';
 import { SessionLaunchControls } from '@/client/features/session-selection';
 import { useSessionLaunchSelection } from '@/client/features/session-selection';
@@ -36,16 +35,22 @@ afterEach(async () => {
   clients.splice(0).forEach((client) => client.clear());
   document.body.innerHTML = '';
 });
+/**
+ * Submits the selection's launch settings, as the create-workspace form does. New chats in an
+ * existing workspace do not use these controls; their defaults are tested with
+ * useSessionCollectionCommands.
+ */
 function NativeLaunchHarness() {
   const selection = useSessionLaunchSelection('workspace');
-  const commands = useSessionCollectionCommands({
-    workspaceId: 'workspace',
-    sessions: [],
-    creationDefaults: selection.creationDefaults,
-    canCreate: selection.ready,
-    unavailableReason: selection.unavailableReason,
-    onCreated: selection.reset,
-  });
+  const create = trpc.session.createAndStartSession.useMutation({ onSuccess: selection.reset });
+  const submit = (extra: { name: string; initialMessage?: string }) =>
+    create.mutate({
+      workspaceId: 'workspace',
+      workflow: 'followup',
+      ...selection.creationDefaults,
+      ...extra,
+      initialPrompt: '',
+    });
   return (
     <>
       <SessionLaunchControls {...selection.controlsProps} />
@@ -53,16 +58,16 @@ function NativeLaunchHarness() {
         type="button"
         disabled={!selection.ready}
         title={selection.unavailableReason}
-        onClick={commands.createChat}
+        onClick={() => submit({ name: 'Chat 1' })}
       >
-        Create chat
+        Submit launch
       </button>
       <button
         type="button"
         disabled={!selection.ready}
-        onClick={() => commands.createQuickAction('Review', 'Review this')}
+        onClick={() => submit({ name: 'Review', initialMessage: 'Review this' })}
       >
-        Quick action
+        Submit launch with message
       </button>
     </>
   );
@@ -258,7 +263,7 @@ async function openModels(name: string) {
   });
 }
 async function ready() {
-  await vi.waitFor(() => expect(button('Create chat')?.disabled).toBe(false));
+  await vi.waitFor(() => expect(button('Submit launch')?.disabled).toBe(false));
 }
 
 describe('real launch controls and tRPC payloads', () => {
@@ -266,7 +271,7 @@ describe('real launch controls and tRPC payloads', () => {
     { provider: 'CODEX', effort: 'Ultra', raw: 'ultra' },
     { provider: 'CLAUDE', effort: 'Max', raw: 'max' },
   ] as const)(
-    'submits selected thinking and Plan for $provider new chats and quick actions',
+    'submits selected thinking and Plan for $provider launches with and without a message',
     async ({ provider, effort, raw }) => {
       const view = renderLaunch();
       await view.render();
@@ -280,7 +285,7 @@ describe('real launch controls and tRPC payloads', () => {
       await choose(effort);
       await open('Planning: Default');
       await choose('Plan');
-      await act(() => button('Quick action')?.click());
+      await act(() => button('Submit launch with message')?.click());
       await vi.waitFor(() =>
         expect(
           view.requests.some((request) => request.path === 'session.createAndStartSession')
@@ -300,7 +305,7 @@ describe('real launch controls and tRPC payloads', () => {
       ]);
       await ready();
       expect(button('Thinking level: High')).toBeDefined();
-      await act(() => button('Create chat')?.click());
+      await act(() => button('Submit launch')?.click());
       await vi.waitFor(() =>
         expect(
           view.requests.filter((request) => request.path === 'session.createAndStartSession')
@@ -337,7 +342,7 @@ describe('real launch controls and tRPC payloads', () => {
       });
     });
     expect(button('Thinking level: High')).toBeDefined();
-    await act(() => button('Create chat')?.click());
+    await act(() => button('Submit launch')?.click());
     await vi.waitFor(() =>
       expect(
         view.requests.some((request) => request.path === 'session.createAndStartSession')
@@ -353,7 +358,7 @@ describe('real launch controls and tRPC payloads', () => {
     await view.render();
     await ready();
     expect(button('Thinking level: Default')).toBeDefined();
-    await act(() => button('Create chat')?.click());
+    await act(() => button('Submit launch')?.click());
     await vi.waitFor(() =>
       expect(
         view.requests.some((request) => request.path === 'session.createAndStartSession')
@@ -375,8 +380,8 @@ describe('real launch controls and tRPC payloads', () => {
     await vi.waitFor(() =>
       expect(button('Thinking level: ultra')?.getAttribute('aria-invalid')).toBe('true')
     );
-    expect(button('Create chat')?.disabled).toBe(true);
-    expect(button('Create chat')?.title).toContain('Choose a supported thinking');
+    expect(button('Submit launch')?.disabled).toBe(true);
+    expect(button('Submit launch')?.title).toContain('Choose a supported thinking');
     await open('New conversation provider and model: Codex · 6 Luna');
     await chooseProviderDefault('Claude');
     await ready();
@@ -389,7 +394,7 @@ describe('real launch controls and tRPC payloads', () => {
     await open('Thinking level: ultra');
     await choose('Default');
     await ready();
-    await act(() => button('Create chat')?.click());
+    await act(() => button('Submit launch')?.click());
     await vi.waitFor(() =>
       expect(
         view.requests.some((request) => request.path === 'session.createAndStartSession')
@@ -413,7 +418,7 @@ describe('real launch controls and tRPC payloads', () => {
     await openModels('Codex');
     await choose('Slow model');
     await vi.waitFor(() => expect(view.pending.has('CODEX:slow')).toBe(true));
-    expect(button('Create chat')?.disabled).toBe(true);
+    expect(button('Submit launch')?.disabled).toBe(true);
     await open('New conversation provider and model: Codex · Slow model');
     await chooseProviderDefault('Claude');
     await ready();
@@ -430,7 +435,7 @@ describe('real launch controls and tRPC payloads', () => {
     await openModels('Codex');
     await choose('6 Luna');
     await vi.waitFor(() => expect(button('Thinking level: Unavailable')).toBeDefined());
-    expect(button('Create chat')?.disabled).toBe(true);
+    expect(button('Submit launch')?.disabled).toBe(true);
     expect(button('New conversation provider and model: Codex · 6 Luna')?.disabled).toBe(false);
     await open('Thinking level: Unavailable');
     const retry = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(

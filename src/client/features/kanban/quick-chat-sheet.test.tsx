@@ -8,9 +8,8 @@ const mocks = vi.hoisted(() => ({
   select: vi.fn(),
   close: vi.fn(),
   create: vi.fn(),
-  retry: vi.fn(),
   empty: false,
-  ready: false,
+  loaded: true,
 }));
 vi.mock('./kanban-context', () => ({
   useKanban: () => ({ workspaces: [{ id: 'workspace', name: 'Review workspace' }] }),
@@ -34,24 +33,14 @@ vi.mock('./use-quick-chat', () => ({
     handleNewChat: mocks.create,
     handleQuickAction: vi.fn(),
     isCreatingSession: false,
+    sessionsLoaded: mocks.loaded,
     chatState: {},
-    launchSelection: {
-      ready: mocks.ready,
-      unavailableReason: mocks.ready ? undefined : 'Could not load chat defaults',
-      loading: false,
-      controlsProps: {
-        provider: null,
-        models: [],
-        error: mocks.ready ? undefined : 'Could not load chat defaults',
-        onRetry: mocks.retry,
-      },
-    },
   }),
 }));
 
 beforeEach(() => {
   mocks.empty = false;
-  mocks.ready = false;
+  mocks.loaded = true;
   vi.clearAllMocks();
   Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
     configurable: true,
@@ -61,7 +50,7 @@ beforeEach(() => {
 });
 
 it.each([false, true])(
-  'keeps Quick Chat navigation usable while creation defaults fail (empty=%s)',
+  'creates sessions directly without launch pickers (empty=%s)',
   async (empty) => {
     mocks.empty = empty;
     const container = document.createElement('div');
@@ -75,7 +64,6 @@ it.each([false, true])(
         const secondTab = [...document.body.querySelectorAll<HTMLElement>('[role="tab"]')].find(
           (tab) => tab.textContent?.includes('Chat 2')
         );
-        expect(secondTab?.getAttribute('aria-disabled')).toBe('false');
         await act(() => secondTab?.click());
         expect(mocks.select).toHaveBeenCalledWith('second');
         const close = document.body.querySelector<HTMLButtonElement>('[aria-label="Close Chat 1"]');
@@ -84,21 +72,16 @@ it.each([false, true])(
         expect(mocks.close).toHaveBeenCalledWith('first');
       } else {
         expect(document.body.querySelector('[role="tab"]')).toBeNull();
-        expect(mocks.select).not.toHaveBeenCalled();
       }
-      expect(
-        document.body.querySelector<HTMLButtonElement>('[aria-label="New session"]')?.disabled
-      ).toBe(true);
+      expect(document.body.querySelector('[aria-label^="New conversation provider"]')).toBeNull();
+      expect(document.body.querySelector('[aria-label^="Thinking level"]')).toBeNull();
       expect(
         document.body.querySelector<HTMLButtonElement>('[aria-label="Quick actions"]')?.disabled
-      ).toBe(true);
-      const retry = document.body.querySelector<HTMLButtonElement>(
-        '[aria-label$="Retry selection"]'
-      );
-      expect(retry?.disabled).toBe(false);
-      await act(() => retry?.click());
-      expect(mocks.retry).toHaveBeenCalledOnce();
-      expect(mocks.create).not.toHaveBeenCalled();
+      ).toBe(false);
+      const create = document.body.querySelector<HTMLButtonElement>('[aria-label="New session"]');
+      expect(create?.disabled).toBe(false);
+      await act(() => create?.click());
+      expect(mocks.create).toHaveBeenCalledOnce();
     } finally {
       await act(() => root.unmount());
       container.remove();
@@ -106,26 +89,22 @@ it.each([false, true])(
   }
 );
 
-it('explains blocked creation and clears its disabled reason after defaults recover', async () => {
+it('blocks new chats and quick actions until sessions load', async () => {
+  mocks.empty = true;
+  mocks.loaded = false;
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
-  const render = () =>
-    act(() =>
+  try {
+    await act(() =>
       root.render(createElement(QuickChatSheet, { workspaceId: 'workspace', onClose: vi.fn() }))
     );
-  try {
-    await render();
-    const blocked = document.body.querySelector<HTMLButtonElement>('[aria-label="New session"]');
-    expect(blocked?.title).toBe('Could not load chat defaults');
-    expect(blocked?.classList.contains('disabled:pointer-events-none')).toBe(false);
-    expect(blocked?.getAttribute('aria-description')).toBe('Could not load chat defaults');
-    mocks.ready = true;
-    await render();
-    const available = document.body.querySelector<HTMLButtonElement>('[aria-label="New session"]');
-    expect(available?.disabled).toBe(false);
-    expect(available?.title).toBe('New Session');
-    expect(available?.getAttribute('aria-description')).toBeNull();
+    expect(
+      document.body.querySelector<HTMLButtonElement>('[aria-label="New session"]')?.disabled
+    ).toBe(true);
+    expect(
+      document.body.querySelector<HTMLButtonElement>('[aria-label="Quick actions"]')?.disabled
+    ).toBe(true);
   } finally {
     await act(() => root.unmount());
     container.remove();

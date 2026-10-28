@@ -11,11 +11,9 @@ import { MemoryRouter } from 'react-router';
 import { toast } from 'sonner';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useQuickChat } from '@/client/features/kanban/use-quick-chat';
-import { useSessionLaunchSelection } from '@/client/features/session-selection';
 import { trpc } from '@/client/lib/trpc';
 import { useSessionManagement } from '@/client/routes/projects/workspaces/use-workspace-detail';
 import { useSelectedSessionId } from '@/client/routes/projects/workspaces/use-workspace-detail-hooks';
-import type { SessionProviderValue } from '@/lib/session-provider-selection';
 
 vi.mock('@/client/features/chat/use-chat-websocket', () => ({ useChatWebSocket: () => ({}) }));
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }));
@@ -28,11 +26,6 @@ interface Commands {
   close: (id: string) => void;
   select: (id: string) => void;
   pending: boolean;
-  creationProvider: SessionProviderValue | null;
-  creationModel?: string;
-  creationReady: boolean;
-  selectCreationProvider: (provider: SessionProviderValue) => void;
-  selectCreationModel: (model: string) => void;
 }
 const roots: Root[] = [];
 const clients: QueryClient[] = [];
@@ -51,6 +44,8 @@ function readWorkspaceId(input: unknown): string {
     ? String(input.workspaceId)
     : '';
 }
+
+type RosterSession = { id: string; name: string; provider?: 'CLAUDE' | 'CODEX'; model?: string };
 
 interface SuspendedWorkspace {
   workspaceId: string;
@@ -74,11 +69,10 @@ function SuspendWorkspace({
 
 interface SurfaceProps {
   workspaceId: string;
-  provider: SessionProviderValue;
   onResult: (commands: Commands) => void;
   suspended?: SuspendedWorkspace;
 }
-function Full({ workspaceId, provider, onResult, suspended }: SurfaceProps) {
+function Full({ workspaceId, onResult, suspended }: SurfaceProps) {
   const { data: sessions } = trpc.session.listSessions.useQuery({ workspaceId });
   const { selectedDbSessionId, setSelectedDbSessionId } = useSelectedSessionId(
     workspaceId,
@@ -86,7 +80,6 @@ function Full({ workspaceId, provider, onResult, suspended }: SurfaceProps) {
     (sessions ?? []).map((s) => s.id)
   );
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const launchSelection = useSessionLaunchSelection(workspaceId, { defaultProvider: provider });
   const management = useSessionManagement({
     workspaceId,
     slug: 'project',
@@ -94,10 +87,6 @@ function Full({ workspaceId, provider, onResult, suspended }: SurfaceProps) {
     inputRef,
     selectedDbSessionId,
     setSelectedDbSessionId,
-    creationDefaults: launchSelection.creationDefaults,
-    canCreate: launchSelection.ready,
-    onCreated: launchSelection.reset,
-    selectedProvider: provider,
     onArchiveGitIndexLocked: vi.fn(),
   });
   useLayoutEffect(() => {
@@ -108,12 +97,6 @@ function Full({ workspaceId, provider, onResult, suspended }: SurfaceProps) {
       close: management.handleCloseSession,
       select: management.handleSelectSession,
       pending: management.createSession.isPending,
-      creationProvider: launchSelection.provider,
-      creationModel: launchSelection.model,
-      creationReady: launchSelection.ready,
-      selectCreationProvider: (provider) =>
-        launchSelection.pickerProps.onProviderChange?.(provider),
-      selectCreationModel: (model) => launchSelection.pickerProps.onModelChange?.(model),
     });
   });
   return (
@@ -133,48 +116,17 @@ function Quick({ workspaceId, onResult, suspended }: SurfaceProps) {
       close: chat.handleCloseSession,
       select: chat.setSelectedSessionId,
       pending: chat.isCreatingSession,
-      creationProvider: chat.launchSelection.provider,
-      creationModel: chat.launchSelection.model,
-      creationReady: chat.launchSelection.ready,
-      selectCreationProvider: (provider) =>
-        chat.launchSelection.pickerProps.onProviderChange?.(provider),
-      selectCreationModel: (model) => chat.launchSelection.pickerProps.onModelChange?.(model),
     });
   });
   return <SuspendWorkspace workspaceId={workspaceId} suspended={suspended} />;
 }
 
-function launchProbeResponse(input: unknown) {
-  const record = typeof input === 'object' && input !== null ? input : {};
-  const provider = 'provider' in record && record.provider === 'CODEX' ? 'CODEX' : 'CLAUDE';
-  const model = 'model' in record && typeof record.model === 'string' ? record.model : 'native';
-  return {
-    provider,
-    model,
-    reasoning: { options: [] },
-    planMode: { supported: false, selected: false },
-  };
-}
-
 function queryResponse(
   path: string,
   input: unknown,
-  provider: SessionProviderValue,
-  rosters: ReadonlyMap<string, Array<{ id: string; name: string }>>
+  rosters: ReadonlyMap<string, RosterSession[]>
 ): unknown {
   switch (path) {
-    case 'userSettings.get':
-      return {
-        defaultSessionProvider: 'CLAUDE',
-        defaultClaudeModel: 'saved-sonnet',
-        defaultCodexModel: 'saved-sol',
-      };
-    case 'session.getLaunchOptions':
-      return launchProbeResponse(input);
-    case 'userSettings.getProviderOptions':
-      return { CLAUDE: { models: [] }, CODEX: { models: [] } };
-    case 'workspace.get':
-      return { defaultSessionProvider: provider };
     case 'session.listSessions':
       return rosters.get(readWorkspaceId(input)) ?? [];
     default:
@@ -182,12 +134,12 @@ function queryResponse(
   }
 }
 
-function renderSurface(surface: Surface, provider: SessionProviderValue = 'CLAUDE') {
+function renderSurface(surface: Surface) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   clients.push(queryClient);
-  const rosters = new Map([
+  const rosters = new Map<string, RosterSession[]>([
     [
       'a',
       [
@@ -215,7 +167,7 @@ function renderSurface(surface: Surface, provider: SessionProviderValue = 'CLAUD
                 reject: (error) => observer.error(TRPCClientError.from(error)),
               });
             } else {
-              respond(queryResponse(op.path, op.input, provider, rosters));
+              respond(queryResponse(op.path, op.input, rosters));
             }
           }),
     ],
@@ -234,7 +186,6 @@ function renderSurface(surface: Surface, provider: SessionProviderValue = 'CLAUD
           <Suspense fallback={<div data-testid="pending-workspace" />}>
             <SurfaceComponent
               workspaceId={workspaceId}
-              provider={provider}
               suspended={suspended}
               onResult={(commands) => {
                 result = commands;
@@ -269,7 +220,7 @@ function renderSurface(surface: Surface, provider: SessionProviderValue = 'CLAUD
     rosters,
     cache: (workspaceId: string) =>
       queryClient.getQueryData(getQueryKey(trpc.session.listSessions, { workspaceId }, 'query')),
-    setRoster: (workspaceId: string, value: Array<{ id: string; name: string }>) => {
+    setRoster: (workspaceId: string, value: RosterSession[]) => {
       rosters.set(workspaceId, value);
       queryClient.setQueryData(
         getQueryKey(trpc.session.listSessions, { workspaceId }, 'query'),
@@ -352,10 +303,6 @@ describe.each<Surface>(['full', 'quick'])('%s chat session collection', (surface
             workspaceId: 'a',
             workflow: 'followup',
             initialPrompt: '',
-            reasoningEffort: null,
-            planModeEnabled: false,
-            provider: 'CLAUDE',
-            model: 'saved-sonnet',
             ...(kind === 'chat'
               ? { name: 'Chat 8' }
               : { name: 'Review', initialMessage: 'Review prompt' }),
@@ -376,43 +323,6 @@ describe.each<Surface>(['full', 'quick'])('%s chat session collection', (surface
       }
     }
   );
-
-  it('retains explicit selection after refetch and failed creation, then resets only after success', async () => {
-    const view = renderSurface(surface);
-    await vi.waitFor(() => expect(view.get().creationModel).toBe('saved-sonnet'));
-    flushSync(() => view.get().selectCreationProvider('CODEX'));
-    expect(view.get().creationModel).toBe('saved-sol');
-    flushSync(() => view.get().selectCreationModel('chosen-luna'));
-    flushSync(() =>
-      view.queryClient.setQueryData(getQueryKey(trpc.userSettings.get, undefined, 'query'), {
-        defaultSessionProvider: 'CLAUDE',
-        defaultClaudeModel: 'fresh-sonnet',
-        defaultCodexModel: 'fresh-sol',
-      })
-    );
-    expect(view.get().creationProvider).toBe('CODEX');
-    expect(view.get().creationModel).toBe('chosen-luna');
-    await vi.waitFor(() => expect(view.get().creationReady).toBe(true));
-    view.get().newChat();
-    await vi.waitFor(() => expect(view.pending).toHaveLength(1));
-    view.pending[0]?.reject(new Error('Try again'));
-    await vi.waitFor(() => expect(view.get().pending).toBe(false));
-    expect(view.get().creationProvider).toBe('CODEX');
-    expect(view.get().creationModel).toBe('chosen-luna');
-    await vi.waitFor(() => expect(view.get().creationReady).toBe(true));
-    view.get().newChat();
-    await vi.waitFor(() => expect(view.pending).toHaveLength(2));
-    const inputs = view.requests
-      .filter((request) => request.path === 'session.createAndStartSession')
-      .map((request) => request.input);
-    expect(inputs).toEqual([
-      expect.objectContaining({ provider: 'CODEX', model: 'chosen-luna' }),
-      expect.objectContaining({ provider: 'CODEX', model: 'chosen-luna' }),
-    ]);
-    view.pending[1]?.resolve({ id: 'created' });
-    await vi.waitFor(() => expect(view.get().creationProvider).toBe('CLAUDE'));
-    expect(view.get().creationModel).toBe('fresh-sonnet');
-  });
 
   it.each(['chat', 'action'])(
     'reports a failed %s once without changing selection or retrying creation',
@@ -473,6 +383,30 @@ describe.each<Surface>(['full', 'quick'])('%s chat session collection', (surface
     await vi.waitFor(() => expect(view.get().selected).toBe('second'));
     expect(view.requests.filter((r) => r.path === 'session.createAndStartSession')).toHaveLength(2);
   });
+
+  it.each(['chat', 'action'])(
+    "starts a %s with the workspace's first provider and model, without thinking or Plan",
+    async (kind) => {
+      const view = renderSurface(surface);
+      await vi.waitFor(() => expect(view.get().selected).toBe('a1'));
+      flushSync(() =>
+        view.setRoster('a', [
+          { id: 'a1', name: 'Chat 2', provider: 'CODEX', model: 'gpt-sol' },
+          { id: 'a2', name: 'Chat 7', provider: 'CLAUDE', model: 'opus' },
+        ])
+      );
+      // Query cache notifications reach React on a later task.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const operation = kind === 'chat' ? view.get().newChat() : view.get().quickAction();
+      await vi.waitFor(() => expect(view.pending).toHaveLength(1));
+      const input = view.requests.find((r) => r.path === 'session.createAndStartSession')?.input;
+      expect(input).toMatchObject({ workspaceId: 'a', provider: 'CODEX', model: 'gpt-sol' });
+      expect(input).not.toHaveProperty('reasoningEffort');
+      expect(input).not.toHaveProperty('planModeEnabled');
+      view.pending[0]?.resolve({ id: 'created-a' });
+      await operation;
+    }
+  );
 
   it('keeps selection when another tab closes and ignores unknown tabs', async () => {
     const view = renderSurface(surface);
@@ -551,44 +485,4 @@ describe.each<Surface>(['full', 'quick'])('%s chat session collection', (surface
       ]);
     }
   );
-});
-
-it('uses Codex model defaults for both full-chat commands', async () => {
-  const view = renderSurface('full', 'CODEX');
-  await vi.waitFor(() => expect(view.get().selected).toBe('a1'));
-  view.get().newChat();
-  const action = view.get().quickAction();
-  await vi.waitFor(() => expect(view.pending).toHaveLength(2));
-  expect(view.requests.filter((r) => r.path === 'session.createAndStartSession')).toEqual([
-    {
-      path: 'session.createAndStartSession',
-      input: {
-        workspaceId: 'a',
-        workflow: 'followup',
-        name: 'Chat 8',
-        provider: 'CODEX',
-        model: 'saved-sol',
-        initialPrompt: '',
-        reasoningEffort: null,
-        planModeEnabled: false,
-      },
-    },
-    {
-      path: 'session.createAndStartSession',
-      input: {
-        workspaceId: 'a',
-        workflow: 'followup',
-        name: 'Review',
-        provider: 'CODEX',
-        model: 'saved-sol',
-        initialPrompt: '',
-        reasoningEffort: null,
-        planModeEnabled: false,
-        initialMessage: 'Review prompt',
-      },
-    },
-  ]);
-  view.pending[0]?.resolve({ id: 'first' });
-  view.pending[1]?.resolve({ id: 'second' });
-  await action;
 });

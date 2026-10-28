@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useChatWebSocket, useSessionCollectionCommands } from '@/client/features/chat';
-import { useSessionLaunchSelection } from '@/client/features/session-selection';
 import { trpc } from '@/client/lib/trpc';
 import { useAutoScroll } from '@/hooks/use-auto-scroll';
 
@@ -13,22 +12,6 @@ function isPendingCreatedSelection(
 }
 
 export function useQuickChat(workspaceId: string | null) {
-  const {
-    data: workspace,
-    error: workspaceError,
-    refetch: refetchWorkspace,
-  } = trpc.workspace.get.useQuery(
-    { id: workspaceId ?? '' },
-    { enabled: !!workspaceId, staleTime: Number.POSITIVE_INFINITY }
-  );
-  const launchSelection = useSessionLaunchSelection(workspaceId, {
-    defaultProvider: workspace?.defaultSessionProvider,
-    ready: workspace !== undefined,
-    error: !workspace && workspaceError ? 'Could not load workspace defaults' : undefined,
-    onRetry: () => {
-      void refetchWorkspace();
-    },
-  });
   const viewportRef = useRef<HTMLDivElement>(null);
   const { onScroll, isNearBottom, scrollToBottom } = useAutoScroll(viewportRef);
 
@@ -95,16 +78,12 @@ export function useQuickChat(workspaceId: string | null) {
   } = useSessionCollectionCommands({
     workspaceId,
     sessions,
-    creationDefaults: launchSelection.creationDefaults,
-    canCreate: launchSelection.ready,
-    unavailableReason: launchSelection.unavailableReason,
     onCreated: (session, originatingWorkspaceId) => {
       if (activeWorkspaceRef.current !== originatingWorkspaceId) {
         return;
       }
       pendingCreatedSessionRef.current = { id: session.id, workspaceId: originatingWorkspaceId };
       setSelectedSessionId(session.id);
-      launchSelection.reset();
     },
   });
 
@@ -132,6 +111,7 @@ export function useQuickChat(workspaceId: string | null) {
 
   return {
     sessions: sessions ?? [],
+    sessionsLoaded: sessions !== undefined,
     selectedSessionId,
     setSelectedSessionId,
     chatState,
@@ -143,6 +123,5 @@ export function useQuickChat(workspaceId: string | null) {
     handleCloseSession,
     handleQuickAction,
     isCreatingSession: createSession.isPending,
-    launchSelection,
   };
 }

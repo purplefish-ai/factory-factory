@@ -8,19 +8,15 @@ import { useQuickChat } from './use-quick-chat';
 
 const launchMocks = vi.hoisted(() => ({
   inputs: [] as unknown[],
-  workspace: { defaultSessionProvider: 'WORKSPACE_DEFAULT' } as
-    | { defaultSessionProvider: string }
-    | undefined,
-  workspaceError: null as Error | null,
-  refetchWorkspace: vi.fn().mockResolvedValue({}),
-  settings: {
-    defaultSessionProvider: 'CODEX',
-    defaultClaudeModel: 'saved-sonnet',
-    defaultCodexModel: 'saved-sol',
-  },
 }));
 
-const sessionsByWorkspace = vi.hoisted(() => new Map<string, Array<{ id: string }> | undefined>());
+const sessionsByWorkspace = vi.hoisted(
+  () =>
+    new Map<
+      string,
+      Array<{ id: string; provider?: 'CLAUDE' | 'CODEX'; model?: string }> | undefined
+    >()
+);
 
 vi.mock('sonner', () => ({
   toast: {
@@ -45,31 +41,7 @@ vi.mock('@/client/lib/trpc', () => ({
         },
       },
     }),
-    userSettings: {
-      get: { useQuery: () => ({ data: launchMocks.settings }) },
-      getProviderOptions: { useQuery: () => ({ data: undefined, isLoading: false }) },
-    },
-    workspace: {
-      get: {
-        useQuery: () => ({
-          data: launchMocks.workspace,
-          error: launchMocks.workspaceError,
-          refetch: launchMocks.refetchWorkspace,
-        }),
-      },
-    },
     session: {
-      getLaunchOptions: {
-        useQuery: (input: { provider: 'CLAUDE' | 'CODEX'; model?: string }) => ({
-          data: {
-            provider: input.provider,
-            model: input.model ?? 'native',
-            reasoning: { options: [] },
-            planMode: { supported: false, selected: false },
-          },
-          refetch: vi.fn(),
-        }),
-      },
       listSessions: {
         useQuery: ({ workspaceId }: { workspaceId: string }) => ({
           data: sessionsByWorkspace.get(workspaceId),
@@ -167,8 +139,6 @@ function renderHook(workspaceId: string | null): RenderedHook {
 beforeEach(() => {
   sessionsByWorkspace.clear();
   launchMocks.inputs.length = 0;
-  launchMocks.workspace = { defaultSessionProvider: 'WORKSPACE_DEFAULT' };
-  launchMocks.workspaceError = null;
 });
 
 afterEach(() => {
@@ -216,14 +186,13 @@ describe('useQuickChat session selection', () => {
 });
 
 it.each(['chat', 'quick action'])(
-  'uses independent saved and explicit provider models for a new %s',
+  "starts a new %s with the workspace's original provider and model",
   (kind) => {
-    sessionsByWorkspace.set('workspace-a', [{ id: 'existing-codex' }]);
+    sessionsByWorkspace.set('workspace-a', [
+      { id: 'first', provider: 'CODEX', model: 'gpt-sol' },
+      { id: 'second', provider: 'CLAUDE', model: 'opus' },
+    ]);
     const mounted = renderHook('workspace-a');
-    const selection = () => mounted.getResult().launchSelection.pickerProps;
-    flushSync(() => selection().onProviderChange?.('CLAUDE'));
-    expect(mounted.getResult().launchSelection.model).toBe('saved-sonnet');
-    flushSync(() => selection().onModelChange?.('chosen-opus'));
     flushSync(() => {
       if (kind === 'chat') {
         mounted.getResult().handleNewChat();
@@ -232,34 +201,9 @@ it.each(['chat', 'quick action'])(
       }
     });
     expect(launchMocks.inputs).toEqual([
-      expect.objectContaining({
-        workspaceId: 'workspace-a',
-        provider: 'CLAUDE',
-        model: 'chosen-opus',
-      }),
+      expect.objectContaining({ workspaceId: 'workspace-a', provider: 'CODEX', model: 'gpt-sol' }),
     ]);
-    expect(mounted.getResult().launchSelection.provider).toBe('CODEX');
-    expect(mounted.getResult().launchSelection.model).toBe('saved-sol');
+    expect(launchMocks.inputs[0]).not.toHaveProperty('reasoningEffort');
+    expect(launchMocks.inputs[0]).not.toHaveProperty('planModeEnabled');
   }
 );
-
-it('exposes workspace defaults failure with retry and recovers without reopening Quick Chat', () => {
-  launchMocks.workspace = undefined;
-  launchMocks.workspaceError = new Error('Workspace lookup failed');
-  const mounted = renderHook('workspace-a');
-  expect(mounted.getResult().launchSelection.loading).toBe(false);
-  expect(mounted.getResult().launchSelection.ready).toBe(false);
-  expect(mounted.getResult().launchSelection.error).toBe('Could not load workspace defaults');
-  mounted.getResult().launchSelection.pickerProps.onRetry?.();
-  expect(launchMocks.refetchWorkspace).toHaveBeenCalledOnce();
-  launchMocks.workspaceError = null;
-  launchMocks.workspace = { defaultSessionProvider: 'CLAUDE' };
-  mounted.rerender('workspace-a');
-  expect(mounted.getResult().launchSelection.ready).toBe(true);
-  expect(mounted.getResult().launchSelection.creationDefaults).toEqual({
-    provider: 'CLAUDE',
-    model: 'saved-sonnet',
-    reasoningEffort: null,
-    planModeEnabled: false,
-  });
-});

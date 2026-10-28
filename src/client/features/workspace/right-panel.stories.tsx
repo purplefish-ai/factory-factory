@@ -91,8 +91,6 @@ function RightPanelStory({
                     workspaceId={workspaceId}
                     sessions={[{ id: 'session-1', name: 'Chat 1', status: 'IDLE' }]}
                     currentSessionId="session-1"
-                    selectedProvider="CLAUDE"
-                    setSelectedProvider={fn()}
                     onCreateSession={fn()}
                     onQuickAction={fn()}
                     onRestartSession={fn()}

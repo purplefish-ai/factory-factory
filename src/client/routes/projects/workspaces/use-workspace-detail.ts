@@ -9,7 +9,6 @@ import { trpc } from '@/client/lib/trpc';
 import { isArchiveGitIndexLockedError } from '@/client/lib/workspace-archive';
 import { useWorkspaceIdeActions } from '@/client/routes/projects/workspaces/use-workspace-ide-actions';
 import type { SessionProviderValue } from '@/lib/session-provider-selection';
-import type { SessionLaunchSettings } from '@/shared/session-launch';
 
 function showArchiveError(error: unknown, onGitLocked: () => void) {
   if (isArchiveGitIndexLockedError(error)) {
@@ -105,13 +104,6 @@ interface UseSessionManagementOptions {
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   selectedDbSessionId: string | null;
   setSelectedDbSessionId: (id: string | null) => void;
-  /** Independent selection for the new conversation. */
-  creationDefaults?: SessionLaunchSettings & { provider?: SessionProviderValue; model?: string };
-  creationUnavailableReason?: string;
-  canCreate?: boolean;
-  onCreated?: () => void;
-  /** Provider selection for newly created sessions */
-  selectedProvider: SessionProviderValue;
   onArchiveGitIndexLocked: () => void;
 }
 
@@ -163,11 +155,6 @@ export function useSessionManagement({
   inputRef,
   selectedDbSessionId,
   setSelectedDbSessionId,
-  creationDefaults,
-  creationUnavailableReason,
-  canCreate,
-  onCreated,
-  selectedProvider,
   onArchiveGitIndexLocked,
 }: UseSessionManagementOptions): UseSessionManagementReturn {
   const navigate = useNavigate();
@@ -185,15 +172,11 @@ export function useSessionManagement({
   } = useSessionCollectionCommands({
     workspaceId,
     sessions,
-    creationDefaults: creationDefaults ?? { provider: selectedProvider, model: undefined },
-    canCreate,
-    unavailableReason: creationUnavailableReason,
     onCreated: (session, originatingWorkspaceId, kind) => {
       if (activeWorkspaceRef.current !== originatingWorkspaceId) {
         return;
       }
       setSelectedDbSessionId(session.id);
-      onCreated?.();
       if (kind === 'chat') {
         setTimeout(() => inputRef.current?.focus(), 0);
       }

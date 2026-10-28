@@ -217,8 +217,6 @@ function createViewProps(activeChildCount: number): WorkspaceDetailViewProps {
       handleOpenSubagentTab: vi.fn(),
       maxSessions: 5,
       hasWorktreePath: true,
-      selectedProvider: 'CLAUDE',
-      setSelectedProvider: vi.fn(),
     },
     chat: {
       viewportRef: { current: null },

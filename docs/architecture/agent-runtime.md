@@ -130,9 +130,14 @@ This UI timer does not release backend configuration readiness.
 
 ### Launch thinking and Plan
 
-Manual workspace creation, new conversations, and Quick Chat share compact
-thinking and planning menus styled like the chat configuration controls.
-Planning shows Default or Plan; unsupported selected Plan can still be cleared.
+Manual workspace creation offers the provider/model picker and compact thinking
+and planning menus styled like the chat configuration controls. Planning shows
+Default or Plan; unsupported selected Plan can still be cleared. New
+conversations in an existing workspace (the workspace tab bar, Quick Chat, and
+quick actions) have no launch pickers: they reuse the provider and model of the
+workspace's oldest session, or the workspace provider and saved model default
+when it has none, and omit thinking and Plan so the saved thinking default
+applies with Plan off. Users change these per conversation from the composer.
 Thinking levels and planning availability come from a disposable ACP session
 configured with the selected provider/model; the provider-wide model catalog is
 not used as a thinking capability list. Discovery submits no prompt, rejects

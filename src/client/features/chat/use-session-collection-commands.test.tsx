@@ -25,38 +25,22 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+type HarnessSession = { name?: string | null; provider?: 'CLAUDE' | 'CODEX'; model?: string };
+
 function Harness({
   workspaceId,
-  names,
+  sessions,
   onCommands,
-  canCreate,
-  unavailableReason,
 }: {
   workspaceId: string | null;
-  canCreate?: boolean;
-  unavailableReason?: string;
-  names: Array<string | null>;
+  sessions: HarnessSession[] | undefined;
   onCommands: (commands: ReturnType<typeof useSessionCollectionCommands>) => void;
 }) {
-  onCommands(
-    useSessionCollectionCommands({
-      workspaceId,
-      sessions: names.map((name) => ({ name })),
-      creationDefaults: { model: '' },
-      canCreate,
-      unavailableReason,
-      onCreated: vi.fn(),
-    })
-  );
+  onCommands(useSessionCollectionCommands({ workspaceId, sessions, onCreated: vi.fn() }));
   return null;
 }
 
-function renderCommands(
-  workspaceId: string | null,
-  names: Array<string | null> = [],
-  canCreate = true,
-  unavailableReason?: string
-) {
+function renderCommands(workspaceId: string | null, sessions: HarnessSession[] | undefined) {
   let commands: ReturnType<typeof useSessionCollectionCommands> | undefined;
   const root = createRoot(document.createElement('div'));
   roots.push(root);
@@ -64,9 +48,7 @@ function renderCommands(
     root.render(
       createElement(Harness, {
         workspaceId,
-        names,
-        canCreate,
-        unavailableReason,
+        sessions,
         onCommands: (value) => {
           commands = value;
         },
@@ -79,9 +61,11 @@ function renderCommands(
   return commands;
 }
 
+const names = (values: Array<string | null>) => values.map((name) => ({ name }));
+
 describe('useSessionCollectionCommands input policy', () => {
   it('does not create chats or quick actions without a workspace', async () => {
-    const commands = renderCommands(null);
+    const commands = renderCommands(null, []);
     commands.createChat();
     commands.createQuickAction('Review', 'Review prompt');
     await commands.createQuickActionAsync('Review', 'Review prompt');
@@ -93,33 +77,72 @@ describe('useSessionCollectionCommands input policy', () => {
     { names: [], want: 'Chat 1' },
     { names: ['Chat 2', 'Chat 9', 'Chat 3'], want: 'Chat 10' },
     { names: [null, '', 'Review', 'Chat 0', 'Chat 99 extra', 'Chat -1'], want: 'Chat 1' },
-  ])('numbers new chats from exact positive Chat N titles: $want', ({ names, want }) => {
-    renderCommands('workspace', names).createChat();
+  ])('numbers new chats from exact positive Chat N titles: $want', ({ names: titles, want }) => {
+    renderCommands('workspace', names(titles)).createChat();
     expect(mutate).toHaveBeenCalledExactlyOnceWith(
-      { workspaceId: 'workspace', workflow: 'followup', model: '', name: want, initialPrompt: '' },
+      { workspaceId: 'workspace', workflow: 'followup', name: want, initialPrompt: '' },
       expect.objectContaining({ onSuccess: expect.any(Function) })
     );
   });
 });
 
-it('does not launch chats or quick actions before creation defaults are available', async () => {
-  const commands = renderCommands('workspace', [], false);
+it("starts chats and quick actions with the workspace's first provider and model", async () => {
+  mutateAsync.mockResolvedValue({ id: 'created' });
+  const commands = renderCommands('workspace', [
+    { name: 'Chat 1', provider: 'CODEX', model: 'gpt-sol' },
+    { name: 'Chat 2', provider: 'CLAUDE', model: 'opus' },
+  ]);
+  commands.createChat();
+  await commands.createQuickActionAsync('Review', 'Review prompt');
+  expect(mutate).toHaveBeenCalledWith(
+    {
+      workspaceId: 'workspace',
+      workflow: 'followup',
+      provider: 'CODEX',
+      model: 'gpt-sol',
+      name: 'Chat 3',
+      initialPrompt: '',
+    },
+    expect.anything()
+  );
+  expect(mutateAsync).toHaveBeenCalledWith({
+    workspaceId: 'workspace',
+    workflow: 'followup',
+    provider: 'CODEX',
+    model: 'gpt-sol',
+    name: 'Review',
+    initialMessage: 'Review prompt',
+    initialPrompt: '',
+  });
+});
+
+it('does not launch chats or quick actions before sessions load', async () => {
+  const commands = renderCommands('workspace', undefined);
   commands.createChat();
   commands.createQuickAction('Review', 'Review prompt');
   await commands.createQuickActionAsync('Review', 'Review prompt');
   expect(mutate).not.toHaveBeenCalled();
   expect(mutateAsync).not.toHaveBeenCalled();
-  expect(toast.error).toHaveBeenCalledWith('Chat defaults are not ready. Wait or retry selection.');
+  expect(toast.error).toHaveBeenCalledWith('Sessions are still loading. Try again in a moment.');
 });
 
-it('reports the invalid thinking choice when a guarded quick action is invoked', () => {
-  const commands = renderCommands(
-    'workspace',
-    [],
-    false,
-    'Choose a supported thinking level or Default'
-  );
-  commands.createQuickAction('Review', 'Review this');
-  expect(mutate).not.toHaveBeenCalled();
-  expect(toast.error).toHaveBeenCalledWith('Choose a supported thinking level or Default');
+it.each([
+  { label: 'no sessions', sessions: [], want: {} },
+  {
+    label: 'a first session without a model',
+    sessions: [{ provider: 'CLAUDE' as const }],
+    want: { provider: 'CLAUDE' },
+  },
+  { label: 'a first session without a provider', sessions: [{ model: 'opus' }], want: {} },
+])('leaves unknown launch fields to the server for $label', ({ sessions, want }) => {
+  renderCommands('workspace', sessions).createChat();
+  const input = mutate.mock.calls[0]?.[0];
+  expect(input).toMatchObject(want);
+  for (const key of ['provider', 'model'] as const) {
+    if (!(key in want)) {
+      expect(input).not.toHaveProperty(key);
+    }
+  }
+  expect(input).not.toHaveProperty('reasoningEffort');
+  expect(input).not.toHaveProperty('planModeEnabled');
 });
