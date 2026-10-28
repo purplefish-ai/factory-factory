@@ -47,9 +47,9 @@ including issues not assigned to the current user. Bare numbers and `#123`
 automatically look up an exact issue, including closed issues. Text queries
 require selecting **Search GitHub issues** before any external request; editing
 the text requires submitting it again. This avoids per-keystroke fan-out across
-repositories. Identical query results are cached in the client for 60 seconds.
-GitHub loading or partial failures leave local results selectable, and failures
-can be retried.
+repositories. Identical query results are treated as fresh in the client for 60
+seconds. GitHub loading or partial failures leave local results selectable, and
+failures can be retried.
 
 Selecting **Start issue** opens the existing issue launch sheet with the full
 prompt and provider/mode options. Cmd/Ctrl+K leaves that sheet and edited
