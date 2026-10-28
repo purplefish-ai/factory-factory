@@ -1,5 +1,6 @@
 import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { createLogger } from '@/backend/services/logger.service';
+import { isNativeModeConfigOption } from './acp-config-option-identification';
 import type { AcpProcessHandle } from './acp-process-handle';
 import { requireSessionConfigOptions } from './acp-session-config-options';
 
@@ -47,7 +48,7 @@ export class AcpRuntimeConfigController {
       });
 
       handle.configOptions = handle.configOptions.map((option) =>
-        option.type === 'select' && option.category === 'mode'
+        option.type === 'select' && isNativeModeConfigOption(option, 'mode')
           ? { ...option, currentValue: modeId }
           : option
       );

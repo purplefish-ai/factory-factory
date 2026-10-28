@@ -2299,8 +2299,8 @@ describe('SessionService', () => {
       model: 'sonnet',
       provider: 'CLAUDE',
       providerSessionId: null,
+      providerMetadata: {},
     });
-
     const workspace = unsafeCoerce<Awaited<ReturnType<typeof sessionRepository.getWorkspaceById>>>({
       id: 'workspace-1',
       worktreePath: '/tmp/work',

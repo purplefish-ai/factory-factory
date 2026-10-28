@@ -9,6 +9,7 @@ import {
   closedSessionAccessor,
 } from '@/backend/services/session/resources/closed-session.accessor';
 import { prDedicatedSessionAccessor } from '@/backend/services/session/resources/pr-dedicated-session.accessor';
+import { createSessionLaunchMetadata } from '@/backend/services/session/service/lifecycle/session-launch-settings';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type {
   AcquirePRDedicatedSessionInput,
@@ -80,6 +81,8 @@ class SessionDataService {
     workspacePrId?: string;
     workflow: string;
     model?: string;
+    reasoningEffort?: string | null;
+    planModeEnabled?: boolean;
     provider?: SessionProvider;
     providerProjectPath?: string | null;
   }): Promise<AgentSessionRecord> {
@@ -88,7 +91,14 @@ class SessionDataService {
       explicitProvider: data.provider,
       explicitModel: data.model,
     });
-    return toAgentSessionRecord(await agentSessionAccessor.create({ ...data, ...defaults }));
+    const launchMetadata = createSessionLaunchMetadata(data);
+    return toAgentSessionRecord(
+      await agentSessionAccessor.create({
+        ...data,
+        ...defaults,
+        ...(launchMetadata ? { providerMetadata: launchMetadata } : {}),
+      })
+    );
   }
 
   async createAgentSessionWithinWorkspaceLimit(data: {
@@ -97,6 +107,8 @@ class SessionDataService {
     workspacePrId?: string;
     workflow: string;
     model?: string;
+    reasoningEffort?: string | null;
+    planModeEnabled?: boolean;
     provider?: SessionProvider;
     providerProjectPath?: string | null;
     maxSessions: number;
@@ -106,7 +118,12 @@ class SessionDataService {
       explicitProvider: data.provider,
       explicitModel: data.model,
     });
-    const result = await agentSessionAccessor.createWithinWorkspaceLimit({ ...data, ...defaults });
+    const launchMetadata = createSessionLaunchMetadata(data);
+    const result = await agentSessionAccessor.createWithinWorkspaceLimit({
+      ...data,
+      ...defaults,
+      ...(launchMetadata ? { providerMetadata: launchMetadata } : {}),
+    });
     return result.outcome === 'created'
       ? { ...result, session: toAgentSessionRecord(result.session) }
       : result;

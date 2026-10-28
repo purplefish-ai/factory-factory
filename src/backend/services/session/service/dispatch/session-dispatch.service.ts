@@ -699,10 +699,14 @@ export class SessionDispatchService {
         dbSessionId,
         msg.settings.selectedModel ?? undefined
       );
-      await this.dependencies.configService.setSessionReasoningEffort(
-        dbSessionId,
-        msg.settings.reasoningEffort ?? null
-      );
+      // Null messages carry no effort override, including initial workspace
+      // prompts and messages queued before capabilities finish loading.
+      if (typeof msg.settings.reasoningEffort === 'string') {
+        await this.dependencies.configService.setSessionReasoningEffort(
+          dbSessionId,
+          msg.settings.reasoningEffort
+        );
+      }
     } catch (error) {
       if (this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
         throw error;

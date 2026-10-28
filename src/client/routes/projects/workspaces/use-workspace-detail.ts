@@ -9,6 +9,7 @@ import { trpc } from '@/client/lib/trpc';
 import { isArchiveGitIndexLockedError } from '@/client/lib/workspace-archive';
 import { useWorkspaceIdeActions } from '@/client/routes/projects/workspaces/use-workspace-ide-actions';
 import type { SessionProviderValue } from '@/lib/session-provider-selection';
+import type { SessionLaunchSettings } from '@/shared/session-launch';
 
 function showArchiveError(error: unknown, onGitLocked: () => void) {
   if (isArchiveGitIndexLockedError(error)) {
@@ -105,7 +106,8 @@ interface UseSessionManagementOptions {
   selectedDbSessionId: string | null;
   setSelectedDbSessionId: (id: string | null) => void;
   /** Independent selection for the new conversation. */
-  creationDefaults?: { provider?: SessionProviderValue; model?: string };
+  creationDefaults?: SessionLaunchSettings & { provider?: SessionProviderValue; model?: string };
+  creationUnavailableReason?: string;
   canCreate?: boolean;
   onCreated?: () => void;
   /** Provider selection for newly created sessions */
@@ -134,6 +136,8 @@ export interface UseSessionManagementReturn {
       workspaceId: string;
       workflow: string;
       model?: string;
+      reasoningEffort?: string | null;
+      planModeEnabled?: boolean;
       name: string;
       provider?: SessionProviderValue;
       initialMessage?: string;
@@ -160,6 +164,7 @@ export function useSessionManagement({
   selectedDbSessionId,
   setSelectedDbSessionId,
   creationDefaults,
+  creationUnavailableReason,
   canCreate,
   onCreated,
   selectedProvider,
@@ -182,6 +187,7 @@ export function useSessionManagement({
     sessions,
     creationDefaults: creationDefaults ?? { provider: selectedProvider, model: undefined },
     canCreate,
+    unavailableReason: creationUnavailableReason,
     onCreated: (session, originatingWorkspaceId, kind) => {
       if (activeWorkspaceRef.current !== originatingWorkspaceId) {
         return;

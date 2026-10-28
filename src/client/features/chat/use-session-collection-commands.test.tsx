@@ -30,9 +30,11 @@ function Harness({
   names,
   onCommands,
   canCreate,
+  unavailableReason,
 }: {
   workspaceId: string | null;
   canCreate?: boolean;
+  unavailableReason?: string;
   names: Array<string | null>;
   onCommands: (commands: ReturnType<typeof useSessionCollectionCommands>) => void;
 }) {
@@ -42,6 +44,7 @@ function Harness({
       sessions: names.map((name) => ({ name })),
       creationDefaults: { model: '' },
       canCreate,
+      unavailableReason,
       onCreated: vi.fn(),
     })
   );
@@ -51,7 +54,8 @@ function Harness({
 function renderCommands(
   workspaceId: string | null,
   names: Array<string | null> = [],
-  canCreate = true
+  canCreate = true,
+  unavailableReason?: string
 ) {
   let commands: ReturnType<typeof useSessionCollectionCommands> | undefined;
   const root = createRoot(document.createElement('div'));
@@ -62,6 +66,7 @@ function renderCommands(
         workspaceId,
         names,
         canCreate,
+        unavailableReason,
         onCommands: (value) => {
           commands = value;
         },
@@ -105,4 +110,16 @@ it('does not launch chats or quick actions before creation defaults are availabl
   expect(mutate).not.toHaveBeenCalled();
   expect(mutateAsync).not.toHaveBeenCalled();
   expect(toast.error).toHaveBeenCalledWith('Chat defaults are not ready. Wait or retry selection.');
+});
+
+it('reports the invalid thinking choice when a guarded quick action is invoked', () => {
+  const commands = renderCommands(
+    'workspace',
+    [],
+    false,
+    'Choose a supported thinking level or Default'
+  );
+  commands.createQuickAction('Review', 'Review this');
+  expect(mutate).not.toHaveBeenCalled();
+  expect(toast.error).toHaveBeenCalledWith('Choose a supported thinking level or Default');
 });

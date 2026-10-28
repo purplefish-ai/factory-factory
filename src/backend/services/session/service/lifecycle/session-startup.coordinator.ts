@@ -16,6 +16,7 @@ import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import { SessionStatus } from '@/shared/core';
 import type { AcpEventProcessor } from './acp-event-processor';
 import type { SessionContextService } from './session-context.service';
+import { markSessionLaunchSettingsApplied } from './session-launch-settings';
 import { type SessionLifecycleGate, SessionStartupCancelledError } from './session-lifecycle-gate';
 import type { SessionAcpEnvironmentPort } from './session-lifecycle.types';
 import type { SessionNotificationDeliveryService } from './session-notification-delivery.service';
@@ -38,7 +39,8 @@ export type GetOrCreateSessionClientOptions = {
   resumePolicy?: 'allow_fallback' | 'require_existing';
   thinkingEnabled?: boolean;
   model?: string;
-  reasoningEffort?: string;
+  reasoningEffort?: string | null;
+  planModeEnabled?: boolean;
   startupModePreset?: SessionStartupModePreset;
 };
 
@@ -79,6 +81,7 @@ export type SessionStartupCoordinatorDependencies = {
     | 'applyConfiguredPermissionPreset'
     | 'applyConfiguredReasoningEffort'
     | 'applyStartupModePreset'
+    | 'applyStartupLaunchPlan'
     | 'buildAcpChatBarCapabilities'
     | 'persistAcpConfigSnapshot'
   >;
@@ -350,6 +353,8 @@ export class SessionStartupCoordinator {
       purpose?: 'active' | 'browse';
       resumePolicy?: 'allow_fallback' | 'require_existing';
       startupModePreset?: SessionStartupModePreset;
+      reasoningEffort?: string | null;
+      planModeEnabled?: boolean;
     },
     session: AgentSessionRecord,
     permissionPreset: PermissionPreset | undefined,
@@ -431,7 +436,12 @@ export class SessionStartupCoordinator {
         await this.dependencies.sessionConfigService.applyConfiguredReasoningEffort(
           sessionId,
           handle,
-          { persistSnapshot: false, emitUpdates: false }
+          {
+            persistSnapshot: false,
+            emitUpdates: false,
+            session,
+            reasoningEffort: options.reasoningEffort,
+          }
         );
       }
       if (
@@ -453,6 +463,13 @@ export class SessionStartupCoordinator {
         options.startupModePreset,
         session.workflow
       );
+      await this.dependencies.sessionConfigService.applyStartupLaunchPlan(
+        sessionId,
+        session,
+        handle,
+        permissionPreset,
+        options.planModeEnabled
+      );
       await this.reapplyReviewPermissions(
         sessionId,
         session,
@@ -465,11 +482,13 @@ export class SessionStartupCoordinator {
         provider: handle.provider as PersistAcpConfigSnapshotParams['provider'],
         providerSessionId: handle.providerSessionId,
         configOptions: handle.configOptions,
-        existingMetadata:
+        requirePersistence: true,
+        existingMetadata: markSessionLaunchSettingsApplied(
           handle.sessionCreationOutcome?.kind === 'resume_fallback'
             ? ((await this.dependencies.repository.getSessionById(sessionId))?.providerMetadata ??
-              undefined)
-            : (session.providerMetadata ?? undefined),
+                undefined)
+            : (session.providerMetadata ?? undefined)
+        ),
       });
       await this.assertCreationAllowed(sessionId, stopGeneration, options.assertCurrent);
       handle.completeConfiguration(() => {

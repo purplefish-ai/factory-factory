@@ -7,8 +7,8 @@ import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { useEffect } from 'react';
 import {
-  ProviderModelPicker,
-  type ProviderModelPickerProps,
+  SessionLaunchControls,
+  type SessionLaunchControlsProps,
 } from '@/client/features/session-selection';
 import { type SubagentSelection, useLiveSubagentSelection } from '@/client/features/subagents';
 import { TabButton } from '@/components/ui/tab-button';
@@ -280,7 +280,7 @@ interface MainViewTabBarProps {
   maxSessions?: number;
   selectedProvider: SessionProviderValue;
   setSelectedProvider: (provider: SessionProviderValue) => void;
-  creationSelection?: ProviderModelPickerProps;
+  creationSelection?: SessionLaunchControlsProps;
 }
 
 export function MainViewTabBar({
@@ -309,7 +309,11 @@ export function MainViewTabBar({
   // Check if active session limit is reached
   const isAtLimit = isWorkspaceSessionLimitReached(sessions, maxSessions);
   const isButtonDisabled =
-    disabled || isAtLimit || creationSelection?.loading || Boolean(creationSelection?.error);
+    disabled ||
+    isAtLimit ||
+    creationSelection?.ready === false ||
+    creationSelection?.loading ||
+    Boolean(creationSelection?.error);
   const pickerProps = creationSelection ?? {
     provider: selectedProvider,
     models: [],
@@ -320,11 +324,11 @@ export function MainViewTabBar({
     : 'New conversation';
 
   return (
-    <div className={cn('flex items-center bg-muted/50', className)}>
+    <div className={cn('flex flex-wrap items-center bg-muted/50 sm:flex-nowrap', className)}>
       {/* Scrollable tab area */}
       <div
         role="tablist"
-        className="flex flex-1 min-w-0 items-center gap-0.5 p-1 overflow-x-auto"
+        className="flex min-w-0 flex-1 basis-full items-center gap-0.5 overflow-x-auto p-1 sm:basis-auto"
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
       >
         {/* Session tabs (Chat 1, Chat 2, etc.) */}
@@ -347,46 +351,6 @@ export function MainViewTabBar({
             />
           );
         })}
-
-        {/* Session creation controls (provider + add button) */}
-        {onCreateSession && (
-          <div className="ml-0.5 flex shrink-0 items-center gap-0.5">
-            <span className="px-1 text-xs text-muted-foreground">New</span>
-            <ProviderModelPicker
-              {...pickerProps}
-              disabled={disabled || isAtLimit}
-              disabledReason={
-                isAtLimit
-                  ? `Maximum ${maxSessions} sessions per workspace`
-                  : disabled
-                    ? 'Session creation is unavailable'
-                    : undefined
-              }
-              label="New conversation provider and model"
-            />
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={onCreateSession}
-                  disabled={isButtonDisabled}
-                  className={cn(
-                    'flex h-7 w-7 items-center justify-center rounded-none',
-                    'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground',
-                    'transition-colors disabled:pointer-events-none disabled:opacity-50'
-                  )}
-                  aria-label={newSessionLabel}
-                >
-                  <PlusIcon className="h-3.5 w-3.5" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {isAtLimit ? `Maximum ${maxSessions} sessions per workspace` : newSessionLabel}
-              </TooltipContent>
-            </Tooltip>
-          </div>
-        )}
 
         {onQuickAction && (
           <div className="ml-0.5 shrink-0">
@@ -437,6 +401,49 @@ export function MainViewTabBar({
           )
         )}
       </div>
+
+      {/* Session creation controls (provider + add button) */}
+      {onCreateSession && (
+        <div className="mx-1 flex min-w-0 flex-1 items-center gap-0.5 py-1 sm:flex-none">
+          <span className="px-1 text-xs text-muted-foreground">New</span>
+          <SessionLaunchControls
+            {...pickerProps}
+            disabled={disabled || isAtLimit}
+            disabledReason={
+              isAtLimit
+                ? `Maximum ${maxSessions} sessions per workspace`
+                : disabled
+                  ? 'Session creation is unavailable'
+                  : undefined
+            }
+            label="New conversation provider and model"
+          />
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={onCreateSession}
+                disabled={isButtonDisabled}
+                className={cn(
+                  'flex h-7 w-7 items-center justify-center rounded-none',
+                  'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground',
+                  'transition-colors disabled:opacity-50'
+                )}
+                aria-label={newSessionLabel}
+                aria-description={creationSelection?.unavailableReason}
+              >
+                <PlusIcon className="h-3.5 w-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {isAtLimit
+                ? `Maximum ${maxSessions} sessions per workspace`
+                : (creationSelection?.unavailableReason ?? newSessionLabel)}
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      )}
 
       {/* Restart button — pinned to the right, outside the scrollable area */}
       {onRestartSession && (

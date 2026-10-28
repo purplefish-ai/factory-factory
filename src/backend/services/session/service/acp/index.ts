@@ -25,3 +25,5 @@ export {
 export { fetchCodexModelCatalogFromAppServer } from './codex-model-catalog-loader';
 export { toAcpSessionId } from './acp-session-identity';
 export type { AcpClientOptions, AcpProvider, AcpSessionState, PermissionPreset } from './types';
+
+export { fetchSessionLaunchOptionsFromAcp } from './session-launch-options-probe';
