@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createDefaultApplicationDependencies } from '@/backend/app-context';
 import { sessionProviderResolverService } from '@/backend/services/session';
 import {
   agentSessionAccessor,
@@ -9,7 +10,6 @@ import { userSettingsService } from '@/backend/services/settings';
 import { workspaceDataService } from '@/backend/services/workspace';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type { AgentSession, SessionProvider, Workspace } from '@prisma-gen/client';
-import { createDefaultApplicationDependencies } from './app-context';
 
 const workspace = unsafeCoerce<Workspace>({
   id: 'same-workspace',
