@@ -101,11 +101,14 @@ Manual successful branch renames resolve canonical Git HEAD before writing;
 automatic renames write only after their Git rename succeeds. Both use the
 workspace data service's branch acceptance gateway. Its transaction returns the
 canonical branch, status, and DB `updatedAt` only after the branch update and PR
-discovery schedule reset commit together. Failed transactions emit no fact. The
-gateway serializes persistence through synchronous accepted-event delivery per
-workspace; other workspaces remain independent and failures release the queue.
-The collector subscribes for its own start/stop lifetime and immediately
-publishes accepted branches, bypassing observation coalescing.
+discovery schedule reset commit together. Failed transactions emit no fact.
+Subscriber failures are logged after commit without failing the rename or
+interrupting remaining synchronous subscribers; reconciliation repairs missed
+cache publication. The gateway serializes persistence through synchronous
+accepted-event delivery per workspace; other workspaces remain independent and
+failures release the queue. The collector subscribes for its own start/stop
+lifetime and immediately publishes accepted branches, bypassing observation
+coalescing.
 
 The store tracks branch freshness privately, independently of workspace,
 lifecycle, and name clocks. Equal DB milliseconds are accepted only from the

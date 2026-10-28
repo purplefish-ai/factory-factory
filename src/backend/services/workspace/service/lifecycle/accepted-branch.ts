@@ -1,6 +1,10 @@
+import { toError } from '@/backend/lib/error-utils';
+import { createLogger } from '@/backend/services/logger.service';
 import type { Workspace } from '@prisma-gen/client';
 
 export type AcceptedWorkspaceBranch = Pick<Workspace, 'id' | 'branchName' | 'updatedAt' | 'status'>;
+
+const logger = createLogger('accepted-workspace-branch');
 
 /** Serializes committed branch facts through synchronous application delivery. */
 export class AcceptedBranchPublisher {
@@ -21,7 +25,13 @@ export class AcceptedBranchPublisher {
     ).then(async () => {
       const row = await persist();
       for (const listener of this.listeners) {
-        listener(row);
+        try {
+          listener(row);
+        } catch (error) {
+          logger.error('Failed to publish accepted workspace branch', toError(error), {
+            workspaceId: row.id,
+          });
+        }
       }
       return row;
     });
