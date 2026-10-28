@@ -9,7 +9,22 @@ import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { gate } from './session-config-authority.test-helpers';
 import { setupStartupConfig } from './session-startup-config.test-helpers';
 
-vi.mock('@/backend/services/settings', () => ({ userSettingsService: {} }));
+vi.mock('@/backend/services/workspace', () => ({
+  workspaceDataService: { findById: vi.fn() },
+  workspaceNotificationService: {
+    listPendingForDelivery: vi.fn(() => Promise.resolve([])),
+    findForDelivery: vi.fn(() => Promise.resolve(null)),
+    markDelivered: vi.fn(() => Promise.resolve()),
+  },
+}));
+
+vi.mock('@/backend/services/settings', () => ({
+  userSettingsService: {
+    get: vi.fn(() =>
+      Promise.resolve({ defaultClaudeReasoningEffort: null, defaultCodexReasoningEffort: null })
+    ),
+  },
+}));
 afterEach(() => vi.restoreAllMocks());
 
 it('keeps a coalesced borrower shared after the real manager creator has completed', async () => {

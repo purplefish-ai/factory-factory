@@ -7,6 +7,15 @@ import {
 } from '@/backend/services/session/service/lifecycle/session-lifecycle.test-helpers';
 import { workspaceNotificationService } from '@/backend/services/workspace';
 
+vi.mock('@/backend/services/workspace', () => ({
+  workspaceDataService: { findById: vi.fn() },
+  workspaceNotificationService: {
+    listPendingForDelivery: vi.fn(() => Promise.resolve([])),
+    findForDelivery: vi.fn(() => Promise.resolve(null)),
+    markDelivered: vi.fn(() => Promise.resolve()),
+  },
+}));
+
 beforeEach(() => vi.clearAllMocks());
 function guardHarness() {
   const harness = createLifecycleHarness();
@@ -185,7 +194,7 @@ it('retains a runtime after a valid ordinary startup has reused it and finished'
 
 it('passes the destination fence into notification recovery before cards are appended', async () => {
   const h = guardHarness();
-  vi.spyOn(workspaceNotificationService, 'listPendingForDelivery').mockImplementation(() => {
+  vi.spyOn(workspaceNotificationService, 'listPendingForDelivery').mockImplementationOnce(() => {
     h.invalidate();
     return Promise.resolve([createPendingWorkspaceNotification()]);
   });
@@ -195,6 +204,14 @@ it('passes the destination fence into notification recovery before cards are app
       assertCurrent: h.assertCurrent,
     })
   ).rejects.toBeInstanceOf(SessionStartupCancelledError);
+  expect(h.sessionDomainService.enqueue).not.toHaveBeenCalled();
+  expect(h.sessionDomainService.appendClaudeEvent).not.toHaveBeenCalled();
+});
+it('starts without delivering notifications when none are pending', async () => {
+  const h = guardHarness();
+  await expect(
+    h.service.startSession('session-1', { initialPrompt: '', assertCurrent: h.assertCurrent })
+  ).resolves.toBeUndefined();
   expect(h.sessionDomainService.enqueue).not.toHaveBeenCalled();
   expect(h.sessionDomainService.appendClaudeEvent).not.toHaveBeenCalled();
 });

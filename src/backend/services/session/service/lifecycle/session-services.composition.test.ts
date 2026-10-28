@@ -12,6 +12,15 @@ import {
 } from './session-lifecycle.test-helpers';
 import { sessionLifecycleService, sessionDispatchService } from './session-services';
 
+vi.mock('@/backend/services/workspace', () => ({
+  workspaceDataService: { findById: vi.fn() },
+  workspaceNotificationService: {
+    listPendingForDelivery: vi.fn(() => Promise.resolve([])),
+    findForDelivery: vi.fn(() => Promise.resolve(null)),
+    markDelivered: vi.fn(() => Promise.resolve()),
+  },
+}));
+
 describe('session services composition', () => {
   afterEach(() => {
     sessionDomainService.clearAllSessions();

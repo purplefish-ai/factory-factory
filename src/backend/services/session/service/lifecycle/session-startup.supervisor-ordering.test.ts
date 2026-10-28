@@ -14,6 +14,15 @@ import { gate } from './session-config-authority.test-helpers';
 import { setupStartupConfig, startupConfigOptions } from './session-startup-config.test-helpers';
 import { SessionConfigService } from './session.config.service';
 
+vi.mock('@/backend/services/workspace', () => ({
+  workspaceDataService: { findById: vi.fn() },
+  workspaceNotificationService: {
+    listPendingForDelivery: vi.fn(() => Promise.resolve([])),
+    findForDelivery: vi.fn(() => Promise.resolve(null)),
+    markDelivered: vi.fn(() => Promise.resolve()),
+  },
+}));
+
 vi.mock('@/backend/services/settings', () => ({
   userSettingsService: { get: vi.fn(async () => ({})) },
 }));
