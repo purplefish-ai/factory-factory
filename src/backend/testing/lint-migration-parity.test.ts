@@ -1,73 +1,111 @@
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
-import { afterAll, describe, expect, it } from 'vitest';
+import { join, relative, resolve } from 'node:path';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
 const directory = mkdtempSync(join(process.cwd(), '.lint-parity-'));
 const binary = resolve('node_modules/.bin/biome');
 
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
 
-function lint(source: string, extension = 'ts') {
-  const file = join(directory, `fixture.${extension}`);
-  writeFileSync(file, source);
-  return spawnSync(binary, ['lint', file], { encoding: 'utf8' });
+const biomeFixtures = [
+  {
+    rule: 'noUnusedImports',
+    extension: 'ts',
+    source: "import { value as _unused } from './other'; export const kept = 1;",
+  },
+  { rule: 'noEmptyBlockStatements', extension: 'ts', source: 'export function empty() {}' },
+  {
+    rule: 'noDangerouslySetInnerHtml',
+    extension: 'ts',
+    source: "React.createElement('div', { dangerouslySetInnerHTML: { __html: 'child' } });",
+  },
+  {
+    rule: 'noDangerouslySetInnerHtml',
+    extension: 'js',
+    source: "React.createElement('div', { dangerouslySetInnerHTML: { __html: 'child' } });",
+  },
+].map((fixture, index) => ({
+  ...fixture,
+  file: join(directory, `fixture-${index}.${fixture.extension}`),
+}));
+
+const biomeReportSchema = z.object({
+  diagnostics: z.array(
+    z.object({
+      category: z.string(),
+      severity: z.string(),
+      location: z.object({ path: z.string() }),
+    })
+  ),
+});
+
+function lint() {
+  for (const fixture of biomeFixtures) {
+    writeFileSync(fixture.file, fixture.source);
+  }
+  return spawnSync(binary, ['lint', '--reporter=json', ...biomeFixtures.map(({ file }) => file)], {
+    encoding: 'utf8',
+  });
 }
 
-function oxlint(source: string) {
-  const file = join(directory, 'callback.ts');
-  writeFileSync(file, source);
-  return spawnSync(resolve('node_modules/.bin/oxlint'), ['--deny-warnings', file], {
+function oxlint(sources: string | string[]) {
+  const files = (typeof sources === 'string' ? [sources] : sources).map((source, index) => {
+    const file = join(directory, `callback-${index}.ts`);
+    writeFileSync(file, source);
+    return file;
+  });
+  return spawnSync(resolve('node_modules/.bin/oxlint'), ['--deny-warnings', ...files], {
     encoding: 'utf8',
   });
 }
 
 describe('lint coverage retained during Oxc migration', () => {
-  it('permits initialized constants captured by asynchronous callbacks', () => {
-    const result = oxlint(
-      'export function create() { const pending: Promise<void> = Promise.resolve().finally(() => { void pending; }); return pending; }'
-    );
-    expect(result.error).toBeUndefined();
-    expect(result.status).toBe(0);
-  });
-
-  it('permits delayed assignments read by earlier callback declarations', () => {
-    const result = oxlint(
-      'export function create() { let pending: Promise<void>; const getPending = () => pending; pending = Promise.resolve(); return getPending; }'
-    );
-    expect(result.error).toBeUndefined();
-    expect(result.status).toBe(0);
-  });
-
-  it.each([
-    ['noUnusedImports', "import { value as _unused } from './other'; export const kept = 1;"],
-    ['noEmptyBlockStatements', 'export function empty() {}'],
+  const acceptedFixtures: [string, string][] = [
     [
-      'noDangerouslySetInnerHtml',
-      "React.createElement('div', { dangerouslySetInnerHTML: { __html: 'child' } });",
+      'initialized constants captured by asynchronous callbacks',
+      'export function create() { const pending: Promise<void> = Promise.resolve().finally(() => { void pending; }); return pending; }',
     ],
-  ])('continues enforcing %s in TypeScript', (rule, source) => {
-    const result = lint(source);
-    expect(result.error).toBeUndefined();
-    expect(result.status).toBe(1);
-    expect(result.stdout + result.stderr).toContain(rule);
+    [
+      'delayed assignments read by earlier callback declarations',
+      'export function create() { let pending: Promise<void>; const getPending = () => pending; pending = Promise.resolve(); return getPending; }',
+    ],
+    [
+      'underscore-prefixed unused destructuring parameters',
+      'export function f({ _unused }: { _unused: string }) { /* Intentionally empty. */ }',
+    ],
+    [
+      'underscore-prefixed unused catch bindings',
+      'export function f() { try { throw new Error(); } catch (_error) { return; } }',
+    ],
+  ];
+  let acceptedResult: ReturnType<typeof oxlint>;
+  let biomeResult: ReturnType<typeof lint>;
+  beforeAll(() => {
+    // One real type-aware CLI run must accept every fixture; each file stays a
+    // separate module so declarations cannot influence another fixture.
+    acceptedResult = oxlint(acceptedFixtures.map(([, source]) => source));
+    biomeResult = lint();
+  });
+  it.each(acceptedFixtures)('permits %s', () => {
+    expect(acceptedResult.error).toBeUndefined();
+    expect(acceptedResult.status).toBe(0);
   });
 
-  it('continues rejecting dangerous HTML outside JSX in JavaScript', () => {
-    const result = lint(
-      "React.createElement('div', { dangerouslySetInnerHTML: { __html: 'child' } });",
-      'js'
+  it.each(biomeFixtures)('continues enforcing $rule in $extension', ({ rule, file }) => {
+    expect(biomeResult.error).toBeUndefined();
+    expect(biomeResult.status).toBe(1);
+    const report = biomeReportSchema.parse(JSON.parse(biomeResult.stdout));
+    expect(report.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          category: expect.stringMatching(new RegExp(`/${rule}$`)),
+          severity: 'error',
+          location: { path: relative(process.cwd(), file) },
+        }),
+      ])
     );
-    expect(result.status).toBe(1);
-    expect(result.stdout + result.stderr).toContain('noDangerouslySetInnerHtml');
-  });
-
-  it('permits underscore-prefixed unused destructuring parameters', () => {
-    const result = oxlint(
-      'export function f({ _unused }: { _unused: string }) { /* Intentionally empty. */ }'
-    );
-    expect(result.error).toBeUndefined();
-    expect(result.status).toBe(0);
   });
 
   it('rejects unused destructuring parameters without an underscore prefix', () => {
@@ -78,17 +116,12 @@ describe('lint coverage retained during Oxc migration', () => {
     expect(result.stdout + result.stderr).toContain('no-unused-vars');
   });
 
-  it.each([
-    ['error', 1],
-    ['_error', 0],
-  ])('enforces unused catch binding policy for %s', (binding, status) => {
+  it('rejects unused catch bindings without an underscore prefix', () => {
     const result = oxlint(
-      `export function f() { try { throw new Error(); } catch (${binding}) { return; } }`
+      'export function f() { try { throw new Error(); } catch (error) { return; } }'
     );
     expect(result.error).toBeUndefined();
-    expect(result.status).toBe(status);
-    if (status !== 0) {
-      expect(result.stdout + result.stderr).toContain('no-unused-vars');
-    }
+    expect(result.status).toBe(1);
+    expect(result.stdout + result.stderr).toContain('no-unused-vars');
   });
 });

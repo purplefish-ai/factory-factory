@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { countSuppressions } from '../../../scripts/check-lint-suppressions.mjs';
 
 const script = resolve('scripts/check-lint-suppressions.mjs');
 const roots: string[] = [];
@@ -13,16 +14,33 @@ afterEach(() => {
   }
 });
 
-function runCheck(source: string, relativeFile = 'src/example.ts') {
+function createFixture(source: string, relativeFile = 'src/example.ts') {
   const root = mkdtempSync(join(tmpdir(), 'ff-lint-suppressions-'));
   roots.push(root);
   const file = join(root, relativeFile);
   mkdirSync(resolve(file, '..'), { recursive: true });
   writeFileSync(file, source);
-  return spawnSync(process.execPath, [script], { cwd: root, encoding: 'utf8' });
+  return root;
+}
+
+function runCheck(source: string, relativeFile = 'src/example.ts') {
+  const result = countSuppressions(createFixture(source, relativeFile));
+  return {
+    status: result.totalSuppressions > 0 ? 1 : 0,
+    stderr: result.filesWithSuppressions.map((file) => file.relativePath).join('\n'),
+  };
 }
 
 describe('inline lint suppression policy', () => {
+  it.each([false, true])('enforces suppressions through the CLI (suppressed: %s)', (suppressed) => {
+    const root = createFixture(suppressed ? '// oxlint-disable' : '// ordinary comment');
+    const result = spawnSync(process.execPath, [script], { cwd: root, encoding: 'utf8' });
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(suppressed ? 1 : 0);
+    expect(result.stdout + result.stderr).toContain(
+      suppressed ? 'src/example.ts: 1' : 'No inline lint/format suppressions found'
+    );
+  });
   it.each([
     '// biome-ignore lint/style/noNonNullAssertion: temporary',
     '/* biome-ignore-all lint: temporary */',

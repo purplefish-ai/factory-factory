@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { collectServiceAccessorBoundaryViolations } from '../../../scripts/check-service-accessor-boundaries.mjs';
 
 interface SourceFileFixture {
   path: string;
@@ -23,10 +24,7 @@ describe('check-service-accessor-boundaries', () => {
     tempDirs.length = 0;
   });
 
-  function runChecker(sourceFiles: SourceFileFixture[]): {
-    status: number | null;
-    output: string;
-  } {
+  function createFixture(sourceFiles: SourceFileFixture[]): string {
     const tempRoot = mkdtempSync(path.join(os.tmpdir(), 'service-accessor-boundaries-'));
     tempDirs.push(tempRoot);
 
@@ -36,16 +34,37 @@ describe('check-service-accessor-boundaries', () => {
       writeFileSync(fullPath, sourceFile.content);
     }
 
-    const result = spawnSync('node', [checkerScriptPath], {
+    return tempRoot;
+  }
+
+  function runChecker(sourceFiles: SourceFileFixture[]) {
+    const violations = collectServiceAccessorBoundaryViolations(createFixture(sourceFiles));
+    return {
+      status: violations.length > 0 ? 1 : 0,
+      output: violations.join('\n'),
+    };
+  }
+
+  it.each([false, true])('enforces boundaries through the CLI (cross-owner: %s)', (crossOwner) => {
+    const tempRoot = createFixture([
+      {
+        path: `src/backend/services/${crossOwner ? 'session' : 'workspace'}/service/example.ts`,
+        content:
+          "import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';\n",
+      },
+    ]);
+    const result = spawnSync(process.execPath, [checkerScriptPath], {
       cwd: tempRoot,
       encoding: 'utf8',
     });
-
-    return {
-      status: result.status,
-      output: `${result.stdout}${result.stderr}`,
-    };
-  }
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(crossOwner ? 1 : 0);
+    expect(result.stdout + result.stderr).toContain(
+      crossOwner
+        ? 'cross-owner raw persistence accessor'
+        : 'Service accessor boundaries check passed.'
+    );
+  });
 
   it('allows owner-internal deep accessor imports', () => {
     const result = runChecker([
@@ -57,7 +76,7 @@ describe('check-service-accessor-boundaries', () => {
     ]);
 
     expect(result.status).toBe(0);
-    expect(result.output).toContain('Service accessor boundaries check passed.');
+    expect(result.output).toBe('');
   });
 
   it('ignores local export declarations without a module specifier', () => {
@@ -394,7 +413,7 @@ describe('check-service-accessor-boundaries', () => {
     ]);
 
     expect(result.status).toBe(0);
-    expect(result.output).toContain('Service accessor boundaries check passed.');
+    expect(result.output).toBe('');
   });
 
   it('allows ordinary capsule barrel mocks with accessor-shaped properties', () => {
@@ -407,7 +426,7 @@ describe('check-service-accessor-boundaries', () => {
     ]);
 
     expect(result.status).toBe(0);
-    expect(result.output).toContain('Service accessor boundaries check passed.');
+    expect(result.output).toBe('');
   });
 
   it.each(['js', 'mjs', 'cjs'])(

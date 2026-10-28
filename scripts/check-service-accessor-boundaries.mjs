@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts']);
@@ -646,31 +647,36 @@ function checkAccessorPolicyCoverage(sourceFiles, rootDir, violations) {
   }
 }
 
-const rootDir = process.cwd();
-const sourceRoot = path.join(rootDir, SOURCE_ROOT);
-let sourceFiles = [];
+export function collectServiceAccessorBoundaryViolations(rootDir = process.cwd()) {
+  const sourceRoot = path.join(rootDir, SOURCE_ROOT);
+  let sourceFiles = [];
 
-try {
-  sourceFiles = collectSourceFiles(sourceRoot);
-} catch (error) {
-  if (error?.code !== 'ENOENT') {
-    throw error;
+  try {
+    sourceFiles = collectSourceFiles(sourceRoot);
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      throw error;
+    }
   }
+
+  const violations = [];
+  checkAccessorPolicyCoverage(sourceFiles, rootDir, violations);
+  for (const sourceFile of sourceFiles) {
+    checkSourceFile(sourceFile, rootDir, violations);
+  }
+  checkCapsuleBarrelExportChains(sourceFiles, rootDir, violations);
+  return [...new Set(violations)].sort();
 }
 
-const violations = [];
-checkAccessorPolicyCoverage(sourceFiles, rootDir, violations);
-for (const sourceFile of sourceFiles) {
-  checkSourceFile(sourceFile, rootDir, violations);
-}
-checkCapsuleBarrelExportChains(sourceFiles, rootDir, violations);
-
-if (violations.length > 0) {
-  console.error('Service accessor boundary violations:');
-  for (const violation of [...new Set(violations)].sort()) {
-    console.error(`- ${violation}`);
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const violations = collectServiceAccessorBoundaryViolations();
+  if (violations.length > 0) {
+    console.error('Service accessor boundary violations:');
+    for (const violation of violations) {
+      console.error(`- ${violation}`);
+    }
+    process.exitCode = 1;
+  } else {
+    console.log('Service accessor boundaries check passed.');
   }
-  process.exitCode = 1;
-} else {
-  console.log('Service accessor boundaries check passed.');
 }

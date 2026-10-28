@@ -1,10 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { cssComments, htmlComments, markdownComments, yamlComments } from './lint-comments.mjs';
 
-const ROOT = process.cwd();
 const SCAN_ROOTS = [
   'src',
   'electron',
@@ -50,14 +50,14 @@ function walkFiles(dirPath, out) {
   }
 }
 
-function countSuppressions() {
+export function countSuppressions(rootDir = process.cwd()) {
   const files = [];
   for (const root of SCAN_ROOTS) {
-    walkFiles(path.join(ROOT, root), files);
+    walkFiles(path.join(rootDir, root), files);
   }
-  for (const entry of fs.readdirSync(ROOT, { withFileTypes: true })) {
+  for (const entry of fs.readdirSync(rootDir, { withFileTypes: true })) {
     if (entry.isFile()) {
-      files.push(path.join(ROOT, entry.name));
+      files.push(path.join(rootDir, entry.name));
     }
   }
 
@@ -68,7 +68,7 @@ function countSuppressions() {
     if (!/\.(?:[cm]?[jt]sx?|css|jsonc?|html|mdx?|ya?ml)$/.test(filePath)) {
       continue;
     }
-    const relativePath = toPosixPath(path.relative(ROOT, filePath));
+    const relativePath = toPosixPath(path.relative(rootDir, filePath));
     if (isSuppressionAllowed(relativePath)) {
       continue;
     }
@@ -151,4 +151,6 @@ function main() {
   console.log('No inline lint/format suppressions found outside prisma/generated/.');
 }
 
-main();
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main();
+}
