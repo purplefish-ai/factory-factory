@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { MarkdownRenderer } from '@/components/ui/markdown';
 import { PromptCard } from '@/components/ui/prompt-card';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import type { PermissionRequest } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
 import { extractPlanText } from '@/shared/acp-protocol/plan-content';
@@ -135,6 +136,7 @@ function PermissionDecisionCard({
       icon={<TerminalIcon className="h-5 w-5 text-muted-foreground" aria-hidden="true" />}
       label={`Permission request for ${toolName}`}
       className={className}
+      actionsPlacement="below"
       actions={
         <PermissionDecisionActions
           allowButtonRef={allowButtonRef}
@@ -194,7 +196,26 @@ function getPermissionOptionStyle(kind: PermissionOption['kind']) {
 }
 
 const permissionOptionButtonClass =
-  'h-auto min-h-8 max-w-full gap-1.5 whitespace-normal text-left leading-snug';
+  'h-auto min-h-8 min-w-0 max-w-full gap-1.5 whitespace-normal text-left leading-snug';
+
+function PermissionInput({ content }: { content: string }) {
+  return (
+    <ScrollArea
+      className="mt-2 min-w-0 rounded-md border bg-background"
+      scrollbars="both"
+      viewportProps={{
+        role: 'region',
+        'aria-label': 'Tool input',
+        tabIndex: 0,
+        className: 'max-h-48',
+      }}
+    >
+      <pre className="p-3 font-mono text-xs font-normal leading-relaxed whitespace-pre">
+        {content}
+      </pre>
+    </ScrollArea>
+  );
+}
 
 // =============================================================================
 // Plan View Toggle
@@ -334,7 +355,7 @@ function PlanApprovalPrompt({ permission, onApprove, className }: PermissionProm
                 className={permissionOptionButtonClass}
               >
                 <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-                {option.name}
+                <span className="min-w-0 [overflow-wrap:anywhere]">{option.name}</span>
               </Button>
             );
           })}
@@ -386,8 +407,9 @@ function AcpPermissionPrompt({ permission, onApprove, className }: PermissionPro
       icon={<TerminalIcon className="h-5 w-5 text-muted-foreground" aria-hidden="true" />}
       label={`Permission request for ${toolName}`}
       className={className}
+      actionsPlacement="below"
       actions={
-        <div className="flex flex-wrap gap-2">
+        <div className="flex min-w-0 w-full flex-wrap justify-end gap-2">
           {[...allowOptions, ...rejectOptions].map((option, index) => {
             const style = getPermissionOptionStyle(option.kind);
             const Icon = style.icon;
@@ -401,14 +423,14 @@ function AcpPermissionPrompt({ permission, onApprove, className }: PermissionPro
                 className={permissionOptionButtonClass}
               >
                 <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-                {option.name}
+                <span className="min-w-0 [overflow-wrap:anywhere]">{option.name}</span>
               </Button>
             );
           })}
         </div>
       }
     >
-      <div className="text-sm font-medium">Permission: {toolName}</div>
+      <div className="text-sm font-medium break-words">Permission: {toolName}</div>
       {permission.elicitation === 'url' &&
       typeof toolInput.url === 'string' &&
       /^https?:\/\//i.test(toolInput.url) ? (
@@ -423,18 +445,15 @@ function AcpPermissionPrompt({ permission, onApprove, className }: PermissionPro
             {toolInput.url}
           </a>
         </div>
-      ) : (
+      ) : permission.elicitation === 'form' && typeof toolInput.message === 'string' ? (
         <div
-          className={cn(
-            'text-xs text-muted-foreground mt-1 whitespace-pre-wrap break-words max-h-32 overflow-y-auto',
-            permission.elicitation !== 'form' && 'font-mono'
-          )}
-          title={inputPreview}
+          className="mt-1 max-h-32 overflow-y-auto text-xs text-muted-foreground whitespace-pre-wrap break-words"
+          title={toolInput.message}
         >
-          {permission.elicitation === 'form' && typeof toolInput.message === 'string'
-            ? toolInput.message
-            : inputPreview}
+          {toolInput.message}
         </div>
+      ) : (
+        <PermissionInput content={inputPreview} />
       )}
     </PromptCard>
   );
@@ -493,10 +512,8 @@ export function PermissionPrompt({ permission, onApprove, className }: Permissio
       onDeny={handleDeny}
       className={className}
     >
-      <div className="text-sm font-medium">Permission: {toolName}</div>
-      <div className="text-xs text-muted-foreground mt-1 font-mono truncate" title={inputPreview}>
-        {inputPreview}
-      </div>
+      <div className="text-sm font-medium break-words">Permission: {toolName}</div>
+      <PermissionInput content={inputPreview} />
     </PermissionDecisionCard>
   );
 }
@@ -536,12 +553,8 @@ export function PermissionPromptExpanded({
       className={className}
     >
       <div className="space-y-2">
-        <div className="text-sm font-medium">Permission: {toolName}</div>
-        <div className="bg-background rounded-md p-2 border">
-          <pre className="text-xs overflow-x-auto max-h-32 overflow-y-auto whitespace-pre-wrap font-mono">
-            {formatToolInput(toolInput)}
-          </pre>
-        </div>
+        <div className="text-sm font-medium break-words">Permission: {toolName}</div>
+        <PermissionInput content={formatToolInput(toolInput)} />
       </div>
     </PermissionDecisionCard>
   );

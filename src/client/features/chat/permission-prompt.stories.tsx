@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { fn } from 'storybook/test';
+import { expect, fn, within } from 'storybook/test';
 import {
   createPermissionRequest,
   createPlanApprovalRequest,
@@ -297,14 +297,70 @@ export const FormConsent: Story = {
 export const LongAcpCommand: Story = {
   args: {
     permission: {
-      ...createPermissionRequest('Run shell command', {
-        command: Array.from({ length: 30 }, (_, index) => `echo "Step ${index + 1}"`).join('\n'),
+      ...createPermissionRequest('Bash', {
+        command: `python3 - <<'EOF'
+from pathlib import Path
+
+path = Path('src/client/features/kanban/permission-requests/fixtures/generated/very-long-command-preview-regression.test.tsx')
+source = path.read_text()
+${Array.from({ length: 30 }, (_, index) => `source = source.replace('before ${index}', 'after ${index}')`).join('\n')}
+path.write_text(source)
+EOF`,
       }),
       acpOptions: [
-        { optionId: 'allow_once', kind: 'allow_once', name: 'Allow once' },
-        { optionId: 'reject_once', kind: 'reject_once', name: 'Reject' },
+        { optionId: 'allow_once', kind: 'allow_once', name: 'Yes' },
+        {
+          optionId: 'allow_always',
+          kind: 'allow_always',
+          name: "Yes, and don't ask again for pnpm -s vitest run src/client/features/kanban commands",
+        },
+        { optionId: 'reject_once', kind: 'reject_once', name: 'No' },
       ],
     },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const prompt = canvas.getByRole('alertdialog');
+    const preview = canvas.getByRole('region', { name: 'Tool input' });
+    const bounds = prompt.getBoundingClientRect();
+    const inputBounds = preview.getBoundingClientRect();
+    // Commands keep the available width even when an approval label is long.
+    await expect(inputBounds.width).toBeGreaterThan(bounds.width * 0.7);
+    await expect(getComputedStyle(preview.querySelector('pre') ?? preview).whiteSpace).toBe('pre');
+    await expect(preview.scrollHeight).toBeGreaterThan(preview.clientHeight);
+    await expect(preview.scrollWidth).toBeGreaterThan(preview.clientWidth);
+    for (const button of canvas.getAllByRole('button')) {
+      const actionBounds = button.getBoundingClientRect();
+      await expect(actionBounds.top).toBeGreaterThanOrEqual(inputBounds.bottom);
+      await expect(actionBounds.left).toBeGreaterThanOrEqual(bounds.left);
+      await expect(actionBounds.right).toBeLessThanOrEqual(bounds.right);
+      await expect(button.scrollWidth).toBeLessThanOrEqual(button.clientWidth);
+    }
+  },
+};
+
+export const UnbrokenAcpOption: Story = {
+  ...LongAcpCommand,
+  args: {
+    permission: {
+      ...createPermissionRequest('Bash', { command: 'pnpm test' }),
+      acpOptions: [
+        {
+          optionId: 'allow_always',
+          kind: 'allow_always',
+          name: `Always allow ${'long_directory_name_'.repeat(30)}`,
+        },
+        { optionId: 'reject_once', kind: 'reject_once', name: 'No' },
+      ],
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const bounds = canvas.getByRole('alertdialog').getBoundingClientRect();
+    for (const button of canvas.getAllByRole('button')) {
+      await expect(button.getBoundingClientRect().right).toBeLessThanOrEqual(bounds.right);
+      await expect(button.scrollWidth).toBeLessThanOrEqual(button.clientWidth);
+    }
   },
 };
 
