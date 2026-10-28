@@ -33,6 +33,7 @@ export function setupStartupConfig(provider: 'CLAUDE' | 'CODEX' = 'CODEX') {
   const h = createLifecycleHarness({
     provider,
     providerSessionId: 'thread',
+    session: { model: 'first' },
     getPermissionPreset: () => Promise.resolve('STRICT'),
   });
   let row = { ...structuredClone(h.session), updatedAt: new Date(1) };
@@ -78,6 +79,12 @@ export function setupStartupConfig(provider: 'CLAUDE' | 'CODEX' = 'CODEX') {
   );
   h.repository.getSessionById.mockImplementation(repository.getSessionById.bind(repository));
   h.repository.updateSession.mockImplementation(repository.updateSession.bind(repository));
+  h.repository.acknowledgeStartupConfiguration.mockImplementation(
+    repository.acknowledgeStartupConfiguration.bind(repository)
+  );
+  h.repository.updatePendingLaunchConfiguration.mockImplementation(
+    repository.updatePendingLaunchConfiguration.bind(repository)
+  );
   const handle = createTestProcessHandle({
     provider,
     providerSessionId: 'thread',
@@ -99,6 +106,9 @@ export function setupStartupConfig(provider: 'CLAUDE' | 'CODEX' = 'CODEX') {
   const controller = new AcpRuntimeConfigController();
   const runtime = {
     ...h.runtimeManager,
+    setSessionModel: vi.fn((id: string, model: string) =>
+      controller.setSessionModel(handle, model, id)
+    ),
     setConfigOption: vi.fn((id: string, key: string, value: string) =>
       controller.setConfigOption(handle, key, value, id)
     ),
@@ -117,6 +127,12 @@ export function setupStartupConfig(provider: 'CLAUDE' | 'CODEX' = 'CODEX') {
     sessionDomainService: unsafeCoerce(h.sessionDomainService),
     codexModelCatalogService: { getModels: () => Promise.resolve([]) },
   });
+  h.sessionConfigService.requireSavedStartupAccess.mockImplementation(
+    config.requireSavedStartupAccess.bind(config)
+  );
+  h.sessionConfigService.applyStartupModel.mockImplementation(
+    config.applyStartupModel.bind(config)
+  );
   h.sessionConfigService.applyConfiguredPermissionPreset.mockImplementation(
     config.applyConfiguredPermissionPreset.bind(config)
   );

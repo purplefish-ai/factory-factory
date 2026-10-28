@@ -16,7 +16,6 @@ import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import { SessionStatus } from '@/shared/core';
 import type { AcpEventProcessor } from './acp-event-processor';
 import type { SessionContextService } from './session-context.service';
-import { markSessionLaunchSettingsApplied } from './session-launch-settings';
 import { type SessionLifecycleGate, SessionStartupCancelledError } from './session-lifecycle-gate';
 import type { SessionAcpEnvironmentPort } from './session-lifecycle.types';
 import type { SessionNotificationDeliveryService } from './session-notification-delivery.service';
@@ -24,10 +23,11 @@ import {
   SessionStartupPermissionError,
   SessionStartupTargetError,
 } from './session-permission-policy';
-import { restorePRResumeConfig } from './session-pr-resume-config';
 import type { SessionRuntimeExitCoordinator } from './session-runtime-exit.coordinator';
 import { stopStartupConfigurationFailure } from './session-startup-config-failure';
 import { SessionStartupPersistenceError } from './session-startup-configuration-finalizer';
+import { prepareSessionStartup } from './session-startup-preparation';
+import { SessionStartupRequest } from './session-startup-request';
 import type { StopSessionOptions } from './session-termination.coordinator';
 import type {
   PersistAcpConfigSnapshotParams,
@@ -89,6 +89,8 @@ export type SessionStartupCoordinatorDependencies = {
   >;
   sessionConfigService: Pick<
     SessionConfigService,
+    | 'requireSavedStartupAccess'
+    | 'applyStartupModel'
     | 'applyConfiguredPermissionPreset'
     | 'applyConfiguredReasoningEffort'
     | 'applyStartupModePreset'
@@ -422,6 +424,12 @@ export class SessionStartupCoordinator {
     };
 
     await this.assertCreationAllowed(sessionId, stopGeneration, options.assertCurrent);
+    const latest = await this.dependencies.repository.getSessionById(sessionId);
+    await this.assertCreationAllowed(sessionId, stopGeneration, options.assertCurrent);
+    if (!latest) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+    clientOptions.model = options.model ?? latest.model;
     const creationPromise = this.dependencies.runtimeManager.getOrCreateClient(
       sessionId,
       clientOptions,
@@ -432,82 +440,17 @@ export class SessionStartupCoordinator {
       }
     );
     let handle: AcpProcessHandle | undefined;
+    let request: SessionStartupRequest | undefined;
     try {
       handle = await creationPromise;
-      const candidate = handle;
       this.markRuntimeShared(handle, ownership);
-      await this.assertCreationAllowed(sessionId, stopGeneration, options.assertCurrent);
       if (browseOnly) {
+        await this.assertCreationAllowed(sessionId, stopGeneration, options.assertCurrent);
         return { handle, dispatchableNotificationCount: 0 };
       }
       if (options.resumePolicy === 'require_existing') {
         this.assertExistingConversation(session, handle, true);
-        await restorePRResumeConfig(session, handle, () =>
-          this.assertStartupAllowed(sessionId, stopGeneration)
-        );
-      } else {
-        await this.withPermissionFailureStop(
-          sessionId,
-          handle,
-          stopGeneration,
-          () =>
-            this.dependencies.sessionConfigService.applyConfiguredReasoningEffort(
-              sessionId,
-              candidate,
-              {
-                persistSnapshot: false,
-                emitUpdates: false,
-                session,
-                reasoningEffort: options.reasoningEffort,
-              }
-            ),
-          undefined,
-          true
-        );
       }
-      if (
-        options.resumePolicy !== 'require_existing' ||
-        session.workflow === ADVERSARIAL_REVIEW_WORKFLOW
-      ) {
-        // Permission enforcement must stop an unsafe candidate even when another caller shares it.
-        await this.applyConfiguredPermissionPreset(
-          sessionId,
-          session,
-          handle,
-          stopGeneration,
-          permissionPreset
-        );
-      }
-      await this.applyStartupModePreset(
-        sessionId,
-        handle,
-        options.startupModePreset,
-        session.workflow
-      );
-      await this.withPermissionFailureStop(
-        sessionId,
-        handle,
-        stopGeneration,
-        () =>
-          this.dependencies.sessionConfigService.applyStartupLaunchPlan(
-            sessionId,
-            session,
-            candidate,
-            permissionPreset,
-            options.planModeEnabled
-          ),
-        undefined,
-        true
-      );
-
-      await this.reapplyReviewPermissions(
-        sessionId,
-        session,
-        handle,
-        stopGeneration,
-        permissionPreset
-      );
-      await this.assertCreationAllowed(sessionId, stopGeneration, options.assertCurrent);
       const configuredHandle = handle;
       const assertConfiguredRuntime = () => {
         this.assertStartupAllowed(sessionId, stopGeneration);
@@ -515,29 +458,47 @@ export class SessionStartupCoordinator {
           throw new Error('Session runtime changed during configuration');
         }
       };
+      const candidateRequest = new SessionStartupRequest(
+        assertConfiguredRuntime,
+        () => Boolean(ownership?.shared || !registration.isOnlyOperation()),
+        options.assertCurrent
+      );
+      request = candidateRequest;
+      await candidateRequest.check();
+      const prepare = () =>
+        prepareSessionStartup(
+          sessionId,
+          configuredHandle,
+          { ...options, permissionPreset },
+          {
+            repository: this.dependencies.repository,
+            config: this.dependencies.sessionConfigService,
+            assertCurrent: assertConfiguredRuntime,
+            checkCurrent: () => candidateRequest.check(),
+            isRequestFailure: (error: unknown) => candidateRequest.isRequestFailure(error),
+          }
+        );
       await this.withPermissionFailureStop(
         sessionId,
         configuredHandle,
         stopGeneration,
-        async () =>
-          this.dependencies.sessionConfigService.completeStartupConfiguration(sessionId, {
+        async () => {
+          const intent = await prepare();
+          await this.dependencies.sessionConfigService.completeStartupConfiguration(sessionId, {
             handle: configuredHandle,
-            existingMetadata: markSessionLaunchSettingsApplied(
-              configuredHandle.sessionCreationOutcome?.kind === 'resume_fallback'
-                ? ((await this.dependencies.repository.getSessionById(sessionId))
-                    ?.providerMetadata ?? undefined)
-                : (session.providerMetadata ?? undefined)
-            ),
+            intent,
+            prepare,
             assertCurrent: assertConfiguredRuntime,
-            beforeComplete: () =>
-              this.assertCreationAllowed(sessionId, stopGeneration, options.assertCurrent),
+            beforeComplete: () => candidateRequest.check(),
             complete: () => configuredHandle.completeConfiguration(assertConfiguredRuntime),
-          }),
+          });
+        },
         undefined,
         true
       );
+      candidateRequest.rejectCancelledRequest();
     } catch (error) {
-      if (!isTerminalConfigFailure(error)) {
+      if (!(isTerminalConfigFailure(error) || request?.preservesSharedCandidate(error))) {
         handle?.failConfiguration(error);
       }
       await this.cleanupFailedClientCreation(
@@ -697,6 +658,7 @@ export class SessionStartupCoordinator {
         : await this.dependencies.contextService.resolvePermissionPreset(session);
     await this.assertCreationAllowed(sessionId, stopGeneration, options.assertCurrent);
 
+    const startupOwnership = ownership ?? { shared: false };
     return await this.dependencies.runtimeManager.runClientCreationOperation(
       sessionId,
       'active',
@@ -711,7 +673,7 @@ export class SessionStartupCoordinator {
             resolvedPreset,
             stopGeneration,
             registration,
-            ownership
+            startupOwnership
           );
           handle = created.handle;
           dispatchableNotificationCount = created.dispatchableNotificationCount;
@@ -736,10 +698,10 @@ export class SessionStartupCoordinator {
               handle ?? this.dependencies.runtimeManager.getClient(sessionId) ?? undefined,
               registration,
               stopGeneration,
-              ownership
+              startupOwnership
             );
           }
-          if (this.canUpdateFailedStartupState(sessionId, ownership, stopGeneration)) {
+          if (this.canUpdateFailedStartupState(sessionId, startupOwnership, stopGeneration)) {
             this.dependencies.sessionDomainService.setRuntimeSnapshot(sessionId, {
               phase: 'error',
               processState: 'stopped',

@@ -3,7 +3,10 @@ import { createLogger } from '@/backend/services/logger.service';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import { withConfiguredAcpHandle } from '@/backend/services/session/service/acp/acp-configured-handle';
-import { resolveAcpModelSelection } from '@/backend/services/session/service/acp/acp-model-selection';
+import {
+  confirmsAcpModelSelection,
+  resolveAcpModelSelection,
+} from '@/backend/services/session/service/acp/acp-model-selection';
 import { normalizeSessionConfigOptions } from '@/backend/services/session/service/acp/acp-session-config-options';
 import { fetchSessionLaunchOptionsFromAcp } from '@/backend/services/session/service/acp/session-launch-options-probe';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
@@ -31,6 +34,7 @@ import {
 export type { PersistAcpConfigSnapshotParams } from './session-config-snapshot-persistence';
 import { setInactiveSessionConfigOption } from './session-inactive-config-options';
 import { SessionLaunchOptionsService } from './session-launch-options.service';
+import { readSessionLaunchSettings } from './session-launch-settings';
 import {
   applyReadOnlyReviewPermissions,
   assertReadOnlyReviewConfigOption,
@@ -93,7 +97,8 @@ export class SessionConfigService {
     this.startupFinalizer = new SessionStartupConfigurationFinalizer(
       this.snapshotPersistence,
       this.configAuthority,
-      this.startupPermissions
+      this.startupPermissions,
+      this.repository
     );
     this.runtimeManager = options.runtimeManager;
     this.codexModelCatalogService = options.codexModelCatalogService;
@@ -107,6 +112,43 @@ export class SessionConfigService {
         } as SessionDeltaEvent);
       }
     );
+  }
+
+  requireSavedStartupAccess(handle: AcpProcessHandle, metadata: unknown): void {
+    const snapshot = parseAcpConfigSnapshot(metadata);
+    if (
+      snapshot?.provider === handle.provider &&
+      snapshot.providerSessionId === handle.providerSessionId
+    ) {
+      this.startupPermissions.capture(handle, snapshot.configOptions);
+    }
+  }
+
+  async applyStartupModel(
+    sessionId: string,
+    handle: AcpProcessHandle,
+    model: string
+  ): Promise<void> {
+    const assertCurrent = this.acceptRuntime(sessionId, handle);
+    const target = resolveAcpModelSelection(handle.provider, handle.configOptions, model);
+    if (
+      handle.configOptions.find((option) => option.id === target.configId)?.currentValue !==
+      target.value
+    ) {
+      await this.runtimeManager.setSessionModel(sessionId, target.value);
+    }
+    assertCurrent();
+    if (
+      !confirmsAcpModelSelection(
+        handle.provider,
+        model,
+        target.value,
+        handle.configOptions.find((option) => option.id === target.configId)?.currentValue
+      )
+    ) {
+      throw new SessionStartupTargetError(new Error('Requested startup model was not applied'));
+    }
+    this.acceptConfiguration(sessionId, handle);
   }
 
   async applyStartupLaunchPlan(
@@ -342,7 +384,11 @@ export class SessionConfigService {
   ): Promise<boolean> {
     const snapshot = parseAcpConfigSnapshot(session.providerMetadata);
     if (snapshot) {
-      this.startupPermissions.capture(handle, snapshot.configOptions);
+      this.startupPermissions.capture(
+        handle,
+        snapshot.configOptions,
+        readSessionLaunchSettings(session.providerMetadata)?.planModeEnabled !== undefined
+      );
     }
     const restored = await restoreSavedNativeModes(sessionId, session, handle, this.runtimeManager);
     if (restored === undefined) {

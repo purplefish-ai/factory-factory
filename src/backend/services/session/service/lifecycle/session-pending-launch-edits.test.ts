@@ -5,6 +5,7 @@ import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { readSessionLaunchSettings } from './session-launch-settings';
 import { createLifecycleTestSession } from './session-lifecycle.test-helpers';
 import { SessionConfigService } from './session.config.service';
+import { SessionRepository } from './session.repository';
 
 function select(
   id: string,
@@ -63,8 +64,25 @@ function fixture(provider: 'CLAUDE' | 'CODEX', applied = false) {
       Promise.resolve(Object.assign(session, update))
     ),
   };
+  const durable = new SessionRepository(
+    unsafeCoerce({
+      findById: () => Promise.resolve(structuredClone(session)),
+      update: repository.updateSession,
+      updateIfProviderIdentity: (_id: string, expected: typeof session, data: object) => {
+        if (
+          +expected.updatedAt !== +session.updatedAt ||
+          JSON.stringify(expected.providerMetadata) !== JSON.stringify(session.providerMetadata)
+        ) {
+          return Promise.resolve(0);
+        }
+        Object.assign(session, data, { updatedAt: new Date(+session.updatedAt + 1) });
+        return Promise.resolve(1);
+      },
+    }),
+    unsafeCoerce({})
+  );
   const service = new SessionConfigService({
-    repository: unsafeCoerce(repository),
+    repository: durable,
     runtimeManager: unsafeCoerce(runtime),
     codexModelCatalogService: { getModels: vi.fn() },
     sessionDomainService: unsafeCoerce({ emitDelta: vi.fn() }),

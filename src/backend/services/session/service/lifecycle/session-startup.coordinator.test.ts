@@ -449,6 +449,7 @@ describe('SessionStartupCoordinator', () => {
     );
     expect(acpEventProcessor.clearSessionState).not.toHaveBeenCalled();
 
+    runtimeManager.getClient.mockReturnValue(handle);
     activeCreation.resolve(handle);
     await expect(activeResult).resolves.toBe(handle);
   });
@@ -483,6 +484,9 @@ describe('SessionStartupCoordinator', () => {
       createPendingWorkspaceNotification(),
     ] as never);
     runtimeManager.getOrCreateClient.mockImplementation((_id, options) => {
+      if (options.purpose !== 'browse') {
+        runtimeManager.getClient.mockReturnValue(handle);
+      }
       if (options.purpose === 'browse') {
         runtimeManager.getSubagentBrowseCapability.mockReturnValue({
           version: 1,

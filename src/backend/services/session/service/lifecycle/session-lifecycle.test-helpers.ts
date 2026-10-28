@@ -73,6 +73,8 @@ export type LifecycleHarness = {
     | 'getWorkspaceById'
     | 'markWorkspaceHasHadSessions'
     | 'updateSession'
+    | 'acknowledgeStartupConfiguration'
+    | 'updatePendingLaunchConfiguration'
     | 'updateSessionIfStatus'
     | 'deleteSession'
     | 'recoverStaleRunningSessions'
@@ -128,6 +130,8 @@ export type LifecycleHarness = {
   >;
   sessionConfigService: MockedPick<
     SessionConfigService,
+    | 'requireSavedStartupAccess'
+    | 'applyStartupModel'
     | 'applyConfiguredReasoningEffort'
     | 'applyStartupModePreset'
     | 'applyStartupLaunchPlan'
@@ -231,7 +235,15 @@ export function mockCreatedAcpClient(
     completeConfiguration: vi.fn((assertCurrent?: () => void) => assertCurrent?.()),
     failConfiguration: vi.fn(),
   });
-  vi.mocked(runtimeManager.getOrCreateClient).mockImplementation(() => {
+  vi.mocked(runtimeManager.getOrCreateClient).mockImplementation((_id, options) => {
+    Object.assign(acpHandle, {
+      provider: acpHandle.provider ?? options.provider,
+      providerSessionId:
+        acpHandle.providerSessionId ?? options.resumeProviderSessionId ?? 'provider-session-1',
+      sessionCreationOutcome: acpHandle.sessionCreationOutcome ?? {
+        kind: options.resumeProviderSessionId ? 'resumed' : 'new',
+      },
+    });
     vi.mocked(runtimeManager.getClient).mockReturnValue(acpHandle);
     return Promise.resolve(acpHandle);
   });
@@ -274,7 +286,7 @@ export function createTerminationHarness(
   >;
   const retryService = new SessionRetryService();
   const runtimeManager = {
-    getClient: vi.fn(() => undefined),
+    getClient: vi.fn<AcpRuntimeManager['getClient']>(() => undefined),
     isSessionWorking: vi.fn(() => false),
     isStopInProgress: vi.fn(() => false),
     isSessionRunning: vi.fn((sessionId: string) => sessionId === 'session-runtime-only'),
@@ -529,6 +541,14 @@ export function createLifecycleHarness(
       async () => undefined
     ),
     updateSession: vi.fn<SessionRepository['updateSession']>(async () => session),
+    acknowledgeStartupConfiguration: vi.fn<SessionRepository['acknowledgeStartupConfiguration']>(
+      (id, data, _intent, guard): Promise<AgentSessionRecord> =>
+        repository.updateSession(id, data, guard)
+    ),
+    updatePendingLaunchConfiguration: vi.fn<SessionRepository['updatePendingLaunchConfiguration']>(
+      (id, data, _patch, guard): Promise<AgentSessionRecord> =>
+        repository.updateSession(id, data, guard)
+    ),
     updateSessionIfStatus: vi.fn<SessionRepository['updateSessionIfStatus']>(async () => 0),
     deleteSession: vi.fn<SessionRepository['deleteSession']>(async () => session),
     recoverStaleRunningSessions: vi.fn<SessionRepository['recoverStaleRunningSessions']>(
@@ -541,6 +561,8 @@ export function createLifecycleHarness(
     | 'getWorkspaceById'
     | 'markWorkspaceHasHadSessions'
     | 'updateSession'
+    | 'acknowledgeStartupConfiguration'
+    | 'updatePendingLaunchConfiguration'
     | 'updateSessionIfStatus'
     | 'deleteSession'
     | 'recoverStaleRunningSessions'
@@ -556,14 +578,21 @@ export function createLifecycleHarness(
     hasClientCreationOperation: vi.fn(() => false),
     isBrowseOnlySession: vi.fn((sessionId: string) => sessionId === 'session-browse-only'),
     isSessionWorking: vi.fn(() => false),
-    getClient: vi.fn(() => undefined),
+    getClient: vi.fn<AcpRuntimeManager['getClient']>(() => undefined),
     getBrowseClient: vi.fn(() => undefined),
     getPendingClient: vi.fn(() => undefined),
     getSubagentBrowseCapability: vi.fn<AcpRuntimeManager['getSubagentBrowseCapability']>(
       () => null
     ),
     getOrCreateClient: vi.fn<AcpRuntimeManager['getOrCreateClient']>(
-      overrides.getOrCreateClient ?? (async () => handle)
+      overrides.getOrCreateClient ??
+        ((_id, options, handlers) => {
+          handlers.onRuntimeCreated?.(handle);
+          if (options.purpose !== 'browse') {
+            runtimeManager.getClient.mockReturnValue(handle);
+          }
+          return Promise.resolve(handle);
+        })
     ),
     runClientCreationOperation: vi.fn(runClientCreationOperation) as Mock<
       AcpRuntimeManager['runClientCreationOperation']
@@ -629,6 +658,8 @@ export function createLifecycleHarness(
     | 'markError'
   >;
   const sessionConfigService = {
+    requireSavedStartupAccess: vi.fn<SessionConfigService['requireSavedStartupAccess']>(),
+    applyStartupModel: vi.fn<SessionConfigService['applyStartupModel']>(async () => undefined),
     applyConfiguredReasoningEffort: vi.fn(async () => undefined),
     applyStartupModePreset: vi.fn(async () => undefined),
     applyStartupLaunchPlan: vi.fn(async () => undefined),
@@ -647,6 +678,8 @@ export function createLifecycleHarness(
     ),
   } satisfies Pick<
     SessionConfigService,
+    | 'requireSavedStartupAccess'
+    | 'applyStartupModel'
     | 'applyConfiguredReasoningEffort'
     | 'applyStartupModePreset'
     | 'applyStartupLaunchPlan'

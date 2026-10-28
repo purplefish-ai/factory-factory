@@ -48,6 +48,8 @@ function setupSupervisor() {
     codexModelCatalogService: { getModels: () => Promise.resolve([]) },
   });
   for (const name of [
+    'requireSavedStartupAccess',
+    'applyStartupModel',
     'applyConfiguredReasoningEffort',
     'applyConfiguredPermissionPreset',
     'applyStartupModePreset',
@@ -189,6 +191,7 @@ describe('real supervisor and startup configuration phase ordering', () => {
         });
         replacement.configOptions = startupConfigOptions('third');
         exitChildWithCode(unsafeCoerce<MockChildProcess>(replacement.child));
+        h.setSession({ model: 'third' });
         h.factory.mockResolvedValueOnce(replacement);
         await h.service.startSession(h.session.id, { initialPrompt: 'Replacement prompt' });
         expect(h.manager.getClient(h.session.id)).toBe(replacement);

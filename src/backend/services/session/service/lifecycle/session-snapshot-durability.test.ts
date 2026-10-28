@@ -7,6 +7,7 @@ import {
   readSessionLaunchSettings,
 } from './session-launch-settings';
 import { createLifecycleTestSession, createDeferred } from './session-lifecycle.test-helpers';
+import { captureSessionStartupIntent } from './session-startup-intent';
 import { SessionConfigService } from './session.config.service';
 import { SessionRepository } from './session.repository';
 function options(effort: string): SessionConfigOption[] {
@@ -92,6 +93,7 @@ function fixture() {
     handle.configOptions = options('medium');
     return service.completeStartupConfiguration('session-1', {
       handle,
+      intent: captureSessionStartupIntent(row),
       existingMetadata: markSessionLaunchSettingsApplied(row.providerMetadata),
       assertCurrent: () => {
         if (runtime.getClient() !== handle) {

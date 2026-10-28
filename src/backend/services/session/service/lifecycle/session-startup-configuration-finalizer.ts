@@ -7,6 +7,12 @@ import type {
 import type { SessionProvider } from './session-config-option-helpers';
 import type { SessionConfigSnapshotPersistence } from './session-config-snapshot-persistence';
 import type { SessionStartupPermissions } from './session-permission-policy';
+import {
+  matchesSessionStartupIntent,
+  SessionStartupIntentChangedError,
+  type SessionStartupIntent,
+} from './session-startup-intent';
+import type { SessionRepository } from './session.repository';
 
 export class SessionStartupPersistenceError extends Error {
   constructor(error: unknown) {
@@ -20,6 +26,8 @@ export type CompleteStartupConfigurationParams = {
   assertCurrent: () => void;
   beforeComplete: () => Promise<void>;
   complete: () => void;
+  prepare?: () => Promise<SessionStartupIntent>;
+  intent?: SessionStartupIntent;
 };
 
 /** Config owns the final durable authority and synchronous permission/readiness handoff. */
@@ -35,14 +43,82 @@ export class SessionStartupConfigurationFinalizer {
   constructor(
     private readonly snapshots: SessionConfigSnapshotPersistence,
     private readonly authority: SessionConfigCommitAuthority,
-    private readonly permissions: SessionStartupPermissions
+    private readonly permissions: SessionStartupPermissions,
+    private readonly repository: Pick<SessionRepository, 'getSessionById'>
   ) {}
 
   async complete(sessionId: string, params: CompleteStartupConfigurationParams): Promise<void> {
+    let intent = params.intent ?? (await params.prepare?.());
     for (;;) {
-      params.assertCurrent();
-      this.permissions.assertCurrent(params.handle, params.existingMetadata);
+      const before = await this.refreshIntent(sessionId, intent, params);
+      intent = before.intent;
+      if (before.changed) {
+        continue;
+      }
       const { options, accepted } = this.capture(sessionId, params);
+      const model = options.find((option) => option.category === 'model')?.currentValue;
+      if (intent && typeof model === 'string') {
+        intent = { ...intent, confirmedModel: model };
+      }
+      const result = await this.persistCurrent(sessionId, params, options, accepted, intent);
+      if (result === 'intent_changed') {
+        intent = await this.prepareAgain(params);
+        continue;
+      }
+      if (result === 'superseded') {
+        continue;
+      }
+      await params.beforeComplete();
+      const after = await this.refreshIntent(sessionId, intent, params);
+      intent = after.intent;
+      if (after.changed) {
+        continue;
+      }
+      params.assertCurrent();
+      if (!accepted.isCurrent()) {
+        continue;
+      }
+      this.permissions.assertCurrent(params.handle, params.existingMetadata);
+      // No yield between current authority/required targets and actual readiness.
+      params.complete();
+      return;
+    }
+  }
+
+  private async refreshIntent(
+    sessionId: string,
+    intent: SessionStartupIntent | undefined,
+    params: CompleteStartupConfigurationParams
+  ) {
+    params.assertCurrent();
+    this.permissions.assertCurrent(params.handle, params.existingMetadata);
+    if (!intent) {
+      return { intent, changed: false };
+    }
+    const current = await this.repository.getSessionById(sessionId);
+    params.assertCurrent();
+    this.permissions.assertCurrent(params.handle, params.existingMetadata);
+    if (current && matchesSessionStartupIntent(current, intent)) {
+      return { intent, changed: false };
+    }
+    return { intent: await this.prepareAgain(params), changed: true };
+  }
+
+  private prepareAgain(params: CompleteStartupConfigurationParams): Promise<SessionStartupIntent> {
+    if (!params.prepare) {
+      throw new SessionStartupIntentChangedError();
+    }
+    return params.prepare();
+  }
+
+  private async persistCurrent(
+    sessionId: string,
+    params: CompleteStartupConfigurationParams,
+    options: SessionConfigOption[],
+    accepted: AcceptedConfigCommit,
+    intent: SessionStartupIntent | undefined
+  ): Promise<'persisted' | 'superseded' | 'intent_changed'> {
+    try {
       const persisted = await accepted.persist(async (assertCurrent) => {
         try {
           await this.snapshots.persist(sessionId, {
@@ -52,26 +128,23 @@ export class SessionStartupConfigurationFinalizer {
             requirePersistence: true,
             existingMetadata: params.existingMetadata,
             assertCurrent,
+            startupIntent: intent,
           });
         } catch (error) {
-          // Supersession, stop and replacement retain their original control-flow owner.
+          // Supersession/stop/replacement keep their original control-flow owner.
           assertCurrent();
+          if (error instanceof SessionStartupIntentChangedError) {
+            throw error;
+          }
           throw new SessionStartupPersistenceError(error);
         }
       });
-      if (!persisted) {
-        continue;
+      return persisted ? 'persisted' : 'superseded';
+    } catch (error) {
+      if (error instanceof SessionStartupIntentChangedError) {
+        return 'intent_changed';
       }
-      // Request-only cancellation must not become a terminal storage failure.
-      await params.beforeComplete();
-      params.assertCurrent();
-      if (!accepted.isCurrent()) {
-        continue;
-      }
-      this.permissions.assertCurrent(params.handle, params.existingMetadata);
-      // Do not yield between current authority/access validation and actual readiness.
-      params.complete();
-      return;
+      throw error;
     }
   }
 

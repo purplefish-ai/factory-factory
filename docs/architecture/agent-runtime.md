@@ -91,7 +91,10 @@ access or current final persistence failure permanently rejects the candidate's
 readiness and attempts to stop that same incarnation, including a shared
 candidate. Runtime identity and lifecycle generation fences preserve
 replacements and newer stops; caller-specific cancellation retains shared
-cleanup protections. Later genuine server changes remain authoritative after
+cleanup protections. A cancelled request leaves a healthy shared candidate's
+completion owner running under independent runtime/lifecycle guards; that owner
+opens real readiness for surviving users, then rejects the cancelled request
+before its prompt. Later genuine server changes remain authoritative after
 pending edits settle. Model-only changes preserve a supported explicit reasoning
 effort; an unsupported effort normalizes to the new model's confirmed default.
 Each session load has a 10-second UI loading safety timer, including creation
@@ -123,13 +126,20 @@ default), explicit null (native default), and a supported value (that exact
 level). The UI submits its displayed resolved choice. Validated
 `providerMetadata.launchSettings` stores initial intent with `applied: false`;
 only the startup owner's final confirmed snapshot marks it applied. Intermediate
-configuration snapshots cannot consume it. Identity-matched confirmed snapshots
-own later resumes, including edits made after launch and changes to global
-defaults. A saved level no longer supported after a model change uses the new
-model's native default; unsupported explicit launch levels fail before prompts.
-Stopped-session edits require a durable snapshot write and report persistence
-errors. Applied launch intent with a missing or invalid snapshot stops resume
-instead of replacing confirmed choices with global defaults.
+configuration snapshots cannot consume it. Startup refreshes durable intent
+after context and runtime handoff. A conditional repository acknowledgment
+compares the model/thinking/Plan actually applied with current desired fields at
+its CAS boundary. Changed intent is reread and reapplied. Observed snapshots
+cannot rewrite desired launch fields; only explicit stopped edits own those
+patches. Per-start thinking/Plan overrides retain precedence and may leave
+conflicting stored choices unconsumed. Explicit model selection keeps its
+confirmed model column persistence semantics. Identity-matched confirmed
+snapshots own later resumes, including edits made after launch and changes to
+global defaults. A saved level no longer supported after a model change uses the
+new model's native default; unsupported explicit launch levels fail before
+prompts. Stopped-session edits require a durable snapshot write and report
+persistence errors. Applied launch intent with a missing or invalid snapshot
+stops resume instead of replacing confirmed choices with global defaults.
 
 Plan-on selects Claude's native plan access mode or Codex's plan collaboration
 mode. Plan-off retains the configured permission preset rather than applying a

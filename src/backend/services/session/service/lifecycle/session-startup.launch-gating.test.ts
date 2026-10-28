@@ -58,8 +58,8 @@ describe('launch configuration startup gate', () => {
     expect(h.sessionConfigService.completeStartupConfiguration).toHaveBeenLastCalledWith(
       'session-1',
       expect.objectContaining({
-        existingMetadata: expect.objectContaining({
-          launchSettings: { reasoningEffort: 'high', planModeEnabled: true, applied: true },
+        intent: expect.objectContaining({
+          launch: { reasoningEffort: 'high', planModeEnabled: true, applied: false },
         }),
       })
     );
