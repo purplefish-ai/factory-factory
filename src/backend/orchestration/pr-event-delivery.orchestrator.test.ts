@@ -367,6 +367,12 @@ it('reads candidate facts before refresh and rechecks authorization before claim
   expect(refreshObservation).toHaveBeenCalledWith({ workspaceId: 'w', prId: 'p' });
   expect(mocks.observe).not.toHaveBeenCalled();
   expect(mocks.pending).toHaveBeenCalledTimes(2);
+  expect(mocks.pending.mock.invocationCallOrder[0]).toBeLessThan(
+    refreshObservation.mock.invocationCallOrder[0]!
+  );
+  expect(mocks.pending.mock.invocationCallOrder[1]).toBeGreaterThan(
+    refreshObservation.mock.invocationCallOrder[0]!
+  );
   expect(mocks.claim).not.toHaveBeenCalled();
 });
 it('does not freeze or claim events when the injected refresh fails', async () => {

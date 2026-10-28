@@ -878,6 +878,8 @@ it('delivers a large MAIN ledger in bounded batches without acknowledging deferr
         expect(delivery.text).toContain(JSON.stringify(pr.url));
         expect(delivered.has(pr.id)).toBe(false);
         delivered.add(pr.id);
+      } else {
+        expect(delivery.text).not.toContain(JSON.stringify(pr.url));
       }
     }
     expect(
