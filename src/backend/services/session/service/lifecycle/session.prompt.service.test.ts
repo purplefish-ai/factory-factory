@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SessionDomainService } from '@/backend/services/session';
 import { PromptTimeoutError } from '@/backend/services/session/service/acp';
-import { AcpNativeSessionTracker } from '../acp/acp-native-session-tracker';
+import { AcpNativeSessionTracker } from '@/backend/services/session/service/acp/acp-native-session-tracker';
 import { AcpEventProcessor } from './acp-event-processor';
 import { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import { SessionService } from './session.service';

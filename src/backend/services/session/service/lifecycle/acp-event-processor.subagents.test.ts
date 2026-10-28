@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { AcpNativeSessionTracker } from '../acp/acp-native-session-tracker';
-import { SessionDomainService } from '../session-domain.service';
+import { AcpNativeSessionTracker } from '@/backend/services/session/service/acp/acp-native-session-tracker';
+import { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({

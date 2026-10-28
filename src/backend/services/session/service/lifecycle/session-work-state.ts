@@ -1,5 +1,5 @@
+import type { AcpProcessHandle } from '@/backend/services/session/service/acp/acp-process-handle';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
-import type { AcpProcessHandle } from '../acp/acp-process-handle';
 
 /** Read current work when publishing runtime state, including after prompt completion. */
 export function getAcpWorkState(
