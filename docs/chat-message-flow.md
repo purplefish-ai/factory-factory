@@ -181,6 +181,11 @@ duplicate-result filtering creates a new grouper. Message edits must replace the
 array and changed message objects; in-place appends and truncation are detected
 by length, but same-length in-place edits are unsupported.
 
+Thinking-only assistant messages and thinking stream blocks are omitted from the
+grouped transcript, including loaded session history. They do not create empty
+rows. The live activity indicator still shows the latest reasoning while the
+agent is running.
+
 ## Sources of truth
 
 | Concern                                               | Source                                                                                                                                                                                                             |
