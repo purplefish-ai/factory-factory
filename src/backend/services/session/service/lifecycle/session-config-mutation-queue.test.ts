@@ -3,13 +3,13 @@ import {
   createManagerTestHarness,
   mockPrompt,
   setupSuccessfulSpawn,
-} from '../acp/acp-runtime-manager.test-harness';
+} from '@/backend/services/session/service/acp/acp-runtime-manager.test-harness';
 import {
   createDeferred,
   defaultContext,
   defaultHandlers,
   defaultOptions,
-} from '../acp/acp-runtime-manager.test-helpers';
+} from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
 import { SessionConfigMutationQueue } from './session-config-mutation-queue';
 
 it.each(['resolve', 'reject'] as const)(

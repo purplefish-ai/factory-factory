@@ -4,9 +4,9 @@ import {
   sessionConfigService,
   sessionService,
 } from '@/backend/services/session/service/lifecycle/session-core-services';
+import { SessionQueuedSettings } from '@/backend/services/session/service/lifecycle/session-queued-settings';
+import type { SessionConfigService } from '@/backend/services/session/service/lifecycle/session.config.service';
 import type { QueuedMessage } from '@/shared/acp-protocol';
-import { SessionQueuedSettings } from '../lifecycle/session-queued-settings';
-import type { SessionConfigService } from '../lifecycle/session.config.service';
 import { SessionDispatchService } from './session-dispatch.service';
 
 /** Supplies the same infrastructure ports as production; individual suites retain their mocks. */

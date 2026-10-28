@@ -1,6 +1,6 @@
+import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import { DEFAULT_THINKING_BUDGET } from '@/shared/acp-protocol';
 import type { QueuedMessage } from '@/shared/acp-protocol';
-import type { AcpProcessHandle, AcpRuntimeManager } from '../acp';
 
 type Settings = QueuedMessage['settings'];
 
