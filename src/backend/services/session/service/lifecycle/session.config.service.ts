@@ -14,6 +14,7 @@ import { type ChatBarCapabilities, EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/
 import type { SessionPermissionPreset } from '@prisma-gen/client';
 import { parseAcpConfigSnapshot, type StoredAcpConfigSnapshot } from './acp-config-snapshot';
 import type { CodexModelCatalogService } from './codex-model-catalog.service';
+import { SessionConfigCommitAuthority } from './session-config-commit-authority';
 import { SessionConfigMutationQueue } from './session-config-mutation-queue';
 import {
   buildCapabilitiesFromConfigOptions,
@@ -21,6 +22,11 @@ import {
   getConfigOptionValues,
   type SessionProvider,
 } from './session-config-option-helpers';
+import {
+  SessionConfigSnapshotPersistence,
+  type PersistAcpConfigSnapshotParams,
+} from './session-config-snapshot-persistence';
+export type { PersistAcpConfigSnapshotParams } from './session-config-snapshot-persistence';
 import { setInactiveSessionConfigOption } from './session-inactive-config-options';
 import {
   applyReadOnlyReviewPermissions,
@@ -34,13 +40,6 @@ import type { SessionRepository } from './session.repository';
 const logger = createLogger('session');
 
 type SessionStartupModePreset = 'non_interactive' | 'plan';
-export type PersistAcpConfigSnapshotParams = {
-  provider: SessionProvider;
-  providerSessionId: string;
-  configOptions: SessionConfigOption[];
-  existingMetadata?: unknown;
-  assertCurrent?: () => void;
-};
 
 export type SessionConfigServiceDependencies = {
   repository: SessionRepository;
@@ -50,6 +49,8 @@ export type SessionConfigServiceDependencies = {
 };
 
 export class SessionConfigService {
+  private readonly snapshotPersistence: SessionConfigSnapshotPersistence;
+  private readonly configAuthority = new SessionConfigCommitAuthority();
   private readonly configUpdates: SessionConfigMutationQueue;
   private readonly repository: SessionRepository;
   private readonly runtimeManager: AcpRuntimeManager;
@@ -58,6 +59,7 @@ export class SessionConfigService {
 
   constructor(options: SessionConfigServiceDependencies) {
     this.repository = options.repository;
+    this.snapshotPersistence = new SessionConfigSnapshotPersistence(options.repository);
     this.runtimeManager = options.runtimeManager;
     this.codexModelCatalogService = options.codexModelCatalogService;
     this.sessionDomainService = options.sessionDomainService ?? sessionDomainService;
@@ -77,12 +79,20 @@ export class SessionConfigService {
     handle: AcpProcessHandle,
     configOptions: SessionConfigOption[]
   ): void {
+    if (
+      this.runtimeManager.getClient(sessionId) !== handle ||
+      this.runtimeManager.isStopInProgress(sessionId)
+    ) {
+      return;
+    }
     const normalizedConfigOptions = normalizeSessionConfigOptions(handle.provider, configOptions);
     handle.configOptions = normalizedConfigOptions;
     void this.persistAcpConfigSnapshot(sessionId, {
       provider: handle.provider as SessionProvider,
       providerSessionId: handle.providerSessionId,
       configOptions: normalizedConfigOptions,
+    }).catch((error: unknown) => {
+      logger.warn('Failed persisting native configuration update', { sessionId, error });
     });
 
     this.sessionDomainService.emitDelta(sessionId, {
@@ -124,18 +134,30 @@ export class SessionConfigService {
       return;
     }
 
-    const persistSnapshot = options?.persistSnapshot ?? this.persistAcpConfigSnapshot.bind(this);
-    handle.configOptions = modeResult.configOptions;
+    const persistSnapshot =
+      options?.persistSnapshot ?? this.snapshotPersistence.persist.bind(this.snapshotPersistence);
+    const configOptions = structuredClone(handle.configOptions);
+    const accepted = this.acceptConfiguration(sessionId, handle);
     try {
-      await persistSnapshot(sessionId, {
-        provider: handle.provider as SessionProvider,
-        providerSessionId: handle.providerSessionId,
-        configOptions: modeResult.configOptions,
-      });
+      if (
+        !(await accepted.persist((assertCurrent) =>
+          persistSnapshot(sessionId, {
+            provider: handle.provider as SessionProvider,
+            providerSessionId: handle.providerSessionId,
+            configOptions,
+            assertCurrent,
+          })
+        ))
+      ) {
+        return;
+      }
+      if (!accepted.isCurrent()) {
+        return;
+      }
 
       this.sessionDomainService.emitDelta(sessionId, {
         type: 'config_options_update',
-        configOptions: modeResult.configOptions,
+        configOptions,
       } as SessionDeltaEvent);
       this.sessionDomainService.emitDelta(sessionId, {
         type: 'chat_capabilities',
@@ -218,7 +240,6 @@ export class SessionConfigService {
       ) {
         throw new Error('Configured session access mode was not applied');
       }
-      handle.configOptions = configOptions;
       await this.persistAndEmitConfigOptions(sessionId, handle);
     } catch (error) {
       logger.warn('Failed applying configured session permission preset', {
@@ -251,12 +272,23 @@ export class SessionConfigService {
     sessionId: string,
     handle: AcpProcessHandle
   ): Promise<void> {
-    const configOptions = handle.configOptions;
-    await this.persistAcpConfigSnapshot(sessionId, {
-      provider: handle.provider as SessionProvider,
-      providerSessionId: handle.providerSessionId,
-      configOptions,
-    });
+    const configOptions = structuredClone(handle.configOptions);
+    const accepted = this.acceptConfiguration(sessionId, handle);
+    if (
+      !(await accepted.persist((assertCurrent) =>
+        this.snapshotPersistence.persist(sessionId, {
+          provider: handle.provider as SessionProvider,
+          providerSessionId: handle.providerSessionId,
+          configOptions,
+          assertCurrent,
+        })
+      ))
+    ) {
+      return;
+    }
+    if (!accepted.isCurrent()) {
+      return;
+    }
     this.sessionDomainService.emitDelta(sessionId, {
       type: 'config_options_update',
       configOptions,
@@ -489,25 +521,7 @@ export class SessionConfigService {
   ): Promise<void> {
     const acpHandle = this.runtimeManager.getClient(sessionId);
     if (!acpHandle) {
-      const update = await setInactiveSessionConfigOption(sessionId, configId, value, {
-        repository: this.repository,
-        runtimeManager: this.runtimeManager,
-        catalog: this.codexModelCatalogService,
-        persistSnapshot: this.persistAcpConfigSnapshot.bind(this),
-      });
-      if (!update) {
-        await this.setSessionConfigOptionUnserialized(sessionId, configId, value);
-        return;
-      }
-      const { provider, configOptions } = update;
-      this.sessionDomainService.emitDelta(sessionId, {
-        type: 'config_options_update',
-        configOptions,
-      } as SessionDeltaEvent);
-      this.sessionDomainService.emitDelta(sessionId, {
-        type: 'chat_capabilities',
-        capabilities: buildCapabilitiesFromConfigOptions(provider, configOptions),
-      });
+      await this.updateInactiveSessionConfigOption(sessionId, configId, value);
       return;
     }
 
@@ -536,30 +550,76 @@ export class SessionConfigService {
       );
     }
 
-    const configOptions = await withConfiguredAcpHandle(
-      this.runtimeManager,
-      sessionId,
-      acpHandle,
-      () =>
-        isModeOption
-          ? this.runtimeManager.setSessionMode(sessionId, value)
-          : isModelOption
-            ? this.runtimeManager.setSessionModel(sessionId, value)
-            : this.runtimeManager.setConfigOption(sessionId, configId, value)
+    await withConfiguredAcpHandle(this.runtimeManager, sessionId, acpHandle, () =>
+      isModeOption
+        ? this.runtimeManager.setSessionMode(sessionId, value)
+        : isModelOption
+          ? this.runtimeManager.setSessionModel(sessionId, value)
+          : this.runtimeManager.setConfigOption(sessionId, configId, value)
     );
 
     this.assertCurrentConfiguredHandle(sessionId, acpHandle);
-    await this.persistAcpConfigSnapshot(sessionId, {
-      provider: acpHandle.provider as SessionProvider,
-      providerSessionId: acpHandle.providerSessionId,
-      configOptions,
-      assertCurrent: () => this.assertCurrentConfiguredHandle(sessionId, acpHandle),
-    });
-    this.assertCurrentConfiguredHandle(sessionId, acpHandle);
+    const configOptions = structuredClone(acpHandle.configOptions);
+    const accepted = this.acceptConfiguration(sessionId, acpHandle, () =>
+      this.assertCurrentConfiguredHandle(sessionId, acpHandle)
+    );
+    if (
+      !(await accepted.persist((assertCurrent) =>
+        this.snapshotPersistence.persist(sessionId, {
+          provider: acpHandle.provider as SessionProvider,
+          providerSessionId: acpHandle.providerSessionId,
+          configOptions,
+          assertCurrent,
+        })
+      ))
+    ) {
+      return;
+    }
+    if (!accepted.isCurrent()) {
+      return;
+    }
     this.sessionDomainService.emitDelta(sessionId, {
       type: 'config_options_update',
       configOptions,
     } as SessionDeltaEvent);
+  }
+
+  private async updateInactiveSessionConfigOption(
+    sessionId: string,
+    configId: string,
+    value: string
+  ): Promise<void> {
+    const update = await setInactiveSessionConfigOption(sessionId, configId, value, {
+      repository: this.repository,
+      runtimeManager: this.runtimeManager,
+      catalog: this.codexModelCatalogService,
+      persistSnapshot: this.persistAcpConfigSnapshot.bind(this),
+      accept: (assertCurrent) => this.configAuthority.accept(sessionId, assertCurrent),
+    });
+    if (!update) {
+      await this.setSessionConfigOptionUnserialized(sessionId, configId, value);
+      return;
+    }
+    if (
+      this.runtimeManager.getClient(sessionId) ||
+      this.runtimeManager.getPendingClient?.(sessionId) !== undefined
+    ) {
+      await this.setSessionConfigOptionUnserialized(sessionId, configId, value);
+      return;
+    }
+    if (!update.accepted.isCurrent()) {
+      return;
+    }
+    const { provider, configOptions } = update;
+    this.sessionDomainService.emitDelta(sessionId, {
+      type: 'config_options_update',
+      configOptions,
+    } as SessionDeltaEvent);
+    this.sessionDomainService.emitDelta(sessionId, {
+      type: 'chat_capabilities',
+      capabilities: buildCapabilitiesFromConfigOptions(provider, configOptions),
+    });
+    return;
   }
 
   private assertCurrentConfiguredHandle(sessionId: string, handle: AcpProcessHandle): void {
@@ -632,45 +692,41 @@ export class SessionConfigService {
     sessionId: string,
     params: PersistAcpConfigSnapshotParams
   ): Promise<void> {
-    if (params.configOptions.length === 0) {
-      return;
-    }
-
-    const configOptionsForStorage = this.cloneConfigOptionsForStorage(params.configOptions);
-    const observedModelId = this.resolveObservedModel(configOptionsForStorage);
-    const metadataSource =
-      params.existingMetadata ??
-      (await this.repository.getSessionById(sessionId))?.providerMetadata ??
-      null;
-    const snapshot: StoredAcpConfigSnapshot = {
-      provider: params.provider,
-      providerSessionId: params.providerSessionId,
-      capturedAt: new Date().toISOString(),
-      configOptions: configOptionsForStorage,
-      ...(observedModelId ? { observedModelId } : {}),
-    };
-
-    const persistedUpdate = this.buildSnapshotPersistUpdate(
-      metadataSource,
-      snapshot,
-      observedModelId
+    const handle = this.runtimeManager.getClient(sessionId);
+    const configOptions =
+      handle?.provider === params.provider && handle.providerSessionId === params.providerSessionId
+        ? handle.configOptions
+        : params.configOptions;
+    const accepted = this.configAuthority.accept(
+      sessionId,
+      params.assertCurrent ?? this.acceptRuntime(sessionId, handle)
     );
+    await accepted.persist((assertCurrent) =>
+      this.snapshotPersistence.persist(sessionId, { ...params, configOptions, assertCurrent })
+    );
+  }
 
-    params.assertCurrent?.();
-    try {
-      await this.repository.updateSession(
-        sessionId,
-        persistedUpdate,
-        ...(params.assertCurrent ? ([params.assertCurrent] as const) : [])
-      );
-    } catch (error) {
-      params.assertCurrent?.();
-      logger.warn('Failed persisting ACP config snapshot to session metadata; retrying once', {
-        sessionId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      await this.retryPersistAcpConfigSnapshot(sessionId, snapshot, params.assertCurrent);
-    }
+  private acceptConfiguration(
+    sessionId: string,
+    handle?: AcpProcessHandle,
+    assertCurrent?: () => void
+  ) {
+    return this.configAuthority.accept(
+      sessionId,
+      assertCurrent ?? this.acceptRuntime(sessionId, handle)
+    );
+  }
+
+  private acceptRuntime(sessionId: string, handle?: AcpProcessHandle): () => void {
+    return () => {
+      if (
+        handle &&
+        (this.runtimeManager.getClient(sessionId) !== handle ||
+          this.runtimeManager.isStopInProgress(sessionId))
+      ) {
+        throw new Error('Session runtime changed before configuration update');
+      }
+    };
   }
 
   private async applyStartupCollaborationModePreset(params: {
@@ -843,22 +899,35 @@ export class SessionConfigService {
       return;
     }
 
-    const configOptions = await this.runtimeManager.setConfigOption(
+    await this.runtimeManager.setConfigOption(
       params.sessionId,
       reasoningOption.id,
       params.targetReasoningEffort
     );
     params.assertCurrent?.();
-    params.handle.configOptions = configOptions;
-    if (params.persistSnapshot !== false) {
-      await this.persistAcpConfigSnapshot(params.sessionId, {
-        provider: params.handle.provider as SessionProvider,
-        providerSessionId: params.handle.providerSessionId,
-        configOptions,
-        assertCurrent: params.assertCurrent,
-      });
+    const configOptions = structuredClone(params.handle.configOptions);
+    const accepted = this.acceptConfiguration(
+      params.sessionId,
+      params.handle,
+      params.assertCurrent
+    );
+    if (
+      !(await accepted.persist(async (assertCurrent) => {
+        if (params.persistSnapshot !== false) {
+          await this.snapshotPersistence.persist(params.sessionId, {
+            provider: params.handle.provider as SessionProvider,
+            providerSessionId: params.handle.providerSessionId,
+            configOptions,
+            assertCurrent,
+          });
+        }
+      }))
+    ) {
+      return;
     }
-    params.assertCurrent?.();
+    if (!accepted.isCurrent()) {
+      return;
+    }
     if (params.emitUpdates !== false) {
       this.sessionDomainService.emitDelta(params.sessionId, {
         type: 'config_options_update',
@@ -927,73 +996,5 @@ export class SessionConfigService {
       modelCatalog,
       latest?.model ?? params.session.model
     );
-  }
-
-  private buildSnapshotPersistUpdate(
-    metadataSource: unknown,
-    snapshot: StoredAcpConfigSnapshot,
-    observedModelId: string | undefined
-  ): {
-    providerMetadata: AgentSessionRecord['providerMetadata'];
-    model?: string;
-  } {
-    const nextMetadata: Record<string, unknown> = {
-      ...this.toMetadataRecord(metadataSource),
-      acpConfigSnapshot: snapshot,
-    };
-    if (observedModelId) {
-      nextMetadata.observedModelId = observedModelId;
-    }
-
-    return {
-      providerMetadata: nextMetadata as AgentSessionRecord['providerMetadata'],
-      ...(observedModelId ? { model: observedModelId } : {}),
-    };
-  }
-
-  private async retryPersistAcpConfigSnapshot(
-    sessionId: string,
-    snapshot: StoredAcpConfigSnapshot,
-    assertCurrent?: () => void
-  ): Promise<void> {
-    try {
-      const latestMetadataSource = (await this.repository.getSessionById(sessionId))
-        ?.providerMetadata;
-      assertCurrent?.();
-      await this.repository.updateSession(
-        sessionId,
-        this.buildSnapshotPersistUpdate(latestMetadataSource, snapshot, snapshot.observedModelId),
-        ...(assertCurrent ? ([assertCurrent] as const) : [])
-      );
-    } catch (retryError) {
-      assertCurrent?.();
-      logger.warn('Retry failed persisting ACP config snapshot to session metadata', {
-        sessionId,
-        error: retryError instanceof Error ? retryError.message : String(retryError),
-      });
-    }
-  }
-
-  private cloneConfigOptionsForStorage(
-    configOptions: SessionConfigOption[]
-  ): SessionConfigOption[] {
-    try {
-      return structuredClone(configOptions);
-    } catch {
-      return configOptions;
-    }
-  }
-
-  private toMetadataRecord(metadata: unknown): Record<string, unknown> {
-    if (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata)) {
-      return {};
-    }
-    return { ...(metadata as Record<string, unknown>) };
-  }
-
-  private resolveObservedModel(configOptions: SessionConfigOption[]): string | undefined {
-    const modelOption = configOptions.find((option) => option.category === 'model');
-    const currentValue = modelOption?.currentValue;
-    return currentValue ? String(currentValue) : undefined;
   }
 }

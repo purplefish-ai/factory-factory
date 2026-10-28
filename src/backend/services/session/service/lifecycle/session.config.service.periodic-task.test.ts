@@ -50,12 +50,12 @@ it.each(
           : []),
       ],
     });
-    const updateOption = (id: string, value: string) =>
-      Promise.resolve(
-        handle.configOptions.map((option) =>
-          option.id === id && option.type === 'select' ? { ...option, currentValue: value } : option
-        )
+    const updateOption = (id: string, value: string) => {
+      handle.configOptions = handle.configOptions.map((option) =>
+        option.id === id && option.type === 'select' ? { ...option, currentValue: value } : option
       );
+      return Promise.resolve(handle.configOptions);
+    };
     const setConfigOption = vi.fn(async (_sessionId: string, optionId: string, value: string) =>
       updateOption(optionId, value)
     );
@@ -68,7 +68,12 @@ it.each(
         getSessionById: async () => ({ id: 'session-1', providerMetadata: null }),
         updateSession: async () => ({}),
       }),
-      runtimeManager: unsafeCoerce({ setConfigOption, setSessionMode }),
+      runtimeManager: unsafeCoerce({
+        getClient: () => handle,
+        isStopInProgress: () => false,
+        setConfigOption,
+        setSessionMode,
+      }),
       sessionDomainService: unsafeCoerce({ emitDelta: vi.fn() }),
     });
     await service.applyStartupModePreset('session-1', handle, 'non_interactive', 'periodic-task');

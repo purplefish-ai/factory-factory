@@ -75,12 +75,18 @@ correlation prevents an older rejection from discarding a newer choice. Each
 conversation restores its own draft and attachments, including switches before
 draft autosave completes. Model/configuration writes serialize per session
 through persistence and state publication, including failure corrections;
-different sessions remain independent. Later genuine server changes remain
-authoritative after pending edits settle. Model-only changes preserve a
-supported explicit reasoning effort; an unsupported effort normalizes to the new
-model's confirmed default. Each session load has a 10-second UI loading safety
-timer, including creation from an empty Quick Chat. This UI timer does not
-release backend configuration readiness.
+different sessions remain independent. Accepted native observations, successful
+RPC results, and startup snapshots share a configuration authority fence through
+metadata reads, CAS retries, and publication. Failed requests leave the last
+accepted state valid; superseded background writes stop without publishing a
+stale result. Startup persistence stays outside the public readiness queue.
+Exhausted persistence retries are logged and rejected; native notifications own
+that background rejection, and final startup persistence failure keeps dispatch
+blocked. Later genuine server changes remain authoritative after pending edits
+settle. Model-only changes preserve a supported explicit reasoning effort; an
+unsupported effort normalizes to the new model's confirmed default. Each session
+load has a 10-second UI loading safety timer, including creation from an empty
+Quick Chat. This UI timer does not release backend configuration readiness.
 
 ### Permission and configuration readiness
 

@@ -163,7 +163,8 @@ describe('saved native session access', () => {
           providerMetadata: expect.objectContaining({
             acpConfigSnapshot: expect.objectContaining({ providerSessionId: 'thread' }),
           }),
-        })
+        }),
+        expect.any(Function)
       );
     }
   );
@@ -242,7 +243,8 @@ describe('saved native session access', () => {
           retainedMetadata: 'preserved',
           acpConfigSnapshot: expect.objectContaining({ providerSessionId: 'replacement' }),
         }),
-      })
+      }),
+      expect.any(Function)
     );
   });
 

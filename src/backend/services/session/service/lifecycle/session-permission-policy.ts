@@ -41,7 +41,7 @@ export async function applyReadOnlyReviewPermissions(
   }
   let didUpdate = false;
   if (mode.currentValue !== target) {
-    handle.configOptions = await runtime.setSessionMode(sessionId, target);
+    await runtime.setSessionMode(sessionId, target);
     didUpdate = true;
   }
   if (handle.configOptions.find((option) => option.id === mode.id)?.currentValue !== target) {
@@ -55,7 +55,7 @@ export async function applyReadOnlyReviewPermissions(
       throw new Error('Adversarial review requires plan collaboration mode');
     }
     if (collaboration.currentValue !== 'plan') {
-      handle.configOptions = await runtime.setConfigOption(sessionId, collaboration.id, 'plan');
+      await runtime.setConfigOption(sessionId, collaboration.id, 'plan');
       didUpdate = true;
     }
     if (
