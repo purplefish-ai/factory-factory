@@ -15,6 +15,7 @@ import { useProjectWorkspaceQuery } from '@/client/hooks/use-project-workspace-q
 import { useWorkspaceAttention } from '@/client/hooks/use-workspace-attention';
 import { readSelectedProjectSlug, writeSelectedProjectSlug } from '@/client/lib/project-selection';
 import { trpc } from '@/client/lib/trpc';
+import type { WorkspaceSummary } from '@/shared/workspace-summary';
 
 export function getProjectSlugFromPath(pathname: string): string | null {
   const match = pathname.match(/^\/projects\/([^/]+)/);
@@ -120,7 +121,7 @@ export function useAppNavigationData() {
   // Sync slug from URL/localStorage and keep stale selections from surviving project changes.
   useProjectSlugSync(pathname, projects, selectedProjectSlug, selectProjectSlug);
 
-  const serverWorkspaces = projectState?.workspaces;
+  const serverWorkspaces: WorkspaceSummary<Date>[] | undefined = projectState?.workspaces;
   const reviewCount = projectState?.reviewCount ?? 0;
 
   // Get current workspace ID from URL

@@ -333,7 +333,7 @@ export function KanbanProvider({
         projectId,
         projectSlug,
         issueProvider,
-        workspaces: visibleWorkspaces as WorkspaceWithKanban[] | undefined,
+        workspaces: visibleWorkspaces,
         issues,
         isLoading: isLoadingWorkspaces || isLoadingIssues,
         isError: isErrorWorkspaces,

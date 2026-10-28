@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { projectSnapshotToWorkspace } from '@/client/lib/snapshot-to-workspace';
 import type { UseWebSocketTransportOptions } from '@/hooks/use-websocket-transport';
-import { makeWorkspaceSnapshotEntry as makeEntry } from '@/test-utils/workspace-snapshot';
+import {
+  makeWorkspaceSnapshotEntry as makeEntry,
+  makeCompleteWorkspaceSnapshotEntry as complete,
+} from '@/test-utils/workspace-snapshot';
 import { useProjectSnapshotSync } from './use-project-snapshot-sync';
 
 // =============================================================================
@@ -518,6 +521,64 @@ describe('useProjectSnapshotSync', () => {
     expect(mockListInvalidate).not.toHaveBeenCalled();
     expect(mockWorkspaceGetInvalidate).not.toHaveBeenCalled();
   }
+
+  describe('complete-summary repair retirement', () => {
+    it.each(['snapshot_full', 'snapshot_changed'] as const)(
+      'skips unknown-row and READY path repairs for complete %s rows',
+      (type) => {
+        useProjectSnapshotSync('proj-1');
+        mockGetData.mockReturnValue({ workspaces: [], reviewCount: 0 });
+        const snapshot = complete({ workspaceId: 'complete-new', worktreePath: null });
+        capturedOptions!.onMessage!(
+          type === 'snapshot_full'
+            ? { type, projectId: 'proj-1', entries: [snapshot] }
+            : { type, workspaceId: snapshot.workspaceId, entry: snapshot }
+        );
+        expect(mockListInvalidate).not.toHaveBeenCalled();
+        mockGetData.mockReturnValue({
+          workspaces: [projectSnapshotToWorkspace(snapshot)],
+          reviewCount: 0,
+        });
+        capturedOptions!.onMessage!({
+          type: 'snapshot_changed',
+          workspaceId: snapshot.workspaceId,
+          entry: snapshot,
+        });
+        expect(mockListInvalidate).not.toHaveBeenCalled();
+      }
+    );
+
+    it('repairs only legacy introductions within a mixed complete baseline', () => {
+      useProjectSnapshotSync('proj-1');
+      mockGetData.mockReturnValue({ workspaces: [], reviewCount: 0 });
+      capturedOptions!.onMessage!({
+        type: 'snapshot_full',
+        projectId: 'proj-1',
+        entries: [complete({ workspaceId: 'complete' }), makeEntry({ workspaceId: 'legacy' })],
+      });
+      expect(mockListInvalidate).toHaveBeenCalledTimes(1);
+    });
+
+    it('retains retry for incomplete unversioned entries', async () => {
+      useProjectSnapshotSync('proj-1');
+      mockGetData.mockReturnValue({ workspaces: [], reviewCount: 0 });
+      mockListInvalidate.mockRejectedValueOnce(new Error('transient'));
+      const {
+        worktreePath: _missing,
+        summaryVersion: _version,
+        ...snapshot
+      } = complete({ workspaceId: 'incomplete' });
+      const message = {
+        type: 'snapshot_changed' as const,
+        workspaceId: snapshot.workspaceId,
+        entry: snapshot,
+      };
+      capturedOptions!.onMessage!(message);
+      await Promise.resolve();
+      capturedOptions!.onMessage!(message);
+      expect(mockListInvalidate).toHaveBeenCalledTimes(2);
+    });
+  });
 
   describe('cache invalidation strategy', () => {
     it('snapshot_changed and snapshot_removed do not invalidate caches for a known workspace', () => {

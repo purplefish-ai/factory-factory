@@ -18,7 +18,6 @@ import {
   WorkspaceStatusBadge,
 } from '@/client/features/workspace';
 import { useInlineWorkspaceRename } from '@/client/hooks/use-inline-workspace-rename';
-import type { ProjectWorkspace } from '@/client/lib/snapshot-to-workspace';
 import { trpc } from '@/client/lib/trpc';
 import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
 import { Button } from '@/components/ui/button';
@@ -27,6 +26,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils';
 import type { WorkspaceStatus } from '@/shared/core';
 import { findWorkspaceSessionRuntimeError } from '@/shared/session-runtime';
+import type { WorkspaceSummary } from '@/shared/workspace-summary';
 import { KanbanStatusChip } from './kanban-card-status-chip';
 
 /**
@@ -34,7 +34,7 @@ import { KanbanStatusChip } from './kanban-card-status-chip';
  * follow that endpoint rather than the database row. Anything a card needs is
  * added to the list payload once, for every surface that reads it.
  */
-export type WorkspaceWithKanban = ProjectWorkspace;
+export type WorkspaceWithKanban = WorkspaceSummary<Date>;
 
 interface KanbanCardProps {
   workspace: WorkspaceWithKanban;
@@ -356,14 +356,11 @@ function deriveCardState(workspace: WorkspaceWithKanban) {
 }
 
 function AutoIterationBadge({ workspace }: { workspace: WorkspaceWithKanban }) {
-  const progress = workspace.autoIterationProgress as {
-    currentIteration?: number;
-    currentMetricSummary?: string;
-  } | null;
-  const config = workspace.autoIterationConfig as { maxIterations?: number } | null;
-  const status = workspace.autoIterationStatus;
-  const current = progress?.currentIteration ?? 0;
-  const max = config?.maxIterations ?? 25;
+  const summary = workspace.autoIteration;
+  const status = summary?.status;
+  // Preserve the existing display fallback without making unknown cache values known.
+  const current = summary?.currentIteration ?? 0;
+  const max = summary?.maxIterations ?? 25;
   const maxLabel = max === 0 ? '∞' : String(max);
   const isRunning = status === 'RUNNING';
 
@@ -378,7 +375,7 @@ function AutoIterationBadge({ workspace }: { workspace: WorkspaceWithKanban }) {
         </div>
       </TooltipTrigger>
       <TooltipContent>
-        <p>{progress?.currentMetricSummary || 'Auto-iteration workspace'}</p>
+        <p>{summary?.currentMetricSummary || 'Auto-iteration workspace'}</p>
       </TooltipContent>
     </Tooltip>
   );

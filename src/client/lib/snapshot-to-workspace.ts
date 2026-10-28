@@ -9,7 +9,11 @@ import { deriveWorkspaceFlowState } from '@/shared/workspace-flow-state';
 import type { WorkspacePullRequest } from '@/shared/workspace-pr';
 import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
-import type { WorkspaceSnapshotEntry } from '@/shared/workspace-snapshot';
+import {
+  projectWorkspaceSnapshotMetadata,
+  WorkspaceSnapshotEntrySchema,
+  type WorkspaceSnapshotEntry,
+} from '@/shared/workspace-snapshot';
 import { deriveWorkspaceStatusReason } from '@/shared/workspace-status-reason';
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
@@ -17,6 +21,11 @@ type RouterOutputs = inferRouterOutputs<AppRouter>;
 /** One row of the project workspace list — what the sidebar and the board render. */
 export type ProjectWorkspace = RouterOutputs['workspace']['listForProject']['workspaces'][number];
 export type WorkspaceDetail = RouterOutputs['workspace']['get'];
+
+/** A version claim alone cannot retire repairs for imperative/non-wire callers. */
+export function isCompleteWorkspaceSnapshot(entry: WorkspaceSnapshotEntry): boolean {
+  return entry.summaryVersion === 1 && WorkspaceSnapshotEntrySchema.safeParse(entry).success;
+}
 
 /**
  * Fields a snapshot entry doesn't carry, because they change through explicit
@@ -142,10 +151,10 @@ function projectLegacyPRState(entry: WorkspaceSnapshotEntry, prs: WorkspacePullR
 /** The snapshot-backed half of a list row, shared with the detail cache. */
 function projectSnapshotToLiveFields(
   entry: WorkspaceSnapshotEntry,
+  hasLegacyPR: boolean,
   existing?: Pick<ProjectWorkspace, 'prs' | 'createdAt'>
 ) {
-  const hasLegacyPR = !entry.prs?.length && Boolean(entry.prUrl);
-  const prs = projectSnapshotPRs(entry, existing?.prs ?? []);
+  const prs = hasLegacyPR ? projectSnapshotPRs(entry, existing?.prs ?? []) : (entry.prs ?? []);
   const createdAt = new Date(entry.createdAt);
   return {
     id: entry.workspaceId,
@@ -186,10 +195,24 @@ export function projectSnapshotToWorkspace(
   entry: WorkspaceSnapshotEntry,
   existing?: ProjectWorkspace
 ): ProjectWorkspace {
+  const complete = isCompleteWorkspaceSnapshot(entry);
+  const hasLegacyPR = !(complete || entry.prs?.length) && Boolean(entry.prUrl);
+  const liveFields = projectSnapshotToLiveFields(entry, hasLegacyPR, existing);
+  if (complete && entry.summaryVersion === 1) {
+    return {
+      ...mutationOnlyFieldDefaults(),
+      ...existing,
+      ...liveFields,
+      ...projectWorkspaceSnapshotMetadata(entry),
+      autoIteration: entry.autoIteration,
+      gitStats: entry.gitStats,
+      lastActivityAt: entry.lastActivityAt,
+    };
+  }
   return {
     ...mutationOnlyFieldDefaults(),
     ...existing,
-    ...projectSnapshotToLiveFields(entry, existing),
+    ...liveFields,
     autoIteration:
       entry.mode === 'AUTO_ITERATION'
         ? {
@@ -213,8 +236,9 @@ export function mergeProjectSnapshotIntoWorkspaceDetail(
     return undefined;
   }
 
-  const liveFields = projectSnapshotToLiveFields(entry, existing);
-  const hasLegacyPR = !entry.prs?.length && Boolean(entry.prUrl);
+  const complete = isCompleteWorkspaceSnapshot(entry);
+  const hasLegacyPR = !(complete || entry.prs?.length) && Boolean(entry.prUrl);
+  const liveFields = projectSnapshotToLiveFields(entry, hasLegacyPR, existing);
   return {
     ...existing,
     ...liveFields,

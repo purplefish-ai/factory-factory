@@ -43,8 +43,6 @@ export const baseWorkspace: WorkspaceWithKanban = {
   mode: 'STANDARD',
   autoIterationStatus: null,
   autoIteration: null,
-  autoIterationConfig: null,
-  autoIterationProgress: null,
   prs: [],
   prSummary: deriveWorkspacePRSummary([], true),
   prUrl: null,
@@ -131,8 +129,6 @@ export const AutoIterationRunning: Story = {
         maxIterations: 25,
         currentMetricSummary: null,
       },
-      autoIterationConfig: { maxIterations: 25 },
-      autoIterationProgress: { currentIteration: 3 },
       statusReason: {
         code: 'AUTO_ITERATING',
         label: 'Auto-iterating',
@@ -156,8 +152,6 @@ export const AutoIterationPaused: Story = {
         maxIterations: 25,
         currentMetricSummary: null,
       },
-      autoIterationConfig: { maxIterations: 25 },
-      autoIterationProgress: { currentIteration: 3 },
     },
     projectSlug: 'my-project',
   },
@@ -175,8 +169,23 @@ export const AutoIterationCompleted: Story = {
         maxIterations: 25,
         currentMetricSummary: null,
       },
-      autoIterationConfig: { maxIterations: 25 },
-      autoIterationProgress: { currentIteration: 25 },
+    },
+    projectSlug: 'my-project',
+  },
+};
+
+export const AutoIterationUnknown: Story = {
+  args: {
+    workspace: {
+      ...baseWorkspace,
+      mode: 'AUTO_ITERATION',
+      autoIterationStatus: null,
+      autoIteration: {
+        status: null,
+        currentIteration: null,
+        maxIterations: null,
+        currentMetricSummary: null,
+      },
     },
     projectSlug: 'my-project',
   },
