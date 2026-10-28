@@ -482,19 +482,15 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   }, [scrollContainerRef, handleScroll]);
 
   // Show loading state while session is loading (prevents flicker during event replay)
-  // If there's also an init banner, show both spinners
+  // Workspace setup takes priority over the session's loading status.
   if (loadingSession) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-center p-8 gap-4">
-        {showingInitSpinner && (
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <SpinnerGapIcon className="h-4 w-4 animate-spin" />
-            <span className="text-sm">{initBanner?.message}</span>
-          </div>
-        )}
+      <div className="flex items-center justify-center h-full text-center p-8">
         <div className="flex items-center gap-2 text-muted-foreground">
-          <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          <span className="text-sm">Loading session...</span>
+          <SpinnerGapIcon className="h-4 w-4 animate-spin" />
+          <span className="text-sm">
+            {showingInitSpinner ? initBanner.message : 'Loading session...'}
+          </span>
         </div>
       </div>
     );
