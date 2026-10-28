@@ -320,11 +320,25 @@ it('keeps events unclaimed until the recipient has a provider conversation ident
     expectedBindingRevision: 0,
     replyToPrComments: true,
   });
-  const event = (await workspacePrEventAccessor.listPending('w', null))[0];
+  await createPR();
+  await db.prisma.$transaction((tx) =>
+    workspacePrEventAccessor.insert(tx, 'w', 'p', [
+      {
+        kind: 'CI_FAILED',
+        deduplicationKey: 'ci-failure',
+        payload: {
+          kind: 'CI_FAILED',
+          target: { workspaceId: 'w', prId: 'p' },
+          observation: redObservation,
+        },
+      },
+    ])
+  );
+  const event = (await workspacePrEventAccessor.listPending('w', 'p'))[0];
   if (!event) {
-    throw new Error('Missing control event');
+    throw new Error('Missing PR event');
   }
-  const request = { workspaceId: 'w', prId: null, bindingRevision: binding.bindingRevision };
+  const request = { workspaceId: 'w', prId: 'p', bindingRevision: binding.bindingRevision };
   const delivery = {
     deliveryId: 'delivery',
     sessionId: 'main',

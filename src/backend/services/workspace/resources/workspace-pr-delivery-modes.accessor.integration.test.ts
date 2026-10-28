@@ -522,7 +522,7 @@ it('preserves unclaimed recovery and review facts through mode-only switches whi
     replyToPrComments: false,
   });
   expect(await workspacePrEventAccessor.listPending('w', 'p')).toHaveLength(2);
-  expect(await workspacePrEventAccessor.listPending('w', null)).toHaveLength(1);
+  expect(await workspacePrEventAccessor.listPending('w', null)).toHaveLength(0);
   expect(
     await workspacePrEventAccessor.claimDelivery(
       { workspaceId: 'w', prId: 'p', bindingRevision: 2 },
@@ -623,7 +623,7 @@ it('preserves facts when a dedicated-to-main switch also binds a missing main pr
   expect(await db.prisma.workspacePREvent.findUnique({ where: { id: oldControl } })).toMatchObject({
     state: 'CANCELLED',
   });
-  expect(await workspacePrEventAccessor.listPending('w', null)).toHaveLength(1);
+  expect(await workspacePrEventAccessor.listPending('w', null)).toHaveLength(0);
   expect(await db.prisma.workspacePREvent.findUnique({ where: { id: frozenId } })).toMatchObject({
     state: 'DISPATCHING',
     deliveryId: 'old-dedicated',

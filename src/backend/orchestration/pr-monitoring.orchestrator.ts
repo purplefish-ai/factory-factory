@@ -26,8 +26,7 @@ export async function setPRMonitoring(
   },
   services: PRMonitoringServices = defaultPRMonitoringServices
 ) {
-  const { workspacePRMonitoringService, sessionBackgroundDeliveryService, userSettingsService } =
-    services;
+  const { workspacePRMonitoringService, sessionBackgroundDeliveryService } = services;
   const previous = await workspacePRMonitoringService.get(input.workspaceId);
   assertBindingRevision(previous?.bindingRevision ?? 0, input.expectedBindingRevision);
   const deliveryMode = input.deliveryMode ?? previous?.deliveryMode ?? 'MAIN';
@@ -45,24 +44,15 @@ export async function setPRMonitoring(
     return recipient;
   }
   const { recipientSessionId } = recipient;
-  const settings = input.enabled ? await userSettingsService.get() : null;
   const result = await workspacePRMonitoringService.setBinding({
     ...input,
     recipientSessionId,
-    replyToPrComments: settings?.ratchetReplyToPrComments,
   });
   if (!result.applied) {
     throw new Error(BINDING_CHANGED_MESSAGE);
   }
   if (previous && previous.bindingRevision !== result.bindingRevision) {
     sessionBackgroundDeliveryService.invalidate(input.workspaceId, previous.bindingRevision);
-  }
-  if (shouldAddControl(input, deliveryMode, recipientSessionId)) {
-    await workspacePRMonitoringService.addEnabledControl(
-      input.workspaceId,
-      result.bindingRevision,
-      settings?.ratchetReplyToPrComments ?? false
-    );
   }
   await wakePRDelivery(input.workspaceId, createPRDeliveryPorts(services));
   return { status: 'updated' as const, bindingRevision: result.bindingRevision };
@@ -112,12 +102,4 @@ export async function bindIssueMonitoringSession(
       services
     );
   }
-}
-
-function shouldAddControl(
-  input: { enabled: boolean; resume?: boolean },
-  mode: PRDeliveryMode,
-  recipient: string | null
-) {
-  return input.enabled && !input.resume && mode === 'MAIN' && !!recipient;
 }

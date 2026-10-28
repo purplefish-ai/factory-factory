@@ -30,31 +30,6 @@ async function validateRecipient(tx: Prisma.TransactionClient, input: PRBindingI
     }
   }
 }
-async function insertEnableControl(
-  tx: Prisma.TransactionClient,
-  input: PRBindingInput,
-  bindingRevision: number
-) {
-  if (
-    input.deliveryMode === 'DEDICATED' ||
-    !(input.enabled && input.recipientSessionId) ||
-    input.replyToPrComments === undefined
-  ) {
-    return;
-  }
-  await workspacePrEventAccessor.insert(tx, input.workspaceId, null, [
-    {
-      kind: 'MONITORING_ENABLED',
-      deduplicationKey: `enabled:${bindingRevision}`,
-      payload: {
-        kind: 'MONITORING_ENABLED',
-        workspaceId: input.workspaceId,
-        bindingRevision,
-        replyToPrComments: input.replyToPrComments,
-      },
-    },
-  ]);
-}
 function resolveBinding(input: PRBindingInput, config: WorkspacePRMonitoring) {
   const deliveryMode = prDeliveryModeSchema.parse(input.deliveryMode ?? config.deliveryMode);
   const recipientSessionId =
@@ -92,8 +67,7 @@ function bindingTransition(input: PRBindingInput, config: WorkspacePRMonitoring)
 
 async function updateBindingEvents(
   tx: Prisma.TransactionClient,
-  transition: ReturnType<typeof bindingTransition>,
-  bindingRevision: number
+  transition: ReturnType<typeof bindingTransition>
 ) {
   const { effective, bindingChanged, cancelPendingFacts, shouldResume } = transition;
   if (bindingChanged) {
@@ -102,7 +76,6 @@ async function updateBindingEvents(
     } else {
       await workspacePrEventAccessor.cancelUnclaimedControls(tx, effective.workspaceId);
     }
-    await insertEnableControl(tx, effective, bindingRevision);
   }
   if (shouldResume) {
     await workspacePrEventAccessor.renewRetryAllowance(tx, effective.workspaceId);
@@ -168,7 +141,6 @@ class WorkspacePrMonitoringAccessor {
       const { effective, bindingChanged, shouldResume, data } = transition;
       await validateRecipient(tx, effective);
       if (!(bindingChanged || shouldResume)) {
-        await insertEnableControl(tx, effective, config.bindingRevision);
         return { applied: true, bindingRevision: config.bindingRevision };
       }
       const result = await tx.workspacePRMonitoring.updateMany({
@@ -180,7 +152,7 @@ class WorkspacePrMonitoringAccessor {
         data,
       });
       if (result.count) {
-        await updateBindingEvents(tx, transition, config.bindingRevision + 1);
+        await updateBindingEvents(tx, transition);
       }
       return {
         applied: result.count === 1,

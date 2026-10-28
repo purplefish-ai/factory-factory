@@ -445,9 +445,9 @@ messages:
 - Issue starts: `src/shared/issue-start-prompt.ts`, shared with the editable UI
   preview. It supplies untrusted issue data, the implementation/PR outcome,
   repository-defined verification, and screenshot/PR metadata.
-- PR updates: `src/backend/prompts/pr-event.ts` renders bounded facts and a
-  trusted enablement control for the existing main conversation. Delivery uses
-  the source-aware session queue and strict provider resume; see
+- PR updates: `src/backend/prompts/pr-event.ts` renders bounded PR facts with
+  maintenance instructions only when an attached PR has actionable events.
+  Delivery uses the source-aware session queue and strict provider resume; see
   [PR updates](pull-requests.md).
 - Quick actions: `prompts/quick-actions/` (see below).
 - Auto-iteration: `src/backend/services/auto-iteration/service/prompts.ts`.

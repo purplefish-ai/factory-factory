@@ -52,7 +52,7 @@ it('requires an explicit recipient when more than one ordinary conversation exis
   expect(mocks.setBinding).not.toHaveBeenCalled();
   expect(mocks.wake).not.toHaveBeenCalled();
 });
-it('binds the unique ordinary conversation and emits one trusted enable control', async () => {
+it('binds the unique ordinary conversation without queuing a PR update', async () => {
   mocks.sessions.mockResolvedValue([
     { id: 'a', workflow: 'code' },
     { id: 'aux', workflow: 'auto-iteration' },
@@ -63,9 +63,8 @@ it('binds the unique ordinary conversation and emits one trusted enable control'
     enabled: true,
     expectedBindingRevision: 2,
     recipientSessionId: 'a',
-    replyToPrComments: false,
   });
-  expect(mocks.control).toHaveBeenCalledExactlyOnceWith('w', 3, false);
+  expect(mocks.control).not.toHaveBeenCalled();
   expect(mocks.invalidate).toHaveBeenCalledExactlyOnceWith('w', 2);
 });
 it('rejects stale binding changes without queuing control or facts', async () => {
@@ -89,11 +88,10 @@ it('binds the issue-start conversation explicitly rather than choosing a recent 
     enabled: true,
     expectedBindingRevision: 2,
     recipientSessionId: 'a',
-    replyToPrComments: false,
   });
 });
 
-it('repairs a missing enable control when the same enabled binding is retried', async () => {
+it('does not queue a PR update when the same enabled binding is retried', async () => {
   mocks.get.mockResolvedValue({ enabled: true, recipientSessionId: 'a', bindingRevision: 3 });
   mocks.setBinding.mockResolvedValue({ applied: true, bindingRevision: 3 });
   await setPRMonitoring({
@@ -102,7 +100,7 @@ it('repairs a missing enable control when the same enabled binding is retried', 
     recipientSessionId: 'a',
     expectedBindingRevision: 3,
   });
-  expect(mocks.control).toHaveBeenCalledExactlyOnceWith('w', 3, false);
+  expect(mocks.control).not.toHaveBeenCalled();
 });
 
 it('enables dedicated delivery without selecting a main recipient or emitting a control', async () => {
