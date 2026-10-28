@@ -33,6 +33,8 @@ const ClaudeHistoryEntrySchema = z
   .object({
     type: z.string().optional(),
     isSidechain: z.boolean().optional(),
+    isMeta: z.boolean().optional(),
+    turnCompanion: z.boolean().optional(),
     sessionId: z.string().optional(),
     timestamp: z.string().optional(),
     createdAt: z.string().optional(),
@@ -271,6 +273,55 @@ function parseChunkAsHistory(
   );
 }
 
+const HistoryImageSchema = z.object({
+  type: z.literal('image'),
+  source: z.object({
+    type: z.literal('base64'),
+    media_type: z.enum(['image/png', 'image/jpeg', 'image/gif', 'image/webp']),
+    data: z
+      .string()
+      .min(1)
+      .regex(/^[A-Za-z0-9+/]+={0,2}$/),
+  }),
+});
+
+function restoreUserImages(
+  messages: HistoryMessage[],
+  content: unknown[],
+  timestamp: string,
+  uuid: string | undefined
+): void {
+  let imageIndex = 0;
+  const attachments = content.flatMap((chunk, index) => {
+    const parsed = HistoryImageSchema.safeParse(chunk);
+    if (!parsed.success) {
+      return [];
+    }
+    const { data, media_type: mediaType } = parsed.data.source;
+    imageIndex += 1;
+    return [
+      {
+        id: `history-image-${uuid ?? timestamp}-${index}`,
+        name: `image-${imageIndex}.${mediaType.slice('image/'.length)}`,
+        type: mediaType,
+        contentType: 'image' as const,
+        size: Buffer.byteLength(data, 'base64'),
+        data,
+      },
+    ];
+  });
+  if (attachments.length === 0) {
+    return;
+  }
+  // Keep attachments on the original prompt instead of creating separate chat rows.
+  const userMessage = messages.find((message) => message.type === 'user');
+  if (userMessage) {
+    userMessage.attachments = attachments;
+  } else {
+    messages.unshift(withOptionalUuid({ type: 'user', content: '', timestamp, attachments }, uuid));
+  }
+}
+
 function parseContentAsHistory(
   role: 'assistant' | 'user',
   content: string | unknown[],
@@ -298,6 +349,9 @@ function parseContentAsHistory(
     }
   }
 
+  if (role === 'user') {
+    restoreUserImages(messages, content, timestamp, uuid);
+  }
   return messages;
 }
 
@@ -352,7 +406,8 @@ function isEntryEligible(entry: ClaudeSessionHistoryEntry, providerSessionId: st
   if (entry.type !== 'user' && entry.type !== 'assistant') {
     return false;
   }
-  if (entry.isSidechain) {
+  // Claude stores image file references as metadata companions to the original prompt.
+  if (entry.isSidechain || (entry.isMeta && entry.turnCompanion)) {
     return false;
   }
   if (entry.sessionId && entry.sessionId !== providerSessionId) {

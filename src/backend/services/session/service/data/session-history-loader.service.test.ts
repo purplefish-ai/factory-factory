@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { configService } from '@/backend/services/config.service';
+import { buildTranscriptFromHistory } from '../store/session-transcript';
 import { claudeSessionHistoryLoaderService } from './session-history-loader.service';
 
 function encodeProjectPath(cwd: string): string {
@@ -162,6 +163,132 @@ describe('claudeSessionHistoryLoaderService', () => {
         timestamp: '2026-02-14T00:00:03.000Z',
       },
     ]);
+  });
+
+  it('restores image attachments on the user message and omits image companion metadata', async () => {
+    const providerSessionId = 'images-session';
+    const cwd = '/Users/test/project';
+    const timestamp = '2026-10-28T10:03:09.340Z';
+    const data =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII=';
+    writeSessionFile({
+      claudeConfigDir: tempDir,
+      cwd,
+      providerSessionId,
+      entries: [
+        {
+          type: 'user',
+          sessionId: providerSessionId,
+          timestamp,
+          uuid: 'original-image',
+          message: {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Look at this screenshot' },
+              { type: 'image', source: { type: 'base64', media_type: 'image/png', data } },
+            ],
+          },
+        },
+        {
+          type: 'user',
+          sessionId: providerSessionId,
+          timestamp,
+          isMeta: true,
+          turnCompanion: true,
+          message: {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: '[Image: source: /private/tmp/claude-501/project/images/1.png]',
+              },
+            ],
+          },
+        },
+      ],
+    });
+
+    const result = await claudeSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: cwd,
+    });
+    expect(result.status).toBe('loaded');
+    if (result.status !== 'loaded') {
+      return;
+    }
+    const transcript = buildTranscriptFromHistory(result.history);
+    expect(transcript).toHaveLength(1);
+    expect(transcript[0]).toMatchObject({
+      source: 'user',
+      text: 'Look at this screenshot',
+      timestamp,
+    });
+    expect(transcript[0]?.attachments).toEqual([
+      {
+        id: expect.any(String),
+        name: 'image-1.png',
+        type: 'image/png',
+        contentType: 'image',
+        size: 68,
+        data,
+      },
+    ]);
+  });
+
+  it('restores image-only messages with multiple images and skips malformed image blocks', async () => {
+    const providerSessionId = 'image-only-session';
+    const cwd = '/Users/test/project';
+    writeSessionFile({
+      claudeConfigDir: tempDir,
+      cwd,
+      providerSessionId,
+      entries: [
+        {
+          type: 'user',
+          sessionId: providerSessionId,
+          uuid: 'images-only',
+          timestamp: '2026-10-28T10:03:09.340Z',
+          message: {
+            role: 'user',
+            content: [
+              {
+                type: 'image',
+                source: { type: 'base64', media_type: 'image/jpeg', data: '/9j/2Q==' },
+              },
+              {
+                type: 'image',
+                source: { type: 'base64', media_type: 'image/webp', data: 'UklGRg==' },
+              },
+              { type: 'image', source: { type: 'base64', media_type: 'text/html', data: 'YWJj' } },
+              { type: 'image', source: { type: 'base64', media_type: 'image/png' } },
+              { type: 'image', source: { type: 'url', url: 'https://example.com/image.png' } },
+            ],
+          },
+        },
+      ],
+    });
+    const result = await claudeSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: cwd,
+    });
+    expect(result.status).toBe('loaded');
+    if (result.status !== 'loaded') {
+      return;
+    }
+    const transcript = buildTranscriptFromHistory(result.history);
+    expect(transcript).toHaveLength(1);
+    expect(transcript[0]).toMatchObject({ source: 'user', text: '' });
+    expect(transcript[0]?.attachments).toMatchObject([
+      { name: 'image-1.jpeg', type: 'image/jpeg', size: 4, data: '/9j/2Q==' },
+      { name: 'image-2.webp', type: 'image/webp', size: 4, data: 'UklGRg==' },
+    ]);
+    expect(new Set(transcript[0]?.attachments?.map((attachment) => attachment.id)).size).toBe(2);
+    expect(
+      await claudeSessionHistoryLoaderService.loadSessionHistory({
+        providerSessionId,
+        workingDir: cwd,
+      })
+    ).toEqual(result);
   });
 
   it('normalizes tool_result entries with omitted content to an empty string', async () => {

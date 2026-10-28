@@ -4,6 +4,11 @@ Rejected or failed messages restore their text and attachments only when the
 current session composer is empty. A newer draft or attachment selection is
 preserved, and clearing it later does not replay the earlier recovery.
 
+Claude session history restores inline image blocks as attachments on the
+original user prompt, including image-only prompts. Image-reference metadata
+companions are omitted from chat replay; their temporary file paths are not
+read.
+
 The new-workspace slash-command palette prefers project command descriptions
 over same-named global commands, matching the workspace-first precedence used
 when loading a Claude session. Commands found only in the global directory
