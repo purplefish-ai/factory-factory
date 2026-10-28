@@ -1,5 +1,6 @@
 import type { ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import { tmpdir } from 'node:os';
 import { PassThrough } from 'node:stream';
 import type { RequestPermissionRequest } from '@agentclientprotocol/sdk/unstable';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -132,7 +133,7 @@ function createDeferred<T>(): {
 function defaultOptions(overrides?: Partial<AcpClientOptions>): AcpClientOptions {
   return {
     provider: 'CLAUDE',
-    workingDir: '/tmp/workspace',
+    workingDir: tmpdir(),
     sessionId: 'log-session-1',
     ...overrides,
   };
@@ -298,7 +299,7 @@ describe('AcpClientFactory', () => {
     await factory.createClient(createParams({ options: defaultOptions({ provider: 'CODEX' }) }));
 
     expect(mocks.spawn).toHaveBeenCalledWith(expect.any(String), expect.any(Array), {
-      cwd: '/tmp/workspace',
+      cwd: tmpdir(),
       stdio: ['pipe', 'pipe', 'pipe'],
       env: {
         CUSTOM_ENV: 'preserved',
@@ -357,7 +358,7 @@ describe('AcpClientFactory', () => {
     );
 
     expect(mocks.newSession).toHaveBeenCalledWith({
-      cwd: '/tmp/workspace',
+      cwd: tmpdir(),
       mcpServers: [
         {
           name: 'workspace-tools',
@@ -408,7 +409,7 @@ describe('AcpClientFactory', () => {
 
     expect(mocks.loadSession).toHaveBeenCalledWith({
       sessionId: 'stored-provider-1',
-      cwd: '/tmp/workspace',
+      cwd: tmpdir(),
       mcpServers: [],
     });
     expect(mocks.newSession).not.toHaveBeenCalled();

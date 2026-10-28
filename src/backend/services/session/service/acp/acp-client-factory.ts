@@ -23,9 +23,9 @@ import type {
 import { raceWithSoftTimeout } from './acp-runtime-quiescence';
 import {
   createAcpSpawnError,
-  hasUsableWorkingDir,
   resolveProviderAcpSpawnCommand,
   type SpawnCommand,
+  validateAcpWorkingDir,
   withTimeout,
 } from './acp-runtime-spawn';
 import { requireSessionConfigOptions } from './acp-session-config-options';
@@ -81,9 +81,7 @@ export class AcpClientFactory {
   async createClient(params: CreateAcpClientParams): Promise<AcpProcessHandle> {
     const { sessionId, options, handlers, metadata, shutdownSignal, stopSignal } = params;
     const startupTimeoutMs = this.acpStartupTimeoutMs;
-    if (!hasUsableWorkingDir(options.workingDir)) {
-      throw new Error('ACP working directory is required before spawning adapter process');
-    }
+    validateAcpWorkingDir(options.workingDir);
 
     const spawnCommand = resolveSpawnCommand(options);
     const isCodex = options.provider === 'CODEX';

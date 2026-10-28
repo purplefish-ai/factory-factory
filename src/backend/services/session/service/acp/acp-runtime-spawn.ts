@@ -1,4 +1,5 @@
 import type { ChildProcess } from 'node:child_process';
+import { statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { createLogger } from '@/backend/services/logger.service';
@@ -13,8 +14,21 @@ export type SpawnCommand = {
   commandLabel: string;
 };
 
-export function hasUsableWorkingDir(workingDir: string | null | undefined): boolean {
-  return typeof workingDir === 'string' && workingDir.trim().length > 0;
+export function validateAcpWorkingDir(workingDir: string | null | undefined): void {
+  if (typeof workingDir !== 'string' || workingDir.trim().length === 0) {
+    throw new Error('ACP working directory is required before spawning adapter process');
+  }
+
+  // A missing cwd makes spawn report ENOENT against the executable, even when Node exists.
+  const stats = statSync(workingDir, { throwIfNoEntry: false });
+  if (!stats) {
+    throw new Error(
+      `ACP working directory does not exist: "${workingDir}". Restore the workspace worktree before starting the session.`
+    );
+  }
+  if (!stats.isDirectory()) {
+    throw new Error(`ACP working directory is not a directory: "${workingDir}"`);
+  }
 }
 
 export function createAcpSpawnError(commandLabel: string, error: unknown): Error {
