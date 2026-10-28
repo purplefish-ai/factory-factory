@@ -84,7 +84,7 @@ function resolveCodexReasoningValue(
   if (defaultReasoningValue && values.has(defaultReasoningValue)) {
     return defaultReasoningValue;
   }
-  return reasoningValues[0] ?? null;
+  return null;
 }
 
 function upsertCodexModelOption(
@@ -149,12 +149,11 @@ function upsertCodexReasoningOption(
     name: entry.reasoningEffort,
     ...(entry.description ? { description: entry.description } : {}),
   }));
-  const resolvedReasoningValue =
-    resolveCodexReasoningValue(
-      readConfigOptionCurrentValue(existingReasoningOption),
-      selectedModel?.defaultReasoningEffort,
-      reasoningSelectOptions.map((entry) => entry.value)
-    ) ?? reasoningSelectOptions[0]?.value;
+  const resolvedReasoningValue = resolveCodexReasoningValue(
+    readConfigOptionCurrentValue(existingReasoningOption),
+    selectedModel?.defaultReasoningEffort,
+    reasoningSelectOptions.map((entry) => entry.value)
+  );
 
   if (!resolvedReasoningValue) {
     if (reasoningOptionIndex >= 0) {
