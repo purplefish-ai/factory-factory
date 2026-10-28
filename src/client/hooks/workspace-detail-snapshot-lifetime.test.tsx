@@ -127,7 +127,7 @@ describe('snapshot detail history in a real hook mount', () => {
     expect(utils.workspace.get.getData({ id: 'ws-1' })).toBeUndefined();
   });
 
-  it('keeps independent mounted hook histories and rejects superseded callbacks', () => {
+  it('keeps departure histories independent between simultaneously mounted hooks', () => {
     fixture();
     const reset = vi.spyOn(queryClient, 'resetQueries');
     utils.workspace.get.setData({ id: 'ws-1' }, row());
