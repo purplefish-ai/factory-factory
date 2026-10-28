@@ -53,6 +53,17 @@ controls render select options.
 
 ### Provider and model selection
 
+Each default application graph constructs its own session creation resolver and
+data facade. Their forwarding callbacks use the graph's current workspace,
+resolver, and `userSettingsQueryService` capabilities for persisted provider and
+model defaults. The separate `userSettingsService` alias still serves PR/bridge
+policy; substituting settings for both policies requires binding both aliases.
+The session capsule also exports factories for explicit construction and retains
+process-default singleton exports for legacy callers. Persistence accessors,
+acquisition queues, and other runtime settings reads retain their existing
+scope; this creation boundary does not isolate an entire application runtime or
+make separate settings reads atomic.
+
 Model selection uses the explicit launch choice, then the user's saved default
 for that provider. Existing conversations retain their stored model. New and
 resumed runtimes apply that model through the advertised ACP model option before

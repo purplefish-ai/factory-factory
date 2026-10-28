@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { agentSessionAccessor } from '@/backend/services/session/resources/agent-session.accessor';
+import { createLifecycleTestSession } from '@/backend/services/session/service/lifecycle/session-lifecycle.test-helpers';
 import { userSettingsService } from '@/backend/services/settings';
 import { SessionStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
@@ -69,8 +71,8 @@ function setupInitialization(services: ReturnType<typeof createGraph>['services'
   vi.spyOn(services.sessionLifecycleService, 'startSession').mockResolvedValue(
     unsafeCoerce(undefined)
   );
-  vi.spyOn(services.sessionDataService, 'findAgentSessionsByWorkspaceId').mockResolvedValue([
-    unsafeCoerce({ id: 'session-init', status: SessionStatus.IDLE, model: 'sonnet' }),
+  vi.spyOn(agentSessionAccessor, 'findByWorkspaceId').mockResolvedValue([
+    createLifecycleTestSession({ id: 'session-init', status: SessionStatus.IDLE, model: 'sonnet' }),
   ]);
   vi.spyOn(services.workspaceStateMachine, 'startProvisioning').mockResolvedValue(workspace);
 }
@@ -187,9 +189,9 @@ describe('application queue producer composition', () => {
       vi.spyOn(services.workspaceNotificationService, 'notifyChild').mockResolvedValue(
         notification
       );
-      vi.spyOn(services.sessionDataService, 'findAgentSessionsByWorkspaceId').mockImplementation(
-        async (id) => [unsafeCoerce({ id: `session-${id}`, status: SessionStatus.IDLE })]
-      );
+      vi.spyOn(agentSessionAccessor, 'findByWorkspaceId').mockImplementation(async (id) => [
+        createLifecycleTestSession({ id: `session-${id}`, status: SessionStatus.IDLE }),
+      ]);
       for (const graph of [first, second]) {
         await expect(
           graph.services.deliverWorkspaceNotification({

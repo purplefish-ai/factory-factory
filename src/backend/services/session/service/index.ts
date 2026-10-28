@@ -41,8 +41,18 @@ export type {
 } from './chat/session-load.service';
 export { SessionDispatchService } from './dispatch/session-dispatch.service';
 export type { DispatchOptions } from './dispatch/session-dispatch.types';
-export { sessionDataService } from './data/session-data.service';
-export { sessionProviderResolverService } from './data/session-provider-resolver.service';
+export {
+  createSessionDataService,
+  sessionDataService,
+  type SessionDataDependencies,
+  type SessionDataService,
+} from './data/session-data.service';
+export {
+  createSessionProviderResolverService,
+  sessionProviderResolverService,
+  type SessionProviderResolverDependencies,
+  type SessionProviderResolverService,
+} from './data/session-provider-resolver.service';
 export type { SessionInterceptorBridge } from './interceptor.bridge';
 export { sessionInterceptorBridge } from './interceptor.bridge';
 export { ClaudeModelCatalogService } from './lifecycle/claude-model-catalog.service';
