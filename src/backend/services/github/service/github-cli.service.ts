@@ -271,7 +271,7 @@ class GitHubCLIService {
       const afterClause = afterCursor ? `, after: ${JSON.stringify(afterCursor)}` : '';
       const query = `
         query {
-          search(query: "is:pr is:open review-requested:@me", type: ISSUE, first: 50${afterClause}) {
+          search(query: "is:pr is:open review-requested:@me archived:false", type: ISSUE, first: 50${afterClause}) {
             pageInfo {
               hasNextPage
               endCursor
