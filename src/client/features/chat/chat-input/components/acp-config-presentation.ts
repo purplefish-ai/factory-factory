@@ -32,6 +32,7 @@ export function getConfigPresentation(option: AcpConfigOption) {
       : (Object.entries(icons).find(([value]) => value === option.currentValue)?.[1] ?? ShieldIcon);
     return {
       label: 'Access',
+      toggle: false,
       icon,
       compact: true,
       active: option.currentValue === 'plan',
@@ -41,6 +42,7 @@ export function getConfigPresentation(option: AcpConfigOption) {
   if (matches('collaboration_mode', 'plan_mode')) {
     return {
       label: 'Planning',
+      toggle: true,
       icon: MapTrifoldIcon,
       compact: true,
       active: option.currentValue === 'plan',
@@ -50,6 +52,7 @@ export function getConfigPresentation(option: AcpConfigOption) {
   if (matches('fast-mode', 'fast')) {
     return {
       label: 'Fast mode',
+      toggle: true,
       icon: GaugeIcon,
       compact: true,
       active: option.currentValue === 'on',
@@ -59,11 +62,19 @@ export function getConfigPresentation(option: AcpConfigOption) {
   if (matches('reasoning_effort', 'reasoning', 'effort', 'thought_level')) {
     return {
       label: 'Reasoning effort',
+      toggle: false,
       icon: BrainIcon,
       compact: false,
       active: false,
       warning: false,
     };
   }
-  return { label: option.name, icon: undefined, compact: false, active: false, warning: false };
+  return {
+    toggle: false,
+    label: option.name,
+    icon: undefined,
+    compact: false,
+    active: false,
+    warning: false,
+  };
 }

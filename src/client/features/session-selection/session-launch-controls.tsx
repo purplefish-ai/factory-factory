@@ -194,35 +194,18 @@ export function PlanningSelector({
   return (
     <TooltipProvider>
       <Tooltip>
-        <DropdownMenu>
-          <TooltipTrigger asChild>
-            <DropdownMenuTrigger asChild>
-              <ComposerMenuTrigger
-                iconOnly
-                icon={<MapTrifoldIcon className="size-3.5 shrink-0" aria-hidden="true" />}
-                className={cn('shrink-0', control.enabled && 'bg-accent text-accent-foreground')}
-                disabled={disabled || unavailable}
-                aria-label={`Planning: ${control.enabled ? 'Plan' : 'Default'}`}
-                aria-description={description}
-              />
-            </DropdownMenuTrigger>
-          </TooltipTrigger>
-          <DropdownMenuContent align="start" className="w-64 max-w-[calc(100vw-2rem)]">
-            <DropdownMenuLabel>Planning</DropdownMenuLabel>
-            <DropdownMenuRadioGroup
-              value={control.enabled ? 'plan' : 'default'}
-              onValueChange={(value) => control.onChange(value === 'plan')}
-            >
-              <DropdownMenuRadioItem value="default">Default</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem
-                value="plan"
-                disabled={control.loading || Boolean(control.error) || !control.supported}
-              >
-                Plan
-              </DropdownMenuRadioItem>
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <TooltipTrigger asChild>
+          <ComposerMenuTrigger
+            iconOnly
+            icon={<MapTrifoldIcon className="size-3.5 shrink-0" aria-hidden="true" />}
+            className={cn('shrink-0', control.enabled && 'bg-accent text-accent-foreground')}
+            disabled={disabled || unavailable}
+            aria-label={`Planning: ${control.enabled ? 'Plan' : 'Default'}`}
+            aria-description={description}
+            aria-pressed={control.enabled}
+            onClick={() => control.onChange(!control.enabled)}
+          />
+        </TooltipTrigger>
         <TooltipContent side="top">{description}</TooltipContent>
       </Tooltip>
     </TooltipProvider>

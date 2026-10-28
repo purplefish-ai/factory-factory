@@ -113,7 +113,10 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Interactive: Story = {};
-export const Planning: Story = { args: { planEnabled: true } };
+export const Planning: Story = {
+  name: 'Planning toggle enabled',
+  args: { planEnabled: true },
+};
 export const Dark: Story = { globals: { theme: 'dark' } };
 export const Loading: Story = { args: { state: 'loading' } };
 export const FailedDiscovery: Story = { args: { state: 'error' } };
