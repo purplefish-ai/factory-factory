@@ -96,13 +96,56 @@ describe('SessionLaunchControls', () => {
     keyboardOpen(trigger);
     keyboardSelect('Default');
     expect(onReasoningChange).toHaveBeenCalledWith(null);
-    const plan = mounted.container.querySelector<HTMLButtonElement>('[aria-label="Plan mode"]');
+    const plan = mounted.container.querySelector<HTMLButtonElement>(
+      '[aria-label="Planning: Plan"]'
+    );
     expect(plan?.disabled).toBe(false);
-    expect(plan?.hasAttribute('title')).toBe(false);
+    expect(plan?.title).toContain('Turn Plan off to launch');
     expect(plan?.getAttribute('aria-description')).toContain('Turn Plan off to launch');
-    expect(plan?.getAttribute('aria-pressed')).toBe('true');
-    flushSync(() => plan?.click());
+    keyboardOpen(plan);
+    const selected = document.body.querySelector('[role="menuitemradio"][aria-checked="true"]');
+    expect(selected?.textContent).toBe('Plan');
+    expect(
+      [...document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]')]
+        .find((item) => item.textContent === 'Plan')
+        ?.getAttribute('data-disabled')
+    ).not.toBeNull();
+    keyboardSelect('Default');
     expect(onPlanChange).toHaveBeenCalledWith(false);
+  });
+  it('keeps the unavailable-thinking warning outside the truncated long label', () => {
+    const label = 'Maximum advertised thinking level no longer supported';
+    const mounted = mount({
+      reasoning: {
+        value: label,
+        options: [{ value: 'high', label: 'High' }],
+        loading: false,
+        invalid: true,
+        onChange: vi.fn(),
+        onRetry: vi.fn(),
+      },
+    });
+    const trigger = mounted.container.querySelector<HTMLButtonElement>(
+      `[aria-label="Thinking level: ${label}"]`
+    );
+    const warning = trigger?.querySelector('[aria-label="Unavailable thinking level"]');
+    expect(warning).not.toBeNull();
+    const truncatedLabel = trigger?.querySelector('.truncate');
+    expect(truncatedLabel?.textContent).toBe(label);
+    expect(truncatedLabel?.contains(warning ?? null)).toBe(false);
+    keyboardOpen(trigger);
+    keyboardSelect('Default');
+    expect(mounted.props.reasoning?.onChange).toHaveBeenCalledWith(null);
+  });
+  it('selects planning from a labeled menu like chat configuration', () => {
+    const mounted = mount();
+    const trigger = mounted.container.querySelector<HTMLButtonElement>(
+      '[aria-label="Planning: Default"]'
+    );
+    expect(trigger?.textContent).toBe('Default');
+    keyboardOpen(trigger);
+    keyboardSelect('Plan');
+    expect(mounted.props.planMode?.onChange).toHaveBeenCalledWith(true);
   });
   it('offers discovery retry while leaving provider and model selection available', () => {
     const onRetry = vi.fn();
@@ -134,7 +177,8 @@ describe('SessionLaunchControls', () => {
     flushSync(() => retry?.click());
     expect(onRetry).toHaveBeenCalledOnce();
     expect(
-      mounted.container.querySelector<HTMLButtonElement>('[aria-label="Plan mode"]')?.disabled
+      mounted.container.querySelector<HTMLButtonElement>('[aria-label="Planning: Default"]')
+        ?.disabled
     ).toBe(true);
   });
 });

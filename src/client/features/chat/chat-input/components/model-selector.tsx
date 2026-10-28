@@ -1,5 +1,4 @@
-import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
-import { Button } from '@/components/ui/button';
+import { ComposerMenuTrigger } from '@/client/components/composer-menu-trigger';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,15 +25,9 @@ export function ModelSelector({ selectedModel, options, onChange, disabled }: Mo
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={disabled}
-          className="h-6 max-w-[12rem] gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
-        >
-          <span className="truncate">{displayName}</span>
-          <CaretDownIcon className="h-3 w-3 shrink-0" />
-        </Button>
+        <ComposerMenuTrigger disabled={disabled} className="max-w-[12rem]">
+          {displayName}
+        </ComposerMenuTrigger>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-40">
         <DropdownMenuRadioGroup value={selectedModel} onValueChange={onChange}>
