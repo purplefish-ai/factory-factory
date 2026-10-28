@@ -8,7 +8,7 @@ type Logger = ReturnType<typeof createLogger>;
  * for batched PR discovery. The scheduler performs the GitHub lookup so completion
  * stays lightweight and does not bypass discovery backoff coordination.
  */
-export async function maybeDiscoverPROnSessionEnd(
+export async function schedulePRDiscovery(
   workspaceId: string,
   logger: Logger,
   workspace: Pick<SessionLifecycleWorkspaceBridge, 'resetPRDiscoveryBackoff'>
@@ -17,7 +17,7 @@ export async function maybeDiscoverPROnSessionEnd(
     await workspace.resetPRDiscoveryBackoff(workspaceId);
   } catch (error) {
     // Fire-and-forget: log but don't surface to caller.
-    logger.debug('PR discovery backoff reset on session end failed', {
+    logger.debug('PR discovery backoff reset failed', {
       workspaceId,
       error: error instanceof Error ? error.message : String(error),
     });

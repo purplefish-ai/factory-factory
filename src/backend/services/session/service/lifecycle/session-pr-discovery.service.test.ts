@@ -5,9 +5,9 @@ const { mockResetPRDiscoveryBackoff } = vi.hoisted(() => ({
   mockResetPRDiscoveryBackoff: vi.fn(),
 }));
 
-import { maybeDiscoverPROnSessionEnd } from './session-pr-discovery.service';
+import { schedulePRDiscovery } from './session-pr-discovery.service';
 
-describe('maybeDiscoverPROnSessionEnd', () => {
+describe('schedulePRDiscovery', () => {
   const logger = createLogger('session-pr-discovery-test');
 
   beforeEach(() => {
@@ -16,7 +16,7 @@ describe('maybeDiscoverPROnSessionEnd', () => {
   });
 
   it('resets persisted discovery backoff without performing GitHub discovery', async () => {
-    await maybeDiscoverPROnSessionEnd('workspace-1', logger, {
+    await schedulePRDiscovery('workspace-1', logger, {
       resetPRDiscoveryBackoff: mockResetPRDiscoveryBackoff,
     });
 
@@ -30,12 +30,12 @@ describe('maybeDiscoverPROnSessionEnd', () => {
     mockResetPRDiscoveryBackoff.mockRejectedValue(error);
 
     await expect(
-      maybeDiscoverPROnSessionEnd('workspace-1', logger, {
+      schedulePRDiscovery('workspace-1', logger, {
         resetPRDiscoveryBackoff: mockResetPRDiscoveryBackoff,
       })
     ).resolves.toBeUndefined();
 
-    expect(debug).toHaveBeenCalledWith('PR discovery backoff reset on session end failed', {
+    expect(debug).toHaveBeenCalledWith('PR discovery backoff reset failed', {
       workspaceId: 'workspace-1',
       error: 'database unavailable',
     });
