@@ -10,6 +10,7 @@ import { buildTranscriptFromHistory } from '@/backend/services/session/service/s
 import type { HistoryMessage } from '@/shared/acp-protocol';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { AcpEventProcessor } from './acp-event-processor';
+import { SessionStartupCancelledError } from './session-lifecycle-gate';
 import { createDeferred, createLifecycleHarness } from './session-lifecycle.test-helpers';
 import { createProviderHistoryHydrator } from './session-provider-history-hydrator';
 import { SessionStartupCoordinator } from './session-startup.coordinator';
@@ -175,8 +176,15 @@ it.each([
   const { domain, coordinator } = setup();
   await coordinator.getOrCreateSessionClient('session-1');
   expect(
-    domain.getTranscriptSnapshot('session-1').some((entry) => entry.text === 'Initial prompt')
-  ).toBe(true);
+    domain.getTranscriptSnapshot('session-1').map((entry) => entry.text ?? entry.message?.type)
+  ).toEqual([
+    'Initial prompt',
+    'session_lifecycle',
+    'assistant',
+    'stream_event',
+    'user',
+    'assistant',
+  ]);
 });
 
 it('accepts live output after suppressing hydrated resume replay', async () => {
@@ -232,7 +240,7 @@ it('does not spawn a runtime when stopped during history hydration', async () =>
   await vi.waitFor(() => expect(loadHistory).toHaveBeenCalled());
   const reservation = h.lifecycleGate.reserveStop('session-1');
   reading.resolve({ status: 'loaded', history, filePath: '/tmp/history.jsonl' });
-  expect(await startup).toBeInstanceOf(Error);
+  expect(await startup).toBeInstanceOf(SessionStartupCancelledError);
   expect(h.runtimeManager.getOrCreateClient).not.toHaveBeenCalled();
   reservation?.release();
 });
