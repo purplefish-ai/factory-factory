@@ -55,7 +55,7 @@ export function WorkspaceCreationOptions({
             />
           </div>
         )}
-        <div className="ml-auto flex shrink-0 items-center gap-2">{children}</div>
+        <div className="ml-auto flex min-w-0 items-center gap-2">{children}</div>
       </div>
     </div>
   );

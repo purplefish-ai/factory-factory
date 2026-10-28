@@ -687,11 +687,11 @@ export function InlineWorkspaceForm({
           >
             Cancel
           </Button>
-          <div className="flex">
+          <div className="flex min-w-0">
             <Button
               size="sm"
               className={cn(
-                'h-7 text-xs whitespace-nowrap rounded-r-none',
+                'h-7 min-w-0 shrink text-xs whitespace-nowrap rounded-r-none',
                 mode !== 'STANDARD' && 'bg-primary/90'
               )}
               onClick={() => handleLaunch(mode)}
@@ -700,7 +700,7 @@ export function InlineWorkspaceForm({
               aria-description={launchDisabledReason}
             >
               {isCreating ? <SpinnerGapIcon className="h-3 w-3 animate-spin mr-1" /> : null}
-              {launchButtonLabels[mode]}
+              <span className="truncate">{launchButtonLabels[mode]}</span>
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

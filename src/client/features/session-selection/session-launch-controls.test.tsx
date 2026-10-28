@@ -100,7 +100,6 @@ describe('SessionLaunchControls', () => {
       '[aria-label="Planning: Plan"]'
     );
     expect(plan?.disabled).toBe(false);
-    expect(plan?.title).toContain('Turn Plan off to launch');
     expect(plan?.getAttribute('aria-description')).toContain('Turn Plan off to launch');
     keyboardOpen(plan);
     const selected = document.body.querySelector('[role="menuitemradio"][aria-checked="true"]');

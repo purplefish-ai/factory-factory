@@ -204,7 +204,6 @@ export function PlanningSelector({
                 disabled={disabled || unavailable}
                 aria-label={`Planning: ${control.enabled ? 'Plan' : 'Default'}`}
                 aria-description={description}
-                title={description}
               />
             </DropdownMenuTrigger>
           </TooltipTrigger>
