@@ -96,13 +96,32 @@ describe('SessionLaunchControls', () => {
     keyboardOpen(trigger);
     keyboardSelect('Default');
     expect(onReasoningChange).toHaveBeenCalledWith(null);
-    const plan = mounted.container.querySelector<HTMLButtonElement>('[aria-label="Plan mode"]');
+    const plan = mounted.container.querySelector<HTMLButtonElement>(
+      '[aria-label="Planning: Plan"]'
+    );
     expect(plan?.disabled).toBe(false);
-    expect(plan?.hasAttribute('title')).toBe(false);
+    expect(plan?.title).toContain('Turn Plan off to launch');
     expect(plan?.getAttribute('aria-description')).toContain('Turn Plan off to launch');
-    expect(plan?.getAttribute('aria-pressed')).toBe('true');
-    flushSync(() => plan?.click());
+    keyboardOpen(plan);
+    const selected = document.body.querySelector('[role="menuitemradio"][aria-checked="true"]');
+    expect(selected?.textContent).toBe('Plan');
+    expect(
+      [...document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]')]
+        .find((item) => item.textContent === 'Plan')
+        ?.getAttribute('data-disabled')
+    ).not.toBeNull();
+    keyboardSelect('Default');
     expect(onPlanChange).toHaveBeenCalledWith(false);
+  });
+  it('selects planning from a labeled menu like chat configuration', () => {
+    const mounted = mount();
+    const trigger = mounted.container.querySelector<HTMLButtonElement>(
+      '[aria-label="Planning: Default"]'
+    );
+    expect(trigger?.textContent).toBe('Default');
+    keyboardOpen(trigger);
+    keyboardSelect('Plan');
+    expect(mounted.props.planMode?.onChange).toHaveBeenCalledWith(true);
   });
   it('offers discovery retry while leaving provider and model selection available', () => {
     const onRetry = vi.fn();
@@ -134,7 +153,8 @@ describe('SessionLaunchControls', () => {
     flushSync(() => retry?.click());
     expect(onRetry).toHaveBeenCalledOnce();
     expect(
-      mounted.container.querySelector<HTMLButtonElement>('[aria-label="Plan mode"]')?.disabled
+      mounted.container.querySelector<HTMLButtonElement>('[aria-label="Planning: Default"]')
+        ?.disabled
     ).toBe(true);
   });
 });

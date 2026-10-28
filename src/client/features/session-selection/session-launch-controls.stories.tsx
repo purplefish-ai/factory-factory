@@ -11,14 +11,19 @@ interface Draft {
 interface PreviewProps {
   state?: 'ready' | 'loading' | 'error' | 'invalid' | 'unsupported';
   longLabels?: boolean;
+  planEnabled?: boolean;
 }
-function LaunchControlsPreview({ state = 'ready', longLabels = false }: PreviewProps) {
+function LaunchControlsPreview({
+  state = 'ready',
+  longLabels = false,
+  planEnabled = false,
+}: PreviewProps) {
   const [provider, setProvider] = useState<ChatProvider>('CODEX');
   const [drafts, setDrafts] = useState<Record<ChatProvider, Draft>>({
     CODEX: {
       model: state === 'invalid' ? 'luna' : 'sol',
       effort: state === 'invalid' ? 'ultra' : 'high',
-      plan: state === 'unsupported',
+      plan: planEnabled || state === 'unsupported',
     },
     CLAUDE: { model: 'sonnet', effort: null, plan: false },
   });
@@ -92,6 +97,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Interactive: Story = {};
+export const Planning: Story = { args: { planEnabled: true } };
 export const Dark: Story = { globals: { theme: 'dark' } };
 export const Loading: Story = { args: { state: 'loading' } };
 export const FailedDiscovery: Story = { args: { state: 'error' } };
