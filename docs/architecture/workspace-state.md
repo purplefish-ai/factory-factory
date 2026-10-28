@@ -20,6 +20,10 @@ resumed without rerunning setup. Its single workspace-level script warning
 exposes **Dispatch queued messages** for the selected chat. Ready workspaces
 with a setup warning dispatch normally and do not show this action.
 
+While chat session history loads, workspace initialization takes priority in the
+chat loading indicator. It shows one spinner with the setup status, then falls
+back to the session loading status if history is still loading after setup.
+
 Retrying a ready workspace with a setup warning restores READY even when its
 setup and startup scripts have been removed, before queued messages dispatch.
 
