@@ -44,6 +44,7 @@ import {
   type WorkspaceSnapshotMetadata,
 } from '@/shared/workspace-snapshot';
 import type { WorkspaceStatusReason } from '@/shared/workspace-status-reason';
+import { BranchFreshness } from './branch-freshness';
 
 export type { SnapshotFieldGroup, WorkspaceSnapshotEntry } from '@/shared/workspace-snapshot';
 
@@ -68,6 +69,8 @@ export interface SnapshotUpdateInput extends Partial<WorkspaceSnapshotMetadata> 
   status?: WorkspaceStatus;
   createdAt?: string;
   branchName?: string | null;
+  /** Input-only canonical DB branch provenance. */
+  branchUpdatedAt?: number;
   hasHadSessions?: boolean;
   mode?: WorkspaceMode;
   autoIterationStatus?: AutoIterationStatus | null;
@@ -167,13 +170,7 @@ export interface SnapshotUpsertResult {
 // Field-to-group mapping
 // ---------------------------------------------------------------------------
 
-const WORKSPACE_FIELDS = [
-  'projectId',
-  'status',
-  'createdAt',
-  'branchName',
-  'hasHadSessions',
-] as const;
+const WORKSPACE_FIELDS = ['projectId', 'status', 'createdAt', 'hasHadSessions'] as const;
 const PR_FIELDS = [
   'prs',
   'prSummary',
@@ -336,6 +333,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
   // count toward the versioned complete-summary contract.
   private hydratedFields = new Map<string, Set<SnapshotField>>();
   private rawSessionIsWorkingByWorkspaceId = new Map<string, boolean>();
+  private readonly branches = new BranchFreshness();
   /** Name freshness is independent of unrelated workspace/lifecycle observations. */
   private readonly nameTimestamps = new Map<string, number>();
   private deriveFns: SnapshotDerivationFns | null = null;
@@ -575,6 +573,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     const hydrated = this.hydratedFields.get(entry.workspaceId) ?? new Set<SnapshotField>();
     const complete =
       hydrated.has('name') &&
+      hydrated.has('branchName') &&
       FIELD_GROUP_MAPPINGS.every(
         ({ group, fields }) => group === 'git' || fields.every((field) => hydrated.has(field))
       ) &&
@@ -725,9 +724,10 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     // Field-level timestamp merge
     const grouped = this.mergeFieldGroups(entry, update, ts);
     const name = this.mergeName(entry, update, ts);
+    const branch = this.mergeBranch(entry, update, ts);
     const mergeResult = {
-      accepted: grouped.accepted || name.accepted,
-      rawChanged: grouped.rawChanged || name.rawChanged,
+      accepted: grouped.accepted || name.accepted || branch.accepted,
+      rawChanged: grouped.rawChanged || name.rawChanged || branch.rawChanged,
     };
 
     if (!(isNewEntry || mergeResult.accepted)) {
@@ -776,6 +776,50 @@ export class WorkspaceSnapshotStore extends EventEmitter {
       return { accepted: true, changed: false, emitted: false };
     }
     this.publishEntry(workspaceId, entry, 'mutation:workspace_rename', entry.projectId);
+    return { accepted: true, changed: true, emitted: true };
+  }
+
+  canAcceptBranchObservation(workspaceId: string, timestamp: number): boolean {
+    return this.branches.canAccept(workspaceId, timestamp);
+  }
+
+  private mergeBranch(
+    entry: WorkspaceSnapshotEntry,
+    update: SnapshotUpdateInput,
+    ts: number,
+    acceptedWrite = false
+  ) {
+    const result = this.branches.merge(
+      entry,
+      update.branchName,
+      update.branchUpdatedAt ?? ts,
+      acceptedWrite
+    );
+    if (result.accepted) {
+      this.hydratedFields.get(entry.workspaceId)?.add('branchName');
+    }
+    return result;
+  }
+
+  /** Equal DB milliseconds are allowed only from the serialized branch writer. */
+  publishAcceptedBranch(
+    workspaceId: string,
+    branchName: string | null,
+    branchUpdatedAt: number
+  ): SnapshotUpsertResult {
+    const entry = this.entries.get(workspaceId);
+    if (!entry || entry.status === 'ARCHIVING' || entry.status === 'ARCHIVED') {
+      return { accepted: false, changed: false, emitted: false };
+    }
+    const result = this.mergeBranch(entry, { branchName, branchUpdatedAt }, branchUpdatedAt, true);
+    if (!result.accepted) {
+      return { accepted: false, changed: false, emitted: false };
+    }
+    const summaryChanged = this.updateSummaryCompleteness(entry);
+    if (!(result.rawChanged || summaryChanged)) {
+      return { accepted: true, changed: false, emitted: false };
+    }
+    this.publishEntry(workspaceId, entry, 'mutation:workspace_branch_rename', entry.projectId);
     return { accepted: true, changed: true, emitted: true };
   }
 
@@ -832,6 +876,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     timer.unref();
     this.removalTimestamps.set(workspaceId, { removedAt, expiresAt, timer });
     this.nameTimestamps.delete(workspaceId);
+    this.branches.remove(workspaceId);
 
     const entry = this.entries.get(workspaceId);
     if (!entry) {
@@ -922,6 +967,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     this.projectIndex.clear();
     this.rawSessionIsWorkingByWorkspaceId.clear();
     this.nameTimestamps.clear();
+    this.branches.clear();
     for (const tombstone of this.removalTimestamps.values()) {
       clearTimeout(tombstone.timer);
     }

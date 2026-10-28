@@ -81,7 +81,10 @@ describe('failed PR attachment streaming', () => {
         createLogger: () => logger,
         prSnapshotService: prEvents,
         ratchetService: ratchetEvents,
-        workspaceDataService: { findRatchetProjection: read },
+        workspaceDataService: {
+          subscribeAcceptedBranch: () => vi.fn(),
+          findRatchetProjection: read,
+        },
         workspaceSnapshotStore: store,
         workspaceActivityService: new EventEmitter(),
         workspaceStateMachine: new EventEmitter(),

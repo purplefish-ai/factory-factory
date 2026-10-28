@@ -34,7 +34,7 @@ it.each(['PROVISIONING', 'READY', 'FAILED'] as const)(
       runScriptStateMachine: new EventEmitter(),
       workspaceAutoIterationService: new EventEmitter(),
       sessionDomainService: new EventEmitter(),
-      workspaceDataService: { findById },
+      workspaceDataService: { subscribeAcceptedBranch: () => vi.fn(), findById },
       workspaceSnapshotStore: store,
     });
     const collector = createEventCollectorOrchestrator(dependencies);

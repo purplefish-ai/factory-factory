@@ -54,6 +54,7 @@ function createHarness(prState: 'OPEN' | 'MERGED' | 'CLOSED' | null = 'OPEN') {
     sessionLifecycleService: { stopWorkspaceSessions: vi.fn().mockResolvedValue(undefined) },
     terminalService: { destroyWorkspaceTerminals: vi.fn() },
     workspaceDataService: {
+      subscribeAcceptedBranch: () => vi.fn(),
       findById,
       findRatchetProjection,
     },

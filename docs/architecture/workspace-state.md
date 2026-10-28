@@ -95,6 +95,34 @@ freshness metadata is not added to full or changed wire payloads. Workspace
 persistence remains independent of the snapshot store, and clients retain their
 normal stream authority rather than overlaying HTTP names.
 
+## Accepted workspace branches
+
+Manual successful branch renames resolve canonical Git HEAD before writing;
+automatic renames write only after their Git rename succeeds. Both use the
+workspace data service's branch acceptance gateway. Its transaction returns the
+canonical branch, status, and DB `updatedAt` only after the branch update and PR
+discovery schedule reset commit together. Failed transactions emit no fact. The
+gateway serializes persistence through synchronous accepted-event delivery per
+workspace; other workspaces remain independent and failures release the queue.
+The collector subscribes for its own start/stop lifetime and immediately
+publishes accepted branches, bypassing observation coalescing.
+
+The store tracks branch freshness privately, independently of workspace,
+lifecycle, and name clocks. Equal DB milliseconds are accepted only from the
+serialized branch writer. Lifecycle and reconciliation observations carry the
+row's DB timestamp and must be strictly newer; stale reads cannot undo a rename
+or produce branch drift diagnostics. Accepted branches hydrate only branchName,
+which is still required for a complete summary. An unchanged branch can advance
+freshness without emitting a new version. Missing, removed, archiving, and
+archived entries cannot be seeded by acceptance, including when the returned
+canonical row is already archiving or archived. Removal clears private branch
+freshness; provenance never enters the wire payload.
+
+Periodic reconciliation still repairs missed events and restart state. Its
+60-second interval is the delay after a completed run, not a hard maximum for
+stale UI: prior Git work, the next database read, and failed sweeps can delay
+repair.
+
 ## Run script
 
 Startup output accumulates across factory setup and project startup phases. The

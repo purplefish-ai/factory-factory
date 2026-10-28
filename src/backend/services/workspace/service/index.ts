@@ -10,6 +10,7 @@ export type {
 } from './bridges';
 export { workspaceActivityService } from './lifecycle/activity.service';
 export { WorkspaceCreationService } from './lifecycle/creation.service';
+export type { AcceptedWorkspaceBranch } from './lifecycle/accepted-branch';
 export { workspaceDataService } from './lifecycle/data.service';
 // --- Workspace lifecycle ---
 export {
