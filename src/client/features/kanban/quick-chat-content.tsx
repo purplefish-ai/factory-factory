@@ -34,6 +34,7 @@ export function QuickChatContent({
   );
 
   const running = chatState.sessionStatus.phase === 'running';
+  const promptInFlight = chatState.sessionRuntime.work?.promptInFlight ?? running;
   const stopping = chatState.sessionStatus.phase === 'stopping';
   const loadingSession = chatState.sessionStatus.phase === 'loading';
   const startingSession = chatState.sessionStatus.phase === 'starting';
@@ -104,8 +105,9 @@ export function QuickChatContent({
           disabled={!chatState.connected || loadingSession}
           running={running}
           stopping={stopping}
+          promptInFlight={promptInFlight}
           inputRef={chatState.inputRef}
-          placeholder={running ? 'Message will be queued...' : 'Type a message...'}
+          placeholder={promptInFlight ? 'Message will be queued...' : 'Type a message...'}
           settings={chatState.chatSettings}
           capabilities={chatState.chatCapabilities}
           capabilitiesLoaded={chatState.chatCapabilitiesLoaded}

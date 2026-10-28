@@ -24,10 +24,9 @@ vi.mock('./hooks/use-textarea-resize', () => ({ useTextareaResize: () => undefin
 vi.mock('./hooks/use-chat-input-actions', () => ({
   useChatInputActions: () => ({ handleFileSelect: mocks.fileSelect }),
 }));
-vi.mock('./components/input-controls', () => ({
+vi.mock('./components/input-controls', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./components/input-controls')>()),
   AttachmentSection: () => null,
-  RightControls: ({ children }: { children: React.ReactNode }) =>
-    createElement('div', null, children),
   LeftControls: ({ onFileSelect }: { onFileSelect: unknown }) => {
     mocks.callbacks.push(onFileSelect);
     return null;
@@ -55,6 +54,26 @@ describe('ChatInput file controls', () => {
     }
   });
 });
+
+it.each([
+  { promptInFlight: false, label: 'Send message' },
+  { promptInFlight: true, label: 'Queue message' },
+])(
+  'keeps queue wording separate from background work ($promptInFlight)',
+  ({ promptInFlight, label }) => {
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    try {
+      flushSync(() =>
+        root.render(<ChatInput onSend={vi.fn()} running promptInFlight={promptInFlight} />)
+      );
+      expect(container.querySelector(`[aria-label="${label}"]`)).not.toBeNull();
+      expect(container.querySelector('[aria-label="Stop agent"]')).not.toBeNull();
+    } finally {
+      flushSync(() => root.unmount());
+    }
+  }
+);
 
 it.each([true, false])(
   'preserves composer input with a dedicated compact callback: %s',

@@ -28,6 +28,8 @@ export interface ChatInputProps {
   onStop?: () => void;
   disabled?: boolean;
   running?: boolean;
+  // Prompt ownership controls queue wording independently of background activity.
+  promptInFlight?: boolean;
   stopping?: boolean;
   isCompacting?: boolean;
   inputRef?: React.RefObject<HTMLTextAreaElement | null>;
@@ -79,6 +81,7 @@ export const ChatInput = memo(function ChatInput({
   onStop,
   disabled = false,
   running = false,
+  promptInFlight = running,
   stopping = false,
   isCompacting = false,
   inputRef,
@@ -322,6 +325,7 @@ export const ChatInput = memo(function ChatInput({
           <RightControls
             pendingMessageCount={pendingMessageCount}
             running={running}
+            promptInFlight={promptInFlight}
             stopping={stopping}
             onStop={onStop}
             onSendClick={actions.handleSendClick}

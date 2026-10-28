@@ -317,6 +317,10 @@ once that RPC completes. The provider remains authoritative: if it reports an
 active turn that the client cannot observe, the existing bounded busy retry
 preserves the queued message.
 
+The workspace and quick-chat composers use prompt ownership for their queue
+placeholder and send-button label; background activity keeps the stop control
+available without implying that the next message must wait.
+
 Startup and required configuration must complete before submission. Workspace
 initialization/manual-resume policy, compaction, per-session dispatch
 serialization and stop/generation fences still apply. The prompt slot is
