@@ -50,7 +50,7 @@ export interface SessionDispatchLifecycleDependencies {
 
 /** Method-level capabilities supplied by the session composition root. */
 export interface SessionDispatchDependencies {
-  runtimeManager: Pick<AcpRuntimeManager, 'isSessionWorking' | 'isSessionRunning'>;
+  runtimeManager: Pick<AcpRuntimeManager, 'isSessionPromptInFlight' | 'isSessionRunning'>;
   configService: Pick<
     SessionConfigService,
     | 'setSessionCollaborationMode'

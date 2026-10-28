@@ -36,8 +36,13 @@ function harness(policy: 'allowed' | 'manual_resume' = 'allowed') {
     getSessionClient: vi.fn<() => unknown>().mockReturnValue({}),
     getOrCreateSessionClient: vi.fn().mockResolvedValue({}),
   };
+  const runtimeManager = {
+    isSessionWorking: vi.fn(() => false),
+    isSessionPromptInFlight: vi.fn(() => false),
+    isSessionRunning: vi.fn(() => true),
+  };
   const dispatcher = new SessionDispatchService({
-    runtimeManager: { isSessionWorking: () => false, isSessionRunning: () => true },
+    runtimeManager,
     configService: {
       setSessionCollaborationMode: vi.fn().mockResolvedValue(undefined),
       setSessionThinkingBudget: vi.fn().mockResolvedValue(undefined),
@@ -79,6 +84,7 @@ function harness(policy: 'allowed' | 'manual_resume' = 'allowed') {
     dispatcher,
     sendSessionMessage,
     startup,
+    runtimeManager,
     stop: () => {
       generation += 1;
     },
@@ -92,6 +98,35 @@ afterEach(() => {
 });
 
 describe('session dispatcher queue and lifecycle coordination', () => {
+  it('dispatches a follow-up while background activity keeps the session working', async () => {
+    // A long-lived shell, child agent, or goal must not own the parent's prompt slot.
+    const { dispatcher, runtimeManager, sendSessionMessage } = harness();
+    runtimeManager.isSessionWorking.mockReturnValue(true);
+    const message = enqueue('follow-up');
+
+    await dispatcher.tryDispatchNextMessage('session');
+
+    expect(sendSessionMessage).toHaveBeenCalledExactlyOnceWith('session', 'follow-up');
+    expect(sessionDomainService.peekNextMessage('session')).toBeUndefined();
+    expect(sessionDomainService.getTranscriptSnapshot('session')).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: message.id })])
+    );
+  });
+
+  it('keeps a message queued until the active prompt finishes even if display activity is stale', async () => {
+    const { dispatcher, runtimeManager, sendSessionMessage } = harness();
+    runtimeManager.isSessionPromptInFlight.mockReturnValue(true);
+    const message = enqueue('next-turn');
+
+    await dispatcher.tryDispatchNextMessage('session');
+    expect(sendSessionMessage).not.toHaveBeenCalled();
+    expect(sessionDomainService.peekNextMessage('session')).toBe(message);
+
+    runtimeManager.isSessionPromptInFlight.mockReturnValue(false);
+    await dispatcher.tryDispatchNextMessage('session');
+    expect(sendSessionMessage).toHaveBeenCalledExactlyOnceWith('session', 'next-turn');
+  });
+
   it('keeps the queued message visible until startup finishes across repeated dispatch requests', async () => {
     const { dispatcher, startup, sendSessionMessage } = harness();
     const message = enqueue('first');
@@ -111,6 +146,43 @@ describe('session dispatcher queue and lifecycle coordination', () => {
     await pending;
     expect(sendSessionMessage).toHaveBeenCalledExactlyOnceWith('session', 'first');
     expect(sessionDomainService.peekNextMessage('session')).toBeUndefined();
+  });
+
+  it('rechecks the prompt slot when another turn starts during auto-start', async () => {
+    const { dispatcher, startup, runtimeManager, sendSessionMessage } = harness();
+    const message = enqueue('follow-up');
+    startup.getSessionClient.mockReturnValue(undefined);
+    startup.getOrCreateSessionClient.mockImplementation(() => {
+      startup.getSessionClient.mockReturnValue({});
+      runtimeManager.isSessionPromptInFlight.mockReturnValue(true);
+      return Promise.resolve({});
+    });
+
+    await dispatcher.tryDispatchNextMessage('session');
+
+    expect(sessionDomainService.peekNextMessage('session')).toBe(message);
+    expect(sendSessionMessage).not.toHaveBeenCalled();
+    runtimeManager.isSessionPromptInFlight.mockReturnValue(false);
+    await dispatcher.tryDispatchNextMessage('session');
+    expect(sendSessionMessage).toHaveBeenCalledExactlyOnceWith('session', 'follow-up');
+  });
+
+  it('waits for compaction even when no prompt or background task is active', async () => {
+    const { dispatcher, startup, sendSessionMessage } = harness();
+    let compacting = true;
+    startup.getSessionClient.mockReturnValue({
+      isCompactingActive: () => compacting,
+      startCompaction: vi.fn(),
+      endCompaction: vi.fn(),
+    });
+    const message = enqueue('after-compaction');
+
+    await dispatcher.tryDispatchNextMessage('session');
+    expect(sessionDomainService.peekNextMessage('session')).toBe(message);
+    expect(sendSessionMessage).not.toHaveBeenCalled();
+    compacting = false;
+    await dispatcher.tryDispatchNextMessage('session');
+    expect(sendSessionMessage).toHaveBeenCalledExactlyOnceWith('session', 'after-compaction');
   });
 
   it('does not let an old completion unlock a replacement dispatch after lifecycle reset', async () => {

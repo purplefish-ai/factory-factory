@@ -34,7 +34,7 @@ const {
     getGeneration: vi.fn(),
     isGenerationCurrent: vi.fn(),
     isSessionRunning: vi.fn(),
-    isSessionWorking: vi.fn(),
+    isSessionPromptInFlight: vi.fn(),
     setSessionModel: vi.fn(),
     setSessionReasoningEffort: vi.fn(),
     setSessionThinkingBudget: vi.fn(),
@@ -138,7 +138,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
     mockNotificationDeliveryService.isNotificationMessage.mockReturnValue(false);
     mockSessionDomainService.getTranscriptSnapshot.mockReturnValue([]);
     mockSessionDomainService.removeQueuedMessage.mockReturnValue(true);
-    mockSessionService.isSessionWorking.mockReturnValue(false);
+    mockSessionService.isSessionPromptInFlight.mockReturnValue(false);
     mockSessionService.isSessionRunning.mockReturnValue(true);
     mockSessionService.isSessionStopping.mockReturnValue(false);
     mockSessionService.getGeneration.mockReturnValue(0);

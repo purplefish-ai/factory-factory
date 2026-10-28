@@ -9,8 +9,10 @@ interface PromptCardProps {
   icon: React.ReactNode;
   /** Main content of the prompt */
   children: React.ReactNode;
-  /** Action buttons to display on the right */
+  /** Action buttons to display beside or below the content */
   actions?: React.ReactNode;
+  /** Place actions below content that needs the full card width */
+  actionsPlacement?: 'inline' | 'below';
   /** ARIA role for the card (default: 'alertdialog') */
   role?: 'alertdialog' | 'form' | 'dialog';
   /** Accessible name for the card when needed */
@@ -36,6 +38,7 @@ export function PromptCard({
   icon,
   children,
   actions,
+  actionsPlacement = 'inline',
   role = 'alertdialog',
   label,
   className,
@@ -44,7 +47,12 @@ export function PromptCard({
 }: PromptCardProps) {
   return (
     <div className={cn('border-b bg-muted/50 p-3', className)} role={role}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+      <div
+        className={cn(
+          'flex min-w-0 flex-col gap-3',
+          actionsPlacement === 'inline' && 'sm:flex-row sm:items-start'
+        )}
+      >
         {label && <span className="sr-only">{label}</span>}
         <div className="flex min-w-0 flex-1 items-start gap-3">
           <div
@@ -56,7 +64,12 @@ export function PromptCard({
           <div className="min-w-0 flex-1">{children}</div>
         </div>
         {actions && (
-          <div className="flex w-full flex-wrap justify-end gap-2 sm:w-auto sm:shrink-0 sm:flex-nowrap">
+          <div
+            className={cn(
+              'flex min-w-0 w-full flex-wrap justify-end gap-2',
+              actionsPlacement === 'inline' && 'sm:w-auto sm:shrink-0 sm:flex-nowrap'
+            )}
+          >
             {actions}
           </div>
         )}

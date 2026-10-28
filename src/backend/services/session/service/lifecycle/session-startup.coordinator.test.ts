@@ -633,6 +633,7 @@ describe('SessionStartupCoordinator', () => {
     const promptResult = createDeferred<{ stopReason: string }>();
     const promptRuntimeManager = {
       sendPrompt: vi.fn(() => promptResult.promise),
+      isSessionWorking: () => false,
     };
     const promptDomainService = new SessionDomainService();
     const promptService = new SessionService({

@@ -20,6 +20,10 @@ resumed without rerunning setup. Its single workspace-level script warning
 exposes **Dispatch queued messages** for the selected chat. Ready workspaces
 with a setup warning dispatch normally and do not show this action.
 
+While chat session history loads, workspace initialization takes priority in the
+chat loading indicator. It shows one spinner with the setup status, then falls
+back to the session loading status if history is still loading after setup.
+
 Retrying a ready workspace with a setup warning restores READY even when its
 setup and startup scripts have been removed, before queued messages dispatch.
 
@@ -404,6 +408,15 @@ applied only in the badge. Raw loop payloads remain available for legacy/detail
 consumers. Complete summaries still never create fetched full detail, and
 detail-only initialization fields remain HTTP-owned. Existing incomplete-row
 repair remains necessary.
+
+`workspace-detail-snapshot-transitions` owns snapshot departure discovery, exact
+detail resets, and live detail merging. Each snapshot hook mount retains one
+opaque transition scope across reconnects, project switches, QueryClient
+replacement, and StrictMode effect replay. An actual remount gets fresh removal
+history; independent mounts do not share it. Binding the scope to a project and
+QueryClient selects its cache operations without changing that history. HTTP
+detail owners still follow each Query's cache removal/GC lifetime and own
+response provenance and success-commit guards.
 
 Each snapshot WebSocket starts from a full read of current store state after its
 optional startup seed wait. Changes emitted before that baseline are already

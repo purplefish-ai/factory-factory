@@ -7,6 +7,7 @@ import type { QueuedMessage } from '@/shared/acp-protocol';
 import {
   type ClaimedPRDelivery,
   PR_EVENT_MESSAGE_ID_PREFIX,
+  PR_UPDATE_QUEUED_TEXT,
   type PRDeliveryRequest,
 } from '@/shared/pr-monitoring';
 import { prDeliveryRequestSchema } from '@/shared/schemas/pr-event.schema';
@@ -48,7 +49,7 @@ export class SessionBackgroundDeliveryService {
     const messageId = `${PR_EVENT_MESSAGE_ID_PREFIX}queued-${key}`;
     const message: QueuedMessage = {
       id: messageId,
-      text: 'PR update queued for the next turn',
+      text: PR_UPDATE_QUEUED_TEXT,
       timestamp: new Date().toISOString(),
       source: { type: 'pr_event', request },
       settings: {

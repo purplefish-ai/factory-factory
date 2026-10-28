@@ -27,7 +27,7 @@ vi.mock('@/backend/db', () => ({
   },
 }));
 vi.mock('@/backend/services/session', () => ({
-  acpRuntimeManager: { isSessionWorking: () => state.busy },
+  acpRuntimeManager: { isSessionPromptInFlight: () => state.busy },
   sessionDomainService: { getPendingInteractiveRequest: () => null },
   sessionLifecycleService: {},
   sessionDataService: {
@@ -97,6 +97,7 @@ beforeAll(async () => {
       projectId: 'project',
       name: 'Workspace',
       status: 'READY',
+      worktreePath: db.tempDir,
       prMonitoring: { create: { enabled: true, bindingRevision: 1, eventEpoch: 1 } },
       prs: {
         create: [
@@ -291,6 +292,7 @@ it('retains a competing dedicated request and wakes it after the workspace claim
       projectId: 'project',
       name: 'Competing PRs',
       status: 'READY',
+      worktreePath: db.tempDir,
       prMonitoring: { create: { enabled: true, deliveryMode: 'DEDICATED', bindingRevision: 1 } },
     },
   });
@@ -364,6 +366,7 @@ it('coalesces poll, manual refresh, and delivery through separately composed obs
       projectId: 'project',
       name: 'Observation graph',
       status: 'READY',
+      worktreePath: db.tempDir,
       prMonitoring: { create: { enabled: true, eventEpoch: 1 } },
       prs: { create: { id: prId, url: redObservation.url } },
     },
@@ -417,6 +420,7 @@ it('accepts a changed head without superseding an in-flight frozen failure', asy
       projectId: 'project',
       name: 'Policy flow',
       status: 'READY',
+      worktreePath: db.tempDir,
       prMonitoring: { create: { enabled: true, bindingRevision: 1, eventEpoch: 1 } },
       prs: { create: { id: prId, url: redObservation.url } },
     },

@@ -73,6 +73,8 @@ import {
   acpTraceLogger,
   chatEventForwarderService,
   createSessionLoadService,
+  createSessionDataService,
+  createSessionProviderResolverService,
   sessionCommandFactories,
   sessionConfigService,
   sessionPermissionService,
@@ -81,7 +83,6 @@ import {
   codexModelCatalogService,
   providerUsageService,
   type SessionFileLogger,
-  sessionDataService,
   sessionBackgroundDeliveryService,
   findPRDeliveryReceipt,
   sessionDomainService,
@@ -90,7 +91,7 @@ import {
   sessionLifecycleEventService,
   sessionLifecycleService,
   sessionPromptTurnCompletionService,
-  sessionProviderResolverService,
+  type sessionProviderResolverService,
   sessionRepository,
   sessionService,
   voiceNarrationService,
@@ -341,7 +342,12 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     runScriptStateMachine,
     schedulerService,
     serverInstanceService,
-    sessionDataService,
+    sessionDataService: createSessionDataService({
+      providerResolver: {
+        resolveSessionDefaults: (input) =>
+          services.sessionProviderResolverService.resolveSessionDefaults(input),
+      },
+    }),
     sessionBackgroundDeliveryService,
     findPRDeliveryReceipt,
     sessionDomainService,
@@ -349,7 +355,12 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     sessionFileLogger,
     sessionLifecycleEventService,
     sessionLifecycleService,
-    sessionProviderResolverService,
+    sessionProviderResolverService: createSessionProviderResolverService({
+      getDefaultSessionProvider: () =>
+        services.userSettingsQueryService.getDefaultSessionProvider(),
+      getModelDefaults: () => services.userSettingsQueryService.get(),
+      findWorkspace: (id) => services.workspaceDataService.findById(id),
+    }),
     sessionPromptTurnCompletionService,
     sessionRepository,
     sessionService,

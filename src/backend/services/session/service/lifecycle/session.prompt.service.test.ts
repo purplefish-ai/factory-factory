@@ -9,6 +9,7 @@ function createPromptService() {
   const runtimeManager = {
     getClient: vi.fn(),
     sendPrompt: vi.fn(),
+    isSessionWorking: vi.fn().mockReturnValue(false),
   };
   const sessionDomainService = {
     setRuntimeSnapshot: vi.fn(),
@@ -27,10 +28,17 @@ function createPromptService() {
     schedule: vi.fn(),
   };
   const isSessionStopping = vi.fn().mockReturnValue(false);
+  const isGenerationCurrent = vi.fn().mockReturnValue(true);
   const lifecycleGate = {
     getGeneration: () => 0,
-    isGenerationCurrent: (_sessionId: string, stopGeneration: number) => stopGeneration === 0,
+    isGenerationCurrent,
     isSessionStopping,
+  };
+  const workspaceBridge = {
+    markSessionRunning: vi.fn(() => 1),
+    markSessionIdle: vi.fn(),
+    recordRatchetSessionEnd: vi.fn(async () => undefined),
+    resetPRDiscoveryBackoff: vi.fn(async () => true),
   };
   const service = new SessionService({
     runtimeManager: runtimeManager as never,
@@ -40,6 +48,7 @@ function createPromptService() {
     lifecycleEventService: lifecycleEventService as never,
     lifecycleGate,
   });
+  service.configure({ workspace: workspaceBridge });
 
   return {
     service,
@@ -49,6 +58,8 @@ function createPromptService() {
     lifecycleEventService,
     promptTurnCompletionService,
     isSessionStopping,
+    isGenerationCurrent,
+    workspaceBridge,
   };
 }
 
@@ -61,6 +72,22 @@ function createDeferred<T>() {
   });
   return { promise, resolve, reject };
 }
+
+it('preserves background activity after a prompt completes and wakes queued prompts', async () => {
+  const { service, runtimeManager, sessionDomainService, promptTurnCompletionService } =
+    createPromptService();
+  runtimeManager.getClient.mockReturnValue({ supportsImages: () => true });
+  runtimeManager.sendPrompt.mockResolvedValue({ stopReason: 'end_turn' });
+  runtimeManager.isSessionWorking.mockReturnValue(true);
+
+  await service.sendSessionMessage('session-1', 'follow-up');
+
+  expect(sessionDomainService.setRuntimeSnapshot).toHaveBeenLastCalledWith(
+    'session-1',
+    expect.objectContaining({ phase: 'running', activity: 'WORKING', processState: 'alive' })
+  );
+  expect(promptTurnCompletionService.schedule).toHaveBeenCalledWith('session-1');
+});
 
 function createLifecyclePromptHarness() {
   const runtimeManager = {
@@ -127,6 +154,71 @@ describe('SessionService prompt coordination', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
+
+  it('makes PR discovery eligible after each successful turn while the ACP process stays alive', async () => {
+    const { service, runtimeManager, workspaceBridge } = createPromptService();
+    const prompt = createDeferred<{ stopReason: string }>();
+    runtimeManager.sendPrompt.mockReturnValueOnce(prompt.promise);
+    const pending = service.sendAcpMessage('session-1', [{ type: 'text', text: 'open a PR' }]);
+    await Promise.resolve();
+    expect(workspaceBridge.resetPRDiscoveryBackoff).not.toHaveBeenCalled();
+
+    // A pending database write must not delay completion or the next queued turn.
+    const reset = createDeferred<boolean>();
+    workspaceBridge.resetPRDiscoveryBackoff.mockReturnValueOnce(reset.promise);
+    prompt.resolve({ stopReason: 'end_turn' });
+    await expect(pending).resolves.toBe('end_turn');
+    expect(workspaceBridge.resetPRDiscoveryBackoff).toHaveBeenCalledExactlyOnceWith('workspace-1');
+    reset.resolve(true);
+
+    runtimeManager.sendPrompt.mockResolvedValueOnce({ stopReason: 'end_turn' });
+    await service.sendAcpMessage('session-1', [{ type: 'text', text: 'push changes' }]);
+    expect(workspaceBridge.resetPRDiscoveryBackoff).toHaveBeenCalledTimes(2);
+  });
+
+  it('preserves successful turn completion when discovery scheduling fails', async () => {
+    const { service, runtimeManager, workspaceBridge, promptTurnCompletionService } =
+      createPromptService();
+    runtimeManager.sendPrompt.mockResolvedValueOnce({ stopReason: 'end_turn' });
+    workspaceBridge.resetPRDiscoveryBackoff.mockRejectedValueOnce(
+      new Error('database unavailable')
+    );
+
+    await expect(service.sendAcpMessage('session-1', [])).resolves.toBe('end_turn');
+    expect(workspaceBridge.resetPRDiscoveryBackoff).toHaveBeenCalledWith('workspace-1');
+    expect(promptTurnCompletionService.schedule).toHaveBeenCalledWith('session-1');
+  });
+
+  it.each(['stopping', 'stale', 'failed', 'busy', 'unowned'] as const)(
+    'does not reset discovery for a %s turn',
+    async (scenario) => {
+      const harness = createPromptService();
+      const { service, runtimeManager, workspaceBridge } = harness;
+      runtimeManager.sendPrompt.mockResolvedValueOnce({ stopReason: 'end_turn' });
+      if (scenario === 'stopping') {
+        harness.isSessionStopping.mockReturnValue(true);
+      }
+      if (scenario === 'stale') {
+        harness.isGenerationCurrent.mockReturnValue(false);
+      }
+      if (scenario === 'unowned') {
+        harness.acpEventProcessor.getWorkspaceId.mockReturnValue(undefined);
+      }
+      if (scenario === 'failed' || scenario === 'busy') {
+        runtimeManager.sendPrompt
+          .mockReset()
+          .mockRejectedValueOnce(
+            new Error(
+              scenario === 'busy' ? 'A turn is already in progress for this session' : 'failed'
+            )
+          );
+        await expect(service.sendAcpMessage('session-1', [])).rejects.toThrow();
+      } else {
+        await service.sendAcpMessage('session-1', []);
+      }
+      expect(workspaceBridge.resetPRDiscoveryBackoff).not.toHaveBeenCalled();
+    }
+  );
 
   it('rejects when sendSessionMessage is called without an ACP client', async () => {
     const { service, runtimeManager } = createPromptService();

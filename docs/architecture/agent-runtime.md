@@ -39,6 +39,16 @@ bundled Codex runtime, without starting an inference turn. Claude model
 discovery uses an ephemeral ACP session with tools disabled. Both catalog
 services coalesce requests and cache successful results for 30 seconds.
 
+Session startup validates that the workspace working directory exists and is a
+directory before spawning an adapter. Missing worktrees report the affected path
+and require restoring the worktree before retrying. Node otherwise reports a
+misleading `spawn <node> ENOENT` when the working directory is missing, even if
+the Node executable exists.
+
+Failed exact-conversation resumes retain the provider's diagnostic details and
+original error so missing Codex rollout history is actionable instead of
+appearing only as `Internal error`.
+
 Provider-native configuration controls own access permissions. Codex `mode`
 selects access and `collaboration_mode` selects planning independently. Claude
 `mode` owns its native access/planning modes. Saved STRICT/RELAXED/YOLO defaults
@@ -53,6 +63,17 @@ controls render select options.
 
 ### Provider and model selection
 
+Each default application graph constructs its own session creation resolver and
+data facade. Their forwarding callbacks use the graph's current workspace,
+resolver, and `userSettingsQueryService` capabilities for persisted provider and
+model defaults. The separate `userSettingsService` alias still serves PR/bridge
+policy; substituting settings for both policies requires binding both aliases.
+The session capsule also exports factories for explicit construction and retains
+process-default singleton exports for legacy callers. Persistence accessors,
+acquisition queues, and other runtime settings reads retain their existing
+scope; this creation boundary does not isolate an entire application runtime or
+make separate settings reads atomic.
+
 Model selection uses the explicit launch choice, then the user's saved default
 for that provider. Existing conversations retain their stored model. New and
 resumed runtimes apply that model through the advertised ACP model option before
@@ -62,7 +83,10 @@ means its native default, and supported Claude family aliases resolve to the
 advertised identity. Browse-only restoration does not change configuration.
 Startup model configuration shares the bounded startup deadline and cancellation
 signals. Passive catalog reads enrich available options without persisting a
-guessed selection or overwriting a newer runtime/edit.
+guessed selection or overwriting a newer runtime/edit. Catalog-only chat
+projections do not select a reasoning effort. Before native configuration is
+available, the chat bar withholds the effort control rather than briefly
+displaying the catalog default or first supported level.
 
 Client settings remain intact while capabilities are unknown. Initial confirmed
 configuration supersedes bootstrap model values; explicit edits and restored
@@ -147,6 +171,12 @@ values still apply before their prompt.
 
 ### Permission and configuration readiness
 
+Tool permission prompts keep request content above the approval actions so long
+provider option labels cannot squeeze the request. Tool previews preserve
+literal text, line breaks, and indentation in a bounded, keyboard-scrollable
+monospace panel; long lines scroll horizontally. Consent messages retain prose
+formatting.
+
 Permission defaults initialize new sessions. Existing sessions restore their
 saved native access and Codex planning choices before publishing a new snapshot
 or dispatching work. Prompts and user configuration changes wait for that
@@ -220,6 +250,40 @@ from either adapter. Each child's in-memory transcript retains at most 100 turns
 and 2 MiB of serialized updates. Oldest whole turns are evicted; an oversized
 active turn is discarded until the next user turn. Cursors use monotonic turn
 offsets, and expired cursors fail explicitly instead of returning another turn.
+
+### Activity and prompt dispatch
+
+Workspace/session activity and ownership of a conversation's prompt slot are
+separate signals. `isSessionWorking` includes in-flight prompts, background
+shell commands (including persistent preview servers), native subagents and
+active goals. It drives runtime activity and the yellow work indicator; a
+completed prompt retains that activity until the remaining work ends.
+`isSessionPromptInFlight` answers only whether the current active runtime has an
+unresolved prompt RPC. Browse-only runtimes do not own an active prompt slot.
+
+Ordinary chat messages may be composed and queued during any turn. Dispatch
+waits for the preceding prompt to complete, including time spent executing tools
+or awaiting that turn's approval, question or elicitation. A background shell,
+independently running child or active goal does not block the next parent prompt
+once that RPC completes. The provider remains authoritative: if it reports an
+active turn that the client cannot observe, the existing bounded busy retry
+preserves the queued message.
+
+Startup and required configuration must complete before submission. Workspace
+initialization/manual-resume policy, compaction, per-session dispatch
+serialization and stop/generation fences still apply. The prompt slot is
+rechecked after auto-start; another caller may have acquired it while startup
+was awaited. A stopped runtime can auto-resume through the existing launch
+policy; being stopped is not permission to bypass setup or a failed exact
+resume.
+
+Automatic PR updates additionally wait for pending interactive requests, an
+in-flight prompt in another conversation in the same workspace, valid recipient
+and binding checks, and an unpaused delivery policy. Background activity alone
+does not block delivery in either the recipient or another conversation. Receipt
+recovery waits for the actual prompt or the specific delivery attempt, not
+unrelated background work. Other conversations' prompts do not prevent a human
+from sending to their selected conversation.
 
 Factory Factory supplies workspace MCP servers through session-scoped adapter
 configuration. It never writes the user's native Codex configuration. Requested

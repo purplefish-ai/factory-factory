@@ -1,4 +1,5 @@
 import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
+import { resolveClaudeModelAlias } from '@/shared/acp-protocol/model-selection';
 import type { AcpConnection } from './acp-connection';
 import { requireSessionConfigOptions } from './acp-session-config-options';
 import { formatClaudeModelOptionName } from './claude-model-options';
@@ -55,29 +56,10 @@ export function resolveAcpModelSelection(
   if (provider === 'CODEX' && requested === 'default') {
     return { configId: option.id, value: option.currentValue };
   }
-  if (provider === 'CLAUDE' && /^(sonnet|opus|haiku|fable)(\[1m\])?$/.test(requested)) {
-    const [family] = requested.split('[');
-    const matches = choices.filter(
-      (entry) =>
-        entry.value.startsWith(`claude-${family}-`) &&
-        entry.value.endsWith('[1m]') === requested.endsWith('[1m]')
-    );
-    if (matches.length === 1 && matches[0]) {
-      return { configId: option.id, value: matches[0].value };
-    }
-  }
-  const canonical =
-    provider === 'CLAUDE'
-      ? /^claude-(sonnet|opus|haiku|fable)-(\d+(?:-\d+)*)(\[1m\])?$/.exec(requested)
-      : null;
-  if (canonical) {
-    const [, family, version, context = ''] = canonical;
-    const alias = choices.find(
-      (entry) =>
-        entry.value === `${family}${context}` &&
-        formatClaudeModelOptionName(entry)
-          .toLowerCase()
-          .replace(/\s+\([^)]*\)$/, '') === `${family} ${version?.replaceAll('-', '.')}`
+  if (provider === 'CLAUDE') {
+    const alias = resolveClaudeModelAlias(
+      requested,
+      choices.map((entry) => ({ value: entry.value, label: formatClaudeModelOptionName(entry) }))
     );
     if (alias) {
       return { configId: option.id, value: alias.value };

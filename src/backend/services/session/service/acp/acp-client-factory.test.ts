@@ -1,5 +1,6 @@
 import type { ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import { tmpdir } from 'node:os';
 import { PassThrough } from 'node:stream';
 import type { RequestPermissionRequest } from '@agentclientprotocol/sdk/unstable';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -132,7 +133,7 @@ function createDeferred<T>(): {
 function defaultOptions(overrides?: Partial<AcpClientOptions>): AcpClientOptions {
   return {
     provider: 'CLAUDE',
-    workingDir: '/tmp/workspace',
+    workingDir: tmpdir(),
     sessionId: 'log-session-1',
     ...overrides,
   };
@@ -260,7 +261,11 @@ describe('AcpClientFactory', () => {
 
   it('never replaces a failed legacy Codex resume with a fresh conversation', async () => {
     setupSuccessfulSpawn(createMockChildProcess({ exitAfterSigterm: true }), { loadSession: true });
-    mocks.loadSession.mockRejectedValue(new Error('thread unavailable'));
+    const loadError = Object.assign(new Error('Internal error'), {
+      code: -32_603,
+      data: { details: 'no rollout found for thread id native-thread' },
+    });
+    mocks.loadSession.mockRejectedValue(loadError);
     await expect(
       new AcpClientFactory().createClient(
         createParams({
@@ -270,7 +275,10 @@ describe('AcpClientFactory', () => {
           }),
         })
       )
-    ).rejects.toThrow('thread unavailable');
+    ).rejects.toMatchObject({
+      message: expect.stringContaining('no rollout found for thread id native-thread'),
+      cause: loadError,
+    });
     expect(mocks.newSession).not.toHaveBeenCalled();
     expect(mocks.logger.warn).toHaveBeenCalledWith(
       'loadSession failed',
@@ -298,7 +306,7 @@ describe('AcpClientFactory', () => {
     await factory.createClient(createParams({ options: defaultOptions({ provider: 'CODEX' }) }));
 
     expect(mocks.spawn).toHaveBeenCalledWith(expect.any(String), expect.any(Array), {
-      cwd: '/tmp/workspace',
+      cwd: tmpdir(),
       stdio: ['pipe', 'pipe', 'pipe'],
       env: {
         CUSTOM_ENV: 'preserved',
@@ -357,7 +365,7 @@ describe('AcpClientFactory', () => {
     );
 
     expect(mocks.newSession).toHaveBeenCalledWith({
-      cwd: '/tmp/workspace',
+      cwd: tmpdir(),
       mcpServers: [
         {
           name: 'workspace-tools',
@@ -408,7 +416,7 @@ describe('AcpClientFactory', () => {
 
     expect(mocks.loadSession).toHaveBeenCalledWith({
       sessionId: 'stored-provider-1',
-      cwd: '/tmp/workspace',
+      cwd: tmpdir(),
       mcpServers: [],
     });
     expect(mocks.newSession).not.toHaveBeenCalled();

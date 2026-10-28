@@ -55,7 +55,7 @@ function harness() {
       findPRDedicatedSession: vi.fn().mockImplementation(() => Promise.resolve({ ...session })),
     },
     sessionLifecycleService: { startSession: start },
-    acpRuntimeManager: { isSessionWorking: working, getClient },
+    acpRuntimeManager: { isSessionPromptInFlight: working, getClient },
   } as unknown as PRDedicatedSessionPorts;
   return {
     session,

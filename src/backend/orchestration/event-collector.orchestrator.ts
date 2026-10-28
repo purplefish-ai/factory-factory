@@ -69,6 +69,7 @@ import {
 import type { PRState } from '@/shared/core';
 import { projectWorkspaceSnapshotMetadata } from '@/shared/workspace-snapshot';
 import type { getWorkspaceLinearContext } from './linear-config.helper';
+import { LinearMergeCompletion } from './linear-merge-completion.orchestrator';
 import { projectPrEvent, shouldRefreshRatchetForPrSwitch } from './pr-event-projection';
 import { RatchetProjectionWorker } from './ratchet-projection.worker';
 import { subscribeWorkspaceBranchPublication } from './workspace-branch-publication.orchestrator';
@@ -286,14 +287,7 @@ class EventCollectorState {
   readonly logger: Logger;
   activeCoalescer: EventCoalescer | null = null;
   lastIdlePrRefreshByWorkspace = new Map<string, number>();
-  linearMergeCompletions = new Map<
-    string,
-    Pick<PRSnapshotUpdatedEvent, 'prNumber' | 'prUrl'> & {
-      status: 'pending' | 'running' | 'completed';
-      retryRequested: boolean;
-      retryProjection?: Pick<SnapshotUpdateInput, 'prSummary' | 'prState'>;
-    }
-  >();
+  linearMergeCompletion: LinearMergeCompletion | null = null;
   teardownListeners: Array<() => void> = [];
   ratchetProjection: RatchetProjectionWorker | null = null;
 
@@ -309,7 +303,7 @@ function removeWorkspaceWithState(state: EventCollectorState, workspaceId: strin
     state.dependencies.workspaceSnapshotStore.remove(workspaceId);
   }
   state.lastIdlePrRefreshByWorkspace.delete(workspaceId);
-  state.linearMergeCompletions.delete(workspaceId);
+  state.linearMergeCompletion?.removeWorkspace(workspaceId);
   state.dependencies.workspaceActivityService.clearWorkspace(workspaceId);
   state.dependencies.prFetchCoordinator.removeWorkspace(workspaceId);
 }
@@ -437,108 +431,6 @@ function buildWorkspaceStateChangeFields(event: WorkspaceStateChangedEvent): Sna
 }
 
 // ---------------------------------------------------------------------------
-// Linear state sync on PR merge
-// ---------------------------------------------------------------------------
-
-function getLinearCompletionProjection(
-  state: EventCollectorState,
-  workspaceId: string,
-  acceptedProjection?: Pick<SnapshotUpdateInput, 'prSummary' | 'prState'>
-) {
-  // Association-aware effects use the accepted worker projection. Legacy
-  // no-prId events keep their independent read/null-row compatibility gate.
-  return acceptedProjection
-    ? Promise.resolve(acceptedProjection)
-    : state.dependencies.workspaceDataService.findRatchetProjection(workspaceId);
-}
-
-async function handleLinearIssueCompletedOnMerge(
-  state: EventCollectorState,
-  workspaceId: string,
-  prIdentity: Pick<PRSnapshotUpdatedEvent, 'prNumber' | 'prUrl'>,
-  acceptedProjection?: Pick<SnapshotUpdateInput, 'prSummary' | 'prState'>
-): Promise<void> {
-  const previous = state.linearMergeCompletions.get(workspaceId);
-  if (
-    previous?.prNumber === prIdentity.prNumber &&
-    (!(previous.prUrl && prIdentity.prUrl) || previous.prUrl === prIdentity.prUrl)
-  ) {
-    previous.prUrl ??= prIdentity.prUrl;
-    if (previous.status !== 'pending') {
-      return;
-    }
-  }
-  const attempt: NonNullable<ReturnType<EventCollectorState['linearMergeCompletions']['get']>> = {
-    ...prIdentity,
-    status: 'running',
-    retryRequested: false,
-  };
-  state.linearMergeCompletions.set(workspaceId, attempt);
-  let completed = false;
-  try {
-    const projection = await getLinearCompletionProjection(state, workspaceId, acceptedProjection);
-    if (projection && (projection.prSummary?.state ?? projection.prState) !== 'MERGED') {
-      attempt.status = 'pending';
-      return;
-    }
-    const ctx = await state.dependencies.getWorkspaceLinearContext(workspaceId);
-    if (!ctx) {
-      return;
-    }
-
-    completed = await state.dependencies.linearStateSyncService.markIssueCompleted(
-      ctx.apiKey,
-      ctx.linearIssueId
-    );
-    if (!completed) {
-      return;
-    }
-    attempt.status = 'completed';
-    state.logger.info('Marked Linear issue as completed on PR merge', {
-      workspaceId,
-      linearIssueId: ctx.linearIssueId,
-    });
-  } catch (error) {
-    state.logger.warn('Failed to mark Linear issue as completed on PR merge', {
-      workspaceId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  } finally {
-    finishLinearCompletionAttempt(state, workspaceId, attempt, completed);
-  }
-}
-
-function finishLinearCompletionAttempt(
-  state: EventCollectorState,
-  workspaceId: string,
-  attempt: NonNullable<ReturnType<EventCollectorState['linearMergeCompletions']['get']>>,
-  completed: boolean
-): void {
-  if (state.linearMergeCompletions.get(workspaceId) !== attempt) {
-    return;
-  }
-  if (attempt.status === 'pending' && attempt.retryRequested) {
-    void handleLinearIssueCompletedOnMerge(state, workspaceId, attempt, attempt.retryProjection);
-  } else if (!completed && attempt.status !== 'pending') {
-    state.linearMergeCompletions.delete(workspaceId);
-  }
-}
-
-function retryDeferredLinearCompletion(
-  state: EventCollectorState,
-  workspaceId: string,
-  acceptedProjection?: Pick<SnapshotUpdateInput, 'prSummary' | 'prState'>
-): void {
-  const pending = state.linearMergeCompletions.get(workspaceId);
-  if (pending?.status === 'pending') {
-    void handleLinearIssueCompletedOnMerge(state, workspaceId, pending, acceptedProjection);
-  } else if (pending?.status === 'running') {
-    pending.retryRequested = true;
-    pending.retryProjection = acceptedProjection;
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Event collector lifecycle
 // ---------------------------------------------------------------------------
 
@@ -569,6 +461,15 @@ function startEventCollectorWithState(state: EventCollectorState): void {
     state.logger
   );
   state.activeCoalescer = coalescer;
+  const linearMergeCompletion = new LinearMergeCompletion({
+    readLegacyProjection: (workspaceId) =>
+      dependencies.workspaceDataService.findRatchetProjection(workspaceId),
+    getLinearContext: (workspaceId) => dependencies.getWorkspaceLinearContext(workspaceId),
+    markIssueCompleted: (apiKey, issueId) =>
+      dependencies.linearStateSyncService.markIssueCompleted(apiKey, issueId),
+    logger: state.logger,
+  });
+  state.linearMergeCompletion = linearMergeCompletion;
   state.teardownListeners.push(
     subscribeWorkspaceBranchPublication(
       dependencies.workspaceDataService,
@@ -593,16 +494,7 @@ function startEventCollectorWithState(state: EventCollectorState): void {
       if (shouldRefreshRatchet) {
         requestImmediateRatchetCheck(state, workspaceId);
       }
-      retryDeferredLinearCompletion(state, workspaceId, fields);
-      // A merged sibling is not workspace completion while the selected PR is open.
-      if ((fields.prSummary?.state ?? fields.prState) === 'MERGED' && fields.prNumber != null) {
-        void handleLinearIssueCompletedOnMerge(
-          state,
-          workspaceId,
-          { prNumber: fields.prNumber, prUrl: fields.prUrl },
-          fields
-        );
-      }
+      linearMergeCompletion.observeAcceptedProjection(workspaceId, fields);
     },
     logger: state.logger,
   });
@@ -737,10 +629,8 @@ function startEventCollectorWithState(state: EventCollectorState): void {
     }
 
     // Transition linked Linear issue to completed when PR is merged
-    if (event.prState === 'MERGED') {
-      void handleLinearIssueCompletedOnMerge(state, event.workspaceId, prIdentity);
-    } else if (event.prState === 'CLOSED') {
-      retryDeferredLinearCompletion(state, event.workspaceId);
+    if (event.prState === 'MERGED' || event.prState === 'CLOSED') {
+      linearMergeCompletion.observeLegacy(event.workspaceId, prIdentity, event.prState);
     }
   };
   dependencies.prSnapshotService.on(PR_SNAPSHOT_UPDATED, prSnapshotUpdatedHandler);
@@ -966,7 +856,8 @@ function stopEventCollectorWithState(state: EventCollectorState): void {
     state.activeCoalescer.flushAll();
     state.activeCoalescer = null;
     state.lastIdlePrRefreshByWorkspace.clear();
-    state.linearMergeCompletions.clear();
+    state.linearMergeCompletion?.stop();
+    state.linearMergeCompletion = null;
     state.logger.info('Event collector stopped');
   }
 }

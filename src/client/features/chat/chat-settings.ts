@@ -23,7 +23,7 @@ export function clampChatSettingsForCapabilities(
       return capabilities.reasoning.selected;
     }
 
-    return capabilities.reasoning.options[0]?.value ?? null;
+    return null;
   })();
 
   return {

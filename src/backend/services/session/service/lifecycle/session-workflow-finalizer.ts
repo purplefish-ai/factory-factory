@@ -9,7 +9,7 @@ import type {
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type { PersistClosedSessionInput } from './closed-session-persistence.service';
 import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
-import { maybeDiscoverPROnSessionEnd } from './session-pr-discovery.service';
+import { schedulePRDiscovery } from './session-pr-discovery.service';
 import type { SessionRepository } from './session.repository';
 
 const logger = createLogger('session-workflow-finalizer');
@@ -101,7 +101,7 @@ export class SessionWorkflowFinalizer {
     }
 
     if (this.workspaceBridge) {
-      void maybeDiscoverPROnSessionEnd(session.workspaceId, logger, this.workspaceBridge);
+      void schedulePRDiscovery(session.workspaceId, logger, this.workspaceBridge);
     }
 
     if (session.workflow === 'ratchet') {

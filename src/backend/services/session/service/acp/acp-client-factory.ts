@@ -14,7 +14,11 @@ import { AcpNativeSessionTracker } from './acp-native-session-tracker';
 import { AcpProcessHandle } from './acp-process-handle';
 import type { AcpRuntimeMetadata, AcpStartupSignal } from './acp-runtime-contracts';
 import { wireAcpRuntimeErrorHandler } from './acp-runtime-error-handler';
-import { AcpBrowseSessionUnavailableError, getAcpErrorLogDetails } from './acp-runtime-errors';
+import {
+  AcpBrowseSessionUnavailableError,
+  createAcpResumeError,
+  getAcpErrorLogDetails,
+} from './acp-runtime-errors';
 import type {
   AcpRuntimeEvent,
   AcpRuntimeEventHandlers,
@@ -23,9 +27,9 @@ import type {
 import { raceWithSoftTimeout } from './acp-runtime-quiescence';
 import {
   createAcpSpawnError,
-  hasUsableWorkingDir,
   resolveProviderAcpSpawnCommand,
   type SpawnCommand,
+  validateAcpWorkingDir,
   withTimeout,
 } from './acp-runtime-spawn';
 import { requireSessionConfigOptions } from './acp-session-config-options';
@@ -81,9 +85,7 @@ export class AcpClientFactory {
   async createClient(params: CreateAcpClientParams): Promise<AcpProcessHandle> {
     const { sessionId, options, handlers, metadata, shutdownSignal, stopSignal } = params;
     const startupTimeoutMs = this.acpStartupTimeoutMs;
-    if (!hasUsableWorkingDir(options.workingDir)) {
-      throw new Error('ACP working directory is required before spawning adapter process');
-    }
+    validateAcpWorkingDir(options.workingDir);
 
     const spawnCommand = resolveSpawnCommand(options);
     const isCodex = options.provider === 'CODEX';
@@ -359,12 +361,13 @@ export class AcpClientFactory {
       });
     } catch (error) {
       const legacyCodex = options.provider === 'CODEX' && storedId.startsWith('sess_');
+      const requireExisting = legacyCodex || options.resumePolicy === 'require_existing';
       this.logLoadSessionFailure(
         sessionId,
         storedId,
         error,
         options.purpose === 'browse',
-        !legacyCodex
+        !requireExisting
       );
       if (options.purpose === 'browse') {
         throw new AcpBrowseSessionUnavailableError(
@@ -372,8 +375,8 @@ export class AcpClientFactory {
           { cause: error }
         );
       }
-      if (legacyCodex) {
-        throw error;
+      if (requireExisting) {
+        throw createAcpResumeError(options.provider, storedId, error);
       }
       return null;
     }

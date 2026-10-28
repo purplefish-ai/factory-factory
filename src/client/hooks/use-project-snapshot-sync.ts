@@ -1,6 +1,5 @@
 import { type QueryClient, useQueryClient } from '@tanstack/react-query';
 import { getQueryKey } from '@trpc/react-query';
-import type { inferRouterOutputs } from '@trpc/server';
 /**
  * React hook that syncs /snapshots WebSocket messages into the
  * workspace.listForProject (sidebar + kanban) and workspace.get (detail
@@ -21,17 +20,18 @@ import type { inferRouterOutputs } from '@trpc/server';
  */
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { runInBackground } from '@/client/lib/background-task';
-import {
-  isCompleteWorkspaceSnapshot,
-  mergeProjectSnapshotIntoWorkspaceDetail,
-} from '@/client/lib/snapshot-to-workspace';
-import { type AppRouter, trpc } from '@/client/lib/trpc';
+import { isCompleteWorkspaceSnapshot } from '@/client/lib/snapshot-to-workspace';
+import { trpc } from '@/client/lib/trpc';
 import {
   getProjectWorkspaceCacheReconciler,
   projectWorkspaceDetailQueryFilter,
   type ProjectWorkspaceCacheReconciler,
   type WorkspaceConnection,
 } from '@/client/lib/workspace-cache-reconciler';
+import {
+  createWorkspaceDetailTransitionScope,
+  type ProjectWorkspaceDetailTransitions,
+} from '@/client/lib/workspace-detail-snapshot-transitions';
 import { useWebSocketChannel } from '@/hooks/use-websocket-channel';
 import { buildWebSocketUrl } from '@/lib/websocket-config';
 import {
@@ -43,7 +43,6 @@ import {
   type WorkspaceSnapshotEntry,
 } from '@/shared/workspace-snapshot';
 
-type RouterOutputs = inferRouterOutputs<AppRouter>;
 type PendingRequestType = WorkspaceSnapshotEntry['pendingRequestType'];
 type TrpcUtils = ReturnType<typeof trpc.useUtils>;
 
@@ -203,64 +202,13 @@ function healReadyWorktreePaths(
   );
 }
 
-/** Reset existing detail observers once per departure from the live list. */
-function resetRemovedWorkspaceDetail(
-  queryClient: QueryClient,
-  workspaceId: string,
-  removedWorkspaceIds: Set<string>
-): void {
-  if (removedWorkspaceIds.has(workspaceId)) {
-    return;
-  }
-  removedWorkspaceIds.add(workspaceId);
-  // Unlike setData(undefined), reset clears old data and synchronously cancels
-  // its request before active observers refetch persisted (possibly archived)
-  // detail. No initialData is configured for workspace.get.
-  runInBackground(
-    queryClient.resetQueries({
-      queryKey: getQueryKey(trpc.workspace.get, { id: workspaceId }, 'query'),
-      exact: true,
-    }),
-    'Could not refresh data'
-  );
-}
-
-/** A rollback summary must not race a removal's outstanding detail fetch. */
-function mergeLiveWorkspaceDetail(
-  utils: TrpcUtils,
-  queryClient: QueryClient,
-  entry: WorkspaceSnapshotEntry,
-  removedWorkspaceIds: Set<string>
-): void {
-  const reintroduced = removedWorkspaceIds.delete(entry.workspaceId);
-  const filter = {
-    queryKey: getQueryKey(trpc.workspace.get, { id: entry.workspaceId }, 'query'),
-    exact: true,
-  };
-  if (reintroduced) {
-    // Cancellation takes effect synchronously; do not await before merging.
-    runInBackground(queryClient.cancelQueries(filter), 'Could not refresh data');
-  }
-  utils.workspace.get.setData({ id: entry.workspaceId }, (prev) =>
-    mergeProjectSnapshotIntoWorkspaceDetail(entry, prev)
-  );
-  if (reintroduced) {
-    // Reset may have cleared the full detail, which a summary cannot recreate.
-    runInBackground(
-      queryClient.refetchQueries({ ...filter, type: 'active' }),
-      'Could not refresh data'
-    );
-  }
-}
-
 function applySnapshotFullMessage(
   utils: TrpcUtils,
-  queryClient: QueryClient,
+  details: ProjectWorkspaceDetailTransitions,
   message: SnapshotFullMessage,
   pendingRequests: Map<string, PendingRequestType>,
   alreadyInvalidated: Set<string>,
   repairedWorktreePaths: Set<string>,
-  removedWorkspaceIds: Set<string>,
   reconciler: ProjectWorkspaceCacheReconciler,
   connection: WorkspaceConnection
 ): void {
@@ -274,25 +222,7 @@ function applySnapshotFullMessage(
     ).map((w) => w.id)
   );
 
-  const liveWorkspaceIds = new Set(entries.map((entry) => entry.workspaceId));
-  const removalCandidates = new Set(knownWorkspaceIds);
-  // A detail can outlive an empty/evicted project list across navigation.
-  for (const [, detail] of queryClient.getQueriesData<RouterOutputs['workspace']['get']>({
-    queryKey: getQueryKey(trpc.workspace.get, undefined, 'query'),
-  })) {
-    if (
-      detail?.projectId === message.projectId &&
-      detail.status !== 'ARCHIVING' &&
-      detail.status !== 'ARCHIVED'
-    ) {
-      removalCandidates.add(detail.id);
-    }
-  }
-  for (const workspaceId of removalCandidates) {
-    if (!liveWorkspaceIds.has(workspaceId)) {
-      resetRemovedWorkspaceDetail(queryClient, workspaceId, removedWorkspaceIds);
-    }
-  }
+  details.resetDepartures(entries, knownWorkspaceIds);
   reconciler.apply(connection, message);
 
   invalidateForUnknownWorkspaces(
@@ -312,19 +242,18 @@ function applySnapshotFullMessage(
   );
 
   for (const entry of entries) {
-    mergeLiveWorkspaceDetail(utils, queryClient, entry, removedWorkspaceIds);
+    details.mergeLive(entry);
   }
 }
 
 function applySnapshotChangedMessage(
   utils: TrpcUtils,
-  queryClient: QueryClient,
+  details: ProjectWorkspaceDetailTransitions,
   projectId: string,
   message: SnapshotChangedMessage,
   pendingRequests: Map<string, PendingRequestType>,
   alreadyInvalidated: Set<string>,
   repairedWorktreePaths: Set<string>,
-  removedWorkspaceIds: Set<string>,
   reconciler: ProjectWorkspaceCacheReconciler,
   connection: WorkspaceConnection
 ): void {
@@ -342,14 +271,13 @@ function applySnapshotChangedMessage(
 
   healReadyWorktreePaths(utils, projectId, [entry], knownWorkspaceIds, repairedWorktreePaths);
 
-  mergeLiveWorkspaceDetail(utils, queryClient, entry, removedWorkspaceIds);
+  details.mergeLive(entry);
 }
 
 function applySnapshotRemovedMessage(
-  queryClient: QueryClient,
+  details: ProjectWorkspaceDetailTransitions,
   message: SnapshotRemovedMessage,
   pendingRequests: Map<string, PendingRequestType>,
-  removedWorkspaceIds: Set<string>,
   reconciler: ProjectWorkspaceCacheReconciler,
   connection: WorkspaceConnection
 ): void {
@@ -357,7 +285,7 @@ function applySnapshotRemovedMessage(
 
   reconciler.apply(connection, message);
 
-  resetRemovedWorkspaceDetail(queryClient, message.workspaceId, removedWorkspaceIds);
+  details.remove(message.workspaceId);
 }
 
 // =============================================================================
@@ -388,11 +316,14 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
   // same newly-introduced workspace doesn't trigger a refetch storm.
   const invalidatedForUnknownWorkspaceRef = useRef<Set<string>>(new Set());
   const repairedWorktreePathsRef = useRef<Set<string>>(new Set());
-  const removedWorkspaceIdsRef = useRef<Set<string>>(new Set());
+  const detailTransitionsRef = useRef(createWorkspaceDetailTransitionScope());
 
   const lifecycle = useMemo(
     () => ({
       owner: projectId ? getProjectWorkspaceCacheReconciler(queryClient, projectId) : undefined,
+      details: projectId
+        ? detailTransitionsRef.current.forProject(queryClient, projectId)
+        : undefined,
       connection: undefined as WorkspaceConnection | undefined,
       opened: false,
       disposed: false,
@@ -469,7 +400,8 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
         !projectId ||
         lifecycle.disposed ||
         !connection ||
-        !reconciler?.accepts(connection, message)
+        !reconciler?.accepts(connection, message) ||
+        !lifecycle.details
       ) {
         return;
       }
@@ -477,12 +409,11 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
         case 'snapshot_full': {
           applySnapshotFullMessage(
             utils,
-            queryClient,
+            lifecycle.details,
             message,
             previousPendingRequestsRef.current,
             invalidatedForUnknownWorkspaceRef.current,
             repairedWorktreePathsRef.current,
-            removedWorkspaceIdsRef.current,
             reconciler,
             connection
           );
@@ -497,13 +428,12 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
         case 'snapshot_changed': {
           applySnapshotChangedMessage(
             utils,
-            queryClient,
+            lifecycle.details,
             projectId,
             message,
             previousPendingRequestsRef.current,
             invalidatedForUnknownWorkspaceRef.current,
             repairedWorktreePathsRef.current,
-            removedWorkspaceIdsRef.current,
             reconciler,
             connection
           );
@@ -512,10 +442,9 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
 
         case 'snapshot_removed': {
           applySnapshotRemovedMessage(
-            queryClient,
+            lifecycle.details,
             message,
             previousPendingRequestsRef.current,
-            removedWorkspaceIdsRef.current,
             reconciler,
             connection
           );

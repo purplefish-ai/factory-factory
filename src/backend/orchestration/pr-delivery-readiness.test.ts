@@ -1,10 +1,36 @@
 import { afterEach, expect, it, vi } from 'vitest';
+import type { AgentSessionRecord } from '@/backend/services/session';
 import { recipientCanDispatch } from './pr-delivery-readiness';
+const otherSession: AgentSessionRecord = {
+  id: 'other',
+  workspaceId: 'w',
+  name: null,
+  workflow: 'implement',
+  model: 'gpt-6.1-sol',
+  status: 'RUNNING',
+  provider: 'CODEX',
+  providerSessionId: 'provider-other',
+  providerProjectPath: null,
+  providerProcessPid: null,
+  providerMetadata: null,
+  createdAt: new Date('2026-10-28T00:00:00Z'),
+  updatedAt: new Date('2026-10-28T00:00:00Z'),
+};
 afterEach(() => vi.useRealTimers());
+it('allows PR work when another conversation only has background activity', async () => {
+  const services = {
+    sessionDataService: { findAgentSessionsByWorkspaceId: vi.fn(async () => [otherSession]) },
+    acpRuntimeManager: {
+      isSessionWorking: () => true,
+      isSessionPromptInFlight: () => false,
+    },
+  };
+  expect(await recipientCanDispatch('w', 'main', services)).toBe(true);
+});
 it('fails closed within five seconds when the recipient lookup stalls', async () => {
   vi.useFakeTimers();
   const services = {
-    acpRuntimeManager: { isSessionWorking: vi.fn(() => false) },
+    acpRuntimeManager: { isSessionPromptInFlight: vi.fn(() => false) },
     sessionDataService: {
       findAgentSessionsByWorkspaceId: vi.fn(
         () =>
@@ -23,13 +49,13 @@ it('fails closed on query failure and blocks another working session', async () 
   const query = vi
     .fn()
     .mockRejectedValueOnce(new Error('database unavailable'))
-    .mockResolvedValueOnce([{ id: 'other' }]);
+    .mockResolvedValueOnce([otherSession]);
   const services = {
     sessionDataService: {
       findAgentSessionsByWorkspaceId: query,
     },
     acpRuntimeManager: {
-      isSessionWorking: vi.fn(() => true),
+      isSessionPromptInFlight: vi.fn(() => true),
     },
   };
   expect(await recipientCanDispatch('w', 'main', services)).toBe(false);
