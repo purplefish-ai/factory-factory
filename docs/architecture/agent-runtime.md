@@ -39,6 +39,12 @@ bundled Codex runtime, without starting an inference turn. Claude model
 discovery uses an ephemeral ACP session with tools disabled. Both catalog
 services coalesce requests and cache successful results for 30 seconds.
 
+Session startup validates that the workspace working directory exists and is a
+directory before spawning an adapter. Missing worktrees report the affected path
+and require restoring the worktree before retrying. Node otherwise reports a
+misleading `spawn <node> ENOENT` when the working directory is missing, even if
+the Node executable exists.
+
 Provider-native configuration controls own access permissions. Codex `mode`
 selects access and `collaboration_mode` selects planning independently. Claude
 `mode` owns its native access/planning modes. Saved STRICT/RELAXED/YOLO defaults

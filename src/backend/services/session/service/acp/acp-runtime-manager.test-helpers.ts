@@ -1,5 +1,6 @@
 import type { ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import { tmpdir } from 'node:os';
 import { PassThrough } from 'node:stream';
 import { vi } from 'vitest';
 import { SUBAGENTS_CAPABILITY_META_KEY } from '@/shared/acp-protocol/subagents';
@@ -122,7 +123,7 @@ export function createTestClient(
 export function defaultOptions(): AcpClientOptions {
   return {
     provider: 'CLAUDE',
-    workingDir: '/tmp/workspace',
+    workingDir: tmpdir(),
     sessionId: 'test-session-1',
   };
 }
@@ -130,13 +131,13 @@ export function defaultOptions(): AcpClientOptions {
 export function codexOptions(): AcpClientOptions {
   return {
     provider: 'CODEX',
-    workingDir: '/tmp/workspace',
+    workingDir: tmpdir(),
     sessionId: 'test-session-1',
   };
 }
 
 export function defaultContext() {
-  return { workspaceId: 'w1', workingDir: '/tmp/workspace' };
+  return { workspaceId: 'w1', workingDir: tmpdir() };
 }
 
 export function defaultConfigOptions() {
