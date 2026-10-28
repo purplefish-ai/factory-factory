@@ -166,7 +166,7 @@ it('detach cancels unclaimed pending events and removes them from every pending 
     prMonitoring: { pendingEventCount: 0 },
   });
 });
-it('pending counts include attached PR events and workspace controls, excluding detached history', async () => {
+it('pending counts include attached PR events, excluding legacy controls and detached history', async () => {
   await createPR('p');
   await createPR('p2', { detachedAt: new Date() });
   for (const [id, prId] of [
@@ -179,25 +179,31 @@ it('pending counts include attached PR events and workspace controls, excluding 
         id,
         prId,
         workspaceId: 'w',
-        kind: 'MONITORING_ENABLED',
+        kind: prId ? 'CI_FAILED' : 'MONITORING_ENABLED',
         deduplicationKey: id,
-        payload: {
-          kind: 'MONITORING_ENABLED',
-          workspaceId: 'w',
-          bindingRevision: 0,
-          replyToPrComments: true,
-        },
+        payload: prId
+          ? {
+              kind: 'CI_FAILED',
+              target: { workspaceId: 'w', prId },
+              observation: redObservation,
+            }
+          : {
+              kind: 'MONITORING_ENABLED',
+              workspaceId: 'w',
+              bindingRevision: 0,
+              replyToPrComments: true,
+            },
       },
     });
   }
   expect(await workspaceRatchetAccessor.findSnapshotProjection('w')).toMatchObject({
-    prMonitoring: { pendingEventCount: 2 },
+    prMonitoring: { pendingEventCount: 1 },
   });
   expect(await workspaceAccessor.findById('w')).toMatchObject({
-    prMonitoring: { pendingEventCount: 2 },
+    prMonitoring: { pendingEventCount: 1 },
   });
 });
-it('maintenance workspace reads preserve pending controls and attached PR counts', async () => {
+it('maintenance workspace reads count attached PR events without legacy controls', async () => {
   await createPR('p');
   await createPR('p2', { detachedAt: new Date() });
   for (const [id, prId] of [
@@ -210,20 +216,26 @@ it('maintenance workspace reads preserve pending controls and attached PR counts
         id,
         prId,
         workspaceId: 'w',
-        kind: 'MONITORING_ENABLED',
+        kind: prId ? 'CI_FAILED' : 'MONITORING_ENABLED',
         deduplicationKey: id,
-        payload: {
-          kind: 'MONITORING_ENABLED',
-          workspaceId: 'w',
-          bindingRevision: 0,
-          replyToPrComments: true,
-        },
+        payload: prId
+          ? {
+              kind: 'CI_FAILED',
+              target: { workspaceId: 'w', prId },
+              observation: redObservation,
+            }
+          : {
+              kind: 'MONITORING_ENABLED',
+              workspaceId: 'w',
+              bindingRevision: 0,
+              replyToPrComments: true,
+            },
       },
     });
   }
   const rows = await workspaceAccessor.findAllNonArchivedWithSessionsAndProject();
   expect(rows).toHaveLength(1);
-  expect(rows[0]).toMatchObject({ id: 'w', prMonitoring: { enabled: true, pendingEventCount: 2 } });
+  expect(rows[0]).toMatchObject({ id: 'w', prMonitoring: { enabled: true, pendingEventCount: 1 } });
 });
 it('does not preserve explicitly resolved reviews when merging incomplete observations', async () => {
   const review = {
@@ -474,5 +486,36 @@ it.each([
         expect(projection?.prUrl).toBe(second.url);
       }
     }
+  }
+);
+
+it.each(['PENDING', 'DISPATCHING'])(
+  'does not report a queued update for a legacy %s control without a PR',
+  async (state) => {
+    await db.prisma.workspacePREvent.create({
+      data: {
+        workspaceId: 'w',
+        kind: 'MONITORING_ENABLED',
+        state,
+        deduplicationKey: 'legacy-control',
+        payload: {
+          kind: 'MONITORING_ENABLED',
+          workspaceId: 'w',
+          bindingRevision: 0,
+          replyToPrComments: false,
+        },
+      },
+    });
+    expect(await workspaceRatchetAccessor.findSnapshotProjection('w')).toMatchObject({
+      prs: [],
+      prMonitoring: { pendingEventCount: 0 },
+    });
+    expect(await workspaceAccessor.findById('w')).toMatchObject({
+      prs: [],
+      prMonitoring: { pendingEventCount: 0 },
+    });
+    const rows = await workspaceAccessor.findAllNonArchivedWithSessionsAndProject();
+    expect(rows[0]).toMatchObject({ prMonitoring: { pendingEventCount: 0 } });
+    expect(await db.prisma.workspacePREvent.count({ where: { workspaceId: 'w', state } })).toBe(1);
   }
 );

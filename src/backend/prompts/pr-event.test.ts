@@ -158,3 +158,41 @@ it('includes maintenance context in main and dedicated event batches within the 
   expect(dedicated).toContain('untrusted data');
   expect(Buffer.byteLength(dedicated)).toBeLessThanOrEqual(16_384);
 });
+
+it.each([
+  { deliveryMode: 'MAIN' as const, bodyLength: 15_520 },
+  { deliveryMode: 'DEDICATED' as const, bodyLength: 15_375 },
+])(
+  'retains near-limit review feedback with one reply policy in $deliveryMode mode',
+  ({ deliveryMode, bodyLength }) => {
+    const body = 'x'.repeat(bodyLength);
+    const text = buildPREventMessage({
+      deliveryId: 'review-policy',
+      deliveryMode,
+      replyToPrComments: false,
+      events: [
+        {
+          kind: 'REVIEW_FEEDBACK',
+          target: { workspaceId: 'w', prId: 'p' },
+          observation: redObservation,
+          reviews: [
+            {
+              identity: 'review',
+              contentHash: 'hash',
+              author: 'reviewer',
+              body,
+              path: 'file.ts',
+              line: 1,
+              url: redObservation.url,
+              activityAt: redObservation.observedAt,
+            },
+          ],
+        },
+      ],
+    });
+    expect(text).toContain(body);
+    expect(text).not.toContain('omitted');
+    expect(text.match(/Do not post replies to PR comments\./g)).toHaveLength(1);
+    expect(Buffer.byteLength(text)).toBeLessThanOrEqual(16_384);
+  }
+);

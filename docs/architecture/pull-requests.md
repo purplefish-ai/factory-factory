@@ -93,8 +93,9 @@ changing destinations/recipients starts an observation epoch. Enabling
 monitoring or binding a recipient does not queue a chat message. Both MAIN and
 DEDICATED batches carry concise maintenance instructions with actionable events
 for an attached PR in the same bounded message. Legacy workspace-level
-enablement controls are not delivered. Collection projections report MERGED only
-when every attached PR is merged; an open sibling remains visible.
+enablement controls are not delivered or included in pending counts; they remain
+available for receipt recovery. Collection projections report MERGED only when
+every attached PR is merged; an open sibling remains visible.
 
 Accepted per-PR `NONE` → `OPEN` observations notify the parent workspace once
 for each newly opened association, including attachment and discovery refreshes.

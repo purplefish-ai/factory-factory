@@ -30,7 +30,8 @@ export function flattenWorkspaceRatchet(
 export const WORKSPACE_RATCHET_DEFAULTS = flattenWorkspaceRatchet(null);
 export const pendingPREventWhere = {
   state: { in: ['PENDING', 'DISPATCHING'] },
-  OR: [{ prId: null }, { pr: { detachedAt: null } }],
+  prId: { not: null },
+  pr: { detachedAt: null },
 } satisfies Prisma.WorkspacePREventWhereInput;
 class WorkspaceRatchetAccessor {
   async findSnapshotProjection(workspaceId: string) {
