@@ -116,9 +116,18 @@ sends `load_session`, whose transport adapter runs these application stages:
    session event bus, preserving `loadRequestId` and broadcast recipient scope.
    Capture and publication do not yield, so a queued live update cannot precede
    a stale replay.
-3. `completeLoad` updates the runtime, publishes capabilities, configuration
-   options, and cached slash commands in order, then consumes and dispatches any
-   stored initial message through that application's dispatcher.
+3. `completeLoad` updates the runtime and resolves one configuration projection.
+   It synchronously finalizes that read against the current live handle,
+   publishes capabilities then nonempty configuration options without yielding,
+   then awaits and publishes cached slash commands. It consumes and dispatches
+   any stored initial message through that application's dispatcher only after
+   commands.
+
+The configuration owner performs at most one catalog lookup per completion,
+including failed discovery, and rechecks stored selection after discovery.
+Successful catalog reads still share their existing cache. A live handle owns
+capabilities; for compatibility, an empty live handle still permits stored
+fallback options. Passive reads never persist a catalog selection.
 
 Socket subscriptions, serialization, safe delivery, and disconnected-viewer
 cleanup remain owned by the transport. A closed or throwing requester does not

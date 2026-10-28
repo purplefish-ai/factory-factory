@@ -328,9 +328,11 @@ application commands receive plain contexts and typed outcomes. Loading prepares
 history asynchronously, captures current runtime/recovery/replay synchronously,
 then publishes replay at the transport boundary without yielding. Application
 completion owns runtime updates, capabilities, options, slash commands, and
-initial-message activation in that order. Load activation uses the supplied
-application graph's dispatcher. See [chat message flow](../chat-message-flow.md)
-for reconnect, recipient, and failure contracts.
+initial-message activation in that order. Capabilities and options share one
+configuration resolution per completion and publish consecutively after a
+synchronous live-handle recheck. Load activation uses the supplied application
+graph's dispatcher. See [chat message flow](../chat-message-flow.md) for
+reconnect, recipient, and failure contracts.
 
 ## Session lifecycle ownership
 

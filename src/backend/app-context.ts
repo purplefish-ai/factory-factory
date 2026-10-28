@@ -275,9 +275,8 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
         finishLoad: (id) => services.sessionDomainService.finishLoad(id),
       },
       config: {
-        getChatBarCapabilities: (id) => services.sessionConfigService.getChatBarCapabilities(id),
-        getSessionConfigOptionsWithFallback: (id) =>
-          services.sessionConfigService.getSessionConfigOptionsWithFallback(id),
+        getSessionConfigProjection: (id) =>
+          services.sessionConfigService.getSessionConfigProjection(id),
       },
       hydrateLifecycleEvents: (id) => services.sessionLifecycleEventService.hydrate(id),
       getRuntimeSnapshot: (id) => services.sessionLifecycleService.getRuntimeSnapshot(id),
