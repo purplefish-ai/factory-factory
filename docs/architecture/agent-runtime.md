@@ -292,9 +292,10 @@ failures do not fail a turn.
 
 Workspace/session activity and ownership of a conversation's prompt slot are
 separate signals. `isSessionWorking` includes in-flight prompts, background
-shell commands (including persistent preview servers), native subagents and
-active goals. It drives runtime activity and the yellow work indicator; a
-completed prompt retains that activity until the remaining work ends.
+agent turns and tasks, native subagents and active goals. Background shell
+commands (including persistent preview servers) remain visible but do not keep
+the session or workspace working after the prompt completes. The work signal
+drives runtime activity, the yellow work indicator and the workspace column.
 `isSessionPromptInFlight` answers only whether the current active runtime has an
 unresolved prompt RPC. Browse-only runtimes do not own an active prompt slot.
 
@@ -319,7 +320,8 @@ preserves the queued message.
 
 The workspace and quick-chat composers use prompt ownership for their queue
 placeholder and send-button label; background activity keeps the stop control
-available without implying that the next message must wait.
+available for active agent work without implying that the next message must
+wait.
 
 Startup and required configuration must complete before submission. Workspace
 initialization/manual-resume policy, compaction, per-session dispatch

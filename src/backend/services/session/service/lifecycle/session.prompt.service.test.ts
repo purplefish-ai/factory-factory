@@ -74,10 +74,12 @@ function createDeferred<T>() {
   return { promise, resolve, reject };
 }
 
-it('preserves background activity after a prompt completes and wakes queued prompts', async () => {
+it('keeps preview details while becoming idle after a prompt and wakes queued prompts', async () => {
   const { service, runtimeManager, sessionDomainService, promptTurnCompletionService } =
     createPromptService();
-  const tracker = new AcpNativeSessionTracker();
+  const tracker = new AcpNativeSessionTracker({
+    onTaskStatusChanged: (active) => runtimeManager.isSessionWorking.mockReturnValue(active),
+  });
   tracker.onRawMessage({
     method: 'session/update',
     params: {
@@ -96,15 +98,14 @@ it('preserves background activity after a prompt completes and wakes queued prom
     nativeSessionTracker: tracker,
   });
   runtimeManager.sendPrompt.mockResolvedValue({ stopReason: 'end_turn' });
-  runtimeManager.isSessionWorking.mockReturnValue(true);
 
   await service.sendSessionMessage('session-1', 'follow-up');
 
   expect(sessionDomainService.setRuntimeSnapshot).toHaveBeenLastCalledWith(
     'session-1',
     expect.objectContaining({
-      phase: 'running',
-      activity: 'WORKING',
+      phase: 'idle',
+      activity: 'IDLE',
       processState: 'alive',
       work: {
         promptInFlight: false,

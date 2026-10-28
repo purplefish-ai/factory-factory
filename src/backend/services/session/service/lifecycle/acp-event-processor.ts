@@ -169,13 +169,21 @@ export class AcpEventProcessor {
         });
         return;
       }
+      const { work } = getAcpWorkState(this.runtimeManager.getClient(sid));
       if (event.active || this.runtimeManager.isSessionWorking(sid)) {
-        const { work } = getAcpWorkState(this.runtimeManager.getClient(sid));
         if (work) {
           this.sessionDomainService.markRunning(sid, work);
         } else {
           this.sessionDomainService.markRunning(sid);
         }
+      } else if (work) {
+        this.sessionDomainService.setRuntimeSnapshot(sid, {
+          phase: 'idle',
+          processState: 'alive',
+          activity: 'IDLE',
+          work,
+          updatedAt: new Date().toISOString(),
+        });
       } else {
         this.sessionDomainService.markIdle(sid, 'alive');
       }

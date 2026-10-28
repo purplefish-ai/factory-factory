@@ -114,6 +114,10 @@ describe('AcpEventProcessor sub-agent invalidations', () => {
         activeGoals: 0,
       };
       expect(domain.getRuntimeSnapshot('db-session-1').work).toEqual(work);
+      expect(domain.getRuntimeSnapshot('db-session-1')).toMatchObject({
+        phase: 'idle',
+        activity: 'IDLE',
+      });
       const reloaded = domain.prepareLoad(
         'db-session-1',
         domain.getRuntimeSnapshot('db-session-1')
@@ -146,7 +150,10 @@ describe('AcpEventProcessor sub-agent invalidations', () => {
           work: { backgroundTasks: [], promptInFlight: false },
         });
       } else {
-        expect(domain.getRuntimeSnapshot('db-session-1').work).toBeUndefined();
+        expect(domain.getRuntimeSnapshot('db-session-1').work).toMatchObject({
+          backgroundTasks: [],
+          promptInFlight: false,
+        });
       }
     }
   );

@@ -285,8 +285,8 @@ describe('AcpNativeSessionTracker', () => {
     expect(older.nextCursor).toBeNull();
   });
 
-  it('keeps background activity until every child, goal and async task ends', () => {
-    // Catches prompt completion or a single background task clearing other ongoing work.
+  it('keeps agent activity until every child and goal ends despite a remaining shell', () => {
+    // Catches a shell retaining work after children and goals have finished.
     const active = vi.fn();
     const tracker = new AcpNativeSessionTracker({ onTaskStatusChanged: active });
     tracker.setRootSessionId('root');
@@ -322,7 +322,7 @@ describe('AcpNativeSessionTracker', () => {
         _meta: { jetbrains: { air: { goal: null } } },
       })
     );
-    expect(active.mock.calls).toEqual([[true], [true], [true], [true], [true]]);
+    expect(active.mock.calls).toEqual([[true], [true], [true], [true], [false]]);
     tracker.onRawMessage(
       update('child', {
         sessionUpdate: 'async_task_state_update',
@@ -330,7 +330,7 @@ describe('AcpNativeSessionTracker', () => {
         state: 'completed',
       })
     );
-    expect(active.mock.calls).toEqual([[true], [true], [true], [true], [true], [false]]);
+    expect(active.mock.calls).toEqual([[true], [true], [true], [true], [false], [false]]);
   });
 
   it('evicts oldest whole turns while keeping retained cursors stable and rejecting expired cursors', () => {
