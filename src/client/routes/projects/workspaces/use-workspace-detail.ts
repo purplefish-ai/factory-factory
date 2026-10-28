@@ -105,7 +105,7 @@ interface UseSessionManagementOptions {
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   selectedDbSessionId: string | null;
   setSelectedDbSessionId: (id: string | null) => void;
-  /** Independent selection for the new conversation. */
+  /** Settings to carry into the new conversation. */
   creationDefaults?: SessionLaunchSettings & { provider?: SessionProviderValue; model?: string };
   creationUnavailableReason?: string;
   canCreate?: boolean;

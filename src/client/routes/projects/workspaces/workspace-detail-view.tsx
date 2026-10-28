@@ -1,6 +1,5 @@
 import { type Dispatch, type SetStateAction, useCallback, useState } from 'react';
 import { Loading } from '@/client/components/loading';
-import type { SessionLaunchControlsProps } from '@/client/features/session-selection';
 import type { SubagentSelection } from '@/client/features/subagents';
 import {
   ArchiveWorkspaceDialog,
@@ -61,9 +60,9 @@ interface SessionTabsProps {
   handleOpenSubagentTab: (selection: SubagentSelection) => void;
   maxSessions: ReturnType<typeof useWorkspaceData>['maxSessions'];
   hasWorktreePath: boolean;
-  selectedProvider: SessionProviderValue;
-  setSelectedProvider: (provider: SessionProviderValue) => void;
-  creationSelection?: SessionLaunchControlsProps;
+  selectedProvider: SessionProviderValue | null;
+  creationReady?: boolean;
+  creationUnavailableReason?: string;
 }
 
 interface ArchiveDialogProps {
@@ -212,8 +211,8 @@ export function WorkspaceDetailView({
         maxSessions={sessionTabs.maxSessions}
         hasWorktreePath={sessionTabs.hasWorktreePath}
         selectedProvider={sessionTabs.selectedProvider}
-        setSelectedProvider={sessionTabs.setSelectedProvider}
-        creationSelection={sessionTabs.creationSelection}
+        creationReady={sessionTabs.creationReady}
+        creationUnavailableReason={sessionTabs.creationUnavailableReason}
       >
         <ChatContent {...chat} />
       </WorkspaceContentView>

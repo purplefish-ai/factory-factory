@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useChatWebSocket } from '@/client/features/chat';
-import { useSessionLaunchSelection } from '@/client/features/session-selection';
 import {
   ArchiveGitLockDialog,
   usePersistentScroll,
@@ -26,6 +25,7 @@ import type { ChatContentProps } from './workspace-detail-chat-content';
 import {
   buildSessionSummariesById,
   getVisibleInitBanner,
+  getNewSessionDefaults,
   hasUserMessageWithoutAgentMessage,
   isProviderSubagentSessionReady,
 } from './workspace-detail-container.utils';
@@ -79,12 +79,6 @@ export function WorkspaceDetailContainer() {
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [archiveGitLockDialogOpen, setArchiveGitLockDialogOpen] = useState(false);
   const isParentWorkspace = workspace?.creationSource !== 'CHILD_WORKSPACE';
-  const launchSelection = useSessionLaunchSelection(workspaceId, {
-    defaultProvider: workspace?.defaultSessionProvider,
-    ready: workspace !== undefined,
-  });
-  const selectedProvider = launchSelection.provider ?? 'CLAUDE';
-  const setSelectedProvider = launchSelection.pickerProps.onProviderChange ?? (() => undefined);
 
   const isDoneOrMergedWorkspace = isWorkspaceDoneOrMerged(workspace);
   const { data: childWorkspaces } = trpc.workspace.listChildren.useQuery(
@@ -134,6 +128,17 @@ export function WorkspaceDetailContainer() {
     messagesEndRef,
   } = useChatWebSocket({
     dbSessionId: selectedDbSessionId,
+  });
+
+  const launchDefaults = getNewSessionDefaults({
+    selectedSessionId: selectedDbSessionId,
+    runtimeSessionId,
+    capabilitiesLoaded: chatCapabilitiesLoaded,
+    provider: chatCapabilities.provider,
+    settings: chatSettings,
+    configOptions: acpConfigOptions,
+    defaultProvider: workspace?.defaultSessionProvider,
+    workspaceReady: workspace !== undefined && sessions !== undefined,
   });
 
   const loadingSession = sessionStatus.phase === 'loading';
@@ -189,11 +194,10 @@ export function WorkspaceDetailContainer() {
     inputRef,
     selectedDbSessionId,
     setSelectedDbSessionId,
-    creationDefaults: launchSelection.creationDefaults,
-    canCreate: launchSelection.ready,
-    creationUnavailableReason: launchSelection.unavailableReason,
-    onCreated: launchSelection.reset,
-    selectedProvider,
+    creationDefaults: launchDefaults.creationDefaults,
+    canCreate: launchDefaults.ready,
+    creationUnavailableReason: launchDefaults.unavailableReason,
+    selectedProvider: launchDefaults.provider ?? 'CLAUDE',
     onArchiveGitIndexLocked: () => setArchiveGitLockDialogOpen(true),
   });
 
@@ -344,7 +348,7 @@ export function WorkspaceDetailContainer() {
           onArchiveRequest={handleArchiveRequest}
           handleQuickAction={handleQuickAction}
           running={workspaceRunning}
-          isCreatingSession={createSession.isPending || !launchSelection.ready}
+          isCreatingSession={createSession.isPending || !launchDefaults.ready}
           hasChanges={hasChanges}
         />
       )}
@@ -383,9 +387,9 @@ export function WorkspaceDetailContainer() {
           handleOpenSubagentTab: openSubagentTab,
           maxSessions,
           hasWorktreePath: !!workspace?.worktreePath,
-          selectedProvider,
-          setSelectedProvider,
-          creationSelection: launchSelection.controlsProps,
+          selectedProvider: launchDefaults.provider,
+          creationReady: launchDefaults.ready,
+          creationUnavailableReason: launchDefaults.unavailableReason,
         }}
         chat={chatViewModel}
         rightPanelVisible={rightPanelVisible}

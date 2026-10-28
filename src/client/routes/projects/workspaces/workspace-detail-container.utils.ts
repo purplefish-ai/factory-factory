@@ -1,5 +1,12 @@
+import type { AcpConfigOption } from '@/client/features/chat/reducer';
 import type { WorkspaceSessionRuntimeSummary } from '@/client/features/workspace/session-tab-runtime';
-import type { ChatMessage } from '@/lib/chat-protocol';
+import type { ChatSettings, ChatMessage } from '@/lib/chat-protocol';
+import {
+  resolveExplicitSessionProvider,
+  type NewSessionProviderSelection,
+} from '@/lib/session-provider-selection';
+import type { ChatProvider } from '@/shared/chat-capabilities';
+import type { SessionLaunchSettings } from '@/shared/session-launch';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 
 type MessageSourceOnly = Pick<ChatMessage, 'source'>;
@@ -104,4 +111,77 @@ export function hasUserMessageWithoutAgentMessage(messages: readonly MessageSour
   }
 
   return hasUserMessage;
+}
+
+interface NewSessionDefaultsOptions {
+  selectedSessionId: string | null;
+  runtimeSessionId: string | null;
+  capabilitiesLoaded: boolean;
+  provider: ChatProvider;
+  settings: ChatSettings;
+  configOptions?: AcpConfigOption[] | null;
+  defaultProvider: NewSessionProviderSelection | undefined;
+  workspaceReady: boolean;
+}
+
+/** Copy only settings hydrated for the selected conversation, never bootstrap or previous values. */
+export function getNewSessionDefaults(options: NewSessionDefaultsOptions): {
+  provider: ChatProvider | null;
+  ready: boolean;
+  unavailableReason?: string;
+  creationDefaults: SessionLaunchSettings & { provider?: ChatProvider; model?: string };
+} {
+  const {
+    selectedSessionId,
+    runtimeSessionId,
+    capabilitiesLoaded,
+    provider,
+    settings,
+    configOptions,
+    defaultProvider,
+    workspaceReady,
+  } = options;
+  const ready =
+    workspaceReady &&
+    (!selectedSessionId ||
+      (runtimeSessionId === selectedSessionId && capabilitiesLoaded && configOptions != null));
+  if (!ready) {
+    return {
+      provider: null,
+      ready: false,
+      unavailableReason: 'Loading current session settings',
+      creationDefaults: {},
+    };
+  }
+  if (!selectedSessionId) {
+    const fallbackProvider = resolveExplicitSessionProvider(defaultProvider ?? 'WORKSPACE_DEFAULT');
+    return {
+      provider: fallbackProvider ?? null,
+      ready: true,
+      unavailableReason: undefined,
+      creationDefaults: { provider: fallbackProvider },
+    };
+  }
+  const reasoning = configOptions?.find(
+    (option) =>
+      option.category === 'thought_level' ||
+      option.category === 'reasoning' ||
+      option.id === 'reasoning_effort' ||
+      option.id === 'thought_level'
+  );
+  const planningKind = provider === 'CODEX' ? 'collaboration_mode' : 'mode';
+  const planning = configOptions?.find(
+    (option) => option.id === planningKind || option.category === planningKind
+  );
+  return {
+    provider,
+    ready: true,
+    unavailableReason: undefined,
+    creationDefaults: {
+      provider,
+      model: settings.selectedModel,
+      reasoningEffort: reasoning?.currentValue ?? settings.reasoningEffort,
+      planModeEnabled: planning ? planning.currentValue === 'plan' : settings.planModeEnabled,
+    },
+  };
 }

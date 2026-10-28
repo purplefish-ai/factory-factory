@@ -107,9 +107,8 @@ export class SessionLoadService {
     }
     const { capabilities, configOptions } = current;
     this.deps.domain.emitDelta(sessionId, { type: 'chat_capabilities', capabilities });
-    if (configOptions.length > 0) {
-      this.deps.domain.emitDelta(sessionId, { type: 'config_options_update', configOptions });
-    }
+    // Even an empty list confirms native settings hydration for clients.
+    this.deps.domain.emitDelta(sessionId, { type: 'config_options_update', configOptions });
     const cached = await this.deps.getCachedCommands(provider);
     const slashCommands =
       provider === 'CLAUDE'

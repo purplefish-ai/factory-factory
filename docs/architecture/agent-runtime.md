@@ -92,16 +92,21 @@ This UI timer does not release backend configuration readiness.
 
 ### Launch thinking and Plan
 
-Manual workspace creation, new conversations, and Quick Chat share a compact
-thinking menu and Plan icon toggle. Thinking levels and planning availability
-come from a disposable ACP session configured with the selected provider/model;
-the provider-wide model catalog is not used as a thinking capability list.
-Discovery submits no prompt, rejects permission/tool callbacks, and closes its
-processes. Its endpoint requires the trusted-local boundary used for local
-execution. Successful native results are cached for 30 seconds per
-provider/model, with bounded cache and concurrent discovery counts. Failed
-discovery offers Retry; creation waits for confirmed options while model
-selection remains editable.
+The workspace top bar offers a single plus button for new conversations. New
+conversations and quick actions inherit the selected conversation’s provider,
+model, thinking level, and Plan setting once its settings are hydrated. Users
+can change those settings in the new conversation’s chat controls. An empty
+workspace uses its saved provider and model defaults.
+
+Manual workspace creation and Quick Chat share a compact thinking menu and Plan
+icon toggle. Thinking levels and planning availability come from a disposable
+ACP session configured with the selected provider/model; the provider-wide model
+catalog is not used as a thinking capability list. Discovery submits no prompt,
+rejects permission/tool callbacks, and closes its processes. Its endpoint
+requires the trusted-local boundary used for local execution. Successful native
+results are cached for 30 seconds per provider/model, with bounded cache and
+concurrent discovery counts. Failed discovery offers Retry; creation waits for
+confirmed options while model selection remains editable.
 
 Each launch draft snapshots its saved provider defaults and retains explicit
 thinking/Plan choices across provider switches and settings refreshes. A model

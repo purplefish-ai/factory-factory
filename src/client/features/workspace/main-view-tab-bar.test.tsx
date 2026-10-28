@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { composeStories } from '@storybook/react';
-import { act } from 'react';
+import { act, type ComponentProps } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SubagentSelection } from '@/client/features/subagents';
@@ -84,12 +84,7 @@ async function renderTabBar(workspaceId: string) {
   await act(() => {
     root.render(
       <WorkspacePanelProvider workspaceId={workspaceId}>
-        <MainViewTabBar
-          workspaceId={workspaceId}
-          sessions={[]}
-          selectedProvider="CODEX"
-          setSelectedProvider={vi.fn()}
-        />
+        <MainViewTabBar workspaceId={workspaceId} sessions={[]} selectedProvider="CODEX" />
       </WorkspacePanelProvider>
     );
   });
@@ -176,79 +171,69 @@ describe('MainViewTabBar sub-agent tabs', () => {
   });
 });
 
-it('keeps unknown creation provider labels consistent instead of implying the legacy provider', async () => {
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-  const root = createRoot(container);
-  try {
+describe('MainViewTabBar session creation', () => {
+  async function renderCreationBar(props: Partial<ComponentProps<typeof MainViewTabBar>> = {}) {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const onCreateSession = vi.fn();
     await act(() =>
       root.render(
         <TooltipProvider>
-          <WorkspacePanelProvider workspaceId="unknown-creation-provider">
+          <WorkspacePanelProvider workspaceId="creation">
             <MainViewTabBar
-              workspaceId="unknown-creation-provider"
-              sessions={[]}
+              workspaceId="creation"
+              sessions={[{ id: 'current', name: 'Chat 1', status: 'RUNNING' }]}
               selectedProvider="CODEX"
-              setSelectedProvider={vi.fn()}
-              onCreateSession={vi.fn()}
-              creationSelection={{ provider: null, models: [], loading: true }}
+              onCreateSession={onCreateSession}
+              {...props}
             />
           </WorkspacePanelProvider>
         </TooltipProvider>
       )
     );
-    expect(
-      container.querySelector('[aria-label="New conversation provider and model: Loading model…"]')
-    ).not.toBeNull();
-    expect(
-      container.querySelector<HTMLButtonElement>('[aria-label="New conversation"]')?.disabled
-    ).toBe(true);
-    expect(container.querySelector('[aria-label="New Codex session"]')).toBeNull();
-  } finally {
-    await act(() => root.unmount());
+    return { container, root, onCreateSession };
   }
-});
 
-it('keeps the creation retry enabled while creation actions are blocked by defaults failure', async () => {
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-  const root = createRoot(container);
-  const onRetry = vi.fn();
-  try {
-    await act(() =>
-      root.render(
-        <TooltipProvider>
-          <WorkspacePanelProvider workspaceId="failed-creation-provider">
-            <MainViewTabBar
-              workspaceId="failed-creation-provider"
-              sessions={[]}
-              selectedProvider="CODEX"
-              setSelectedProvider={vi.fn()}
-              onCreateSession={vi.fn()}
-              creationSelection={{
-                provider: null,
-                models: [],
-                error: 'Could not load chat defaults',
-                unavailableReason: 'Could not load chat defaults',
-                onRetry,
-              }}
-            />
-          </WorkspacePanelProvider>
-        </TooltipProvider>
-      )
-    );
-    expect(
-      container.querySelector<HTMLButtonElement>('[aria-label="New conversation"]')?.disabled
-    ).toBe(true);
-    const create = container.querySelector<HTMLButtonElement>('[aria-label="New conversation"]');
-    expect(create?.hasAttribute('title')).toBe(false);
-    expect(create?.getAttribute('aria-description')).toBe('Could not load chat defaults');
-    expect(create?.classList.contains('disabled:pointer-events-none')).toBe(false);
-    const retry = container.querySelector<HTMLButtonElement>('[aria-label$="Retry selection"]');
-    expect(retry?.disabled).toBe(false);
-    await act(() => retry?.click());
-    expect(onRetry).toHaveBeenCalledOnce();
-  } finally {
-    await act(() => root.unmount());
-  }
+  it('offers just the plus button and creates a session on click', async () => {
+    const { container, root, onCreateSession } = await renderCreationBar();
+    try {
+      expect(container.querySelector('[aria-haspopup]')).toBeNull();
+      expect(container.textContent).not.toContain('New');
+      const create = container.querySelector<HTMLButtonElement>('[aria-label="New Codex session"]');
+      expect(create?.disabled).toBe(false);
+      await act(() => create?.click());
+      expect(onCreateSession).toHaveBeenCalledOnce();
+    } finally {
+      await act(() => root.unmount());
+    }
+  });
+
+  it('blocks creation while the selected session settings are loading', async () => {
+    const { container, root, onCreateSession } = await renderCreationBar({
+      selectedProvider: null,
+      creationReady: false,
+      creationUnavailableReason: 'Loading current session settings',
+    });
+    try {
+      const create = container.querySelector<HTMLButtonElement>('[aria-label="New conversation"]');
+      expect(create?.disabled).toBe(true);
+      expect(create?.getAttribute('aria-description')).toBe('Loading current session settings');
+      await act(() => create?.click());
+      expect(onCreateSession).not.toHaveBeenCalled();
+    } finally {
+      await act(() => root.unmount());
+    }
+  });
+
+  it('keeps the session limit enforced', async () => {
+    const { container, root } = await renderCreationBar({ maxSessions: 1 });
+    try {
+      expect(
+        container.querySelector<HTMLButtonElement>('[aria-label="New Codex session"]')?.disabled
+      ).toBe(true);
+    } finally {
+      await act(() => root.unmount());
+    }
+  });
 });

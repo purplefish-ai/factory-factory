@@ -153,6 +153,7 @@ describe('SessionLoadService', () => {
       'runtime',
       'projection',
       'chat_capabilities',
+      'config_options_update',
       'commands',
       'slash_commands',
       'consume',
@@ -344,4 +345,14 @@ describe('SessionLoadService', () => {
     expect(test.service.captureReplay(prepared).sessionRuntime).toEqual(running);
     expect(test.calls).toEqual(['history', 'lifecycle', 'prepare']);
   });
+});
+
+it('publishes an empty native option list so clients can finish settings hydration', async () => {
+  const test = setup();
+  const prepared = await test.service.prepareLoad({ sessionId: 's1' });
+  if (prepared.status !== 'ready') {
+    throw new Error('Expected ready session');
+  }
+  await test.service.completeLoad(prepared);
+  expect(test.deltas).toContainEqual({ type: 'config_options_update', configOptions: [] });
 });

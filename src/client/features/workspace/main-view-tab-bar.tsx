@@ -6,10 +6,6 @@ import { GitDiffIcon } from '@phosphor-icons/react/dist/csr/GitDiff';
 import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { useEffect } from 'react';
-import {
-  SessionLaunchControls,
-  type SessionLaunchControlsProps,
-} from '@/client/features/session-selection';
 import { type SubagentSelection, useLiveSubagentSelection } from '@/client/features/subagents';
 import { TabButton } from '@/components/ui/tab-button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -278,9 +274,9 @@ interface MainViewTabBarProps {
   disabled?: boolean;
   /** Maximum sessions allowed per workspace */
   maxSessions?: number;
-  selectedProvider: SessionProviderValue;
-  setSelectedProvider: (provider: SessionProviderValue) => void;
-  creationSelection?: SessionLaunchControlsProps;
+  selectedProvider: SessionProviderValue | null;
+  creationReady?: boolean;
+  creationUnavailableReason?: string;
 }
 
 export function MainViewTabBar({
@@ -298,8 +294,8 @@ export function MainViewTabBar({
   disabled,
   maxSessions,
   selectedProvider,
-  setSelectedProvider,
-  creationSelection,
+  creationReady = true,
+  creationUnavailableReason,
 }: MainViewTabBarProps) {
   const { tabs, activeTabId, selectTab, closeTab, updateSubagentTab } = useWorkspacePanel();
 
@@ -308,27 +304,17 @@ export function MainViewTabBar({
 
   // Check if active session limit is reached
   const isAtLimit = isWorkspaceSessionLimitReached(sessions, maxSessions);
-  const isButtonDisabled =
-    disabled ||
-    isAtLimit ||
-    creationSelection?.ready === false ||
-    creationSelection?.loading ||
-    Boolean(creationSelection?.error);
-  const pickerProps = creationSelection ?? {
-    provider: selectedProvider,
-    models: [],
-    onProviderChange: setSelectedProvider,
-  };
-  const newSessionLabel = pickerProps.provider
-    ? `New ${getSessionProviderLabel(pickerProps.provider)} session`
+  const isButtonDisabled = disabled || isAtLimit || !creationReady;
+  const newSessionLabel = selectedProvider
+    ? `New ${getSessionProviderLabel(selectedProvider)} session`
     : 'New conversation';
 
   return (
-    <div className={cn('flex flex-wrap items-center bg-muted/50 sm:flex-nowrap', className)}>
+    <div className={cn('flex items-center bg-muted/50', className)}>
       {/* Scrollable tab area */}
       <div
         role="tablist"
-        className="flex min-w-0 flex-1 basis-full items-center gap-0.5 overflow-x-auto p-1 sm:basis-auto"
+        className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto p-1"
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
       >
         {/* Session tabs (Chat 1, Chat 2, etc.) */}
@@ -402,23 +388,9 @@ export function MainViewTabBar({
         )}
       </div>
 
-      {/* Session creation controls (provider + add button) */}
+      {/* New sessions inherit the current conversation's settings. */}
       {onCreateSession && (
-        <div className="mx-1 flex min-w-0 flex-1 items-center gap-0.5 py-1 sm:flex-none">
-          <span className="px-1 text-xs text-muted-foreground">New</span>
-          <SessionLaunchControls
-            {...pickerProps}
-            disabled={disabled || isAtLimit}
-            disabledReason={
-              isAtLimit
-                ? `Maximum ${maxSessions} sessions per workspace`
-                : disabled
-                  ? 'Session creation is unavailable'
-                  : undefined
-            }
-            label="New conversation provider and model"
-          />
-
+        <div className="mx-1 shrink-0 py-1">
           <Tooltip>
             <TooltipTrigger asChild>
               <button
@@ -431,7 +403,7 @@ export function MainViewTabBar({
                   'transition-colors disabled:opacity-50'
                 )}
                 aria-label={newSessionLabel}
-                aria-description={creationSelection?.unavailableReason}
+                aria-description={creationUnavailableReason}
               >
                 <PlusIcon className="h-3.5 w-3.5" />
               </button>
@@ -439,7 +411,7 @@ export function MainViewTabBar({
             <TooltipContent>
               {isAtLimit
                 ? `Maximum ${maxSessions} sessions per workspace`
-                : (creationSelection?.unavailableReason ?? newSessionLabel)}
+                : (creationUnavailableReason ?? newSessionLabel)}
             </TooltipContent>
           </Tooltip>
         </div>

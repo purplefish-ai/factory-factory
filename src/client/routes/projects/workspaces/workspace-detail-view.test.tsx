@@ -218,7 +218,6 @@ function createViewProps(activeChildCount: number): WorkspaceDetailViewProps {
       maxSessions: 5,
       hasWorktreePath: true,
       selectedProvider: 'CLAUDE',
-      setSelectedProvider: vi.fn(),
     },
     chat: {
       viewportRef: { current: null },

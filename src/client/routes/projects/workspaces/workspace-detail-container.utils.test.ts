@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import type { AcpConfigOption } from '@/client/features/chat/reducer';
 import type { WorkspaceSessionRuntimeSummary } from '@/client/features/workspace/session-tab-runtime';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import {
   buildSessionSummariesById,
+  getNewSessionDefaults,
   getVisibleInitBanner,
   hasUserMessageWithoutAgentMessage,
   isProviderSubagentSessionReady,
@@ -228,5 +230,150 @@ describe('buildSessionSummariesById', () => {
     expect(created?.persistedStatus).toBe('IDLE');
     expect(created?.runtimePhase).toBe('starting');
     expect(created?.lastExit).toBeNull();
+  });
+});
+
+describe('getNewSessionDefaults', () => {
+  const current = {
+    selectedSessionId: 'codex-session',
+    runtimeSessionId: 'codex-session',
+    capabilitiesLoaded: true,
+    configOptions: [] as AcpConfigOption[],
+    provider: 'CODEX' as const,
+    settings: {
+      selectedModel: 'current-model',
+      reasoningEffort: 'high',
+      planModeEnabled: true,
+      thinkingEnabled: false,
+    },
+    defaultProvider: 'CLAUDE' as const,
+    workspaceReady: true,
+  };
+
+  it('inherits the current provider, model, thinking level and Plan setting', () => {
+    expect(getNewSessionDefaults(current)).toEqual({
+      provider: 'CODEX',
+      ready: true,
+      unavailableReason: undefined,
+      creationDefaults: {
+        provider: 'CODEX',
+        model: 'current-model',
+        reasoningEffort: 'high',
+        planModeEnabled: true,
+      },
+    });
+  });
+
+  it('uses the latest settings including native default thinking and Plan off', () => {
+    expect(
+      getNewSessionDefaults({
+        ...current,
+        provider: 'CLAUDE',
+        settings: {
+          ...current.settings,
+          selectedModel: 'opus',
+          reasoningEffort: null,
+          planModeEnabled: false,
+        },
+      }).creationDefaults
+    ).toEqual({
+      provider: 'CLAUDE',
+      model: 'opus',
+      reasoningEffort: null,
+      planModeEnabled: false,
+    });
+  });
+
+  it.each([
+    { runtimeSessionId: 'previous-session' },
+    { capabilitiesLoaded: false },
+    { configOptions: null },
+    { workspaceReady: false },
+  ])('waits for current settings instead of copying stale or bootstrap values: %j', (pending) => {
+    const result = getNewSessionDefaults({ ...current, ...pending });
+    expect(result.ready).toBe(false);
+    expect(result.creationDefaults).toEqual({});
+    expect(result.unavailableReason).toBeDefined();
+  });
+
+  it('uses saved workspace defaults when creating the first conversation', () => {
+    expect(
+      getNewSessionDefaults({
+        ...current,
+        selectedSessionId: null,
+        runtimeSessionId: null,
+        capabilitiesLoaded: false,
+      })
+    ).toEqual({
+      provider: 'CLAUDE',
+      ready: true,
+      unavailableReason: undefined,
+      creationDefaults: { provider: 'CLAUDE' },
+    });
+  });
+});
+
+describe('native settings inheritance', () => {
+  const current = {
+    selectedSessionId: 'current',
+    runtimeSessionId: 'current',
+    capabilitiesLoaded: true,
+    configOptions: [] as AcpConfigOption[],
+    provider: 'CODEX' as const,
+    defaultProvider: 'CLAUDE' as const,
+    workspaceReady: true,
+    settings: {
+      selectedModel: 'model',
+      reasoningEffort: 'low',
+      planModeEnabled: false,
+      thinkingEnabled: false,
+    },
+  };
+  const option = (id: string, currentValue: string, category?: string) => ({
+    id,
+    category,
+    currentValue,
+    name: id,
+    type: 'select',
+    options: [],
+  });
+  it.each([
+    option('reasoning_effort', 'high'),
+    option('thought_level', 'high'),
+    option('custom_thinking', 'high', 'reasoning'),
+    option('custom_thinking', 'high', 'thought_level'),
+  ])('copies the displayed native thinking level: %j', (reasoning) => {
+    expect(
+      getNewSessionDefaults({ ...current, configOptions: [reasoning] }).creationDefaults
+        .reasoningEffort
+    ).toBe('high');
+  });
+  it.each([
+    { provider: 'CODEX' as const, config: option('collaboration_mode', 'plan') },
+    { provider: 'CODEX' as const, config: option('custom_planning', 'plan', 'collaboration_mode') },
+    { provider: 'CLAUDE' as const, config: option('mode', 'plan') },
+  ])('copies hydrated native planning for $provider', ({ provider, config }) => {
+    expect(
+      getNewSessionDefaults({ ...current, provider, configOptions: [config] }).creationDefaults
+        .planModeEnabled
+    ).toBe(true);
+  });
+  it('keeps Codex access mode separate from its planning setting', () => {
+    expect(
+      getNewSessionDefaults({
+        ...current,
+        settings: { ...current.settings, planModeEnabled: true },
+        configOptions: [option('mode', 'plan'), option('collaboration_mode', 'default')],
+      }).creationDefaults.planModeEnabled
+    ).toBe(false);
+  });
+  it('leaves provider resolution to workspace defaults when no provider is pinned', () => {
+    const result = getNewSessionDefaults({
+      ...current,
+      selectedSessionId: null,
+      defaultProvider: 'WORKSPACE_DEFAULT',
+    });
+    expect(result.provider).toBeNull();
+    expect(result.creationDefaults.provider).toBeUndefined();
   });
 });

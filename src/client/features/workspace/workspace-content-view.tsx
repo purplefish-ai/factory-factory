@@ -1,6 +1,5 @@
 import type { inferRouterOutputs } from '@trpc/server';
 import type { ReactNode } from 'react';
-import type { SessionLaunchControlsProps } from '@/client/features/session-selection';
 import { getStatusBannerClassName } from '@/client/lib/status-banner-styles';
 import type { AppRouter } from '@/client/lib/trpc';
 import type { SessionProviderValue } from '@/lib/session-provider-selection';
@@ -33,9 +32,9 @@ interface WorkspaceContentViewProps {
   maxSessions?: number;
   /** Whether the workspace has a worktree path (required for sessions) */
   hasWorktreePath: boolean;
-  selectedProvider: SessionProviderValue;
-  setSelectedProvider: (provider: SessionProviderValue) => void;
-  creationSelection?: SessionLaunchControlsProps;
+  selectedProvider: SessionProviderValue | null;
+  creationReady?: boolean;
+  creationUnavailableReason?: string;
 }
 
 // =============================================================================
@@ -65,8 +64,8 @@ export function WorkspaceContentView({
   maxSessions,
   hasWorktreePath,
   selectedProvider,
-  setSelectedProvider,
-  creationSelection,
+  creationReady = true,
+  creationUnavailableReason,
 }: WorkspaceContentViewProps) {
   const hasNoSessions = sessions && sessions.length === 0;
   const { openTab } = useWorkspacePanel();
@@ -93,8 +92,8 @@ export function WorkspaceContentView({
           disabled={isCreatingSession || isDeletingSession || !hasWorktreePath}
           maxSessions={maxSessions}
           selectedProvider={selectedProvider}
-          setSelectedProvider={setSelectedProvider}
-          creationSelection={creationSelection}
+          creationReady={creationReady}
+          creationUnavailableReason={creationUnavailableReason}
         />
       </div>
 
