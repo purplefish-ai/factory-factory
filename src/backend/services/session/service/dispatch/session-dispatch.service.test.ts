@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
 import { SessionNotificationDeliveryService } from '@/backend/services/session/service/lifecycle/session-notification-delivery.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
-import type { QueuedMessage } from '@/shared/acp-protocol';
+import { buildTranscriptFromHistory } from '@/backend/services/session/service/store/session-transcript';
+import type { AgentContentItem, QueuedMessage } from '@/shared/acp-protocol';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionDispatchService } from './session-dispatch.service';
 
@@ -35,7 +36,9 @@ function harness(
   notifications?: SessionNotificationDeliveryService
 ) {
   let generation = 0;
-  const sendSessionMessage = vi.fn().mockResolvedValue(undefined);
+  const sendSessionMessage = vi
+    .fn<(sessionId: string, content: string | AgentContentItem[]) => Promise<void>>()
+    .mockResolvedValue(undefined);
   const startup = {
     getSessionClient: vi.fn<() => unknown>().mockReturnValue({}),
     getOrCreateSessionClient: vi.fn().mockResolvedValue({}),
@@ -219,7 +222,7 @@ describe('session dispatcher queue and lifecycle coordination', () => {
         type: 'image',
         source: { type: 'base64', media_type: 'image/png', data: first.attachments[0]!.data },
       },
-      { type: 'text', text: 'and these notes\n\n[Pasted content: notes.txt]\nnotes' },
+      { type: 'text', text: '\n\nand these notes\n\n[Pasted content: notes.txt]\nnotes' },
     ]);
     expect(
       sessionDomainService.getTranscriptSnapshot('session').map(({ attachments }) => attachments)
@@ -238,6 +241,58 @@ describe('session dispatcher queue and lifecycle coordination', () => {
     expect(sessionDomainService.getTranscriptSnapshot('session').map(({ id }) => id)).toEqual([
       'good',
     ]);
+  });
+
+  it('replays human content after a PR update from the actual mixed text/image provider prompt', async () => {
+    const { dispatcher, sendSessionMessage, backgroundDelivery } = harness();
+    const human = enqueue('Human request\n\nSecond paragraph');
+    human.attachments = [
+      {
+        id: 'image',
+        name: 'image.png',
+        type: 'image/png',
+        size: 67,
+        contentType: 'image',
+        data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      },
+    ];
+    const pr: QueuedMessage = {
+      ...human,
+      id: 'pr-event-before-image',
+      attachments: undefined,
+      text: '<!-- factory-factory-pr-event:before-image -->\nPR failed',
+      source: { type: 'pr_event', request: { workspaceId: 'w', prId: 'p', bindingRevision: 1 } },
+    };
+    // A busy PR-only send can be restored in front of a human message arriving mid-send.
+    sessionDomainService.requeueFront('session', pr);
+    backgroundDelivery.prepare.mockResolvedValue({ status: 'ready' });
+    await dispatcher.tryDispatchNextMessage('session');
+    const content = sendSessionMessage.mock.calls[0]?.[1];
+    if (!Array.isArray(content)) {
+      throw new Error('Expected text/image provider blocks');
+    }
+    const restored = buildTranscriptFromHistory([
+      {
+        type: 'user',
+        uuid: 'provider-id',
+        content: content
+          .filter((item) => item.type === 'text')
+          .map((item) => item.text)
+          .join('\n'),
+        attachments: human.attachments,
+        timestamp: human.timestamp,
+      },
+    ]);
+    expect(restored).toHaveLength(2);
+    expect(restored[0]).toMatchObject({
+      source: 'agent',
+      message: { type: 'pr_update', text: pr.text },
+    });
+    expect(restored[1]).toMatchObject({
+      source: 'user',
+      text: human.text,
+      attachments: human.attachments,
+    });
   });
 
   it('dispatches human messages while a PR batch is blocked', async () => {
@@ -270,6 +325,30 @@ describe('session dispatcher queue and lifecycle coordination', () => {
     expect(sendSessionMessage).not.toHaveBeenCalled();
     expect(fail.mock.calls.map(([, message]) => message.id).sort()).toEqual(['first', 'second']);
     expect(sessionDomainService.getTranscriptSnapshot('session')).toEqual([]);
+  });
+
+  it('releases a validated PR claim when stop wins before the batch is submitted', async () => {
+    const { dispatcher, sendSessionMessage, backgroundDelivery, stop } = harness();
+    const human = enqueue('human');
+    const pr: QueuedMessage = {
+      ...human,
+      id: 'pr-event-stop-after-validation',
+      source: { type: 'pr_event', request: { workspaceId: 'w', prId: 'p', bindingRevision: 1 } },
+    };
+    sessionDomainService.enqueue('session', pr);
+    backgroundDelivery.prepare.mockResolvedValue({ status: 'ready' });
+    backgroundDelivery.validate.mockImplementation(() => {
+      // Stop after the individual validator returns true, before the batch resumes.
+      queueMicrotask(() => queueMicrotask(stop));
+      return Promise.resolve(true);
+    });
+    await dispatcher.tryDispatchNextMessage('session');
+    expect(sendSessionMessage).not.toHaveBeenCalled();
+    expect(backgroundDelivery.fail).toHaveBeenCalledExactlyOnceWith(
+      pr,
+      expect.any(Error),
+      'cancelled'
+    );
   });
 
   it('retries the surviving batch when a human message is cancelled during PR preparation', async () => {

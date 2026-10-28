@@ -802,3 +802,96 @@ it('recovers an absent frozen batch with a detached target and delivers attached
   await prBackgroundDeliveryPort.complete(next.delivery);
   expect(await workspacePRMonitoringService.listPending(workspaceId)).toEqual([]);
 });
+
+it('delivers a large MAIN ledger in bounded batches without acknowledging deferred PRs', async () => {
+  const workspaceId = 'bounded-main-ledger';
+  const sessionId = `${workspaceId}-session`;
+  const prs = Array.from({ length: 70 }, (_, index) => ({
+    id: `${workspaceId}-${index}`,
+    workspaceId,
+    url: `https://github.com/org/repo/pull/${index + 100}`,
+  }));
+  await db.prisma.workspace.create({
+    data: {
+      id: workspaceId,
+      projectId: 'project',
+      name: workspaceId,
+      status: 'READY',
+      worktreePath: db.tempDir,
+      prMonitoring: { create: { enabled: true, bindingRevision: 1 } },
+    },
+  });
+  await db.prisma.workspacePR.createMany({ data: prs });
+  await db.prisma.agentSession.create({
+    data: {
+      id: sessionId,
+      workspaceId,
+      workflow: 'implement',
+      provider: 'CODEX',
+      providerSessionId: `${sessionId}-provider`,
+    },
+  });
+  await db.prisma.workspacePRMonitoring.update({
+    where: { workspaceId },
+    data: { recipientSessionId: sessionId },
+  });
+  await db.prisma.workspacePREvent.createMany({
+    data: prs.map((pr, index) => ({
+      id: `${pr.id}-event`,
+      workspaceId,
+      prId: pr.id,
+      kind: 'CI_FAILED',
+      deduplicationKey: `failure-${index}`,
+      payload: {
+        kind: 'CI_FAILED',
+        target: { workspaceId, prId: pr.id },
+        observation: {
+          ...redObservation,
+          url: pr.url,
+          number: index + 100,
+          headBranch: `feature-${'x'.repeat(300)}`,
+        },
+      },
+    })),
+  });
+  const delivered = new Set<string>();
+  let batches = 0;
+  while (delivered.size < prs.length && batches < 10) {
+    const pending = await workspacePRMonitoringService.listPending(workspaceId);
+    const representative = pending[0]?.prId;
+    if (!representative) {
+      throw new Error('Expected pending ledger facts');
+    }
+    const prepared = await preparePRDelivery({
+      sessionId,
+      request: { workspaceId, prId: representative, bindingRevision: 1 },
+    });
+    if (prepared.status !== 'ready') {
+      throw new Error('Expected bounded MAIN delivery');
+    }
+    const delivery = prepared.delivery;
+    expect(Buffer.byteLength(delivery.text)).toBeLessThanOrEqual(16_384);
+    expect(delivery.eventIds.length).toBeGreaterThan(0);
+    expect(delivery.eventIds.length).toBeLessThan(prs.length);
+    for (const pr of prs) {
+      if (delivery.eventIds.includes(`${pr.id}-event`)) {
+        expect(delivery.text).toContain(JSON.stringify(pr.url));
+        expect(delivered.has(pr.id)).toBe(false);
+        delivered.add(pr.id);
+      }
+    }
+    expect(
+      await db.prisma.workspacePREvent.count({ where: { workspaceId, state: 'PENDING' } })
+    ).toBe(prs.length - delivered.size);
+    await prBackgroundDeliveryPort.complete(delivery);
+    expect(
+      await db.prisma.workspacePREvent.count({ where: { workspaceId, state: 'DELIVERED' } })
+    ).toBe(delivered.size);
+    batches++;
+  }
+  expect(delivered.size).toBe(70);
+  expect(batches).toBeGreaterThan(1);
+  expect(await workspacePRMonitoringService.get(workspaceId)).toMatchObject({
+    deliveryPauseReason: null,
+  });
+});

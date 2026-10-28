@@ -48,9 +48,20 @@ export function combineBatchContents(
   });
   return parts.every((part) => typeof part === 'string')
     ? parts.join('\n\n')
-    : parts.flatMap((part) =>
-        typeof part === 'string' ? [{ type: 'text' as const, text: part }] : part
-      );
+    : parts.flatMap((part, index) => batchPartBlocks(part, index > 0));
+}
+
+function batchPartBlocks(part: string | AgentContentItem[], boundary: boolean): AgentContentItem[] {
+  if (typeof part === 'string') {
+    return [{ type: 'text', text: `${boundary ? '\n\n' : ''}${part}` }];
+  }
+  const firstText = part.findIndex((block) => block.type === 'text');
+  // Claude restores each text block separately, so separators must stay with meaningful text.
+  return part.map((block, index) =>
+    boundary && index === firstText && block.type === 'text'
+      ? { ...block, text: `\n\n${block.text}` }
+      : block
+  );
 }
 
 async function releasePreparedBackgrounds(

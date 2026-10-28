@@ -262,6 +262,71 @@ describe('session-transcript', () => {
     });
   });
 
+  it('restores human text following a PR update with its attachments', () => {
+    const pr = '<!-- factory-factory-pr-event:first -->\nPR failed';
+    const attachments = [
+      {
+        id: 'image',
+        name: 'image.png',
+        type: 'image/png',
+        size: 1,
+        data: 'a',
+        contentType: 'image' as const,
+      },
+    ];
+    const restored = buildTranscriptFromHistory([
+      {
+        type: 'user',
+        uuid: 'provider-id',
+        content: `${pr}\n\nHuman request\n\nSecond paragraph`,
+        timestamp: '2026-10-28T00:00:00.000Z',
+        attachments,
+      },
+    ]);
+    expect(restored).toHaveLength(2);
+    expect(restored[0]).toMatchObject({
+      source: 'agent',
+      message: { type: 'pr_update', text: pr },
+      order: 0,
+    });
+    expect(restored[1]).toMatchObject({
+      source: 'user',
+      text: 'Human request\n\nSecond paragraph',
+      attachments,
+      order: 1,
+    });
+  });
+
+  it('retains attachment-only human content preceding a PR update on replay', () => {
+    const pr = '<!-- factory-factory-pr-event:attachments -->\nPR failed';
+    const attachments = [
+      {
+        id: 'image',
+        name: 'image.png',
+        type: 'image/png',
+        size: 1,
+        data: 'a',
+        contentType: 'image' as const,
+      },
+    ];
+    const restored = buildTranscriptFromHistory([
+      {
+        type: 'user',
+        uuid: 'provider-id',
+        content: pr,
+        timestamp: '2026-10-28T00:00:00.000Z',
+        attachments,
+      },
+    ]);
+    expect(restored).toHaveLength(2);
+    expect(restored[0]).toMatchObject({ source: 'user', text: '', attachments, order: 0 });
+    expect(restored[1]).toMatchObject({
+      source: 'agent',
+      message: { type: 'pr_update', text: pr },
+      order: 1,
+    });
+  });
+
   it('upserts duplicate tool_use content_block_start events by tool id', () => {
     const store = createStore();
     const options = createAppendOptions();

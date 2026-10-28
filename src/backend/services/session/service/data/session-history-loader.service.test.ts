@@ -3,7 +3,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { configService } from '@/backend/services/config.service';
+import { processAttachmentsAndBuildContent } from '@/backend/services/session/service/chat/chat-message-handlers/attachment-processing';
+import { combineBatchContents } from '@/backend/services/session/service/dispatch/session-dispatch-batch';
 import { buildTranscriptFromHistory } from '@/backend/services/session/service/store/session-transcript';
+import type { QueuedMessage } from '@/shared/acp-protocol';
 import { MAX_IMAGE_SIZE } from '@/shared/attachment-limits';
 import { claudeSessionHistoryLoaderService } from './session-history-loader.service';
 
@@ -234,6 +237,89 @@ describe('claudeSessionHistoryLoaderService', () => {
         data,
       },
     ]);
+  });
+
+  it('replays a combined human image and PR prompt without standalone separator bubbles', async () => {
+    const providerSessionId = 'mixed-pr-image-session';
+    const cwd = '/Users/test/project';
+    const timestamp = '2026-10-28T10:03:09.340Z';
+    const data =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    const size = Buffer.byteLength(data, 'base64');
+    const human: QueuedMessage = {
+      id: 'human-image',
+      text: 'Look at this screenshot',
+      timestamp,
+      settings: {
+        selectedModel: null,
+        reasoningEffort: null,
+        thinkingEnabled: false,
+        planModeEnabled: false,
+      },
+      attachments: [
+        { id: 'image', name: 'image.png', type: 'image/png', contentType: 'image', size, data },
+      ],
+    };
+    const pr: QueuedMessage = {
+      id: 'pr-event-mixed',
+      text: '<!-- factory-factory-pr-event:mixed -->\nPR failed',
+      timestamp,
+      settings: { ...human.settings },
+      source: {
+        type: 'pr_event',
+        request: { workspaceId: 'workspace', prId: 'pr', bindingRevision: 1 },
+      },
+    };
+    const messages = [human, pr];
+    const content = combineBatchContents(
+      messages,
+      new Map(
+        messages.map((message) => [
+          message,
+          processAttachmentsAndBuildContent(message.text, message.attachments),
+        ])
+      )
+    );
+    writeSessionFile({
+      claudeConfigDir: tempDir,
+      cwd,
+      providerSessionId,
+      entries: [
+        {
+          type: 'user',
+          sessionId: providerSessionId,
+          timestamp,
+          uuid: 'combined-image-pr',
+          message: { role: 'user', content },
+        },
+      ],
+    });
+
+    const result = await claudeSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: cwd,
+    });
+    expect(result.status).toBe('loaded');
+    if (result.status !== 'loaded') {
+      return;
+    }
+    const transcript = buildTranscriptFromHistory(result.history);
+    expect(
+      transcript.filter(
+        (message) =>
+          message.source === 'user' && !message.text?.trim() && !message.attachments?.length
+      )
+    ).toEqual([]);
+    expect(transcript).toHaveLength(2);
+    expect(transcript[0]).toMatchObject({
+      source: 'user',
+      text: human.text,
+      attachments: [{ type: 'image/png', contentType: 'image', size, data }],
+    });
+    expect(transcript[1]).toMatchObject({
+      source: 'agent',
+      message: { type: 'pr_update', text: pr.text },
+    });
   });
 
   it('restores image-only messages with multiple images and skips malformed image blocks', async () => {

@@ -42,11 +42,12 @@ PR monitoring replaces the former Ratchet fixer workflow. The two-minute
 `pr-event-poll` job observes every attached PR and queues actionable updates in
 either a bound ordinary conversation (MAIN, the default) or one reusable
 dedicated conversation per PR (DEDICATED). This is one event pipeline with a
-destination setting, replacing the former fixer engine. Queued human messages
-are provided together in FIFO order on the next agent turn. A ready background
-update joins those messages in the same provider prompt. Background updates wait
-for an idle recipient, no interactive request, and no working agent in the
-workspace. An update arriving mid-turn stays queued for the next turn.
+destination setting, replacing the former fixer engine. Queued non-command human
+messages are provided together in FIFO order on the next agent turn. Slash
+commands run in standalone turns. A ready background update joins those messages
+in the same provider prompt. Background updates wait for an idle recipient, no
+interactive request, and no working agent in the workspace. An update arriving
+mid-turn stays queued for the next turn.
 
 Enablement and delivery destination are workspace-scoped. In MAIN mode, a unique
 ordinary conversation can be bound automatically; multiple candidates require an
@@ -232,17 +233,22 @@ retained rather than inferred resolved. Unknown CI results never become green.
 ### Delivery and recovery
 
 The session queue carries a backend-owned `pr_event` source. Browser messages
-cannot supply it or reserved message IDs. MAIN preparation refreshes every
-attached PR before collecting pending facts; dedicated preparation refreshes its
-bound PR. It checks eligibility before freezing a bounded message (16 KiB
-UTF-8), event IDs, delivery UUID, recipient, binding revision, and attempt. The
-final guard runs again for every event and PR target immediately before provider
-submission. Frozen retries preserve their exact text and complete event set, so
-later facts wait for a subsequent batch. A transactional workspace-wide claim
-permits only one PR delivery at a time, including across dedicated
-conversations. A competing claim retains its queued status row and retries when
-the active delivery settles. Review data is escaped, explicitly untrusted, and
-includes PR links and omission counts.
+cannot supply it or reserved message IDs. MAIN preparation refreshes distinct
+PRs with pending candidate facts, with at most three refreshes in flight. Failed
+refreshes leave that PR's facts pending while healthy siblings remain eligible;
+unrelated attached PRs do not delay delivery. Dedicated preparation refreshes
+its bound PR. Frozen retries reuse their exact event set and text without
+another GitHub refresh. Preparation checks eligibility before freezing a bounded
+message (16 KiB UTF-8), event IDs, delivery UUID, recipient, binding revision,
+and attempt. When complete PR identity sections exceed that limit, the batch
+claims only the sections represented in its text and leaves the remainder
+pending for later turns. The final guard runs again for every event and PR
+target immediately before provider submission. Frozen retries preserve their
+exact text and complete event set, so later facts wait for a subsequent batch. A
+transactional workspace-wide claim permits only one PR delivery at a time,
+including across dedicated conversations. A competing claim retains its queued
+status row and retries when the active delivery settles. Review data is escaped,
+explicitly untrusted, and includes PR links and omission counts.
 
 Cold delivery requires resuming the exact stored Claude/Codex conversation.
 Failed or unsupported resume cannot fall back to a new conversation. Saved ACP

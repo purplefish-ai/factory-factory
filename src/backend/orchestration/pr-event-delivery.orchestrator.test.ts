@@ -123,6 +123,7 @@ beforeEach(() => {
   vi.mocked(defaultPRDeliveryPorts.workspacePrSnapshotService.list).mockResolvedValue([
     { id: 'p' },
   ] as never);
+  mocks.observe.mockResolvedValue(true);
   mocks.busy.mockReturnValue(false);
   mocks.dispatch.mockResolvedValue(undefined);
   mocks.interaction.mockReturnValue(null);
@@ -264,6 +265,7 @@ it('queues for the next turn without claiming while the recipient is busy', asyn
   expect(mocks.claim).not.toHaveBeenCalled();
 });
 it('rejects a binding stopped while observation refresh is in flight', async () => {
+  mocks.pending.mockResolvedValue([queuedFact('p')]);
   mocks.observe.mockImplementation(() => {
     config.bindingRevision++;
     config.deliveryPauseReason = 'USER_STOPPED';
@@ -335,6 +337,7 @@ it('rechecks another working session in the final dispatch guard', async () => {
   ).toBe(false);
 });
 it('forces a fresh observation before freezing a PR update', async () => {
+  mocks.pending.mockResolvedValue([queuedFact('p')]);
   await preparePRDelivery({
     sessionId: 'main',
     request: { workspaceId: 'w', prId: 'p', bindingRevision: 1 },
@@ -345,7 +348,8 @@ it('forces a fresh observation before freezing a PR update', async () => {
     { force: true }
   );
 });
-it('awaits the injected refresh and rechecks authorization before reading pending events', async () => {
+it('reads candidate facts before refresh and rechecks authorization before claiming', async () => {
+  mocks.pending.mockResolvedValue([queuedFact('p')]);
   const refreshObservation = vi.fn(() => {
     config.bindingRevision++;
     return Promise.resolve(true);
@@ -362,10 +366,11 @@ it('awaits the injected refresh and rechecks authorization before reading pendin
   ).toEqual({ status: 'discard' });
   expect(refreshObservation).toHaveBeenCalledWith({ workspaceId: 'w', prId: 'p' });
   expect(mocks.observe).not.toHaveBeenCalled();
-  expect(mocks.pending).not.toHaveBeenCalled();
+  expect(mocks.pending).toHaveBeenCalledTimes(2);
   expect(mocks.claim).not.toHaveBeenCalled();
 });
 it('does not freeze or claim events when the injected refresh fails', async () => {
+  mocks.pending.mockResolvedValue([queuedFact('p')]);
   const refreshObservation = vi.fn(() => Promise.reject(new Error('GitHub unavailable')));
   await expect(
     preparePRDelivery(
@@ -375,8 +380,9 @@ it('does not freeze or claim events when the injected refresh fails', async () =
       },
       { ...defaultPRDeliveryPorts, refreshObservation }
     )
-  ).rejects.toThrow('GitHub unavailable');
-  expect(mocks.pending).not.toHaveBeenCalled();
+  ).resolves.toMatchObject({ status: 'blocked', reason: 'Waiting for fresh PR observations' });
+  expect(mocks.pending).toHaveBeenCalledTimes(2);
+  expect(mocks.pause).not.toHaveBeenCalled();
   expect(mocks.claim).not.toHaveBeenCalled();
 });
 it('does not invalidate the bound recipient when an unrelated session stops', async () => {

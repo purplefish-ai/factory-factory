@@ -206,12 +206,27 @@ it('renders multiple main PR identities and feedback in one bounded message', ()
       {
         kind: 'CI_FAILED',
         target: { workspaceId: 'w', prId: 'q' },
-        observation: { ...redObservation, number: 2, url: 'https://github.com/org/repo/pull/2' },
+        observation: {
+          ...redObservation,
+          number: 2,
+          url: 'https://github.com/org/repo/pull/2',
+          checks: [
+            {
+              ...redObservation.checks[0]!,
+              name: 'Sibling lint',
+              detailsUrl: 'https://github.com/org/repo/actions/runs/2',
+            },
+          ],
+        },
       },
     ],
   });
   expect(text).toContain(redObservation.url);
   expect(text).toContain('https://github.com/org/repo/pull/2');
+  expect(text).toContain('"name":"test"');
+  expect(text).toContain('https://github.com/org/repo/actions/runs/1');
+  expect(text).toContain('Sibling lint');
+  expect(text).toContain('https://github.com/org/repo/actions/runs/2');
   expect(text.match(/factory-factory-pr-event:many/g)).toHaveLength(1);
   expect(Buffer.byteLength(text)).toBeLessThanOrEqual(16_384);
 });
@@ -227,4 +242,27 @@ it('still rejects mixing PRs in a dedicated conversation', () => {
       ],
     })
   ).toThrow('Batch must belong to one PR');
+});
+
+it('bounds a valid MAIN batch when combined PR identity headers exceed the message limit', () => {
+  const events = Array.from({ length: 70 }, (_, index) => ({
+    kind: 'CI_FAILED' as const,
+    target: { workspaceId: 'w', prId: `p${index}` },
+    observation: {
+      ...redObservation,
+      number: index + 1,
+      url: `https://github.com/org/repo/pull/${index + 1}`,
+      headBranch: `branch-${'x'.repeat(300)}`,
+    },
+  }));
+  const text = buildPREventMessage({
+    deliveryId: 'many-bounded',
+    replyToPrComments: false,
+    events,
+  });
+  expect(Buffer.byteLength(text)).toBeLessThanOrEqual(16_384);
+  expect(text).toContain(JSON.stringify(events[0]!.observation.url));
+  expect(text).not.toContain(JSON.stringify(events[69]!.observation.url));
+  expect(text).toContain('remain queued');
+  expect(text).not.toContain('\n\n');
 });

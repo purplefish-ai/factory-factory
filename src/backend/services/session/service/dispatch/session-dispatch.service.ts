@@ -736,10 +736,7 @@ export class SessionDispatchService {
       }
     }
     if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
-      await this.failStoppedBatch(
-        dbSessionId,
-        messages.filter((message) => !message.source)
-      );
+      await this.failStoppedBatch(dbSessionId, messages);
       return false;
     }
 

@@ -61,12 +61,6 @@ export type SessionNotificationDeliveryServiceDependencies = {
   deltaPort: NotificationDeltaPort;
 };
 
-type CommittedNotificationMatch = {
-  id: string;
-  matchedByContent: boolean;
-  contentMatchKey?: string;
-};
-
 type ActiveDispatchClaim = {
   sessionId: string;
   notificationId: string;
@@ -104,7 +98,6 @@ export class SessionNotificationDeliveryService {
 
       let enqueuedCount = 0;
       let dispatchableCount = 0;
-      const consumedContentMatchIds = new Set<string>();
       for (const notification of pending) {
         await assertAllowed();
         const messageId = workspaceNotificationMessageId(notification.id);
@@ -120,7 +113,6 @@ export class SessionNotificationDeliveryService {
           notificationId: notification.id,
           messageId,
           messageText,
-          consumedContentMatchIds,
         });
         await assertAllowed();
         if (alreadyDelivered) {
@@ -283,37 +275,28 @@ export class SessionNotificationDeliveryService {
     } as SessionDeltaEvent & { order: number });
   }
 
-  private findCommittedNotificationMatch(
+  private hasCommittedNotificationMatch(
     sessionId: string,
     messageId: string,
-    messageText: string,
-    consumedContentMatchIds: ReadonlySet<string>
-  ): CommittedNotificationMatch | undefined {
+    messageText: string
+  ): boolean {
     const userEntries = this.transcriptPort
       .getTranscriptSnapshot(sessionId)
       .filter(
         (entry) => entry.source === 'user' && !this.isTranscriptMessageInFlight(sessionId, entry.id)
       );
-    const exactIdMatch = userEntries.find((entry) => entry.id === messageId);
-    if (exactIdMatch) {
-      return { id: exactIdMatch.id, matchedByContent: false };
+    if (userEntries.some((entry) => entry.id === messageId)) {
+      return true;
     }
     if (this.transcriptPort.getHistoryHydrationSource(sessionId) !== 'jsonl') {
-      return undefined;
+      return false;
     }
-    const contentMatch = userEntries.find(
+    // Canonical text includes this notification's unique receipt marker, including in a combined prompt.
+    return userEntries.some(
       (entry) =>
         !entry.id.startsWith(WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX) &&
-        entry.text?.includes(messageText) &&
-        !consumedContentMatchIds.has(`${entry.id}:${messageId}`)
+        Boolean(entry.text?.includes(messageText))
     );
-    return contentMatch
-      ? {
-          id: contentMatch.id,
-          matchedByContent: true,
-          contentMatchKey: `${contentMatch.id}:${messageId}`,
-        }
-      : undefined;
   }
 
   private async markDeliveredIfTranscriptMatch(input: {
@@ -322,19 +305,9 @@ export class SessionNotificationDeliveryService {
     notificationId: string;
     messageId: string;
     messageText: string;
-    consumedContentMatchIds: Set<string>;
   }): Promise<boolean> {
-    const committedMessage = this.findCommittedNotificationMatch(
-      input.sessionId,
-      input.messageId,
-      input.messageText,
-      input.consumedContentMatchIds
-    );
-    if (!committedMessage) {
+    if (!this.hasCommittedNotificationMatch(input.sessionId, input.messageId, input.messageText)) {
       return false;
-    }
-    if (committedMessage.matchedByContent) {
-      input.consumedContentMatchIds.add(committedMessage.contentMatchKey ?? committedMessage.id);
     }
     await this.markDeliveredAfterTranscriptMatch(
       input.sessionId,
