@@ -97,15 +97,23 @@ sending a hardcoded client model. Pending model choices stay visible until
 confirmed. Rejected or unsent changes restore the confirmed model; request
 correlation prevents an older rejection from discarding a newer choice. Each
 conversation restores its own draft and attachments, including switches before
-draft autosave completes. Model/configuration writes serialize per session
-through persistence and state publication, including failure corrections;
-different sessions remain independent. Accepted native observations, successful
-RPC results, and startup snapshots share a configuration authority fence through
-metadata reads, CAS retries, and publication. Failed requests leave the last
-accepted state valid; superseded background writes stop without publishing a
-stale result. Public snapshot persistence exhaustion propagates an error and
-configuration correction; native asynchronous observations own their background
-rejection and logging. The
+draft autosave completes. Chat configuration controls remain editable during a
+turn. Edits retain a visible pending selection and apply after that prompt
+settles, before the next prompt can start; background activity alone does not
+delay them. Newer explicit edits supersede the corresponding settings in
+messages already queued for that runtime; newer queued intent remains intact.
+Request acknowledgments and correlated failures settle only the matching pending
+choice, so an older response cannot discard a newer edit. Stopping or replacing
+the runtime rejects its deferred edits. Disconnecting clears unacknowledged
+selections so reconnect snapshots regain authority. Model/configuration writes
+serialize per session through persistence and state publication, including
+failure corrections; different sessions remain independent. Accepted native
+observations, successful RPC results, and startup snapshots share a
+configuration authority fence through metadata reads, CAS retries, and
+publication. Failed requests leave the last accepted state valid; superseded
+background writes stop without publishing a stale result. Public snapshot
+persistence exhaustion propagates an error and configuration correction; native
+asynchronous observations own their background rejection and logging. The
 [startup finalizer](#permission-and-configuration-readiness) owns startup
 durability, permission checks, readiness, and failure cleanup. Later genuine
 server changes remain authoritative after pending edits settle. Model-only

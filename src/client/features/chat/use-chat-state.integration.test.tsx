@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MessageAttachment } from '@/lib/chat-protocol';
 import { MessageState } from '@/lib/chat-protocol';
 import { type ChatBarCapabilities, EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
-import { loadSettings } from './chat-persistence';
+import { loadSettings, persistSettings } from './chat-persistence';
 import { type UseChatStateReturn, useChatState } from './use-chat-state';
 
 vi.mock('sonner', () => ({
@@ -26,22 +26,28 @@ Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
 interface ChatStateHarnessProps {
   dbSessionId: string | null;
   send: (message: unknown) => boolean;
+  connected?: boolean;
   chatRef: { current: UseChatStateReturn | null };
 }
 
-function ChatStateHarness({ dbSessionId, send, chatRef }: ChatStateHarnessProps) {
-  chatRef.current = useChatState({ dbSessionId, send, connected: true });
+function ChatStateHarness({ dbSessionId, send, chatRef, connected = true }: ChatStateHarnessProps) {
+  chatRef.current = useChatState({ dbSessionId, send, connected });
   return null;
 }
 
-function renderChatState(initialSessionId: string | null, send = vi.fn(() => true)) {
+function renderChatState(
+  initialSessionId: string | null,
+  send = vi.fn((_message: unknown) => true),
+  initialConnected = true
+) {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root: Root = createRoot(container);
   const chatRef = { current: null as UseChatStateReturn | null };
 
+  let connected = initialConnected;
   const render = (dbSessionId: string | null) => {
-    root.render(createElement(ChatStateHarness, { dbSessionId, send, chatRef }));
+    root.render(createElement(ChatStateHarness, { dbSessionId, send, chatRef, connected }));
   };
 
   flushSync(() => {
@@ -51,6 +57,10 @@ function renderChatState(initialSessionId: string | null, send = vi.fn(() => tru
   return {
     chatRef,
     send,
+    setConnected: (value: boolean) => {
+      connected = value;
+      flushSync(() => render(initialSessionId));
+    },
     rerenderSession: (dbSessionId: string | null) => {
       render(dbSessionId);
     },
@@ -580,4 +590,219 @@ it('keeps a failed PR update out of an empty composer', async () => {
   } finally {
     await act(() => harness.cleanup());
   }
+});
+
+describe('pending native settings', () => {
+  afterEach(() => {
+    document.body.innerHTML = '';
+    sessionStorage.clear();
+    vi.clearAllMocks();
+  });
+
+  it('preserves saved settings during the initial disconnected render', async () => {
+    persistSettings('initial-disconnect', {
+      selectedModel: 'saved-model',
+      reasoningEffort: 'high',
+      thinkingEnabled: true,
+      planModeEnabled: true,
+    });
+    const harness = renderChatState(
+      'initial-disconnect',
+      vi.fn((_message: unknown) => true),
+      false
+    );
+    await flushEffects();
+    expect(loadSettings('initial-disconnect')?.selectedModel).toBe('saved-model');
+    expect(harness.chatRef.current?.chatSettings.reasoningEffort).toBe('high');
+    harness.cleanup();
+  });
+
+  it('keeps the latest native choice visible through current-turn updates and older rejections', async () => {
+    const send = vi.fn((_message: unknown) => true);
+    const harness = renderChatState('pending-settings', send);
+    await flushEffects();
+    const option = {
+      id: 'mode',
+      name: 'Access',
+      type: 'select',
+      currentValue: 'default',
+      options: [
+        { value: 'default', name: 'Default' },
+        { value: 'review', name: 'Review' },
+      ],
+    };
+    flushSync(() =>
+      harness.chatRef.current?.dispatch({
+        type: 'CONFIG_OPTIONS_UPDATE',
+        payload: { configOptions: [option] },
+      })
+    );
+    flushSync(() => harness.chatRef.current?.setConfigOption('mode', 'review'));
+    const older = harness.send.mock.calls.at(-1)?.[0];
+    if (
+      !older ||
+      typeof older !== 'object' ||
+      !('requestId' in older) ||
+      typeof older.requestId !== 'string'
+    ) {
+      throw new Error('Expected request correlation');
+    }
+    expect(harness.chatRef.current?.acpConfigOptions?.[0]?.currentValue).toBe('review');
+    flushSync(() => harness.chatRef.current?.setConfigOption('mode', 'default'));
+    const latest = harness.send.mock.calls.at(-1)?.[0];
+    if (
+      !latest ||
+      typeof latest !== 'object' ||
+      !('requestId' in latest) ||
+      typeof latest.requestId !== 'string'
+    ) {
+      throw new Error('Expected request correlation');
+    }
+    flushSync(() =>
+      harness.chatRef.current?.dispatch({
+        type: 'CONFIG_OPTIONS_UPDATE',
+        payload: { configOptions: [{ ...option, currentValue: 'review' }] },
+      })
+    );
+    flushSync(() =>
+      harness.chatRef.current?.handleMessage({
+        type: 'error',
+        requestId: older.requestId,
+        message: 'rejected',
+      })
+    );
+    expect(harness.chatRef.current?.acpConfigOptions?.[0]?.currentValue).toBe('default');
+    flushSync(() =>
+      harness.chatRef.current?.handleMessage({
+        type: 'error',
+        requestId: latest.requestId,
+        message: 'rejected',
+      })
+    );
+    expect(harness.chatRef.current?.acpConfigOptions?.[0]?.currentValue).toBe('review');
+    flushSync(() => harness.chatRef.current?.setConfigOption('mode', 'default'));
+    const applied = harness.send.mock.calls.at(-1)?.[0];
+    if (
+      !applied ||
+      typeof applied !== 'object' ||
+      !('requestId' in applied) ||
+      typeof applied.requestId !== 'string'
+    ) {
+      throw new Error('Expected request correlation');
+    }
+    flushSync(() =>
+      harness.chatRef.current?.dispatch({
+        type: 'CONFIG_OPTIONS_UPDATE',
+        payload: { configOptions: [option] },
+      })
+    );
+    flushSync(() =>
+      harness.chatRef.current?.handleMessage({
+        type: 'config_option_applied',
+        requestId: applied.requestId,
+      })
+    );
+    flushSync(() =>
+      harness.chatRef.current?.dispatch({
+        type: 'CONFIG_OPTIONS_UPDATE',
+        payload: { configOptions: [{ ...option, currentValue: 'review' }] },
+      })
+    );
+    expect(harness.chatRef.current?.acpConfigOptions?.[0]?.currentValue).toBe('review');
+    flushSync(() => harness.chatRef.current?.setConfigOption('mode', 'default'));
+    harness.setConnected(false);
+    await flushEffects();
+    harness.setConnected(true);
+    flushSync(() =>
+      harness.chatRef.current?.dispatch({
+        type: 'CONFIG_OPTIONS_UPDATE',
+        payload: { configOptions: [{ ...option, currentValue: 'review' }] },
+      })
+    );
+    expect(harness.chatRef.current?.acpConfigOptions?.[0]?.currentValue).toBe('review');
+    harness.cleanup();
+  });
+
+  it('uses a selected native reasoning level when queuing the next message', async () => {
+    const harness = renderChatState('pending-reasoning');
+    await flushEffects();
+    flushSync(() =>
+      harness.chatRef.current?.dispatch({
+        type: 'WS_CHAT_CAPABILITIES',
+        payload: {
+          capabilities: {
+            ...EMPTY_CHAT_BAR_CAPABILITIES,
+            provider: 'CODEX',
+            reasoning: {
+              enabled: true,
+              selected: 'low',
+              options: [
+                { value: 'low', label: 'Low' },
+                { value: 'high', label: 'High' },
+              ],
+            },
+          },
+        },
+      })
+    );
+    flushSync(() =>
+      harness.chatRef.current?.dispatch({
+        type: 'CONFIG_OPTIONS_UPDATE',
+        payload: {
+          configOptions: [
+            {
+              id: 'reasoning_effort',
+              category: 'thought_level',
+              name: 'Thinking',
+              type: 'select',
+              currentValue: 'low',
+              options: [
+                { value: 'low', name: 'Low' },
+                { value: 'high', name: 'High' },
+              ],
+            },
+          ],
+        },
+      })
+    );
+    flushSync(() => harness.chatRef.current?.setConfigOption('reasoning_effort', 'high'));
+    flushSync(() => harness.chatRef.current?.sendMessage('next turn'));
+    expect(harness.send).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        type: 'queue_message',
+        settings: expect.objectContaining({ reasoningEffort: 'high' }),
+      })
+    );
+    harness.setConnected(false);
+    await flushEffects();
+    harness.setConnected(true);
+    flushSync(() =>
+      harness.chatRef.current?.dispatch({
+        type: 'CONFIG_OPTIONS_UPDATE',
+        payload: {
+          configOptions: [
+            {
+              id: 'reasoning_effort',
+              category: 'thought_level',
+              name: 'Thinking',
+              type: 'select',
+              currentValue: 'high',
+              options: [
+                { value: 'low', name: 'Low' },
+                { value: 'high', name: 'High' },
+              ],
+            },
+          ],
+        },
+      })
+    );
+    flushSync(() => harness.chatRef.current?.sendMessage('after reconnect'));
+    expect(harness.send).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        type: 'queue_message',
+        settings: expect.objectContaining({ reasoningEffort: 'high' }),
+      })
+    );
+    harness.cleanup();
+  });
 });

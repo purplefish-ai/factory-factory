@@ -51,13 +51,7 @@ export interface SessionDispatchLifecycleDependencies {
 /** Method-level capabilities supplied by the session composition root. */
 export interface SessionDispatchDependencies {
   runtimeManager: Pick<AcpRuntimeManager, 'isSessionPromptInFlight' | 'isSessionRunning'>;
-  configService: Pick<
-    SessionConfigService,
-    | 'setSessionCollaborationMode'
-    | 'setSessionThinkingBudget'
-    | 'setSessionModel'
-    | 'setSessionReasoningEffort'
-  >;
+  configService: Pick<SessionConfigService, 'configureQueuedMessage'>;
   promptService: {
     sendSessionMessage(sessionId: string, content: string | AgentContentItem[]): Promise<void>;
   };

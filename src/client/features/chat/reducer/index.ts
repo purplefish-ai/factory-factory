@@ -495,6 +495,10 @@ const messageHandlers: MessageHandlerMap = {
   slash_commands: handleSlashCommandsMessage,
   user_message_uuid: handleUserMessageUuidMessage,
   config_options_update: handleConfigOptionsUpdateMessage,
+  config_option_applied: (data) =>
+    typeof data.requestId === 'string'
+      ? { type: 'CONFIG_OPTION_APPLIED', payload: { requestId: data.requestId } }
+      : null,
 };
 
 /**

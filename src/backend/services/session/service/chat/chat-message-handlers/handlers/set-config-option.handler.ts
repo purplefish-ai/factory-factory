@@ -22,7 +22,11 @@ export function createSetConfigOptionHandler(deps: {
           value: message.value,
         });
       }
-      return { replies: [] };
+      return {
+        replies: message.requestId
+          ? [{ type: 'config_option_applied', requestId: message.requestId }]
+          : [],
+      };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : error;
       logger.error('[Chat WS] Failed to set config option', {

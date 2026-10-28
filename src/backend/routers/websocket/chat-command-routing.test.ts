@@ -27,7 +27,7 @@ describe('chat command routing from application composition', () => {
       type: 'set_model',
       model: 'chosen',
     });
-    expect(model).toHaveBeenCalledWith('session-command', 'chosen');
+    expect(model).toHaveBeenCalledWith('session-command', 'chosen', 'user');
     expect(outcome).toEqual({
       replies: [{ type: 'chat_capabilities', capabilities: EMPTY_CHAT_BAR_CAPABILITIES }],
     });

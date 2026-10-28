@@ -1,4 +1,7 @@
-import { clampChatSettingsForCapabilities } from '@/client/features/chat/chat-settings';
+import {
+  clampChatSettingsForCapabilities,
+  getConfigOptionSettings,
+} from '@/client/features/chat/chat-settings';
 import type { AcpConfigOption, ChatAction, ChatState } from '@/client/features/chat/reducer/types';
 
 function isModelOption(option: AcpConfigOption): boolean {
@@ -21,6 +24,25 @@ function confirmsModelSelection(state: ChatState, currentModel: string | undefin
   );
 }
 
+function reconcileNativeSettings(
+  state: ChatState,
+  configOptions: AcpConfigOption[]
+): Partial<ChatState['chatSettings']> {
+  const confirmedSettings: Partial<ChatState['chatSettings']> = {};
+  if (state.needsConfigReconciliation) {
+    const confirmedState = { ...state, acpConfigOptions: configOptions };
+    for (const option of configOptions) {
+      if (!(isModelOption(option) || state.pendingConfigOptions[option.id])) {
+        Object.assign(
+          confirmedSettings,
+          getConfigOptionSettings(confirmedState, option.id, option.currentValue)
+        );
+      }
+    }
+  }
+  return confirmedSettings;
+}
+
 function handleConfigOptionsUpdate(
   state: ChatState,
   payload: { configOptions: AcpConfigOption[] }
@@ -32,16 +54,21 @@ function handleConfigOptionsUpdate(
   const modelOption = payload.configOptions.find(isModelOption);
   const currentModel = modelOption?.currentValue;
   const keepPendingModel =
-    state.modelSelectionSource === 'local' && !confirmsModelSelection(state, currentModel);
+    (modelOption && !!state.pendingConfigOptions[modelOption.id]) ||
+    (state.modelSelectionSource === 'local' && !confirmsModelSelection(state, currentModel));
   const acceptModel = !!currentModel && !keepPendingModel;
+  const confirmedSettings = reconcileNativeSettings(state, payload.configOptions);
   return {
     ...state,
+    needsConfigReconciliation: false,
     acpConfigOptions: modelOption
       ? payload.configOptions
       : [...(state.acpConfigOptions?.filter(isModelOption) ?? []), ...payload.configOptions],
-    chatSettings: acceptModel
-      ? { ...state.chatSettings, selectedModel: currentModel }
-      : state.chatSettings,
+    chatSettings: {
+      ...state.chatSettings,
+      ...confirmedSettings,
+      ...(acceptModel ? { selectedModel: currentModel } : {}),
+    },
     modelSelectionSource: acceptModel ? 'server' : state.modelSelectionSource,
     pendingModelRequestId: acceptModel ? null : state.pendingModelRequestId,
   };
@@ -88,10 +115,55 @@ function handleModelRequestFailure(
   };
 }
 
+function settleConfigRequest(state: ChatState, requestId: string | undefined): ChatState {
+  const entry = Object.entries(state.pendingConfigOptions).find(
+    ([, pending]) => pending.requestId === requestId
+  );
+  if (!entry) {
+    return state;
+  }
+  const [configId] = entry;
+  const pendingConfigOptions = { ...state.pendingConfigOptions };
+  delete pendingConfigOptions[configId];
+  const confirmed = state.acpConfigOptions?.find((option) => option.id === configId);
+  const settings = confirmed
+    ? getConfigOptionSettings(state, configId, confirmed.currentValue)
+    : {};
+  return {
+    ...state,
+    pendingConfigOptions,
+    chatSettings: { ...state.chatSettings, ...settings },
+    ...(settings.selectedModel !== undefined
+      ? { modelSelectionSource: 'server' as const, pendingModelRequestId: null }
+      : {}),
+  };
+}
+
 export function reduceSettingsSlice(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
     case 'WS_ERROR':
-      return handleModelRequestFailure(state, action);
+      return handleModelRequestFailure(
+        settleConfigRequest(state, action.payload.requestId),
+        action
+      );
+    case 'CONFIG_OPTION_REQUESTED':
+      return {
+        ...state,
+        pendingConfigOptions: {
+          ...state.pendingConfigOptions,
+          [action.payload.configId]: {
+            value: action.payload.value,
+            requestId: action.payload.requestId,
+          },
+        },
+      };
+    case 'CONFIG_OPTION_APPLIED':
+      return settleConfigRequest(state, action.payload.requestId);
+    case 'CONFIG_OPTIONS_DISCONNECTED':
+      return Object.values(state.pendingConfigOptions).reduce<ChatState>(
+        (current, pending) => settleConfigRequest(current, pending.requestId),
+        { ...state, needsConfigReconciliation: true }
+      );
     case 'UPDATE_SETTINGS':
       return {
         ...state,

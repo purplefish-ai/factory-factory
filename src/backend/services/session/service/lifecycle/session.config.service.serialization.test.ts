@@ -100,6 +100,73 @@ function fixture() {
 }
 
 describe('configuration transaction ordering', () => {
+  it('gives newer native edits precedence over an already queued message', async () => {
+    const f = fixture();
+    const queued = {
+      timestamp: new Date(0).toISOString(),
+      settings: {
+        selectedModel: 'first',
+        reasoningEffort: null,
+        thinkingEnabled: false,
+        planModeEnabled: false,
+      },
+    };
+    f.handle.isPromptInFlight = true;
+    f.rpc.mockResolvedValue({ configOptions: options('second') });
+    const edit = f.service.setSessionConfigOption('session', 'model', 'second');
+    const resolved = f.service.configureQueuedMessage('session', queued);
+    f.handle.isPromptInFlight = false;
+    await edit;
+    expect((await resolved).selectedModel).toBe('second');
+    const newer = { ...queued, timestamp: new Date(Date.now() + 1000).toISOString() };
+    expect((await f.service.configureQueuedMessage('session', newer)).selectedModel).toBe('first');
+  });
+
+  it('keeps edits arriving during dispatch configuration after the complete message transaction', async () => {
+    const f = fixture();
+    const planning = (model: string): SessionConfigOption[] => [
+      ...options(model),
+      {
+        id: 'collaboration_mode',
+        category: 'collaboration_mode',
+        name: 'Planning',
+        type: 'select',
+        currentValue: 'plan',
+        options: [
+          { value: 'plan', name: 'Plan' },
+          { value: 'default', name: 'Default' },
+        ],
+      },
+    ];
+    f.handle.configOptions = planning('first').map((option) =>
+      option.id === 'collaboration_mode' && option.type === 'select'
+        ? { ...option, currentValue: 'default' }
+        : option
+    );
+    const plan = createDeferred<{ configOptions: SessionConfigOption[] }>();
+    f.rpc
+      .mockReturnValueOnce(plan.promise)
+      .mockResolvedValueOnce({ configOptions: planning('first') })
+      .mockResolvedValueOnce({ configOptions: planning('third') });
+    const configuring = f.service.configureQueuedMessage('session', {
+      timestamp: new Date(0).toISOString(),
+      settings: {
+        selectedModel: 'first',
+        reasoningEffort: null,
+        thinkingEnabled: false,
+        planModeEnabled: true,
+      },
+    });
+    // Force the plan write to yield before the message's model write.
+    await vi.waitFor(() => expect(f.rpc).toHaveBeenCalled());
+    const edit = f.service.setSessionConfigOption('session', 'model', 'third');
+    plan.resolve({ configOptions: planning('first') });
+    await Promise.all([configuring, edit]);
+    expect(f.handle.configOptions.find((option) => option.id === 'model')?.currentValue).toBe(
+      'third'
+    );
+  });
+
   it('retains the latest choice when provider responses would complete in reverse order', async () => {
     const f = fixture();
     const second = createDeferred<{ configOptions: SessionConfigOption[] }>();

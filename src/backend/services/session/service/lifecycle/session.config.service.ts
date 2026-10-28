@@ -12,7 +12,7 @@ import { fetchSessionLaunchOptionsFromAcp } from '@/backend/services/session/ser
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { userSettingsService } from '@/backend/services/settings';
-import type { SessionDeltaEvent } from '@/shared/acp-protocol';
+import type { SessionDeltaEvent, QueuedMessage } from '@/shared/acp-protocol';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import type { SessionLaunchOptions } from '@/shared/session-launch';
@@ -36,6 +36,7 @@ import {
   SessionConfigSnapshotPersistence,
   type PersistAcpConfigSnapshotParams,
 } from './session-config-snapshot-persistence';
+import { SessionQueuedSettings } from './session-queued-settings';
 export type { PersistAcpConfigSnapshotParams } from './session-config-snapshot-persistence';
 import { setInactiveSessionConfigOption } from './session-inactive-config-options';
 import { SessionLaunchOptionsService } from './session-launch-options.service';
@@ -91,6 +92,7 @@ export class SessionConfigService {
   private readonly configAuthority = new SessionConfigCommitAuthority();
   private readonly launchOptionsService: Pick<SessionLaunchOptionsService, 'getOptions'>;
   private readonly configUpdates: SessionConfigMutationQueue;
+  private readonly queuedSettings: SessionQueuedSettings;
   private readonly repository: SessionRepository;
   private readonly runtimeManager: AcpRuntimeManager;
   private readonly sessionDomainService: SessionDomainService;
@@ -112,6 +114,7 @@ export class SessionConfigService {
       this.repository
     );
     this.runtimeManager = options.runtimeManager;
+    this.queuedSettings = new SessionQueuedSettings(this.runtimeManager);
     this.codexModelCatalogService = options.codexModelCatalogService;
     this.sessionDomainService = options.sessionDomainService ?? sessionDomainService;
     this.configUpdates = new SessionConfigMutationQueue(
@@ -543,9 +546,27 @@ export class SessionConfigService {
     };
   }
 
-  async setSessionModel(sessionId: string, model?: string): Promise<void> {
-    await this.configUpdates.run(sessionId, () =>
-      this.setSessionModelUnserialized(sessionId, model)
+  configureQueuedMessage(
+    sessionId: string,
+    message: Pick<QueuedMessage, 'timestamp' | 'settings'>,
+    supportsThinkingBudget = false
+  ): Promise<QueuedMessage['settings']> {
+    return this.configUpdates.run(sessionId, () =>
+      this.queuedSettings.configure(sessionId, message, supportsThinkingBudget, {
+        plan: () => this.setSessionCollaborationModeUnserialized(sessionId, 'plan'),
+        thinking: (budget) => this.setSessionThinkingBudgetUnserialized(sessionId, budget),
+        model: (model) => this.setSessionModelUnserialized(sessionId, model),
+        reasoning: (effort) => this.setSessionReasoningEffortUnserialized(sessionId, effort),
+      })
+    );
+  }
+
+  async setSessionModel(sessionId: string, model?: string, source?: 'user'): Promise<void> {
+    await this.configUpdates.run(
+      sessionId,
+      this.queuedSettings.capture(sessionId, source ? 'model' : undefined, () =>
+        this.setSessionModelUnserialized(sessionId, model)
+      )
     );
   }
 
@@ -646,10 +667,14 @@ export class SessionConfigService {
 
   async setSessionReasoningEffort(
     sessionId: string,
-    reasoningEffort: string | null
+    reasoningEffort: string | null,
+    source?: 'user'
   ): Promise<void> {
-    await this.configUpdates.run(sessionId, () =>
-      this.setSessionReasoningEffortUnserialized(sessionId, reasoningEffort)
+    await this.configUpdates.run(
+      sessionId,
+      this.queuedSettings.capture(sessionId, source ? 'thought_level' : undefined, () =>
+        this.setSessionReasoningEffortUnserialized(sessionId, reasoningEffort)
+      )
     );
   }
 
@@ -729,8 +754,11 @@ export class SessionConfigService {
   }
 
   async setSessionConfigOption(sessionId: string, configId: string, value: string): Promise<void> {
-    await this.configUpdates.run(sessionId, () =>
-      this.setSessionConfigOptionUnserialized(sessionId, configId, value)
+    await this.configUpdates.run(
+      sessionId,
+      this.queuedSettings.capture(sessionId, configId, () =>
+        this.setSessionConfigOptionUnserialized(sessionId, configId, value)
+      )
     );
   }
 

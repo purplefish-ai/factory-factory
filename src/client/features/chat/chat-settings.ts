@@ -1,5 +1,6 @@
 import type { ChatSettings } from '@/lib/chat-protocol';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
+import type { ChatState } from './reducer/types';
 
 export function clampChatSettingsForCapabilities(
   settings: ChatSettings,
@@ -34,4 +35,28 @@ export function clampChatSettingsForCapabilities(
     thinkingEnabled: capabilities.thinking.enabled ? settings.thinkingEnabled : false,
     planModeEnabled: capabilities.planMode.enabled ? settings.planModeEnabled : false,
   };
+}
+
+export function getConfigOptionSettings(
+  state: ChatState,
+  configId: string,
+  value: string
+): Partial<ChatSettings> {
+  const changedOption = state.acpConfigOptions?.find((option) => option.id === configId);
+  const isModelOption = configId === 'model' || changedOption?.category === 'model';
+  const isPlanningOption =
+    state.chatCapabilities.provider === 'CODEX'
+      ? configId === 'collaboration_mode' || changedOption?.category === 'collaboration_mode'
+      : configId === 'mode' || changedOption?.category === 'mode';
+  const settings: Partial<ChatSettings> = {};
+  if (isPlanningOption) {
+    settings.planModeEnabled = value === 'plan';
+  }
+  if (isModelOption) {
+    settings.selectedModel = value;
+  }
+  if (configId === 'reasoning_effort' || changedOption?.category === 'thought_level') {
+    settings.reasoningEffort = value;
+  }
+  return settings;
 }

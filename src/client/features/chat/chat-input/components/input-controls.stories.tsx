@@ -127,3 +127,6 @@ export const BeforeRuntimeConfiguration: Story = {
     },
   },
 };
+
+export const Running: Story = { ...PartialAcp, args: { ...PartialAcp.args, running: true } };
+export const RunningMobile: Story = { ...Running, parameters: { viewport: { value: 'mobile1' } } };

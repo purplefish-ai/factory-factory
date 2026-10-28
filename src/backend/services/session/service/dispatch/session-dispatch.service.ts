@@ -12,7 +12,6 @@ import { sessionDomainService } from '@/backend/services/session/service/session
 import { VOICE_MODE_BREVITY_INSTRUCTION } from '@/backend/services/session/service/voice/voice-mode-instructions';
 import {
   type AgentContentItem,
-  DEFAULT_THINKING_BUDGET,
   MessageState,
   type QueuedMessage,
   resolveSelectedModel,
@@ -680,28 +679,11 @@ export class SessionDispatchService {
       return true;
     }
     try {
-      if (msg.settings.planModeEnabled) {
-        await this.dependencies.configService.setSessionCollaborationMode(dbSessionId, 'plan');
-      }
-
-      // Only clients that expose thinking-budget controls support this feature.
-      // Keep this before state mutation so provider errors can be safely recovered.
-      if (isThinkingBudgetClient(client)) {
-        const thinkingTokens = msg.settings.thinkingEnabled ? DEFAULT_THINKING_BUDGET : null;
-        await this.dependencies.configService.setSessionThinkingBudget(dbSessionId, thinkingTokens);
-      }
-      await this.dependencies.configService.setSessionModel(
+      msg.settings = await this.dependencies.configService.configureQueuedMessage(
         dbSessionId,
-        msg.settings.selectedModel ?? undefined
+        msg,
+        isThinkingBudgetClient(client)
       );
-      // Null messages carry no effort override, including initial workspace
-      // prompts and messages queued before capabilities finish loading.
-      if (typeof msg.settings.reasoningEffort === 'string') {
-        await this.dependencies.configService.setSessionReasoningEffort(
-          dbSessionId,
-          msg.settings.reasoningEffort
-        );
-      }
     } catch (error) {
       if (this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
         throw error;

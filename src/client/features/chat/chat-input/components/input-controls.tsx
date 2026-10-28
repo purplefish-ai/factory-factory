@@ -182,7 +182,7 @@ const RuntimeOptions = memo(function RuntimeOptions({
   mobile?: boolean;
 }) {
   const { capabilities, settings, onSetConfigOption } = props;
-  const disabled = props.disabled || props.running || props.stopping;
+  const disabled = props.disabled || props.stopping;
   const row = (label: string, control: React.ReactNode) =>
     mobile ? (
       <div className="flex items-center justify-between gap-2 rounded-md border p-2">
@@ -288,7 +288,7 @@ const MobileSettingsSheet = memo(function MobileSettingsSheet({
       >
         <SheetHeader>
           <SheetTitle>Chat Options</SheetTitle>
-          <SheetDescription>Adjust runtime settings for this conversation.</SheetDescription>
+          <SheetDescription>Settings apply to the next turn.</SheetDescription>
         </SheetHeader>
         <div className="space-y-3 py-4">
           <RuntimeOptions props={props} controls={controls} mobile />
@@ -299,7 +299,7 @@ const MobileSettingsSheet = memo(function MobileSettingsSheet({
 });
 
 function getModelDisabledReason(props: LeftControlsProps, controls: RuntimeControls) {
-  if (props.running || props.stopping) {
+  if (props.stopping) {
     return 'Wait for the agent to stop before changing models';
   }
   if (props.disabled) {
@@ -332,7 +332,7 @@ export const LeftControls = memo(function LeftControls(props: LeftControlsProps)
         onModelChange={controls.onModelChange}
         loading={controls.loading}
         updating={!controls.loading && controls.updating}
-        disabled={Boolean(props.disabled || busy || !controls.modelEditable)}
+        disabled={Boolean(props.disabled || props.stopping || !controls.modelEditable)}
         disabledReason={disabledReason}
       />
       {isMobile ? (

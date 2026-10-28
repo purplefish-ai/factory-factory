@@ -99,6 +99,8 @@ function createSessionSwitchResetState(): Pick<
   | 'chatCapabilitiesLoaded'
   | 'modelSelectionSource'
   | 'pendingModelRequestId'
+  | 'pendingConfigOptions'
+  | 'needsConfigReconciliation'
   | 'acpConfigOptions'
 > {
   return {
@@ -116,6 +118,8 @@ function createSessionSwitchResetState(): Pick<
     chatCapabilitiesLoaded: false,
     modelSelectionSource: 'bootstrap',
     pendingModelRequestId: null,
+    pendingConfigOptions: {},
+    needsConfigReconciliation: false,
   };
 }
 
@@ -133,6 +137,8 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
     chatCapabilitiesLoaded: false,
     modelSelectionSource: 'bootstrap',
     pendingModelRequestId: null,
+    pendingConfigOptions: {},
+    needsConfigReconciliation: false,
     queuedMessages: new Map(),
     toolUseIdToIndex: new Map(),
     agentMessageOrderToIndex: new Map(),

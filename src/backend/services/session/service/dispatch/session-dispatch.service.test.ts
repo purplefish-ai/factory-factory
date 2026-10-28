@@ -44,10 +44,7 @@ function harness(policy: 'allowed' | 'manual_resume' = 'allowed') {
   const dispatcher = new SessionDispatchService({
     runtimeManager,
     configService: {
-      setSessionCollaborationMode: vi.fn().mockResolvedValue(undefined),
-      setSessionThinkingBudget: vi.fn().mockResolvedValue(undefined),
-      setSessionModel: vi.fn().mockResolvedValue(undefined),
-      setSessionReasoningEffort: vi.fn().mockResolvedValue(undefined),
+      configureQueuedMessage: vi.fn((_id, message) => Promise.resolve(message.settings)),
     },
     promptService: { sendSessionMessage },
     backgroundDelivery: {

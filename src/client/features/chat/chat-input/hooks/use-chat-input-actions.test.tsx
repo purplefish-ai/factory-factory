@@ -224,7 +224,7 @@ describe('useChatInputActions keyboard shortcuts', () => {
     container.remove();
   });
 
-  it('does not toggle plan mode with Mod+Shift+P while running', () => {
+  it('toggles plan mode with Mod+Shift+P for the next turn while running', () => {
     const onSettingsChange = vi.fn();
     const capabilities = claudeChatBarCapabilities();
     const { root, container, textarea } = renderHarness({
@@ -236,7 +236,7 @@ describe('useChatInputActions keyboard shortcuts', () => {
 
     dispatchModShiftShortcut(textarea, 'p');
 
-    expect(onSettingsChange).not.toHaveBeenCalled();
+    expect(onSettingsChange).toHaveBeenCalledWith({ planModeEnabled: true });
 
     root.unmount();
     container.remove();

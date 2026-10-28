@@ -50,8 +50,8 @@ describe('createSetModelHandler', () => {
       }
     );
 
-    expect(mocks.setSessionModel).toHaveBeenCalledWith('session-1', 'gpt-5.3-codex');
-    expect(mocks.setSessionReasoningEffort).toHaveBeenCalledWith('session-1', 'high');
+    expect(mocks.setSessionModel).toHaveBeenCalledWith('session-1', 'gpt-5.3-codex', 'user');
+    expect(mocks.setSessionReasoningEffort).toHaveBeenCalledWith('session-1', 'high', 'user');
     expect(mocks.getChatBarCapabilities).toHaveBeenCalledWith('session-1');
     expect(outcome).toEqual({
       replies: [
@@ -87,7 +87,7 @@ describe('createSetModelHandler', () => {
       }
     );
 
-    expect(mocks.setSessionModel).toHaveBeenCalledWith('session-1', 'gpt-5.3-codex');
+    expect(mocks.setSessionModel).toHaveBeenCalledWith('session-1', 'gpt-5.3-codex', 'user');
     expect(mocks.setSessionReasoningEffort).not.toHaveBeenCalled();
     expect(mocks.getChatBarCapabilities).toHaveBeenCalledWith('session-1');
     expect(outcome.replies).toHaveLength(1);

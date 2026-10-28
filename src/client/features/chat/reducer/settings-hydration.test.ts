@@ -36,6 +36,28 @@ function hydrate(state = createInitialChatState()) {
 }
 
 describe('settings hydration', () => {
+  it('keeps a local next-turn planning toggle through unrelated native snapshots', () => {
+    const configured = chatReducer(hydrate(), {
+      type: 'UPDATE_SETTINGS',
+      payload: { planModeEnabled: true },
+    });
+    const next = chatReducer(configured, {
+      type: 'CONFIG_OPTIONS_UPDATE',
+      payload: {
+        configOptions: [
+          {
+            id: 'mode',
+            name: 'Access',
+            type: 'select',
+            currentValue: 'default',
+            options: [{ value: 'default', name: 'Default' }],
+          },
+        ],
+      },
+    });
+    expect(next.chatSettings.planModeEnabled).toBe(true);
+  });
+
   it('adopts the confirmed initial model instead of the bootstrap default', () => {
     expect(hydrate().chatSettings.selectedModel).toBe('sonnet');
   });

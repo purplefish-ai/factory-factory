@@ -35,6 +35,7 @@ export type SessionCommandError =
 
 export type SessionCommandReply =
   | { type: 'chat_capabilities'; capabilities: ChatBarCapabilities }
+  | { type: 'config_option_applied'; requestId: string }
   | { type: 'error'; error: SessionCommandError; requestId?: string };
 
 export interface SessionCommandOutcome {
@@ -56,10 +57,11 @@ export interface SessionPermissionCommandService {
 }
 
 export interface SessionModelCommandService {
-  setSessionModel(sessionId: string, model?: string): Promise<void>;
+  setSessionModel(sessionId: string, model?: string, source?: 'user'): Promise<void>;
   setSessionReasoningEffort(
     sessionId: string,
-    reasoningEffort: string | null
+    reasoningEffort: string | null,
+    source?: 'user'
   ): Promise<void> | void;
   getChatBarCapabilities(sessionId: string): Promise<ChatBarCapabilities>;
 }

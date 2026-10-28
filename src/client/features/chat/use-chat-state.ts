@@ -143,6 +143,20 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   const sessionContext = sessionContextRef.current;
   dbSessionIdRef.current = dbSessionId;
 
+  useEffect(() => {
+    if (!connected) {
+      // Private command replies can be lost with the socket. Reconnect snapshots
+      // must regain authority instead of retaining an unacknowledged selection.
+      const action: ChatAction = { type: 'CONFIG_OPTIONS_DISCONNECTED' };
+      const previousSettings = stateRef.current.chatSettings;
+      stateRef.current = reduceSettingsSlice(stateRef.current, action);
+      dispatch(action);
+      if (stateRef.current.chatSettings !== previousSettings) {
+        persistSettings(dbSessionIdRef.current, stateRef.current.chatSettings);
+      }
+    }
+  }, [connected]);
+
   // Load persisted attachments when switching sessions.
   useEffect(() => {
     setInputAttachmentsState(loadInputAttachments(dbSessionId));
@@ -286,6 +300,11 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     () => ({
       // Spread all state from reducer
       ...state,
+      acpConfigOptions:
+        state.acpConfigOptions?.map((option) => ({
+          ...option,
+          currentValue: state.pendingConfigOptions[option.id]?.value ?? option.currentValue,
+        })) ?? null,
       // Convert queuedMessages Map to array for UI consumption
       // (Internal state uses Map for O(1) lookups and automatic de-duplication)
       queuedMessages: Array.from(state.queuedMessages.values()),

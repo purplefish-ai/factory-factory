@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createTestSessionDispatcher } from '@/backend/services/session/service/dispatch/session-dispatch.test-helpers';
+import {
+  configureTestQueuedMessage,
+  createTestSessionDispatcher,
+} from '@/backend/services/session/service/dispatch/session-dispatch.test-helpers';
 import { VOICE_MODE_BREVITY_INSTRUCTION } from '@/backend/services/session/service/voice/voice-mode-instructions';
 import type { QueuedMessage } from '@/shared/acp-protocol';
 
@@ -35,6 +38,9 @@ const {
     isGenerationCurrent: vi.fn(),
     isSessionRunning: vi.fn(),
     isSessionPromptInFlight: vi.fn(),
+    configureQueuedMessage: vi.fn((id: string, message: QueuedMessage, supportsThinking: boolean) =>
+      configureTestQueuedMessage(mockSessionService, id, message, supportsThinking)
+    ),
     setSessionModel: vi.fn(),
     setSessionReasoningEffort: vi.fn(),
     setSessionThinkingBudget: vi.fn(),
