@@ -7,6 +7,15 @@ import {
 } from '@/backend/services/session/service/lifecycle/session-lifecycle.test-helpers';
 import { workspaceNotificationService } from '@/backend/services/workspace';
 
+vi.mock('@/backend/services/workspace', () => ({
+  workspaceDataService: { findById: vi.fn() },
+  workspaceNotificationService: {
+    listPendingForDelivery: vi.fn(() => Promise.resolve([])),
+    findForDelivery: vi.fn(() => Promise.resolve(null)),
+    markDelivered: vi.fn(() => Promise.resolve()),
+  },
+}));
+
 beforeEach(() => vi.clearAllMocks());
 function guardHarness() {
   const harness = createLifecycleHarness();

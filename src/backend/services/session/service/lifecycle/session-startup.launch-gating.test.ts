@@ -1,5 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createLifecycleHarness } from './session-lifecycle.test-helpers';
+vi.mock('@/backend/services/workspace', () => ({
+  workspaceDataService: { findById: vi.fn() },
+  workspaceNotificationService: {
+    listPendingForDelivery: vi.fn(() => Promise.resolve([])),
+    findForDelivery: vi.fn(() => Promise.resolve(null)),
+    markDelivered: vi.fn(() => Promise.resolve()),
+  },
+}));
+
 describe('launch configuration startup gate', () => {
   it('does not prompt or consume intent when explicit Plan application fails', async () => {
     const h = createLifecycleHarness({

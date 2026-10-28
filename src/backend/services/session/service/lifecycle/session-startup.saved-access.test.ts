@@ -4,6 +4,15 @@ import { configOptions } from './session-config-authority.test-helpers';
 import { createDeferred, createLifecycleHarness } from './session-lifecycle.test-helpers';
 import { SessionConfigService } from './session.config.service';
 
+vi.mock('@/backend/services/workspace', () => ({
+  workspaceDataService: { findById: vi.fn() },
+  workspaceNotificationService: {
+    listPendingForDelivery: vi.fn(() => Promise.resolve([])),
+    findForDelivery: vi.fn(() => Promise.resolve(null)),
+    markDelivered: vi.fn(() => Promise.resolve()),
+  },
+}));
+
 it('keeps Claude native access authoritative over the legacy non-interactive bypass preset', async () => {
   const h = createLifecycleHarness({ provider: 'CLAUDE' });
   await h.service.startSession(h.session.id, {

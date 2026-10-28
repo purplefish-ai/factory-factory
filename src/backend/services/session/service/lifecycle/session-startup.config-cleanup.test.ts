@@ -3,7 +3,22 @@ import { createTestProcessHandle } from '@/backend/services/session/service/acp/
 import { gate, settleConfig } from './session-config-authority.test-helpers';
 import { setupStartupConfig } from './session-startup-config.test-helpers';
 
-vi.mock('@/backend/services/settings', () => ({ userSettingsService: {} }));
+vi.mock('@/backend/services/workspace', () => ({
+  workspaceDataService: { findById: vi.fn() },
+  workspaceNotificationService: {
+    listPendingForDelivery: vi.fn(() => Promise.resolve([])),
+    findForDelivery: vi.fn(() => Promise.resolve(null)),
+    markDelivered: vi.fn(() => Promise.resolve()),
+  },
+}));
+
+vi.mock('@/backend/services/settings', () => ({
+  userSettingsService: {
+    get: vi.fn(() =>
+      Promise.resolve({ defaultClaudeReasoningEffort: null, defaultCodexReasoningEffort: null })
+    ),
+  },
+}));
 
 describe('final startup failure ownership', () => {
   it.each(['registration', 'owner-reuse'] as const)(

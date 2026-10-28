@@ -6,7 +6,22 @@ import * as permissionPolicy from './session-permission-policy';
 import * as savedModes from './session-saved-native-modes';
 import { setupStartupConfig, startupConfigOptions } from './session-startup-config.test-helpers';
 
-vi.mock('@/backend/services/settings', () => ({ userSettingsService: {} }));
+vi.mock('@/backend/services/workspace', () => ({
+  workspaceDataService: { findById: vi.fn() },
+  workspaceNotificationService: {
+    listPendingForDelivery: vi.fn(() => Promise.resolve([])),
+    findForDelivery: vi.fn(() => Promise.resolve(null)),
+    markDelivered: vi.fn(() => Promise.resolve()),
+  },
+}));
+
+vi.mock('@/backend/services/settings', () => ({
+  userSettingsService: {
+    get: vi.fn(() =>
+      Promise.resolve({ defaultClaudeReasoningEffort: null, defaultCodexReasoningEffort: null })
+    ),
+  },
+}));
 
 describe('final startup configuration durability and access', () => {
   it.each(['success', 'failure'] as const)(
