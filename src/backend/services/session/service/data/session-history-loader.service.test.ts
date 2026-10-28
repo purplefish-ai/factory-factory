@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { configService } from '@/backend/services/config.service';
-import { buildTranscriptFromHistory } from '../store/session-transcript';
+import { buildTranscriptFromHistory } from '@/backend/services/session/service/store/session-transcript';
+import { MAX_IMAGE_SIZE } from '@/shared/attachment-limits';
 import { claudeSessionHistoryLoaderService } from './session-history-loader.service';
 
 function encodeProjectPath(cwd: string): string {
@@ -289,6 +290,81 @@ describe('claudeSessionHistoryLoaderService', () => {
         workingDir: cwd,
       })
     ).toEqual(result);
+  });
+
+  it.each(['A', 'AAAA=', 'AAA===', 'AA=A', ''])(
+    'skips invalid base64 image data %j without losing user text',
+    async (data) => {
+      const providerSessionId = 'invalid-base64-session';
+      const cwd = '/Users/test/project';
+      writeSessionFile({
+        claudeConfigDir: tempDir,
+        cwd,
+        providerSessionId,
+        entries: [
+          {
+            type: 'user',
+            sessionId: providerSessionId,
+            message: {
+              role: 'user',
+              content: [
+                { type: 'text', text: 'Keep this prompt' },
+                { type: 'image', source: { type: 'base64', media_type: 'image/png', data } },
+              ],
+            },
+          },
+        ],
+      });
+      const result = await claudeSessionHistoryLoaderService.loadSessionHistory({
+        providerSessionId,
+        workingDir: cwd,
+      });
+      expect(result.status).toBe('loaded');
+      if (result.status !== 'loaded') {
+        return;
+      }
+      expect(result.history).toHaveLength(1);
+      expect(result.history[0]).toMatchObject({ type: 'user', content: 'Keep this prompt' });
+      expect(result.history[0]?.attachments).toBeUndefined();
+    }
+  );
+
+  it.each([-1, 0, 1, 3])('applies the decoded image size limit at offset %i', async (offset) => {
+    const providerSessionId = 'bounded-image-session';
+    const cwd = '/Users/test/project';
+    const size = MAX_IMAGE_SIZE + offset;
+    const data = Buffer.alloc(size).toString('base64');
+    writeSessionFile({
+      claudeConfigDir: tempDir,
+      cwd,
+      providerSessionId,
+      entries: [
+        {
+          type: 'user',
+          sessionId: providerSessionId,
+          message: {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Keep this prompt' },
+              { type: 'image', source: { type: 'base64', media_type: 'image/png', data } },
+            ],
+          },
+        },
+      ],
+    });
+    const result = await claudeSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: cwd,
+    });
+    expect(result.status).toBe('loaded');
+    if (result.status !== 'loaded') {
+      return;
+    }
+    expect(result.history).toHaveLength(1);
+    expect(result.history[0]).toMatchObject({ type: 'user', content: 'Keep this prompt' });
+    expect(result.history[0]?.attachments?.map((attachment) => attachment.size) ?? []).toEqual(
+      offset <= 0 ? [size] : []
+    );
   });
 
   it('normalizes tool_result entries with omitted content to an empty string', async () => {

@@ -5,6 +5,7 @@ import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
 import { summarizeZodIssues } from '@/backend/services/session/service/zod-issue-summary';
 import type { HistoryMessage, ToolResultContentValue } from '@/shared/acp-protocol';
+import { MAX_IMAGE_SIZE } from '@/shared/attachment-limits';
 import { readNonEmptyJsonlLines } from './session-history-jsonl-reader';
 
 const logger = createLogger('session-history-loader');
@@ -281,7 +282,9 @@ const HistoryImageSchema = z.object({
     data: z
       .string()
       .min(1)
-      .regex(/^[A-Za-z0-9+/]+={0,2}$/),
+      .max(Math.ceil(MAX_IMAGE_SIZE / 3) * 4)
+      .regex(/^[A-Za-z0-9+/]+={0,2}$/)
+      .refine((data) => data.length % 4 === 0),
   }),
 });
 
@@ -298,6 +301,10 @@ function restoreUserImages(
       return [];
     }
     const { data, media_type: mediaType } = parsed.data.source;
+    const size = Buffer.byteLength(data, 'base64');
+    if (size > MAX_IMAGE_SIZE) {
+      return [];
+    }
     imageIndex += 1;
     return [
       {
@@ -305,7 +312,7 @@ function restoreUserImages(
         name: `image-${imageIndex}.${mediaType.slice('image/'.length)}`,
         type: mediaType,
         contentType: 'image' as const,
-        size: Buffer.byteLength(data, 'base64'),
+        size,
         data,
       },
     ];
