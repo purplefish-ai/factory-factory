@@ -24,6 +24,7 @@ const ALLOWED_PURE_BACKEND_IMPORTS = new Map<string, ReadonlySet<string>>([
     new Set([
       'computePendingRequestType',
       'deriveWorkspaceFlowStateFromWorkspace',
+      'toWorkspaceDerivedStateInput',
       'getWorkspaceInitPolicy',
       'parseGithubUrl',
     ]),

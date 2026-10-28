@@ -959,7 +959,7 @@ describe('WorkspaceSnapshotStore', () => {
   // ARCH-02: No service capsule imports
   // -------------------------------------------------------------------------
   describe('ARCH-02: No service capsule imports', () => {
-    it('service file has zero imports from service capsule roots', () => {
+    it('service file imports only its pure read-state helper within service capsules', () => {
       const serviceFilePath = path.resolve(
         import.meta.dirname,
         'workspace-snapshot-store.service.ts'
@@ -973,7 +973,14 @@ describe('WorkspaceSnapshotStore', () => {
       // Check only actual import lines, not comments
       const importLines = content.split('\n').filter((line) => /^\s*import\s/.test(line));
 
+      // Only this capsule-local pure adapter is permitted. Its runtime closure
+      // is independently fenced by workspace-read-state.boundary.test.ts.
+      const pureReadStateImport =
+        "import { toWorkspaceDerivedStateInput } from '@/backend/services/workspace/service/state/workspace-read-state';";
       for (const line of importLines) {
+        if (line === pureReadStateImport) {
+          continue;
+        }
         expect(line).not.toMatch(forbiddenServiceCapsuleImport);
       }
     });
