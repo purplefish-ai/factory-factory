@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { MarkdownRenderer } from '@/components/ui/markdown';
+import { MarkdownRenderer } from '@/client/components/markdown';
 import type { ToolResultContentValue } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
 import {

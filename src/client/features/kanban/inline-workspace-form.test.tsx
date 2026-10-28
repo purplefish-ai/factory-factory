@@ -201,6 +201,7 @@ vi.mock('@/client/features/session-selection', async (importOriginal) => ({
     models,
     reasoning,
     planMode,
+    children,
   }: import('@/client/features/session-selection').SessionLaunchControlsProps) =>
     createElement(
       'div',
@@ -244,7 +245,8 @@ vi.mock('@/client/features/session-selection', async (importOriginal) => ({
           'aria-label': 'Choose model',
         },
         model
-      )
+      ),
+      children
     ),
 }));
 
