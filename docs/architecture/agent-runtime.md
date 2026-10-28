@@ -260,6 +260,11 @@ commit leaves the new durable identity available for the next restart. An
 archive created before a cancelled or failed commit remains available as a
 retained copy.
 
+Pending configuration notifications carry an internal source capability to the
+configuration owner while public runtime lookup still hides their candidate. The
+source remains valid after creation clears, but stop, exit, and replacement
+invalidate it, including through the existing guarded snapshot write.
+
 Runtime incarnation/stop fences reject stale repair callbacks. A process that
 has exited by code or signal fails the liveness fence, including when an
 external signal kills a candidate during identity reconciliation. Failed-load

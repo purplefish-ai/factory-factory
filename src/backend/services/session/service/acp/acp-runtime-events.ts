@@ -35,6 +35,12 @@ export type AcpProviderIdentityEvent = Readonly<{
   assertCurrent(): void;
 }>;
 
+/** Internal source capability for config observations from an installed pending candidate. */
+export type AcpConfigObservationSource = Readonly<{
+  handle: import('./acp-process-handle').AcpProcessHandle;
+  isCurrent(): boolean;
+}>;
+
 export type AcpRuntimeEventHandlers = {
   /** Emitted only for this caller's newly installed candidate, never a reused runtime. */
   onRuntimeCreated?: (handle: import('./acp-process-handle').AcpProcessHandle) => void;
@@ -42,7 +48,11 @@ export type AcpRuntimeEventHandlers = {
   onSessionId?: (sessionId: string, providerSessionId: string) => Promise<void>;
   onRuntimeExit?: (event: AcpRuntimeExitEvent) => Promise<void>;
   onRuntimeError?: (event: AcpRuntimeErrorEvent) => Promise<void> | void;
-  onAcpEvent?: (sessionId: string, event: AcpRuntimeEvent) => void;
+  onAcpEvent?: (
+    sessionId: string,
+    event: AcpRuntimeEvent,
+    configSource?: AcpConfigObservationSource
+  ) => void;
   onAcpLog?: (sessionId: string, payload: Record<string, unknown>) => void;
   /** Permission bridge to inject into AcpClientHandler for suspending requestPermission */
   permissionBridge?: AcpPermissionBridge;
