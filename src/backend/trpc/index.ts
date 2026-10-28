@@ -8,6 +8,7 @@ import { linearRouter } from './linear.trpc';
 import { periodicTaskRouter } from './periodic-task.trpc';
 import { prReviewRouter } from './pr-review.trpc';
 import { projectRouter } from './project.trpc';
+import { searchRouter } from './search.trpc';
 import { sessionRouter } from './session.trpc';
 import { router } from './trpc';
 import { userSettingsRouter } from './user-settings.trpc';
@@ -21,6 +22,7 @@ export const appRouter = router({
   adversarialReview: adversarialReviewRouter,
   workspace: workspaceRouter,
   session: sessionRouter,
+  search: searchRouter,
   closedSessions: closedSessionsRouter,
   prReview: prReviewRouter,
   userSettings: userSettingsRouter,

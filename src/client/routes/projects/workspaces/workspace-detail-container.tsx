@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useChatWebSocket } from '@/client/features/chat';
 import {
   ArchiveGitLockDialog,
@@ -33,6 +33,8 @@ import { WorkspaceDetailView } from './workspace-detail-view';
 export function WorkspaceDetailContainer() {
   const { slug = '', id: workspaceId = '' } = useParams<{ slug: string; id: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { key: navigationKey } = useLocation();
   const utils = trpc.useUtils();
 
   const { workspace, workspaceLoading, sessions, initialDbSessionId, maxSessions } =
@@ -55,6 +57,7 @@ export function WorkspaceDetailContainer() {
     rightPanelVisible,
     setRightPanelVisible,
     activeTabId,
+    selectTab,
     clearScrollState,
     openTab,
     openSubagentTab,
@@ -70,10 +73,30 @@ export function WorkspaceDetailContainer() {
   }, [workspaceId, workspaceInitStatus?.phase]);
 
   const sessionIds = useMemo(() => sessions?.map((s) => s.id) ?? [], [sessions]);
-  const { selectedDbSessionId, setSelectedDbSessionId } = useSelectedSessionId(
+  const activateLinkedChat = useCallback(() => selectTab('chat'), [selectTab]);
+  const { selectedDbSessionId, setSelectedDbSessionId: selectSession } = useSelectedSessionId(
     workspaceId,
     initialDbSessionId ?? null,
-    sessionIds
+    sessionIds,
+    searchParams.get('session'),
+    activateLinkedChat,
+    navigationKey
+  );
+  const setSelectedDbSessionId = useCallback(
+    (id: string | null) => {
+      selectSession(id);
+      if (searchParams.has('session')) {
+        setSearchParams(
+          (previous) => {
+            const next = new URLSearchParams(previous);
+            next.delete('session');
+            return next;
+          },
+          { replace: true }
+        );
+      }
+    },
+    [selectSession, searchParams, setSearchParams]
   );
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [archiveGitLockDialogOpen, setArchiveGitLockDialogOpen] = useState(false);

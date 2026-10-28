@@ -73,6 +73,13 @@ Then:
   model options.
 - **Issue-to-PR workflow:** Pull assigned work from GitHub or Linear, link it to
   a workspace, and follow it through to merge.
+- **Global search:** Use the header search button or `Cmd/Ctrl+K` to find
+  projects, workspaces, and named conversations. Search matches workspace
+  descriptions, branches, linked issue IDs, and cached PR titles/numbers too.
+  Empty input shows recently updated items; **Include archived** reveals saved
+  metadata for archived items. Active conversation results open the selected
+  chat; archived results open a read-only metadata preview. Message bodies and
+  repository contents are not searched yet.
 - **Automatic PR progression:** Ratchet watches open pull requests and can
   dispatch follow-up agents for failing CI and actionable review feedback.
 - **Repeatable automation:** Quick actions, periodic tasks, and child workspaces
