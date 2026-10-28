@@ -285,3 +285,26 @@ export const PlanningAndFastEnabled: Story = {
     })),
   },
 };
+
+export const ClaudeUnrestrictedAlias: Story = {
+  ...ClaudeToolbar,
+  args: {
+    ...ClaudeToolbar.args,
+    acpConfigOptions: ClaudeToolbar.args?.acpConfigOptions?.map((option) =>
+      option.id === 'mode'
+        ? {
+            ...option,
+            currentValue: 'dangerouslySkipPermissions',
+            options: [
+              { value: 'default', name: 'Manual', description: 'Always ask before making changes' },
+              {
+                value: 'dangerouslySkipPermissions',
+                name: 'Bypass permissions',
+                description: 'Accepts all permissions',
+              },
+            ],
+          }
+        : option
+    ),
+  },
+};

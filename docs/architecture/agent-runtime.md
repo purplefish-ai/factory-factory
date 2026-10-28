@@ -61,7 +61,8 @@ use `session/set_config_option`; legacy model/mode response fallbacks remain
 supported. Boolean options remain in backend snapshots while current chat
 controls render select options.
 
-The conversation composer keeps the model and reasoning effort visible. Access,
+The conversation composer keeps the model visible and shows reasoning effort
+when supported by native configuration or resolved capabilities. Access,
 planning, and Fast mode use compact icons with the current value in a tooltip
 and accessible label. Active planning and Fast mode are highlighted;
 unrestricted access uses an orange warning icon. Menus show provider-supplied
@@ -123,16 +124,17 @@ This UI timer does not release backend configuration readiness.
 
 ### Launch thinking and Plan
 
-Manual workspace creation, new conversations, and Quick Chat share a compact
-thinking menu and Plan icon toggle. Thinking levels and planning availability
-come from a disposable ACP session configured with the selected provider/model;
-the provider-wide model catalog is not used as a thinking capability list.
-Discovery submits no prompt, rejects permission/tool callbacks, and closes its
-processes. Its endpoint requires the trusted-local boundary used for local
-execution. Successful native results are cached for 30 seconds per
-provider/model, with bounded cache and concurrent discovery counts. Failed
-discovery offers Retry; creation waits for confirmed options while model
-selection remains editable.
+Manual workspace creation, new conversations, and Quick Chat share compact
+thinking and planning menus styled like the chat configuration controls.
+Planning shows Default or Plan; unsupported selected Plan can still be cleared.
+Thinking levels and planning availability come from a disposable ACP session
+configured with the selected provider/model; the provider-wide model catalog is
+not used as a thinking capability list. Discovery submits no prompt, rejects
+permission/tool callbacks, and closes its processes. Its endpoint requires the
+trusted-local boundary used for local execution. Successful native results are
+cached for 30 seconds per provider/model, with bounded cache and concurrent
+discovery counts. Failed discovery offers Retry; creation waits for confirmed
+options while model selection remains editable.
 
 Each launch draft snapshots its saved provider defaults and retains explicit
 thinking/Plan choices across provider switches and settings refreshes. A model

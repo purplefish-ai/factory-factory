@@ -1,10 +1,9 @@
-import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
+import { ComposerMenuTrigger } from '@/client/components/composer-menu-trigger';
 import type {
   AcpConfigOption,
   AcpConfigOptionGroup,
   AcpConfigOptionValue,
 } from '@/client/features/chat/reducer';
-import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -78,27 +77,20 @@ export function AcpConfigSelector({
         <DropdownMenu>
           <TooltipTrigger asChild>
             <DropdownMenuTrigger asChild>
-              <Button
+              <ComposerMenuTrigger
                 aria-label={label}
-                variant="ghost"
-                size="sm"
                 disabled={disabled}
+                iconOnly={iconOnly}
+                icon={Icon && <Icon className="size-3.5 shrink-0" aria-hidden="true" />}
                 className={cn(
-                  'h-6 shrink-0 gap-1 text-xs text-muted-foreground hover:text-foreground',
-                  iconOnly ? 'w-6 p-0' : 'max-w-[14rem] px-2',
+                  'shrink-0',
                   presentation.active && 'bg-accent text-accent-foreground',
                   presentation.warning &&
                     'text-orange-600 hover:text-orange-600 dark:text-orange-400 dark:hover:text-orange-400'
                 )}
               >
-                {Icon && <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
-                {!iconOnly && (
-                  <>
-                    <span className="truncate">{displayName}</span>
-                    <CaretDownIcon className="h-3 w-3 shrink-0" aria-hidden="true" />
-                  </>
-                )}
-              </Button>
+                {displayName}
+              </ComposerMenuTrigger>
             </DropdownMenuTrigger>
           </TooltipTrigger>
           <DropdownMenuContent align="start" className="w-64 max-w-[calc(100vw-2rem)]">

@@ -4,6 +4,7 @@ const mockGithubCLIService = vi.hoisted(() => ({
   checkHealth: vi.fn(),
   listIssues: vi.fn(),
   getIssue: vi.fn(),
+  getPRPreview: vi.fn(),
 }));
 const mockClassifyGitHubCLIError = vi.hoisted(() => vi.fn());
 
@@ -38,6 +39,33 @@ describe('githubRouter', () => {
     vi.clearAllMocks();
     mockClassifyGitHubCLIError.mockReturnValue('unknown');
     mockWorkspaceDataService.findByProjectId.mockResolvedValue([]);
+  });
+
+  it('returns preview metadata for the requested repository and PR', async () => {
+    const preview = {
+      title: 'Show PR previews',
+      state: 'OPEN',
+      isDraft: false,
+      author: { login: 'martin' },
+      createdAt: '2026-10-28T12:00:00Z',
+      additions: 24,
+      deletions: 3,
+      changedFiles: 2,
+    };
+    mockGithubCLIService.getPRPreview.mockResolvedValue(preview);
+
+    await expect(createCaller().getPRPreview({ repo: 'owner/repo', number: 42 })).resolves.toEqual(
+      preview
+    );
+    expect(mockGithubCLIService.getPRPreview).toHaveBeenCalledExactlyOnceWith('owner/repo', 42);
+  });
+
+  it.each([
+    { repo: '-x/y', number: 42 },
+    { repo: 'owner/repo', number: 0 },
+  ])('rejects invalid preview input before calling GitHub: $repo #$number', async (input) => {
+    await expect(createCaller().getPRPreview(input)).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(mockGithubCLIService.getPRPreview).not.toHaveBeenCalled();
   });
 
   it('lists project issues, and gets issue details with error handling', async () => {

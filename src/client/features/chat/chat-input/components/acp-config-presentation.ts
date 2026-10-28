@@ -12,7 +12,12 @@ export function getConfigPresentation(option: AcpConfigOption) {
   const matches = (...names: string[]) =>
     names.includes(option.id) || names.includes(option.category ?? '');
   if (matches('mode')) {
-    const warning = ['agent-full-access', 'bypassPermissions'].includes(option.currentValue);
+    const warning = [
+      'agent-full-access',
+      'bypassPermissions',
+      'dangerouslySkipPermissions',
+      'dangerousSkipPermissions',
+    ].includes(option.currentValue);
     const icons = {
       'read-only': HandPalmIcon,
       default: HandPalmIcon,

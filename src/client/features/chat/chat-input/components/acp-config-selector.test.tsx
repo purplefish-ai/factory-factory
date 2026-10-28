@@ -187,3 +187,44 @@ it('shows descriptions and selects raw values in grouped provider options', () =
     flushSync(() => root.unmount());
   }
 });
+
+it.each([
+  'agent-full-access',
+  'bypassPermissions',
+  'dangerouslySkipPermissions',
+  'dangerousSkipPermissions',
+])('warns about unrestricted access in both trigger and menu for %s', (value) => {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  flushSync(() =>
+    root.render(
+      createElement(AcpConfigSelector, {
+        configOption: {
+          id: 'mode',
+          name: 'Mode',
+          type: 'select',
+          currentValue: value,
+          options: [
+            { value, name: 'Unrestricted' },
+            { value: 'default', name: 'Manual' },
+          ],
+        },
+        onSelect: vi.fn(),
+      })
+    )
+  );
+  try {
+    const trigger = container.querySelector('button');
+    expect(trigger?.className).toContain('text-orange-600');
+    flushSync(() =>
+      trigger?.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowDown' }))
+    );
+    const selected = document.body.querySelector('[role="menuitemradio"][aria-checked="true"]');
+    expect(selected?.className).toContain('text-orange-600');
+    const manual = document.body.querySelector('[role="menuitemradio"][aria-checked="false"]');
+    expect(manual?.className).not.toContain('text-orange-600');
+  } finally {
+    flushSync(() => root.unmount());
+  }
+});
