@@ -3,6 +3,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import type { GroupedMessageItem } from '@/lib/chat-protocol';
 import { isStreamEventMessage, isToolSequence } from '@/lib/chat-protocol';
+import { PR_EVENT_MESSAGE_ID_PREFIX } from '@/shared/pr-monitoring';
 import type { WorkspaceInitBanner } from '@/shared/workspace-init';
 import { GroupedMessageItemRenderer, LoadingIndicator } from './agent-activity';
 import { ThinkingCompletionProvider } from './agent-activity/message-renderers';
@@ -171,7 +172,7 @@ const VirtualRow = memo(function VirtualRow({
 
 export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   workspaceId,
-  messages,
+  messages: allMessages,
   running,
   startingSession,
   loadingSession,
@@ -191,9 +192,22 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   onWorkspaceFileLink,
   initBanner,
 }: VirtualizedMessageListProps) {
+  // Pending PR updates describe future work, so keep them after the current activity.
+  const { messages, queuedPRUpdates } = useMemo(() => {
+    const messages: GroupedMessageItem[] = [];
+    const queuedPRUpdates: GroupedMessageItem[] = [];
+    for (const item of allMessages) {
+      const isQueuedPRUpdate =
+        !isToolSequence(item) &&
+        queuedMessageIds?.has(item.id) &&
+        (item.message?.type === 'pr_update' || item.id.startsWith(PR_EVENT_MESSAGE_ID_PREFIX));
+      (isQueuedPRUpdate ? queuedPRUpdates : messages).push(item);
+    }
+    return { messages, queuedPRUpdates };
+  }, [allMessages, queuedMessageIds]);
   const { getExpansionState, setExpansionState } = useWorkspaceToolExpansionState(workspaceId);
   const contentRef = useRef<HTMLDivElement | null>(null);
-  const prevMessageCountRef = useRef(messages.length);
+  const prevMessageCountRef = useRef(allMessages.length);
   const prevLatestThinkingRef = useRef<string | null>(latestThinking);
   const loadingSessionRef = useRef(loadingSession);
   const resizeStickRafRef = useRef<number | null>(null);
@@ -206,7 +220,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   loadingSessionRef.current = loadingSession;
   const showingInitSpinner = initBanner?.kind === 'info';
   const hasScrollableContent =
-    messages.length > 0 || running || startingSession || showingInitSpinner;
+    allMessages.length > 0 || running || startingSession || showingInitSpinner;
   const getToolExpansionState = workspaceId ? getExpansionState : undefined;
   const setToolExpansionState = workspaceId ? setExpansionState : undefined;
   const getToolExpansionToken = useCallback(
@@ -280,7 +294,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
 
   // Auto-scroll to bottom when new messages are added (only if user is near bottom)
   useEffect(() => {
-    const currentCount = messages.length;
+    const currentCount = allMessages.length;
     const prevCount = prevMessageCountRef.current;
     prevMessageCountRef.current = currentCount;
 
@@ -303,7 +317,9 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
       // Wrap in try-catch to handle edge cases where scroll element becomes null during unmount
       // or rapid component updates (see: https://github.com/TanStack/virtual/issues/696)
       try {
-        virtualizer.scrollToIndex(currentCount - 1, { align: 'end', behavior: 'auto' });
+        if (messages.length > 0) {
+          virtualizer.scrollToIndex(messages.length - 1, { align: 'end', behavior: 'auto' });
+        }
       } catch {
         // Scroll element likely became null during unmount - safe to ignore.
       }
@@ -316,7 +332,14 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
         stickToBottom();
       });
     }
-  }, [loadingSession, messages.length, scrollContainerRef, stickToBottom, virtualizer]);
+  }, [
+    allMessages.length,
+    loadingSession,
+    messages.length,
+    scrollContainerRef,
+    stickToBottom,
+    virtualizer,
+  ]);
 
   // Cancel pending append pins when switching into loading/hydration states.
   useEffect(() => {
@@ -585,6 +608,10 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
 
         {/* Loading indicators after messages */}
         {running && <LoadingIndicator latestReasoning={latestThinking} className="py-4" />}
+
+        {queuedPRUpdates.map((item) => (
+          <GroupedMessageItemRenderer key={item.id} item={item} isQueued />
+        ))}
 
         {/* Scroll anchor */}
         <div ref={messagesEndRef} className="h-px" />
