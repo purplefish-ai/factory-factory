@@ -11,6 +11,7 @@ import { z } from 'zod';
 import type { SubagentSelection } from '@/client/features/subagents';
 import { MOBILE_BREAKPOINT, useIsMobile } from '@/hooks/use-mobile';
 import { subagentSummarySchema } from '@/shared/acp-protocol';
+import type { TopPanelTab } from './right-panel-state';
 import {
   getScrollStateFromRecord,
   loadScrollStateRecord,
@@ -20,6 +21,7 @@ import {
   saveScrollStateRecord,
   upsertScrollState,
 } from './scroll-state';
+import { useRightPanelTopTab } from './use-right-panel-top-tab';
 
 // =============================================================================
 // Types
@@ -41,6 +43,7 @@ export interface WorkspacePanelState {
   activeTabId: string;
   rightPanelVisible: boolean;
   activeBottomTab: BottomPanelTab;
+  activeTopTab: TopPanelTab;
 }
 
 interface WorkspacePanelContextValue extends WorkspacePanelState {
@@ -52,6 +55,7 @@ interface WorkspacePanelContextValue extends WorkspacePanelState {
   toggleRightPanel: () => void;
   setRightPanelVisible: (visible: boolean) => void;
   setActiveBottomTab: (tab: BottomPanelTab) => void;
+  setActiveTopTab: (tab: TopPanelTab) => void;
   getScrollState: (tabId: string, mode: ScrollMode) => ScrollState | null;
   setScrollState: (tabId: string, mode: ScrollMode, state: ScrollState) => void;
   clearScrollState: (tabId: string) => void;
@@ -257,6 +261,7 @@ export function WorkspacePanelProvider({
   initialActiveTabId,
 }: WorkspacePanelProviderProps) {
   const isMobile = useIsMobile();
+  const { activeTopTab, setActiveTopTab } = useRightPanelTopTab(workspaceId);
   // Track which workspaceId has completed loading (enables persistence)
   const loadedForWorkspaceRef = useRef<string | null>(null);
   const scrollStatesRef = useRef<Record<string, ScrollState>>({});
@@ -556,6 +561,7 @@ export function WorkspacePanelProvider({
       activeTabId,
       rightPanelVisible,
       activeBottomTab,
+      activeTopTab,
       openTab,
       openSubagentTab,
       updateSubagentTab,
@@ -564,6 +570,7 @@ export function WorkspacePanelProvider({
       toggleRightPanel,
       setRightPanelVisible,
       setActiveBottomTab,
+      setActiveTopTab,
       getScrollState,
       setScrollState,
       clearScrollState,
@@ -573,6 +580,7 @@ export function WorkspacePanelProvider({
       activeTabId,
       rightPanelVisible,
       activeBottomTab,
+      activeTopTab,
       openTab,
       openSubagentTab,
       updateSubagentTab,
@@ -581,6 +589,7 @@ export function WorkspacePanelProvider({
       toggleRightPanel,
       setRightPanelVisible,
       setActiveBottomTab,
+      setActiveTopTab,
       getScrollState,
       setScrollState,
       clearScrollState,

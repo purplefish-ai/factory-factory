@@ -5,20 +5,23 @@ import { getQueryKey } from '@trpc/react-query';
 import { observable } from '@trpc/server/observable';
 import { useRef, useState } from 'react';
 import { expect, fn, userEvent, within } from 'storybook/test';
+import { VirtualizedMessageList } from '@/client/features/chat';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { MainViewTabBar } from './main-view-tab-bar';
 import { RightPanel } from './right-panel';
-import { WorkspacePanelProvider } from './workspace-panel-context';
+import { useWorkspacePanel, WorkspacePanelProvider } from './workspace-panel-context';
 
 const workspaceId = 'right-panel-capabilities-story';
 function RightPanelStory({
   hasTask = false,
   showChatToolbar = false,
+  showActivity = false,
 }: {
   hasTask?: boolean;
   showChatToolbar?: boolean;
+  showActivity?: boolean;
 }) {
   const taskPresent = useRef(hasTask);
   const [queryClient] = useState(() => new QueryClient());
@@ -35,7 +38,7 @@ function RightPanelStory({
                   projectId: 'right-panel-project',
                   mode: 'STANDARD',
                   periodicTaskId: taskPresent.current ? 'task-1' : null,
-                  creationSource: 'MANUAL',
+                  creationSource: showActivity ? 'CHILD_WORKSPACE' : 'MANUAL',
                 }),
                 'workspace.getInitStatus': () => ({ status: 'READY', initOutput: '' }),
                 'workspace.getGitStatus': () => ({ files: [] }),
@@ -70,41 +73,77 @@ function RightPanelStory({
     <trpc.Provider client={client} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
         <WorkspacePanelProvider workspaceId={workspaceId}>
-          <Button
-            onClick={() => {
-              taskPresent.current = false;
-              runInBackground(
-                queryClient.invalidateQueries({
-                  queryKey: getQueryKey(trpc.workspace.get, { id: workspaceId }, 'query'),
-                }),
-                'Could not refresh workspace'
-              );
-            }}
-          >
-            Delete periodic task
-          </Button>
-          <div className="flex h-[650px] border" style={{ width: showChatToolbar ? 1600 : 800 }}>
-            {showChatToolbar && (
-              <div className="min-w-0 flex-1 border-r">
-                <div className="border-b" data-testid="chat-toolbar">
-                  <MainViewTabBar
-                    workspaceId={workspaceId}
-                    sessions={[{ id: 'session-1', name: 'Chat 1', status: 'IDLE' }]}
-                    currentSessionId="session-1"
-                    onCreateSession={fn()}
-                    onQuickAction={fn()}
-                    onRestartSession={fn()}
-                  />
+          {showActivity ? (
+            <ActivityNavigation />
+          ) : (
+            <>
+              <Button
+                onClick={() => {
+                  taskPresent.current = false;
+                  runInBackground(
+                    queryClient.invalidateQueries({
+                      queryKey: getQueryKey(trpc.workspace.get, { id: workspaceId }, 'query'),
+                    }),
+                    'Could not refresh workspace'
+                  );
+                }}
+              >
+                Delete periodic task
+              </Button>
+              <div
+                className="flex h-[650px] border"
+                style={{ width: showChatToolbar ? 1600 : 800 }}
+              >
+                {showChatToolbar && (
+                  <div className="min-w-0 flex-1 border-r">
+                    <div className="border-b" data-testid="chat-toolbar">
+                      <MainViewTabBar
+                        workspaceId={workspaceId}
+                        sessions={[{ id: 'session-1', name: 'Chat 1', status: 'IDLE' }]}
+                        currentSessionId="session-1"
+                        onCreateSession={fn()}
+                        onQuickAction={fn()}
+                        onRestartSession={fn()}
+                      />
+                    </div>
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <RightPanel workspaceId={workspaceId} />
                 </div>
               </div>
-            )}
-            <div className="min-w-0 flex-1">
-              <RightPanel workspaceId={workspaceId} />
-            </div>
-          </div>
+            </>
+          )}
         </WorkspacePanelProvider>
       </QueryClientProvider>
     </trpc.Provider>
+  );
+}
+
+function ActivityNavigation() {
+  const { rightPanelVisible, setRightPanelVisible, setActiveTopTab } = useWorkspacePanel();
+  return (
+    <div className="flex h-[650px] w-[1000px] border">
+      <div className="flex-1 p-4">
+        <VirtualizedMessageList
+          messages={[]}
+          running
+          loadingSession={false}
+          startingSession={false}
+          scrollContainerRef={{ current: null }}
+          work={{ promptInFlight: false, backgroundTasks: [], runningSubagents: 1, activeGoals: 0 }}
+          onOpenAgents={() => {
+            setActiveTopTab('agents');
+            setRightPanelVisible(true);
+          }}
+        />
+      </div>
+      {rightPanelVisible && (
+        <div className="flex-1 border-l">
+          <RightPanel workspaceId={workspaceId} />
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -136,6 +175,7 @@ const meta = {
     const entries = [
       [`workspace-right-panel-tab-${workspaceId}`, 'periodic-task'],
       [`workspace-panel-bottom-tab-${workspaceId}`, 'setup-logs'],
+      [`workspace-panel-right-visible-${workspaceId}`, 'false'],
     ];
     const previous = entries.map(([key]) => [key, localStorage.getItem(key ?? '')]);
     for (const [key, value] of entries) {
@@ -193,5 +233,15 @@ export const AlignedToolbars: Story = {
     const changesBounds = changesToolbar.getBoundingClientRect();
     await expect(chatBounds.top).toBe(changesBounds.top);
     await expect(chatBounds.bottom).toBe(changesBounds.bottom);
+  },
+};
+
+export const OpenAgentsFromActivity: Story = {
+  args: { showActivity: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: '1 sub-agent running' }));
+    await expect(canvas.getByRole('button', { name: 'Agents' })).toBeVisible();
+    await expect(localStorage.getItem(`workspace-right-panel-tab-${workspaceId}`)).toBe('agents');
   },
 };

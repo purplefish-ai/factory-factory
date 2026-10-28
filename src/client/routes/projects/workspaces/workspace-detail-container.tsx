@@ -56,6 +56,7 @@ export function WorkspaceDetailContainer() {
   const {
     rightPanelVisible,
     setRightPanelVisible,
+    setActiveTopTab,
     activeTabId,
     selectTab,
     clearScrollState,
@@ -293,11 +294,17 @@ export function WorkspaceDetailContainer() {
     inputRef,
   });
 
+  const handleOpenAgents = useCallback(() => {
+    setActiveTopTab('agents');
+    setRightPanelVisible(true);
+  }, [setActiveTopTab, setRightPanelVisible]);
+
   const chatViewModel: ChatContentProps = {
     workspaceId,
     sessionId: selectedDbSessionId,
     resolveWorkspaceFileLink: resolveWorkspaceChatFileLink,
     onWorkspaceFileLink: handleWorkspaceFileLink,
+    onOpenAgents: handleOpenAgents,
     messages,
     sessionStatus,
     sessionRuntime,

@@ -555,7 +555,8 @@ public operations and the session composition root wires the owners.
 
 Provider-initiated sub-agents are session-scoped, read-only, and provider-owned.
 Factory Factory projects their native ACP metadata and transcripts into the
-Agents panel through its session-scoped tracker.
+Agents panel through its session-scoped tracker. Clicking the running sub-agent
+count in chat opens the right panel and selects Agents.
 
 They are distinct from workspace-scoped child workspaces, and are recovered from
 the provider when a parent session is reloaded rather than persisted by Factory

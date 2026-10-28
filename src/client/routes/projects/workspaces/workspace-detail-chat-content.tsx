@@ -26,6 +26,7 @@ export interface ChatContentProps {
   sessionId: string | null;
   resolveWorkspaceFileLink?: (href: string) => string | null;
   onWorkspaceFileLink?: (path: string) => void;
+  onOpenAgents?: () => void;
   messages: ReturnType<typeof useChatWebSocket>['messages'];
   sessionStatus: ReturnType<typeof useChatWebSocket>['sessionStatus'];
   sessionRuntime: SessionRuntimeState;
@@ -280,6 +281,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
           onRewindToMessage={rewindEnabled ? props.startRewindPreview : undefined}
           resolveWorkspaceFileLink={props.resolveWorkspaceFileLink}
           onWorkspaceFileLink={props.onWorkspaceFileLink}
+          onOpenAgents={props.onOpenAgents}
           initBanner={props.initBanner}
         />
       </div>
