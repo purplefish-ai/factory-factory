@@ -36,6 +36,7 @@ vi.mock('@/backend/services/workspace', async (importOriginal) => {
       upsert: (...args: unknown[]) => mockUpsert(...args),
       getByWorkspaceId: (...args: unknown[]) => mockGetByWorkspaceId(...args),
       getAllWorkspaceIds: () => mockGetAllWorkspaceIds(),
+      canAcceptBranchObservation: () => true,
       canAcceptNameObservation: () => true,
       remove: (...args: unknown[]) => mockRemove(...args),
     },
@@ -252,6 +253,7 @@ describe('SnapshotReconciliationService', () => {
       },
       workspaceSnapshotStore: {
         getAllWorkspaceIds: mockGetAllWorkspaceIds,
+        canAcceptBranchObservation: () => true,
         canAcceptNameObservation: vi.fn(() => true),
         getByWorkspaceId: mockGetByWorkspaceId,
         remove: mockRemove,
@@ -950,6 +952,7 @@ describe('per-graph snapshot reconciliation', () => {
     const createDependencies = (workspaceId: string) => {
       const store = {
         getAllWorkspaceIds: vi.fn(() => []),
+        canAcceptBranchObservation: () => true,
         canAcceptNameObservation: vi.fn(() => true),
         getByWorkspaceId: vi.fn(),
         remove: vi.fn(),

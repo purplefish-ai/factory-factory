@@ -71,6 +71,7 @@ import { projectWorkspaceSnapshotMetadata } from '@/shared/workspace-snapshot';
 import type { getWorkspaceLinearContext } from './linear-config.helper';
 import { projectPrEvent, shouldRefreshRatchetForPrSwitch } from './pr-event-projection';
 import { RatchetProjectionWorker } from './ratchet-projection.worker';
+import { subscribeWorkspaceBranchPublication } from './workspace-branch-publication.orchestrator';
 import type { fireLifecycleNotification } from './workspace-children.orchestrator';
 
 // ---------------------------------------------------------------------------
@@ -429,6 +430,7 @@ function buildWorkspaceStateChangeFields(event: WorkspaceStateChangedEvent): Sna
     projectId: event.workspace.projectId,
     name: event.workspace.name,
     nameUpdatedAt: event.workspace.updatedAt.getTime(),
+    branchUpdatedAt: event.workspace.updatedAt.getTime(),
     branchName: event.workspace.branchName,
     createdAt: event.workspace.createdAt.toISOString(),
   };
@@ -567,6 +569,12 @@ function startEventCollectorWithState(state: EventCollectorState): void {
     state.logger
   );
   state.activeCoalescer = coalescer;
+  state.teardownListeners.push(
+    subscribeWorkspaceBranchPublication(
+      dependencies.workspaceDataService,
+      dependencies.workspaceSnapshotStore
+    )
+  );
   const ratchetProjection = new RatchetProjectionWorker({
     read: (workspaceId) => dependencies.workspaceDataService.findRatchetProjection(workspaceId),
     publish: (workspaceId, fields, reasons) => {
@@ -936,7 +944,7 @@ function startEventCollectorWithState(state: EventCollectorState): void {
     dependencies.sessionDomainService.off('runtime_changed', runtimeChangedHandler)
   );
 
-  state.logger.info('Event collector started with 13 event subscriptions');
+  state.logger.info('Event collector started with 14 event subscriptions');
 }
 
 // ---------------------------------------------------------------------------

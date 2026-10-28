@@ -31,6 +31,7 @@ it('keeps same-ms compact updates coherent with lifecycle and stale legacy event
       runScriptStateMachine: new EventEmitter(),
       workspaceAutoIterationService: service,
       sessionDomainService: new EventEmitter(),
+      workspaceDataService: { subscribeAcceptedBranch: () => vi.fn() },
       workspaceSnapshotStore: store,
     })
   );
