@@ -9,6 +9,23 @@ workspace remain visible; detached associations do not affect visibility.
 Filtering reads current workspace state after each GitHub list fetch, so
 restoring a workspace makes its requests eligible again on the next refresh.
 
+## PR link previews
+
+GitHub pull request links in chat Markdown show a preview on hover or keyboard
+focus. The card includes the PR state, repository, title, author, creation age,
+and changed-line and file counts. Links retain their original destinations,
+including comment anchors and file paths. Escape dismisses the preview.
+Repository display names retain the link's casing; query keys normalize casing
+so equivalent links share cached metadata. PRs created within five seconds show
+their age as `now`.
+
+Preview metadata loads only when the card opens, through the local authenticated
+GitHub CLI and its shared read budget. The client shares cached results for one
+minute across matching PR links. Previews request no reviews, comments, checks,
+or diffs. Failed reads show an unavailable state while keeping the link usable.
+Other hosts, issue links, and workspace file links retain their existing
+behavior.
+
 ## PR detail diffs
 
 The PR detail panel uses `parseFileDiff` in `src/lib/diff/parse.ts` to display

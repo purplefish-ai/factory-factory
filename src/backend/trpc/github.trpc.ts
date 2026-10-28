@@ -6,6 +6,7 @@
 
 import { z } from 'zod';
 import { classifyGitHubCLIError, type GitHubCLIHealthStatus } from '@/backend/services/github';
+import { githubPRPreviewInputSchema } from '@/shared/github-pr-preview';
 import { filterIssuesLinkedToActiveWorkspaces } from './issue-filter';
 import { publicProcedure, router } from './trpc';
 
@@ -23,6 +24,12 @@ function buildAuthRequiredHealth(health: GitHubCLIHealthStatus): GitHubCLIHealth
 }
 
 export const githubRouter = router({
+  getPRPreview: publicProcedure
+    .input(githubPRPreviewInputSchema)
+    .query(({ ctx, input }) =>
+      ctx.appContext.services.githubCLIService.getPRPreview(input.repo, input.number)
+    ),
+
   /**
    * List open issues assigned to the current user for a project's repository.
    * Used by the Kanban board to populate the Issues column.

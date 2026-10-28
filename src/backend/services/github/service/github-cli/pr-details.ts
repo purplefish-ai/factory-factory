@@ -142,3 +142,30 @@ export async function getPRFullDetails(
     throw new Error(`Failed to fetch PR details: ${errorMessage}`);
   }
 }
+
+export async function getPRDiff(
+  repo: string,
+  prNumber: number,
+  read: PRMetadataRead
+): Promise<string> {
+  try {
+    const { stdout } = await read(['pr', 'diff', String(prNumber), '--repo', repo], {
+      timeout: GH_TIMEOUT_MS.diff,
+      maxBuffer: GH_MAX_BUFFER_BYTES.diff,
+    });
+
+    return stdout;
+  } catch (error) {
+    const errorType = classifyError(error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    logger.error('Failed to fetch PR diff via gh CLI', {
+      repo,
+      prNumber,
+      errorType,
+      error: errorMessage,
+    });
+
+    throw new Error(`Failed to fetch PR diff: ${errorMessage}`);
+  }
+}
