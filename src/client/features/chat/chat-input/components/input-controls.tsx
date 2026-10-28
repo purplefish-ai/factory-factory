@@ -370,6 +370,7 @@ export const LeftControls = memo(function LeftControls(props: LeftControlsProps)
 export const RightControls = memo(function RightControls({
   pendingMessageCount,
   running,
+  promptInFlight = running,
   stopping,
   onStop,
   onSendClick,
@@ -380,6 +381,7 @@ export const RightControls = memo(function RightControls({
   children?: React.ReactNode;
   pendingMessageCount: number;
   running: boolean;
+  promptInFlight?: boolean;
   stopping: boolean;
   onStop?: () => void;
   onSendClick: (ref: React.RefObject<HTMLTextAreaElement | null>) => void;
@@ -415,7 +417,7 @@ export const RightControls = memo(function RightControls({
         onClick={() => onSendClick(inputRef)}
         disabled={disabled}
         size="icon-sm"
-        aria-label={running ? 'Queue message' : 'Send message'}
+        aria-label={promptInFlight ? 'Queue message' : 'Send message'}
       >
         <PaperPlaneTiltIcon className="h-4 w-4" />
       </InputGroupButton>

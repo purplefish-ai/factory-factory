@@ -89,6 +89,7 @@ function getInputPlaceholder({
   stopping,
   displayStartingState,
   running,
+  promptInFlight,
   pendingRequest,
   sessionPhase,
   sessionRuntime,
@@ -98,6 +99,7 @@ function getInputPlaceholder({
   stopping: boolean;
   displayStartingState: boolean;
   running: boolean;
+  promptInFlight: boolean;
   pendingRequest: ReturnType<typeof useChatWebSocket>['pendingRequest'];
   sessionPhase: ReturnType<typeof useChatWebSocket>['sessionStatus']['phase'];
   sessionRuntime: SessionRuntimeState;
@@ -118,7 +120,7 @@ function getInputPlaceholder({
   if (pendingRequest.type === 'permission' && pendingRequest.request.toolName === 'ExitPlanMode') {
     return 'Approve the plan or keep planning...';
   }
-  if (running) {
+  if (promptInFlight) {
     return 'Message will be queued...';
   }
   if (sessionPhase === 'ready' && messageCount === 0) {
@@ -194,6 +196,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
   }, [props.isNearBottom, props.viewportRef]);
 
   const running = props.sessionStatus.phase === 'running';
+  const promptInFlight = props.sessionRuntime.work?.promptInFlight ?? running;
   const stopping = props.sessionStatus.phase === 'stopping';
   const displayStartingState = shouldShowStartingState(props.sessionStatus.phase, autoStartPending);
   const loadingSession = props.sessionStatus.phase === 'loading';
@@ -221,6 +224,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
     stopping,
     displayStartingState,
     running,
+    promptInFlight,
     pendingRequest: props.pendingRequest,
     sessionPhase: props.sessionStatus.phase,
     sessionRuntime: props.sessionRuntime,
@@ -325,6 +329,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
             onStop={props.stopChat}
             disabled={!props.connected || loadingSession}
             running={running}
+            promptInFlight={promptInFlight}
             stopping={stopping}
             isCompacting={props.isCompacting}
             inputRef={props.inputRef}

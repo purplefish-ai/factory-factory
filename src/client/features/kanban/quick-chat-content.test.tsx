@@ -18,6 +18,60 @@ vi.mock('@/client/features/chat', () => ({
 }));
 
 describe('QuickChatContent composer and queue controls', () => {
+  it.each([
+    { promptInFlight: false, placeholder: 'Type a message...' },
+    { promptInFlight: true, placeholder: 'Message will be queued...' },
+    { promptInFlight: undefined, placeholder: 'Message will be queued...' },
+  ])(
+    'uses prompt ownership when promptInFlight=$promptInFlight',
+    ({ promptInFlight, placeholder }) => {
+      const chatState = {
+        messages: [],
+        queuedMessages: [],
+        pendingMessages: new Map(),
+        pendingRequest: { type: 'none' },
+        sessionStatus: { phase: 'running' },
+        sessionRuntime: {
+          ...createInitialSessionRuntimeState(),
+          phase: 'running',
+          processState: 'alive',
+          activity: 'WORKING',
+          work:
+            promptInFlight === undefined
+              ? undefined
+              : {
+                  promptInFlight,
+                  backgroundTasks: [{ id: 'preview', name: 'pnpm dev', kind: 'shell' }],
+                  runningSubagents: 0,
+                  activeGoals: 0,
+                },
+        },
+      } as unknown as UseChatWebSocketReturn;
+      const root = createRoot(document.createElement('div'));
+      try {
+        flushSync(() =>
+          root.render(
+            <QuickChatContent
+              workspaceId="workspace-1"
+              chatState={chatState}
+              viewportRef={createRef()}
+              onScroll={vi.fn()}
+              isNearBottom
+              scrollToBottom={vi.fn()}
+            />
+          )
+        );
+        expect(input.mock.lastCall?.[0].placeholder).toBe(placeholder);
+        expect(input.mock.lastCall?.[0]).toMatchObject({
+          running: true,
+          promptInFlight: promptInFlight ?? true,
+        });
+      } finally {
+        flushSync(() => root.unmount());
+      }
+    }
+  );
+
   it('connects queue controls and composer attachments to shared chat state', () => {
     const removeQueuedMessage = vi.fn();
     const attachments = [

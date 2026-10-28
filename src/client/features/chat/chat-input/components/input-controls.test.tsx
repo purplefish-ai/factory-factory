@@ -11,13 +11,49 @@ import {
 } from '@/client/features/chat/reducer';
 import { DEFAULT_CHAT_SETTINGS } from '@/lib/chat-protocol';
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
-import { LeftControls } from './input-controls';
+import { LeftControls, RightControls } from './input-controls';
 
 const mocks = vi.hoisted(() => ({ mobile: false }));
 vi.mock('@/hooks/use-mobile', () => ({ useIsMobile: () => mocks.mobile }));
 
 afterEach(() => {
   document.body.innerHTML = '';
+});
+
+it.each([
+  { promptInFlight: false, label: 'Send message' },
+  { promptInFlight: true, label: 'Queue message' },
+  { promptInFlight: undefined, label: 'Queue message' },
+])('labels sending by prompt ownership ($promptInFlight)', ({ promptInFlight, label }) => {
+  const rootElement = document.createElement('div');
+  const root = createRoot(rootElement);
+  const inputRef = createRef<HTMLTextAreaElement>();
+  const onStop = vi.fn();
+  const onSendClick = vi.fn();
+  try {
+    flushSync(() =>
+      root.render(
+        <RightControls
+          pendingMessageCount={0}
+          running
+          promptInFlight={promptInFlight}
+          stopping={false}
+          onStop={onStop}
+          onSendClick={onSendClick}
+          disabled={false}
+          inputRef={inputRef}
+        />
+      )
+    );
+    const send = rootElement.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`);
+    expect(send).not.toBeNull();
+    send?.click();
+    expect(onSendClick).toHaveBeenCalledWith(inputRef);
+    rootElement.querySelector<HTMLButtonElement>('[aria-label="Stop agent"]')?.click();
+    expect(onStop).toHaveBeenCalledOnce();
+  } finally {
+    flushSync(() => root.unmount());
+  }
 });
 
 describe('capability-driven image upload controls', () => {

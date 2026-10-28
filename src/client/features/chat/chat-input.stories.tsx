@@ -50,7 +50,11 @@ const meta: Meta<typeof ChatInput> = {
     },
     running: {
       control: 'boolean',
-      description: 'Whether a request is currently running',
+      description: 'Whether the session has active work, including background processes',
+    },
+    promptInFlight: {
+      control: 'boolean',
+      description: 'Whether a prompt is in flight, so the next message will be queued',
     },
     placeholder: {
       control: 'text',
@@ -89,6 +93,16 @@ export const Running: Story = {
   args: {
     onSend: onSendAction,
     running: true,
+    promptInFlight: true,
+    placeholder: 'Message will be queued...',
+  },
+};
+
+export const BackgroundProcessRunning: Story = {
+  args: {
+    onSend: onSendAction,
+    running: true,
+    promptInFlight: false,
   },
 };
 

@@ -104,6 +104,56 @@ describe('ChatContent runtime error placeholder', () => {
   });
 });
 
+describe('ChatContent message queue wording', () => {
+  it.each([
+    { promptInFlight: false, placeholder: 'Type a message...' },
+    { promptInFlight: true, placeholder: 'Message will be queued...' },
+    { promptInFlight: undefined, placeholder: 'Message will be queued...' },
+  ])(
+    'uses prompt ownership when promptInFlight=$promptInFlight',
+    ({ promptInFlight, placeholder }) => {
+      const props = {
+        workspaceId: 'workspace-1',
+        sessionId: 'session-1',
+        messages: [],
+        queuedMessages: [],
+        sessionStatus: { phase: 'running' },
+        sessionRuntime: {
+          ...createInitialSessionRuntimeState(),
+          phase: 'running',
+          activity: 'WORKING',
+          processState: 'alive',
+          work:
+            promptInFlight === undefined
+              ? undefined
+              : {
+                  promptInFlight,
+                  backgroundTasks: [{ id: 'preview', name: 'pnpm dev', kind: 'shell' }],
+                  runningSubagents: 0,
+                  activeGoals: 0,
+                },
+        },
+        chatCapabilities: EMPTY_CHAT_BAR_CAPABILITIES,
+        pendingRequest: { type: 'none' },
+        pendingMessages: new Map(),
+        inputRef: createRef(),
+        viewportRef: createRef(),
+      } as unknown as ChatContentProps;
+      const root = createRoot(document.createElement('div'));
+      try {
+        flushSync(() => root.render(<ChatContent {...props} />));
+        expect(input.mock.lastCall?.[0].placeholder).toBe(placeholder);
+        expect(input.mock.lastCall?.[0]).toMatchObject({
+          running: true,
+          promptInFlight: promptInFlight ?? true,
+        });
+      } finally {
+        flushSync(() => root.unmount());
+      }
+    }
+  );
+});
+
 describe('ChatContent scroll control', () => {
   it('jumps to the latest messages and hides when the viewport reaches the bottom', () => {
     const scrollToBottom = vi.fn();

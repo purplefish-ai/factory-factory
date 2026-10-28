@@ -10,7 +10,7 @@ import {
   createUserQuestion,
 } from '@/lib/claude-fixtures';
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
-import { createInitialSessionRuntimeState } from '@/shared/session-runtime';
+import { createInitialSessionRuntimeState, type SessionWorkState } from '@/shared/session-runtime';
 import { ChatContent, type ChatContentProps } from './workspace-detail-chat-content';
 
 const messages = Array.from({ length: 40 }, (_, index) =>
@@ -32,7 +32,7 @@ const question = createUserQuestion([
 ]);
 const noop = () => undefined;
 
-function MockConversation() {
+function MockConversation({ work }: { work?: SessionWorkState }) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -84,8 +84,18 @@ function MockConversation() {
           workspaceId="scroll-button-story"
           sessionId={null}
           messages={messages}
-          sessionStatus={{ phase: 'ready' }}
-          sessionRuntime={createInitialSessionRuntimeState()}
+          sessionStatus={{ phase: work ? 'running' : 'ready' }}
+          sessionRuntime={
+            work
+              ? {
+                  ...createInitialSessionRuntimeState(),
+                  phase: 'running',
+                  processState: 'alive',
+                  activity: 'WORKING',
+                  work,
+                }
+              : createInitialSessionRuntimeState()
+          }
           messagesEndRef={messagesEndRef}
           viewportRef={viewportRef}
           {...scroll}
@@ -146,3 +156,25 @@ type Story = StoryObj<typeof meta>;
 
 // All callbacks stay local; this story never starts a session or sends messages.
 export const ComposerHeightChanges: Story = { render: () => <MockConversation /> };
+
+export const BackgroundProcessRunning: Story = {
+  args: {
+    work: {
+      promptInFlight: false,
+      backgroundTasks: [{ id: 'preview', name: 'pnpm dev', kind: 'shell' }],
+      runningSubagents: 0,
+      activeGoals: 0,
+    },
+  },
+};
+
+export const PromptInFlight: Story = {
+  args: {
+    work: {
+      promptInFlight: true,
+      backgroundTasks: [],
+      runningSubagents: 0,
+      activeGoals: 0,
+    },
+  },
+};
