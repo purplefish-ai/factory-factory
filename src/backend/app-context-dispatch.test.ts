@@ -1,11 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { userSettingsService } from '@/backend/services/settings';
-import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { SessionStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { createDefaultApplicationDependencies } from './app-context';
 import { clearWorkspaceInitOrchestratorStateForTests } from './orchestration/workspace-init.orchestrator';
-import { sessionDispatchService, sessionDomainService } from './services/session';
+import {
+  SessionConfigService,
+  SessionDomainService,
+  sessionConfigService,
+  sessionDispatchService,
+  sessionDomainService,
+} from './services/session';
 import { WorkspaceCreationService } from './services/workspace';
 
 // Only monitoring persistence is irrelevant to these producer/dispatcher contracts.
@@ -214,30 +219,87 @@ describe('application queue producer composition', () => {
       expect(sessionDispatchService.tryDispatchNextMessage).not.toHaveBeenCalled();
     }
   );
-  it('activates stored initial messages through each load command graph dispatcher', async () => {
-    const first = createGraph('first');
-    const second = createGraph('second');
-    vi.spyOn(first.services.sessionConfigService, 'getChatBarCapabilities').mockResolvedValue(
-      EMPTY_CHAT_BAR_CAPABILITIES
-    );
-    vi.spyOn(
-      first.services.sessionConfigService,
-      'getSessionConfigOptionsWithFallback'
-    ).mockResolvedValue([]);
+  it('loads through distinct config, domain, and dispatch graphs without singleton fallbacks', async () => {
+    const forbidden = () => {
+      throw new Error('Load crossed into the global graph');
+    };
+    vi.spyOn(sessionConfigService, 'getSessionConfigProjection').mockImplementation(forbidden);
+    vi.spyOn(sessionDispatchService, 'tryDispatchNextMessage').mockImplementation(forbidden);
+    for (const method of ['finishLoad', 'emitDelta', 'consumeInitialMessage', 'enqueue'] as const) {
+      vi.spyOn(sessionDomainService, method).mockImplementation(forbidden);
+    }
     vi.spyOn(userSettingsService, 'get').mockResolvedValue(
       unsafeCoerce({ cachedSlashCommands: null })
     );
-    for (const graph of [first, second]) {
-      sessionDomainService.storeInitialMessage(`load-${graph.label}`, `Initial ${graph.label}`);
+    const graphs = ['first', 'second'].map((label) => {
+      const { services } = createDefaultApplicationDependencies();
+      const domain = new SessionDomainService();
+      const configOptions = [
+        {
+          id: 'model',
+          category: 'model',
+          name: 'Model',
+          type: 'select',
+          currentValue: label,
+          options: [{ value: label, name: label }],
+        },
+      ];
+      services.sessionDomainService = domain;
+      services.sessionConfigService = new SessionConfigService({
+        repository: unsafeCoerce({ getSessionById: forbidden }),
+        runtimeManager: unsafeCoerce({ getClient: () => ({ provider: 'CODEX', configOptions }) }),
+        codexModelCatalogService: { getModels: forbidden },
+        sessionDomainService: domain,
+      });
+      const projection = vi.spyOn(services.sessionConfigService, 'getSessionConfigProjection');
+      const emitted = vi.spyOn(domain, 'emitDelta');
+      const delivered: string[] = [];
+      const dispatch = vi.fn((id: string) => {
+        const message = domain.dequeueNext(id);
+        if (message) {
+          delivered.push(message.text);
+        }
+        return Promise.resolve();
+      });
+      services.sessionDispatchService = {
+        configure: vi.fn(),
+        setManualDispatchResume: vi.fn(),
+        resetDispatchState: vi.fn(),
+        tryDispatchNextMessage: dispatch,
+      };
+      domain.storeInitialMessage('shared-load', `Initial ${label}`);
+      return { label, services, domain, projection, emitted, delivered, dispatch };
+    });
+    for (const graph of graphs) {
       await graph.services.sessionLoadService.completeLoad({
         status: 'ready',
-        sessionId: `load-${graph.label}`,
+        sessionId: 'shared-load',
         provider: 'CODEX',
         worktreePath: null,
       });
+      expect(graph.projection).toHaveBeenCalledExactlyOnceWith('shared-load');
+      expect(graph.emitted.mock.calls.map((call) => call[1])).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: 'chat_capabilities',
+            capabilities: expect.objectContaining({
+              model: expect.objectContaining({ selected: graph.label }),
+            }),
+          }),
+          expect.objectContaining({
+            type: 'config_options_update',
+            configOptions: expect.arrayContaining([
+              expect.objectContaining({ currentValue: graph.label }),
+            ]),
+          }),
+        ])
+      );
+      expect(graph.delivered).toEqual([`Initial ${graph.label}`]);
+      expect(graph.dispatch).toHaveBeenCalledExactlyOnceWith('shared-load');
     }
-    expect(first.delivered).toEqual([{ sessionId: 'load-first', text: 'Initial first' }]);
-    expect(second.delivered).toEqual([{ sessionId: 'load-second', text: 'Initial second' }]);
-    expect(sessionDispatchService.tryDispatchNextMessage).not.toHaveBeenCalled();
+    expect(graphs[0]?.domain).not.toBe(graphs[1]?.domain);
+    expect(graphs[0]?.services.sessionConfigService).not.toBe(
+      graphs[1]?.services.sessionConfigService
+    );
   });
 });

@@ -1,4 +1,4 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
+import type { ResolvedSessionConfigProjection } from '@/backend/services/session/service/lifecycle/session-config-projection';
 import type { ProviderHistorySession } from '@/backend/services/session/service/lifecycle/session-provider-history-hydrator';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { finalizeInterruptedTranscriptToolCalls } from '@/backend/services/session/service/store/session-tool-call-recovery';
@@ -9,7 +9,6 @@ import {
   scanClaudeWorkspaceCommandsFromDisk,
 } from '@/backend/services/session/service/store/slash-command-disk-scanner';
 import type { CommandInfo, SessionDeltaEvent } from '@/shared/acp-protocol';
-import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import { buildAcceptedMessageStateChange, buildQueuedMessage } from './chat-message-handlers/utils';
 import type { SessionCommandOutcome } from './session-command.types';
@@ -49,8 +48,7 @@ export interface SessionLoadDependencies {
     prepareLoad(sessionId: string, runtime: SessionRuntimeState): SessionLoadReplay;
   };
   config: {
-    getChatBarCapabilities(sessionId: string): Promise<ChatBarCapabilities>;
-    getSessionConfigOptionsWithFallback(sessionId: string): Promise<SessionConfigOption[]>;
+    getSessionConfigProjection(sessionId: string): Promise<ResolvedSessionConfigProjection>;
   };
   getCachedCommands(provider: 'CLAUDE' | 'CODEX'): Promise<CommandInfo[] | null>;
   tryDispatchNextMessage(sessionId: string): Promise<void>;
@@ -101,9 +99,14 @@ export class SessionLoadService {
   async completeLoad(prepared: PreparedSessionLoad): Promise<void> {
     const { sessionId, provider, worktreePath } = prepared;
     this.deps.domain.finishLoad(sessionId);
-    const capabilities = await this.deps.config.getChatBarCapabilities(sessionId);
+    let resolved = await this.deps.config.getSessionConfigProjection(sessionId);
+    let current = resolved.currentProjection();
+    while ('retry' in current) {
+      resolved = await current.retry;
+      current = resolved.currentProjection();
+    }
+    const { capabilities, configOptions } = current;
     this.deps.domain.emitDelta(sessionId, { type: 'chat_capabilities', capabilities });
-    const configOptions = await this.deps.config.getSessionConfigOptionsWithFallback(sessionId);
     if (configOptions.length > 0) {
       this.deps.domain.emitDelta(sessionId, { type: 'config_options_update', configOptions });
     }

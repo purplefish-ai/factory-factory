@@ -20,8 +20,12 @@ function createLoad(domain: SessionDomainService) {
   return createSessionLoadService({
     domain,
     config: {
-      getChatBarCapabilities: () => Promise.resolve(EMPTY_CHAT_BAR_CAPABILITIES),
-      getSessionConfigOptionsWithFallback: () => Promise.resolve([]),
+      getSessionConfigProjection: async () => ({
+        currentProjection: () => ({
+          capabilities: EMPTY_CHAT_BAR_CAPABILITIES,
+          configOptions: [],
+        }),
+      }),
     },
     hydrateLifecycleEvents: () => Promise.resolve(),
     getRuntimeSnapshot: (id) => domain.getRuntimeSnapshot(id),
@@ -37,6 +41,23 @@ const loaded = (text: string) => ({
 describe('session load history domain binding', () => {
   beforeEach(() => {
     sessionDomainService.clearAllSessions();
+    const forbidden = () => {
+      throw new Error('History hydration crossed into the global domain');
+    };
+    for (const method of [
+      'getTranscriptSnapshot',
+      'isHistoryHydrated',
+      'createProviderHistoryFence',
+      'getHistoryHydrationSource',
+      'markHistoryHydrated',
+      'clearHistoryRetryCooldown',
+      'canAttemptHistoryHydration',
+      'setHistoryRetryAt',
+      'replaceTranscript',
+      'prepareLoad',
+    ] as const) {
+      vi.spyOn(sessionDomainService, method).mockImplementation(forbidden);
+    }
   });
   afterEach(() => {
     sessionDomainService.clearAllSessions();
@@ -77,8 +98,6 @@ describe('session load history domain binding', () => {
       );
       expect(first.getHistoryHydrationSource('shared-session')).toBe('jsonl');
       expect(second.isHistoryHydrated('shared-session')).toBe(false);
-      expect(sessionDomainService.getTranscriptSnapshot('shared-session')).toEqual([]);
-      expect(sessionDomainService.isHistoryHydrated('shared-session')).toBe(false);
 
       const secondPrepared = await secondLoad.prepareLoad({ sessionId: 'shared-session' });
       if (secondPrepared.status !== 'ready') {

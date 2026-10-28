@@ -73,13 +73,14 @@ function setup() {
       },
     },
     config: {
-      getChatBarCapabilities: () => {
-        calls.push('capabilities');
-        return Promise.resolve(EMPTY_CHAT_BAR_CAPABILITIES);
-      },
-      getSessionConfigOptionsWithFallback: () => {
-        calls.push('options');
-        return Promise.resolve([]);
+      getSessionConfigProjection: () => {
+        calls.push('projection');
+        return Promise.resolve({
+          currentProjection: () => ({
+            capabilities: EMPTY_CHAT_BAR_CAPABILITIES,
+            configOptions: [],
+          }),
+        });
       },
     },
     getCachedCommands: () => {
@@ -150,9 +151,8 @@ describe('SessionLoadService', () => {
       'lifecycle',
       'prepare',
       'runtime',
-      'capabilities',
+      'projection',
       'chat_capabilities',
-      'options',
       'commands',
       'slash_commands',
       'consume',
@@ -238,6 +238,7 @@ describe('SessionLoadService', () => {
     await Promise.all([test.service.completeLoad(prepared), test.service.completeLoad(prepared)]);
     expect(test.queue.map((message) => message.text)).toEqual(['Start once']);
     expect(test.calls.filter((call) => call === 'dispatch')).toHaveLength(1);
+    expect(test.calls.filter((call) => call === 'projection')).toHaveLength(2);
   });
 
   it('does not dispatch or report accepted state when initial enqueue rejects', async () => {
@@ -253,10 +254,10 @@ describe('SessionLoadService', () => {
     expect(test.deltas.map((event) => event.type)).not.toContain('message_state_changed');
   });
 
-  it('leaves activation untouched when capability lookup fails', async () => {
+  it('leaves activation untouched when projection lookup fails', async () => {
     const test = setup();
     test.setInitial('Start');
-    test.deps.config.getChatBarCapabilities = () => Promise.reject(new Error('catalog failed'));
+    test.deps.config.getSessionConfigProjection = () => Promise.reject(new Error('catalog failed'));
     const prepared = await test.service.prepareLoad({ sessionId: 's1' });
     if (prepared.status !== 'ready') {
       throw new Error('Expected ready session');
@@ -268,15 +269,27 @@ describe('SessionLoadService', () => {
   it('publishes confirmed options between capabilities and commands before activating initial text', async () => {
     const test = setup();
     test.setInitial('Start');
-    test.deps.config.getSessionConfigOptionsWithFallback = async () => [
-      {
-        id: 'model',
-        name: 'Model',
-        type: 'select',
-        currentValue: 'chosen',
-        options: [{ value: 'chosen', name: 'Chosen' }],
-      },
-    ];
+    const emit = test.deps.domain.emitDelta;
+    test.deps.domain.emitDelta = (id, event) => {
+      emit(id, event);
+      if (event.type === 'chat_capabilities') {
+        queueMicrotask(() => test.calls.push('interleaved'));
+      }
+    };
+    test.deps.config.getSessionConfigProjection = async () => ({
+      currentProjection: () => ({
+        capabilities: EMPTY_CHAT_BAR_CAPABILITIES,
+        configOptions: [
+          {
+            id: 'model',
+            name: 'Model',
+            type: 'select',
+            currentValue: 'chosen',
+            options: [{ value: 'chosen', name: 'Chosen' }],
+          },
+        ],
+      }),
+    });
     const prepared = await test.service.prepareLoad({ sessionId: 's1' });
     if (prepared.status !== 'ready') {
       throw new Error('Expected ready session');
@@ -288,6 +301,9 @@ describe('SessionLoadService', () => {
       'slash_commands',
       'message_state_changed',
     ]);
+    expect(test.calls.indexOf('config_options_update')).toBeLessThan(
+      test.calls.indexOf('interleaved')
+    );
     expect(test.deltas[1]).toEqual({
       type: 'config_options_update',
       configOptions: [

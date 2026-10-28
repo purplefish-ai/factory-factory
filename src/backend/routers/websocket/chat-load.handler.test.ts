@@ -63,10 +63,17 @@ function setup() {
     }),
     domain,
     config: {
-      getChatBarCapabilities: capabilities,
-      getSessionConfigOptionsWithFallback: async () => [
-        { id: 'model', name: 'Model', type: 'select', currentValue: 'chosen', options: [] },
-      ],
+      getSessionConfigProjection: async () => {
+        const value = await capabilities();
+        return {
+          currentProjection: () => ({
+            capabilities: value,
+            configOptions: [
+              { id: 'model', name: 'Model', type: 'select', currentValue: 'chosen', options: [] },
+            ],
+          }),
+        };
+      },
     },
     getCachedCommands: async () => [],
     tryDispatchNextMessage: ports.dispatch.tryDispatchNextMessage,

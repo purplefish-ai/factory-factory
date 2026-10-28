@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it, vi } from 'vitest';
+import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 
 const mocks = vi.hoisted(() => ({
   findById: vi.fn(),
@@ -18,8 +19,9 @@ vi.mock('@/backend/services/session/service/lifecycle/session-core-services', ()
   sessionLifecycleService: { getRuntimeSnapshot: () => ({ processState: 'alive' }) },
   sessionLifecycleEventService: { hydrate: vi.fn() },
   sessionConfigService: {
-    getChatBarCapabilities: vi.fn(),
-    getSessionConfigOptionsWithFallback: () => [],
+    getSessionConfigProjection: async () => ({
+      currentProjection: () => ({ capabilities: EMPTY_CHAT_BAR_CAPABILITIES, configOptions: [] }),
+    }),
   },
 }));
 vi.mock('@/backend/services/session/service/session-domain.service', () => ({

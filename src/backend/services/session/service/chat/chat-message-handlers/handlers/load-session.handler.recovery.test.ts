@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatMessage } from '@/shared/acp-protocol';
+import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 
 const mocks = vi.hoisted(() => ({
   findById: vi.fn(),
   hydrateLifecycleEvents: vi.fn(),
   getRuntimeSnapshot: vi.fn(),
-  getChatBarCapabilities: vi.fn(),
-  getSessionConfigOptionsWithFallback: vi.fn(),
+  getSessionConfigProjection: vi.fn(),
   prepareLoad: vi.fn(),
   emitDelta: vi.fn(),
   getTranscriptSnapshot: vi.fn(),
@@ -41,8 +41,7 @@ vi.mock('@/backend/services/session/service/lifecycle/session-core-services', ()
   sessionLifecycleService: { getRuntimeSnapshot: mocks.getRuntimeSnapshot },
   sessionLifecycleEventService: { hydrate: mocks.hydrateLifecycleEvents },
   sessionConfigService: {
-    getChatBarCapabilities: mocks.getChatBarCapabilities,
-    getSessionConfigOptionsWithFallback: mocks.getSessionConfigOptionsWithFallback,
+    getSessionConfigProjection: mocks.getSessionConfigProjection,
   },
 }));
 
@@ -159,18 +158,12 @@ describe('load session tool-call recovery', () => {
       activity: 'IDLE',
       updatedAt: '2026-08-20T10:01:00.000Z',
     });
-    mocks.getChatBarCapabilities.mockResolvedValue({
-      provider: 'CODEX',
-      model: { enabled: false, options: [] },
-      reasoning: { enabled: false, options: [] },
-      thinking: { enabled: false },
-      planMode: { enabled: true },
-      attachments: { enabled: true, kinds: ['image', 'text'] },
-      slashCommands: { enabled: false },
-      usageStats: { enabled: false, contextWindow: false },
-      rewind: { enabled: false },
+    mocks.getSessionConfigProjection.mockResolvedValue({
+      currentProjection: () => ({
+        capabilities: EMPTY_CHAT_BAR_CAPABILITIES,
+        configOptions: [],
+      }),
     });
-    mocks.getSessionConfigOptionsWithFallback.mockResolvedValue([]);
     mocks.getCachedCommands.mockResolvedValue([]);
     mocks.consumeInitialMessage.mockReturnValue(null);
   });
