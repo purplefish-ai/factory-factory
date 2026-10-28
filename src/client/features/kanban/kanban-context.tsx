@@ -1,5 +1,9 @@
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import {
+  useWorkspaceArchiveCommand,
+  type WorkspaceArchiveOutcome,
+} from '@/client/features/workspace';
 import { useProjectIssues } from '@/client/hooks/use-project-issues';
 import { useProjectWorkspaceQuery } from '@/client/hooks/use-project-workspace-query';
 import { useToggleRatcheting } from '@/client/hooks/use-toggle-ratcheting';
@@ -8,11 +12,6 @@ import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import type { WorkspaceIssueLink } from '@/client/lib/project-issue-visibility';
 import { trpc } from '@/client/lib/trpc';
 import { isArchiveGitIndexLockedError } from '@/client/lib/workspace-archive';
-import {
-  removeWorkspaceFromProjectWorkspaceCache,
-  removeWorkspacesFromProjectWorkspaceCache,
-  restoreWorkspacesToProjectWorkspaceCache,
-} from '@/client/lib/workspace-cache-helpers';
 import type { IssueProvider } from '@/shared/core';
 import type { WorkspaceWithKanban } from './kanban-card';
 
@@ -91,14 +90,27 @@ export function KanbanProvider({
   const renameMutation = trpc.workspace.rename.useMutation({
     onError: (error) => toast.error(`Failed to rename workspace: ${error.message}`),
   });
-  const archiveMutation = trpc.workspace.archive.useMutation();
-  const bulkArchiveMutation = trpc.workspace.bulkArchive.useMutation();
+  const archiveCommand = useWorkspaceArchiveCommand();
   const [togglingWorkspaceId, setTogglingWorkspaceId] = useState<string | null>(null);
-  const [archivingWorkspaceIds, setArchivingWorkspaceIds] = useState<Set<string>>(new Set());
   const [archiveGitLockWorkspaceIds, setArchiveGitLockWorkspaceIds] = useState<string[]>([]);
-  const [archivingWorkspaceIssueLinks, setArchivingWorkspaceIssueLinks] = useState<
-    Map<string, WorkspaceIssueLink>
+  const [archiveIssueOperations, setArchiveIssueOperations] = useState<
+    Map<symbol, Map<string, WorkspaceIssueLink>>
   >(new Map());
+  const archivingWorkspaceIssueLinks = useMemo(
+    () => new Map([...archiveIssueOperations.values()].flatMap((links) => [...links])),
+    [archiveIssueOperations]
+  );
+
+  const suppressArchiveIssues = (links: Map<string, WorkspaceIssueLink>) => {
+    const operation = Symbol('issue suppression');
+    setArchiveIssueOperations((current) => new Map(current).set(operation, links));
+    return () =>
+      setArchiveIssueOperations((current) => {
+        const next = new Map(current);
+        next.delete(operation);
+        return next;
+      });
+  };
   const {
     issues,
     isLoading: isLoadingIssues,
@@ -133,6 +145,18 @@ export function KanbanProvider({
     toast.error(message);
   };
 
+  const handleArchiveOutcomes = (outcomes: WorkspaceArchiveOutcome[]) => {
+    const idsByError = new Map<unknown, string[]>();
+    for (const outcome of outcomes) {
+      if (!outcome.success) {
+        idsByError.set(outcome.error, [...(idsByError.get(outcome.error) ?? []), outcome.id]);
+      }
+    }
+    for (const [error, ids] of idsByError) {
+      handleArchiveError(error, ids);
+    }
+  };
+
   const syncAndRefetch = () => {
     syncMutation.mutate({ projectId });
     runInBackground(refetchWorkspaces(), 'Could not refresh data');
@@ -161,61 +185,32 @@ export function KanbanProvider({
   const archiveWorkspace = async (workspaceId: string, removeGitIndexLock = false) => {
     const workspace = workspaces?.find((item) => item.id === workspaceId);
 
-    await utils.workspace.listForProject.cancel({ projectId });
-
-    const previousWorkspaces = utils.workspace.listForProject.getData({ projectId });
-
-    utils.workspace.listForProject.setData({ projectId }, (old) =>
-      removeWorkspaceFromProjectWorkspaceCache(old, workspaceId)
+    const releaseIssueSuppression = suppressArchiveIssues(
+      new Map([
+        [
+          workspaceId,
+          {
+            githubIssueNumber:
+              workspace?.githubIssueNumber ??
+              archivingWorkspaceIssueLinks.get(workspaceId)?.githubIssueNumber ??
+              null,
+            linearIssueId:
+              workspace?.linearIssueId ??
+              archivingWorkspaceIssueLinks.get(workspaceId)?.linearIssueId ??
+              null,
+          },
+        ],
+      ])
     );
-
-    setArchivingWorkspaceIds((prev) => {
-      const next = new Set(prev);
-      next.add(workspaceId);
-      return next;
-    });
-    setArchivingWorkspaceIssueLinks((prev) => {
-      const next = new Map(prev);
-      next.set(workspaceId, {
-        githubIssueNumber: workspace?.githubIssueNumber ?? null,
-        linearIssueId: workspace?.linearIssueId ?? null,
-      });
-      return next;
-    });
     try {
-      try {
-        await archiveMutation.mutateAsync(
-          removeGitIndexLock ? { id: workspaceId, removeGitIndexLock: true } : { id: workspaceId }
-        );
-      } catch (error) {
-        utils.workspace.listForProject.setData({ projectId }, (old) =>
-          restoreWorkspacesToProjectWorkspaceCache(old, previousWorkspaces, [workspaceId])
-        );
-        handleArchiveError(error, [workspaceId]);
-        return;
-      }
-
-      await Promise.allSettled([
-        refetchWorkspaces(),
-        utils.workspace.get.invalidate({ id: workspaceId }),
-      ]);
+      const outcomes = await archiveCommand.archiveWorkspace({
+        projectId,
+        id: workspaceId,
+        removeGitIndexLock,
+      });
+      handleArchiveOutcomes(outcomes);
     } finally {
-      setArchivingWorkspaceIds((prev) => {
-        if (!prev.has(workspaceId)) {
-          return prev;
-        }
-        const next = new Set(prev);
-        next.delete(workspaceId);
-        return next;
-      });
-      setArchivingWorkspaceIssueLinks((prev) => {
-        if (!prev.has(workspaceId)) {
-          return prev;
-        }
-        const next = new Map(prev);
-        next.delete(workspaceId);
-        return next;
-      });
+      releaseIssueSuppression();
     }
   };
 
@@ -225,85 +220,27 @@ export function KanbanProvider({
     );
     const workspaceIdsToArchive = workspacesToArchive.map((workspace) => workspace.id);
 
-    await utils.workspace.listForProject.cancel({ projectId });
-
-    const previousWorkspaces = utils.workspace.listForProject.getData({ projectId });
-
-    utils.workspace.listForProject.setData({ projectId }, (old) =>
-      removeWorkspacesFromProjectWorkspaceCache(old, workspaceIdsToArchive)
+    const releaseIssueSuppression = suppressArchiveIssues(
+      new Map(
+        workspacesToArchive.map((workspace) => [
+          workspace.id,
+          {
+            githubIssueNumber: workspace.githubIssueNumber ?? null,
+            linearIssueId: workspace.linearIssueId ?? null,
+          },
+        ])
+      )
     );
 
-    setArchivingWorkspaceIds((prev) => {
-      const next = new Set(prev);
-      for (const workspaceId of workspaceIdsToArchive) {
-        next.add(workspaceId);
-      }
-      return next;
-    });
-
-    setArchivingWorkspaceIssueLinks((prev) => {
-      const next = new Map(prev);
-      for (const workspace of workspacesToArchive) {
-        next.set(workspace.id, {
-          githubIssueNumber: workspace.githubIssueNumber ?? null,
-          linearIssueId: workspace.linearIssueId ?? null,
-        });
-      }
-      return next;
-    });
-
     try {
-      try {
-        const result = await bulkArchiveMutation.mutateAsync({
-          projectId,
-          kanbanColumn: kanbanColumn as 'WORKING' | 'WAITING' | 'DONE',
-        });
-        const failedResults = result.results.filter((item) => !item.success);
-        const failedWorkspaceIds = failedResults.map((item) => item.id);
-        for (const failedResult of failedResults) {
-          handleArchiveError(
-            {
-              data: {
-                code: failedResult.code,
-                applicationErrorKind: failedResult.applicationErrorKind,
-              },
-              message: failedResult.error,
-            },
-            [failedResult.id]
-          );
-        }
-        if (failedWorkspaceIds.length > 0) {
-          utils.workspace.listForProject.setData({ projectId }, (old) =>
-            restoreWorkspacesToProjectWorkspaceCache(old, previousWorkspaces, failedWorkspaceIds)
-          );
-        }
-      } catch (error) {
-        utils.workspace.listForProject.setData({ projectId }, (old) =>
-          restoreWorkspacesToProjectWorkspaceCache(old, previousWorkspaces, workspaceIdsToArchive)
-        );
-        handleArchiveError(error, workspaceIdsToArchive);
-        return;
-      }
-
-      // The archive already succeeded, so a failing refresh must not surface as
-      // an archive failure.
-      await Promise.allSettled([refetchWorkspaces()]);
+      const outcomes = await archiveCommand.archiveColumn({
+        projectId,
+        ids: workspaceIdsToArchive,
+        kanbanColumn: kanbanColumn as 'WORKING' | 'WAITING' | 'DONE',
+      });
+      handleArchiveOutcomes(outcomes);
     } finally {
-      setArchivingWorkspaceIds((prev) => {
-        const next = new Set(prev);
-        for (const workspaceId of workspaceIdsToArchive) {
-          next.delete(workspaceId);
-        }
-        return next;
-      });
-
-      setArchivingWorkspaceIssueLinks((prev) => {
-        const next = new Map(prev);
-        for (const workspaceId of workspaceIdsToArchive) {
-          next.delete(workspaceId);
-        }
-        return next;
-      });
+      releaseIssueSuppression();
     }
   };
 
@@ -323,8 +260,8 @@ export function KanbanProvider({
   };
 
   const visibleWorkspaces = useMemo(
-    () => workspaces?.filter((workspace) => !archivingWorkspaceIds.has(workspace.id)),
-    [workspaces, archivingWorkspaceIds]
+    () => workspaces?.filter((workspace) => !archivingWorkspaceIssueLinks.has(workspace.id)),
+    [workspaces, archivingWorkspaceIssueLinks]
   );
 
   return (
@@ -349,7 +286,7 @@ export function KanbanProvider({
         archiveGitLockWorkspaceIds,
         dismissArchiveGitLock,
         retryGitLockedArchives,
-        isBulkArchiving: bulkArchiveMutation.isPending,
+        isBulkArchiving: archiveCommand.isBulkArchiving,
         showInlineForm,
         setShowInlineForm,
         quickChatWorkspaceId,

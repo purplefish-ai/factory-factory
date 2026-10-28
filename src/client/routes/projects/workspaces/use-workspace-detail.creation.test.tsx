@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement, createRef } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
@@ -25,6 +26,7 @@ vi.mock('@/client/lib/trpc', () => ({
     },
     workspace: {
       archive: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+      bulkArchive: { useMutation: () => ({ mutateAsync: vi.fn(), isPending: false }) },
       openInIde: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
       getAvailableIdes: { useQuery: () => ({}) },
     },
@@ -59,15 +61,20 @@ describe('new session provider boundary', () => {
       mocks.mutate.mockClear();
       mocks.mutateAsync.mockClear();
       let result: ReturnType<typeof useSessionManagement> | undefined;
+      const queryClient = new QueryClient();
       const root = createRoot(document.createElement('div'));
       try {
         flushSync(() =>
           root.render(
-            createElement(SessionManagementHarness, {
-              onResult: (next) => {
-                result = next;
-              },
-            })
+            createElement(
+              QueryClientProvider,
+              { client: queryClient },
+              createElement(SessionManagementHarness, {
+                onResult: (next) => {
+                  result = next;
+                },
+              })
+            )
           )
         );
         if (kind === 'chat') {
@@ -84,6 +91,7 @@ describe('new session provider boundary', () => {
         }
       } finally {
         flushSync(() => root.unmount());
+        queryClient.clear();
       }
     }
   );

@@ -2,15 +2,28 @@ import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { useSessionCollectionCommands } from '@/client/features/chat';
+import { useWorkspaceArchiveCommand } from '@/client/features/workspace';
 import { useWorkspaceDetailQuery } from '@/client/hooks/use-workspace-detail-query';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { isArchiveGitIndexLockedError } from '@/client/lib/workspace-archive';
-import {
-  removeWorkspaceFromProjectWorkspaceCache,
-  restoreWorkspacesToProjectWorkspaceCache,
-} from '@/client/lib/workspace-cache-helpers';
+import { useWorkspaceIdeActions } from '@/client/routes/projects/workspaces/use-workspace-ide-actions';
 import type { SessionProviderValue } from '@/lib/session-provider-selection';
+
+function showArchiveError(error: unknown, onGitLocked: () => void) {
+  if (isArchiveGitIndexLockedError(error)) {
+    onGitLocked();
+    return;
+  }
+  const message =
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof error.message === 'string'
+      ? error.message
+      : 'Failed to archive workspace';
+  toast.error(message || 'Failed to archive workspace');
+}
 
 // =============================================================================
 // Helpers
@@ -181,61 +194,48 @@ export function useSessionManagement({
     },
   });
 
-  const archiveWorkspace = trpc.workspace.archive.useMutation({
-    onMutate: async ({ id }) => {
-      const workspace = utils.workspace.get.getData({ id });
-      const projectId = workspace?.projectId;
-
-      if (!projectId) {
-        return { projectId, previousWorkspaces: undefined };
-      }
-
-      await utils.workspace.listForProject.cancel({ projectId });
-      const previousWorkspaces = utils.workspace.listForProject.getData({ projectId });
-
-      utils.workspace.listForProject.setData({ projectId }, (old) =>
-        removeWorkspaceFromProjectWorkspaceCache(old, id)
-      );
-
-      return { projectId, previousWorkspaces };
+  const archiveLifetime = useRef<symbol | null>(null);
+  useLayoutEffect(() => {
+    archiveLifetime.current = Symbol(`${workspaceId}/${slug}`);
+    return () => {
+      archiveLifetime.current = null;
+    };
+  }, [workspaceId, slug]);
+  const handleArchiveFailure = (
+    error: unknown,
+    isCurrent: boolean,
+    onError: ((error: unknown) => void) | undefined
+  ) => {
+    showArchiveError(error, isCurrent ? onArchiveGitIndexLocked : () => undefined);
+    if (isCurrent) {
+      onError?.(error);
+    }
+  };
+  const archiveCommand = useWorkspaceArchiveCommand();
+  const archiveWorkspace: UseSessionManagementReturn['archiveWorkspace'] = {
+    isPending: archiveCommand.isArchiving,
+    mutate: (input, options) => {
+      const originatingLifetime = archiveLifetime.current;
+      const projectId = utils.workspace.get.getData({ id: input.id })?.projectId;
+      void archiveCommand.archiveWorkspace({ ...input, projectId }).then((outcomes) => {
+        const outcome = outcomes[0];
+        if (!outcome) {
+          return;
+        }
+        const isCurrent = archiveLifetime.current === originatingLifetime;
+        if (outcome.success) {
+          if (!isCurrent) {
+            return;
+          }
+          void navigate(slug ? `/projects/${slug}/workspaces` : '/projects', { replace: true });
+          options?.onSuccess?.(undefined);
+          return;
+        }
+        handleArchiveFailure(outcome.error, isCurrent, options?.onError);
+      });
     },
-    onSuccess: () => {
-      if (slug) {
-        void navigate(`/projects/${slug}/workspaces`, { replace: true });
-      } else {
-        void navigate('/projects', { replace: true });
-      }
-    },
-    onError: (error, _variables, context) => {
-      if (context?.projectId && context.previousWorkspaces) {
-        utils.workspace.listForProject.setData({ projectId: context.projectId }, (old) =>
-          restoreWorkspacesToProjectWorkspaceCache(old, context.previousWorkspaces, [_variables.id])
-        );
-      }
-
-      if (isArchiveGitIndexLockedError(error)) {
-        onArchiveGitIndexLocked();
-      } else {
-        toast.error(error.message || 'Failed to archive workspace');
-      }
-    },
-    onSettled: (_data, _error, variables, context) => {
-      void utils.workspace.get.invalidate({ id: variables.id });
-      if (context?.projectId) {
-        void utils.workspace.listForProject.invalidate({ projectId: context.projectId });
-      }
-    },
-  });
-
-  const openInIde = trpc.workspace.openInIde.useMutation({
-    onError: (error) => {
-      toast.error(error.message);
-    },
-  });
-
-  const { data: availableIdesData } = trpc.workspace.getAvailableIdes.useQuery();
-  const availableIdes = availableIdesData?.ides ?? [];
-  const preferredIde = availableIdesData?.preferredIde ?? 'cursor';
+  };
+  const { openInIde, availableIdes, preferredIde } = useWorkspaceIdeActions();
 
   const handleSelectSession = useCallback(
     (dbSessionId: string) => {

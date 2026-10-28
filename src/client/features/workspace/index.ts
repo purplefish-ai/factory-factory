@@ -32,3 +32,4 @@ export * from './workspace-panel-context';
 export * from './workspace-pr-menu';
 export * from './workspace-status-badge';
 export * from './workspaces-back-link';
+export * from './use-workspace-archive-command';

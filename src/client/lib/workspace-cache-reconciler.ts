@@ -33,11 +33,113 @@ export class ProjectWorkspaceCacheReconciler {
   private entries = new Map<string, WorkspaceSnapshotEntry>();
   private hasBaseline = false;
   private reviewCount: number | undefined;
+  private archiveSettlementGeneration = 0;
   private readonly httpResults = new WeakMap<
     object,
-    { epoch: symbol; data: ProjectWorkspaceCache }
+    {
+      epoch: symbol;
+      generation: number;
+      query: Query | undefined;
+      request: Promise<unknown> | undefined;
+      data: ProjectWorkspaceCache;
+    }
   >();
+  // Only pending IDs have a rollback candidate. QueryClient remains the rendered list.
+  private readonly archives = new Map<symbol, Set<string>>();
+  private readonly archiveCandidates = new Map<string, ProjectWorkspace>();
+  // Success is irreversible only within the remaining overlapping group for this ID.
+  private readonly successfulArchiveIds = new Set<string>();
+  private archiveOrder: string[] = [];
   readonly queryKey;
+
+  beginArchive(ids: readonly string[]): symbol {
+    const operation = Symbol('archive');
+    const current = this.archiveBase(this.queryClient.getQueryData(this.queryKey));
+    this.archives.set(operation, new Set(ids));
+    this.queryClient.setQueryData(this.queryKey, this.applyArchiveOverlay(current));
+    return operation;
+  }
+
+  settleArchive(
+    operation: symbol,
+    failedIds: readonly string[],
+    successfulIds: readonly string[] = []
+  ): void {
+    const ids = this.archives.get(operation);
+    if (!ids) {
+      return;
+    }
+    const failed = new Set(failedIds);
+    const succeeded = new Set([...ids].filter((id) => !failed.has(id)));
+    for (const id of successfulIds) {
+      succeeded.add(id);
+    }
+    this.archiveSettlementGeneration += 1;
+    for (const id of succeeded) {
+      this.successfulArchiveIds.add(id);
+      this.archiveCandidates.delete(id);
+    }
+    const base = this.archiveBase(this.queryClient.getQueryData(this.queryKey));
+    this.archives.delete(operation);
+    this.queryClient.setQueryData(this.queryKey, this.applyArchiveOverlay(base));
+    // End this ID's fence as soon as its last overlapping operation settles.
+    const pending = this.pendingArchiveIds();
+    for (const id of this.successfulArchiveIds) {
+      if (!pending.has(id)) {
+        this.successfulArchiveIds.delete(id);
+      }
+    }
+    if (!pending.size) {
+      this.archiveOrder = [];
+    }
+  }
+
+  private pendingArchiveIds(): Set<string> {
+    return new Set([...this.archives.values()].flatMap((ids) => [...ids]));
+  }
+
+  private archiveBase(
+    current: ProjectWorkspaceCache | undefined
+  ): ProjectWorkspaceCache | undefined {
+    if (!(current && this.archiveCandidates.size)) {
+      return current;
+    }
+    const rows = new Map(current.workspaces.map((row) => [row.id, row]));
+    for (const [id, row] of this.archiveCandidates) {
+      if (!rows.has(id)) {
+        rows.set(id, row);
+      }
+    }
+    const workspaces: ProjectWorkspace[] = [];
+    for (const id of this.archiveOrder) {
+      const row = rows.get(id);
+      if (row) {
+        workspaces.push(row);
+        rows.delete(id);
+      }
+    }
+    workspaces.push(...rows.values());
+    return { ...current, workspaces };
+  }
+
+  private applyArchiveOverlay(
+    base: ProjectWorkspaceCache | undefined
+  ): ProjectWorkspaceCache | undefined {
+    const pending = this.pendingArchiveIds();
+    const hidden = new Set([...pending, ...this.successfulArchiveIds]);
+    this.archiveCandidates.clear();
+    if (!(base && hidden.size)) {
+      this.archiveOrder = [];
+      return base;
+    }
+    this.archiveOrder = base.workspaces.map((row) => row.id);
+    for (const row of base.workspaces) {
+      if (pending.has(row.id) && !this.successfulArchiveIds.has(row.id)) {
+        this.archiveCandidates.set(row.id, row);
+      }
+    }
+    return { ...base, workspaces: base.workspaces.filter((row) => !hidden.has(row.id)) };
+  }
 
   constructor(
     private readonly queryClient: QueryClient,
@@ -78,9 +180,44 @@ export class ProjectWorkspaceCacheReconciler {
     signal: AbortSignal
   ): Promise<ProjectWorkspaceCache> {
     const epoch = this.epoch;
-    const data = await fetchWorkspaces(signal);
-    this.httpResults.set(data, { epoch, data });
+    const generation = this.archiveSettlementGeneration;
+    const query = this.queryClient.getQueryCache().find({ queryKey: this.queryKey, exact: true });
+    const request = query?.promise;
+    // Per-request identity keeps one-use provenance safe for reused fetcher objects.
+    const data = { ...(await fetchWorkspaces(signal)) };
+    this.httpResults.set(data, { epoch, generation, query, request, data });
     return data;
+  }
+
+  private recoverArchiveHttpQuery(
+    query: Query,
+    rejectedRequest: Promise<unknown> | undefined
+  ): void {
+    const filter = { queryKey: this.queryKey, exact: true };
+    if (query !== this.queryClient.getQueryCache().find(filter)) {
+      return;
+    }
+    if (query.promise && query.promise !== rejectedRequest) {
+      return;
+    }
+    if (query.isActive() && query.state.data !== undefined) {
+      runInBackground(this.queryClient.invalidateQueries(filter), 'Could not refresh data');
+      return;
+    }
+    const cached = query.state.data;
+    const reset = this.queryClient.resetQueries(filter);
+    if (cached !== undefined) {
+      this.queryClient.setQueryData(this.queryKey, cached);
+    }
+    if (
+      cached === undefined &&
+      query.getObserversCount() === 0 &&
+      query.state.fetchStatus === 'idle' &&
+      query === this.queryClient.getQueryCache().find(filter)
+    ) {
+      this.queryClient.removeQueries(filter);
+    }
+    runInBackground(reset, 'Could not refresh data');
   }
 
   /** Query.setData calls this synchronously at its actual success commit. */
@@ -93,12 +230,22 @@ export class ProjectWorkspaceCacheReconciler {
     if (http.epoch !== this.epoch) {
       return previous;
     }
+    if (http.generation !== this.archiveSettlementGeneration) {
+      if (http.query) {
+        const query = http.query;
+        queueMicrotask(() => this.recoverArchiveHttpQuery(query, http.request));
+      }
+      // Do not dispatch success/idle from an old continuation over a newer fetch.
+      throw new CancelledError({ revert: true });
+    }
     if (!this.hasBaseline) {
-      return replaceEqualDeep(previous, http.data);
+      return replaceEqualDeep(previous, this.applyArchiveOverlay(http.data));
     }
 
     // Read the current cache, not the value captured when HTTP began/resolved.
-    const current = this.queryClient.getQueryData<ProjectWorkspaceCache>(this.queryKey);
+    const current = this.archiveBase(
+      this.queryClient.getQueryData<ProjectWorkspaceCache>(this.queryKey)
+    );
     const incoming = new Map(http.data.workspaces.map((workspace) => [workspace.id, workspace]));
     const rows =
       current?.workspaces ??
@@ -119,7 +266,7 @@ export class ProjectWorkspaceCacheReconciler {
       }),
       reviewCount: this.reviewCount ?? http.data.reviewCount,
     };
-    return replaceEqualDeep(previous, reconciled);
+    return replaceEqualDeep(previous, this.applyArchiveOverlay(reconciled));
   };
 
   hasWorkspace(workspaceId: string): boolean {
@@ -183,38 +330,43 @@ export class ProjectWorkspaceCacheReconciler {
     if (message.reviewCount !== undefined) {
       this.reviewCount = message.reviewCount;
     }
-    this.queryClient.setQueryData<ProjectWorkspaceCache>(this.queryKey, (previous) => {
-      if (message.type === 'snapshot_full') {
-        const existing = new Map(
-          previous?.workspaces.map((workspace) => [workspace.id, workspace])
-        );
-        return {
-          workspaces: message.entries.map((entry) =>
-            projectSnapshotToWorkspace(entry, existing.get(entry.workspaceId))
-          ),
-          reviewCount: message.reviewCount ?? previous?.reviewCount ?? 0,
-        };
-      }
-      if (message.type === 'snapshot_removed') {
-        return (
-          previous && {
-            workspaces: previous.workspaces.filter(
-              (workspace) => workspace.id !== message.workspaceId
-            ),
-            reviewCount: message.reviewCount ?? previous.reviewCount,
+    this.queryClient.setQueryData<ProjectWorkspaceCache>(this.queryKey, (rendered) => {
+      const previous = this.archiveBase(rendered);
+      return this.applyArchiveOverlay(
+        ((): ProjectWorkspaceCache | undefined => {
+          if (message.type === 'snapshot_full') {
+            const existing = new Map(
+              previous?.workspaces.map((workspace) => [workspace.id, workspace])
+            );
+            return {
+              workspaces: message.entries.map((entry) =>
+                projectSnapshotToWorkspace(entry, existing.get(entry.workspaceId))
+              ),
+              reviewCount: message.reviewCount ?? previous?.reviewCount ?? 0,
+            };
           }
-        );
-      }
-      const rows = previous?.workspaces ?? [];
-      const index = rows.findIndex((workspace) => workspace.id === message.entry.workspaceId);
-      const mapped = projectSnapshotToWorkspace(message.entry, rows[index]);
-      const workspaces = [...rows];
-      if (index < 0) {
-        workspaces.push(mapped);
-      } else {
-        workspaces[index] = mapped;
-      }
-      return { workspaces, reviewCount: message.reviewCount ?? previous?.reviewCount ?? 0 };
+          if (message.type === 'snapshot_removed') {
+            return (
+              previous && {
+                workspaces: previous.workspaces.filter(
+                  (workspace) => workspace.id !== message.workspaceId
+                ),
+                reviewCount: message.reviewCount ?? previous.reviewCount,
+              }
+            );
+          }
+          const rows = previous?.workspaces ?? [];
+          const index = rows.findIndex((workspace) => workspace.id === message.entry.workspaceId);
+          const mapped = projectSnapshotToWorkspace(message.entry, rows[index]);
+          const workspaces = [...rows];
+          if (index < 0) {
+            workspaces.push(mapped);
+          } else {
+            workspaces[index] = mapped;
+          }
+          return { workspaces, reviewCount: message.reviewCount ?? previous?.reviewCount ?? 0 };
+        })()
+      );
     });
     return true;
   }

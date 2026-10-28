@@ -231,7 +231,10 @@ describe('project workspace HTTP/stream commit ownership', () => {
     const response = list('http');
     f.resolve(response);
     const returned = await fetch;
-    expect(returned).toBe(response);
+    expect(returned).not.toBe(response);
+    expect(returned).toEqual(response);
+    expect(returned.workspaces).toBe(response.workspaces);
+    expect(returned.workspaces[0]?.createdAt).toBe(response.workspaces[0]?.createdAt);
     expect(f.client.getQueryData(f.options.queryKey)).toMatchObject({
       workspaces: [{ name: 'stream' }],
     });
