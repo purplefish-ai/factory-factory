@@ -746,8 +746,12 @@ describe('SessionStartupCoordinator', () => {
     const harness = createLifecycleHarness();
     installRuntimeQuiescence(harness);
     const snapshotPersistence = createDeferred<void>();
-    harness.sessionConfigService.persistAcpConfigSnapshot.mockReturnValueOnce(
-      snapshotPersistence.promise
+    harness.sessionConfigService.persistAcpConfigSnapshot.mockImplementationOnce(
+      async (_id, params) => {
+        await snapshotPersistence.promise;
+        await params.completeStartup?.beforeComplete();
+        params.completeStartup?.complete();
+      }
     );
 
     const startResult = harness.service

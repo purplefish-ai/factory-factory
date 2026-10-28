@@ -292,3 +292,30 @@ export function buildCapabilitiesFromConfigOptions(
     rewind: { enabled: false },
   };
 }
+
+export function findModeValue(
+  availableModeValues: string[],
+  preferredModeValues: string[]
+): string | null {
+  if (availableModeValues.length === 0 || preferredModeValues.length === 0) {
+    return null;
+  }
+
+  const availableByNormalized = new Map<string, string>();
+  for (const value of availableModeValues) {
+    availableByNormalized.set(normalizeModeValue(value), value);
+  }
+
+  for (const preferredValue of preferredModeValues) {
+    const match = availableByNormalized.get(normalizeModeValue(preferredValue));
+    if (match) {
+      return match;
+    }
+  }
+
+  return null;
+}
+
+function normalizeModeValue(value: string): string {
+  return value.replace(/[^a-z0-9]/gi, '').toLowerCase();
+}

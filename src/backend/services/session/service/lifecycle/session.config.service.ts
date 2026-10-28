@@ -20,6 +20,7 @@ import {
   buildCapabilitiesFromConfigOptions,
   buildCodexConfigOptionsWithModelCatalog,
   getConfigOptionValues,
+  findModeValue,
   type SessionProvider,
 } from './session-config-option-helpers';
 import {
@@ -32,6 +33,7 @@ import {
   applyReadOnlyReviewPermissions,
   assertReadOnlyReviewConfigOption,
   resolveConfiguredAccessModeTarget,
+  SessionStartupPermissions,
 } from './session-permission-policy';
 import { restoreSavedNativeModes } from './session-saved-native-modes';
 import { getWorkflowPermissionPreset } from './session-workflow-permissions';
@@ -49,6 +51,7 @@ export type SessionConfigServiceDependencies = {
 };
 
 export class SessionConfigService {
+  private readonly startupPermissions = new SessionStartupPermissions();
   private readonly snapshotPersistence: SessionConfigSnapshotPersistence;
   private readonly configAuthority = new SessionConfigCommitAuthority();
   private readonly configUpdates: SessionConfigMutationQueue;
@@ -59,7 +62,12 @@ export class SessionConfigService {
 
   constructor(options: SessionConfigServiceDependencies) {
     this.repository = options.repository;
-    this.snapshotPersistence = new SessionConfigSnapshotPersistence(options.repository);
+    this.snapshotPersistence = new SessionConfigSnapshotPersistence(
+      options.repository,
+      options.runtimeManager,
+      this.configAuthority,
+      (handle, metadata) => this.startupPermissions.assertCurrent(handle, metadata)
+    );
     this.runtimeManager = options.runtimeManager;
     this.codexModelCatalogService = options.codexModelCatalogService;
     this.sessionDomainService = options.sessionDomainService ?? sessionDomainService;
@@ -121,14 +129,12 @@ export class SessionConfigService {
       return;
     }
 
-    const modeResult = await this.applyStartupCollaborationModePreset({
+    const didUpdate = await this.applyStartupCollaborationModePreset({
       sessionId,
       handle,
       startupModePreset,
       workflow,
-      configOptions: handle.configOptions,
     });
-    const didUpdate = modeResult.didUpdate;
 
     if (!didUpdate) {
       return;
@@ -181,9 +187,13 @@ export class SessionConfigService {
     preResolvedPreset?: SessionPermissionPreset
   ): Promise<void> {
     if (session.workflow === ADVERSARIAL_REVIEW_WORKFLOW) {
-      if (await applyReadOnlyReviewPermissions(sessionId, handle, this.runtimeManager)) {
+      this.startupPermissions.captureReview(handle);
+      const changed = await applyReadOnlyReviewPermissions(sessionId, handle, this.runtimeManager);
+      this.startupPermissions.assertCurrent(handle);
+      if (changed) {
         await this.persistAndEmitConfigOptions(sessionId, handle);
       }
+      this.startupPermissions.assertCurrent(handle);
       return;
     }
 
@@ -208,6 +218,7 @@ export class SessionConfigService {
 
     // Claude plan mode is also its read-only access mode. Preserve planning.
     if (handle.provider === 'CLAUDE' && accessModeOption.currentValue === 'plan') {
+      this.startupPermissions.expectAccess(handle, accessModeOption.id, 'plan');
       return;
     }
     const targetAccessMode = resolveConfiguredAccessModeTarget(
@@ -221,26 +232,19 @@ export class SessionConfigService {
       );
     }
 
-    const currentAccessMode = accessModeOption.currentValue
-      ? String(accessModeOption.currentValue)
-      : null;
-    if (currentAccessMode === targetAccessMode) {
+    if (
+      handle.configOptions.find((option) => option.id === accessModeOption.id)?.currentValue ===
+      targetAccessMode
+    ) {
+      this.startupPermissions.capture(handle);
       return;
     }
 
     try {
-      const configOptions = await this.runtimeManager.setConfigOption(
-        sessionId,
-        accessModeOption.id,
-        targetAccessMode
-      );
-      if (
-        configOptions.find((option) => option.id === accessModeOption.id)?.currentValue !==
-        targetAccessMode
-      ) {
-        throw new Error('Configured session access mode was not applied');
-      }
+      await this.runtimeManager.setConfigOption(sessionId, accessModeOption.id, targetAccessMode);
+      this.startupPermissions.expectAccess(handle, accessModeOption.id, targetAccessMode);
       await this.persistAndEmitConfigOptions(sessionId, handle);
+      this.startupPermissions.assertCurrent(handle);
     } catch (error) {
       logger.warn('Failed applying configured session permission preset', {
         sessionId,
@@ -258,13 +262,19 @@ export class SessionConfigService {
     session: AgentSessionRecord,
     handle: AcpProcessHandle
   ): Promise<boolean> {
+    const snapshot = parseAcpConfigSnapshot(session.providerMetadata);
+    if (snapshot) {
+      this.startupPermissions.capture(handle, snapshot.configOptions);
+    }
     const restored = await restoreSavedNativeModes(sessionId, session, handle, this.runtimeManager);
     if (restored === undefined) {
       return false;
     }
+    this.startupPermissions.assertCurrent(handle);
     if (restored) {
       await this.persistAndEmitConfigOptions(sessionId, handle);
     }
+    this.startupPermissions.assertCurrent(handle);
     return true;
   }
 
@@ -692,18 +702,7 @@ export class SessionConfigService {
     sessionId: string,
     params: PersistAcpConfigSnapshotParams
   ): Promise<void> {
-    const handle = this.runtimeManager.getClient(sessionId);
-    const configOptions =
-      handle?.provider === params.provider && handle.providerSessionId === params.providerSessionId
-        ? handle.configOptions
-        : params.configOptions;
-    const accepted = this.configAuthority.accept(
-      sessionId,
-      params.assertCurrent ?? this.acceptRuntime(sessionId, handle)
-    );
-    await accepted.persist((assertCurrent) =>
-      this.snapshotPersistence.persist(sessionId, { ...params, configOptions, assertCurrent })
-    );
+    await this.snapshotPersistence.persistCurrent(sessionId, params);
   }
 
   private acceptConfiguration(
@@ -734,11 +733,13 @@ export class SessionConfigService {
     handle: AcpProcessHandle;
     startupModePreset: SessionStartupModePreset;
     workflow: string;
-    configOptions: SessionConfigOption[];
-  }): Promise<{ configOptions: SessionConfigOption[]; didUpdate: boolean }> {
-    const modeOption = this.findCollaborationOption(params.handle.provider, params.configOptions);
+  }): Promise<boolean> {
+    const modeOption = this.findCollaborationOption(
+      params.handle.provider,
+      params.handle.configOptions
+    );
     if (!modeOption) {
-      return { configOptions: params.configOptions, didUpdate: false };
+      return false;
     }
 
     const availableModeValues = getConfigOptionValues(modeOption);
@@ -755,20 +756,19 @@ export class SessionConfigService {
         startupModePreset: params.startupModePreset,
         availableModeValues,
       });
-      return { configOptions: params.configOptions, didUpdate: false };
+      return false;
     }
 
     const currentMode = modeOption.currentValue ? String(modeOption.currentValue) : null;
     if (currentMode === targetMode) {
-      return { configOptions: params.configOptions, didUpdate: false };
+      return false;
     }
 
     try {
-      const configOptions =
-        modeOption.id === 'mode'
-          ? await this.runtimeManager.setSessionMode(params.sessionId, targetMode)
-          : await this.runtimeManager.setConfigOption(params.sessionId, modeOption.id, targetMode);
-      return { configOptions, didUpdate: true };
+      await (modeOption.id === 'mode'
+        ? this.runtimeManager.setSessionMode(params.sessionId, targetMode)
+        : this.runtimeManager.setConfigOption(params.sessionId, modeOption.id, targetMode));
+      return true;
     } catch (error) {
       logger.warn('Failed applying startup mode preset', {
         sessionId: params.sessionId,
@@ -778,7 +778,7 @@ export class SessionConfigService {
         targetMode,
         error: error instanceof Error ? error.message : String(error),
       });
-      return { configOptions: params.configOptions, didUpdate: false };
+      return false;
     }
   }
 
@@ -800,11 +800,11 @@ export class SessionConfigService {
     }
 
     if (startupModePreset === 'plan') {
-      return this.findModeValue(availableModeValues, ['plan']);
+      return findModeValue(availableModeValues, ['plan']);
     }
 
     if (provider === 'CLAUDE') {
-      return this.findModeValue(availableModeValues, [
+      return findModeValue(availableModeValues, [
         'bypassPermissions',
         'dangerouslySkipPermissions',
         'dangerousSkipPermissions',
@@ -812,7 +812,7 @@ export class SessionConfigService {
       ]);
     }
 
-    return this.findModeValue(availableModeValues, ['default']);
+    return findModeValue(availableModeValues, ['default']);
   }
 
   private async resolvePermissionPresetFromSettings(
@@ -938,33 +938,6 @@ export class SessionConfigService {
         capabilities: this.buildAcpChatBarCapabilities(params.handle),
       });
     }
-  }
-
-  private findModeValue(
-    availableModeValues: string[],
-    preferredModeValues: string[]
-  ): string | null {
-    if (availableModeValues.length === 0 || preferredModeValues.length === 0) {
-      return null;
-    }
-
-    const availableByNormalized = new Map<string, string>();
-    for (const value of availableModeValues) {
-      availableByNormalized.set(this.normalizeModeValue(value), value);
-    }
-
-    for (const preferredValue of preferredModeValues) {
-      const match = availableByNormalized.get(this.normalizeModeValue(preferredValue));
-      if (match) {
-        return match;
-      }
-    }
-
-    return null;
-  }
-
-  private normalizeModeValue(value: string): string {
-    return value.replace(/[^a-z0-9]/gi, '').toLowerCase();
   }
 
   private async refreshCodexFallbackConfigOptionsFromAppServer(params: {

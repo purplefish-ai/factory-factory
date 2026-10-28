@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createTestProcessHandle } from '../acp/acp-runtime-manager.test-helpers';
+import { createTestProcessHandle } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
 import { parseAcpConfigSnapshot } from './acp-config-snapshot';
 import {
   configOptions,

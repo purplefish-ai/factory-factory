@@ -79,14 +79,24 @@ different sessions remain independent. Accepted native observations, successful
 RPC results, and startup snapshots share a configuration authority fence through
 metadata reads, CAS retries, and publication. Failed requests leave the last
 accepted state valid; superseded background writes stop without publishing a
-stale result. Startup persistence stays outside the public readiness queue.
-Exhausted persistence retries are logged and rejected; native notifications own
-that background rejection, and final startup persistence failure keeps dispatch
-blocked. Later genuine server changes remain authoritative after pending edits
-settle. Model-only changes preserve a supported explicit reasoning effort; an
-unsupported effort normalizes to the new model's confirmed default. Each session
-load has a 10-second UI loading safety timer, including creation from an empty
-Quick Chat. This UI timer does not release backend configuration readiness.
+stale result. Startup persistence stays outside the public readiness queue. If
+native configuration supersedes the final startup write, startup recaptures and
+persists the current handle before opening readiness. After the final async
+lifecycle check, configuration authority and required native permissions are
+checked synchronously with readiness completion. A changed required access mode
+fails startup, including observations received during permission RPC or
+persistence continuations. Exhausted persistence retries are logged and
+rejected; native notifications own that background rejection. Terminal required
+access or current final persistence failure permanently rejects the candidate's
+readiness and attempts to stop that same incarnation, including a shared
+candidate. Runtime identity and lifecycle generation fences preserve
+replacements and newer stops; caller-specific cancellation retains shared
+cleanup protections. Later genuine server changes remain authoritative after
+pending edits settle. Model-only changes preserve a supported explicit reasoning
+effort; an unsupported effort normalizes to the new model's confirmed default.
+Each session load has a 10-second UI loading safety timer, including creation
+from an empty Quick Chat. This UI timer does not release backend configuration
+readiness.
 
 ### Permission and configuration readiness
 

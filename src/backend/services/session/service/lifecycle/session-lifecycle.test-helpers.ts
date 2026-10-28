@@ -617,7 +617,12 @@ export function createLifecycleHarness(
     applyConfiguredReasoningEffort: vi.fn(async () => undefined),
     applyStartupModePreset: vi.fn(async () => undefined),
     applyConfiguredPermissionPreset: vi.fn(async () => undefined),
-    persistAcpConfigSnapshot: vi.fn(async () => undefined),
+    persistAcpConfigSnapshot: vi.fn<SessionConfigService['persistAcpConfigSnapshot']>(
+      async (_id, params) => {
+        await params.completeStartup?.beforeComplete();
+        params.completeStartup?.complete();
+      }
+    ),
     buildAcpChatBarCapabilities: vi.fn<SessionConfigService['buildAcpChatBarCapabilities']>(
       () => EMPTY_CHAT_BAR_CAPABILITIES
     ),

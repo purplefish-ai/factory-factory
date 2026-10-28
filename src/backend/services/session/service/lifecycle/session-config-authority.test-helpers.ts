@@ -1,12 +1,15 @@
 import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { vi } from 'vitest';
-import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type {
   AgentSessionRecord,
   ProviderIdentityExpectation,
-} from '../../resources/agent-session.accessor';
-import { AcpRuntimeConfigController } from '../acp/acp-runtime-config-controller';
-import { createDeferred, createTestProcessHandle } from '../acp/acp-runtime-manager.test-helpers';
+} from '@/backend/services/session/resources/agent-session.accessor';
+import { AcpRuntimeConfigController } from '@/backend/services/session/service/acp/acp-runtime-config-controller';
+import {
+  createDeferred,
+  createTestProcessHandle,
+} from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
+import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionConfigService } from './session.config.service';
 import { SessionRepository } from './session.repository';
 
