@@ -646,31 +646,36 @@ function checkAccessorPolicyCoverage(sourceFiles, rootDir, violations) {
   }
 }
 
-const rootDir = process.cwd();
-const sourceRoot = path.join(rootDir, SOURCE_ROOT);
-let sourceFiles = [];
+export function collectServiceAccessorBoundaryViolations(rootDir = process.cwd()) {
+  const sourceRoot = path.join(rootDir, SOURCE_ROOT);
+  let sourceFiles = [];
 
-try {
-  sourceFiles = collectSourceFiles(sourceRoot);
-} catch (error) {
-  if (error?.code !== 'ENOENT') {
-    throw error;
+  try {
+    sourceFiles = collectSourceFiles(sourceRoot);
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      throw error;
+    }
   }
+
+  const violations = [];
+  checkAccessorPolicyCoverage(sourceFiles, rootDir, violations);
+  for (const sourceFile of sourceFiles) {
+    checkSourceFile(sourceFile, rootDir, violations);
+  }
+  checkCapsuleBarrelExportChains(sourceFiles, rootDir, violations);
+  return [...new Set(violations)].sort();
 }
 
-const violations = [];
-checkAccessorPolicyCoverage(sourceFiles, rootDir, violations);
-for (const sourceFile of sourceFiles) {
-  checkSourceFile(sourceFile, rootDir, violations);
-}
-checkCapsuleBarrelExportChains(sourceFiles, rootDir, violations);
-
-if (violations.length > 0) {
-  console.error('Service accessor boundary violations:');
-  for (const violation of [...new Set(violations)].sort()) {
-    console.error(`- ${violation}`);
+if (import.meta.main) {
+  const violations = collectServiceAccessorBoundaryViolations();
+  if (violations.length > 0) {
+    console.error('Service accessor boundary violations:');
+    for (const violation of violations) {
+      console.error(`- ${violation}`);
+    }
+    process.exitCode = 1;
+  } else {
+    console.log('Service accessor boundaries check passed.');
   }
-  process.exitCode = 1;
-} else {
-  console.log('Service accessor boundaries check passed.');
 }

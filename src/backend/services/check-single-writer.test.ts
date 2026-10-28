@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { collectSingleWriterViolations } from '@/../scripts/check-single-writer.mjs';
 
 describe('check-single-writer', () => {
   const tempDirs: string[] = [];
@@ -58,16 +59,34 @@ describe('check-single-writer', () => {
   }
 
   function runChecker(rootDir: string): { status: number | null; output: string } {
-    const result = spawnSync('node', [checkerScriptPath], {
-      cwd: rootDir,
-      encoding: 'utf8',
-    });
-
-    return {
-      status: result.status,
-      output: `${result.stdout}${result.stderr}`,
-    };
+    const violations = collectSingleWriterViolations({ rootDir });
+    return { status: violations.length > 0 ? 1 : 0, output: violations.join('\n') };
   }
+
+  it.each([false, true])(
+    'enforces ownership through the CLI (unauthorized: %s)',
+    (unauthorized) => {
+      const rootDir = createTempBackend([
+        {
+          relPath: unauthorized
+            ? 'src/backend/services/session/service/lifecycle/session.service.ts'
+            : 'src/backend/services/workspace/service/lifecycle/data.service.ts',
+          content: unauthorized
+            ? "workspaceAccessor.markHasHadSessions('ws');"
+            : 'export const marker = "noop";',
+        },
+      ]);
+      const result = spawnSync(process.execPath, [checkerScriptPath], {
+        cwd: rootDir,
+        encoding: 'utf8',
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.status).toBe(unauthorized ? 1 : 0);
+      if (unauthorized) {
+        expect(result.stderr).toContain('unauthorized write of workspace field "hasHadSessions"');
+      }
+    }
+  );
 
   it('flags unauthorized field writes made through a wrapper mutator', () => {
     const tempRoot = createTempBackend([
