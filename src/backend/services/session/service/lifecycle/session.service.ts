@@ -10,6 +10,7 @@ import type { SessionRuntimeState } from '@/shared/session-runtime';
 import type { AcpEventProcessor } from './acp-event-processor';
 import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import type { SessionLifecycleGate } from './session-lifecycle-gate';
+import { schedulePRDiscovery } from './session-pr-discovery.service';
 import { toErrorMessage, toProviderFailureChatMessage } from './session.error-message';
 import type { SessionPromptTurnCompletionService } from './session.prompt-turn-completion.service';
 
@@ -278,8 +279,16 @@ export class SessionService {
         !this.lifecycleGate.isSessionStopping(sessionId) &&
         this.lifecycleGate.isGenerationCurrent(sessionId, stopGeneration)
       ) {
+        this.schedulePRDiscoveryAfterTurn(workspaceId, promptCompleted);
         this.promptTurnCompletionService.schedule(sessionId);
       }
+    }
+  }
+
+  private schedulePRDiscoveryAfterTurn(workspaceId: string | undefined, promptCompleted: boolean) {
+    // ACP processes survive completed turns, including the turn that opens a PR.
+    if (promptCompleted && workspaceId && this.workspaceBridge) {
+      void schedulePRDiscovery(workspaceId, logger, this.workspaceBridge);
     }
   }
 
