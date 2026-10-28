@@ -25,7 +25,9 @@ export class AcpProcessHandle {
   readonly nativeSessionTracker?: AcpNativeSessionTracker;
   providerSessionId: string;
   agentCapabilities: Record<string, unknown>;
-  isPromptInFlight: boolean;
+  private promptLease?: AcpConfigurationLease;
+  private readonly promptCompletion = new AcpPromptReadiness();
+  private pendingConfigUpdate?: Promise<void>;
   configOptions: SessionConfigOption[];
   readonly createdAt: Date;
   readonly sessionCreationOutcome: AcpSessionCreationOutcome;
@@ -59,6 +61,42 @@ export class AcpProcessHandle {
     return toAcpSessionId(this.provider, this.providerSessionId);
   }
 
+  get isPromptInFlight(): boolean {
+    return this.promptLease !== undefined;
+  }
+
+  set isPromptInFlight(value: boolean) {
+    if (value) {
+      this.promptLease ??= this.promptCompletion.begin();
+    } else {
+      this.promptLease?.complete();
+      this.promptLease = undefined;
+    }
+  }
+
+  get promptComplete(): Promise<void> | undefined {
+    return this.promptCompletion.wait();
+  }
+
+  /** Pending public edits block the next prompt, but never the current turn. */
+  get pendingConfigUpdates(): Promise<void> | undefined {
+    return this.pendingConfigUpdate;
+  }
+
+  trackPendingConfigUpdate(update: Promise<unknown>): void {
+    const ready = update
+      .then(
+        () => undefined,
+        () => undefined
+      )
+      .finally(() => {
+        if (this.pendingConfigUpdate === ready) {
+          this.pendingConfigUpdate = undefined;
+        }
+      });
+    this.pendingConfigUpdate = ready;
+  }
+
   get configurationReady(): Promise<void> | undefined {
     return this.promptReadiness.wait();
   }
@@ -76,8 +114,10 @@ export class AcpProcessHandle {
     this.initialConfiguration?.complete();
   }
 
+  /** Permanently reject this incarnation's configuration and prompt-completion waiters. */
   failConfiguration(error: unknown): void {
     this.promptReadiness.fail(error);
+    this.promptCompletion.fail(error);
   }
 
   supportsImages(): boolean {

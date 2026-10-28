@@ -163,7 +163,37 @@ describe('provider and model selection', () => {
     }
   );
 
-  it.each([{ running: true }, { disabled: true }, { stopping: true }])(
+  it.each([false, true])('allows next-turn settings while running (mobile=%s)', (mobile) => {
+    mocks.mobile = mobile;
+    const mounted = renderSelectionControls({ running: true });
+    try {
+      expect(
+        mounted.container.querySelector<HTMLButtonElement>('[aria-label^="Provider and model"]')
+          ?.disabled
+      ).toBe(false);
+      if (mobile) {
+        flushSync(() =>
+          mounted.container
+            .querySelector<HTMLButtonElement>('[aria-label="Open chat options"]')
+            ?.click()
+        );
+      }
+      const surface = mobile ? document.body : mounted.container;
+      for (const label of ['Access: Default', 'Toggle thinking mode', 'Toggle planning mode']) {
+        expect(surface.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)?.disabled).toBe(
+          false
+        );
+      }
+      flushSync(() =>
+        surface.querySelector<HTMLButtonElement>('[aria-label="Toggle planning mode"]')?.click()
+      );
+      expect(mounted.props.onPlanModeChange).toHaveBeenCalledWith(true);
+    } finally {
+      mounted.unmount();
+    }
+  });
+
+  it.each([{ disabled: true }, { stopping: true }])(
     'disables selection while unavailable: %j',
     (overrides) => {
       mocks.mobile = false;

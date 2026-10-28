@@ -5,7 +5,7 @@ import {
   createDeferred,
   createTestProcessHandle,
 } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
-import type { SessionDeltaEvent } from '@/shared/acp-protocol';
+import { DEFAULT_THINKING_BUDGET, type SessionDeltaEvent } from '@/shared/acp-protocol';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionConfigService } from './session.config.service';
 
@@ -100,6 +100,200 @@ function fixture() {
 }
 
 describe('configuration transaction ordering', () => {
+  it('gives newer native edits precedence over an already queued message', async () => {
+    const f = fixture();
+    const queued = {
+      timestamp: new Date(0).toISOString(),
+      settings: {
+        selectedModel: 'first',
+        reasoningEffort: null,
+        thinkingEnabled: false,
+        planModeEnabled: false,
+      },
+    };
+    f.handle.isPromptInFlight = true;
+    f.rpc.mockResolvedValue({ configOptions: options('second') });
+    const edit = f.service.setSessionConfigOption('session', 'model', 'second');
+    const resolved = f.service.configureQueuedMessage('session', queued);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(f.rpc).not.toHaveBeenCalled();
+    f.handle.isPromptInFlight = false;
+    await edit;
+    expect((await resolved).selectedModel).toBe('second');
+    const newer = { ...queued, timestamp: new Date(Date.now() + 1000).toISOString() };
+    expect((await f.service.configureQueuedMessage('session', newer)).selectedModel).toBe('first');
+  });
+
+  it('keeps edits arriving during dispatch configuration after the complete message transaction', async () => {
+    const f = fixture();
+    const planning = (model: string): SessionConfigOption[] => [
+      ...options(model),
+      {
+        id: 'collaboration_mode',
+        category: 'collaboration_mode',
+        name: 'Planning',
+        type: 'select',
+        currentValue: 'plan',
+        options: [
+          { value: 'plan', name: 'Plan' },
+          { value: 'default', name: 'Default' },
+        ],
+      },
+    ];
+    f.handle.configOptions = planning('first').map((option) =>
+      option.id === 'collaboration_mode' && option.type === 'select'
+        ? { ...option, currentValue: 'default' }
+        : option
+    );
+    const plan = createDeferred<{ configOptions: SessionConfigOption[] }>();
+    f.rpc
+      .mockReturnValueOnce(plan.promise)
+      .mockResolvedValueOnce({ configOptions: planning('first') })
+      .mockResolvedValueOnce({ configOptions: planning('third') });
+    const configuring = f.service.configureQueuedMessage('session', {
+      timestamp: new Date(0).toISOString(),
+      settings: {
+        selectedModel: 'first',
+        reasoningEffort: null,
+        thinkingEnabled: false,
+        planModeEnabled: true,
+      },
+    });
+    // Force the plan write to yield before the message's model write.
+    await vi.waitFor(() => expect(f.rpc).toHaveBeenCalled());
+    const edit = f.service.setSessionConfigOption('session', 'model', 'third');
+    plan.resolve({ configOptions: planning('first') });
+    await Promise.all([configuring, edit]);
+    expect(f.rpc.mock.calls.map(([request]) => [request.configId, request.value])).toEqual([
+      ['collaboration_mode', 'plan'],
+      ['model', 'first'],
+      ['model', 'third'],
+    ]);
+    expect(f.handle.configOptions.find((option) => option.id === 'model')?.currentValue).toBe(
+      'third'
+    );
+  });
+
+  it.each([true, false])(
+    'preserves a newer explicit thinking toggle %s over queued intent',
+    async (enabled) => {
+      const f = fixture();
+      const budget = String(DEFAULT_THINKING_BUDGET);
+      const thought: SessionConfigOption = {
+        id: 'thinking_budget',
+        category: 'thought_level',
+        name: 'Thinking',
+        type: 'select',
+        currentValue: budget,
+        options: [{ value: budget, name: budget }],
+      };
+      f.handle.configOptions.push(thought);
+      f.rpc.mockResolvedValue({ configOptions: [...options('first'), thought] });
+      await f.service.setSessionThinkingBudget('session', enabled ? DEFAULT_THINKING_BUDGET : null);
+      const resolved = await f.service.configureQueuedMessage(
+        'session',
+        {
+          timestamp: new Date(0).toISOString(),
+          settings: {
+            selectedModel: null,
+            reasoningEffort: null,
+            thinkingEnabled: !enabled,
+            planModeEnabled: false,
+          },
+        },
+        true
+      );
+      expect(resolved.thinkingEnabled).toBe(enabled);
+      expect(
+        f.rpc.mock.calls.filter(([request]) => request.configId === 'thinking_budget')
+      ).toHaveLength(enabled ? 2 : 0);
+    }
+  );
+
+  it('does not capture unsupported thinking budgets as successful toggles', async () => {
+    const f = fixture();
+    f.handle.configOptions.push({
+      id: 'thinking_budget',
+      category: 'thought_level',
+      name: 'Thinking',
+      type: 'select',
+      currentValue: 'low',
+      options: [{ value: 'low', name: 'Low' }],
+    });
+    await f.service.setSessionThinkingBudget('session', DEFAULT_THINKING_BUDGET);
+    const resolved = await f.service.configureQueuedMessage(
+      'session',
+      {
+        timestamp: new Date(0).toISOString(),
+        settings: {
+          selectedModel: null,
+          reasoningEffort: null,
+          thinkingEnabled: false,
+          planModeEnabled: false,
+        },
+      },
+      true
+    );
+    expect(resolved.thinkingEnabled).toBe(false);
+    expect(f.rpc).not.toHaveBeenCalled();
+  });
+
+  it('keeps a queued model choice after an undefined model request', async () => {
+    const f = fixture();
+    f.rpc.mockResolvedValue({ configOptions: options('second') });
+    await f.service.setSessionModel('session', undefined, 'user');
+    const resolved = await f.service.configureQueuedMessage('session', {
+      timestamp: new Date(0).toISOString(),
+      settings: {
+        selectedModel: 'second',
+        reasoningEffort: null,
+        thinkingEnabled: false,
+        planModeEnabled: false,
+      },
+    });
+    expect(resolved.selectedModel).toBe('second');
+    expect(f.rpc).toHaveBeenCalledWith(
+      expect.objectContaining({ configId: 'model', value: 'second' })
+    );
+  });
+
+  it('keeps a queued model choice after a real reasoning-only user request', async () => {
+    const f = fixture();
+    const withReasoning = (model: string, effort: string): SessionConfigOption[] => [
+      ...options(model),
+      {
+        id: 'reasoning_effort',
+        category: 'thought_level',
+        name: 'Reasoning',
+        type: 'select',
+        currentValue: effort,
+        options: ['low', 'high'].map((value) => ({ value, name: value })),
+      },
+    ];
+    f.handle.configOptions = withReasoning('first', 'low');
+    f.rpc
+      .mockResolvedValueOnce({ configOptions: withReasoning('first', 'high') })
+      .mockResolvedValue({ configOptions: withReasoning('second', 'high') });
+    await f.service.setSessionReasoningEffort('session', 'high', 'user');
+    expect(f.rpc).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ configId: 'reasoning_effort', value: 'high' })
+    );
+    const resolved = await f.service.configureQueuedMessage('session', {
+      timestamp: new Date(0).toISOString(),
+      settings: {
+        selectedModel: 'second',
+        reasoningEffort: 'low',
+        thinkingEnabled: false,
+        planModeEnabled: false,
+      },
+    });
+    expect(resolved).toMatchObject({ selectedModel: 'second', reasoningEffort: 'high' });
+    expect(f.handle.configOptions.find((option) => option.id === 'model')?.currentValue).toBe(
+      'second'
+    );
+  });
+
   it('retains the latest choice when provider responses would complete in reverse order', async () => {
     const f = fixture();
     const second = createDeferred<{ configOptions: SessionConfigOption[] }>();

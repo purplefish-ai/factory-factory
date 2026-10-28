@@ -178,7 +178,7 @@ export function useChatInputActions({
         shift: true,
         alt: false,
         action: () => {
-          if (!running && planModeEnabled) {
+          if (!(disabled || stopping) && planModeEnabled) {
             onSettingsChange?.({ planModeEnabled: !settings?.planModeEnabled });
           }
         },
@@ -189,7 +189,7 @@ export function useChatInputActions({
         shift: true,
         alt: false,
         action: () => {
-          if (!running && thinkingEnabled) {
+          if (!(disabled || stopping) && thinkingEnabled) {
             onSettingsChange?.({ thinkingEnabled: !settings?.thinkingEnabled });
           }
         },

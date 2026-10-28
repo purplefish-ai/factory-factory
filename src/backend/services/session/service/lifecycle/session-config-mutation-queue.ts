@@ -4,14 +4,14 @@ import { withConfiguredAcpHandle } from '@/backend/services/session/service/acp/
 
 /** Native RPC, durable state, and configuration publication share one per-session transaction. */
 export class SessionConfigMutationQueue {
-  private readonly updates = new Map<string, Promise<void>>();
+  private readonly updates = new Map<string, Promise<unknown>>();
 
   constructor(
     private readonly runtime: Pick<AcpRuntimeManager, 'getClient' | 'isStopInProgress'>,
     private readonly publishCorrection: (sessionId: string, options: SessionConfigOption[]) => void
   ) {}
 
-  async run(sessionId: string, operation: () => Promise<void>): Promise<void> {
+  async run<T>(sessionId: string, operation: () => Promise<T>): Promise<T> {
     const handle = this.runtime.getClient(sessionId);
     const prior = this.updates.get(sessionId) ?? Promise.resolve();
     const update = prior
@@ -22,9 +22,10 @@ export class SessionConfigMutationQueue {
         }
         try {
           if (handle) {
-            await withConfiguredAcpHandle(this.runtime, sessionId, handle, operation);
+            await handle.promptComplete;
+            return await withConfiguredAcpHandle(this.runtime, sessionId, handle, operation);
           } else {
-            await operation();
+            return await operation();
           }
         } catch (error) {
           const current = this.runtime.getClient(sessionId);
@@ -41,8 +42,10 @@ export class SessionConfigMutationQueue {
         }
       });
     this.updates.set(sessionId, update);
+    // Register synchronously so even a direct prompt cannot overtake this edit.
+    handle?.trackPendingConfigUpdate(update);
     try {
-      await update;
+      return await update;
     } finally {
       if (this.updates.get(sessionId) === update) {
         this.updates.delete(sessionId);

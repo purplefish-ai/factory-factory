@@ -12,7 +12,7 @@ import { fetchSessionLaunchOptionsFromAcp } from '@/backend/services/session/ser
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { userSettingsService } from '@/backend/services/settings';
-import type { SessionDeltaEvent } from '@/shared/acp-protocol';
+import type { SessionDeltaEvent, QueuedMessage } from '@/shared/acp-protocol';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import type { SessionLaunchOptions } from '@/shared/session-launch';
@@ -47,6 +47,7 @@ import {
   SessionStartupPermissions,
   SessionStartupTargetError,
 } from './session-permission-policy';
+import { type AcceptedQueuedConfig, SessionQueuedSettings } from './session-queued-settings';
 import {
   applyReasoningEffortTarget,
   type ReasoningEffortTargetParams,
@@ -91,6 +92,7 @@ export class SessionConfigService {
   private readonly configAuthority = new SessionConfigCommitAuthority();
   private readonly launchOptionsService: Pick<SessionLaunchOptionsService, 'getOptions'>;
   private readonly configUpdates: SessionConfigMutationQueue;
+  private readonly queuedSettings: SessionQueuedSettings;
   private readonly repository: SessionRepository;
   private readonly runtimeManager: AcpRuntimeManager;
   private readonly sessionDomainService: SessionDomainService;
@@ -122,6 +124,9 @@ export class SessionConfigService {
           configOptions,
         } as SessionDeltaEvent);
       }
+    );
+    this.queuedSettings = new SessionQueuedSettings(this.runtimeManager, (sessionId, operation) =>
+      this.configUpdates.run(sessionId, operation)
     );
   }
 
@@ -543,23 +548,51 @@ export class SessionConfigService {
     };
   }
 
-  async setSessionModel(sessionId: string, model?: string): Promise<void> {
-    await this.configUpdates.run(sessionId, () =>
-      this.setSessionModelUnserialized(sessionId, model)
+  resolveQueuedMessageSettings(
+    sessionId: string,
+    message: Pick<QueuedMessage, 'timestamp' | 'settings'>
+  ): QueuedMessage['settings'] {
+    return this.queuedSettings.resolve(sessionId, message);
+  }
+
+  configureQueuedMessage(
+    sessionId: string,
+    message: Pick<QueuedMessage, 'timestamp' | 'settings'>,
+    supportsThinkingBudget = false
+  ): Promise<QueuedMessage['settings']> {
+    return this.configUpdates.run(sessionId, () =>
+      this.queuedSettings.configure(sessionId, message, supportsThinkingBudget, {
+        plan: () => this.setSessionCollaborationModeUnserialized(sessionId, 'plan'),
+        thinking: (budget) => this.setSessionThinkingBudgetUnserialized(sessionId, budget),
+        model: (model) => this.setSessionModelUnserialized(sessionId, model),
+        reasoning: (effort) => this.setSessionReasoningEffortUnserialized(sessionId, effort),
+      })
     );
   }
 
-  private async setSessionModelUnserialized(sessionId: string, model?: string): Promise<void> {
+  async setSessionModel(sessionId: string, model?: string, source?: 'user'): Promise<void> {
+    await this.queuedSettings.capture(sessionId, source && model ? 'model' : undefined, () =>
+      this.setSessionModelUnserialized(sessionId, model)
+    )();
+  }
+
+  private async setSessionModelUnserialized(
+    sessionId: string,
+    model?: string
+  ): Promise<AcceptedQueuedConfig | undefined> {
     if (!model) {
       return;
     }
     const handle = this.runtimeManager.getClient(sessionId);
     if (handle) {
-      await withConfiguredAcpHandle(this.runtimeManager, sessionId, handle, async () => {
+      return await withConfiguredAcpHandle(this.runtimeManager, sessionId, handle, async () => {
         const target = resolveAcpModelSelection(handle.provider, handle.configOptions, model);
-        await this.setSessionConfigOptionUnserialized(sessionId, target.configId, target.value);
+        return await this.setSessionConfigOptionUnserialized(
+          sessionId,
+          target.configId,
+          target.value
+        );
       });
-      return;
     }
     const session = await this.repository.getSessionById(sessionId);
     if (!session) {
@@ -567,11 +600,10 @@ export class SessionConfigService {
     }
     const snapshot = parseAcpConfigSnapshot(session.providerMetadata);
     if (!snapshot) {
-      await this.setSessionConfigOptionUnserialized(sessionId, 'model', model);
-      return;
+      return await this.setSessionConfigOptionUnserialized(sessionId, 'model', model);
     }
     const target = resolveAcpModelSelection(session.provider, snapshot.configOptions, model);
-    await this.setSessionConfigOptionUnserialized(sessionId, target.configId, target.value);
+    return await this.setSessionConfigOptionUnserialized(sessionId, target.configId, target.value);
   }
 
   async setSessionCollaborationMode(sessionId: string, mode: 'plan'): Promise<void> {
@@ -609,9 +641,9 @@ export class SessionConfigService {
   }
 
   async setSessionThinkingBudget(sessionId: string, maxTokens: number | null): Promise<void> {
-    await this.configUpdates.run(sessionId, () =>
+    await this.queuedSettings.captureThinking(sessionId, maxTokens, () =>
       this.setSessionThinkingBudgetUnserialized(sessionId, maxTokens)
-    );
+    )();
   }
 
   private async setSessionThinkingBudgetUnserialized(
@@ -646,11 +678,12 @@ export class SessionConfigService {
 
   async setSessionReasoningEffort(
     sessionId: string,
-    reasoningEffort: string | null
+    reasoningEffort: string | null,
+    source?: 'user'
   ): Promise<void> {
-    await this.configUpdates.run(sessionId, () =>
+    await this.queuedSettings.capture(sessionId, source ? 'thought_level' : undefined, () =>
       this.setSessionReasoningEffortUnserialized(sessionId, reasoningEffort)
-    );
+    )();
   }
 
   private async setSessionReasoningEffortUnserialized(
@@ -729,20 +762,19 @@ export class SessionConfigService {
   }
 
   async setSessionConfigOption(sessionId: string, configId: string, value: string): Promise<void> {
-    await this.configUpdates.run(sessionId, () =>
+    await this.queuedSettings.capture(sessionId, configId, () =>
       this.setSessionConfigOptionUnserialized(sessionId, configId, value)
-    );
+    )();
   }
 
   private async setSessionConfigOptionUnserialized(
     sessionId: string,
     configId: string,
     value: string
-  ): Promise<void> {
+  ): Promise<AcceptedQueuedConfig | undefined> {
     const acpHandle = this.runtimeManager.getClient(sessionId);
     if (!acpHandle) {
-      await this.updateInactiveSessionConfigOption(sessionId, configId, value);
-      return;
+      return await this.updateInactiveSessionConfigOption(sessionId, configId, value);
     }
 
     while (acpHandle.configurationReady !== undefined) {
@@ -802,13 +834,14 @@ export class SessionConfigService {
       type: 'config_options_update',
       configOptions,
     } as SessionDeltaEvent);
+    return { provider: acpHandle.provider, configOptions };
   }
 
   private async updateInactiveSessionConfigOption(
     sessionId: string,
     configId: string,
     value: string
-  ): Promise<void> {
+  ): Promise<AcceptedQueuedConfig | undefined> {
     const update = await setInactiveSessionConfigOption(sessionId, configId, value, {
       repository: this.repository,
       runtimeManager: this.runtimeManager,
@@ -817,15 +850,13 @@ export class SessionConfigService {
       accept: (assertCurrent) => this.configAuthority.accept(sessionId, assertCurrent),
     });
     if (!update) {
-      await this.setSessionConfigOptionUnserialized(sessionId, configId, value);
-      return;
+      return await this.setSessionConfigOptionUnserialized(sessionId, configId, value);
     }
     if (
       this.runtimeManager.getClient(sessionId) ||
       this.runtimeManager.getPendingClient?.(sessionId) !== undefined
     ) {
-      await this.setSessionConfigOptionUnserialized(sessionId, configId, value);
-      return;
+      return await this.setSessionConfigOptionUnserialized(sessionId, configId, value);
     }
     if (!update.accepted.isCurrent()) {
       return;
@@ -839,7 +870,7 @@ export class SessionConfigService {
       type: 'chat_capabilities',
       capabilities: buildCapabilitiesFromConfigOptions(provider, configOptions),
     });
-    return;
+    return update;
   }
 
   private assertCurrentConfiguredHandle(sessionId: string, handle: AcpProcessHandle): void {
@@ -893,6 +924,7 @@ export class SessionConfigService {
 
   releaseSessionConfiguration(sessionId: string): void {
     this.configAuthority.release(sessionId);
+    this.queuedSettings.release(sessionId);
   }
 
   async completeStartupConfiguration(

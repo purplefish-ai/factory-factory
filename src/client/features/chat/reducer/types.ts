@@ -251,6 +251,8 @@ export interface ChatState {
   acpPlan: AcpPlanState | null;
   /** ACP agent-provided config options (model, mode, thought level, custom) */
   acpConfigOptions: AcpConfigOption[] | null;
+  pendingConfigOptions: Map<string, { value: string; requestId: string }>;
+  needsConfigReconciliation: boolean;
 }
 
 // =============================================================================
@@ -381,6 +383,12 @@ export type ChatAction =
   | { type: 'ACP_PLAN_UPDATE'; payload: { entries: AcpPlanEntry[] } }
   // ACP config options update
   | { type: 'CONFIG_OPTIONS_UPDATE'; payload: { configOptions: AcpConfigOption[] } }
+  | {
+      type: 'CONFIG_OPTION_REQUESTED';
+      payload: { configId: string; value: string; requestId: string };
+    }
+  | { type: 'CONFIG_OPTION_APPLIED'; payload: { requestId: string } }
+  | { type: 'CONFIG_OPTIONS_DISCONNECTED' }
   // Rewind files actions
   | { type: 'REWIND_PREVIEW_START'; payload: { userMessageId: string; requestNonce: string } }
   | { type: 'REWIND_PREVIEW_SUCCESS'; payload: { affectedFiles: string[]; userMessageId?: string } }

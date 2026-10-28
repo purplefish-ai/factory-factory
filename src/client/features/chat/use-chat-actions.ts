@@ -24,7 +24,7 @@ import type {
   StopMessage,
 } from '@/shared/websocket';
 import { persistSettings } from './chat-persistence';
-import { clampChatSettingsForCapabilities } from './chat-settings';
+import { clampChatSettingsForCapabilities, getConfigOptionSettings } from './chat-settings';
 import type { ChatAction, ChatState } from './reducer';
 import { reduceSettingsSlice } from './reducer/slices/settings';
 
@@ -137,27 +137,6 @@ function getOutboundSettings(state: ChatState): QueueMessageRequest['settings'] 
       };
 }
 
-function getConfigOptionSettings(
-  state: ChatState,
-  configId: string,
-  value: string
-): Partial<ChatSettings> {
-  const changedOption = state.acpConfigOptions?.find((option) => option.id === configId);
-  const isModelOption = configId === 'model' || changedOption?.category === 'model';
-  const isPlanningOption =
-    state.chatCapabilities.provider === 'CODEX'
-      ? configId === 'collaboration_mode' || changedOption?.category === 'collaboration_mode'
-      : configId === 'mode' || changedOption?.category === 'mode';
-  const settings: Partial<ChatSettings> = {};
-  if (isPlanningOption) {
-    settings.planModeEnabled = value === 'plan';
-  }
-  if (isModelOption) {
-    settings.selectedModel = value;
-  }
-  return settings;
-}
-
 function findOptionIdByDecision(
   options: AcpPermissionOption[] | undefined,
   allow: boolean
@@ -244,7 +223,7 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
         type: 'WS_ERROR',
         payload: {
           requestId,
-          message: 'Model change was not sent. Reconnect and try again.',
+          message: 'Setting change was not sent. Reconnect and try again.',
         },
       };
       stateRef.current = reduceSettingsSlice(stateRef.current, action);
@@ -401,7 +380,13 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
   const setConfigOption = useCallback(
     (configId: string, value: string) => {
       const settings = getConfigOptionSettings(stateRef.current, configId, value);
-      const requestId = settings.selectedModel !== undefined ? crypto.randomUUID() : undefined;
+      const requestId = crypto.randomUUID();
+      const action: ChatAction = {
+        type: 'CONFIG_OPTION_REQUESTED',
+        payload: { configId, value, requestId },
+      };
+      stateRef.current = reduceSettingsSlice(stateRef.current, action);
+      dispatch(action);
       if (Object.keys(settings).length > 0) {
         applySettings(settings, requestId);
       }
@@ -415,7 +400,7 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
         rejectUnsentModelRequest(requestId);
       }
     },
-    [send, applySettings, rejectUnsentModelRequest, stateRef]
+    [send, applySettings, rejectUnsentModelRequest, stateRef, dispatch]
   );
 
   // Rewind files actions

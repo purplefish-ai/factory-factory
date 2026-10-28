@@ -248,6 +248,7 @@ interface WebSocketMessagePayloadByType {
       options?: unknown[];
     }>;
   };
+  config_option_applied: { requestId: string };
 }
 
 /**
@@ -313,6 +314,7 @@ const WEBSOCKET_MESSAGE_TYPE_MAP: Record<WebSocketMessage['type'], true> = {
   user_message_uuid: true,
   chat_capabilities: true,
   config_options_update: true,
+  config_option_applied: true,
 };
 
 export const WEBSOCKET_MESSAGE_TYPES = Object.keys(

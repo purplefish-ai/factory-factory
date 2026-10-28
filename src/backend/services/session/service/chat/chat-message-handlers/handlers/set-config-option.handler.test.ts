@@ -31,6 +31,32 @@ describe('createSetConfigOptionHandler', () => {
     expect(outcome).toEqual({ replies: [] });
   });
 
+  it('acknowledges the request only after its deferred configuration finishes', async () => {
+    let complete!: () => void;
+    setSessionConfigOption.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        complete = resolve;
+      })
+    );
+    let settled = false;
+    const result = handler(context, {
+      type: 'set_config_option',
+      configId: 'mode',
+      value: 'plan',
+      requestId: 'pending-edit',
+    });
+    const outcome = Promise.resolve(result).then((value) => {
+      settled = true;
+      return value;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    complete();
+    expect(await outcome).toEqual({
+      replies: [{ type: 'config_option_applied', requestId: 'pending-edit' }],
+    });
+  });
+
   it.each([undefined, 'config-request'])(
     'returns requester correlation %s while the service owns configuration correction',
     async (requestId) => {

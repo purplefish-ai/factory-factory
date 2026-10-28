@@ -512,6 +512,7 @@ export function createLifecycleHarness(
     isPromptInFlight: false,
     beginConfiguration: vi.fn(() => ({ complete: vi.fn(), fail: vi.fn() })),
     completeConfiguration: vi.fn(),
+    trackPendingConfigUpdate: vi.fn(),
     failConfiguration: vi.fn(),
     getSubagentBrowseCapability: vi.fn(() => ({
       version: 1 as const,
