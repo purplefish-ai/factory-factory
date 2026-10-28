@@ -35,6 +35,25 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
+it('warns once when a swallowed username failure starts the shared cooldown', async () => {
+  execute.mockRejectedValue(offline);
+  await expect(githubCLIService.getAuthenticatedUsername()).resolves.toBeNull();
+  await expect(githubCLIService.getPRStatusDetails('org/repo', 1)).rejects.toMatchObject({
+    name: 'GitHubConnectivityError',
+  });
+  expect(logger.warn).toHaveBeenCalledTimes(1);
+  expect(logger.error).not.toHaveBeenCalled();
+});
+
+it('warns once when parallel review metadata reads start the shared cooldown', async () => {
+  execute.mockRejectedValue(offline);
+  await expect(githubCLIService.getPRReviewDetails('org/repo', 1)).rejects.toMatchObject({
+    name: 'GitHubConnectivityError',
+  });
+  expect(logger.warn).toHaveBeenCalledTimes(1);
+  expect(logger.error).not.toHaveBeenCalled();
+});
+
 it.each([
   { name: 'full PR details', read: () => githubCLIService.getPRFullDetails('org/repo', 1) },
   { name: 'PR diff', read: () => githubCLIService.getPRDiff('org/repo', 1) },
@@ -48,6 +67,10 @@ it.each([
   execute.mockRejectedValueOnce(offline);
   await expect(read()).rejects.toMatchObject({ name: 'GitHubConnectivityError', cause: offline });
   expect(logger.error).not.toHaveBeenCalled();
+  expect(logger.warn).toHaveBeenCalledWith(
+    'GitHub temporarily unreachable; will retry',
+    expect.objectContaining({ errorType: 'network_error', repo: expect.any(String) })
+  );
 });
 
 it('checks authentication independently of a network read cooldown', async () => {

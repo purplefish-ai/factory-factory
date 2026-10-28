@@ -129,7 +129,7 @@ export async function getPRFullDetails(
     };
   } catch (error) {
     signal?.throwIfAborted();
-    throwIfGitHubConnectivityError(error);
+    throwIfGitHubConnectivityError(error, { repo, prNumber });
     const errorType = classifyError(error);
     const errorMessage = error instanceof Error ? error.message : String(error);
 
@@ -157,7 +157,7 @@ export async function getPRDiff(
 
     return stdout;
   } catch (error) {
-    throwIfGitHubConnectivityError(error);
+    throwIfGitHubConnectivityError(error, { repo, prNumber });
     const errorType = classifyError(error);
     const errorMessage = error instanceof Error ? error.message : String(error);
 

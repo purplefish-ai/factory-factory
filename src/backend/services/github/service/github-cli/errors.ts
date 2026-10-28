@@ -44,9 +44,13 @@ function isNetworkErrorMessage(message: string): boolean {
   );
 }
 
-/** Keep retryable failures intact before a read wrapper adds generic context. */
-export function throwIfGitHubConnectivityError(error: unknown): void {
+/** Warn and keep retryable failures intact before a read wrapper adds generic context. */
+export function throwIfGitHubConnectivityError(
+  error: unknown,
+  context: Record<string, unknown>
+): void {
   if (error instanceof GitHubConnectivityError) {
+    logGitHubCLIError('network_error', error.message, context);
     throw error;
   }
 }

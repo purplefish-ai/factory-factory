@@ -6,7 +6,7 @@ import {
   isGitHubCLIReadTimeout,
 } from '@/backend/lib/github-cli-error';
 import { GH_TIMEOUT_MS, ghExecLimit } from './constants';
-import { classifyError } from './errors';
+import { classifyError, logGitHubCLIError } from './errors';
 
 const execFileAsync = promisify(execFile);
 const RATE_LIMIT_FAST_FAIL_MS = 60_000;
@@ -100,6 +100,9 @@ export class GitHubCLIExecutor {
     );
     if (!this.networkFailure || Date.now() >= this.networkFailure.until) {
       this.networkFailure = { error: connectivityError, until: Date.now() + NETWORK_FAST_FAIL_MS };
+      logGitHubCLIError('network_error', connectivityError.message, {
+        readCooldownMs: NETWORK_FAST_FAIL_MS,
+      });
     }
     return connectivityError;
   }

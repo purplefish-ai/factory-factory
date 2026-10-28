@@ -536,7 +536,7 @@ class GitHubCLIService {
 
       return parseGhJson(issueSchema.array(), stdout, 'listIssues');
     } catch (error) {
-      throwIfGitHubConnectivityError(error);
+      throwIfGitHubConnectivityError(error, { owner, repo });
       const errorType = classifyError(error);
       const errorMessage = error instanceof Error ? error.message : String(error);
 
@@ -638,7 +638,7 @@ class GitHubCLIService {
       return allComments.reverse();
     } catch (error) {
       signal?.throwIfAborted();
-      throwIfGitHubConnectivityError(error);
+      throwIfGitHubConnectivityError(error, { repo, prNumber });
       const errorType = classifyError(error);
       const errorMessage = error instanceof Error ? error.message : String(error);
 
@@ -682,7 +682,7 @@ class GitHubCLIService {
       return resolvedIds;
     } catch (error) {
       signal?.throwIfAborted();
-      throwIfGitHubConnectivityError(error);
+      throwIfGitHubConnectivityError(error, { repo, prNumber });
       const errorType = classifyError(error);
       const errorMessage = error instanceof Error ? error.message : String(error);
 
