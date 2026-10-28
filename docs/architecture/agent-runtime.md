@@ -262,8 +262,10 @@ retained copy.
 
 Pending configuration notifications carry an internal source capability to the
 configuration owner while public runtime lookup still hides their candidate. The
-source remains valid after creation clears, but stop, exit, and replacement
-invalidate it, including through the existing guarded snapshot write.
+source remains valid after creation clears. Its existing stop-generation fence
+rejects observations during a stop attempt, and exit or replacement invalidates
+it, including through the guarded snapshot write. If stopping fails and retains
+the same live runtime, observations may resume once that stop attempt clears.
 
 Runtime incarnation/stop fences reject stale repair callbacks. A process that
 has exited by code or signal fails the liveness fence, including when an
