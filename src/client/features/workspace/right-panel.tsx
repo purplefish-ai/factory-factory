@@ -119,7 +119,10 @@ function TopPanelArea({
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Tab bar */}
-      <div className="flex items-center gap-0.5 p-1 bg-muted/50 border-b">
+      <div
+        className="flex items-center gap-0.5 p-1 bg-muted/50 border-b"
+        data-testid="workspace-tools-toolbar"
+      >
         <TabButton
           label="Changes"
           icon={<FileDashedIcon className="h-3.5 w-3.5" />}

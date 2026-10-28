@@ -86,7 +86,7 @@ function RightPanelStory({
           <div className="flex h-[650px] border" style={{ width: showChatToolbar ? 1600 : 800 }}>
             {showChatToolbar && (
               <div className="min-w-0 flex-1 border-r">
-                <div className="border-b">
+                <div className="border-b" data-testid="chat-toolbar">
                   <MainViewTabBar
                     workspaceId={workspaceId}
                     sessions={[{ id: 'session-1', name: 'Chat 1', status: 'IDLE' }]}
@@ -189,11 +189,8 @@ export const AlignedToolbars: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText('No changes');
-    const chatToolbar = canvas.getByRole('tablist').parentElement?.parentElement;
-    const changesToolbar = canvas.getByRole('button', { name: 'Changes' }).parentElement;
-    if (!(chatToolbar && changesToolbar)) {
-      throw new Error('Expected both workspace toolbars');
-    }
+    const chatToolbar = canvas.getByTestId('chat-toolbar');
+    const changesToolbar = canvas.getByTestId('workspace-tools-toolbar');
     const chatBounds = chatToolbar.getBoundingClientRect();
     const changesBounds = changesToolbar.getBoundingClientRect();
     await expect(chatBounds.top).toBe(changesBounds.top);
