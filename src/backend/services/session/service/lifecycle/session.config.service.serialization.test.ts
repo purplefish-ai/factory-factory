@@ -5,7 +5,7 @@ import {
   createDeferred,
   createTestProcessHandle,
 } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
-import type { SessionDeltaEvent } from '@/shared/acp-protocol';
+import { DEFAULT_THINKING_BUDGET, type SessionDeltaEvent } from '@/shared/acp-protocol';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionConfigService } from './session.config.service';
 
@@ -115,6 +115,8 @@ describe('configuration transaction ordering', () => {
     f.rpc.mockResolvedValue({ configOptions: options('second') });
     const edit = f.service.setSessionConfigOption('session', 'model', 'second');
     const resolved = f.service.configureQueuedMessage('session', queued);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(f.rpc).not.toHaveBeenCalled();
     f.handle.isPromptInFlight = false;
     await edit;
     expect((await resolved).selectedModel).toBe('second');
@@ -162,8 +164,96 @@ describe('configuration transaction ordering', () => {
     const edit = f.service.setSessionConfigOption('session', 'model', 'third');
     plan.resolve({ configOptions: planning('first') });
     await Promise.all([configuring, edit]);
+    expect(f.rpc.mock.calls.map(([request]) => [request.configId, request.value])).toEqual([
+      ['collaboration_mode', 'plan'],
+      ['model', 'first'],
+      ['model', 'third'],
+    ]);
     expect(f.handle.configOptions.find((option) => option.id === 'model')?.currentValue).toBe(
       'third'
+    );
+  });
+
+  it.each([true, false])(
+    'preserves a newer explicit thinking toggle %s over queued intent',
+    async (enabled) => {
+      const f = fixture();
+      const budget = String(DEFAULT_THINKING_BUDGET);
+      const thought: SessionConfigOption = {
+        id: 'thinking_budget',
+        category: 'thought_level',
+        name: 'Thinking',
+        type: 'select',
+        currentValue: budget,
+        options: [{ value: budget, name: budget }],
+      };
+      f.handle.configOptions.push(thought);
+      f.rpc.mockResolvedValue({ configOptions: [...options('first'), thought] });
+      await f.service.setSessionThinkingBudget('session', enabled ? DEFAULT_THINKING_BUDGET : null);
+      const resolved = await f.service.configureQueuedMessage(
+        'session',
+        {
+          timestamp: new Date(0).toISOString(),
+          settings: {
+            selectedModel: null,
+            reasoningEffort: null,
+            thinkingEnabled: !enabled,
+            planModeEnabled: false,
+          },
+        },
+        true
+      );
+      expect(resolved.thinkingEnabled).toBe(enabled);
+      expect(
+        f.rpc.mock.calls.filter(([request]) => request.configId === 'thinking_budget')
+      ).toHaveLength(enabled ? 2 : 0);
+    }
+  );
+
+  it('does not capture unsupported thinking budgets as successful toggles', async () => {
+    const f = fixture();
+    f.handle.configOptions.push({
+      id: 'thinking_budget',
+      category: 'thought_level',
+      name: 'Thinking',
+      type: 'select',
+      currentValue: 'low',
+      options: [{ value: 'low', name: 'Low' }],
+    });
+    await f.service.setSessionThinkingBudget('session', DEFAULT_THINKING_BUDGET);
+    const resolved = await f.service.configureQueuedMessage(
+      'session',
+      {
+        timestamp: new Date(0).toISOString(),
+        settings: {
+          selectedModel: null,
+          reasoningEffort: null,
+          thinkingEnabled: false,
+          planModeEnabled: false,
+        },
+      },
+      true
+    );
+    expect(resolved.thinkingEnabled).toBe(false);
+    expect(f.rpc).not.toHaveBeenCalled();
+  });
+
+  it('keeps a queued model choice after a reasoning-only user request', async () => {
+    const f = fixture();
+    f.rpc.mockResolvedValue({ configOptions: options('second') });
+    await f.service.setSessionModel('session', undefined, 'user');
+    const resolved = await f.service.configureQueuedMessage('session', {
+      timestamp: new Date(0).toISOString(),
+      settings: {
+        selectedModel: 'second',
+        reasoningEffort: null,
+        thinkingEnabled: false,
+        planModeEnabled: false,
+      },
+    });
+    expect(resolved.selectedModel).toBe('second');
+    expect(f.rpc).toHaveBeenCalledWith(
+      expect.objectContaining({ configId: 'model', value: 'second' })
     );
   });
 

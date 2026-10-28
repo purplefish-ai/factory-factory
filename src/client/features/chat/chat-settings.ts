@@ -55,7 +55,12 @@ export function getConfigOptionSettings(
   if (isModelOption) {
     settings.selectedModel = value;
   }
-  if (configId === 'reasoning_effort' || changedOption?.category === 'thought_level') {
+  if (
+    configId === 'thought_level' ||
+    configId === 'reasoning_effort' ||
+    changedOption?.category === 'thought_level' ||
+    changedOption?.category === 'reasoning'
+  ) {
     settings.reasoningEffort = value;
   }
   return settings;

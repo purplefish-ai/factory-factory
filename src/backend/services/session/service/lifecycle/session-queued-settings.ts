@@ -1,4 +1,6 @@
 import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/session/service/acp';
+import { isReasoningConfigOption } from '@/backend/services/session/service/acp/acp-config-option-identification';
+import { getConfigOptionValues } from '@/backend/services/session/service/lifecycle/session-config-option-helpers';
 import { DEFAULT_THINKING_BUDGET } from '@/shared/acp-protocol';
 import type { QueuedMessage } from '@/shared/acp-protocol';
 
@@ -27,6 +29,36 @@ export class SessionQueuedSettings {
     if (!configId) {
       return operation;
     }
+    return this.captureEdit(sessionId, operation, (handle) =>
+      settingsForNativeOption(handle, configId)
+    );
+  }
+
+  captureThinking(
+    sessionId: string,
+    maxTokens: number | null,
+    operation: () => Promise<void>
+  ): () => Promise<void> {
+    return this.captureEdit(sessionId, operation, (handle) => {
+      if (maxTokens === null) {
+        return { thinkingEnabled: false };
+      }
+      const option = handle.configOptions.find(isReasoningConfigOption);
+      if (!option || String(option.currentValue) !== String(maxTokens)) {
+        return {};
+      }
+      const values = getConfigOptionValues(option);
+      return values.length === 0 || values.includes(String(maxTokens))
+        ? { thinkingEnabled: true }
+        : {};
+    });
+  }
+
+  private captureEdit(
+    sessionId: string,
+    operation: () => Promise<void>,
+    readSettings: (handle: AcpProcessHandle) => Partial<Settings>
+  ): () => Promise<void> {
     const requestedAt = Date.now();
     const handle = this.runtime.getClient(sessionId);
     return async () => {
@@ -34,7 +66,7 @@ export class SessionQueuedSettings {
       if (!handle || this.runtime.getClient(sessionId) !== handle) {
         return;
       }
-      const settings = settingsForNativeOption(handle, configId);
+      const settings = readSettings(handle);
       const edits = this.edits.get(handle) ?? new Map();
       for (const key of Object.keys(settings) as Array<keyof Settings>) {
         edits.set(key, { requestedAt, settings: { [key]: settings[key] } });
@@ -82,7 +114,10 @@ export class SessionQueuedSettings {
 
 function settingsForNativeOption(handle: AcpProcessHandle, configId: string): Partial<Settings> {
   const option = handle.configOptions.find(
-    (entry) => entry.id === configId || entry.category === configId
+    (entry) =>
+      entry.id === configId ||
+      entry.category === configId ||
+      (configId === 'thought_level' && isReasoningConfigOption(entry))
   );
   if (!option) {
     return {};
@@ -90,11 +125,11 @@ function settingsForNativeOption(handle: AcpProcessHandle, configId: string): Pa
   const settings: Partial<Settings> = {};
   if (option.id === 'model' || option.category === 'model') {
     settings.selectedModel = String(option.currentValue);
-    const reasoning = handle.configOptions.find((entry) => entry.category === 'thought_level');
+    const reasoning = handle.configOptions.find(isReasoningConfigOption);
     if (reasoning) {
       settings.reasoningEffort = String(reasoning.currentValue);
     }
-  } else if (option.category === 'thought_level' || option.id === 'reasoning_effort') {
+  } else if (isReasoningConfigOption(option)) {
     settings.reasoningEffort = String(option.currentValue);
   } else if (
     (handle.provider === 'CLAUDE' && (option.id === 'mode' || option.category === 'mode')) ||

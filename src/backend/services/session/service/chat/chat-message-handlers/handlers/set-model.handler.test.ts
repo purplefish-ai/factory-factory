@@ -93,6 +93,18 @@ describe('createSetModelHandler', () => {
     expect(outcome.replies).toHaveLength(1);
   });
 
+  it('does not submit a model edit for a reasoning-only request', async () => {
+    await createSetModelHandler(deps)(
+      { sessionId: 'session-1', workingDir: '/tmp/project' },
+      {
+        type: 'set_model',
+        reasoningEffort: 'high',
+      }
+    );
+    expect(mocks.setSessionModel).not.toHaveBeenCalled();
+    expect(mocks.setSessionReasoningEffort).toHaveBeenCalledWith('session-1', 'high', 'user');
+  });
+
   it.each([undefined, 'model-request'])(
     'returns the model failure with requester correlation %s',
     async (requestId) => {

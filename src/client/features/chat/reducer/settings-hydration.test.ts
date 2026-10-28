@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { chatReducer, createInitialChatState } from '@/client/features/chat/reducer';
 import { DEFAULT_CHAT_SETTINGS } from '@/lib/chat-protocol';
 import { type ChatBarCapabilities, EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
-import { chatReducer, createInitialChatState } from './index';
 
 const capabilities: ChatBarCapabilities = {
   ...EMPTY_CHAT_BAR_CAPABILITIES,
@@ -36,7 +36,7 @@ function hydrate(state = createInitialChatState()) {
 }
 
 describe('settings hydration', () => {
-  it('keeps a local next-turn planning toggle through unrelated native snapshots', () => {
+  it('keeps a local next-turn planning toggle through unchanged native mode snapshots', () => {
     const configured = chatReducer(hydrate(), {
       type: 'UPDATE_SETTINGS',
       payload: { planModeEnabled: true },
@@ -56,6 +56,41 @@ describe('settings hydration', () => {
       },
     });
     expect(next.chatSettings.planModeEnabled).toBe(true);
+  });
+
+  it('keeps a local next-turn planning toggle through an access-only reconnect snapshot', () => {
+    const configured = chatReducer(hydrate(), {
+      type: 'UPDATE_SETTINGS',
+      payload: { planModeEnabled: true },
+    });
+    const disconnected = chatReducer(configured, { type: 'CONFIG_OPTIONS_DISCONNECTED' });
+    const next = chatReducer(disconnected, {
+      type: 'CONFIG_OPTIONS_UPDATE',
+      payload: {
+        configOptions: [
+          {
+            id: 'approval',
+            name: 'Access',
+            type: 'select',
+            currentValue: 'default',
+            options: [],
+          },
+        ],
+      },
+    });
+    expect(next.chatSettings.planModeEnabled).toBe(true);
+  });
+
+  it('clears capability model request authority when its connection is lost', () => {
+    const configured = chatReducer(hydrate(), {
+      type: 'UPDATE_SETTINGS',
+      payload: { selectedModel: 'opus' },
+      requestId: 'lost-model-request',
+    });
+    const disconnected = chatReducer(configured, { type: 'CONFIG_OPTIONS_DISCONNECTED' });
+    expect(disconnected.pendingModelRequestId).toBeNull();
+    expect(disconnected.modelSelectionSource).toBe('server');
+    expect(disconnected.chatSettings.selectedModel).toBe('sonnet');
   });
 
   it('adopts the confirmed initial model instead of the bootstrap default', () => {

@@ -22,6 +22,8 @@ export function createSetConfigOptionHandler(deps: {
           value: message.value,
         });
       }
+      // Superseded edits settle against the newer native snapshot already published
+      // by the service; storage failures and runtime changes reject instead.
       return {
         replies: message.requestId
           ? [{ type: 'config_option_applied', requestId: message.requestId }]

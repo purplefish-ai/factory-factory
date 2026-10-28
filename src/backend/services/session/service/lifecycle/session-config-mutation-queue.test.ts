@@ -60,7 +60,12 @@ it('rejects deferred edits when the runtime exits without waiting for its prompt
   const { manager } = createManagerTestHarness();
   const child = setupSuccessfulSpawn();
   mockPrompt.mockReturnValueOnce(new Promise(() => undefined));
-  await manager.getOrCreateClient('session', defaultOptions(), defaultHandlers(), defaultContext());
+  const handle = await manager.getOrCreateClient(
+    'session',
+    defaultOptions(),
+    defaultHandlers(),
+    defaultContext()
+  );
   void manager.sendPrompt('session', []);
   let applied = false;
   const queue = new SessionConfigMutationQueue(manager, vi.fn());
@@ -70,8 +75,13 @@ it('rejects deferred edits when the runtime exits without waiting for its prompt
       return Promise.resolve();
     })
     .catch((error: unknown) => error);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  expect(applied).toBe(false);
+  const exited = new Error('ACP process exited: session');
+  const rejectConfiguration = vi.spyOn(handle, 'failConfiguration');
   child.exitCode = 1;
   child.emit('exit', 1, null);
-  expect(await edit).toBeInstanceOf(Error);
+  expect(rejectConfiguration).toHaveBeenCalledWith(exited);
+  expect(await edit).toBe(rejectConfiguration.mock.calls[0]?.[0]);
   expect(applied).toBe(false);
 });

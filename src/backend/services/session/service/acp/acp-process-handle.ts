@@ -96,6 +96,7 @@ export class AcpProcessHandle {
     this.initialConfiguration?.complete();
   }
 
+  /** Permanently reject this incarnation's configuration and prompt-completion waiters. */
   failConfiguration(error: unknown): void {
     this.promptReadiness.fail(error);
     this.promptCompletion.fail(error);

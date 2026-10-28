@@ -79,7 +79,10 @@ function handleCapabilitiesUpdate(
   action: Extract<ChatAction, { type: 'WS_CHAT_CAPABILITIES' }>
 ): ChatState {
   const confirmedModel = action.payload.capabilities.model.selected;
-  const adoptModel = state.modelSelectionSource === 'bootstrap' && !!confirmedModel;
+  const adoptModel =
+    !!confirmedModel &&
+    (state.modelSelectionSource === 'bootstrap' ||
+      (state.needsConfigReconciliation && state.modelSelectionSource !== 'local'));
   const slashCommandsEnabled = action.payload.capabilities.slashCommands.enabled;
   return {
     ...state,
@@ -102,6 +105,10 @@ function handleModelRequestFailure(
   if (!action.payload.requestId || action.payload.requestId !== state.pendingModelRequestId) {
     return state;
   }
+  return restoreConfirmedModel(state);
+}
+
+function restoreConfirmedModel(state: ChatState): ChatState {
   const confirmedModel =
     state.acpConfigOptions?.find(isModelOption)?.currentValue ??
     state.chatCapabilities.model.selected;
@@ -159,11 +166,15 @@ export function reduceSettingsSlice(state: ChatState, action: ChatAction): ChatS
       };
     case 'CONFIG_OPTION_APPLIED':
       return settleConfigRequest(state, action.payload.requestId);
-    case 'CONFIG_OPTIONS_DISCONNECTED':
-      return Object.values(state.pendingConfigOptions).reduce<ChatState>(
+    case 'CONFIG_OPTIONS_DISCONNECTED': {
+      const settled = Object.values(state.pendingConfigOptions).reduce<ChatState>(
         (current, pending) => settleConfigRequest(current, pending.requestId),
         { ...state, needsConfigReconciliation: true }
       );
+      return settled.modelSelectionSource === 'local' || settled.pendingModelRequestId
+        ? restoreConfirmedModel(settled)
+        : settled;
+    }
     case 'UPDATE_SETTINGS':
       return {
         ...state,

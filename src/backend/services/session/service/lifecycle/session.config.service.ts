@@ -564,7 +564,7 @@ export class SessionConfigService {
   async setSessionModel(sessionId: string, model?: string, source?: 'user'): Promise<void> {
     await this.configUpdates.run(
       sessionId,
-      this.queuedSettings.capture(sessionId, source ? 'model' : undefined, () =>
+      this.queuedSettings.capture(sessionId, source && model ? 'model' : undefined, () =>
         this.setSessionModelUnserialized(sessionId, model)
       )
     );
@@ -630,8 +630,11 @@ export class SessionConfigService {
   }
 
   async setSessionThinkingBudget(sessionId: string, maxTokens: number | null): Promise<void> {
-    await this.configUpdates.run(sessionId, () =>
-      this.setSessionThinkingBudgetUnserialized(sessionId, maxTokens)
+    await this.configUpdates.run(
+      sessionId,
+      this.queuedSettings.captureThinking(sessionId, maxTokens, () =>
+        this.setSessionThinkingBudgetUnserialized(sessionId, maxTokens)
+      )
     );
   }
 
