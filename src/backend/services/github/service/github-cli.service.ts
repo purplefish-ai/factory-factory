@@ -3,11 +3,17 @@ import { promisify } from 'node:util';
 import { createLogger } from '@/backend/services/logger.service';
 import { isRateLimitMessage } from '@/backend/services/rate-limit-backoff';
 import type { CIStatus, PRState } from '@/shared/core';
+import { githubPRPreviewSchema } from '@/shared/github-pr-preview';
 import type { PRWithFullDetails, ReviewAction } from '@/shared/github-types';
 import { GH_MAX_BUFFER_BYTES, GH_TIMEOUT_MS, ghExecLimit } from './github-cli/constants';
 import { classifyError, logGitHubCLIError } from './github-cli/errors';
 import { computeCIStatus, computePRState } from './github-cli/mappers';
-import { getPRFullDetails, getPRReviewDetails, getPRStatusDetails } from './github-cli/pr-details';
+import {
+  getPRDiff,
+  getPRFullDetails,
+  getPRReviewDetails,
+  getPRStatusDetails,
+} from './github-cli/pr-details';
 import {
   collectResolvedReviewCommentIds,
   type TruncatedResolvedThread,
@@ -444,6 +450,21 @@ class GitHubCLIService {
     }
   }
 
+  /** Small, on-demand link preview without review or check enrichment. */
+  async getPRPreview(repo: string, prNumber: number) {
+    const fields = Object.keys(githubPRPreviewSchema.shape).join(',');
+    const { stdout } = await this.exec([
+      'pr',
+      'view',
+      String(prNumber),
+      '--repo',
+      repo,
+      '--json',
+      fields,
+    ]);
+    return parseGhJson(githubPRPreviewSchema, stdout, 'getPRPreview');
+  }
+
   /** Mandatory monitoring facts, independent of review enrichment. */
   getPRStatusDetails(
     repo: string,
@@ -471,30 +492,8 @@ class GitHubCLIService {
     return getPRFullDetails(repo, prNumber, (args, options) => this.exec(args, options), signal);
   }
 
-  /**
-   * Get the diff for a PR.
-   */
-  async getPRDiff(repo: string, prNumber: number): Promise<string> {
-    try {
-      const { stdout } = await this.exec(['pr', 'diff', String(prNumber), '--repo', repo], {
-        timeout: GH_TIMEOUT_MS.diff,
-        maxBuffer: GH_MAX_BUFFER_BYTES.diff,
-      });
-
-      return stdout;
-    } catch (error) {
-      const errorType = classifyError(error);
-      const errorMessage = error instanceof Error ? error.message : String(error);
-
-      logger.error('Failed to fetch PR diff via gh CLI', {
-        repo,
-        prNumber,
-        errorType,
-        error: errorMessage,
-      });
-
-      throw new Error(`Failed to fetch PR diff: ${errorMessage}`);
-    }
+  getPRDiff(repo: string, prNumber: number): Promise<string> {
+    return getPRDiff(repo, prNumber, (args, options) => this.exec(args, options));
   }
 
   /**
