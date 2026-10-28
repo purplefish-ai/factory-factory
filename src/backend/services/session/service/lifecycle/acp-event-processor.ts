@@ -5,6 +5,7 @@ import type { InterceptorContext, ToolEvent } from '@/backend/interceptors/types
 import { createLogger } from '@/backend/services/logger.service';
 import {
   AcpEventTranslator,
+  type AcpConfigObservationSource,
   type AcpRuntimeEvent,
   type AcpRuntimeEventHandlers,
   type AcpRuntimeManager,
@@ -106,7 +107,11 @@ export class AcpEventProcessor {
 
     return {
       permissionBridge,
-      onAcpEvent: (sid: string, event: AcpRuntimeEvent) => {
+      onAcpEvent: (
+        sid: string,
+        event: AcpRuntimeEvent,
+        configSource?: AcpConfigObservationSource
+      ) => {
         if (event.type !== 'acp_session_update') {
           this.handleNonSessionAcpEvent(sid, event);
           return;
@@ -135,7 +140,7 @@ export class AcpEventProcessor {
             deltaIndex: index,
             delta,
           });
-          this.handleAcpDelta(sid, delta as SessionDeltaEvent);
+          this.handleAcpDelta(sid, delta as SessionDeltaEvent, configSource);
         }
       },
     };
@@ -255,7 +260,11 @@ export class AcpEventProcessor {
    * Handle a single translated ACP delta: persist and emit agent_messages,
    * accumulate text chunks, and forward non-message deltas.
    */
-  handleAcpDelta(sid: string, delta: SessionDeltaEvent): void {
+  handleAcpDelta(
+    sid: string,
+    delta: SessionDeltaEvent,
+    configSource?: AcpConfigObservationSource
+  ): void {
     this.maybeLiftReplaySuppression(sid);
 
     if (
@@ -280,13 +289,14 @@ export class AcpEventProcessor {
 
     // When configOptions change mid-session, sync the handle and re-emit capabilities
     if (delta.type === 'config_options_update') {
-      const acpHandle = this.runtimeManager.getClient(sid);
+      const acpHandle = this.runtimeManager.getClient(sid) ?? configSource?.handle;
       if (acpHandle) {
         const { configOptions } = delta as { configOptions: unknown[] };
         this.sessionConfigService.applyConfigOptionsUpdateDelta(
           sid,
           acpHandle,
-          configOptions as SessionConfigOption[]
+          configOptions as SessionConfigOption[],
+          configSource?.isCurrent
         );
         return;
       }

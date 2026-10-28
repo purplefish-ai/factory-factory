@@ -128,14 +128,26 @@ export class SessionConfigService {
   applyConfigOptionsUpdateDelta(
     sessionId: string,
     handle: AcpProcessHandle,
-    configOptions: SessionConfigOption[]
+    configOptions: SessionConfigOption[],
+    isCurrentSource?: () => boolean
   ): void {
+    const assertCurrent = isCurrentSource
+      ? () => {
+          if (!isCurrentSource()) {
+            throw new Error('Session runtime changed before configuration update');
+          }
+        }
+      : undefined;
+    if (isCurrentSource && !isCurrentSource()) {
+      return;
+    }
     const normalizedConfigOptions = normalizeSessionConfigOptions(handle.provider, configOptions);
     handle.configOptions = normalizedConfigOptions;
     void this.persistAcpConfigSnapshot(sessionId, {
       provider: handle.provider as SessionProvider,
       providerSessionId: handle.providerSessionId,
       configOptions: normalizedConfigOptions,
+      ...(assertCurrent ? { assertCurrent } : {}),
     }).catch((error: unknown) => {
       logger.warn('Failed persisting native ACP configuration update', {
         sessionId,

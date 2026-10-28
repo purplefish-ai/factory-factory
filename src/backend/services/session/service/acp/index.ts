@@ -4,6 +4,7 @@ export { AcpEventTranslator } from './acp-event-translator';
 export { AcpPermissionBridge } from './acp-permission-bridge';
 export { AcpProcessHandle } from './acp-process-handle';
 export type {
+  AcpConfigObservationSource,
   AcpPermissionRequestEvent,
   AcpProviderIdentityEvent,
   AcpRuntimeErrorEvent,
