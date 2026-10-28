@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { GitHubConnectivityError } from '@/backend/lib/github-cli-error';
 import { isRateLimitMessage, RateLimitBackoff } from './rate-limit-backoff';
 
 const mockLogger = {
@@ -189,7 +190,10 @@ describe('RateLimitBackoff', () => {
 
     it('warns for connectivity failures while leaving the next polling pass eligible', () => {
       const rateLimited = backoff.handleError(
-        new Error('error connecting to api.github.com\ncheck your internet connection'),
+        new GitHubConnectivityError(
+          'error connecting to api.github.com',
+          new Error('connection failed')
+        ),
         mockLogger as never,
         'PR monitoring',
         { workspaceId: 'ws-1', prUrl: 'url1' },
@@ -212,6 +216,18 @@ describe('RateLimitBackoff', () => {
       );
 
       expect(isRateLimit).toBe(false);
+    });
+
+    it('does not downgrade a storage connection failure to a GitHub warning', () => {
+      backoff.handleError(
+        new Error('database connection lost'),
+        mockLogger as never,
+        'PR monitoring',
+        { workspaceId: 'ws-1', prUrl: 'url1' },
+        60_000
+      );
+      expect(mockLogger.error).toHaveBeenCalled();
+      expect(mockLogger.warn).not.toHaveBeenCalled();
     });
 
     it('handles non-Error objects that contain rate limit text', () => {

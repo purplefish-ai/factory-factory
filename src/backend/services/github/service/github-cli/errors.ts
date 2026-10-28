@@ -1,5 +1,10 @@
+import {
+  getGitHubCLIErrorMessage,
+  GitHubConnectivityError,
+  isGitHubCLIReadTimeout,
+} from '@/backend/lib/github-cli-error';
 import { createLogger } from '@/backend/services/logger.service';
-import { isNetworkErrorMessage, isRateLimitMessage } from '@/backend/services/rate-limit-backoff';
+import { isRateLimitMessage } from '@/backend/services/rate-limit-backoff';
 import type { GitHubCLIErrorType } from './types';
 
 const logger = createLogger('github-cli');
@@ -29,12 +34,24 @@ function isRateLimitError(message: string): boolean {
   return isRateLimitMessage(message);
 }
 
+function isNetworkErrorMessage(message: string): boolean {
+  return (
+    message.includes('network') ||
+    message.includes('timeout') ||
+    message.includes('connection') ||
+    message.includes('error connecting') ||
+    message.includes('unexpected eof')
+  );
+}
+
 /**
  * Classify an error from gh CLI execution.
  */
 export function classifyError(error: unknown): GitHubCLIErrorType {
-  const message = error instanceof Error ? error.message : String(error);
-  const lowerMessage = message.toLowerCase();
+  if (error instanceof GitHubConnectivityError || isGitHubCLIReadTimeout(error)) {
+    return 'network_error';
+  }
+  const lowerMessage = getGitHubCLIErrorMessage(error).toLowerCase();
 
   if (isCliNotInstalledError(lowerMessage)) {
     return 'cli_not_installed';

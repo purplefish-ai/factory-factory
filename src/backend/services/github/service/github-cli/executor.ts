@@ -1,7 +1,12 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { isNetworkErrorMessage, isRateLimitMessage } from '@/backend/services/rate-limit-backoff';
+import {
+  getGitHubCLIErrorMessage,
+  GitHubConnectivityError,
+  isGitHubCLIReadTimeout,
+} from '@/backend/lib/github-cli-error';
 import { GH_TIMEOUT_MS, ghExecLimit } from './constants';
+import { classifyError } from './errors';
 
 const execFileAsync = promisify(execFile);
 const RATE_LIMIT_FAST_FAIL_MS = 60_000;
@@ -13,7 +18,7 @@ type ExecOptions = { timeout?: number; maxBuffer?: number; signal?: AbortSignal 
 export class GitHubCLIExecutor {
   private readonly inflight = new Map<string, Promise<ExecResult>>();
   private rateLimitedUntil = 0;
-  private networkFailure: { error: unknown; until: number } | null = null;
+  private networkFailure: { error: GitHubConnectivityError; until: number } | null = null;
 
   clearBackoff(): void {
     this.rateLimitedUntil = 0;
@@ -56,7 +61,8 @@ export class GitHubCLIExecutor {
     options: ExecOptions | undefined,
     read: boolean
   ): Promise<ExecResult> {
-    const networkRead = read && args[0] !== '--version';
+    const healthCheck = args[0] === '--version' || (args[0] === 'auth' && args[1] === 'status');
+    const networkRead = read && !healthCheck;
     options?.signal?.throwIfAborted();
     this.throwIfUnavailable(networkRead);
     return await ghExecLimit(async () => {
@@ -71,25 +77,30 @@ export class GitHubCLIExecutor {
         });
       } catch (error) {
         // Record backoff before releasing the process slot to the next command.
-        if (!options?.signal?.aborted) {
-          this.recordFailure(error, networkRead);
+        if (options?.signal?.aborted) {
+          throw error;
         }
-        throw error;
+        throw this.recordFailure(error, networkRead);
       }
     });
   }
 
-  private recordFailure(error: unknown, networkRead: boolean): void {
-    const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
-    if (isRateLimitMessage(message)) {
+  private recordFailure(error: unknown, networkRead: boolean): unknown {
+    const errorType = classifyError(error);
+    if (errorType === 'rate_limit') {
       this.rateLimitedUntil = Date.now() + RATE_LIMIT_FAST_FAIL_MS;
-      return;
+      return error;
     }
-    if (!(networkRead && isNetworkErrorMessage(message))) {
-      return;
+    if (!networkRead || errorType !== 'network_error') {
+      return error;
     }
+    const connectivityError = new GitHubConnectivityError(
+      isGitHubCLIReadTimeout(error) ? 'GitHub CLI read timed out' : getGitHubCLIErrorMessage(error),
+      error
+    );
     if (!this.networkFailure || Date.now() >= this.networkFailure.until) {
-      this.networkFailure = { error, until: Date.now() + NETWORK_FAST_FAIL_MS };
+      this.networkFailure = { error: connectivityError, until: Date.now() + NETWORK_FAST_FAIL_MS };
     }
+    return connectivityError;
   }
 }

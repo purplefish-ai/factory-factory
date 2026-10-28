@@ -9,6 +9,7 @@ vi.mock('node:util', () => ({ promisify: (fn: unknown) => fn }));
 vi.mock('@/backend/services/logger.service', () => ({ createLogger: () => logger }));
 
 import { githubCLIService } from './github-cli.service';
+import { classifyError } from './github-cli/errors';
 
 const offline = new Error(
   'Command failed: gh pr view 1 --repo org/repo\nerror connecting to api.github.com\ncheck your internet connection or https://githubstatus.com\n'
@@ -34,6 +35,81 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
+it('checks authentication independently of a network read cooldown', async () => {
+  execute
+    .mockRejectedValueOnce(offline)
+    .mockImplementation((_command, args: string[]) =>
+      Promise.resolve({ stdout: args[0] === '--version' ? 'gh version 2.20.0' : '', stderr: '' })
+    );
+  await expect(githubCLIService.getPRStatusDetails('org/repo', 1)).rejects.toThrow(
+    'error connecting'
+  );
+  await expect(githubCLIService.checkHealth()).resolves.toMatchObject({
+    isInstalled: true,
+    isAuthenticated: true,
+  });
+});
+
+it('recognizes a child-process read timeout even without timeout text', async () => {
+  const timeout = Object.assign(new Error('Command failed: gh pr view 1 --repo org/repo\n'), {
+    killed: true,
+    signal: 'SIGTERM',
+    code: null,
+    stderr: '',
+  });
+  execute
+    .mockRejectedValueOnce(timeout)
+    .mockResolvedValue({ stdout: JSON.stringify(details), stderr: '' });
+  await expect(githubCLIService.getPRStatusDetails('org/repo', 1)).rejects.toMatchObject({
+    name: 'GitHubConnectivityError',
+    cause: timeout,
+  });
+  await expect(githubCLIService.getPRStatusDetails('org/repo', 2)).rejects.toMatchObject({
+    name: 'GitHubConnectivityError',
+    cause: timeout,
+  });
+  expect(execute).toHaveBeenCalledTimes(1);
+});
+
+it.each(['network', 'timeout', 'connection'])(
+  'does not classify a repository named %s as a network failure',
+  async (repo) => {
+    const failure = new Error(
+      `Command failed: gh pr view 1 --repo org/${repo}\nGraphQL: Resource not accessible by integration`
+    );
+    expect(classifyError(failure)).toBe('unknown');
+    execute
+      .mockRejectedValueOnce(failure)
+      .mockResolvedValueOnce({ stdout: JSON.stringify(details), stderr: '' });
+    await expect(githubCLIService.getPRStatusDetails(`org/${repo}`, 1)).rejects.toBe(failure);
+    await expect(githubCLIService.getPRStatusDetails('org/repo', 1)).resolves.toMatchObject({
+      number: 1,
+    });
+  }
+);
+
+it('does not treat a killed output-buffer overflow as a network timeout', async () => {
+  const failure = Object.assign(new Error('stdout maxBuffer length exceeded'), {
+    killed: true,
+    signal: 'SIGTERM',
+    code: 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER',
+  });
+  execute
+    .mockRejectedValueOnce(failure)
+    .mockResolvedValueOnce({ stdout: JSON.stringify(details), stderr: '' });
+  await expect(githubCLIService.getPRStatusDetails('org/repo', 1)).rejects.toBe(failure);
+  await expect(githubCLIService.getPRStatusDetails('org/repo', 1)).resolves.toMatchObject({
+    number: 1,
+  });
+});
+
+it('classifies stderr rather than command arguments when stderr is available', () => {
+  const failure = Object.assign(new Error('Command failed: gh pr view 1 --repo org/network'), {
+    stderr: 'HTTP 401: invalid token',
+  });
+  expect(classifyError(failure)).toBe('auth_required');
+});
+
 it('shares a bounded network cooldown across PRs and resumes reads after it expires', async () => {
   let now = 1_000_000;
   vi.spyOn(Date, 'now').mockImplementation(() => now);
@@ -41,9 +117,15 @@ it('shares a bounded network cooldown across PRs and resumes reads after it expi
     stdout: JSON.stringify(details),
     stderr: '',
   });
-  await expect(githubCLIService.getPRStatusDetails('org/repo', 1)).rejects.toBe(offline);
+  await expect(githubCLIService.getPRStatusDetails('org/repo', 1)).rejects.toMatchObject({
+    name: 'GitHubConnectivityError',
+    cause: offline,
+  });
   now += 20_000;
-  await expect(githubCLIService.getPRStatusDetails('other/repo', 2)).rejects.toBe(offline);
+  await expect(githubCLIService.getPRStatusDetails('other/repo', 2)).rejects.toMatchObject({
+    name: 'GitHubConnectivityError',
+    cause: offline,
+  });
   expect(execute).toHaveBeenCalledTimes(1);
   now += 10_000;
   await expect(githubCLIService.getPRStatusDetails('org/repo', 1)).resolves.toMatchObject({
@@ -69,7 +151,10 @@ it('rechecks network backoff before spawning reads already waiting for a process
     reject(offline);
   }
   expect(await settled).toEqual(
-    Array.from({ length: 8 }, () => ({ status: 'rejected', reason: offline }))
+    Array.from({ length: 8 }, () => ({
+      status: 'rejected',
+      reason: expect.objectContaining({ name: 'GitHubConnectivityError', cause: offline }),
+    }))
   );
   expect(execute).toHaveBeenCalledTimes(5);
 });
@@ -105,7 +190,10 @@ it('does not turn a cancelled read into a process-wide network outage', async ()
 
 it('does not block or automatically replay writes during a read network cooldown', async () => {
   execute.mockRejectedValueOnce(offline).mockResolvedValueOnce({ stdout: '', stderr: '' });
-  await expect(githubCLIService.getPRStatusDetails('org/repo', 1)).rejects.toBe(offline);
+  await expect(githubCLIService.getPRStatusDetails('org/repo', 1)).rejects.toMatchObject({
+    name: 'GitHubConnectivityError',
+    cause: offline,
+  });
   await githubCLIService.submitReview('org/repo', 1, 'approve');
   expect(execute).toHaveBeenCalledTimes(2);
   expect(execute).toHaveBeenLastCalledWith(
@@ -119,7 +207,10 @@ it('clears the network cooldown with the other CLI caches', async () => {
   execute
     .mockRejectedValueOnce(offline)
     .mockResolvedValueOnce({ stdout: JSON.stringify(details), stderr: '' });
-  await expect(githubCLIService.getPRStatusDetails('org/repo', 1)).rejects.toBe(offline);
+  await expect(githubCLIService.getPRStatusDetails('org/repo', 1)).rejects.toMatchObject({
+    name: 'GitHubConnectivityError',
+    cause: offline,
+  });
   githubCLIService.clearCaches();
   await expect(githubCLIService.getPRStatusDetails('org/repo', 1)).resolves.toMatchObject({
     number: 1,

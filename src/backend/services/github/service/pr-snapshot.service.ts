@@ -1,9 +1,9 @@
 import { EventEmitter } from 'node:events';
 import { toError } from '@/backend/lib/error-utils';
+import { GitHubConnectivityError } from '@/backend/lib/github-cli-error';
 import { createLogger } from '@/backend/services/logger.service';
 import type { CIStatus, PRState } from '@/shared/core';
 import type { GitHubPRDiscoveryClaim, GitHubWorkspaceBridge } from './bridges';
-import { classifyError } from './github-cli/errors';
 
 const logger = createLogger('pr-snapshot');
 
@@ -123,7 +123,7 @@ class PRSnapshotService extends EventEmitter {
         },
       };
     } catch (error) {
-      if (classifyError(error) === 'network_error') {
+      if (error instanceof GitHubConnectivityError) {
         logger.warn('PR refresh temporarily unable to reach GitHub; will retry', {
           ...target,
           error: toError(error).message,
