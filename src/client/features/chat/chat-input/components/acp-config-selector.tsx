@@ -31,7 +31,6 @@ function isGroupedOption(
 }
 
 function getToggleProps(
-  current: AcpConfigOptionValue | undefined,
   next: AcpConfigOptionValue | undefined,
   active: boolean,
   onToggle: (value: string) => void,
@@ -39,7 +38,7 @@ function getToggleProps(
 ) {
   return {
     'aria-pressed': active,
-    disabled: disabled || !(current && next),
+    disabled: disabled || !next,
     indicator: false,
     onClick: next ? () => onToggle(next.value) : undefined,
   };
@@ -67,7 +66,6 @@ export function AcpConfigSelector({
       aria-label={label}
       {...(presentation.toggle
         ? getToggleProps(
-            current,
             next,
             presentation.active,
             (value) => onSelect(configOption.id, value),

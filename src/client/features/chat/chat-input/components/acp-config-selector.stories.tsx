@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { useState } from 'react';
+import { useArgs } from 'storybook/preview-api';
 import { fn } from 'storybook/test';
 import type { AcpConfigOption } from '@/client/features/chat/reducer';
 import { AcpConfigSelector } from './acp-config-selector';
@@ -54,21 +54,20 @@ export const CodexAccess: Story = {
 };
 
 function InteractiveToggle(args: React.ComponentProps<typeof AcpConfigSelector>) {
-  const [currentValue, setCurrentValue] = useState(args.configOption.currentValue);
+  const [, updateArgs] = useArgs();
   return (
     <AcpConfigSelector
       {...args}
-      configOption={{ ...args.configOption, currentValue }}
       onSelect={(id, value) => {
         args.onSelect(id, value);
-        setCurrentValue(value);
+        updateArgs({ configOption: { ...args.configOption, currentValue: value } });
       }}
     />
   );
 }
 
 export const CodexPlanning: Story = {
-  render: (args) => <InteractiveToggle {...args} />,
+  render: InteractiveToggle,
   args: {
     configOption: {
       id: 'collaboration_mode',
@@ -85,7 +84,7 @@ export const CodexPlanning: Story = {
 };
 
 export const FastMode: Story = {
-  render: (args) => <InteractiveToggle {...args} />,
+  render: InteractiveToggle,
   args: {
     configOption: {
       id: 'fast-mode',

@@ -225,13 +225,13 @@ it.each([
 });
 
 it.each([
-  ['collaboration_mode', undefined, 'default', 'plan'],
-  ['plan_mode', undefined, 'default', 'plan'],
-  ['fast-mode', undefined, 'off', 'on'],
-  ['fast', undefined, 'off', 'on'],
-  ['provider-planning', 'plan_mode', 'default', 'plan'],
-  ['provider-speed', 'fast', 'off', 'on'],
-])('toggles %s directly in both directions', (id, category, off, on) => {
+  ['collaboration_mode', undefined, 'default', 'plan', 'Planning'],
+  ['plan_mode', undefined, 'default', 'plan', 'Planning'],
+  ['fast-mode', undefined, 'off', 'on', 'Fast mode'],
+  ['fast', undefined, 'off', 'on', 'Fast mode'],
+  ['provider-planning', 'plan_mode', 'default', 'plan', 'Planning'],
+  ['provider-speed', 'fast', 'off', 'on', 'Fast mode'],
+])('toggles %s directly in both directions', (id, category, off, on, label) => {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -266,6 +266,8 @@ it.each([
     render(off);
     const button = container.querySelector('button');
     expect(button?.getAttribute('aria-pressed')).toBe('false');
+    expect(button?.getAttribute('aria-label')).toBe(`${label}: Off`);
+    expect(button?.textContent).toBe('');
     flushSync(() => button?.click());
     expect(onSelect).toHaveBeenLastCalledWith(id, on);
     expect(document.body.querySelector('[role="menu"]')).toBeNull();
@@ -273,11 +275,48 @@ it.each([
 
     render(on, false, false);
     expect(button?.getAttribute('aria-pressed')).toBe('true');
+    expect(button?.getAttribute('aria-label')).toBe(`${label}: On`);
+    expect(button?.textContent).toBe('On');
     flushSync(() => button?.click());
     expect(onSelect).toHaveBeenLastCalledWith(id, off);
 
     onSelect.mockClear();
     render(off, true);
+    flushSync(() => button?.click());
+    expect(onSelect).not.toHaveBeenCalled();
+  } finally {
+    flushSync(() => root.unmount());
+  }
+});
+
+it.each([
+  ['collaboration_mode', 'plan', 'default'],
+  ['fast-mode', 'on', 'off'],
+])('allows clearing an unsupported selected %s value', (id, selected, fallback) => {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  const onSelect = vi.fn();
+  const render = (options: AcpConfigOption['options']) =>
+    flushSync(() =>
+      root.render(
+        createElement(AcpConfigSelector, {
+          configOption: { id, name: 'Setting', type: 'select', currentValue: selected, options },
+          onSelect,
+        })
+      )
+    );
+  try {
+    render([{ value: fallback, name: 'Default' }]);
+    const button = container.querySelector('button');
+    expect(button?.disabled).toBe(false);
+    expect(button?.getAttribute('aria-pressed')).toBe('true');
+    flushSync(() => button?.click());
+    expect(onSelect).toHaveBeenCalledWith(id, fallback);
+
+    onSelect.mockClear();
+    render([{ value: selected, name: 'Selected' }]);
+    expect(button?.disabled).toBe(true);
     flushSync(() => button?.click());
     expect(onSelect).not.toHaveBeenCalled();
   } finally {
