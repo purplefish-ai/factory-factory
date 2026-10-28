@@ -50,7 +50,7 @@ it.each(['', 'Internal reasoning'])(
         id: 'stream-thinking',
         source: 'agent',
         timestamp,
-        order: 1.5,
+        order: 2,
         message: {
           type: 'stream_event',
           event: {
@@ -64,7 +64,7 @@ it.each(['', 'Internal reasoning'])(
         id: 'answer',
         source: 'agent',
         timestamp,
-        order: 2,
+        order: 3,
         message: {
           type: 'assistant',
           message: { role: 'assistant', content: [{ type: 'text', text: 'The fix is ready.' }] },
@@ -80,11 +80,62 @@ it.each(['', 'Internal reasoning'])(
       expect(container.textContent).not.toContain('Thinking');
       expect(container.querySelectorAll('[data-index]')).toHaveLength(2);
 
+      const appendedMessages: ChatMessage[] = [
+        ...messages,
+        {
+          id: 'appended-thinking',
+          source: 'agent',
+          timestamp,
+          order: 4,
+          message: {
+            type: 'assistant',
+            message: { role: 'assistant', content: [{ type: 'thinking', thinking }] },
+          },
+        },
+        {
+          id: 'appended-stream-thinking',
+          source: 'agent',
+          timestamp,
+          order: 5,
+          message: {
+            type: 'stream_event',
+            event: {
+              type: 'content_block_start',
+              index: 0,
+              content_block: { type: 'thinking', thinking },
+            },
+          },
+        },
+      ];
       flushSync(() =>
-        root.render(createElement(History, { messages: [...messages], running: true }))
+        root.render(createElement(History, { messages: appendedMessages, running: true }))
       );
       expect(container.textContent).toContain('Checking the next step');
+      expect(container.textContent).not.toContain('Thinking');
       expect(container.querySelectorAll('[data-index]')).toHaveLength(2);
+
+      const nextAnswer: ChatMessage = {
+        id: 'next-answer',
+        source: 'agent',
+        timestamp,
+        order: 6,
+        message: {
+          type: 'assistant',
+          message: {
+            role: 'assistant',
+            content: [{ type: 'text', text: 'The next step is done.' }],
+          },
+        },
+      };
+      flushSync(() =>
+        root.render(
+          createElement(History, { messages: [...appendedMessages, nextAnswer], running: false })
+        )
+      );
+      expect(container.textContent).toContain('The fix is ready.');
+      expect(container.textContent).toContain('The next step is done.');
+      expect(container.textContent).not.toContain('Thinking');
+      expect(container.querySelectorAll('[data-index]')).toHaveLength(3);
     } finally {
       flushSync(() => root.unmount());
     }
