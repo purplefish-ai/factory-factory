@@ -1,4 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import { beginWorkspaceArchiveOperation } from '@/client/lib/workspace-archive-operation';
 
@@ -18,7 +19,9 @@ export function useWorkspaceArchiveCommand() {
   const single = trpc.workspace.archive.useMutation();
   const bulk = trpc.workspace.bulkArchive.useMutation();
 
-  const execute = async (
+  const [active, setActive] = useState({ single: 0, bulk: 0 });
+
+  const executeArchive = async (
     target: ArchiveTarget,
     mutate: (ids: readonly string[]) => Promise<WorkspaceArchiveOutcome[]>
   ): Promise<WorkspaceArchiveOutcome[]> => {
@@ -52,6 +55,19 @@ export function useWorkspaceArchiveCommand() {
     return outcomes;
   };
 
+  const execute = async (
+    kind: 'single' | 'bulk',
+    target: ArchiveTarget,
+    mutate: (ids: readonly string[]) => Promise<WorkspaceArchiveOutcome[]>
+  ) => {
+    setActive((current) => ({ ...current, [kind]: current[kind] + 1 }));
+    try {
+      return await executeArchive(target, mutate);
+    } finally {
+      setActive((current) => ({ ...current, [kind]: current[kind] - 1 }));
+    }
+  };
+
   const archiveWorkspace = ({
     projectId,
     id,
@@ -61,7 +77,7 @@ export function useWorkspaceArchiveCommand() {
     id: string;
     removeGitIndexLock?: boolean;
   }) =>
-    execute({ projectId, ids: [id] }, async () => {
+    execute('single', { projectId, ids: [id] }, async () => {
       await single.mutateAsync(removeGitIndexLock ? { id, removeGitIndexLock: true } : { id });
       return [{ id, success: true }];
     });
@@ -75,7 +91,7 @@ export function useWorkspaceArchiveCommand() {
     ids: readonly string[];
     kanbanColumn: 'WORKING' | 'WAITING' | 'DONE';
   }) =>
-    execute({ projectId, ids }, async (capturedIds) => {
+    execute('bulk', { projectId, ids }, async (capturedIds) => {
       const result = await bulk.mutateAsync({ projectId, kanbanColumn });
       const failures = new Map(
         result.results.filter((item) => !item.success).map((item) => [item.id, item])
@@ -99,7 +115,7 @@ export function useWorkspaceArchiveCommand() {
   return {
     archiveWorkspace,
     archiveColumn,
-    isArchiving: single.isPending,
-    isBulkArchiving: bulk.isPending,
+    isArchiving: active.single > 0,
+    isBulkArchiving: active.bulk > 0,
   };
 }

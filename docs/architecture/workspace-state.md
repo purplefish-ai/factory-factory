@@ -264,7 +264,12 @@ cannot be undone by another command's failure or a later accepted base while
 that overlap remains pending. The per-ID success fence ends with the last
 overlapping operation; later authoritative introductions remain eligible. Extra
 server-selected bulk successes participate in that same settlement. Repair
-failures never change the archive's per-workspace outcome.
+failures never change the archive's per-workspace outcome. Each HTTP attempt
+also captures a settlement generation and its originating query/request.
+Settlement rotates that generation before releasing overlays; an older
+continuation cancels instead of dispatching success over a newer fetch. Scoped
+recovery retries a mounted bootstrap without undefined success or a stuck load.
+Fresh requests started after settlement keep normal membership authority.
 
 The board keeps issue intake suppressed per pending operation and owns locked
 subset recovery, retries and selection. The detail route owns its dialogs and

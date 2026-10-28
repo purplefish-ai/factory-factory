@@ -1,6 +1,9 @@
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { useWorkspaceArchiveCommand } from '@/client/features/workspace';
+import {
+  useWorkspaceArchiveCommand,
+  type WorkspaceArchiveOutcome,
+} from '@/client/features/workspace';
 import { useProjectIssues } from '@/client/hooks/use-project-issues';
 import { useProjectWorkspaceQuery } from '@/client/hooks/use-project-workspace-query';
 import { useToggleRatcheting } from '@/client/hooks/use-toggle-ratcheting';
@@ -142,6 +145,18 @@ export function KanbanProvider({
     toast.error(message);
   };
 
+  const handleArchiveOutcomes = (outcomes: WorkspaceArchiveOutcome[]) => {
+    const idsByError = new Map<unknown, string[]>();
+    for (const outcome of outcomes) {
+      if (!outcome.success) {
+        idsByError.set(outcome.error, [...(idsByError.get(outcome.error) ?? []), outcome.id]);
+      }
+    }
+    for (const [error, ids] of idsByError) {
+      handleArchiveError(error, ids);
+    }
+  };
+
   const syncAndRefetch = () => {
     syncMutation.mutate({ projectId });
     runInBackground(refetchWorkspaces(), 'Could not refresh data');
@@ -193,11 +208,7 @@ export function KanbanProvider({
         id: workspaceId,
         removeGitIndexLock,
       });
-      for (const outcome of outcomes) {
-        if (!outcome.success) {
-          handleArchiveError(outcome.error, [outcome.id]);
-        }
-      }
+      handleArchiveOutcomes(outcomes);
     } finally {
       releaseIssueSuppression();
     }
@@ -227,11 +238,7 @@ export function KanbanProvider({
         ids: workspaceIdsToArchive,
         kanbanColumn: kanbanColumn as 'WORKING' | 'WAITING' | 'DONE',
       });
-      for (const outcome of outcomes) {
-        if (!outcome.success) {
-          handleArchiveError(outcome.error, [outcome.id]);
-        }
-      }
+      handleArchiveOutcomes(outcomes);
     } finally {
       releaseIssueSuppression();
     }

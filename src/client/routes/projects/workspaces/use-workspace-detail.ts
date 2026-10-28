@@ -199,6 +199,16 @@ export function useSessionManagement({
       archiveLifetime.current = null;
     };
   }, [workspaceId, slug]);
+  const handleArchiveFailure = (
+    error: unknown,
+    isCurrent: boolean,
+    onError: ((error: unknown) => void) | undefined
+  ) => {
+    showArchiveError(error, isCurrent ? onArchiveGitIndexLocked : () => undefined);
+    if (isCurrent) {
+      onError?.(error);
+    }
+  };
   const archiveCommand = useWorkspaceArchiveCommand();
   const archiveWorkspace: UseSessionManagementReturn['archiveWorkspace'] = {
     isPending: archiveCommand.isArchiving,
@@ -207,16 +217,19 @@ export function useSessionManagement({
       const projectId = utils.workspace.get.getData({ id: input.id })?.projectId;
       void archiveCommand.archiveWorkspace({ ...input, projectId }).then((outcomes) => {
         const outcome = outcomes[0];
-        if (!outcome || archiveLifetime.current !== originatingLifetime) {
+        if (!outcome) {
           return;
         }
+        const isCurrent = archiveLifetime.current === originatingLifetime;
         if (outcome.success) {
+          if (!isCurrent) {
+            return;
+          }
           void navigate(slug ? `/projects/${slug}/workspaces` : '/projects', { replace: true });
           options?.onSuccess?.(undefined);
           return;
         }
-        showArchiveError(outcome.error, onArchiveGitIndexLocked);
-        options?.onError?.(outcome.error);
+        handleArchiveFailure(outcome.error, isCurrent, options?.onError);
       });
     },
   };

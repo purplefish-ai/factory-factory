@@ -50,6 +50,7 @@ const mocks = vi.hoisted(() => ({
   workspaceListSetDataMock: vi.fn(),
   workspaceGetInvalidateMock: vi.fn(),
   refetchWorkspacesMock: vi.fn(),
+  workspaceListInvalidateMock: vi.fn(),
   refetchGitHubIssuesMock: vi.fn(),
   refetchLinearIssuesMock: vi.fn(),
   archiveInputs: [] as unknown[],
@@ -112,7 +113,7 @@ vi.mock('@/client/lib/trpc', () => ({
           cancel: mocks.workspaceListCancelMock,
           getData: mocks.workspaceListGetDataMock,
           setData: mocks.workspaceListSetDataMock,
-          invalidate: mocks.refetchWorkspacesMock,
+          invalidate: mocks.workspaceListInvalidateMock,
         },
         get: {
           invalidate: mocks.workspaceGetInvalidateMock,
@@ -169,6 +170,7 @@ vi.mock('@/client/lib/trpc', () => ({
 }));
 
 let queryClient: QueryClient;
+let unsubscribeCache: () => void;
 let root: Root | undefined;
 let context: ReturnType<typeof useKanban> | undefined;
 
@@ -224,7 +226,7 @@ function expectVisibleWorkspaceIds(expectedIds: string[]) {
 beforeEach(() => {
   vi.clearAllMocks();
   queryClient = new QueryClient();
-  queryClient.getQueryCache().subscribe((event) => {
+  unsubscribeCache = queryClient.getQueryCache().subscribe((event) => {
     const data = event.query.state.data as ProjectWorkspaceCache | undefined;
     if (data && data !== mocks.workspaceListState) {
       mocks.workspaceListSetDataMock({ projectId: 'project-1' }, () => data);
@@ -237,6 +239,7 @@ beforeEach(() => {
   mocks.bulkArchiveInputs = [];
   mocks.bulkArchiveResults = [{ id: 'workspace-1', success: true }];
   mocks.refetchWorkspacesMock.mockResolvedValue({ isError: false });
+  mocks.workspaceListInvalidateMock.mockResolvedValue(undefined);
   mocks.githubIssues = [];
   mocks.workspaceListState = {
     workspaces: [
@@ -270,6 +273,7 @@ afterEach(() => {
   if (root) {
     flushSync(() => root?.unmount());
   }
+  unsubscribeCache();
   queryClient.clear();
   root = undefined;
   context = undefined;
@@ -335,8 +339,38 @@ describe('KanbanProvider archive failure handling', () => {
     expectVisibleWorkspaceIds(['workspace-1', 'workspace-2']);
   });
 
-  it('keeps a successful single archive removed when workspace refetch fails', async () => {
-    mocks.refetchWorkspacesMock.mockRejectedValueOnce(new Error('Workspace refetch failed'));
+  it('reports one whole-request bulk failure once for a multi-workspace column', async () => {
+    mocks.workspaceListState!.workspaces[1]!.kanbanColumn = 'WAITING';
+    mocks.bulkArchiveError = { message: 'One shared request failure' };
+    const kanban = renderProvider();
+    await expectArchiveToResolve(() => kanban.bulkArchiveColumn('WAITING'));
+    expect(mocks.toastErrorMock).toHaveBeenCalledExactlyOnceWith('One shared request failure');
+  });
+
+  it('reports distinct per-result bulk errors separately and collects every shared lock ID', async () => {
+    mocks.workspaceListState!.workspaces[1]!.kanbanColumn = 'WAITING';
+    mocks.bulkArchiveResults = ['workspace-1', 'workspace-2'].map((id) => ({
+      id,
+      success: false,
+      error: 'Distinct result failure',
+    }));
+    const kanban = renderProvider();
+    await expectArchiveToResolve(() => kanban.bulkArchiveColumn('WAITING'));
+    expect(mocks.toastErrorMock).toHaveBeenCalledTimes(2);
+    mocks.toastErrorMock.mockClear();
+    mocks.bulkArchiveError = {
+      data: { applicationErrorKind: 'GIT_INDEX_LOCKED' },
+      message: 'Git locked',
+    };
+    rerenderProvider();
+    await expectArchiveToResolve(() => context!.bulkArchiveColumn('WAITING'));
+    rerenderProvider();
+    expect(context!.archiveGitLockWorkspaceIds).toEqual(['workspace-1', 'workspace-2']);
+    expect(mocks.toastErrorMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps a successful single archive removed when list invalidation fails', async () => {
+    mocks.workspaceListInvalidateMock.mockRejectedValueOnce(new Error('Workspace refetch failed'));
     const kanban = renderProvider();
 
     await expectArchiveToResolve(() => kanban.archiveWorkspace('workspace-1'));
@@ -371,7 +405,7 @@ describe('KanbanProvider archive failure handling', () => {
         code: 'INTERNAL_SERVER_ERROR',
       },
     ];
-    mocks.refetchWorkspacesMock.mockRejectedValueOnce(new Error('Workspace refetch failed'));
+    mocks.workspaceListInvalidateMock.mockRejectedValueOnce(new Error('Workspace refetch failed'));
     const kanban = renderProvider();
 
     await expectArchiveToResolve(() => kanban.bulkArchiveColumn('WAITING'));
@@ -392,7 +426,7 @@ describe('KanbanProvider archive failure handling', () => {
       githubIssueNumber: null,
       linearIssueId: null,
     });
-    mocks.refetchWorkspacesMock.mockRejectedValueOnce(new Error('Workspace refetch failed'));
+    mocks.workspaceListInvalidateMock.mockRejectedValueOnce(new Error('Workspace refetch failed'));
     const kanban = renderProvider();
 
     await expectArchiveToResolve(() => kanban.bulkArchiveColumn('WAITING'));

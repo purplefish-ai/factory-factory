@@ -33,9 +33,16 @@ export class ProjectWorkspaceCacheReconciler {
   private entries = new Map<string, WorkspaceSnapshotEntry>();
   private hasBaseline = false;
   private reviewCount: number | undefined;
+  private archiveSettlementGeneration = 0;
   private readonly httpResults = new WeakMap<
     object,
-    { epoch: symbol; data: ProjectWorkspaceCache }
+    {
+      epoch: symbol;
+      generation: number;
+      query: Query | undefined;
+      request: Promise<unknown> | undefined;
+      data: ProjectWorkspaceCache;
+    }
   >();
   // Only pending IDs have a rollback candidate. QueryClient remains the rendered list.
   private readonly archives = new Map<symbol, Set<string>>();
@@ -67,6 +74,7 @@ export class ProjectWorkspaceCacheReconciler {
     for (const id of successfulIds) {
       succeeded.add(id);
     }
+    this.archiveSettlementGeneration += 1;
     for (const id of succeeded) {
       this.successfulArchiveIds.add(id);
       this.archiveCandidates.delete(id);
@@ -172,9 +180,44 @@ export class ProjectWorkspaceCacheReconciler {
     signal: AbortSignal
   ): Promise<ProjectWorkspaceCache> {
     const epoch = this.epoch;
-    const data = await fetchWorkspaces(signal);
-    this.httpResults.set(data, { epoch, data });
+    const generation = this.archiveSettlementGeneration;
+    const query = this.queryClient.getQueryCache().find({ queryKey: this.queryKey, exact: true });
+    const request = query?.promise;
+    // Per-request identity keeps one-use provenance safe for reused fetcher objects.
+    const data = { ...(await fetchWorkspaces(signal)) };
+    this.httpResults.set(data, { epoch, generation, query, request, data });
     return data;
+  }
+
+  private recoverArchiveHttpQuery(
+    query: Query,
+    rejectedRequest: Promise<unknown> | undefined
+  ): void {
+    const filter = { queryKey: this.queryKey, exact: true };
+    if (query !== this.queryClient.getQueryCache().find(filter)) {
+      return;
+    }
+    if (query.promise && query.promise !== rejectedRequest) {
+      return;
+    }
+    if (query.isActive() && query.state.data !== undefined) {
+      runInBackground(this.queryClient.invalidateQueries(filter), 'Could not refresh data');
+      return;
+    }
+    const cached = query.state.data;
+    const reset = this.queryClient.resetQueries(filter);
+    if (cached !== undefined) {
+      this.queryClient.setQueryData(this.queryKey, cached);
+    }
+    if (
+      cached === undefined &&
+      query.getObserversCount() === 0 &&
+      query.state.fetchStatus === 'idle' &&
+      query === this.queryClient.getQueryCache().find(filter)
+    ) {
+      this.queryClient.removeQueries(filter);
+    }
+    runInBackground(reset, 'Could not refresh data');
   }
 
   /** Query.setData calls this synchronously at its actual success commit. */
@@ -186,6 +229,14 @@ export class ProjectWorkspaceCacheReconciler {
     this.httpResults.delete(http.data);
     if (http.epoch !== this.epoch) {
       return previous;
+    }
+    if (http.generation !== this.archiveSettlementGeneration) {
+      if (http.query) {
+        const query = http.query;
+        queueMicrotask(() => this.recoverArchiveHttpQuery(query, http.request));
+      }
+      // Do not dispatch success/idle from an old continuation over a newer fetch.
+      throw new CancelledError({ revert: true });
     }
     if (!this.hasBaseline) {
       return replaceEqualDeep(previous, this.applyArchiveOverlay(http.data));

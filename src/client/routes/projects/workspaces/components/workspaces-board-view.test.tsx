@@ -13,7 +13,6 @@ type Workspace = { id: string; kanbanColumn: 'WAITING' | 'WORKING'; createdAt: s
 type WorkspaceList = { workspaces: Workspace[]; reviewCount: number };
 
 const mocks = vi.hoisted(() => ({
-  lists: new Map<string, WorkspaceList>(),
   isMobile: false,
   context: null as ReturnType<typeof useKanban> | null,
   rename: vi.fn(),
@@ -21,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   bulkArchive: vi.fn(),
   cancel: vi.fn(),
   refetch: vi.fn(),
+  listInvalidate: vi.fn(),
   invalidate: vi.fn(),
   toastError: vi.fn(),
 }));
@@ -110,13 +110,13 @@ vi.mock('@/client/lib/trpc', () => ({
       workspace: {
         listForProject: {
           cancel: mocks.cancel,
-          invalidate: ({ projectId }: { projectId: string }) => mocks.refetch(projectId),
-          getData: ({ projectId }: { projectId: string }) => mocks.lists.get(projectId),
+          invalidate: mocks.listInvalidate,
+          getData: ({ projectId }: { projectId: string }) => getList(projectId),
           setData: (
             { projectId }: { projectId: string },
             update: (old: WorkspaceList | undefined) => WorkspaceList
           ) => {
-            mocks.lists.set(projectId, update(mocks.lists.get(projectId)));
+            setList(projectId, update(getList(projectId)));
           },
         },
         get: { invalidate: mocks.invalidate },
@@ -126,8 +126,8 @@ vi.mock('@/client/lib/trpc', () => ({
       listForProject: {
         _def: () => ({ path: ['workspace', 'listForProject'] }),
         useQuery: ({ projectId }: { projectId: string }) => ({
-          data: mocks.lists.get(projectId),
-          isLoading: !mocks.lists.has(projectId),
+          data: getList(projectId),
+          isLoading: !getList(projectId),
           isError: false,
           error: null,
           refetch: () => mocks.refetch(projectId),
@@ -172,6 +172,19 @@ let root: Root;
 let container: HTMLDivElement;
 let actDescriptor: PropertyDescriptor | undefined;
 
+function listKey(projectId: string) {
+  return getQueryKey(trpc.workspace.listForProject, { projectId }, 'query');
+}
+function getList(projectId: string) {
+  return queryClient.getQueryData<WorkspaceList>(listKey(projectId));
+}
+function setList(projectId: string, data: WorkspaceList) {
+  queryClient.setQueryData(listKey(projectId), data);
+}
+function deleteList(projectId: string) {
+  queryClient.removeQueries({ queryKey: listKey(projectId), exact: true });
+}
+
 async function render(projectId: string) {
   await act(async () =>
     root.render(
@@ -206,24 +219,10 @@ beforeEach(() => {
   vi.resetAllMocks();
   mocks.isMobile = false;
   mocks.context = null;
-  mocks.lists = new Map(['a', 'b', 'c'].map((id) => [id, list(id)]));
   queryClient = new QueryClient();
-  for (const [projectId, data] of mocks.lists) {
-    queryClient.setQueryData(
-      getQueryKey(trpc.workspace.listForProject, { projectId }, 'query'),
-      data
-    );
+  for (const projectId of ['a', 'b', 'c']) {
+    setList(projectId, list(projectId));
   }
-  queryClient.getQueryCache().subscribe((event) => {
-    for (const projectId of mocks.lists.keys()) {
-      if (
-        event.query.queryHash ===
-        JSON.stringify(getQueryKey(trpc.workspace.listForProject, { projectId }, 'query'))
-      ) {
-        mocks.lists.set(projectId, event.query.state.data as WorkspaceList);
-      }
-    }
-  });
   mocks.archive.mockResolvedValue(undefined);
   mocks.bulkArchive.mockResolvedValue({ results: [] });
   container = document.createElement('div');
@@ -280,6 +279,7 @@ describe('WorkspacesBoardView project lifetime', () => {
       expect(current.quickChatWorkspaceId).toBe(`${selectedProject}-2`);
       expect(current.archiveGitLockWorkspaceIds).toEqual([]);
       expect(mocks.refetch).not.toHaveBeenCalledWith('b');
+      expect(mocks.listInvalidate).not.toHaveBeenCalled();
       if (outcome === 'success') {
         expect(mocks.refetch).toHaveBeenCalledExactlyOnceWith('a');
         expect(mocks.invalidate).toHaveBeenCalledExactlyOnceWith({ id: 'a-1' });
@@ -362,7 +362,7 @@ describe('WorkspacesBoardView project lifetime', () => {
 
     await render('b');
     expect(container.querySelector('[data-column]')?.getAttribute('data-column')).toBe('WAITING');
-    mocks.lists.set('c', {
+    setList('c', {
       ...list('c'),
       workspaces: list('c').workspaces.map((workspace) => ({
         ...workspace,
@@ -371,7 +371,7 @@ describe('WorkspacesBoardView project lifetime', () => {
     });
     await render('c');
     expect(container.querySelector('[data-column]')?.getAttribute('data-column')).toBe('WORKING');
-    mocks.lists.set('a', { workspaces: [], reviewCount: 0 });
+    setList('a', { workspaces: [], reviewCount: 0 });
     await render('a');
     expect(container.querySelector('[data-column]')).toBeNull();
     expect(
@@ -383,13 +383,13 @@ describe('WorkspacesBoardView project lifetime', () => {
   it('keeps old Quick Chat closed while the next project bootstrap is delayed', async () => {
     await render('a');
     await act(() => mocks.context!.openQuickChat('a-1'));
-    mocks.lists.delete('b');
+    deleteList('b');
     await render('b');
     expect(mocks.context!.isLoading).toBe(true);
     expect(mocks.context!.quickChatWorkspaceId).toBeNull();
     expect(mocks.context!.workspaces).toBeUndefined();
     expect(document.body.textContent).not.toContain('a-1');
-    mocks.lists.set('b', list('b'));
+    setList('b', list('b'));
     await render('b');
     expect(mocks.context!.workspaces?.map((workspace) => workspace.id)).toEqual(['b-1', 'b-2']);
     expect(mocks.context!.quickChatWorkspaceId).toBeNull();
@@ -408,10 +408,11 @@ describe('WorkspacesBoardView project lifetime', () => {
       pending.resolve();
       await archive;
     });
-    expect(mocks.refetch).toHaveBeenCalledExactlyOnceWith('a');
+    expect(mocks.listInvalidate).toHaveBeenCalledExactlyOnceWith({ projectId: 'a' });
+    expect(mocks.refetch).not.toHaveBeenCalled();
     expect(mocks.invalidate).toHaveBeenCalledExactlyOnceWith({ id: 'a-1' });
-    expect(mocks.lists.get('a')?.workspaces.map((workspace) => workspace.id)).toEqual(['a-2']);
-    expect(mocks.lists.get('b')).toEqual(list('b'));
+    expect(getList('a')?.workspaces.map((workspace) => workspace.id)).toEqual(['a-2']);
+    expect(getList('b')).toEqual(list('b'));
     expect(mocks.context!.workspaces?.map((workspace) => workspace.id)).toEqual(['b-1', 'b-2']);
   });
 
@@ -437,11 +438,8 @@ describe('WorkspacesBoardView project lifetime', () => {
       await render(destination);
       expect(mocks.context!.archiveGitLockWorkspaceIds).toEqual([]);
       expect(document.body.textContent).not.toContain('Git is locked');
-      expect(mocks.lists.get('a')?.workspaces.map((workspace) => workspace.id)).toEqual([
-        'a-1',
-        'a-2',
-      ]);
-      expect(mocks.lists.get('b')).toEqual(list('b'));
+      expect(getList('a')?.workspaces.map((workspace) => workspace.id)).toEqual(['a-1', 'a-2']);
+      expect(getList('b')).toEqual(list('b'));
       await act(async () => mocks.context!.retryGitLockedArchives(true));
       expect(mocks.archive).toHaveBeenCalledTimes(1);
     }
@@ -468,8 +466,9 @@ describe('WorkspacesBoardView project lifetime', () => {
       await archive;
     });
     expect(mocks.context!.archiveGitLockWorkspaceIds).toEqual([]);
-    expect(mocks.refetch).toHaveBeenCalledWith('a');
-    expect(mocks.lists.get('b')).toEqual(list('b'));
+    expect(mocks.listInvalidate).toHaveBeenCalledWith({ projectId: 'a' });
+    expect(mocks.refetch).not.toHaveBeenCalled();
+    expect(getList('b')).toEqual(list('b'));
 
     mocks.archive.mockRejectedValueOnce(gitLockError);
     await act(async () => mocks.context!.archiveWorkspace('b-1'));
@@ -479,7 +478,7 @@ describe('WorkspacesBoardView project lifetime', () => {
       { id: 'b-1' },
       { id: 'b-1', removeGitIndexLock: true },
     ]);
-    expect(mocks.lists.get('a')?.workspaces.map((workspace) => workspace.id)).toEqual(['a-1']);
-    expect(mocks.lists.get('b')?.workspaces.map((workspace) => workspace.id)).toEqual(['b-2']);
+    expect(getList('a')?.workspaces.map((workspace) => workspace.id)).toEqual(['a-1']);
+    expect(getList('b')?.workspaces.map((workspace) => workspace.id)).toEqual(['b-2']);
   });
 });
