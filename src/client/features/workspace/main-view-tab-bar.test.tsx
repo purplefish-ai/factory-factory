@@ -199,3 +199,29 @@ it('shows a plain new-session button without launch pickers', async () => {
     await act(() => root.unmount());
   }
 });
+
+it('disables the new-session button until sessions load', async () => {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  try {
+    await act(() =>
+      root.render(
+        <TooltipProvider>
+          <WorkspacePanelProvider workspaceId="loading-create">
+            <MainViewTabBar
+              workspaceId="loading-create"
+              sessions={undefined}
+              onCreateSession={vi.fn()}
+            />
+          </WorkspacePanelProvider>
+        </TooltipProvider>
+      )
+    );
+    expect(container.querySelector<HTMLButtonElement>('[aria-label="New session"]')?.disabled).toBe(
+      true
+    );
+  } finally {
+    await act(() => root.unmount());
+  }
+});

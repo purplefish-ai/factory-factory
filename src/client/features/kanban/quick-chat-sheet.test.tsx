@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   close: vi.fn(),
   create: vi.fn(),
   empty: false,
+  loaded: true,
 }));
 vi.mock('./kanban-context', () => ({
   useKanban: () => ({ workspaces: [{ id: 'workspace', name: 'Review workspace' }] }),
@@ -32,12 +33,14 @@ vi.mock('./use-quick-chat', () => ({
     handleNewChat: mocks.create,
     handleQuickAction: vi.fn(),
     isCreatingSession: false,
+    sessionsLoaded: mocks.loaded,
     chatState: {},
   }),
 }));
 
 beforeEach(() => {
   mocks.empty = false;
+  mocks.loaded = true;
   vi.clearAllMocks();
   Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
     configurable: true,
@@ -63,6 +66,10 @@ it.each([false, true])(
         );
         await act(() => secondTab?.click());
         expect(mocks.select).toHaveBeenCalledWith('second');
+        const close = document.body.querySelector<HTMLButtonElement>('[aria-label="Close Chat 1"]');
+        expect(close?.disabled).toBe(false);
+        await act(() => close?.click());
+        expect(mocks.close).toHaveBeenCalledWith('first');
       } else {
         expect(document.body.querySelector('[role="tab"]')).toBeNull();
       }
@@ -81,3 +88,25 @@ it.each([false, true])(
     }
   }
 );
+
+it('blocks new chats and quick actions until sessions load', async () => {
+  mocks.empty = true;
+  mocks.loaded = false;
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  try {
+    await act(() =>
+      root.render(createElement(QuickChatSheet, { workspaceId: 'workspace', onClose: vi.fn() }))
+    );
+    expect(
+      document.body.querySelector<HTMLButtonElement>('[aria-label="New session"]')?.disabled
+    ).toBe(true);
+    expect(
+      document.body.querySelector<HTMLButtonElement>('[aria-label="Quick actions"]')?.disabled
+    ).toBe(true);
+  } finally {
+    await act(() => root.unmount());
+    container.remove();
+  }
+});

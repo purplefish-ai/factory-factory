@@ -125,3 +125,24 @@ it('does not launch chats or quick actions before sessions load', async () => {
   expect(mutateAsync).not.toHaveBeenCalled();
   expect(toast.error).toHaveBeenCalledWith('Sessions are still loading. Try again in a moment.');
 });
+
+it.each([
+  { label: 'no sessions', sessions: [], want: {} },
+  {
+    label: 'a first session without a model',
+    sessions: [{ provider: 'CLAUDE' as const }],
+    want: { provider: 'CLAUDE' },
+  },
+  { label: 'a first session without a provider', sessions: [{ model: 'opus' }], want: {} },
+])('leaves unknown launch fields to the server for $label', ({ sessions, want }) => {
+  renderCommands('workspace', sessions).createChat();
+  const input = mutate.mock.calls[0]?.[0];
+  expect(input).toMatchObject(want);
+  for (const key of ['provider', 'model'] as const) {
+    if (!(key in want)) {
+      expect(input).not.toHaveProperty(key);
+    }
+  }
+  expect(input).not.toHaveProperty('reasoningEffort');
+  expect(input).not.toHaveProperty('planModeEnabled');
+});

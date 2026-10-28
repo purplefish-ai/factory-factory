@@ -111,6 +111,7 @@ export function useQuickChat(workspaceId: string | null) {
 
   return {
     sessions: sessions ?? [],
+    sessionsLoaded: sessions !== undefined,
     selectedSessionId,
     setSelectedSessionId,
     chatState,

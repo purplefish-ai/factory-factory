@@ -294,7 +294,8 @@ export function MainViewTabBar({
 
   // Check if active session limit is reached
   const isAtLimit = isWorkspaceSessionLimitReached(sessions, maxSessions);
-  const isButtonDisabled = disabled || isAtLimit;
+  // New sessions inherit the first session's provider/model, so wait for the list.
+  const isButtonDisabled = disabled || isAtLimit || sessions === undefined;
 
   return (
     <div className={cn('flex items-center bg-muted/50', className)}>

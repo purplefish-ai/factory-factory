@@ -38,6 +38,7 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
     handleCloseSession,
     handleQuickAction,
     isCreatingSession,
+    sessionsLoaded,
   } = useQuickChat(workspaceId);
 
   const sessionTabData: SessionData[] = useMemo(
@@ -53,7 +54,8 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
 
   const runningSessionId = useMemo(() => sessions.find((s) => s.isWorking)?.id ?? null, [sessions]);
 
-  const tabBarDisabled = isCreatingSession || !workspaceId;
+  // There are no tabs until sessions load, and new chats need the list for their defaults.
+  const tabBarDisabled = isCreatingSession || !workspaceId || !sessionsLoaded;
 
   return (
     <Sheet open={!!workspaceId} onOpenChange={(open) => !open && onClose()}>
