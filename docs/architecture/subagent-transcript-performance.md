@@ -1,9 +1,13 @@
 # Subagent transcript projection performance
 
 Subagent transcript pages are translated through `AcpEventTranslator` and the
-chat reducer. Provider message IDs do not merge chunks: projection assigns each
-translated event a monotonically increasing order. Terminal tool updates append
-results; partial updates retain the existing translator behavior.
+chat reducer. Consecutive assistant text chunks with the same provider message
+ID merge into one Markdown message; absent or null IDs form the same sequence.
+An ID change or a tool, reasoning, user, or non-text update ends the sequence.
+Each text sequence is joined once, preserving linear projection work. Projection
+retains monotonically increasing local event orders, using the first chunk's
+order for a merged message. Terminal tool updates append results; partial
+updates retain the existing translator behavior.
 
 Projection collects completed messages in a page-local array. The reducer sees
 only one update at a time, or one contiguous thought sequence, rather than the

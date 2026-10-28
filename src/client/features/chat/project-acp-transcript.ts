@@ -109,6 +109,42 @@ function seedThinkingSequence(
   };
 }
 
+function* coalesceAgentTextChunks(
+  updates: SubagentTranscriptUpdate[]
+): Generator<{ update: SubagentTranscriptUpdate; chunkCount: number }> {
+  for (let index = 0; index < updates.length; index += 1) {
+    const update = updates[index];
+    if (!update) {
+      continue;
+    }
+    if (update.sessionUpdate !== 'agent_message_chunk' || update.content.type !== 'text') {
+      yield { update, chunkCount: 1 };
+      continue;
+    }
+
+    const chunks = [update.content.text];
+    let nextIndex = index + 1;
+    while (nextIndex < updates.length) {
+      const next = updates[nextIndex];
+      if (
+        next?.sessionUpdate !== 'agent_message_chunk' ||
+        next.content.type !== 'text' ||
+        (next.messageId ?? null) !== (update.messageId ?? null)
+      ) {
+        break;
+      }
+      chunks.push(next.content.text);
+      nextIndex += 1;
+    }
+
+    yield {
+      update: { ...update, content: { ...update.content, text: chunks.join('') } },
+      chunkCount: chunks.length,
+    };
+    index = nextIndex - 1;
+  }
+}
+
 export function projectAcpTranscriptUpdates(updates: SubagentTranscriptUpdate[]): ChatMessage[] {
   const translator = new AcpEventTranslator(transcriptLogger);
   const emptyState = createInitialChatState({
@@ -128,7 +164,9 @@ export function projectAcpTranscriptUpdates(updates: SubagentTranscriptUpdate[])
   let order = 0;
   let reasoningSequenceOpen = false;
 
-  for (const update of updates) {
+  // Translate one complete text sequence so streamed tokens share a markdown
+  // message. Join once, keeping projection linear even for long replies.
+  for (const { update, chunkCount } of coalesceAgentTextChunks(updates)) {
     if (update.sessionUpdate !== 'agent_thought_chunk') {
       collectMessages();
       reasoningSequenceOpen = false;
@@ -152,6 +190,7 @@ export function projectAcpTranscriptUpdates(updates: SubagentTranscriptUpdate[])
       state = applySessionDelta(state, delta, order, `subagent-event-${order}`);
       order += 1;
     }
+    order += chunkCount - 1;
     if (update.sessionUpdate !== 'agent_thought_chunk') {
       collectMessages();
     }
