@@ -20,7 +20,10 @@ import type {
 import type { SessionStatus } from '@/shared/core';
 import type { PRTarget } from '@/shared/pr-monitoring';
 import type { Prisma, SessionProvider } from '@prisma-gen/client';
-import { sessionProviderResolverService } from './session-provider-resolver.service';
+import {
+  sessionProviderResolverService,
+  type SessionProviderResolverService,
+} from './session-provider-resolver.service';
 
 function toAgentSessionRecord(session: PersistenceAgentSessionRecord): AgentSessionRecord {
   return {
@@ -54,7 +57,13 @@ function toAgentSessionRecordWithWorkspace(
   };
 }
 
-class SessionDataService {
+export interface SessionDataDependencies {
+  providerResolver: Pick<SessionProviderResolverService, 'resolveSessionDefaults'>;
+}
+
+class SessionDataImplementation {
+  constructor(private readonly dependencies: SessionDataDependencies) {}
+
   // Agent sessions
 
   async findAgentSessionById(id: string): Promise<AgentSessionRecordWithWorkspace | null> {
@@ -86,7 +95,7 @@ class SessionDataService {
     provider?: SessionProvider;
     providerProjectPath?: string | null;
   }): Promise<AgentSessionRecord> {
-    const defaults = await sessionProviderResolverService.resolveSessionDefaults({
+    const defaults = await this.dependencies.providerResolver.resolveSessionDefaults({
       workspaceId: data.workspaceId,
       explicitProvider: data.provider,
       explicitModel: data.model,
@@ -113,7 +122,7 @@ class SessionDataService {
     providerProjectPath?: string | null;
     maxSessions: number;
   }) {
-    const defaults = await sessionProviderResolverService.resolveSessionDefaults({
+    const defaults = await this.dependencies.providerResolver.resolveSessionDefaults({
       workspaceId: data.workspaceId,
       explicitProvider: data.provider,
       explicitModel: data.model,
@@ -139,7 +148,7 @@ class SessionDataService {
     if (!workspace || input.isCurrent?.() === false) {
       return { outcome: 'unavailable' as const };
     }
-    const defaults = await sessionProviderResolverService.resolveSessionDefaults({
+    const defaults = await this.dependencies.providerResolver.resolveSessionDefaults({
       workspace,
       workspaceId: input.workspaceId,
       explicitProvider: input.provider,
@@ -212,4 +221,14 @@ class SessionDataService {
   }
 }
 
-export const sessionDataService = new SessionDataService();
+export type SessionDataService = Pick<SessionDataImplementation, keyof SessionDataImplementation>;
+
+export function createSessionDataService(
+  dependencies: SessionDataDependencies
+): SessionDataService {
+  return new SessionDataImplementation(dependencies);
+}
+
+export const sessionDataService = createSessionDataService({
+  providerResolver: sessionProviderResolverService,
+});

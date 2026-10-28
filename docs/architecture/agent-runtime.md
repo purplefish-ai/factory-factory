@@ -39,12 +39,15 @@ bundled Codex runtime, without starting an inference turn. Claude model
 discovery uses an ephemeral ACP session with tools disabled. Both catalog
 services coalesce requests and cache successful results for 30 seconds.
 
-ACP startup checks that its working directory exists and is a directory before
-spawning. A deleted worktree is reported with its actual path; Node's raw
-`spawn <node> ENOENT` can otherwise misleadingly suggest a missing executable.
-Restore the worktree before retrying. Failed exact-conversation resumes retain
-the provider's diagnostic details and original error so missing Codex rollout
-history is actionable instead of appearing only as `Internal error`.
+Session startup validates that the workspace working directory exists and is a
+directory before spawning an adapter. Missing worktrees report the affected path
+and require restoring the worktree before retrying. Node otherwise reports a
+misleading `spawn <node> ENOENT` when the working directory is missing, even if
+the Node executable exists.
+
+Failed exact-conversation resumes retain the provider's diagnostic details and
+original error so missing Codex rollout history is actionable instead of
+appearing only as `Internal error`.
 
 Provider-native configuration controls own access permissions. Codex `mode`
 selects access and `collaboration_mode` selects planning independently. Claude
@@ -59,6 +62,17 @@ supported. Boolean options remain in backend snapshots while current chat
 controls render select options.
 
 ### Provider and model selection
+
+Each default application graph constructs its own session creation resolver and
+data facade. Their forwarding callbacks use the graph's current workspace,
+resolver, and `userSettingsQueryService` capabilities for persisted provider and
+model defaults. The separate `userSettingsService` alias still serves PR/bridge
+policy; substituting settings for both policies requires binding both aliases.
+The session capsule also exports factories for explicit construction and retains
+process-default singleton exports for legacy callers. Persistence accessors,
+acquisition queues, and other runtime settings reads retain their existing
+scope; this creation boundary does not isolate an entire application runtime or
+make separate settings reads atomic.
 
 Model selection uses the explicit launch choice, then the user's saved default
 for that provider. Existing conversations retain their stored model. New and

@@ -1,5 +1,5 @@
 import type { ChildProcess } from 'node:child_process';
-import { statSync, type Stats } from 'node:fs';
+import { statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { createLogger } from '@/backend/services/logger.service';
@@ -14,23 +14,20 @@ export type SpawnCommand = {
   commandLabel: string;
 };
 
-export function assertAcpWorkingDirectory(workingDir: string | null | undefined): void {
+export function validateAcpWorkingDir(workingDir: string | null | undefined): void {
   if (typeof workingDir !== 'string' || workingDir.trim().length === 0) {
     throw new Error('ACP working directory is required before spawning adapter process');
   }
-  // Node reports a missing cwd as "spawn <node executable> ENOENT", hiding
-  // the deleted worktree behind an apparently missing runtime.
-  let directory: Stats;
-  try {
-    directory = statSync(workingDir);
-  } catch (error) {
+
+  // A missing cwd makes spawn report ENOENT against the executable, even when Node exists.
+  const stats = statSync(workingDir, { throwIfNoEntry: false });
+  if (!stats) {
     throw new Error(
-      `ACP working directory is unavailable: "${workingDir}". Restore the workspace worktree before starting the agent.`,
-      { cause: error }
+      `ACP working directory does not exist: "${workingDir}". Restore the workspace worktree before starting the session.`
     );
   }
-  if (!directory.isDirectory()) {
-    throw new Error(`ACP working directory is not a directory: "${workingDir}".`);
+  if (!stats.isDirectory()) {
+    throw new Error(`ACP working directory is not a directory: "${workingDir}"`);
   }
 }
 

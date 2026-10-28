@@ -26,10 +26,10 @@ import type {
 } from './acp-runtime-events';
 import { raceWithSoftTimeout } from './acp-runtime-quiescence';
 import {
-  assertAcpWorkingDirectory,
   createAcpSpawnError,
   resolveProviderAcpSpawnCommand,
   type SpawnCommand,
+  validateAcpWorkingDir,
   withTimeout,
 } from './acp-runtime-spawn';
 import { requireSessionConfigOptions } from './acp-session-config-options';
@@ -85,7 +85,7 @@ export class AcpClientFactory {
   async createClient(params: CreateAcpClientParams): Promise<AcpProcessHandle> {
     const { sessionId, options, handlers, metadata, shutdownSignal, stopSignal } = params;
     const startupTimeoutMs = this.acpStartupTimeoutMs;
-    assertAcpWorkingDirectory(options.workingDir);
+    validateAcpWorkingDir(options.workingDir);
 
     const spawnCommand = resolveSpawnCommand(options);
     const isCodex = options.provider === 'CODEX';
