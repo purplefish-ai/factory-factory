@@ -89,7 +89,8 @@ thinking menu and Plan icon toggle. Thinking levels and planning availability
 come from a disposable ACP session configured with the selected provider/model;
 the provider-wide model catalog is not used as a thinking capability list.
 Discovery submits no prompt, rejects permission/tool callbacks, and closes its
-processes. Successful native results are cached for 30 seconds per
+processes. Its endpoint requires the trusted-local boundary used for local
+execution. Successful native results are cached for 30 seconds per
 provider/model, with bounded cache and concurrent discovery counts. Failed
 discovery offers Retry; creation waits for confirmed options while model
 selection remains editable.

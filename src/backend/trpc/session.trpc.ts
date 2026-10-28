@@ -122,7 +122,7 @@ async function rollbackCreatedSession(
 }
 
 export const sessionRouter = router({
-  getLaunchOptions: publicProcedure
+  getLaunchOptions: trustedLocalProcedure
     .input(
       z.object({
         provider: z.nativeEnum(SessionProvider),

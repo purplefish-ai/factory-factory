@@ -1,6 +1,7 @@
 import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { createLogger } from '@/backend/services/logger.service';
 import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/session/service/acp';
+import { isReasoningConfigOption } from '@/backend/services/session/service/acp/acp-config-option-identification';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type { SessionDeltaEvent } from '@/shared/acp-protocol';
 import {
@@ -89,13 +90,7 @@ export async function applyReasoningEffortTarget(
 function supportedReasoningOption(
   params: ReasoningEffortTargetParams
 ): SessionConfigOption | undefined {
-  const reasoningOption = params.handle.configOptions.find(
-    (option) =>
-      option.id === 'reasoning_effort' ||
-      option.id === 'thought_level' ||
-      option.category === 'thought_level' ||
-      option.category === 'reasoning'
-  );
+  const reasoningOption = params.handle.configOptions.find(isReasoningConfigOption);
   if (!reasoningOption) {
     if (params.strict && !params.normalizeUnsupported) {
       throw new Error('Unsupported reasoning effort: selected model has no thinking control');

@@ -1,6 +1,7 @@
 import { createLogger } from '@/backend/services/logger.service';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { AcpProcessHandle } from '@/backend/services/session/service/acp';
+import { isReasoningConfigOption } from '@/backend/services/session/service/acp/acp-config-option-identification';
 import { userSettingsService } from '@/backend/services/settings';
 import { parseAcpConfigSnapshot } from './acp-config-snapshot';
 import type { SessionProvider } from './session-config-option-helpers';
@@ -70,9 +71,7 @@ function savedReasoningTarget(
   ) {
     throw new Error('Saved reasoning configuration belongs to another conversation');
   }
-  const saved = snapshot.configOptions.find(
-    (option) => option.category === 'thought_level' || option.category === 'reasoning'
-  );
+  const saved = snapshot.configOptions.find(isReasoningConfigOption);
   return {
     value: saved?.type === 'select' ? saved.currentValue : null,
     strict: true,

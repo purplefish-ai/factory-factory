@@ -75,6 +75,28 @@ describe('native launch capability discovery', () => {
     mocks.set.mockResolvedValue({ configOptions: config('opus') });
     mocks.ext.mockResolvedValue({});
   });
+  it.each([
+    { provider: 'CLAUDE' as const, effortId: 'thought_level', modeId: 'mode' },
+    { provider: 'CODEX' as const, effortId: 'reasoning_effort', modeId: 'collaboration_mode' },
+  ])('discovers ID-only $provider thinking and Plan controls', ({ provider, effortId, modeId }) => {
+    const native = config().map((option) => {
+      if (option.category === 'thought_level') {
+        return { ...option, id: effortId, category: undefined };
+      }
+      if (option.category === 'mode' && option.type === 'select') {
+        return { ...option, id: modeId, category: undefined, currentValue: 'plan' };
+      }
+      return option;
+    });
+    expect(launchOptionsFromConfig(provider, native)).toMatchObject({
+      reasoning: {
+        options: expect.arrayContaining([{ value: 'max', label: 'max' }]),
+        selected: 'default',
+        defaultValue: 'default',
+      },
+      planMode: { supported: true, selected: true },
+    });
+  });
   it('selects the requested Claude model and exposes native extended effort levels without a prompt', async () => {
     const child = createMockChildProcess();
     exitChildAfterSigterm(child);

@@ -8,6 +8,10 @@ import {
   type SessionConfigSelectOption,
 } from '@agentclientprotocol/sdk/unstable';
 import { createLogger, getCurrentProcessEnv } from '@/backend/services/logger.service';
+import {
+  isNativeModeConfigOption,
+  isReasoningConfigOption,
+} from './acp-config-option-identification';
 import { createAcpConnection } from './acp-connection';
 import { applyAcpStartupModel } from './acp-model-selection';
 import {
@@ -44,9 +48,7 @@ export function launchOptionsFromConfig(
   if (typeof model?.currentValue !== 'string' || !model.currentValue) {
     throw new Error('Native provider did not confirm a model');
   }
-  const effort = config.find(
-    (option) => option.category === 'thought_level' || option.category === 'reasoning'
-  );
+  const effort = config.find(isReasoningConfigOption);
   const effortOptions = choices(effort);
   const selected =
     typeof effort?.currentValue === 'string' &&
@@ -54,7 +56,7 @@ export function launchOptionsFromConfig(
       ? effort.currentValue
       : undefined;
   const plan = config.find((option) =>
-    provider === 'CLAUDE' ? option.category === 'mode' : option.category === 'collaboration_mode'
+    isNativeModeConfigOption(option, provider === 'CLAUDE' ? 'mode' : 'collaboration_mode')
   );
   return {
     provider,

@@ -1,6 +1,7 @@
 import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/session/service/acp';
+import { isNativeModeConfigOption } from '@/backend/services/session/service/acp/acp-config-option-identification';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import type { SessionPermissionPreset } from '@prisma-gen/client';
 import { getConfigOptionValues } from './session-config-option-helpers';
@@ -23,9 +24,7 @@ export async function applyStartupLaunchPlan(
     throw new Error('Adversarial review permissions must remain read-only');
   }
   const option = handle.configOptions.find((entry) =>
-    handle.provider === 'CLAUDE'
-      ? entry.category === 'mode'
-      : entry.category === 'collaboration_mode'
+    isNativeModeConfigOption(entry, handle.provider === 'CLAUDE' ? 'mode' : 'collaboration_mode')
   );
   if (option?.type !== 'select') {
     if (enabled) {

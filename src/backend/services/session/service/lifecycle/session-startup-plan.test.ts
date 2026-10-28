@@ -47,6 +47,20 @@ describe('startup native planning', () => {
       expect(f.handle.configOptions[0]?.currentValue).toBe('plan');
     }
   );
+  it.each([
+    { provider: 'CLAUDE' as const, enabled: true },
+    { provider: 'CLAUDE' as const, enabled: false },
+    { provider: 'CODEX' as const, enabled: true },
+    { provider: 'CODEX' as const, enabled: false },
+  ])('applies ID-only $provider Plan $enabled before readiness', async ({ provider, enabled }) => {
+    const f = fixture(provider, enabled);
+    f.handle.configOptions = f.handle.configOptions.map((option) => ({
+      ...option,
+      category: undefined,
+    }));
+    await applyStartupLaunchPlan('session', f.session, f.handle, 'STRICT', f.runtime);
+    expect(f.handle.configOptions[0]?.currentValue).toBe(enabled ? 'plan' : 'default');
+  });
   it('turns Claude Plan off into configured STRICT access rather than legacy bypass', async () => {
     const f = fixture('CLAUDE', false);
     await applyStartupLaunchPlan('session', f.session, f.handle, 'STRICT', f.runtime);

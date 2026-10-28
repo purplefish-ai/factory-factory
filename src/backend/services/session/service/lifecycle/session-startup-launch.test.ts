@@ -105,6 +105,36 @@ describe('startup thinking intent precedence', () => {
     });
     expect(f.handle.configOptions[0]?.currentValue).toBe('medium');
   });
+  it.each(['reasoning_effort', 'thought_level'])(
+    'restores saved ID-only %s effort before startup readiness',
+    async (id) => {
+      const savedOptions = saved('medium').map((option) => ({
+        ...option,
+        id,
+        category: undefined,
+      }));
+      const f = fixture({
+        launchSettings: { reasoningEffort: 'high', applied: true },
+        acpConfigSnapshot: {
+          provider: 'CODEX',
+          providerSessionId: 'thread',
+          configOptions: savedOptions,
+        },
+      });
+      f.handle.configOptions = saved('low').map((option) => ({
+        ...option,
+        id,
+        category: undefined,
+      }));
+      await f.service.applyConfiguredReasoningEffort('session', f.handle, {
+        session: f.session,
+        persistSnapshot: false,
+        emitUpdates: false,
+      });
+      expect(f.handle.configOptions[0]?.currentValue).toBe('medium');
+      expect(f.runtime.setConfigOption).toHaveBeenCalledWith('session', id, 'medium');
+    }
+  );
   it('does not let an intermediate snapshot consume unapplied launch intent', async () => {
     const f = fixture({
       launchSettings: { reasoningEffort: 'medium', applied: false },

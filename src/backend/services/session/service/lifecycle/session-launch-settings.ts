@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import {
+  isNativeModeConfigOption,
+  isReasoningConfigOption,
+} from '@/backend/services/session/service/acp/acp-config-option-identification';
 import { sessionLaunchSettingsSchema, type SessionLaunchSettings } from '@/shared/session-launch';
 const metadataSchema = z.record(z.string(), z.unknown());
 const storedLaunchSchema = sessionLaunchSettingsSchema.extend({
@@ -54,12 +58,11 @@ export function pendingSessionLaunchSettingsPatch(
   if (!launch || launch.applied || !option) {
     return undefined;
   }
-  const reasoning =
-    option.category === 'thought_level' ||
-    option.category === 'reasoning' ||
-    ['reasoning_effort', 'thought_level'].includes(option.id);
-  const planCategory = provider === 'CLAUDE' ? 'mode' : 'collaboration_mode';
-  const planning = option.category === planCategory || option.id === planCategory;
+  const reasoning = isReasoningConfigOption(option);
+  const planning = isNativeModeConfigOption(
+    option,
+    provider === 'CLAUDE' ? 'mode' : 'collaboration_mode'
+  );
   const edited = reasoning
     ? { reasoningEffort: value }
     : planning
