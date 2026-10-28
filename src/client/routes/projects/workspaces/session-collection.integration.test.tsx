@@ -30,6 +30,7 @@ interface Commands {
   pending: boolean;
   creationProvider: SessionProviderValue | null;
   creationModel?: string;
+  creationReady: boolean;
   selectCreationProvider: (provider: SessionProviderValue) => void;
   selectCreationModel: (model: string) => void;
 }
@@ -109,6 +110,7 @@ function Full({ workspaceId, provider, onResult, suspended }: SurfaceProps) {
       pending: management.createSession.isPending,
       creationProvider: launchSelection.provider,
       creationModel: launchSelection.model,
+      creationReady: launchSelection.ready,
       selectCreationProvider: (provider) =>
         launchSelection.pickerProps.onProviderChange?.(provider),
       selectCreationModel: (model) => launchSelection.pickerProps.onModelChange?.(model),
@@ -133,12 +135,25 @@ function Quick({ workspaceId, onResult, suspended }: SurfaceProps) {
       pending: chat.isCreatingSession,
       creationProvider: chat.launchSelection.provider,
       creationModel: chat.launchSelection.model,
+      creationReady: chat.launchSelection.ready,
       selectCreationProvider: (provider) =>
         chat.launchSelection.pickerProps.onProviderChange?.(provider),
       selectCreationModel: (model) => chat.launchSelection.pickerProps.onModelChange?.(model),
     });
   });
   return <SuspendWorkspace workspaceId={workspaceId} suspended={suspended} />;
+}
+
+function launchProbeResponse(input: unknown) {
+  const record = typeof input === 'object' && input !== null ? input : {};
+  const provider = 'provider' in record && record.provider === 'CODEX' ? 'CODEX' : 'CLAUDE';
+  const model = 'model' in record && typeof record.model === 'string' ? record.model : 'native';
+  return {
+    provider,
+    model,
+    reasoning: { options: [] },
+    planMode: { supported: false, selected: false },
+  };
 }
 
 function queryResponse(
@@ -154,6 +169,8 @@ function queryResponse(
         defaultClaudeModel: 'saved-sonnet',
         defaultCodexModel: 'saved-sol',
       };
+    case 'session.getLaunchOptions':
+      return launchProbeResponse(input);
     case 'userSettings.getProviderOptions':
       return { CLAUDE: { models: [] }, CODEX: { models: [] } };
     case 'workspace.get':
@@ -335,6 +352,8 @@ describe.each<Surface>(['full', 'quick'])('%s chat session collection', (surface
             workspaceId: 'a',
             workflow: 'followup',
             initialPrompt: '',
+            reasoningEffort: null,
+            planModeEnabled: false,
             provider: 'CLAUDE',
             model: 'saved-sonnet',
             ...(kind === 'chat'
@@ -373,12 +392,14 @@ describe.each<Surface>(['full', 'quick'])('%s chat session collection', (surface
     );
     expect(view.get().creationProvider).toBe('CODEX');
     expect(view.get().creationModel).toBe('chosen-luna');
+    await vi.waitFor(() => expect(view.get().creationReady).toBe(true));
     view.get().newChat();
     await vi.waitFor(() => expect(view.pending).toHaveLength(1));
     view.pending[0]?.reject(new Error('Try again'));
     await vi.waitFor(() => expect(view.get().pending).toBe(false));
     expect(view.get().creationProvider).toBe('CODEX');
     expect(view.get().creationModel).toBe('chosen-luna');
+    await vi.waitFor(() => expect(view.get().creationReady).toBe(true));
     view.get().newChat();
     await vi.waitFor(() => expect(view.pending).toHaveLength(2));
     const inputs = view.requests
@@ -548,6 +569,8 @@ it('uses Codex model defaults for both full-chat commands', async () => {
         provider: 'CODEX',
         model: 'saved-sol',
         initialPrompt: '',
+        reasoningEffort: null,
+        planModeEnabled: false,
       },
     },
     {
@@ -559,6 +582,8 @@ it('uses Codex model defaults for both full-chat commands', async () => {
         provider: 'CODEX',
         model: 'saved-sol',
         initialPrompt: '',
+        reasoningEffort: null,
+        planModeEnabled: false,
         initialMessage: 'Review prompt',
       },
     },

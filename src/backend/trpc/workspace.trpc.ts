@@ -14,6 +14,7 @@ import {
 import { KanbanColumn } from '@/shared/core';
 import { prDeliveryModeSchema } from '@/shared/pr-monitoring';
 import { autoIterationConfigSchema } from '@/shared/schemas/auto-iteration.schema';
+import { sessionLaunchSettingsSchema } from '@/shared/session-launch';
 import { AttachmentSchema } from '@/shared/websocket';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import { SessionProvider, WorkspaceProviderSelection } from '@prisma-gen/client';
@@ -62,6 +63,7 @@ const workspaceCreationSourceSchema = z.discriminatedUnion('type', [
       startupModePreset: z.enum(['non_interactive', 'plan']).optional(),
       provider: z.nativeEnum(SessionProvider).optional(),
       model: z.string().trim().min(1).optional(),
+      ...sessionLaunchSettingsSchema.shape,
       mode: z.enum(['STANDARD', 'AUTO_ITERATION']).optional(),
       autoIterationConfig: autoIterationConfigSchema.optional(),
     })

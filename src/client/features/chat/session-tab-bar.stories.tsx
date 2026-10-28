@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { fn } from 'storybook/test';
-import { ProviderModelPicker } from '@/client/features/session-selection';
+import { SessionLaunchControls } from '@/client/features/session-selection';
 import type { SessionData } from './session-tab-bar';
 import { SessionTabBar } from './session-tab-bar';
 
@@ -237,19 +237,28 @@ export const WithCreationSelection: Story = {
     creationControl: (
       <div className="flex min-w-0 items-center">
         <span className="px-1 text-xs text-muted-foreground">New</span>
-        <ProviderModelPicker
+        <SessionLaunchControls
           provider="CODEX"
           model="six-sol"
           models={[{ value: 'six-sol', label: '6 Sol' }]}
           onModelChange={fn()}
           onProviderChange={fn()}
+          reasoning={{
+            value: 'high',
+            options: [{ value: 'high', label: 'Extra high thinking' }],
+            loading: false,
+            invalid: false,
+            onChange: fn(),
+            onRetry: fn(),
+          }}
+          planMode={{ enabled: false, supported: true, loading: false, onChange: fn() }}
         />
       </div>
     ),
   },
   decorators: [
     (Story) => (
-      <div className="w-80">
+      <div className="w-[min(20rem,calc(100vw-2rem))]">
         <Story />
       </div>
     ),
@@ -261,8 +270,9 @@ export const CreationDefaultsUnavailable: Story = {
   args: {
     ...WithCreationSelection.args,
     createDisabled: true,
+    createDisabledReason: 'Could not load chat defaults',
     creationControl: (
-      <ProviderModelPicker
+      <SessionLaunchControls
         provider={null}
         models={[]}
         error="Could not load chat defaults"

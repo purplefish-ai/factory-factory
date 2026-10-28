@@ -191,6 +191,7 @@ export function WorkspaceDetailContainer() {
     setSelectedDbSessionId,
     creationDefaults: launchSelection.creationDefaults,
     canCreate: launchSelection.ready,
+    creationUnavailableReason: launchSelection.unavailableReason,
     onCreated: launchSelection.reset,
     selectedProvider,
     onArchiveGitIndexLocked: () => setArchiveGitLockDialogOpen(true),
@@ -384,7 +385,7 @@ export function WorkspaceDetailContainer() {
           hasWorktreePath: !!workspace?.worktreePath,
           selectedProvider,
           setSelectedProvider,
-          creationSelection: launchSelection.pickerProps,
+          creationSelection: launchSelection.controlsProps,
         }}
         chat={chatViewModel}
         rightPanelVisible={rightPanelVisible}

@@ -97,6 +97,7 @@ export function useQuickChat(workspaceId: string | null) {
     sessions,
     creationDefaults: launchSelection.creationDefaults,
     canCreate: launchSelection.ready,
+    unavailableReason: launchSelection.unavailableReason,
     onCreated: (session, originatingWorkspaceId) => {
       if (activeWorkspaceRef.current !== originatingWorkspaceId) {
         return;

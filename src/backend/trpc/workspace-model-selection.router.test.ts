@@ -31,6 +31,20 @@ describe('manual workspace model selection', () => {
     expect(f.launch).toHaveBeenCalledExactlyOnceWith({ ...source, model: 'gpt-6-luna' });
   });
 
+  it('preserves explicit native thinking and Plan off at the workspace boundary', async () => {
+    const f = fixture();
+    const source = {
+      type: 'MANUAL' as const,
+      projectId: 'project',
+      name: 'Workspace',
+      provider: 'CLAUDE' as const,
+      reasoningEffort: null,
+      planModeEnabled: false,
+    };
+    await f.caller.create(source);
+    expect(f.launch).toHaveBeenCalledExactlyOnceWith(source);
+  });
+
   it('rejects an empty explicit model before launching', async () => {
     const f = fixture();
     await expect(

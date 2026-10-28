@@ -82,6 +82,50 @@ model's confirmed default. Each session load has a 10-second UI loading safety
 timer, including creation from an empty Quick Chat. This UI timer does not
 release backend configuration readiness.
 
+### Launch thinking and Plan
+
+Manual workspace creation, new conversations, and Quick Chat share a compact
+thinking menu and Plan icon toggle. Thinking levels and planning availability
+come from a disposable ACP session configured with the selected provider/model;
+the provider-wide model catalog is not used as a thinking capability list.
+Discovery submits no prompt, rejects permission/tool callbacks, and closes its
+processes. Its endpoint requires the trusted-local boundary used for local
+execution. Successful native results are cached for 30 seconds per
+provider/model, with bounded cache and concurrent discovery counts. Failed
+discovery offers Retry; creation waits for confirmed options while model
+selection remains editable.
+
+Each launch draft snapshots its saved provider defaults and retains explicit
+thinking/Plan choices across provider switches and settings refreshes. A model
+change that makes an explicit level unavailable keeps that choice visible and
+blocks creation until a supported level or Default is selected. Unsupported
+inherited preferences use the native default instead. Existing chat navigation
+and periodic-task creation do not depend on launch-option readiness.
+
+Launch requests distinguish an omitted `reasoningEffort` (saved provider
+default), explicit null (native default), and a supported value (that exact
+level). The UI submits its displayed resolved choice. Validated
+`providerMetadata.launchSettings` stores initial intent with `applied: false`;
+only the startup owner's final confirmed snapshot marks it applied. Intermediate
+configuration snapshots cannot consume it. Identity-matched confirmed snapshots
+own later resumes, including edits made after launch and changes to global
+defaults. A saved level no longer supported after a model change uses the new
+model's native default; unsupported explicit launch levels fail before prompts.
+Stopped-session edits require a durable snapshot write and report persistence
+errors. Applied launch intent with a missing or invalid snapshot stops resume
+instead of replacing confirmed choices with global defaults.
+
+Plan-on selects Claude's native plan access mode or Codex's plan collaboration
+mode. Plan-off retains the configured permission preset rather than applying a
+legacy permissive execution preset. Explicit native failures or unconfirmed
+settings stop startup before readiness and first dispatch. Existing reviewer
+restrictions and browse-only restoration remain authoritative.
+
+Queued message settings have a separate null meaning: no effort override. This
+preserves confirmed startup thinking through the first automatic workspace
+prompt and messages composed before capabilities load. Explicit queued thinking
+values still apply before their prompt.
+
 ### Permission and configuration readiness
 
 Permission defaults initialize new sessions. Existing sessions restore their

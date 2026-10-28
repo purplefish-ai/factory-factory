@@ -113,9 +113,23 @@ export const ScreenshotTab: Story = {
   ),
 };
 
-function NewConversationTabBar() {
+// Representative native capabilities from the local Claude/Codex probes; no provider is launched.
+const thinkingOptions = [
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+  { value: 'xhigh', label: 'Extra high' },
+  { value: 'max', label: 'Maximum' },
+];
+function NewConversationTabBar({ unavailable = false }: { unavailable?: boolean }) {
   const [provider, setProvider] = useState<'CLAUDE' | 'CODEX'>('CLAUDE');
-  const [model, setModel] = useState('sonnet');
+  const [drafts, setDrafts] = useState({
+    CLAUDE: { model: 'sonnet', effort: 'high' as string | null, plan: false },
+    CODEX: { model: 'six-sol', effort: 'high' as string | null, plan: false },
+  });
+  const draft = drafts[provider];
+  const updateDraft = (patch: Partial<typeof draft>) =>
+    setDrafts((current) => ({ ...current, [provider]: { ...current[provider], ...patch } }));
   const options =
     provider === 'CLAUDE'
       ? [
@@ -126,6 +140,17 @@ function NewConversationTabBar() {
           { value: 'six-sol', label: '6 Sol' },
           { value: 'six-luna', label: '6 Luna' },
         ];
+  const reasoningOptions =
+    provider === 'CODEX' && draft.model === 'six-sol'
+      ? [...thinkingOptions, { value: 'ultra', label: 'Ultra' }]
+      : thinkingOptions;
+  const invalid =
+    draft.effort !== null && !reasoningOptions.some((option) => option.value === draft.effort);
+  const unavailableReason = unavailable
+    ? 'Could not load thinking options'
+    : invalid
+      ? 'Choose a supported thinking level or Default'
+      : undefined;
   return (
     <WorkspacePanelProvider workspaceId="selection-story">
       <MainViewTabBar
@@ -139,13 +164,28 @@ function NewConversationTabBar() {
         onCreateSession={fn()}
         creationSelection={{
           provider,
-          model,
+          model: draft.model,
           models: options,
-          onModelChange: setModel,
-          onProviderChange: (next) => {
-            setProvider(next);
-            setModel(next === 'CLAUDE' ? 'sonnet' : 'six-sol');
+          onModelChange: (model) => updateDraft({ model }),
+          ready: !unavailableReason,
+          unavailableReason,
+          reasoning: {
+            value: draft.effort,
+            options: reasoningOptions,
+            defaultValue: provider === 'CLAUDE' ? 'default' : 'low',
+            loading: false,
+            invalid,
+            error: unavailable ? unavailableReason : undefined,
+            onChange: (effort) => updateDraft({ effort }),
+            onRetry: fn(),
           },
+          planMode: {
+            enabled: draft.plan,
+            supported: true,
+            loading: false,
+            onChange: (plan) => updateDraft({ plan }),
+          },
+          onProviderChange: setProvider,
         }}
       />
     </WorkspacePanelProvider>
@@ -165,4 +205,8 @@ export const NewConversationSelectionNarrow: Story = {
       </div>
     ),
   ],
+};
+
+export const CreationOptionsUnavailable: Story = {
+  render: () => <NewConversationTabBar unavailable />,
 };

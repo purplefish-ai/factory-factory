@@ -11,6 +11,7 @@ import type {
   sessionProviderResolverService,
 } from '@/backend/services/session';
 import type { WorkspaceCreationService } from '@/backend/services/workspace';
+import type { SessionLaunchSettings } from '@/shared/session-launch';
 
 type WorkspaceCreation = WorkspaceCreationService['create'];
 
@@ -112,8 +113,17 @@ async function launchPeriodicTask(
   return { workspace, defaultSessionId: session.id };
 }
 
-function explicitSessionModel(source: InteractiveLaunchSource): { model?: string } {
-  return source.type === 'MANUAL' && source.model !== undefined ? { model: source.model } : {};
+function explicitSessionModel(
+  source: InteractiveLaunchSource
+): SessionLaunchSettings & { model?: string } {
+  if (source.type !== 'MANUAL') {
+    return {};
+  }
+  return {
+    ...(source.model !== undefined ? { model: source.model } : {}),
+    ...(source.reasoningEffort !== undefined ? { reasoningEffort: source.reasoningEffort } : {}),
+    ...(source.planModeEnabled !== undefined ? { planModeEnabled: source.planModeEnabled } : {}),
+  };
 }
 
 async function preflightInteractiveLaunch(

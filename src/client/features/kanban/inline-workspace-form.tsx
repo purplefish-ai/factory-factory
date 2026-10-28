@@ -17,7 +17,7 @@ import {
   useSlashCommands,
 } from '@/client/features/composer';
 import {
-  ProviderModelPicker,
+  SessionLaunchControls,
   useSessionLaunchSelection,
 } from '@/client/features/session-selection';
 import { RatchetToggleButton } from '@/client/features/workspace';
@@ -83,6 +83,10 @@ function handleFormKeyDown(
       opts.onLaunch();
     }
   }
+}
+
+function reportUnavailableLaunch(reason?: string) {
+  toast.error(reason ?? 'Workspace creation is not ready');
 }
 
 interface InlineWorkspaceFormProps {
@@ -354,9 +358,6 @@ export function InlineWorkspaceForm({
   const [attachments, setAttachments] = useState<MessageAttachment[]>([]);
   const [ratchetEnabled, setRatchetEnabled] = useState(false);
   const launchSelection = useSessionLaunchSelection(projectId);
-  const [startupModePreset, setStartupModePreset] = useState<'non_interactive' | 'plan'>(
-    'non_interactive'
-  );
   const [mode, setMode] = useState<'STANDARD' | 'AUTO_ITERATION' | 'PERIODIC_TASK'>('STANDARD');
   const [cadence, setCadence] = useState<
     'EVERY_MINUTE' | 'EVERY_FIVE_MINUTES' | 'DAILY' | 'WEEKLY' | 'MONTHLY'
@@ -484,8 +485,11 @@ export function InlineWorkspaceForm({
 
   const isCreating = createWorkspaceMutation.isPending || createPeriodicTaskMutation.isPending;
   const supportsWorkspaceOptions = mode !== 'PERIODIC_TASK';
-  const isLaunchDisabled =
-    isCreating || (supportsWorkspaceOptions && (isLoadingSettings || !launchSelection.ready));
+  const isLaunchDisabled = isCreating || (supportsWorkspaceOptions && !launchSelection.ready);
+
+  const launchDisabledReason = supportsWorkspaceOptions
+    ? launchSelection.unavailableReason
+    : undefined;
 
   const pasteDropHandler = usePasteDropHandler({
     setAttachments,
@@ -545,7 +549,6 @@ export function InlineWorkspaceForm({
       name,
       initialPrompt: trimmedPrompt || undefined,
       initialAttachments: attachments.length > 0 ? attachments : undefined,
-      startupModePreset: startupModePreset === 'plan' ? 'plan' : undefined,
       ratchetEnabled,
       ...launchSelection.creationDefaults,
       mode: launchMode,
@@ -556,6 +559,7 @@ export function InlineWorkspaceForm({
 
   const handleLaunch = (launchMode: 'STANDARD' | 'AUTO_ITERATION' | 'PERIODIC_TASK' = mode) => {
     if (isLaunchDisabled) {
+      reportUnavailableLaunch(launchDisabledReason);
       return;
     }
     if (launchMode === 'AUTO_ITERATION' && !(testCommand.trim() && targetDescription.trim())) {
@@ -669,24 +673,11 @@ export function InlineWorkspaceForm({
                     disabled={isLoadingSettings || isCreating}
                   />
                 </div>
-                <ProviderModelPicker
-                  {...launchSelection.pickerProps}
+                <SessionLaunchControls
+                  {...launchSelection.controlsProps}
                   disabled={isCreating}
                   disabledReason={isCreating ? 'Creating workspace' : undefined}
                 />
-                <Select
-                  value={startupModePreset}
-                  onValueChange={(v) => setStartupModePreset(v as 'non_interactive' | 'plan')}
-                  disabled={isCreating}
-                >
-                  <SelectTrigger className="h-7 w-24 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="non_interactive">Default</SelectItem>
-                    <SelectItem value="plan">Plan</SelectItem>
-                  </SelectContent>
-                </Select>
                 <Button
                   type="button"
                   variant="ghost"
@@ -731,6 +722,8 @@ export function InlineWorkspaceForm({
                 )}
                 onClick={() => handleLaunch(mode)}
                 disabled={isLaunchDisabled}
+                title={launchDisabledReason}
+                aria-description={launchDisabledReason}
               >
                 {isCreating ? <SpinnerGapIcon className="h-3 w-3 animate-spin mr-1" /> : null}
                 {launchButtonLabels[mode]}

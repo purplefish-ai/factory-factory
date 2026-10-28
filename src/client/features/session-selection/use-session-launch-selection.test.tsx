@@ -3,6 +3,7 @@ import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { SessionLaunchOptions } from '@/shared/session-launch';
 import {
   useSessionLaunchSelection,
   useSessionLaunchSelectionState,
@@ -11,6 +12,9 @@ import {
 
 const mocks = vi.hoisted(() => ({
   settings: undefined as SessionLaunchDefaults | undefined,
+  launches: new Map<string, SessionLaunchOptions | undefined>(),
+  launchErrors: new Map<string, Error>(),
+  refetchLaunch: vi.fn().mockResolvedValue({}),
   settingsError: null as Error | null,
   refetchSettings: vi.fn().mockResolvedValue({}),
   catalog: undefined as
@@ -22,6 +26,25 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
+    session: {
+      getLaunchOptions: {
+        useQuery: (input: { provider: 'CLAUDE' | 'CODEX'; model?: string }) => {
+          const key = `${input.provider}:${input.model}`;
+          return {
+            data: mocks.launches.has(key)
+              ? mocks.launches.get(key)
+              : {
+                  provider: input.provider,
+                  model: input.model ?? 'native',
+                  reasoning: { options: [] },
+                  planMode: { supported: false, selected: false },
+                },
+            error: mocks.launchErrors.get(key),
+            refetch: mocks.refetchLaunch,
+          };
+        },
+      },
+    },
     userSettings: {
       get: {
         useQuery: () => ({
@@ -37,6 +60,8 @@ vi.mock('@/client/lib/trpc', () => ({
 const roots: Root[] = [];
 afterEach(() => {
   roots.splice(0).forEach((root) => flushSync(() => root.unmount()));
+  mocks.launches.clear();
+  mocks.launchErrors.clear();
 });
 const defaults: SessionLaunchDefaults = {
   defaultSessionProvider: 'CODEX',
@@ -170,7 +195,12 @@ describe('connected launch options', () => {
         })
       )
     );
-    expect(result?.creationDefaults).toEqual({ provider: 'CODEX', model: 'default' });
+    expect(result?.creationDefaults).toEqual({
+      provider: 'CODEX',
+      model: 'default',
+      reasoningEffort: null,
+      planModeEnabled: false,
+    });
     expect(result?.pickerProps.models).toEqual([{ value: 'default', label: 'Provider default' }]);
     expect(result?.pickerProps.modelsLoading).toBe(true);
     expect(result?.loading).toBe(false);
@@ -204,4 +234,148 @@ it('offers a retry after saved defaults fail instead of leaving selection loadin
   render();
   expect(result?.ready).toBe(true);
   expect(result?.pickerProps.error).toBeUndefined();
+});
+
+it('keeps explicit thinking and Plan drafts per provider through refetch and resets after creation', () => {
+  const mounted = mount(defaults);
+  flushSync(() => mounted.current.onReasoningChange('xhigh'));
+  flushSync(() => mounted.current.onPlanModeChange(true));
+  flushSync(() => mounted.current.onProviderChange('CLAUDE'));
+  expect(mounted.current.reasoningEffort).toBeUndefined();
+  expect(mounted.current.planModeEnabled).toBeUndefined();
+  flushSync(() => mounted.current.onReasoningChange(null));
+  flushSync(() => mounted.current.onPlanModeChange(false));
+  flushSync(() => mounted.current.onProviderChange('CODEX'));
+  expect(mounted.current.reasoningEffort).toBe('xhigh');
+  expect(mounted.current.planModeEnabled).toBe(true);
+  mounted.render('workspace-a', { ...defaults, defaultCodexReasoningEffort: 'low' });
+  expect(mounted.current.reasoningEffort).toBe('xhigh');
+  flushSync(() => mounted.current.reset());
+  expect(mounted.current.reasoningEffort).toBeUndefined();
+  expect(mounted.current.planModeEnabled).toBeUndefined();
+});
+
+function mountConnected() {
+  let result: ReturnType<typeof useSessionLaunchSelection> | undefined;
+  const root = createRoot(document.createElement('div'));
+  roots.push(root);
+  const render = () =>
+    flushSync(() =>
+      root.render(
+        createElement(ConnectedLaunchHarness, {
+          onResult: (value) => {
+            result = value;
+          },
+        })
+      )
+    );
+  render();
+  return {
+    render,
+    get current() {
+      if (!result) {
+        throw new Error('Missing launch selection');
+      }
+      return result;
+    },
+  };
+}
+const solNative: SessionLaunchOptions = {
+  provider: 'CODEX',
+  model: 'native-sol',
+  reasoning: {
+    options: [
+      { value: 'medium', label: 'Medium' },
+      { value: 'high', label: 'High' },
+      { value: 'ultra', label: 'Ultra' },
+    ],
+    selected: 'high',
+    defaultValue: 'medium',
+  },
+  planMode: { supported: true, selected: false },
+};
+
+it('freezes the effective saved level and preserves an unsupported explicit draft until Default and Plan off', () => {
+  mocks.settings = { ...defaults, defaultCodexReasoningEffort: 'high' };
+  mocks.launches.set('CODEX:saved-sol', solNative);
+  mocks.launches.set('CODEX:luna', {
+    ...solNative,
+    model: 'native-luna',
+    reasoning: {
+      options: [{ value: 'medium', label: 'Medium' }],
+      defaultValue: 'medium',
+      selected: 'medium',
+    },
+    planMode: { supported: false, selected: false },
+  });
+  const mounted = mountConnected();
+  expect(mounted.current.controlsProps.reasoning?.value).toBe('high');
+  expect(mounted.current.creationDefaults.reasoningEffort).toBe('high');
+  mocks.settings = { ...defaults, defaultCodexReasoningEffort: 'medium' };
+  mounted.render();
+  expect(mounted.current.controlsProps.reasoning?.value).toBe('high');
+  expect(mounted.current.creationDefaults.reasoningEffort).toBe('high');
+  flushSync(() => mounted.current.controlsProps.reasoning?.onChange('ultra'));
+  flushSync(() => mounted.current.controlsProps.planMode?.onChange(true));
+  mocks.settings = { ...defaults, defaultCodexReasoningEffort: 'medium' };
+  mounted.render();
+  expect(mounted.current.creationDefaults).toEqual({
+    provider: 'CODEX',
+    model: 'saved-sol',
+    reasoningEffort: 'ultra',
+    planModeEnabled: true,
+  });
+  flushSync(() => mounted.current.pickerProps.onModelChange?.('luna'));
+  expect(mounted.current.ready).toBe(false);
+  expect(mounted.current.controlsProps.reasoning?.value).toBe('ultra');
+  expect(mounted.current.controlsProps.reasoning?.invalid).toBe(true);
+  flushSync(() => mounted.current.pickerProps.onProviderChange?.('CLAUDE'));
+  flushSync(() => mounted.current.pickerProps.onProviderChange?.('CODEX'));
+  expect(mounted.current.controlsProps.reasoning?.value).toBe('ultra');
+  flushSync(() => mounted.current.controlsProps.reasoning?.onChange(null));
+  expect(mounted.current.ready).toBe(false);
+  flushSync(() => mounted.current.controlsProps.planMode?.onChange(false));
+  expect(mounted.current.ready).toBe(true);
+  expect(mounted.current.creationDefaults.reasoningEffort).toBeNull();
+});
+
+it('distinguishes pending discovery and failure from known unsupported capabilities, with retry', () => {
+  mocks.settings = defaults;
+  mocks.launches.set('CODEX:saved-sol', undefined);
+  const mounted = mountConnected();
+  expect(mounted.current.ready).toBe(false);
+  expect(mounted.current.controlsProps.reasoning?.loading).toBe(true);
+  mocks.launchErrors.set('CODEX:saved-sol', new Error('Probe failed'));
+  mounted.render();
+  expect(mounted.current.controlsProps.reasoning?.loading).toBe(false);
+  expect(mounted.current.controlsProps.reasoning?.error).toContain('Could not load');
+  mounted.current.controlsProps.reasoning?.onRetry();
+  expect(mocks.refetchLaunch).toHaveBeenCalled();
+  mocks.launchErrors.delete('CODEX:saved-sol');
+  mocks.launches.set('CODEX:saved-sol', {
+    ...solNative,
+    reasoning: { options: [] },
+    planMode: { supported: false, selected: false },
+  });
+  mounted.render();
+  expect(mounted.current.ready).toBe(true);
+  expect(mounted.current.controlsProps.reasoning?.loading).toBe(false);
+  expect(mounted.current.controlsProps.reasoning?.error).toBeUndefined();
+});
+
+// Saved Default is intent, even when the native default is a concrete advertised level.
+it('keeps saved native Default visible and in the outbound payload across native refetch', () => {
+  mocks.settings = { ...defaults, defaultCodexReasoningEffort: null };
+  mocks.launches.set('CODEX:saved-sol', solNative);
+  const mounted = mountConnected();
+  expect(mounted.current.ready).toBe(true);
+  expect(mounted.current.controlsProps.reasoning?.value).toBeNull();
+  expect(mounted.current.creationDefaults.reasoningEffort).toBeNull();
+  mocks.launches.set('CODEX:saved-sol', {
+    ...solNative,
+    reasoning: { ...solNative.reasoning, defaultValue: 'high', selected: 'high' },
+  });
+  mounted.render();
+  expect(mounted.current.controlsProps.reasoning?.value).toBeNull();
+  expect(mounted.current.creationDefaults.reasoningEffort).toBeNull();
 });

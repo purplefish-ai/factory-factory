@@ -1,7 +1,7 @@
 import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { useMemo } from 'react';
 import { type SessionData, SessionTabBar } from '@/client/features/chat';
-import { ProviderModelPicker } from '@/client/features/session-selection';
+import { SessionLaunchControls } from '@/client/features/session-selection';
 import { QuickActionsMenu } from '@/client/features/workspace';
 import {
   Sheet,
@@ -83,11 +83,12 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
               onCloseSession={handleCloseSession}
               disabled={tabBarDisabled}
               createDisabled={creationDisabled}
+              createDisabledReason={launchSelection.unavailableReason}
               creationControl={
                 <div className="flex min-w-0 items-center gap-0.5">
                   <span className="px-1 text-xs text-muted-foreground">New</span>
-                  <ProviderModelPicker
-                    {...launchSelection.pickerProps}
+                  <SessionLaunchControls
+                    {...launchSelection.controlsProps}
                     disabled={isCreatingSession || !workspaceId}
                   />
                 </div>

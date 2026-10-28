@@ -678,7 +678,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
 
     expect(mockSessionService.setSessionThinkingBudget).not.toHaveBeenCalled();
     expect(mockSessionService.setSessionModel).toHaveBeenCalledWith('s1', undefined);
-    expect(mockSessionService.setSessionReasoningEffort).toHaveBeenCalledWith('s1', null);
+    expect(mockSessionService.setSessionReasoningEffort).not.toHaveBeenCalled();
     expect(mockSessionService.sendSessionMessage).toHaveBeenCalledWith('s1', 'hello');
     expect(mockSessionDomainService.markRunning).toHaveBeenCalledWith('s1');
     expect(mockSessionDomainService.emitDelta).toHaveBeenCalledWith(
