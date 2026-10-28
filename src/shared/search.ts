@@ -18,6 +18,22 @@ const resultFields = {
 export const SearchResultSchema = z.discriminatedUnion('kind', [
   z.object({
     ...resultFields,
+    kind: z.literal('github_issue'),
+    projectId: z.string().min(1),
+    workspaceId: z.null(),
+    sessionId: z.null(),
+    githubIssue: z.object({
+      number: z.number().int().positive(),
+      title: z.string(),
+      body: z.string(),
+      url: z.string(),
+      state: z.enum(['OPEN', 'CLOSED']),
+      createdAt: z.string(),
+      author: z.object({ login: z.string() }),
+    }),
+  }),
+  z.object({
+    ...resultFields,
     kind: z.literal('project'),
     workspaceId: z.null(),
     sessionId: z.null(),

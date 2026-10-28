@@ -121,6 +121,40 @@ describe('metadata search', () => {
     ]);
   });
 
+  it('finds workspaces by pasted PR and source issue URLs', async () => {
+    const { workspace } = await seed();
+    await db.prisma.workspace.update({
+      where: { id: workspace.id },
+      data: {
+        githubIssueUrl: 'https://github.com/org/repo/issues/123',
+        linearIssueUrl: 'https://linear.app/team/issue/ENG-456/search-polish',
+      },
+    });
+    for (const query of [
+      'https://github.com/org/repo/pull/789',
+      'https://github.com/org/repo/issues/123',
+      'https://linear.app/team/issue/ENG-456/search-polish',
+    ]) {
+      expect(await search.search({ query })).toEqual([
+        expect.objectContaining({ id: workspace.id }),
+      ]);
+    }
+    const [result] = await search.search({ query: 'search polish' });
+    expect(result?.subtitle).toContain('Issue #123');
+    expect(result?.subtitle).toContain('PR #789');
+  });
+
+  it('excludes detached PRs from workspace matches', async () => {
+    const { workspace } = await seed();
+    await db.prisma.workspacePR.updateMany({
+      where: { workspaceId: workspace.id },
+      data: { detachedAt: new Date() },
+    });
+    for (const query of ['#789', 'https://github.com/org/repo/pull/789']) {
+      expect(await search.search({ query })).toEqual([]);
+    }
+  });
+
   it('matches decomposed Unicode names and query terms', async () => {
     const { project } = await seed();
     const workspace = await db.prisma.workspace.create({

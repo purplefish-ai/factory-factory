@@ -9,7 +9,7 @@ const results: SearchResult[] = [
     kind: 'workspace',
     id: 'ws1',
     title: 'Universal search',
-    subtitle: 'Factory Factory · feature/universal-search · #123',
+    subtitle: 'Factory Factory · feature/universal-search · Issue #123 · PR #789',
     projectSlug: 'factory-factory',
     workspaceId: 'ws1',
     sessionId: null,
@@ -125,5 +125,59 @@ export const LongNames: Story = {
           'Another project with a lengthy name · martin/feature/a-long-branch-name-with-details · ENG-12345',
       },
     ],
+  },
+};
+
+const githubIssues = {
+  results: [
+    {
+      kind: 'github_issue' as const,
+      id: 'p1:42',
+      title: 'Improve search keyboard navigation',
+      subtitle: 'Factory Factory · purplefish-ai/factory-factory · Issue #42',
+      projectId: 'p1',
+      projectSlug: 'factory-factory',
+      workspaceId: null,
+      sessionId: null,
+      archived: false,
+      githubIssue: {
+        number: 42,
+        title: 'Improve search keyboard navigation',
+        body: 'Details',
+        url: 'https://github.com/purplefish-ai/factory-factory/issues/42',
+        state: 'OPEN' as const,
+        createdAt: '2026-01-01T00:00:00Z',
+        author: { login: 'martin' },
+      },
+    },
+  ],
+  loading: false,
+  error: false,
+  onRetry: fn(),
+};
+export const GitHubIssues: Story = {
+  args: { query: 'search', githubIssues, onSelect: fn() },
+  play: async ({ canvasElement, args }) => {
+    const body = within(canvasElement.ownerDocument.body);
+    await userEvent.click(body.getByRole('option', { name: /Improve search keyboard navigation/ }));
+    await expect(args.onSelect).toHaveBeenCalledWith(githubIssues.results[0]);
+  },
+};
+export const GitHubLoading: Story = {
+  args: { query: 'search', githubIssues: { ...githubIssues, results: [], loading: true } },
+};
+export const GitHubUnavailable: Story = {
+  args: { query: 'search', githubIssues: { ...githubIssues, results: [], error: true } },
+};
+
+export const GitHubSearchAction: Story = {
+  args: { query: 'search', onSearchGitHub: fn() },
+  play: async ({ canvasElement, args }) => {
+    await userEvent.click(
+      within(canvasElement.ownerDocument.body).getByRole('option', {
+        name: /Search GitHub issues for/,
+      })
+    );
+    await expect(args.onSearchGitHub).toHaveBeenCalledOnce();
   },
 };

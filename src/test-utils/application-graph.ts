@@ -442,6 +442,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     dataBackupService,
     decisionLogQueryService: decisionLogService,
     metadataSearchService,
+    searchGitHubIssues: vi.fn().mockResolvedValue({ results: [], errors: [] }),
     executeStartupScriptPipeline,
     factoryConfigService: FactoryConfigService,
     claudeModelCatalogService,

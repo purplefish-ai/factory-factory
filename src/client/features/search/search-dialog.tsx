@@ -31,6 +31,8 @@ export function SearchDialog({
   includeArchived,
   onIncludeArchivedChange,
   results,
+  githubIssues,
+  onSearchGitHub,
   loading,
   error,
   onRetry,
@@ -38,10 +40,20 @@ export function SearchDialog({
 }: SearchDialogProps) {
   const [selected, setSelected] = useState('');
   useEffect(() => {
-    if (open) {
-      setSelected(results[0] ? `${results[0].kind}:${results[0].id}` : '');
+    // Wait for local matches before automatically selecting a lower GitHub row.
+    if (!open || loading || error) {
+      setSelected('');
+      return;
     }
-  }, [results, open]);
+    const available = [
+      ...results,
+      ...(!githubIssues?.loading ? (githubIssues?.results ?? []) : []),
+    ].map((result) => `${result.kind}:${result.id}`);
+    if (onSearchGitHub) {
+      available.push('search-github-issues');
+    }
+    setSelected((current) => (available.includes(current) ? current : (available[0] ?? '')));
+  }, [results, githubIssues?.results, githubIssues?.loading, loading, error, open, onSearchGitHub]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -52,7 +64,8 @@ export function SearchDialog({
       >
         <DialogTitle className="sr-only">Search</DialogTitle>
         <DialogDescription className="sr-only">
-          Find projects, workspaces, and conversations by name, branch, issue, or pull request.
+          Find projects, workspaces, conversations, pull requests, and GitHub issues. Select an
+          issue to start a workspace.
         </DialogDescription>
         <Command
           shouldFilter={false}
@@ -66,7 +79,7 @@ export function SearchDialog({
               value={query}
               onValueChange={onQueryChange}
               maxLength={200}
-              placeholder="Search by name, branch, issue…"
+              placeholder="Search names, branches, PRs, or issues…"
               aria-label="Search metadata"
               className="h-14 pr-10 text-base sm:text-sm"
             />
@@ -79,6 +92,8 @@ export function SearchDialog({
             <SearchResults
               query={query}
               results={results}
+              githubIssues={githubIssues}
+              onSearchGitHub={onSearchGitHub}
               loading={loading}
               error={error}
               onRetry={onRetry}

@@ -12,6 +12,9 @@ supports Kanban intake (`listIssuesForProject`, assigned to `@me`). Starting
 from an issue creates a linked workspace (`githubIssueNumber`,
 `githubIssueUrl`).
 
+Global search also supports GitHub issue lookup and launching; see
+[Search](./search.md) for matching and request behavior.
+
 GitHub project imports reuse existing clone directories when owner or repository
 casing differs, preserving the existing path and local changes. New clones use
 lowercase owner/repository paths, matching GitHub's case-insensitive names. URL

@@ -51,14 +51,18 @@ export const metadataSearchAccessor = {
         .prepare(`
       WITH pr_metadata AS (
         SELECT workspaceId,
-          group_concat(coalesce(title, '') || ' #' || coalesce(number, ''), ' ') AS text
+          group_concat(coalesce(title, '') || ' PR #' || coalesce(number, ''), ' ') AS text,
+          group_concat('PR #' || coalesce(number, ''), ' · ') AS refs,
+          group_concat(url, ' ') AS urls
         FROM WorkspacePR WHERE detachedAt IS NULL GROUP BY workspaceId
       ), workspace_metadata AS (
         SELECT w.*, p.name AS projectName, p.slug AS projectSlug,
           (p.isArchived OR w.status = 'ARCHIVED') AS archived,
           coalesce(w.branchName, '') || ' ' || coalesce(w.description, '') || ' ' ||
-          CASE WHEN w.githubIssueNumber IS NULL THEN '' ELSE '#' || w.githubIssueNumber END || ' ' ||
-          coalesce(w.linearIssueIdentifier, '') || ' ' || coalesce(pr.text, '') AS metadata
+          CASE WHEN w.githubIssueNumber IS NULL THEN '' ELSE 'Issue #' || w.githubIssueNumber END || ' ' ||
+          coalesce(w.linearIssueIdentifier, '') || ' ' || coalesce(pr.text, '') ||
+          CASE WHEN @includeUrls THEN ' ' || coalesce(w.githubIssueUrl, '') || ' ' ||
+          coalesce(w.linearIssueUrl, '') || ' ' || coalesce(pr.urls, '') ELSE '' END AS metadata
         FROM Workspace w JOIN Project p ON p.id = w.projectId
         LEFT JOIN pr_metadata pr ON pr.workspaceId = w.id
       ), candidates AS (
@@ -71,9 +75,12 @@ export const metadataSearchAccessor = {
         SELECT 'workspace', w.id, w.name,
           w.projectName || CASE WHEN w.branchName IS NULL THEN '' ELSE ' · ' || w.branchName END ||
           CASE WHEN w.linearIssueIdentifier IS NULL THEN '' ELSE ' · ' || w.linearIssueIdentifier END ||
-          CASE WHEN w.githubIssueNumber IS NULL THEN '' ELSE ' · #' || w.githubIssueNumber END,
+          CASE WHEN w.githubIssueNumber IS NULL THEN '' ELSE ' · Issue #' || w.githubIssueNumber END ||
+          CASE WHEN pr.refs IS NULL THEN '' ELSE ' · ' || pr.refs END,
           w.projectSlug, w.id, NULL, w.archived, w.updatedAt,
-          coalesce(w.description, '') || char(10) || coalesce(pr.text, ''),
+          coalesce(w.description, '') || char(10) || coalesce(pr.text, '') ||
+          CASE WHEN @includeUrls THEN char(10) || coalesce(w.githubIssueUrl, '') || ' ' ||
+          coalesce(w.linearIssueUrl, '') || ' ' || coalesce(pr.urls, '') ELSE '' END,
           w.name || ' ' || w.projectName || ' ' || w.metadata
         FROM workspace_metadata w LEFT JOIN pr_metadata pr ON pr.workspaceId = w.id
         UNION ALL
@@ -89,7 +96,11 @@ export const metadataSearchAccessor = {
       WHERE (@includeArchived OR NOT archived) AND search_matches(searchText)
       ORDER BY relevance DESC, updatedAt DESC, kind, id LIMIT @limit
       `)
-        .all({ includeArchived: Number(includeArchived), limit });
+        .all({
+          includeArchived: Number(includeArchived),
+          includeUrls: Number(/^https?:\/\//.test(query)),
+          limit,
+        });
       return rows.map((row) => ({
         ...SearchResultSchema.parse(row),
         ...CandidateFieldsSchema.parse(row),

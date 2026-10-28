@@ -9,6 +9,7 @@ import {
   throwIfGitHubConnectivityError,
 } from './github-cli/errors';
 import { GitHubCLIExecutor } from './github-cli/executor';
+import { searchIssues } from './github-cli/issue-search';
 import { computeCIStatus, computePRState } from './github-cli/mappers';
 import {
   getPRDiff,
@@ -506,6 +507,10 @@ class GitHubCLIService {
     const issues = await this.fetchIssues(owner, repo, options);
     this.issueCache.set(cacheKey, { issues, fetchedAt: Date.now() });
     return issues;
+  }
+
+  searchIssues(owner: string, repo: string, query: string, limit = 30): Promise<GitHubIssue[]> {
+    return searchIssues((args, options) => this.exec(args, options), owner, repo, query, limit);
   }
 
   private async fetchIssues(
