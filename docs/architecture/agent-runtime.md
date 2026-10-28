@@ -45,6 +45,10 @@ and require restoring the worktree before retrying. Node otherwise reports a
 misleading `spawn <node> ENOENT` when the working directory is missing, even if
 the Node executable exists.
 
+Failed exact-conversation resumes retain the provider's diagnostic details and
+original error so missing Codex rollout history is actionable instead of
+appearing only as `Internal error`.
+
 Provider-native configuration controls own access permissions. Codex `mode`
 selects access and `collaboration_mode` selects planning independently. Claude
 `mode` owns its native access/planning modes. Saved STRICT/RELAXED/YOLO defaults

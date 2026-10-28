@@ -261,7 +261,11 @@ describe('AcpClientFactory', () => {
 
   it('never replaces a failed legacy Codex resume with a fresh conversation', async () => {
     setupSuccessfulSpawn(createMockChildProcess({ exitAfterSigterm: true }), { loadSession: true });
-    mocks.loadSession.mockRejectedValue(new Error('thread unavailable'));
+    const loadError = Object.assign(new Error('Internal error'), {
+      code: -32_603,
+      data: { details: 'no rollout found for thread id native-thread' },
+    });
+    mocks.loadSession.mockRejectedValue(loadError);
     await expect(
       new AcpClientFactory().createClient(
         createParams({
@@ -271,7 +275,10 @@ describe('AcpClientFactory', () => {
           }),
         })
       )
-    ).rejects.toThrow('thread unavailable');
+    ).rejects.toMatchObject({
+      message: expect.stringContaining('no rollout found for thread id native-thread'),
+      cause: loadError,
+    });
     expect(mocks.newSession).not.toHaveBeenCalled();
     expect(mocks.logger.warn).toHaveBeenCalledWith(
       'loadSession failed',

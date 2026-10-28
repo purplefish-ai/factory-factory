@@ -83,6 +83,25 @@ export function getAcpErrorLogDetails(error: unknown): AcpErrorLogDetails {
   return { message: String(error) };
 }
 
+export function createAcpResumeError(
+  provider: string,
+  providerSessionId: string,
+  error: unknown
+): Error {
+  const { message, data, code } = getAcpErrorLogDetails(error);
+  const detail =
+    typeof data === 'object' &&
+    data !== null &&
+    'details' in data &&
+    typeof data.details === 'string'
+      ? data.details
+      : undefined;
+  return new Error(
+    `Cannot restore existing ${provider} conversation "${providerSessionId}": ${message}${code !== undefined ? ` [code ${code}]` : ''}${detail ? ` (${detail})` : ''}. Restore the provider history before retrying.`,
+    { cause: error }
+  );
+}
+
 export function isMethodNotFoundError(error: unknown): boolean {
   const details = getAcpErrorLogDetails(error);
   return details.code === -32_601 || details.message.includes('Method not found');
