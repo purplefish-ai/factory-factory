@@ -1,5 +1,5 @@
 import { MessageState, type QueuedMessage } from '@/shared/acp-protocol';
-import type { PRUpdateDeliveryState } from '@/shared/pr-monitoring';
+import { PR_UPDATE_QUEUED_TEXT, type PRUpdateDeliveryState } from '@/shared/pr-monitoring';
 import type { RecentMessageRejection, SessionStore } from './session-store.types';
 import { upsertTranscriptMessage } from './session-transcript';
 
@@ -23,7 +23,7 @@ export function recordPRUpdateOutcome(
     message: {
       type: 'pr_update',
       text:
-        deliveryState === 'cancelled' && message.text === 'PR update queued for the next turn'
+        deliveryState === 'cancelled' && message.text === PR_UPDATE_QUEUED_TEXT
           ? 'PR update cancelled before dispatch'
           : message.text,
       prDeliveryState: deliveryState,

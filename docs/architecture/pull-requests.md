@@ -34,7 +34,7 @@ its saved provider identity and settings. Switching back to MAIN retains the
 selected main conversation. Binding changes use a revision compare-and-swap and
 invalidate queued requests for the old revision.
 
-An existing dedicated conversation receives its queued chat card even while
+An existing dedicated conversation receives its queued status row even while
 another session is working. Creating a new provider conversation waits for an
 idle workspace; session idle transitions wake pending PR delivery immediately.
 
@@ -177,8 +177,8 @@ eligibility before freezing a bounded message (16 KiB UTF-8), event IDs,
 delivery UUID, recipient, binding revision, and attempt. The final guard runs
 again immediately before provider submission. A transactional workspace-wide
 claim permits only one PR delivery at a time, including across dedicated
-conversations. A competing claim retains its queued card and retries when the
-active delivery settles. Review data is escaped, explicitly untrusted, and
+conversations. A competing claim retains its queued status row and retries when
+the active delivery settles. Review data is escaped, explicitly untrusted, and
 includes PR links and omission counts.
 
 Cold delivery requires resuming the exact stored Claude/Codex conversation.
@@ -214,12 +214,13 @@ preserving the original frozen delivery ID and text. The PR menu also offers
 explicit **Resume PR updates** for recoverable pauses, including when no
 dedicated conversation exists yet. Changing destinations alone preserves a
 pause; resuming uses the binding revision and retains frozen recipients. The
-chat renders PR updates as noneditable cards with queued, delivered, failed, or
-cancelled delivery states. Failed and cancelled queue outcomes remain in session
-snapshots and replay; background prompt text never enters composer recovery.
-Snapshots expose enablement, delivery mode, recipient, pause reason and pending
-count. Queued updates, paused delivery, and idle red CI do not imply live agent
-work.
+chat renders PR updates as compact, noneditable rows with queued, delivered,
+failed, or cancelled delivery states. Queued updates appear below current agent
+activity as a single status line; delivered update contents can be expanded in
+the transcript. Failed and cancelled queue outcomes remain in session snapshots
+and replay; background prompt text never enters composer recovery. Snapshots
+expose enablement, delivery mode, recipient, pause reason and pending count.
+Queued updates, paused delivery, and idle red CI do not imply live agent work.
 
 ### Migration and backups
 
