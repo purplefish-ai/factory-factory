@@ -13,6 +13,11 @@ export class SessionConfigCommitAuthority {
   // Reuse their accepted guard so re-entry cannot revive an obsolete snapshot.
   private readonly guards = new WeakMap<() => void, AcceptedConfigCommit>();
 
+  /** Durable deletion invalidates retained guards without retaining the session ID. */
+  release(sessionId: string): void {
+    this.accepted.delete(sessionId);
+  }
+
   accept(sessionId: string, assertRuntime: () => void): AcceptedConfigCommit {
     const existing = this.guards.get(assertRuntime);
     if (existing) {
@@ -47,7 +52,9 @@ export class SessionConfigCommitAuthority {
           assertCurrent();
           return true;
         } catch (error) {
-          if (error instanceof SupersededConfigCommit) {
+          // Runtime/source failure remains owned by its caller even when a
+          // newer token also exists. Only same-source supersession is a no-op.
+          if (!commit.isCurrent()) {
             return false;
           }
           throw error;

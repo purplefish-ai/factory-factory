@@ -17,6 +17,7 @@ export async function applyStartupCollaborationModePreset(
     handle: AcpProcessHandle;
     startupModePreset: StartupModePreset;
     workflow: string;
+    assertCurrent: () => void;
   },
   confirmTarget: (id: string, value: string) => void
 ): Promise<boolean> {
@@ -40,6 +41,9 @@ export async function applyStartupCollaborationModePreset(
     });
     return false;
   }
+  // The runtime API resolves by session ID; validate its exact source before
+  // dispatch, outside the optional RPC-failure compatibility catch.
+  params.assertCurrent();
   if (modeOption.currentValue === targetMode) {
     confirmTarget(modeOption.id, targetMode);
     return false;
@@ -60,6 +64,7 @@ export async function applyStartupCollaborationModePreset(
       error: error instanceof Error ? error.message : String(error),
     });
   }
+  params.assertCurrent();
   // The explicit request authorizes only this target, even if its notification
   // arrived before an optional RPC error. The policy checks the current handle.
   confirmTarget(modeOption.id, targetMode);

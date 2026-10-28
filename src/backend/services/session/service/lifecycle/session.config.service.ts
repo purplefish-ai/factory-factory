@@ -263,6 +263,7 @@ export class SessionConfigService {
         handle,
         startupModePreset,
         workflow,
+        assertCurrent: this.acceptRuntime(sessionId, handle),
       },
       (id, value) => this.startupPermissions.authorizeRequestedTarget(handle, id, value)
     );
@@ -888,6 +889,10 @@ export class SessionConfigService {
     await accepted.persist((assertCurrent) =>
       this.snapshotPersistence.persist(sessionId, { ...params, configOptions, assertCurrent })
     );
+  }
+
+  releaseSessionConfiguration(sessionId: string): void {
+    this.configAuthority.release(sessionId);
   }
 
   async completeStartupConfiguration(

@@ -720,6 +720,11 @@ export class SessionStartupCoordinator {
     const owner = this.startupOwners.get(handle);
     if (owner && owner !== caller) {
       owner.shared = true;
+      if (caller) {
+        // Coalesced borrowers keep shared status after the original creation
+        // operation finishes; they never acquire cleanup ownership of its handle.
+        caller.shared = true;
+      }
     }
   }
 

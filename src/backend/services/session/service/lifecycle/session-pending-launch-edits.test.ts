@@ -64,32 +64,51 @@ function fixture(provider: 'CLAUDE' | 'CODEX', applied = false) {
       Promise.resolve(Object.assign(session, update))
     ),
   };
-  const durable = new SessionRepository(
-    unsafeCoerce({
-      findById: () => Promise.resolve(structuredClone(session)),
-      update: repository.updateSession,
-      updateIfProviderIdentity: (_id: string, expected: typeof session, data: object) => {
-        if (
-          +expected.updatedAt !== +session.updatedAt ||
-          JSON.stringify(expected.providerMetadata) !== JSON.stringify(session.providerMetadata)
-        ) {
-          return Promise.resolve(0);
-        }
-        Object.assign(session, data, { updatedAt: new Date(+session.updatedAt + 1) });
-        return Promise.resolve(1);
-      },
-    }),
-    unsafeCoerce({})
-  );
+  const accessor = {
+    findById: () => Promise.resolve(structuredClone(session)),
+    update: repository.updateSession,
+    updateIfProviderIdentity: (_id: string, expected: typeof session, data: object) => {
+      if (
+        expected.providerSessionId !== session.providerSessionId ||
+        +expected.updatedAt !== +session.updatedAt ||
+        JSON.stringify(expected.providerMetadata) !== JSON.stringify(session.providerMetadata)
+      ) {
+        return Promise.resolve(0);
+      }
+      Object.assign(session, data, { updatedAt: new Date(+session.updatedAt + 1) });
+      return Promise.resolve(1);
+    },
+  };
+  const durable = new SessionRepository(unsafeCoerce(accessor), unsafeCoerce({}));
   const service = new SessionConfigService({
     repository: durable,
     runtimeManager: unsafeCoerce(runtime),
     codexModelCatalogService: { getModels: vi.fn() },
     sessionDomainService: unsafeCoerce({ emitDelta: vi.fn() }),
   });
-  return { mode, off, session, handle, runtime, service };
+  return { mode, off, session, handle, runtime, service, accessor, durable };
 }
 describe('explicit stopped edits during a pending launch', () => {
+  it('rejects a snapshot CAS after only provider identity changes', async () => {
+    const f = fixture('CODEX');
+    const original = f.accessor.updateIfProviderIdentity;
+    const model = f.session.model;
+    const metadata = structuredClone(f.session.providerMetadata);
+    vi.spyOn(f.accessor, 'updateIfProviderIdentity').mockImplementationOnce((...args) => {
+      f.session.providerSessionId = 'replacement';
+      return original(...args);
+    });
+    await expect(
+      f.durable.updateSession(f.session.id, {
+        model: 'stale-write',
+        providerMetadata: metadata,
+      })
+    ).rejects.toThrow('Stale provider metadata reconciliation');
+    expect(f.session.providerSessionId).toBe('replacement');
+    expect(f.session.model).toBe(model);
+    expect(f.session.providerMetadata).toEqual(metadata);
+  });
+
   it.each(['CLAUDE', 'CODEX'] as const)(
     'preserves latest %s effort and Plan edits through startup',
     async (provider) => {

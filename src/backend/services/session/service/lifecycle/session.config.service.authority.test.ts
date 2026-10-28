@@ -166,7 +166,9 @@ describe('accepted configuration commit authority', () => {
       h.native('second');
       await read.started;
       if (kind === 'unsupported') {
-        await expect(h.service.setSessionModel('session', 'unavailable')).rejects.toThrow();
+        await expect(h.service.setSessionModel('session', 'unavailable')).rejects.toThrow(
+          'Unsupported model "unavailable" for CODEX'
+        );
       } else {
         h.connection.setSessionConfigOption.mockImplementationOnce(async () => {
           await response.wait();

@@ -670,6 +670,7 @@ export function createLifecycleHarness(
     completeStartupConfiguration: vi.fn<SessionConfigService['completeStartupConfiguration']>(
       async (_id, params) => {
         await params.beforeComplete();
+        params.assertCurrent();
         params.complete();
       }
     ),

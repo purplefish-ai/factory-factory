@@ -75,6 +75,26 @@ describe('SessionStartupCoordinator', () => {
     vi.mocked(workspaceNotificationService.markDelivered).mockResolvedValue();
   });
 
+  it('keeps the default harness finalizer authority check immediately before completion', async () => {
+    const h = createLifecycleHarness();
+    const checking = createDeferred<void>();
+    const cancelled = new Error('startup authority changed');
+    const complete = vi.fn();
+    const assertCurrent = vi.fn(() => {
+      throw cancelled;
+    });
+    const finalizing = h.sessionConfigService.completeStartupConfiguration(h.session.id, {
+      handle: h.handle,
+      assertCurrent,
+      beforeComplete: () => checking.promise,
+      complete,
+    });
+    checking.resolve();
+    await expect(finalizing).rejects.toBe(cancelled);
+    expect(assertCurrent).toHaveBeenCalledOnce();
+    expect(complete).not.toHaveBeenCalled();
+  });
+
   it('reconciles a newly created client to durable and in-memory running state', async () => {
     const harness = createLifecycleHarness();
     const coordinator = createStartupCoordinator(harness);
@@ -746,14 +766,15 @@ describe('SessionStartupCoordinator', () => {
     expect(service.getStopGeneration('session-1')).not.toBe(startupGeneration);
   });
 
-  it('does not publish startup capabilities after stop completes during snapshot persistence', async () => {
+  it('does not publish startup capabilities after stop completes during the finalizer gate', async () => {
     const harness = createLifecycleHarness();
     installRuntimeQuiescence(harness);
-    const snapshotPersistence = createDeferred<void>();
+    const startupFinalization = createDeferred<void>();
     harness.sessionConfigService.completeStartupConfiguration.mockImplementationOnce(
       async (_id, params) => {
-        await snapshotPersistence.promise;
+        await startupFinalization.promise;
         await params.beforeComplete();
+        params.assertCurrent();
         params.complete();
       }
     );
@@ -777,7 +798,7 @@ describe('SessionStartupCoordinator', () => {
     ]);
 
     expect(firstSettlement).toBe('blocked');
-    snapshotPersistence.resolve(undefined);
+    startupFinalization.resolve(undefined);
     await stopPromise;
 
     await expect(startResult).resolves.toEqual(

@@ -17,6 +17,13 @@ it('stores the supplied accepted snapshot independently of pending runtime confi
     configOptions: configOptions('first'),
   });
   expect(h.row().model).toBe('first');
+  expect(h.row().providerMetadata).toMatchObject({
+    acpConfigSnapshot: {
+      provider: 'CODEX',
+      providerSessionId: 'thread',
+      configOptions: configOptions('first'),
+    },
+  });
   expect(h.handle.configOptions.find((option) => option.id === 'model')?.currentValue).toBe(
     'third'
   );

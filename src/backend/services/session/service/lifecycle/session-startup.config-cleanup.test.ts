@@ -167,10 +167,25 @@ describe('final startup failure ownership', () => {
       operation({ isOnlyOperation: () => false })
     );
     h.runtimeManager.stopClient.mockRejectedValueOnce(new Error('stop unavailable'));
-    h.hooks.cas = () => Promise.reject(new Error('storage unavailable'));
-    const result = await h.service
+    const writing = gate();
+    h.hooks.cas = async (number) => {
+      if (number === 1) {
+        await writing.wait();
+      }
+      throw new Error('storage unavailable');
+    };
+    const starting = h.service
       .startSession(h.session.id, { initialPrompt: 'Do work' })
       .catch((error) => error);
+    await writing.started;
+    const readiness = h.handle.configurationReady;
+    if (!readiness) {
+      throw new Error('Expected pending startup readiness at the final snapshot write');
+    }
+    const waiting = readiness.catch((error: unknown) => error);
+    writing.release();
+    const result = await starting;
+    expect(await waiting).toEqual(expect.objectContaining({ message: 'storage unavailable' }));
     expect(result).toEqual(expect.objectContaining({ message: 'storage unavailable' }));
     expect(h.runtimeManager.stopClient).toHaveBeenCalledExactlyOnceWith(h.session.id);
     expect(h.lifecycleGate.isSessionStopping(h.session.id)).toBe(false);

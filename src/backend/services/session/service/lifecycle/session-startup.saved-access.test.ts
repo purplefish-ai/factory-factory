@@ -15,7 +15,7 @@ it('keeps Claude native access authoritative over the legacy non-interactive byp
 });
 
 it.each(['start', 'acquire'] as const)(
-  'enforces native access before %s snapshot persistence and notification recovery',
+  'enforces native access before %s startup completion and notification recovery',
   async (path) => {
     const h = createLifecycleHarness();
     let applied = false;
@@ -26,6 +26,7 @@ it.each(['start', 'acquire'] as const)(
     h.sessionConfigService.completeStartupConfiguration.mockImplementation(async (_id, params) => {
       expect(applied).toBe(true);
       await params.beforeComplete();
+      params.assertCurrent();
       params.complete();
     });
     h.notificationDeliveryService.recoverPending = vi.fn(() => {

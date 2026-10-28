@@ -67,20 +67,17 @@ export async function applyReasoningEffortTarget(
   }
   params.confirmTarget?.(reasoningOption.id, params.targetReasoningEffort);
   const accepted = deps.acceptConfiguration(params.assertCurrent);
-  if (
-    !(
-      (await accepted.persist(async (assertCurrent) => {
-        if (params.persistSnapshot !== false) {
-          await deps.persistSnapshot(params.sessionId, {
-            provider: params.handle.provider as SessionProvider,
-            providerSessionId: params.handle.providerSessionId,
-            configOptions,
-            assertCurrent,
-          });
-        }
-      })) && accepted.isCurrent()
-    )
-  ) {
+  const persisted = await accepted.persist(async (assertCurrent) => {
+    if (params.persistSnapshot !== false) {
+      await deps.persistSnapshot(params.sessionId, {
+        provider: params.handle.provider as SessionProvider,
+        providerSessionId: params.handle.providerSessionId,
+        configOptions,
+        assertCurrent,
+      });
+    }
+  });
+  if (!(persisted && accepted.isCurrent())) {
     return;
   }
   if (params.emitUpdates !== false) {

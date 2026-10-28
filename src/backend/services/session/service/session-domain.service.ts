@@ -507,6 +507,7 @@ export class SessionDomainService extends EventEmitter {
   forgetProviderHistoryIdentity(sessionId: string): void {
     this.repairedProviderHistoryIdentities.delete(sessionId);
     sessionResumeFences.forget(sessionId);
+    this.emit('session_permanently_deleted', sessionId);
   }
 
   getAllPendingRequests(): Map<string, PendingInteractiveRequest> {
