@@ -16,6 +16,7 @@ import type { SessionDomainService } from '@/backend/services/session/service/se
 import { slashCommandCacheService } from '@/backend/services/session/service/store/slash-command-cache.service';
 import { isWorkspaceScopedCommandName } from '@/backend/services/session/service/store/slash-command-disk-scanner';
 import type { AgentMessage, CommandInfo, SessionDeltaEvent } from '@/shared/acp-protocol';
+import { getAcpWorkState } from './session-work-state';
 import type { SessionConfigService } from './session.config.service';
 import { toPublicProviderErrorMessage } from './session.error-message';
 import type { SessionPermissionService } from './session.permission.service';
@@ -152,7 +153,12 @@ export class AcpEventProcessor {
   ): void {
     if (event.type === 'acp_task_status_changed') {
       if (event.active || this.runtimeManager.isSessionWorking(sid)) {
-        this.sessionDomainService.markRunning(sid);
+        const { work } = getAcpWorkState(this.runtimeManager.getClient(sid));
+        if (work) {
+          this.sessionDomainService.markRunning(sid, work);
+        } else {
+          this.sessionDomainService.markRunning(sid);
+        }
       } else {
         this.sessionDomainService.markIdle(sid, 'alive');
       }

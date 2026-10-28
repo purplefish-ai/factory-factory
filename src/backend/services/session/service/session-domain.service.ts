@@ -86,6 +86,7 @@ export class SessionDomainService extends EventEmitter {
     updates: Pick<SessionRuntimeState, 'phase' | 'processState' | 'activity'> & {
       lastExit?: SessionRuntimeState['lastExit'];
       errorMessage?: SessionRuntimeState['errorMessage'];
+      work?: SessionRuntimeState['work'];
     }
   ): void {
     const store = this.registry.getOrCreateActive(sessionId);
@@ -104,6 +105,7 @@ export class SessionDomainService extends EventEmitter {
         phase: sessionRuntime.phase,
         processState: sessionRuntime.processState,
         activity: sessionRuntime.activity,
+        work: sessionRuntime.work,
         ...(Object.hasOwn(sessionRuntime, 'lastExit') ? { lastExit: sessionRuntime.lastExit } : {}),
         ...(Object.hasOwn(sessionRuntime, 'errorMessage')
           ? { errorMessage: sessionRuntime.errorMessage }
@@ -207,6 +209,7 @@ export class SessionDomainService extends EventEmitter {
         phase: runtime.phase,
         processState: runtime.processState,
         activity: runtime.activity,
+        work: runtime.work,
         ...(Object.hasOwn(runtime, 'lastExit') ? { lastExit: runtime.lastExit } : {}),
         ...(Object.hasOwn(runtime, 'errorMessage') ? { errorMessage: runtime.errorMessage } : {}),
         updatedAt: runtime.updatedAt,
@@ -437,11 +440,13 @@ export class SessionDomainService extends EventEmitter {
     this.publisher.forwardSnapshot(store, { reason: 'queue_cleared' });
   }
 
-  markRunning(sessionId: string): void {
+  markRunning(sessionId: string, work?: SessionRuntimeState['work']): void {
+    const previousWork = this.registry.getOrCreate(sessionId).runtime.work;
     this.transitionRuntime(sessionId, {
       phase: 'running',
       processState: 'alive',
       activity: 'WORKING',
+      work: work ?? (previousWork ? { ...previousWork, promptInFlight: true } : undefined),
     });
   }
 

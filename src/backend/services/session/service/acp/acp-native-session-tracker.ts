@@ -10,6 +10,12 @@ import {
 import { AcpSubagentBrowseError } from './acp-runtime-errors';
 import { normalizeSessionUpdateMessage } from './acp-stream-normalizer';
 
+export interface AcpBackgroundWork {
+  backgroundTasks: { id: string; name: string; kind: 'shell' | 'turn' | 'task' }[];
+  runningSubagents: number;
+  activeGoals: number;
+}
+
 const spawnedSchema = z.object({
   subagentSessionId: z.string().min(1),
   name: z.string(),
@@ -22,6 +28,8 @@ const stateSchema = z.object({
 });
 const taskSchema = z.object({
   asyncTaskId: z.string().min(1),
+  name: z.string().optional(),
+  taskType: z.string().optional(),
   state: z.enum(['running', 'paused', 'completed', 'failed', 'stopped']).optional(),
 });
 
@@ -76,9 +84,16 @@ export class AcpNativeSessionTracker {
   private readonly abandonedSessions = new Set<string>();
   private available = false;
   private readonly children = new Map<string, ChildSession>();
-  private readonly activeTasks = new Set<string>();
+  private readonly activeTasks = new Map<
+    string,
+    { name: string; kind: AcpBackgroundWork['backgroundTasks'][number]['kind']; active: boolean }
+  >();
   private readonly activeGoals = new Set<string>();
-  private active = false;
+  private activityKey = JSON.stringify({
+    backgroundTasks: [],
+    runningSubagents: 0,
+    activeGoals: 0,
+  });
 
   constructor(private readonly callbacks: TrackerCallbacks = {}) {}
 
@@ -113,6 +128,18 @@ export class AcpNativeSessionTracker {
 
   isAvailable(): boolean {
     return this.available;
+  }
+
+  getBackgroundWork(): AcpBackgroundWork {
+    return {
+      backgroundTasks: [...this.activeTasks]
+        .filter(([, task]) => task.active)
+        .map(([id, { name, kind }]) => ({ id, name, kind })),
+      runningSubagents: [...this.children.values()].filter(
+        (child) => child.summary.status === 'running'
+      ).length,
+      activeGoals: this.activeGoals.size,
+    };
   }
 
   ownsSession(sessionId: string): boolean {
@@ -379,8 +406,15 @@ export class AcpNativeSessionTracker {
       return;
     }
     const key = JSON.stringify([sessionId, parsed.data.asyncTaskId]);
+    const previous = this.activeTasks.get(key);
     if (update.sessionUpdate === 'async_task_spawned' || parsed.data.state === 'running') {
-      this.activeTasks.add(key);
+      this.activeTasks.set(key, {
+        name: parsed.data.name?.trim().slice(0, 500) || previous?.name || 'Background task',
+        kind: parsed.data.taskType ? taskKind(parsed.data.taskType) : (previous?.kind ?? 'task'),
+        active: true,
+      });
+    } else if (parsed.data.state === 'paused' && previous) {
+      this.activeTasks.set(key, { ...previous, active: false });
     } else if (update.sessionUpdate === 'async_task_state_update' && parsed.data.state) {
       this.activeTasks.delete(key);
     }
@@ -388,14 +422,14 @@ export class AcpNativeSessionTracker {
   }
 
   private publishActivity(): void {
+    const work = this.getBackgroundWork();
+    const activityKey = JSON.stringify(work);
     const active =
-      this.activeGoals.size > 0 ||
-      this.activeTasks.size > 0 ||
-      [...this.children.values()].some((child) => child.summary.status === 'running');
-    if (active === this.active) {
+      work.activeGoals > 0 || work.backgroundTasks.length > 0 || work.runningSubagents > 0;
+    if (activityKey === this.activityKey) {
       return;
     }
-    this.active = active;
+    this.activityKey = activityKey;
     this.callbacks.onTaskStatusChanged?.(active);
   }
 
@@ -404,4 +438,11 @@ export class AcpNativeSessionTracker {
       this.callbacks.onSubagentsChanged?.({ sessionId: this.rootSessionId, subagentId, change });
     }
   }
+}
+
+function taskKind(taskType?: string): AcpBackgroundWork['backgroundTasks'][number]['kind'] {
+  if (taskType === 'shell' || taskType === 'local_bash') {
+    return 'shell';
+  }
+  return taskType === 'turn' ? 'turn' : 'task';
 }

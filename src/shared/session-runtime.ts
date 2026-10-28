@@ -40,12 +40,20 @@ export interface SessionSummary {
   errorMessage?: string | null;
 }
 
+export interface SessionWorkState {
+  promptInFlight: boolean;
+  backgroundTasks: { id: string; name: string; kind: 'shell' | 'turn' | 'task' }[];
+  runningSubagents: number;
+  activeGoals: number;
+}
+
 export interface SessionRuntimeState {
   phase: SessionRuntimePhase;
   processState: SessionRuntimeProcessState;
   lastExit?: SessionRuntimeLastExit;
   errorMessage?: string;
   activity: SessionRuntimeActivity;
+  work?: SessionWorkState;
   updatedAt: string;
 }
 

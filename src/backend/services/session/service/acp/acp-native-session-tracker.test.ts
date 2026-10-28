@@ -37,6 +37,104 @@ function text(
 }
 
 describe('AcpNativeSessionTracker', () => {
+  it('uses a task type learned after the first update and preserves it on nameless updates', () => {
+    const tracker = new AcpNativeSessionTracker();
+    tracker.onRawMessage(
+      update('root', {
+        sessionUpdate: 'async_task_state_update',
+        asyncTaskId: 'turn',
+        state: 'running',
+      })
+    );
+    tracker.onRawMessage(
+      update('root', {
+        sessionUpdate: 'async_task_spawned',
+        asyncTaskId: 'turn',
+        name: 'Claude is working',
+        taskType: 'turn',
+      })
+    );
+    tracker.onRawMessage(
+      update('root', {
+        sessionUpdate: 'async_task_state_update',
+        asyncTaskId: 'turn',
+        state: 'running',
+      })
+    );
+    expect(tracker.getBackgroundWork().backgroundTasks).toEqual([
+      { id: '["root","turn"]', name: 'Claude is working', kind: 'turn' },
+    ]);
+  });
+
+  it('retains command identity across a pause and a nameless running update', () => {
+    const tracker = new AcpNativeSessionTracker();
+    tracker.onRawMessage(
+      update('root', {
+        sessionUpdate: 'async_task_spawned',
+        asyncTaskId: 'preview',
+        name: 'pnpm storybook',
+        taskType: 'shell',
+      })
+    );
+    tracker.onRawMessage(
+      update('root', {
+        sessionUpdate: 'async_task_state_update',
+        asyncTaskId: 'preview',
+        state: 'paused',
+      })
+    );
+    expect(tracker.getBackgroundWork().backgroundTasks).toEqual([]);
+    tracker.onRawMessage(
+      update('root', {
+        sessionUpdate: 'async_task_state_update',
+        asyncTaskId: 'preview',
+        state: 'running',
+      })
+    );
+    expect(tracker.getBackgroundWork().backgroundTasks).toEqual([
+      { id: '["root","preview"]', name: 'pnpm storybook', kind: 'shell' },
+    ]);
+  });
+
+  it('publishes named work changes even while another background task remains active', () => {
+    const tracker = new AcpNativeSessionTracker();
+    const snapshots: unknown[] = [];
+    const observed = new AcpNativeSessionTracker({
+      onTaskStatusChanged: () => snapshots.push(observed.getBackgroundWork()),
+    });
+    for (const [id, name] of [
+      ['preview', 'pnpm storybook'],
+      ['tests', 'pnpm test'],
+    ]) {
+      observed.onRawMessage(
+        update('root', {
+          sessionUpdate: 'async_task_spawned',
+          asyncTaskId: id,
+          name,
+        })
+      );
+    }
+    observed.onRawMessage(
+      update('root', {
+        sessionUpdate: 'async_task_state_update',
+        asyncTaskId: 'tests',
+        state: 'completed',
+      })
+    );
+    expect(snapshots).toMatchObject([
+      { backgroundTasks: [{ name: 'pnpm storybook' }] },
+      { backgroundTasks: [{ name: 'pnpm storybook' }, { name: 'pnpm test' }] },
+      { backgroundTasks: [{ name: 'pnpm storybook' }] },
+    ]);
+    observed.resetSession();
+    expect(snapshots.at(-1)).toEqual({ backgroundTasks: [], runningSubagents: 0, activeGoals: 0 });
+    expect(tracker.getBackgroundWork()).toEqual({
+      backgroundTasks: [],
+      runningSubagents: 0,
+      activeGoals: 0,
+    });
+  });
+
   it('captures negotiation before SDK validation and consumes native child output only', () => {
     // Catches unsupported draft events reaching SDK validation or child output reaching parent chat.
     const changed = vi.fn();
@@ -122,7 +220,8 @@ describe('AcpNativeSessionTracker', () => {
           state,
         })
       );
-      expect(active.mock.calls).toEqual([[true], [false]]);
+      // Adding the goal also publishes updated details while the child remains active.
+      expect(active.mock.calls).toEqual([[true], [true], [false]]);
     }
   );
 
@@ -223,7 +322,7 @@ describe('AcpNativeSessionTracker', () => {
         _meta: { jetbrains: { air: { goal: null } } },
       })
     );
-    expect(active.mock.calls).toEqual([[true]]);
+    expect(active.mock.calls).toEqual([[true], [true], [true], [true], [true]]);
     tracker.onRawMessage(
       update('child', {
         sessionUpdate: 'async_task_state_update',
@@ -231,7 +330,7 @@ describe('AcpNativeSessionTracker', () => {
         state: 'completed',
       })
     );
-    expect(active.mock.calls).toEqual([[true], [false]]);
+    expect(active.mock.calls).toEqual([[true], [true], [true], [true], [true], [false]]);
   });
 
   it('evicts oldest whole turns while keeping retained cursors stable and rejecting expired cursors', () => {

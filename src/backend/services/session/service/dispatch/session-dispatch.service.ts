@@ -463,12 +463,21 @@ export class SessionDispatchService {
     sessionDomainService.removeTranscriptMessageById(dbSessionId, msg.id, {
       emitSnapshot: false,
     });
-    // Avoid clobbering markProcessExit() runtime/lastExit when exit handling is in flight.
-    if (this.dependencies.runtimeManager.isSessionRunning(dbSessionId)) {
-      sessionDomainService.markError(dbSessionId, errorMessage);
-    }
+    this.markDispatchError(dbSessionId, errorMessage);
     this.turnInProgressRetryAttempts.delete(dbSessionId);
     sessionDomainService.failMessage(dbSessionId, msg, errorMessage);
+  }
+
+  private markDispatchError(sessionId: string, errorMessage: string): void {
+    // Preserve process exits and prompt errors already finalized with fresh work details.
+    if (!this.dependencies.runtimeManager.isSessionRunning(sessionId)) {
+      return;
+    }
+    const runtime = sessionDomainService.getRuntimeSnapshot(sessionId);
+    if (runtime.phase === 'error' && runtime.errorMessage === errorMessage) {
+      return;
+    }
+    sessionDomainService.markError(sessionId, errorMessage);
   }
 
   private scheduleTurnInProgressRetry(dbSessionId: string): void {
