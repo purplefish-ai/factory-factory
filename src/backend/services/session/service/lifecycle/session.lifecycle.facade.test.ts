@@ -204,6 +204,19 @@ describe('SessionLifecycleFacade', () => {
       activity: 'WORKING',
       updatedAt: '2026-08-12T00:00:00.000Z',
     });
+    sessionDomainService.getRuntimeSnapshot.mockReturnValueOnce({
+      phase: 'error',
+      processState: 'alive',
+      activity: 'IDLE',
+      errorMessage: 'Selected model is at capacity.',
+      updatedAt: '2026-10-28T14:26:26.000Z',
+    });
+    // An alive process with background work must not hide a terminal turn error.
+    expect(service.getRuntimeSnapshot('runtime-session')).toMatchObject({
+      phase: 'error',
+      activity: 'IDLE',
+      errorMessage: 'Selected model is at capacity.',
+    });
     await expect(service.getSessionOptions('options-session')).resolves.toEqual(sessionOptions);
     await expect(service.persistClosedSession('closed-session')).resolves.toBeUndefined();
     await expect(service.recoverStaleRunningSessions()).resolves.toBe(3);

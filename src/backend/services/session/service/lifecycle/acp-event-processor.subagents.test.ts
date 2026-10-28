@@ -35,6 +35,7 @@ function makeDeps(): AcpEventProcessorDependencies {
       isSessionWorking: vi.fn().mockReturnValue(true),
     } as unknown as AcpEventProcessorDependencies['runtimeManager'],
     sessionDomainService: {
+      getRuntimeSnapshot: vi.fn().mockReturnValue({ phase: 'idle' }),
       emitDelta: vi.fn(),
       appendClaudeEvent: vi.fn(),
       upsertClaudeEvent: vi.fn(),
@@ -52,6 +53,29 @@ function makeDeps(): AcpEventProcessorDependencies {
 }
 
 describe('AcpEventProcessor sub-agent invalidations', () => {
+  it.each([true, false])(
+    'preserves a terminal prompt error when task activity changes to %s',
+    (active) => {
+      const deps = makeDeps();
+      vi.mocked(deps.sessionDomainService.getRuntimeSnapshot).mockReturnValue({
+        phase: 'error',
+        processState: 'alive',
+        activity: 'IDLE',
+        errorMessage: 'Selected model is at capacity.',
+        updatedAt: '2026-10-28T14:26:26.000Z',
+      });
+      const markRunning = vi.fn();
+      const markIdle = vi.fn();
+      Object.assign(deps.sessionDomainService, { markRunning, markIdle });
+      const { onAcpEvent } = new AcpEventProcessor(deps).createRuntimeEventHandler('db-session-1');
+
+      onAcpEvent?.('db-session-1', { type: 'acp_task_status_changed', active });
+
+      expect(markRunning).not.toHaveBeenCalled();
+      expect(markIdle).not.toHaveBeenCalled();
+    }
+  );
+
   it('publishes runtime changes when task activity starts and stops', () => {
     const deps = makeDeps();
     const isSessionWorking = deps.runtimeManager.isSessionWorking as ReturnType<typeof vi.fn>;

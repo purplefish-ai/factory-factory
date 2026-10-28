@@ -1,9 +1,23 @@
 import type { ContentBlock } from '@agentclientprotocol/sdk/unstable';
+import { z } from 'zod';
 import { createLogger } from '@/backend/services/logger.service';
 import type { AcpProcessHandle } from './acp-process-handle';
 import { PromptTimeoutError } from './acp-runtime-errors';
 
 const logger = createLogger('acp-runtime-manager');
+
+const promptFailureSchema = z.object({
+  _meta: z.object({
+    jetbrains: z.object({
+      air: z.object({
+        sessionFailure: z.object({
+          severity: z.enum(['error', 'warning']),
+          title: z.string().trim().min(1),
+        }),
+      }),
+    }),
+  }),
+});
 
 export type AcpPromptRuntimePort = {
   isCurrentHandle(sessionId: string, handle: AcpProcessHandle): boolean;
@@ -48,6 +62,12 @@ export class AcpPromptController {
         result = await promptPromise;
       }
 
+      // ACP v1 can resolve with end_turn even after a terminal provider error.
+      // Only the negotiated failure metadata distinguishes that from success.
+      const failure = promptFailureSchema.safeParse(result);
+      if (failure.success && failure.data._meta.jetbrains.air.sessionFailure.severity === 'error') {
+        throw new Error(failure.data._meta.jetbrains.air.sessionFailure.title);
+      }
       handle.isPromptInFlight = false;
       return { stopReason: result.stopReason };
     } catch (error) {

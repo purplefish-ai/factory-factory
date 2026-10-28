@@ -267,6 +267,12 @@ and 2 MiB of serialized updates. Oldest whole turns are evicted; an oversized
 active turn is discarded until the next user turn. Cursors use monotonic turn
 offsets, and expired cursors fail explicitly instead of returning another turn.
 
+ACP negotiates structured session failures. An `end_turn` prompt response
+carrying an error in `_meta.jetbrains.air.sessionFailure` fails the turn through
+the normal provider-error lifecycle path, clearing its working indicator and
+recording a `TURN_INTERRUPTED` event. Warning notices and cleared failures do
+not fail a turn.
+
 ### Activity and prompt dispatch
 
 Workspace/session activity and ownership of a conversation's prompt slot are
