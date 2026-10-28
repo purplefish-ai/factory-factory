@@ -41,12 +41,13 @@ const mockWorkspaceGetSetData = vi.fn();
 const mockListInvalidate = vi.fn();
 const mockWorkspaceGetInvalidate = vi.fn();
 const mockWorkspaceGetReset = vi.fn();
+const mockQueryInvalidate = vi.fn();
 vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({
     resetQueries: mockWorkspaceGetReset,
     getQueriesData: () => [],
     cancelQueries: () => Promise.resolve(),
-    invalidateQueries: () => Promise.resolve(),
+    invalidateQueries: mockQueryInvalidate,
     setQueryData: (key: readonly [unknown, { input: unknown }], updater: unknown) =>
       mockSetData(key[1].input, updater),
   }),
@@ -110,6 +111,8 @@ describe('useProjectSnapshotSync', () => {
     mockListInvalidate.mockReset();
     mockListInvalidate.mockResolvedValue(undefined);
     mockWorkspaceGetInvalidate.mockClear();
+    mockQueryInvalidate.mockReset();
+    mockQueryInvalidate.mockResolvedValue(undefined);
     mockGlobalDispatchEvent.mockClear();
     vi.stubGlobal('dispatchEvent', mockGlobalDispatchEvent);
   });
@@ -520,6 +523,7 @@ describe('useProjectSnapshotSync', () => {
   function expectNoInvalidations(): void {
     expect(mockListInvalidate).not.toHaveBeenCalled();
     expect(mockWorkspaceGetInvalidate).not.toHaveBeenCalled();
+    expect(mockQueryInvalidate).not.toHaveBeenCalled();
   }
 
   describe('complete-summary repair retirement', () => {
@@ -745,8 +749,12 @@ describe('useProjectSnapshotSync', () => {
         entries: [makeEntry()],
       });
 
-      expect(mockWorkspaceGetInvalidate).toHaveBeenCalledTimes(1);
-      expect(mockWorkspaceGetInvalidate).toHaveBeenCalledWith();
+      expect(mockWorkspaceGetInvalidate).not.toHaveBeenCalled();
+      expect(mockQueryInvalidate).toHaveBeenCalledTimes(1);
+      expect(mockQueryInvalidate).toHaveBeenCalledWith({
+        queryKey: [['workspace', 'get'], { input: undefined, type: 'query' }],
+        predicate: expect.any(Function),
+      });
       expect(mockListInvalidate).toHaveBeenCalledTimes(1);
       expect(mockListInvalidate).toHaveBeenCalledWith({ projectId: 'proj-1' });
 
@@ -755,7 +763,7 @@ describe('useProjectSnapshotSync', () => {
         projectId: 'proj-1',
         entries: [makeEntry()],
       });
-      expect(mockWorkspaceGetInvalidate).toHaveBeenCalledTimes(2);
+      expect(mockQueryInvalidate).toHaveBeenCalledTimes(2);
       expect(mockListInvalidate).toHaveBeenCalledTimes(2);
     });
 
