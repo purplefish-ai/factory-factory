@@ -193,6 +193,21 @@ vi.mock('@/client/features/composer', () => ({
 
 vi.mock('@/client/features/session-selection', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/client/features/session-selection')>()),
+  PlanningSelector: ({
+    control,
+    showLabel,
+  }: {
+    control: { enabled: boolean; onChange: (value: boolean) => void };
+    showLabel?: boolean;
+  }) =>
+    createElement(
+      'button',
+      {
+        'aria-label': `Planning: ${control.enabled ? 'Plan' : 'Default'}`,
+        onClick: () => control.onChange(!control.enabled),
+      },
+      control.enabled ? 'Plan' : showLabel ? 'Plan off' : 'Default'
+    ),
   SessionLaunchControls: ({
     provider,
     model,

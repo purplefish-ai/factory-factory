@@ -38,3 +38,4 @@ export const OnProcessing: Story = {
     animated: true,
   },
 };
+export const Labeled: Story = { args: { enabled: true, state: 'IDLE', label: 'PR updates' } };

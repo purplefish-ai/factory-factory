@@ -12,6 +12,7 @@ interface RatchetToggleButtonProps {
   disabled?: boolean;
   stopPropagation?: boolean;
   className?: string;
+  label?: string;
 }
 
 function getTooltip(enabled: boolean, state: RatchetStateLike): string {
@@ -30,6 +31,7 @@ export function RatchetToggleButton({
   disabled = false,
   stopPropagation = false,
   className,
+  label,
 }: RatchetToggleButtonProps) {
   return (
     <Tooltip>
@@ -53,9 +55,18 @@ export function RatchetToggleButton({
           disabled={disabled}
           aria-label={enabled ? 'Disable PR updates' : 'Enable PR updates'}
           aria-pressed={enabled}
-          className={cn('h-7 w-7 p-0', className)}
+          className={cn(
+            'h-7 w-7 p-0',
+            label && 'w-auto gap-1.5 px-2 text-xs aria-pressed:bg-accent',
+            className
+          )}
         >
-          <RatchetWrenchIcon enabled={enabled} animated={animated} className="h-full w-full" />
+          <RatchetWrenchIcon
+            enabled={enabled}
+            animated={animated}
+            className={label ? 'size-3.5' : 'h-full w-full'}
+          />
+          {label && <span>{label}</span>}
         </Button>
       </TooltipTrigger>
       <TooltipContent side="top">{getTooltip(enabled, state)}</TooltipContent>

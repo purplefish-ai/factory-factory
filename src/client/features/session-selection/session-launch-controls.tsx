@@ -175,14 +175,16 @@ function getPlanDescription(control: LaunchPlanControl): string {
   }
   return `Plan mode ${control.enabled ? 'on' : 'off'}`;
 }
-function PlanningSelector({
+export function PlanningSelector({
   control,
   disabled,
   disabledReason,
+  showLabel = false,
 }: {
   control: LaunchPlanControl;
   disabled?: boolean;
   disabledReason?: string;
+  showLabel?: boolean;
 }) {
   const unavailable =
     !control.enabled && (control.loading || Boolean(control.error) || !control.supported);
@@ -196,7 +198,7 @@ function PlanningSelector({
           aria-description={description}
           title={description}
         >
-          {control.enabled ? 'Plan' : 'Default'}
+          {control.enabled ? 'Plan' : showLabel ? 'Plan off' : 'Default'}
         </ComposerMenuTrigger>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64 max-w-[calc(100vw-2rem)]">

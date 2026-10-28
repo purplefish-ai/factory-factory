@@ -131,7 +131,7 @@ describe('launch selection ownership', () => {
     expect(mounted.current.provider).toBe('CLAUDE');
     expect(mounted.current.model).toBe('chosen-opus');
   });
-  it('keeps each provider model independent while toggling providers', () => {
+  it('selects the saved model default when clicking a provider, including the current provider', () => {
     const mounted = mount(defaults);
     expect(mounted.current.model).toBe('saved-sol');
     flushSync(() => mounted.current.onModelChange('chosen-luna'));
@@ -139,9 +139,20 @@ describe('launch selection ownership', () => {
     expect(mounted.current.model).toBe('saved-sonnet');
     flushSync(() => mounted.current.onModelChange('chosen-opus'));
     flushSync(() => mounted.current.onProviderChange('CODEX'));
-    expect(mounted.current.model).toBe('chosen-luna');
+    expect(mounted.current.model).toBe('saved-sol');
     flushSync(() => mounted.current.onProviderChange('CLAUDE'));
+    expect(mounted.current.model).toBe('saved-sonnet');
+    flushSync(() => mounted.current.onModelChange('chosen-opus'));
+    flushSync(() => mounted.current.onProviderChange('CLAUDE'));
+    expect(mounted.current.model).toBe('saved-sonnet');
+  });
+  it('applies a different provider and model atomically without overwriting the previous provider draft', () => {
+    const mounted = mount(defaults);
+    flushSync(() => mounted.current.onProviderChange('CLAUDE', 'chosen-opus'));
+    expect(mounted.current.provider).toBe('CLAUDE');
     expect(mounted.current.model).toBe('chosen-opus');
+    flushSync(() => mounted.current.onProviderChange('CODEX'));
+    expect(mounted.current.model).toBe('saved-sol');
   });
   it('waits for saved defaults and seeds them only once per draft', () => {
     const mounted = mount(undefined);
@@ -330,7 +341,7 @@ it('freezes the effective saved level and preserves an unsupported explicit draf
   expect(mounted.current.controlsProps.reasoning?.value).toBe('ultra');
   expect(mounted.current.controlsProps.reasoning?.invalid).toBe(true);
   flushSync(() => mounted.current.pickerProps.onProviderChange?.('CLAUDE'));
-  flushSync(() => mounted.current.pickerProps.onProviderChange?.('CODEX'));
+  flushSync(() => mounted.current.pickerProps.onProviderChange?.('CODEX', 'luna'));
   expect(mounted.current.controlsProps.reasoning?.value).toBe('ultra');
   flushSync(() => mounted.current.controlsProps.reasoning?.onChange(null));
   expect(mounted.current.ready).toBe(false);

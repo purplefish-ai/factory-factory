@@ -3,4 +3,8 @@ export {
   useSessionLaunchSelection,
   type SessionLaunchSelection,
 } from './use-session-launch-selection';
-export { SessionLaunchControls, type SessionLaunchControlsProps } from './session-launch-controls';
+export {
+  PlanningSelector,
+  SessionLaunchControls,
+  type SessionLaunchControlsProps,
+} from './session-launch-controls';
