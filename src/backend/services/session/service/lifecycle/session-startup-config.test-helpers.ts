@@ -120,6 +120,12 @@ export function setupStartupConfig(provider: 'CLAUDE' | 'CODEX' = 'CODEX') {
   h.sessionConfigService.applyConfiguredPermissionPreset.mockImplementation(
     config.applyConfiguredPermissionPreset.bind(config)
   );
+  h.sessionConfigService.applyStartupLaunchPlan.mockImplementation(
+    config.applyStartupLaunchPlan.bind(config)
+  );
+  h.sessionConfigService.applyConfiguredReasoningEffort.mockImplementation(
+    config.applyConfiguredReasoningEffort.bind(config)
+  );
   h.sessionConfigService.applyStartupModePreset.mockImplementation(
     config.applyStartupModePreset.bind(config)
   );

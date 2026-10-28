@@ -76,7 +76,12 @@ export interface SnapshotReconciliationDependencies extends ReconciliationBridge
   >;
   workspaceSnapshotStore: Pick<
     typeof workspaceSnapshotStore,
-    'getAllWorkspaceIds' | 'getByWorkspaceId' | 'remove' | 'upsert' | 'canAcceptNameObservation'
+    | 'getAllWorkspaceIds'
+    | 'getByWorkspaceId'
+    | 'remove'
+    | 'upsert'
+    | 'canAcceptNameObservation'
+    | 'canAcceptBranchObservation'
   >;
   /**
    * Defaults to the process-wide runner. Injected so a test can drive this
@@ -151,7 +156,8 @@ const DRIFT_FIELD_GROUPS: { group: string; fields: DriftComparableField[] }[] = 
     ],
   },
   { group: 'autoIteration', fields: ['mode', 'autoIterationStatus', 'autoIteration'] },
-  { group: 'workspace', fields: ['status', 'branchName'] },
+  { group: 'workspace', fields: ['status'] },
+  { group: 'branch', fields: ['branchName'] },
   { group: 'name', fields: ['name'] },
   { group: 'pr', fields: ['prs', 'prSummary', 'prState', 'prCiStatus', 'prNumber'] },
   {
@@ -288,6 +294,7 @@ export class SnapshotReconciliationService {
       projectId: ws.projectId,
       name: ws.name,
       nameUpdatedAt: ws.updatedAt.getTime(),
+      branchUpdatedAt: ws.updatedAt.getTime(),
       status: ws.status,
       createdAt: ws.createdAt.toISOString(),
       branchName: ws.branchName,
@@ -394,11 +401,16 @@ export class SnapshotReconciliationService {
         if (existing) {
           const drifts = detectDrift(existing, authoritativeFields).filter(
             ({ field }) =>
-              field !== 'name' ||
-              this.dependencies.workspaceSnapshotStore.canAcceptNameObservation(
-                ws.id,
-                ws.updatedAt.getTime()
-              )
+              (field !== 'name' ||
+                this.dependencies.workspaceSnapshotStore.canAcceptNameObservation(
+                  ws.id,
+                  ws.updatedAt.getTime()
+                )) &&
+              (field !== 'branchName' ||
+                this.dependencies.workspaceSnapshotStore.canAcceptBranchObservation(
+                  ws.id,
+                  ws.updatedAt.getTime()
+                ))
           );
           if (drifts.length > 0) {
             driftsDetected += drifts.length;

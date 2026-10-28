@@ -228,6 +228,48 @@ it.each([0, 2])(
   }
 );
 
+describe('manual launch settings forwarding', () => {
+  it.each([
+    { reasoningEffort: 'max', planModeEnabled: true },
+    { reasoningEffort: null, planModeEnabled: false },
+    {},
+  ])('preserves exact supplied intent and omits absent fields: %j', async (settings) => {
+    const { ports } = createPorts();
+    await launchWorkspace(
+      { type: 'MANUAL', projectId: 'p1', name: 'Launch choices', provider: 'CODEX', ...settings },
+      ports
+    );
+    expect(ports.createDefaultSession).toHaveBeenCalledExactlyOnceWith({
+      workspaceId: 'w-created',
+      workflow: 'followup',
+      name: 'Chat 1',
+      provider: 'CODEX',
+      providerProjectPath: null,
+      ...settings,
+    });
+  });
+
+  it('retains the workspace without substituting another session after provisioning fails', async () => {
+    const { ports, workspace } = createPorts();
+    ports.createDefaultSession.mockRejectedValue(new Error('Session insert failed'));
+    await expect(
+      launchWorkspace(
+        {
+          type: 'MANUAL',
+          projectId: 'p1',
+          name: 'Launch choices',
+          provider: 'CODEX',
+          reasoningEffort: 'max',
+          planModeEnabled: true,
+        },
+        ports
+      )
+    ).resolves.toEqual({ workspace, defaultSessionId: null });
+    expect(ports.createDefaultSession).toHaveBeenCalledTimes(1);
+    expect(ports.initializeWorktree).toHaveBeenCalledTimes(1);
+  });
+});
+
 const childSource = {
   type: 'CHILD_WORKSPACE',
   projectId: 'p1',

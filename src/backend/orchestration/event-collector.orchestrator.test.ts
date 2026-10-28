@@ -50,7 +50,7 @@ vi.mock('@/backend/services/workspace', () => ({
   WORKSPACE_STATE_CHANGED: 'workspace_state_changed',
   workspaceStateMachine: { on: vi.fn(), off: vi.fn() },
   workspaceActivityService: { on: vi.fn(), off: vi.fn(), clearWorkspace: vi.fn() },
-  workspaceDataService: { findRatchetProjection: vi.fn() },
+  workspaceDataService: { subscribeAcceptedBranch: () => vi.fn(), findRatchetProjection: vi.fn() },
   workspaceSnapshotStore: {
     upsert: vi.fn(),
     getByWorkspaceId: vi.fn(),
@@ -711,6 +711,7 @@ describe('configureEventCollector', () => {
         projectId: 'proj-1',
         name: 'My workspace',
         nameUpdatedAt: Date.parse('2026-01-01T01:00:00.000Z'),
+        branchUpdatedAt: Date.parse('2026-01-01T01:00:00.000Z'),
         branchName: 'feature/test',
         createdAt: '2026-01-01T00:00:00.000Z',
       },
@@ -1499,9 +1500,7 @@ describe('configureEventCollector', () => {
 });
 
 describe('per-graph event collector lifecycle', () => {
-  function createSource() {
-    return new EventEmitter();
-  }
+  const createSource = () => new EventEmitter();
 
   function createDependencies(store: MockStore) {
     return {
@@ -1525,6 +1524,7 @@ describe('per-graph event collector lifecycle', () => {
       workspaceActivityService: Object.assign(createSource(), { clearWorkspace: vi.fn() }),
       workspaceSnapshotStore: Object.assign(store, { getAllWorkspaceIds: vi.fn(() => []) }),
       workspaceStateMachine: createSource(),
+      workspaceDataService,
     };
   }
 
@@ -1576,7 +1576,7 @@ describe('per-graph event collector lifecycle', () => {
     const read = vi.fn().mockReturnValueOnce(pendingRead.promise).mockResolvedValue(projection);
     const dependencies = {
       ...createDependencies(store),
-      workspaceDataService: { findRatchetProjection: read },
+      workspaceDataService: { subscribeAcceptedBranch: () => vi.fn(), findRatchetProjection: read },
     };
     const collector = createEventCollectorOrchestrator(dependencies as never);
     collector.start();

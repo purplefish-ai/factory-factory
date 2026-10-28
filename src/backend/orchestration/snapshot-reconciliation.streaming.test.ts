@@ -78,6 +78,7 @@ function makeService(
   workspaces: ReturnType<typeof makeWorkspace>[] | Promise<ReturnType<typeof makeWorkspace>[]>,
   getWorkspaceGitStats: (path: string) => Promise<GitStats | null>,
   workspaceSnapshotStore: {
+    canAcceptBranchObservation(id: string, branchUpdatedAt: number): boolean;
     canAcceptNameObservation(id: string, nameUpdatedAt: number): boolean;
     getAllWorkspaceIds(): string[];
     getByWorkspaceId(id: string): unknown;
@@ -208,6 +209,7 @@ it('releases the seed barrier when there are no workspaces', async () => {
   const service = makeService([], vi.fn(), {
     getAllWorkspaceIds: () => [],
     getByWorkspaceId: () => undefined,
+    canAcceptBranchObservation: () => true,
     canAcceptNameObservation: () => true,
     remove: () => false,
     upsert,
@@ -225,6 +227,7 @@ it('keeps shutdown pending until streamed git work settles', async () => {
   const service = makeService([makeWorkspace('ws-1', '/path/1')], () => pendingGitStats.promise, {
     getAllWorkspaceIds: () => [],
     getByWorkspaceId: () => undefined,
+    canAcceptBranchObservation: () => true,
     canAcceptNameObservation: () => true,
     remove: () => false,
     upsert: () => ({ accepted: true, changed: true, emitted: true }),
@@ -258,6 +261,7 @@ it('publishes each git result as it settles and keeps accurate accounting', asyn
   const store = {
     getAllWorkspaceIds: () => [],
     getByWorkspaceId: () => undefined,
+    canAcceptBranchObservation: () => true,
     canAcceptNameObservation: () => true,
     remove: () => false,
     upsert,
@@ -567,3 +571,56 @@ it('repairs compact loop drift while suppressing a stale canonical-name diagnost
     vi.useRealTimers();
   }
 });
+
+it.each(['older', 'equal-ms'] as const)(
+  'does not count or log a deferred %s branch observation rejected after an accepted rename',
+  async (provenance) => {
+    const workspace = makeWorkspace('ws-1', null);
+    const store = createStore();
+    await makeService([workspace], () => Promise.resolve(null), store).reconcile();
+    const pendingRead = deferred<ReturnType<typeof makeWorkspace>[]>();
+    const warn = vi.fn();
+    const reconciliation = makeService(
+      pendingRead.promise,
+      () => Promise.resolve(null),
+      store,
+      warn
+    ).reconcile();
+    const acceptedAt = workspace.updatedAt.getTime() + 1;
+    expect(store.publishAcceptedBranch(workspace.id, 'Accepted rename', acceptedAt).accepted).toBe(
+      true
+    );
+    pendingRead.resolve([
+      {
+        ...workspace,
+        updatedAt: provenance === 'equal-ms' ? new Date(acceptedAt) : workspace.updatedAt,
+      },
+    ]);
+
+    expect((await reconciliation).driftsDetected).toBe(0);
+    expect(warn).not.toHaveBeenCalled();
+    expect(store.getByWorkspaceId(workspace.id)?.branchName).toBe('Accepted rename');
+
+    const newer = {
+      ...workspace,
+      branchName: 'New canonical name',
+      updatedAt: new Date(acceptedAt + 1),
+    };
+    const result = await makeService([newer], () => Promise.resolve(null), store, warn).reconcile();
+    expect(result.driftsDetected).toBe(1);
+    expect(warn).toHaveBeenCalledExactlyOnceWith('Snapshot drift detected', {
+      workspaceId: workspace.id,
+      driftCount: 1,
+      drifts: [
+        {
+          field: 'branchName',
+          group: 'branch',
+          snapshot: 'Accepted rename',
+          authoritative: 'New canonical name',
+        },
+      ],
+    });
+    expect(store.getByWorkspaceId(workspace.id)?.branchName).toBe('New canonical name');
+    store.clear();
+  }
+);

@@ -84,6 +84,12 @@ export function resolveConfiguredAccessModeTarget(
   return getConfigOptionValues(modeOption).includes(target) ? target : null;
 }
 
+export class SessionStartupTargetError extends Error {
+  constructor(error: unknown) {
+    super(error instanceof Error ? error.message : String(error), { cause: error });
+  }
+}
+
 export class SessionStartupPermissionError extends Error {
   constructor() {
     super('Configured session access mode was not applied');
@@ -106,10 +112,12 @@ export class SessionStartupPermissions {
         (includePlanning &&
           (option.id === 'collaboration_mode' || option.category === 'collaboration_mode'))
     );
-    this.required.set(
-      handle,
-      modes.map((option) => ({ id: option.id, value: option.currentValue }))
-    );
+    this.required.set(handle, [
+      ...(this.required.get(handle) ?? []).filter(
+        (expected) => !modes.some((mode) => mode.id === expected.id)
+      ),
+      ...modes.map((option) => ({ id: option.id, value: option.currentValue })),
+    ]);
   }
 
   captureReview(handle: AcpProcessHandle): void {
@@ -143,6 +151,16 @@ export class SessionStartupPermissions {
       handle.configOptions.find((option) => option.id === id)?.currentValue !== value
     ) {
       return;
+    }
+    const required = this.required.get(handle) ?? [];
+    this.required.set(handle, [...required.filter((option) => option.id !== id), { id, value }]);
+  }
+
+  expectLaunchTarget(handle: AcpProcessHandle, id: string, value: string): void {
+    if (handle.configOptions.find((option) => option.id === id)?.currentValue !== value) {
+      throw new SessionStartupTargetError(
+        new Error('Requested startup configuration was not applied')
+      );
     }
     const required = this.required.get(handle) ?? [];
     this.required.set(handle, [...required.filter((option) => option.id !== id), { id, value }]);

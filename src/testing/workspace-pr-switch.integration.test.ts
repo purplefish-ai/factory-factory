@@ -113,7 +113,7 @@ function createFixture(previous: { prNumber?: number; prUrl?: string; prState?: 
     getWorkspaceLinearContext: vi.fn().mockResolvedValue(null),
     prSnapshotService: prs,
     ratchetService: Object.assign(ratchet, { checkWorkspaceById: check }),
-    workspaceDataService: { findRatchetProjection: read },
+    workspaceDataService: { subscribeAcceptedBranch: () => vi.fn(), findRatchetProjection: read },
     workspaceSnapshotStore: store,
     workspaceActivityService: new EventEmitter(),
     workspaceStateMachine: new EventEmitter(),

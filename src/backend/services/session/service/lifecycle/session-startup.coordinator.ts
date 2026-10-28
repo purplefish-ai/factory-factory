@@ -16,10 +16,14 @@ import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import { SessionStatus } from '@/shared/core';
 import type { AcpEventProcessor } from './acp-event-processor';
 import type { SessionContextService } from './session-context.service';
+import { markSessionLaunchSettingsApplied } from './session-launch-settings';
 import { type SessionLifecycleGate, SessionStartupCancelledError } from './session-lifecycle-gate';
 import type { SessionAcpEnvironmentPort } from './session-lifecycle.types';
 import type { SessionNotificationDeliveryService } from './session-notification-delivery.service';
-import { SessionStartupPermissionError } from './session-permission-policy';
+import {
+  SessionStartupPermissionError,
+  SessionStartupTargetError,
+} from './session-permission-policy';
 import { restorePRResumeConfig } from './session-pr-resume-config';
 import type { SessionRuntimeExitCoordinator } from './session-runtime-exit.coordinator';
 import { stopStartupConfigurationFailure } from './session-startup-config-failure';
@@ -33,7 +37,9 @@ import { toErrorMessage } from './session.error-message';
 import type { SessionRepository } from './session.repository';
 
 const isTerminalConfigFailure = (error: unknown) =>
-  error instanceof SessionStartupPermissionError || error instanceof SessionStartupPersistenceError;
+  error instanceof SessionStartupPermissionError ||
+  error instanceof SessionStartupPersistenceError ||
+  error instanceof SessionStartupTargetError;
 
 const logger = createLogger('session');
 
@@ -44,7 +50,8 @@ export type GetOrCreateSessionClientOptions = {
   resumePolicy?: 'allow_fallback' | 'require_existing';
   thinkingEnabled?: boolean;
   model?: string;
-  reasoningEffort?: string;
+  reasoningEffort?: string | null;
+  planModeEnabled?: boolean;
   startupModePreset?: SessionStartupModePreset;
 };
 
@@ -85,6 +92,7 @@ export type SessionStartupCoordinatorDependencies = {
     | 'applyConfiguredPermissionPreset'
     | 'applyConfiguredReasoningEffort'
     | 'applyStartupModePreset'
+    | 'applyStartupLaunchPlan'
     | 'buildAcpChatBarCapabilities'
     | 'persistAcpConfigSnapshot'
     | 'completeStartupConfiguration'
@@ -357,6 +365,8 @@ export class SessionStartupCoordinator {
       purpose?: 'active' | 'browse';
       resumePolicy?: 'allow_fallback' | 'require_existing';
       startupModePreset?: SessionStartupModePreset;
+      reasoningEffort?: string | null;
+      planModeEnabled?: boolean;
     },
     session: AgentSessionRecord,
     permissionPreset: PermissionPreset | undefined,
@@ -424,6 +434,7 @@ export class SessionStartupCoordinator {
     let handle: AcpProcessHandle | undefined;
     try {
       handle = await creationPromise;
+      const candidate = handle;
       this.markRuntimeShared(handle, ownership);
       await this.assertCreationAllowed(sessionId, stopGeneration, options.assertCurrent);
       if (browseOnly) {
@@ -435,10 +446,23 @@ export class SessionStartupCoordinator {
           this.assertStartupAllowed(sessionId, stopGeneration)
         );
       } else {
-        await this.dependencies.sessionConfigService.applyConfiguredReasoningEffort(
+        await this.withPermissionFailureStop(
           sessionId,
           handle,
-          { persistSnapshot: false, emitUpdates: false }
+          stopGeneration,
+          () =>
+            this.dependencies.sessionConfigService.applyConfiguredReasoningEffort(
+              sessionId,
+              candidate,
+              {
+                persistSnapshot: false,
+                emitUpdates: false,
+                session,
+                reasoningEffort: options.reasoningEffort,
+              }
+            ),
+          undefined,
+          true
         );
       }
       if (
@@ -460,6 +484,22 @@ export class SessionStartupCoordinator {
         options.startupModePreset,
         session.workflow
       );
+      await this.withPermissionFailureStop(
+        sessionId,
+        handle,
+        stopGeneration,
+        () =>
+          this.dependencies.sessionConfigService.applyStartupLaunchPlan(
+            sessionId,
+            session,
+            candidate,
+            permissionPreset,
+            options.planModeEnabled
+          ),
+        undefined,
+        true
+      );
+
       await this.reapplyReviewPermissions(
         sessionId,
         session,
@@ -482,11 +522,12 @@ export class SessionStartupCoordinator {
         async () =>
           this.dependencies.sessionConfigService.completeStartupConfiguration(sessionId, {
             handle: configuredHandle,
-            existingMetadata:
+            existingMetadata: markSessionLaunchSettingsApplied(
               configuredHandle.sessionCreationOutcome?.kind === 'resume_fallback'
                 ? ((await this.dependencies.repository.getSessionById(sessionId))
                     ?.providerMetadata ?? undefined)
-                : (session.providerMetadata ?? undefined),
+                : (session.providerMetadata ?? undefined)
+            ),
             assertCurrent: assertConfiguredRuntime,
             beforeComplete: () =>
               this.assertCreationAllowed(sessionId, stopGeneration, options.assertCurrent),

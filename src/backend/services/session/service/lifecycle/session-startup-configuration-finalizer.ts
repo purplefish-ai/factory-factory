@@ -49,6 +49,7 @@ export class SessionStartupConfigurationFinalizer {
             provider: params.handle.provider as SessionProvider,
             providerSessionId: params.handle.providerSessionId,
             configOptions: options,
+            requirePersistence: true,
             existingMetadata: params.existingMetadata,
             assertCurrent,
           });

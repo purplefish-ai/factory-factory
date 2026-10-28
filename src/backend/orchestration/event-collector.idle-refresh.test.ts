@@ -38,6 +38,7 @@ function createCollector() {
     runScriptStateMachine: new EventEmitter(),
     workspaceAutoIterationService: new EventEmitter(),
     sessionDomainService: new EventEmitter(),
+    workspaceDataService: { subscribeAcceptedBranch: () => vi.fn() },
     workspaceSnapshotStore: {
       getAllWorkspaceIds: () => [],
       getByWorkspaceId: () => ({ projectId: 'project-1' }),

@@ -90,6 +90,26 @@ vi.mock('@/client/lib/trpc', () => ({
         }),
       },
     },
+    session: {
+      getLaunchOptions: {
+        useQuery: (input: { provider: 'CLAUDE' | 'CODEX'; model?: string }) => ({
+          data: {
+            provider: input.provider,
+            model: input.model ?? 'native',
+            reasoning: {
+              options: [
+                { value: 'medium', label: 'Medium' },
+                { value: 'high', label: 'High' },
+              ],
+              selected: 'medium',
+              defaultValue: 'medium',
+            },
+            planMode: { supported: true, selected: false },
+          },
+          refetch: vi.fn(),
+        }),
+      },
+    },
     workspace: {
       list: {
         useQuery: () => ({
@@ -173,17 +193,35 @@ vi.mock('@/client/features/composer', () => ({
 
 vi.mock('@/client/features/session-selection', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/client/features/session-selection')>()),
-  ProviderModelPicker: ({
+  SessionLaunchControls: ({
     provider,
     model,
     onProviderChange,
     onModelChange,
     models,
-  }: import('@/client/features/session-selection').ProviderModelPickerProps) =>
+    reasoning,
+    planMode,
+  }: import('@/client/features/session-selection').SessionLaunchControlsProps) =>
     createElement(
       'div',
       { 'aria-label': 'New conversation provider and model' },
       `${provider} ${model}`,
+      reasoning &&
+        createElement(
+          'button',
+          { 'aria-label': `Thinking level: ${reasoning.value ?? 'Default'}` },
+          reasoning.value ?? 'Default'
+        ),
+      planMode &&
+        createElement(
+          'button',
+          {
+            'aria-label': 'Plan mode',
+            'aria-pressed': planMode.enabled,
+            onClick: () => planMode.onChange(!planMode.enabled),
+          },
+          'Plan'
+        ),
       createElement(
         'button',
         { onClick: () => onProviderChange?.('CLAUDE'), 'aria-label': 'Choose Claude' },
@@ -334,7 +372,7 @@ describe('InlineWorkspaceForm', () => {
     expect(
       container.querySelector('[aria-label^="New conversation provider and model"]')
     ).not.toBeNull();
-    expect(container.textContent).toContain('Default');
+    expect(container.querySelector('[aria-label^="Thinking level:"]')).not.toBeNull();
     expect(container.textContent).toContain('Plan');
     expect(container.querySelectorAll('[aria-label="Attach files"]')).toHaveLength(2);
 
@@ -551,3 +589,20 @@ it.each(['loading', 'failed'])(
     });
   }
 );
+
+it('explains why keyboard workspace creation is blocked while defaults are unavailable', async () => {
+  mocks.settingsUnavailable = true;
+  mocks.settingsError = new Error('Defaults failed');
+  await act(() => {
+    const { root, textarea } = renderForm();
+    try {
+      textarea.dispatchEvent(
+        new KeyboardEvent('keydown', { bubbles: true, key: 'Enter', metaKey: true })
+      );
+      expect(mocks.createWorkspaceMutateMock).not.toHaveBeenCalled();
+      expect(mocks.toastErrorMock).toHaveBeenCalledWith('Could not load chat defaults');
+    } finally {
+      flushSync(() => root.unmount());
+    }
+  });
+});

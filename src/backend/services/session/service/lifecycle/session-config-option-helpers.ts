@@ -2,6 +2,10 @@ import type {
   SessionConfigOption,
   SessionConfigSelectOption,
 } from '@agentclientprotocol/sdk/unstable';
+import {
+  isNativeModeConfigOption,
+  isReasoningConfigOption,
+} from '@/backend/services/session/service/acp/acp-config-option-identification';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 
 export type SessionProvider = 'CLAUDE' | 'CODEX';
@@ -55,12 +59,7 @@ function readConfigOptionCurrentValue(option: SessionConfigOption | null): strin
 }
 
 function findReasoningOptionIndex(configOptions: SessionConfigOption[]): number {
-  return configOptions.findIndex(
-    (option) =>
-      option.id === 'reasoning_effort' ||
-      option.category === 'thought_level' ||
-      option.category === 'reasoning'
-  );
+  return configOptions.findIndex(isReasoningConfigOption);
 }
 
 function resolveCodexModelValue(
@@ -227,16 +226,9 @@ export function buildCapabilitiesFromConfigOptions(
 ): ChatBarCapabilities {
   const modelOption = configOptions.find((option) => option.category === 'model');
   const modeOption = configOptions.find((option) =>
-    provider === 'CODEX'
-      ? option.id === 'collaboration_mode' || option.category === 'collaboration_mode'
-      : option.category === 'mode'
+    isNativeModeConfigOption(option, provider === 'CODEX' ? 'collaboration_mode' : 'mode')
   );
-  const thoughtOption = configOptions.find(
-    (option) =>
-      option.category === 'thought_level' ||
-      option.id === 'reasoning_effort' ||
-      option.category === 'reasoning'
-  );
+  const thoughtOption = configOptions.find(isReasoningConfigOption);
   const selectedModel = modelOption?.currentValue
     ? String(modelOption.currentValue)
     : (fallbackModel ?? undefined);

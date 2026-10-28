@@ -1,6 +1,6 @@
 import type { inferRouterOutputs } from '@trpc/server';
 import type { ReactNode } from 'react';
-import type { ProviderModelPickerProps } from '@/client/features/session-selection';
+import type { SessionLaunchControlsProps } from '@/client/features/session-selection';
 import { getStatusBannerClassName } from '@/client/lib/status-banner-styles';
 import type { AppRouter } from '@/client/lib/trpc';
 import type { SessionProviderValue } from '@/lib/session-provider-selection';
@@ -35,7 +35,7 @@ interface WorkspaceContentViewProps {
   hasWorktreePath: boolean;
   selectedProvider: SessionProviderValue;
   setSelectedProvider: (provider: SessionProviderValue) => void;
-  creationSelection?: ProviderModelPickerProps;
+  creationSelection?: SessionLaunchControlsProps;
 }
 
 // =============================================================================

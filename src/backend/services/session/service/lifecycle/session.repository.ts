@@ -7,6 +7,7 @@ import {
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { workspaceDataService } from '@/backend/services/workspace';
 import type { Prisma, Workspace } from '@prisma-gen/client';
+import { readSessionLaunchSettings } from './session-launch-settings';
 
 function isMetadataRecord(value: Prisma.JsonValue | undefined): value is Prisma.JsonObject {
   return !!value && typeof value === 'object' && !Array.isArray(value);
@@ -155,9 +156,11 @@ export class SessionRepository {
     const currentMetadata = current.providerMetadata;
     const durableMetadata = isMetadataRecord(currentMetadata) ? currentMetadata : {};
     const { providerSessionId: _identity, ...guardedData } = data;
+    const consumedLaunch = readSessionLaunchSettings(durableMetadata);
     const mergedMetadata = {
       ...durableMetadata,
       ...metadata,
+      ...(consumedLaunch?.applied ? { launchSettings: consumedLaunch } : {}),
       ...(durableMetadata.providerIdentityRollovers !== undefined
         ? { providerIdentityRollovers: durableMetadata.providerIdentityRollovers }
         : {}),

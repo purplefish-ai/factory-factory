@@ -282,7 +282,10 @@ it('persists one parent notification per accepted NONE-to-OPEN association and n
       runScriptStateMachine: new EventEmitter(),
       workspaceAutoIterationService: new EventEmitter(),
       sessionDomainService: new EventEmitter(),
-      workspaceDataService: { findRatchetProjection: vi.fn().mockResolvedValue(null) },
+      workspaceDataService: {
+        subscribeAcceptedBranch: () => vi.fn(),
+        findRatchetProjection: vi.fn().mockResolvedValue(null),
+      },
       workspaceSnapshotStore: { getAllWorkspaceIds: () => [], upsert: vi.fn() },
     })
   );

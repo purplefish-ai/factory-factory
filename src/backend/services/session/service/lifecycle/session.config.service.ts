@@ -5,12 +5,14 @@ import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/ses
 import { withConfiguredAcpHandle } from '@/backend/services/session/service/acp/acp-configured-handle';
 import { resolveAcpModelSelection } from '@/backend/services/session/service/acp/acp-model-selection';
 import { normalizeSessionConfigOptions } from '@/backend/services/session/service/acp/acp-session-config-options';
+import { fetchSessionLaunchOptionsFromAcp } from '@/backend/services/session/service/acp/session-launch-options-probe';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { userSettingsService } from '@/backend/services/settings';
 import type { SessionDeltaEvent } from '@/shared/acp-protocol';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import { type ChatBarCapabilities, EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
+import type { SessionLaunchOptions } from '@/shared/session-launch';
 import type { SessionPermissionPreset } from '@prisma-gen/client';
 import { parseAcpConfigSnapshot, type StoredAcpConfigSnapshot } from './acp-config-snapshot';
 import type { CodexModelCatalogService } from './codex-model-catalog.service';
@@ -28,12 +30,18 @@ import {
 } from './session-config-snapshot-persistence';
 export type { PersistAcpConfigSnapshotParams } from './session-config-snapshot-persistence';
 import { setInactiveSessionConfigOption } from './session-inactive-config-options';
+import { SessionLaunchOptionsService } from './session-launch-options.service';
 import {
   applyReadOnlyReviewPermissions,
   assertReadOnlyReviewConfigOption,
   resolveConfiguredAccessModeTarget,
   SessionStartupPermissions,
+  SessionStartupTargetError,
 } from './session-permission-policy';
+import {
+  applyReasoningEffortTarget,
+  type ReasoningEffortTargetParams,
+} from './session-reasoning-configuration';
 import { restoreSavedNativeModes } from './session-saved-native-modes';
 import {
   SessionStartupConfigurationFinalizer,
@@ -44,6 +52,8 @@ import {
   findCollaborationOption,
   resolveStartupModeTarget,
 } from './session-startup-mode-preset';
+import { applyStartupLaunchPlan } from './session-startup-plan';
+import { configuredReasoningEffort, startupReasoningTarget } from './session-startup-reasoning';
 import { getWorkflowPermissionPreset } from './session-workflow-permissions';
 import type { SessionRepository } from './session.repository';
 
@@ -56,6 +66,7 @@ export type SessionConfigServiceDependencies = {
   runtimeManager: AcpRuntimeManager;
   codexModelCatalogService: Pick<CodexModelCatalogService, 'getModels'>;
   sessionDomainService?: SessionDomainService;
+  launchOptionsService?: Pick<SessionLaunchOptionsService, 'getOptions'>;
 };
 
 export class SessionConfigService {
@@ -63,6 +74,7 @@ export class SessionConfigService {
   private readonly snapshotPersistence: SessionConfigSnapshotPersistence;
   private readonly startupFinalizer: SessionStartupConfigurationFinalizer;
   private readonly configAuthority = new SessionConfigCommitAuthority();
+  private readonly launchOptionsService: Pick<SessionLaunchOptionsService, 'getOptions'>;
   private readonly configUpdates: SessionConfigMutationQueue;
   private readonly repository: SessionRepository;
   private readonly runtimeManager: AcpRuntimeManager;
@@ -70,6 +82,12 @@ export class SessionConfigService {
   private readonly codexModelCatalogService: Pick<CodexModelCatalogService, 'getModels'>;
 
   constructor(options: SessionConfigServiceDependencies) {
+    this.launchOptionsService =
+      options.launchOptionsService ??
+      new SessionLaunchOptionsService({
+        fetchOptions: fetchSessionLaunchOptionsFromAcp,
+        getSettings: () => userSettingsService.get(),
+      });
     this.repository = options.repository;
     this.snapshotPersistence = new SessionConfigSnapshotPersistence(options.repository);
     this.startupFinalizer = new SessionStartupConfigurationFinalizer(
@@ -91,15 +109,61 @@ export class SessionConfigService {
     );
   }
 
+  async applyStartupLaunchPlan(
+    sessionId: string,
+    session: AgentSessionRecord,
+    handle: AcpProcessHandle,
+    preset: SessionPermissionPreset | undefined,
+    override?: boolean
+  ): Promise<void> {
+    const assertCurrent = this.acceptRuntime(sessionId, handle);
+    try {
+      await applyStartupLaunchPlan(
+        sessionId,
+        session,
+        handle,
+        preset,
+        this.runtimeManager,
+        override,
+        () =>
+          this.resolvePermissionPresetFromSettings(sessionId, session.workflow, session.provider),
+        {
+          assertCurrent,
+          confirmTarget: (id, value) => {
+            this.startupPermissions.expectLaunchTarget(handle, id, value);
+            this.acceptConfiguration(sessionId, handle);
+          },
+        }
+      );
+    } catch (error) {
+      assertCurrent();
+      throw new SessionStartupTargetError(error);
+    }
+  }
+
+  getLaunchOptions(input: {
+    provider: SessionProvider;
+    model?: string;
+  }): Promise<SessionLaunchOptions> {
+    return this.launchOptionsService.getOptions(input);
+  }
+
   applyConfigOptionsUpdateDelta(
     sessionId: string,
     handle: AcpProcessHandle,
-    configOptions: SessionConfigOption[]
+    configOptions: SessionConfigOption[],
+    isCurrentSource?: () => boolean
   ): void {
-    if (
-      this.runtimeManager.getClient(sessionId) !== handle ||
-      this.runtimeManager.isStopInProgress(sessionId)
-    ) {
+    const assertCurrent = isCurrentSource
+      ? () => {
+          if (!isCurrentSource()) {
+            throw new Error('Session runtime changed before configuration update');
+          }
+        }
+      : this.acceptRuntime(sessionId, handle);
+    try {
+      assertCurrent();
+    } catch {
       return;
     }
     const normalizedConfigOptions = normalizeSessionConfigOptions(handle.provider, configOptions);
@@ -108,6 +172,7 @@ export class SessionConfigService {
       provider: handle.provider as SessionProvider,
       providerSessionId: handle.providerSessionId,
       configOptions: normalizedConfigOptions,
+      assertCurrent,
     }).catch((error: unknown) => {
       logger.warn('Failed persisting native configuration update', { sessionId, error });
     });
@@ -486,10 +551,7 @@ export class SessionConfigService {
     const requestedReasoningEffort = reasoningEffort?.trim();
     const targetReasoningEffort =
       requestedReasoningEffort ||
-      (await this.resolveConfiguredReasoningEffortFromSettings(
-        sessionId,
-        acpHandle.provider as SessionProvider
-      ));
+      (await configuredReasoningEffort(sessionId, acpHandle.provider as SessionProvider));
     if (!targetReasoningEffort) {
       return;
     }
@@ -511,24 +573,44 @@ export class SessionConfigService {
     options?: {
       persistSnapshot?: boolean;
       emitUpdates?: boolean;
+      session?: AgentSessionRecord;
+      reasoningEffort?: string | null;
     }
   ): Promise<void> {
-    const targetReasoningEffort = await this.resolveConfiguredReasoningEffortFromSettings(
-      sessionId,
-      handle.provider as SessionProvider
-    );
-    if (!targetReasoningEffort) {
-      return;
-    }
+    const assertCurrent = this.acceptRuntime(sessionId, handle);
+    try {
+      const target = await startupReasoningTarget(
+        sessionId,
+        handle,
+        options?.session,
+        options?.reasoningEffort
+      );
+      const targetReasoningEffort = target.value;
+      if (!targetReasoningEffort) {
+        return;
+      }
 
-    await this.applyReasoningEffortTarget({
-      sessionId,
-      handle,
-      targetReasoningEffort,
-      source: 'settings',
-      persistSnapshot: options?.persistSnapshot,
-      emitUpdates: options?.emitUpdates,
-    });
+      await this.applyReasoningEffortTarget({
+        sessionId,
+        handle,
+        targetReasoningEffort,
+        source: 'settings',
+        strict: target.strict,
+        normalizeUnsupported: target.normalizeUnsupported,
+        assertCurrent,
+        ...(target.strict && !target.normalizeUnsupported
+          ? {
+              confirmTarget: (id: string, value: string) =>
+                this.startupPermissions.expectLaunchTarget(handle, id, value),
+            }
+          : {}),
+        persistSnapshot: options?.persistSnapshot,
+        emitUpdates: options?.emitUpdates,
+      });
+    } catch (error) {
+      assertCurrent();
+      throw new SessionStartupTargetError(error);
+    }
   }
 
   async setSessionConfigOption(sessionId: string, configId: string, value: string): Promise<void> {
@@ -776,110 +858,14 @@ export class SessionConfigService {
     }
   }
 
-  private async resolveConfiguredReasoningEffortFromSettings(
-    sessionId: string,
-    provider: SessionProvider
-  ): Promise<string | null> {
-    try {
-      const settings = await userSettingsService.get();
-      const value =
-        provider === 'CLAUDE'
-          ? settings.defaultClaudeReasoningEffort
-          : settings.defaultCodexReasoningEffort;
-      return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
-    } catch (error) {
-      logger.warn('Failed loading user reasoning-effort defaults; using provider default', {
-        sessionId,
-        provider,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return null;
-    }
-  }
-
-  private async applyReasoningEffortTarget(params: {
-    sessionId: string;
-    handle: AcpProcessHandle;
-    targetReasoningEffort: string;
-    source: 'message' | 'settings';
-    persistSnapshot?: boolean;
-    emitUpdates?: boolean;
-    assertCurrent?: () => void;
-  }): Promise<void> {
-    const reasoningOption = params.handle.configOptions.find(
-      (option) =>
-        option.id === 'reasoning_effort' ||
-        option.id === 'thought_level' ||
-        option.category === 'thought_level' ||
-        option.category === 'reasoning'
-    );
-    if (!reasoningOption) {
-      logger.debug('Skipping reasoning-effort default because provider has no effort option', {
-        sessionId: params.sessionId,
-        provider: params.handle.provider,
-        source: params.source,
-      });
-      return;
-    }
-
-    const availableValues = getConfigOptionValues(reasoningOption);
-    if (availableValues.length > 0 && !availableValues.includes(params.targetReasoningEffort)) {
-      logger.debug('Skipping unsupported reasoning effort for ACP session', {
-        sessionId: params.sessionId,
-        provider: params.handle.provider,
-        reasoningEffort: params.targetReasoningEffort,
-        availableValues,
-        source: params.source,
-      });
-      return;
-    }
-
-    const currentReasoningEffort = reasoningOption.currentValue
-      ? String(reasoningOption.currentValue)
-      : null;
-    if (currentReasoningEffort === params.targetReasoningEffort) {
-      return;
-    }
-
-    await this.runtimeManager.setConfigOption(
-      params.sessionId,
-      reasoningOption.id,
-      params.targetReasoningEffort
-    );
-    params.assertCurrent?.();
-    const configOptions = structuredClone(params.handle.configOptions);
-    const accepted = this.acceptConfiguration(
-      params.sessionId,
-      params.handle,
-      params.assertCurrent
-    );
-    if (
-      !(await accepted.persist(async (assertCurrent) => {
-        if (params.persistSnapshot !== false) {
-          await this.snapshotPersistence.persist(params.sessionId, {
-            provider: params.handle.provider as SessionProvider,
-            providerSessionId: params.handle.providerSessionId,
-            configOptions,
-            assertCurrent,
-          });
-        }
-      }))
-    ) {
-      return;
-    }
-    if (!accepted.isCurrent()) {
-      return;
-    }
-    if (params.emitUpdates !== false) {
-      this.sessionDomainService.emitDelta(params.sessionId, {
-        type: 'config_options_update',
-        configOptions,
-      } as SessionDeltaEvent);
-      this.sessionDomainService.emitDelta(params.sessionId, {
-        type: 'chat_capabilities',
-        capabilities: this.buildAcpChatBarCapabilities(params.handle),
-      });
-    }
+  private applyReasoningEffortTarget(params: ReasoningEffortTargetParams): Promise<void> {
+    return applyReasoningEffortTarget(params, {
+      runtimeManager: this.runtimeManager,
+      acceptConfiguration: (assertCurrent) =>
+        this.acceptConfiguration(params.sessionId, params.handle, assertCurrent),
+      persistSnapshot: this.persistAcpConfigSnapshot.bind(this),
+      emitDelta: this.sessionDomainService.emitDelta.bind(this.sessionDomainService),
+    });
   }
 
   private async refreshCodexFallbackConfigOptionsFromAppServer(params: {

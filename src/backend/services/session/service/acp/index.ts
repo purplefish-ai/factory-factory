@@ -4,6 +4,7 @@ export { AcpEventTranslator } from './acp-event-translator';
 export { AcpPermissionBridge } from './acp-permission-bridge';
 export { AcpProcessHandle } from './acp-process-handle';
 export type {
+  AcpConfigObservationSource,
   AcpPermissionRequestEvent,
   AcpProviderIdentityEvent,
   AcpRuntimeErrorEvent,
@@ -25,3 +26,5 @@ export {
 export { fetchCodexModelCatalogFromAppServer } from './codex-model-catalog-loader';
 export { toAcpSessionId } from './acp-session-identity';
 export type { AcpClientOptions, AcpProvider, AcpSessionState, PermissionPreset } from './types';
+
+export { fetchSessionLaunchOptionsFromAcp } from './session-launch-options-probe';

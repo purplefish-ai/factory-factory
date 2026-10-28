@@ -345,7 +345,8 @@ export class AcpRuntimeSupervisor {
 
   private createRuntimeHandlers(
     handlers: AcpRuntimeEventHandlers,
-    runtime: AcpRuntimeMetadata
+    runtime: AcpRuntimeMetadata,
+    stopGeneration: number
   ): AcpRuntimeEventHandlers {
     return {
       ...handlers,
@@ -362,12 +363,53 @@ export class AcpRuntimeSupervisor {
           }
         }
         if (handlers.onAcpEvent) {
+          if (
+            this.dispatchPendingConfigObservation(
+              sessionId,
+              event,
+              runtime,
+              stopGeneration,
+              handlers.onAcpEvent
+            )
+          ) {
+            return;
+          }
           handlers.onAcpEvent(sessionId, event);
           return;
         }
         logger.debug('ACP event received but no handler registered', { sessionId });
       },
     };
+  }
+
+  private dispatchPendingConfigObservation(
+    sessionId: string,
+    event: Parameters<NonNullable<AcpRuntimeEventHandlers['onAcpEvent']>>[1],
+    runtime: AcpRuntimeMetadata,
+    stopGeneration: number,
+    dispatch: NonNullable<AcpRuntimeEventHandlers['onAcpEvent']>
+  ): boolean {
+    if (
+      !this.pendingCreation.has(sessionId) ||
+      event.type !== 'acp_session_update' ||
+      event.update.sessionUpdate !== 'config_option_update'
+    ) {
+      return false;
+    }
+    // Public lookup deliberately hides the pending candidate. Config alone receives
+    // its source fence; its owner still normalizes, accepts, persists and publishes.
+    const handle = this.getInstalledHandle(sessionId);
+    if (handle) {
+      const isCurrent = () =>
+        this.currentRuntimeBySessionId.get(sessionId) === runtime &&
+        this.isCurrentHandle(sessionId, handle) &&
+        handle.isRunning() &&
+        !this.isCreationCancelled(sessionId, stopGeneration);
+      if (isCurrent()) {
+        dispatch(sessionId, event, { handle, isCurrent });
+      }
+    }
+    return true;
   }
 
   private async createClient(
@@ -383,7 +425,7 @@ export class AcpRuntimeSupervisor {
     }
     const shutdownSignal = this.createShutdownSignal(sessionId);
     const stopSignal = this.createSessionStopSignal(sessionId);
-    const runtimeHandlers = this.createRuntimeHandlers(handlers, metadata);
+    const runtimeHandlers = this.createRuntimeHandlers(handlers, metadata, stopGeneration);
     let startupActive = true;
     let eventsReady = false;
     let startupError: Error | undefined;

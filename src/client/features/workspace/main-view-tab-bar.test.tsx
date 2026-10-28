@@ -229,6 +229,7 @@ it('keeps the creation retry enabled while creation actions are blocked by defau
                 provider: null,
                 models: [],
                 error: 'Could not load chat defaults',
+                unavailableReason: 'Could not load chat defaults',
                 onRetry,
               }}
             />
@@ -239,6 +240,10 @@ it('keeps the creation retry enabled while creation actions are blocked by defau
     expect(
       container.querySelector<HTMLButtonElement>('[aria-label="New conversation"]')?.disabled
     ).toBe(true);
+    const create = container.querySelector<HTMLButtonElement>('[aria-label="New conversation"]');
+    expect(create?.hasAttribute('title')).toBe(false);
+    expect(create?.getAttribute('aria-description')).toBe('Could not load chat defaults');
+    expect(create?.classList.contains('disabled:pointer-events-none')).toBe(false);
     const retry = container.querySelector<HTMLButtonElement>('[aria-label$="Retry selection"]');
     expect(retry?.disabled).toBe(false);
     await act(() => retry?.click());

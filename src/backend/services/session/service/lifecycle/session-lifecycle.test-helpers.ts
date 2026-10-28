@@ -130,6 +130,7 @@ export type LifecycleHarness = {
     SessionConfigService,
     | 'applyConfiguredReasoningEffort'
     | 'applyStartupModePreset'
+    | 'applyStartupLaunchPlan'
     | 'applyConfiguredPermissionPreset'
     | 'persistAcpConfigSnapshot'
     | 'completeStartupConfiguration'
@@ -212,6 +213,19 @@ export function mockCreatedAcpClient(
   runtimeManager: Pick<AcpRuntimeManager, 'getOrCreateClient' | 'getClient'>,
   acpHandle: AcpProcessHandle
 ): void {
+  // Successful native startup supplies confirmed configuration for its final snapshot.
+  if (acpHandle.configOptions.length === 0) {
+    acpHandle.configOptions = [
+      {
+        id: 'model',
+        category: 'model',
+        name: 'Model',
+        type: 'select',
+        currentValue: 'sonnet',
+        options: [{ value: 'sonnet', name: 'Sonnet' }],
+      },
+    ];
+  }
   Object.assign(acpHandle, {
     beginConfiguration: vi.fn(() => ({ complete: vi.fn(), fail: vi.fn() })),
     completeConfiguration: vi.fn((assertCurrent?: () => void) => assertCurrent?.()),
@@ -617,6 +631,7 @@ export function createLifecycleHarness(
   const sessionConfigService = {
     applyConfiguredReasoningEffort: vi.fn(async () => undefined),
     applyStartupModePreset: vi.fn(async () => undefined),
+    applyStartupLaunchPlan: vi.fn(async () => undefined),
     applyConfiguredPermissionPreset: vi.fn(async () => undefined),
     persistAcpConfigSnapshot: vi.fn<SessionConfigService['persistAcpConfigSnapshot']>(
       async () => undefined
@@ -634,6 +649,7 @@ export function createLifecycleHarness(
     SessionConfigService,
     | 'applyConfiguredReasoningEffort'
     | 'applyStartupModePreset'
+    | 'applyStartupLaunchPlan'
     | 'applyConfiguredPermissionPreset'
     | 'persistAcpConfigSnapshot'
     | 'completeStartupConfiguration'

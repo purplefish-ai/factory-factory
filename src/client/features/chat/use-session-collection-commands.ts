@@ -10,8 +10,12 @@ type CreationKind = 'chat' | 'quick-action';
 interface SessionCollectionCommandsOptions {
   workspaceId: string | null;
   sessions: readonly { name?: string | null }[] | undefined;
-  creationDefaults: Pick<CreateSessionInput, 'model' | 'provider'>;
+  creationDefaults: Pick<
+    CreateSessionInput,
+    'model' | 'provider' | 'reasoningEffort' | 'planModeEnabled'
+  >;
   canCreate?: boolean;
+  unavailableReason?: string;
   onCreated: (session: { id: string }, workspaceId: string, kind: CreationKind) => void;
 }
 
@@ -38,6 +42,7 @@ export function useSessionCollectionCommands({
   sessions,
   creationDefaults,
   canCreate = true,
+  unavailableReason,
   onCreated,
 }: SessionCollectionCommandsOptions): SessionCollectionCommands {
   const utils = trpc.useUtils();
@@ -86,7 +91,7 @@ export function useSessionCollectionCommands({
       return;
     }
     if (!canCreate) {
-      toast.error('Chat defaults are not ready. Wait or retry selection.');
+      toast.error(unavailableReason ?? 'Chat defaults are not ready. Wait or retry selection.');
       return;
     }
     const existingNumbers = (sessions ?? [])
@@ -106,7 +111,15 @@ export function useSessionCollectionCommands({
       },
       { onSuccess: (session) => onCreated(session, workspaceId, 'chat') }
     );
-  }, [workspaceId, sessions, creationDefaults, canCreate, createSession, onCreated]);
+  }, [
+    workspaceId,
+    sessions,
+    creationDefaults,
+    canCreate,
+    unavailableReason,
+    createSession,
+    onCreated,
+  ]);
 
   const quickActionInput = useCallback(
     (name: string, prompt: string): CreateSessionInput | null => {
@@ -114,7 +127,7 @@ export function useSessionCollectionCommands({
         return null;
       }
       if (!canCreate) {
-        toast.error('Chat defaults are not ready. Wait or retry selection.');
+        toast.error(unavailableReason ?? 'Chat defaults are not ready. Wait or retry selection.');
         return null;
       }
       return {
@@ -126,7 +139,7 @@ export function useSessionCollectionCommands({
         initialPrompt: '',
       };
     },
-    [workspaceId, creationDefaults, canCreate]
+    [workspaceId, creationDefaults, canCreate, unavailableReason]
   );
   const createQuickAction = useCallback(
     (name: string, prompt: string) => {
