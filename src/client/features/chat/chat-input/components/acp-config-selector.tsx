@@ -14,101 +14,123 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
+import { getConfigPresentation } from './acp-config-presentation';
 
 interface AcpConfigSelectorProps {
   configOption: AcpConfigOption;
   onSelect: (configId: string, value: string) => void;
   disabled?: boolean;
+  compact?: boolean;
 }
 
 function isGroupedOption(
   option: AcpConfigOptionValue | AcpConfigOptionGroup
 ): option is AcpConfigOptionGroup {
-  return 'group' in option && Array.isArray((option as AcpConfigOptionGroup).options);
+  return 'group' in option && Array.isArray(option.options);
 }
 
-function findCurrentLabel(configOption: AcpConfigOption): string {
-  for (const entry of configOption.options) {
-    if (isGroupedOption(entry)) {
-      for (const opt of entry.options) {
-        if (opt.value === configOption.currentValue) {
-          return opt.name;
-        }
-      }
-    } else if (entry.value === configOption.currentValue) {
-      return entry.name;
-    }
-  }
-  return configOption.name;
-}
-
-/**
- * Generic ACP config option dropdown selector.
- * Handles both flat and grouped option arrays from ACP agents.
- * Follows the same visual style as ModelSelector.
- */
-export function AcpConfigSelector({ configOption, onSelect, disabled }: AcpConfigSelectorProps) {
-  const displayName = findCurrentLabel(configOption);
-  const controlName =
-    configOption.id === 'mode'
-      ? 'Access'
-      : configOption.id === 'collaboration_mode'
-        ? 'Planning'
-        : configOption.name;
-  const hasGroupedOptions = configOption.options.some(isGroupedOption);
+/** Provider-owned settings, with compact controls and explanations at the point of selection. */
+export function AcpConfigSelector({
+  configOption,
+  onSelect,
+  disabled,
+  compact = true,
+}: AcpConfigSelectorProps) {
+  const current = configOption.options
+    .flatMap((entry) => (isGroupedOption(entry) ? entry.options : [entry]))
+    .find((option) => option.value === configOption.currentValue);
+  const displayName = current?.name ?? configOption.currentValue;
+  const presentation = getConfigPresentation(configOption);
+  const Icon = presentation.icon;
+  const iconOnly = compact && presentation.compact;
+  const label = `${presentation.label}: ${displayName}`;
+  const renderOption = (option: AcpConfigOptionValue) => {
+    const item = getConfigPresentation({ ...configOption, currentValue: option.value });
+    const ItemIcon = presentation.label === 'Access' ? item.icon : undefined;
+    return (
+      <DropdownMenuRadioItem
+        key={option.value}
+        value={option.value}
+        textValue={option.name}
+        className={cn(
+          item.warning &&
+            'text-orange-600 focus:text-orange-600 dark:text-orange-400 dark:focus:text-orange-400'
+        )}
+      >
+        {ItemIcon && <ItemIcon className="size-4 shrink-0" aria-hidden="true" />}
+        <span className="min-w-0">
+          <span className="block">{option.name}</span>
+          {option.description && (
+            <span className="block text-xs font-normal text-muted-foreground">
+              {option.description}
+            </span>
+          )}
+        </span>
+      </DropdownMenuRadioItem>
+    );
+  };
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          aria-label={`${controlName}: ${displayName}`}
-          title={`${controlName}: ${displayName}`}
-          variant="ghost"
-          size="sm"
-          disabled={disabled}
-          className="h-6 max-w-[14rem] gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
-        >
-          <span className="truncate">{displayName}</span>
-          <CaretDownIcon className="h-3 w-3 shrink-0" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-64 max-w-[calc(100vw-2rem)]">
-        <DropdownMenuLabel>{controlName}</DropdownMenuLabel>
-        <DropdownMenuRadioGroup
-          value={configOption.currentValue}
-          onValueChange={(value) => onSelect(configOption.id, value)}
-        >
-          {hasGroupedOptions
-            ? configOption.options.map((entry, idx) => {
-                if (isGroupedOption(entry)) {
-                  return (
-                    <div key={entry.group}>
-                      {idx > 0 && <DropdownMenuSeparator />}
-                      <DropdownMenuLabel>{entry.group}</DropdownMenuLabel>
-                      {entry.options.map((opt) => (
-                        <DropdownMenuRadioItem key={opt.value} value={opt.value}>
-                          {opt.name}
-                        </DropdownMenuRadioItem>
-                      ))}
-                    </div>
-                  );
-                }
-                return (
-                  <DropdownMenuRadioItem key={entry.value} value={entry.value}>
-                    {entry.name}
-                  </DropdownMenuRadioItem>
-                );
-              })
-            : configOption.options.map((entry) => {
-                const opt = entry as AcpConfigOptionValue;
-                return (
-                  <DropdownMenuRadioItem key={opt.value} value={opt.value}>
-                    {opt.name}
-                  </DropdownMenuRadioItem>
-                );
-              })}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <TooltipProvider>
+      <Tooltip open={compact ? undefined : false}>
+        <DropdownMenu>
+          <TooltipTrigger asChild>
+            <DropdownMenuTrigger asChild>
+              <Button
+                aria-label={label}
+                variant="ghost"
+                size="sm"
+                disabled={disabled}
+                className={cn(
+                  'h-6 shrink-0 gap-1 text-xs text-muted-foreground hover:text-foreground',
+                  iconOnly ? 'w-6 p-0' : 'max-w-[14rem] px-2',
+                  presentation.active && 'bg-accent text-accent-foreground',
+                  presentation.warning &&
+                    'text-orange-600 hover:text-orange-600 dark:text-orange-400 dark:hover:text-orange-400'
+                )}
+              >
+                {Icon && <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+                {!iconOnly && (
+                  <>
+                    <span className="truncate">{displayName}</span>
+                    <CaretDownIcon className="h-3 w-3 shrink-0" aria-hidden="true" />
+                  </>
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          <DropdownMenuContent align="start" className="w-64 max-w-[calc(100vw-2rem)]">
+            <DropdownMenuLabel>{presentation.label}</DropdownMenuLabel>
+            {configOption.description && (
+              <p className="px-2 pb-2 text-xs text-muted-foreground">{configOption.description}</p>
+            )}
+            <DropdownMenuRadioGroup
+              value={configOption.currentValue}
+              onValueChange={(value) => onSelect(configOption.id, value)}
+            >
+              {configOption.options.map((entry, idx) =>
+                isGroupedOption(entry) ? (
+                  <div key={entry.group}>
+                    {idx > 0 && <DropdownMenuSeparator />}
+                    <DropdownMenuLabel>{entry.group}</DropdownMenuLabel>
+                    {entry.options.map(renderOption)}
+                  </div>
+                ) : (
+                  renderOption(entry)
+                )
+              )}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <TooltipContent side="top" className="max-w-64">
+          <p>{label}</p>
+          {(current?.description || configOption.description) && (
+            <p className="mt-1 opacity-80">{current?.description || configOption.description}</p>
+          )}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
