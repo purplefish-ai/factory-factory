@@ -201,18 +201,22 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   const hasBackgroundActivity = Boolean(
     work && (work.backgroundTasks.length > 0 || work.runningSubagents > 0 || work.activeGoals > 0)
   );
-  // Pending PR updates describe future work, so keep them after the current activity.
-  const { messages, queuedPRUpdates } = useMemo(() => {
+  // Pending PR updates share one status line after the current activity.
+  const { messages, queuedPRUpdate } = useMemo(() => {
     const messages: GroupedMessageItem[] = [];
-    const queuedPRUpdates: GroupedMessageItem[] = [];
+    let queuedPRUpdate: GroupedMessageItem | undefined;
     for (const item of allMessages) {
       const isQueuedPRUpdate =
         !isToolSequence(item) &&
         queuedMessageIds?.has(item.id) &&
         (item.message?.type === 'pr_update' || item.id.startsWith(PR_EVENT_MESSAGE_ID_PREFIX));
-      (isQueuedPRUpdate ? queuedPRUpdates : messages).push(item);
+      if (isQueuedPRUpdate) {
+        queuedPRUpdate ??= item;
+      } else {
+        messages.push(item);
+      }
     }
-    return { messages, queuedPRUpdates };
+    return { messages, queuedPRUpdate };
   }, [allMessages, queuedMessageIds]);
   const { getExpansionState, setExpansionState } = useWorkspaceToolExpansionState(workspaceId);
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -624,9 +628,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
           />
         )}
 
-        {queuedPRUpdates.map((item) => (
-          <GroupedMessageItemRenderer key={item.id} item={item} isQueued />
-        ))}
+        {queuedPRUpdate && <GroupedMessageItemRenderer item={queuedPRUpdate} isQueued />}
 
         {/* Scroll anchor */}
         <div ref={messagesEndRef} className="h-px" />

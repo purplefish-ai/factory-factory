@@ -285,6 +285,33 @@ describe('SessionNotificationDeliveryService', () => {
     expect(notificationPort.markDelivered).toHaveBeenCalledWith(['notif-parent']);
   });
 
+  it('recovers each notification included in one combined provider prompt', async () => {
+    const { service, notificationPort, queuePort } = createHarness({
+      pending: [
+        createPendingWorkspaceNotification({ id: 'first' }),
+        createPendingWorkspaceNotification({ id: 'second' }),
+      ],
+      historyHydrationSource: 'jsonl',
+      transcript: [
+        {
+          id: 'provider-batch-0',
+          source: 'user',
+          order: 0,
+          timestamp: '2026-06-22T10:30:00.000Z',
+          text: 'Human request\n\n[Message from parent workspace "Parent Workspace"]: Please check the failing test.\n\n<!-- factory-factory-workspace-notification:first -->\n\n[Message from parent workspace "Parent Workspace"]: Please check the failing test.\n\n<!-- factory-factory-workspace-notification:second -->',
+        },
+      ],
+    });
+    await service.recoverPending({
+      sessionId: 'session-1',
+      workspaceId: 'workspace-1',
+      assertAllowed: vi.fn(),
+    });
+    expect(queuePort.enqueue).not.toHaveBeenCalled();
+    expect(notificationPort.markDelivered).toHaveBeenCalledWith(['first']);
+    expect(notificationPort.markDelivered).toHaveBeenCalledWith(['second']);
+  });
+
   it('does not content-match identical user text without the notification marker', async () => {
     const { service, notificationPort, queuePort } = createHarness({
       pending: [createPendingWorkspaceNotification()],

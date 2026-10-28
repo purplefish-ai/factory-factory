@@ -64,7 +64,7 @@ export type PRDeliveryPorts = PRDedicatedSessionPorts &
     sessionDomainService: Pick<typeof sessionDomainService, 'getPendingInteractiveRequest'>;
     sessionDispatchService: Pick<typeof sessionDispatchService, 'tryDispatchNextMessage'>;
     userSettingsService: Pick<typeof userSettingsService, 'get'>;
-    workspacePrSnapshotService: Pick<typeof workspacePrSnapshotService, 'find'>;
+    workspacePrSnapshotService: Pick<typeof workspacePrSnapshotService, 'find' | 'list'>;
     ratchetService: Pick<typeof ratchetService, 'emit'>;
     sessionBackgroundDeliveryService: Pick<
       typeof sessionBackgroundDeliveryService,

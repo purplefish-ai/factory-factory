@@ -66,3 +66,97 @@ it('keeps a queued PR update below live thinking, then returns it to the transcr
     container.remove();
   }
 });
+
+it('shows one PR queue status until all updates settle, preserving individual outcomes and human messages', () => {
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  const updates: ChatMessage[] = [
+    {
+      id: 'pr-event-first',
+      source: 'user',
+      order: 1,
+      timestamp: '2026-10-28T00:00:00.000Z',
+      text: 'PR update queued for the next turn',
+    },
+    {
+      id: 'second-update',
+      source: 'agent',
+      order: 2,
+      timestamp: '2026-10-28T00:00:01.000Z',
+      message: { type: 'pr_update', text: 'Review feedback' },
+    },
+    {
+      id: 'pr-event-third',
+      source: 'user',
+      order: 3,
+      timestamp: '2026-10-28T00:00:02.000Z',
+      text: 'PR update queued for the next turn',
+    },
+  ];
+  const human: ChatMessage = {
+    id: 'human',
+    source: 'user',
+    order: 4,
+    timestamp: '2026-10-28T00:00:03.000Z',
+    text: 'Please check the tests too',
+  };
+  const render = (settled: number) => {
+    const states = ['delivered', 'failed', 'cancelled'] as const;
+    flushSync(() =>
+      root.render(
+        createElement(VirtualizedMessageList, {
+          messages: [
+            ...updates.map((update, index): ChatMessage =>
+              index < settled
+                ? {
+                    ...update,
+                    source: 'agent',
+                    message: {
+                      type: 'pr_update',
+                      text: `Update ${index + 1} details`,
+                      prDeliveryState: states[index],
+                    },
+                  }
+                : update
+            ),
+            human,
+          ],
+          queuedMessageIds: new Set([...updates.slice(settled).map(({ id }) => id), human.id]),
+          running: true,
+          startingSession: false,
+          loadingSession: false,
+          latestThinking: 'Checking the implementation',
+          scrollContainerRef: { current: container },
+        })
+      )
+    );
+  };
+  try {
+    for (const settled of [0, 1, 2, 3]) {
+      render(settled);
+      expect(container.textContent?.match(/PR update · queued for next turn/g) ?? []).toHaveLength(
+        settled < 3 ? 1 : 0
+      );
+      expect(container.textContent).toContain(human.text);
+      expect(container.querySelectorAll('details')).toHaveLength(settled);
+      if (settled < 3) {
+        expect(container.textContent!.indexOf('Checking the implementation')).toBeLessThan(
+          container.textContent!.indexOf('PR update · queued for next turn')
+        );
+      }
+      if (settled > 0) {
+        expect(container.textContent).toContain('PR update · delivered');
+      }
+      if (settled > 1) {
+        expect(container.textContent).toContain('PR update · failed');
+      }
+      if (settled > 2) {
+        expect(container.textContent).toContain('PR update · cancelled');
+      }
+    }
+  } finally {
+    flushSync(() => root.unmount());
+    container.remove();
+  }
+});

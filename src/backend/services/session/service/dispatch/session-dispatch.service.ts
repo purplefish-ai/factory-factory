@@ -16,6 +16,13 @@ import {
   type QueuedMessage,
   resolveSelectedModel,
 } from '@/shared/acp-protocol';
+import {
+  acknowledgeSentBatch,
+  collectDispatchBatch,
+  dispatchCollectedBatch,
+  prepareBatchContents,
+  combineBatchContents,
+} from './session-dispatch-batch';
 import type {
   SessionDispatchDependencies,
   SessionDispatchLifecycleDependencies,
@@ -241,7 +248,9 @@ export class SessionDispatchService {
           ? 'continue'
           : 'done';
       }
-      await this.dispatchPeekedMessage(dbSessionId, peeked, stopGeneration);
+      if ((await this.dispatchPeekedMessage(dbSessionId, peeked, stopGeneration)) === 'retry') {
+        return 'continue';
+      }
       return peeked.source &&
         this.isDispatchGenerationCurrent(dbSessionId, stopGeneration) &&
         sessionDomainService.peekNextMessage(dbSessionId) !== peeked
@@ -258,7 +267,7 @@ export class SessionDispatchService {
     dbSessionId: string,
     peeked: QueuedMessage,
     stopGeneration: number
-  ): Promise<void> {
+  ): Promise<'retry' | undefined> {
     const dispatchGate = await this.evaluateDispatchGateSafely(dbSessionId);
     if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
       return;
@@ -292,25 +301,36 @@ export class SessionDispatchService {
       );
       return;
     }
-    // NOW dequeue — client is ready, we're about to dispatch.
-    const msg = sessionDomainService.dequeueNext(dbSessionId, { emitSnapshot: false });
-    if (!msg) {
-      return;
-    }
-
-    try {
-      await this.dispatchMessage(dbSessionId, msg, clientResult.client, stopGeneration);
-      this.turnInProgressRetryAttempts.delete(dbSessionId);
-    } catch (error) {
-      if (msg.source) {
-        await this.dependencies.backgroundDelivery.fail(
-          msg,
-          error,
-          this.isDispatchGenerationCurrent(dbSessionId, stopGeneration) ? 'failed' : 'cancelled'
-        );
-      }
-      this.handleDispatchError(dbSessionId, msg, error, stopGeneration);
-    }
+    const batch = await collectDispatchBatch({
+      sessionId: dbSessionId,
+      first: peeked,
+      notifications: this.lifecycle.notificationDelivery,
+      prepareBackground: async (message) => {
+        try {
+          return await this.prepareBackgroundForDispatch(dbSessionId, message, stopGeneration);
+        } catch (error) {
+          logger.warn('PR preparation deferred; dispatching queued human messages', {
+            dbSessionId,
+            error,
+          });
+          return false;
+        }
+      },
+      isCurrent: () => this.isDispatchGenerationCurrent(dbSessionId, stopGeneration),
+    });
+    return dispatchCollectedBatch({
+      sessionId: dbSessionId,
+      batch,
+      backgroundDelivery: this.dependencies.backgroundDelivery,
+      isCurrent: () => this.isDispatchGenerationCurrent(dbSessionId, stopGeneration),
+      send: (messages) =>
+        this.dispatchMessage(dbSessionId, messages, clientResult.client, stopGeneration),
+      onError: (message, error) =>
+        this.handleDispatchError(dbSessionId, message, error, stopGeneration),
+      onSuccess: () => {
+        this.turnInProgressRetryAttempts.delete(dbSessionId);
+      },
+    });
   }
 
   private async releaseStoppedBackground(message: QueuedMessage): Promise<void> {
@@ -592,39 +612,62 @@ export class SessionDispatchService {
    */
   private async dispatchMessage(
     dbSessionId: string,
-    msg: QueuedMessage,
+    messages: QueuedMessage[],
     client: unknown,
     stopGeneration: number
   ): Promise<void> {
+    const contents = prepareBatchContents(
+      messages,
+      (message) => this.buildMessageContent(message),
+      (message, error) => this.handleDispatchError(dbSessionId, message, error, stopGeneration)
+    );
+    const msg =
+      [...messages]
+        .reverse()
+        .find(
+          (message) =>
+            !(
+              message.source ||
+              this.lifecycle.notificationDelivery.isNotificationMessage(message.id)
+            )
+        ) ?? messages[0];
+    if (!msg) {
+      return;
+    }
     const isCompactCommand = this.isCompactCommand(msg.text);
     const compactionClient = isClaudeCompactionClient(client) ? client : null;
 
-    if (!(await this.configureMessageForDispatch(dbSessionId, msg, client, stopGeneration))) {
+    if (
+      !(await this.configureBatchForDispatch(dbSessionId, messages, msg, client, stopGeneration))
+    ) {
       return;
     }
 
     sessionDomainService.markRunning(dbSessionId);
 
-    // Build content and send to Claude
-    const content = this.buildMessageContent(msg);
-    const order = sessionDomainService.allocateOrder(dbSessionId);
-    const dispatchedUserMessage = {
-      text: msg.text,
-      timestamp: msg.timestamp,
-      attachments: msg.attachments,
-      settings: {
-        ...msg.settings,
-        selectedModel: resolveSelectedModel(msg.settings.selectedModel),
-        reasoningEffort: msg.settings.reasoningEffort,
-      },
-      order,
-    };
-
-    sessionDomainService.emitDelta(dbSessionId, {
-      type: 'message_state_changed',
-      id: msg.id,
-      newState: MessageState.DISPATCHED,
-      userMessage: dispatchedUserMessage,
+    const content = combineBatchContents(messages, contents);
+    const dispatched = messages.map((message) => {
+      if (!message.source) {
+        message.settings = { ...msg.settings };
+      }
+      const order = sessionDomainService.allocateOrder(dbSessionId);
+      const userMessage = {
+        text: message.text,
+        timestamp: message.timestamp,
+        attachments: message.attachments,
+        settings: {
+          ...msg.settings,
+          selectedModel: resolveSelectedModel(msg.settings.selectedModel),
+        },
+        order,
+      };
+      sessionDomainService.emitDelta(dbSessionId, {
+        type: 'message_state_changed',
+        id: message.id,
+        newState: MessageState.DISPATCHED,
+        userMessage,
+      });
+      return { message, order, userMessage };
     });
 
     if (isCompactCommand && compactionClient) {
@@ -635,30 +678,25 @@ export class SessionDispatchService {
       const sendPromise = this.dependencies.promptService.sendSessionMessage(dbSessionId, content);
       // Persist immediately after dispatch so refresh/replay keeps this user message
       // visible while the provider is still working on the turn.
-      sessionDomainService.commitSentUserMessageAtOrder(dbSessionId, msg, order);
-      await sendPromise;
-      sessionDomainService.emitDelta(dbSessionId, {
-        type: 'message_state_changed',
-        id: msg.id,
-        newState: MessageState.COMMITTED,
-        userMessage: dispatchedUserMessage,
-      });
-      if (msg.source) {
-        await this.dependencies.backgroundDelivery.complete(msg);
-        if (this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
-          await this.lifecycle.notificationDelivery.recoverPending({
-            sessionId: dbSessionId,
-            workspaceId: msg.source.request.workspaceId,
-            assertAllowed: () => {
-              if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
-                throw new Error('Session stopped before notification recovery');
-              }
-            },
-          });
-        }
-      } else {
-        await this.lifecycle.notificationDelivery.acknowledgeSuccessfulDispatch(msg.id);
+      for (const { message, order } of dispatched) {
+        sessionDomainService.commitSentUserMessageAtOrder(dbSessionId, message, order);
       }
+      await sendPromise;
+      for (const { message, userMessage } of dispatched) {
+        sessionDomainService.emitDelta(dbSessionId, {
+          type: 'message_state_changed',
+          id: message.id,
+          newState: MessageState.COMMITTED,
+          userMessage,
+        });
+      }
+      await acknowledgeSentBatch({
+        sessionId: dbSessionId,
+        messages,
+        backgroundDelivery: this.dependencies.backgroundDelivery,
+        notifications: this.lifecycle.notificationDelivery,
+        isCurrent: () => this.isDispatchGenerationCurrent(dbSessionId, stopGeneration),
+      });
     } catch (error) {
       if (isCompactCommand && compactionClient) {
         compactionClient.endCompaction();
@@ -672,6 +710,46 @@ export class SessionDispatchService {
         messageId: msg.id,
         remainingInQueue: sessionDomainService.getQueueLength(dbSessionId),
       });
+    }
+  }
+
+  private async configureBatchForDispatch(
+    dbSessionId: string,
+    messages: QueuedMessage[],
+    msg: QueuedMessage,
+    client: unknown,
+    stopGeneration: number
+  ): Promise<boolean> {
+    if (!(await this.configureMessageForDispatch(dbSessionId, msg, client, stopGeneration))) {
+      await this.failStoppedBatch(
+        dbSessionId,
+        messages.filter((other) => other !== msg)
+      );
+      return false;
+    }
+
+    for (const background of messages.filter((message) => message.source && message !== msg)) {
+      if (
+        !(await this.configureMessageForDispatch(dbSessionId, background, client, stopGeneration))
+      ) {
+        messages.splice(messages.indexOf(background), 1);
+      }
+    }
+    if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
+      await this.failStoppedBatch(dbSessionId, messages);
+      return false;
+    }
+
+    return true;
+  }
+
+  private async failStoppedBatch(dbSessionId: string, messages: QueuedMessage[]): Promise<void> {
+    for (const message of messages) {
+      if (message.source) {
+        await this.releaseStoppedBackground(message);
+      } else {
+        this.failStoppedUserMessage(dbSessionId, message);
+      }
     }
   }
 

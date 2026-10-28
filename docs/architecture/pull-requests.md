@@ -42,10 +42,12 @@ PR monitoring replaces the former Ratchet fixer workflow. The two-minute
 `pr-event-poll` job observes every attached PR and queues actionable updates in
 either a bound ordinary conversation (MAIN, the default) or one reusable
 dedicated conversation per PR (DEDICATED). This is one event pipeline with a
-destination setting, replacing the former fixer engine. Human messages retain
-FIFO priority; a background update waits for an idle recipient, no interactive
-request, and no working agent in the workspace. An update arriving mid-turn
-stays queued for the next turn.
+destination setting, replacing the former fixer engine. Queued non-command human
+messages are provided together in FIFO order on the next agent turn. Slash
+commands run in standalone turns. A ready background update joins those messages
+in the same provider prompt. Background updates wait for an idle recipient, no
+interactive request, and no working agent in the workspace. An update arriving
+mid-turn stays queued for the next turn.
 
 Enablement and delivery destination are workspace-scoped. In MAIN mode, a unique
 ordinary conversation can be bound automatically; multiple candidates require an
@@ -93,10 +95,12 @@ cancels unclaimed events while facts continue to refresh. Re-enabling or
 changing destinations/recipients starts an observation epoch. Enabling
 monitoring or binding a recipient does not queue a chat message. Both MAIN and
 DEDICATED batches carry concise maintenance instructions with actionable events
-for an attached PR in the same bounded message. Legacy workspace-level
-enablement controls are not delivered or included in pending counts; they remain
-available for receipt recovery. Collection projections report MERGED only when
-every attached PR is merged; an open sibling remains visible.
+in the same bounded message. MAIN batches collect pending facts across attached
+PRs for the selected conversation; DEDICATED batches contain only their bound
+PR's facts. Legacy workspace-level enablement controls are not delivered or
+included in pending counts; they remain available for receipt recovery.
+Collection projections report MERGED only when every attached PR is merged; an
+open sibling remains visible.
 
 Accepted per-PR `NONE` → `OPEN` observations notify the parent workspace once
 for each newly opened association, including attachment and discovery refreshes.
@@ -229,14 +233,22 @@ retained rather than inferred resolved. Unknown CI results never become green.
 ### Delivery and recovery
 
 The session queue carries a backend-owned `pr_event` source. Browser messages
-cannot supply it or reserved message IDs. Preparation refreshes facts and checks
-eligibility before freezing a bounded message (16 KiB UTF-8), event IDs,
-delivery UUID, recipient, binding revision, and attempt. The final guard runs
-again immediately before provider submission. A transactional workspace-wide
-claim permits only one PR delivery at a time, including across dedicated
-conversations. A competing claim retains its queued status row and retries when
-the active delivery settles. Review data is escaped, explicitly untrusted, and
-includes PR links and omission counts.
+cannot supply it or reserved message IDs. MAIN preparation refreshes distinct
+PRs with pending candidate facts, with at most three refreshes in flight. Failed
+refreshes leave that PR's facts pending while healthy siblings remain eligible;
+unrelated attached PRs do not delay delivery. Dedicated preparation refreshes
+its bound PR. Frozen retries reuse their exact event set and text without
+another GitHub refresh. Preparation checks eligibility before freezing a bounded
+message (16 KiB UTF-8), event IDs, delivery UUID, recipient, binding revision,
+and attempt. When complete PR identity sections exceed that limit, the batch
+claims only the sections represented in its text and leaves the remainder
+pending for later turns. The final guard runs again for every event and PR
+target immediately before provider submission. Frozen retries preserve their
+exact text and complete event set, so later facts wait for a subsequent batch. A
+transactional workspace-wide claim permits only one PR delivery at a time,
+including across dedicated conversations. A competing claim retains its queued
+status row and retries when the active delivery settles. Review data is escaped,
+explicitly untrusted, and includes PR links and omission counts.
 
 Cold delivery requires resuming the exact stored Claude/Codex conversation.
 Failed or unsupported resume cannot fall back to a new conversation. Saved ACP
@@ -263,7 +275,9 @@ receipt lookup and verifies the rollover lineage; unreadable history still
 pauses delivery. Frozen message text and delivery IDs remain unchanged. A
 recipient change first recovers old claims; only proven absence allows
 cancelling an old frozen delivery. It never retargets that frozen message into a
-new conversation.
+new conversation. If a PR in a frozen MAIN batch is detached, proven absence
+allows cancelling that batch and queuing fresh facts for its still-attached PRs.
+The original delivery identity and text remain preserved for receipt history.
 
 Closing a conversation retains its provider session ID in archived transcript
 metadata. Receipt recovery reads that identity and checks provider-owned
@@ -281,11 +295,12 @@ dedicated conversation exists yet. Changing destinations alone preserves a
 pause; resuming uses the binding revision and retains frozen recipients. The
 chat renders PR updates as compact, noneditable rows with queued, delivered,
 failed, or cancelled delivery states. Queued updates appear below current agent
-activity as a single status line; delivered update contents can be expanded in
-the transcript. Failed and cancelled queue outcomes remain in session snapshots
-and replay; background prompt text never enters composer recovery. Snapshots
-expose enablement, delivery mode, recipient, pause reason and pending count.
-Queued updates, paused delivery, and idle red CI do not imply live agent work.
+activity as one shared status line, regardless of how many updates are queued;
+delivered update contents can be expanded in the transcript. Failed and
+cancelled queue outcomes remain in session snapshots and replay; background
+prompt text never enters composer recovery. Snapshots expose enablement,
+delivery mode, recipient, pause reason and pending count. Queued updates, paused
+delivery, and idle red CI do not imply live agent work.
 
 ### Migration and backups
 

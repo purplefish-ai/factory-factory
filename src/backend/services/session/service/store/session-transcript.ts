@@ -105,6 +105,54 @@ function historyToClaudeMessage(msg: HistoryMessage): AgentMessage {
   return assertNever(msg);
 }
 
+/** PR sections contain escaped data on single lines; a blank line marks the next queued message. */
+function buildPRUpdateHistoryMessages(
+  historyMsg: Extract<HistoryMessage, { type: 'user' }>,
+  messageBaseId: string,
+  initialOrder: number
+): ChatMessage[] | null {
+  const prUpdate = /(?:^|\n+)(<!-- factory-factory-pr-event:[^\n]+ -->)/.exec(historyMsg.content);
+  const marker = prUpdate?.[1];
+  if (!(prUpdate && marker)) {
+    return null;
+  }
+  const prefix = historyMsg.content.slice(0, prUpdate.index);
+  const offset = prUpdate.index + prUpdate[0].length - marker.length;
+  const prAndSuffix = historyMsg.content.slice(offset);
+  const boundary = prAndSuffix.indexOf('\n\n');
+  const prText = boundary < 0 ? prAndSuffix : prAndSuffix.slice(0, boundary);
+  const suffix = boundary < 0 ? '' : prAndSuffix.slice(boundary).replace(/^\n+/, '');
+  const hasAttachments = (historyMsg.attachments?.length ?? 0) > 0;
+  const before = Boolean(prefix) || (hasAttachments && boundary < 0);
+  const messages: ChatMessage[] = [];
+  const appendHuman = (text: string, includeAttachments: boolean) => {
+    const order = initialOrder + messages.length;
+    messages.push({
+      id: `${messageBaseId}-${order}`,
+      source: 'user',
+      text,
+      ...(includeAttachments ? { attachments: historyMsg.attachments } : {}),
+      timestamp: historyMsg.timestamp,
+      order,
+    });
+  };
+  if (before) {
+    appendHuman(prefix, true);
+  }
+  const order = initialOrder + messages.length;
+  messages.push({
+    id: `${messageBaseId}-${order}`,
+    source: 'agent',
+    message: { type: 'pr_update', text: prText },
+    timestamp: historyMsg.timestamp,
+    order,
+  });
+  if (suffix || (!before && hasAttachments && boundary >= 0)) {
+    appendHuman(suffix, !before);
+  }
+  return messages;
+}
+
 export function buildTranscriptFromHistory(history: HistoryMessage[]): ChatMessage[] {
   const transcript: ChatMessage[] = [];
   let order = 0;
@@ -113,19 +161,13 @@ export function buildTranscriptFromHistory(history: HistoryMessage[]): ChatMessa
     const messageBaseId = historyMsg.uuid ?? buildDeterministicHistoryId(historyMsg, index);
     const messageId = `${messageBaseId}-${order}`;
 
-    if (
-      historyMsg.type === 'user' &&
-      /^<!-- factory-factory-pr-event:[^\n]+ -->/.test(historyMsg.content)
-    ) {
-      transcript.push({
-        id: messageId,
-        source: 'agent',
-        message: { type: 'pr_update', text: historyMsg.content },
-        timestamp: historyMsg.timestamp,
-        order,
-      });
-      order += 1;
-      continue;
+    if (historyMsg.type === 'user') {
+      const updates = buildPRUpdateHistoryMessages(historyMsg, messageBaseId, order);
+      if (updates) {
+        transcript.push(...updates);
+        order += updates.length;
+        continue;
+      }
     }
     if (historyMsg.type === 'user') {
       transcript.push({

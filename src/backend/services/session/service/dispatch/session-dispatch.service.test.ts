@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
+import { SessionNotificationDeliveryService } from '@/backend/services/session/service/lifecycle/session-notification-delivery.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
-import type { QueuedMessage } from '@/shared/acp-protocol';
+import { buildTranscriptFromHistory } from '@/backend/services/session/service/store/session-transcript';
+import type { AgentContentItem, QueuedMessage } from '@/shared/acp-protocol';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionDispatchService } from './session-dispatch.service';
 
@@ -29,9 +31,14 @@ function enqueue(id: string) {
   return message;
 }
 
-function harness(policy: 'allowed' | 'manual_resume' = 'allowed') {
+function harness(
+  policy: 'allowed' | 'manual_resume' = 'allowed',
+  notifications?: SessionNotificationDeliveryService
+) {
   let generation = 0;
-  const sendSessionMessage = vi.fn().mockResolvedValue(undefined);
+  const sendSessionMessage = vi
+    .fn<(sessionId: string, content: string | AgentContentItem[]) => Promise<void>>()
+    .mockResolvedValue(undefined);
   const startup = {
     getSessionClient: vi.fn<() => unknown>().mockReturnValue({}),
     getOrCreateSessionClient: vi.fn().mockResolvedValue({}),
@@ -44,19 +51,23 @@ function harness(policy: 'allowed' | 'manual_resume' = 'allowed') {
   const resolveQueuedMessageSettings = vi.fn(
     (_id: string, message: QueuedMessage) => message.settings
   );
+  const configureQueuedMessage = vi.fn((_id: string, message: QueuedMessage) =>
+    Promise.resolve(message.settings)
+  );
+  const backgroundDelivery = {
+    prepare: vi.fn(),
+    validate: vi.fn().mockResolvedValue(true),
+    fail: vi.fn().mockResolvedValue(undefined),
+    complete: vi.fn().mockResolvedValue(undefined),
+  };
   const dispatcher = new SessionDispatchService({
     runtimeManager,
     configService: {
       resolveQueuedMessageSettings,
-      configureQueuedMessage: vi.fn((_id, message) => Promise.resolve(message.settings)),
+      configureQueuedMessage,
     },
     promptService: { sendSessionMessage },
-    backgroundDelivery: {
-      prepare: vi.fn(),
-      validate: vi.fn(),
-      fail: vi.fn(),
-      complete: vi.fn(),
-    },
+    backgroundDelivery,
   });
   dispatcher.configure({
     initPolicy: { getWorkspaceInitPolicy: () => ({ dispatchPolicy: policy }) },
@@ -68,7 +79,7 @@ function harness(policy: 'allowed' | 'manual_resume' = 'allowed') {
       isSessionStopping: () => false,
     },
     startup,
-    notificationDelivery: {
+    notificationDelivery: notifications ?? {
       claimForDispatch: () => ({ status: 'not_notification' }),
       isAlreadyDelivered: async () => false,
       acknowledgeSuccessfulDispatch: async () => undefined,
@@ -87,6 +98,8 @@ function harness(policy: 'allowed' | 'manual_resume' = 'allowed') {
     sendSessionMessage,
     startup,
     runtimeManager,
+    configureQueuedMessage,
+    backgroundDelivery,
     stop: () => {
       generation += 1;
     },
@@ -100,6 +113,351 @@ afterEach(() => {
 });
 
 describe('session dispatcher queue and lifecycle coordination', () => {
+  it('sends all waiting human messages in one turn and retains their individual transcript entries', async () => {
+    const { dispatcher, sendSessionMessage, configureQueuedMessage } = harness();
+    const first = enqueue('first');
+    const second = enqueue('second');
+    second.settings.selectedModel = 'latest-model';
+    const pending = deferred();
+    sendSessionMessage.mockReturnValueOnce(pending.promise);
+
+    const dispatch = dispatcher.tryDispatchNextMessage('session');
+    await vi.waitFor(() => expect(sendSessionMessage).toHaveBeenCalledOnce());
+    expect(sendSessionMessage).toHaveBeenCalledWith('session', 'first\n\nsecond');
+    expect(configureQueuedMessage).toHaveBeenCalledWith('session', second, false);
+    expect(sessionDomainService.getQueueLength('session')).toBe(0);
+    expect(sessionDomainService.getTranscriptSnapshot('session').map(({ id }) => id)).toEqual([
+      first.id,
+      second.id,
+    ]);
+    const late = enqueue('late');
+    pending.resolve();
+    await dispatch;
+    expect(sessionDomainService.peekNextMessage('session')).toBe(late);
+    expect(sendSessionMessage).toHaveBeenCalledOnce();
+  });
+
+  it('includes a ready PR batch with queued human messages in the same prompt', async () => {
+    const { dispatcher, sendSessionMessage, backgroundDelivery } = harness();
+    const human = enqueue('please fix these');
+    const pr: QueuedMessage = {
+      ...human,
+      id: 'pr-event-batch',
+      source: { type: 'pr_event', request: { workspaceId: 'w', prId: 'p', bindingRevision: 1 } },
+      text: 'PR update queued for the next turn',
+    };
+    sessionDomainService.enqueue('session', pr);
+    backgroundDelivery.prepare.mockImplementation(() => {
+      pr.text = '<!-- factory-factory-pr-event:batch -->\nPR #1 and PR #2 updates';
+      return Promise.resolve({ status: 'ready' });
+    });
+    await dispatcher.tryDispatchNextMessage('session');
+    expect(sendSessionMessage).toHaveBeenCalledExactlyOnceWith(
+      'session',
+      'please fix these\n\n<!-- factory-factory-pr-event:batch -->\nPR #1 and PR #2 updates'
+    );
+    expect(backgroundDelivery.complete).toHaveBeenCalledExactlyOnceWith(pr);
+    expect(sessionDomainService.getQueueLength('session')).toBe(0);
+  });
+
+  it('requeues every message in its original order when the provider is busy', async () => {
+    vi.useFakeTimers();
+    const { dispatcher, sendSessionMessage } = harness();
+    const first = enqueue('first');
+    const second = enqueue('second');
+    sendSessionMessage.mockImplementationOnce(() => {
+      enqueue('late');
+      return Promise.reject(new Error('A turn is already in progress for this session'));
+    });
+    await dispatcher.tryDispatchNextMessage('session');
+    expect(sessionDomainService.peekNextMessage('session')).toBe(first);
+    expect(sessionDomainService.getQueueLength('session')).toBe(3);
+    expect(sessionDomainService.getTranscriptSnapshot('session')).toEqual([]);
+    sessionDomainService.dequeueNext('session');
+    expect(sessionDomainService.peekNextMessage('session')).toBe(second);
+    dispatcher.resetDispatchState('session');
+  });
+
+  it('keeps slash commands as standalone turns between queued batches', async () => {
+    const { dispatcher, sendSessionMessage } = harness();
+    enqueue('first');
+    enqueue('/compact');
+    enqueue('second');
+    await dispatcher.tryDispatchNextMessage('session');
+    expect(sendSessionMessage).toHaveBeenCalledExactlyOnceWith('session', 'first');
+    expect(sessionDomainService.peekNextMessage('session')?.text).toBe('/compact');
+    await dispatcher.tryDispatchNextMessage('session');
+    expect(sendSessionMessage.mock.calls[1]).toEqual(['session', '/compact']);
+    expect(sessionDomainService.peekNextMessage('session')?.text).toBe('second');
+  });
+
+  it('preserves attachments from every queued message in the combined prompt', async () => {
+    const { dispatcher, sendSessionMessage } = harness();
+    const first = enqueue('inspect this image');
+    first.attachments = [
+      {
+        id: 'image',
+        name: 'image.png',
+        type: 'image/png',
+        size: 67,
+        contentType: 'image',
+        data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      },
+    ];
+    const second = enqueue('and these notes');
+    second.attachments = [
+      {
+        id: 'notes',
+        name: 'notes.txt',
+        type: 'text/plain',
+        size: 5,
+        contentType: 'text',
+        data: 'notes',
+      },
+    ];
+    await dispatcher.tryDispatchNextMessage('session');
+    expect(sendSessionMessage).toHaveBeenCalledExactlyOnceWith('session', [
+      { type: 'text', text: 'inspect this image' },
+      {
+        type: 'image',
+        source: { type: 'base64', media_type: 'image/png', data: first.attachments[0]!.data },
+      },
+      { type: 'text', text: '\n\nand these notes\n\n[Pasted content: notes.txt]\nnotes' },
+    ]);
+    expect(
+      sessionDomainService.getTranscriptSnapshot('session').map(({ attachments }) => attachments)
+    ).toEqual([first.attachments, second.attachments]);
+  });
+
+  it('rejects an invalid attachment without discarding the other queued messages', async () => {
+    const { dispatcher, sendSessionMessage } = harness();
+    const invalid = enqueue('bad');
+    invalid.attachments = [
+      { id: 'bad', name: 'bad.png', type: 'image/png', size: 1, contentType: 'image', data: 'bad' },
+    ];
+    enqueue('good');
+    await dispatcher.tryDispatchNextMessage('session');
+    expect(sendSessionMessage).toHaveBeenCalledExactlyOnceWith('session', 'good');
+    expect(sessionDomainService.getTranscriptSnapshot('session').map(({ id }) => id)).toEqual([
+      'good',
+    ]);
+  });
+
+  it('replays human content after a PR update from the actual mixed text/image provider prompt', async () => {
+    const { dispatcher, sendSessionMessage, backgroundDelivery } = harness();
+    const human = enqueue('Human request\n\nSecond paragraph');
+    human.attachments = [
+      {
+        id: 'image',
+        name: 'image.png',
+        type: 'image/png',
+        size: 67,
+        contentType: 'image',
+        data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      },
+    ];
+    const pr: QueuedMessage = {
+      ...human,
+      id: 'pr-event-before-image',
+      attachments: undefined,
+      text: '<!-- factory-factory-pr-event:before-image -->\nPR failed',
+      source: { type: 'pr_event', request: { workspaceId: 'w', prId: 'p', bindingRevision: 1 } },
+    };
+    // A busy PR-only send can be restored in front of a human message arriving mid-send.
+    sessionDomainService.requeueFront('session', pr);
+    backgroundDelivery.prepare.mockResolvedValue({ status: 'ready' });
+    await dispatcher.tryDispatchNextMessage('session');
+    const content = sendSessionMessage.mock.calls[0]?.[1];
+    if (!Array.isArray(content)) {
+      throw new Error('Expected text/image provider blocks');
+    }
+    const restored = buildTranscriptFromHistory([
+      {
+        type: 'user',
+        uuid: 'provider-id',
+        content: content
+          .filter((item) => item.type === 'text')
+          .map((item) => item.text)
+          .join('\n'),
+        attachments: human.attachments,
+        timestamp: human.timestamp,
+      },
+    ]);
+    expect(restored).toHaveLength(2);
+    expect(restored[0]).toMatchObject({
+      source: 'agent',
+      message: { type: 'pr_update', text: pr.text },
+    });
+    expect(restored[1]).toMatchObject({
+      source: 'user',
+      text: human.text,
+      attachments: human.attachments,
+    });
+  });
+
+  it('dispatches human messages while a PR batch is blocked', async () => {
+    const { dispatcher, sendSessionMessage, backgroundDelivery } = harness();
+    const first = enqueue('first');
+    enqueue('second');
+    const pr: QueuedMessage = {
+      ...first,
+      id: 'pr-event-blocked',
+      source: { type: 'pr_event', request: { workspaceId: 'w', prId: 'p', bindingRevision: 1 } },
+    };
+    sessionDomainService.enqueue('session', pr);
+    backgroundDelivery.prepare.mockResolvedValue({ status: 'blocked' });
+    await dispatcher.tryDispatchNextMessage('session');
+    expect(sendSessionMessage).toHaveBeenCalledExactlyOnceWith('session', 'first\n\nsecond');
+    expect(sessionDomainService.peekNextMessage('session')).toBe(pr);
+    expect(backgroundDelivery.complete).not.toHaveBeenCalled();
+  });
+
+  it('does not send any member when the session stops during batch configuration', async () => {
+    const { dispatcher, sendSessionMessage, configureQueuedMessage, stop } = harness();
+    enqueue('first');
+    enqueue('second');
+    const fail = vi.spyOn(sessionDomainService, 'failMessage');
+    configureQueuedMessage.mockImplementation((_id, message) => {
+      stop();
+      return Promise.resolve(message.settings);
+    });
+    await dispatcher.tryDispatchNextMessage('session');
+    expect(sendSessionMessage).not.toHaveBeenCalled();
+    expect(fail.mock.calls.map(([, message]) => message.id).sort()).toEqual(['first', 'second']);
+    expect(sessionDomainService.getTranscriptSnapshot('session')).toEqual([]);
+  });
+
+  it('releases a validated PR claim when stop wins before the batch is submitted', async () => {
+    const { dispatcher, sendSessionMessage, backgroundDelivery, stop } = harness();
+    const human = enqueue('human');
+    const pr: QueuedMessage = {
+      ...human,
+      id: 'pr-event-stop-after-validation',
+      source: { type: 'pr_event', request: { workspaceId: 'w', prId: 'p', bindingRevision: 1 } },
+    };
+    sessionDomainService.enqueue('session', pr);
+    backgroundDelivery.prepare.mockResolvedValue({ status: 'ready' });
+    backgroundDelivery.validate.mockImplementation(() => {
+      // Stop after the individual validator returns true, before the batch resumes.
+      queueMicrotask(() => queueMicrotask(stop));
+      return Promise.resolve(true);
+    });
+    await dispatcher.tryDispatchNextMessage('session');
+    expect(sendSessionMessage).not.toHaveBeenCalled();
+    expect(backgroundDelivery.fail).toHaveBeenCalledExactlyOnceWith(
+      pr,
+      expect.any(Error),
+      'cancelled'
+    );
+  });
+
+  it('retries the surviving batch when a human message is cancelled during PR preparation', async () => {
+    const { dispatcher, sendSessionMessage, backgroundDelivery } = harness();
+    const first = enqueue('first');
+    const cancelled = enqueue('cancelled');
+    const pr: QueuedMessage = {
+      ...first,
+      id: 'pr-event-race',
+      source: { type: 'pr_event', request: { workspaceId: 'w', prId: 'p', bindingRevision: 1 } },
+    };
+    sessionDomainService.enqueue('session', pr);
+    const preparing = deferred();
+    backgroundDelivery.prepare
+      .mockImplementationOnce(async () => {
+        await preparing.promise;
+        pr.text = 'PR facts';
+        return { status: 'ready' };
+      })
+      .mockResolvedValue({ status: 'ready' });
+    const dispatch = dispatcher.tryDispatchNextMessage('session');
+    await vi.waitFor(() => expect(backgroundDelivery.prepare).toHaveBeenCalledOnce());
+    sessionDomainService.removeQueuedMessage('session', cancelled.id);
+    preparing.resolve();
+    await dispatch;
+    expect(sendSessionMessage).toHaveBeenCalledExactlyOnceWith('session', 'first\n\nPR facts');
+    expect(sessionDomainService.getQueueLength('session')).toBe(0);
+    expect(backgroundDelivery.fail.mock.calls.every((call) => call[2] !== 'cancelled')).toBe(true);
+  });
+
+  it('dispatches the human batch even if refreshing PR facts throws', async () => {
+    const { dispatcher, sendSessionMessage, backgroundDelivery } = harness();
+    const first = enqueue('first');
+    enqueue('second');
+    const pr: QueuedMessage = {
+      ...first,
+      id: 'pr-event-refresh-error',
+      source: { type: 'pr_event', request: { workspaceId: 'w', prId: 'p', bindingRevision: 1 } },
+    };
+    sessionDomainService.enqueue('session', pr);
+    backgroundDelivery.prepare.mockRejectedValue(new Error('GitHub unavailable'));
+    await dispatcher.tryDispatchNextMessage('session');
+    expect(sendSessionMessage).toHaveBeenCalledExactlyOnceWith('session', 'first\n\nsecond');
+    expect(sessionDomainService.peekNextMessage('session')).toBe(pr);
+  });
+
+  it('retains successfully sent human messages if acknowledging the PR delivery fails', async () => {
+    const { dispatcher, sendSessionMessage, backgroundDelivery } = harness();
+    const first = enqueue('first');
+    const pr: QueuedMessage = {
+      ...first,
+      id: 'pr-event-settlement-error',
+      source: { type: 'pr_event', request: { workspaceId: 'w', prId: 'p', bindingRevision: 1 } },
+      text: 'PR facts',
+    };
+    sessionDomainService.enqueue('session', pr);
+    backgroundDelivery.prepare.mockResolvedValue({ status: 'ready' });
+    backgroundDelivery.complete.mockRejectedValue(new Error('database unavailable'));
+    const fail = vi.spyOn(sessionDomainService, 'failMessage');
+    await dispatcher.tryDispatchNextMessage('session');
+    expect(sendSessionMessage).toHaveBeenCalledExactlyOnceWith('session', 'first\n\nPR facts');
+    expect(fail).not.toHaveBeenCalled();
+    expect(backgroundDelivery.fail).not.toHaveBeenCalled();
+    expect(sessionDomainService.getTranscriptSnapshot('session').map(({ id }) => id)).toEqual([
+      first.id,
+      pr.id,
+    ]);
+  });
+
+  it('holds every notification claim until the combined turn is received and acknowledges each one', async () => {
+    const delivered = new Set<string>();
+    const notifications = new SessionNotificationDeliveryService({
+      notificationPort: {
+        listPendingForDelivery: async () => [],
+        findForDelivery: async (id) => ({ deliveredAt: delivered.has(id) ? new Date() : null }),
+        markDelivered: (ids) => {
+          ids.forEach((id) => delivered.add(id));
+          return Promise.resolve();
+        },
+      },
+      queuePort: sessionDomainService,
+      transcriptPort: {
+        getTranscriptSnapshot: (id) => sessionDomainService.getTranscriptSnapshot(id),
+        getHistoryHydrationSource: () => 'none',
+        appendClaudeEvent: () => 0,
+      },
+      deltaPort: sessionDomainService,
+    });
+    const { dispatcher, sendSessionMessage } = harness('allowed', notifications);
+    enqueue('human');
+    enqueue('workspace-notification-one');
+    enqueue('workspace-notification-two');
+    const pending = deferred();
+    sendSessionMessage.mockReturnValueOnce(pending.promise);
+    const dispatch = dispatcher.tryDispatchNextMessage('session');
+    await vi.waitFor(() => expect(sendSessionMessage).toHaveBeenCalledOnce());
+    expect(
+      notifications.claimForDispatch('other-session', 'workspace-notification-one').status
+    ).toBe('duplicate');
+    expect(
+      notifications.claimForDispatch('other-session', 'workspace-notification-two').status
+    ).toBe('duplicate');
+    expect(delivered.size).toBe(0);
+    pending.resolve();
+    await dispatch;
+    expect([...delivered].sort()).toEqual(['one', 'two']);
+    expect(sessionDomainService.getQueueLength('session')).toBe(0);
+  });
+
   it('retains fresh background details already finalized by a failed prompt', async () => {
     const { dispatcher, sendSessionMessage } = harness();
     enqueue('follow-up');

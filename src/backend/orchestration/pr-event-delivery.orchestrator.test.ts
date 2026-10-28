@@ -3,6 +3,7 @@ import * as filesystem from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, expect, it, vi } from 'vitest';
+import { redObservation } from '@/shared/pr-monitoring.test-helpers';
 
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
@@ -44,7 +45,10 @@ vi.mock('@/backend/services/workspace', () => ({
     cancelRecoveredDelivery: mocks.cancel,
     settleDelivery: mocks.settle,
   },
-  workspacePrSnapshotService: { find: vi.fn(async () => ({ id: 'p' })) },
+  workspacePrSnapshotService: {
+    find: vi.fn(async () => ({ id: 'p' })),
+    list: vi.fn(async () => [{ id: 'p' }]),
+  },
 }));
 vi.mock('@/backend/services/ratchet', () => ({
   ratchetService: { emit: mocks.emit },
@@ -113,6 +117,13 @@ beforeEach(() => {
     providerSessionId: 'original',
     workspace: { status: 'READY', worktreePath: tmpdir() },
   });
+  vi.mocked(defaultPRDeliveryPorts.workspacePrSnapshotService.find).mockResolvedValue({
+    id: 'p',
+  } as never);
+  vi.mocked(defaultPRDeliveryPorts.workspacePrSnapshotService.list).mockResolvedValue([
+    { id: 'p' },
+  ] as never);
+  mocks.observe.mockResolvedValue(true);
   mocks.busy.mockReturnValue(false);
   mocks.dispatch.mockResolvedValue(undefined);
   mocks.interaction.mockReturnValue(null);
@@ -254,6 +265,7 @@ it('queues for the next turn without claiming while the recipient is busy', asyn
   expect(mocks.claim).not.toHaveBeenCalled();
 });
 it('rejects a binding stopped while observation refresh is in flight', async () => {
+  mocks.pending.mockResolvedValue([queuedFact('p')]);
   mocks.observe.mockImplementation(() => {
     config.bindingRevision++;
     config.deliveryPauseReason = 'USER_STOPPED';
@@ -325,6 +337,7 @@ it('rechecks another working session in the final dispatch guard', async () => {
   ).toBe(false);
 });
 it('forces a fresh observation before freezing a PR update', async () => {
+  mocks.pending.mockResolvedValue([queuedFact('p')]);
   await preparePRDelivery({
     sessionId: 'main',
     request: { workspaceId: 'w', prId: 'p', bindingRevision: 1 },
@@ -335,7 +348,8 @@ it('forces a fresh observation before freezing a PR update', async () => {
     { force: true }
   );
 });
-it('awaits the injected refresh and rechecks authorization before reading pending events', async () => {
+it('reads candidate facts before refresh and rechecks authorization before claiming', async () => {
+  mocks.pending.mockResolvedValue([queuedFact('p')]);
   const refreshObservation = vi.fn(() => {
     config.bindingRevision++;
     return Promise.resolve(true);
@@ -352,10 +366,17 @@ it('awaits the injected refresh and rechecks authorization before reading pendin
   ).toEqual({ status: 'discard' });
   expect(refreshObservation).toHaveBeenCalledWith({ workspaceId: 'w', prId: 'p' });
   expect(mocks.observe).not.toHaveBeenCalled();
-  expect(mocks.pending).not.toHaveBeenCalled();
+  expect(mocks.pending).toHaveBeenCalledTimes(2);
+  expect(mocks.pending.mock.invocationCallOrder[0]).toBeLessThan(
+    refreshObservation.mock.invocationCallOrder[0]!
+  );
+  expect(mocks.pending.mock.invocationCallOrder[1]).toBeGreaterThan(
+    refreshObservation.mock.invocationCallOrder[0]!
+  );
   expect(mocks.claim).not.toHaveBeenCalled();
 });
 it('does not freeze or claim events when the injected refresh fails', async () => {
+  mocks.pending.mockResolvedValue([queuedFact('p')]);
   const refreshObservation = vi.fn(() => Promise.reject(new Error('GitHub unavailable')));
   await expect(
     preparePRDelivery(
@@ -365,8 +386,9 @@ it('does not freeze or claim events when the injected refresh fails', async () =
       },
       { ...defaultPRDeliveryPorts, refreshObservation }
     )
-  ).rejects.toThrow('GitHub unavailable');
-  expect(mocks.pending).not.toHaveBeenCalled();
+  ).resolves.toMatchObject({ status: 'blocked', reason: 'Waiting for fresh PR observations' });
+  expect(mocks.pending).toHaveBeenCalledTimes(2);
+  expect(mocks.pause).not.toHaveBeenCalled();
   expect(mocks.claim).not.toHaveBeenCalled();
 });
 it('does not invalidate the bound recipient when an unrelated session stops', async () => {
@@ -784,4 +806,127 @@ it('queues real PR events even alongside a legacy enable control', async () => {
     prId: 'p',
     bindingRevision: 1,
   });
+});
+
+function queuedFact(prId: string, id = `event-${prId}`) {
+  return {
+    id,
+    workspaceId: 'w',
+    prId,
+    state: 'PENDING',
+    attempts: 0,
+    deliveryId: null,
+    payload: {
+      kind: 'CI_FAILED',
+      target: { workspaceId: 'w', prId },
+      observation: {
+        ...redObservation,
+        number: prId === 'p' ? 1 : 2,
+        url: `https://github.com/org/repo/pull/${prId === 'p' ? 1 : 2}`,
+      },
+    },
+  };
+}
+it('refreshes and claims all main PR updates in one delivery without legacy controls', async () => {
+  vi.mocked(defaultPRDeliveryPorts.workspacePrSnapshotService.list).mockResolvedValue([
+    { id: 'p' },
+    { id: 'q' },
+  ] as never);
+  const pending = [
+    { id: 'control', prId: null, state: 'PENDING' },
+    queuedFact('p'),
+    queuedFact('q'),
+  ];
+  mocks.pending.mockImplementation(async (_workspaceId, prId) =>
+    prId === undefined ? pending : pending.filter((e) => e.prId === prId)
+  );
+  mocks.claim.mockImplementation(async (_request, input) => ({
+    ...input,
+    bindingRevision: 1,
+    attempt: 1,
+  }));
+  const result = await preparePRDelivery({
+    sessionId: 'main',
+    request: { workspaceId: 'w', prId: 'p', bindingRevision: 1 },
+  });
+  expect(result).toMatchObject({ status: 'ready', delivery: { eventIds: ['event-p', 'event-q'] } });
+  expect(mocks.observe).toHaveBeenCalledWith(
+    expect.anything(),
+    { workspaceId: 'w', prId: 'q' },
+    { force: true }
+  );
+  expect(mocks.claim).toHaveBeenCalledWith(
+    { workspaceId: 'w', prId: null, bindingRevision: 1 },
+    expect.objectContaining({ text: expect.stringContaining('https://github.com/org/repo/pull/2') })
+  );
+});
+it('retries a frozen multi-PR batch with exactly its original events and text', async () => {
+  const frozen = ['p', 'q'].map((prId) => ({
+    ...queuedFact(prId),
+    deliveryId: 'frozen',
+    deliveryText: 'exact original text',
+    deliverySessionId: 'main',
+    deliveryProvider: 'CLAUDE',
+    deliveryProviderSessionId: 'original',
+  }));
+  const pending = [...frozen, queuedFact('q', 'newer')];
+  mocks.pending.mockImplementation(async (_workspaceId, prId) =>
+    prId === undefined ? pending : pending.filter((e) => e.prId === prId)
+  );
+  mocks.claim.mockImplementation(async (_request, input) => ({
+    ...input,
+    bindingRevision: 1,
+    attempt: 2,
+  }));
+  expect(
+    await preparePRDelivery({
+      sessionId: 'main',
+      request: { workspaceId: 'w', prId: 'p', bindingRevision: 1 },
+    })
+  ).toMatchObject({
+    status: 'ready',
+    delivery: {
+      deliveryId: 'frozen',
+      text: 'exact original text',
+      eventIds: ['event-p', 'event-q'],
+    },
+  });
+});
+it('rejects a prepared batch when a sibling PR becomes detached before submission', async () => {
+  mocks.pending.mockResolvedValue(
+    ['p', 'q'].map((prId) => ({
+      ...queuedFact(prId),
+      state: 'DISPATCHING',
+      deliveryId: 'delivery',
+    }))
+  );
+  vi.mocked(defaultPRDeliveryPorts.workspacePrSnapshotService.find).mockImplementation(
+    async ({ prId }) => (prId === 'q' ? null : ({ id: 'p' } as never))
+  );
+  expect(
+    await prBackgroundDeliveryPort.validate({
+      deliveryId: 'delivery',
+      sessionId: 'main',
+      bindingRevision: 1,
+      eventIds: ['event-p', 'event-q'],
+      text: 'frozen',
+      attempt: 1,
+      deliveryProvider: 'CLAUDE',
+      deliveryProviderSessionId: 'original',
+    })
+  ).toBe(false);
+});
+it('rejects a prepared batch when one claimed event is missing', async () => {
+  expect(
+    await prBackgroundDeliveryPort.validate({
+      deliveryId: 'delivery',
+      sessionId: 'main',
+      bindingRevision: 1,
+      eventIds: ['event', 'missing'],
+      text: 'frozen',
+      attempt: 1,
+      deliveryProvider: 'CLAUDE',
+      deliveryProviderSessionId: 'original',
+    })
+  ).toBe(false);
 });
