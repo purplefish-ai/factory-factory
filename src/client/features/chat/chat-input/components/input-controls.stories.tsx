@@ -127,3 +127,184 @@ export const BeforeRuntimeConfiguration: Story = {
     },
   },
 };
+
+export const CodexToolbar: Story = {
+  args: {
+    acpConfigOptions: [
+      {
+        id: 'mode',
+        name: 'Mode',
+        type: 'select',
+        currentValue: 'agent',
+        description: 'Choose how actions are approved.',
+        options: [
+          {
+            value: 'read-only',
+            name: 'Read-only',
+            description: 'Requires approval to edit files and access the internet.',
+          },
+          {
+            value: 'workspace-write',
+            name: 'Workspace access',
+            description:
+              'Edit workspace files; ask before writing outside the workspace or accessing the network.',
+          },
+          {
+            value: 'agent',
+            name: 'Auto review',
+            description: 'Only ask for actions detected as potentially unsafe.',
+          },
+          {
+            value: 'agent-full-access',
+            name: 'Full access',
+            description: 'Unrestricted access to the internet and any file on your computer.',
+          },
+        ],
+      },
+      {
+        id: 'collaboration_mode',
+        name: 'Mode',
+        type: 'select',
+        currentValue: 'default',
+        options: [
+          { value: 'default', name: 'Default', description: 'Work directly on the task.' },
+          { value: 'plan', name: 'Plan', description: 'Plan before making changes.' },
+        ],
+      },
+      {
+        id: 'reasoning_effort',
+        name: 'Reasoning effort',
+        category: 'reasoning',
+        type: 'select',
+        currentValue: 'high',
+        options: [
+          { value: 'low', name: 'Low' },
+          { value: 'high', name: 'High' },
+        ],
+      },
+      {
+        id: 'fast-mode',
+        name: 'Fast mode',
+        type: 'select',
+        currentValue: 'off',
+        description: '1.5x speed, increased usage',
+        options: [
+          { value: 'off', name: 'Off', description: 'Default speed, normal usage' },
+          { value: 'on', name: 'On', description: '1.5x speed, increased usage' },
+        ],
+      },
+    ],
+  },
+};
+export const CodexToolbarDark: Story = { ...CodexToolbar, globals: { theme: 'dark' } };
+
+export const ClaudeToolbar: Story = {
+  args: {
+    capabilities: {
+      ...meta.args.capabilities,
+      provider: 'CLAUDE',
+      model: {
+        enabled: true,
+        selected: 'sonnet',
+        options: [{ value: 'sonnet', label: 'Sonnet 5' }],
+      },
+      reasoning: { enabled: false, options: [] },
+      planMode: { enabled: false },
+      attachments: { enabled: true, kinds: ['image'] },
+    },
+    acpConfigOptions: [
+      {
+        id: 'mode',
+        name: 'Mode',
+        type: 'select',
+        currentValue: 'acceptEdits',
+        description: 'Choose how actions are approved.',
+        options: [
+          { value: 'default', name: 'Manual', description: 'Always ask before making changes' },
+          {
+            value: 'acceptEdits',
+            name: 'Accept edits',
+            description: 'Automatically accept all file edits',
+          },
+          { value: 'plan', name: 'Plan', description: 'Create a plan before making changes' },
+          { value: 'auto', name: 'Auto', description: 'Claude handles permission decisions' },
+          {
+            value: 'bypassPermissions',
+            name: 'Bypass permissions',
+            description: 'Accepts all permissions',
+          },
+        ],
+      },
+      {
+        id: 'effort',
+        name: 'Effort',
+        category: 'thought_level',
+        type: 'select',
+        currentValue: 'high',
+        options: [
+          { value: 'low', name: 'Low' },
+          { value: 'high', name: 'High' },
+        ],
+      },
+      {
+        id: 'fast',
+        name: 'Fast mode',
+        type: 'select',
+        currentValue: 'off',
+        description: 'Faster responses with increased usage.',
+        options: [
+          { value: 'off', name: 'Off' },
+          { value: 'on', name: 'On' },
+        ],
+      },
+    ],
+  },
+};
+export const ClaudeToolbarDark: Story = { ...ClaudeToolbar, globals: { theme: 'dark' } };
+export const FullAccessToolbar: Story = {
+  ...CodexToolbar,
+  args: {
+    ...CodexToolbar.args,
+    acpConfigOptions: CodexToolbar.args?.acpConfigOptions?.map((option) =>
+      option.id === 'mode' ? { ...option, currentValue: 'agent-full-access' } : option
+    ),
+  },
+};
+export const PlanningAndFastEnabled: Story = {
+  ...CodexToolbar,
+  args: {
+    ...CodexToolbar.args,
+    acpConfigOptions: CodexToolbar.args?.acpConfigOptions?.map((option) => ({
+      ...option,
+      currentValue:
+        option.id === 'collaboration_mode'
+          ? 'plan'
+          : option.id === 'fast-mode'
+            ? 'on'
+            : option.currentValue,
+    })),
+  },
+};
+
+export const ClaudeUnrestrictedAlias: Story = {
+  ...ClaudeToolbar,
+  args: {
+    ...ClaudeToolbar.args,
+    acpConfigOptions: ClaudeToolbar.args?.acpConfigOptions?.map((option) =>
+      option.id === 'mode'
+        ? {
+            ...option,
+            currentValue: 'dangerouslySkipPermissions',
+            options: [
+              { value: 'default', name: 'Manual', description: 'Always ask before making changes' },
+              {
+                value: 'dangerouslySkipPermissions',
+                name: 'Bypass permissions',
+                description: 'Accepts all permissions',
+              },
+            ],
+          }
+        : option
+    ),
+  },
+};

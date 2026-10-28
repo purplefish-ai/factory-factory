@@ -27,6 +27,7 @@ import {
   type ChatModelOption,
   hasResolvedChatBarCapabilities,
 } from '@/shared/chat-capabilities';
+import { getConfigPresentation } from './acp-config-presentation';
 import { AcpConfigSelector } from './acp-config-selector';
 import { ModelSelector } from './model-selector';
 import { QuickActionsDropdown } from './quick-actions-dropdown';
@@ -198,11 +199,12 @@ const RuntimeOptions = memo(function RuntimeOptions({
         <div key={option.id}>
           {onSetConfigOption &&
             row(
-              option.name,
+              getConfigPresentation(option).label,
               <AcpConfigSelector
                 configOption={option}
                 onSelect={onSetConfigOption}
                 disabled={disabled}
+                compact={!mobile}
               />
             )}
         </div>

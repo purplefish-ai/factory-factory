@@ -61,6 +61,14 @@ use `session/set_config_option`; legacy model/mode response fallbacks remain
 supported. Boolean options remain in backend snapshots while current chat
 controls render select options.
 
+The conversation composer keeps the model visible and shows reasoning effort
+when supported by native configuration or resolved capabilities. Access,
+planning, and Fast mode use compact icons with the current value in a tooltip
+and accessible label. Active planning and Fast mode are highlighted;
+unrestricted access uses an orange warning icon. Menus show provider-supplied
+descriptions for settings and choices. On mobile, the options sheet retains text
+labels.
+
 ### Provider and model selection
 
 Each default application graph constructs its own session creation resolver and
