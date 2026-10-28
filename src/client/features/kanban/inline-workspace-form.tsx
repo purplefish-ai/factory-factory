@@ -586,7 +586,7 @@ export function InlineWorkspaceForm({
   };
 
   return (
-    <Card className="shrink-0 border-dashed border-primary/50">
+    <Card className="shrink-0 border-dashed border-primary/50 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-1 motion-safe:duration-150 motion-safe:ease-out">
       <CardContent className="p-3 space-y-3" onKeyDown={handleKeyDown}>
         <div className="relative">
           <SlashCommandPalette
