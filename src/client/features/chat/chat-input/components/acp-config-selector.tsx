@@ -1,10 +1,9 @@
-import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
+import { ComposerMenuTrigger } from '@/client/components/composer-menu-trigger';
 import type {
   AcpConfigOption,
   AcpConfigOptionGroup,
   AcpConfigOptionValue,
 } from '@/client/features/chat/reducer';
-import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -60,17 +59,13 @@ export function AcpConfigSelector({ configOption, onSelect, disabled }: AcpConfi
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button
+        <ComposerMenuTrigger
           aria-label={`${controlName}: ${displayName}`}
           title={`${controlName}: ${displayName}`}
-          variant="ghost"
-          size="sm"
           disabled={disabled}
-          className="h-6 max-w-[14rem] gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
         >
-          <span className="truncate">{displayName}</span>
-          <CaretDownIcon className="h-3 w-3 shrink-0" />
-        </Button>
+          {displayName}
+        </ComposerMenuTrigger>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64 max-w-[calc(100vw-2rem)]">
         <DropdownMenuLabel>{controlName}</DropdownMenuLabel>

@@ -1,7 +1,7 @@
 import { PaperclipIcon } from '@phosphor-icons/react/dist/csr/Paperclip';
 import type { ReactNode } from 'react';
 import {
-  PlanModeToggle,
+  PlanningSelector,
   SessionLaunchControls,
   type SessionLaunchControlsProps,
 } from '@/client/features/session-selection';
@@ -61,7 +61,7 @@ export function WorkspaceCreationOptions({
               disabled={settingsLoading || disabled}
             />
             {selection.planMode && (
-              <PlanModeToggle
+              <PlanningSelector
                 control={selection.planMode}
                 disabled={disabled}
                 disabledReason={disabledReason}

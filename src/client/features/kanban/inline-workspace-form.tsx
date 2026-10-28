@@ -710,7 +710,7 @@ export function InlineWorkspaceForm({
                   disabled={isCreating}
                   aria-label="Choose launch mode"
                 >
-                  <CaretDownIcon className="h-3 w-3" />
+                  <CaretDownIcon className="size-3" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="text-xs">

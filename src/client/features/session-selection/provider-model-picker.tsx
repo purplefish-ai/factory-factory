@@ -1,7 +1,7 @@
 import { ArrowClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowClockwise';
-import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
 import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { useState } from 'react';
+import { ComposerMenuTrigger } from '@/client/components/composer-menu-trigger';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -118,28 +118,25 @@ export function ProviderModelPicker({
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
+        <ComposerMenuTrigger
           disabled={unavailable}
           aria-label={`${label}: ${displayName}`}
           aria-description={reason}
           aria-busy={updating}
           title={reason ?? displayName}
-          className="h-7 min-w-0 max-w-[14rem] shrink gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+          className="shrink"
+          indicator={
+            updating ? (
+              <SpinnerGapIcon
+                role="status"
+                aria-label="Applying model selection"
+                className="size-3 shrink-0 animate-spin"
+              />
+            ) : undefined
+          }
         >
-          <span className="truncate">{displayName}</span>
-          {updating ? (
-            <SpinnerGapIcon
-              role="status"
-              aria-label="Applying model selection"
-              className="h-3 w-3 shrink-0 animate-spin"
-            />
-          ) : (
-            <CaretDownIcon className="h-3 w-3 shrink-0" />
-          )}
-        </Button>
+          {displayName}
+        </ComposerMenuTrigger>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64 max-w-[calc(100vw-2rem)]">
         <DropdownMenuLabel>{onProviderChange ? 'Provider and model' : 'Model'}</DropdownMenuLabel>

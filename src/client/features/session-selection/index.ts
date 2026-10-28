@@ -4,7 +4,7 @@ export {
   type SessionLaunchSelection,
 } from './use-session-launch-selection';
 export {
-  PlanModeToggle,
+  PlanningSelector,
   SessionLaunchControls,
   type SessionLaunchControlsProps,
 } from './session-launch-controls';

@@ -1,8 +1,8 @@
 import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { memo } from 'react';
+import { MarkdownRenderer } from '@/client/components/markdown';
 import { CompactBoundaryIndicator } from '@/client/features/chat/compact-boundary-indicator';
-import { MarkdownRenderer } from '@/components/ui/markdown';
 import type { AgentMessage, AgentStreamEvent, ContentBlockDelta } from '@/lib/chat-protocol';
 import { isTextContent, isThinkingContent } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';

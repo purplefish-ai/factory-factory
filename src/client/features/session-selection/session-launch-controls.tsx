@@ -1,8 +1,7 @@
-import { BrainIcon } from '@phosphor-icons/react/dist/csr/Brain';
 import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
-import { MapTrifoldIcon } from '@phosphor-icons/react/dist/csr/MapTrifold';
 import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
-import { Button } from '@/components/ui/button';
+import type { ReactNode } from 'react';
+import { ComposerMenuTrigger } from '@/client/components/composer-menu-trigger';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,8 +11,6 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Toggle } from '@/components/ui/toggle';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import type { ChatReasoningOption } from '@/shared/chat-capabilities';
 import { ProviderModelPicker, type ProviderModelPickerProps } from './provider-model-picker';
@@ -36,6 +33,7 @@ export interface LaunchPlanControl {
   onChange: (value: boolean) => void;
 }
 export interface SessionLaunchControlsProps extends ProviderModelPickerProps {
+  children?: ReactNode;
   reasoning?: LaunchReasoningControl;
   planMode?: LaunchPlanControl;
   ready?: boolean;
@@ -95,31 +93,28 @@ function ThinkingLevelSelector({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className={cn(
-            'h-7 min-w-0 max-w-[8rem] shrink-0 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground',
-            control.invalid && 'text-destructive'
-          )}
+        <ComposerMenuTrigger
+          className={cn('max-w-[8rem] shrink-0', control.invalid && 'text-destructive')}
           disabled={disabled || unsupported}
           aria-label={`Thinking level: ${label}`}
           aria-description={description}
           title={description}
           aria-busy={control.loading}
           aria-invalid={control.invalid}
+          indicator={
+            control.invalid ? (
+              <>
+                <WarningCircleIcon
+                  className="size-3 shrink-0"
+                  aria-label="Unavailable thinking level"
+                />
+                <CaretDownIcon className="size-3 shrink-0" />
+              </>
+            ) : undefined
+          }
         >
-          <BrainIcon className="h-3.5 w-3.5" />
-          <span className="truncate">{label}</span>
-          {control.invalid && (
-            <WarningCircleIcon
-              className="h-3 w-3 shrink-0"
-              aria-label="Unavailable thinking level"
-            />
-          )}
-          <CaretDownIcon className="h-3 w-3" />
-        </Button>
+          {label}
+        </ComposerMenuTrigger>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64 max-w-[calc(100vw-2rem)]">
         <DropdownMenuLabel>Thinking level</DropdownMenuLabel>
@@ -180,7 +175,7 @@ function getPlanDescription(control: LaunchPlanControl): string {
   }
   return `Plan mode ${control.enabled ? 'on' : 'off'}`;
 }
-export function PlanModeToggle({
+export function PlanningSelector({
   control,
   disabled,
   disabledReason,
@@ -195,38 +190,44 @@ export function PlanModeToggle({
     !control.enabled && (control.loading || Boolean(control.error) || !control.supported);
   const description = disabled ? disabledReason : getPlanDescription(control);
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Toggle
-            size="sm"
-            pressed={control.enabled}
-            onPressedChange={control.onChange}
-            disabled={disabled || unavailable}
-            aria-label="Plan mode"
-            aria-description={description}
-            className={cn(
-              'h-7 shrink-0 gap-1.5 text-xs disabled:pointer-events-auto data-[state=on]:bg-primary data-[state=on]:text-primary-foreground',
-              showLabel ? 'px-2' : 'w-7 p-0'
-            )}
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <ComposerMenuTrigger
+          disabled={disabled || unavailable}
+          aria-label={`Planning: ${control.enabled ? 'Plan' : 'Default'}`}
+          aria-description={description}
+          title={description}
+        >
+          {control.enabled ? 'Plan' : showLabel ? 'Plan off' : 'Default'}
+        </ComposerMenuTrigger>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-64 max-w-[calc(100vw-2rem)]">
+        <DropdownMenuLabel>Planning</DropdownMenuLabel>
+        <DropdownMenuRadioGroup
+          value={control.enabled ? 'plan' : 'default'}
+          onValueChange={(value) => control.onChange(value === 'plan')}
+        >
+          <DropdownMenuRadioItem value="default">Default</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem
+            value="plan"
+            disabled={control.loading || Boolean(control.error) || !control.supported}
           >
-            <MapTrifoldIcon className="h-3.5 w-3.5" />
-            {showLabel && <span>Plan</span>}
-          </Toggle>
-        </TooltipTrigger>
-        <TooltipContent>{description}</TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+            Plan
+          </DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 /** Pure shared launch controls; native discovery and draft ownership live in the caller's hook. */
 export function SessionLaunchControls({
   reasoning,
   planMode,
+  children,
   ...picker
 }: SessionLaunchControlsProps) {
   return (
-    <div className="flex min-w-0 max-w-[min(26rem,calc(100vw-4rem))] flex-wrap items-center gap-1">
+    <div className="flex min-w-0 flex-wrap items-center gap-1">
       <ProviderModelPicker {...picker} />
       {reasoning && (
         <ThinkingLevelSelector
@@ -236,12 +237,13 @@ export function SessionLaunchControls({
         />
       )}
       {planMode && (
-        <PlanModeToggle
+        <PlanningSelector
           control={planMode}
           disabled={picker.disabled}
           disabledReason={picker.disabledReason}
         />
       )}
+      {children}
     </div>
   );
 }

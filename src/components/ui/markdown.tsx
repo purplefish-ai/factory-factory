@@ -7,6 +7,8 @@ import {
   memo,
   Suspense,
   useMemo,
+  type ReactElement,
+  type ReactNode,
 } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -19,6 +21,7 @@ export interface MarkdownRendererProps {
   className?: string;
   resolveWorkspaceFileLink?: (href: string) => string | null;
   onWorkspaceFileLink?: (path: string) => void;
+  renderExternalLink?: (link: ReactElement<ComponentPropsWithoutRef<'a'>>) => ReactNode;
 }
 
 export const MarkdownRenderer = memo(function MarkdownRenderer({
@@ -26,6 +29,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   className,
   resolveWorkspaceFileLink,
   onWorkspaceFileLink,
+  renderExternalLink,
 }: MarkdownRendererProps) {
   // Memoize the markdown components to prevent recreating on every render
   const components = useMemo(
@@ -105,7 +109,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
           );
         }
 
-        return (
+        const link = (
           <a
             href={href}
             target="_blank"
@@ -116,13 +120,14 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
             <ArrowSquareOutIcon className="h-3 w-3 shrink-0" />
           </a>
         );
+        return renderExternalLink ? renderExternalLink(link) : link;
       },
       // Override paragraph with comfortable spacing
       p: ({ children }: ComponentPropsWithoutRef<'p'>) => (
         <p className="mb-4 last:mb-0">{children}</p>
       ),
     }),
-    [onWorkspaceFileLink, resolveWorkspaceFileLink]
+    [onWorkspaceFileLink, resolveWorkspaceFileLink, renderExternalLink]
   );
 
   return (

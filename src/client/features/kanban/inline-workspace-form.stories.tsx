@@ -87,10 +87,12 @@ function WorkspaceCreationPreviewSession({
   provider = 'CODEX',
   loading = false,
   catalogLoading = false,
+  compact = false,
 }: {
   provider?: ChatProvider;
   loading?: boolean;
   catalogLoading?: boolean;
+  compact?: boolean;
 }) {
   const [queryClient] = useState(
     () => new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -116,7 +118,12 @@ function WorkspaceCreationPreviewSession({
   return (
     <QueryClientProvider client={queryClient}>
       <trpc.Provider client={client} queryClient={queryClient}>
-        <div className="w-[min(40rem,calc(100vw-2rem))] max-w-full">
+        <div
+          className="max-w-full"
+          style={{
+            width: compact ? 'min(20rem, calc(100vw - 2rem))' : 'min(40rem, calc(100vw - 2rem))',
+          }}
+        >
           <InlineWorkspaceForm
             projectId="preview-project"
             existingNames={[]}
@@ -133,6 +140,7 @@ function WorkspaceCreationPreview(props: {
   provider?: ChatProvider;
   loading?: boolean;
   catalogLoading?: boolean;
+  compact?: boolean;
 }) {
   const key = `${props.provider ?? 'CODEX'}:${Boolean(props.loading)}:${Boolean(props.catalogLoading)}`;
   return <WorkspaceCreationPreviewSession key={key} {...props} />;
@@ -150,7 +158,11 @@ export const SavedClaudeDefaults: Story = { args: { provider: 'CLAUDE' } };
 export const Dark: Story = { globals: { theme: 'dark' } };
 export const Loading: Story = { args: { loading: true } };
 export const CatalogLoading: Story = { args: { catalogLoading: true } };
-export const Narrow: Story = { parameters: { viewport: { value: 'mobile1' } } };
+export const Narrow: Story = {
+  args: { compact: true },
+  parameters: { viewport: { value: 'mobile1' } },
+};
+export const NarrowDark: Story = { ...Narrow, globals: { theme: 'dark' } };
 export const Sidebar: Story = {
   decorators: [
     (Story) => (
