@@ -48,8 +48,10 @@ vi.mock('@tanstack/react-query', () => ({
     getQueriesData: () => [],
     cancelQueries: () => Promise.resolve(),
     invalidateQueries: mockQueryInvalidate,
-    setQueryData: (key: readonly [unknown, { input: unknown }], updater: unknown) =>
-      mockSetData(key[1].input, updater),
+    setQueryData: (key: readonly [readonly string[], { input: unknown }], updater: unknown) =>
+      key[0][1] === 'get'
+        ? mockWorkspaceGetSetData(key[1].input, updater)
+        : mockSetData(key[1].input, updater),
   }),
 }));
 vi.mock('@trpc/react-query', () => ({
