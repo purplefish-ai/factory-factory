@@ -39,6 +39,13 @@ bundled Codex runtime, without starting an inference turn. Claude model
 discovery uses an ephemeral ACP session with tools disabled. Both catalog
 services coalesce requests and cache successful results for 30 seconds.
 
+ACP startup checks that its working directory exists and is a directory before
+spawning. A deleted worktree is reported with its actual path; Node's raw
+`spawn <node> ENOENT` can otherwise misleadingly suggest a missing executable.
+Restore the worktree before retrying. Failed exact-conversation resumes retain
+the provider's diagnostic details and original error so missing Codex rollout
+history is actionable instead of appearing only as `Internal error`.
+
 Provider-native configuration controls own access permissions. Codex `mode`
 selects access and `collaboration_mode` selects planning independently. Claude
 `mode` owns its native access/planning modes. Saved STRICT/RELAXED/YOLO defaults

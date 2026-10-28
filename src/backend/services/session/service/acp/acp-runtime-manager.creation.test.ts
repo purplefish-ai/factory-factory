@@ -66,7 +66,7 @@ describe('AcpRuntimeManager', () => {
         expect.stringMatching(/@agentclientprotocol[/\\]claude-agent-acp[/\\]/),
       ]);
       expect(spawnArgs[2]).toMatchObject({
-        cwd: '/tmp/workspace',
+        cwd: tmpdir(),
         stdio: ['pipe', 'pipe', 'pipe'],
         detached: false,
       });
@@ -95,7 +95,7 @@ describe('AcpRuntimeManager', () => {
       expect(mockNewSession).toHaveBeenCalledTimes(1);
       expect(mockNewSession).toHaveBeenCalledWith(
         expect.objectContaining({
-          cwd: '/tmp/workspace',
+          cwd: tmpdir(),
           mcpServers: [],
         })
       );
@@ -131,7 +131,7 @@ describe('AcpRuntimeManager', () => {
         env: { ELECTRON_RUN_AS_NODE: '1', DISABLE_MCP_CONFIG_FILTERING: 'true' },
       });
       expect(spawnArgs[2]).toMatchObject({
-        cwd: '/tmp/workspace',
+        cwd: tmpdir(),
         stdio: ['pipe', 'pipe', 'pipe'],
         detached: false,
       });

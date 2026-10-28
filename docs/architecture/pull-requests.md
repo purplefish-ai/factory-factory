@@ -186,6 +186,11 @@ Failed or unsupported resume cannot fall back to a new conversation. Saved ACP
 model, mode, reasoning and permissions are restored; PR updates never apply
 separate Ratchet provider or permission defaults.
 
+Delivery checks that the recipient's worktree is available before claiming an
+update. A missing directory pauses monitoring as `SESSION_FAILED`, preserving
+pending events. Restore the worktree, then use **Resume PR updates** to retry.
+The ACP startup preflight also catches a directory removed after that check.
+
 A completed provider prompt acknowledges delivery, meaning the facts were
 received, regardless of whether the PR was fixed. After an uncertain exit,
 provider-owned user history must contain the exact delivery marker to prove

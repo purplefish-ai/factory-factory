@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
+import { stat } from 'node:fs/promises';
 import { buildPRMonitoringMessage } from '@/backend/prompts/pr-event';
 import { createLogger } from '@/backend/services/logger.service';
+import { RATCHET_DISPATCH_CHANGED } from '@/backend/services/ratchet';
 import type { PRBackgroundDeliveryPort } from '@/backend/services/session';
 import { type PRDeliveryRequest } from '@/shared/pr-monitoring';
 import { prMonitoringEventPayloadSchema } from '@/shared/schemas/pr-event.schema';
@@ -45,6 +47,33 @@ export async function guardPRDelivery(
     }))
   ) {
     return 'discard';
+  }
+  const worktreePath = initial.session.workspace.worktreePath;
+  const worktreeAvailable = worktreePath
+    ? await stat(worktreePath).then(
+        (info) => info.isDirectory(),
+        () => false
+      )
+    : false;
+  if (!worktreeAvailable) {
+    const paused = await workspacePRMonitoringService.pauseWorkspace(
+      request.workspaceId,
+      'SESSION_FAILED',
+      request.bindingRevision
+    );
+    if (paused.count) {
+      services.sessionBackgroundDeliveryService.invalidate(
+        request.workspaceId,
+        request.bindingRevision
+      );
+      services.ratchetService.emit(RATCHET_DISPATCH_CHANGED, { workspaceId: request.workspaceId });
+      logger.warn('PR delivery paused because the workspace worktree is unavailable', {
+        workspaceId: request.workspaceId,
+        sessionId,
+        worktreePath,
+      });
+    }
+    return 'blocked';
   }
   const finalRecipientAllowed = await recipientCanDispatch(
     request.workspaceId,
