@@ -219,6 +219,13 @@ export interface PRAggregateGuard {
 }
 
 class WorkspacePRAccessor {
+  findReviewRequestAssociations(urls: string[]) {
+    return prisma.workspacePR.findMany({
+      where: { url: { in: urls }, detachedAt: null },
+      select: { url: true, workspace: { select: { status: true } } },
+    });
+  }
+
   acceptMonitoredObservation(input: {
     target: PRTarget;
     expectedPrRevision: number;

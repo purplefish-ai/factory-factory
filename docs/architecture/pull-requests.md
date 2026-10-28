@@ -1,5 +1,14 @@
 # Pull Request Automation
 
+## Review requests
+
+The Reviews list and review badge exclude PRs attached only to ARCHIVING or
+ARCHIVED workspaces. A PR attached to a live workspace remains visible, even
+when an archived workspace also references it. Requests without a local
+workspace remain visible; detached associations do not affect visibility.
+Filtering reads current workspace state after each GitHub list fetch, so
+restoring a workspace makes its requests eligible again on the next refresh.
+
 ## PR link previews
 
 GitHub pull request links in chat Markdown show a preview on hover or keyboard

@@ -55,7 +55,7 @@ vi.mock('@/backend/services/workspace', () => ({
     setInitScriptPid: vi.fn(),
     clearInitScriptPid: vi.fn(),
   },
-  workspaceQueryService: { configure: vi.fn() },
+  workspaceQueryService: { configure: vi.fn(), filterReviewRequests: vi.fn() },
   workspaceSnapshotStore: { configure: vi.fn() },
   workspaceActivityService: {
     markSessionRunning: vi.fn(),
@@ -368,6 +368,31 @@ describe('configureDomainBridges', () => {
   });
 
   describe('workspace bridge delegation', () => {
+    it('returns filtered review requests through the configured github bridge', async () => {
+      const archived = {
+        number: 1,
+        title: 'Archived PR',
+        url: 'https://github.com/org/repo/pull/1',
+        repository: { nameWithOwner: 'org/repo' },
+        author: { login: 'author' },
+        createdAt: '2026-01-01T00:00:00Z',
+        isDraft: false,
+        reviewDecision: 'REVIEW_REQUIRED' as const,
+        additions: 1,
+        deletions: 0,
+        changedFiles: 1,
+      };
+      const live = { ...archived, number: 2, url: 'https://github.com/org/repo/pull/2' };
+      const prs = [archived, live];
+      vi.mocked(githubCLIService.listReviewRequests).mockResolvedValue(prs);
+      vi.mocked(workspaceQueryService.filterReviewRequests).mockResolvedValue([live]);
+      configureDomainBridges(createBridgeServices());
+      const bridge = getBridge(workspaceQueryService.configure);
+
+      await expect(bridge.github.listReviewRequests()).resolves.toEqual([live]);
+      expect(workspaceQueryService.filterReviewRequests).toHaveBeenCalledWith(prs);
+    });
+
     it('workspaceQueryService gets github bridge with checkHealth', async () => {
       configureDomainBridges(createBridgeServices());
       const bridge = getBridge(workspaceQueryService.configure);
