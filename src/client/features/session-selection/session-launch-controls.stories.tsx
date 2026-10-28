@@ -26,16 +26,22 @@ function LaunchControlsPreview({ state = 'ready', longLabels = false }: PreviewP
   const update = (patch: Partial<Draft>) =>
     setDrafts((current) => ({ ...current, [provider]: { ...current[provider], ...patch } }));
   const modelLabel = longLabels ? 'GPT-6.1 Terra Codex — extended context and reasoning' : '6 Sol';
-  const models =
-    provider === 'CLAUDE'
-      ? [
-          { value: 'sonnet', label: 'Sonnet' },
-          { value: 'opus', label: 'Opus' },
-        ]
-      : [
-          { value: 'sol', label: modelLabel },
-          { value: 'luna', label: '6 Luna' },
-        ];
+  const providerOptions = {
+    CLAUDE: {
+      defaultModel: 'sonnet',
+      models: [
+        { value: 'sonnet', label: 'Sonnet' },
+        { value: 'opus', label: 'Opus' },
+      ],
+    },
+    CODEX: {
+      defaultModel: 'sol',
+      models: [
+        { value: 'sol', label: modelLabel },
+        { value: 'luna', label: '6 Luna' },
+      ],
+    },
+  };
   const values =
     provider === 'CLAUDE'
       ? ['default', 'low', 'medium', 'high', 'xhigh', 'max']
@@ -60,8 +66,15 @@ function LaunchControlsPreview({ state = 'ready', longLabels = false }: PreviewP
       <SessionLaunchControls
         provider={provider}
         model={draft.model}
-        models={models}
-        onProviderChange={setProvider}
+        models={providerOptions[provider].models}
+        providerOptions={providerOptions}
+        onProviderChange={(next, model) => {
+          setProvider(next);
+          setDrafts((current) => ({
+            ...current,
+            [next]: { ...current[next], model: model ?? providerOptions[next].defaultModel },
+          }));
+        }}
         onModelChange={(model) => update({ model })}
         reasoning={{
           value: draft.effort,

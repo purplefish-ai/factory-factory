@@ -100,7 +100,7 @@ function ThinkingLevelSelector({
           variant="ghost"
           size="sm"
           className={cn(
-            'h-6 min-w-0 max-w-[8rem] shrink-0 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground',
+            'h-7 min-w-0 max-w-[8rem] shrink-0 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground',
             control.invalid && 'text-destructive'
           )}
           disabled={disabled || unsupported}
@@ -180,14 +180,16 @@ function getPlanDescription(control: LaunchPlanControl): string {
   }
   return `Plan mode ${control.enabled ? 'on' : 'off'}`;
 }
-function PlanModeToggle({
+export function PlanModeToggle({
   control,
   disabled,
   disabledReason,
+  showLabel = false,
 }: {
   control: LaunchPlanControl;
   disabled?: boolean;
   disabledReason?: string;
+  showLabel?: boolean;
 }) {
   const unavailable =
     !control.enabled && (control.loading || Boolean(control.error) || !control.supported);
@@ -203,9 +205,13 @@ function PlanModeToggle({
             disabled={disabled || unavailable}
             aria-label="Plan mode"
             aria-description={description}
-            className="h-6 w-6 shrink-0 p-0 disabled:pointer-events-auto data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+            className={cn(
+              'h-7 shrink-0 gap-1.5 text-xs disabled:pointer-events-auto data-[state=on]:bg-primary data-[state=on]:text-primary-foreground',
+              showLabel ? 'px-2' : 'w-7 p-0'
+            )}
           >
             <MapTrifoldIcon className="h-3.5 w-3.5" />
+            {showLabel && <span>Plan</span>}
           </Toggle>
         </TooltipTrigger>
         <TooltipContent>{description}</TooltipContent>

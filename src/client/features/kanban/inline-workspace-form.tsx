@@ -1,7 +1,6 @@
 import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
 import { CalendarIcon } from '@phosphor-icons/react/dist/csr/Calendar';
 import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
-import { PaperclipIcon } from '@phosphor-icons/react/dist/csr/Paperclip';
 import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { useQueryClient } from '@tanstack/react-query';
 import type { inferRouterOutputs } from '@trpc/server';
@@ -16,11 +15,7 @@ import {
   useProjectFileMentions,
   useSlashCommands,
 } from '@/client/features/composer';
-import {
-  SessionLaunchControls,
-  useSessionLaunchSelection,
-} from '@/client/features/session-selection';
-import { RatchetToggleButton } from '@/client/features/workspace';
+import { useSessionLaunchSelection } from '@/client/features/session-selection';
 import { runInBackground } from '@/client/lib/background-task';
 import type { AppRouter } from '@/client/lib/trpc';
 import { trpc } from '@/client/lib/trpc';
@@ -55,6 +50,7 @@ import {
   generateUniqueWorkspaceName,
   generateWorkspaceNameFromPrompt,
 } from '@/shared/workspace-words';
+import { WorkspaceCreationOptions } from './workspace-creation-options';
 
 function handleFormKeyDown(
   e: React.KeyboardEvent,
@@ -660,102 +656,79 @@ export function InlineWorkspaceForm({
           baseBranch={baseBranch}
           setBaseBranch={setBaseBranch}
         />
-        <div className="space-y-2">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            {supportsWorkspaceOptions ? (
-              <>
-                <div className="flex items-center gap-1.5">
-                  <RatchetToggleButton
-                    enabled={ratchetEnabled}
-                    state="IDLE"
-                    className="h-5 w-5"
-                    onToggle={setRatchetEnabled}
-                    disabled={isLoadingSettings || isCreating}
-                  />
-                </div>
-                <SessionLaunchControls
-                  {...launchSelection.controlsProps}
-                  disabled={isCreating}
-                  disabledReason={isCreating ? 'Creating workspace' : undefined}
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 w-7 shrink-0 px-0"
-                  aria-label="Attach files"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isCreating}
-                >
-                  <PaperclipIcon className="h-3.5 w-3.5" />
-                </Button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  accept={ATTACHMENT_ACCEPT_TYPES}
-                  onChange={(event) => {
-                    runInBackground(handleFileSelect(event), 'Could not attach file');
-                  }}
-                  className="hidden"
-                  aria-label="Attach files"
-                />
-              </>
-            ) : null}
-          </div>
-          <div className="flex justify-end gap-2">
+        {supportsWorkspaceOptions && (
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept={ATTACHMENT_ACCEPT_TYPES}
+            onChange={(event) => {
+              runInBackground(handleFileSelect(event), 'Could not attach file');
+            }}
+            className="hidden"
+            aria-label="Attach files"
+          />
+        )}
+        <WorkspaceCreationOptions
+          selection={launchSelection.controlsProps}
+          enabled={supportsWorkspaceOptions}
+          disabled={isCreating}
+          settingsLoading={isLoadingSettings}
+          ratchetEnabled={ratchetEnabled}
+          onRatchetChange={setRatchetEnabled}
+          onAttach={() => fileInputRef.current?.click()}
+        >
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs whitespace-nowrap"
+            onClick={onCancel}
+            disabled={isCreating}
+          >
+            Cancel
+          </Button>
+          <div className="flex">
             <Button
-              variant="ghost"
               size="sm"
-              className="h-7 text-xs whitespace-nowrap"
-              onClick={onCancel}
-              disabled={isCreating}
+              className={cn(
+                'h-7 text-xs whitespace-nowrap rounded-r-none',
+                mode !== 'STANDARD' && 'bg-primary/90'
+              )}
+              onClick={() => handleLaunch(mode)}
+              disabled={isLaunchDisabled}
+              title={launchDisabledReason}
+              aria-description={launchDisabledReason}
             >
-              Cancel
+              {isCreating ? <SpinnerGapIcon className="h-3 w-3 animate-spin mr-1" /> : null}
+              {launchButtonLabels[mode]}
             </Button>
-            <div className="flex">
-              <Button
-                size="sm"
-                className={cn(
-                  'h-7 text-xs whitespace-nowrap rounded-r-none',
-                  mode !== 'STANDARD' && 'bg-primary/90'
-                )}
-                onClick={() => handleLaunch(mode)}
-                disabled={isLaunchDisabled}
-                title={launchDisabledReason}
-                aria-description={launchDisabledReason}
-              >
-                {isCreating ? <SpinnerGapIcon className="h-3 w-3 animate-spin mr-1" /> : null}
-                {launchButtonLabels[mode]}
-              </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    size="sm"
-                    className="h-7 rounded-l-none border-l border-primary-foreground/20 px-1.5"
-                    disabled={isCreating}
-                    aria-label="Choose launch mode"
-                  >
-                    <CaretDownIcon className="h-3 w-3" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="text-xs">
-                  <DropdownMenuItem className="text-xs" onClick={() => setMode('STANDARD')}>
-                    Launch as Standard Workspace
-                  </DropdownMenuItem>
-                  <DropdownMenuItem className="text-xs" onClick={() => setMode('AUTO_ITERATION')}>
-                    <ArrowsClockwiseIcon className="mr-1.5 h-3 w-3" />
-                    Launch as Auto-Iteration Workspace
-                  </DropdownMenuItem>
-                  <DropdownMenuItem className="text-xs" onClick={() => setMode('PERIODIC_TASK')}>
-                    <CalendarIcon className="mr-1.5 h-3 w-3" />
-                    Create Periodic Task
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="sm"
+                  className="h-7 rounded-l-none border-l border-primary-foreground/20 px-1.5"
+                  disabled={isCreating}
+                  aria-label="Choose launch mode"
+                >
+                  <CaretDownIcon className="h-3 w-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="text-xs">
+                <DropdownMenuItem className="text-xs" onClick={() => setMode('STANDARD')}>
+                  Launch as Standard Workspace
+                </DropdownMenuItem>
+                <DropdownMenuItem className="text-xs" onClick={() => setMode('AUTO_ITERATION')}>
+                  <ArrowsClockwiseIcon className="mr-1.5 h-3 w-3" />
+                  Launch as Auto-Iteration Workspace
+                </DropdownMenuItem>
+                <DropdownMenuItem className="text-xs" onClick={() => setMode('PERIODIC_TASK')}>
+                  <CalendarIcon className="mr-1.5 h-3 w-3" />
+                  Create Periodic Task
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
-        </div>
+        </WorkspaceCreationOptions>
       </CardContent>
     </Card>
   );

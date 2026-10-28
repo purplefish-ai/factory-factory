@@ -116,7 +116,7 @@ function WorkspaceCreationPreviewSession({
   return (
     <QueryClientProvider client={queryClient}>
       <trpc.Provider client={client} queryClient={queryClient}>
-        <div className="w-[min(40rem,calc(100vw-2rem))]">
+        <div className="w-[min(40rem,calc(100vw-2rem))] max-w-full">
           <InlineWorkspaceForm
             projectId="preview-project"
             existingNames={[]}
@@ -151,3 +151,13 @@ export const Dark: Story = { globals: { theme: 'dark' } };
 export const Loading: Story = { args: { loading: true } };
 export const CatalogLoading: Story = { args: { catalogLoading: true } };
 export const Narrow: Story = { parameters: { viewport: { value: 'mobile1' } } };
+export const Sidebar: Story = {
+  decorators: [
+    (Story) => (
+      <div className="w-72">
+        <Story />
+      </div>
+    ),
+  ],
+  globals: { theme: 'dark' },
+};
