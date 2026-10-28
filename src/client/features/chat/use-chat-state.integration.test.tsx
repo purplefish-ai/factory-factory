@@ -5,11 +5,11 @@ import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { loadSettings, persistSettings } from '@/client/features/chat/chat-persistence';
+import { type UseChatStateReturn, useChatState } from '@/client/features/chat/use-chat-state';
 import type { MessageAttachment } from '@/lib/chat-protocol';
 import { MessageState } from '@/lib/chat-protocol';
 import { type ChatBarCapabilities, EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
-import { loadSettings, persistSettings } from './chat-persistence';
-import { type UseChatStateReturn, useChatState } from './use-chat-state';
 
 vi.mock('sonner', () => ({
   toast: {
@@ -600,21 +600,28 @@ describe('pending native settings', () => {
   });
 
   it('preserves saved settings during the initial disconnected render', async () => {
-    persistSettings('initial-disconnect', {
+    const savedSettings = {
       selectedModel: 'saved-model',
       reasoningEffort: 'high',
       thinkingEnabled: true,
       planModeEnabled: true,
+    };
+    persistSettings('initial-disconnect', savedSettings);
+    let harness!: ReturnType<typeof renderChatState>;
+    await act(() => {
+      harness = renderChatState(
+        'initial-disconnect',
+        vi.fn((_message: unknown) => true),
+        false
+      );
     });
-    const harness = renderChatState(
-      'initial-disconnect',
-      vi.fn((_message: unknown) => true),
-      false
-    );
-    await flushEffects();
-    expect(loadSettings('initial-disconnect')?.selectedModel).toBe('saved-model');
-    expect(harness.chatRef.current?.chatSettings.reasoningEffort).toBe('high');
-    harness.cleanup();
+    try {
+      await act(flushEffects);
+      expect(harness.chatRef.current?.chatSettings).toEqual(savedSettings);
+      expect(loadSettings('initial-disconnect')).toEqual(savedSettings);
+    } finally {
+      await act(() => harness.cleanup());
+    }
   });
 
   it('keeps the latest native choice visible through current-turn updates and older rejections', async () => {

@@ -251,7 +251,7 @@ export interface ChatState {
   acpPlan: AcpPlanState | null;
   /** ACP agent-provided config options (model, mode, thought level, custom) */
   acpConfigOptions: AcpConfigOption[] | null;
-  pendingConfigOptions: Record<string, { value: string; requestId: string }>;
+  pendingConfigOptions: Map<string, { value: string; requestId: string }>;
   needsConfigReconciliation: boolean;
 }
 

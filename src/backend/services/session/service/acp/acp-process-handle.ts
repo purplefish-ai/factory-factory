@@ -27,8 +27,7 @@ export class AcpProcessHandle {
   agentCapabilities: Record<string, unknown>;
   private promptLease?: AcpConfigurationLease;
   private readonly promptCompletion = new AcpPromptReadiness();
-  /** Pending public edits block the next prompt, but never the current turn. */
-  pendingConfigUpdates?: Promise<void>;
+  private pendingConfigUpdate?: Promise<void>;
   configOptions: SessionConfigOption[];
   readonly createdAt: Date;
   readonly sessionCreationOutcome: AcpSessionCreationOutcome;
@@ -77,6 +76,25 @@ export class AcpProcessHandle {
 
   get promptComplete(): Promise<void> | undefined {
     return this.promptCompletion.wait();
+  }
+
+  /** Pending public edits block the next prompt, but never the current turn. */
+  get pendingConfigUpdates(): Promise<void> | undefined {
+    return this.pendingConfigUpdate;
+  }
+
+  trackPendingConfigUpdate(update: Promise<unknown>): void {
+    const ready = update
+      .then(
+        () => undefined,
+        () => undefined
+      )
+      .finally(() => {
+        if (this.pendingConfigUpdate === ready) {
+          this.pendingConfigUpdate = undefined;
+        }
+      });
+    this.pendingConfigUpdate = ready;
   }
 
   get configurationReady(): Promise<void> | undefined {

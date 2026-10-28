@@ -6,7 +6,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { LeftControls } from '@/client/features/chat/chat-input/components/input-controls';
-import { loadSettings } from '@/client/features/chat/chat-persistence';
+import { loadSettings, persistSettings } from '@/client/features/chat/chat-persistence';
 import type { AcpConfigOption } from '@/client/features/chat/reducer';
 import {
   useChatWebSocket,
@@ -106,9 +106,15 @@ const outboundSchema = z.object({
 });
 const cleanups: (() => void)[] = [];
 
-function Harness({ chatRef }: { chatRef: { current: UseChatWebSocketReturn | undefined } }) {
+function Harness({
+  chatRef,
+  sessionId,
+}: {
+  chatRef: { current: UseChatWebSocketReturn | undefined };
+  sessionId: string;
+}) {
   const fileInputRef = createRef<HTMLInputElement>();
-  const chat = useChatWebSocket({ dbSessionId: 'websocket-config' });
+  const chat = useChatWebSocket({ dbSessionId: sessionId });
   chatRef.current = chat;
   return (
     <LeftControls
@@ -135,22 +141,22 @@ function Harness({ chatRef }: { chatRef: { current: UseChatWebSocketReturn | und
   );
 }
 
-async function mount() {
+async function mount(initialCapabilities = capabilities) {
   const chatRef: { current: UseChatWebSocketReturn | undefined } = { current: undefined };
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
   const queryClient = new QueryClient();
   const client = createTrpcClient();
-  await act(() =>
+  const render = (sessionId: string) =>
     root.render(
       <QueryClientProvider client={queryClient}>
         <trpc.Provider client={client} queryClient={queryClient}>
-          <Harness chatRef={chatRef} />
+          <Harness chatRef={chatRef} sessionId={sessionId} />
         </trpc.Provider>
       </QueryClientProvider>
-    )
-  );
+    );
+  await act(() => render('websocket-config'));
   cleanups.push(() => {
     root.unmount();
     queryClient.clear();
@@ -158,10 +164,13 @@ async function mount() {
   });
   const socket = BrowserSocket.sockets.at(-1)!;
   await act(() => socket.open());
-  await act(() => socket.receive({ type: 'chat_capabilities', capabilities }));
+  await act(() => socket.receive({ type: 'chat_capabilities', capabilities: initialCapabilities }));
   return {
     container,
     socket,
+    switchSession: async (sessionId: string) => {
+      await act(() => render(sessionId));
+    },
     get chat() {
       if (!chatRef.current) {
         throw new Error('Hook did not render');
@@ -214,6 +223,36 @@ afterEach(async () => {
 });
 
 describe('real chat WebSocket configuration lifecycle', () => {
+  it('keeps a model choice outbound when disconnecting before a model is confirmed', async () => {
+    const harness = await mount({
+      ...capabilities,
+      model: { ...capabilities.model, selected: undefined },
+    });
+    await act(() => harness.chat.updateSettings({ selectedModel: 'six-luna' }));
+    await act(() => harness.socket.close());
+    expect(harness.chat.chatSettings.selectedModel).toBe('six-luna');
+    const next = await harness.reconnect();
+    await act(() => harness.chat.sendMessage('Use the visible model choice'));
+    expect(outboundSchema.parse(JSON.parse(next.sent.at(-1)!)).settings?.selectedModel).toBe(
+      'six-luna'
+    );
+  });
+
+  it('does not persist a previous session rollback under the newly selected session', async () => {
+    const saved = {
+      selectedModel: 'six-luna',
+      reasoningEffort: 'high',
+      thinkingEnabled: true,
+      planModeEnabled: true,
+    };
+    persistSettings('next-session', saved);
+    const harness = await mount();
+    await harness.hydrate(harness.socket, [modelOption, reasoningOption]);
+    await act(() => harness.chat.setConfigOption(reasoningOption.id, 'high'));
+    await harness.switchSession('next-session');
+    expect(loadSettings('next-session')).toEqual(saved);
+  });
+
   it('rolls back an unanswered native change on socket close and adopts reconnect settings', async () => {
     const harness = await mount();
     // Use an existing supported alias here; alias coverage is tested separately.

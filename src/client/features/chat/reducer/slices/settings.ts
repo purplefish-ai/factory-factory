@@ -32,7 +32,7 @@ function reconcileNativeSettings(
   if (state.needsConfigReconciliation) {
     const confirmedState = { ...state, acpConfigOptions: configOptions };
     for (const option of configOptions) {
-      if (!(isModelOption(option) || state.pendingConfigOptions[option.id])) {
+      if (!(isModelOption(option) || state.pendingConfigOptions.has(option.id))) {
         Object.assign(
           confirmedSettings,
           getConfigOptionSettings(confirmedState, option.id, option.currentValue)
@@ -54,7 +54,7 @@ function handleConfigOptionsUpdate(
   const modelOption = payload.configOptions.find(isModelOption);
   const currentModel = modelOption?.currentValue;
   const keepPendingModel =
-    (modelOption && !!state.pendingConfigOptions[modelOption.id]) ||
+    (modelOption && state.pendingConfigOptions.has(modelOption.id)) ||
     (state.modelSelectionSource === 'local' && !confirmsModelSelection(state, currentModel));
   const acceptModel = !!currentModel && !keepPendingModel;
   const confirmedSettings = reconcileNativeSettings(state, payload.configOptions);
@@ -117,21 +117,21 @@ function restoreConfirmedModel(state: ChatState): ChatState {
     chatSettings: confirmedModel
       ? { ...state.chatSettings, selectedModel: confirmedModel }
       : state.chatSettings,
-    modelSelectionSource: confirmedModel ? 'server' : 'bootstrap',
+    modelSelectionSource: confirmedModel ? 'server' : state.modelSelectionSource,
     pendingModelRequestId: null,
   };
 }
 
 function settleConfigRequest(state: ChatState, requestId: string | undefined): ChatState {
-  const entry = Object.entries(state.pendingConfigOptions).find(
+  const entry = Array.from(state.pendingConfigOptions.entries()).find(
     ([, pending]) => pending.requestId === requestId
   );
   if (!entry) {
     return state;
   }
   const [configId] = entry;
-  const pendingConfigOptions = { ...state.pendingConfigOptions };
-  delete pendingConfigOptions[configId];
+  const pendingConfigOptions = new Map(state.pendingConfigOptions);
+  pendingConfigOptions.delete(configId);
   const confirmed = state.acpConfigOptions?.find((option) => option.id === configId);
   const settings = confirmed
     ? getConfigOptionSettings(state, configId, confirmed.currentValue)
@@ -156,18 +156,15 @@ export function reduceSettingsSlice(state: ChatState, action: ChatAction): ChatS
     case 'CONFIG_OPTION_REQUESTED':
       return {
         ...state,
-        pendingConfigOptions: {
-          ...state.pendingConfigOptions,
-          [action.payload.configId]: {
-            value: action.payload.value,
-            requestId: action.payload.requestId,
-          },
-        },
+        pendingConfigOptions: new Map(state.pendingConfigOptions).set(action.payload.configId, {
+          value: action.payload.value,
+          requestId: action.payload.requestId,
+        }),
       };
     case 'CONFIG_OPTION_APPLIED':
       return settleConfigRequest(state, action.payload.requestId);
     case 'CONFIG_OPTIONS_DISCONNECTED': {
-      const settled = Object.values(state.pendingConfigOptions).reduce<ChatState>(
+      const settled = Array.from(state.pendingConfigOptions.values()).reduce<ChatState>(
         (current, pending) => settleConfigRequest(current, pending.requestId),
         { ...state, needsConfigReconciliation: true }
       );

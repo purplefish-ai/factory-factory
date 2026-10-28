@@ -1,6 +1,9 @@
 import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { describe, expect, it, vi } from 'vitest';
-import { createTestProcessHandle } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
+import {
+  createDeferred,
+  createTestProcessHandle,
+} from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
 import { SessionQueuedSettings } from '@/backend/services/session/service/lifecycle/session-queued-settings';
 
 const identities = [
@@ -69,6 +72,17 @@ describe('queued explicit settings', () => {
     f.handle.configOptions = [reasoning(identity)];
     await f.queued.capture('session', 'thought_level', async () => undefined)();
     expect(f.queued.resolve('session', f.message).reasoningEffort).toBe('low');
+  });
+
+  it('does not restore retained intent after deletion releases an unfinished capture', async () => {
+    const f = fixture();
+    f.handle.configOptions = [reasoning({ id: 'thought_level' })];
+    const applying = createDeferred<void>();
+    const edit = f.queued.capture('session', 'thought_level', () => applying.promise)();
+    f.queued.release('session');
+    applying.resolve();
+    await edit;
+    expect(f.queued.resolve('session', f.message).reasoningEffort).toBe('high');
   });
 
   it('preserves confirmed startup planning when queued false has no explicit intent', async () => {

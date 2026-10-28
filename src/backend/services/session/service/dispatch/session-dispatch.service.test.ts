@@ -41,9 +41,13 @@ function harness(policy: 'allowed' | 'manual_resume' = 'allowed') {
     isSessionPromptInFlight: vi.fn(() => false),
     isSessionRunning: vi.fn(() => true),
   };
+  const resolveQueuedMessageSettings = vi.fn(
+    (_id: string, message: QueuedMessage) => message.settings
+  );
   const dispatcher = new SessionDispatchService({
     runtimeManager,
     configService: {
+      resolveQueuedMessageSettings,
       configureQueuedMessage: vi.fn((_id, message) => Promise.resolve(message.settings)),
     },
     promptService: { sendSessionMessage },
@@ -79,6 +83,7 @@ function harness(policy: 'allowed' | 'manual_resume' = 'allowed') {
   );
   return {
     dispatcher,
+    resolveQueuedMessageSettings,
     sendSessionMessage,
     startup,
     runtimeManager,
@@ -143,6 +148,29 @@ describe('session dispatcher queue and lifecycle coordination', () => {
     await pending;
     expect(sendSessionMessage).toHaveBeenCalledExactlyOnceWith('session', 'first');
     expect(sessionDomainService.peekNextMessage('session')).toBeUndefined();
+  });
+
+  it('uses newer accepted settings before starting a stopped session for an older queued turn', async () => {
+    const { dispatcher, startup, resolveQueuedMessageSettings } = harness();
+    enqueue('stopped-follow-up');
+    startup.getSessionClient.mockReturnValue(undefined);
+    startup.getOrCreateSessionClient.mockImplementation(() => {
+      startup.getSessionClient.mockReturnValue({});
+      return Promise.resolve({});
+    });
+    resolveQueuedMessageSettings.mockImplementation((_id, message) => ({
+      ...message.settings,
+      selectedModel: 'newer-model',
+      reasoningEffort: 'high',
+      planModeEnabled: true,
+    }));
+    await dispatcher.tryDispatchNextMessage('session');
+    expect(startup.getOrCreateSessionClient).toHaveBeenCalledWith('session', {
+      thinkingEnabled: false,
+      planModeEnabled: true,
+      model: 'newer-model',
+      reasoningEffort: 'high',
+    });
   });
 
   it('rechecks the prompt slot when another turn starts during auto-start', async () => {

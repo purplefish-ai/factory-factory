@@ -5,11 +5,13 @@ import { DEFAULT_THINKING_BUDGET } from '@/shared/acp-protocol';
 import type { QueuedMessage } from '@/shared/acp-protocol';
 
 type Settings = QueuedMessage['settings'];
+export type AcceptedQueuedConfig = Pick<AcpProcessHandle, 'provider' | 'configOptions'>;
+type ConfigOperation = () => Promise<AcceptedQueuedConfig | undefined> | Promise<void>;
 
 /** Explicit edits supersede older queued intent, independently for each setting. */
 export class SessionQueuedSettings {
-  private readonly edits = new WeakMap<
-    AcpProcessHandle,
+  private readonly edits = new Map<
+    string,
     Map<
       keyof Settings,
       {
@@ -24,10 +26,12 @@ export class SessionQueuedSettings {
   capture(
     sessionId: string,
     configId: string | undefined,
-    operation: () => Promise<void>
+    operation: ConfigOperation
   ): () => Promise<void> {
     if (!configId) {
-      return operation;
+      return async () => {
+        await operation();
+      };
     }
     return this.captureEdit(sessionId, operation, (handle) =>
       settingsForNativeOption(handle, configId)
@@ -56,23 +60,34 @@ export class SessionQueuedSettings {
 
   private captureEdit(
     sessionId: string,
-    operation: () => Promise<void>,
-    readSettings: (handle: AcpProcessHandle) => Partial<Settings>
+    operation: ConfigOperation,
+    readSettings: (handle: AcceptedQueuedConfig) => Partial<Settings>
   ): () => Promise<void> {
     const requestedAt = Date.now();
     const handle = this.runtime.getClient(sessionId);
+    const edits = this.edits.get(sessionId) ?? new Map();
+    this.edits.set(sessionId, edits);
     return async () => {
-      await operation();
-      if (!handle || this.runtime.getClient(sessionId) !== handle) {
+      const accepted = await operation();
+      if (
+        this.edits.get(sessionId) !== edits ||
+        (handle && this.runtime.getClient(sessionId) !== handle)
+      ) {
         return;
       }
-      const settings = readSettings(handle);
-      const edits = this.edits.get(handle) ?? new Map();
+      const config = accepted ?? handle;
+      if (!config) {
+        return;
+      }
+      const settings = readSettings(config);
       for (const key of Object.keys(settings) as Array<keyof Settings>) {
         edits.set(key, { requestedAt, settings: { [key]: settings[key] } });
       }
-      this.edits.set(handle, edits);
     };
+  }
+
+  release(sessionId: string): void {
+    this.edits.delete(sessionId);
   }
 
   async configure(
@@ -82,7 +97,7 @@ export class SessionQueuedSettings {
     apply: {
       plan(): Promise<void>;
       thinking(budget: number | null): Promise<void>;
-      model(model: string | undefined): Promise<void>;
+      model(model: string | undefined): Promise<unknown>;
       reasoning(effort: string): Promise<void>;
     }
   ): Promise<Settings> {
@@ -101,9 +116,8 @@ export class SessionQueuedSettings {
   }
 
   resolve(sessionId: string, message: Pick<QueuedMessage, 'timestamp' | 'settings'>): Settings {
-    const handle = this.runtime.getClient(sessionId);
     let settings = message.settings;
-    for (const edit of (handle && this.edits.get(handle))?.values() ?? []) {
+    for (const edit of this.edits.get(sessionId)?.values() ?? []) {
       if (edit.requestedAt >= Date.parse(message.timestamp)) {
         settings = { ...settings, ...edit.settings };
       }
@@ -112,7 +126,10 @@ export class SessionQueuedSettings {
   }
 }
 
-function settingsForNativeOption(handle: AcpProcessHandle, configId: string): Partial<Settings> {
+function settingsForNativeOption(
+  handle: AcceptedQueuedConfig,
+  configId: string
+): Partial<Settings> {
   const option = handle.configOptions.find(
     (entry) =>
       entry.id === configId ||

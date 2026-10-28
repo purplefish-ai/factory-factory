@@ -42,21 +42,8 @@ export class SessionConfigMutationQueue {
         }
       });
     this.updates.set(sessionId, update);
-    if (handle) {
-      // Register synchronously so even a direct prompt cannot overtake this edit.
-      // A rejected edit retains the confirmed settings and releases the barrier.
-      const ready = update
-        .then(
-          () => undefined,
-          () => undefined
-        )
-        .finally(() => {
-          if (handle.pendingConfigUpdates === ready) {
-            handle.pendingConfigUpdates = undefined;
-          }
-        });
-      handle.pendingConfigUpdates = ready;
-    }
+    // Register synchronously so even a direct prompt cannot overtake this edit.
+    handle?.trackPendingConfigUpdate(update);
     try {
       return await update;
     } finally {

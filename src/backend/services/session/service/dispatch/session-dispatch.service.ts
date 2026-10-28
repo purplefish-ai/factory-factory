@@ -545,6 +545,12 @@ export class SessionDispatchService {
     }
 
     try {
+      if (!msg.source) {
+        msg.settings = this.dependencies.configService.resolveQueuedMessageSettings(
+          dbSessionId,
+          msg
+        );
+      }
       await this.lifecycle.startup.getOrCreateSessionClient(
         dbSessionId,
         msg.source

@@ -146,6 +146,9 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   dbSessionIdRef.current = dbSessionId;
 
   const handleDisconnected = useCallback(() => {
+    if (sessionContextRef.current !== sessionContext) {
+      return;
+    }
     // Private command replies can be lost with the socket. Reconnect snapshots
     // must regain authority instead of retaining an unacknowledged selection.
     const action: ChatAction = { type: 'CONFIG_OPTIONS_DISCONNECTED' };
@@ -155,7 +158,7 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     if (stateRef.current.chatSettings !== previousSettings) {
       persistSettings(dbSessionIdRef.current, stateRef.current.chatSettings);
     }
-  }, []);
+  }, [sessionContext]);
 
   const wasConnectedRef = useRef(connected);
   useEffect(() => {
@@ -222,10 +225,11 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   // Settings confirmations and rollbacks must be visible to an immediate send,
   // including multiple transport events batched before React commits a render.
   const dispatchTransportAction = useCallback((action: ChatAction) => {
-    const nextState = reduceSettingsSlice(stateRef.current, action);
-    if (nextState !== stateRef.current) {
+    const previousState = stateRef.current;
+    const nextState = reduceSettingsSlice(previousState, action);
+    if (nextState !== previousState) {
       stateRef.current = nextState;
-      if (nextState.modelSelectionSource === 'server') {
+      if (nextState.chatSettings !== previousState.chatSettings) {
         persistSettings(dbSessionIdRef.current, nextState.chatSettings);
       }
     }
@@ -314,7 +318,7 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
           currentValue:
             option.id === 'model' || option.category === 'model'
               ? option.currentValue
-              : (state.pendingConfigOptions[option.id]?.value ?? option.currentValue),
+              : (state.pendingConfigOptions.get(option.id)?.value ?? option.currentValue),
         })) ?? null,
       // Convert queuedMessages Map to array for UI consumption
       // (Internal state uses Map for O(1) lookups and automatic de-duplication)

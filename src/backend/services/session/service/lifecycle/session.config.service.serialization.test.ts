@@ -238,7 +238,7 @@ describe('configuration transaction ordering', () => {
     expect(f.rpc).not.toHaveBeenCalled();
   });
 
-  it('keeps a queued model choice after a reasoning-only user request', async () => {
+  it('keeps a queued model choice after an undefined model request', async () => {
     const f = fixture();
     f.rpc.mockResolvedValue({ configOptions: options('second') });
     await f.service.setSessionModel('session', undefined, 'user');
@@ -254,6 +254,43 @@ describe('configuration transaction ordering', () => {
     expect(resolved.selectedModel).toBe('second');
     expect(f.rpc).toHaveBeenCalledWith(
       expect.objectContaining({ configId: 'model', value: 'second' })
+    );
+  });
+
+  it('keeps a queued model choice after a real reasoning-only user request', async () => {
+    const f = fixture();
+    const withReasoning = (model: string, effort: string): SessionConfigOption[] => [
+      ...options(model),
+      {
+        id: 'reasoning_effort',
+        category: 'thought_level',
+        name: 'Reasoning',
+        type: 'select',
+        currentValue: effort,
+        options: ['low', 'high'].map((value) => ({ value, name: value })),
+      },
+    ];
+    f.handle.configOptions = withReasoning('first', 'low');
+    f.rpc
+      .mockResolvedValueOnce({ configOptions: withReasoning('first', 'high') })
+      .mockResolvedValue({ configOptions: withReasoning('second', 'high') });
+    await f.service.setSessionReasoningEffort('session', 'high', 'user');
+    expect(f.rpc).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ configId: 'reasoning_effort', value: 'high' })
+    );
+    const resolved = await f.service.configureQueuedMessage('session', {
+      timestamp: new Date(0).toISOString(),
+      settings: {
+        selectedModel: 'second',
+        reasoningEffort: 'low',
+        thinkingEnabled: false,
+        planModeEnabled: false,
+      },
+    });
+    expect(resolved).toMatchObject({ selectedModel: 'second', reasoningEffort: 'high' });
+    expect(f.handle.configOptions.find((option) => option.id === 'model')?.currentValue).toBe(
+      'second'
     );
   });
 

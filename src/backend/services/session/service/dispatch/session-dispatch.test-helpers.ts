@@ -43,3 +43,20 @@ export function configureTestQueuedMessage(
     }
   );
 }
+
+export function createAttachmentMessage(message: QueuedMessage): QueuedMessage {
+  return {
+    ...message,
+    text: 'preserve this draft',
+    attachments: [
+      {
+        id: 'attachment-1',
+        name: 'notes.txt',
+        type: 'text/plain',
+        size: 11,
+        data: 'draft notes',
+        contentType: 'text',
+      },
+    ],
+  };
+}

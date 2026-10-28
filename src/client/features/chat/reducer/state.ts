@@ -118,7 +118,7 @@ function createSessionSwitchResetState(): Pick<
     chatCapabilitiesLoaded: false,
     modelSelectionSource: 'bootstrap',
     pendingModelRequestId: null,
-    pendingConfigOptions: {},
+    pendingConfigOptions: new Map(),
     needsConfigReconciliation: false,
   };
 }
@@ -137,7 +137,7 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
     chatCapabilitiesLoaded: false,
     modelSelectionSource: 'bootstrap',
     pendingModelRequestId: null,
-    pendingConfigOptions: {},
+    pendingConfigOptions: new Map(),
     needsConfigReconciliation: false,
     queuedMessages: new Map(),
     toolUseIdToIndex: new Map(),

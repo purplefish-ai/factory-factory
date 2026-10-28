@@ -40,6 +40,7 @@ const {
     isGenerationCurrent: vi.fn(),
     isSessionRunning: vi.fn(),
     isSessionPromptInFlight: vi.fn(),
+    resolveQueuedMessageSettings: (_id: string, message: QueuedMessage) => message.settings,
     configureQueuedMessage: vi.fn((id: string, message: QueuedMessage, supportsThinking: boolean) =>
       configureTestQueuedMessage(mockSessionService, id, message, supportsThinking)
     ),
