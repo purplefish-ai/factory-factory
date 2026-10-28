@@ -27,6 +27,30 @@ function createStore(): SessionStore {
 }
 
 describe('SessionRuntimeMachine', () => {
+  it.each(['idle', 'stopping', 'error'] as const)(
+    'clears prior work when moving to %s',
+    (phase) => {
+      const machine = new SessionRuntimeMachine(
+        () => undefined,
+        () => '2026-02-09T00:00:00.000Z'
+      );
+      const store = createStore();
+      machine.markRuntime(store, {
+        phase: 'running',
+        processState: 'alive',
+        activity: 'WORKING',
+        work: {
+          promptInFlight: false,
+          backgroundTasks: [{ id: 'preview', name: 'pnpm storybook', kind: 'shell' }],
+          runningSubagents: 0,
+          activeGoals: 0,
+        },
+      });
+      machine.markRuntime(store, { phase, processState: 'stopped', activity: 'IDLE' });
+      expect(store.runtime.work).toBeUndefined();
+    }
+  );
+
   it('replaces runtime snapshot and emits delta by default', () => {
     const emitRuntimeDelta = vi.fn();
     const machine = new SessionRuntimeMachine(emitRuntimeDelta, () => '2026-02-09T00:00:00.000Z');

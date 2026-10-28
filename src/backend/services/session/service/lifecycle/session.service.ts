@@ -11,6 +11,7 @@ import type { AcpEventProcessor } from './acp-event-processor';
 import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import type { SessionLifecycleGate } from './session-lifecycle-gate';
 import { schedulePRDiscovery } from './session-pr-discovery.service';
+import { getAcpWorkState } from './session-work-state';
 import { toErrorMessage, toProviderFailureChatMessage } from './session.error-message';
 import type { SessionPromptTurnCompletionService } from './session.prompt-turn-completion.service';
 
@@ -230,6 +231,7 @@ export class SessionService {
       phase: 'running',
       processState: 'alive',
       activity: 'WORKING',
+      ...getAcpWorkState(this.runtimeManager.getClient(sessionId), true),
       updatedAt: new Date().toISOString(),
     });
 
@@ -306,6 +308,7 @@ export class SessionService {
       phase: isWorking ? 'running' : 'idle',
       processState: 'alive',
       activity: isWorking ? 'WORKING' : 'IDLE',
+      ...getAcpWorkState(this.runtimeManager.getClient(sessionId)),
       updatedAt: new Date().toISOString(),
     });
   }

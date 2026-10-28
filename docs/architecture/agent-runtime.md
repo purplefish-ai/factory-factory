@@ -272,6 +272,14 @@ completed prompt retains that activity until the remaining work ends.
 `isSessionPromptInFlight` answers only whether the current active runtime has an
 unresolved prompt RPC. Browse-only runtimes do not own an active prompt slot.
 
+Runtime snapshots also carry prompt ownership and named background tasks, with
+counts for running subagents and active goals. Chat shows background processes
+and their commands separately from the active-turn spinner. A completed turn
+with a persistent preview server shows the remaining process instead of stale
+reasoning or “Agent is working”. Task-detail changes publish even while another
+task keeps the session busy, and reconnects restore current work from the live
+runtime. Idle and stopped transitions clear prior work details.
+
 Ordinary chat messages may be composed and queued during any turn. Dispatch
 waits for the preceding prompt to complete, including time spent executing tools
 or awaiting that turn's approval, question or elicitation. A background shell,

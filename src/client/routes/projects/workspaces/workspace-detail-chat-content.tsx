@@ -261,6 +261,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
           workspaceId={props.workspaceId}
           messages={groupedMessages}
           running={running}
+          work={props.sessionRuntime.work}
           startingSession={displayStartingState}
           loadingSession={loadingSession}
           latestThinking={props.latestThinking ?? null}

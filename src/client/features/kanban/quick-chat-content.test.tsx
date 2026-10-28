@@ -4,6 +4,7 @@ import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
 import type { ChatInput, UseChatWebSocketReturn } from '@/client/features/chat';
+import { createInitialSessionRuntimeState } from '@/shared/session-runtime';
 import { QuickChatContent } from './quick-chat-content';
 
 const input = vi.hoisted(() => vi.fn((_props: ComponentProps<typeof ChatInput>) => null));
@@ -38,6 +39,7 @@ describe('QuickChatContent composer and queue controls', () => {
       pendingMessages: new Map(),
       pendingRequest: { type: 'none' },
       sessionStatus: { phase: 'running' },
+      sessionRuntime: createInitialSessionRuntimeState(),
       removeQueuedMessage,
     } as unknown as UseChatWebSocketReturn;
     const container = document.createElement('div');

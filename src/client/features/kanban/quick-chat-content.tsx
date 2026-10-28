@@ -55,6 +55,7 @@ export function QuickChatContent({
           workspaceId={workspaceId}
           messages={groupedMessages}
           running={running}
+          work={chatState.sessionRuntime.work}
           startingSession={startingSession}
           loadingSession={loadingSession}
           latestThinking={chatState.latestThinking}

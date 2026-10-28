@@ -12,40 +12,28 @@ export class SessionRuntimeMachine {
     updates: Pick<SessionRuntimeState, 'phase' | 'processState' | 'activity'> & {
       lastExit?: SessionRuntimeState['lastExit'];
       errorMessage?: SessionRuntimeState['errorMessage'];
+      work?: SessionRuntimeState['work'];
       updatedAt?: string;
     },
     options?: { emitDelta?: boolean; replace?: boolean }
   ): void {
-    if (options?.replace) {
-      store.runtime = {
-        phase: updates.phase,
-        processState: updates.processState,
-        activity: updates.activity,
-        ...(Object.hasOwn(updates, 'lastExit') ? { lastExit: updates.lastExit } : {}),
-        ...(Object.hasOwn(updates, 'errorMessage') ? { errorMessage: updates.errorMessage } : {}),
-        updatedAt: updates.updatedAt ?? this.nowIso(),
-      };
-
-      if (options?.emitDelta !== false) {
-        this.emitRuntimeDelta(store.sessionId, store.runtime);
-      }
-      return;
-    }
-
-    const hasExplicitLastExit = Object.hasOwn(updates, 'lastExit');
-    const hasExplicitErrorMessage = Object.hasOwn(updates, 'errorMessage');
     const {
       lastExit: _lastExit,
       errorMessage: _errorMessage,
-      ...runtimeWithoutTransientFields
+      work: previousWork,
+      ...previous
     } = store.runtime;
+    const work = updates.work ?? (options?.replace ? undefined : previousWork);
     store.runtime = {
-      ...runtimeWithoutTransientFields,
+      ...(options?.replace ? {} : previous),
       phase: updates.phase,
       processState: updates.processState,
       activity: updates.activity,
-      ...(hasExplicitLastExit ? { lastExit: updates.lastExit } : {}),
-      ...(hasExplicitErrorMessage ? { errorMessage: updates.errorMessage } : {}),
+      ...(updates.activity === 'WORKING' && updates.processState === 'alive' && work
+        ? { work }
+        : {}),
+      ...(Object.hasOwn(updates, 'lastExit') ? { lastExit: updates.lastExit } : {}),
+      ...(Object.hasOwn(updates, 'errorMessage') ? { errorMessage: updates.errorMessage } : {}),
       updatedAt: updates.updatedAt ?? this.nowIso(),
     };
 

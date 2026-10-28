@@ -7,6 +7,49 @@ import type { WorkspaceInitBanner } from '@/shared/workspace-init';
 import { VirtualizedMessageList } from './virtualized-message-list';
 
 describe('VirtualizedMessageList loading status', () => {
+  it('identifies background processes after the prompt finishes and removes completed work', () => {
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    const work = {
+      promptInFlight: false,
+      backgroundTasks: [
+        { id: 'storybook', name: 'pnpm storybook --port 62770', kind: 'shell' as const },
+      ],
+      runningSubagents: 0,
+      activeGoals: 0,
+    };
+    const render = (running: boolean, promptInFlight: boolean) => {
+      flushSync(() => {
+        root.render(
+          <VirtualizedMessageList
+            messages={[]}
+            running={running}
+            work={{ ...work, promptInFlight }}
+            latestThinking="Old reasoning from the finished turn"
+            startingSession={false}
+            loadingSession={false}
+            scrollContainerRef={{ current: null }}
+          />
+        );
+      });
+    };
+    try {
+      render(true, false);
+      expect(container.textContent).toContain('Background process running');
+      expect(container.textContent).toContain('pnpm storybook --port 62770');
+      expect(container.textContent).not.toContain('Old reasoning');
+      expect(container.textContent).not.toContain('Agent is working');
+      expect(container.querySelectorAll('.animate-spin')).toHaveLength(0);
+      render(true, true);
+      expect(container.textContent).toContain('Old reasoning');
+      expect(container.textContent).toContain('pnpm storybook --port 62770');
+      render(false, false);
+      expect(container.textContent).not.toContain('pnpm storybook');
+    } finally {
+      root.unmount();
+    }
+  });
+
   it('shows one workspace setup spinner, then session loading after setup finishes', () => {
     const container = document.createElement('div');
     const root = createRoot(container);

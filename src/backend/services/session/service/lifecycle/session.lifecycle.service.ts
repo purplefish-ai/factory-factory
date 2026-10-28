@@ -18,6 +18,7 @@ import type {
   StartSessionOptions,
 } from './session-startup.coordinator';
 import type { SessionStopReason, StopSessionOptions } from './session-termination.coordinator';
+import { getAcpWorkState } from './session-work-state';
 
 export type {
   GetOrCreateSessionClientOptions,
@@ -125,6 +126,7 @@ export class SessionLifecycleService {
         phase: isWorking ? 'running' : 'idle',
         processState: 'alive',
         activity: isWorking ? 'WORKING' : 'IDLE',
+        ...getAcpWorkState(acpClient),
         updatedAt: base.updatedAt,
       };
     }
