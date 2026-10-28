@@ -4,8 +4,8 @@ import type { SessionLifecycleWorkspaceBridge } from '@/backend/services/session
 type Logger = ReturnType<typeof createLogger>;
 
 /**
- * After a session ends, make the workspace immediately eligible for batched PR
- * discovery. The scheduler performs the GitHub lookup so session completion
+ * After a successful prompt turn or session exit, make the workspace eligible
+ * for batched PR discovery. The scheduler performs the GitHub lookup so completion
  * stays lightweight and does not bypass discovery backoff coordination.
  */
 export async function maybeDiscoverPROnSessionEnd(

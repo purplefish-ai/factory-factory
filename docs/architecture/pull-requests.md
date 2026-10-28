@@ -45,6 +45,13 @@ owns branch lookup scheduling separately. An observation and its
 identity and revision. Attaching or merging one PR preserves sibling
 associations and events.
 
+Successful ACP prompt turns reset the workspace's PR discovery backoff, as do
+runtime exits. ACP processes remain alive between turns, so waiting for process
+exit alone can leave a newly opened PR undiscovered after its checks fail. The
+reset only makes discovery eligible for the next batched scheduler pass; it does
+not perform a GitHub lookup or delay turn completion. Failed, stopping, and
+superseded turns do not reset discovery.
+
 `WorkspacePRMonitoring` owns enablement, delivery mode, main recipient
 preference, binding revision, epoch, and delivery pause. Turning monitoring off
 cancels unclaimed events while facts continue to refresh. Re-enabling or
