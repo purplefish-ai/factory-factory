@@ -22,11 +22,7 @@ import { CombinedChangesPanel } from './combined-changes-panel';
 import { DevLogsPanel } from './dev-logs-panel';
 import { FileBrowserPanel } from './file-browser-panel';
 import { PeriodicTaskPanel } from './periodic-task-panel';
-import {
-  loadPersistedTopPanelState,
-  STORAGE_KEY_TOP_TAB_PREFIX,
-  type TopPanelTab,
-} from './right-panel-state';
+import { STORAGE_KEY_TOP_TAB_PREFIX, type TopPanelTab } from './right-panel-state';
 import { ScreenshotsPanel } from './screenshots-panel';
 import { SetupLogsPanel } from './setup-logs-panel';
 import { TerminalPanel, type TerminalPanelRef, type TerminalTabState } from './terminal-panel';
@@ -40,15 +36,6 @@ import { type BottomPanelTab, useWorkspacePanel } from './workspace-panel-contex
 // =============================================================================
 
 type LogsBottomTab = Exclude<BottomPanelTab, 'terminal'>;
-
-interface WorkspaceTopTabState {
-  workspaceId: string;
-  tab: TopPanelTab;
-}
-
-function getActiveTopTab(state: WorkspaceTopTabState, workspaceId: string): TopPanelTab {
-  return state.workspaceId === workspaceId ? state.tab : 'changes';
-}
 
 function isLogsBottomTab(tab: BottomPanelTab): tab is LogsBottomTab {
   return tab === 'setup-logs' || tab === 'dev-logs' || tab === 'post-run-logs';
@@ -229,13 +216,12 @@ export function RightPanel({
 }: RightPanelProps) {
   // Track which workspaceId has been loaded to handle workspace changes
   const loadedForWorkspaceRef = useRef<string | null>(null);
-  const [topTabState, setTopTabState] = useState<WorkspaceTopTabState>({
-    workspaceId,
-    tab: 'changes',
-  });
-  // A previous workspace's tab must not reset the new workspace's preference.
-  const activeTopTab = getActiveTopTab(topTabState, workspaceId);
-  const { activeBottomTab, setActiveBottomTab } = useWorkspacePanel();
+  const {
+    activeBottomTab,
+    setActiveBottomTab,
+    activeTopTab,
+    setActiveTopTab: handleTopTabChange,
+  } = useWorkspacePanel();
   const terminalPanelRef = useRef<TerminalPanelRef>(null);
 
   // Single shared dev logs connection for both tab indicator and panel content
@@ -280,7 +266,7 @@ export function RightPanel({
     }
   );
 
-  // Load persisted tabs from localStorage on mount or workspaceId change
+  // Reset workspace-specific terminal and log state on mount or workspace change.
   useEffect(() => {
     if (loadedForWorkspaceRef.current === workspaceId) {
       return;
@@ -292,29 +278,7 @@ export function RightPanel({
 
     // Reset logs subtab selection to default when workspace changes
     setLastLogsTab('setup-logs');
-
-    let storage: Storage | null = null;
-    try {
-      storage = typeof window === 'undefined' ? null : window.localStorage;
-    } catch {
-      // Ignore storage errors
-    }
-    const persisted = loadPersistedTopPanelState(storage, workspaceId);
-    setTopTabState({ workspaceId, tab: persisted.topTab });
   }, [workspaceId]);
-
-  // Persist top-level tab selection to localStorage
-  const handleTopTabChange = useCallback(
-    (tab: TopPanelTab) => {
-      setTopTabState({ workspaceId, tab });
-      try {
-        localStorage.setItem(`${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`, tab);
-      } catch {
-        // Ignore storage errors
-      }
-    },
-    [workspaceId]
-  );
 
   useEffect(() => {
     if (workspace === undefined) {

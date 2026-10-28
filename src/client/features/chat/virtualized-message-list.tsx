@@ -26,6 +26,7 @@ interface VirtualizedMessageListProps {
   messages: GroupedMessageItem[];
   running: boolean;
   work?: SessionWorkState;
+  onOpenAgents?: () => void;
   startingSession: boolean;
   loadingSession: boolean;
   latestThinking?: string | null;
@@ -178,6 +179,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   messages: allMessages,
   running,
   work,
+  onOpenAgents,
   startingSession,
   loadingSession,
   latestThinking = null,
@@ -615,7 +617,11 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
 
         {/* Loading indicators after messages */}
         {(running || hasBackgroundActivity) && (
-          <SessionActivityIndicator work={work} latestThinking={latestThinking} />
+          <SessionActivityIndicator
+            work={work}
+            latestThinking={latestThinking}
+            onOpenAgents={onOpenAgents}
+          />
         )}
 
         {queuedPRUpdates.map((item) => (

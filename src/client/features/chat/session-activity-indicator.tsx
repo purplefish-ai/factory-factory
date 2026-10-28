@@ -5,9 +5,11 @@ import { LoadingIndicator } from './agent-activity';
 export function SessionActivityIndicator({
   work,
   latestThinking,
+  onOpenAgents,
 }: {
   work?: SessionWorkState;
   latestThinking?: string | null;
+  onOpenAgents?: () => void;
 }) {
   const tasks = work?.backgroundTasks ?? [];
   const backgroundTasks = tasks.filter((task) => task.kind !== 'turn');
@@ -38,9 +40,15 @@ export function SessionActivityIndicator({
         </div>
       )}
       {!!work?.runningSubagents && (
-        <p className="text-sm text-muted-foreground">
+        <button
+          type="button"
+          onClick={onOpenAgents}
+          disabled={!onOpenAgents}
+          title="Open Agents panel"
+          className="block text-sm text-muted-foreground enabled:cursor-pointer enabled:hover:text-foreground enabled:hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+        >
           {work.runningSubagents} {work.runningSubagents === 1 ? 'sub-agent' : 'sub-agents'} running
-        </p>
+        </button>
       )}
       {!!work?.activeGoals && (
         <p className="text-sm text-muted-foreground">

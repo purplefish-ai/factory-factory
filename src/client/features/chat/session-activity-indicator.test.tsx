@@ -1,9 +1,33 @@
 // @vitest-environment jsdom
+import { flushSync } from 'react-dom';
+import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { SessionActivityIndicator } from './session-activity-indicator';
 
 describe('SessionActivityIndicator', () => {
+  it.each([1, 2])('opens Agents from the %s running sub-agent label', (runningSubagents) => {
+    const onOpenAgents = vi.fn();
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    try {
+      flushSync(() =>
+        root.render(
+          <SessionActivityIndicator
+            work={{ promptInFlight: false, backgroundTasks: [], runningSubagents, activeGoals: 0 }}
+            onOpenAgents={onOpenAgents}
+          />
+        )
+      );
+      const button = container.querySelector('button');
+      expect(button?.textContent).toContain(`${runningSubagents} sub-agent`);
+      button?.click();
+      expect(onOpenAgents).toHaveBeenCalledOnce();
+    } finally {
+      flushSync(() => root.unmount());
+    }
+  });
+
   it.each([
     [1, '1 goal active'],
     [2, '2 goals active'],
