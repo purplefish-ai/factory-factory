@@ -3,7 +3,7 @@
 The approved workspace mockup adds a compact thinking-level menu beside the
 provider/model picker and replaces the Default/Plan dropdown with a Plan icon
 toggle. Both controls use actual Claude and Codex capabilities. This record
-captures that design; delivery requirements belong to the original task and PR.
+captures that approved design.
 
 Use the same controls for manual workspace creation, new conversations, and
 Quick Chat. Keep provider-specific draft choices, saved defaults,
@@ -37,8 +37,7 @@ stop launch before prompting. Inherited unsupported defaults may use the native
 default. Resume preserves the latest confirmed session configuration, rather
 than reapplying stale launch intent or changed global defaults.
 
-Test the actual components, startup and first dispatch, including the first
-workspace prompt and no-prompt starts. Verify real Claude and Codex adapters in
-disposable workspaces, checking supported options, explicit/default effort,
-planning, and stop/resume. Run repository checks, full tests, integration tests,
-both builds, mobile checks, and independent review before PR delivery.
+The validation strategy covers the actual components, startup and first
+dispatch, including the first workspace prompt and no-prompt starts. Disposable
+Claude and Codex sessions cover supported options, explicit/default effort,
+planning, and stop/resume.
