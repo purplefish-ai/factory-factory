@@ -163,6 +163,12 @@ values still apply before their prompt.
 
 ### Permission and configuration readiness
 
+Tool permission prompts keep request content above the approval actions so long
+provider option labels cannot squeeze the request. Tool previews preserve
+literal text, line breaks, and indentation in a bounded, keyboard-scrollable
+monospace panel; long lines scroll horizontally. Consent messages retain prose
+formatting.
+
 Permission defaults initialize new sessions. Existing sessions restore their
 saved native access and Codex planning choices before publishing a new snapshot
 or dispatching work. Prompts and user configuration changes wait for that

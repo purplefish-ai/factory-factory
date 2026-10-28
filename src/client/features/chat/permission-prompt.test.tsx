@@ -5,7 +5,7 @@ import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PermissionRequest } from '@/lib/chat-protocol';
-import { PermissionPrompt } from './permission-prompt';
+import { PermissionPrompt, PermissionPromptExpanded } from './permission-prompt';
 
 function findButtonByText(container: HTMLElement, text: string): HTMLButtonElement | null {
   const buttons = Array.from(container.querySelectorAll('button'));
@@ -37,13 +37,54 @@ describe('PermissionPrompt', () => {
       flushSync(() =>
         root.render(createElement(PermissionPrompt, { permission, onApprove: vi.fn() }))
       );
-      const preview = container.querySelector('[title]');
-      expect(preview?.className).toContain('max-h-32');
-      expect(preview?.className).toContain('overflow-y-auto');
-      expect(preview?.className.includes('font-mono')).toBe(type !== 'FormElicitation');
+      const preview = container.querySelector(
+        type === 'FormElicitation' ? '[title]' : '[role="region"]'
+      );
+      expect(preview?.className).toContain(type === 'FormElicitation' ? 'max-h-32' : 'max-h-48');
+      if (type === 'Command') {
+        expect(container.querySelector('pre')?.className).toContain('font-mono');
+      } else {
+        expect(preview?.className).toContain('overflow-y-auto');
+        expect(preview?.className).not.toContain('font-mono');
+      }
       if (type === 'FormElicitation') {
         expect(preview?.textContent).toBe('Consent message');
       }
+      root.unmount();
+    }
+  );
+
+  it.each(['legacy', 'acp', 'expanded'])(
+    'preserves a multiline command as readable code for %s requests',
+    (variant) => {
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const root = createRoot(container);
+      const command = "python3 - <<'EOF'\n  print('<script>literal text</script>')\nEOF";
+      const permission: PermissionRequest = {
+        requestId: 'multiline',
+        toolName: 'Bash',
+        timestamp: '',
+        toolInput: { command },
+        ...(variant === 'acp'
+          ? { acpOptions: [{ optionId: 'allow', kind: 'allow_once' as const, name: 'Allow' }] }
+          : {}),
+      };
+      flushSync(() =>
+        root.render(
+          createElement(variant === 'expanded' ? PermissionPromptExpanded : PermissionPrompt, {
+            permission,
+            onApprove: vi.fn(),
+          })
+        )
+      );
+      const preview = container.querySelector('pre');
+      expect(preview).not.toBeNull();
+      expect(preview?.textContent).toBe(
+        variant === 'expanded' ? JSON.stringify({ command }, null, 2) : command
+      );
+      expect(container.querySelector('[role="region"]')?.getAttribute('tabindex')).toBe('0');
+      expect(container.querySelector('script')).toBeNull();
       root.unmount();
     }
   );
