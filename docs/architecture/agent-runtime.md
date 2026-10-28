@@ -62,7 +62,10 @@ means its native default, and supported Claude family aliases resolve to the
 advertised identity. Browse-only restoration does not change configuration.
 Startup model configuration shares the bounded startup deadline and cancellation
 signals. Passive catalog reads enrich available options without persisting a
-guessed selection or overwriting a newer runtime/edit.
+guessed selection or overwriting a newer runtime/edit. Catalog-only chat
+projections do not select a reasoning effort. Before native configuration is
+available, the chat bar withholds the effort control rather than briefly
+displaying the catalog default or first supported level.
 
 Client settings remain intact while capabilities are unknown. Initial confirmed
 configuration supersedes bootstrap model values; explicit edits and restored

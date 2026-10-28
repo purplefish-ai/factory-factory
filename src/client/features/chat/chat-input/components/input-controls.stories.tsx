@@ -102,3 +102,28 @@ export const PendingNativeAcknowledgement: Story = {
 export const LoadedEmptyCapabilities: Story = {
   args: { capabilities: EMPTY_CHAT_BAR_CAPABILITIES, capabilitiesLoaded: true },
 };
+
+export const UnconfirmedEffort: Story = {
+  args: {
+    capabilities: {
+      ...meta.args.capabilities,
+      reasoning: {
+        enabled: true,
+        options: [
+          { value: 'low', label: 'Low' },
+          { value: 'high', label: 'High' },
+        ],
+      },
+    },
+  },
+};
+
+export const BeforeRuntimeConfiguration: Story = {
+  args: {
+    capabilities: {
+      ...meta.args.capabilities,
+      reasoning: { enabled: false, options: [] },
+      planMode: { enabled: false },
+    },
+  },
+};

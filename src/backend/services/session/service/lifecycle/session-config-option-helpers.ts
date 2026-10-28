@@ -194,7 +194,11 @@ export function buildCodexConfigOptionsWithModelCatalog(
     return existingConfigOptions;
   }
 
-  upsertCodexReasoningOption(nextConfigOptions, modelCatalog, resolvedModelValue);
+  // A catalog describes available levels, not this session's selection. Wait for
+  // native configuration rather than publishing a guess before launch settings apply.
+  if (nextConfigOptions.some(isReasoningConfigOption)) {
+    upsertCodexReasoningOption(nextConfigOptions, modelCatalog, resolvedModelValue);
+  }
   return nextConfigOptions;
 }
 

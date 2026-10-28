@@ -314,8 +314,7 @@ describe('SessionConfigService', () => {
     expect(capabilities.model.options).toEqual([
       { value: 'gpt-5.4-codex', label: 'GPT-5.4 Codex' },
     ]);
-    expect(capabilities.reasoning.enabled).toBe(true);
-    expect(capabilities.reasoning.selected).toBe('high');
+    expect(capabilities.reasoning).toEqual({ enabled: false, options: [] });
   });
 
   it('derives CODEX model/reasoning/plan-mode capabilities from cached ACP config options', async () => {
