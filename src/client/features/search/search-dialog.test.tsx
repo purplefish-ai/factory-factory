@@ -58,6 +58,65 @@ async function render(overrides: Partial<React.ComponentProps<typeof SearchDialo
 }
 
 describe('SearchDialog', () => {
+  it('keeps local results selectable while GitHub issues load or fail', async () => {
+    const props = await render({
+      githubIssues: { results: [], loading: true, error: false, onRetry: vi.fn() },
+    });
+    expect(document.querySelector('[role="option"]')?.textContent).toContain('Accessibility');
+    expect(document.body.textContent).toContain('Searching GitHub');
+    await act(() =>
+      root.render(
+        <SearchDialog
+          {...props}
+          githubIssues={{ results: [], loading: false, error: true, onRetry: vi.fn() }}
+        />
+      )
+    );
+    expect(document.body.textContent).toContain('Couldn’t search GitHub');
+    await act(() =>
+      document
+        .querySelector('input')
+        ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    );
+    expect(props.onSelect).toHaveBeenCalledWith(result);
+  });
+
+  it('offers GitHub issue results as Start issue actions with keyboard selection', async () => {
+    const issue: SearchResult = {
+      kind: 'github_issue',
+      id: 'p1:42',
+      title: 'Fix search',
+      subtitle: 'Factory · org/repo · Issue #42',
+      projectId: 'p1',
+      projectSlug: 'factory',
+      workspaceId: null,
+      sessionId: null,
+      archived: false,
+      githubIssue: {
+        number: 42,
+        title: 'Fix search',
+        body: 'Details',
+        url: 'https://github.com/org/repo/issues/42',
+        state: 'OPEN',
+        createdAt: '2026-01-01T00:00:00Z',
+        author: { login: 'martin' },
+      },
+    };
+    const props = await render({
+      results: [],
+      query: '#42',
+      githubIssues: { results: [issue], loading: false, error: false, onRetry: vi.fn() },
+    });
+    expect(document.querySelector('[role="option"]')?.textContent).toContain('Start issue');
+    expect(document.body.textContent).not.toContain('No results found');
+    await act(() =>
+      document
+        .querySelector('input')
+        ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    );
+    expect(props.onSelect).toHaveBeenCalledWith(issue);
+  });
+
   it.each(['button[aria-pressed]', 'button[aria-label="Close search"]'])(
     'keeps Enter on the focused control %s',
     async (selector) => {
@@ -86,6 +145,33 @@ describe('SearchDialog', () => {
         ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
     );
     expect(props.onSelect).toHaveBeenCalledWith(result);
+  });
+
+  it('preserves keyboard selection when GitHub finishes loading', async () => {
+    const second = { ...result, id: 'second', sessionId: 'second' };
+    const props = await render({
+      results: [result, second],
+      githubIssues: { results: [], loading: true, error: false, onRetry: vi.fn() },
+    });
+    await act(() =>
+      document
+        .querySelector('input')
+        ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+    );
+    await act(() =>
+      root.render(
+        <SearchDialog
+          {...props}
+          githubIssues={{ results: [], loading: false, error: false, onRetry: vi.fn() }}
+        />
+      )
+    );
+    await act(() =>
+      document
+        .querySelector('input')
+        ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    );
+    expect(props.onSelect).toHaveBeenCalledWith(second);
   });
 
   it('shows a highlighted snippet for a metadata-only match', async () => {

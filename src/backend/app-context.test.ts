@@ -55,6 +55,36 @@ describe('createApplication', () => {
     expect(publishA).toHaveBeenCalledExactlyOnceWith('same-id', a.name, 200);
   });
 
+  it('searches GitHub issues through the application-owned project and CLI capabilities', async () => {
+    const { services } = createDefaultApplicationDependencies();
+    services.projectManagementService = Object.assign({}, services.projectManagementService, {
+      list: vi
+        .fn()
+        .mockResolvedValue([
+          { id: 'p1', slug: 'factory', name: 'Factory', githubOwner: 'org', githubRepo: 'repo' },
+        ]),
+    });
+    services.githubCLIService = Object.assign({}, services.githubCLIService, {
+      searchIssues: vi.fn().mockResolvedValue([
+        {
+          number: 42,
+          title: 'Graph issue',
+          body: 'Details',
+          url: 'https://github.com/org/repo/issues/42',
+          state: 'OPEN',
+          createdAt: '2026-01-01T00:00:00Z',
+          author: { login: 'martin' },
+        },
+      ]),
+    });
+    await expect(
+      services.searchGitHubIssues({ query: '#42', limit: 30, includeArchived: false })
+    ).resolves.toEqual({
+      results: [expect.objectContaining({ projectId: 'p1', title: 'Graph issue' })],
+      errors: [],
+    });
+  });
+
   it('shares the runtime server endpoint with lifecycle composition', () => {
     const dependencies = createDefaultApplicationDependencies();
 

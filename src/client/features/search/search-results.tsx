@@ -2,6 +2,7 @@ import { ArchiveIcon } from '@phosphor-icons/react/dist/csr/Archive';
 import { ArrowElbowDownLeftIcon } from '@phosphor-icons/react/dist/csr/ArrowElbowDownLeft';
 import { ChatCircleIcon } from '@phosphor-icons/react/dist/csr/ChatCircle';
 import { FolderSimpleIcon } from '@phosphor-icons/react/dist/csr/FolderSimple';
+import { GithubLogoIcon } from '@phosphor-icons/react/dist/csr/GithubLogo';
 import { StackSimpleIcon } from '@phosphor-icons/react/dist/csr/StackSimple';
 import { Button } from '@/components/ui/button';
 import { CommandGroup, CommandItem } from '@/components/ui/command';
@@ -9,17 +10,22 @@ import type { SearchResult } from '@/shared/search';
 import { highlightSearchText } from './search-highlight';
 
 const resultKinds = {
+  github_issue: { label: 'Start issue', Icon: GithubLogoIcon },
   project: { label: 'Project', Icon: FolderSimpleIcon },
   workspace: { label: 'Workspace', Icon: StackSimpleIcon },
   session: { label: 'Conversation', Icon: ChatCircleIcon },
 };
 
-export interface SearchResultsProps {
-  query: string;
+export interface SearchGroupState {
   results: SearchResult[];
   loading: boolean;
   error: boolean;
   onRetry: () => void;
+}
+
+export interface SearchResultsProps extends SearchGroupState {
+  githubIssues?: SearchGroupState;
+  query: string;
   onSelect: (result: SearchResult) => void;
 }
 
@@ -78,14 +84,7 @@ function ResultRow({
   );
 }
 
-export function SearchResults({
-  query,
-  results,
-  loading,
-  error,
-  onRetry,
-  onSelect,
-}: SearchResultsProps) {
+function LocalResults({ query, results, loading, error, onRetry, onSelect }: SearchResultsProps) {
   if (error) {
     return (
       <div
@@ -146,5 +145,55 @@ export function SearchResults({
         />
       ))}
     </CommandGroup>
+  );
+}
+
+export function SearchResults(props: SearchResultsProps) {
+  const { githubIssues, ...local } = props;
+  const hasIssues =
+    githubIssues && (githubIssues.loading || githubIssues.error || githubIssues.results.length > 0);
+  return (
+    <>
+      {(local.results.length > 0 || local.loading || local.error || !hasIssues) && (
+        <LocalResults {...local} />
+      )}
+      {hasIssues && githubIssues && (
+        <CommandGroup forceMount heading="GitHub issues" className="p-0">
+          {githubIssues.loading ? (
+            <div role="status" className="px-3 py-4 text-sm text-muted-foreground">
+              Searching GitHub issues…
+            </div>
+          ) : (
+            <>
+              {githubIssues.results.map((result) => (
+                <ResultRow
+                  key={`${result.kind}:${result.id}`}
+                  result={result}
+                  query={local.query}
+                  onSelect={local.onSelect}
+                />
+              ))}
+              {githubIssues.error && (
+                <div role="alert" className="px-3 py-3 text-sm text-muted-foreground">
+                  Couldn’t search GitHub issues in some projects.
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={githubIssues.onRetry}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.stopPropagation();
+                      }
+                    }}
+                  >
+                    Retry GitHub search
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
+        </CommandGroup>
+      )}
+    </>
   );
 }

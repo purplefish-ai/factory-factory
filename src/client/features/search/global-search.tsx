@@ -1,6 +1,7 @@
 import { MagnifyingGlassIcon } from '@phosphor-icons/react/dist/csr/MagnifyingGlass';
-import { useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { normalizeGitHubIssue } from '@/client/lib/issue-normalization';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
@@ -8,8 +9,17 @@ import type { SearchResult } from '@/shared/search';
 import { SearchDialog } from './search-dialog';
 import { getSearchResultUrl } from './search-navigation';
 
+const IssueLaunchSheet = lazy(() =>
+  import('@/client/features/kanban').then((module) => ({ default: module.IssueLaunchSheet }))
+);
+const emptyResults: SearchResult[] = [];
+
 export function GlobalSearch() {
   const navigate = useNavigate();
+  const [selectedIssue, setSelectedIssue] = useState<Extract<
+    SearchResult,
+    { kind: 'github_issue' }
+  > | null>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -20,6 +30,7 @@ export function GlobalSearch() {
     setOpen(value);
     if (value) {
       setArchiveOpen(false);
+      setSelectedIssue(null);
     }
     if (!value) {
       setQuery('');
@@ -57,7 +68,18 @@ export function GlobalSearch() {
       refetchOnWindowFocus: false,
     }
   );
+  const issuesEnabled = open && Boolean(debouncedQuery);
+  const issues = trpc.search.githubIssues.useQuery(
+    { query: debouncedQuery },
+    { enabled: issuesEnabled, staleTime: 60_000, retry: false, refetchOnWindowFocus: false }
+  );
+  const querySettled = query.trim() === debouncedQuery;
   const select = (result: SearchResult) => {
+    if (result.kind === 'github_issue') {
+      setSearchOpen(false);
+      setSelectedIssue(result);
+      return;
+    }
     // Archived workspaces cannot enter the live chat route (it redirects and
     // their worktree may be gone). Keep discovery read-only and explicit.
     if (result.archived) {
@@ -80,7 +102,19 @@ export function GlobalSearch() {
         onQueryChange={setQuery}
         includeArchived={includeArchived}
         onIncludeArchivedChange={setIncludeArchived}
-        results={search.data ?? []}
+        results={search.data ?? emptyResults}
+        githubIssues={
+          issuesEnabled
+            ? {
+                results: querySettled ? (issues.data?.results ?? emptyResults) : emptyResults,
+                loading: !querySettled || issues.isPending || issues.isFetching,
+                error: issues.isError || Boolean(issues.data?.errors.length),
+                onRetry: () => {
+                  void issues.refetch();
+                },
+              }
+            : undefined
+        }
         loading={query.trim() !== debouncedQuery || search.isPending || search.isFetching}
         error={query.trim() === debouncedQuery && search.isError && !search.isFetching}
         onRetry={() => {
@@ -103,6 +137,30 @@ export function GlobalSearch() {
           </Button>
         }
       />
+      {selectedIssue && (
+        <Suspense
+          fallback={
+            <Dialog open onOpenChange={() => setSelectedIssue(null)}>
+              <DialogContent>
+                <DialogTitle>Start Issue</DialogTitle>
+                <DialogDescription>Loading issue launch options…</DialogDescription>
+              </DialogContent>
+            </Dialog>
+          }
+        >
+          <IssueLaunchSheet
+            key={selectedIssue.id}
+            issue={normalizeGitHubIssue(selectedIssue.githubIssue)}
+            projectId={selectedIssue.projectId}
+            open
+            onOpenChange={(value) => {
+              if (!value) {
+                setSelectedIssue(null);
+              }
+            }}
+          />
+        </Suspense>
+      )}
       <Dialog
         open={archiveOpen}
         onOpenChange={(value) => {

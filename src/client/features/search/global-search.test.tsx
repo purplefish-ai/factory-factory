@@ -5,8 +5,23 @@ import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GlobalSearch } from './global-search';
 
-const query = vi.hoisted(() => vi.fn());
-vi.mock('@/client/lib/trpc', () => ({ trpc: { search: { metadata: { useQuery: query } } } }));
+const { query, issueQuery } = vi.hoisted(() => ({ query: vi.fn(), issueQuery: vi.fn() }));
+vi.mock('@/client/lib/trpc', () => ({
+  trpc: { search: { metadata: { useQuery: query }, githubIssues: { useQuery: issueQuery } } },
+}));
+vi.mock('@/client/features/kanban', () => ({
+  IssueLaunchSheet: ({
+    issue,
+    projectId,
+  }: {
+    issue: { displayId: string; body: string };
+    projectId: string;
+  }) => (
+    <div role="dialog">
+      Launch {projectId} {issue.displayId} {issue.body}
+    </div>
+  ),
+}));
 let root: Root;
 function LocationProbe() {
   const location = useLocation();
@@ -28,6 +43,13 @@ beforeEach(() => {
     }
   );
   HTMLElement.prototype.scrollIntoView = vi.fn();
+  issueQuery.mockReturnValue({
+    data: { results: [], errors: [] },
+    isPending: false,
+    isFetching: false,
+    isError: false,
+    refetch: vi.fn(),
+  });
   query.mockReturnValue({
     data: [
       {
@@ -75,6 +97,58 @@ async function key(keyValue: string, modifiers: KeyboardEventInit = {}) {
 }
 
 describe('GlobalSearch', () => {
+  it('opens the issue launch flow with the selected project and full issue', async () => {
+    issueQuery.mockReturnValue({
+      data: {
+        results: [
+          {
+            kind: 'github_issue',
+            id: 'p1:42',
+            title: 'Fix search',
+            subtitle: 'Factory · Issue #42',
+            projectId: 'p1',
+            projectSlug: 'factory',
+            workspaceId: null,
+            sessionId: null,
+            archived: false,
+            githubIssue: {
+              number: 42,
+              title: 'Fix search',
+              body: 'Full issue details',
+              url: 'https://github.com/org/repo/issues/42',
+              state: 'OPEN',
+              createdAt: '2026-01-01T00:00:00Z',
+              author: { login: 'martin' },
+            },
+          },
+        ],
+        errors: [],
+      },
+      isPending: false,
+      isFetching: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+    vi.useFakeTimers();
+    await render();
+    await key('k', { ctrlKey: true });
+    const input = document.querySelector('input')!;
+    await act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, '#42');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(() => vi.advanceTimersByTime(150));
+    const issueOption = Array.from(document.querySelectorAll('[role="option"]')).find((el) =>
+      el.textContent?.includes('Fix search')
+    );
+    expect(issueOption).toBeDefined();
+    await act(() => issueOption?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
+      'Launch p1 #42 Full issue details'
+    );
+    expect(document.querySelector('output')?.textContent).toBe('/projects/factory/workspaces/ws');
+  });
+
   it('hides cached results while a background refresh is fetching', async () => {
     query.mockReturnValue({ ...query(), isFetching: true });
     await render();

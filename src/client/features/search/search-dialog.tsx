@@ -31,6 +31,7 @@ export function SearchDialog({
   includeArchived,
   onIncludeArchivedChange,
   results,
+  githubIssues,
   loading,
   error,
   onRetry,
@@ -38,10 +39,16 @@ export function SearchDialog({
 }: SearchDialogProps) {
   const [selected, setSelected] = useState('');
   useEffect(() => {
-    if (open) {
-      setSelected(results[0] ? `${results[0].kind}:${results[0].id}` : '');
+    if (!open) {
+      setSelected('');
+      return;
     }
-  }, [results, open]);
+    const available = [
+      ...(!(loading || error) ? results : []),
+      ...(!githubIssues?.loading ? (githubIssues?.results ?? []) : []),
+    ].map((result) => `${result.kind}:${result.id}`);
+    setSelected((current) => (available.includes(current) ? current : (available[0] ?? '')));
+  }, [results, githubIssues?.results, githubIssues?.loading, loading, error, open]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -52,7 +59,8 @@ export function SearchDialog({
       >
         <DialogTitle className="sr-only">Search</DialogTitle>
         <DialogDescription className="sr-only">
-          Find projects, workspaces, and conversations by name, branch, issue, or pull request.
+          Find projects, workspaces, conversations, pull requests, and GitHub issues. Select an
+          issue to start a workspace.
         </DialogDescription>
         <Command
           shouldFilter={false}
@@ -66,7 +74,7 @@ export function SearchDialog({
               value={query}
               onValueChange={onQueryChange}
               maxLength={200}
-              placeholder="Search by name, branch, issue…"
+              placeholder="Search names, branches, PRs, or issues…"
               aria-label="Search metadata"
               className="h-14 pr-10 text-base sm:text-sm"
             />
@@ -79,6 +87,7 @@ export function SearchDialog({
             <SearchResults
               query={query}
               results={results}
+              githubIssues={githubIssues}
               loading={loading}
               error={error}
               onRetry={onRetry}

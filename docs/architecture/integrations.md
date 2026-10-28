@@ -12,6 +12,18 @@ supports Kanban intake (`listIssuesForProject`, assigned to `@me`). Starting
 from an issue creates a linked workspace (`githubIssueNumber`,
 `githubIssueUrl`).
 
+Global search (Cmd/Ctrl+K) matches saved workspace PR titles and numbers, source
+issue identifiers, and pasted PR or source issue URLs. Workspace results label
+linked issues and attached PRs; detached PRs are excluded. Archived metadata
+remains available through **Include archived**.
+
+For nonempty queries, a separate GitHub issues group searches active projects'
+linked repositories, including issues not assigned to the current user. Text
+queries search open issues; bare numbers and `#123` look up an exact issue,
+including closed issues. Selecting **Start issue** opens the existing launch
+sheet with the full issue prompt and provider/mode options. GitHub loading and
+partial failures leave local results usable, and failed searches can be retried.
+
 GitHub project imports reuse existing clone directories when owner or repository
 casing differs, preserving the existing path and local changes. New clones use
 lowercase owner/repository paths, matching GitHub's case-insensitive names. URL

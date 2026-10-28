@@ -11,6 +11,7 @@ import {
   createEventCollectorOrchestrator,
   type EventCollectorOrchestrator,
 } from './orchestration/event-collector.orchestrator';
+import { searchGitHubIssues } from './orchestration/github-issue-search.orchestrator';
 import { healthService } from './orchestration/health.service';
 import { getWorkspaceLinearContext } from './orchestration/linear-config.helper';
 import { updateProjectSettings } from './orchestration/project-settings.orchestrator';
@@ -144,6 +145,9 @@ export type ApplicationServices = BridgeServices & {
   dataBackupService: typeof dataBackupService;
   decisionLogQueryService: typeof decisionLogService;
   metadataSearchService: typeof metadataSearchService;
+  searchGitHubIssues: (
+    input: Parameters<typeof searchGitHubIssues>[0]
+  ) => ReturnType<typeof searchGitHubIssues>;
   executeStartupScriptPipeline: typeof executeStartupScriptPipeline;
   claudeModelCatalogService: Pick<typeof claudeModelCatalogService, 'getModels'>;
   codexModelCatalogService: Pick<typeof codexModelCatalogService, 'getModels'>;
@@ -301,6 +305,12 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     dataBackupService,
     decisionLogQueryService: decisionLogService,
     metadataSearchService,
+    searchGitHubIssues: (input) =>
+      searchGitHubIssues(input, {
+        listProjects: (filters) => services.projectManagementService.list(filters),
+        searchIssues: (owner, repo, query, limit) =>
+          services.githubCLIService.searchIssues(owner, repo, query, limit),
+      }),
     executeStartupScriptPipeline,
     claudeModelCatalogService,
     codexModelCatalogService,

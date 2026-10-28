@@ -1,11 +1,18 @@
 import { describe, expect, it, vi } from 'vitest';
+import { searchGitHubIssues } from '@/backend/orchestration/github-issue-search.orchestrator';
 import { searchRouter } from './search.trpc';
 
 const search = vi.fn().mockResolvedValue([]);
+const list = vi.fn();
+const searchIssues = vi.fn();
 const caller = searchRouter.createCaller({
   appContext: {
     services: {
       metadataSearchService: { search },
+      projectManagementService: { list },
+      githubCLIService: { searchIssues },
+      searchGitHubIssues: (input: Parameters<typeof searchGitHubIssues>[0]) =>
+        searchGitHubIssues(input, { listProjects: list, searchIssues }),
     },
   },
 } as never);
@@ -22,4 +29,52 @@ describe('metadata search boundary', () => {
       expect(search).not.toHaveBeenCalled();
     }
   );
+});
+
+describe('GitHub issue search', () => {
+  it('does not contact GitHub for blank queries', async () => {
+    await expect(caller.githubIssues({ query: '  ' })).resolves.toEqual({
+      results: [],
+      errors: [],
+    });
+    expect(list).not.toHaveBeenCalled();
+  });
+
+  it('keeps successful project results when another repository fails', async () => {
+    list.mockResolvedValue([
+      { id: 'p1', slug: 'one', name: 'One', githubOwner: 'org', githubRepo: 'one' },
+      { id: 'p2', slug: 'two', name: 'Two', githubOwner: 'org', githubRepo: 'two' },
+      { id: 'p3', slug: 'local', name: 'Local', githubOwner: null, githubRepo: null },
+    ]);
+    searchIssues.mockImplementation((_owner, repo) => {
+      if (repo === 'two') {
+        throw new Error('Offline');
+      }
+      return [
+        {
+          number: 42,
+          title: 'Fix search',
+          body: 'Full issue',
+          url: 'https://github.com/org/one/issues/42',
+          state: 'OPEN',
+          createdAt: '2026-01-01T00:00:00Z',
+          author: { login: 'martin' },
+        },
+      ];
+    });
+    await expect(caller.githubIssues({ query: '#42' })).resolves.toEqual({
+      results: [
+        expect.objectContaining({
+          kind: 'github_issue',
+          id: 'p1:42',
+          projectId: 'p1',
+          title: 'Fix search',
+          githubIssue: expect.objectContaining({ number: 42, body: 'Full issue' }),
+        }),
+      ],
+      errors: ['Two: Offline'],
+    });
+    expect(list).toHaveBeenCalledWith({ isArchived: false });
+    expect(searchIssues).toHaveBeenCalledWith('org', 'one', '#42', 30);
+  });
 });
