@@ -29,10 +29,6 @@ import type {
   WorkspaceStatus,
 } from '@/shared/core';
 import type { SessionSummary } from '@/shared/session-runtime';
-import {
-  findWorkspaceSessionRuntimeError,
-  hasStartingSessionSummary,
-} from '@/shared/session-runtime';
 import type { WorkspaceCiObservation, WorkspaceFlowPhase } from '@/shared/workspace-flow-state';
 import type { WorkspacePullRequest } from '@/shared/workspace-pr';
 import type { WorkspacePRSummary } from '@/shared/workspace-pr-summary';
@@ -44,6 +40,7 @@ import {
   type WorkspaceSnapshotMetadata,
 } from '@/shared/workspace-snapshot';
 import type { WorkspaceStatusReason } from '@/shared/workspace-status-reason';
+import { toWorkspaceDerivedStateInput } from '../state/workspace-read-state';
 import { BranchFreshness } from './branch-freshness';
 
 export type { SnapshotFieldGroup, WorkspaceSnapshotEntry } from '@/shared/workspace-snapshot';
@@ -599,26 +596,12 @@ export class WorkspaceSnapshotStore extends EventEmitter {
       ratchetState: entry.ratchetState,
     });
     const derivedState = assembleWorkspaceDerivedState(
-      {
-        lifecycle: entry.status,
-        prSummary: entry.prSummary,
-        prUrl: entry.prUrl,
-        prState: entry.prState,
-        prCiStatus: entry.prCiStatus,
-        ratchetState: entry.ratchetState,
-        prMonitoring: entry.prMonitoring,
-        hasHadSessions: entry.hasHadSessions,
+      toWorkspaceDerivedStateInput(entry, {
+        sessionSummaries: entry.sessionSummaries,
         sessionIsWorking,
         pendingRequestType: entry.pendingRequestType,
-        hasSessionRuntimeError: Boolean(findWorkspaceSessionRuntimeError(entry.sessionSummaries)),
-        isSessionStarting: hasStartingSessionSummary(entry.sessionSummaries),
-        ratchetEnabled: entry.ratchetEnabled,
-        hasMergeConflict: entry.hasMergeConflict,
-        dispatchStalled: Boolean(entry.prMonitoring.pauseReason),
-        mode: entry.mode,
-        autoIterationStatus: entry.autoIterationStatus,
         flowState,
-      },
+      }),
       { deriveSidebarStatus: this.derive.deriveSidebarStatus }
     );
 

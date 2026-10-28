@@ -32,6 +32,7 @@ import type { createLogger } from '@/backend/services/logger.service';
 import type { sessionLifecycleService } from '@/backend/services/session';
 import {
   computePendingRequestType,
+  deriveLastActivityAt,
   type gitOpsService,
   type SnapshotUpdateInput,
   sessionSummariesEqual,
@@ -275,19 +276,6 @@ export class SnapshotReconciliationService {
     const isWorking = hasWorkingSessionSummary(sessionSummaries);
     const pendingRequestType = computePendingRequestType(sessionIds, allPendingRequests);
 
-    // Compute lastActivityAt from session timestamps
-    const sessionDates = [
-      ...(ws.agentSessions?.map((s) => s.updatedAt) ?? []),
-      ...(ws.terminalSessions?.map((s) => s.updatedAt) ?? []),
-    ].filter((date) => Number.isFinite(date?.getTime())) as Date[];
-
-    const lastActivityAt =
-      sessionDates.length > 0
-        ? new Date(
-            sessionDates.reduce((max, d) => Math.max(max, d.getTime()), -Infinity)
-          ).toISOString()
-        : null;
-
     return {
       ...projectWorkspaceSnapshotMetadata(ws),
       autoIteration: projectAutoIterationSummary(ws),
@@ -316,7 +304,7 @@ export class SnapshotReconciliationService {
       isWorking,
       pendingRequestType,
       sessionSummaries,
-      lastActivityAt,
+      lastActivityAt: deriveLastActivityAt(ws),
     };
   }
 

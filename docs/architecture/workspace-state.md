@@ -378,6 +378,13 @@ lifecycle transition does not block older unknown metadata from a reconciliation
 seed. Mode changes invalidate prior compact-loop hydration; accepted current
 mode/status determine its shape and status while known counters are preserved.
 
+The workspace capsule's pure `workspace-read-state` helpers own last-activity
+selection and normalized derived-state inputs for project lists, detail reads,
+and snapshot re-derivation. Runtime reads and HTTP/wire date conversion stay
+with their callers. The store derives only after timestamp merges, using its
+private raw session-busy value; active loop or ratchet state does not itself
+make `isWorking` true.
+
 Committed lifecycle events publish their row's metadata immediately, including
 initial provisioning, READY paths and setup errors. A NEW-only workspace before
 initialization gains metadata through reconciliation; no separate creation event

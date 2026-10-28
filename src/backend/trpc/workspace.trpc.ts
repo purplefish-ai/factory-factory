@@ -8,15 +8,12 @@ import {
 import { assembleWorkspaceDerivedState } from '@/backend/lib/workspace-derived-state';
 import {
   computePendingRequestType,
+  toWorkspaceDerivedStateInput,
   deriveWorkspaceFlowStateFromWorkspace,
 } from '@/backend/services/workspace';
 import { KanbanColumn } from '@/shared/core';
 import { prDeliveryModeSchema } from '@/shared/pr-monitoring';
 import { autoIterationConfigSchema } from '@/shared/schemas/auto-iteration.schema';
-import {
-  findWorkspaceSessionRuntimeError,
-  hasStartingSessionSummary,
-} from '@/shared/session-runtime';
 import { AttachmentSchema } from '@/shared/websocket';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import { SessionProvider, WorkspaceProviderSelection } from '@prisma-gen/client';
@@ -150,26 +147,15 @@ export const workspaceCoreRouter = router({
       sessionDomainService.getAllPendingRequests()
     );
     const derivedState = assembleWorkspaceDerivedState(
-      {
-        lifecycle: workspace.status,
-        prSummary: workspace.prSummary,
-        prUrl: workspace.prUrl,
-        prState: workspace.prState,
-        prCiStatus: workspace.prCiStatus,
-        ratchetState: workspace.ratchetState,
-        hasHadSessions: workspace.hasHadSessions,
-        sessionIsWorking: hasWorkingSessionSummary(sessionSummaries),
-        pendingRequestType,
-        hasSessionRuntimeError: Boolean(findWorkspaceSessionRuntimeError(sessionSummaries)),
-        isSessionStarting: hasStartingSessionSummary(sessionSummaries),
-        ratchetEnabled: workspace.ratchetEnabled,
-        hasMergeConflict: workspace.prHasMergeConflict,
-        dispatchStalled: Boolean(workspace.prMonitoring?.pauseReason),
-        prMonitoring: workspace.prMonitoring,
-        mode: workspace.mode,
-        autoIterationStatus: workspace.autoIterationStatus,
-        flowState,
-      },
+      toWorkspaceDerivedStateInput(
+        { ...workspace, hasMergeConflict: workspace.prHasMergeConflict },
+        {
+          sessionSummaries,
+          sessionIsWorking: hasWorkingSessionSummary(sessionSummaries),
+          pendingRequestType,
+          flowState,
+        }
+      ),
       {
         deriveSidebarStatus: deriveWorkspaceSidebarStatus,
       }
