@@ -50,7 +50,7 @@ export interface RatchetCheckResult {
 interface MonitoringBridge {
   retireLegacy?(): Promise<unknown>;
   observe(target: PRTarget, signal?: AbortSignal): Promise<boolean>;
-  wake(workspaceId: string): Promise<void>;
+  wake(workspaceId: string, isCurrent?: () => boolean): Promise<void>;
   setMonitoring(input: {
     workspaceId: string;
     enabled: boolean;
@@ -104,6 +104,7 @@ export class RatchetService extends EventEmitter {
   private limit = pLimit(3);
   private checking = new Map<string, Promise<WorkspaceRatchetResult>>();
   private controllers = new Set<AbortController>();
+  private pendingWakes = new Set<Promise<void>>();
   constructor() {
     super();
     jobRunner.register({
@@ -134,6 +135,19 @@ export class RatchetService extends EventEmitter {
       controller.abort();
     }
     await jobRunner.stop(POLL_JOB);
+    await Promise.allSettled(this.pendingWakes);
+  }
+  async wakePendingEvents(workspaceId: string): Promise<void> {
+    if (this.stopped || !this.bridge) {
+      return;
+    }
+    const wake = this.bridge.wake(workspaceId, () => !this.stopped);
+    this.pendingWakes.add(wake);
+    try {
+      await wake;
+    } finally {
+      this.pendingWakes.delete(wake);
+    }
   }
   async checkAllWorkspaces(signal?: AbortSignal): Promise<RatchetCheckResult> {
     if (this.stopped || signal?.aborted) {

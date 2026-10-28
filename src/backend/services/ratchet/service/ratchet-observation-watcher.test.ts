@@ -31,6 +31,41 @@ beforeEach(() => {
   mocks.get.mockReset().mockResolvedValue({ enabled: true, bindingRevision: 7 });
 });
 
+it('wakes committed events without fetching GitHub and ignores wakes after stop', async () => {
+  const service = new RatchetService();
+  const observe = vi.fn();
+  const wake = vi.fn().mockResolvedValue(undefined);
+  service.configure({ observe, wake, setMonitoring: vi.fn() });
+  await service.wakePendingEvents('w');
+  expect(wake).toHaveBeenCalledExactlyOnceWith('w', expect.any(Function));
+  expect(observe).not.toHaveBeenCalled();
+  expect(mocks.listEnabled).not.toHaveBeenCalled();
+  await service.stop();
+  await service.wakePendingEvents('w');
+  expect(wake).toHaveBeenCalledTimes(1);
+});
+
+it('invalidates an in-flight event wake and drains it before shutdown finishes', async () => {
+  const service = new RatchetService();
+  const pending = deferred<void>();
+  const wake = vi.fn((_id: string, _isCurrent?: () => boolean) => pending.promise);
+  service.configure({ observe: vi.fn(), wake, setMonitoring: vi.fn() });
+  const waking = service.wakePendingEvents('w');
+  const isCurrent = wake.mock.calls[0]?.[1];
+  expect(isCurrent?.()).toBe(true);
+  let stopped = false;
+  const stopping = service.stop().then(() => {
+    stopped = true;
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(isCurrent?.()).toBe(false);
+  expect(stopped).toBe(false);
+  pending.resolve();
+  await Promise.all([waking, stopping]);
+  expect(stopped).toBe(true);
+});
+
 it('observes every association and wakes the main queue once without creating fixer sessions', async () => {
   mocks.listEnabled.mockResolvedValue([
     {
