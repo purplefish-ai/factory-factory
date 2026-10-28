@@ -9,6 +9,7 @@ function createPromptService() {
   const runtimeManager = {
     getClient: vi.fn(),
     sendPrompt: vi.fn(),
+    isSessionWorking: vi.fn().mockReturnValue(false),
   };
   const sessionDomainService = {
     setRuntimeSnapshot: vi.fn(),
@@ -61,6 +62,22 @@ function createDeferred<T>() {
   });
   return { promise, resolve, reject };
 }
+
+it('preserves background activity after a prompt completes and wakes queued prompts', async () => {
+  const { service, runtimeManager, sessionDomainService, promptTurnCompletionService } =
+    createPromptService();
+  runtimeManager.getClient.mockReturnValue({ supportsImages: () => true });
+  runtimeManager.sendPrompt.mockResolvedValue({ stopReason: 'end_turn' });
+  runtimeManager.isSessionWorking.mockReturnValue(true);
+
+  await service.sendSessionMessage('session-1', 'follow-up');
+
+  expect(sessionDomainService.setRuntimeSnapshot).toHaveBeenLastCalledWith(
+    'session-1',
+    expect.objectContaining({ phase: 'running', activity: 'WORKING', processState: 'alive' })
+  );
+  expect(promptTurnCompletionService.schedule).toHaveBeenCalledWith('session-1');
+});
 
 function createLifecyclePromptHarness() {
   const runtimeManager = {

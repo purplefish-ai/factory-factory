@@ -18,7 +18,7 @@ import type { PRTarget } from '@/shared/pr-monitoring';
 
 export interface PRRecipientReadinessPorts {
   sessionDataService: Pick<typeof sessionDataService, 'findAgentSessionsByWorkspaceId'>;
-  acpRuntimeManager: Pick<typeof acpRuntimeManager, 'isSessionWorking'>;
+  acpRuntimeManager: Pick<typeof acpRuntimeManager, 'isSessionPromptInFlight'>;
 }
 
 export interface PRRecipientPorts {
@@ -45,7 +45,7 @@ export type PRDedicatedSessionPorts = PRRecipientReadinessPorts & {
 
 export type PRDeliveryRecoveryPorts = PRRecipientPorts & {
   sessionDataService: Pick<typeof sessionDataService, 'findAgentSessionById'>;
-  acpRuntimeManager: Pick<typeof acpRuntimeManager, 'isSessionWorking'>;
+  acpRuntimeManager: Pick<typeof acpRuntimeManager, 'isSessionPromptInFlight'>;
   sessionBackgroundDeliveryService: Pick<
     typeof sessionBackgroundDeliveryService,
     'isDeliveryActive'

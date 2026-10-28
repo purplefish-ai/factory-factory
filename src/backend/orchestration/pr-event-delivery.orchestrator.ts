@@ -34,7 +34,7 @@ export async function guardPRDelivery(
   if (
     config.deliveryPauseReason ||
     sessionDomainService.getPendingInteractiveRequest(sessionId) ||
-    acpRuntimeManager.isSessionWorking(sessionId) ||
+    acpRuntimeManager.isSessionPromptInFlight(sessionId) ||
     !(await recipientCanDispatch(request.workspaceId, sessionId, services))
   ) {
     return 'blocked';
@@ -101,7 +101,7 @@ export async function guardPRDelivery(
     !finalRecipientAllowed ||
     latestConfig.deliveryPauseReason ||
     sessionDomainService.getPendingInteractiveRequest(sessionId) ||
-    acpRuntimeManager.isSessionWorking(sessionId)
+    acpRuntimeManager.isSessionPromptInFlight(sessionId)
   ) {
     return 'blocked';
   }

@@ -247,6 +247,40 @@ and 2 MiB of serialized updates. Oldest whole turns are evicted; an oversized
 active turn is discarded until the next user turn. Cursors use monotonic turn
 offsets, and expired cursors fail explicitly instead of returning another turn.
 
+### Activity and prompt dispatch
+
+Workspace/session activity and ownership of a conversation's prompt slot are
+separate signals. `isSessionWorking` includes in-flight prompts, background
+shell commands (including persistent preview servers), native subagents and
+active goals. It drives runtime activity and the yellow work indicator; a
+completed prompt retains that activity until the remaining work ends.
+`isSessionPromptInFlight` answers only whether the current active runtime has an
+unresolved prompt RPC. Browse-only runtimes do not own an active prompt slot.
+
+Ordinary chat messages may be composed and queued during any turn. Dispatch
+waits for the preceding prompt to complete, including time spent executing tools
+or awaiting that turn's approval, question or elicitation. A background shell,
+independently running child or active goal does not block the next parent prompt
+once that RPC completes. The provider remains authoritative: if it reports an
+active turn that the client cannot observe, the existing bounded busy retry
+preserves the queued message.
+
+Startup and required configuration must complete before submission. Workspace
+initialization/manual-resume policy, compaction, per-session dispatch
+serialization and stop/generation fences still apply. The prompt slot is
+rechecked after auto-start; another caller may have acquired it while startup
+was awaited. A stopped runtime can auto-resume through the existing launch
+policy; being stopped is not permission to bypass setup or a failed exact
+resume.
+
+Automatic PR updates additionally wait for pending interactive requests, an
+in-flight prompt in another conversation in the same workspace, valid recipient
+and binding checks, and an unpaused delivery policy. Background activity alone
+does not block delivery in either the recipient or another conversation. Receipt
+recovery waits for the actual prompt or the specific delivery attempt, not
+unrelated background work. Other conversations' prompts do not prevent a human
+from sending to their selected conversation.
+
 Factory Factory supplies workspace MCP servers through session-scoped adapter
 configuration. It never writes the user's native Codex configuration. Requested
 workspace MCP configuration takes precedence over stale entries left by older

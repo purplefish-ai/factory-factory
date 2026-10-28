@@ -27,7 +27,7 @@ vi.mock('@/backend/db', () => ({
   },
 }));
 vi.mock('@/backend/services/session', () => ({
-  acpRuntimeManager: { isSessionWorking: () => state.busy },
+  acpRuntimeManager: { isSessionPromptInFlight: () => state.busy },
   sessionDomainService: { getPendingInteractiveRequest: () => null },
   sessionLifecycleService: {},
   sessionDataService: {

@@ -252,12 +252,18 @@ export class AcpRuntimeSupervisor {
     return this.getClient(sessionId) !== undefined;
   }
 
+  /** Activity for presentation, including work that does not occupy the prompt slot. */
   isSessionWorking(sessionId: string): boolean {
     const handle = this.sessions.get(sessionId);
     if (!handle || this.browseOnlySessions.has(sessionId)) {
       return false;
     }
     return handle.isPromptInFlight || this.activeTaskSessions.has(sessionId);
+  }
+
+  /** Owns the prompt slot; background shells, children and goals do not. */
+  isSessionPromptInFlight(sessionId: string): boolean {
+    return this.getClient(sessionId)?.isPromptInFlight ?? false;
   }
 
   isAnySessionWorking(sessionIds: string[]): boolean {

@@ -55,6 +55,9 @@ describe('AcpRuntimeSupervisor status queries', () => {
     expect(supervisor.isSessionRunning('active-session')).toBe(true);
     expect(supervisor.isSessionRunning('browse-session')).toBe(false);
     expect(supervisor.isSessionWorking('browse-session')).toBe(false);
+    expect(supervisor.isSessionPromptInFlight('active-session')).toBe(true);
+    expect(supervisor.isSessionPromptInFlight('browse-session')).toBe(false);
+    expect(supervisor.isSessionPromptInFlight('missing')).toBe(false);
     expect(supervisor.isAnySessionWorking(['missing', 'browse-session'])).toBe(false);
     expect([...supervisor.getAllClients()]).toEqual([
       ['active-session', active],
@@ -108,12 +111,19 @@ describe('AcpRuntimeSupervisor status queries', () => {
     );
 
     expect(supervisor.isSessionWorking('session-1')).toBe(true);
+    expect(supervisor.isSessionPromptInFlight('session-1')).toBe(false);
+    handle.isPromptInFlight = true;
+    expect(supervisor.isSessionPromptInFlight('session-1')).toBe(true);
+    handle.isPromptInFlight = false;
+    expect(supervisor.isSessionWorking('session-1')).toBe(true);
+    expect(supervisor.isSessionPromptInFlight('session-1')).toBe(false);
     const runtimeHandlers = createClient.mock.calls[0]?.[0].handlers;
     runtimeHandlers?.onAcpEvent?.('session-1', {
       type: 'acp_task_status_changed',
       active: false,
     });
     expect(supervisor.isSessionWorking('session-1')).toBe(false);
+    expect(supervisor.isSessionPromptInFlight('session-1')).toBe(false);
   });
 
   it('keeps browse task activity hidden until the runtime is promoted', async () => {
