@@ -99,9 +99,9 @@ export async function restoreSavedNativeModes(
     ) {
       continue;
     }
-    handle.configOptions = isNativeMode(saved, 'mode')
-      ? await runtime.setSessionMode(sessionId, String(saved.currentValue))
-      : await runtime.setConfigOption(sessionId, saved.id, String(saved.currentValue));
+    await (isNativeMode(saved, 'mode')
+      ? runtime.setSessionMode(sessionId, String(saved.currentValue))
+      : runtime.setConfigOption(sessionId, saved.id, String(saved.currentValue)));
     changed = true;
   }
   assertCurrentRuntime(sessionId, handle, runtime);

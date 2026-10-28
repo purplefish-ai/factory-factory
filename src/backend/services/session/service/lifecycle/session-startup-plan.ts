@@ -14,7 +14,8 @@ export async function applyStartupLaunchPlan(
   preset: SessionPermissionPreset | undefined,
   runtime: Pick<AcpRuntimeManager, 'setSessionMode' | 'setConfigOption'>,
   override?: boolean,
-  resolvePreset?: () => Promise<SessionPermissionPreset>
+  resolvePreset?: () => Promise<SessionPermissionPreset>,
+  confirmation?: { assertCurrent(): void; confirmTarget(id: string, value: string): void }
 ): Promise<void> {
   const launch = readSessionLaunchSettings(session.providerMetadata);
   const enabled = override ?? (launch && !launch.applied ? launch.planModeEnabled : undefined);
@@ -37,16 +38,17 @@ export async function applyStartupLaunchPlan(
   if (!getConfigOptionValues(option).includes(target)) {
     throw new Error('Requested Plan mode is unavailable for the selected provider/model');
   }
-  if (option.currentValue === target) {
-    return;
+  confirmation?.assertCurrent();
+  if (handle.configOptions.find((entry) => entry.id === option.id)?.currentValue !== target) {
+    await (handle.provider === 'CLAUDE'
+      ? runtime.setSessionMode(sessionId, target)
+      : runtime.setConfigOption(sessionId, option.id, target));
   }
-  handle.configOptions =
-    handle.provider === 'CLAUDE'
-      ? await runtime.setSessionMode(sessionId, target)
-      : await runtime.setConfigOption(sessionId, option.id, target);
+  confirmation?.assertCurrent();
   if (handle.configOptions.find((entry) => entry.id === option.id)?.currentValue !== target) {
     throw new Error('Requested Plan mode was not applied');
   }
+  confirmation?.confirmTarget(option.id, target);
 }
 
 async function requestedPlanMode(

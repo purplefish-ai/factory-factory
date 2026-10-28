@@ -51,6 +51,9 @@ function setupSupervisor() {
     codexModelCatalogService: { getModels: () => Promise.resolve([]) },
   });
   for (const name of [
+    'requireSavedStartupAccess',
+    'applyStartupModel',
+    'completeStartupConfiguration',
     'applyConfiguredReasoningEffort',
     'applyConfiguredPermissionPreset',
     'applyStartupModePreset',
@@ -193,6 +196,9 @@ describe('real supervisor and startup configuration phase ordering', () => {
       expect(h.sendSessionMessage).not.toHaveBeenCalled();
       expect(h.row().providerMetadata).toBeNull();
       if (outcome === 'replacement') {
+        // The new runtime's initial model must agree with its durable desired
+        // selection now that this fixture executes the real startup finalizer.
+        await h.repository.updateSession(h.session.id, { model: 'third' });
         const replacement = createTestProcessHandle({
           providerSessionId: 'thread',
           sessionCreationOutcome: { kind: 'resumed' },

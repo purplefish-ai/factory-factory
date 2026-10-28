@@ -37,6 +37,8 @@ function fixture(provider: 'CLAUDE' | 'CODEX', enabled: boolean) {
     return Promise.resolve(handle.configOptions);
   };
   const runtime = {
+    getClient: () => handle,
+    isStopInProgress: () => false,
     setSessionMode: vi.fn(apply),
     setConfigOption: vi.fn((_sid: string, _id: string, value: string) => apply(_sid, value)),
   };

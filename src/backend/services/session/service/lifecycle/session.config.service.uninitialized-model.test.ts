@@ -147,11 +147,12 @@ describe('inactive Codex model intent before first startup', () => {
         options: f.models.map((model) => ({ value: model.id, name: model.displayName })),
       },
     ];
-    f.runtime.setSessionModel.mockResolvedValue(
-      handle.configOptions.map((option) =>
+    f.runtime.setSessionModel.mockImplementation(() => {
+      handle.configOptions = handle.configOptions.map((option) =>
         option.type === 'select' ? { ...option, currentValue: 'second' } : option
-      )
-    );
+      );
+      return Promise.resolve(handle.configOptions);
+    });
     let guarded = false;
     f.repository.updateSession.mockImplementationOnce(
       (_id, _update, assertCurrent?: () => void) => {
@@ -202,13 +203,12 @@ describe('inactive Codex model intent before first startup', () => {
       },
     ];
     f.runtime.getClient.mockReturnValue(handle);
-    f.runtime.setSessionModel.mockImplementation(() =>
-      Promise.resolve(
-        handle.configOptions.map((option) =>
-          option.type === 'select' ? { ...option, currentValue: 'second' } : option
-        )
-      )
-    );
+    f.runtime.setSessionModel.mockImplementation(() => {
+      handle.configOptions = handle.configOptions.map((option) =>
+        option.type === 'select' ? { ...option, currentValue: 'second' } : option
+      );
+      return Promise.resolve(handle.configOptions);
+    });
     discovering.resolve(f.models);
     await setting;
     expect(f.runtime.setSessionModel).toHaveBeenCalledWith('session', 'second');

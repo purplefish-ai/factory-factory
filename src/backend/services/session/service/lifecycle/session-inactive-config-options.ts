@@ -2,6 +2,7 @@ import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import type { AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import { parseAcpConfigSnapshot } from './acp-config-snapshot';
 import type { CodexModelCatalogService } from './codex-model-catalog.service';
+import type { AcceptedConfigCommit } from './session-config-commit-authority';
 import {
   buildCodexConfigOptionsWithModelCatalog,
   getConfigOptionValues,
@@ -12,9 +13,14 @@ import { pendingSessionLaunchSettingsPatch } from './session-launch-settings';
 import { assertReadOnlyReviewConfigOption } from './session-permission-policy';
 import type { SessionRepository } from './session.repository';
 
-type InactiveConfigOptions = { provider: SessionProvider; configOptions: SessionConfigOption[] };
+type InactiveConfigOptions = {
+  provider: SessionProvider;
+  configOptions: SessionConfigOption[];
+  accepted: AcceptedConfigCommit;
+};
 type InactiveConfigDependencies = {
   repository: SessionRepository;
+  accept(assertCurrent: () => void): AcceptedConfigCommit;
   runtimeManager: Pick<AcpRuntimeManager, 'getClient' | 'getPendingClient'>;
   catalog: Pick<CodexModelCatalogService, 'getModels'>;
   persistSnapshot(sessionId: string, params: PersistAcpConfigSnapshotParams): Promise<void>;
@@ -62,7 +68,7 @@ export async function setInactiveSessionConfigOption(
       })
     );
     return persisted
-      ? { provider: session.provider, configOptions }
+      ? { provider: session.provider, configOptions, accepted: persisted }
       : await setInactiveSessionConfigOption(sessionId, configId, value, deps);
   }
   if (session.provider !== 'CODEX' || configId !== 'model') {
@@ -93,15 +99,14 @@ export async function setInactiveSessionConfigOption(
     configOptions.find((option) => option.id === configId),
     latest.provider
   );
-  if (
-    !(await persistWhileInactive(sessionId, deps, (assertCurrent) =>
-      deps.repository.updateSession(sessionId, { model: value }, assertCurrent)
-    ))
-  ) {
+  const accepted = await persistWhileInactive(sessionId, deps, (assertCurrent) =>
+    deps.repository.updateSession(sessionId, { model: value }, assertCurrent)
+  );
+  if (!accepted) {
     return await setInactiveSessionConfigOption(sessionId, configId, value, deps);
   }
   // This is explicit intent, not observed native configuration: leave provider metadata untouched.
-  return { provider: 'CODEX', configOptions };
+  return { provider: 'CODEX', configOptions, accepted };
 }
 
 async function settlePendingRuntime(
@@ -115,7 +120,7 @@ async function persistWhileInactive(
   sessionId: string,
   deps: InactiveConfigDependencies,
   operation: (assertCurrent: () => void) => Promise<unknown>
-): Promise<boolean> {
+): Promise<AcceptedConfigCommit | null> {
   const hasRuntime = () =>
     Boolean(
       deps.runtimeManager.getClient(sessionId) ||
@@ -126,16 +131,24 @@ async function persistWhileInactive(
       throw new Error('Session runtime changed before inactive configuration update');
     }
   };
+  let accepted: AcceptedConfigCommit;
   try {
     assertCurrent();
-    await operation(assertCurrent);
+    accepted = deps.accept(assertCurrent);
+    if (
+      !(await accepted.persist(async (guard) => {
+        await operation(guard);
+      }))
+    ) {
+      return null;
+    }
   } catch (error) {
     if (!hasRuntime()) {
       throw error;
     }
-    return false;
+    return null;
   }
-  return !hasRuntime();
+  return hasRuntime() ? null : accepted;
 }
 
 function updateCachedConfigOptions(

@@ -16,7 +16,7 @@ describe('launch configuration startup gate', () => {
     expect(h.sendSessionMessage).not.toHaveBeenCalled();
     expect(h.handle.completeConfiguration).not.toHaveBeenCalled();
     expect(h.handle.failConfiguration).toHaveBeenCalledWith(expect.any(Error));
-    expect(h.sessionConfigService.persistAcpConfigSnapshot).not.toHaveBeenCalled();
+    expect(h.sessionConfigService.completeStartupConfiguration).not.toHaveBeenCalled();
   });
   it('keeps startup unready and does not prompt when final persistence fails', async () => {
     const h = createLifecycleHarness({
@@ -26,15 +26,20 @@ describe('launch configuration startup gate', () => {
         },
       },
     });
-    h.sessionConfigService.persistAcpConfigSnapshot.mockRejectedValue(
+    h.sessionConfigService.completeStartupConfiguration.mockRejectedValue(
       new Error('Final persistence unavailable')
     );
     await expect(
       h.service.startSession('session-1', { initialPrompt: 'First prompt' })
     ).rejects.toThrow('Final persistence unavailable');
-    expect(h.sessionConfigService.persistAcpConfigSnapshot).toHaveBeenCalledWith(
+    expect(h.sessionConfigService.completeStartupConfiguration).toHaveBeenCalledWith(
       'session-1',
-      expect.objectContaining({ requirePersistence: true })
+      expect.objectContaining({
+        handle: h.handle,
+        assertCurrent: expect.any(Function),
+        beforeComplete: expect.any(Function),
+        complete: expect.any(Function),
+      })
     );
     expect(h.sendSessionMessage).not.toHaveBeenCalled();
     expect(h.handle.completeConfiguration).not.toHaveBeenCalled();
@@ -49,17 +54,17 @@ describe('launch configuration startup gate', () => {
       },
     });
     await h.service.startSession('session-1', { initialPrompt: '' });
-    expect(h.sessionConfigService.persistAcpConfigSnapshot).toHaveBeenCalledTimes(1);
-    expect(h.sessionConfigService.persistAcpConfigSnapshot).toHaveBeenLastCalledWith(
+    expect(h.sessionConfigService.completeStartupConfiguration).toHaveBeenCalledTimes(1);
+    expect(h.sessionConfigService.completeStartupConfiguration).toHaveBeenLastCalledWith(
       'session-1',
       expect.objectContaining({
-        existingMetadata: expect.objectContaining({
-          launchSettings: { reasoningEffort: 'high', planModeEnabled: true, applied: true },
+        intent: expect.objectContaining({
+          launch: { reasoningEffort: 'high', planModeEnabled: true, applied: false },
         }),
       })
     );
     expect(h.sessionConfigService.applyStartupLaunchPlan.mock.invocationCallOrder[0]).toBeLessThan(
-      h.sessionConfigService.persistAcpConfigSnapshot.mock.invocationCallOrder[0] ?? 0
+      h.sessionConfigService.completeStartupConfiguration.mock.invocationCallOrder[0] ?? 0
     );
   });
 });

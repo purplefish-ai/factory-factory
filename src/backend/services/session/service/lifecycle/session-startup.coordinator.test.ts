@@ -75,6 +75,26 @@ describe('SessionStartupCoordinator', () => {
     vi.mocked(workspaceNotificationService.markDelivered).mockResolvedValue();
   });
 
+  it('keeps the default harness finalizer authority check immediately before completion', async () => {
+    const h = createLifecycleHarness();
+    const checking = createDeferred<void>();
+    const cancelled = new Error('startup authority changed');
+    const complete = vi.fn();
+    const assertCurrent = vi.fn(() => {
+      throw cancelled;
+    });
+    const finalizing = h.sessionConfigService.completeStartupConfiguration(h.session.id, {
+      handle: h.handle,
+      assertCurrent,
+      beforeComplete: () => checking.promise,
+      complete,
+    });
+    checking.resolve();
+    await expect(finalizing).rejects.toBe(cancelled);
+    expect(assertCurrent).toHaveBeenCalledOnce();
+    expect(complete).not.toHaveBeenCalled();
+  });
+
   it('reconciles a newly created client to durable and in-memory running state', async () => {
     const harness = createLifecycleHarness();
     const coordinator = createStartupCoordinator(harness);
@@ -449,6 +469,7 @@ describe('SessionStartupCoordinator', () => {
     );
     expect(acpEventProcessor.clearSessionState).not.toHaveBeenCalled();
 
+    runtimeManager.getClient.mockReturnValue(handle);
     activeCreation.resolve(handle);
     await expect(activeResult).resolves.toBe(handle);
   });
@@ -483,6 +504,9 @@ describe('SessionStartupCoordinator', () => {
       createPendingWorkspaceNotification(),
     ] as never);
     runtimeManager.getOrCreateClient.mockImplementation((_id, options) => {
+      if (options.purpose !== 'browse') {
+        runtimeManager.getClient.mockReturnValue(handle);
+      }
       if (options.purpose === 'browse') {
         runtimeManager.getSubagentBrowseCapability.mockReturnValue({
           version: 1,
@@ -742,19 +766,24 @@ describe('SessionStartupCoordinator', () => {
     expect(service.getStopGeneration('session-1')).not.toBe(startupGeneration);
   });
 
-  it('does not publish startup capabilities after stop completes during snapshot persistence', async () => {
+  it('does not publish startup capabilities after stop completes during the finalizer gate', async () => {
     const harness = createLifecycleHarness();
     installRuntimeQuiescence(harness);
-    const snapshotPersistence = createDeferred<void>();
-    harness.sessionConfigService.persistAcpConfigSnapshot.mockReturnValueOnce(
-      snapshotPersistence.promise
+    const startupFinalization = createDeferred<void>();
+    harness.sessionConfigService.completeStartupConfiguration.mockImplementationOnce(
+      async (_id, params) => {
+        await startupFinalization.promise;
+        await params.beforeComplete();
+        params.assertCurrent();
+        params.complete();
+      }
     );
 
     const startResult = harness.service
       .startSession('session-1', { initialPrompt: '' })
       .catch((error: unknown) => error);
     await vi.waitFor(() => {
-      expect(harness.sessionConfigService.persistAcpConfigSnapshot).toHaveBeenCalledOnce();
+      expect(harness.sessionConfigService.completeStartupConfiguration).toHaveBeenCalledOnce();
     });
 
     const stopPromise = harness.service.stopSession('session-1');
@@ -769,7 +798,7 @@ describe('SessionStartupCoordinator', () => {
     ]);
 
     expect(firstSettlement).toBe('blocked');
-    snapshotPersistence.resolve(undefined);
+    startupFinalization.resolve(undefined);
     await stopPromise;
 
     await expect(startResult).resolves.toEqual(

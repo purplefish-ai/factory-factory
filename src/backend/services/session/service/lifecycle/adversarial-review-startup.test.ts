@@ -289,6 +289,7 @@ describe('adversarial review startup permissions', () => {
     'keeps review execution read-only with configured %s permissions',
     async (preset) => {
       const harness = createHarness('CODEX');
+      harness.runtime.getClient.mockReturnValue(harness.handle);
       const configured = new SessionConfigService({
         repository: unsafeCoerce(harness.repository),
         runtimeManager: unsafeCoerce(harness.runtime),
@@ -501,13 +502,18 @@ describe('adversarial review startup permissions', () => {
   it('persists and emits repaired permissions on an existing review client', async () => {
     const harness = createHarness('CODEX');
     harness.runtimeManager.getClient.mockReturnValue(harness.handle);
-    const persist = vi.spyOn(harness.config, 'persistAcpConfigSnapshot').mockResolvedValue();
+    const persist = harness.repository.updateSession;
     await start(harness, 'chat auto-start');
     expect(persist).toHaveBeenCalledWith(
       harness.session.id,
       expect.objectContaining({
-        configOptions: harness.handle.configOptions,
-      })
+        providerMetadata: expect.objectContaining({
+          acpConfigSnapshot: expect.objectContaining({
+            configOptions: harness.handle.configOptions,
+          }),
+        }),
+      }),
+      expect.any(Function)
     );
     expect(harness.sessionDomainService.emitDelta).toHaveBeenCalledWith(harness.session.id, {
       type: 'config_options_update',

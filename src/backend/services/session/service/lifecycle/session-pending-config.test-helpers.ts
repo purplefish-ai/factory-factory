@@ -40,6 +40,7 @@ export function setupStartupConfig() {
   const h = createLifecycleHarness({
     provider: 'CODEX',
     providerSessionId: 'thread',
+    session: { model: 'first' },
     getPermissionPreset: () => Promise.resolve('STRICT'),
   });
   let row = { ...structuredClone(h.session), updatedAt: new Date(1) };
@@ -76,6 +77,12 @@ export function setupStartupConfig() {
   );
   h.repository.getSessionById.mockImplementation(repository.getSessionById.bind(repository));
   h.repository.updateSession.mockImplementation(repository.updateSession.bind(repository));
+  h.repository.acknowledgeStartupConfiguration.mockImplementation(
+    repository.acknowledgeStartupConfiguration.bind(repository)
+  );
+  h.repository.updatePendingLaunchConfiguration.mockImplementation(
+    repository.updatePendingLaunchConfiguration.bind(repository)
+  );
   const handle = createTestProcessHandle({
     provider: 'CODEX',
     providerSessionId: 'thread',

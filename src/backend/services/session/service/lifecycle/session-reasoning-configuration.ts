@@ -4,6 +4,7 @@ import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/ses
 import { isReasoningConfigOption } from '@/backend/services/session/service/acp/acp-config-option-identification';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type { SessionDeltaEvent } from '@/shared/acp-protocol';
+import type { AcceptedConfigCommit } from './session-config-commit-authority';
 import {
   buildCapabilitiesFromConfigOptions,
   getConfigOptionValues,
@@ -20,9 +21,11 @@ export type ReasoningEffortTargetParams = {
   persistSnapshot?: boolean;
   emitUpdates?: boolean;
   assertCurrent?: () => void;
+  confirmTarget?: (id: string, value: string) => void;
 };
 type Dependencies = {
   runtimeManager: Pick<AcpRuntimeManager, 'setConfigOption'>;
+  acceptConfiguration(assertCurrent?: () => void): AcceptedConfigCommit;
   persistSnapshot(
     sessionId: string,
     params: {
@@ -46,18 +49,15 @@ export async function applyReasoningEffortTarget(
     ? String(reasoningOption.currentValue)
     : null;
   const alreadyConfirmed = currentReasoningEffort === params.targetReasoningEffort;
-  if (alreadyConfirmed && params.persistSnapshot === false) {
-    return;
+  if (!alreadyConfirmed) {
+    await deps.runtimeManager.setConfigOption(
+      params.sessionId,
+      reasoningOption.id,
+      params.targetReasoningEffort
+    );
   }
-  // A prior best-effort write may have failed even though the provider confirmed this value.
-  const configOptions = alreadyConfirmed
-    ? params.handle.configOptions
-    : await deps.runtimeManager.setConfigOption(
-        params.sessionId,
-        reasoningOption.id,
-        params.targetReasoningEffort
-      );
   params.assertCurrent?.();
+  const configOptions = structuredClone(params.handle.configOptions);
   if (
     params.strict &&
     configOptions.find((option) => option.id === reasoningOption.id)?.currentValue !==
@@ -65,16 +65,21 @@ export async function applyReasoningEffortTarget(
   ) {
     throw new Error('Requested reasoning effort was not applied');
   }
-  params.handle.configOptions = configOptions;
-  if (params.persistSnapshot !== false) {
-    await deps.persistSnapshot(params.sessionId, {
-      provider: params.handle.provider as SessionProvider,
-      providerSessionId: params.handle.providerSessionId,
-      configOptions,
-      assertCurrent: params.assertCurrent,
-    });
+  params.confirmTarget?.(reasoningOption.id, params.targetReasoningEffort);
+  const accepted = deps.acceptConfiguration(params.assertCurrent);
+  const persisted = await accepted.persist(async (assertCurrent) => {
+    if (params.persistSnapshot !== false) {
+      await deps.persistSnapshot(params.sessionId, {
+        provider: params.handle.provider as SessionProvider,
+        providerSessionId: params.handle.providerSessionId,
+        configOptions,
+        assertCurrent,
+      });
+    }
+  });
+  if (!(persisted && accepted.isCurrent())) {
+    return;
   }
-  params.assertCurrent?.();
   if (params.emitUpdates !== false) {
     deps.emitDelta(params.sessionId, {
       type: 'config_options_update',

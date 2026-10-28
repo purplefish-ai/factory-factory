@@ -3,7 +3,10 @@ import { createLogger } from '@/backend/services/logger.service';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import { withConfiguredAcpHandle } from '@/backend/services/session/service/acp/acp-configured-handle';
-import { resolveAcpModelSelection } from '@/backend/services/session/service/acp/acp-model-selection';
+import {
+  confirmsAcpModelSelection,
+  resolveAcpModelSelection,
+} from '@/backend/services/session/service/acp/acp-model-selection';
 import { normalizeSessionConfigOptions } from '@/backend/services/session/service/acp/acp-session-config-options';
 import { fetchSessionLaunchOptionsFromAcp } from '@/backend/services/session/service/acp/session-launch-options-probe';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
@@ -16,6 +19,7 @@ import type { SessionLaunchOptions } from '@/shared/session-launch';
 import type { SessionPermissionPreset } from '@prisma-gen/client';
 import { parseAcpConfigSnapshot } from './acp-config-snapshot';
 import type { CodexModelCatalogService } from './codex-model-catalog.service';
+import { SessionConfigCommitAuthority } from './session-config-commit-authority';
 import { SessionConfigMutationQueue } from './session-config-mutation-queue';
 import {
   buildCapabilitiesFromConfigOptions,
@@ -32,18 +36,31 @@ import {
   SessionConfigSnapshotPersistence,
   type PersistAcpConfigSnapshotParams,
 } from './session-config-snapshot-persistence';
+export type { PersistAcpConfigSnapshotParams } from './session-config-snapshot-persistence';
 import { setInactiveSessionConfigOption } from './session-inactive-config-options';
 import { SessionLaunchOptionsService } from './session-launch-options.service';
+import { readSessionLaunchSettings } from './session-launch-settings';
 import {
   applyReadOnlyReviewPermissions,
   assertReadOnlyReviewConfigOption,
   resolveConfiguredAccessModeTarget,
+  SessionStartupPermissions,
+  SessionStartupTargetError,
 } from './session-permission-policy';
 import {
   applyReasoningEffortTarget,
   type ReasoningEffortTargetParams,
 } from './session-reasoning-configuration';
 import { restoreSavedNativeModes } from './session-saved-native-modes';
+import {
+  SessionStartupConfigurationFinalizer,
+  type CompleteStartupConfigurationParams,
+} from './session-startup-configuration-finalizer';
+import {
+  applyStartupCollaborationModePreset,
+  findCollaborationOption,
+  resolveStartupModeTarget,
+} from './session-startup-mode-preset';
 import { applyStartupLaunchPlan } from './session-startup-plan';
 import { configuredReasoningEffort, startupReasoningTarget } from './session-startup-reasoning';
 import { getWorkflowPermissionPreset } from './session-workflow-permissions';
@@ -58,7 +75,6 @@ type SessionConfigReadContext = {
   catalog?: Promise<CodexModelCatalogEntry[] | null>;
   retirements: number;
 };
-export type { PersistAcpConfigSnapshotParams } from './session-config-snapshot-persistence';
 
 export type SessionConfigServiceDependencies = {
   repository: SessionRepository;
@@ -69,8 +85,11 @@ export type SessionConfigServiceDependencies = {
 };
 
 export class SessionConfigService {
-  private readonly launchOptionsService: Pick<SessionLaunchOptionsService, 'getOptions'>;
+  private readonly startupPermissions = new SessionStartupPermissions();
   private readonly snapshotPersistence: SessionConfigSnapshotPersistence;
+  private readonly startupFinalizer: SessionStartupConfigurationFinalizer;
+  private readonly configAuthority = new SessionConfigCommitAuthority();
+  private readonly launchOptionsService: Pick<SessionLaunchOptionsService, 'getOptions'>;
   private readonly configUpdates: SessionConfigMutationQueue;
   private readonly repository: SessionRepository;
   private readonly runtimeManager: AcpRuntimeManager;
@@ -85,7 +104,13 @@ export class SessionConfigService {
         getSettings: () => userSettingsService.get(),
       });
     this.repository = options.repository;
-    this.snapshotPersistence = new SessionConfigSnapshotPersistence(this.repository);
+    this.snapshotPersistence = new SessionConfigSnapshotPersistence(options.repository);
+    this.startupFinalizer = new SessionStartupConfigurationFinalizer(
+      this.snapshotPersistence,
+      this.configAuthority,
+      this.startupPermissions,
+      this.repository
+    );
     this.runtimeManager = options.runtimeManager;
     this.codexModelCatalogService = options.codexModelCatalogService;
     this.sessionDomainService = options.sessionDomainService ?? sessionDomainService;
@@ -100,22 +125,73 @@ export class SessionConfigService {
     );
   }
 
-  applyStartupLaunchPlan(
+  requireSavedStartupAccess(handle: AcpProcessHandle, metadata: unknown): void {
+    const snapshot = parseAcpConfigSnapshot(metadata);
+    if (
+      snapshot?.provider === handle.provider &&
+      snapshot.providerSessionId === handle.providerSessionId
+    ) {
+      this.startupPermissions.capture(handle, snapshot.configOptions);
+    }
+  }
+
+  async applyStartupModel(
+    sessionId: string,
+    handle: AcpProcessHandle,
+    model: string
+  ): Promise<void> {
+    const assertCurrent = this.acceptRuntime(sessionId, handle);
+    const target = resolveAcpModelSelection(handle.provider, handle.configOptions, model);
+    if (
+      handle.configOptions.find((option) => option.id === target.configId)?.currentValue !==
+      target.value
+    ) {
+      await this.runtimeManager.setSessionModel(sessionId, target.value);
+    }
+    assertCurrent();
+    if (
+      !confirmsAcpModelSelection(
+        handle.provider,
+        model,
+        target.value,
+        handle.configOptions.find((option) => option.id === target.configId)?.currentValue
+      )
+    ) {
+      throw new SessionStartupTargetError(new Error('Requested startup model was not applied'));
+    }
+    this.acceptConfiguration(sessionId, handle);
+  }
+
+  async applyStartupLaunchPlan(
     sessionId: string,
     session: AgentSessionRecord,
     handle: AcpProcessHandle,
     preset: SessionPermissionPreset | undefined,
     override?: boolean
   ): Promise<void> {
-    return applyStartupLaunchPlan(
-      sessionId,
-      session,
-      handle,
-      preset,
-      this.runtimeManager,
-      override,
-      () => this.resolvePermissionPresetFromSettings(sessionId, session.workflow, session.provider)
-    );
+    const assertCurrent = this.acceptRuntime(sessionId, handle);
+    try {
+      await applyStartupLaunchPlan(
+        sessionId,
+        session,
+        handle,
+        preset,
+        this.runtimeManager,
+        override,
+        () =>
+          this.resolvePermissionPresetFromSettings(sessionId, session.workflow, session.provider),
+        {
+          assertCurrent,
+          confirmTarget: (id, value) => {
+            this.startupPermissions.expectLaunchTarget(handle, id, value);
+            this.acceptConfiguration(sessionId, handle);
+          },
+        }
+      );
+    } catch (error) {
+      assertCurrent();
+      throw new SessionStartupTargetError(error);
+    }
   }
 
   getLaunchOptions(input: {
@@ -137,8 +213,10 @@ export class SessionConfigService {
             throw new Error('Session runtime changed before configuration update');
           }
         }
-      : undefined;
-    if (isCurrentSource && !isCurrentSource()) {
+      : this.acceptRuntime(sessionId, handle);
+    try {
+      assertCurrent();
+    } catch {
       return;
     }
     const normalizedConfigOptions = normalizeSessionConfigOptions(handle.provider, configOptions);
@@ -147,12 +225,9 @@ export class SessionConfigService {
       provider: handle.provider as SessionProvider,
       providerSessionId: handle.providerSessionId,
       configOptions: normalizedConfigOptions,
-      ...(assertCurrent ? { assertCurrent } : {}),
+      assertCurrent,
     }).catch((error: unknown) => {
-      logger.warn('Failed persisting native ACP configuration update', {
-        sessionId,
-        error: error instanceof Error ? error.message : String(error),
-      });
+      logger.warn('Failed persisting native configuration update', { sessionId, error });
     });
 
     this.sessionDomainService.emitDelta(sessionId, {
@@ -181,31 +256,46 @@ export class SessionConfigService {
       return;
     }
 
-    const modeResult = await this.applyStartupCollaborationModePreset({
-      sessionId,
-      handle,
-      startupModePreset,
-      workflow,
-      configOptions: handle.configOptions,
-    });
-    const didUpdate = modeResult.didUpdate;
+    const didUpdate = await applyStartupCollaborationModePreset(
+      this.runtimeManager,
+      {
+        sessionId,
+        handle,
+        startupModePreset,
+        workflow,
+        assertCurrent: this.acceptRuntime(sessionId, handle),
+      },
+      (id, value) => this.startupPermissions.authorizeRequestedTarget(handle, id, value)
+    );
 
     if (!didUpdate) {
       return;
     }
 
-    const persistSnapshot = options?.persistSnapshot ?? this.persistAcpConfigSnapshot.bind(this);
-    handle.configOptions = modeResult.configOptions;
+    const persistSnapshot =
+      options?.persistSnapshot ?? this.snapshotPersistence.persist.bind(this.snapshotPersistence);
+    const configOptions = structuredClone(handle.configOptions);
+    const accepted = this.acceptConfiguration(sessionId, handle);
     try {
-      await persistSnapshot(sessionId, {
-        provider: handle.provider as SessionProvider,
-        providerSessionId: handle.providerSessionId,
-        configOptions: modeResult.configOptions,
-      });
+      if (
+        !(await accepted.persist((assertCurrent) =>
+          persistSnapshot(sessionId, {
+            provider: handle.provider as SessionProvider,
+            providerSessionId: handle.providerSessionId,
+            configOptions,
+            assertCurrent,
+          })
+        ))
+      ) {
+        return;
+      }
+      if (!accepted.isCurrent()) {
+        return;
+      }
 
       this.sessionDomainService.emitDelta(sessionId, {
         type: 'config_options_update',
-        configOptions: modeResult.configOptions,
+        configOptions,
       } as SessionDeltaEvent);
       this.sessionDomainService.emitDelta(sessionId, {
         type: 'chat_capabilities',
@@ -229,9 +319,13 @@ export class SessionConfigService {
     preResolvedPreset?: SessionPermissionPreset
   ): Promise<void> {
     if (session.workflow === ADVERSARIAL_REVIEW_WORKFLOW) {
-      if (await applyReadOnlyReviewPermissions(sessionId, handle, this.runtimeManager)) {
+      this.startupPermissions.captureReview(handle);
+      const changed = await applyReadOnlyReviewPermissions(sessionId, handle, this.runtimeManager);
+      this.startupPermissions.assertCurrent(handle);
+      if (changed) {
         await this.persistAndEmitConfigOptions(sessionId, handle);
       }
+      this.startupPermissions.assertCurrent(handle);
       return;
     }
 
@@ -256,6 +350,7 @@ export class SessionConfigService {
 
     // Claude plan mode is also its read-only access mode. Preserve planning.
     if (handle.provider === 'CLAUDE' && accessModeOption.currentValue === 'plan') {
+      this.startupPermissions.expectAccess(handle, accessModeOption.id, 'plan');
       return;
     }
     const targetAccessMode = resolveConfiguredAccessModeTarget(
@@ -269,27 +364,19 @@ export class SessionConfigService {
       );
     }
 
-    const currentAccessMode = accessModeOption.currentValue
-      ? String(accessModeOption.currentValue)
-      : null;
-    if (currentAccessMode === targetAccessMode) {
+    if (
+      handle.configOptions.find((option) => option.id === accessModeOption.id)?.currentValue ===
+      targetAccessMode
+    ) {
+      this.startupPermissions.capture(handle);
       return;
     }
 
     try {
-      const configOptions = await this.runtimeManager.setConfigOption(
-        sessionId,
-        accessModeOption.id,
-        targetAccessMode
-      );
-      if (
-        configOptions.find((option) => option.id === accessModeOption.id)?.currentValue !==
-        targetAccessMode
-      ) {
-        throw new Error('Configured session access mode was not applied');
-      }
-      handle.configOptions = configOptions;
+      await this.runtimeManager.setConfigOption(sessionId, accessModeOption.id, targetAccessMode);
+      this.startupPermissions.expectAccess(handle, accessModeOption.id, targetAccessMode);
       await this.persistAndEmitConfigOptions(sessionId, handle);
+      this.startupPermissions.assertCurrent(handle);
     } catch (error) {
       logger.warn('Failed applying configured session permission preset', {
         sessionId,
@@ -307,13 +394,23 @@ export class SessionConfigService {
     session: AgentSessionRecord,
     handle: AcpProcessHandle
   ): Promise<boolean> {
+    const snapshot = parseAcpConfigSnapshot(session.providerMetadata);
+    if (snapshot) {
+      this.startupPermissions.capture(
+        handle,
+        snapshot.configOptions,
+        readSessionLaunchSettings(session.providerMetadata)?.planModeEnabled !== undefined
+      );
+    }
     const restored = await restoreSavedNativeModes(sessionId, session, handle, this.runtimeManager);
     if (restored === undefined) {
       return false;
     }
+    this.startupPermissions.assertCurrent(handle);
     if (restored) {
       await this.persistAndEmitConfigOptions(sessionId, handle);
     }
+    this.startupPermissions.assertCurrent(handle);
     return true;
   }
 
@@ -321,12 +418,23 @@ export class SessionConfigService {
     sessionId: string,
     handle: AcpProcessHandle
   ): Promise<void> {
-    const configOptions = handle.configOptions;
-    await this.persistAcpConfigSnapshot(sessionId, {
-      provider: handle.provider as SessionProvider,
-      providerSessionId: handle.providerSessionId,
-      configOptions,
-    });
+    const configOptions = structuredClone(handle.configOptions);
+    const accepted = this.acceptConfiguration(sessionId, handle);
+    if (
+      !(await accepted.persist((assertCurrent) =>
+        this.snapshotPersistence.persist(sessionId, {
+          provider: handle.provider as SessionProvider,
+          providerSessionId: handle.providerSessionId,
+          configOptions,
+          assertCurrent,
+        })
+      ))
+    ) {
+      return;
+    }
+    if (!accepted.isCurrent()) {
+      return;
+    }
     this.sessionDomainService.emitDelta(sessionId, {
       type: 'config_options_update',
       configOptions,
@@ -482,13 +590,13 @@ export class SessionConfigService {
       return;
     }
 
-    const modeOption = this.findCollaborationOption(acpHandle.provider, acpHandle.configOptions);
+    const modeOption = findCollaborationOption(acpHandle.provider, acpHandle.configOptions);
     if (!modeOption) {
       return;
     }
 
     const availableModeValues = getConfigOptionValues(modeOption);
-    const targetMode = this.resolveStartupModeTarget(
+    const targetMode = resolveStartupModeTarget(
       acpHandle.provider as SessionProvider,
       mode,
       availableModeValues
@@ -584,27 +692,40 @@ export class SessionConfigService {
       reasoningEffort?: string | null;
     }
   ): Promise<void> {
-    const target = await startupReasoningTarget(
-      sessionId,
-      handle,
-      options?.session,
-      options?.reasoningEffort
-    );
-    const targetReasoningEffort = target.value;
-    if (!targetReasoningEffort) {
-      return;
-    }
+    const assertCurrent = this.acceptRuntime(sessionId, handle);
+    try {
+      const target = await startupReasoningTarget(
+        sessionId,
+        handle,
+        options?.session,
+        options?.reasoningEffort
+      );
+      const targetReasoningEffort = target.value;
+      if (!targetReasoningEffort) {
+        return;
+      }
 
-    await this.applyReasoningEffortTarget({
-      sessionId,
-      handle,
-      targetReasoningEffort,
-      source: 'settings',
-      strict: target.strict,
-      normalizeUnsupported: target.normalizeUnsupported,
-      persistSnapshot: options?.persistSnapshot,
-      emitUpdates: options?.emitUpdates,
-    });
+      await this.applyReasoningEffortTarget({
+        sessionId,
+        handle,
+        targetReasoningEffort,
+        source: 'settings',
+        strict: target.strict,
+        normalizeUnsupported: target.normalizeUnsupported,
+        assertCurrent,
+        ...(target.strict && !target.normalizeUnsupported
+          ? {
+              confirmTarget: (id: string, value: string) =>
+                this.startupPermissions.expectLaunchTarget(handle, id, value),
+            }
+          : {}),
+        persistSnapshot: options?.persistSnapshot,
+        emitUpdates: options?.emitUpdates,
+      });
+    } catch (error) {
+      assertCurrent();
+      throw new SessionStartupTargetError(error);
+    }
   }
 
   async setSessionConfigOption(sessionId: string, configId: string, value: string): Promise<void> {
@@ -620,25 +741,7 @@ export class SessionConfigService {
   ): Promise<void> {
     const acpHandle = this.runtimeManager.getClient(sessionId);
     if (!acpHandle) {
-      const update = await setInactiveSessionConfigOption(sessionId, configId, value, {
-        repository: this.repository,
-        runtimeManager: this.runtimeManager,
-        catalog: this.codexModelCatalogService,
-        persistSnapshot: this.persistAcpConfigSnapshot.bind(this),
-      });
-      if (!update) {
-        await this.setSessionConfigOptionUnserialized(sessionId, configId, value);
-        return;
-      }
-      const { provider, configOptions } = update;
-      this.sessionDomainService.emitDelta(sessionId, {
-        type: 'config_options_update',
-        configOptions,
-      } as SessionDeltaEvent);
-      this.sessionDomainService.emitDelta(sessionId, {
-        type: 'chat_capabilities',
-        capabilities: buildCapabilitiesFromConfigOptions(provider, configOptions),
-      });
+      await this.updateInactiveSessionConfigOption(sessionId, configId, value);
       return;
     }
 
@@ -667,30 +770,76 @@ export class SessionConfigService {
       );
     }
 
-    const configOptions = await withConfiguredAcpHandle(
-      this.runtimeManager,
-      sessionId,
-      acpHandle,
-      () =>
-        isModeOption
-          ? this.runtimeManager.setSessionMode(sessionId, value)
-          : isModelOption
-            ? this.runtimeManager.setSessionModel(sessionId, value)
-            : this.runtimeManager.setConfigOption(sessionId, configId, value)
+    await withConfiguredAcpHandle(this.runtimeManager, sessionId, acpHandle, () =>
+      isModeOption
+        ? this.runtimeManager.setSessionMode(sessionId, value)
+        : isModelOption
+          ? this.runtimeManager.setSessionModel(sessionId, value)
+          : this.runtimeManager.setConfigOption(sessionId, configId, value)
     );
 
     this.assertCurrentConfiguredHandle(sessionId, acpHandle);
-    await this.persistAcpConfigSnapshot(sessionId, {
-      provider: acpHandle.provider as SessionProvider,
-      providerSessionId: acpHandle.providerSessionId,
-      configOptions,
-      assertCurrent: () => this.assertCurrentConfiguredHandle(sessionId, acpHandle),
-    });
-    this.assertCurrentConfiguredHandle(sessionId, acpHandle);
+    const configOptions = structuredClone(acpHandle.configOptions);
+    const accepted = this.acceptConfiguration(sessionId, acpHandle, () =>
+      this.assertCurrentConfiguredHandle(sessionId, acpHandle)
+    );
+    if (
+      !(await accepted.persist((assertCurrent) =>
+        this.snapshotPersistence.persist(sessionId, {
+          provider: acpHandle.provider as SessionProvider,
+          providerSessionId: acpHandle.providerSessionId,
+          configOptions,
+          assertCurrent,
+        })
+      ))
+    ) {
+      return;
+    }
+    if (!accepted.isCurrent()) {
+      return;
+    }
     this.sessionDomainService.emitDelta(sessionId, {
       type: 'config_options_update',
       configOptions,
     } as SessionDeltaEvent);
+  }
+
+  private async updateInactiveSessionConfigOption(
+    sessionId: string,
+    configId: string,
+    value: string
+  ): Promise<void> {
+    const update = await setInactiveSessionConfigOption(sessionId, configId, value, {
+      repository: this.repository,
+      runtimeManager: this.runtimeManager,
+      catalog: this.codexModelCatalogService,
+      persistSnapshot: this.persistAcpConfigSnapshot.bind(this),
+      accept: (assertCurrent) => this.configAuthority.accept(sessionId, assertCurrent),
+    });
+    if (!update) {
+      await this.setSessionConfigOptionUnserialized(sessionId, configId, value);
+      return;
+    }
+    if (
+      this.runtimeManager.getClient(sessionId) ||
+      this.runtimeManager.getPendingClient?.(sessionId) !== undefined
+    ) {
+      await this.setSessionConfigOptionUnserialized(sessionId, configId, value);
+      return;
+    }
+    if (!update.accepted.isCurrent()) {
+      return;
+    }
+    const { provider, configOptions } = update;
+    this.sessionDomainService.emitDelta(sessionId, {
+      type: 'config_options_update',
+      configOptions,
+    } as SessionDeltaEvent);
+    this.sessionDomainService.emitDelta(sessionId, {
+      type: 'chat_capabilities',
+      capabilities: buildCapabilitiesFromConfigOptions(provider, configOptions),
+    });
+    return;
   }
 
   private assertCurrentConfiguredHandle(sessionId: string, handle: AcpProcessHandle): void {
@@ -726,97 +875,54 @@ export class SessionConfigService {
     );
   }
 
-  persistAcpConfigSnapshot(
+  async persistAcpConfigSnapshot(
     sessionId: string,
     params: PersistAcpConfigSnapshotParams
   ): Promise<void> {
-    return this.snapshotPersistence.persist(sessionId, params);
-  }
-
-  private async applyStartupCollaborationModePreset(params: {
-    sessionId: string;
-    handle: AcpProcessHandle;
-    startupModePreset: SessionStartupModePreset;
-    workflow: string;
-    configOptions: SessionConfigOption[];
-  }): Promise<{ configOptions: SessionConfigOption[]; didUpdate: boolean }> {
-    const modeOption = this.findCollaborationOption(params.handle.provider, params.configOptions);
-    if (!modeOption) {
-      return { configOptions: params.configOptions, didUpdate: false };
-    }
-
-    const availableModeValues = getConfigOptionValues(modeOption);
-    const targetMode = this.resolveStartupModeTarget(
-      params.handle.provider as SessionProvider,
-      params.startupModePreset,
-      availableModeValues
-    );
-    if (!targetMode) {
-      logger.debug('Startup mode preset not available in ACP mode options', {
-        sessionId: params.sessionId,
-        provider: params.handle.provider,
-        workflow: params.workflow,
-        startupModePreset: params.startupModePreset,
-        availableModeValues,
-      });
-      return { configOptions: params.configOptions, didUpdate: false };
-    }
-
-    const currentMode = modeOption.currentValue ? String(modeOption.currentValue) : null;
-    if (currentMode === targetMode) {
-      return { configOptions: params.configOptions, didUpdate: false };
-    }
-
-    try {
-      const configOptions =
-        modeOption.id === 'mode'
-          ? await this.runtimeManager.setSessionMode(params.sessionId, targetMode)
-          : await this.runtimeManager.setConfigOption(params.sessionId, modeOption.id, targetMode);
-      return { configOptions, didUpdate: true };
-    } catch (error) {
-      logger.warn('Failed applying startup mode preset', {
-        sessionId: params.sessionId,
-        provider: params.handle.provider,
-        workflow: params.workflow,
-        startupModePreset: params.startupModePreset,
-        targetMode,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return { configOptions: params.configOptions, didUpdate: false };
-    }
-  }
-
-  private findCollaborationOption(provider: string, configOptions: SessionConfigOption[]) {
-    return configOptions.find((option) =>
-      provider === 'CODEX'
-        ? option.id === 'collaboration_mode' || option.category === 'collaboration_mode'
-        : option.id === 'mode' || option.category === 'mode'
+    const handle = this.runtimeManager.getClient(sessionId);
+    params.assertCurrent?.();
+    const configOptions =
+      handle?.provider === params.provider && handle.providerSessionId === params.providerSessionId
+        ? handle.configOptions
+        : params.configOptions;
+    const accepted = this.acceptConfiguration(sessionId, handle, params.assertCurrent);
+    await accepted.persist((assertCurrent) =>
+      this.snapshotPersistence.persist(sessionId, { ...params, configOptions, assertCurrent })
     );
   }
 
-  private resolveStartupModeTarget(
-    provider: SessionProvider,
-    startupModePreset: SessionStartupModePreset,
-    availableModeValues: string[]
-  ): string | null {
-    if (availableModeValues.length === 0) {
-      return null;
-    }
+  releaseSessionConfiguration(sessionId: string): void {
+    this.configAuthority.release(sessionId);
+  }
 
-    if (startupModePreset === 'plan') {
-      return this.findModeValue(availableModeValues, ['plan']);
-    }
+  async completeStartupConfiguration(
+    sessionId: string,
+    params: CompleteStartupConfigurationParams
+  ): Promise<void> {
+    await this.startupFinalizer.complete(sessionId, params);
+  }
 
-    if (provider === 'CLAUDE') {
-      return this.findModeValue(availableModeValues, [
-        'bypassPermissions',
-        'dangerouslySkipPermissions',
-        'dangerousSkipPermissions',
-        'acceptEdits',
-      ]);
-    }
+  private acceptConfiguration(
+    sessionId: string,
+    handle?: AcpProcessHandle,
+    assertCurrent?: () => void
+  ) {
+    return this.configAuthority.accept(
+      sessionId,
+      assertCurrent ?? this.acceptRuntime(sessionId, handle)
+    );
+  }
 
-    return this.findModeValue(availableModeValues, ['default']);
+  private acceptRuntime(sessionId: string, handle?: AcpProcessHandle): () => void {
+    return () => {
+      if (
+        handle &&
+        (this.runtimeManager.getClient(sessionId) !== handle ||
+          this.runtimeManager.isStopInProgress(sessionId))
+      ) {
+        throw new Error('Session runtime changed before configuration update');
+      }
+    };
   }
 
   private async resolvePermissionPresetFromSettings(
@@ -841,35 +947,10 @@ export class SessionConfigService {
   private applyReasoningEffortTarget(params: ReasoningEffortTargetParams): Promise<void> {
     return applyReasoningEffortTarget(params, {
       runtimeManager: this.runtimeManager,
+      acceptConfiguration: (assertCurrent) =>
+        this.acceptConfiguration(params.sessionId, params.handle, assertCurrent),
       persistSnapshot: this.persistAcpConfigSnapshot.bind(this),
       emitDelta: this.sessionDomainService.emitDelta.bind(this.sessionDomainService),
     });
-  }
-
-  private findModeValue(
-    availableModeValues: string[],
-    preferredModeValues: string[]
-  ): string | null {
-    if (availableModeValues.length === 0 || preferredModeValues.length === 0) {
-      return null;
-    }
-
-    const availableByNormalized = new Map<string, string>();
-    for (const value of availableModeValues) {
-      availableByNormalized.set(this.normalizeModeValue(value), value);
-    }
-
-    for (const preferredValue of preferredModeValues) {
-      const match = availableByNormalized.get(this.normalizeModeValue(preferredValue));
-      if (match) {
-        return match;
-      }
-    }
-
-    return null;
-  }
-
-  private normalizeModeValue(value: string): string {
-    return value.replace(/[^a-z0-9]/gi, '').toLowerCase();
   }
 }

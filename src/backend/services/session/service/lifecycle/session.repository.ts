@@ -6,8 +6,15 @@ import {
 } from '@/backend/services/session/resources/agent-session.accessor';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { workspaceDataService } from '@/backend/services/workspace';
+import type { SessionLaunchSettings } from '@/shared/session-launch';
 import type { Prisma, Workspace } from '@prisma-gen/client';
 import { readSessionLaunchSettings } from './session-launch-settings';
+import {
+  canAcknowledgeSessionLaunch,
+  matchesSessionStartupIntent,
+  SessionStartupIntentChangedError,
+  type SessionStartupIntent,
+} from './session-startup-intent';
 
 function isMetadataRecord(value: Prisma.JsonValue | undefined): value is Prisma.JsonObject {
   return !!value && typeof value === 'object' && !Array.isArray(value);
@@ -81,6 +88,24 @@ export class SessionRepository {
     return this.updateSessionWithGuards(sessionId, data, assertCurrent);
   }
 
+  acknowledgeStartupConfiguration(
+    sessionId: string,
+    data: SessionUpdateData,
+    intent: SessionStartupIntent,
+    assertCurrent?: () => void
+  ): Promise<AgentSessionRecord> {
+    return this.updateSessionWithGuards(sessionId, data, assertCurrent, { intent });
+  }
+
+  updatePendingLaunchConfiguration(
+    sessionId: string,
+    data: SessionUpdateData,
+    patch: SessionLaunchSettings,
+    assertCurrent?: () => void
+  ): Promise<AgentSessionRecord> {
+    return this.updateSessionWithGuards(sessionId, data, assertCurrent, { patch });
+  }
+
   updateSessionIfStatus(
     sessionId: string,
     data: ConditionalSessionUpdateData,
@@ -108,7 +133,8 @@ export class SessionRepository {
   private async updateSessionWithGuards(
     sessionId: string,
     data: SessionUpdateData,
-    assertCurrent?: () => void
+    assertCurrent?: () => void,
+    launchChange?: { intent?: SessionStartupIntent; patch?: SessionLaunchSettings }
   ): Promise<AgentSessionRecord> {
     if (Object.hasOwn(data, 'providerSessionId')) {
       const current = await this.sessions.findById(sessionId);
@@ -126,7 +152,13 @@ export class SessionRepository {
 
     const metadata = data.providerMetadata;
     if (isMetadataRecord(metadata) && Object.hasOwn(metadata, 'acpConfigSnapshot')) {
-      return this.updateConfigSnapshotMetadata(sessionId, data, metadata, assertCurrent);
+      return this.updateConfigSnapshotMetadata(
+        sessionId,
+        data,
+        metadata,
+        assertCurrent,
+        launchChange
+      );
     }
 
     assertCurrent?.();
@@ -137,7 +169,8 @@ export class SessionRepository {
     sessionId: string,
     data: SessionUpdateData,
     metadata: Prisma.JsonObject,
-    assertCurrent?: () => void
+    assertCurrent?: () => void,
+    launchChange?: { intent?: SessionStartupIntent; patch?: SessionLaunchSettings }
   ): Promise<AgentSessionRecord> {
     const current = await this.sessions.findById(sessionId);
     if (!current) {
@@ -156,15 +189,10 @@ export class SessionRepository {
     const currentMetadata = current.providerMetadata;
     const durableMetadata = isMetadataRecord(currentMetadata) ? currentMetadata : {};
     const { providerSessionId: _identity, ...guardedData } = data;
-    const consumedLaunch = readSessionLaunchSettings(durableMetadata);
-    const mergedMetadata = {
-      ...durableMetadata,
-      ...metadata,
-      ...(consumedLaunch?.applied ? { launchSettings: consumedLaunch } : {}),
-      ...(durableMetadata.providerIdentityRollovers !== undefined
-        ? { providerIdentityRollovers: durableMetadata.providerIdentityRollovers }
-        : {}),
-    };
+    if (launchChange?.intent && !matchesSessionStartupIntent(current, launchChange.intent)) {
+      throw new SessionStartupIntentChangedError();
+    }
+    const mergedMetadata = mergeSnapshotMetadata(durableMetadata, metadata, launchChange);
     assertCurrent?.();
     if (
       (await this.sessions.updateIfProviderIdentity(sessionId, current, {
@@ -172,6 +200,9 @@ export class SessionRepository {
         providerMetadata: mergedMetadata,
       })) !== 1
     ) {
+      if (launchChange?.intent) {
+        throw new SessionStartupIntentChangedError();
+      }
       throw new Error(`Stale provider metadata reconciliation for session ${sessionId}`);
     }
     const persisted = await this.sessions.findById(sessionId);
@@ -194,3 +225,31 @@ export class SessionRepository {
 }
 
 export const sessionRepository = new SessionRepository();
+
+function mergeSnapshotMetadata(
+  durable: Prisma.JsonObject,
+  incoming: Prisma.JsonObject,
+  change?: { intent?: SessionStartupIntent; patch?: SessionLaunchSettings }
+): Prisma.JsonObject {
+  const launch = readSessionLaunchSettings(durable);
+  const { launchSettings: _capturedLaunch, ...snapshotMetadata } = incoming;
+  const nextLaunch = launch?.applied
+    ? launch
+    : launch
+      ? {
+          ...launch,
+          ...(change?.patch ?? {}),
+          ...(change?.intent && canAcknowledgeSessionLaunch(launch, change.intent)
+            ? { applied: true }
+            : {}),
+        }
+      : undefined;
+  return {
+    ...durable,
+    ...snapshotMetadata,
+    ...(nextLaunch ? { launchSettings: nextLaunch } : {}),
+    ...(durable.providerIdentityRollovers !== undefined
+      ? { providerIdentityRollovers: durable.providerIdentityRollovers }
+      : {}),
+  };
+}

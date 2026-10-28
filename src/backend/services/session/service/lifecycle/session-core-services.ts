@@ -85,6 +85,10 @@ export const sessionConfigService = new SessionConfigService({
   sessionDomainService,
 });
 
+sessionDomainService.on('session_permanently_deleted', (sessionId: string) => {
+  sessionConfigService.releaseSessionConfiguration(sessionId);
+});
+
 export const sessionPromptTurnCompletionService = new SessionPromptTurnCompletionService();
 export const sessionRetryService = new SessionRetryService();
 export const sessionLifecycleEventService = new SessionLifecycleEventService({

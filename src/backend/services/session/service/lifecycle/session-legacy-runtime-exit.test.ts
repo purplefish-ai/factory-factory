@@ -76,6 +76,7 @@ vi.mock('./session.repository', () => ({
     getWorkspaceById: vi.fn(),
     markWorkspaceHasHadSessions: vi.fn(),
     updateSession: vi.fn(),
+    acknowledgeStartupConfiguration: vi.fn(),
     updateSessionIfStatus: vi.fn(),
     deleteSession: vi.fn(),
     recoverStaleRunningSessions: vi.fn(),
@@ -142,6 +143,9 @@ describe('retained legacy runtime exit', () => {
     );
     vi.mocked(closedSessionPersistenceService.persistClosedSession).mockResolvedValue();
     vi.mocked(sessionRepository.updateSessionIfStatus).mockResolvedValue(1);
+    vi.mocked(sessionRepository.acknowledgeStartupConfiguration).mockImplementation(
+      (id, data, _intent, guard) => sessionRepository.updateSession(id, data, guard)
+    );
   });
   it('clears ratchetActiveSessionId and deletes session on ACP ratchet exit', async () => {
     const session = unsafeCoerce<

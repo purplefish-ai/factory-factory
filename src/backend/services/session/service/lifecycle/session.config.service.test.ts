@@ -98,6 +98,7 @@ describe('SessionConfigService', () => {
       },
     ];
 
+    runtimeManager.getClient.mockReturnValue(handle);
     service.applyConfigOptionsUpdateDelta('session-1', handle, unsafeCoerce(incoming));
 
     expect(handle.configOptions.filter((option) => option.type === 'select')[0]?.options).toEqual([
@@ -110,117 +111,6 @@ describe('SessionConfigService', () => {
         configOptions: handle.configOptions,
       })
     );
-  });
-
-  it('applies Claude non-interactive startup mode preset when bypassPermissions is available', async () => {
-    const modeConfig = {
-      id: 'mode',
-      name: 'Mode',
-      type: 'select',
-      category: 'mode',
-      currentValue: 'default',
-      options: [
-        { value: 'default', name: 'Default' },
-        { value: 'bypassPermissions', name: 'Bypass Permissions' },
-      ],
-    };
-    const handle = unsafeCoerce<AcpProcessHandle>({
-      provider: 'CLAUDE',
-      providerSessionId: 'provider-session-1',
-      configOptions: [modeConfig],
-    });
-
-    runtimeManager.setSessionMode.mockResolvedValue([
-      { ...modeConfig, currentValue: 'bypassPermissions' },
-    ]);
-
-    await service.applyStartupModePreset('session-1', handle, 'non_interactive', 'default');
-
-    expect(runtimeManager.setSessionMode).toHaveBeenCalledWith('session-1', 'bypassPermissions');
-    expect(sessionDomain.emitDelta).toHaveBeenCalledWith(
-      'session-1',
-      expect.objectContaining({
-        type: 'config_options_update',
-      })
-    );
-    expect(sessionDomain.emitDelta).toHaveBeenCalledWith(
-      'session-1',
-      expect.objectContaining({ type: 'chat_capabilities' })
-    );
-  });
-
-  it.each(['auto-iteration', 'periodic-task'])(
-    'sets %s collaboration independently of native access at startup',
-    async (workflow) => {
-      const access = {
-        id: 'mode',
-        name: 'Access',
-        type: 'select',
-        category: 'mode',
-        currentValue: 'workspace-write',
-        options: [{ value: 'workspace-write', name: 'Workspace access' }],
-      };
-      const planning = {
-        id: 'collaboration_mode',
-        name: 'Planning',
-        type: 'select',
-        category: 'collaboration_mode',
-        currentValue: 'plan',
-        options: ['default', 'plan'].map((value) => ({ value, name: value })),
-      };
-      const handle = unsafeCoerce<AcpProcessHandle>({
-        provider: 'CODEX',
-        providerSessionId: 'provider-codex-1',
-        configOptions: [access, planning],
-      });
-      runtimeManager.setConfigOption.mockResolvedValue([
-        access,
-        { ...planning, currentValue: 'default' },
-      ]);
-      await service.applyStartupModePreset('session-codex', handle, 'non_interactive', workflow);
-      expect(runtimeManager.setConfigOption).toHaveBeenCalledWith(
-        'session-codex',
-        'collaboration_mode',
-        'default'
-      );
-      expect(runtimeManager.setSessionMode).not.toHaveBeenCalled();
-      expect(handle.configOptions[0]?.currentValue).toBe('workspace-write');
-    }
-  );
-
-  it('continues startup when persistSnapshot callback fails', async () => {
-    const modeConfig = {
-      id: 'mode',
-      name: 'Mode',
-      type: 'select',
-      category: 'mode',
-      currentValue: 'default',
-      options: [
-        { value: 'default', name: 'Default' },
-        { value: 'bypassPermissions', name: 'Bypass Permissions' },
-      ],
-    };
-    const handle = unsafeCoerce<AcpProcessHandle>({
-      provider: 'CLAUDE',
-      providerSessionId: 'provider-session-1',
-      configOptions: [modeConfig],
-    });
-
-    runtimeManager.setSessionMode.mockResolvedValue([
-      { ...modeConfig, currentValue: 'bypassPermissions' },
-    ]);
-
-    const persistSnapshot = vi.fn().mockRejectedValue(new Error('db unavailable'));
-
-    await expect(
-      service.applyStartupModePreset('session-1', handle, 'non_interactive', 'default', {
-        persistSnapshot,
-      })
-    ).resolves.toBeUndefined();
-
-    expect(runtimeManager.setSessionMode).toHaveBeenCalledWith('session-1', 'bypassPermissions');
-    expect(persistSnapshot).toHaveBeenCalledTimes(1);
-    expect(handle.configOptions[0]?.currentValue).toBe('bypassPermissions');
   });
 
   it('normalizes legacy Claude snapshot labels before passive options and capabilities', async () => {
@@ -610,7 +500,11 @@ describe('SessionConfigService', () => {
         configOptions,
       })
     );
-    runtimeManager.setConfigOption.mockResolvedValue(configOptions);
+    const handle = unsafeCoerce<AcpProcessHandle>(runtimeManager.getClient());
+    runtimeManager.setConfigOption.mockImplementation(() => {
+      handle.configOptions = unsafeCoerce(configOptions);
+      return Promise.resolve(handle.configOptions);
+    });
 
     await service.setSessionThinkingBudget('session-1', 10_000);
 
@@ -641,19 +535,23 @@ describe('SessionConfigService', () => {
         ],
       })
     );
-    runtimeManager.setSessionModel.mockResolvedValue([
-      {
-        id: 'model',
-        name: 'Model',
-        type: 'select',
-        category: 'model',
-        currentValue: 'claude-sonnet-4-5',
-        options: [
-          { value: 'default', name: 'Default' },
-          { value: 'claude-sonnet-4-5', name: 'Sonnet 4.5' },
-        ],
-      },
-    ]);
+    const handle = unsafeCoerce<AcpProcessHandle>(runtimeManager.getClient());
+    runtimeManager.setSessionModel.mockImplementation(() => {
+      handle.configOptions = unsafeCoerce([
+        {
+          id: 'model',
+          name: 'Model',
+          type: 'select',
+          category: 'model',
+          currentValue: 'claude-sonnet-4-5',
+          options: [
+            { value: 'default', name: 'Default' },
+            { value: 'claude-sonnet-4-5', name: 'Sonnet 4.5' },
+          ],
+        },
+      ]);
+      return Promise.resolve(handle.configOptions);
+    });
 
     await service.setSessionConfigOption('session-1', 'model', 'claude-sonnet-4-5');
 
@@ -681,19 +579,23 @@ describe('SessionConfigService', () => {
         ],
       })
     );
-    runtimeManager.setSessionMode.mockResolvedValue([
-      {
-        id: 'mode',
-        name: 'Mode',
-        type: 'select',
-        category: 'mode',
-        currentValue: 'acceptEdits',
-        options: [
-          { value: 'default', name: 'Default' },
-          { value: 'acceptEdits', name: 'Accept Edits' },
-        ],
-      },
-    ]);
+    const handle = unsafeCoerce<AcpProcessHandle>(runtimeManager.getClient());
+    runtimeManager.setSessionMode.mockImplementation(() => {
+      handle.configOptions = unsafeCoerce([
+        {
+          id: 'mode',
+          name: 'Mode',
+          type: 'select',
+          category: 'mode',
+          currentValue: 'acceptEdits',
+          options: [
+            { value: 'default', name: 'Default' },
+            { value: 'acceptEdits', name: 'Accept Edits' },
+          ],
+        },
+      ]);
+      return Promise.resolve(handle.configOptions);
+    });
 
     await service.setSessionConfigOption('session-1', 'mode', 'acceptEdits');
 
@@ -720,7 +622,11 @@ describe('SessionConfigService', () => {
         configOptions: [modeConfig],
       })
     );
-    runtimeManager.setConfigOption.mockResolvedValue([{ ...modeConfig, currentValue: 'PLAN' }]);
+    const handle = unsafeCoerce<AcpProcessHandle>(runtimeManager.getClient());
+    runtimeManager.setConfigOption.mockImplementation(() => {
+      handle.configOptions = unsafeCoerce([{ ...modeConfig, currentValue: 'PLAN' }]);
+      return Promise.resolve(handle.configOptions);
+    });
 
     await service.setSessionCollaborationMode('session-1', 'plan');
 
@@ -790,51 +696,6 @@ describe('SessionConfigService', () => {
         source: 'settings',
       })
     );
-  });
-
-  it('applies configured reasoning effort to a new ACP handle without immediate emit when requested', async () => {
-    vi.mocked(userSettingsService.get).mockResolvedValue(
-      unsafeCoerce({
-        defaultCodexReasoningEffort: 'high',
-      })
-    );
-    const handle = unsafeCoerce<AcpProcessHandle>({
-      provider: 'CODEX',
-      providerSessionId: 'provider-codex-1',
-      configOptions: [
-        {
-          id: 'reasoning_effort',
-          name: 'Reasoning Effort',
-          type: 'select',
-          category: 'thought_level',
-          currentValue: 'medium',
-          options: [
-            { value: 'medium', name: 'Medium' },
-            { value: 'high', name: 'High' },
-          ],
-        },
-      ],
-    });
-    runtimeManager.setConfigOption.mockResolvedValue([
-      {
-        ...handle.configOptions[0],
-        currentValue: 'high',
-      },
-    ]);
-
-    await service.applyConfiguredReasoningEffort('session-1', handle, {
-      persistSnapshot: false,
-      emitUpdates: false,
-    });
-
-    expect(runtimeManager.setConfigOption).toHaveBeenCalledWith(
-      'session-1',
-      'reasoning_effort',
-      'high'
-    );
-    expect(handle.configOptions[0]?.currentValue).toBe('high');
-    expect(repository.updateSession).not.toHaveBeenCalled();
-    expect(sessionDomain.emitDelta).not.toHaveBeenCalled();
   });
 
   it('updates cached config snapshot when setting config on inactive session', async () => {
@@ -962,141 +823,6 @@ describe('SessionConfigService', () => {
       Object.hasOwn(update as object, 'providerMetadata')
     );
     expect(metadataUpdates).toHaveLength(2);
-  });
-
-  it.each(['default', 'auto-iteration'])(
-    'applies configured permissions for %s',
-    async (workflow) => {
-      vi.mocked(userSettingsService.get).mockResolvedValue(
-        unsafeCoerce({
-          autoIterationPermissions: workflow === 'default' ? 'STRICT' : 'RELAXED',
-          defaultWorkspacePermissions: workflow === 'default' ? 'RELAXED' : 'STRICT',
-        })
-      );
-
-      const handle = unsafeCoerce<AcpProcessHandle>({
-        provider: 'CODEX',
-        providerSessionId: 'provider-codex-1',
-        configOptions: [
-          {
-            id: 'mode',
-            name: 'Access',
-            type: 'select',
-            category: 'mode',
-            currentValue: 'workspace-write',
-            options: [
-              {
-                value: 'workspace-write',
-                name: 'On Request',
-              },
-              {
-                value: 'agent',
-                name: 'On Failure',
-              },
-            ],
-          },
-        ],
-      });
-
-      runtimeManager.setConfigOption.mockResolvedValue([
-        {
-          id: 'mode',
-          name: 'Access',
-          type: 'select',
-          category: 'mode',
-          currentValue: 'agent',
-          options: [
-            {
-              value: 'workspace-write',
-              name: 'On Request',
-            },
-            {
-              value: 'agent',
-              name: 'On Failure',
-            },
-          ],
-        },
-      ]);
-
-      await service.applyConfiguredPermissionPreset(
-        'session-1',
-        unsafeCoerce({
-          id: 'session-1',
-          workflow,
-        }),
-        handle
-      );
-
-      expect(runtimeManager.setConfigOption).toHaveBeenCalledWith('session-1', 'mode', 'agent');
-    }
-  );
-
-  it('applies configured permission preset for CLAUDE sessions that expose permission config', async () => {
-    vi.mocked(userSettingsService.get).mockResolvedValue(
-      unsafeCoerce({
-        autoIterationPermissions: 'YOLO',
-        defaultWorkspacePermissions: 'YOLO',
-      })
-    );
-
-    const handle = unsafeCoerce<AcpProcessHandle>({
-      provider: 'CLAUDE',
-      providerSessionId: 'provider-claude-1',
-      configOptions: [
-        {
-          id: 'mode',
-          name: 'Access',
-          type: 'select',
-          category: 'mode',
-          currentValue: 'default',
-          options: [
-            {
-              value: 'default',
-              name: 'On Request',
-            },
-            {
-              value: 'bypassPermissions',
-              name: 'YOLO',
-            },
-          ],
-        },
-      ],
-    });
-
-    runtimeManager.setConfigOption.mockResolvedValue([
-      {
-        id: 'mode',
-        name: 'Access',
-        type: 'select',
-        category: 'mode',
-        currentValue: 'bypassPermissions',
-        options: [
-          {
-            value: 'default',
-            name: 'On Request',
-          },
-          {
-            value: 'bypassPermissions',
-            name: 'YOLO',
-          },
-        ],
-      },
-    ]);
-
-    await service.applyConfiguredPermissionPreset(
-      'session-1',
-      unsafeCoerce({
-        id: 'session-1',
-        workflow: 'default',
-      }),
-      handle
-    );
-
-    expect(runtimeManager.setConfigOption).toHaveBeenCalledWith(
-      'session-1',
-      'mode',
-      'bypassPermissions'
-    );
   });
 
   it('no-ops gracefully for CLAUDE sessions without permission config option', async () => {

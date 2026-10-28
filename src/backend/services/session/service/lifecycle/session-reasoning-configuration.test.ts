@@ -1,6 +1,7 @@
 import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { expect, it, vi } from 'vitest';
 import { createTestProcessHandle } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
+import { SessionConfigCommitAuthority } from './session-config-commit-authority';
 import { applyReasoningEffortTarget } from './session-reasoning-configuration';
 it('re-persists a repeated confirmed effort after the earlier best-effort snapshot write failed', async () => {
   const handle = createTestProcessHandle({ provider: 'CODEX' });
@@ -17,8 +18,16 @@ it('re-persists a repeated confirmed effort after the earlier best-effort snapsh
     option.type === 'select' ? { ...option, currentValue: 'medium' } : option
   );
   let saved: SessionConfigOption[] = handle.configOptions;
+  const authority = new SessionConfigCommitAuthority();
   const deps = {
-    runtimeManager: { setConfigOption: vi.fn().mockResolvedValue(confirmed) },
+    runtimeManager: {
+      setConfigOption: vi.fn(() => {
+        handle.configOptions = confirmed;
+        return Promise.resolve(confirmed);
+      }),
+    },
+    acceptConfiguration: (assertCurrent?: () => void) =>
+      authority.accept('session', assertCurrent ?? (() => undefined)),
     persistSnapshot: vi
       .fn((_id: string, params: { configOptions: SessionConfigOption[] }) => {
         saved = params.configOptions;

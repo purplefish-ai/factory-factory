@@ -18,6 +18,21 @@ function confirmsModelSelection(provider: string, expected: string, observed: un
   );
 }
 
+/** Match the provider's existing alias/canonical confirmation rules. */
+export function confirmsAcpModelSelection(
+  provider: string,
+  requested: string,
+  resolved: string,
+  observed: unknown
+): boolean {
+  return (
+    observed === requested ||
+    (requested.startsWith('claude-')
+      ? observed === resolved
+      : confirmsModelSelection(provider, resolved, observed))
+  );
+}
+
 /** Resolve aliases only when the provider advertises an unambiguous model identity. */
 export function resolveAcpModelSelection(
   provider: string,
@@ -95,12 +110,7 @@ export async function applyAcpStartupModel(params: {
   });
   const confirmed = requireSessionConfigOptions(params.provider, 'setSessionConfigOption', result);
   const observed = confirmed.find((option) => option.id === target.configId)?.currentValue;
-  if (
-    observed !== params.model &&
-    !(params.model.startsWith('claude-')
-      ? observed === target.value
-      : confirmsModelSelection(params.provider, target.value, observed))
-  ) {
+  if (!confirmsAcpModelSelection(params.provider, params.model, target.value, observed)) {
     throw new Error(`Configured model "${params.model}" was not applied by ${params.provider}`);
   }
   return confirmed;

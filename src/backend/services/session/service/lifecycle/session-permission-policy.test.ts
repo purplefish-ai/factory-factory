@@ -49,12 +49,13 @@ describe('provider native access policy', () => {
       ],
     };
     const runtime = {
-      setSessionMode: vi.fn(async (_id: string, value: string) =>
-        handle.configOptions.map((option: SessionConfigOption) =>
-          option.id === 'mode' && option.type === 'select'
-            ? { ...option, currentValue: value }
-            : option
-        )
+      setSessionMode: vi.fn(
+        async (_id: string, value: string) =>
+          (handle.configOptions = handle.configOptions.map((option: SessionConfigOption) =>
+            option.id === 'mode' && option.type === 'select'
+              ? { ...option, currentValue: value }
+              : option
+          ))
       ),
       setConfigOption: vi.fn(),
     };
@@ -78,12 +79,13 @@ describe('provider native access policy', () => {
       };
       const runtime = {
         setSessionMode: vi.fn(),
-        setConfigOption: vi.fn(async (_id: string, configId: string, value: string) =>
-          handle.configOptions.map((option: SessionConfigOption) =>
-            option.id === configId && option.type === 'select'
-              ? { ...option, currentValue: value }
-              : option
-          )
+        setConfigOption: vi.fn(
+          async (_id: string, configId: string, value: string) =>
+            (handle.configOptions = handle.configOptions.map((option: SessionConfigOption) =>
+              option.id === configId && option.type === 'select'
+                ? { ...option, currentValue: value }
+                : option
+            ))
         ),
       };
       await expect(

@@ -75,12 +75,20 @@ correlation prevents an older rejection from discarding a newer choice. Each
 conversation restores its own draft and attachments, including switches before
 draft autosave completes. Model/configuration writes serialize per session
 through persistence and state publication, including failure corrections;
-different sessions remain independent. Later genuine server changes remain
-authoritative after pending edits settle. Model-only changes preserve a
-supported explicit reasoning effort; an unsupported effort normalizes to the new
-model's confirmed default. Each session load has a 10-second UI loading safety
-timer, including creation from an empty Quick Chat. This UI timer does not
-release backend configuration readiness.
+different sessions remain independent. Accepted native observations, successful
+RPC results, and startup snapshots share a configuration authority fence through
+metadata reads, CAS retries, and publication. Failed requests leave the last
+accepted state valid; superseded background writes stop without publishing a
+stale result. Public snapshot persistence exhaustion propagates an error and
+configuration correction; native asynchronous observations own their background
+rejection and logging. The
+[startup finalizer](#permission-and-configuration-readiness) owns startup
+durability, permission checks, readiness, and failure cleanup. Later genuine
+server changes remain authoritative after pending edits settle. Model-only
+changes preserve a supported explicit reasoning effort; an unsupported effort
+normalizes to the new model's confirmed default. Each session load has a
+10-second UI loading safety timer, including creation from an empty Quick Chat.
+This UI timer does not release backend configuration readiness.
 
 ### Launch thinking and Plan
 
@@ -107,13 +115,20 @@ default), explicit null (native default), and a supported value (that exact
 level). The UI submits its displayed resolved choice. Validated
 `providerMetadata.launchSettings` stores initial intent with `applied: false`;
 only the startup owner's final confirmed snapshot marks it applied. Intermediate
-configuration snapshots cannot consume it. Identity-matched confirmed snapshots
-own later resumes, including edits made after launch and changes to global
-defaults. A saved level no longer supported after a model change uses the new
-model's native default; unsupported explicit launch levels fail before prompts.
-Stopped-session edits require a durable snapshot write and report persistence
-errors. Applied launch intent with a missing or invalid snapshot stops resume
-instead of replacing confirmed choices with global defaults.
+configuration snapshots cannot consume it. Startup refreshes durable intent
+after context and runtime handoff. A conditional repository acknowledgment
+compares the model/thinking/Plan actually applied with current desired fields at
+its CAS boundary. Changed intent is reread and reapplied. Observed snapshots
+cannot rewrite desired launch fields; only explicit stopped edits own those
+patches. Per-start thinking/Plan overrides retain precedence and may leave
+conflicting stored choices unconsumed. Explicit model selection keeps its
+confirmed model column persistence semantics. Identity-matched confirmed
+snapshots own later resumes, including edits made after launch and changes to
+global defaults. A saved level no longer supported after a model change uses the
+new model's native default; unsupported explicit launch levels fail before
+prompts. Stopped-session edits require a durable snapshot write and report
+persistence errors. Applied launch intent with a missing or invalid snapshot
+stops resume instead of replacing confirmed choices with global defaults.
 
 Plan-on selects Claude's native plan access mode or Codex's plan collaboration
 mode. Plan-off retains the configured permission preset rather than applying a
@@ -134,7 +149,30 @@ or dispatching work. Prompts and user configuration changes wait for that
 restoration on the current runtime handle. Invalid, mismatched, or unavailable
 saved modes stop startup; legacy sessions without a snapshot retain the
 configured-default fallback. Reviewer workflows always reapply their read-only
-restrictions.
+restrictions. An explicitly requested Claude plan preset authorizes its
+confirmed native plan access; Codex planning changes its separate collaboration
+control and retains the required access mode. Optional preset failures warn and
+continue only while the current access still satisfies the authorized target.
+
+The config-owned startup finalizer persists the current accepted snapshot
+outside the public readiness queue. Snapshot storage owns metadata merging,
+guarded CAS writes, and retry; it does not decide startup readiness. If native
+configuration supersedes the final startup write, startup recaptures and
+persists the current handle before opening readiness. The final durable intent
+read precedes the last async request/lifecycle check; authority and required
+permissions are then checked synchronously with actual readiness completion. A
+changed required access mode fails startup, including observations during
+permission RPC or persistence continuations.
+
+A mandatory current configuration failure permanently rejects the candidate's
+readiness and attempts to stop only that runtime incarnation, including a shared
+candidate. Runtime identity and lifecycle generation fences preserve
+replacements and newer stops. Caller-specific cancellation retains shared
+cleanup protections: a healthy shared candidate's completion owner continues
+under independent runtime/lifecycle guards, opens readiness for surviving users,
+then rejects the cancelled request before its prompt. Native snapshot failures
+after readiness remain best effort; their asynchronous owner catches and logs
+rejection.
 
 Configuration readiness intentionally has no independent timeout. If provider
 setup stalls, prompts and settings remain blocked until setup fails, the child

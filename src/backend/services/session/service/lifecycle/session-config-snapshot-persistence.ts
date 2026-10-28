@@ -4,7 +4,8 @@ import type { AgentSessionRecord } from '@/backend/services/session/resources/ag
 import type { SessionLaunchSettings } from '@/shared/session-launch';
 import type { StoredAcpConfigSnapshot } from './acp-config-snapshot';
 import type { SessionProvider } from './session-config-option-helpers';
-import { readSessionLaunchSettings } from './session-launch-settings';
+import type { SessionStartupIntent } from './session-startup-intent';
+import { SessionStartupIntentChangedError } from './session-startup-intent';
 import type { SessionRepository } from './session.repository';
 const logger = createLogger('session');
 export type PersistAcpConfigSnapshotParams = {
@@ -15,25 +16,16 @@ export type PersistAcpConfigSnapshotParams = {
   pendingLaunchSettingsPatch?: SessionLaunchSettings;
   assertCurrent?: () => void;
   requirePersistence?: boolean;
+  startupIntent?: SessionStartupIntent;
 };
 
-/** Serialize every snapshot writer, including native events and the final startup commit. */
+/** Persist an accepted snapshot with its original guard through metadata reads and CAS retries. */
 export class SessionConfigSnapshotPersistence {
-  private readonly writes = new Map<string, Promise<void>>();
   constructor(private readonly repository: SessionRepository) {}
 
   async persist(sessionId: string, params: PersistAcpConfigSnapshotParams): Promise<void> {
-    const captured = { ...params, configOptions: cloneOptions(params.configOptions) };
-    const previous = this.writes.get(sessionId) ?? Promise.resolve();
-    const writing = previous.catch(() => undefined).then(() => this.write(sessionId, captured));
-    this.writes.set(sessionId, writing);
-    try {
-      await writing;
-    } finally {
-      if (this.writes.get(sessionId) === writing) {
-        this.writes.delete(sessionId);
-      }
-    }
+    params.assertCurrent?.();
+    await this.write(sessionId, { ...params, configOptions: cloneOptions(params.configOptions) });
   }
 
   private async write(sessionId: string, params: PersistAcpConfigSnapshotParams): Promise<void> {
@@ -41,20 +33,17 @@ export class SessionConfigSnapshotPersistence {
     if (!snapshot) {
       return;
     }
-    const consumedLaunch = readSessionLaunchSettings(params.existingMetadata);
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        await this.writeAttempt(sessionId, params, snapshot, consumedLaunch, attempt);
+        await this.writeAttempt(sessionId, params, snapshot, attempt);
         return;
       } catch (error) {
         params.assertCurrent?.();
-        logger.warn(
-          attempt === 0
-            ? 'Failed persisting ACP config snapshot to session metadata; retrying once'
-            : 'Retry failed persisting ACP config snapshot to session metadata',
-          { sessionId, error: error instanceof Error ? error.message : String(error) }
-        );
-        if (attempt === 1 && params.requirePersistence) {
+        if (error instanceof SessionStartupIntentChangedError) {
+          throw error;
+        }
+        logPersistenceFailure(sessionId, attempt, error);
+        if (attempt === 1) {
           throw error;
         }
       }
@@ -65,7 +54,6 @@ export class SessionConfigSnapshotPersistence {
     sessionId: string,
     params: PersistAcpConfigSnapshotParams,
     snapshot: StoredAcpConfigSnapshot,
-    consumedLaunch: ReturnType<typeof readSessionLaunchSettings>,
     attempt: number
   ): Promise<void> {
     const source =
@@ -73,22 +61,26 @@ export class SessionConfigSnapshotPersistence {
         ? params.existingMetadata
         : (await this.repository.getSessionById(sessionId))?.providerMetadata;
     const metadata = metadataRecord(source);
-    // A retry refreshes other metadata but retains the final commit's consumed intent.
-    if (consumedLaunch?.applied) {
-      metadata.launchSettings = consumedLaunch;
-    } else if (params.pendingLaunchSettingsPatch) {
-      const latestLaunch = readSessionLaunchSettings(source);
-      if (latestLaunch && !latestLaunch.applied) {
-        metadata.launchSettings = { ...latestLaunch, ...params.pendingLaunchSettingsPatch };
-      }
-    }
     const update = snapshotUpdate(metadata, snapshot, snapshot.observedModelId);
     params.assertCurrent?.();
-    await this.repository.updateSession(
-      sessionId,
-      update,
-      ...(params.assertCurrent ? ([params.assertCurrent] as const) : [])
-    );
+    const intent = params.startupIntent;
+    if (intent) {
+      await this.repository.acknowledgeStartupConfiguration(
+        sessionId,
+        update,
+        intent,
+        params.assertCurrent
+      );
+    } else if (params.pendingLaunchSettingsPatch) {
+      await this.repository.updatePendingLaunchConfiguration(
+        sessionId,
+        update,
+        params.pendingLaunchSettingsPatch,
+        params.assertCurrent
+      );
+    } else {
+      await this.repository.updateSession(sessionId, update, params.assertCurrent);
+    }
   }
 }
 function buildSnapshot(
@@ -138,4 +130,16 @@ function metadataRecord(metadata: unknown): Record<string, unknown> {
   return typeof metadata === 'object' && metadata !== null && !Array.isArray(metadata)
     ? { ...(metadata as Record<string, unknown>) }
     : {};
+}
+
+function logPersistenceFailure(sessionId: string, attempt: number, error: unknown): void {
+  logger.warn(
+    attempt === 0
+      ? 'Failed persisting ACP config snapshot to session metadata; retrying once'
+      : 'Retry failed persisting ACP config snapshot to session metadata',
+    {
+      sessionId,
+      error: error instanceof Error ? error.message : String(error),
+    }
+  );
 }

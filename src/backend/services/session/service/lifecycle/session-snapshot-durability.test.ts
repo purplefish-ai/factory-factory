@@ -7,6 +7,7 @@ import {
   readSessionLaunchSettings,
 } from './session-launch-settings';
 import { createLifecycleTestSession, createDeferred } from './session-lifecycle.test-helpers';
+import { captureSessionStartupIntent } from './session-startup-intent';
 import { SessionConfigService } from './session.config.service';
 import { SessionRepository } from './session.repository';
 function options(effort: string): SessionConfigOption[] {
@@ -75,22 +76,38 @@ function fixture() {
     }),
   };
   const repository = new SessionRepository(unsafeCoerce(accessor), unsafeCoerce({}));
+  const handle = createTestProcessHandle({ provider: 'CODEX', providerSessionId: 'thread' });
+  const runtime = {
+    getClient: vi.fn<() => typeof handle | undefined>(),
+    getPendingClient: vi.fn(),
+    isStopInProgress: () => false,
+  };
   const service = new SessionConfigService({
     repository,
-    runtimeManager: unsafeCoerce({ getClient: vi.fn(), getPendingClient: vi.fn() }),
+    runtimeManager: unsafeCoerce(runtime),
     codexModelCatalogService: { getModels: vi.fn() },
     sessionDomainService: unsafeCoerce({ emitDelta: vi.fn() }),
   });
-  const final = () =>
-    service.persistAcpConfigSnapshot('session-1', {
-      provider: 'CODEX',
-      providerSessionId: 'thread',
-      configOptions: options('medium'),
+  const final = () => {
+    runtime.getClient.mockReturnValue(handle);
+    handle.configOptions = options('medium');
+    return service.completeStartupConfiguration('session-1', {
+      handle,
+      intent: captureSessionStartupIntent(row),
       existingMetadata: markSessionLaunchSettingsApplied(row.providerMetadata),
-      requirePersistence: true,
+      assertCurrent: () => {
+        if (runtime.getClient() !== handle) {
+          throw new Error('Runtime replaced');
+        }
+      },
+      beforeComplete: () => Promise.resolve(),
+      complete: () => handle.completeConfiguration(),
     });
+  };
   return {
     accessor,
+    handle,
+    install: () => runtime.getClient.mockReturnValue(handle),
     repository,
     service,
     final,
@@ -190,8 +207,9 @@ describe('durable final launch snapshot with production repository CAS', () => {
   it('keeps native update failures best-effort and releases the following final commit', async () => {
     const f = fixture();
     f.failWrites(2);
-    const handle = createTestProcessHandle({ provider: 'CODEX', providerSessionId: 'thread' });
-    f.service.applyConfigOptionsUpdateDelta('session-1', handle, options('low'));
+    f.install();
+    f.service.applyConfigOptionsUpdateDelta('session-1', f.handle, options('low'));
+    await vi.waitFor(() => expect(f.accessor.updateIfProviderIdentity).toHaveBeenCalledTimes(2));
     await f.final();
     expect(f.accessor.updateIfProviderIdentity).toHaveBeenCalledTimes(3);
     expect(readSessionLaunchSettings(f.row.providerMetadata)?.applied).toBe(true);
@@ -203,7 +221,7 @@ describe('durable final launch snapshot with production repository CAS', () => {
       },
     });
   });
-  it('orders an earlier native-event write before the final commit instead of rewinding it later', async () => {
+  it('obsoletes an earlier blocked native observation while the current final snapshot commits', async () => {
     const f = fixture();
     const reading = createDeferred<typeof f.row>();
     f.accessor.findById.mockReturnValueOnce(reading.promise);
@@ -221,7 +239,7 @@ describe('durable final launch snapshot with production repository CAS', () => {
     const finishedBeforeOlderWrite = finished;
     reading.resolve(structuredClone(f.row));
     await Promise.all([native, final]);
-    expect(finishedBeforeOlderWrite).toBe(false);
+    expect(finishedBeforeOlderWrite).toBe(true);
     expect(readSessionLaunchSettings(f.row.providerMetadata)?.applied).toBe(true);
     expect(f.row.providerMetadata).toMatchObject({
       acpConfigSnapshot: {
@@ -231,14 +249,14 @@ describe('durable final launch snapshot with production repository CAS', () => {
       },
     });
   });
-  it('orders actual native updates paused inside the repository before final startup persistence', async () => {
+  it('lets current final startup persistence commit while obsolete native repository I/O remains blocked', async () => {
     const f = fixture();
     const reading = createDeferred<typeof f.row>();
     f.accessor.findById
       .mockResolvedValueOnce(structuredClone(f.row))
       .mockReturnValueOnce(reading.promise);
-    const handle = createTestProcessHandle({ provider: 'CODEX', providerSessionId: 'thread' });
-    f.service.applyConfigOptionsUpdateDelta('session-1', handle, options('low'));
+    f.install();
+    f.service.applyConfigOptionsUpdateDelta('session-1', f.handle, options('low'));
     await vi.waitFor(() => expect(f.accessor.findById).toHaveBeenCalledTimes(2));
     let finished = false;
     const final = f.final().then(() => {
@@ -248,7 +266,7 @@ describe('durable final launch snapshot with production repository CAS', () => {
     const finishedBeforeOlderWrite = finished;
     reading.resolve(structuredClone(f.row));
     await final;
-    expect(finishedBeforeOlderWrite).toBe(false);
+    expect(finishedBeforeOlderWrite).toBe(true);
     expect(readSessionLaunchSettings(f.row.providerMetadata)?.applied).toBe(true);
     expect(f.row.providerMetadata).toMatchObject({
       acpConfigSnapshot: {
