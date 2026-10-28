@@ -632,3 +632,156 @@ it.each(['ARCHIVED', 'STOPPED'] as const)(
     }
   }
 );
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}
+
+async function settleCompletions() {
+  for (let i = 0; i < 12; i++) {
+    await Promise.resolve();
+  }
+}
+
+describe.each(['removal', 'restart'] as const)('Linear completion after %s', (cleanup) => {
+  function clearTracking(collector: ReturnType<typeof createHarness>['collector']) {
+    if (cleanup === 'removal') {
+      collector.removeWorkspace('ws-1');
+    } else {
+      collector.stop();
+      collector.start();
+    }
+  }
+
+  it('clears a successful completion so the same PR can be attempted again', async () => {
+    const { collector, emitMerge, markIssueCompleted } = createHarness();
+    try {
+      emitMerge();
+      await settleCompletions();
+      expect(markIssueCompleted).toHaveBeenCalledTimes(1);
+      clearTracking(collector);
+      emitMerge();
+      await settleCompletions();
+      expect(markIssueCompleted).toHaveBeenCalledTimes(2);
+    } finally {
+      collector.stop();
+    }
+  });
+
+  it.each(['false', 'throw'] as const)(
+    'fences a late %s finalization from a new running attempt',
+    async (result) => {
+      const { collector, emitMerge, markIssueCompleted } = createHarness();
+      const first = deferred<boolean>();
+      const second = deferred<boolean>();
+      markIssueCompleted.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+      try {
+        emitMerge();
+        await settleCompletions();
+        expect(markIssueCompleted).toHaveBeenCalledTimes(1);
+        clearTracking(collector);
+        emitMerge();
+        await settleCompletions();
+        expect(markIssueCompleted).toHaveBeenCalledTimes(2);
+        if (result === 'false') {
+          first.resolve(false);
+        } else {
+          first.reject(new Error('late failure'));
+        }
+        await settleCompletions();
+        emitMerge();
+        await settleCompletions();
+        expect(markIssueCompleted).toHaveBeenCalledTimes(2);
+        second.resolve(true);
+        await settleCompletions();
+        emitMerge();
+        await settleCompletions();
+        expect(markIssueCompleted).toHaveBeenCalledTimes(2);
+      } finally {
+        collector.stop();
+      }
+    }
+  );
+
+  it('does not restore cleared tracking when admitted work succeeds later', async () => {
+    const { collector, emitMerge, markIssueCompleted } = createHarness();
+    const first = deferred<boolean>();
+    markIssueCompleted.mockReturnValueOnce(first.promise);
+    try {
+      emitMerge();
+      await settleCompletions();
+      expect(markIssueCompleted).toHaveBeenCalledTimes(1);
+      clearTracking(collector);
+      first.resolve(true);
+      await settleCompletions();
+      emitMerge();
+      await settleCompletions();
+      expect(markIssueCompleted).toHaveBeenCalledTimes(2);
+    } finally {
+      collector.stop();
+    }
+  });
+
+  it('allows an admitted context lookup to continue after tracking cleanup', async () => {
+    const { collector, emitMerge, getWorkspaceLinearContext, markIssueCompleted } = createHarness();
+    const context = deferred<{ apiKey: string; linearIssueId: string }>();
+    getWorkspaceLinearContext.mockReturnValueOnce(context.promise);
+    try {
+      emitMerge();
+      await settleCompletions();
+      expect(getWorkspaceLinearContext).toHaveBeenCalledTimes(1);
+      clearTracking(collector);
+      context.resolve({ apiKey: 'test-key', linearIssueId: 'issue-1' });
+      await settleCompletions();
+      expect(markIssueCompleted).toHaveBeenCalledExactlyOnceWith('test-key', 'issue-1');
+      emitMerge();
+      await settleCompletions();
+      expect(markIssueCompleted).toHaveBeenCalledTimes(2);
+    } finally {
+      collector.stop();
+    }
+  });
+
+  it('does not retry a cleared pending read with queued CLOSED intent', async () => {
+    const {
+      collector,
+      emitMerge,
+      findRatchetProjection,
+      prSnapshotService,
+      markIssueCompleted,
+      getWorkspaceLinearContext,
+    } = createHarness();
+    const projection = deferred<unknown>();
+    // The first read belongs to the monitoring worker, the second to legacy completion.
+    findRatchetProjection.mockResolvedValueOnce(null).mockReturnValueOnce(projection.promise);
+    try {
+      emitMerge();
+      prSnapshotService.emit(PR_SNAPSHOT_UPDATED, {
+        workspaceId: 'ws-1',
+        prNumber: 7,
+        prState: 'CLOSED',
+        prCiStatus: 'SUCCESS',
+        prReviewState: null,
+      });
+      await settleCompletions();
+      clearTracking(collector);
+      const readsBeforeSettlement = findRatchetProjection.mock.calls.length;
+      projection.resolve({ prState: 'OPEN' });
+      await settleCompletions();
+      expect(findRatchetProjection).toHaveBeenCalledTimes(readsBeforeSettlement);
+      expect(getWorkspaceLinearContext).not.toHaveBeenCalled();
+      expect(markIssueCompleted).not.toHaveBeenCalled();
+      emitMerge();
+      await settleCompletions();
+      expect(markIssueCompleted).toHaveBeenCalledTimes(1);
+    } finally {
+      collector.stop();
+    }
+  });
+});
