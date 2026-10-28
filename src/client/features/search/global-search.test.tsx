@@ -13,14 +13,23 @@ vi.mock('@/client/features/kanban', () => ({
   IssueLaunchSheet: ({
     issue,
     projectId,
+    open,
+    onOpenChange,
   }: {
     issue: { displayId: string; body: string };
     projectId: string;
-  }) => (
-    <div role="dialog">
-      Launch {projectId} {issue.displayId} {issue.body}
-    </div>
-  ),
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+  }) =>
+    open && (
+      <div role="dialog">
+        Launch {projectId} {issue.displayId} {issue.body}
+        <textarea aria-label="Launch prompt" defaultValue={issue.body} />
+        <button type="button" onClick={() => onOpenChange(false)}>
+          Close launch
+        </button>
+      </div>
+    ),
 }));
 let root: Root;
 function LocationProbe() {
@@ -147,6 +156,57 @@ describe('GlobalSearch', () => {
       'Launch p1 #42 Full issue details'
     );
     expect(document.querySelector('output')?.textContent).toBe('/projects/factory/workspaces/ws');
+    const prompt = document.querySelector('textarea')!;
+    await act(() => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(
+        prompt,
+        'Edited launch prompt'
+      );
+      prompt.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await key('k', { ctrlKey: true });
+    expect(document.querySelector('textarea')).toBe(prompt);
+    expect(prompt.value).toBe('Edited launch prompt');
+    const close = Array.from(document.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Close launch'
+    );
+    await act(() => close?.click());
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it('searches GitHub text only on request and keeps exact numbers automatic', async () => {
+    vi.useFakeTimers();
+    await render();
+    await key('k', { ctrlKey: true });
+    const input = document.querySelector('input')!;
+    const type = async (value: string) => {
+      await act(() => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+          input,
+          value
+        );
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      await act(() => vi.advanceTimersByTime(150));
+    };
+    await type('search');
+    expect(issueQuery.mock.lastCall?.[1].enabled).toBe(false);
+    const action = Array.from(document.querySelectorAll('[role="option"]')).find((el) =>
+      el.textContent?.includes('Search GitHub issues')
+    );
+    expect(action).toBeDefined();
+    await act(() => action?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(issueQuery.mock.lastCall?.[0].query).toBe('search');
+    expect(issueQuery.mock.lastCall?.[1].enabled).toBe(true);
+    await type('search polish');
+    expect(issueQuery.mock.lastCall?.[1].enabled).toBe(false);
+    await type('search');
+    expect(issueQuery.mock.lastCall?.[1].enabled).toBe(false);
+    for (const number of ['42', '#42']) {
+      await type(number);
+      expect(issueQuery.mock.lastCall?.[0].query).toBe(number);
+      expect(issueQuery.mock.lastCall?.[1].enabled).toBe(true);
+    }
   });
 
   it('hides cached results while a background refresh is fetching', async () => {

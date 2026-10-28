@@ -69,6 +69,8 @@ describe('GitHub issue search', () => {
 
   it('rejects malformed GitHub data', async () => {
     const exec = vi.fn().mockResolvedValue({ stdout: '[{"number":"42"}]', stderr: '' });
-    await expect(searchIssues(exec, 'org', 'repo', 'search', 20)).rejects.toThrow();
+    await expect(searchIssues(exec, 'org', 'repo', 'search', 20)).rejects.toThrow(
+      'Invalid gh CLI response for searchIssues'
+    );
   });
 });

@@ -32,6 +32,7 @@ export function SearchDialog({
   onIncludeArchivedChange,
   results,
   githubIssues,
+  onSearchGitHub,
   loading,
   error,
   onRetry,
@@ -39,16 +40,20 @@ export function SearchDialog({
 }: SearchDialogProps) {
   const [selected, setSelected] = useState('');
   useEffect(() => {
-    if (!open) {
+    // Wait for local matches before automatically selecting a lower GitHub row.
+    if (!open || loading || error) {
       setSelected('');
       return;
     }
     const available = [
-      ...(!(loading || error) ? results : []),
+      ...results,
       ...(!githubIssues?.loading ? (githubIssues?.results ?? []) : []),
     ].map((result) => `${result.kind}:${result.id}`);
+    if (onSearchGitHub) {
+      available.push('search-github-issues');
+    }
     setSelected((current) => (available.includes(current) ? current : (available[0] ?? '')));
-  }, [results, githubIssues?.results, githubIssues?.loading, loading, error, open]);
+  }, [results, githubIssues?.results, githubIssues?.loading, loading, error, open, onSearchGitHub]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -88,6 +93,7 @@ export function SearchDialog({
               query={query}
               results={results}
               githubIssues={githubIssues}
+              onSearchGitHub={onSearchGitHub}
               loading={loading}
               error={error}
               onRetry={onRetry}

@@ -81,27 +81,27 @@ describe('SearchDialog', () => {
     expect(props.onSelect).toHaveBeenCalledWith(result);
   });
 
-  it('offers GitHub issue results as Start issue actions with keyboard selection', async () => {
-    const issue: SearchResult = {
-      kind: 'github_issue',
-      id: 'p1:42',
+  const issue: SearchResult = {
+    kind: 'github_issue',
+    id: 'p1:42',
+    title: 'Fix search',
+    subtitle: 'Factory · org/repo · Issue #42',
+    projectId: 'p1',
+    projectSlug: 'factory',
+    workspaceId: null,
+    sessionId: null,
+    archived: false,
+    githubIssue: {
+      number: 42,
       title: 'Fix search',
-      subtitle: 'Factory · org/repo · Issue #42',
-      projectId: 'p1',
-      projectSlug: 'factory',
-      workspaceId: null,
-      sessionId: null,
-      archived: false,
-      githubIssue: {
-        number: 42,
-        title: 'Fix search',
-        body: 'Details',
-        url: 'https://github.com/org/repo/issues/42',
-        state: 'OPEN',
-        createdAt: '2026-01-01T00:00:00Z',
-        author: { login: 'martin' },
-      },
-    };
+      body: 'Details',
+      url: 'https://github.com/org/repo/issues/42',
+      state: 'OPEN',
+      createdAt: '2026-01-01T00:00:00Z',
+      author: { login: 'martin' },
+    },
+  };
+  it('offers GitHub issue results as Start issue actions with keyboard selection', async () => {
     const props = await render({
       results: [],
       query: '#42',
@@ -116,6 +116,26 @@ describe('SearchDialog', () => {
     );
     expect(props.onSelect).toHaveBeenCalledWith(issue);
   });
+
+  it.each(['loading', 'error'] as const)(
+    'selects the top local result after %s recovers',
+    async (state) => {
+      const props = await render({
+        results: [],
+        [state]: true,
+        githubIssues: { results: [issue], loading: false, error: false, onRetry: vi.fn() },
+      });
+      await act(() =>
+        root.render(<SearchDialog {...props} results={[result]} loading={false} error={false} />)
+      );
+      await act(() =>
+        document
+          .querySelector('input')
+          ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+      );
+      expect(props.onSelect).toHaveBeenCalledWith(result);
+    }
+  );
 
   it.each(['button[aria-pressed]', 'button[aria-label="Close search"]'])(
     'keeps Enter on the focused control %s',

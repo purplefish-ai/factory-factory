@@ -26,22 +26,42 @@ every candidate into the application. The query still scans current metadata;
 there is no persistent search index or background indexing job.
 
 Workspace metadata includes descriptions, branches, issue identifiers, and
-attached PR titles and numbers. Issue and PR URLs are excluded to avoid matching
-common URL boilerplate. The service adds a short metadata snippet when a match
-is absent from the visible title and subtitle. Truncation removes surrogate
-halves at the snippet edges to keep emoji text well formed.
+attached PR titles and numbers. Pasted HTTP(S) queries also match saved PR,
+GitHub issue, and Linear issue URLs. Ordinary text queries exclude URLs to avoid
+matching common URL boilerplate. Detached PRs contribute neither titles,
+numbers, nor URLs. The service adds a short metadata snippet when a match is
+absent from the visible title and subtitle. Truncation removes surrogate halves
+at the snippet edges to keep emoji text well formed.
 
 ## Client behavior
 
-The header button and Cmd/Ctrl+K open a debounced search dialog. Loading states
-hide stale results, including during cache refresh. Archived results are opt-in
-and open a read-only preview; its content stays populated during dismissal.
-Active conversation results navigate using `?session=` and select the chat tab,
-including when a saved file tab would otherwise be restored.
+The header button and Cmd/Ctrl+K open a dialog with a 150 ms debounce for local
+metadata. Loading states hide stale results, including during cache refresh.
+Archived results are opt-in and open a read-only preview; its content stays
+populated during dismissal. Active conversation results navigate using
+`?session=` and select the chat tab, including when a saved file tab would
+otherwise be restored.
+
+A separate GitHub issues group searches active projects' linked repositories,
+including issues not assigned to the current user. Bare numbers and `#123`
+automatically look up an exact issue, including closed issues. Text queries
+require selecting **Search GitHub issues** before any external request; editing
+the text requires submitting it again. This avoids per-keystroke fan-out across
+repositories. Identical query results are cached in the client for 60 seconds.
+GitHub loading or partial failures leave local results selectable, and failures
+can be retried.
+
+Selecting **Start issue** opens the existing issue launch sheet with the full
+prompt and provider/mode options. Cmd/Ctrl+K leaves that sheet and edited
+options intact until it is dismissed. A local error boundary contains lazy-load
+failures and offers dismissal so the rest of the app and search remain usable.
 
 The dialog uses cmdk for result navigation. Its Enter handler consumes events,
 so header and footer buttons sit outside the command root. The retry button
 inside the results stops Enter propagation to preserve native activation.
+Automatic selection waits while local results load or fail, so returning local
+matches take priority over GitHub rows. Explicit keyboard choices remain stable
+when GitHub results arrive.
 
 Search regressions live beside the service and client feature; conversation
 navigation tests live beside the workspace routes. See the shared

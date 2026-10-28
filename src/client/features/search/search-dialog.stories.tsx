@@ -169,3 +169,15 @@ export const GitHubLoading: Story = {
 export const GitHubUnavailable: Story = {
   args: { query: 'search', githubIssues: { ...githubIssues, results: [], error: true } },
 };
+
+export const GitHubSearchAction: Story = {
+  args: { query: 'search', onSearchGitHub: fn() },
+  play: async ({ canvasElement, args }) => {
+    await userEvent.click(
+      within(canvasElement.ownerDocument.body).getByRole('option', {
+        name: /Search GitHub issues for/,
+      })
+    );
+    await expect(args.onSearchGitHub).toHaveBeenCalledOnce();
+  },
+};

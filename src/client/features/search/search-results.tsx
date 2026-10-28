@@ -25,6 +25,7 @@ export interface SearchGroupState {
 
 export interface SearchResultsProps extends SearchGroupState {
   githubIssues?: SearchGroupState;
+  onSearchGitHub?: () => void;
   query: string;
   onSelect: (result: SearchResult) => void;
 }
@@ -149,49 +150,62 @@ function LocalResults({ query, results, loading, error, onRetry, onSelect }: Sea
 }
 
 export function SearchResults(props: SearchResultsProps) {
-  const { githubIssues, ...local } = props;
+  const { githubIssues, onSearchGitHub, ...local } = props;
   const hasIssues =
-    githubIssues && (githubIssues.loading || githubIssues.error || githubIssues.results.length > 0);
+    Boolean(onSearchGitHub) ||
+    (githubIssues &&
+      (githubIssues.loading || githubIssues.error || githubIssues.results.length > 0));
   return (
     <>
       {(local.results.length > 0 || local.loading || local.error || !hasIssues) && (
         <LocalResults {...local} />
       )}
-      {hasIssues && githubIssues && (
+      {hasIssues && (
         <CommandGroup forceMount heading="GitHub issues" className="p-0">
-          {githubIssues.loading ? (
-            <div role="status" className="px-3 py-4 text-sm text-muted-foreground">
-              Searching GitHub issues…
-            </div>
-          ) : (
-            <>
-              {githubIssues.results.map((result) => (
-                <ResultRow
-                  key={`${result.kind}:${result.id}`}
-                  result={result}
-                  query={local.query}
-                  onSelect={local.onSelect}
-                />
-              ))}
-              {githubIssues.error && (
-                <div role="alert" className="px-3 py-3 text-sm text-muted-foreground">
-                  Couldn’t search GitHub issues in some projects.
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={githubIssues.onRetry}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
-                        event.stopPropagation();
-                      }
-                    }}
-                  >
-                    Retry GitHub search
-                  </Button>
-                </div>
-              )}
-            </>
+          {onSearchGitHub && (
+            <CommandItem
+              value="search-github-issues"
+              onSelect={onSearchGitHub}
+              className="min-h-12 cursor-pointer rounded-lg px-3"
+            >
+              <GithubLogoIcon className="size-4" />
+              <span className="truncate">Search GitHub issues for “{local.query.trim()}”</span>
+            </CommandItem>
           )}
+          {githubIssues &&
+            (githubIssues.loading ? (
+              <div role="status" className="px-3 py-4 text-sm text-muted-foreground">
+                Searching GitHub issues…
+              </div>
+            ) : (
+              <>
+                {githubIssues.results.map((result) => (
+                  <ResultRow
+                    key={`${result.kind}:${result.id}`}
+                    result={result}
+                    query={local.query}
+                    onSelect={local.onSelect}
+                  />
+                ))}
+                {githubIssues.error && (
+                  <div role="alert" className="px-3 py-3 text-sm text-muted-foreground">
+                    Couldn’t search GitHub issues.
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={githubIssues.onRetry}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.stopPropagation();
+                        }
+                      }}
+                    >
+                      Retry GitHub search
+                    </Button>
+                  </div>
+                )}
+              </>
+            ))}
         </CommandGroup>
       )}
     </>

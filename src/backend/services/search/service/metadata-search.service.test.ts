@@ -150,7 +150,9 @@ describe('metadata search', () => {
       where: { workspaceId: workspace.id },
       data: { detachedAt: new Date() },
     });
-    expect(await search.search({ query: '#789' })).toEqual([]);
+    for (const query of ['#789', 'https://github.com/org/repo/pull/789']) {
+      expect(await search.search({ query })).toEqual([]);
+    }
   });
 
   it('matches decomposed Unicode names and query terms', async () => {

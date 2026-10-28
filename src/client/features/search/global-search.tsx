@@ -1,6 +1,7 @@
 import { MagnifyingGlassIcon } from '@phosphor-icons/react/dist/csr/MagnifyingGlass';
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { ErrorBoundary } from '@/client/error-boundary';
 import { normalizeGitHubIssue } from '@/client/lib/issue-normalization';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -14,6 +15,10 @@ const IssueLaunchSheet = lazy(() =>
 );
 const emptyResults: SearchResult[] = [];
 
+function requestedIssueQuery(query: string, submittedQuery: string): string {
+  return /^#?\d+$/.test(query) || submittedQuery === query ? query : '';
+}
+
 export function GlobalSearch() {
   const navigate = useNavigate();
   const [selectedIssue, setSelectedIssue] = useState<Extract<
@@ -23,20 +28,27 @@ export function GlobalSearch() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [submittedIssueQuery, setSubmittedIssueQuery] = useState('');
   const [includeArchived, setIncludeArchived] = useState(false);
   const [archivePreview, setArchivePreview] = useState<SearchResult | null>(null);
   const [archiveOpen, setArchiveOpen] = useState(false);
-  const setSearchOpen = useCallback((value: boolean) => {
-    setOpen(value);
-    if (value) {
-      setArchiveOpen(false);
-      setSelectedIssue(null);
-    }
-    if (!value) {
-      setQuery('');
-      setDebouncedQuery('');
-    }
-  }, []);
+  const setSearchOpen = useCallback(
+    (value: boolean) => {
+      if (value && selectedIssue) {
+        return;
+      }
+      setOpen(value);
+      if (value) {
+        setArchiveOpen(false);
+      }
+      if (!value) {
+        setQuery('');
+        setDebouncedQuery('');
+        setSubmittedIssueQuery('');
+      }
+    },
+    [selectedIssue]
+  );
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 150);
     return () => window.clearTimeout(timer);
@@ -68,12 +80,14 @@ export function GlobalSearch() {
       refetchOnWindowFocus: false,
     }
   );
-  const issuesEnabled = open && Boolean(debouncedQuery);
+  const querySettled = query.trim() === debouncedQuery;
+  const issueQuery = requestedIssueQuery(debouncedQuery, submittedIssueQuery);
+  const issuesEnabled = open && querySettled && Boolean(issueQuery);
   const issues = trpc.search.githubIssues.useQuery(
-    { query: debouncedQuery },
+    { query: issueQuery },
     { enabled: issuesEnabled, staleTime: 60_000, retry: false, refetchOnWindowFocus: false }
   );
-  const querySettled = query.trim() === debouncedQuery;
+  const searchGitHub = useCallback(() => setSubmittedIssueQuery(debouncedQuery), [debouncedQuery]);
   const select = (result: SearchResult) => {
     if (result.kind === 'github_issue') {
       setSearchOpen(false);
@@ -99,10 +113,16 @@ export function GlobalSearch() {
         open={open}
         onOpenChange={setSearchOpen}
         query={query}
-        onQueryChange={setQuery}
+        onQueryChange={(value) => {
+          setQuery(value);
+          setSubmittedIssueQuery('');
+        }}
         includeArchived={includeArchived}
         onIncludeArchivedChange={setIncludeArchived}
         results={search.data ?? emptyResults}
+        onSearchGitHub={
+          open && querySettled && debouncedQuery && !issueQuery ? searchGitHub : undefined
+        }
         githubIssues={
           issuesEnabled
             ? {
@@ -138,28 +158,45 @@ export function GlobalSearch() {
         }
       />
       {selectedIssue && (
-        <Suspense
+        <ErrorBoundary
+          key={selectedIssue.id}
           fallback={
             <Dialog open onOpenChange={() => setSelectedIssue(null)}>
               <DialogContent>
                 <DialogTitle>Start Issue</DialogTitle>
-                <DialogDescription>Loading issue launch options…</DialogDescription>
+                <DialogDescription role="alert">
+                  Unable to load issue launch options. Reload the app to try again.
+                </DialogDescription>
+                <Button variant="outline" onClick={() => setSelectedIssue(null)}>
+                  Close
+                </Button>
               </DialogContent>
             </Dialog>
           }
         >
-          <IssueLaunchSheet
-            key={selectedIssue.id}
-            issue={normalizeGitHubIssue(selectedIssue.githubIssue)}
-            projectId={selectedIssue.projectId}
-            open
-            onOpenChange={(value) => {
-              if (!value) {
-                setSelectedIssue(null);
-              }
-            }}
-          />
-        </Suspense>
+          <Suspense
+            fallback={
+              <Dialog open onOpenChange={() => setSelectedIssue(null)}>
+                <DialogContent>
+                  <DialogTitle>Start Issue</DialogTitle>
+                  <DialogDescription>Loading issue launch options…</DialogDescription>
+                </DialogContent>
+              </Dialog>
+            }
+          >
+            <IssueLaunchSheet
+              key={selectedIssue.id}
+              issue={normalizeGitHubIssue(selectedIssue.githubIssue)}
+              projectId={selectedIssue.projectId}
+              open
+              onOpenChange={(value) => {
+                if (!value) {
+                  setSelectedIssue(null);
+                }
+              }}
+            />
+          </Suspense>
+        </ErrorBoundary>
       )}
       <Dialog
         open={archiveOpen}
