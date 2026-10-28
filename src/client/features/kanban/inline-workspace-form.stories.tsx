@@ -4,6 +4,7 @@ import { observable } from '@trpc/server/observable';
 import { useState } from 'react';
 import { expect, fn, userEvent, within } from 'storybook/test';
 import { trpc } from '@/client/lib/trpc';
+import { Button } from '@/components/ui/button';
 import type { ChatProvider } from '@/shared/chat-capabilities';
 import { InlineWorkspaceForm } from './inline-workspace-form';
 
@@ -88,12 +89,15 @@ function WorkspaceCreationPreviewSession({
   loading = false,
   catalogLoading = false,
   compact = false,
+  startCollapsed = false,
 }: {
   provider?: ChatProvider;
   loading?: boolean;
   catalogLoading?: boolean;
   compact?: boolean;
+  startCollapsed?: boolean;
 }) {
+  const [open, setOpen] = useState(!startCollapsed);
   const [queryClient] = useState(
     () => new QueryClient({ defaultOptions: { queries: { retry: false } } })
   );
@@ -124,12 +128,23 @@ function WorkspaceCreationPreviewSession({
             width: compact ? 'min(20rem, calc(100vw - 2rem))' : 'min(40rem, calc(100vw - 2rem))',
           }}
         >
-          <InlineWorkspaceForm
-            projectId="preview-project"
-            existingNames={[]}
-            onCreated={fn()}
-            onCancel={onCancel}
-          />
+          {open ? (
+            <InlineWorkspaceForm
+              projectId="preview-project"
+              existingNames={[]}
+              onCreated={fn()}
+              onCancel={() => {
+                onCancel();
+                if (startCollapsed) {
+                  setOpen(false);
+                }
+              }}
+            />
+          ) : (
+            <Button variant="outline" onClick={() => setOpen(true)}>
+              New Workspace
+            </Button>
+          )}
         </div>
       </trpc.Provider>
     </QueryClientProvider>
@@ -141,8 +156,9 @@ function WorkspaceCreationPreview(props: {
   loading?: boolean;
   catalogLoading?: boolean;
   compact?: boolean;
+  startCollapsed?: boolean;
 }) {
-  const key = `${props.provider ?? 'CODEX'}:${Boolean(props.loading)}:${Boolean(props.catalogLoading)}`;
+  const key = `${props.provider ?? 'CODEX'}:${Boolean(props.loading)}:${Boolean(props.catalogLoading)}:${Boolean(props.startCollapsed)}`;
   return <WorkspaceCreationPreviewSession key={key} {...props} />;
 }
 
@@ -154,6 +170,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const SavedCodexDefaults: Story = {};
+export const OpenFromButton: Story = { args: { startCollapsed: true } };
 export const SavedClaudeDefaults: Story = { args: { provider: 'CLAUDE' } };
 export const Dark: Story = { globals: { theme: 'dark' } };
 export const Loading: Story = { args: { loading: true } };
