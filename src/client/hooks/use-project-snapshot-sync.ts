@@ -65,12 +65,18 @@ function triggerWorkspaceAttention(workspaceId: string): void {
 /**
  * Invalidates the workspace caches after any snapshot_full baseline past a
  * project's first. The snapshot patches keep the UI instant; the refetches
- * restore DB-backed fields the snapshot doesn't carry (issue links, etc.)
- * and drop workspace.get entries for workspaces that were archived while
- * no socket for the project was connected.
+ * restore DB-backed fields the snapshot doesn't carry for this project's
+ * owned detail queries, including deliberately opened archived workspaces.
  */
-function healWorkspaceCachesAfterReconnect(utils: TrpcUtils, projectId: string): void {
-  runInBackground(utils.workspace.get.invalidate(), 'Could not refresh data');
+function healWorkspaceCachesAfterReconnect(
+  utils: TrpcUtils,
+  queryClient: QueryClient,
+  projectId: string
+): void {
+  runInBackground(
+    queryClient.invalidateQueries(projectWorkspaceDetailQueryFilter(queryClient, projectId)),
+    'Could not refresh data'
+  );
   runInBackground(
     utils.workspace.listForProject.invalidate({ projectId }),
     'Could not refresh data'
@@ -481,7 +487,7 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
             connection
           );
           if (baselineProjectsRef.current.has(message.projectId)) {
-            healWorkspaceCachesAfterReconnect(utils, message.projectId);
+            healWorkspaceCachesAfterReconnect(utils, queryClient, message.projectId);
           } else {
             baselineProjectsRef.current.add(message.projectId);
           }
