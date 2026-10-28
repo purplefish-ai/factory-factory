@@ -23,7 +23,7 @@ describe('server review configuration contracts', () => {
     expect(h.events.filter((event) => event.type === 'chat_capabilities')).toEqual([]);
   });
 
-  it('rejects required storage failure and always propagates a non-required source guard failure', async () => {
+  it('rejects exhausted storage failure and propagates source guard errors', async () => {
     const h = setupAuthority();
     h.hooks.cas = () => Promise.reject(new Error('database unavailable'));
     const snapshots = new SessionConfigSnapshotPersistence(h.repository);
@@ -32,9 +32,7 @@ describe('server review configuration contracts', () => {
       providerSessionId: 'thread',
       configOptions: configOptions('second'),
     };
-    await expect(
-      snapshots.persist('session', { ...params, requirePersistence: true })
-    ).rejects.toThrow('database unavailable');
+    await expect(snapshots.persist('session', params)).rejects.toThrow('database unavailable');
     expect(h.casModels).toHaveLength(2);
     const sourceError = new Error('runtime replaced');
     await expect(
@@ -46,6 +44,22 @@ describe('server review configuration contracts', () => {
       })
     ).rejects.toBe(sourceError);
     expect(h.casModels).toHaveLength(2);
+  });
+
+  it('rejects empty required native configuration before any repository I/O', async () => {
+    const h = setupAuthority();
+    const snapshots = new SessionConfigSnapshotPersistence(h.repository);
+    await expect(
+      snapshots.persist('session', {
+        provider: 'CODEX',
+        providerSessionId: 'thread',
+        configOptions: [],
+        requirePersistence: true,
+      })
+    ).rejects.toThrow('Cannot finalize startup without native configuration');
+    expect(h.accessor.findById).not.toHaveBeenCalled();
+    expect(h.accessor.updateIfProviderIdentity).not.toHaveBeenCalled();
+    expect(h.accessor.update).not.toHaveBeenCalled();
   });
 
   it('does not issue an optional preset RPC against a replacement runtime', async () => {
