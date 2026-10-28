@@ -303,7 +303,7 @@ describe('initializeWorkspaceWorktree orchestrator', () => {
     expect(mocks.startSession).not.toHaveBeenCalled();
   });
 
-  it('stops eagerly-started session when initialization fails', async () => {
+  it('does not start a session when initialization fails', async () => {
     mocks.runStartupScript.mockRejectedValue(new Error('boom'));
     mocks.findByWorkspaceId.mockResolvedValue([{ id: 'session-1', status: SessionStatus.IDLE }]);
 
@@ -312,10 +312,7 @@ describe('initializeWorkspaceWorktree orchestrator', () => {
       useExistingBranch: false,
     });
 
-    expect(mocks.startSession).toHaveBeenCalledWith('session-1', {
-      initialPrompt: '',
-      startupModePreset: 'non_interactive',
-    });
+    expect(mocks.startSession).not.toHaveBeenCalled();
     expect(mocks.stopWorkspaceSessions).toHaveBeenCalledWith('workspace-1');
     expect(mocks.destroyTerminal).toHaveBeenCalledWith('workspace-1', 'term-default');
     expect(mocks.clearTerminalPid).toHaveBeenCalledWith('workspace-1', 'term-default');
