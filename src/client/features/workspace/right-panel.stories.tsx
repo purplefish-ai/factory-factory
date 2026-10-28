@@ -4,15 +4,22 @@ import { TRPCClientError } from '@trpc/client';
 import { getQueryKey } from '@trpc/react-query';
 import { observable } from '@trpc/server/observable';
 import { useRef, useState } from 'react';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, fn, userEvent, within } from 'storybook/test';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
+import { MainViewTabBar } from './main-view-tab-bar';
 import { RightPanel } from './right-panel';
 import { WorkspacePanelProvider } from './workspace-panel-context';
 
 const workspaceId = 'right-panel-capabilities-story';
-function RightPanelStory({ hasTask = false }: { hasTask?: boolean }) {
+function RightPanelStory({
+  hasTask = false,
+  showChatToolbar = false,
+}: {
+  hasTask?: boolean;
+  showChatToolbar?: boolean;
+}) {
   const taskPresent = useRef(hasTask);
   const [queryClient] = useState(() => new QueryClient());
   const [client] = useState(() =>
@@ -22,6 +29,7 @@ function RightPanelStory({ hasTask = false }: { hasTask?: boolean }) {
           ({ op }) =>
             observable((observer) => {
               const responses: Record<string, () => unknown> = {
+                'session.listQuickActions': () => [],
                 'workspace.get': () => ({
                   id: workspaceId,
                   projectId: 'right-panel-project',
@@ -75,8 +83,26 @@ function RightPanelStory({ hasTask = false }: { hasTask?: boolean }) {
           >
             Delete periodic task
           </Button>
-          <div className="h-[650px] w-[800px] border">
-            <RightPanel workspaceId={workspaceId} />
+          <div className="flex h-[650px] border" style={{ width: showChatToolbar ? 1600 : 800 }}>
+            {showChatToolbar && (
+              <div className="min-w-0 flex-1 border-r">
+                <div className="border-b">
+                  <MainViewTabBar
+                    workspaceId={workspaceId}
+                    sessions={[{ id: 'session-1', name: 'Chat 1', status: 'IDLE' }]}
+                    currentSessionId="session-1"
+                    selectedProvider="CLAUDE"
+                    setSelectedProvider={fn()}
+                    onCreateSession={fn()}
+                    onQuickAction={fn()}
+                    onRestartSession={fn()}
+                  />
+                </div>
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <RightPanel workspaceId={workspaceId} />
+            </div>
           </div>
         </WorkspacePanelProvider>
       </QueryClientProvider>
@@ -154,5 +180,23 @@ export const DeleteWhileOpen: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Delete periodic task' }));
     await expect(await canvas.findByText('No changes')).toBeVisible();
     await expect(localStorage.getItem(`workspace-right-panel-tab-${workspaceId}`)).toBe('changes');
+  },
+};
+
+export const AlignedToolbars: Story = {
+  args: { showChatToolbar: true },
+  globals: { theme: 'dark' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByText('No changes');
+    const chatToolbar = canvas.getByRole('tablist').parentElement?.parentElement;
+    const changesToolbar = canvas.getByRole('button', { name: 'Changes' }).parentElement;
+    if (!(chatToolbar && changesToolbar)) {
+      throw new Error('Expected both workspace toolbars');
+    }
+    const chatBounds = chatToolbar.getBoundingClientRect();
+    const changesBounds = changesToolbar.getBoundingClientRect();
+    await expect(chatBounds.top).toBe(changesBounds.top);
+    await expect(chatBounds.bottom).toBe(changesBounds.bottom);
   },
 };

@@ -71,7 +71,7 @@ export function QuickActionsMenu({ onExecuteAgent, disabled = false }: QuickActi
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8"
+              className="h-7 w-7"
               disabled={disabled || isLoading || !hasActions}
             >
               <LightningIcon className="h-4 w-4" />
