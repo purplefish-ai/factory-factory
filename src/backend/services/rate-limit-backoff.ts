@@ -1,4 +1,5 @@
 import { toError } from '@/backend/lib/error-utils';
+import { getGitHubCLIErrorMessage, GitHubConnectivityError } from '@/backend/lib/github-cli-error';
 import type { createLogger } from './logger.service';
 
 type Logger = ReturnType<typeof createLogger>;
@@ -64,7 +65,7 @@ export class RateLimitBackoff {
     context: { workspaceId: string; prUrl: string },
     baseIntervalMs: number
   ): boolean {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = getGitHubCLIErrorMessage(error);
     const isRateLimit = isRateLimitMessage(errorMessage.toLowerCase());
 
     if (isRateLimit) {
@@ -79,6 +80,14 @@ export class RateLimitBackoff {
         nextDelayMs: baseIntervalMs * this.multiplier,
       });
       return true;
+    }
+
+    if (error instanceof GitHubConnectivityError) {
+      logger.warn(`${serviceName} temporarily unable to reach GitHub; will retry`, {
+        ...context,
+        error: errorMessage,
+      });
+      return false;
     }
 
     logger.error(`${serviceName} check failed for workspace`, toError(error), {

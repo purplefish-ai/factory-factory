@@ -1,6 +1,10 @@
 import { beforeEach, expect, it, vi } from 'vitest';
+import { GitHubConnectivityError } from '@/backend/lib/github-cli-error';
 import type { GitHubWorkspaceBridge } from './bridges';
 import { PR_URL_ATTACHED, prSnapshotService } from './pr-snapshot.service';
+
+const logger = vi.hoisted(() => ({ warn: vi.fn(), error: vi.fn() }));
+vi.mock('@/backend/services/logger.service', () => ({ createLogger: () => logger }));
 
 vi.mock('./github-cli.service', () => {
   throw new Error('Snapshot attachment must not import the GitHub CLI dependency graph');
@@ -60,6 +64,58 @@ it('routes manual refresh through the same full observation pipeline', async () 
   });
   expect(observe).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'w', prId: 'p' }, { force: true });
 });
+it('reports retryable network failures and recovers on the next refresh', async () => {
+  observe.mockRejectedValueOnce(
+    new GitHubConnectivityError(
+      'error connecting to api.github.com',
+      new Error('connection failed')
+    )
+  );
+  expect(await prSnapshotService.refreshPR({ workspaceId: 'w', prId: 'p' })).toEqual({
+    success: false,
+    reason: 'fetch_failed',
+  });
+  expect(logger.warn).toHaveBeenCalledWith(
+    expect.any(String),
+    expect.objectContaining({ workspaceId: 'w', prId: 'p' })
+  );
+  expect(logger.error).not.toHaveBeenCalled();
+  expect(await prSnapshotService.refreshPR({ workspaceId: 'w', prId: 'p' })).toMatchObject({
+    success: true,
+  });
+});
+
+it('keeps unexpected observation failures visible as errors', async () => {
+  observe.mockRejectedValueOnce(new Error('invalid observation'));
+  expect(await prSnapshotService.refreshPR({ workspaceId: 'w', prId: 'p' })).toEqual({
+    success: false,
+    reason: 'error',
+  });
+  expect(logger.error).toHaveBeenCalled();
+});
+
+it.each(['lookup', 'persistence', 'readback'])(
+  'keeps %s storage connection failures visible as errors',
+  async (stage) => {
+    const failure = new Error('database connection lost');
+    if (stage === 'lookup') {
+      bridge.findPR.mockRejectedValueOnce(failure);
+    } else if (stage === 'persistence') {
+      observe.mockRejectedValueOnce(failure);
+    } else {
+      bridge.findPR.mockResolvedValueOnce(row).mockRejectedValueOnce(failure);
+    }
+    await expect(prSnapshotService.refreshPR({ workspaceId: 'w', prId: 'p' })).resolves.toEqual({
+      success: false,
+      reason: 'error',
+    });
+    expect(logger.error).toHaveBeenCalledWith('Failed to refresh PR', failure, {
+      workspaceId: 'w',
+      prId: 'p',
+    });
+    expect(logger.warn).not.toHaveBeenCalled();
+  }
+);
 it('refreshes every explicit association and reports a sibling failure', async () => {
   bridge.listPRs.mockResolvedValue([row, { ...row, id: 'p2' }]);
   observe.mockResolvedValueOnce(false).mockResolvedValueOnce(true);

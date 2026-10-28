@@ -1,3 +1,8 @@
+import {
+  getGitHubCLIErrorMessage,
+  GitHubConnectivityError,
+  isGitHubCLIReadTimeout,
+} from '@/backend/lib/github-cli-error';
 import { createLogger } from '@/backend/services/logger.service';
 import { isRateLimitMessage } from '@/backend/services/rate-limit-backoff';
 import type { GitHubCLIErrorType } from './types';
@@ -25,25 +30,39 @@ function isPRNotFoundError(message: string): boolean {
   return message.includes('could not resolve') || message.includes('not found');
 }
 
-function isNetworkError(message: string): boolean {
+function isRateLimitError(message: string): boolean {
+  return isRateLimitMessage(message);
+}
+
+function isNetworkErrorMessage(message: string): boolean {
   return (
     message.includes('network') ||
     message.includes('timeout') ||
     message.includes('connection') ||
+    message.includes('error connecting') ||
     message.includes('unexpected eof')
   );
 }
 
-function isRateLimitError(message: string): boolean {
-  return isRateLimitMessage(message);
+/** Warn and keep retryable failures intact before a read wrapper adds generic context. */
+export function throwIfGitHubConnectivityError(
+  error: unknown,
+  context: Record<string, unknown>
+): void {
+  if (error instanceof GitHubConnectivityError) {
+    logGitHubCLIError('network_error', error.message, context);
+    throw error;
+  }
 }
 
 /**
  * Classify an error from gh CLI execution.
  */
 export function classifyError(error: unknown): GitHubCLIErrorType {
-  const message = error instanceof Error ? error.message : String(error);
-  const lowerMessage = message.toLowerCase();
+  if (error instanceof GitHubConnectivityError || isGitHubCLIReadTimeout(error)) {
+    return 'network_error';
+  }
+  const lowerMessage = getGitHubCLIErrorMessage(error).toLowerCase();
 
   if (isCliNotInstalledError(lowerMessage)) {
     return 'cli_not_installed';
@@ -61,7 +80,7 @@ export function classifyError(error: unknown): GitHubCLIErrorType {
     return 'rate_limit';
   }
 
-  if (isNetworkError(lowerMessage)) {
+  if (isNetworkErrorMessage(lowerMessage)) {
     return 'network_error';
   }
 
@@ -98,6 +117,12 @@ export function logGitHubCLIError(
       errorType,
       error: errorMessage,
       hint: 'Polling intervals have been increased to reduce API pressure',
+    });
+  } else if (errorType === 'network_error') {
+    logger.warn('GitHub temporarily unreachable; will retry', {
+      ...context,
+      errorType,
+      error: errorMessage,
     });
   } else {
     logger.error('Failed to fetch PR status via gh CLI', {

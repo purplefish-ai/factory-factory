@@ -1,12 +1,14 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { createLogger } from '@/backend/services/logger.service';
-import { isRateLimitMessage } from '@/backend/services/rate-limit-backoff';
 import type { CIStatus, PRState } from '@/shared/core';
 import { githubPRPreviewSchema } from '@/shared/github-pr-preview';
 import type { PRWithFullDetails, ReviewAction } from '@/shared/github-types';
-import { GH_MAX_BUFFER_BYTES, GH_TIMEOUT_MS, ghExecLimit } from './github-cli/constants';
-import { classifyError, logGitHubCLIError } from './github-cli/errors';
+import { GH_MAX_BUFFER_BYTES, GH_TIMEOUT_MS } from './github-cli/constants';
+import {
+  classifyError,
+  logGitHubCLIError,
+  throwIfGitHubConnectivityError,
+} from './github-cli/errors';
+import { GitHubCLIExecutor } from './github-cli/executor';
 import { computeCIStatus, computePRState } from './github-cli/mappers';
 import {
   getPRDiff,
@@ -42,7 +44,6 @@ import type {
 } from './github-cli/types';
 import { parseGhJson } from './github-cli/utils';
 
-const execFileAsync = promisify(execFile);
 const logger = createLogger('github-cli');
 
 type ExecResult = { stdout: string; stderr: string };
@@ -55,12 +56,8 @@ type ReadExecOptions = { timeout?: number; maxBuffer?: number; signal?: AbortSig
  * All process spawning is gated through a shared concurrency limiter
  * and read-only calls benefit from in-flight deduplication (singleflight).
  */
-// How long to fast-fail gh calls after a rate limit is detected (60 s).
-const RATE_LIMIT_FAST_FAIL_MS = 60_000;
-
 class GitHubCLIService {
-  private readonly execLimit = ghExecLimit;
-  private readonly inflight = new Map<string, Promise<ExecResult>>();
+  private readonly executor = new GitHubCLIExecutor();
 
   private cachedHealth: { result: GitHubCLIHealthStatus; fetchedAt: number } | null = null;
   private healthRefreshInFlight: Promise<GitHubCLIHealthStatus> | null = null;
@@ -70,87 +67,23 @@ class GitHubCLIService {
   private readonly issueRefreshInFlight = new Set<string>();
   private readonly ISSUE_CACHE_TTL_MS = 60_000;
 
-  // When set, all exec() calls will fail immediately until this timestamp.
-  private rateLimitedUntil: number | null = null;
-
   clearCaches(): void {
     this.cachedHealth = null;
     this.healthRefreshInFlight = null;
     this.issueCache.clear();
     this.issueRefreshInFlight.clear();
-    this.rateLimitedUntil = null;
+    this.executor.clearBackoff();
   }
 
   private exec(args: string[], options?: ReadExecOptions): Promise<ExecResult> {
-    if (this.rateLimitedUntil !== null && Date.now() < this.rateLimitedUntil) {
-      return Promise.reject(new Error('GitHub API rate limit exceeded, backing off'));
-    }
-
-    const execute = () =>
-      this.execLimit(() => {
-        options?.signal?.throwIfAborted();
-        return execFileAsync('gh', args, {
-          timeout: options?.timeout ?? GH_TIMEOUT_MS.default,
-          ...(options?.maxBuffer ? { maxBuffer: options.maxBuffer } : {}),
-          ...(options?.signal ? { signal: options.signal } : {}),
-        });
-      }).then(
-        (result) => result,
-        (err: unknown) => {
-          const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
-          if (isRateLimitMessage(msg)) {
-            this.rateLimitedUntil = Date.now() + RATE_LIMIT_FAST_FAIL_MS;
-          }
-          throw err;
-        }
-      );
-
-    if (options?.signal) {
-      return execute();
-    }
-
-    const key = args.join('\0');
-    const existing = this.inflight.get(key);
-    if (existing !== undefined) {
-      return existing;
-    }
-
-    const promise = execute().finally(() => {
-      this.inflight.delete(key);
-    });
-    this.inflight.set(key, promise);
-    return promise;
+    return this.executor.read(args, options);
   }
 
-  /**
-   * Execute a mutating gh CLI command with concurrency limiting but NO dedup.
-   * Used for write operations (approve, comment, close, etc.).
-   *
-   * Also applies rate-limit fast-fail to avoid queueing behind other blocked calls.
-   */
   private execMutating(
     args: string[],
     options?: { timeout?: number; maxBuffer?: number }
   ): Promise<ExecResult> {
-    if (this.rateLimitedUntil !== null && Date.now() < this.rateLimitedUntil) {
-      return Promise.reject(new Error('GitHub API rate limit exceeded, backing off'));
-    }
-
-    return this.execLimit(() =>
-      execFileAsync('gh', args, {
-        timeout: options?.timeout ?? GH_TIMEOUT_MS.default,
-        ...(options?.maxBuffer ? { maxBuffer: options.maxBuffer } : {}),
-      })
-    ).then(
-      (result) => result,
-      (err: unknown) => {
-        const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
-        if (isRateLimitMessage(msg)) {
-          this.rateLimitedUntil = Date.now() + RATE_LIMIT_FAST_FAIL_MS;
-        }
-        throw err;
-      }
-    );
+    return this.executor.mutate(args, options);
   }
 
   /**
@@ -603,6 +536,7 @@ class GitHubCLIService {
 
       return parseGhJson(issueSchema.array(), stdout, 'listIssues');
     } catch (error) {
+      throwIfGitHubConnectivityError(error, { owner, repo });
       const errorType = classifyError(error);
       const errorMessage = error instanceof Error ? error.message : String(error);
 
@@ -704,6 +638,7 @@ class GitHubCLIService {
       return allComments.reverse();
     } catch (error) {
       signal?.throwIfAborted();
+      throwIfGitHubConnectivityError(error, { repo, prNumber });
       const errorType = classifyError(error);
       const errorMessage = error instanceof Error ? error.message : String(error);
 
@@ -747,6 +682,7 @@ class GitHubCLIService {
       return resolvedIds;
     } catch (error) {
       signal?.throwIfAborted();
+      throwIfGitHubConnectivityError(error, { repo, prNumber });
       const errorType = classifyError(error);
       const errorMessage = error instanceof Error ? error.message : String(error);
 
