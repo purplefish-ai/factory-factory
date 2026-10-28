@@ -196,3 +196,35 @@ it.each([
     expect(Buffer.byteLength(text)).toBeLessThanOrEqual(16_384);
   }
 );
+
+it('renders multiple main PR identities and feedback in one bounded message', () => {
+  const text = buildPREventMessage({
+    deliveryId: 'many',
+    replyToPrComments: false,
+    events: [
+      { kind: 'CI_FAILED', target: { workspaceId: 'w', prId: 'p' }, observation: redObservation },
+      {
+        kind: 'CI_FAILED',
+        target: { workspaceId: 'w', prId: 'q' },
+        observation: { ...redObservation, number: 2, url: 'https://github.com/org/repo/pull/2' },
+      },
+    ],
+  });
+  expect(text).toContain(redObservation.url);
+  expect(text).toContain('https://github.com/org/repo/pull/2');
+  expect(text.match(/factory-factory-pr-event:many/g)).toHaveLength(1);
+  expect(Buffer.byteLength(text)).toBeLessThanOrEqual(16_384);
+});
+it('still rejects mixing PRs in a dedicated conversation', () => {
+  expect(() =>
+    buildPREventMessage({
+      deliveryId: 'dedicated',
+      deliveryMode: 'DEDICATED',
+      replyToPrComments: false,
+      events: [
+        { kind: 'CI_FAILED', target: { workspaceId: 'w', prId: 'p' }, observation: redObservation },
+        { kind: 'CI_FAILED', target: { workspaceId: 'w', prId: 'q' }, observation: redObservation },
+      ],
+    })
+  ).toThrow('Batch must belong to one PR');
+});

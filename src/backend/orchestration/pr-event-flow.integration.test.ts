@@ -9,6 +9,7 @@ import { ratchetService } from '@/backend/services/ratchet';
 import {
   sessionBackgroundDeliveryService,
   sessionDispatchService,
+  findPRDeliveryReceipt,
 } from '@/backend/services/session';
 import {
   workspacePRMonitoringService,
@@ -64,6 +65,7 @@ vi.mock('@/backend/services/settings', () => ({
 
 import { createEventCollectorOrchestrator } from './event-collector.orchestrator';
 import { createPRDeliveryPorts, defaultPRDeliveryPorts } from './pr-delivery-dependencies';
+import { recoverPRDeliveries } from './pr-delivery-recovery';
 import { prBackgroundDeliveryPort } from './pr-event-delivery-port';
 import { preparePRDelivery, wakePRDelivery } from './pr-event-delivery.orchestrator';
 import {
@@ -667,3 +669,136 @@ it.each([false, true])(
     });
   }
 );
+
+it('recovers an absent frozen batch with a detached target and delivers attached siblings with fresh facts', async () => {
+  const workspaceId = 'detached-main-recovery';
+  const sessionId = `${workspaceId}-session`;
+  const targets = ['one', 'two', 'three'].map((name, index) => ({
+    id: `${workspaceId}-${name}`,
+    workspaceId,
+    url: `https://github.com/org/repo/pull/${index + 10}`,
+  }));
+  await db.prisma.workspace.create({
+    data: {
+      id: workspaceId,
+      projectId: 'project',
+      name: workspaceId,
+      status: 'READY',
+      worktreePath: db.tempDir,
+      prMonitoring: { create: { enabled: true, bindingRevision: 1 } },
+    },
+  });
+  await db.prisma.workspacePR.createMany({ data: targets });
+  await db.prisma.agentSession.create({
+    data: {
+      id: sessionId,
+      workspaceId,
+      workflow: 'implement',
+      provider: 'CODEX',
+      providerSessionId: `${sessionId}-provider`,
+    },
+  });
+  await db.prisma.workspacePRMonitoring.update({
+    where: { workspaceId },
+    data: { recipientSessionId: sessionId },
+  });
+  const addFact = (index: number) => {
+    const target = targets[index]!;
+    return db.prisma.workspacePREvent.create({
+      data: {
+        workspaceId,
+        prId: target.id,
+        kind: 'CI_FAILED',
+        deduplicationKey: `failed-${index}`,
+        payload: {
+          kind: 'CI_FAILED',
+          target: { workspaceId, prId: target.id },
+          observation: { ...redObservation, url: target.url, number: index + 10 },
+        },
+      },
+    });
+  };
+  const original = [await addFact(0), await addFact(1)];
+  const prepared = await preparePRDelivery({
+    sessionId,
+    request: { workspaceId, prId: targets[0]!.id, bindingRevision: 1 },
+  });
+  if (prepared.status !== 'ready') {
+    throw new Error('Expected original frozen delivery');
+  }
+  const frozen = prepared.delivery;
+  await prBackgroundDeliveryPort.fail(frozen, new Error('Temporary transport failure'));
+  await db.prisma.workspacePR.update({
+    where: { id: targets[1]!.id },
+    data: { detachedAt: new Date() },
+  });
+  const fresh = await addFact(2);
+
+  vi.mocked(findPRDeliveryReceipt).mockResolvedValue('unavailable');
+  await recoverPRDeliveries(sessionId);
+  expect(
+    await db.prisma.workspacePREvent.findMany({ where: { deliveryId: frozen.deliveryId } })
+  ).toEqual(
+    expect.arrayContaining(
+      original.map((row) =>
+        expect.objectContaining({
+          id: row.id,
+          state: 'PENDING',
+          deliveryText: frozen.text,
+          deliveryId: frozen.deliveryId,
+        })
+      )
+    )
+  );
+  expect(await db.prisma.workspacePREvent.count({ where: { workspaceId } })).toBe(3);
+  await workspacePRMonitoringService.resume(sessionId);
+  vi.mocked(findPRDeliveryReceipt).mockResolvedValue('absent');
+  await recoverPRDeliveries(sessionId);
+  await recoverPRDeliveries(sessionId);
+  expect(
+    await db.prisma.workspacePREvent.findMany({ where: { deliveryId: frozen.deliveryId } })
+  ).toEqual(
+    expect.arrayContaining(
+      original.map((row) =>
+        expect.objectContaining({
+          id: row.id,
+          state: 'CANCELLED',
+          deliveryText: frozen.text,
+          deliveryId: frozen.deliveryId,
+        })
+      )
+    )
+  );
+  const pending = await workspacePRMonitoringService.listPending(workspaceId);
+  expect(pending).toHaveLength(2);
+  expect(pending).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        prId: targets[0]!.id,
+        state: 'PENDING',
+        deliveryId: null,
+        deduplicationKey: original[0]!.deduplicationKey,
+      }),
+      expect.objectContaining({
+        id: fresh.id,
+        prId: targets[2]!.id,
+        state: 'PENDING',
+        deliveryId: null,
+      }),
+    ])
+  );
+  const binding = await workspacePRMonitoringService.get(workspaceId);
+  const next = await preparePRDelivery({
+    sessionId,
+    request: { workspaceId, prId: targets[2]!.id, bindingRevision: binding!.bindingRevision },
+  });
+  if (next.status !== 'ready') {
+    throw new Error('Expected eligible sibling delivery');
+  }
+  expect(next.delivery.deliveryId).not.toBe(frozen.deliveryId);
+  expect(next.delivery.text).toContain(targets[0]!.url);
+  expect(next.delivery.text).toContain(targets[2]!.url);
+  expect(next.delivery.text).not.toContain(targets[1]!.url);
+  await prBackgroundDeliveryPort.complete(next.delivery);
+  expect(await workspacePRMonitoringService.listPending(workspaceId)).toEqual([]);
+});

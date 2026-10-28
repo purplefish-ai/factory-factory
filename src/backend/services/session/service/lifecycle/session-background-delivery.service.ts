@@ -118,8 +118,38 @@ export class SessionBackgroundDeliveryService {
       }
       message.text = result.delivery.text;
       this.deliveries.set(message.id, { delivery: result.delivery, message });
+      this.coalesceMainTokens(sessionId, message);
     }
     return result;
+  }
+  private coalesceMainTokens(sessionId: string, message: QueuedMessage) {
+    const request = message.source?.request;
+    if (!request || (request.deliveryMode ?? 'MAIN') !== 'MAIN') {
+      return;
+    }
+    // Durable facts belong to the ready claim or a later observation; queued
+    // placeholders have no independent receipt or cancellation to preserve.
+    for (const [key, token] of [...this.tokens]) {
+      if (
+        token.messageId === message.id ||
+        token.sessionId !== sessionId ||
+        token.request.workspaceId !== request.workspaceId ||
+        token.request.bindingRevision !== request.bindingRevision ||
+        (token.request.deliveryMode ?? 'MAIN') !== 'MAIN' ||
+        this.deliveries.has(token.messageId)
+      ) {
+        continue;
+      }
+      const removed = sessionDomainService.removeQueuedMessage(sessionId, token.messageId, {
+        expectedMessage: token.message,
+        recordCancellation: false,
+      });
+      // Removal publishes synchronously, so retain any replacement token
+      // enqueued by a snapshot listener before the removal call returns.
+      if (removed && this.tokens.get(key) === token) {
+        this.tokens.delete(key);
+      }
+    }
   }
   private forgetToken(messageId: string) {
     for (const [key, token] of this.tokens) {

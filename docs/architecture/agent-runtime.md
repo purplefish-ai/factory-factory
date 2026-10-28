@@ -536,6 +536,20 @@ registry's dispatch, reset, and manual-resume callbacks reach that same instance
 through the transport-owned chat router. Lifecycle generation, delivery claim,
 and transcript-commit ownership remain with their existing services.
 
+At the next turn boundary, dispatch combines queued human messages and workspace
+notifications in FIFO order into one provider prompt. A ready PR update batch
+joins that prompt; a blocked PR update does not delay human messages. The latest
+human message supplies the turn's settings. Slash commands remain standalone
+turns so provider commands such as `/compact` retain their meaning.
+
+Each message retains its own dispatch state and local transcript entry. A busy
+provider restores the batch in order, while invalid attachments reject only
+their own message. Cancelling a message during preparation retries the remaining
+queue. Successful provider receipt commits the entire batch before separate
+notification and PR acknowledgements; acknowledgement failures do not roll back
+human messages. Provider history retains the combined human text and restores
+trailing PR content as a compact update row.
+
 Startup, termination, runtime exit, notifications, context, and workflow
 finalization each have one coordinator or service.
 

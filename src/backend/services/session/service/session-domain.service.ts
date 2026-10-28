@@ -235,7 +235,7 @@ export class SessionDomainService extends EventEmitter {
   removeQueuedMessage(
     sessionId: string,
     messageId: string,
-    options?: { expectedMessage?: QueuedMessage }
+    options?: { expectedMessage?: QueuedMessage; recordCancellation?: boolean }
   ): boolean {
     const store = this.registry.getOrCreateActive(sessionId);
     const removed = removeQueuedMessage(store, messageId, options);
@@ -521,6 +521,20 @@ export class SessionDomainService extends EventEmitter {
 
   getQueueLength(sessionId: string): number {
     return this.registry.getQueueLength(sessionId);
+  }
+
+  getQueueSnapshot(sessionId: string): QueuedMessage[] {
+    return this.registry.getQueueSnapshot(sessionId);
+  }
+
+  takeQueuedMessages(sessionId: string, messages: readonly QueuedMessage[]): boolean {
+    const store = this.registry.getOrCreateActive(sessionId);
+    if (messages.some((message) => !store.queue.includes(message))) {
+      return false;
+    }
+    const selected = new Set(messages);
+    store.queue = store.queue.filter((message) => !selected.has(message));
+    return true;
   }
 
   hasQueuedMessage(sessionId: string, messageId: string): boolean {

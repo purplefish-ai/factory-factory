@@ -15,6 +15,7 @@ const {
     enqueue: vi.fn<(sessionId: string, message: QueuedMessage) => { position: number }>(),
     hasQueuedMessage: vi.fn(),
     peekNextMessage: vi.fn(),
+    getQueueSnapshot: vi.fn(),
     dequeueNext: vi.fn(),
     requeueFront: vi.fn(),
     markError: vi.fn(),
@@ -102,6 +103,10 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
   };
   beforeEach(() => {
     vi.clearAllMocks();
+    mockSessionDomainService.getQueueSnapshot.mockImplementation(() => {
+      const next = mockSessionDomainService.peekNextMessage();
+      return next ? [next] : [];
+    });
     sessionDispatchService.resetDispatchState('s1');
     sessionDispatchService.configure({
       initPolicy: {

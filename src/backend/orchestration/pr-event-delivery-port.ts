@@ -29,20 +29,32 @@ export function createPRBackgroundDeliveryPort(
       }
       const config = await workspacePRMonitoringService.get(session.workspaceId);
       const events = await workspacePRMonitoringService.listPending(session.workspaceId);
-      const event = events.find((e) => e.deliveryId === delivery.deliveryId);
-      return (
-        !!event &&
-        (await guardPRDelivery(
-          delivery.sessionId,
-          {
-            workspaceId: event.workspaceId,
-            prId: event.prId,
-            bindingRevision: delivery.bindingRevision,
-            deliveryMode: config?.deliveryMode,
-          },
-          services
-        )) === 'ready'
-      );
+      const claimed = events.filter((e) => e.deliveryId === delivery.deliveryId);
+      if (
+        !claimed.length ||
+        new Set(delivery.eventIds).size !== delivery.eventIds.length ||
+        claimed.length !== delivery.eventIds.length ||
+        claimed.some((event) => !(delivery.eventIds.includes(event.id) && event.prId))
+      ) {
+        return false;
+      }
+      for (const prId of new Set(claimed.map((event) => event.prId))) {
+        if (
+          (await guardPRDelivery(
+            delivery.sessionId,
+            {
+              workspaceId: session.workspaceId,
+              prId,
+              bindingRevision: delivery.bindingRevision,
+              deliveryMode: config?.deliveryMode,
+            },
+            services
+          )) !== 'ready'
+        ) {
+          return false;
+        }
+      }
+      return true;
     },
     async complete(delivery) {
       await workspacePRMonitoringService.settleDelivery({ ...delivery, result: 'delivered' });

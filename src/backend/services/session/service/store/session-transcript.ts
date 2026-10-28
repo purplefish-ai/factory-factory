@@ -113,14 +113,29 @@ export function buildTranscriptFromHistory(history: HistoryMessage[]): ChatMessa
     const messageBaseId = historyMsg.uuid ?? buildDeterministicHistoryId(historyMsg, index);
     const messageId = `${messageBaseId}-${order}`;
 
-    if (
-      historyMsg.type === 'user' &&
-      /^<!-- factory-factory-pr-event:[^\n]+ -->/.test(historyMsg.content)
-    ) {
+    const prUpdate =
+      historyMsg.type === 'user'
+        ? /(?:^|\n+)(<!-- factory-factory-pr-event:[^\n]+ -->)/.exec(historyMsg.content)
+        : null;
+    const prMarker = prUpdate?.[1];
+    if (historyMsg.type === 'user' && prUpdate && prMarker) {
+      const humanText = historyMsg.content.slice(0, prUpdate.index);
+      if (humanText) {
+        transcript.push({
+          id: messageId,
+          source: 'user',
+          text: humanText,
+          attachments: historyMsg.attachments,
+          timestamp: historyMsg.timestamp,
+          order,
+        });
+        order += 1;
+      }
+      const markerOffset = prUpdate.index + prUpdate[0].length - prMarker.length;
       transcript.push({
-        id: messageId,
+        id: `${messageBaseId}-${order}`,
         source: 'agent',
-        message: { type: 'pr_update', text: historyMsg.content },
+        message: { type: 'pr_update', text: historyMsg.content.slice(markerOffset) },
         timestamp: historyMsg.timestamp,
         order,
       });

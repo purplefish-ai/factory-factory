@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { prisma } from '@/backend/db';
 import {
@@ -10,7 +11,7 @@ import {
 } from '@/shared/pr-monitoring';
 import { prMonitoringEventPayloadSchema } from '@/shared/schemas/pr-event.schema';
 import { prEventBackupSchema } from '@/shared/schemas/pr-monitoring-backup.schema';
-import type { AgentSession, Prisma } from '@prisma-gen/client';
+import type { AgentSession, Prisma, WorkspacePREvent } from '@prisma-gen/client';
 
 function validateImportedTarget(event: z.infer<typeof prEventBackupSchema>, workspaceId: string) {
   if (
@@ -94,6 +95,127 @@ function hasRolloverLineage(session: AgentSession, previousIdentity: string | nu
     }
   }
   return reachable.has(session.providerSessionId);
+}
+
+async function requeueAttachedFactsAfterDetachment(
+  tx: Prisma.TransactionClient,
+  session: AgentSession,
+  rows: WorkspacePREvent[]
+): Promise<number | null> {
+  const targetIds = [...new Set(rows.flatMap((row) => (row.prId ? [row.prId] : [])))];
+  if (!(isPRMonitoringRecipient(session) && targetIds.length)) {
+    return null;
+  }
+  const attached = await tx.workspacePR.findMany({
+    where: { id: { in: targetIds }, workspaceId: session.workspaceId, detachedAt: null },
+    select: { id: true },
+  });
+  if (attached.length === targetIds.length) {
+    return null;
+  }
+  const attachedIds = new Set(attached.map((pr) => pr.id));
+  const cancelled = await tx.workspacePREvent.updateMany({
+    where: { id: { in: rows.map((row) => row.id) }, state: { in: ['PENDING', 'DISPATCHING'] } },
+    data: { state: 'CANCELLED' },
+  });
+  for (const row of rows) {
+    if (!(row.prId && attachedIds.has(row.prId))) {
+      continue;
+    }
+    // Keep the frozen delivery and receipt evidence intact. Transfer its
+    // canonical reducer key to a fresh row only after receipt proves absence.
+    await tx.workspacePREvent.update({
+      where: { id: row.id },
+      data: { deduplicationKey: `recovered:${row.id}:${randomUUID()}` },
+    });
+    await tx.workspacePREvent.create({
+      data: {
+        workspaceId: row.workspaceId,
+        prId: row.prId,
+        kind: row.kind,
+        deduplicationKey: row.deduplicationKey,
+        payload: prMonitoringEventPayloadSchema.parse(row.payload),
+        createdAt: row.createdAt,
+      },
+    });
+  }
+  return cancelled.count;
+}
+
+type DeliveryClaimInput = Omit<ClaimedPRDelivery, 'bindingRevision' | 'attempt'>;
+function claimPRScope(request: PRDeliveryRequest, deliveryMode: 'MAIN' | 'DEDICATED') {
+  return deliveryMode === 'MAIN' && request.prId === null ? {} : { prId: request.prId };
+}
+
+async function matchesFrozenClaim(
+  tx: Prisma.TransactionClient,
+  input: DeliveryClaimInput,
+  rows: WorkspacePREvent[]
+) {
+  if (rows.length !== input.eventIds.length) {
+    return false;
+  }
+  if (
+    rows.some(
+      (row) =>
+        row.deliveryId &&
+        (row.deliveryId !== input.deliveryId ||
+          row.deliverySessionId !== input.sessionId ||
+          row.deliveryText !== input.text)
+    )
+  ) {
+    return false;
+  }
+  if (!rows.some((row) => row.deliveryId)) {
+    return true;
+  }
+  // Frozen retries contain every original event and no newly observed facts.
+  return (
+    rows.every((row) => row.deliveryId === input.deliveryId) &&
+    (await tx.workspacePREvent.count({ where: { deliveryId: input.deliveryId } })) === rows.length
+  );
+}
+async function claimTargetsAttached(
+  tx: Prisma.TransactionClient,
+  request: PRDeliveryRequest,
+  rows: WorkspacePREvent[]
+) {
+  const legacyControls =
+    request.prId === null &&
+    rows.every((row) => row.prId === null && row.kind === 'MONITORING_ENABLED');
+  if (legacyControls) {
+    return true;
+  }
+  const targetIds = [...new Set(rows.map((row) => row.prId))];
+  if (targetIds.some((id) => !id)) {
+    return false;
+  }
+  return (
+    (await tx.workspacePR.count({
+      where: {
+        id: { in: targetIds.filter((id): id is string => id !== null) },
+        workspaceId: request.workspaceId,
+        detachedAt: null,
+      },
+    })) === targetIds.length
+  );
+}
+function matchesClaimIdentity(
+  session: AgentSession | null,
+  rows: WorkspacePREvent[]
+): session is AgentSession & { providerSessionId: string } {
+  if (!session?.providerSessionId) {
+    return false;
+  }
+  return rows.every(
+    (row) =>
+      !row.deliveryId ||
+      Boolean(
+        row.deliveryProviderSessionId &&
+        row.deliveryProvider === session.provider &&
+        row.deliveryProviderSessionId === session.providerSessionId
+      )
+  );
 }
 
 class WorkspacePrEventAccessor {
@@ -201,7 +323,7 @@ class WorkspacePrEventAccessor {
   }
   claimDelivery(
     request: PRDeliveryRequest,
-    input: Omit<ClaimedPRDelivery, 'bindingRevision' | 'attempt'>
+    input: DeliveryClaimInput
   ): Promise<ClaimedPRDelivery | null> {
     const deliveryMode = prDeliveryModeSchema.parse(request.deliveryMode ?? 'MAIN');
     return prisma.$transaction(async (tx) => {
@@ -233,35 +355,20 @@ class WorkspacePrEventAccessor {
         where: {
           id: { in: input.eventIds },
           workspaceId: request.workspaceId,
-          prId: request.prId,
+          ...claimPRScope(request, deliveryMode),
           state: 'PENDING',
         },
       });
-      if (
-        rows.length !== input.eventIds.length ||
-        rows.some(
-          (e) =>
-            e.deliveryId &&
-            (e.deliveryId !== input.deliveryId ||
-              e.deliverySessionId !== input.sessionId ||
-              e.deliveryText !== input.text)
-        )
-      ) {
+      if (!(await matchesFrozenClaim(tx, input, rows))) {
+        return null;
+      }
+      if (!(await claimTargetsAttached(tx, request, rows))) {
         return null;
       }
       const session = await tx.agentSession.findFirst({
         where: { id: input.sessionId, workspaceId: request.workspaceId },
       });
-      if (
-        !session?.providerSessionId ||
-        rows.some(
-          (row) =>
-            row.deliveryId &&
-            (!row.deliveryProviderSessionId ||
-              row.deliveryProvider !== session.provider ||
-              row.deliveryProviderSessionId !== session.providerSessionId)
-        )
-      ) {
+      if (!matchesClaimIdentity(session, rows)) {
         return null;
       }
       if (!(await authorizedRecipient(tx, request, session, config.recipientSessionId))) {
@@ -355,6 +462,10 @@ class WorkspacePrEventAccessor {
           )
         ) {
           return { count: 0, status: 'identity_mismatch' };
+        }
+        const requeued = await requeueAttachedFactsAfterDetachment(tx, session, rows);
+        if (requeued !== null) {
+          return { count: requeued, status: 'recovered' };
         }
         const updated = await tx.workspacePREvent.updateMany({
           where: {

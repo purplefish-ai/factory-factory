@@ -651,3 +651,80 @@ it('preserves facts when a dedicated-to-main switch also binds a missing main pr
     )
   ).toMatchObject({ eventIds, sessionId: 'main', attempt: 1 });
 });
+
+async function mainBatchFacts() {
+  const first = await fact();
+  const [second] = await db.prisma.$transaction((tx) =>
+    workspacePrEventAccessor.insert(tx, 'w', 'p2', [
+      {
+        kind: 'CI_FAILED',
+        deduplicationKey: 'second',
+        payload: {
+          kind: 'CI_FAILED',
+          target: { workspaceId: 'w', prId: 'p2' },
+          observation: redObservation,
+        },
+      },
+    ])
+  );
+  if (!second) {
+    throw new Error('Missing sibling');
+  }
+  return [first, second];
+}
+it('atomically claims all main PR targets and preserves the whole frozen retry set', async () => {
+  const eventIds = await mainBatchFacts();
+  const request = { workspaceId: 'w', prId: null, bindingRevision: 0 };
+  const input = { deliveryId: 'batch', sessionId: 'main', eventIds, text: 'all facts' };
+  expect(await workspacePrEventAccessor.claimDelivery(request, input)).toMatchObject({
+    eventIds,
+    attempt: 1,
+    deliveryProviderSessionId: 'main-provider',
+  });
+  expect(
+    await db.prisma.workspacePREvent.count({ where: { deliveryId: 'batch', state: 'DISPATCHING' } })
+  ).toBe(2);
+  await workspacePrEventAccessor.settleDelivery({
+    deliveryId: 'batch',
+    sessionId: 'main',
+    bindingRevision: 0,
+    result: 'retry',
+  });
+  expect(
+    await workspacePrEventAccessor.claimDelivery(request, { ...input, eventIds: [eventIds[0]!] })
+  ).toBeNull();
+  expect(await workspacePrEventAccessor.claimDelivery(request, input)).toMatchObject({
+    eventIds,
+    text: 'all facts',
+    attempt: 2,
+  });
+});
+it('rejects an all-PR claim atomically when any target has detached', async () => {
+  const eventIds = await mainBatchFacts();
+  await db.prisma.workspacePR.update({ where: { id: 'p2' }, data: { detachedAt: new Date() } });
+  expect(
+    await workspacePrEventAccessor.claimDelivery(
+      { workspaceId: 'w', prId: null, bindingRevision: 0 },
+      { deliveryId: 'batch', sessionId: 'main', eventIds, text: 'all' }
+    )
+  ).toBeNull();
+  expect(await db.prisma.workspacePREvent.count({ where: { state: 'DISPATCHING' } })).toBe(0);
+});
+it('cannot mix fresh events into a frozen main batch', async () => {
+  const eventIds = await mainBatchFacts();
+  const request = { workspaceId: 'w', prId: null, bindingRevision: 0 };
+  const input = {
+    deliveryId: 'batch',
+    sessionId: 'main',
+    eventIds: [eventIds[0]!],
+    text: 'frozen',
+  };
+  expect(await workspacePrEventAccessor.claimDelivery(request, input)).not.toBeNull();
+  await workspacePrEventAccessor.settleDelivery({
+    deliveryId: 'batch',
+    sessionId: 'main',
+    bindingRevision: 0,
+    result: 'retry',
+  });
+  expect(await workspacePrEventAccessor.claimDelivery(request, { ...input, eventIds })).toBeNull();
+});

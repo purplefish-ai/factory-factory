@@ -64,6 +64,7 @@ export type SessionNotificationDeliveryServiceDependencies = {
 type CommittedNotificationMatch = {
   id: string;
   matchedByContent: boolean;
+  contentMatchKey?: string;
 };
 
 type ActiveDispatchClaim = {
@@ -303,10 +304,16 @@ export class SessionNotificationDeliveryService {
     const contentMatch = userEntries.find(
       (entry) =>
         !entry.id.startsWith(WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX) &&
-        entry.text === messageText &&
-        !consumedContentMatchIds.has(entry.id)
+        entry.text?.includes(messageText) &&
+        !consumedContentMatchIds.has(`${entry.id}:${messageId}`)
     );
-    return contentMatch ? { id: contentMatch.id, matchedByContent: true } : undefined;
+    return contentMatch
+      ? {
+          id: contentMatch.id,
+          matchedByContent: true,
+          contentMatchKey: `${contentMatch.id}:${messageId}`,
+        }
+      : undefined;
   }
 
   private async markDeliveredIfTranscriptMatch(input: {
@@ -327,7 +334,7 @@ export class SessionNotificationDeliveryService {
       return false;
     }
     if (committedMessage.matchedByContent) {
-      input.consumedContentMatchIds.add(committedMessage.id);
+      input.consumedContentMatchIds.add(committedMessage.contentMatchKey ?? committedMessage.id);
     }
     await this.markDeliveredAfterTranscriptMatch(
       input.sessionId,

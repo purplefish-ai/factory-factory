@@ -15,6 +15,7 @@ const {
 } = vi.hoisted(() => ({
   mockSessionDomainService: {
     peekNextMessage: vi.fn(),
+    getQueueSnapshot: vi.fn(),
     dequeueNext: vi.fn(),
     requeueFront: vi.fn(),
     markError: vi.fn(),
@@ -106,6 +107,10 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockSessionDomainService.getQueueSnapshot.mockImplementation(() => {
+      const next = mockSessionDomainService.peekNextMessage();
+      return next ? [next] : [];
+    });
     sessionDispatchService.resetDispatchState('s1');
     sessionDispatchService.configure({
       initPolicy: {

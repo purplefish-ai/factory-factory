@@ -239,6 +239,29 @@ describe('session-transcript', () => {
     expect(restored[1]).toMatchObject({ source: 'user', text: 'My next request' });
   });
 
+  it('restores a combined human and PR prompt as user content followed by a compact PR update', () => {
+    const pr = '<!-- factory-factory-pr-event:combined -->\nPR #1 and PR #2 failed';
+    const transcript = buildTranscriptFromHistory([
+      {
+        type: 'user',
+        uuid: 'provider-id',
+        content: `First request\n\nSecond request\n\n${pr}`,
+        timestamp: '2026-10-28T00:00:00.000Z',
+      },
+    ]);
+    expect(transcript).toHaveLength(2);
+    expect(transcript[0]).toMatchObject({
+      source: 'user',
+      text: 'First request\n\nSecond request',
+      order: 0,
+    });
+    expect(transcript[1]).toMatchObject({
+      source: 'agent',
+      message: { type: 'pr_update', text: pr },
+      order: 1,
+    });
+  });
+
   it('upserts duplicate tool_use content_block_start events by tool id', () => {
     const store = createStore();
     const options = createAppendOptions();

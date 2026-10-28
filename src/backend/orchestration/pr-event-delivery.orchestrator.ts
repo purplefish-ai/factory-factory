@@ -125,14 +125,18 @@ export async function preparePRDelivery(
   if (initialGuard !== 'ready') {
     return blockedGuardResult(initialGuard);
   }
-  if (request.prId) {
-    await services.refreshObservation({ workspaceId: request.workspaceId, prId: request.prId });
-  }
+  const main = (request.deliveryMode ?? 'MAIN') === 'MAIN';
+  await refreshDeliveryObservations(request, main, services);
   const finalGuard = await guardPRDelivery(sessionId, request, services);
   if (finalGuard !== 'ready') {
     return blockedGuardResult(finalGuard);
   }
-  const pending = await workspacePRMonitoringService.listPending(request.workspaceId, request.prId);
+  const pending = (
+    await workspacePRMonitoringService.listPending(
+      request.workspaceId,
+      main ? undefined : request.prId
+    )
+  ).filter((e) => e.prId !== null);
   const first = pending[0];
   if (!first) {
     return { status: 'discard' };
@@ -174,24 +178,70 @@ export async function preparePRDelivery(
     logger.error('Invalid persisted PR event', { error });
     return { status: 'blocked', reason: 'Stored PR update is invalid' };
   }
-  const delivery = await workspacePRMonitoringService.claimDelivery(request, {
-    deliveryId,
-    sessionId,
-    eventIds: events.map((e) => e.id),
-    text,
-  });
+  const targetGuard = await guardDeliveryTargets(sessionId, request, events, services);
+  if (targetGuard !== 'ready') {
+    return blockedGuardResult(targetGuard);
+  }
+  return claimDeliveryOrWait(sessionId, request, main, { deliveryId, text, events }, services);
+}
+async function refreshDeliveryObservations(
+  request: PRDeliveryRequest,
+  main: boolean,
+  services: PRDeliveryPorts
+) {
+  const targets = main
+    ? await services.workspacePrSnapshotService.list(request.workspaceId)
+    : request.prId
+      ? [{ id: request.prId }]
+      : [];
+  for (const target of targets) {
+    await services.refreshObservation({ workspaceId: request.workspaceId, prId: target.id });
+  }
+}
+async function guardDeliveryTargets(
+  sessionId: string,
+  request: PRDeliveryRequest,
+  events: PendingPREvent[],
+  services: PRDeliveryPorts
+) {
+  for (const prId of new Set(events.map((e) => e.prId))) {
+    const guard = await guardPRDelivery(sessionId, { ...request, prId }, services);
+    if (guard !== 'ready') {
+      return guard;
+    }
+  }
+  return 'ready' as const;
+}
+async function claimDeliveryOrWait(
+  sessionId: string,
+  request: PRDeliveryRequest,
+  main: boolean,
+  batch: { deliveryId: string; text: string; events: PendingPREvent[] },
+  services: PRDeliveryPorts
+): ReturnType<PRBackgroundDeliveryPort['prepare']> {
+  const monitoring = services.workspacePRMonitoringService;
+  const delivery = await monitoring.claimDelivery(
+    { ...request, prId: main ? null : request.prId },
+    {
+      deliveryId: batch.deliveryId,
+      sessionId,
+      eventIds: batch.events.map((event) => event.id),
+      text: batch.text,
+    }
+  );
   if (delivery) {
     return { status: 'ready', delivery };
   }
-  const remaining = await workspacePRMonitoringService.listPending(
+  const remaining = await monitoring.listPending(
     request.workspaceId,
-    request.prId
+    main ? undefined : request.prId
   );
   const guard = await guardPRDelivery(sessionId, request, services);
   return remaining.length && guard !== 'discard'
     ? { status: 'blocked', reason: 'Waiting for the workspace PR delivery claim' }
     : { status: 'discard' };
 }
+
 type MonitoringConfig = Awaited<ReturnType<PRDeliveryPorts['workspacePRMonitoringService']['get']>>;
 function matchesBinding(
   config: MonitoringConfig,
