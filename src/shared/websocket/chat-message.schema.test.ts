@@ -46,6 +46,18 @@ describe('ChatMessageSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  it.each([
+    { type: 'set_model', model: 'sonnet' },
+    { type: 'set_config_option', configId: 'model', value: 'sonnet' },
+  ])('preserves request correlation for $type', (command) => {
+    expect(ChatMessageSchema.parse({ ...command, requestId: 'selection-123' })).toEqual({
+      ...command,
+      requestId: 'selection-123',
+    });
+    expect(ChatMessageSchema.safeParse({ ...command, requestId: '' }).success).toBe(false);
+    expect(ChatMessageSchema.safeParse({ ...command, requestId: 123 }).success).toBe(false);
+  });
+
   it('accepts set_thinking_budget with null', () => {
     const result = ChatMessageSchema.safeParse({
       type: 'set_thinking_budget',

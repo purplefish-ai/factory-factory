@@ -57,7 +57,8 @@ function RouteProbe({
     inputRef,
     selectedDbSessionId: null,
     setSelectedDbSessionId: vi.fn(),
-    selectedModel: '',
+    creationDefaults: { provider: 'CLAUDE', model: undefined },
+    canCreate: true,
     selectedProvider: 'CLAUDE',
     onArchiveGitIndexLocked: locked,
   });

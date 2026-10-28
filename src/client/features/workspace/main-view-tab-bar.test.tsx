@@ -5,6 +5,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SubagentSelection } from '@/client/features/subagents';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import {
   cleanupSubagentTabTestEnvironment,
   seedSubagentTab,
@@ -173,4 +174,76 @@ describe('MainViewTabBar sub-agent tabs', () => {
     });
     await act(() => root.unmount());
   });
+});
+
+it('keeps unknown creation provider labels consistent instead of implying the legacy provider', async () => {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  try {
+    await act(() =>
+      root.render(
+        <TooltipProvider>
+          <WorkspacePanelProvider workspaceId="unknown-creation-provider">
+            <MainViewTabBar
+              workspaceId="unknown-creation-provider"
+              sessions={[]}
+              selectedProvider="CODEX"
+              setSelectedProvider={vi.fn()}
+              onCreateSession={vi.fn()}
+              creationSelection={{ provider: null, models: [], loading: true }}
+            />
+          </WorkspacePanelProvider>
+        </TooltipProvider>
+      )
+    );
+    expect(
+      container.querySelector('[aria-label="New conversation provider and model: Loading model…"]')
+    ).not.toBeNull();
+    expect(
+      container.querySelector<HTMLButtonElement>('[aria-label="New conversation"]')?.disabled
+    ).toBe(true);
+    expect(container.querySelector('[aria-label="New Codex session"]')).toBeNull();
+  } finally {
+    await act(() => root.unmount());
+  }
+});
+
+it('keeps the creation retry enabled while creation actions are blocked by defaults failure', async () => {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  const onRetry = vi.fn();
+  try {
+    await act(() =>
+      root.render(
+        <TooltipProvider>
+          <WorkspacePanelProvider workspaceId="failed-creation-provider">
+            <MainViewTabBar
+              workspaceId="failed-creation-provider"
+              sessions={[]}
+              selectedProvider="CODEX"
+              setSelectedProvider={vi.fn()}
+              onCreateSession={vi.fn()}
+              creationSelection={{
+                provider: null,
+                models: [],
+                error: 'Could not load chat defaults',
+                onRetry,
+              }}
+            />
+          </WorkspacePanelProvider>
+        </TooltipProvider>
+      )
+    );
+    expect(
+      container.querySelector<HTMLButtonElement>('[aria-label="New conversation"]')?.disabled
+    ).toBe(true);
+    const retry = container.querySelector<HTMLButtonElement>('[aria-label$="Retry selection"]');
+    expect(retry?.disabled).toBe(false);
+    await act(() => retry?.click());
+    expect(onRetry).toHaveBeenCalledOnce();
+  } finally {
+    await act(() => root.unmount());
+  }
 });

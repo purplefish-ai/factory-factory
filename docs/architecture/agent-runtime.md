@@ -51,6 +51,39 @@ use `session/set_config_option`; legacy model/mode response fallbacks remain
 supported. Boolean options remain in backend snapshots while current chat
 controls render select options.
 
+### Provider and model selection
+
+Model selection uses the explicit launch choice, then the user's saved default
+for that provider. Existing conversations retain their stored model. New and
+resumed runtimes apply that model through the advertised ACP model option before
+publishing ready configuration or accepting prompts. Unsupported choices fail
+explicitly; they never silently select the first model. Codex's saved `default`
+means its native default, and supported Claude family aliases resolve to the
+advertised identity. Browse-only restoration does not change configuration.
+Startup model configuration shares the bounded startup deadline and cancellation
+signals. Passive catalog reads enrich available options without persisting a
+guessed selection or overwriting a newer runtime/edit.
+
+Client settings remain intact while capabilities are unknown. Initial confirmed
+configuration supersedes bootstrap model values; explicit edits and restored
+reasoning/planning settings survive hydration. Configuration from a previous
+session visit cannot update the newly selected conversation. A message submitted
+before configuration arrives relies on the server's stored selection instead of
+sending a hardcoded client model. Pending model choices stay visible until
+confirmed. Rejected or unsent changes restore the confirmed model; request
+correlation prevents an older rejection from discarding a newer choice. Each
+conversation restores its own draft and attachments, including switches before
+draft autosave completes. Model/configuration writes serialize per session
+through persistence and state publication, including failure corrections;
+different sessions remain independent. Later genuine server changes remain
+authoritative after pending edits settle. Model-only changes preserve a
+supported explicit reasoning effort; an unsupported effort normalizes to the new
+model's confirmed default. Each session load has a 10-second UI loading safety
+timer, including creation from an empty Quick Chat. This UI timer does not
+release backend configuration readiness.
+
+### Permission and configuration readiness
+
 Permission defaults initialize new sessions. Existing sessions restore their
 saved native access and Codex planning choices before publishing a new snapshot
 or dispatching work. Prompts and user configuration changes wait for that

@@ -187,7 +187,13 @@ function handleAssistantTextDeltaAction(data: WebSocketMessage): ChatAction | nu
 
 function handleErrorMessageAction(data: WebSocketMessage): ChatAction | null {
   if (data.message) {
-    return { type: 'WS_ERROR', payload: { message: data.message } };
+    return {
+      type: 'WS_ERROR',
+      payload: {
+        message: data.message,
+        ...(typeof data.requestId === 'string' ? { requestId: data.requestId } : {}),
+      },
+    };
   }
   return null;
 }

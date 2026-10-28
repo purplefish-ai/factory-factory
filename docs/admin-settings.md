@@ -32,6 +32,18 @@ the browser and does not sync across devices. Each change saves immediately.
 it does not change Mode. The last applied appearance is cached in the browser so
 a reload does not flash the defaults before the saved settings load.
 
+## CLI notices
+
+The top of the app shows a compact blue **Update Claude** button when a newer
+Claude CLI is available. This is an optional update; hover over the button for
+installed and available versions. During an update the button shows progress and
+prevents duplicate requests. Bundled Codex updates ship with the app.
+
+Missing tools and GitHub sign-in problems appear as amber notices with setup
+instructions. **Recheck** refreshes their status. Dismissing the strip keeps it
+hidden across reloads until the issue details change; resolved notices
+disappear.
+
 ## Custom IDE commands
 
 Select **Custom** under **Preferred IDE** to reveal the command field. For a new

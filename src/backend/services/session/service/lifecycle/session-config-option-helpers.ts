@@ -67,7 +67,7 @@ function resolveCodexModelValue(
   currentModelValue: string | null,
   modelCatalog: CodexModelCatalogEntry[]
 ): string | null {
-  if (currentModelValue && modelCatalog.some((model) => model.id === currentModelValue)) {
+  if (currentModelValue && currentModelValue !== 'default') {
     return currentModelValue;
   }
   return modelCatalog.find((model) => model.isDefault)?.id ?? modelCatalog[0]?.id ?? null;

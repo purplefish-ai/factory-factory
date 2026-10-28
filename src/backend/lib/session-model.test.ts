@@ -15,6 +15,8 @@ describe('normalizeSessionModelForProvider', () => {
 
   it('rejects obvious cross-provider model leakage', () => {
     expect(normalizeSessionModelForProvider('opus', 'CODEX')).toBeUndefined();
+    expect(normalizeSessionModelForProvider('opus[1m]', 'CODEX')).toBeUndefined();
+    expect(normalizeSessionModelForProvider('fable[1m]', 'CODEX')).toBeUndefined();
     expect(normalizeSessionModelForProvider('claude-sonnet-4-5-20250929', 'CODEX')).toBeUndefined();
     expect(normalizeSessionModelForProvider('gpt-5', 'CLAUDE')).toBeUndefined();
     expect(normalizeSessionModelForProvider('o3', 'CLAUDE')).toBeUndefined();
@@ -30,10 +32,26 @@ describe('normalizeSessionModelForProvider', () => {
 });
 
 describe('resolveSessionModelForProvider', () => {
-  it('falls back to provider defaults when normalized model is missing or invalid', () => {
+  it('falls back to provider defaults when an explicit model is missing', () => {
     expect(resolveSessionModelForProvider(undefined, 'CLAUDE')).toBe('sonnet');
-    expect(resolveSessionModelForProvider('opus', 'CODEX')).toBe('default');
-    expect(resolveSessionModelForProvider('gpt-5', 'CLAUDE')).toBe('sonnet');
+  });
+
+  it.each(['', '   ', '\t\n'])('treats blank explicit model %j as omitted', (model) => {
+    expect(resolveSessionModelForProvider(model, 'CLAUDE')).toBe('sonnet');
+    expect(resolveSessionModelForProvider(model, 'CODEX')).toBe('default');
+    expect(resolveSessionModelForProvider(model, 'CLAUDE', 'opus')).toBe('opus');
+    expect(resolveSessionModelForProvider(model, 'CODEX', 'gpt-6-sol')).toBe('gpt-6-sol');
+    expect(resolveSessionModelForProvider(model, 'CLAUDE', 'gpt-6-sol')).toBe('sonnet');
+    expect(resolveSessionModelForProvider(model, 'CODEX', 'opus')).toBe('default');
+  });
+
+  it.each([
+    ['opus', 'CODEX'],
+    ['gpt-5', 'CLAUDE'],
+    ['  opus  ', 'CODEX'],
+    ['\t gpt-5 \n', 'CLAUDE'],
+  ] as const)('rejects explicit %s for %s instead of replacing the choice', (model, provider) => {
+    expect(() => resolveSessionModelForProvider(model, provider)).toThrow('not compatible');
   });
 
   it('uses provider-compatible fallback models before built-in defaults', () => {

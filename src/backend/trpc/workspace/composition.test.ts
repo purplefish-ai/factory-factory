@@ -117,6 +117,18 @@ describe('workspace router composition', () => {
       branchName: 'feature/resume',
       useExistingBranch: true,
     });
+    resolveProviderForWorkspaceCreation.mockRejectedValueOnce(new Error('Mismatched model'));
+    await expect(
+      caller.create({
+        type: 'MANUAL',
+        projectId: 'project-1',
+        name: 'Explicit model',
+        provider: 'CLAUDE',
+        model: 'gpt-6-luna',
+      })
+    ).rejects.toThrow('Mismatched model');
+    expect(resolveProviderForWorkspaceCreation).toHaveBeenCalledWith('CLAUDE', 'gpt-6-luna');
+    expect(createWorkspace).toHaveBeenCalledOnce();
   });
 
   it('rejects invalid input before invoking interactive launch', async () => {

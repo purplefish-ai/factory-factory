@@ -3,6 +3,7 @@ import { createLogger } from '@/backend/services/logger.service';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import { withConfiguredAcpHandle } from '@/backend/services/session/service/acp/acp-configured-handle';
+import { resolveAcpModelSelection } from '@/backend/services/session/service/acp/acp-model-selection';
 import { normalizeSessionConfigOptions } from '@/backend/services/session/service/acp/acp-session-config-options';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
@@ -13,12 +14,14 @@ import { type ChatBarCapabilities, EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/
 import type { SessionPermissionPreset } from '@prisma-gen/client';
 import { parseAcpConfigSnapshot, type StoredAcpConfigSnapshot } from './acp-config-snapshot';
 import type { CodexModelCatalogService } from './codex-model-catalog.service';
+import { SessionConfigMutationQueue } from './session-config-mutation-queue';
 import {
   buildCapabilitiesFromConfigOptions,
   buildCodexConfigOptionsWithModelCatalog,
   getConfigOptionValues,
   type SessionProvider,
 } from './session-config-option-helpers';
+import { setInactiveSessionConfigOption } from './session-inactive-config-options';
 import {
   applyReadOnlyReviewPermissions,
   assertReadOnlyReviewConfigOption,
@@ -31,7 +34,6 @@ import type { SessionRepository } from './session.repository';
 const logger = createLogger('session');
 
 type SessionStartupModePreset = 'non_interactive' | 'plan';
-
 export type PersistAcpConfigSnapshotParams = {
   provider: SessionProvider;
   providerSessionId: string;
@@ -48,6 +50,7 @@ export type SessionConfigServiceDependencies = {
 };
 
 export class SessionConfigService {
+  private readonly configUpdates: SessionConfigMutationQueue;
   private readonly repository: SessionRepository;
   private readonly runtimeManager: AcpRuntimeManager;
   private readonly sessionDomainService: SessionDomainService;
@@ -58,6 +61,15 @@ export class SessionConfigService {
     this.runtimeManager = options.runtimeManager;
     this.codexModelCatalogService = options.codexModelCatalogService;
     this.sessionDomainService = options.sessionDomainService ?? sessionDomainService;
+    this.configUpdates = new SessionConfigMutationQueue(
+      this.runtimeManager,
+      (sessionId, configOptions) => {
+        this.sessionDomainService.emitDelta(sessionId, {
+          type: 'config_options_update',
+          configOptions,
+        } as SessionDeltaEvent);
+      }
+    );
   }
 
   applyConfigOptionsUpdateDelta(
@@ -297,30 +309,46 @@ export class SessionConfigService {
   }
 
   async setSessionModel(sessionId: string, model?: string): Promise<void> {
-    const acpHandle = this.runtimeManager.getClient(sessionId);
-    if (acpHandle) {
-      const modelOption = acpHandle.configOptions.find((option) => option.category === 'model');
-      if (modelOption && model) {
-        const availableValues = getConfigOptionValues(modelOption);
-        if (availableValues.length > 0 && !availableValues.includes(model)) {
-          logger.debug('Skipping unsupported model for ACP session', {
-            sessionId,
-            provider: acpHandle.provider,
-            model,
-            availableValues,
-          });
-          return;
-        }
+    await this.configUpdates.run(sessionId, () =>
+      this.setSessionModelUnserialized(sessionId, model)
+    );
+  }
 
-        await this.setSessionConfigOption(sessionId, modelOption.id, model);
-      }
+  private async setSessionModelUnserialized(sessionId: string, model?: string): Promise<void> {
+    if (!model) {
       return;
     }
-
-    logger.debug('No ACP handle for setSessionModel', { sessionId, model });
+    const handle = this.runtimeManager.getClient(sessionId);
+    if (handle) {
+      await withConfiguredAcpHandle(this.runtimeManager, sessionId, handle, async () => {
+        const target = resolveAcpModelSelection(handle.provider, handle.configOptions, model);
+        await this.setSessionConfigOptionUnserialized(sessionId, target.configId, target.value);
+      });
+      return;
+    }
+    const session = await this.repository.getSessionById(sessionId);
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+    const snapshot = parseAcpConfigSnapshot(session.providerMetadata);
+    if (!snapshot) {
+      await this.setSessionConfigOptionUnserialized(sessionId, 'model', model);
+      return;
+    }
+    const target = resolveAcpModelSelection(session.provider, snapshot.configOptions, model);
+    await this.setSessionConfigOptionUnserialized(sessionId, target.configId, target.value);
   }
 
   async setSessionCollaborationMode(sessionId: string, mode: 'plan'): Promise<void> {
+    await this.configUpdates.run(sessionId, () =>
+      this.setSessionCollaborationModeUnserialized(sessionId, mode)
+    );
+  }
+
+  private async setSessionCollaborationModeUnserialized(
+    sessionId: string,
+    mode: 'plan'
+  ): Promise<void> {
     const acpHandle = this.runtimeManager.getClient(sessionId);
     if (!acpHandle) {
       logger.debug('No ACP handle for setSessionCollaborationMode', { sessionId, mode });
@@ -342,10 +370,19 @@ export class SessionConfigService {
       return;
     }
 
-    await this.setSessionConfigOption(sessionId, modeOption.id, targetMode);
+    await this.setSessionConfigOptionUnserialized(sessionId, modeOption.id, targetMode);
   }
 
   async setSessionThinkingBudget(sessionId: string, maxTokens: number | null): Promise<void> {
+    await this.configUpdates.run(sessionId, () =>
+      this.setSessionThinkingBudgetUnserialized(sessionId, maxTokens)
+    );
+  }
+
+  private async setSessionThinkingBudgetUnserialized(
+    sessionId: string,
+    maxTokens: number | null
+  ): Promise<void> {
     const acpHandle = this.runtimeManager.getClient(sessionId);
     if (acpHandle) {
       const thoughtOption = acpHandle.configOptions.find(
@@ -364,7 +401,7 @@ export class SessionConfigService {
           return;
         }
 
-        await this.setSessionConfigOption(sessionId, thoughtOption.id, thinkingBudget);
+        await this.setSessionConfigOptionUnserialized(sessionId, thoughtOption.id, thinkingBudget);
       }
       return;
     }
@@ -373,6 +410,15 @@ export class SessionConfigService {
   }
 
   async setSessionReasoningEffort(
+    sessionId: string,
+    reasoningEffort: string | null
+  ): Promise<void> {
+    await this.configUpdates.run(sessionId, () =>
+      this.setSessionReasoningEffortUnserialized(sessionId, reasoningEffort)
+    );
+  }
+
+  private async setSessionReasoningEffortUnserialized(
     sessionId: string,
     reasoningEffort: string | null
   ): Promise<void> {
@@ -431,13 +477,37 @@ export class SessionConfigService {
   }
 
   async setSessionConfigOption(sessionId: string, configId: string, value: string): Promise<void> {
+    await this.configUpdates.run(sessionId, () =>
+      this.setSessionConfigOptionUnserialized(sessionId, configId, value)
+    );
+  }
+
+  private async setSessionConfigOptionUnserialized(
+    sessionId: string,
+    configId: string,
+    value: string
+  ): Promise<void> {
     const acpHandle = this.runtimeManager.getClient(sessionId);
     if (!acpHandle) {
-      const configOptions = await this.setCachedSessionConfigOption(sessionId, configId, value);
+      const update = await setInactiveSessionConfigOption(sessionId, configId, value, {
+        repository: this.repository,
+        runtimeManager: this.runtimeManager,
+        catalog: this.codexModelCatalogService,
+        persistSnapshot: this.persistAcpConfigSnapshot.bind(this),
+      });
+      if (!update) {
+        await this.setSessionConfigOptionUnserialized(sessionId, configId, value);
+        return;
+      }
+      const { provider, configOptions } = update;
       this.sessionDomainService.emitDelta(sessionId, {
         type: 'config_options_update',
         configOptions,
       } as SessionDeltaEvent);
+      this.sessionDomainService.emitDelta(sessionId, {
+        type: 'chat_capabilities',
+        capabilities: buildCapabilitiesFromConfigOptions(provider, configOptions),
+      });
       return;
     }
 
@@ -448,6 +518,9 @@ export class SessionConfigService {
     const selectedOption = acpHandle.configOptions.find((option) => option.id === configId);
     const isModeOption = configId === 'mode' || selectedOption?.category === 'mode';
     const isModelOption = configId === 'model' || selectedOption?.category === 'model';
+    if (isModelOption) {
+      value = resolveAcpModelSelection(acpHandle.provider, acpHandle.configOptions, value).value;
+    }
     if (
       isModeOption ||
       configId === 'collaboration_mode' ||
@@ -825,73 +898,6 @@ export class SessionConfigService {
     return value.replace(/[^a-z0-9]/gi, '').toLowerCase();
   }
 
-  private async setCachedSessionConfigOption(
-    sessionId: string,
-    configId: string,
-    value: string
-  ): Promise<SessionConfigOption[]> {
-    const session = await this.repository.getSessionById(sessionId);
-    if (!session) {
-      throw new Error(`Session not found: ${sessionId}`);
-    }
-
-    const snapshot = parseAcpConfigSnapshot(session.providerMetadata);
-    if (!snapshot || snapshot.provider !== session.provider) {
-      throw new Error(
-        `Cannot set config option for inactive session ${sessionId}: no cached ACP config available`
-      );
-    }
-
-    assertReadOnlyReviewConfigOption(
-      session.workflow,
-      configId,
-      value,
-      snapshot.configOptions.find((option) => option.id === configId),
-      session.provider
-    );
-    const configOptions = this.updateCachedConfigOptions(snapshot.configOptions, configId, value);
-    await this.persistAcpConfigSnapshot(sessionId, {
-      provider: snapshot.provider,
-      providerSessionId: snapshot.providerSessionId,
-      configOptions,
-      existingMetadata: session.providerMetadata,
-    });
-    return configOptions;
-  }
-
-  private updateCachedConfigOptions(
-    configOptions: SessionConfigOption[],
-    configId: string,
-    value: string
-  ): SessionConfigOption[] {
-    if (!configOptions.some((option) => option.id === configId)) {
-      throw new Error(`Unknown config option: ${configId}`);
-    }
-    return configOptions.map((option) => {
-      if (option.id !== configId) {
-        return option;
-      }
-      if (option.type !== 'select') {
-        throw new Error(
-          `Cannot set config option "${configId}" on an inactive session: unsupported type "${option.type}"`
-        );
-      }
-
-      const allowedValues = getConfigOptionValues(option);
-      if (allowedValues.length > 0 && !allowedValues.includes(value)) {
-        throw new Error(
-          `Unsupported value "${value}" for config option "${configId}"` +
-            ` (allowed: ${allowedValues.join(', ')})`
-        );
-      }
-
-      return {
-        ...option,
-        currentValue: value,
-      };
-    });
-  }
-
   private async refreshCodexFallbackConfigOptionsFromAppServer(params: {
     sessionId: string;
     session: AgentSessionRecord;
@@ -904,30 +910,23 @@ export class SessionConfigService {
       });
       return null;
     });
+    // Catalog reads only enrich display options. They never confirm or persist a model.
+    const latest = await this.repository.getSessionById(params.sessionId);
+    const liveOptions = this.getSessionConfigOptions(params.sessionId);
+    if (liveOptions.length > 0) {
+      return liveOptions;
+    }
+    const latestSnapshot = parseAcpConfigSnapshot(latest?.providerMetadata);
+    const configOptions =
+      latestSnapshot?.provider === 'CODEX' ? latestSnapshot.configOptions : params.configOptions;
     if (!modelCatalog || modelCatalog.length === 0) {
-      return params.configOptions;
+      return configOptions;
     }
-
-    const nextConfigOptions = buildCodexConfigOptionsWithModelCatalog(
-      params.configOptions,
+    return buildCodexConfigOptionsWithModelCatalog(
+      configOptions,
       modelCatalog,
-      params.cachedSnapshot?.observedModelId ?? params.session.model
+      latest?.model ?? params.session.model
     );
-
-    if (
-      params.cachedSnapshot &&
-      params.cachedSnapshot.provider === 'CODEX' &&
-      JSON.stringify(params.cachedSnapshot.configOptions) !== JSON.stringify(nextConfigOptions)
-    ) {
-      await this.persistAcpConfigSnapshot(params.sessionId, {
-        provider: 'CODEX',
-        providerSessionId: params.cachedSnapshot.providerSessionId,
-        configOptions: nextConfigOptions,
-        existingMetadata: params.session.providerMetadata,
-      });
-    }
-
-    return nextConfigOptions;
   }
 
   private buildSnapshotPersistUpdate(

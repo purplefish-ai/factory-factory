@@ -94,6 +94,7 @@ export const ChatMessageSchema = z.discriminatedUnion('type', [
   // Set the model
   z.object({
     type: z.literal('set_model'),
+    requestId: z.string().min(1).optional(),
     model: z.string().optional(),
     reasoningEffort: z.string().nullable().optional(),
   }),
@@ -112,6 +113,7 @@ export const ChatMessageSchema = z.discriminatedUnion('type', [
   // Set an ACP config option (model, mode, thought level, etc.)
   z.object({
     type: z.literal('set_config_option'),
+    requestId: z.string().min(1).optional(),
     configId: z.string().min(1),
     value: z.string().min(1),
   }),

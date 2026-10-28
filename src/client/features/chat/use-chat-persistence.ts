@@ -38,16 +38,15 @@ export function useChatPersistence(options: UseChatPersistenceOptions): UseChatP
   const [inputDraft, setInputDraftState] = useState(initialDraft);
   const dbSessionIdRef = useRef<string | null>(dbSessionId ?? null);
   const persistDraftDebounced = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const pendingDraftRef = useRef<{ sessionId: string | null; draft: string } | undefined>(
+    undefined
+  );
 
-  // Update ref when sessionId changes
+  // Reset the composer for each session even when their stored drafts match.
   useEffect(() => {
     dbSessionIdRef.current = dbSessionId;
-  }, [dbSessionId]);
-
-  // Update draft state when initial draft changes (session switch)
-  useEffect(() => {
     setInputDraftState(initialDraft);
-  }, [initialDraft]);
+  }, [dbSessionId, initialDraft]);
 
   /**
    * Set input draft and persist to sessionStorage (debounced).
@@ -60,8 +59,11 @@ export function useChatPersistence(options: UseChatPersistenceOptions): UseChatP
     if (persistDraftDebounced.current) {
       clearTimeout(persistDraftDebounced.current);
     }
+    pendingDraftRef.current = { sessionId, draft };
     persistDraftDebounced.current = setTimeout(() => {
       persistDraft(sessionId, draft);
+      pendingDraftRef.current = undefined;
+      persistDraftDebounced.current = undefined;
     }, 300);
   }, []);
 
@@ -74,17 +76,25 @@ export function useChatPersistence(options: UseChatPersistenceOptions): UseChatP
       clearTimeout(persistDraftDebounced.current);
       persistDraftDebounced.current = undefined;
     }
+    pendingDraftRef.current = undefined;
     clearDraft(dbSessionIdRef.current);
   }, []);
 
-  // Clean up pending debounced persist on unmount
+  // Flush the outgoing draft before the next session loads its own storage,
+  // including switches made before the debounce completes.
   useEffect(() => {
     return () => {
       if (persistDraftDebounced.current) {
         clearTimeout(persistDraftDebounced.current);
+        persistDraftDebounced.current = undefined;
+      }
+      const pending = pendingDraftRef.current;
+      if (pending && pending.sessionId === dbSessionId) {
+        persistDraft(dbSessionId, pending.draft);
+        pendingDraftRef.current = undefined;
       }
     };
-  }, []);
+  }, [dbSessionId]);
 
   return {
     inputDraft,

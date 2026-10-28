@@ -64,6 +64,7 @@ const workspaceCreationSourceSchema = z.discriminatedUnion('type', [
       initialAttachments: z.array(AttachmentSchema).optional(),
       startupModePreset: z.enum(['non_interactive', 'plan']).optional(),
       provider: z.nativeEnum(SessionProvider).optional(),
+      model: z.string().trim().min(1).optional(),
       mode: z.enum(['STANDARD', 'AUTO_ITERATION']).optional(),
       autoIterationConfig: autoIterationConfigSchema.optional(),
     })

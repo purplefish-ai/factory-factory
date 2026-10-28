@@ -134,6 +134,22 @@ describe('sessionProviderResolverService', () => {
     expect(userSettingsService.getDefaultSessionProvider).toHaveBeenCalledTimes(1);
   });
 
+  it('validates explicit models during workspace creation preflight', async () => {
+    await expect(
+      sessionProviderResolverService.resolveProviderForWorkspaceCreation('CLAUDE', 'gpt-6-luna')
+    ).rejects.toThrow('not compatible');
+  });
+
+  it('rejects an explicit cross-provider model for ordinary session creation', async () => {
+    await expect(
+      sessionProviderResolverService.resolveSessionDefaults({
+        workspaceId: 'ws-1',
+        explicitProvider: 'CLAUDE',
+        explicitModel: 'gpt-6-luna',
+      })
+    ).rejects.toThrow('not compatible');
+  });
+
   it('resolves the configured model for the selected provider', async () => {
     vi.mocked(userSettingsService.getDefaultSessionProvider).mockResolvedValue('CODEX');
     vi.mocked(userSettingsService.get).mockResolvedValue({
