@@ -77,8 +77,13 @@ export function useSessionLaunchSelectionState(
     reasoningEffort: draft?.reasoningEffort,
     planModeEnabled: draft?.planModeEnabled,
     loading: !state.defaults,
-    onProviderChange: (next: ChatProvider) =>
-      setStored((current) => ({ ...current, provider: next })),
+    defaults: state.defaults,
+    onProviderChange: (next: ChatProvider, model?: string) =>
+      setStored((current) => ({
+        ...current,
+        provider: next,
+        drafts: { ...current.drafts, [next]: { ...current.drafts[next], model } },
+      })),
     onModelChange: (model: string) => updateDraft({ model }),
     onReasoningChange: (reasoningEffort: string | null) => updateDraft({ reasoningEffort }),
     onPlanModeChange: (planModeEnabled: boolean) => updateDraft({ planModeEnabled }),
@@ -230,6 +235,26 @@ export function useSessionLaunchSelection(
     provider: selection.provider,
     model: selection.model,
     models,
+    providerOptions: {
+      CLAUDE: {
+        defaultModel: selection.defaults?.defaultClaudeModel,
+        models: getModels(
+          'CLAUDE',
+          selection.provider === 'CLAUDE'
+            ? selection.model
+            : selection.defaults?.defaultClaudeModel,
+          catalog
+        ),
+      },
+      CODEX: {
+        defaultModel: selection.defaults?.defaultCodexModel,
+        models: getModels(
+          'CODEX',
+          selection.provider === 'CODEX' ? selection.model : selection.defaults?.defaultCodexModel,
+          catalog
+        ),
+      },
+    },
     loading,
     error,
     onRetry: retry,

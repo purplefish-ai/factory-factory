@@ -119,6 +119,7 @@ function WorkspaceCreationPreviewSession({
     <QueryClientProvider client={queryClient}>
       <trpc.Provider client={client} queryClient={queryClient}>
         <div
+          className="max-w-full"
           style={{
             width: compact ? 'min(20rem, calc(100vw - 2rem))' : 'min(40rem, calc(100vw - 2rem))',
           }}
@@ -162,3 +163,13 @@ export const Narrow: Story = {
   parameters: { viewport: { value: 'mobile1' } },
 };
 export const NarrowDark: Story = { ...Narrow, globals: { theme: 'dark' } };
+export const Sidebar: Story = {
+  decorators: [
+    (Story) => (
+      <div className="w-72">
+        <Story />
+      </div>
+    ),
+  ],
+  globals: { theme: 'dark' },
+};

@@ -8,8 +8,14 @@ export function ComposerMenuTrigger({
   children,
   className,
   indicator,
+  icon,
+  iconOnly = false,
   ...props
-}: ComponentProps<typeof Button> & { indicator?: ReactNode }) {
+}: ComponentProps<typeof Button> & {
+  indicator?: ReactNode;
+  icon?: ReactNode;
+  iconOnly?: boolean;
+}) {
   return (
     <Button
       type="button"
@@ -17,12 +23,18 @@ export function ComposerMenuTrigger({
       size="sm"
       className={cn(
         'h-6 min-w-0 max-w-[14rem] gap-1 px-2 text-xs text-muted-foreground hover:text-foreground',
+        iconOnly && 'size-6 shrink-0 p-0',
         className
       )}
       {...props}
     >
-      <span className="truncate">{children}</span>
-      {indicator ?? <CaretDownIcon className="size-3 shrink-0" />}
+      {icon}
+      {!iconOnly && (
+        <>
+          <span className="truncate">{children}</span>
+          {indicator ?? <CaretDownIcon className="size-3 shrink-0" />}
+        </>
+      )}
     </Button>
   );
 }

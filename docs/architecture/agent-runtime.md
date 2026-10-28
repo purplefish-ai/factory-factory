@@ -4,6 +4,12 @@ Rejected or failed messages restore their text and attachments only when the
 current session composer is empty. A newer draft or attachment selection is
 preserved, and clearing it later does not replay the earlier recovery.
 
+Claude session history restores inline image blocks as attachments on the
+original user prompt, including image-only prompts. Image-reference metadata
+companions are omitted from chat replay; their temporary file paths are not
+read. Restoration rejects malformed base64 and images above the shared 10 MiB
+decoded size limit used for uploads.
+
 The new-workspace slash-command palette prefers project command descriptions
 over same-named global commands, matching the workspace-first precedence used
 when loading a Claude session. Commands found only in the global directory
@@ -60,6 +66,14 @@ permission escalation. Access modes, including Claude planning, use
 use `session/set_config_option`; legacy model/mode response fallbacks remain
 supported. Boolean options remain in backend snapshots while current chat
 controls render select options.
+
+The conversation composer keeps the model visible and shows reasoning effort
+when supported by native configuration or resolved capabilities. Access,
+planning, and Fast mode use compact icons with the current value in a tooltip
+and accessible label. Active planning and Fast mode are highlighted;
+unrestricted access uses an orange warning icon. Menus show provider-supplied
+descriptions for settings and choices. On mobile, the options sheet retains text
+labels.
 
 ### Provider and model selection
 

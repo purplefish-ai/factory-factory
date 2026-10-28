@@ -167,7 +167,12 @@ function renderLaunch(inline = false) {
                     { value: 'slow', label: 'Slow model' },
                   ],
                 },
-                CLAUDE: { models: [{ value: 'sonnet', label: 'Sonnet' }] },
+                CLAUDE: {
+                  models: [
+                    { value: 'sonnet', label: 'Sonnet' },
+                    { value: 'opus', label: 'Opus' },
+                  ],
+                },
               },
               'session.createAndStartSession': { id: 'created' },
               'project.listSlashCommands': { commands: [] },
@@ -235,6 +240,23 @@ async function choose(label: string) {
     item?.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }));
   });
 }
+function providerItem(name: string) {
+  const item = [
+    ...document.body.querySelectorAll<HTMLElement>('[role="menuitem"][aria-haspopup="menu"]'),
+  ].find((option) => option.textContent?.startsWith(name));
+  expect(item).toBeDefined();
+  return item!;
+}
+async function chooseProviderDefault(name: string) {
+  await act(() => providerItem(name).click());
+}
+async function openModels(name: string) {
+  await act(() => {
+    const item = providerItem(name);
+    item.focus();
+    item.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowRight' }));
+  });
+}
 async function ready() {
   await vi.waitFor(() => expect(button('Create chat')?.disabled).toBe(false));
 }
@@ -251,7 +273,7 @@ describe('real launch controls and tRPC payloads', () => {
       await ready();
       if (provider === 'CLAUDE') {
         await open('New conversation provider and model: Codex · 6 Sol');
-        await choose('Claude');
+        await chooseProviderDefault('Claude');
         await ready();
       }
       await open(provider === 'CLAUDE' ? 'Thinking level: Default' : 'Thinking level: High');
@@ -348,6 +370,7 @@ describe('real launch controls and tRPC payloads', () => {
     await open('Thinking level: High');
     await choose('Ultra');
     await open('New conversation provider and model: Codex · 6 Sol');
+    await openModels('Codex');
     await choose('6 Luna');
     await vi.waitFor(() =>
       expect(button('Thinking level: ultra')?.getAttribute('aria-invalid')).toBe('true')
@@ -355,10 +378,11 @@ describe('real launch controls and tRPC payloads', () => {
     expect(button('Create chat')?.disabled).toBe(true);
     expect(button('Create chat')?.title).toContain('Choose a supported thinking');
     await open('New conversation provider and model: Codex · 6 Luna');
-    await choose('Claude');
+    await chooseProviderDefault('Claude');
     await ready();
     await open('New conversation provider and model: Claude · Sonnet');
-    await choose('Codex');
+    await openModels('Codex');
+    await choose('6 Luna');
     await vi.waitFor(() =>
       expect(button('Thinking level: ultra')?.getAttribute('aria-invalid')).toBe('true')
     );
@@ -386,11 +410,12 @@ describe('real launch controls and tRPC payloads', () => {
     await view.render();
     await ready();
     await open('New conversation provider and model: Codex · 6 Sol');
+    await openModels('Codex');
     await choose('Slow model');
     await vi.waitFor(() => expect(view.pending.has('CODEX:slow')).toBe(true));
     expect(button('Create chat')?.disabled).toBe(true);
     await open('New conversation provider and model: Codex · Slow model');
-    await choose('Claude');
+    await chooseProviderDefault('Claude');
     await ready();
     await act(() => view.pending.get('CODEX:slow')?.(fixture('CODEX', 'slow')));
     expect(button('New conversation provider and model: Claude · Sonnet')).toBeDefined();
@@ -402,6 +427,7 @@ describe('real launch controls and tRPC payloads', () => {
     await view.render();
     await ready();
     await open('New conversation provider and model: Codex · 6 Sol');
+    await openModels('Codex');
     await choose('6 Luna');
     await vi.waitFor(() => expect(button('Thinking level: Unavailable')).toBeDefined());
     expect(button('Create chat')?.disabled).toBe(true);
@@ -420,6 +446,29 @@ describe('real launch controls and tRPC payloads', () => {
           JSON.stringify(request.input).includes('luna')
       )
     ).toHaveLength(2);
+  });
+  it('launches a workspace with another provider and its nested model in one menu visit', async () => {
+    const view = renderLaunch(true);
+    await view.render();
+    await vi.waitFor(() => expect(button('Launch')?.disabled).toBe(false));
+    await open('New conversation provider and model: Codex · 6 Sol');
+    await openModels('Claude');
+    expect(button('New conversation provider and model: Codex · 6 Sol')).toBeDefined();
+    await choose('Opus');
+    await vi.waitFor(() => expect(button('Launch')?.disabled).toBe(false));
+    expect(button('New conversation provider and model: Claude · Opus')).toBeDefined();
+    await act(() => button('Launch')?.click());
+    await vi.waitFor(() =>
+      expect(view.requests.some((request) => request.path === 'workspace.create')).toBe(true)
+    );
+    expect(
+      view.requests.find((request) => request.path === 'workspace.create')?.input
+    ).toMatchObject({
+      provider: 'CLAUDE',
+      model: 'opus',
+      reasoningEffort: null,
+      planModeEnabled: false,
+    });
   });
   it('sends the selected thinking and Plan from the actual inline workspace composer', async () => {
     const view = renderLaunch(true);

@@ -8,6 +8,16 @@ const models = [
   { value: 'six-sol', label: '6 Sol' },
   { value: 'six-luna', label: '6 Luna' },
 ];
+const providerOptions = {
+  CODEX: { defaultModel: 'six-sol', models },
+  CLAUDE: {
+    defaultModel: 'sonnet',
+    models: [
+      { value: 'sonnet', label: 'Sonnet' },
+      { value: 'opus', label: 'Opus' },
+    ],
+  },
+};
 const meta = {
   title: 'Chat/Input/ProviderModelPicker',
   component: ProviderModelPicker,
@@ -49,22 +59,16 @@ export const NewConversation: Story = {
   render: function NewConversationPicker() {
     const [provider, setProvider] = useState<ChatProvider>('CODEX');
     const [model, setModel] = useState('six-sol');
-    const options =
-      provider === 'CODEX'
-        ? models
-        : [
-            { value: 'sonnet', label: 'Sonnet' },
-            { value: 'opus', label: 'Opus' },
-          ];
     return (
       <ProviderModelPicker
         provider={provider}
         model={model}
-        models={options}
+        models={providerOptions[provider].models}
+        providerOptions={providerOptions}
         onModelChange={setModel}
-        onProviderChange={(next) => {
+        onProviderChange={(next, nextModel) => {
           setProvider(next);
-          setModel(next === 'CODEX' ? 'six-sol' : 'sonnet');
+          setModel(nextModel ?? providerOptions[next].defaultModel);
         }}
       />
     );

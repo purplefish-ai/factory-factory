@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { GitHubConnectivityError } from '@/backend/lib/github-cli-error';
 import { isRateLimitMessage, RateLimitBackoff } from './rate-limit-backoff';
 
 const mockLogger = {
@@ -175,7 +176,7 @@ describe('RateLimitBackoff', () => {
     it('returns false and logs error for non-rate-limit errors', () => {
       backoff.beginCycle();
       const isRateLimit = backoff.handleError(
-        new Error('network timeout'),
+        new Error('invalid observation'),
         mockLogger as never,
         'test',
         { workspaceId: 'ws-1', prUrl: 'url1' },
@@ -185,6 +186,23 @@ describe('RateLimitBackoff', () => {
       expect(isRateLimit).toBe(false);
       expect(backoff.currentMultiplier).toBe(1);
       expect(mockLogger.error).toHaveBeenCalled();
+    });
+
+    it('warns for connectivity failures while leaving the next polling pass eligible', () => {
+      const rateLimited = backoff.handleError(
+        new GitHubConnectivityError(
+          'error connecting to api.github.com',
+          new Error('connection failed')
+        ),
+        mockLogger as never,
+        'PR monitoring',
+        { workspaceId: 'ws-1', prUrl: 'url1' },
+        60_000
+      );
+      expect(rateLimited).toBe(false);
+      expect(backoff.currentMultiplier).toBe(1);
+      expect(mockLogger.warn).toHaveBeenCalled();
+      expect(mockLogger.error).not.toHaveBeenCalled();
     });
 
     it('handles non-Error objects', () => {
@@ -198,6 +216,18 @@ describe('RateLimitBackoff', () => {
       );
 
       expect(isRateLimit).toBe(false);
+    });
+
+    it('does not downgrade a storage connection failure to a GitHub warning', () => {
+      backoff.handleError(
+        new Error('database connection lost'),
+        mockLogger as never,
+        'PR monitoring',
+        { workspaceId: 'ws-1', prUrl: 'url1' },
+        60_000
+      );
+      expect(mockLogger.error).toHaveBeenCalled();
+      expect(mockLogger.warn).not.toHaveBeenCalled();
     });
 
     it('handles non-Error objects that contain rate limit text', () => {

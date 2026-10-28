@@ -1,4 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react';
+import { useRef } from 'react';
+import type { ChatMessage } from '@/lib/chat-protocol';
+import {
+  createAssistantMessage,
+  createThinkingMessage,
+  createUserMessage,
+} from '@/lib/claude-fixtures';
+import { useGroupedChatMessages } from './use-grouped-chat-messages';
 import { VirtualizedMessageList } from './virtualized-message-list';
 
 const meta: Meta<typeof VirtualizedMessageList> = {
@@ -36,3 +44,44 @@ export const WorkspaceCreation: Story = {
 };
 
 export const SessionLoading: Story = {};
+
+const historyMessages: ChatMessage[] = [
+  createUserMessage('What changed?', 0),
+  {
+    id: 'history-thinking',
+    source: 'agent',
+    timestamp: '2026-10-28T00:00:00.000Z',
+    order: 1,
+    message: {
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'thinking', thinking: '' }] },
+    },
+  },
+  createThinkingMessage('Checking the implementation.', 2),
+  createAssistantMessage('Past sessions show the conversation without thinking boxes.', 3),
+];
+
+function HistoryPreview({ running = false }: { running?: boolean }) {
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const messages = useGroupedChatMessages(historyMessages);
+  return (
+    <div ref={scrollContainerRef} className="h-full overflow-auto">
+      <VirtualizedMessageList
+        messages={messages}
+        running={running}
+        startingSession={false}
+        loadingSession={false}
+        latestThinking="Checking the next step"
+        scrollContainerRef={scrollContainerRef}
+      />
+    </div>
+  );
+}
+
+export const PastSession: Story = {
+  render: () => <HistoryPreview />,
+};
+
+export const LiveActivity: Story = {
+  render: () => <HistoryPreview running />,
+};

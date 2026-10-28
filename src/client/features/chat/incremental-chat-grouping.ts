@@ -3,6 +3,7 @@ import {
   extractToolResultInfo,
   filterDuplicateResultMessages,
   groupAdjacentToolCalls,
+  isRenderableGroupedMessage,
   isToolResultMessage,
   isToolSequence,
   isToolUseMessage,
@@ -26,14 +27,6 @@ interface GroupingSnapshot {
 export interface IncrementalChatGrouper {
   /** Replace the array and changed messages for edits; same-reference length changes are supported. */
   group: (messages: ChatMessage[]) => GroupedMessageItem[];
-}
-
-function isRenderableMessage(message: ChatMessage): boolean {
-  return (
-    message.source !== 'agent' ||
-    message.message?.type !== 'result' ||
-    (typeof message.message.result === 'string' && message.message.result.trim().length > 0)
-  );
 }
 
 function isToolMessage(message: ChatMessage | undefined): boolean {
@@ -187,7 +180,7 @@ function isToolMessageResult(message: ChatMessage): boolean {
 
 function prepareMessages(messages: ChatMessage[], filterDuplicateResults: boolean): ChatMessage[] {
   const deduplicated = filterDuplicateResults ? filterDuplicateResultMessages(messages) : messages;
-  return deduplicated.filter(isRenderableMessage);
+  return deduplicated.filter(isRenderableGroupedMessage);
 }
 
 function createFullSnapshot(

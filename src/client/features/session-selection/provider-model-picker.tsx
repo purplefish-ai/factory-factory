@@ -1,5 +1,6 @@
 import { ArrowClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowClockwise';
 import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
+import { useState } from 'react';
 import { ComposerMenuTrigger } from '@/client/components/composer-menu-trigger';
 import { Button } from '@/components/ui/button';
 import {
@@ -8,17 +9,23 @@ import {
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import type { ChatModelOption, ChatProvider } from '@/shared/chat-capabilities';
+import { ProviderModelSubmenu } from './provider-model-submenu';
+
+export interface ProviderModelOptions {
+  defaultModel?: string;
+  models: readonly ChatModelOption[];
+}
 
 export interface ProviderModelPickerProps {
   provider: ChatProvider | null;
   model?: string;
   models: readonly ChatModelOption[];
   onModelChange?: (model: string) => void;
-  onProviderChange?: (provider: ChatProvider) => void;
+  onProviderChange?: (provider: ChatProvider, model?: string) => void;
+  providerOptions?: Partial<Record<ChatProvider, ProviderModelOptions>>;
   loading?: boolean;
   modelsLoading?: boolean;
   updating?: boolean;
@@ -77,6 +84,7 @@ export function ProviderModelPicker({
   models,
   onModelChange,
   onProviderChange,
+  providerOptions,
   loading = false,
   modelsLoading = false,
   updating = false,
@@ -86,6 +94,7 @@ export function ProviderModelPicker({
   disabledReason,
   label = 'Provider and model',
 }: ProviderModelPickerProps) {
+  const [open, setOpen] = useState(false);
   if (error) {
     return (
       <SelectionRetry
@@ -107,7 +116,7 @@ export function ProviderModelPicker({
   const reason = getDisabledReason(unavailable, loading, disabledReason);
 
   return (
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
         <ComposerMenuTrigger
           disabled={unavailable}
@@ -130,40 +139,40 @@ export function ProviderModelPicker({
         </ComposerMenuTrigger>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64 max-w-[calc(100vw-2rem)]">
-        {onProviderChange && (
-          <>
-            <DropdownMenuLabel>Provider for new conversation</DropdownMenuLabel>
-            <DropdownMenuRadioGroup
-              value={provider ?? ''}
-              onValueChange={(value) => {
-                if (value === 'CLAUDE' || value === 'CODEX') {
-                  onProviderChange(value);
-                }
-              }}
-            >
-              <DropdownMenuRadioItem value="CLAUDE">Claude</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="CODEX">Codex</DropdownMenuRadioItem>
-            </DropdownMenuRadioGroup>
-            <DropdownMenuSeparator />
-          </>
-        )}
-        <DropdownMenuLabel>Model</DropdownMenuLabel>
+        <DropdownMenuLabel>{onProviderChange ? 'Provider and model' : 'Model'}</DropdownMenuLabel>
         {modelsLoading && (
           <div role="status" className="px-2 py-1.5 text-xs text-muted-foreground">
             Loading models…
           </div>
         )}
-        <DropdownMenuRadioGroup value={model ?? ''} onValueChange={onModelChange}>
-          {models.map((option) => (
-            <DropdownMenuRadioItem
-              key={option.value}
-              value={option.value}
-              disabled={!onModelChange}
-            >
-              {option.label}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
+        {onProviderChange ? (
+          (['CLAUDE', 'CODEX'] as const).map((value) => (
+            <ProviderModelSubmenu
+              key={value}
+              name={PROVIDER_NAMES[value]}
+              selected={provider === value}
+              model={provider === value ? model : undefined}
+              options={providerOptions?.[value] ?? { models: provider === value ? models : [] }}
+              loading={modelsLoading}
+              onSelect={(nextModel) => {
+                onProviderChange(value, nextModel);
+                setOpen(false);
+              }}
+            />
+          ))
+        ) : (
+          <DropdownMenuRadioGroup value={model ?? ''} onValueChange={onModelChange}>
+            {models.map((option) => (
+              <DropdownMenuRadioItem
+                key={option.value}
+                value={option.value}
+                disabled={!onModelChange}
+              >
+                {option.label}
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

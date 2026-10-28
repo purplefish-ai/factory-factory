@@ -1,7 +1,7 @@
 import { createLogger } from '@/backend/services/logger.service';
 import type { PRWithFullDetails } from '@/shared/github-types';
 import { GH_MAX_BUFFER_BYTES, GH_TIMEOUT_MS } from './constants';
-import { classifyError } from './errors';
+import { classifyError, throwIfGitHubConnectivityError } from './errors';
 import { mapComments, mapLabels, mapStatusChecks } from './mappers';
 import { getChronologicalReviews } from './reviews';
 import { fullPRDetailsSchema, prReviewDetailsSchema, prStatusDetailsSchema } from './schemas';
@@ -129,6 +129,7 @@ export async function getPRFullDetails(
     };
   } catch (error) {
     signal?.throwIfAborted();
+    throwIfGitHubConnectivityError(error, { repo, prNumber });
     const errorType = classifyError(error);
     const errorMessage = error instanceof Error ? error.message : String(error);
 
@@ -156,6 +157,7 @@ export async function getPRDiff(
 
     return stdout;
   } catch (error) {
+    throwIfGitHubConnectivityError(error, { repo, prNumber });
     const errorType = classifyError(error);
     const errorMessage = error instanceof Error ? error.message : String(error);
 

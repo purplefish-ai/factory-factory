@@ -697,7 +697,21 @@ export function filterDuplicateResultMessages(messages: ChatMessage[]): ChatMess
   });
 }
 
-function isRenderableGroupedMessage(message: ChatMessage): boolean {
+export function isRenderableGroupedMessage(message: ChatMessage): boolean {
+  const agentMessage = message.source === 'agent' ? message.message : undefined;
+  if (agentMessage?.type === 'assistant') {
+    const content = agentMessage.message?.content;
+    if (Array.isArray(content) && content.length > 0 && content.every(isThinkingContent)) {
+      return false;
+    }
+  }
+  if (
+    agentMessage?.type === 'stream_event' &&
+    agentMessage.event?.type === 'content_block_start' &&
+    isThinkingContent(agentMessage.event.content_block)
+  ) {
+    return false;
+  }
   return (
     message.source !== 'agent' ||
     message.message?.type !== 'result' ||
