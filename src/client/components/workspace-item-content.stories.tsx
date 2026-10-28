@@ -38,7 +38,7 @@ const meta = {
   },
   decorators: [
     (Story) => (
-      <div className="w-[300px] max-w-full border p-2">
+      <div data-testid="workspace-item-container" className="w-[300px] max-w-full border p-2">
         <Story />
       </div>
     ),
@@ -51,6 +51,7 @@ type Story = StoryObj<typeof meta>;
 export const PullRequestWithChangeCounts: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    const containerBounds = canvas.getByTestId('workspace-item-container').getBoundingClientRect();
     const additions = canvas.getByText('+317').getBoundingClientRect();
     const deletions = canvas.getByText('-0').getBoundingClientRect();
     const trigger = canvas.getByRole('button', { name: 'PRs (1)' });
@@ -59,9 +60,7 @@ export const PullRequestWithChangeCounts: Story = {
     await expect(branch.getBoundingClientRect().right).toBeLessThan(additions.left);
     await expect(additions.right).toBeLessThan(deletions.left);
     await expect(deletions.right).toBeLessThan(triggerBounds.left);
-    await expect(triggerBounds.right).toBeLessThanOrEqual(
-      canvasElement.getBoundingClientRect().right
-    );
+    await expect(triggerBounds.right).toBeLessThanOrEqual(containerBounds.right);
     await userEvent.click(trigger);
     const menu = await within(canvasElement.ownerDocument.body).findByRole('menu');
     await waitFor(async () => {
