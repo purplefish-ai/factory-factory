@@ -1,6 +1,7 @@
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { Link } from 'react-router';
 import { trpc } from '@/client/lib/trpc';
+import { resolveClaudeModelAlias } from '@/shared/acp-protocol/model-selection';
 import type { ChatModelOption, ChatProvider } from '@/shared/chat-capabilities';
 
 interface MissingModel {
@@ -8,34 +9,17 @@ interface MissingModel {
   model: string;
 }
 
-/** Mirror the runtime's Claude alias rules using the catalog's formatted labels. */
-function hasClaudeModelAlias(model: string, options: ChatModelOption[]) {
-  const alias = /^(sonnet|opus|haiku|fable)(\[1m\])?$/.exec(model);
-  if (alias) {
-    const matches = options.filter(
-      (option) =>
-        option.value.startsWith(`claude-${alias[1]}-`) &&
-        option.value.endsWith('[1m]') === model.endsWith('[1m]')
-    );
-    return matches.length === 1;
-  }
-  const canonical = /^claude-(sonnet|opus|haiku|fable)-(\d+(?:-\d+)*)(\[1m\])?$/.exec(model);
-  if (!canonical) {
-    return false;
-  }
-  const [, family, version, context = ''] = canonical;
-  return options.some(
-    (option) =>
-      option.value === `${family}${context}` &&
-      option.label.toLowerCase().replace(/\s+\([^)]*\)$/, '') ===
-        `${family} ${version?.replaceAll('-', '.')}`
-  );
+interface ModelDefaults {
+  defaultClaudeModel: string;
+  defaultCodexModel: string;
 }
+
+type ModelCatalog = Record<ChatProvider, { source: 'cli' | 'fallback'; models: ChatModelOption[] }>;
 
 function isMissingModel(
   provider: ChatProvider,
   model: string,
-  catalog: { source: 'cli' | 'fallback'; models: ChatModelOption[] }
+  catalog: ModelCatalog[ChatProvider]
 ) {
   if (catalog.source !== 'cli' || !model) {
     return false;
@@ -43,10 +27,21 @@ function isMissingModel(
   if (provider === 'CODEX' && model === 'default') {
     return false;
   }
-  if (provider === 'CLAUDE' && hasClaudeModelAlias(model, catalog.models)) {
+  if (provider === 'CLAUDE' && resolveClaudeModelAlias(model, catalog.models)) {
     return false;
   }
   return !catalog.models.some((option) => option.value === model);
+}
+
+function getMissingModels(settings: ModelDefaults | undefined, catalog: ModelCatalog | undefined) {
+  if (!(settings && catalog)) {
+    return [];
+  }
+  const models: MissingModel[] = [
+    { provider: 'CLAUDE', model: settings.defaultClaudeModel },
+    { provider: 'CODEX', model: settings.defaultCodexModel },
+  ];
+  return models.filter(({ provider, model }) => isMissingModel(provider, model, catalog[provider]));
 }
 
 export function ModelCatalogWarningContent({ models }: { models: MissingModel[] }) {
@@ -85,19 +80,10 @@ export function ModelCatalogWarning() {
   const { data: settings } = trpc.userSettings.get.useQuery();
   const { data: catalog } = trpc.userSettings.getProviderOptions.useQuery(undefined, {
     staleTime: 60_000,
+    refetchOnWindowFocus: true,
+    // Live discovery starts provider processes; poll only while there is a warning to resolve.
+    refetchInterval: (query) =>
+      getMissingModels(settings, query.state.data).length > 0 ? 60_000 : false,
   });
-  if (!(settings && catalog)) {
-    return null;
-  }
-  const models: MissingModel[] = [
-    { provider: 'CLAUDE', model: settings.defaultClaudeModel },
-    { provider: 'CODEX', model: settings.defaultCodexModel },
-  ];
-  return (
-    <ModelCatalogWarningContent
-      models={models.filter(({ provider, model }) =>
-        isMissingModel(provider, model, catalog[provider])
-      )}
-    />
-  );
+  return <ModelCatalogWarningContent models={getMissingModels(settings, catalog)} />;
 }

@@ -73,11 +73,18 @@ describe('ModelCatalogWarning', () => {
     expect(container.querySelector('[role="alert"]')).toBeNull();
   });
 
-  it('does not treat a fallback list as evidence of a missing model', () => {
-    mocks.catalog!.CLAUDE.source = 'fallback';
-    render();
-    expect(container.querySelector('[role="alert"]')).toBeNull();
-  });
+  it.each([
+    { provider: 'CLAUDE', claude: 'retired-claude', codex: 'default' },
+    { provider: 'CODEX', claude: 'sonnet', codex: 'retired-codex' },
+  ] as const)(
+    'does not treat a $provider fallback list as evidence of a missing model',
+    ({ provider, claude, codex }) => {
+      mocks.settings = { defaultClaudeModel: claude, defaultCodexModel: codex };
+      mocks.catalog![provider].source = 'fallback';
+      render();
+      expect(container.querySelector('[role="alert"]')).toBeNull();
+    }
+  );
 
   it('still warns for one provider when discovery for the other failed', () => {
     mocks.catalog!.CLAUDE.source = 'fallback';
