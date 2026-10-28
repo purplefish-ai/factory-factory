@@ -88,7 +88,7 @@ export function createAcpResumeError(
   providerSessionId: string,
   error: unknown
 ): Error {
-  const { message, data } = getAcpErrorLogDetails(error);
+  const { message, data, code } = getAcpErrorLogDetails(error);
   const detail =
     typeof data === 'object' &&
     data !== null &&
@@ -97,7 +97,7 @@ export function createAcpResumeError(
       ? data.details
       : undefined;
   return new Error(
-    `Cannot restore existing ${provider} conversation "${providerSessionId}": ${message}${detail ? ` (${detail})` : ''}. Restore the provider history before retrying.`,
+    `Cannot restore existing ${provider} conversation "${providerSessionId}": ${message}${code !== undefined ? ` [code ${code}]` : ''}${detail ? ` (${detail})` : ''}. Restore the provider history before retrying.`,
     { cause: error }
   );
 }

@@ -1,7 +1,13 @@
 import { randomUUID } from 'node:crypto';
+import * as filesystem from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, expect, it, vi } from 'vitest';
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return { ...actual, stat: vi.fn(actual.stat) };
+});
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
@@ -123,6 +129,45 @@ beforeEach(() => {
     },
   ]);
 });
+it.each(['EACCES', 'EIO', 'ETIMEDOUT', undefined])(
+  'blocks transient filesystem error %j without pausing delivery and permits a later retry',
+  async (code) => {
+    vi.mocked(filesystem.stat).mockRejectedValueOnce(
+      Object.assign(new Error('worktree lookup failed'), { code })
+    );
+    const input = {
+      sessionId: 'main',
+      request: { workspaceId: 'w', prId: 'p', bindingRevision: 1 },
+    };
+    expect(await preparePRDelivery(input)).toMatchObject({ status: 'blocked' });
+    expect(mocks.pause).not.toHaveBeenCalled();
+    expect(mocks.invalidate).not.toHaveBeenCalled();
+    expect(mocks.emit).not.toHaveBeenCalled();
+    expect(mocks.claim).not.toHaveBeenCalled();
+    expect(mocks.observe).not.toHaveBeenCalled();
+    expect(await guardPRDelivery('main', input.request, defaultPRDeliveryPorts)).toBe('ready');
+  }
+);
+it.each(['ENOENT', 'ENOTDIR'])(
+  'persists a delivery pause for filesystem error %s',
+  async (code) => {
+    vi.mocked(filesystem.stat).mockRejectedValueOnce(
+      Object.assign(new Error('worktree unavailable'), { code })
+    );
+    expect(
+      await guardPRDelivery(
+        'main',
+        {
+          workspaceId: 'w',
+          prId: 'p',
+          bindingRevision: 1,
+        },
+        defaultPRDeliveryPorts
+      )
+    ).toBe('blocked');
+    expect(mocks.pause).toHaveBeenCalledWith('w', 'SESSION_FAILED', 1);
+  }
+);
 it.each([null, join(tmpdir(), `ff-deleted-worktree-${randomUUID()}`)])(
   'pauses delivery before claiming or starting a session when worktree %j is unavailable',
   async (worktreePath) => {

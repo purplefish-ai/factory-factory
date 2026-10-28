@@ -52,9 +52,18 @@ export async function guardPRDelivery(
   const worktreeAvailable = worktreePath
     ? await stat(worktreePath).then(
         (info) => info.isDirectory(),
-        () => false
+        (error: unknown) =>
+          typeof error === 'object' &&
+          error !== null &&
+          'code' in error &&
+          (error.code === 'ENOENT' || error.code === 'ENOTDIR')
+            ? false
+            : null
       )
     : false;
+  if (worktreeAvailable === null) {
+    return 'blocked';
+  }
   if (!worktreeAvailable) {
     const paused = await workspacePRMonitoringService.pauseWorkspace(
       request.workspaceId,

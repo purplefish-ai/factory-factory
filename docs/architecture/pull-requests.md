@@ -187,9 +187,11 @@ model, mode, reasoning and permissions are restored; PR updates never apply
 separate Ratchet provider or permission defaults.
 
 Delivery checks that the recipient's worktree is available before claiming an
-update. A missing directory pauses monitoring as `SESSION_FAILED`, preserving
+update. A missing directory pauses delivery as `SESSION_FAILED`, preserving
 pending events. Restore the worktree, then use **Resume PR updates** to retry.
 The ACP startup preflight also catches a directory removed after that check.
+Other filesystem lookup errors temporarily block delivery without persisting a
+pause, so a later attempt can retry.
 
 A completed provider prompt acknowledges delivery, meaning the facts were
 received, regardless of whether the PR was fixed. After an uncertain exit,
