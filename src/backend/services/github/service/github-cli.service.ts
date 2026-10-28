@@ -3,7 +3,11 @@ import type { CIStatus, PRState } from '@/shared/core';
 import { githubPRPreviewSchema } from '@/shared/github-pr-preview';
 import type { PRWithFullDetails, ReviewAction } from '@/shared/github-types';
 import { GH_MAX_BUFFER_BYTES, GH_TIMEOUT_MS } from './github-cli/constants';
-import { classifyError, logGitHubCLIError } from './github-cli/errors';
+import {
+  classifyError,
+  logGitHubCLIError,
+  throwIfGitHubConnectivityError,
+} from './github-cli/errors';
 import { GitHubCLIExecutor } from './github-cli/executor';
 import { computeCIStatus, computePRState } from './github-cli/mappers';
 import {
@@ -532,6 +536,7 @@ class GitHubCLIService {
 
       return parseGhJson(issueSchema.array(), stdout, 'listIssues');
     } catch (error) {
+      throwIfGitHubConnectivityError(error);
       const errorType = classifyError(error);
       const errorMessage = error instanceof Error ? error.message : String(error);
 
@@ -633,6 +638,7 @@ class GitHubCLIService {
       return allComments.reverse();
     } catch (error) {
       signal?.throwIfAborted();
+      throwIfGitHubConnectivityError(error);
       const errorType = classifyError(error);
       const errorMessage = error instanceof Error ? error.message : String(error);
 
@@ -676,6 +682,7 @@ class GitHubCLIService {
       return resolvedIds;
     } catch (error) {
       signal?.throwIfAborted();
+      throwIfGitHubConnectivityError(error);
       const errorType = classifyError(error);
       const errorMessage = error instanceof Error ? error.message : String(error);
 

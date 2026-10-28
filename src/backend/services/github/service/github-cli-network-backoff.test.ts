@@ -35,6 +35,21 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
+it.each([
+  { name: 'full PR details', read: () => githubCLIService.getPRFullDetails('org/repo', 1) },
+  { name: 'PR diff', read: () => githubCLIService.getPRDiff('org/repo', 1) },
+  { name: 'issues', read: () => githubCLIService.listIssues('org', 'repo') },
+  { name: 'review comments', read: () => githubCLIService.getReviewComments('org/repo', 1) },
+  {
+    name: 'resolved review comments',
+    read: () => githubCLIService.getResolvedReviewCommentIds('org/repo', 1),
+  },
+])('preserves typed connectivity errors through the $name wrapper', async ({ read }) => {
+  execute.mockRejectedValueOnce(offline);
+  await expect(read()).rejects.toMatchObject({ name: 'GitHubConnectivityError', cause: offline });
+  expect(logger.error).not.toHaveBeenCalled();
+});
+
 it('checks authentication independently of a network read cooldown', async () => {
   execute
     .mockRejectedValueOnce(offline)

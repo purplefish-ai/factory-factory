@@ -1228,11 +1228,11 @@ describe('GitHubCLIService', () => {
       expect(result).toEqual(new Set());
     });
 
-    it('throws when the gh CLI call fails', async () => {
-      mockExecFile.mockRejectedValue(new Error('network down'));
+    it('wraps non-connectivity CLI failures with context', async () => {
+      mockExecFile.mockRejectedValue(new Error('lookup failed'));
 
       await expect(githubCLIService.getResolvedReviewCommentIds('owner/repo', 123)).rejects.toThrow(
-        'Failed to fetch resolved review threads: network down'
+        'Failed to fetch resolved review threads: lookup failed'
       );
     });
 

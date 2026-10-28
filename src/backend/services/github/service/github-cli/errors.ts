@@ -44,6 +44,13 @@ function isNetworkErrorMessage(message: string): boolean {
   );
 }
 
+/** Keep retryable failures intact before a read wrapper adds generic context. */
+export function throwIfGitHubConnectivityError(error: unknown): void {
+  if (error instanceof GitHubConnectivityError) {
+    throw error;
+  }
+}
+
 /**
  * Classify an error from gh CLI execution.
  */
