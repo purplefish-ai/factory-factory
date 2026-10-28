@@ -424,8 +424,12 @@ export class AcpNativeSessionTracker {
   private publishActivity(): void {
     const work = this.getBackgroundWork();
     const activityKey = JSON.stringify(work);
+    // Shells may be permanent preview servers; retain their details without
+    // treating them as agent work after the prompt finishes.
     const active =
-      work.activeGoals > 0 || work.backgroundTasks.length > 0 || work.runningSubagents > 0;
+      work.activeGoals > 0 ||
+      work.backgroundTasks.some((task) => task.kind !== 'shell') ||
+      work.runningSubagents > 0;
     if (activityKey === this.activityKey) {
       return;
     }

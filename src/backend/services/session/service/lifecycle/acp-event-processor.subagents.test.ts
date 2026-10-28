@@ -114,6 +114,10 @@ describe('AcpEventProcessor sub-agent invalidations', () => {
         activeGoals: 0,
       };
       expect(domain.getRuntimeSnapshot('db-session-1').work).toEqual(work);
+      expect(domain.getRuntimeSnapshot('db-session-1')).toMatchObject({
+        phase: 'idle',
+        activity: 'IDLE',
+      });
       const reloaded = domain.prepareLoad(
         'db-session-1',
         domain.getRuntimeSnapshot('db-session-1')
@@ -139,14 +143,17 @@ describe('AcpEventProcessor sub-agent invalidations', () => {
         state: 'completed',
       });
       expect(domain.getRuntimeSnapshot('db-session-1')).toMatchObject({ activity: 'IDLE' });
+      expect(domain.getRuntimeSnapshot('db-session-1').work).toEqual({
+        backgroundTasks: [],
+        promptInFlight: false,
+        runningSubagents: 0,
+        activeGoals: 0,
+      });
       if (failed) {
         expect(domain.getRuntimeSnapshot('db-session-1')).toMatchObject({
           phase: 'error',
           errorMessage: 'Selected model is at capacity.',
-          work: { backgroundTasks: [], promptInFlight: false },
         });
-      } else {
-        expect(domain.getRuntimeSnapshot('db-session-1').work).toBeUndefined();
       }
     }
   );

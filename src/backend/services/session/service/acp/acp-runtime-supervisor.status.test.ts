@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { CreateAcpClientParams } from './acp-client-factory';
+import { AcpNativeSessionTracker } from './acp-native-session-tracker';
 import type { AcpProcessHandle } from './acp-process-handle';
 import {
   createTestProcessHandle,
@@ -28,6 +29,48 @@ function createHarness() {
 }
 
 describe('AcpRuntimeSupervisor status queries', () => {
+  it('returns idle after a prompt with a persistent preview server and tracks later agent work', async () => {
+    const handle = createTestProcessHandle();
+    const { supervisor, createClient } = createHarness();
+    let publishActivity: (active: boolean) => void = () => undefined;
+    const tracker = new AcpNativeSessionTracker({
+      onTaskStatusChanged: (active) => publishActivity(active),
+    });
+    createClient.mockImplementationOnce(({ handlers }) => {
+      publishActivity = (active) =>
+        handlers.onAcpEvent?.('session-1', {
+          type: 'acp_task_status_changed',
+          active,
+        });
+      return Promise.resolve(handle);
+    });
+    await supervisor.getOrCreateClient(
+      'session-1',
+      defaultOptions(),
+      defaultHandlers(),
+      defaultContext()
+    );
+    const update = (value: Record<string, unknown>) =>
+      tracker.onRawMessage({
+        method: 'session/update',
+        params: { sessionId: 'root', update: value },
+      });
+
+    handle.isPromptInFlight = true;
+    update({ sessionUpdate: 'async_task_spawned', asyncTaskId: 'preview', taskType: 'shell' });
+    expect(supervisor.isSessionWorking('session-1')).toBe(true);
+    handle.isPromptInFlight = false;
+    expect(supervisor.isSessionWorking('session-1')).toBe(false);
+    expect(supervisor.isAnySessionWorking(['session-1'])).toBe(false);
+    expect(supervisor.isSessionRunning('session-1')).toBe(true);
+
+    update({ sessionUpdate: 'async_task_spawned', asyncTaskId: 'agent', taskType: 'turn' });
+    expect(supervisor.isSessionWorking('session-1')).toBe(true);
+    update({ sessionUpdate: 'async_task_state_update', asyncTaskId: 'agent', state: 'completed' });
+    expect(supervisor.isSessionWorking('session-1')).toBe(false);
+    expect(tracker.getBackgroundWork().backgroundTasks).toMatchObject([{ kind: 'shell' }]);
+  });
+
   it('reports installed runtime identity, liveness, work, and process snapshots', async () => {
     // Catches status queries filtering browse handles or deriving work from public visibility.
     const active = createTestProcessHandle({ provider: 'CLAUDE' });
