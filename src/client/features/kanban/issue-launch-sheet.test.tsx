@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createElement, type ReactNode } from 'react';
-import { flushSync } from 'react-dom';
+import { act, createElement, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
+import { actFlushSync } from '@/test-utils/react-act';
 import { IssueLaunchSheet } from './issue-launch-sheet';
 
 const mocks = vi.hoisted(() => ({
@@ -176,7 +176,7 @@ function renderSheet(sheetIssue: NormalizedIssue = issue): {
   root.render = (children) =>
     render(createElement(QueryClientProvider, { client: queryClient }, children));
 
-  flushSync(() => {
+  actFlushSync(() => {
     root.render(
       createElement(IssueLaunchSheet, {
         projectId: 'project-1',
@@ -205,7 +205,7 @@ function findButton(container: HTMLDivElement, label: string) {
 function clickButton(container: HTMLDivElement, label: string) {
   const button = findButton(container, label);
 
-  flushSync(() => {
+  actFlushSync(() => {
     button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
   });
 }
@@ -227,7 +227,7 @@ function changeTextarea(container: HTMLDivElement, value: string) {
     throw new Error('textarea not found');
   }
 
-  flushSync(() => {
+  actFlushSync(() => {
     const valueSetter = Object.getOwnPropertyDescriptor(
       HTMLTextAreaElement.prototype,
       'value'
@@ -274,7 +274,7 @@ describe('IssueLaunchSheet', () => {
       })
     );
 
-    root.unmount();
+    actFlushSync(() => root.unmount());
     container.remove();
   });
 
@@ -305,7 +305,7 @@ describe('IssueLaunchSheet', () => {
       })
     );
 
-    root.unmount();
+    actFlushSync(() => root.unmount());
     container.remove();
   });
 
@@ -336,7 +336,7 @@ describe('IssueLaunchSheet', () => {
       })
     );
 
-    root.unmount();
+    actFlushSync(() => root.unmount());
     container.remove();
   });
 
@@ -348,7 +348,7 @@ describe('IssueLaunchSheet', () => {
     );
     expect(container.querySelector('textarea')?.value).toContain('Closes #42');
 
-    root.unmount();
+    actFlushSync(() => root.unmount());
     container.remove();
   });
 
@@ -375,7 +375,7 @@ describe('IssueLaunchSheet', () => {
       'https://raw.githubusercontent.com/purplefish-ai/factory-factory/'
     );
 
-    root.unmount();
+    actFlushSync(() => root.unmount());
     container.remove();
   });
 
@@ -407,18 +407,21 @@ describe('IssueLaunchSheet', () => {
     };
     mocks.isLoadingProject = false;
 
-    flushSync(() => {
-      root.render(
-        createElement(IssueLaunchSheet, {
-          projectId: 'project-1',
-          issue: linearIssue,
-          open: true,
-          onOpenChange: vi.fn(),
-        })
-      );
-    });
+    // Inspect the commit before act flushes the effect that enriches the prompt.
+    act(() => {
+      actFlushSync(() => {
+        root.render(
+          createElement(IssueLaunchSheet, {
+            projectId: 'project-1',
+            issue: linearIssue,
+            open: true,
+            onOpenChange: vi.fn(),
+          })
+        );
+      });
 
-    expect(findButton(container, 'Start').disabled).toBe(true);
+      expect(findButton(container, 'Start').disabled).toBe(true);
+    });
 
     await waitForButtonEnabled(container, 'Start');
 
@@ -435,7 +438,7 @@ describe('IssueLaunchSheet', () => {
       })
     );
 
-    root.unmount();
+    actFlushSync(() => root.unmount());
     container.remove();
   });
 
@@ -449,7 +452,7 @@ describe('IssueLaunchSheet', () => {
       ratchetEnabled: true,
     };
 
-    flushSync(() => {
+    actFlushSync(() => {
       root.render(
         createElement(IssueLaunchSheet, {
           projectId: 'project-1',
@@ -468,7 +471,7 @@ describe('IssueLaunchSheet', () => {
       })
     );
 
-    root.unmount();
+    actFlushSync(() => root.unmount());
     container.remove();
   });
 });

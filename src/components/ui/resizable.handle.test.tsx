@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import { createElement, type ReactNode } from 'react';
-import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { actFlushSync } from '@/test-utils/react-act';
 
 let capturedSeparatorClassName: string | undefined;
 
@@ -34,7 +34,7 @@ function renderInDom(render: (root: Root) => void): () => void {
   const root = createRoot(container);
   render(root);
   return () => {
-    root.unmount();
+    actFlushSync(() => root.unmount());
     container.remove();
   };
 }
@@ -50,7 +50,7 @@ afterEach(() => {
 describe('ResizableHandle hit target classes', () => {
   it('includes pseudo-element content class for horizontal group handles', () => {
     const cleanup = renderInDom((root) => {
-      flushSync(() => {
+      actFlushSync(() => {
         root.render(createElement(ResizableHandle));
       });
     });
@@ -62,7 +62,7 @@ describe('ResizableHandle hit target classes', () => {
 
   it('includes row-resize cursor for vertical group handles', () => {
     const cleanup = renderInDom((root) => {
-      flushSync(() => {
+      actFlushSync(() => {
         root.render(createElement(ResizableHandle, { direction: 'vertical' }));
       });
     });

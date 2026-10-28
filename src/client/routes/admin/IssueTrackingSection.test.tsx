@@ -111,7 +111,7 @@ describe('Linear key/team validation', () => {
     enterKey('mock-key-a');
     await validate();
     selectTeam();
-    act(() => button('Save')?.click());
+    await act(async () => button('Save')?.click());
     expect(mocks.save).toHaveBeenCalledWith({
       id: 'project-1',
       issueProvider: IssueProvider.LINEAR,
@@ -131,7 +131,7 @@ describe('Linear key/team validation', () => {
     await validate();
     selectTeam();
     enterKey(key);
-    act(() => button('Save')?.click());
+    await act(async () => button('Save')?.click());
     expect(mocks.save).not.toHaveBeenCalled();
     expect(container.textContent).not.toContain('Connected as');
     expect(button('Save')).toBeUndefined();
@@ -172,7 +172,7 @@ describe('Linear key/team validation', () => {
         mocks.validate.mockRejectedValue(new Error('Request failed'));
       }
       await validate();
-      act(() => button('Save')?.click());
+      await act(async () => button('Save')?.click());
       expect(mocks.save).not.toHaveBeenCalled();
       expect(button('Save')).toBeUndefined();
       expect(container.textContent).not.toContain('Connected as');
@@ -192,7 +192,7 @@ describe('Linear key/team validation', () => {
     await validate();
     expect(button('Save')?.disabled).toBe(true);
     selectTeam('Team B (B)');
-    act(() => button('Save')?.click());
+    await act(async () => button('Save')?.click());
     expect(mocks.save).toHaveBeenCalledWith(
       expect.objectContaining({
         issueTrackerConfig: {

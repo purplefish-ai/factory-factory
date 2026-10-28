@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import { createElement, type ReactNode } from 'react';
-import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { actFlushSync } from '@/test-utils/react-act';
 import { KanbanCard, type WorkspaceWithKanban } from './kanban-card';
 
 vi.mock('@phosphor-icons/react/dist/csr/Archive', () => ({ ArchiveIcon: () => null }));
@@ -93,7 +93,7 @@ function renderCard(
   document.body.appendChild(container);
   const root = createRoot(container);
 
-  flushSync(() => {
+  actFlushSync(() => {
     root.render(
       createElement(
         'div',
@@ -147,7 +147,7 @@ describe('compact loop badge', () => {
           .querySelector('[data-testid="auto-iteration-icon"]')
           ?.classList.contains('animate-spin') ?? false
       ).toBe(status === 'RUNNING');
-      flushSync(() => root.unmount());
+      actFlushSync(() => root.unmount());
       container.remove();
     }
   );
@@ -164,7 +164,7 @@ describe('compact loop badge', () => {
       },
     });
     expect(container.textContent).toContain('Iter 0/25');
-    flushSync(() => root.unmount());
+    actFlushSync(() => root.unmount());
     container.remove();
   });
 });
@@ -177,7 +177,7 @@ describe('KanbanCard', () => {
     expect(chips).toHaveLength(1);
     expect(chips[0]?.textContent).toBe('Ready for next prompt');
 
-    root.unmount();
+    actFlushSync(() => root.unmount());
     container.remove();
   });
 
@@ -197,7 +197,7 @@ describe('KanbanCard', () => {
     expect(chips).toHaveLength(1);
     expect(chips[0]?.textContent).toBe('Setting up workspace');
 
-    root.unmount();
+    actFlushSync(() => root.unmount());
     container.remove();
   });
 
@@ -222,7 +222,7 @@ describe('KanbanCard', () => {
     expect(container.textContent).not.toContain('Waiting for CI');
     expect(container.textContent).not.toMatch(/\bCI\b(?! Running)/);
 
-    root.unmount();
+    actFlushSync(() => root.unmount());
     container.remove();
   });
 
@@ -257,7 +257,7 @@ describe('KanbanCard', () => {
     expect(chips[0]?.textContent).toBe('Session error');
     expect(container.textContent).toContain('Session crashed');
 
-    root.unmount();
+    actFlushSync(() => root.unmount());
     container.remove();
   });
 
@@ -277,7 +277,7 @@ describe('KanbanCard', () => {
     expect(chips).toHaveLength(1);
     expect(chips[0]?.textContent).toBe('Agent working');
 
-    root.unmount();
+    actFlushSync(() => root.unmount());
     container.remove();
   });
 
@@ -296,7 +296,7 @@ describe('KanbanCard', () => {
     expect(chips).toHaveLength(1);
     expect(chips[0]?.textContent).toBe('Needs permission');
 
-    root.unmount();
+    actFlushSync(() => root.unmount());
     container.remove();
   });
 
@@ -328,7 +328,7 @@ describe('KanbanCard', () => {
       'noopener,noreferrer'
     );
 
-    root.unmount();
+    actFlushSync(() => root.unmount());
     container.remove();
   });
 
@@ -373,7 +373,7 @@ describe('KanbanCard', () => {
     );
     expect(onCardClick).not.toHaveBeenCalled();
 
-    root.unmount();
+    actFlushSync(() => root.unmount());
     container.remove();
   });
 
@@ -398,7 +398,7 @@ describe('KanbanCard', () => {
       'noopener,noreferrer'
     );
 
-    root.unmount();
+    actFlushSync(() => root.unmount());
     container.remove();
   });
 
@@ -424,7 +424,7 @@ describe('KanbanCard', () => {
       'noopener,noreferrer'
     );
 
-    root.unmount();
+    actFlushSync(() => root.unmount());
     container.remove();
   });
 
@@ -438,7 +438,7 @@ describe('KanbanCard', () => {
     expect(container.textContent).not.toContain('ENG-42');
     expect(container.querySelector('[data-testid="card-content"]')).not.toBeNull();
 
-    root.unmount();
+    actFlushSync(() => root.unmount());
     container.remove();
   });
 });

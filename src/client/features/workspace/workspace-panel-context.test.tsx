@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
 import { act, createElement } from 'react';
-import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SubagentSelection } from '@/client/features/subagents';
+import { actFlushSync } from '@/test-utils/react-act';
 import {
   type MainViewTab,
   useWorkspacePanel,
@@ -101,7 +101,7 @@ function renderPanel(probe: React.ReactNode) {
   document.body.appendChild(container);
   const root = createRoot(container);
 
-  flushSync(() => {
+  actFlushSync(() => {
     root.render(
       <WorkspacePanelProvider workspaceId={WORKSPACE_ID}>{probe}</WorkspacePanelProvider>
     );
@@ -206,7 +206,7 @@ describe('WorkspacePanelProvider persistence', () => {
     document.body.appendChild(container);
     const root = createRoot(container);
 
-    flushSync(() => {
+    actFlushSync(() => {
       root.render(
         <WorkspacePanelProvider workspaceId={WORKSPACE_ID}>
           <WorkspacePanelProbe />
@@ -221,9 +221,7 @@ describe('WorkspacePanelProvider persistence', () => {
       });
     });
 
-    flushSync(() => {
-      root.unmount();
-    });
+    actFlushSync(() => root.unmount());
   });
 
   it('opens, deduplicates, refreshes, and closes a persisted sub-agent tab', async () => {
@@ -255,7 +253,7 @@ describe('WorkspacePanelProvider persistence', () => {
     await clickButton(container, 'Close active');
     expect(readProbe(container).activeTabId).toBe('chat');
     expect(readProbe(container).tabs).toHaveLength(1);
-    root.unmount();
+    actFlushSync(() => root.unmount());
   });
 
   it('keeps equal child IDs under different parent sessions distinct', async () => {
@@ -269,7 +267,7 @@ describe('WorkspacePanelProvider persistence', () => {
         'subagent-session-2-child-1',
       ]);
     });
-    root.unmount();
+    actFlushSync(() => root.unmount());
   });
 
   it('restores a valid persisted sub-agent tab and rejects an incomplete one', async () => {
@@ -286,7 +284,7 @@ describe('WorkspacePanelProvider persistence', () => {
     localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, validTab.id);
     const validRender = renderPanel(<WorkspacePanelProbe />);
     await vi.waitFor(() => expect(readProbe(validRender.container).activeTabId).toBe(validTab.id));
-    validRender.root.unmount();
+    actFlushSync(() => validRender.root.unmount());
 
     localStorage.setItem(
       TABS_STORAGE_KEY,
@@ -301,6 +299,6 @@ describe('WorkspacePanelProvider persistence', () => {
         { id: 'chat', type: 'chat', label: 'Chat' },
       ])
     );
-    invalidRender.root.unmount();
+    actFlushSync(() => invalidRender.root.unmount());
   });
 });

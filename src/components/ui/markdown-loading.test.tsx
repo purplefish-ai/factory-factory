@@ -3,6 +3,7 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
+import { waitForReact } from '@/test-utils/react-act';
 import { MarkdownRenderer } from './markdown';
 
 const engine = vi.hoisted(() => ({ loaded: false }));
@@ -36,7 +37,7 @@ it('loads the diagram engine only when markdown contains a Mermaid diagram', asy
     await act(() => {
       root.render(<MarkdownRenderer content={'```mermaid\ngraph TD; A-->B\n```'} />);
     });
-    await vi.waitFor(() => {
+    await waitForReact(() => {
       expect(container.querySelector('svg')?.getAttribute('aria-label')).toBe('Flow diagram');
     });
     expect(engine.loaded).toBe(true);

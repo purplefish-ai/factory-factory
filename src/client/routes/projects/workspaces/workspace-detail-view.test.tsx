@@ -272,7 +272,7 @@ describe('WorkspaceDetailView', () => {
         ?.getAttribute('data-active-child-count')
     ).toBe('2');
 
-    root.unmount();
+    act(() => root.unmount());
   });
 
   it('does not render the script warning before dismissal state hydrates', () => {
@@ -285,7 +285,7 @@ describe('WorkspaceDetailView', () => {
 
     expect(container.textContent).not.toContain('Init script failed');
 
-    root.unmount();
+    act(() => root.unmount());
   });
 
   it('keeps non-dismissible script warnings visible during dismissal hydration', () => {
@@ -298,7 +298,7 @@ describe('WorkspaceDetailView', () => {
 
     expect(container.textContent).toContain('Init script failed');
 
-    root.unmount();
+    act(() => root.unmount());
   });
 
   it.each([false, true])(
@@ -318,13 +318,13 @@ describe('WorkspaceDetailView', () => {
         );
         if (showPlay) {
           expect(dispatch).toBeDefined();
-          await act(() => dispatch!.click());
+          await act(async () => dispatch!.click());
           expect(props.chat.resumeQueuedMessages).toHaveBeenCalledOnce();
         } else {
           expect(dispatch).toBeUndefined();
         }
       } finally {
-        await act(() => root.unmount());
+        await act(async () => root.unmount());
       }
     }
   );
@@ -352,13 +352,14 @@ describe('WorkspaceDetailView', () => {
     });
     expect(takeScreenshotsButton?.dataset.loading).toBe('true');
 
-    await act(() => {
+    await act(async () => {
       rejectSessionCreation?.(new Error('Session creation failed'));
+      await Promise.resolve();
     });
 
     expect(takeScreenshotsButton?.dataset.loading).toBe('false');
 
-    root.unmount();
+    act(() => root.unmount());
   });
 
   it('opens a sub-agent tab without replacing or selecting the parent chat', () => {
@@ -381,7 +382,7 @@ describe('WorkspaceDetailView', () => {
     );
     expect(container.querySelector('[data-testid="parent-chat"]')).toBe(parentChat);
     expect(props.sessionTabs.handleSelectSession).not.toHaveBeenCalled();
-    root.unmount();
+    act(() => root.unmount());
   });
 
   it('closes the mobile right-panel sheet after opening a sub-agent', () => {
@@ -423,6 +424,6 @@ describe('WorkspaceDetailView', () => {
       });
     });
     expect(props.sessionTabs.handleOpenSubagentTab).not.toHaveBeenCalled();
-    root.unmount();
+    act(() => root.unmount());
   });
 });

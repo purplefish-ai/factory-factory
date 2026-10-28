@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { trpc } from '@/client/lib/trpc';
 import { IssueProvider } from '@/shared/core/enums';
+import { waitForReact } from '@/test-utils/react-act';
 import { ProjectIssueTrackingCard } from './IssueTrackingSection';
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -60,7 +61,7 @@ function enterKey(value: string) {
 
 async function settle(action: () => void, pendingMutations = 0) {
   await act(async () => action());
-  await vi.waitFor(async () => {
+  await waitForReact(async () => {
     await act(async () => {
       // Flush React work from any observer notification since the previous poll.
     });

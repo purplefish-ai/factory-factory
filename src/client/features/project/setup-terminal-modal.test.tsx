@@ -34,9 +34,10 @@ describe('SetupTerminalModal', () => {
   let container: HTMLDivElement;
   let root: ReturnType<typeof createRoot>;
 
-  function render() {
-    void act(() => {
+  async function render() {
+    await act(async () => {
       root.render(createElement(SetupTerminalModal, { open: true, onClose: vi.fn() }));
+      await Promise.resolve();
     });
   }
 
@@ -54,22 +55,20 @@ describe('SetupTerminalModal', () => {
     root = createRoot(container);
   });
 
-  afterEach(() => {
-    void act(() => {
-      root.unmount();
-    });
+  afterEach(async () => {
+    await act(() => root.unmount());
     container.remove();
     document.body.innerHTML = '';
   });
 
-  it('offers bundled Codex login without requiring a separate global CLI', () => {
-    render();
+  it('offers bundled Codex login without requiring a separate global CLI', async () => {
+    await render();
     expect(document.body.textContent).toContain('ff codex login');
   });
 
-  it('shows a Retry control when the connection gives up before ever connecting', () => {
+  it('shows a Retry control when the connection gives up before ever connecting', async () => {
     setupTerminalState.gaveUp = true;
-    render();
+    await render();
 
     const retry = findRetryButton();
     expect(retry).not.toBeNull();
@@ -81,31 +80,31 @@ describe('SetupTerminalModal', () => {
     expect(setupTerminalState.reconnect).toHaveBeenCalledTimes(1);
   });
 
-  it('says the connection was lost when an established terminal gives up', () => {
+  it('says the connection was lost when an established terminal gives up', async () => {
     setupTerminalState.gaveUp = true;
     setupTerminalState.showTerminal = true;
-    render();
+    await render();
 
     expect(document.body.textContent).toContain('Connection lost.');
     expect(findRetryButton()).not.toBeNull();
   });
 
-  it('shows the reconnecting status while a previous session reconnects', () => {
+  it('shows the reconnecting status while a previous session reconnects', async () => {
     setupTerminalState.showTerminal = true;
-    render();
+    await render();
 
     expect(document.body.textContent).toContain('Reconnecting');
     expect(findRetryButton()).toBeNull();
   });
 
-  it('shows no status overlay while connected or during the initial connect', () => {
-    render();
+  it('shows no status overlay while connected or during the initial connect', async () => {
+    await render();
     expect(document.body.textContent).not.toContain('Reconnecting');
     expect(findRetryButton()).toBeNull();
 
     setupTerminalState.connected = true;
     setupTerminalState.showTerminal = true;
-    render();
+    await render();
     expect(document.body.textContent).not.toContain('Reconnecting');
   });
 });

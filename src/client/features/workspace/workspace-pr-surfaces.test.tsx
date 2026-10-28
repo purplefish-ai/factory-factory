@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { getQueryKey } from '@trpc/react-query';
 import { act, type ReactNode } from 'react';
@@ -161,7 +162,7 @@ describe('workspace PR actions across surfaces', () => {
       const confirm = [...dialog.querySelectorAll('button')].find(
         (button) => button.textContent === 'Remove'
       )!;
-      await act(() => confirm.click());
+      await act(async () => confirm.click());
       expect(actions.remove).toHaveBeenCalledWith('attached-42');
     });
   }
