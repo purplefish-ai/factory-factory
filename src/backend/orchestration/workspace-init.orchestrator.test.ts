@@ -1572,31 +1572,20 @@ describe('initializeWorkspaceWorktree', () => {
       );
     });
 
-    it('waits for eager session start to settle before failure cleanup', async () => {
+    it('does not start an agent when the setup pipeline throws', async () => {
       setupHappyPath();
       vi.mocked(FactoryConfigService.readConfig).mockResolvedValue(
         unsafeCoerce({ scripts: { setup: './setup.sh', run: null, cleanup: null } })
       );
 
-      const startSessionDeferred = createDeferredPromise<void>();
-      vi.mocked(sessionLifecycleService.startSession).mockReturnValue(
-        startSessionDeferred.promise as never
-      );
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
       vi.mocked(startupScriptService.runStartupScript).mockRejectedValue(new Error('script boom'));
 
-      const initializationPromise = initializeWorkspaceWorktree(WORKSPACE_ID);
+      await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      await Promise.resolve();
-      await Promise.resolve();
-
-      expect(sessionLifecycleService.stopWorkspaceSessions).not.toHaveBeenCalled();
-
-      startSessionDeferred.resolve(undefined);
-      await initializationPromise;
-
+      expect(sessionLifecycleService.startSession).not.toHaveBeenCalled();
       expect(sessionLifecycleService.stopWorkspaceSessions).toHaveBeenCalledWith(WORKSPACE_ID);
       expect(terminalService.destroyTerminal).toHaveBeenCalledWith(WORKSPACE_ID, 'term-default');
       expect(terminalSessionService.releaseSessionPid).toHaveBeenCalledWith(
