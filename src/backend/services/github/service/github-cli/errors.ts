@@ -1,5 +1,5 @@
 import { createLogger } from '@/backend/services/logger.service';
-import { isRateLimitMessage } from '@/backend/services/rate-limit-backoff';
+import { isNetworkErrorMessage, isRateLimitMessage } from '@/backend/services/rate-limit-backoff';
 import type { GitHubCLIErrorType } from './types';
 
 const logger = createLogger('github-cli');
@@ -23,15 +23,6 @@ function isAuthRequiredError(message: string): boolean {
 
 function isPRNotFoundError(message: string): boolean {
   return message.includes('could not resolve') || message.includes('not found');
-}
-
-function isNetworkError(message: string): boolean {
-  return (
-    message.includes('network') ||
-    message.includes('timeout') ||
-    message.includes('connection') ||
-    message.includes('unexpected eof')
-  );
 }
 
 function isRateLimitError(message: string): boolean {
@@ -61,7 +52,7 @@ export function classifyError(error: unknown): GitHubCLIErrorType {
     return 'rate_limit';
   }
 
-  if (isNetworkError(lowerMessage)) {
+  if (isNetworkErrorMessage(lowerMessage)) {
     return 'network_error';
   }
 
@@ -98,6 +89,12 @@ export function logGitHubCLIError(
       errorType,
       error: errorMessage,
       hint: 'Polling intervals have been increased to reduce API pressure',
+    });
+  } else if (errorType === 'network_error') {
+    logger.warn('GitHub temporarily unreachable; will retry', {
+      ...context,
+      errorType,
+      error: errorMessage,
     });
   } else {
     logger.error('Failed to fetch PR status via gh CLI', {

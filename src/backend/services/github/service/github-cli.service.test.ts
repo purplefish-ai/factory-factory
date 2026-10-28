@@ -147,14 +147,14 @@ describe('GitHubCLIService', () => {
       );
     });
 
-    it('should return null and log error for network issues', async () => {
+    it('should return null and log a warning for network issues', async () => {
       mockExecFile.mockRejectedValue(new Error('network timeout'));
 
       const result = await githubCLIService.getPRStatus('https://github.com/owner/repo/pull/123');
 
       expect(result).toBeNull();
-      expect(mockLoggerError).toHaveBeenCalledWith(
-        'Failed to fetch PR status via gh CLI',
+      expect(mockLoggerWarn).toHaveBeenCalledWith(
+        'GitHub temporarily unreachable; will retry',
         expect.objectContaining({
           errorType: 'network_error',
         })
@@ -1798,10 +1798,8 @@ describe('GitHubCLIService', () => {
       const result = await githubCLIService.getPRStatus('https://github.com/owner/repo/pull/1364');
 
       expect(result).toBeNull();
-      // Should NOT log as "Failed to fetch PR status via gh CLI" (unknown)
-      // Should log as network_error which still goes through the unknown/else branch but with correct type
-      expect(mockLoggerError).toHaveBeenCalledWith(
-        'Failed to fetch PR status via gh CLI',
+      expect(mockLoggerWarn).toHaveBeenCalledWith(
+        'GitHub temporarily unreachable; will retry',
         expect.objectContaining({
           errorType: 'network_error',
         })

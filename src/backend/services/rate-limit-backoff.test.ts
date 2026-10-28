@@ -175,7 +175,7 @@ describe('RateLimitBackoff', () => {
     it('returns false and logs error for non-rate-limit errors', () => {
       backoff.beginCycle();
       const isRateLimit = backoff.handleError(
-        new Error('network timeout'),
+        new Error('invalid observation'),
         mockLogger as never,
         'test',
         { workspaceId: 'ws-1', prUrl: 'url1' },
@@ -185,6 +185,20 @@ describe('RateLimitBackoff', () => {
       expect(isRateLimit).toBe(false);
       expect(backoff.currentMultiplier).toBe(1);
       expect(mockLogger.error).toHaveBeenCalled();
+    });
+
+    it('warns for connectivity failures while leaving the next polling pass eligible', () => {
+      const rateLimited = backoff.handleError(
+        new Error('error connecting to api.github.com\ncheck your internet connection'),
+        mockLogger as never,
+        'PR monitoring',
+        { workspaceId: 'ws-1', prUrl: 'url1' },
+        60_000
+      );
+      expect(rateLimited).toBe(false);
+      expect(backoff.currentMultiplier).toBe(1);
+      expect(mockLogger.warn).toHaveBeenCalled();
+      expect(mockLogger.error).not.toHaveBeenCalled();
     });
 
     it('handles non-Error objects', () => {

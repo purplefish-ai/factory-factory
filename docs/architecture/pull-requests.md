@@ -103,8 +103,13 @@ Polling, manual refresh, and dispatch preparation share normalized observation
 fetching through `pr-observation.orchestrator.ts`. Coalescing is scoped to
 workspace/PR identity and revision/epoch; separate PRs do not share a baseline.
 GitHub owns process-wide spawn limits, in-flight read deduplication, and rate
-limit backoff. Watcher concurrency remains bounded at three workspaces, with a
-90-second timeout and shutdown cancellation.
+limit backoff. A connectivity failure pauses new GitHub reads for 30 seconds
+across PRs, including reads already queued for a process slot. Reads resume
+automatically after the cooldown; failures preserve saved PR facts and remain
+eligible for the next polling pass. Snapshot refresh and monitoring report these
+retryable failures as warnings. Writes are neither paused by the network read
+cooldown nor automatically retried. Watcher concurrency remains bounded at three
+workspaces, with a 90-second timeout and shutdown cancellation.
 
 PR attachment and discovery refreshes require that same normalized observer. The
 snapshot service owns association lifecycle operations and reads the committed

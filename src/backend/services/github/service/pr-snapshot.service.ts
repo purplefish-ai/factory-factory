@@ -3,6 +3,7 @@ import { toError } from '@/backend/lib/error-utils';
 import { createLogger } from '@/backend/services/logger.service';
 import type { CIStatus, PRState } from '@/shared/core';
 import type { GitHubPRDiscoveryClaim, GitHubWorkspaceBridge } from './bridges';
+import { classifyError } from './github-cli/errors';
 
 const logger = createLogger('pr-snapshot');
 
@@ -122,6 +123,13 @@ class PRSnapshotService extends EventEmitter {
         },
       };
     } catch (error) {
+      if (classifyError(error) === 'network_error') {
+        logger.warn('PR refresh temporarily unable to reach GitHub; will retry', {
+          ...target,
+          error: toError(error).message,
+        });
+        return { success: false, reason: 'fetch_failed' };
+      }
       logger.error('Failed to refresh PR', toError(error), target);
       return { success: false, reason: 'error' };
     }

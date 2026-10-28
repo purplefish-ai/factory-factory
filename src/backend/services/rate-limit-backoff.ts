@@ -3,6 +3,17 @@ import type { createLogger } from './logger.service';
 
 type Logger = ReturnType<typeof createLogger>;
 
+/** Shared detection for retryable gh connectivity failures (lowercase input). */
+export function isNetworkErrorMessage(message: string): boolean {
+  return (
+    message.includes('network') ||
+    message.includes('timeout') ||
+    message.includes('connection') ||
+    message.includes('error connecting') ||
+    message.includes('unexpected eof')
+  );
+}
+
 /**
  * Check whether a lowercased error message indicates a GitHub rate limit.
  * Shared by both RateLimitBackoff (polling services) and GitHubCLIService
@@ -79,6 +90,14 @@ export class RateLimitBackoff {
         nextDelayMs: baseIntervalMs * this.multiplier,
       });
       return true;
+    }
+
+    if (isNetworkErrorMessage(errorMessage.toLowerCase())) {
+      logger.warn(`${serviceName} temporarily unable to reach GitHub; will retry`, {
+        ...context,
+        error: errorMessage,
+      });
+      return false;
     }
 
     logger.error(`${serviceName} check failed for workspace`, toError(error), {
