@@ -1,9 +1,9 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { collectServiceAccessorBoundaryViolations } from '../../../scripts/check-service-accessor-boundaries.mjs';
+import { collectServiceAccessorBoundaryViolations } from '@/../scripts/check-service-accessor-boundaries.mjs';
 
 interface SourceFileFixture {
   path: string;
@@ -45,26 +45,38 @@ describe('check-service-accessor-boundaries', () => {
     };
   }
 
-  it.each([false, true])('enforces boundaries through the CLI (cross-owner: %s)', (crossOwner) => {
-    const tempRoot = createFixture([
-      {
-        path: `src/backend/services/${crossOwner ? 'session' : 'workspace'}/service/example.ts`,
-        content:
-          "import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';\n",
-      },
-    ]);
-    const result = spawnSync(process.execPath, [checkerScriptPath], {
-      cwd: tempRoot,
-      encoding: 'utf8',
-    });
-    expect(result.error).toBeUndefined();
-    expect(result.status).toBe(crossOwner ? 1 : 0);
-    expect(result.stdout + result.stderr).toContain(
-      crossOwner
-        ? 'cross-owner raw persistence accessor'
-        : 'Service accessor boundaries check passed.'
-    );
-  });
+  it.each([
+    { crossOwner: false, symlink: false },
+    { crossOwner: true, symlink: false },
+    { crossOwner: false, symlink: true },
+    { crossOwner: true, symlink: true },
+  ])(
+    'enforces boundaries through the CLI ($crossOwner, symlink: $symlink)',
+    ({ crossOwner, symlink }) => {
+      const tempRoot = createFixture([
+        {
+          path: `src/backend/services/${crossOwner ? 'session' : 'workspace'}/service/example.ts`,
+          content:
+            "import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';\n",
+        },
+      ]);
+      const entryPath = symlink ? path.join(tempRoot, 'check-boundaries.mjs') : checkerScriptPath;
+      if (symlink) {
+        symlinkSync(checkerScriptPath, entryPath);
+      }
+      const result = spawnSync(process.execPath, [entryPath], {
+        cwd: tempRoot,
+        encoding: 'utf8',
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.status).toBe(crossOwner ? 1 : 0);
+      expect(result.stdout + result.stderr).toContain(
+        crossOwner
+          ? 'cross-owner raw persistence accessor'
+          : 'Service accessor boundaries check passed.'
+      );
+    }
+  );
 
   it('allows owner-internal deep accessor imports', () => {
     const result = runChecker([

@@ -151,6 +151,9 @@ function main() {
   console.log('No inline lint/format suppressions found outside prisma/generated/.');
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (
+  process.argv[1] &&
+  fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url))
+) {
   main();
 }

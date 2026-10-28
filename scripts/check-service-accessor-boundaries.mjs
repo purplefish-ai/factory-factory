@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -668,7 +668,10 @@ export function collectServiceAccessorBoundaryViolations(rootDir = process.cwd()
   return [...new Set(violations)].sort();
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (
+  process.argv[1] &&
+  realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
+) {
   const violations = collectServiceAccessorBoundaryViolations();
   if (violations.length > 0) {
     console.error('Service accessor boundary violations:');

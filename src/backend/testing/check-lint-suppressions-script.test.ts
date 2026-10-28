@@ -1,9 +1,9 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { countSuppressions } from '../../../scripts/check-lint-suppressions.mjs';
+import { countSuppressions } from '@/../scripts/check-lint-suppressions.mjs';
 
 const script = resolve('scripts/check-lint-suppressions.mjs');
 const roots: string[] = [];
@@ -32,15 +32,27 @@ function runCheck(source: string, relativeFile = 'src/example.ts') {
 }
 
 describe('inline lint suppression policy', () => {
-  it.each([false, true])('enforces suppressions through the CLI (suppressed: %s)', (suppressed) => {
-    const root = createFixture(suppressed ? '// oxlint-disable' : '// ordinary comment');
-    const result = spawnSync(process.execPath, [script], { cwd: root, encoding: 'utf8' });
-    expect(result.error).toBeUndefined();
-    expect(result.status).toBe(suppressed ? 1 : 0);
-    expect(result.stdout + result.stderr).toContain(
-      suppressed ? 'src/example.ts: 1' : 'No inline lint/format suppressions found'
-    );
-  });
+  it.each([
+    { suppressed: false, symlink: false },
+    { suppressed: true, symlink: false },
+    { suppressed: false, symlink: true },
+    { suppressed: true, symlink: true },
+  ])(
+    'enforces suppressions through the CLI ($suppressed, symlink: $symlink)',
+    ({ suppressed, symlink }) => {
+      const root = createFixture(suppressed ? '// oxlint-disable' : '// ordinary comment');
+      const entryPath = symlink ? join(root, 'check-suppressions.mjs') : script;
+      if (symlink) {
+        symlinkSync(script, entryPath);
+      }
+      const result = spawnSync(process.execPath, [entryPath], { cwd: root, encoding: 'utf8' });
+      expect(result.error).toBeUndefined();
+      expect(result.status).toBe(suppressed ? 1 : 0);
+      expect(result.stdout + result.stderr).toContain(
+        suppressed ? 'src/example.ts: 1' : 'No inline lint/format suppressions found'
+      );
+    }
+  );
   it.each([
     '// biome-ignore lint/style/noNonNullAssertion: temporary',
     '/* biome-ignore-all lint: temporary */',

@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { collectSingleWriterViolations } from '../../../scripts/check-single-writer.mjs';
+import { collectSingleWriterViolations } from '@/../scripts/check-single-writer.mjs';
 
 describe('check-single-writer', () => {
   const tempDirs: string[] = [];

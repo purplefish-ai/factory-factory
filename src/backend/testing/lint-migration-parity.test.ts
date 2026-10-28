@@ -41,6 +41,18 @@ const biomeReportSchema = z.object({
   ),
 });
 
+const oxlintReportSchema = z.object({
+  diagnostics: z.array(
+    z.object({
+      filename: z.string(),
+      code: z.string().optional(),
+      message: z.string(),
+      severity: z.string(),
+    })
+  ),
+  number_of_files: z.number().int().nonnegative(),
+});
+
 function lint() {
   for (const fixture of biomeFixtures) {
     writeFileSync(fixture.file, fixture.source);
@@ -50,19 +62,24 @@ function lint() {
   });
 }
 
-function oxlint(sources: string | string[]) {
-  const files = (typeof sources === 'string' ? [sources] : sources).map((source, index) => {
-    const file = join(directory, `callback-${index}.ts`);
+function oxlint(fixtures: string | { file: string; source: string }[]) {
+  const sources =
+    typeof fixtures === 'string'
+      ? [{ file: join(directory, 'rejected.ts'), source: fixtures }]
+      : fixtures;
+  const files = sources.map(({ file, source }) => {
     writeFileSync(file, source);
     return file;
   });
-  return spawnSync(resolve('node_modules/.bin/oxlint'), ['--deny-warnings', ...files], {
-    encoding: 'utf8',
-  });
+  return spawnSync(
+    resolve('node_modules/.bin/oxlint'),
+    ['--deny-warnings', '--format=json', ...files],
+    { encoding: 'utf8' }
+  );
 }
 
 describe('lint coverage retained during Oxc migration', () => {
-  const acceptedFixtures: [string, string][] = [
+  const acceptedSources: [string, string][] = [
     [
       'initialized constants captured by asynchronous callbacks',
       'export function create() { const pending: Promise<void> = Promise.resolve().finally(() => { void pending; }); return pending; }',
@@ -80,17 +97,35 @@ describe('lint coverage retained during Oxc migration', () => {
       'export function f() { try { throw new Error(); } catch (_error) { return; } }',
     ],
   ];
-  let acceptedResult: ReturnType<typeof oxlint>;
+  const acceptedFixtures = acceptedSources.map(([name, source], index) => ({
+    name,
+    source,
+    file: join(directory, `callback-${index}.ts`),
+  }));
+  let acceptedReport: z.infer<typeof oxlintReportSchema>;
   let biomeResult: ReturnType<typeof lint>;
   beforeAll(() => {
     // One real type-aware CLI run must accept every fixture; each file stays a
     // separate module so declarations cannot influence another fixture.
-    acceptedResult = oxlint(acceptedFixtures.map(([, source]) => source));
+    const acceptedResult = oxlint(acceptedFixtures);
+    expect(acceptedResult.error).toBeUndefined();
+    expect(acceptedResult.signal).toBeNull();
+    expect(acceptedResult.stderr).toBe('');
+    acceptedReport = oxlintReportSchema.parse(JSON.parse(acceptedResult.stdout));
+    expect(acceptedReport.number_of_files).toBe(acceptedFixtures.length);
+    const filenames = acceptedFixtures.map(({ file }) => relative(process.cwd(), file));
+    for (const diagnostic of acceptedReport.diagnostics) {
+      expect(filenames).toContain(diagnostic.filename);
+    }
+    expect(acceptedResult.status).toBe(acceptedReport.diagnostics.length === 0 ? 0 : 1);
     biomeResult = lint();
   });
-  it.each(acceptedFixtures)('permits %s', () => {
-    expect(acceptedResult.error).toBeUndefined();
-    expect(acceptedResult.status).toBe(0);
+  it.each(acceptedFixtures)('permits $name', ({ file }) => {
+    expect(
+      acceptedReport.diagnostics.filter(
+        ({ filename }) => filename === relative(process.cwd(), file)
+      )
+    ).toEqual([]);
   });
 
   it.each(biomeFixtures)('continues enforcing $rule in $extension', ({ rule, file }) => {
