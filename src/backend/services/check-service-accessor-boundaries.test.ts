@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { collectServiceAccessorBoundaryViolations } from '@/../scripts/check-service-accessor-boundaries.mjs';
 
@@ -77,6 +78,24 @@ describe('check-service-accessor-boundaries', () => {
       );
     }
   );
+
+  it('can be imported when the host supplies a nonexistent entry path', () => {
+    const root = createFixture([
+      {
+        path: 'src/backend/services/session/service/example.ts',
+        content:
+          "import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';\n",
+      },
+    ]);
+    const program = `import { collectServiceAccessorBoundaryViolations } from ${JSON.stringify(pathToFileURL(checkerScriptPath).href)}; collectServiceAccessorBoundaryViolations().forEach((violation) => console.log(violation));`;
+    const result = spawnSync(
+      process.execPath,
+      ['--input-type=module', '--eval', program, 'missing-host-entry.mjs'],
+      { cwd: root, encoding: 'utf8' }
+    );
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain('cross-owner raw persistence accessor');
+  });
 
   it('allows owner-internal deep accessor imports', () => {
     const result = runChecker([

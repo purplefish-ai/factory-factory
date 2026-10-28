@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { countSuppressions } from '@/../scripts/check-lint-suppressions.mjs';
 
@@ -32,6 +33,18 @@ function runCheck(source: string, relativeFile = 'src/example.ts') {
 }
 
 describe('inline lint suppression policy', () => {
+  it('can be imported when the host supplies a nonexistent entry path', () => {
+    const root = createFixture('// oxlint-disable');
+    const program = `import { countSuppressions } from ${JSON.stringify(pathToFileURL(script).href)}; console.log(countSuppressions().totalSuppressions);`;
+    const result = spawnSync(
+      process.execPath,
+      ['--input-type=module', '--eval', program, 'missing-host-entry.mjs'],
+      { cwd: root, encoding: 'utf8' }
+    );
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout.trim()).toBe('1');
+  });
+
   it.each([
     { suppressed: false, symlink: false },
     { suppressed: true, symlink: false },

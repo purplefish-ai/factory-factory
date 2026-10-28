@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { cssComments, htmlComments, markdownComments, yamlComments } from './lint-comments.mjs';
 
@@ -151,9 +150,6 @@ function main() {
   console.log('No inline lint/format suppressions found outside prisma/generated/.');
 }
 
-if (
-  process.argv[1] &&
-  fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url))
-) {
+if (import.meta.main) {
   main();
 }

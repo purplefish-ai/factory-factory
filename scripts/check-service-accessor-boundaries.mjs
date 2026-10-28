@@ -1,7 +1,6 @@
-import { readdirSync, readFileSync, realpathSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts']);
@@ -668,10 +667,7 @@ export function collectServiceAccessorBoundaryViolations(rootDir = process.cwd()
   return [...new Set(violations)].sort();
 }
 
-if (
-  process.argv[1] &&
-  realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
-) {
+if (import.meta.main) {
   const violations = collectServiceAccessorBoundaryViolations();
   if (violations.length > 0) {
     console.error('Service accessor boundary violations:');
