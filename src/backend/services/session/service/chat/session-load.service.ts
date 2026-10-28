@@ -99,8 +99,13 @@ export class SessionLoadService {
   async completeLoad(prepared: PreparedSessionLoad): Promise<void> {
     const { sessionId, provider, worktreePath } = prepared;
     this.deps.domain.finishLoad(sessionId);
-    const resolved = await this.deps.config.getSessionConfigProjection(sessionId);
-    const { capabilities, configOptions } = resolved.currentProjection();
+    let resolved = await this.deps.config.getSessionConfigProjection(sessionId);
+    let current = resolved.currentProjection();
+    while ('retry' in current) {
+      resolved = await current.retry;
+      current = resolved.currentProjection();
+    }
+    const { capabilities, configOptions } = current;
     this.deps.domain.emitDelta(sessionId, { type: 'chat_capabilities', capabilities });
     if (configOptions.length > 0) {
       this.deps.domain.emitDelta(sessionId, { type: 'config_options_update', configOptions });

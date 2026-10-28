@@ -20,6 +20,7 @@ import { SessionConfigMutationQueue } from './session-config-mutation-queue';
 import {
   buildCapabilitiesFromConfigOptions,
   getConfigOptionValues,
+  type CodexModelCatalogEntry,
   type SessionProvider,
 } from './session-config-option-helpers';
 import {
@@ -50,7 +51,13 @@ import type { SessionRepository } from './session.repository';
 
 const logger = createLogger('session');
 
+const MAX_CONFIG_READ_RETIREMENTS = 3;
+
 type SessionStartupModePreset = 'non_interactive' | 'plan';
+type SessionConfigReadContext = {
+  catalog?: Promise<CodexModelCatalogEntry[] | null>;
+  retirements: number;
+};
 export type { PersistAcpConfigSnapshotParams } from './session-config-snapshot-persistence';
 
 export type SessionConfigServiceDependencies = {
@@ -324,52 +331,83 @@ export class SessionConfigService {
   }
 
   async getSessionConfigOptionsWithFallback(sessionId: string): Promise<SessionConfigOption[]> {
-    return (await this.getSessionConfigProjection(sessionId)).currentProjection().configOptions;
+    let resolved = await this.getSessionConfigProjection(sessionId);
+    for (;;) {
+      const current = resolved.currentProjection();
+      if ('retry' in current) {
+        resolved = await current.retry;
+        continue;
+      }
+      return current.configOptions;
+    }
   }
 
-  async getSessionConfigProjection(sessionId: string): Promise<ResolvedSessionConfigProjection> {
+  getSessionConfigProjection(sessionId: string): Promise<ResolvedSessionConfigProjection> {
+    return this.readSessionConfigProjection(sessionId, { retirements: 0 });
+  }
+
+  private async readSessionConfigProjection(
+    sessionId: string,
+    context: SessionConfigReadContext
+  ): Promise<ResolvedSessionConfigProjection> {
     const live = this.runtimeManager.getClient(sessionId);
     if (live && live.configOptions.length > 0) {
-      return this.resolveConfigProjection(sessionId, {
-        configOptions: structuredClone(live.configOptions),
-        capabilities: this.buildAcpChatBarCapabilities(live),
-      });
+      return this.resolveConfigProjection(sessionId, null, context);
     }
 
     let session = await this.repository.getSessionById(sessionId);
     // A runtime installed during the read owns its options without catalog enrichment.
     const current = this.runtimeManager.getClient(sessionId);
     if (current && current.configOptions.length > 0) {
-      return this.resolveConfigProjection(sessionId, {
-        configOptions: structuredClone(current.configOptions),
-        capabilities: this.buildAcpChatBarCapabilities(current),
-      });
+      return this.resolveConfigProjection(sessionId, null, context);
     }
     let modelCatalog = null;
     if (session?.provider === 'CODEX') {
-      modelCatalog = await this.codexModelCatalogService.getModels().catch((error: unknown) => {
+      context.catalog ??= this.codexModelCatalogService.getModels().catch((error: unknown) => {
         logger.warn('Failed to refresh Codex model catalog from app-server fallback', {
           error: error instanceof Error ? error.message : String(error),
         });
         return null;
       });
+      modelCatalog = await context.catalog;
       // Passive discovery must not retain a selection from before a stopped edit.
       session = await this.repository.getSessionById(sessionId);
     }
     return this.resolveConfigProjection(
       sessionId,
-      buildStoredConfigProjection(session, modelCatalog)
+      buildStoredConfigProjection(session, modelCatalog),
+      context
     );
   }
 
   private resolveConfigProjection(
     sessionId: string,
-    fallback: SessionConfigProjection
+    fallback: SessionConfigProjection | null,
+    context: SessionConfigReadContext
   ): ResolvedSessionConfigProjection {
+    const observedLive = this.runtimeManager.getClient(sessionId);
+    const hadLiveOptions = !!observedLive?.configOptions.length;
+    let retry: Promise<ResolvedSessionConfigProjection> | undefined;
+    const refreshRetired = () => {
+      if (!retry) {
+        if (context.retirements >= MAX_CONFIG_READ_RETIREMENTS) {
+          throw new Error('Session runtime retired repeatedly during configuration read');
+        }
+        context.retirements += 1;
+        retry = this.readSessionConfigProjection(sessionId, context);
+      }
+      return { retry };
+    };
     return {
       currentProjection: () => {
         const handle = this.runtimeManager.getClient(sessionId);
+        if (!handle?.configOptions.length && (hadLiveOptions || !fallback)) {
+          return refreshRetired();
+        }
         if (!handle) {
+          if (!fallback) {
+            throw new Error('Session configuration requires a durable reread');
+          }
           return fallback;
         }
         const configOptions = structuredClone(handle.configOptions);
@@ -379,7 +417,7 @@ export class SessionConfigService {
             configOptions
           ),
           // Preserve the existing empty-handle contract: live capabilities, cached options.
-          configOptions: configOptions.length > 0 ? configOptions : fallback.configOptions,
+          configOptions: configOptions.length > 0 ? configOptions : (fallback?.configOptions ?? []),
         };
       },
     };
@@ -655,10 +693,18 @@ export class SessionConfigService {
 
   async getChatBarCapabilities(sessionId: string): Promise<ChatBarCapabilities> {
     const handle = this.runtimeManager.getClient(sessionId);
-    if (handle) {
+    if (handle && handle.configOptions.length === 0) {
       return this.buildAcpChatBarCapabilities(handle);
     }
-    return (await this.getSessionConfigProjection(sessionId)).currentProjection().capabilities;
+    let resolved = await this.getSessionConfigProjection(sessionId);
+    for (;;) {
+      const current = resolved.currentProjection();
+      if ('retry' in current) {
+        resolved = await current.retry;
+        continue;
+      }
+      return current.capabilities;
+    }
   }
 
   buildAcpChatBarCapabilities(handle: AcpProcessHandle): ChatBarCapabilities {

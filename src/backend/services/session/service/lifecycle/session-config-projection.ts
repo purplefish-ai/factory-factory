@@ -13,9 +13,11 @@ export type SessionConfigProjection = {
   configOptions: SessionConfigOption[];
 };
 
-/** Finalize synchronously immediately before publishing the paired load events. */
+/** Finalize immediately before publication; after a retirement retry, finalize again without yielding. */
 export type ResolvedSessionConfigProjection = {
-  currentProjection(): SessionConfigProjection;
+  currentProjection():
+    | SessionConfigProjection
+    | { retry: Promise<ResolvedSessionConfigProjection> };
 };
 
 /** Pure display selection from the final stored row; never confirms or persists a model. */

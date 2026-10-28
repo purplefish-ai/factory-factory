@@ -4,6 +4,7 @@ import type { AcpProcessHandle } from '@/backend/services/session/service/acp';
 import { SessionLoadService } from '@/backend/services/session/service/chat/session-load.service';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { CodexModelCatalogService } from './codex-model-catalog.service';
+import type { ResolvedSessionConfigProjection } from './session-config-projection';
 import { SessionConfigService } from './session.config.service';
 
 type ModelCatalog = Awaited<ReturnType<CodexModelCatalogService['getModels']>>;
@@ -22,6 +23,13 @@ vi.mock('@/backend/services/logger.service', () => ({
 }));
 vi.mock('@/backend/services/settings', () => ({ userSettingsService: {} }));
 
+function ready(resolved: ResolvedSessionConfigProjection) {
+  const current = resolved.currentProjection();
+  if ('retry' in current) {
+    throw new Error('Expected a current projection');
+  }
+  return current;
+}
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (error: Error) => void;
@@ -113,6 +121,9 @@ function setup() {
         },
       };
     },
+    retireHandle() {
+      handle = undefined;
+    },
     setHandle(configOptions = options('live')) {
       handle = unsafeCoerce<AcpProcessHandle>({ provider: 'CODEX', configOptions });
       return handle;
@@ -146,6 +157,274 @@ const prepared = {
 
 // Removing the combined resolver restores two failed subprocess discoveries/four row reads.
 describe('load configuration projection', () => {
+  it.each(
+    ['fast live', 'live after initial read', 'empty replacement'].flatMap((origin) =>
+      [false, true].map((catalogFails) => ({ origin, catalogFails }))
+    )
+  )(
+    'publishes durable controls after $origin retires (catalog failure=$catalogFails)',
+    async ({ origin, catalogFails }) => {
+      const test = setup();
+      const controls = (model: string, effort: string, plan: string): SessionConfigOption[] => [
+        ...options(model),
+        {
+          id: 'thought_level',
+          name: 'Effort',
+          type: 'select',
+          currentValue: effort,
+          options: [
+            { value: 'low', name: 'Low' },
+            { value: 'high', name: 'High' },
+          ],
+        },
+        {
+          id: 'collaboration_mode',
+          category: 'collaboration_mode',
+          name: 'Plan',
+          type: 'select',
+          currentValue: plan,
+          options: [
+            { value: 'default', name: 'Default' },
+            { value: 'plan', name: 'Plan' },
+          ],
+        },
+      ];
+      if (origin === 'live after initial read') {
+        test.repository.getSessionById.mockImplementationOnce(() => {
+          test.setHandle(controls('retired', 'high', 'plan'));
+          return Promise.resolve(row());
+        });
+      } else {
+        test.setHandle(controls('retired', 'high', 'plan'));
+      }
+      const durable = row('CODEX', controls('durable', 'low', 'default'));
+      durable.model = 'durable';
+      const resolve = test.config.getSessionConfigProjection.bind(test.config);
+      vi.spyOn(test.config, 'getSessionConfigProjection').mockImplementation(async (id) => {
+        const result = await resolve(id);
+        queueMicrotask(() => {
+          if (origin === 'empty replacement') {
+            test.setHandle([]);
+          } else {
+            test.retireHandle();
+          }
+          test.repository.getSessionById.mockResolvedValue(durable);
+        });
+        return result;
+      });
+      if (catalogFails) {
+        test.fetchModels.mockRejectedValue(new Error('catalog unavailable'));
+      } else {
+        test.fetchModels.mockResolvedValue([
+          {
+            ...catalogModel,
+            id: 'durable',
+            defaultReasoningEffort: 'high',
+            supportedReasoningEfforts: [
+              { reasoningEffort: 'low', description: undefined },
+              { reasoningEffort: 'high', description: undefined },
+            ],
+          },
+        ]);
+      }
+      const calls: string[] = [];
+      const domain = {
+        ...test.domain,
+        finishLoad: () => {
+          calls.push('runtime');
+        },
+        emitDelta: (_id: string, event: unknown) => {
+          calls.push('publish');
+          test.domain.emitDelta(_id, event);
+        },
+        consumeInitialMessage: () => {
+          calls.push('consume');
+          return 'Initial text';
+        },
+        enqueue: () => ({ position: 0 }),
+      };
+      const load = new SessionLoadService(
+        unsafeCoerce({
+          config: test.config,
+          domain,
+          getCachedCommands: () => {
+            calls.push('commands');
+            return Promise.resolve([]);
+          },
+          tryDispatchNextMessage: () => {
+            calls.push('dispatch');
+            return Promise.resolve();
+          },
+        })
+      );
+      await load.completeLoad(prepared);
+      expect(test.domain.emitDelta.mock.calls.map((call) => call[1])).toMatchObject([
+        {
+          type: 'chat_capabilities',
+          capabilities:
+            origin === 'empty replacement'
+              ? { model: { enabled: false }, reasoning: { enabled: false } }
+              : { model: { selected: 'durable' }, reasoning: { selected: 'low' } },
+        },
+        {
+          type: 'config_options_update',
+          configOptions: expect.arrayContaining([
+            expect.objectContaining({ id: 'model', currentValue: 'durable' }),
+            expect.objectContaining({ id: 'thought_level', currentValue: 'low' }),
+            expect.objectContaining({ id: 'collaboration_mode', currentValue: 'default' }),
+          ]),
+        },
+        { type: 'slash_commands' },
+        { type: 'message_state_changed' },
+      ]);
+      expect(calls).toEqual([
+        'runtime',
+        'publish',
+        'publish',
+        'commands',
+        'publish',
+        'consume',
+        'publish',
+        'dispatch',
+      ]);
+      expect(test.fetchModels).toHaveBeenCalledTimes(1);
+      expect(test.repository.getSessionById).toHaveBeenCalledTimes(
+        origin === 'live after initial read' ? 3 : 2
+      );
+      expect(test.repository.updateSession).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each(['options', 'capabilities'])(
+    'refreshes retired live state for the %s convenience reader',
+    async (reader) => {
+      const test = setup();
+      test.setHandle(options('retired'));
+      test.repository.getSessionById.mockResolvedValue(row('CODEX', options('durable')));
+      const resolve = test.config.getSessionConfigProjection.bind(test.config);
+      vi.spyOn(test.config, 'getSessionConfigProjection').mockImplementation(async (id) => {
+        const resolved = await resolve(id);
+        queueMicrotask(test.retireHandle);
+        return resolved;
+      });
+      if (reader === 'options') {
+        expect(await test.config.getSessionConfigOptionsWithFallback('session')).toEqual(
+          options('durable')
+        );
+      } else {
+        expect((await test.config.getChatBarCapabilities('session')).model.selected).toBe(
+          'durable'
+        );
+      }
+      expect(test.repository.updateSession).not.toHaveBeenCalled();
+    }
+  );
+
+  it('rechecks retirement again after a retry result resolves and reuses the failed catalog', async () => {
+    const test = setup();
+    test.setHandle(options('retired'));
+    test.repository.getSessionById.mockResolvedValue(row('CODEX', options('durable')));
+    test.fetchModels.mockImplementation(() => {
+      test.setHandle(options('intermediate'));
+      return Promise.reject(new Error('catalog unavailable'));
+    });
+    const resolve = test.config.getSessionConfigProjection.bind(test.config);
+    let retried = false;
+    const watch = (resolved: ResolvedSessionConfigProjection): ResolvedSessionConfigProjection => ({
+      currentProjection: () => {
+        const current = resolved.currentProjection();
+        if (!('retry' in current) || retried) {
+          return current;
+        }
+        retried = true;
+        return {
+          retry: current.retry.then((next) => {
+            queueMicrotask(() => {
+              test.retireHandle();
+              test.repository.getSessionById.mockResolvedValue(row('CODEX', options('latest')));
+            });
+            return next;
+          }),
+        };
+      },
+    });
+    vi.spyOn(test.config, 'getSessionConfigProjection').mockImplementation(async (id) => {
+      const resolved = await resolve(id);
+      queueMicrotask(test.retireHandle);
+      return watch(resolved);
+    });
+    await test.load.completeLoad(prepared);
+    expect(test.domain.emitDelta.mock.calls[0]?.[1]).toMatchObject({
+      capabilities: { model: { selected: 'latest' } },
+    });
+    expect(test.domain.emitDelta.mock.calls[1]?.[1]).toMatchObject({
+      configOptions: options('latest'),
+    });
+    expect(test.fetchModels).toHaveBeenCalledTimes(1);
+    expect(test.repository.getSessionById).toHaveBeenCalledTimes(4);
+    expect(test.repository.updateSession).not.toHaveBeenCalled();
+  });
+
+  it('bounds repeated retirement without config publication or consuming initial text', async () => {
+    const test = setup();
+    test.setHandle();
+    test.repository.getSessionById.mockImplementation(() => {
+      test.setHandle(options('unstable'));
+      return Promise.resolve(row());
+    });
+    const resolve = test.config.getSessionConfigProjection.bind(test.config);
+    const watch = (resolved: ResolvedSessionConfigProjection): ResolvedSessionConfigProjection => ({
+      currentProjection: () => {
+        const current = resolved.currentProjection();
+        return 'retry' in current
+          ? {
+              retry: current.retry.then((next) => {
+                queueMicrotask(test.retireHandle);
+                return watch(next);
+              }),
+            }
+          : current;
+      },
+    });
+    vi.spyOn(test.config, 'getSessionConfigProjection').mockImplementation(async (id) => {
+      const resolved = await resolve(id);
+      queueMicrotask(test.retireHandle);
+      return watch(resolved);
+    });
+    await expect(test.load.completeLoad(prepared)).rejects.toThrow('retired repeatedly');
+    expect(test.domain.emitDelta).not.toHaveBeenCalled();
+    expect(test.domain.consumeInitialMessage).not.toHaveBeenCalled();
+    expect(test.repository.getSessionById).toHaveBeenCalledTimes(3);
+    expect(test.repository.updateSession).not.toHaveBeenCalled();
+  });
+
+  it.each(['initial', 'latest'])(
+    'propagates %s database errors during retirement refresh',
+    async (stage) => {
+      const test = setup();
+      test.setHandle();
+      if (stage === 'latest') {
+        test.repository.getSessionById
+          .mockResolvedValueOnce(row())
+          .mockRejectedValueOnce(new Error('storage unavailable'));
+      } else {
+        test.repository.getSessionById.mockRejectedValueOnce(new Error('storage unavailable'));
+      }
+      test.fetchModels.mockRejectedValue(new Error('catalog unavailable'));
+      const resolve = test.config.getSessionConfigProjection.bind(test.config);
+      vi.spyOn(test.config, 'getSessionConfigProjection').mockImplementation(async (id) => {
+        const resolved = await resolve(id);
+        queueMicrotask(test.retireHandle);
+        return resolved;
+      });
+      await expect(test.load.completeLoad(prepared)).rejects.toThrow('storage unavailable');
+      expect(test.fetchModels).toHaveBeenCalledTimes(stage === 'latest' ? 1 : 0);
+      expect(test.domain.emitDelta).not.toHaveBeenCalled();
+      expect(test.domain.consumeInitialMessage).not.toHaveBeenCalled();
+      expect(test.repository.updateSession).not.toHaveBeenCalled();
+    }
+  );
+
   it('attempts a failed model catalog once per load completion', async () => {
     const test = setup();
     test.fetchModels.mockRejectedValue(new Error('app-server unavailable'));
@@ -205,7 +484,7 @@ describe('load configuration projection', () => {
       }
       blocked.resolve(session);
       finishCatalog();
-      const projection = (await reading).currentProjection();
+      const projection = ready(await reading);
       expect(projection.capabilities.model.selected).toBe(confirmed ? 'live' : 'stored');
       if (confirmed) {
         expect(projection.configOptions).toEqual(options('live'));
@@ -235,7 +514,7 @@ describe('load configuration projection', () => {
     newer.providerMetadata.acpConfigSnapshot.observedModelId = 'newer';
     test.repository.getSessionById.mockResolvedValue(newer);
     catalog.resolve([]);
-    const projection = (await reading).currentProjection();
+    const projection = ready(await reading);
     expect(projection.configOptions).toEqual(
       newer.providerMetadata.acpConfigSnapshot.configOptions
     );
@@ -263,7 +542,7 @@ describe('load configuration projection', () => {
     const handle = test.setHandle();
     const resolved = await resolve('session');
     handle.configOptions = options('edited');
-    expect(resolved.currentProjection()).toMatchObject({
+    expect(ready(resolved)).toMatchObject({
       capabilities: { model: { selected: 'edited' } },
       configOptions: options('edited'),
     });
@@ -272,9 +551,7 @@ describe('load configuration projection', () => {
   it('keeps empty live capabilities authoritative while options retain stored fallback', async () => {
     const test = setup();
     test.setHandle([]);
-    const projection = (
-      await test.config.getSessionConfigProjection('session')
-    ).currentProjection();
+    const projection = ready(await test.config.getSessionConfigProjection('session'));
     expect(projection.capabilities.model.enabled).toBe(false);
     expect(projection.configOptions).toEqual(options());
   });
@@ -282,9 +559,9 @@ describe('load configuration projection', () => {
   it('uses live nonempty options without stored reads or discovery', async () => {
     const test = setup();
     test.setHandle();
-    expect(
-      (await test.config.getSessionConfigProjection('session')).currentProjection().configOptions
-    ).toEqual(options('live'));
+    expect(ready(await test.config.getSessionConfigProjection('session')).configOptions).toEqual(
+      options('live')
+    );
     expect(test.repository.getSessionById).not.toHaveBeenCalled();
     expect(test.fetchModels).not.toHaveBeenCalled();
   });
@@ -294,7 +571,7 @@ describe('load configuration projection', () => {
     async (provider) => {
       const test = setup();
       test.repository.getSessionById.mockResolvedValue(row(provider));
-      const result = (await test.config.getSessionConfigProjection('session')).currentProjection();
+      const result = ready(await test.config.getSessionConfigProjection('session'));
       expect(result.configOptions).toEqual(options());
       expect(result.capabilities.model.selected).toBe('stored');
       expect(test.fetchModels).toHaveBeenCalledTimes(provider === 'CODEX' ? 1 : 0);
@@ -311,7 +588,7 @@ describe('load configuration projection', () => {
     test.repository.getSessionById.mockResolvedValue(
       unsafeCoerce({ provider: 'CODEX', providerMetadata })
     );
-    const result = (await test.config.getSessionConfigProjection('session')).currentProjection();
+    const result = ready(await test.config.getSessionConfigProjection('session'));
     expect(result.configOptions).toEqual([]);
     expect(result.capabilities.model.enabled).toBe(false);
   });
@@ -358,7 +635,7 @@ describe('load configuration projection', () => {
         supportedReasoningEfforts: [{ reasoningEffort: 'high', description: undefined }],
       },
     ]);
-    const result = (await test.config.getSessionConfigProjection('session')).currentProjection();
+    const result = ready(await test.config.getSessionConfigProjection('session'));
     expect(result.capabilities.model.selected).toBe('native-default');
     expect(result.configOptions[0]?.currentValue).toBe('native-default');
     expect(result.capabilities.reasoning.selected).toBe('high');
@@ -391,7 +668,7 @@ describe('load configuration projection', () => {
         },
       ])
     );
-    const result = (await test.config.getSessionConfigProjection('session')).currentProjection();
+    const result = ready(await test.config.getSessionConfigProjection('session'));
     expect(result.capabilities.planMode.enabled).toBe(true);
     expect(result.configOptions).toEqual(
       expect.arrayContaining([
@@ -453,7 +730,7 @@ describe('load configuration projection', () => {
           ],
         },
       ]);
-      const result = (await reading).currentProjection();
+      const result = ready(await reading);
       expect(result.capabilities).toMatchObject({
         model: { selected: 'newer' },
         reasoning: { selected: 'high' },
@@ -497,7 +774,7 @@ describe('load configuration projection', () => {
         },
       ];
       test.repository.getSessionById.mockResolvedValue(row(provider, configOptions));
-      const result = (await test.config.getSessionConfigProjection('session')).currentProjection();
+      const result = ready(await test.config.getSessionConfigProjection('session'));
       expect(result.configOptions).toEqual(configOptions);
       expect(result.capabilities.planMode.enabled).toBe(true);
       if (provider === 'CLAUDE') {
@@ -523,7 +800,7 @@ describe('load configuration projection', () => {
       const before = JSON.stringify(session);
       test.repository.getSessionById.mockResolvedValue(unsafeCoerce(session));
       test.fetchModels.mockResolvedValue([catalogModel]);
-      const result = (await test.config.getSessionConfigProjection('session')).currentProjection();
+      const result = ready(await test.config.getSessionConfigProjection('session'));
       expect(result.capabilities.model.selected).toBe(model === 'default' ? 'catalog' : 'chosen');
       expect(result.configOptions).toHaveLength(1);
       expect(JSON.stringify(session)).toBe(before);
@@ -537,7 +814,7 @@ describe('load configuration projection', () => {
     test.repository.getSessionById
       .mockResolvedValueOnce(row())
       .mockResolvedValueOnce(unsafeCoerce(null));
-    const result = (await test.config.getSessionConfigProjection('session')).currentProjection();
+    const result = ready(await test.config.getSessionConfigProjection('session'));
     expect(result.configOptions).toEqual([]);
     expect(result.capabilities.model.enabled).toBe(false);
     expect(test.repository.updateSession).not.toHaveBeenCalled();
@@ -564,7 +841,7 @@ describe('load configuration projection', () => {
   it('returns empty projection for a missing session', async () => {
     const test = setup();
     test.repository.getSessionById.mockResolvedValue(unsafeCoerce(null));
-    const result = (await test.config.getSessionConfigProjection('session')).currentProjection();
+    const result = ready(await test.config.getSessionConfigProjection('session'));
     expect(result.configOptions).toEqual([]);
     expect(result.capabilities.model.enabled).toBe(false);
     expect(test.fetchModels).not.toHaveBeenCalled();

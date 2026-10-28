@@ -127,7 +127,11 @@ The configuration owner performs at most one catalog lookup per completion,
 including failed discovery, and rechecks stored selection after discovery.
 Successful catalog reads still share their existing cache. A live handle owns
 capabilities; for compatibility, an empty live handle still permits stored
-fallback options. Passive reads never persist a catalog selection.
+fallback options. Passive reads never persist a catalog selection. If a prepared
+live handle retires before publication, another read supplies the durable
+fallback. Every retry is finalized again synchronously and reuses the same
+catalog attempt. Repeated runtime retirement fails before configuration
+publication or initial activation.
 
 Socket subscriptions, serialization, safe delivery, and disconnected-viewer
 cleanup remain owned by the transport. A closed or throwing requester does not
