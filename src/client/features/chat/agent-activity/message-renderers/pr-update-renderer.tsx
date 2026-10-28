@@ -1,6 +1,6 @@
 import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
 import { GitPullRequestIcon } from '@phosphor-icons/react/dist/csr/GitPullRequest';
-import type { PRUpdateDeliveryState } from '@/shared/pr-monitoring';
+import { PR_UPDATE_QUEUED_TEXT, type PRUpdateDeliveryState } from '@/shared/pr-monitoring';
 
 export function PRUpdateRenderer({
   text,
@@ -22,7 +22,7 @@ export function PRUpdateRenderer({
       <span className="truncate">PR update · {label}</span>
     </span>
   );
-  const hasDetails = status !== 'queued' && body !== 'PR update queued for the next turn';
+  const hasDetails = status !== 'queued' && body !== PR_UPDATE_QUEUED_TEXT;
   return (
     <div className="min-w-0 py-1">
       {hasDetails ? (

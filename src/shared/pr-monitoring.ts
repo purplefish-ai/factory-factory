@@ -41,6 +41,7 @@ export function canResumePRMonitoring(reason: string | null | undefined): boolea
   return reason != null && resumablePauseReasons.has(reason);
 }
 export const PR_EVENT_MESSAGE_ID_PREFIX = 'pr-event-';
+export const PR_UPDATE_QUEUED_TEXT = 'PR update queued for the next turn';
 export function prEventMarker(deliveryId: string): string {
   return `<!-- factory-factory-pr-event:${deliveryId} -->`;
 }

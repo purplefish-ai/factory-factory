@@ -48,12 +48,14 @@ it('keeps a queued PR update below live thinking, then returns it to the transcr
     );
   try {
     render(true);
+    expect(container.textContent).toContain('Considering the implementation');
     expect(container.textContent?.match(/PR update/g)).toHaveLength(1);
     expect(container.textContent!.indexOf('Considering the implementation')).toBeLessThan(
       container.textContent!.indexOf('PR update')
     );
     expect(container.querySelector('details')).toBeNull();
     render(false);
+    expect(container.textContent).toContain('Considering the implementation');
     expect(container.textContent?.match(/PR update/g)).toHaveLength(1);
     expect(container.textContent!.indexOf('PR update')).toBeLessThan(
       container.textContent!.indexOf('Considering the implementation')

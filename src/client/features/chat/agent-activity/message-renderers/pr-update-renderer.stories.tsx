@@ -42,8 +42,8 @@ function ConversationPreview() {
   );
 }
 
-export const QueuedBelowThinking: Story = {
-  args: Queued.args,
+export const QueuedBelowThinking: StoryObj<typeof ConversationPreview> = {
+  parameters: { controls: { disable: true } },
   render: () => <ConversationPreview />,
 };
 
