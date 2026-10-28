@@ -184,6 +184,7 @@ const sessionTerminationCoordinator = new SessionTerminationCoordinator({
 });
 
 const sessionStartupCoordinator = new SessionStartupCoordinator({
+  hydrateProviderHistory: hydrateProviderHistoryIfNeeded,
   repository: sessionRepository,
   contextService: sessionContextService,
   acpEnvironment: sessionAcpEnvironment,

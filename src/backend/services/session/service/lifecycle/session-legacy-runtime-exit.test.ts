@@ -30,6 +30,7 @@ vi.mock('@/backend/services/session/service/acp', async (importOriginal) => {
   });
   const runtimeManager = {
     getClient: vi.fn().mockReturnValue(undefined),
+    getPendingClient: vi.fn(),
     getOrCreateClient: vi.fn(),
     runClientCreationOperation: vi.fn((sessionId, purpose, operation) =>
       quiescence.runClientCreationOperation(sessionId, purpose, operation)
@@ -107,7 +108,6 @@ const activeRuntime = {
   purpose: 'active',
   managed: false,
 } as const;
-
 const getAcpProcessorState = () => acpEventProcessor;
 describe('retained legacy runtime exit', () => {
   beforeEach(() => {

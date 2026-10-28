@@ -22,6 +22,7 @@ beforeEach(() => {
 });
 function createStartupCoordinator(harness: LifecycleHarness): SessionStartupCoordinator {
   const dependencies = {
+    hydrateProviderHistory: async () => undefined,
     repository: harness.repository,
     contextService: harness.contextService,
     acpEnvironment: harness.acpEnvironment,

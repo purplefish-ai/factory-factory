@@ -246,9 +246,14 @@ provider identities remain unchanged; transport calls use the underlying native
 Codex thread ID. A failed legacy resume cannot start a replacement conversation.
 History loading accepts both legacy event messages and current public response
 items, deduplicates copies per turn, and excludes injected context and internal
-reasoning. Terminal output deltas are negotiated explicitly, accumulated with
-per-tool and total pending-tool limits, and included in completed tool results.
-Buffers are isolated by session and cleared on teardown.
+reasoning. Active and browse resumes hydrate on-disk history before starting the
+ACP runtime, preserving original message timestamps and suppressing duplicate
+adapter replay. Concurrent startups share history preparation; joining a runtime
+already starting preserves its replay policy. Without on-disk history or a
+retained provider transcript, ACP replay remains the fallback. Terminal output
+deltas are negotiated explicitly, accumulated with per-tool and total
+pending-tool limits, and included in completed tool results. Buffers are
+isolated by session and cleared on teardown.
 
 Permission requests retain the provider's option IDs and choices. Upstream Codex
 plan review is normalized into the application's plan UI. Interactive sessions

@@ -26,6 +26,10 @@ import {
 import type { SessionRuntimeExitCoordinator } from './session-runtime-exit.coordinator';
 import { stopStartupConfigurationFailure } from './session-startup-config-failure';
 import { SessionStartupPersistenceError } from './session-startup-configuration-finalizer';
+import {
+  prepareSessionHistoryForResume,
+  type SessionStartupHistoryDependencies,
+} from './session-startup-history';
 import { prepareSessionStartup } from './session-startup-preparation';
 import { SessionStartupRequest } from './session-startup-request';
 import type { StopSessionOptions } from './session-termination.coordinator';
@@ -64,6 +68,7 @@ export type StartSessionOptions = {
 };
 
 export type SessionStartupCoordinatorDependencies = {
+  hydrateProviderHistory: SessionStartupHistoryDependencies['hydrateProviderHistory'];
   repository: Pick<
     SessionRepository,
     'getSessionById' | 'getWorkspaceById' | 'markWorkspaceHasHadSessions' | 'updateSession'
@@ -86,7 +91,7 @@ export type SessionStartupCoordinatorDependencies = {
   >;
   sessionDomainService: Pick<
     SessionDomainService,
-    'emitDelta' | 'getTranscriptSnapshot' | 'isHistoryHydrated' | 'setRuntimeSnapshot'
+    'emitDelta' | 'getTranscriptSnapshot' | 'getHistoryHydrationSource' | 'setRuntimeSnapshot'
   >;
   sessionConfigService: Pick<
     SessionConfigService,
@@ -403,10 +408,15 @@ export class SessionStartupCoordinator {
       ownership
     );
 
-    this.dependencies.acpEventProcessor.setReplaySuppression(
+    const suppressReplay = await prepareSessionHistoryForResume(
       sessionId,
-      this.shouldSuppressReplayDuringAcpResume(sessionId, session)
+      sessionContext,
+      this.dependencies
     );
+    await this.assertCreationAllowed(sessionId, stopGeneration, options.assertCurrent);
+    if (suppressReplay !== undefined) {
+      this.dependencies.acpEventProcessor.setReplaySuppression(sessionId, suppressReplay);
+    }
 
     const clientOptions: AcpClientOptions = {
       provider: session.provider,
@@ -806,17 +816,6 @@ export class SessionStartupCoordinator {
         error: error instanceof Error ? error.message : String(error),
       });
     }
-  }
-
-  private shouldSuppressReplayDuringAcpResume(
-    sessionId: string,
-    session: AgentSessionRecord
-  ): boolean {
-    return !!(
-      session.providerSessionId &&
-      this.dependencies.sessionDomainService.isHistoryHydrated(sessionId) &&
-      this.dependencies.sessionDomainService.getTranscriptSnapshot(sessionId).length > 0
-    );
   }
 
   private async applyStartupModePreset(
