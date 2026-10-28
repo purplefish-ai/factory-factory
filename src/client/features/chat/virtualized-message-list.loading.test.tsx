@@ -40,10 +40,19 @@ describe('VirtualizedMessageList loading status', () => {
     try {
       render(true, false);
       expect(container.textContent).toContain('Background process running');
-      expect(container.textContent).toContain('pnpm storybook --port 62770');
+      expect(container.textContent).not.toContain('pnpm storybook --port 62770');
       expect(container.textContent).not.toContain('Old reasoning');
       expect(container.textContent).not.toContain('Agent is working');
       expect(container.querySelectorAll('.animate-spin')).toHaveLength(0);
+      const trigger = container.querySelector<HTMLButtonElement>('button[aria-expanded]');
+      expect(trigger?.getAttribute('aria-expanded')).toBe('false');
+      flushSync(() => trigger?.click());
+      expect(trigger?.getAttribute('aria-expanded')).toBe('true');
+      expect(container.textContent).toContain('pnpm storybook --port 62770');
+      flushSync(() => trigger?.click());
+      expect(trigger?.getAttribute('aria-expanded')).toBe('false');
+      expect(container.textContent).not.toContain('pnpm storybook --port 62770');
+      flushSync(() => trigger?.click());
       render(true, true);
       expect(container.textContent).toContain('Old reasoning');
       expect(container.textContent).toContain('pnpm storybook --port 62770');
@@ -78,6 +87,10 @@ describe('VirtualizedMessageList loading status', () => {
           />
         )
       );
+      expect(container.textContent).toContain('Background process running');
+      expect(container.textContent).not.toContain('pnpm storybook');
+      const trigger = container.querySelector<HTMLButtonElement>('button[aria-expanded]');
+      flushSync(() => trigger?.click());
       expect(container.textContent).toContain('pnpm storybook');
       expect(container.textContent).not.toContain('Agent is working');
       expect(container.querySelector('.animate-spin')).toBeNull();

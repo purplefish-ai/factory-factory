@@ -64,6 +64,33 @@ export const BackgroundAfterFailedTurn: Story = {
   args: { ...BackgroundPreview.args, running: false },
 };
 
+export const MultipleBackgroundProcesses: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story: 'Commands start collapsed. Click the process count to expand or collapse the list.',
+      },
+    },
+  },
+  args: {
+    ...BackgroundPreview.args,
+    work: {
+      promptInFlight: false,
+      backgroundTasks: [
+        { id: 'preview', name: 'pnpm storybook --port 62770', kind: 'shell' as const },
+        {
+          id: 'tests',
+          name: 'pnpm test src/client/features/chat --maxWorkers=1',
+          kind: 'shell' as const,
+        },
+        { id: 'dev', name: 'pnpm dev', kind: 'shell' as const },
+      ],
+      runningSubagents: 0,
+      activeGoals: 0,
+    },
+  },
+};
+
 export const PromptWithBackgroundWork: Story = {
   args: {
     ...BackgroundPreview.args,

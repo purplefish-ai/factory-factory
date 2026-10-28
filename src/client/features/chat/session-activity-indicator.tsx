@@ -1,4 +1,6 @@
+import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
 import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import type { SessionWorkState } from '@/shared/session-runtime';
 import { LoadingIndicator } from './agent-activity';
 
@@ -19,23 +21,26 @@ export function SessionActivityIndicator({
     <div className="space-y-3 py-4" role="status" aria-label="Session activity">
       {agentWorking && <LoadingIndicator latestReasoning={latestThinking} />}
       {backgroundTasks.length > 0 && (
-        <div className="text-sm text-muted-foreground space-y-2">
-          <div className="flex items-center gap-2">
+        <Collapsible defaultOpen={false} className="text-sm text-muted-foreground">
+          <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-sm text-left hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <CaretRightIcon className="h-4 w-4 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
             <TerminalIcon className="h-4 w-4 shrink-0" />
             <span>
               {backgroundTasks.length === 1
                 ? `Background ${backgroundKind} running`
                 : `${backgroundTasks.length} background ${backgroundKind === 'process' ? 'processes' : 'tasks'} running`}
             </span>
-          </div>
-          <ul className="space-y-1 max-h-40 overflow-auto">
-            {backgroundTasks.map((task) => (
-              <li key={task.id} className="font-mono text-xs whitespace-pre-wrap break-all">
-                {task.name}
-              </li>
-            ))}
-          </ul>
-        </div>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <ul className="mt-2 space-y-1 max-h-40 overflow-auto">
+              {backgroundTasks.map((task) => (
+                <li key={task.id} className="font-mono text-xs whitespace-pre-wrap break-all">
+                  {task.name}
+                </li>
+              ))}
+            </ul>
+          </CollapsibleContent>
+        </Collapsible>
       )}
       {!!work?.runningSubagents && (
         <p className="text-sm text-muted-foreground">
