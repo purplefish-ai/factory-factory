@@ -100,7 +100,6 @@ describe('SessionLaunchControls', () => {
       '[aria-label="Planning: Plan"]'
     );
     expect(plan?.disabled).toBe(false);
-    expect(plan?.title).toContain('Turn Plan off to launch');
     expect(plan?.getAttribute('aria-description')).toContain('Turn Plan off to launch');
     keyboardOpen(plan);
     const selected = document.body.querySelector('[role="menuitemradio"][aria-checked="true"]');
@@ -142,7 +141,7 @@ describe('SessionLaunchControls', () => {
     const trigger = mounted.container.querySelector<HTMLButtonElement>(
       '[aria-label="Planning: Default"]'
     );
-    expect(trigger?.textContent).toBe('Default');
+    expect(trigger?.getAttribute('aria-description')).toBe('Plan mode off');
     keyboardOpen(trigger);
     keyboardSelect('Plan');
     expect(mounted.props.planMode?.onChange).toHaveBeenCalledWith(true);

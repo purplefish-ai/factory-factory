@@ -1,4 +1,6 @@
+import { BrainIcon } from '@phosphor-icons/react/dist/csr/Brain';
 import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
+import { MapTrifoldIcon } from '@phosphor-icons/react/dist/csr/MapTrifold';
 import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import type { ReactNode } from 'react';
 import { ComposerMenuTrigger } from '@/client/components/composer-menu-trigger';
@@ -11,6 +13,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import type { ChatReasoningOption } from '@/shared/chat-capabilities';
 import { ProviderModelPicker, type ProviderModelPickerProps } from './provider-model-picker';
@@ -101,6 +104,7 @@ function ThinkingLevelSelector({
           title={description}
           aria-busy={control.loading}
           aria-invalid={control.invalid}
+          icon={<BrainIcon className="size-3.5 shrink-0" aria-hidden="true" />}
           indicator={
             control.invalid ? (
               <>
@@ -179,44 +183,49 @@ export function PlanningSelector({
   control,
   disabled,
   disabledReason,
-  showLabel = false,
 }: {
   control: LaunchPlanControl;
   disabled?: boolean;
   disabledReason?: string;
-  showLabel?: boolean;
 }) {
   const unavailable =
     !control.enabled && (control.loading || Boolean(control.error) || !control.supported);
   const description = disabled ? disabledReason : getPlanDescription(control);
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <ComposerMenuTrigger
-          disabled={disabled || unavailable}
-          aria-label={`Planning: ${control.enabled ? 'Plan' : 'Default'}`}
-          aria-description={description}
-          title={description}
-        >
-          {control.enabled ? 'Plan' : showLabel ? 'Plan off' : 'Default'}
-        </ComposerMenuTrigger>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-64 max-w-[calc(100vw-2rem)]">
-        <DropdownMenuLabel>Planning</DropdownMenuLabel>
-        <DropdownMenuRadioGroup
-          value={control.enabled ? 'plan' : 'default'}
-          onValueChange={(value) => control.onChange(value === 'plan')}
-        >
-          <DropdownMenuRadioItem value="default">Default</DropdownMenuRadioItem>
-          <DropdownMenuRadioItem
-            value="plan"
-            disabled={control.loading || Boolean(control.error) || !control.supported}
-          >
-            Plan
-          </DropdownMenuRadioItem>
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <TooltipProvider>
+      <Tooltip>
+        <DropdownMenu>
+          <TooltipTrigger asChild>
+            <DropdownMenuTrigger asChild>
+              <ComposerMenuTrigger
+                iconOnly
+                icon={<MapTrifoldIcon className="size-3.5 shrink-0" aria-hidden="true" />}
+                className={cn('shrink-0', control.enabled && 'bg-accent text-accent-foreground')}
+                disabled={disabled || unavailable}
+                aria-label={`Planning: ${control.enabled ? 'Plan' : 'Default'}`}
+                aria-description={description}
+              />
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          <DropdownMenuContent align="start" className="w-64 max-w-[calc(100vw-2rem)]">
+            <DropdownMenuLabel>Planning</DropdownMenuLabel>
+            <DropdownMenuRadioGroup
+              value={control.enabled ? 'plan' : 'default'}
+              onValueChange={(value) => control.onChange(value === 'plan')}
+            >
+              <DropdownMenuRadioItem value="default">Default</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem
+                value="plan"
+                disabled={control.loading || Boolean(control.error) || !control.supported}
+              >
+                Plan
+              </DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <TooltipContent side="top">{description}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 /** Pure shared launch controls; native discovery and draft ownership live in the caller's hook. */
@@ -227,7 +236,7 @@ export function SessionLaunchControls({
   ...picker
 }: SessionLaunchControlsProps) {
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-1">
+    <div className="flex min-w-0 items-center gap-1">
       <ProviderModelPicker {...picker} />
       {reasoning && (
         <ThinkingLevelSelector

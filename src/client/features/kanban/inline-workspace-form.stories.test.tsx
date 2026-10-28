@@ -27,7 +27,9 @@ it('updates provider and loading preview state when Storybook Controls change ar
     await render({ provider: 'CODEX' });
     await vi.waitFor(() =>
       expect(
-        container.querySelector('[aria-label="New conversation provider and model: Codex · 6 Sol"]')
+        container.querySelector(
+          '[aria-label="New conversation provider and model: Codex · GPT-6.1-Sol"]'
+        )
       ).not.toBeNull()
     );
     await render({ provider: 'CLAUDE' });

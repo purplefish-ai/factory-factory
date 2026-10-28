@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { observable } from '@trpc/server/observable';
 import { useState } from 'react';
-import { fn } from 'storybook/test';
+import { expect, fn, userEvent, within } from 'storybook/test';
 import { trpc } from '@/client/lib/trpc';
 import type { ChatProvider } from '@/shared/chat-capabilities';
 import { InlineWorkspaceForm } from './inline-workspace-form';
@@ -55,7 +55,7 @@ function previewResponse(path: string, input: unknown, provider: ChatProvider) {
       },
       CODEX: {
         models: [
-          { value: 'six-sol', label: '6 Sol' },
+          { value: 'six-sol', label: 'GPT-6.1-Sol' },
           { value: 'six-luna', label: '6 Luna' },
         ],
       },
@@ -172,4 +172,29 @@ export const Sidebar: Story = {
     ),
   ],
   globals: { theme: 'dark' },
+};
+export const SidebarClaude: Story = { ...Sidebar, args: { provider: 'CLAUDE' } };
+
+async function selectSidebarLaunchMode(canvasElement: HTMLElement, mode: string) {
+  const canvas = within(canvasElement);
+  await userEvent.click(canvas.getByRole('button', { name: 'Choose launch mode' }));
+  await userEvent.click(
+    within(canvasElement.ownerDocument.body).getByRole('menuitem', { name: mode })
+  );
+  const cancel = (await canvas.findByRole('button', { name: 'Cancel' })).getBoundingClientRect();
+  const menu = canvas.getByRole('button', { name: 'Choose launch mode' }).getBoundingClientRect();
+  const card = canvasElement.querySelector('[data-slot="card"]')?.getBoundingClientRect();
+  await expect(card).toBeDefined();
+  await expect(menu.top).toBe(cancel.top);
+  await expect(menu.right).toBeLessThanOrEqual(card?.right ?? 0);
+}
+
+export const SidebarAutoIteration: Story = {
+  ...Sidebar,
+  play: ({ canvasElement }) =>
+    selectSidebarLaunchMode(canvasElement, 'Launch as Auto-Iteration Workspace'),
+};
+export const SidebarPeriodicTask: Story = {
+  ...Sidebar,
+  play: ({ canvasElement }) => selectSidebarLaunchMode(canvasElement, 'Create Periodic Task'),
 };
