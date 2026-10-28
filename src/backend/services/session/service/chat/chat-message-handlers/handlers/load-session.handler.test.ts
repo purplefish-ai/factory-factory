@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatMessage } from '@/shared/acp-protocol';
+import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 
 const mocks = vi.hoisted(() => ({
   findById: vi.fn(),
@@ -10,8 +11,7 @@ const mocks = vi.hoisted(() => ({
   loadCodexSessionHistory: vi.fn(),
   hydrateLifecycleEvents: vi.fn(),
   getRuntimeSnapshot: vi.fn(),
-  getChatBarCapabilities: vi.fn(),
-  getSessionConfigOptionsWithFallback: vi.fn(),
+  getSessionConfigProjection: vi.fn(),
   prepareLoad: vi.fn(),
   emitDelta: vi.fn(),
   getTranscriptSnapshot: vi.fn(),
@@ -54,8 +54,7 @@ vi.mock('@/backend/services/session/service/lifecycle/session-core-services', ()
     hydrate: mocks.hydrateLifecycleEvents,
   },
   sessionConfigService: {
-    getChatBarCapabilities: mocks.getChatBarCapabilities,
-    getSessionConfigOptionsWithFallback: mocks.getSessionConfigOptionsWithFallback,
+    getSessionConfigProjection: mocks.getSessionConfigProjection,
   },
 }));
 
@@ -157,19 +156,13 @@ describe('load application history hydration', () => {
       activity: 'IDLE',
       updatedAt: '2026-02-14T00:00:00.000Z',
     });
-    mocks.getChatBarCapabilities.mockResolvedValue({
-      provider: 'CLAUDE',
-      model: { enabled: false, options: [] },
-      reasoning: { enabled: false, options: [] },
-      thinking: { enabled: false },
-      planMode: { enabled: true },
-      attachments: { enabled: true, kinds: ['image', 'text'] },
-      slashCommands: { enabled: false },
-      usageStats: { enabled: false, contextWindow: false },
-      rewind: { enabled: false },
+    mocks.getSessionConfigProjection.mockResolvedValue({
+      currentProjection: () => ({
+        capabilities: EMPTY_CHAT_BAR_CAPABILITIES,
+        configOptions: [],
+      }),
     });
     mocks.getCachedCommands.mockResolvedValue(null);
-    mocks.getSessionConfigOptionsWithFallback.mockResolvedValue([]);
     mocks.getTranscriptSnapshot.mockReturnValue([]);
     mocks.isHistoryHydrated.mockReturnValue(true);
     mocks.getHistoryHydrationSource.mockReturnValue(undefined);
@@ -1371,7 +1364,7 @@ describe('load application history hydration', () => {
     );
   });
 
-  it('emits config options using fallback-aware session service method', async () => {
+  it('emits config options from the resolved projection', async () => {
     mocks.findById.mockResolvedValue({
       provider: 'CLAUDE',
       status: 'IDLE',
@@ -1381,16 +1374,21 @@ describe('load application history hydration', () => {
       providerProjectPath: null,
     });
     mocks.isHistoryHydrated.mockReturnValue(false);
-    mocks.getSessionConfigOptionsWithFallback.mockResolvedValue([
-      {
-        id: 'model',
-        name: 'Model',
-        type: 'select',
-        category: 'model',
-        currentValue: 'claude-sonnet-4-5',
-        options: [{ value: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5' }],
-      },
-    ]);
+    mocks.getSessionConfigProjection.mockResolvedValue({
+      currentProjection: () => ({
+        capabilities: EMPTY_CHAT_BAR_CAPABILITIES,
+        configOptions: [
+          {
+            id: 'model',
+            name: 'Model',
+            type: 'select',
+            category: 'model',
+            currentValue: 'claude-sonnet-4-5',
+            options: [{ value: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5' }],
+          },
+        ],
+      }),
+    });
     const handler = createLoadSessionTestHandler({
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
     });

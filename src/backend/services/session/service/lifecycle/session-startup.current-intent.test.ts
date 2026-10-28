@@ -79,6 +79,69 @@ describe('current startup intent and surviving shared caller', () => {
     }
   );
 
+  it.each([false, true])(
+    'checks request cancellation after the final durable read (shared: %s)',
+    async (shared) => {
+      const h = pendingLaunch();
+      // Match real supervisor retirement so outer request cleanup cannot see
+      // the same stopped handle still installed in this focused harness.
+      h.runtimeManager.stopClient.mockImplementation(() => {
+        h.runtimeManager.getClient.mockReturnValue(undefined);
+        return Promise.resolve();
+      });
+      const held = gate();
+      const read = h.accessor.findById.getMockImplementation();
+      if (!read) {
+        throw new Error('Expected real row reader');
+      }
+      let acknowledgedReads = 0;
+      h.accessor.findById.mockImplementation(async () => {
+        if (readSessionLaunchSettings(h.row().providerMetadata)?.applied) {
+          // The repository first reads back its successful CAS; the next read is
+          // the finalizer's last asynchronous desired-intent validation.
+          if (++acknowledgedReads === 2) {
+            await held.wait();
+          }
+        }
+        return read();
+      });
+      let cancelled = false;
+      const cancellation = new SessionStartupCancelledError();
+      const ready = h.handle.configurationReady?.then(
+        () => 'ready',
+        (error) => error
+      );
+      const starting = h.service
+        .startSession(h.session.id, {
+          initialPrompt: 'Cancelled prompt',
+          assertCurrent: () => (cancelled ? Promise.reject(cancellation) : Promise.resolve()),
+        })
+        .catch((error) => error);
+      await held.started;
+      let borrower: Promise<unknown> | undefined;
+      if (shared) {
+        expect(await h.service.getOrCreateSessionClient(h.session.id)).toBe(h.handle);
+        borrower = h.config.setSessionModel(h.session.id, 'third').then(() => 'usable');
+      }
+      cancelled = true;
+      held.release();
+      expect(await starting).toBe(cancellation);
+      expect(h.sendSessionMessage).not.toHaveBeenCalled();
+      if (shared) {
+        expect(await ready).toBe('ready');
+        expect(await borrower).toBe('usable');
+        expect(h.complete).toHaveBeenCalledOnce();
+        expect(h.fail).not.toHaveBeenCalled();
+        expect(h.runtimeManager.stopClient).not.toHaveBeenCalled();
+      } else {
+        expect(await ready).toBe(cancellation);
+        expect(h.complete).not.toHaveBeenCalled();
+        expect(h.fail).toHaveBeenCalledOnce();
+        expect(h.runtimeManager.stopClient).toHaveBeenCalledExactlyOnceWith(h.session.id);
+      }
+    }
+  );
+
   it('hands a shared acquisition candidate to a surviving caller when its first acquisition request cancels', async () => {
     const h = pendingLaunch();
     const held = gate();

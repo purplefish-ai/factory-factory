@@ -203,6 +203,114 @@ describe('workspaceChildrenRouter', () => {
     expect(children[0]?.kanbanColumn).toBe('WORKING');
   });
 
+  it.each([
+    {
+      name: 'an idle active loop',
+      fields: { mode: 'AUTO_ITERATION', autoIterationStatus: 'RUNNING' },
+      runtime: {},
+      pending: false,
+      column: 'WORKING',
+    },
+    {
+      name: 'permission blocking an active loop',
+      fields: { mode: 'AUTO_ITERATION', autoIterationStatus: 'RUNNING' },
+      runtime: {},
+      pending: true,
+      column: 'WAITING',
+    },
+    {
+      name: 'a runtime error blocking an active loop',
+      fields: { mode: 'AUTO_ITERATION', autoIterationStatus: 'RUNNING' },
+      runtime: { phase: 'error', errorMessage: 'crashed' },
+      pending: false,
+      column: 'WAITING',
+    },
+    {
+      name: 'an archiving child with a starting session',
+      fields: { status: 'ARCHIVING' },
+      runtime: { phase: 'starting' },
+      pending: false,
+      column: null,
+    },
+    {
+      name: 'a merge conflict while CI is pending',
+      fields: { prState: 'OPEN', prCiStatus: 'PENDING', prHasMergeConflict: true },
+      runtime: {},
+      pending: false,
+      column: 'WAITING',
+    },
+    {
+      name: 'paused monitoring while CI is pending',
+      fields: {
+        prState: 'OPEN',
+        prCiStatus: 'PENDING',
+        ratchetEnabled: true,
+        prMonitoring: {
+          enabled: true,
+          deliveryMode: 'MAIN',
+          recipientSessionId: 'sess-1',
+          bindingRevision: 1,
+          pauseReason: 'DELIVERY_FAILED',
+          pendingEventCount: 1,
+        },
+      },
+      runtime: {},
+      pending: false,
+      column: 'WAITING',
+    },
+  ])('preserves the child result for $name', async ({ fields, runtime, pending, column }) => {
+    const createdAt = new Date('2026-07-17T12:00:00.000Z');
+    const row = {
+      ...child,
+      description: null,
+      status: 'READY',
+      prs: [],
+      prState: 'NONE',
+      prUrl: 'https://github.com/org/repo/pull/1',
+      prCiStatus: 'UNKNOWN',
+      prUpdatedAt: createdAt,
+      prHasMergeConflict: false,
+      ratchetEnabled: false,
+      ratchetState: 'IDLE',
+      hasHadSessions: true,
+      mode: 'STANDARD',
+      autoIterationStatus: null,
+      project: { name: 'Child Project', slug: 'child-project' },
+      agentSessions: [{ id: 'sess-1', name: null, workflow: null, model: null, status: 'RUNNING' }],
+      createdAt,
+      ...fields,
+    };
+    mockFindChildrenWithStatus.mockResolvedValue([row]);
+    mockGetRuntimeSnapshot.mockReturnValue({
+      phase: 'idle',
+      processState: 'alive',
+      activity: 'IDLE',
+      updatedAt: createdAt.toISOString(),
+      ...runtime,
+    });
+    mockGetAllPendingRequests.mockReturnValue(
+      pending ? new Map([['sess-1', { toolName: 'Bash' }]]) : new Map()
+    );
+    const { caller } = createCaller();
+
+    expect(await caller.listChildren({ parentWorkspaceId: 'parent-1' })).toEqual([
+      {
+        id: 'child-1',
+        name: 'Child WS',
+        description: null,
+        status: row.status,
+        prs: [],
+        prState: row.prState,
+        prUrl: 'https://github.com/org/repo/pull/1',
+        kanbanColumn: column,
+        projectId: 'child-project-1',
+        projectName: 'Child Project',
+        projectSlug: 'child-project',
+        createdAt,
+      },
+    ]);
+  });
+
   it('returns null when a child has no parent summary', async () => {
     mockFindParentWorkspace.mockResolvedValue(null);
     const { caller } = createCaller();

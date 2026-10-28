@@ -14,19 +14,24 @@ import { sessionDomainService } from '@/backend/services/session/service/session
 import { userSettingsService } from '@/backend/services/settings';
 import type { SessionDeltaEvent } from '@/shared/acp-protocol';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
-import { type ChatBarCapabilities, EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
+import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import type { SessionLaunchOptions } from '@/shared/session-launch';
 import type { SessionPermissionPreset } from '@prisma-gen/client';
-import { parseAcpConfigSnapshot, type StoredAcpConfigSnapshot } from './acp-config-snapshot';
+import { parseAcpConfigSnapshot } from './acp-config-snapshot';
 import type { CodexModelCatalogService } from './codex-model-catalog.service';
 import { SessionConfigCommitAuthority } from './session-config-commit-authority';
 import { SessionConfigMutationQueue } from './session-config-mutation-queue';
 import {
   buildCapabilitiesFromConfigOptions,
-  buildCodexConfigOptionsWithModelCatalog,
   getConfigOptionValues,
+  type CodexModelCatalogEntry,
   type SessionProvider,
 } from './session-config-option-helpers';
+import {
+  buildStoredConfigProjection,
+  type ResolvedSessionConfigProjection,
+  type SessionConfigProjection,
+} from './session-config-projection';
 import {
   SessionConfigSnapshotPersistence,
   type PersistAcpConfigSnapshotParams,
@@ -63,7 +68,13 @@ import type { SessionRepository } from './session.repository';
 
 const logger = createLogger('session');
 
+const MAX_CONFIG_READ_RETIREMENTS = 3;
+
 type SessionStartupModePreset = 'non_interactive' | 'plan';
+type SessionConfigReadContext = {
+  catalog?: Promise<CodexModelCatalogEntry[] | null>;
+  retirements: number;
+};
 
 export type SessionConfigServiceDependencies = {
   repository: SessionRepository;
@@ -439,39 +450,96 @@ export class SessionConfigService {
   }
 
   async getSessionConfigOptionsWithFallback(sessionId: string): Promise<SessionConfigOption[]> {
-    const liveConfigOptions = this.getSessionConfigOptions(sessionId);
-    if (liveConfigOptions.length > 0) {
-      return liveConfigOptions;
-    }
-
-    const session = await this.repository.getSessionById(sessionId);
-    if (!session) {
-      return [];
-    }
-
-    const cachedSnapshot = parseAcpConfigSnapshot(session.providerMetadata);
-    const snapshotConfigOptions =
-      cachedSnapshot && cachedSnapshot.provider === session.provider
-        ? [...cachedSnapshot.configOptions]
-        : [];
-
-    if (session.provider === 'CODEX') {
-      const refreshedCodexOptions = await this.refreshCodexFallbackConfigOptionsFromAppServer({
-        sessionId,
-        session,
-        cachedSnapshot,
-        configOptions: snapshotConfigOptions,
-      });
-      if (refreshedCodexOptions.length > 0) {
-        return refreshedCodexOptions;
+    let resolved = await this.getSessionConfigProjection(sessionId);
+    for (;;) {
+      const current = resolved.currentProjection();
+      if ('retry' in current) {
+        resolved = await current.retry;
+        continue;
       }
+      return current.configOptions;
+    }
+  }
+
+  getSessionConfigProjection(sessionId: string): Promise<ResolvedSessionConfigProjection> {
+    return this.readSessionConfigProjection(sessionId, { retirements: 0 });
+  }
+
+  private async readSessionConfigProjection(
+    sessionId: string,
+    context: SessionConfigReadContext
+  ): Promise<ResolvedSessionConfigProjection> {
+    const live = this.runtimeManager.getClient(sessionId);
+    if (live && live.configOptions.length > 0) {
+      return this.resolveConfigProjection(sessionId, null, context);
     }
 
-    if (snapshotConfigOptions.length > 0) {
-      return snapshotConfigOptions;
+    let session = await this.repository.getSessionById(sessionId);
+    // A runtime installed during the read owns its options without catalog enrichment.
+    const current = this.runtimeManager.getClient(sessionId);
+    if (current && current.configOptions.length > 0) {
+      return this.resolveConfigProjection(sessionId, null, context);
     }
+    let modelCatalog = null;
+    if (session?.provider === 'CODEX') {
+      context.catalog ??= this.codexModelCatalogService.getModels().catch((error: unknown) => {
+        logger.warn('Failed to refresh Codex model catalog from app-server fallback', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return null;
+      });
+      modelCatalog = await context.catalog;
+      // Passive discovery must not retain a selection from before a stopped edit.
+      session = await this.repository.getSessionById(sessionId);
+    }
+    return this.resolveConfigProjection(
+      sessionId,
+      buildStoredConfigProjection(session, modelCatalog),
+      context
+    );
+  }
 
-    return [];
+  private resolveConfigProjection(
+    sessionId: string,
+    fallback: SessionConfigProjection | null,
+    context: SessionConfigReadContext
+  ): ResolvedSessionConfigProjection {
+    const observedLive = this.runtimeManager.getClient(sessionId);
+    const hadLiveOptions = !!observedLive?.configOptions.length;
+    let retry: Promise<ResolvedSessionConfigProjection> | undefined;
+    const refreshRetired = () => {
+      if (!retry) {
+        if (context.retirements >= MAX_CONFIG_READ_RETIREMENTS) {
+          throw new Error('Session runtime retired repeatedly during configuration read');
+        }
+        context.retirements += 1;
+        retry = this.readSessionConfigProjection(sessionId, context);
+      }
+      return { retry };
+    };
+    return {
+      currentProjection: () => {
+        const handle = this.runtimeManager.getClient(sessionId);
+        if (!handle?.configOptions.length && (hadLiveOptions || !fallback)) {
+          return refreshRetired();
+        }
+        if (!handle) {
+          if (!fallback) {
+            throw new Error('Session configuration requires a durable reread');
+          }
+          return fallback;
+        }
+        const configOptions = structuredClone(handle.configOptions);
+        return {
+          capabilities: buildCapabilitiesFromConfigOptions(
+            handle.provider as SessionProvider,
+            configOptions
+          ),
+          // Preserve the existing empty-handle contract: live capabilities, cached options.
+          configOptions: configOptions.length > 0 ? configOptions : (fallback?.configOptions ?? []),
+        };
+      },
+    };
   }
 
   async setSessionModel(sessionId: string, model?: string): Promise<void> {
@@ -784,52 +852,19 @@ export class SessionConfigService {
   }
 
   async getChatBarCapabilities(sessionId: string): Promise<ChatBarCapabilities> {
-    const acpHandle = this.runtimeManager.getClient(sessionId);
-    if (acpHandle) {
-      return this.buildAcpChatBarCapabilities(acpHandle);
+    const handle = this.runtimeManager.getClient(sessionId);
+    if (handle && handle.configOptions.length === 0) {
+      return this.buildAcpChatBarCapabilities(handle);
     }
-
-    const session = await this.repository.getSessionById(sessionId);
-    if (!session) {
-      return EMPTY_CHAT_BAR_CAPABILITIES;
-    }
-
-    const cachedSnapshot = parseAcpConfigSnapshot(session.providerMetadata);
-    if (session.provider === 'CODEX') {
-      const snapshotConfigOptions =
-        cachedSnapshot && cachedSnapshot.provider === 'CODEX'
-          ? [...cachedSnapshot.configOptions]
-          : [];
-      const refreshedCodexOptions = await this.refreshCodexFallbackConfigOptionsFromAppServer({
-        sessionId,
-        session,
-        cachedSnapshot,
-        configOptions: snapshotConfigOptions,
-      });
-
-      if (refreshedCodexOptions.length > 0) {
-        return buildCapabilitiesFromConfigOptions(
-          'CODEX',
-          refreshedCodexOptions,
-          cachedSnapshot?.observedModelId ?? session.model
-        );
+    let resolved = await this.getSessionConfigProjection(sessionId);
+    for (;;) {
+      const current = resolved.currentProjection();
+      if ('retry' in current) {
+        resolved = await current.retry;
+        continue;
       }
-
-      return {
-        ...EMPTY_CHAT_BAR_CAPABILITIES,
-        provider: 'CODEX',
-      };
+      return current.capabilities;
     }
-
-    if (cachedSnapshot && cachedSnapshot.provider === session.provider) {
-      return buildCapabilitiesFromConfigOptions(
-        session.provider,
-        cachedSnapshot.configOptions,
-        cachedSnapshot.observedModelId
-      );
-    }
-
-    return EMPTY_CHAT_BAR_CAPABILITIES;
   }
 
   buildAcpChatBarCapabilities(handle: AcpProcessHandle): ChatBarCapabilities {
@@ -912,36 +947,5 @@ export class SessionConfigService {
       persistSnapshot: this.persistAcpConfigSnapshot.bind(this),
       emitDelta: this.sessionDomainService.emitDelta.bind(this.sessionDomainService),
     });
-  }
-
-  private async refreshCodexFallbackConfigOptionsFromAppServer(params: {
-    sessionId: string;
-    session: AgentSessionRecord;
-    cachedSnapshot: StoredAcpConfigSnapshot | null;
-    configOptions: SessionConfigOption[];
-  }): Promise<SessionConfigOption[]> {
-    const modelCatalog = await this.codexModelCatalogService.getModels().catch((error: unknown) => {
-      logger.warn('Failed to refresh Codex model catalog from app-server fallback', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return null;
-    });
-    // Catalog reads only enrich display options. They never confirm or persist a model.
-    const latest = await this.repository.getSessionById(params.sessionId);
-    const liveOptions = this.getSessionConfigOptions(params.sessionId);
-    if (liveOptions.length > 0) {
-      return liveOptions;
-    }
-    const latestSnapshot = parseAcpConfigSnapshot(latest?.providerMetadata);
-    const configOptions =
-      latestSnapshot?.provider === 'CODEX' ? latestSnapshot.configOptions : params.configOptions;
-    if (!modelCatalog || modelCatalog.length === 0) {
-      return configOptions;
-    }
-    return buildCodexConfigOptionsWithModelCatalog(
-      configOptions,
-      modelCatalog,
-      latest?.model ?? params.session.model
-    );
   }
 }

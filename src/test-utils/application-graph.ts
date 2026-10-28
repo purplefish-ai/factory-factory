@@ -190,7 +190,8 @@ vi.mock('@/backend/services/terminal', () => ({
   terminalService: {},
   terminalSessionService: {},
 }));
-vi.mock('@/backend/services/workspace', () => ({
+vi.mock('@/backend/services/workspace', async () => ({
+  ...(await vi.importActual('@/backend/services/workspace/service/state/workspace-read-state')),
   workspacePRMonitoringService: { get: vi.fn(), listConfigs: vi.fn() },
   computePendingRequestType: (...args: unknown[]) =>
     applicationGraphMocks.computePendingRequestType(...args),

@@ -13,14 +13,14 @@ import type {
 } from '@/backend/services/workspace/service/bridges';
 import { projectWorkspaceSummary } from '@/backend/services/workspace/service/query/workspace-summary-projector';
 import { computePendingRequestType } from '@/backend/services/workspace/service/state/pending-request-type';
+import {
+  deriveLastActivityAt,
+  toWorkspaceDerivedStateInput,
+} from '@/backend/services/workspace/service/state/workspace-read-state';
 import { deriveWorkspaceRuntimeState } from '@/backend/services/workspace/service/state/workspace-runtime-state';
 import { gitOpsService } from '@/backend/services/workspace/service/worktree/git-ops.service';
 import { type KanbanColumn, WorkspaceStatus } from '@/shared/core';
-import {
-  findWorkspaceSessionRuntimeError,
-  hasStartingSessionSummary,
-  hasWorkingSessionSummary,
-} from '@/shared/session-runtime';
+import { hasWorkingSessionSummary } from '@/shared/session-runtime';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 
 const logger = createLogger('workspace-query');
@@ -37,25 +37,6 @@ export interface WorkspaceGitStats {
   additions: number;
   deletions: number;
   hasUncommitted: boolean;
-}
-
-/** Most recent update across a workspace's agent and terminal sessions. */
-function deriveLastActivityAt(workspace: {
-  agentSessions?: Array<{ updatedAt: Date }> | null;
-  terminalSessions?: Array<{ updatedAt: Date }> | null;
-}): string | null {
-  const sessionDates = [
-    ...(workspace.agentSessions?.map((session) => session.updatedAt) ?? []),
-    ...(workspace.terminalSessions?.map((session) => session.updatedAt) ?? []),
-  ].filter((date) => Number.isFinite(date?.getTime()));
-
-  if (sessionDates.length === 0) {
-    return null;
-  }
-
-  return new Date(
-    sessionDates.reduce((max, d) => Math.max(max, d.getTime()), -Infinity)
-  ).toISOString();
 }
 
 class WorkspaceQueryService {
@@ -189,26 +170,15 @@ class WorkspaceQueryService {
           allPendingRequests
         );
         const derivedState = assembleWorkspaceDerivedState(
-          {
-            lifecycle: workspace.status,
-            prSummary: workspace.prSummary,
-            prUrl: workspace.prUrl,
-            prState: workspace.prState,
-            prCiStatus: workspace.prCiStatus,
-            ratchetState: workspace.ratchetState,
-            hasHadSessions: workspace.hasHadSessions,
-            sessionIsWorking: runtimeState.isSessionWorking,
-            pendingRequestType,
-            hasSessionRuntimeError: Boolean(findWorkspaceSessionRuntimeError(sessionSummaries)),
-            isSessionStarting: hasStartingSessionSummary(sessionSummaries),
-            ratchetEnabled: workspace.ratchetEnabled,
-            hasMergeConflict: workspace.prHasMergeConflict,
-            dispatchStalled: Boolean(workspace.prMonitoring?.pauseReason),
-            prMonitoring: workspace.prMonitoring,
-            mode: workspace.mode,
-            autoIterationStatus: workspace.autoIterationStatus,
-            flowState: runtimeState.flowState,
-          },
+          toWorkspaceDerivedStateInput(
+            { ...workspace, hasMergeConflict: workspace.prHasMergeConflict },
+            {
+              sessionSummaries,
+              sessionIsWorking: runtimeState.isSessionWorking,
+              pendingRequestType,
+              flowState: runtimeState.flowState,
+            }
+          ),
           {
             deriveSidebarStatus: deriveWorkspaceSidebarStatus,
           }

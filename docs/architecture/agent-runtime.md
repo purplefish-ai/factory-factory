@@ -81,25 +81,25 @@ metadata reads, CAS retries, and publication. Failed requests leave the last
 accepted state valid; superseded background writes stop without publishing a
 stale result. Startup persistence stays outside the public readiness queue. If
 native configuration supersedes the final startup write, startup recaptures and
-persists the current handle before opening readiness. After the final async
-lifecycle check, configuration authority and required native permissions are
-checked synchronously with readiness completion. A changed required access mode
-fails startup, including observations received during permission RPC or
-persistence continuations. Exhausted persistence retries are logged and
-rejected; native notifications own that background rejection. Terminal required
-access or current final persistence failure permanently rejects the candidate's
-readiness and attempts to stop that same incarnation, including a shared
-candidate. Runtime identity and lifecycle generation fences preserve
-replacements and newer stops; caller-specific cancellation retains shared
-cleanup protections. A cancelled request leaves a healthy shared candidate's
-completion owner running under independent runtime/lifecycle guards; that owner
-opens real readiness for surviving users, then rejects the cancelled request
-before its prompt. Later genuine server changes remain authoritative after
-pending edits settle. Model-only changes preserve a supported explicit reasoning
-effort; an unsupported effort normalizes to the new model's confirmed default.
-Each session load has a 10-second UI loading safety timer, including creation
-from an empty Quick Chat. This UI timer does not release backend configuration
-readiness.
+persists the current handle before opening readiness. The final durable intent
+read precedes the last async request/lifecycle check. Configuration authority
+and required native permissions are then checked synchronously with readiness
+completion. A changed required access mode fails startup, including observations
+received during permission RPC or persistence continuations. Exhausted
+persistence retries are logged and rejected; native notifications own that
+background rejection. Terminal required access or current final persistence
+failure permanently rejects the candidate's readiness and attempts to stop that
+same incarnation, including a shared candidate. Runtime identity and lifecycle
+generation fences preserve replacements and newer stops; caller-specific
+cancellation retains shared cleanup protections. A cancelled request leaves a
+healthy shared candidate's completion owner running under independent
+runtime/lifecycle guards; that owner opens real readiness for surviving users,
+then rejects the cancelled request before its prompt. Later genuine server
+changes remain authoritative after pending edits settle. Model-only changes
+preserve a supported explicit reasoning effort; an unsupported effort normalizes
+to the new model's confirmed default. Each session load has a 10-second UI
+loading safety timer, including creation from an empty Quick Chat. This UI timer
+does not release backend configuration readiness.
 
 ### Launch thinking and Plan
 
@@ -297,6 +297,13 @@ commit leaves the new durable identity available for the next restart. An
 archive created before a cancelled or failed commit remains available as a
 retained copy.
 
+Pending configuration notifications carry an internal source capability to the
+configuration owner while public runtime lookup still hides their candidate. The
+source remains valid after creation clears. Its existing stop-generation fence
+rejects observations during a stop attempt, and exit or replacement invalidates
+it, including through the guarded snapshot write. If stopping fails and retains
+the same live runtime, observations may resume once that stop attempt clears.
+
 Runtime incarnation/stop fences reject stale repair callbacks. A process that
 has exited by code or signal fails the liveness fence, including when an
 external signal kills a candidate during identity reconciliation. Failed-load
@@ -365,9 +372,11 @@ application commands receive plain contexts and typed outcomes. Loading prepares
 history asynchronously, captures current runtime/recovery/replay synchronously,
 then publishes replay at the transport boundary without yielding. Application
 completion owns runtime updates, capabilities, options, slash commands, and
-initial-message activation in that order. Load activation uses the supplied
-application graph's dispatcher. See [chat message flow](../chat-message-flow.md)
-for reconnect, recipient, and failure contracts.
+initial-message activation in that order. Capabilities and options share one
+configuration resolution per completion and publish consecutively after a
+synchronous live-handle recheck. Load activation uses the supplied application
+graph's dispatcher. See [chat message flow](../chat-message-flow.md) for
+reconnect, recipient, and failure contracts.
 
 ## Session lifecycle ownership
 

@@ -289,7 +289,7 @@ export class AcpEventProcessor {
 
     // When configOptions change mid-session, sync the handle and re-emit capabilities
     if (delta.type === 'config_options_update') {
-      const acpHandle = configSource?.handle ?? this.runtimeManager.getClient(sid);
+      const acpHandle = this.runtimeManager.getClient(sid) ?? configSource?.handle;
       if (acpHandle) {
         const { configOptions } = delta as { configOptions: unknown[] };
         this.sessionConfigService.applyConfigOptionsUpdateDelta(

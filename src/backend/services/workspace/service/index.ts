@@ -59,6 +59,7 @@ export {
 } from './state/flow-state';
 export { getWorkspaceInitPolicy, type WorkspaceInitPolicyInput } from './state/init-policy';
 export { computePendingRequestType } from './state/pending-request-type';
+export { deriveLastActivityAt, toWorkspaceDerivedStateInput } from './state/workspace-read-state';
 // --- Worktree management ---
 export { gitCloneService, parseGithubUrl } from './worktree/git-clone.service';
 export { gitOpsService } from './worktree/git-ops.service';

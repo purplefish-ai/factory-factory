@@ -68,12 +68,14 @@ export class SessionStartupConfigurationFinalizer {
       if (result === 'superseded') {
         continue;
       }
-      await params.beforeComplete();
       const after = await this.refreshIntent(sessionId, intent, params);
       intent = after.intent;
       if (after.changed) {
         continue;
       }
+      // Request/lifecycle checks run after the last durable read. No later I/O
+      // may let a cancelled unshared request publish successful readiness.
+      await params.beforeComplete();
       params.assertCurrent();
       if (!accepted.isCurrent()) {
         continue;

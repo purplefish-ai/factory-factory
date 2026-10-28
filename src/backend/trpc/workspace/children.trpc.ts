@@ -8,12 +8,9 @@ import { assembleWorkspaceDerivedState } from '@/backend/lib/workspace-derived-s
 import {
   computePendingRequestType,
   deriveWorkspaceFlowStateFromWorkspace,
+  toWorkspaceDerivedStateInput,
 } from '@/backend/services/workspace';
 import { publicProcedure, router, trustedLocalProcedure } from '@/backend/trpc/trpc';
-import {
-  findWorkspaceSessionRuntimeError,
-  hasStartingSessionSummary,
-} from '@/shared/session-runtime';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 
 export const workspaceChildrenRouter = router({
@@ -51,29 +48,18 @@ export const workspaceChildrenRouter = router({
         // query already loads each child with its sessions, so this does not
         // wait on the snapshot store having an entry.
         const derivedState = assembleWorkspaceDerivedState(
-          {
-            lifecycle: child.status,
-            prSummary: child.prSummary,
-            prUrl: child.prUrl,
-            prState: child.prState,
-            prCiStatus: child.prCiStatus,
-            ratchetState: child.ratchetState,
-            hasHadSessions: child.hasHadSessions,
-            sessionIsWorking: hasWorkingSessionSummary(sessionSummaries),
-            pendingRequestType: computePendingRequestType(
-              child.agentSessions.map((session) => session.id),
-              pendingRequests
-            ),
-            hasSessionRuntimeError: Boolean(findWorkspaceSessionRuntimeError(sessionSummaries)),
-            isSessionStarting: hasStartingSessionSummary(sessionSummaries),
-            ratchetEnabled: child.ratchetEnabled,
-            hasMergeConflict: child.prHasMergeConflict,
-            dispatchStalled: Boolean(child.prMonitoring?.pauseReason),
-            prMonitoring: child.prMonitoring,
-            mode: child.mode,
-            autoIterationStatus: child.autoIterationStatus,
-            flowState: deriveWorkspaceFlowStateFromWorkspace(child),
-          },
+          toWorkspaceDerivedStateInput(
+            { ...child, hasMergeConflict: child.prHasMergeConflict },
+            {
+              sessionSummaries,
+              sessionIsWorking: hasWorkingSessionSummary(sessionSummaries),
+              pendingRequestType: computePendingRequestType(
+                child.agentSessions.map((session) => session.id),
+                pendingRequests
+              ),
+              flowState: deriveWorkspaceFlowStateFromWorkspace(child),
+            }
+          ),
           { deriveSidebarStatus: deriveWorkspaceSidebarStatus }
         );
 
