@@ -3,6 +3,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router';
 import { AppearanceProvider } from '@/client/components/appearance-provider';
 import { CLIHealthBanner } from '@/client/components/cli-health-banner';
 import { Loading } from '@/client/components/loading';
+import { ModelCatalogWarning } from '@/client/components/model-catalog-warning';
 import { AppLayout } from '@/client/components/resizable-layout';
 import { ThemeProvider } from '@/client/components/theme-provider';
 import { WorkspaceNotificationManager } from '@/client/features/workspace/WorkspaceNotificationManager';
@@ -38,6 +39,7 @@ function RootLayout() {
       style={{ height: viewportHeight, transform: viewportTransform }}
     >
       <CLIHealthBanner />
+      <ModelCatalogWarning />
       <AppLayout className="flex-1 overflow-hidden">
         <Suspense fallback={<Loading message="Loading page..." />}>
           <Outlet />

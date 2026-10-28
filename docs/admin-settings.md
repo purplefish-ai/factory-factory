@@ -57,6 +57,13 @@ preserves the saved custom command for later use.
 
 ## Chat defaults
 
+An app-wide warning appears when a saved default Claude or Codex model is
+missing from its live catalog. **Review chat defaults** opens Settings so you
+can choose a current model. The warning clears after the default changes or the
+model returns to the catalog. Discovery failures and fallback lists do not
+trigger this warning; supported Claude aliases and Codex's native `default`
+remain valid. The warning does not change your saved selection.
+
 Model selections save immediately. If a save fails, the affected model selector
 returns to the saved value and an error toast appears. A late failure from an
 older selection does not replace a newer selection, even when the same model is
