@@ -8,17 +8,86 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.4.12] - 2026-10-28
+
+### Added
+
+- Add global metadata search, improve pull request and source issue search, and
+  launch workspaces from GitHub issue results (#2608, #2616)
+- Show provider usage limits and context usage with native compaction controls
+  (#2561)
+- Add native thinking and Plan controls when launching workspaces, with
+  provider-grouped model menus and consistent chat toolbar controls (#2579,
+  #2600, #2603, #2604, #2612)
+- Add GitHub pull request hover previews in chat (#2601)
+
 ### Changed
 
+- Allow configuration changes while agents are working, preserving accepted
+  next-turn settings across reconnects and runtime changes (#2609)
+- Show named background activity separately from agent turns, clarify queued
+  message wording, simplify PR update notices, and hide thinking boxes from
+  session history (#2595, #2598, #2606, #2611, #2615)
+- Consolidate workspace snapshots, cache reconciliation, session dispatch,
+  launch policies, configuration, and PR observation behind explicit ownership
+  boundaries; remove obsolete helpers and UI components (#2501, #2502, #2543,
+  #2544, #2545, #2547, #2548, #2549, #2550, #2552, #2555, #2556, #2557, #2558,
+  #2559, #2560, #2562, #2563, #2564, #2565, #2566, #2567, #2568, #2569, #2570,
+  #2572, #2573, #2575, #2578, #2580, #2584, #2587)
 - Refresh stable dependencies and transitive compatibility overrides, including
   Electron 45, Claude ACP 0.98, Codex ACP 2.3, Anthropic SDK 1, and the Node.js
   26.12.1/pnpm 12.15.0 toolchain; retain Prisma 7 and supported Babel/Picomatch
-  dependency lines.
+  dependency lines (#2518, #2519, #2520, #2521, #2523, #2524, #2554)
+- Update CodeQL actions together (#2522)
 
 ### Fixed
 
-- Preserve Calendar DOM, focus, and custom day state across parent rerenders.
-- Select backend integration tests through a dedicated Vitest configuration.
+- Keep provider, model, and effort selections consistent across workspace
+  startup and new chats; warn when saved model defaults are unavailable (#2571,
+  #2588, #2589, #2590, #2597)
+- Preserve configuration updates during session creation and startup, resolve
+  configuration once per load, and separate optional CLI updates from setup
+  warnings (#2574, #2581, #2582, #2583)
+- Handle missing worktrees and preserve ACP resume diagnostics, validate working
+  directories before adapter startup, and treat provider capacity errors as
+  failed turns (#2586, #2592, #2613)
+- Restore Claude image attachments, keep desktop image upload available, fix
+  large permission request layouts and command rendering, and prevent
+  elicitation answer permission collisions (#2528, #2535, #2596, #2607)
+- Keep failed and cancelled PR updates visible, observe CI independently of
+  optional review enrichment, retry GitHub connectivity failures with backoff,
+  reset discovery after successful turns, and wake and queue delivery only for
+  actionable events (#2539, #2553, #2599, #2605, #2610, #2614)
+- Keep auto-iteration state and workspace renames current, establish snapshots
+  before streaming deltas, reset stale detail queries, and scope reconnect
+  recovery to the owning project (#2540, #2546, #2551, #2576, #2577)
+- Preserve unsettled workspace notifications across restarts, restore terminal
+  output on reconnect, and keep slash commands scoped to their workspace (#2531,
+  #2532, #2534)
+- Refresh file browser listings, decode Git filenames, and recover unavailable
+  workspace panel tabs (#2529, #2530, #2538)
+- Fix Reviews back navigation and exclude archived workspaces from Reviews and
+  archived projects from child workspace creation (#2527, #2536, #2602)
+- Fix streaming query CORS preflight, periodic task calendar scheduling across
+  daylight saving changes, relative server log query bounds, and independent
+  voice settings saves (#2525, #2526, #2533, #2537)
+- Complete permission request state within the permission service (#2542)
+- Prevent duplicate workspace creation spinners, overlapping sidebar PR menus,
+  and mismatched chat and Changes toolbar heights (#2591, #2593, #2594)
+- Preserve Calendar DOM, focus, and custom day state across parent rerenders;
+  select backend integration tests through a dedicated Vitest configuration
+  (#2554)
+
+### Security
+
+- Update vulnerable transitive dependencies and compatibility overrides,
+  including Undici, Hono, body-parser, fast-uri, xmldom, KaTeX, and the MCP SDK
+  (#2541, #2554)
+
+### Documentation
+
+- Remove obsolete app-server adapter references from workspace state guidance
+  (#2500)
 
 ## [0.4.11] - 2026-10-21
 
