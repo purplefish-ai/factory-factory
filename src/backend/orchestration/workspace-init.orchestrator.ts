@@ -756,7 +756,6 @@ async function runWorkspaceInitialization(
   let worktreeCreated = false;
   let worktreeRegistered = false;
   let createdWorktreeInfo: CreatedWorktreeInfo | undefined;
-  let agentSessionPromise: Promise<string | null> = Promise.resolve(null);
   let autoCreatedTerminalId: string | undefined;
 
   try {
@@ -817,9 +816,20 @@ async function runWorkspaceInitialization(
     // Auto-iteration workspaces manage their own ACP session via autoIterationService.
     const isAutoIteration = workspaceWithProject.mode === WorkspaceMode.AUTO_ITERATION;
 
+    const startupScriptPipelineResult = await executeStartupScriptPipeline({
+      workspaceId,
+      workspaceWithProject,
+      worktreePath: worktreeInfo.worktreePath,
+      factoryConfig,
+    });
+    if (!startupScriptPipelineResult.handled) {
+      await workspaceStateMachine.markReady(workspaceId);
+    }
+
+    let agentSessionPromise: Promise<string | null> = Promise.resolve(null);
     if (!isAutoIteration) {
-      // Start Claude session eagerly - runs in parallel with setup scripts.
-      // If scripts fail, stopWorkspaceSessions() in the failure handlers will clean it up.
+      // Provider startup hooks can depend on setup's files and installed tools.
+      // Finish provisioning before starting the agent's bounded startup deadline.
       agentSessionPromise = startDefaultAgentSession(workspaceId, dependencies).catch((error) => {
         logger.error('Failed to start default Claude session', {
           workspaceId,
@@ -829,36 +839,14 @@ async function runWorkspaceInitialization(
       });
     }
 
-    const startupScriptPipelineResult = await executeStartupScriptPipeline({
-      workspaceId,
-      workspaceWithProject,
-      worktreePath: worktreeInfo.worktreePath,
-      factoryConfig,
-    });
-    if (startupScriptPipelineResult.handled) {
-      await handlePostInitSessionStart(
-        workspaceId,
-        isAutoIteration,
-        agentSessionPromise,
-        startupScriptPipelineResult.success,
-        dependencies
-      );
-      return;
-    }
-
-    // No setup scripts ran, mark ready
-    await workspaceStateMachine.markReady(workspaceId);
     await handlePostInitSessionStart(
       workspaceId,
       isAutoIteration,
       agentSessionPromise,
-      true,
+      startupScriptPipelineResult.success,
       dependencies
     );
   } catch (error) {
-    // Ensure any eager session start attempt has settled before cleanup so we
-    // do not race stopWorkspaceSessions() with a late startSession() call.
-    await agentSessionPromise;
     await handleWorkspaceInitFailure(
       workspaceId,
       toError(error),

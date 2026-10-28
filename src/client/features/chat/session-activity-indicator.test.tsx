@@ -2,7 +2,7 @@
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { SessionActivityIndicator } from './session-activity-indicator';
 
 describe('SessionActivityIndicator', () => {
@@ -40,6 +40,33 @@ describe('SessionActivityIndicator', () => {
       expect(trigger?.getAttribute('aria-expanded')).toBe('true');
     } finally {
       root.unmount();
+    }
+  });
+
+  it.each([
+    [1, '1 sub-agent running'],
+    [2, '2 sub-agents running'],
+  ] as const)('opens Agents from the %s running sub-agent label', (runningSubagents, label) => {
+    const onOpenAgents = vi.fn();
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    try {
+      flushSync(() =>
+        root.render(
+          <SessionActivityIndicator
+            work={{ promptInFlight: false, backgroundTasks: [], runningSubagents, activeGoals: 0 }}
+            onOpenAgents={onOpenAgents}
+          />
+        )
+      );
+      const button = container.querySelector('button');
+      expect(button?.textContent).toBe(label);
+      expect(button?.closest('[role="status"], [aria-live]')).toBeNull();
+      expect(container.querySelector('[role="status"]')?.textContent).toBe(label);
+      button?.click();
+      expect(onOpenAgents).toHaveBeenCalledOnce();
+    } finally {
+      flushSync(() => root.unmount());
     }
   });
 

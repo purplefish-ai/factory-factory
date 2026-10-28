@@ -47,6 +47,85 @@ function createTranscript(): SubagentTranscriptUpdate[] {
 }
 
 describe('projectAcpTranscriptUpdates', () => {
+  it.each([undefined, null, 'reply-1'])(
+    'joins streamed text chunks into one formatted reply with message ID %s',
+    (messageId) => {
+      const messages = projectAcpTranscriptUpdates(
+        ['I', '’m', ' using', ' **Iron', ' Fil', 'let**', '’s ship', '-change', ' workflow.'].map(
+          (text) => ({
+            sessionUpdate: 'agent_message_chunk',
+            messageId,
+            content: { type: 'text', text },
+          })
+        )
+      );
+
+      expect(messages).toHaveLength(1);
+      expect(messages[0]?.message?.message?.content).toEqual([
+        { type: 'text', text: 'I’m using **Iron Fillet**’s ship-change workflow.' },
+      ]);
+      expect(messages[0]?.order).toBe(0);
+    }
+  );
+
+  it('keeps distinct provider messages separate', () => {
+    const messages = projectAcpTranscriptUpdates([
+      {
+        sessionUpdate: 'agent_message_chunk',
+        messageId: 'reply-1',
+        content: { type: 'text', text: 'First' },
+      },
+      {
+        sessionUpdate: 'agent_message_chunk',
+        messageId: 'reply-1',
+        content: { type: 'text', text: ' reply.' },
+      },
+      {
+        sessionUpdate: 'agent_message_chunk',
+        messageId: 'reply-2',
+        content: { type: 'text', text: 'Second reply.' },
+      },
+    ]);
+
+    expect(messages.map((message) => message.message?.message?.content)).toEqual([
+      [{ type: 'text', text: 'First reply.' }],
+      [{ type: 'text', text: 'Second reply.' }],
+    ]);
+    expect(messages.map((message) => message.order)).toEqual([0, 2]);
+  });
+
+  it.each<SubagentTranscriptUpdate>([
+    { sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text: 'Thinking' } },
+    { sessionUpdate: 'tool_call', toolCallId: 'read-1', title: 'Read', status: 'pending' },
+    { sessionUpdate: 'tool_call_update', toolCallId: 'read-1', status: 'pending' },
+    { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: 'Continue' } },
+    {
+      sessionUpdate: 'agent_message_chunk',
+      content: { type: 'image', data: 'x', mimeType: 'image/png' },
+    },
+  ])('ends a streamed reply at a $sessionUpdate boundary', (boundary) => {
+    const chunk = (text: string): SubagentTranscriptUpdate => ({
+      sessionUpdate: 'agent_message_chunk',
+      content: { type: 'text', text },
+    });
+    const messages = projectAcpTranscriptUpdates([
+      chunk('Before'),
+      chunk(' boundary.'),
+      boundary,
+      chunk('After'),
+      chunk(' boundary.'),
+    ]);
+
+    expect(
+      messages
+        .filter((message) => message.message?.type === 'assistant')
+        .map((message) => message.message?.message?.content)
+    ).toEqual([
+      [{ type: 'text', text: 'Before boundary.' }],
+      [{ type: 'text', text: 'After boundary.' }],
+    ]);
+  });
+
   it('projects transcript updates through the chat model in stable order', () => {
     const updates = createTranscript();
 
@@ -303,7 +382,7 @@ describe('projectAcpTranscriptUpdates', () => {
       },
     ];
     const messages = projectAcpTranscriptUpdates(updates);
-    expect(messages.map((message) => message.order)).toEqual([0, 4, 5, 7, 8, 9]);
+    expect(messages.map((message) => message.order)).toEqual([0, 4, 5, 7, 8]);
     expect(
       messages.map((message) => {
         const event = message.message?.event;
@@ -313,7 +392,6 @@ describe('projectAcpTranscriptUpdates', () => {
       { type: 'tool_use', id: 'reused', name: 'Read', input: { path: 'first.ts' } },
       undefined,
       { type: 'tool_use', id: 'reused', name: 'Read', input: { path: 'second.ts' } },
-      undefined,
       undefined,
       undefined,
     ]);
@@ -329,8 +407,7 @@ describe('projectAcpTranscriptUpdates', () => {
           is_error: true,
         },
       ],
-      [{ type: 'text', text: 'One' }],
-      [{ type: 'text', text: 'Two' }],
+      [{ type: 'text', text: 'OneTwo' }],
     ]);
   });
 

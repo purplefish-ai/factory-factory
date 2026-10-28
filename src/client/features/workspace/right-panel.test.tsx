@@ -4,6 +4,7 @@ import { act, createElement, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RightPanel } from './right-panel';
+import { useWorkspacePanel, WorkspacePanelProvider } from './workspace-panel-context';
 
 const mocks = vi.hoisted(() => ({
   agentsProps: vi.fn(),
@@ -63,9 +64,7 @@ vi.mock('@/components/ui/tooltip', () => ({
   TooltipTrigger: ({ children }: { children: ReactNode }) => createElement('div', null, children),
 }));
 
-vi.mock('./workspace-panel-context', () => ({
-  useWorkspacePanel: () => ({ activeBottomTab: 'terminal', setActiveBottomTab: vi.fn() }),
-}));
+vi.mock('@/hooks/use-mobile', () => ({ MOBILE_BREAKPOINT: 768, useIsMobile: () => false }));
 
 vi.mock('./use-log-stream', () => ({
   useLogStream: () => ({
@@ -126,6 +125,27 @@ vi.mock('./terminal-tab-bar', () => ({
   TerminalTabBar: () => null,
 }));
 
+function Navigation() {
+  const { rightPanelVisible, setRightPanelVisible, setActiveTopTab } = useWorkspacePanel();
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          setActiveTopTab('agents');
+          setRightPanelVisible(true);
+        }}
+      >
+        Open agents
+      </button>
+      <button type="button" onClick={() => setRightPanelVisible(false)}>
+        Close panel
+      </button>
+      {rightPanelVisible && <RightPanel workspaceId="workspace-1" />}
+    </>
+  );
+}
+
 describe('RightPanel Agents tab', () => {
   let container: HTMLDivElement;
   let root: Root;
@@ -136,6 +156,7 @@ describe('RightPanel Agents tab', () => {
       writable: true,
       value: true,
     });
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
     localStorage.clear();
     mocks.workspaceData = {
       mode: 'STANDARD',
@@ -152,21 +173,42 @@ describe('RightPanel Agents tab', () => {
     void act(() => root.unmount());
     document.body.innerHTML = '';
     vi.clearAllMocks();
+    vi.unstubAllGlobals();
   });
 
   function render(workspaceId = 'workspace-1') {
     void act(() =>
       root.render(
-        createElement(RightPanel, {
-          workspaceId,
-          selectedSessionId: 'session-1',
-          selectedSessionName: 'Session 1',
-          selectedSessionReady: true,
-          onOpenSubagent: vi.fn(),
-        })
+        <WorkspacePanelProvider workspaceId={workspaceId}>
+          <RightPanel
+            workspaceId={workspaceId}
+            selectedSessionId="session-1"
+            selectedSessionName="Session 1"
+            selectedSessionReady
+            onOpenSubagent={vi.fn()}
+          />
+        </WorkspacePanelProvider>
       )
     );
   }
+
+  it('selects Agents from outside the panel and preserves it when the panel remounts', () => {
+    void act(() =>
+      root.render(
+        <WorkspacePanelProvider workspaceId="workspace-1">
+          <Navigation />
+        </WorkspacePanelProvider>
+      )
+    );
+    expect(container.querySelector('[data-testid="agents-panel"]')).toBeNull();
+    void act(() => container.querySelector('button')?.click());
+    expect(container.querySelector('[data-testid="agents-panel"]')).not.toBeNull();
+    expect(localStorage.getItem('workspace-right-panel-tab-workspace-1')).toBe('agents');
+    void act(() => container.querySelectorAll('button')[1]?.click());
+    expect(container.querySelector('[data-testid="agents-panel"]')).toBeNull();
+    void act(() => container.querySelector('button')?.click());
+    expect(container.querySelector('[data-testid="agents-panel"]')).not.toBeNull();
+  });
 
   it.each(['periodic-task', 'auto-iteration'])(
     'falls back from unavailable persisted %s tab',

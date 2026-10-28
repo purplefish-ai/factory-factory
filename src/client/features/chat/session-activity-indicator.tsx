@@ -7,9 +7,11 @@ import { LoadingIndicator } from './agent-activity';
 export function SessionActivityIndicator({
   work,
   latestThinking,
+  onOpenAgents,
 }: {
   work?: SessionWorkState;
   latestThinking?: string | null;
+  onOpenAgents?: () => void;
 }) {
   const tasks = work?.backgroundTasks ?? [];
   const backgroundTasks = tasks.filter((task) => task.kind !== 'turn');
@@ -21,6 +23,8 @@ export function SessionActivityIndicator({
     backgroundTasks.length === 1
       ? `Background ${backgroundKind} running`
       : `${backgroundTasks.length} background ${backgroundKind === 'process' ? 'processes' : 'tasks'} running`;
+  const runningSubagents = work?.runningSubagents ?? 0;
+  const subagentLabel = `${runningSubagents} ${runningSubagents === 1 ? 'sub-agent' : 'sub-agents'} running`;
   return (
     <div className="space-y-3 py-4">
       {agentWorking && (
@@ -49,24 +53,32 @@ export function SessionActivityIndicator({
           </CollapsibleContent>
         </Collapsible>
       )}
-      {!!work?.runningSubagents && (
-        <p className="text-sm text-muted-foreground" role="status">
-          {work.runningSubagents} {work.runningSubagents === 1 ? 'sub-agent' : 'sub-agents'} running
-        </p>
+      {!!runningSubagents && (
+        <div>
+          <span role="status" aria-label="Sub-agent activity" className="sr-only">
+            {subagentLabel}
+          </span>
+          <button
+            type="button"
+            onClick={onOpenAgents}
+            disabled={!onOpenAgents}
+            title="Open Agents panel"
+            className="block text-sm text-muted-foreground enabled:cursor-pointer enabled:hover:text-foreground enabled:hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+          >
+            {subagentLabel}
+          </button>
+        </div>
       )}
       {!!work?.activeGoals && (
         <p className="text-sm text-muted-foreground" role="status">
           {work.activeGoals} {work.activeGoals === 1 ? 'goal' : 'goals'} active
         </p>
       )}
-      {!agentWorking &&
-        backgroundTasks.length === 0 &&
-        !work?.runningSubagents &&
-        !work?.activeGoals && (
-          <p className="text-sm text-muted-foreground" role="status">
-            Background activity running
-          </p>
-        )}
+      {!agentWorking && backgroundTasks.length === 0 && !runningSubagents && !work?.activeGoals && (
+        <p className="text-sm text-muted-foreground" role="status">
+          Background activity running
+        </p>
+      )}
     </div>
   );
 }
