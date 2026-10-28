@@ -16,7 +16,7 @@ function observationPorts() {
     cacheScope: {},
     getMonitoring: vi.fn().mockResolvedValue({ eventEpoch: 3 }),
     findPR: vi.fn().mockResolvedValue({ revision: 7, state: 'NONE' }),
-    acceptObservation: vi.fn().mockResolvedValue({ applied: true }),
+    acceptObservation: vi.fn().mockResolvedValue({ applied: true, eventIds: [] }),
     fetchObservation: vi.fn().mockResolvedValue(redObservation),
     publishAcceptedObservation: vi.fn(),
   } satisfies PRObservationPorts;
@@ -47,9 +47,23 @@ it('accepts and publishes a normalized observation using only producer ports', a
 
 it('does not publish an observation rejected by the atomic revision guard', async () => {
   const ports = observationPorts();
-  ports.acceptObservation.mockResolvedValue({ applied: false });
+  ports.acceptObservation.mockResolvedValue({ applied: false, eventIds: ['rejected'] });
   expect(await observeMonitoredPR(ports, { workspaceId: 'w', prId: 'p' })).toBe(false);
   expect(ports.publishAcceptedObservation).not.toHaveBeenCalled();
+});
+
+it('signals new events only after their observation transaction commits', async () => {
+  const ports = observationPorts();
+  const committed = deferred<{ applied: boolean; eventIds: string[] }>();
+  ports.acceptObservation.mockReturnValue(committed.promise);
+  const observing = observeMonitoredPR(ports, { workspaceId: 'w', prId: 'p' });
+  await vi.waitFor(() => expect(ports.acceptObservation).toHaveBeenCalledOnce());
+  expect(ports.publishAcceptedObservation).not.toHaveBeenCalled();
+  committed.resolve({ applied: true, eventIds: ['failure'] });
+  await observing;
+  expect(ports.publishAcceptedObservation).toHaveBeenCalledWith(
+    expect.objectContaining({ workspaceId: 'w', prId: 'p', prEventsCreated: true })
+  );
 });
 
 it('coalesces concurrent refreshes and releases the producer after a fetch failure', async () => {

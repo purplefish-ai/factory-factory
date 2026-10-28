@@ -144,7 +144,7 @@ export function configureDomainBridges(services: BridgeServices): void {
   ratchetService.configure({
     retireLegacy: () => retireLegacyRatchetSessions(services),
     observe: (target, signal) => observeMonitoredPR(observationPorts, target, { signal }),
-    wake: (workspaceId) => wakePRDelivery(workspaceId, deliveryPorts),
+    wake: (workspaceId, isCurrent) => wakePRDelivery(workspaceId, deliveryPorts, isCurrent),
     setMonitoring: (input) => setPRMonitoring(input, services),
   });
   sessionBackgroundDeliveryService.configure(createPRBackgroundDeliveryPort(deliveryPorts));

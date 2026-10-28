@@ -278,7 +278,9 @@ it('persists one parent notification per accepted NONE-to-OPEN association and n
       prSnapshotService,
       workspaceActivityService: new EventEmitter(),
       workspaceStateMachine: new EventEmitter(),
-      ratchetService: new EventEmitter(),
+      ratchetService: Object.assign(new EventEmitter(), {
+        wakePendingEvents: vi.fn().mockResolvedValue(undefined),
+      }),
       runScriptStateMachine: new EventEmitter(),
       workspaceAutoIterationService: new EventEmitter(),
       sessionDomainService: new EventEmitter(),

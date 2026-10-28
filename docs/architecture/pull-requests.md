@@ -64,6 +64,14 @@ An existing dedicated conversation receives its queued status row even while
 another session is working. Creating a new provider conversation waits for an
 idle workspace; session idle transitions wake pending PR delivery immediately.
 
+Every normalized observation that commits new actionable events also wakes
+delivery through the event collector, including manual and idle refreshes. The
+wake runs asynchronously after the transaction commits and does not fetch GitHub
+itself. Unchanged or rejected observations do not request this wake. Existing
+dispatch guards still queue updates until the workspace is idle; a failed wake
+leaves the durable events for the next poll or idle transition. Monitoring
+shutdown invalidates and drains in-flight observation wakes before finishing.
+
 Each `WorkspacePR` association has its own ID, URL, revision, complete
 normalized observation, epoch, and transition sequence. `WorkspacePRDiscovery`
 owns branch lookup scheduling separately. An observation and its

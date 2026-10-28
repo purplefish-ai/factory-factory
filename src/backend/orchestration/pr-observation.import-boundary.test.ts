@@ -32,7 +32,7 @@ it('loads and accepts an observation with only five supplied capabilities', asyn
     findPR: async () => ({ revision: 7, state: 'NONE' }),
     getMonitoring: async () => ({ eventEpoch: 3 }),
     fetchObservation: async () => redObservation,
-    acceptObservation: async () => ({ applied: true }),
+    acceptObservation: async () => ({ applied: true, eventIds: [] }),
     publishAcceptedObservation: publish,
   } satisfies PRObservationPorts;
 

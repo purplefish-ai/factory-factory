@@ -9,6 +9,7 @@ export interface PRAcceptedObservation {
   previousPrState: string;
   prCiStatus: PRObservation['ciStatus'];
   prReviewState: PRObservation['reviewState'];
+  prEventsCreated?: true;
 }
 
 /** Producer capabilities only; application composition owns their implementations. */
@@ -23,6 +24,6 @@ export interface PRObservationPorts {
     expectedPrRevision: number;
     expectedEventEpoch: number;
     observation: PRObservation;
-  }): Promise<{ applied: boolean }>;
+  }): Promise<{ applied: boolean; eventIds: string[] }>;
   publishAcceptedObservation(event: PRAcceptedObservation): void;
 }

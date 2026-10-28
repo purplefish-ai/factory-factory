@@ -46,6 +46,8 @@ export interface PRSnapshotUpdatedEvent {
   prReviewState: string | null;
   /** The PR write may have reset dispatch ownership; consumers must re-read it. */
   ratchetDispatchChanged?: true;
+  /** The accepted observation transaction inserted actionable PR events. */
+  prEventsCreated?: true;
 }
 
 export interface PRUrlAttachedEvent {

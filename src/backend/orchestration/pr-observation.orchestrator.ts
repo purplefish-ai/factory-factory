@@ -70,6 +70,7 @@ export async function observeMonitoredPR(
         previousPrState: row.state,
         prCiStatus: observation.ciStatus,
         prReviewState: observation.reviewState,
+        ...(result.eventIds.length ? { prEventsCreated: true as const } : {}),
       });
     }
     return result.applied;

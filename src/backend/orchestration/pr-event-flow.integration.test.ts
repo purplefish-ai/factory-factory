@@ -1,10 +1,15 @@
+import { EventEmitter } from 'node:events';
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import {
   PR_SNAPSHOT_UPDATED,
   prObservationService,
   prSnapshotService,
 } from '@/backend/services/github';
-import { sessionBackgroundDeliveryService } from '@/backend/services/session';
+import { ratchetService } from '@/backend/services/ratchet';
+import {
+  sessionBackgroundDeliveryService,
+  sessionDispatchService,
+} from '@/backend/services/session';
 import {
   workspacePRMonitoringService,
   workspacePrSnapshotService,
@@ -57,9 +62,10 @@ vi.mock('@/backend/services/settings', () => ({
   userSettingsService: { get: vi.fn(async () => ({ ratchetReplyToPrComments: true })) },
 }));
 
+import { createEventCollectorOrchestrator } from './event-collector.orchestrator';
 import { createPRDeliveryPorts, defaultPRDeliveryPorts } from './pr-delivery-dependencies';
 import { prBackgroundDeliveryPort } from './pr-event-delivery-port';
-import { preparePRDelivery } from './pr-event-delivery.orchestrator';
+import { preparePRDelivery, wakePRDelivery } from './pr-event-delivery.orchestrator';
 import {
   createPRObservationPorts,
   defaultPRMonitoringServices,
@@ -394,6 +400,7 @@ it('coalesces poll, manual refresh, and delivery through separately composed obs
   expect(publish).toHaveBeenCalledExactlyOnceWith(PR_SNAPSHOT_UPDATED, {
     workspaceId,
     prId,
+    prEventsCreated: true,
     prUrl: redObservation.url,
     prNumber: 1,
     prState: 'OPEN',
@@ -480,4 +487,120 @@ it('accepts a changed head without superseding an in-flight frozen failure', asy
   expect(
     (await workspacePRMonitoringService.listPending(workspaceId, prId)).map((e) => e.id)
   ).toEqual(changed.eventIds);
+});
+
+it('queues a committed failure after an empty idle wake without waiting for another poll', async () => {
+  const workspaceId = 'post-idle-observation';
+  const prId = 'post-idle-pr';
+  await db.prisma.workspace.create({
+    data: {
+      id: workspaceId,
+      projectId: 'project',
+      name: 'Post-idle observation',
+      status: 'READY',
+      worktreePath: db.tempDir,
+      prMonitoring: { create: { enabled: true, bindingRevision: 1, eventEpoch: 1 } },
+      prs: { create: { id: prId, url: redObservation.url, state: 'OPEN' } },
+    },
+  });
+  const sessionId = 'post-idle-session';
+  await db.prisma.agentSession.create({
+    data: {
+      id: sessionId,
+      workspaceId,
+      workflow: 'implement',
+      provider: 'CODEX',
+      providerSessionId: 'post-idle-provider',
+    },
+  });
+  await db.prisma.workspacePRMonitoring.update({
+    where: { workspaceId },
+    data: { recipientSessionId: sessionId },
+  });
+  const graph = { ...defaultPRMonitoringServices };
+  const delivery = createPRDeliveryPorts(graph);
+  const wake = vi.fn((id: string, isCurrent?: () => boolean) =>
+    wakePRDelivery(id, delivery, isCurrent)
+  );
+  const logger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+  ratchetService.configure({
+    observe: vi.fn(),
+    wake,
+    setMonitoring: vi.fn(),
+  });
+  const collector = createEventCollectorOrchestrator({
+    createLogger: () => logger,
+    prSnapshotService,
+    ratchetService,
+    workspaceActivityService: new EventEmitter(),
+    workspaceStateMachine: new EventEmitter(),
+    runScriptStateMachine: new EventEmitter(),
+    workspaceAutoIterationService: new EventEmitter(),
+    sessionDomainService: new EventEmitter(),
+    workspaceDataService: {
+      subscribeAcceptedBranch: () => vi.fn(),
+      findRatchetProjection: async () => null,
+    },
+    workspaceSnapshotStore: {
+      getAllWorkspaceIds: () => [],
+      getByWorkspaceId: () => undefined,
+      upsert: vi.fn(),
+    },
+  } as never);
+  collector.start();
+  try {
+    vi.mocked(sessionBackgroundDeliveryService.enqueue).mockClear();
+    vi.mocked(sessionDispatchService.tryDispatchNextMessage).mockClear();
+    await wakePRDelivery(workspaceId, delivery);
+    expect(sessionBackgroundDeliveryService.enqueue).not.toHaveBeenCalled();
+
+    const fetch = vi.spyOn(prObservationService, 'fetch').mockResolvedValue(redObservation);
+    const target = { workspaceId, prId };
+    const ports = createPRObservationPorts(graph);
+    state.busy = true;
+    await observeMonitoredPR(ports, target, { force: true });
+    await vi.waitFor(() => {
+      expect(sessionBackgroundDeliveryService.enqueue).toHaveBeenCalledExactlyOnceWith(sessionId, {
+        workspaceId,
+        prId,
+        bindingRevision: 1,
+      });
+      expect(sessionDispatchService.tryDispatchNextMessage).toHaveBeenCalledWith(sessionId);
+    });
+    const request = { workspaceId, prId, bindingRevision: 1 };
+    expect(await preparePRDelivery({ sessionId, request }, delivery)).toMatchObject({
+      status: 'blocked',
+    });
+    expect((await workspacePRMonitoringService.listPending(workspaceId))[0]).toMatchObject({
+      state: 'PENDING',
+      deliveryId: null,
+    });
+    await observeMonitoredPR(ports, target, { force: true });
+    expect(sessionBackgroundDeliveryService.enqueue).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledTimes(2);
+
+    wake.mockRejectedValueOnce(new Error('Delivery temporarily unavailable'));
+    fetch.mockResolvedValue({ ...redObservation, headSha: 'wake-failure' });
+    expect(await observeMonitoredPR(ports, target, { force: true })).toBe(true);
+    await vi.waitFor(() => {
+      expect(logger.warn).toHaveBeenCalledWith('PR delivery wake deferred after observation', {
+        workspaceId,
+        error: 'Delivery temporarily unavailable',
+      });
+    });
+    expect((await workspacePRMonitoringService.listPending(workspaceId))[0]).toMatchObject({
+      state: 'PENDING',
+      payload: { observation: { headSha: 'wake-failure' } },
+    });
+    await wakePRDelivery(workspaceId, delivery);
+    expect(sessionBackgroundDeliveryService.enqueue).toHaveBeenCalledTimes(2);
+
+    collector.stop();
+    fetch.mockResolvedValue({ ...redObservation, headSha: 'after-collector-stop' });
+    await observeMonitoredPR(ports, target, { force: true });
+    expect(sessionBackgroundDeliveryService.enqueue).toHaveBeenCalledTimes(2);
+  } finally {
+    state.busy = false;
+    collector.stop();
+  }
 });

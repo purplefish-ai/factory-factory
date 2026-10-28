@@ -587,6 +587,14 @@ function startEventCollectorWithState(state: EventCollectorState): void {
 
   // 2. PR snapshot updates
   const prSnapshotUpdatedHandler = (event: PRSnapshotUpdatedEvent) => {
+    if (event.prEventsCreated) {
+      void dependencies.ratchetService.wakePendingEvents(event.workspaceId).catch((error) => {
+        state.logger.warn('PR delivery wake deferred after observation', {
+          workspaceId: event.workspaceId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    }
     if (event.prId && event.previousPrState === 'NONE' && event.prState === 'OPEN') {
       void dependencies
         .fireLifecycleNotification(event.workspaceId, 'A pull request has been opened.')
