@@ -557,6 +557,10 @@ Provider-initiated sub-agents are session-scoped, read-only, and provider-owned.
 Factory Factory projects their native ACP metadata and transcripts into the
 Agents panel through its session-scoped tracker.
 
+Sub-agent transcript projection joins consecutive assistant text chunks before
+rendering Markdown. Tool, reasoning, non-text content, and provider message-ID
+changes end the text sequence, preserving separate replies and tool ordering.
+
 They are distinct from workspace-scoped child workspaces, and are recovered from
 the provider when a parent session is reloaded rather than persisted by Factory
 Factory.

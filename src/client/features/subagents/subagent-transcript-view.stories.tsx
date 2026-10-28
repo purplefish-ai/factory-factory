@@ -92,6 +92,33 @@ function story(
 export const ActiveLiveDesktop = story(selection('running'), readyState, desktop);
 export const ActiveLiveNarrow = story(selection('running'), readyState, narrow);
 
+const streamedState: SubagentTranscriptState = {
+  ...readyState,
+  hasOlder: false,
+  messages: projectAcpTranscriptUpdates(
+    [
+      'I',
+      '’m',
+      ' using',
+      ' **Iron',
+      ' Fil',
+      'let**',
+      '’s ship',
+      '-change',
+      ' workflow.\n\n',
+      '- Verify the ',
+      '`setup` script.\n',
+      '- Open the pull request.',
+    ].map((text) => ({
+      sessionUpdate: 'agent_message_chunk',
+      content: { type: 'text', text },
+    }))
+  ),
+};
+
+export const StreamedReplyDesktop = story(selection('running'), streamedState, desktop);
+export const StreamedReplyNarrow = story(selection('running'), streamedState, narrow);
+
 export const CompletedDesktop = story(selection('completed'), readyState, desktop);
 export const CompletedNarrow = story(selection('completed'), readyState, narrow);
 
