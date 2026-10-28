@@ -8,10 +8,11 @@ import {
 } from '@/shared/acp-protocol/subagents';
 import { SessionStatus } from '@/shared/core';
 import { providerPlanUsageSchema, usageProviderSchema } from '@/shared/provider-usage';
+import { sessionLaunchSettingsSchema } from '@/shared/session-launch';
 import { SessionProvider } from '@prisma-gen/client';
 import { type Context, publicProcedure, router, trustedLocalProcedure } from './trpc';
 
-const createSessionInputSchema = z.object({
+const createSessionInputSchema = sessionLaunchSettingsSchema.extend({
   workspaceId: z.string(),
   name: z.string().optional(),
   workflow: z.string(),
@@ -77,6 +78,8 @@ async function createAgentSessionFromInput(
     name: input.name,
     workflow: input.workflow,
     model: input.model,
+    ...(input.reasoningEffort !== undefined ? { reasoningEffort: input.reasoningEffort } : {}),
+    ...(input.planModeEnabled !== undefined ? { planModeEnabled: input.planModeEnabled } : {}),
     provider,
     maxSessions,
   });
@@ -119,6 +122,16 @@ async function rollbackCreatedSession(
 }
 
 export const sessionRouter = router({
+  getLaunchOptions: publicProcedure
+    .input(
+      z.object({
+        provider: z.nativeEnum(SessionProvider),
+        model: z.string().trim().min(1).optional(),
+      })
+    )
+    .query(({ ctx, input }) =>
+      ctx.appContext.services.sessionConfigService.getLaunchOptions(input)
+    ),
   getProviderUsage: trustedLocalProcedure
     .input(z.object({ provider: usageProviderSchema }))
     .output(providerPlanUsageSchema)

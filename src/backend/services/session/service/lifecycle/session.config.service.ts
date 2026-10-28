@@ -5,12 +5,14 @@ import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/ses
 import { withConfiguredAcpHandle } from '@/backend/services/session/service/acp/acp-configured-handle';
 import { resolveAcpModelSelection } from '@/backend/services/session/service/acp/acp-model-selection';
 import { normalizeSessionConfigOptions } from '@/backend/services/session/service/acp/acp-session-config-options';
+import { fetchSessionLaunchOptionsFromAcp } from '@/backend/services/session/service/acp/session-launch-options-probe';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { userSettingsService } from '@/backend/services/settings';
 import type { SessionDeltaEvent } from '@/shared/acp-protocol';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import { type ChatBarCapabilities, EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
+import type { SessionLaunchOptions } from '@/shared/session-launch';
 import type { SessionPermissionPreset } from '@prisma-gen/client';
 import { parseAcpConfigSnapshot, type StoredAcpConfigSnapshot } from './acp-config-snapshot';
 import type { CodexModelCatalogService } from './codex-model-catalog.service';
@@ -21,35 +23,43 @@ import {
   getConfigOptionValues,
   type SessionProvider,
 } from './session-config-option-helpers';
+import {
+  SessionConfigSnapshotPersistence,
+  type PersistAcpConfigSnapshotParams,
+} from './session-config-snapshot-persistence';
 import { setInactiveSessionConfigOption } from './session-inactive-config-options';
+import { SessionLaunchOptionsService } from './session-launch-options.service';
 import {
   applyReadOnlyReviewPermissions,
   assertReadOnlyReviewConfigOption,
   resolveConfiguredAccessModeTarget,
 } from './session-permission-policy';
+import {
+  applyReasoningEffortTarget,
+  type ReasoningEffortTargetParams,
+} from './session-reasoning-configuration';
 import { restoreSavedNativeModes } from './session-saved-native-modes';
+import { applyStartupLaunchPlan } from './session-startup-plan';
+import { configuredReasoningEffort, startupReasoningTarget } from './session-startup-reasoning';
 import { getWorkflowPermissionPreset } from './session-workflow-permissions';
 import type { SessionRepository } from './session.repository';
 
 const logger = createLogger('session');
 
 type SessionStartupModePreset = 'non_interactive' | 'plan';
-export type PersistAcpConfigSnapshotParams = {
-  provider: SessionProvider;
-  providerSessionId: string;
-  configOptions: SessionConfigOption[];
-  existingMetadata?: unknown;
-  assertCurrent?: () => void;
-};
+export type { PersistAcpConfigSnapshotParams } from './session-config-snapshot-persistence';
 
 export type SessionConfigServiceDependencies = {
   repository: SessionRepository;
   runtimeManager: AcpRuntimeManager;
   codexModelCatalogService: Pick<CodexModelCatalogService, 'getModels'>;
   sessionDomainService?: SessionDomainService;
+  launchOptionsService?: Pick<SessionLaunchOptionsService, 'getOptions'>;
 };
 
 export class SessionConfigService {
+  private readonly launchOptionsService: Pick<SessionLaunchOptionsService, 'getOptions'>;
+  private readonly snapshotPersistence: SessionConfigSnapshotPersistence;
   private readonly configUpdates: SessionConfigMutationQueue;
   private readonly repository: SessionRepository;
   private readonly runtimeManager: AcpRuntimeManager;
@@ -57,7 +67,14 @@ export class SessionConfigService {
   private readonly codexModelCatalogService: Pick<CodexModelCatalogService, 'getModels'>;
 
   constructor(options: SessionConfigServiceDependencies) {
+    this.launchOptionsService =
+      options.launchOptionsService ??
+      new SessionLaunchOptionsService({
+        fetchOptions: fetchSessionLaunchOptionsFromAcp,
+        getSettings: () => userSettingsService.get(),
+      });
     this.repository = options.repository;
+    this.snapshotPersistence = new SessionConfigSnapshotPersistence(this.repository);
     this.runtimeManager = options.runtimeManager;
     this.codexModelCatalogService = options.codexModelCatalogService;
     this.sessionDomainService = options.sessionDomainService ?? sessionDomainService;
@@ -72,6 +89,30 @@ export class SessionConfigService {
     );
   }
 
+  applyStartupLaunchPlan(
+    sessionId: string,
+    session: AgentSessionRecord,
+    handle: AcpProcessHandle,
+    preset: SessionPermissionPreset | undefined,
+    override?: boolean
+  ): Promise<void> {
+    return applyStartupLaunchPlan(
+      sessionId,
+      session,
+      handle,
+      preset,
+      this.runtimeManager,
+      override
+    );
+  }
+
+  getLaunchOptions(input: {
+    provider: SessionProvider;
+    model?: string;
+  }): Promise<SessionLaunchOptions> {
+    return this.launchOptionsService.getOptions(input);
+  }
+
   applyConfigOptionsUpdateDelta(
     sessionId: string,
     handle: AcpProcessHandle,
@@ -83,6 +124,11 @@ export class SessionConfigService {
       provider: handle.provider as SessionProvider,
       providerSessionId: handle.providerSessionId,
       configOptions: normalizedConfigOptions,
+    }).catch((error: unknown) => {
+      logger.warn('Failed persisting native ACP configuration update', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
     });
 
     this.sessionDomainService.emitDelta(sessionId, {
@@ -431,10 +477,7 @@ export class SessionConfigService {
     const requestedReasoningEffort = reasoningEffort?.trim();
     const targetReasoningEffort =
       requestedReasoningEffort ||
-      (await this.resolveConfiguredReasoningEffortFromSettings(
-        sessionId,
-        acpHandle.provider as SessionProvider
-      ));
+      (await configuredReasoningEffort(sessionId, acpHandle.provider as SessionProvider));
     if (!targetReasoningEffort) {
       return;
     }
@@ -456,12 +499,17 @@ export class SessionConfigService {
     options?: {
       persistSnapshot?: boolean;
       emitUpdates?: boolean;
+      session?: AgentSessionRecord;
+      reasoningEffort?: string | null;
     }
   ): Promise<void> {
-    const targetReasoningEffort = await this.resolveConfiguredReasoningEffortFromSettings(
+    const target = await startupReasoningTarget(
       sessionId,
-      handle.provider as SessionProvider
+      handle,
+      options?.session,
+      options?.reasoningEffort
     );
+    const targetReasoningEffort = target.value;
     if (!targetReasoningEffort) {
       return;
     }
@@ -471,6 +519,8 @@ export class SessionConfigService {
       handle,
       targetReasoningEffort,
       source: 'settings',
+      strict: target.strict,
+      normalizeUnsupported: target.normalizeUnsupported,
       persistSnapshot: options?.persistSnapshot,
       emitUpdates: options?.emitUpdates,
     });
@@ -628,49 +678,11 @@ export class SessionConfigService {
     );
   }
 
-  async persistAcpConfigSnapshot(
+  persistAcpConfigSnapshot(
     sessionId: string,
     params: PersistAcpConfigSnapshotParams
   ): Promise<void> {
-    if (params.configOptions.length === 0) {
-      return;
-    }
-
-    const configOptionsForStorage = this.cloneConfigOptionsForStorage(params.configOptions);
-    const observedModelId = this.resolveObservedModel(configOptionsForStorage);
-    const metadataSource =
-      params.existingMetadata ??
-      (await this.repository.getSessionById(sessionId))?.providerMetadata ??
-      null;
-    const snapshot: StoredAcpConfigSnapshot = {
-      provider: params.provider,
-      providerSessionId: params.providerSessionId,
-      capturedAt: new Date().toISOString(),
-      configOptions: configOptionsForStorage,
-      ...(observedModelId ? { observedModelId } : {}),
-    };
-
-    const persistedUpdate = this.buildSnapshotPersistUpdate(
-      metadataSource,
-      snapshot,
-      observedModelId
-    );
-
-    params.assertCurrent?.();
-    try {
-      await this.repository.updateSession(
-        sessionId,
-        persistedUpdate,
-        ...(params.assertCurrent ? ([params.assertCurrent] as const) : [])
-      );
-    } catch (error) {
-      params.assertCurrent?.();
-      logger.warn('Failed persisting ACP config snapshot to session metadata; retrying once', {
-        sessionId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      await this.retryPersistAcpConfigSnapshot(sessionId, snapshot, params.assertCurrent);
-    }
+    return this.snapshotPersistence.persist(sessionId, params);
   }
 
   private async applyStartupCollaborationModePreset(params: {
@@ -778,97 +790,12 @@ export class SessionConfigService {
     }
   }
 
-  private async resolveConfiguredReasoningEffortFromSettings(
-    sessionId: string,
-    provider: SessionProvider
-  ): Promise<string | null> {
-    try {
-      const settings = await userSettingsService.get();
-      const value =
-        provider === 'CLAUDE'
-          ? settings.defaultClaudeReasoningEffort
-          : settings.defaultCodexReasoningEffort;
-      return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
-    } catch (error) {
-      logger.warn('Failed loading user reasoning-effort defaults; using provider default', {
-        sessionId,
-        provider,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return null;
-    }
-  }
-
-  private async applyReasoningEffortTarget(params: {
-    sessionId: string;
-    handle: AcpProcessHandle;
-    targetReasoningEffort: string;
-    source: 'message' | 'settings';
-    persistSnapshot?: boolean;
-    emitUpdates?: boolean;
-    assertCurrent?: () => void;
-  }): Promise<void> {
-    const reasoningOption = params.handle.configOptions.find(
-      (option) =>
-        option.id === 'reasoning_effort' ||
-        option.id === 'thought_level' ||
-        option.category === 'thought_level' ||
-        option.category === 'reasoning'
-    );
-    if (!reasoningOption) {
-      logger.debug('Skipping reasoning-effort default because provider has no effort option', {
-        sessionId: params.sessionId,
-        provider: params.handle.provider,
-        source: params.source,
-      });
-      return;
-    }
-
-    const availableValues = getConfigOptionValues(reasoningOption);
-    if (availableValues.length > 0 && !availableValues.includes(params.targetReasoningEffort)) {
-      logger.debug('Skipping unsupported reasoning effort for ACP session', {
-        sessionId: params.sessionId,
-        provider: params.handle.provider,
-        reasoningEffort: params.targetReasoningEffort,
-        availableValues,
-        source: params.source,
-      });
-      return;
-    }
-
-    const currentReasoningEffort = reasoningOption.currentValue
-      ? String(reasoningOption.currentValue)
-      : null;
-    if (currentReasoningEffort === params.targetReasoningEffort) {
-      return;
-    }
-
-    const configOptions = await this.runtimeManager.setConfigOption(
-      params.sessionId,
-      reasoningOption.id,
-      params.targetReasoningEffort
-    );
-    params.assertCurrent?.();
-    params.handle.configOptions = configOptions;
-    if (params.persistSnapshot !== false) {
-      await this.persistAcpConfigSnapshot(params.sessionId, {
-        provider: params.handle.provider as SessionProvider,
-        providerSessionId: params.handle.providerSessionId,
-        configOptions,
-        assertCurrent: params.assertCurrent,
-      });
-    }
-    params.assertCurrent?.();
-    if (params.emitUpdates !== false) {
-      this.sessionDomainService.emitDelta(params.sessionId, {
-        type: 'config_options_update',
-        configOptions,
-      } as SessionDeltaEvent);
-      this.sessionDomainService.emitDelta(params.sessionId, {
-        type: 'chat_capabilities',
-        capabilities: this.buildAcpChatBarCapabilities(params.handle),
-      });
-    }
+  private applyReasoningEffortTarget(params: ReasoningEffortTargetParams): Promise<void> {
+    return applyReasoningEffortTarget(params, {
+      runtimeManager: this.runtimeManager,
+      persistSnapshot: this.persistAcpConfigSnapshot.bind(this),
+      emitDelta: this.sessionDomainService.emitDelta.bind(this.sessionDomainService),
+    });
   }
 
   private findModeValue(
@@ -927,73 +854,5 @@ export class SessionConfigService {
       modelCatalog,
       latest?.model ?? params.session.model
     );
-  }
-
-  private buildSnapshotPersistUpdate(
-    metadataSource: unknown,
-    snapshot: StoredAcpConfigSnapshot,
-    observedModelId: string | undefined
-  ): {
-    providerMetadata: AgentSessionRecord['providerMetadata'];
-    model?: string;
-  } {
-    const nextMetadata: Record<string, unknown> = {
-      ...this.toMetadataRecord(metadataSource),
-      acpConfigSnapshot: snapshot,
-    };
-    if (observedModelId) {
-      nextMetadata.observedModelId = observedModelId;
-    }
-
-    return {
-      providerMetadata: nextMetadata as AgentSessionRecord['providerMetadata'],
-      ...(observedModelId ? { model: observedModelId } : {}),
-    };
-  }
-
-  private async retryPersistAcpConfigSnapshot(
-    sessionId: string,
-    snapshot: StoredAcpConfigSnapshot,
-    assertCurrent?: () => void
-  ): Promise<void> {
-    try {
-      const latestMetadataSource = (await this.repository.getSessionById(sessionId))
-        ?.providerMetadata;
-      assertCurrent?.();
-      await this.repository.updateSession(
-        sessionId,
-        this.buildSnapshotPersistUpdate(latestMetadataSource, snapshot, snapshot.observedModelId),
-        ...(assertCurrent ? ([assertCurrent] as const) : [])
-      );
-    } catch (retryError) {
-      assertCurrent?.();
-      logger.warn('Retry failed persisting ACP config snapshot to session metadata', {
-        sessionId,
-        error: retryError instanceof Error ? retryError.message : String(retryError),
-      });
-    }
-  }
-
-  private cloneConfigOptionsForStorage(
-    configOptions: SessionConfigOption[]
-  ): SessionConfigOption[] {
-    try {
-      return structuredClone(configOptions);
-    } catch {
-      return configOptions;
-    }
-  }
-
-  private toMetadataRecord(metadata: unknown): Record<string, unknown> {
-    if (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata)) {
-      return {};
-    }
-    return { ...(metadata as Record<string, unknown>) };
-  }
-
-  private resolveObservedModel(configOptions: SessionConfigOption[]): string | undefined {
-    const modelOption = configOptions.find((option) => option.category === 'model');
-    const currentValue = modelOption?.currentValue;
-    return currentValue ? String(currentValue) : undefined;
   }
 }

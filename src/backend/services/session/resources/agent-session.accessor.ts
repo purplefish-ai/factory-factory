@@ -24,6 +24,7 @@ export interface CreateAgentSessionInput {
   model: string;
   provider: SessionProvider;
   providerProjectPath?: string | null;
+  providerMetadata?: Prisma.InputJsonValue;
 }
 
 export interface UpdateAgentSessionInput {
@@ -121,6 +122,7 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
         model: data.model,
         provider: data.provider,
         providerProjectPath: data.providerProjectPath ?? null,
+        ...(data.providerMetadata !== undefined ? { providerMetadata: data.providerMetadata } : {}),
       },
     });
   }

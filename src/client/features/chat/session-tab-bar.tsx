@@ -35,6 +35,7 @@ interface SessionTabBarProps {
   readOnly?: boolean;
   creationControl?: ReactNode;
   createDisabled?: boolean;
+  createDisabledReason?: string;
 }
 
 // =============================================================================
@@ -195,7 +196,9 @@ export function SessionTabBar({
   readOnly = false,
   creationControl,
   createDisabled = false,
+  createDisabledReason,
 }: SessionTabBarProps) {
+  const creationReason = createDisabled ? createDisabledReason : undefined;
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(false);
@@ -254,76 +257,90 @@ export function SessionTabBar({
   }, [updateScrollArrows]);
 
   return (
-    <div className={cn('flex items-center gap-1 bg-muted rounded-lg p-1', className)}>
-      {/* Left scroll arrow */}
-      {showLeftArrow && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 shrink-0"
-          onClick={scrollLeft}
-          disabled={disabled}
-          aria-label="Scroll session tabs left"
-        >
-          <CaretLeftIcon className="h-4 w-4" />
-        </Button>
+    <div
+      className={cn(
+        'flex items-center gap-1 bg-muted rounded-lg p-1',
+        creationControl && 'flex-wrap sm:flex-nowrap',
+        className
       )}
-
-      {/* Scrollable tab container */}
+    >
       <div
-        ref={scrollContainerRef}
-        role="tablist"
-        onScroll={handleScroll}
-        className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-none"
-        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+        className={cn(
+          'flex min-w-0 flex-1 items-center gap-1',
+          creationControl && 'basis-full sm:basis-auto'
+        )}
       >
-        {sortedSessions.length === 0 ? (
-          <div className="px-3 py-1.5 text-sm text-muted-foreground">No sessions</div>
-        ) : (
-          sortedSessions.map((session, index) => {
-            const isActive = session.id === currentSessionId;
-            const isRunning = session.id === runningSessionId;
+        {/* Left scroll arrow */}
+        {showLeftArrow && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 shrink-0"
+            onClick={scrollLeft}
+            disabled={disabled}
+            aria-label="Scroll session tabs left"
+          >
+            <CaretLeftIcon className="h-4 w-4" />
+          </Button>
+        )}
 
-            return (
-              <SessionTab
-                key={session.id}
-                session={session}
-                displayName={getSessionDisplayName(session, index)}
-                isActive={isActive}
-                isRunning={isRunning}
-                onSelect={() => onSelectSession(session.id)}
-                onClose={() => onCloseSession(session.id)}
-                disabled={disabled}
-                readOnly={readOnly}
-              />
-            );
-          })
+        {/* Scrollable tab container */}
+        <div
+          ref={scrollContainerRef}
+          role="tablist"
+          onScroll={handleScroll}
+          className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-none"
+          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+        >
+          {sortedSessions.length === 0 ? (
+            <div className="px-3 py-1.5 text-sm text-muted-foreground">No sessions</div>
+          ) : (
+            sortedSessions.map((session, index) => {
+              const isActive = session.id === currentSessionId;
+              const isRunning = session.id === runningSessionId;
+
+              return (
+                <SessionTab
+                  key={session.id}
+                  session={session}
+                  displayName={getSessionDisplayName(session, index)}
+                  isActive={isActive}
+                  isRunning={isRunning}
+                  onSelect={() => onSelectSession(session.id)}
+                  onClose={() => onCloseSession(session.id)}
+                  disabled={disabled}
+                  readOnly={readOnly}
+                />
+              );
+            })
+          )}
+        </div>
+
+        {/* Right scroll arrow */}
+        {showRightArrow && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 shrink-0"
+            onClick={scrollRight}
+            disabled={disabled}
+            aria-label="Scroll session tabs right"
+          >
+            <CaretRightIcon className="h-4 w-4" />
+          </Button>
         )}
       </div>
 
-      {/* Right scroll arrow */}
-      {showRightArrow && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 shrink-0"
-          onClick={scrollRight}
-          disabled={disabled}
-          aria-label="Scroll session tabs right"
-        >
-          <CaretRightIcon className="h-4 w-4" />
-        </Button>
-      )}
-
       {/* New session button — hidden in readOnly mode */}
       {!readOnly && (
-        <div className="flex min-w-0 items-center">
+        <div className="flex min-w-0 max-w-full items-center">
           {creationControl}
           <button
             type="button"
             onClick={onCreateSession}
             disabled={disabled || createDisabled}
-            title="New Session"
+            title={creationReason ?? 'New Session'}
+            aria-description={creationReason}
             aria-label="New session"
             className="h-7 w-7 shrink-0 ml-1 flex items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-sidebar-accent hover:text-foreground disabled:opacity-50 disabled:pointer-events-none"
           >

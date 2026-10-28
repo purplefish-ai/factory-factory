@@ -32,6 +32,8 @@ export type WorkspaceCreationSource =
       startupModePreset?: 'non_interactive' | 'plan';
       provider?: SessionProvider;
       model?: string;
+      reasoningEffort?: string | null;
+      planModeEnabled?: boolean;
       mode?: 'STANDARD' | 'AUTO_ITERATION';
       autoIterationConfig?: AutoIterationConfig;
     }

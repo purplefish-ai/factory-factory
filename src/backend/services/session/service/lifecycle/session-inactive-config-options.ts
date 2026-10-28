@@ -7,6 +7,8 @@ import {
   getConfigOptionValues,
   type SessionProvider,
 } from './session-config-option-helpers';
+import type { PersistAcpConfigSnapshotParams } from './session-config-snapshot-persistence';
+import { pendingSessionLaunchSettingsPatch } from './session-launch-settings';
 import { assertReadOnlyReviewConfigOption } from './session-permission-policy';
 import type { SessionRepository } from './session.repository';
 
@@ -15,16 +17,7 @@ type InactiveConfigDependencies = {
   repository: SessionRepository;
   runtimeManager: Pick<AcpRuntimeManager, 'getClient' | 'getPendingClient'>;
   catalog: Pick<CodexModelCatalogService, 'getModels'>;
-  persistSnapshot(
-    sessionId: string,
-    params: {
-      provider: SessionProvider;
-      providerSessionId: string;
-      configOptions: SessionConfigOption[];
-      existingMetadata?: unknown;
-      assertCurrent?: () => void;
-    }
-  ): Promise<void>;
+  persistSnapshot(sessionId: string, params: PersistAcpConfigSnapshotParams): Promise<void>;
 };
 
 /** Null asks the caller to route the same edit through its newly installed live runtime. */
@@ -58,6 +51,12 @@ export async function setInactiveSessionConfigOption(
         providerSessionId: snapshot.providerSessionId,
         configOptions,
         existingMetadata: session.providerMetadata,
+        pendingLaunchSettingsPatch: pendingSessionLaunchSettingsPatch(
+          session.providerMetadata,
+          session.provider,
+          snapshot.configOptions.find((option) => option.id === configId),
+          value
+        ),
         assertCurrent,
       })
     );

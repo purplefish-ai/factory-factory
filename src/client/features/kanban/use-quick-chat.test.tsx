@@ -59,6 +59,17 @@ vi.mock('@/client/lib/trpc', () => ({
       },
     },
     session: {
+      getLaunchOptions: {
+        useQuery: (input: { provider: 'CLAUDE' | 'CODEX'; model?: string }) => ({
+          data: {
+            provider: input.provider,
+            model: input.model ?? 'native',
+            reasoning: { options: [] },
+            planMode: { supported: false, selected: false },
+          },
+          refetch: vi.fn(),
+        }),
+      },
       listSessions: {
         useQuery: ({ workspaceId }: { workspaceId: string }) => ({
           data: sessionsByWorkspace.get(workspaceId),
@@ -248,5 +259,7 @@ it('exposes workspace defaults failure with retry and recovers without reopening
   expect(mounted.getResult().launchSelection.creationDefaults).toEqual({
     provider: 'CLAUDE',
     model: 'saved-sonnet',
+    reasoningEffort: null,
+    planModeEnabled: false,
   });
 });

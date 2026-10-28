@@ -1,6 +1,6 @@
 import { type Dispatch, type SetStateAction, useCallback, useState } from 'react';
 import { Loading } from '@/client/components/loading';
-import type { ProviderModelPickerProps } from '@/client/features/session-selection';
+import type { SessionLaunchControlsProps } from '@/client/features/session-selection';
 import type { SubagentSelection } from '@/client/features/subagents';
 import {
   ArchiveWorkspaceDialog,
@@ -63,7 +63,7 @@ interface SessionTabsProps {
   hasWorktreePath: boolean;
   selectedProvider: SessionProviderValue;
   setSelectedProvider: (provider: SessionProviderValue) => void;
-  creationSelection?: ProviderModelPickerProps;
+  creationSelection?: SessionLaunchControlsProps;
 }
 
 interface ArchiveDialogProps {

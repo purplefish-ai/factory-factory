@@ -116,6 +116,8 @@ export const ScreenshotTab: Story = {
 function NewConversationTabBar() {
   const [provider, setProvider] = useState<'CLAUDE' | 'CODEX'>('CLAUDE');
   const [model, setModel] = useState('sonnet');
+  const [effort, setEffort] = useState<string | null>('high');
+  const [plan, setPlan] = useState(false);
   const options =
     provider === 'CLAUDE'
       ? [
@@ -142,6 +144,20 @@ function NewConversationTabBar() {
           model,
           models: options,
           onModelChange: setModel,
+          reasoning: {
+            value: effort,
+            options: [
+              { value: 'low', label: 'Low' },
+              { value: 'high', label: 'High' },
+              { value: 'xhigh', label: 'Extra high' },
+            ],
+            defaultValue: 'low',
+            loading: false,
+            invalid: false,
+            onChange: setEffort,
+            onRetry: fn(),
+          },
+          planMode: { enabled: plan, supported: true, loading: false, onChange: setPlan },
           onProviderChange: (next) => {
             setProvider(next);
             setModel(next === 'CLAUDE' ? 'sonnet' : 'six-sol');

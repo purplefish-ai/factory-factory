@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   retry: vi.fn(),
   empty: false,
+  ready: false,
 }));
 vi.mock('./kanban-context', () => ({
   useKanban: () => ({ workspaces: [{ id: 'workspace', name: 'Review workspace' }] }),
@@ -35,12 +36,13 @@ vi.mock('./use-quick-chat', () => ({
     isCreatingSession: false,
     chatState: {},
     launchSelection: {
-      ready: false,
+      ready: mocks.ready,
+      unavailableReason: mocks.ready ? undefined : 'Could not load chat defaults',
       loading: false,
-      pickerProps: {
+      controlsProps: {
         provider: null,
         models: [],
-        error: 'Could not load chat defaults',
+        error: mocks.ready ? undefined : 'Could not load chat defaults',
         onRetry: mocks.retry,
       },
     },
@@ -49,6 +51,7 @@ vi.mock('./use-quick-chat', () => ({
 
 beforeEach(() => {
   mocks.empty = false;
+  mocks.ready = false;
   vi.clearAllMocks();
   Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
     configurable: true,
@@ -102,3 +105,28 @@ it.each([false, true])(
     }
   }
 );
+
+it('explains blocked creation and clears its disabled reason after defaults recover', async () => {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  const render = () =>
+    act(() =>
+      root.render(createElement(QuickChatSheet, { workspaceId: 'workspace', onClose: vi.fn() }))
+    );
+  try {
+    await render();
+    const blocked = document.body.querySelector<HTMLButtonElement>('[aria-label="New session"]');
+    expect(blocked?.title).toBe('Could not load chat defaults');
+    expect(blocked?.getAttribute('aria-description')).toBe('Could not load chat defaults');
+    mocks.ready = true;
+    await render();
+    const available = document.body.querySelector<HTMLButtonElement>('[aria-label="New session"]');
+    expect(available?.disabled).toBe(false);
+    expect(available?.title).toBe('New Session');
+    expect(available?.getAttribute('aria-description')).toBeNull();
+  } finally {
+    await act(() => root.unmount());
+    container.remove();
+  }
+});
