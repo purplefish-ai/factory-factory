@@ -106,7 +106,18 @@ or dispatching work. Prompts and user configuration changes wait for that
 restoration on the current runtime handle. Invalid, mismatched, or unavailable
 saved modes stop startup; legacy sessions without a snapshot retain the
 configured-default fallback. Reviewer workflows always reapply their read-only
-restrictions.
+restrictions. An explicitly requested Claude plan preset authorizes its
+confirmed native plan access; Codex planning changes its separate collaboration
+control and retains the required access mode. Optional preset failures warn and
+continue only while the current access still satisfies the authorized target.
+
+The config-owned startup finalizer persists the current accepted snapshot and
+rechecks authority and required permissions synchronously with readiness
+completion. Snapshot storage owns metadata merging, guarded CAS writes, and
+retry; it does not decide startup readiness. Superseding native observations
+keep startup blocked until the current state persists. Terminal startup storage
+or permission failures stop only the matching runtime incarnation. Native
+snapshot failures after readiness remain best effort.
 
 Configuration readiness intentionally has no independent timeout. If provider
 setup stalls, prompts and settings remain blocked until setup fails, the child

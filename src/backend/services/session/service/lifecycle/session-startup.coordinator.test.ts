@@ -746,11 +746,11 @@ describe('SessionStartupCoordinator', () => {
     const harness = createLifecycleHarness();
     installRuntimeQuiescence(harness);
     const snapshotPersistence = createDeferred<void>();
-    harness.sessionConfigService.persistAcpConfigSnapshot.mockImplementationOnce(
+    harness.sessionConfigService.completeStartupConfiguration.mockImplementationOnce(
       async (_id, params) => {
         await snapshotPersistence.promise;
-        await params.completeStartup?.beforeComplete();
-        params.completeStartup?.complete();
+        await params.beforeComplete();
+        params.complete();
       }
     );
 
@@ -758,7 +758,7 @@ describe('SessionStartupCoordinator', () => {
       .startSession('session-1', { initialPrompt: '' })
       .catch((error: unknown) => error);
     await vi.waitFor(() => {
-      expect(harness.sessionConfigService.persistAcpConfigSnapshot).toHaveBeenCalledOnce();
+      expect(harness.sessionConfigService.completeStartupConfiguration).toHaveBeenCalledOnce();
     });
 
     const stopPromise = harness.service.stopSession('session-1');

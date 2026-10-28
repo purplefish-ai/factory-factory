@@ -135,6 +135,19 @@ export class SessionStartupPermissions {
     this.capture(handle);
   }
 
+  authorizeRequestedTarget(handle: AcpProcessHandle, id: string, value: string): void {
+    // Claude planning and access share one native control. Only the exact requested,
+    // confirmed target can replace its prior requirement; unrelated observations cannot.
+    if (
+      handle.provider !== 'CLAUDE' ||
+      handle.configOptions.find((option) => option.id === id)?.currentValue !== value
+    ) {
+      return;
+    }
+    const required = this.required.get(handle) ?? [];
+    this.required.set(handle, [...required.filter((option) => option.id !== id), { id, value }]);
+  }
+
   assertCurrent(handle: AcpProcessHandle, storedMetadata?: unknown): void {
     // Strict PR restoration skips current defaults; its validated saved access remains required.
     if (!this.required.has(handle)) {

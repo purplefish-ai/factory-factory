@@ -23,9 +23,10 @@ it.each(['start', 'acquire'] as const)(
       applied = true;
       return Promise.resolve();
     });
-    h.sessionConfigService.persistAcpConfigSnapshot.mockImplementation(() => {
+    h.sessionConfigService.completeStartupConfiguration.mockImplementation(async (_id, params) => {
       expect(applied).toBe(true);
-      return Promise.resolve();
+      await params.beforeComplete();
+      params.complete();
     });
     h.notificationDeliveryService.recoverPending = vi.fn(() => {
       expect(applied).toBe(true);
@@ -117,8 +118,8 @@ it('fails startup readiness and prevents dispatch when final configuration persi
     sessionDomainService: unsafeCoerce(h.sessionDomainService),
     codexModelCatalogService: { getModels: async () => [] },
   });
-  h.sessionConfigService.persistAcpConfigSnapshot.mockImplementation(
-    config.persistAcpConfigSnapshot.bind(config)
+  h.sessionConfigService.completeStartupConfiguration.mockImplementation(
+    config.completeStartupConfiguration.bind(config)
   );
   await expect(h.service.startSession(h.session.id, { initialPrompt: 'Do work' })).rejects.toThrow(
     'snapshot storage unavailable'

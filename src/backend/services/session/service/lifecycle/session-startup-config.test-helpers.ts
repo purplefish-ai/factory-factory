@@ -29,9 +29,9 @@ export function startupConfigOptions(
   );
 }
 
-export function setupStartupConfig() {
+export function setupStartupConfig(provider: 'CLAUDE' | 'CODEX' = 'CODEX') {
   const h = createLifecycleHarness({
-    provider: 'CODEX',
+    provider,
     providerSessionId: 'thread',
     getPermissionPreset: () => Promise.resolve('STRICT'),
   });
@@ -79,6 +79,7 @@ export function setupStartupConfig() {
   h.repository.getSessionById.mockImplementation(repository.getSessionById.bind(repository));
   h.repository.updateSession.mockImplementation(repository.updateSession.bind(repository));
   const handle = createTestProcessHandle({
+    provider,
     providerSessionId: 'thread',
     sessionCreationOutcome: { kind: 'resumed' },
     connection: unsafeCoerce({
@@ -119,8 +120,14 @@ export function setupStartupConfig() {
   h.sessionConfigService.applyConfiguredPermissionPreset.mockImplementation(
     config.applyConfiguredPermissionPreset.bind(config)
   );
+  h.sessionConfigService.applyStartupModePreset.mockImplementation(
+    config.applyStartupModePreset.bind(config)
+  );
   h.sessionConfigService.persistAcpConfigSnapshot.mockImplementation(
     config.persistAcpConfigSnapshot.bind(config)
+  );
+  h.sessionConfigService.completeStartupConfiguration.mockImplementation(
+    config.completeStartupConfiguration.bind(config)
   );
   return {
     ...h,

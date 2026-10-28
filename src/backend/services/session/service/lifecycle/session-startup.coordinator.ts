@@ -15,7 +15,6 @@ import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import { SessionStatus } from '@/shared/core';
 import type { AcpEventProcessor } from './acp-event-processor';
-import { SessionStartupPersistenceError } from './session-config-snapshot-persistence';
 import type { SessionContextService } from './session-context.service';
 import { type SessionLifecycleGate, SessionStartupCancelledError } from './session-lifecycle-gate';
 import type { SessionAcpEnvironmentPort } from './session-lifecycle.types';
@@ -24,6 +23,7 @@ import { SessionStartupPermissionError } from './session-permission-policy';
 import { restorePRResumeConfig } from './session-pr-resume-config';
 import type { SessionRuntimeExitCoordinator } from './session-runtime-exit.coordinator';
 import { stopStartupConfigurationFailure } from './session-startup-config-failure';
+import { SessionStartupPersistenceError } from './session-startup-configuration-finalizer';
 import type { StopSessionOptions } from './session-termination.coordinator';
 import type {
   PersistAcpConfigSnapshotParams,
@@ -87,6 +87,7 @@ export type SessionStartupCoordinatorDependencies = {
     | 'applyStartupModePreset'
     | 'buildAcpChatBarCapabilities'
     | 'persistAcpConfigSnapshot'
+    | 'completeStartupConfiguration'
   >;
   acpEventProcessor: Pick<
     AcpEventProcessor,
@@ -479,21 +480,17 @@ export class SessionStartupCoordinator {
         configuredHandle,
         stopGeneration,
         async () =>
-          this.persistAcpConfigSnapshot(sessionId, {
-            provider: configuredHandle.provider as PersistAcpConfigSnapshotParams['provider'],
-            providerSessionId: configuredHandle.providerSessionId,
-            configOptions: configuredHandle.configOptions,
+          this.dependencies.sessionConfigService.completeStartupConfiguration(sessionId, {
+            handle: configuredHandle,
             existingMetadata:
               configuredHandle.sessionCreationOutcome?.kind === 'resume_fallback'
                 ? ((await this.dependencies.repository.getSessionById(sessionId))
                     ?.providerMetadata ?? undefined)
                 : (session.providerMetadata ?? undefined),
             assertCurrent: assertConfiguredRuntime,
-            completeStartup: {
-              beforeComplete: () =>
-                this.assertCreationAllowed(sessionId, stopGeneration, options.assertCurrent),
-              complete: () => configuredHandle.completeConfiguration(assertConfiguredRuntime),
-            },
+            beforeComplete: () =>
+              this.assertCreationAllowed(sessionId, stopGeneration, options.assertCurrent),
+            complete: () => configuredHandle.completeConfiguration(assertConfiguredRuntime),
           }),
         undefined,
         true

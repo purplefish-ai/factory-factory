@@ -99,8 +99,8 @@ describe('final startup configuration durability and access', () => {
   it('completes readiness in the config-owned commit continuation before returning to lifecycle', async () => {
     const h = setupStartupConfig();
     let readyAtReturn = false;
-    h.sessionConfigService.persistAcpConfigSnapshot.mockImplementation(async (id, params) => {
-      await h.config.persistAcpConfigSnapshot(id, params);
+    h.sessionConfigService.completeStartupConfiguration.mockImplementation(async (id, params) => {
+      await h.config.completeStartupConfiguration(id, params);
       readyAtReturn = h.handle.configurationReady === undefined;
       queueMicrotask(() => h.native());
     });

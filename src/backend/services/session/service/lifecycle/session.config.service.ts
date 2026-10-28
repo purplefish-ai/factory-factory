@@ -20,7 +20,6 @@ import {
   buildCapabilitiesFromConfigOptions,
   buildCodexConfigOptionsWithModelCatalog,
   getConfigOptionValues,
-  findModeValue,
   type SessionProvider,
 } from './session-config-option-helpers';
 import {
@@ -36,6 +35,15 @@ import {
   SessionStartupPermissions,
 } from './session-permission-policy';
 import { restoreSavedNativeModes } from './session-saved-native-modes';
+import {
+  SessionStartupConfigurationFinalizer,
+  type CompleteStartupConfigurationParams,
+} from './session-startup-configuration-finalizer';
+import {
+  applyStartupCollaborationModePreset,
+  findCollaborationOption,
+  resolveStartupModeTarget,
+} from './session-startup-mode-preset';
 import { getWorkflowPermissionPreset } from './session-workflow-permissions';
 import type { SessionRepository } from './session.repository';
 
@@ -53,6 +61,7 @@ export type SessionConfigServiceDependencies = {
 export class SessionConfigService {
   private readonly startupPermissions = new SessionStartupPermissions();
   private readonly snapshotPersistence: SessionConfigSnapshotPersistence;
+  private readonly startupFinalizer: SessionStartupConfigurationFinalizer;
   private readonly configAuthority = new SessionConfigCommitAuthority();
   private readonly configUpdates: SessionConfigMutationQueue;
   private readonly repository: SessionRepository;
@@ -62,11 +71,11 @@ export class SessionConfigService {
 
   constructor(options: SessionConfigServiceDependencies) {
     this.repository = options.repository;
-    this.snapshotPersistence = new SessionConfigSnapshotPersistence(
-      options.repository,
-      options.runtimeManager,
+    this.snapshotPersistence = new SessionConfigSnapshotPersistence(options.repository);
+    this.startupFinalizer = new SessionStartupConfigurationFinalizer(
+      this.snapshotPersistence,
       this.configAuthority,
-      (handle, metadata) => this.startupPermissions.assertCurrent(handle, metadata)
+      this.startupPermissions
     );
     this.runtimeManager = options.runtimeManager;
     this.codexModelCatalogService = options.codexModelCatalogService;
@@ -129,12 +138,16 @@ export class SessionConfigService {
       return;
     }
 
-    const didUpdate = await this.applyStartupCollaborationModePreset({
-      sessionId,
-      handle,
-      startupModePreset,
-      workflow,
-    });
+    const didUpdate = await applyStartupCollaborationModePreset(
+      this.runtimeManager,
+      {
+        sessionId,
+        handle,
+        startupModePreset,
+        workflow,
+      },
+      (id, value) => this.startupPermissions.authorizeRequestedTarget(handle, id, value)
+    );
 
     if (!didUpdate) {
       return;
@@ -397,13 +410,13 @@ export class SessionConfigService {
       return;
     }
 
-    const modeOption = this.findCollaborationOption(acpHandle.provider, acpHandle.configOptions);
+    const modeOption = findCollaborationOption(acpHandle.provider, acpHandle.configOptions);
     if (!modeOption) {
       return;
     }
 
     const availableModeValues = getConfigOptionValues(modeOption);
-    const targetMode = this.resolveStartupModeTarget(
+    const targetMode = resolveStartupModeTarget(
       acpHandle.provider as SessionProvider,
       mode,
       availableModeValues
@@ -702,7 +715,23 @@ export class SessionConfigService {
     sessionId: string,
     params: PersistAcpConfigSnapshotParams
   ): Promise<void> {
-    await this.snapshotPersistence.persistCurrent(sessionId, params);
+    const handle = this.runtimeManager.getClient(sessionId);
+    params.assertCurrent?.();
+    const configOptions =
+      handle?.provider === params.provider && handle.providerSessionId === params.providerSessionId
+        ? handle.configOptions
+        : params.configOptions;
+    const accepted = this.acceptConfiguration(sessionId, handle, params.assertCurrent);
+    await accepted.persist((assertCurrent) =>
+      this.snapshotPersistence.persist(sessionId, { ...params, configOptions, assertCurrent })
+    );
+  }
+
+  async completeStartupConfiguration(
+    sessionId: string,
+    params: CompleteStartupConfigurationParams
+  ): Promise<void> {
+    await this.startupFinalizer.complete(sessionId, params);
   }
 
   private acceptConfiguration(
@@ -726,93 +755,6 @@ export class SessionConfigService {
         throw new Error('Session runtime changed before configuration update');
       }
     };
-  }
-
-  private async applyStartupCollaborationModePreset(params: {
-    sessionId: string;
-    handle: AcpProcessHandle;
-    startupModePreset: SessionStartupModePreset;
-    workflow: string;
-  }): Promise<boolean> {
-    const modeOption = this.findCollaborationOption(
-      params.handle.provider,
-      params.handle.configOptions
-    );
-    if (!modeOption) {
-      return false;
-    }
-
-    const availableModeValues = getConfigOptionValues(modeOption);
-    const targetMode = this.resolveStartupModeTarget(
-      params.handle.provider as SessionProvider,
-      params.startupModePreset,
-      availableModeValues
-    );
-    if (!targetMode) {
-      logger.debug('Startup mode preset not available in ACP mode options', {
-        sessionId: params.sessionId,
-        provider: params.handle.provider,
-        workflow: params.workflow,
-        startupModePreset: params.startupModePreset,
-        availableModeValues,
-      });
-      return false;
-    }
-
-    const currentMode = modeOption.currentValue ? String(modeOption.currentValue) : null;
-    if (currentMode === targetMode) {
-      return false;
-    }
-
-    try {
-      await (modeOption.id === 'mode'
-        ? this.runtimeManager.setSessionMode(params.sessionId, targetMode)
-        : this.runtimeManager.setConfigOption(params.sessionId, modeOption.id, targetMode));
-      return true;
-    } catch (error) {
-      logger.warn('Failed applying startup mode preset', {
-        sessionId: params.sessionId,
-        provider: params.handle.provider,
-        workflow: params.workflow,
-        startupModePreset: params.startupModePreset,
-        targetMode,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return false;
-    }
-  }
-
-  private findCollaborationOption(provider: string, configOptions: SessionConfigOption[]) {
-    return configOptions.find((option) =>
-      provider === 'CODEX'
-        ? option.id === 'collaboration_mode' || option.category === 'collaboration_mode'
-        : option.id === 'mode' || option.category === 'mode'
-    );
-  }
-
-  private resolveStartupModeTarget(
-    provider: SessionProvider,
-    startupModePreset: SessionStartupModePreset,
-    availableModeValues: string[]
-  ): string | null {
-    if (availableModeValues.length === 0) {
-      return null;
-    }
-
-    if (startupModePreset === 'plan') {
-      return findModeValue(availableModeValues, ['plan']);
-    }
-
-    if (provider === 'CLAUDE') {
-      return findModeValue(availableModeValues, [
-        'bypassPermissions',
-        'dangerouslySkipPermissions',
-        'dangerousSkipPermissions',
-        'acceptEdits',
-      ]);
-    }
-
-    return findModeValue(availableModeValues, ['default']);
   }
 
   private async resolvePermissionPresetFromSettings(

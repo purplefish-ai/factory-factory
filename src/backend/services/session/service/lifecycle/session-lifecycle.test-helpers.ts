@@ -132,6 +132,7 @@ export type LifecycleHarness = {
     | 'applyStartupModePreset'
     | 'applyConfiguredPermissionPreset'
     | 'persistAcpConfigSnapshot'
+    | 'completeStartupConfiguration'
     | 'buildAcpChatBarCapabilities'
   >;
   lifecycleEventService: MockedPick<SessionLifecycleEventService, 'record' | 'hydrate'>;
@@ -618,9 +619,12 @@ export function createLifecycleHarness(
     applyStartupModePreset: vi.fn(async () => undefined),
     applyConfiguredPermissionPreset: vi.fn(async () => undefined),
     persistAcpConfigSnapshot: vi.fn<SessionConfigService['persistAcpConfigSnapshot']>(
+      async () => undefined
+    ),
+    completeStartupConfiguration: vi.fn<SessionConfigService['completeStartupConfiguration']>(
       async (_id, params) => {
-        await params.completeStartup?.beforeComplete();
-        params.completeStartup?.complete();
+        await params.beforeComplete();
+        params.complete();
       }
     ),
     buildAcpChatBarCapabilities: vi.fn<SessionConfigService['buildAcpChatBarCapabilities']>(
@@ -632,6 +636,7 @@ export function createLifecycleHarness(
     | 'applyStartupModePreset'
     | 'applyConfiguredPermissionPreset'
     | 'persistAcpConfigSnapshot'
+    | 'completeStartupConfiguration'
     | 'buildAcpChatBarCapabilities'
   >;
   const acpEventProcessor = {
