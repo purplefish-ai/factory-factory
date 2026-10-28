@@ -2,9 +2,8 @@
 
 The approved workspace mockup adds a compact thinking-level menu beside the
 provider/model picker and replaces the Default/Plan dropdown with a Plan icon
-toggle. Implement these controls with actual Claude and Codex capabilities, then
-deliver a reviewed PR that merges only with green checks and no outstanding
-comments.
+toggle. Both controls use actual Claude and Codex capabilities. This record
+captures that design; delivery requirements belong to the original task and PR.
 
 Use the same controls for manual workspace creation, new conversations, and
 Quick Chat. Keep provider-specific draft choices, saved defaults,

@@ -35,6 +35,7 @@ export type NativeSessionLaunchOptions = {
 };
 const logger = createLogger('session-launch-options-probe');
 const TIMEOUT_MS = 30_000;
+const CLOSE_TIMEOUT_MS = 1000;
 function choices(option: SessionConfigOption | undefined): SessionConfigSelectOption[] {
   return option?.type === 'select'
     ? option.options.flatMap((entry) => ('group' in entry ? entry.options : [entry]))
@@ -109,8 +110,8 @@ export async function fetchSessionLaunchOptionsFromAcp(input: {
   );
   const rejectCallback = (): Promise<never> =>
     Promise.reject(new Error('Launch discovery cannot service provider callbacks'));
-  const run = <T>(promise: Promise<T>, description: string) =>
-    Promise.race([withTimeout({ promise, timeoutMs: TIMEOUT_MS, description }), failed]);
+  const run = <T>(promise: Promise<T>, description: string, timeoutMs = TIMEOUT_MS) =>
+    Promise.race([withTimeout({ promise, timeoutMs, description }), failed]);
   let sessionId: string | undefined;
   let connection: ReturnType<typeof createAcpConnection> | undefined;
   try {
@@ -175,7 +176,11 @@ export async function fetchSessionLaunchOptionsFromAcp(input: {
     try {
       if (sessionId && connection) {
         try {
-          await run(connection.extMethod('session/close', { sessionId }), 'launch discovery close');
+          await run(
+            connection.extMethod('session/close', { sessionId }),
+            'launch discovery close',
+            CLOSE_TIMEOUT_MS
+          );
         } catch (error) {
           logger.debug('Launch discovery close failed', { provider: input.provider, error });
         }

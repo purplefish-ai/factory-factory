@@ -111,6 +111,9 @@ configuration snapshots cannot consume it. Identity-matched confirmed snapshots
 own later resumes, including edits made after launch and changes to global
 defaults. A saved level no longer supported after a model change uses the new
 model's native default; unsupported explicit launch levels fail before prompts.
+Stopped-session edits require a durable snapshot write and report persistence
+errors. Applied launch intent with a missing or invalid snapshot stops resume
+instead of replacing confirmed choices with global defaults.
 
 Plan-on selects Claude's native plan access mode or Codex's plan collaboration
 mode. Plan-off retains the configured permission preset rather than applying a

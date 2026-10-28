@@ -428,10 +428,9 @@ export function MainViewTabBar({
                 className={cn(
                   'flex h-7 w-7 items-center justify-center rounded-none',
                   'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground',
-                  'transition-colors disabled:pointer-events-none disabled:opacity-50'
+                  'transition-colors disabled:opacity-50'
                 )}
                 aria-label={newSessionLabel}
-                title={creationSelection?.unavailableReason ?? newSessionLabel}
                 aria-description={creationSelection?.unavailableReason}
               >
                 <PlusIcon className="h-3.5 w-3.5" />

@@ -51,6 +51,7 @@ export async function setInactiveSessionConfigOption(
         providerSessionId: snapshot.providerSessionId,
         configOptions,
         existingMetadata: session.providerMetadata,
+        requirePersistence: true,
         pendingLaunchSettingsPatch: pendingSessionLaunchSettingsPatch(
           session.providerMetadata,
           session.provider,

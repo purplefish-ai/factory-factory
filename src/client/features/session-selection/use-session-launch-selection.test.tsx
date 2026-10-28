@@ -311,6 +311,10 @@ it('freezes the effective saved level and preserves an unsupported explicit draf
   const mounted = mountConnected();
   expect(mounted.current.controlsProps.reasoning?.value).toBe('high');
   expect(mounted.current.creationDefaults.reasoningEffort).toBe('high');
+  mocks.settings = { ...defaults, defaultCodexReasoningEffort: 'medium' };
+  mounted.render();
+  expect(mounted.current.controlsProps.reasoning?.value).toBe('high');
+  expect(mounted.current.creationDefaults.reasoningEffort).toBe('high');
   flushSync(() => mounted.current.controlsProps.reasoning?.onChange('ultra'));
   flushSync(() => mounted.current.controlsProps.planMode?.onChange(true));
   mocks.settings = { ...defaults, defaultCodexReasoningEffort: 'medium' };
@@ -357,4 +361,21 @@ it('distinguishes pending discovery and failure from known unsupported capabilit
   expect(mounted.current.ready).toBe(true);
   expect(mounted.current.controlsProps.reasoning?.loading).toBe(false);
   expect(mounted.current.controlsProps.reasoning?.error).toBeUndefined();
+});
+
+// Saved Default is intent, even when the native default is a concrete advertised level.
+it('keeps saved native Default visible and in the outbound payload across native refetch', () => {
+  mocks.settings = { ...defaults, defaultCodexReasoningEffort: null };
+  mocks.launches.set('CODEX:saved-sol', solNative);
+  const mounted = mountConnected();
+  expect(mounted.current.ready).toBe(true);
+  expect(mounted.current.controlsProps.reasoning?.value).toBeNull();
+  expect(mounted.current.creationDefaults.reasoningEffort).toBeNull();
+  mocks.launches.set('CODEX:saved-sol', {
+    ...solNative,
+    reasoning: { ...solNative.reasoning, defaultValue: 'high', selected: 'high' },
+  });
+  mounted.render();
+  expect(mounted.current.controlsProps.reasoning?.value).toBeNull();
+  expect(mounted.current.creationDefaults.reasoningEffort).toBeNull();
 });

@@ -98,6 +98,8 @@ describe('SessionLaunchControls', () => {
     expect(onReasoningChange).toHaveBeenCalledWith(null);
     const plan = mounted.container.querySelector<HTMLButtonElement>('[aria-label="Plan mode"]');
     expect(plan?.disabled).toBe(false);
+    expect(plan?.hasAttribute('title')).toBe(false);
+    expect(plan?.getAttribute('aria-description')).toContain('Turn Plan off to launch');
     expect(plan?.getAttribute('aria-pressed')).toBe('true');
     flushSync(() => plan?.click());
     expect(onPlanChange).toHaveBeenCalledWith(false);

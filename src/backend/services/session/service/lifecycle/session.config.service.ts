@@ -102,7 +102,8 @@ export class SessionConfigService {
       handle,
       preset,
       this.runtimeManager,
-      override
+      override,
+      () => this.resolvePermissionPresetFromSettings(sessionId, session.workflow, session.provider)
     );
   }
 

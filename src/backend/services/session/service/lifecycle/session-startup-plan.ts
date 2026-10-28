@@ -13,7 +13,8 @@ export async function applyStartupLaunchPlan(
   handle: AcpProcessHandle,
   preset: SessionPermissionPreset | undefined,
   runtime: Pick<AcpRuntimeManager, 'setSessionMode' | 'setConfigOption'>,
-  override?: boolean
+  override?: boolean,
+  resolvePreset?: () => Promise<SessionPermissionPreset>
 ): Promise<void> {
   const launch = readSessionLaunchSettings(session.providerMetadata);
   const enabled = override ?? (launch && !launch.applied ? launch.planModeEnabled : undefined);
@@ -32,7 +33,7 @@ export async function applyStartupLaunchPlan(
     }
     return;
   }
-  const target = requestedPlanMode(handle.provider, enabled, option, preset);
+  const target = await requestedPlanMode(handle.provider, enabled, option, preset, resolvePreset);
   if (!getConfigOptionValues(option).includes(target)) {
     throw new Error('Requested Plan mode is unavailable for the selected provider/model');
   }
@@ -48,12 +49,13 @@ export async function applyStartupLaunchPlan(
   }
 }
 
-function requestedPlanMode(
+async function requestedPlanMode(
   provider: string,
   enabled: boolean,
   option: SessionConfigOption,
-  preset: SessionPermissionPreset | undefined
-): string {
+  preset: SessionPermissionPreset | undefined,
+  resolvePreset?: () => Promise<SessionPermissionPreset>
+): Promise<string> {
   if (enabled) {
     return 'plan';
   }
@@ -64,7 +66,10 @@ function requestedPlanMode(
   if (option.currentValue !== 'plan') {
     return String(option.currentValue);
   }
-  const target = preset ? resolveConfiguredAccessModeTarget(provider, option, preset) : undefined;
+  const effectivePreset = preset ?? (await resolvePreset?.());
+  const target = effectivePreset
+    ? resolveConfiguredAccessModeTarget(provider, option, effectivePreset)
+    : undefined;
   if (!target) {
     throw new Error('Configured access mode is unavailable for Plan off');
   }

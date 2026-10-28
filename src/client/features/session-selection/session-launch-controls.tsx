@@ -203,8 +203,7 @@ function PlanModeToggle({
             disabled={disabled || unavailable}
             aria-label="Plan mode"
             aria-description={description}
-            title={description}
-            className="h-6 w-6 shrink-0 p-0 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+            className="h-6 w-6 shrink-0 p-0 disabled:pointer-events-auto data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
           >
             <MapTrifoldIcon className="h-3.5 w-3.5" />
           </Toggle>

@@ -270,6 +270,7 @@ export const CreationDefaultsUnavailable: Story = {
   args: {
     ...WithCreationSelection.args,
     createDisabled: true,
+    createDisabledReason: 'Could not load chat defaults',
     creationControl: (
       <SessionLaunchControls
         provider={null}

@@ -159,6 +159,21 @@ describe('durable final launch snapshot with production repository CAS', () => {
       applied: false,
     });
   });
+  it.each([
+    { id: 'effort', value: 'low' },
+    { id: 'collaboration_mode', value: 'default' },
+  ])('rejects stopped $id edits when both durable writes fail', async ({ id, value }) => {
+    const f = fixture();
+    f.failWrites(2);
+    await expect(f.service.setSessionConfigOption('session-1', id, value)).rejects.toThrow(
+      'Storage unavailable'
+    );
+    expect(readSessionLaunchSettings(f.row.providerMetadata)).toEqual({
+      reasoningEffort: 'medium',
+      planModeEnabled: true,
+      applied: false,
+    });
+  });
   it('preserves consumed launch intent when the first final write fails and retry succeeds', async () => {
     const f = fixture();
     f.failWrites(1);

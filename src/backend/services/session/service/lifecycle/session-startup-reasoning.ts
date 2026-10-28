@@ -41,7 +41,7 @@ export async function startupReasoningTarget(
     return { value: launch.reasoningEffort, strict: true };
   }
   if (session && (!launch || launch.applied)) {
-    const saved = savedReasoningTarget(session, handle);
+    const saved = savedReasoningTarget(session, handle, launch?.applied === true);
     if (saved) {
       return saved;
     }
@@ -54,10 +54,14 @@ export async function startupReasoningTarget(
 
 function savedReasoningTarget(
   session: AgentSessionRecord,
-  handle: AcpProcessHandle
+  handle: AcpProcessHandle,
+  requireSnapshot: boolean
 ): { value: string | null; strict: boolean; normalizeUnsupported?: boolean } | undefined {
   const snapshot = parseAcpConfigSnapshot(session.providerMetadata);
   if (!snapshot) {
+    if (requireSnapshot) {
+      throw new Error('Saved reasoning configuration is missing or invalid');
+    }
     return undefined;
   }
   const identity =

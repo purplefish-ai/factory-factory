@@ -118,6 +118,7 @@ it('explains blocked creation and clears its disabled reason after defaults reco
     await render();
     const blocked = document.body.querySelector<HTMLButtonElement>('[aria-label="New session"]');
     expect(blocked?.title).toBe('Could not load chat defaults');
+    expect(blocked?.classList.contains('disabled:pointer-events-none')).toBe(false);
     expect(blocked?.getAttribute('aria-description')).toBe('Could not load chat defaults');
     mocks.ready = true;
     await render();

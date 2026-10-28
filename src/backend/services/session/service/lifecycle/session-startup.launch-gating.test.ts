@@ -14,6 +14,8 @@ describe('launch configuration startup gate', () => {
       h.service.startSession('session-1', { initialPrompt: 'First prompt' })
     ).rejects.toThrow('Plan rejected');
     expect(h.sendSessionMessage).not.toHaveBeenCalled();
+    expect(h.handle.completeConfiguration).not.toHaveBeenCalled();
+    expect(h.handle.failConfiguration).toHaveBeenCalledWith(expect.any(Error));
     expect(h.sessionConfigService.persistAcpConfigSnapshot).not.toHaveBeenCalled();
   });
   it('keeps startup unready and does not prompt when final persistence fails', async () => {
@@ -35,6 +37,8 @@ describe('launch configuration startup gate', () => {
       expect.objectContaining({ requirePersistence: true })
     );
     expect(h.sendSessionMessage).not.toHaveBeenCalled();
+    expect(h.handle.completeConfiguration).not.toHaveBeenCalled();
+    expect(h.handle.failConfiguration).toHaveBeenCalledWith(expect.any(Error));
   });
   it('marks intent applied only on the final configuration snapshot', async () => {
     const h = createLifecycleHarness({
@@ -45,6 +49,7 @@ describe('launch configuration startup gate', () => {
       },
     });
     await h.service.startSession('session-1', { initialPrompt: '' });
+    expect(h.sessionConfigService.persistAcpConfigSnapshot).toHaveBeenCalledTimes(1);
     expect(h.sessionConfigService.persistAcpConfigSnapshot).toHaveBeenLastCalledWith(
       'session-1',
       expect.objectContaining({

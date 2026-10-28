@@ -72,7 +72,7 @@ describe('startup thinking intent precedence', () => {
       .mockResolvedValue(unsafeCoerce({ defaultCodexReasoningEffort: 'high' }))
   );
   it.each(['medium', null] as const)(
-    'applies explicit launch effort %s instead of current global defaults',
+    'honors explicit launch effort %s instead of current global defaults',
     async (effort) => {
       const f = fixture({ launchSettings: { reasoningEffort: effort, applied: false } });
       await f.service.applyConfiguredReasoningEffort('session', f.handle, {
@@ -81,6 +81,22 @@ describe('startup thinking intent precedence', () => {
         emitUpdates: false,
       });
       expect(f.handle.configOptions[0]?.currentValue).toBe(effort ?? 'low');
+      if (effort === null) {
+        expect(f.runtime.setConfigOption).not.toHaveBeenCalled();
+      }
+    }
+  );
+  it.each([undefined, { invalid: true }])(
+    'fails closed for applied launch intent with missing/invalid snapshot %j',
+    async (snapshot) => {
+      const f = fixture({
+        launchSettings: { reasoningEffort: 'medium', applied: true },
+        ...(snapshot === undefined ? {} : { acpConfigSnapshot: snapshot }),
+      });
+      await expect(
+        f.service.applyConfiguredReasoningEffort('session', f.handle, { session: f.session })
+      ).rejects.toThrow('Saved reasoning configuration is missing or invalid');
+      expect(f.runtime.setConfigOption).not.toHaveBeenCalled();
     }
   );
   it('rejects an explicit unsupported level before readiness instead of silently defaulting', async () => {
@@ -135,7 +151,7 @@ describe('startup thinking intent precedence', () => {
       expect(f.runtime.setConfigOption).toHaveBeenCalledWith('session', id, 'medium');
     }
   );
-  it('does not let an intermediate snapshot consume unapplied launch intent', async () => {
+  it('prefers pending launch effort over an earlier observed snapshot', async () => {
     const f = fixture({
       launchSettings: { reasoningEffort: 'medium', applied: false },
       acpConfigSnapshot: {

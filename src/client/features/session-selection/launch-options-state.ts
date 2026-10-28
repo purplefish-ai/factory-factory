@@ -13,7 +13,7 @@ export function getEffectiveLaunchOptions(
   const options = native?.reasoning.options ?? [];
   const saved = draft.savedReasoningEffort;
   const inherited =
-    saved && options.some((option) => option.value === saved)
+    saved === null || (saved && options.some((option) => option.value === saved))
       ? saved
       : (native?.reasoning.defaultValue ?? native?.reasoning.selected);
   const requested = draft.reasoningEffort === undefined ? inherited : draft.reasoningEffort;

@@ -45,15 +45,18 @@ export async function applyReasoningEffortTarget(
   const currentReasoningEffort = reasoningOption.currentValue
     ? String(reasoningOption.currentValue)
     : null;
-  if (currentReasoningEffort === params.targetReasoningEffort) {
+  const alreadyConfirmed = currentReasoningEffort === params.targetReasoningEffort;
+  if (alreadyConfirmed && params.persistSnapshot === false) {
     return;
   }
-
-  const configOptions = await deps.runtimeManager.setConfigOption(
-    params.sessionId,
-    reasoningOption.id,
-    params.targetReasoningEffort
-  );
+  // A prior best-effort write may have failed even though the provider confirmed this value.
+  const configOptions = alreadyConfirmed
+    ? params.handle.configOptions
+    : await deps.runtimeManager.setConfigOption(
+        params.sessionId,
+        reasoningOption.id,
+        params.targetReasoningEffort
+      );
   params.assertCurrent?.();
   if (
     params.strict &&

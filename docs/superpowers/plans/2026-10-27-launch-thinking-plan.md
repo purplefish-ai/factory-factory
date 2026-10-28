@@ -1,8 +1,8 @@
 # Launch Thinking and Plan Implementation Plan
 
-> **For agentic workers:** Use the approved design, test-driven implementation,
-> and the repository's verification and delivery rules. Tasks below have
-> explicit ownership; preserve concurrent edits.
+> Historical implementation record. The original task supplied delivery
+> authorization; this record does not independently authorize repository
+> actions.
 
 **Goal:** Launch Claude and Codex with the thinking level and Plan state shown
 in the compact controls, and retain confirmed choices through resume.
@@ -90,13 +90,10 @@ cross-boundary integration tests in `src/test-utils/`; runtime documentation.
 - [x] Update runtime docs and run required full checks, tests, builds and
       mobile.
 
-## Task 4: Review and delivery (parent owner)
+## Review record
 
-- [ ] Review the full diff independently, address actionable findings, commit,
-      push and create/attach a ready PR.
-- [ ] Resolve review comments and CI failures; reverify any merged base changes.
-- [ ] Merge only the verified revision when all checks are green and no review
-      threads remain outstanding; verify and report the merge.
+Independent review covered the implementation and regressions below. Delivery
+status and review discussion are tracked in the pull request.
 
 ## Verification evidence
 

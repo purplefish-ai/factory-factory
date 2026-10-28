@@ -212,4 +212,31 @@ describe('native launch capability discovery', () => {
       vi.useRealTimers();
     }
   });
+  it('bounds teardown close after stalled model selection instead of waiting another startup timeout', async () => {
+    vi.useFakeTimers();
+    try {
+      const child = createMockChildProcess();
+      exitChildAfterSigterm(child);
+      mocks.spawn.mockReturnValue(child);
+      mocks.set.mockReturnValueOnce(new Promise(() => undefined));
+      mocks.ext.mockReturnValueOnce(new Promise(() => undefined));
+      let finished = false;
+      const probing = fetchSessionLaunchOptionsFromAcp({ provider: 'CLAUDE', model: 'opus' }).catch(
+        (error: unknown) => {
+          finished = true;
+          return error;
+        }
+      );
+      await vi.advanceTimersByTimeAsync(30_001);
+      expect(finished).toBe(false);
+      await vi.advanceTimersByTimeAsync(1001);
+      expect(finished).toBe(true);
+      expect(await probing).toMatchObject({ message: expect.stringContaining('timed out') });
+      expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+      expect(mocks.close).toHaveBeenCalledOnce();
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
 });

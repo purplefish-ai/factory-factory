@@ -342,7 +342,7 @@ export function SessionTabBar({
             title={creationReason ?? 'New Session'}
             aria-description={creationReason}
             aria-label="New session"
-            className="h-7 w-7 shrink-0 ml-1 flex items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-sidebar-accent hover:text-foreground disabled:opacity-50 disabled:pointer-events-none"
+            className="h-7 w-7 shrink-0 ml-1 flex items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-sidebar-accent hover:text-foreground disabled:opacity-50"
           >
             <PlusIcon className="h-4 w-4" />
           </button>

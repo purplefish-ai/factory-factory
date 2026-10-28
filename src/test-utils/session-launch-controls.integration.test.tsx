@@ -137,7 +137,7 @@ function renderLaunch(inline = false) {
     defaultSessionProvider: 'CODEX',
     defaultCodexModel: 'sol',
     defaultClaudeModel: 'sonnet',
-    defaultCodexReasoningEffort: 'high',
+    defaultCodexReasoningEffort: 'high' as string | null,
     defaultClaudeReasoningEffort: null,
     ratchetEnabled: false,
   };
@@ -323,6 +323,22 @@ describe('real launch controls and tRPC payloads', () => {
     expect(
       view.requests.find((request) => request.path === 'session.createAndStartSession')?.input
     ).toMatchObject({ reasoningEffort: 'high', planModeEnabled: false });
+  });
+  it('submits saved Default as null rather than pinning the concrete native default', async () => {
+    const view = renderLaunch();
+    view.settings.defaultCodexReasoningEffort = null;
+    await view.render();
+    await ready();
+    expect(button('Thinking level: Default')).toBeDefined();
+    await act(() => button('Create chat')?.click());
+    await vi.waitFor(() =>
+      expect(
+        view.requests.some((request) => request.path === 'session.createAndStartSession')
+      ).toBe(true)
+    );
+    expect(
+      view.requests.find((request) => request.path === 'session.createAndStartSession')?.input
+    ).toMatchObject({ provider: 'CODEX', reasoningEffort: null, planModeEnabled: false });
   });
   it('keeps Ultra visible but blocks an incompatible model until Default is selected', async () => {
     const view = renderLaunch();

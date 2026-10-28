@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
+import { AcpRuntimeConfigController } from '@/backend/services/session/service/acp/acp-runtime-config-controller';
 import { createTestProcessHandle } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
+import { userSettingsService } from '@/backend/services/settings';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import {
   createSessionLaunchMetadata,
@@ -8,6 +10,8 @@ import {
   readSessionLaunchSettings,
 } from './session-launch-settings';
 import { applyStartupLaunchPlan } from './session-startup-plan';
+import { SessionConfigService } from './session.config.service';
+vi.mock('@/backend/services/settings', () => ({ userSettingsService: { get: vi.fn() } }));
 function fixture(provider: 'CLAUDE' | 'CODEX', enabled: boolean) {
   const handle = createTestProcessHandle({ provider });
   const id = provider === 'CLAUDE' ? 'mode' : 'collaboration_mode';
@@ -61,11 +65,48 @@ describe('startup native planning', () => {
     await applyStartupLaunchPlan('session', f.session, f.handle, 'STRICT', f.runtime);
     expect(f.handle.configOptions[0]?.currentValue).toBe(enabled ? 'plan' : 'default');
   });
+  it.each([true, false])(
+    'confirms ID-only Claude Plan %s through the actual runtime controller',
+    async (enabled) => {
+      const f = fixture('CLAUDE', enabled);
+      f.handle.configOptions = f.handle.configOptions.map((option) => ({
+        ...option,
+        category: undefined,
+      }));
+      const nativeSetSessionMode = vi.fn().mockResolvedValue({});
+      f.handle.connection.setSessionMode = nativeSetSessionMode;
+      const controller = new AcpRuntimeConfigController();
+      f.runtime.setSessionMode.mockImplementation((sessionId, modeId) =>
+        controller.setSessionMode(f.handle, modeId, sessionId)
+      );
+      await applyStartupLaunchPlan('session', f.session, f.handle, 'STRICT', f.runtime);
+      expect(f.handle.configOptions[0]?.currentValue).toBe(enabled ? 'plan' : 'default');
+      expect(nativeSetSessionMode).toHaveBeenCalledWith({
+        sessionId: f.handle.acpSessionId,
+        modeId: enabled ? 'plan' : 'default',
+      });
+    }
+  );
   it('turns Claude Plan off into configured STRICT access rather than legacy bypass', async () => {
     const f = fixture('CLAUDE', false);
     await applyStartupLaunchPlan('session', f.session, f.handle, 'STRICT', f.runtime);
     expect(f.runtime.setSessionMode).toHaveBeenCalledWith('session', 'default');
     expect(f.handle.configOptions[0]?.currentValue).toBe('default');
+  });
+  it('resolves configured Claude access when require-existing resume omits its permission preset', async () => {
+    const f = fixture('CLAUDE', false);
+    vi.mocked(userSettingsService.get).mockResolvedValueOnce(
+      unsafeCoerce({ defaultWorkspacePermissions: 'STRICT', autoIterationPermissions: 'YOLO' })
+    );
+    const service = new SessionConfigService({
+      repository: unsafeCoerce({}),
+      runtimeManager: unsafeCoerce(f.runtime),
+      codexModelCatalogService: { getModels: vi.fn() },
+      sessionDomainService: unsafeCoerce({}),
+    });
+    await service.applyStartupLaunchPlan('session', f.session, f.handle, undefined);
+    expect(f.handle.configOptions[0]?.currentValue).toBe('default');
+    expect(f.runtime.setSessionMode).toHaveBeenCalledWith('session', 'default');
   });
   it('propagates Plan rejection and rejects an unchanged native response', async () => {
     const f = fixture('CODEX', true);
