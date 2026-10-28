@@ -142,7 +142,7 @@ describe('SessionLaunchControls', () => {
     const trigger = mounted.container.querySelector<HTMLButtonElement>(
       '[aria-label="Planning: Default"]'
     );
-    expect(trigger?.textContent).toBe('Default');
+    expect(trigger?.getAttribute('aria-description')).toBe('Plan mode off');
     keyboardOpen(trigger);
     keyboardSelect('Plan');
     expect(mounted.props.planMode?.onChange).toHaveBeenCalledWith(true);

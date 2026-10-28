@@ -55,7 +55,7 @@ function previewResponse(path: string, input: unknown, provider: ChatProvider) {
       },
       CODEX: {
         models: [
-          { value: 'six-sol', label: '6 Sol' },
+          { value: 'six-sol', label: 'GPT-6.1-Sol' },
           { value: 'six-luna', label: '6 Luna' },
         ],
       },
@@ -173,3 +173,4 @@ export const Sidebar: Story = {
   ],
   globals: { theme: 'dark' },
 };
+export const SidebarClaude: Story = { ...Sidebar, args: { provider: 'CLAUDE' } };

@@ -1,7 +1,6 @@
 import { PaperclipIcon } from '@phosphor-icons/react/dist/csr/Paperclip';
 import type { ReactNode } from 'react';
 import {
-  PlanningSelector,
   SessionLaunchControls,
   type SessionLaunchControlsProps,
 } from '@/client/features/session-selection';
@@ -32,14 +31,9 @@ export function WorkspaceCreationOptions({
   return (
     <div className="space-y-2">
       {enabled && (
-        <SessionLaunchControls
-          {...selection}
-          planMode={undefined}
-          disabled={disabled}
-          disabledReason={disabledReason}
-        />
+        <SessionLaunchControls {...selection} disabled={disabled} disabledReason={disabledReason} />
       )}
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2">
         {enabled && (
           <div className="flex shrink-0 items-center gap-1">
             <Button
@@ -56,18 +50,9 @@ export function WorkspaceCreationOptions({
             <RatchetToggleButton
               enabled={ratchetEnabled}
               state="IDLE"
-              label="PR updates"
               onToggle={onRatchetChange}
               disabled={settingsLoading || disabled}
             />
-            {selection.planMode && (
-              <PlanningSelector
-                control={selection.planMode}
-                disabled={disabled}
-                disabledReason={disabledReason}
-                showLabel
-              />
-            )}
           </div>
         )}
         <div className="ml-auto flex shrink-0 items-center gap-2">{children}</div>

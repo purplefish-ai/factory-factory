@@ -22,6 +22,15 @@ const inputSchema = z.object({
 const roots: Root[] = [];
 const clients: QueryClient[] = [];
 beforeEach(() => {
+  // Radix tooltip content measures its trigger when focus returns after menu selection.
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe = vi.fn();
+      unobserve = vi.fn();
+      disconnect = vi.fn();
+    }
+  );
   Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
     configurable: true,
     writable: true,
@@ -34,6 +43,7 @@ afterEach(async () => {
   }
   clients.splice(0).forEach((client) => client.clear());
   document.body.innerHTML = '';
+  vi.unstubAllGlobals();
 });
 /**
  * Submits the selection's launch settings, as the create-workspace form does. New chats in an
