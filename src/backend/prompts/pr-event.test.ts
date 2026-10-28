@@ -49,7 +49,7 @@ it('bounds UTF-8 feedback and retains identity, marker and omitted count', () =>
   expect(text).toContain('omitted');
   expect(text).toContain('Do not post');
 });
-it('uses the workflow instruction only for trusted enable controls', () => {
+it('preserves rendering of legacy enablement controls', () => {
   const text = buildPRMonitoringMessage({
     deliveryId: 'control',
     events: [
@@ -134,7 +134,7 @@ it('includes bounded recovered check names, outcomes and details links', () => {
   expect(Buffer.byteLength(text)).toBeLessThanOrEqual(16_384);
 });
 
-it('adds trusted maintenance context to dedicated batches within the shared byte limit', () => {
+it('includes maintenance context in main and dedicated event batches within the shared byte limit', () => {
   const input = {
     deliveryId: 'dedicated',
     replyToPrComments: false,
@@ -149,9 +149,50 @@ it('adds trusted maintenance context to dedicated batches within the shared byte
   const main = buildPREventMessage(input);
   const dedicated = buildPREventMessage({ ...input, deliveryMode: 'DEDICATED' });
   expect(main).not.toContain('dedicated conversation');
+  expect(main).toContain('Keep the associated PRs moving in this conversation');
+  expect(main).toContain('Do not merge automatically');
+  expect(main).toContain('Do not post replies');
   expect(dedicated).toContain('Maintain this PR in this dedicated conversation');
   expect(dedicated).toContain('Do not merge automatically');
   expect(dedicated).toContain('Do not post replies');
   expect(dedicated).toContain('untrusted data');
   expect(Buffer.byteLength(dedicated)).toBeLessThanOrEqual(16_384);
 });
+
+it.each([
+  { deliveryMode: 'MAIN' as const, bodyLength: 15_520 },
+  { deliveryMode: 'DEDICATED' as const, bodyLength: 15_375 },
+])(
+  'retains near-limit review feedback with one reply policy in $deliveryMode mode',
+  ({ deliveryMode, bodyLength }) => {
+    const body = 'x'.repeat(bodyLength);
+    const text = buildPREventMessage({
+      deliveryId: 'review-policy',
+      deliveryMode,
+      replyToPrComments: false,
+      events: [
+        {
+          kind: 'REVIEW_FEEDBACK',
+          target: { workspaceId: 'w', prId: 'p' },
+          observation: redObservation,
+          reviews: [
+            {
+              identity: 'review',
+              contentHash: 'hash',
+              author: 'reviewer',
+              body,
+              path: 'file.ts',
+              line: 1,
+              url: redObservation.url,
+              activityAt: redObservation.observedAt,
+            },
+          ],
+        },
+      ],
+    });
+    expect(text).toContain(body);
+    expect(text).not.toContain('omitted');
+    expect(text.match(/Do not post replies to PR comments\./g)).toHaveLength(1);
+    expect(Buffer.byteLength(text)).toBeLessThanOrEqual(16_384);
+  }
+);

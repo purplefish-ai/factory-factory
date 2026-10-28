@@ -89,10 +89,13 @@ superseded turns do not reset discovery.
 `WorkspacePRMonitoring` owns enablement, delivery mode, main recipient
 preference, binding revision, epoch, and delivery pause. Turning monitoring off
 cancels unclaimed events while facts continue to refresh. Re-enabling or
-changing destinations/recipients starts an observation epoch. MAIN queues one
-trusted enablement control; DEDICATED batches carry concise maintenance
-instructions in the same bounded event message. Collection projections report
-MERGED only when every attached PR is merged; an open sibling remains visible.
+changing destinations/recipients starts an observation epoch. Enabling
+monitoring or binding a recipient does not queue a chat message. Both MAIN and
+DEDICATED batches carry concise maintenance instructions with actionable events
+for an attached PR in the same bounded message. Legacy workspace-level
+enablement controls are not delivered or included in pending counts; they remain
+available for receipt recovery. Collection projections report MERGED only when
+every attached PR is merged; an open sibling remains visible.
 
 Accepted per-PR `NONE` → `OPEN` observations notify the parent workspace once
 for each newly opened association, including attachment and discovery refreshes.
@@ -173,18 +176,17 @@ recipient binding. Recipient readiness belongs to delivery.
 
 `prFactPayloadSchema` validates GitHub-derived facts; the transition reducer
 accepts and emits only those facts. `prMonitoringControlPayloadSchema` validates
-backend-owned enable instructions separately, with a separate message builder.
+legacy backend-owned enable instructions for backup and receipt compatibility.
 The ledger retains its compatible payload union, but rendering rejects mixed
 control/fact batches instead of silently omitting facts. The reducer
 deliberately reads pending, in-flight, and delivered fact history for
 deduplication and recovery semantics; it does not choose a session, destination,
 or prompt.
 
-Unclaimed enable controls and review-feedback messages use the current trusted
-reply preference at delivery. A control's captured `replyToPrComments` records
-the enable-time setting and remains in compatible payloads; it does not override
-a later preference change. After a delivery is claimed, retries reuse its frozen
-text and identity.
+Unclaimed PR event messages use the current trusted reply preference at
+delivery. Legacy controls retain their captured `replyToPrComments` in
+compatible payloads but no longer start turns. After a delivery is claimed,
+retries reuse its frozen text and identity.
 
 Trigger decisions live in the pure `src/shared/pr-trigger-policy.ts` module. Its
 draft and ledger-summary types live in `pr-trigger-policy.types.ts`, which

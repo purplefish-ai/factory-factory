@@ -152,7 +152,7 @@ describe('durable monitoring', () => {
       'DELIVERED'
     );
   });
-  it('commits the enablement control atomically with a binding and deduplicates retries', async () => {
+  it('enables monitoring without creating PR events and keeps retries idempotent', async () => {
     const current = await workspacePrMonitoringAccessor.get('w');
     const disabled = await workspacePrMonitoringAccessor.setBinding({
       workspaceId: 'w',
@@ -188,19 +188,12 @@ describe('durable monitoring', () => {
     const control = await db.prisma.workspacePREvent.findMany({
       where: { workspaceId: 'w', deduplicationKey: `enabled:${enabled.bindingRevision}` },
     });
-    expect(control).toHaveLength(1);
-    expect(control[0]?.payload).toMatchObject({
-      kind: 'MONITORING_ENABLED',
-      bindingRevision: enabled.bindingRevision,
-      replyToPrComments: false,
-    });
+    expect(control).toEqual([]);
+    expect(await workspacePrEventAccessor.listPending('w')).toEqual([]);
     await workspacePrMonitoringAccessor.pause('main', 'USER_STOPPED');
     expect((await workspacePrMonitoringAccessor.get('w'))?.deliveryPauseReason).toBe(
       'USER_STOPPED'
     );
-    expect(
-      await db.prisma.workspacePREvent.findUnique({ where: { id: control[0]!.id } })
-    ).not.toBeNull();
     await workspacePrMonitoringAccessor.resume('main');
   });
   it('preserves a user stop across legacy retirement and rejects stale completion', async () => {

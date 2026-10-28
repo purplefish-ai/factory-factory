@@ -754,3 +754,34 @@ it('captures each delivery identity after the preceding receipt lookup completes
     ['second', false, { sessionId: 'main', provider: 'CLAUDE', providerSessionId: 'rolled-over' }],
   ]);
 });
+
+it('ignores legacy enable controls when waking delivery without PR events', async () => {
+  mocks.pending.mockResolvedValue([
+    { id: 'control', prId: null, kind: 'MONITORING_ENABLED', state: 'PENDING' },
+  ]);
+  await wakePRDelivery('w');
+  expect(mocks.enqueue).not.toHaveBeenCalled();
+  expect(mocks.dispatch).not.toHaveBeenCalled();
+});
+it('discards previously queued updates without a PR before preparation', async () => {
+  expect(
+    await preparePRDelivery({
+      sessionId: 'main',
+      request: { workspaceId: 'w', prId: null, bindingRevision: 1 },
+    })
+  ).toEqual({ status: 'discard' });
+  expect(mocks.observe).not.toHaveBeenCalled();
+  expect(mocks.claim).not.toHaveBeenCalled();
+});
+it('queues real PR events even alongside a legacy enable control', async () => {
+  mocks.pending.mockResolvedValue([
+    { id: 'control', prId: null, kind: 'MONITORING_ENABLED', state: 'PENDING' },
+    { id: 'fact', prId: 'p', kind: 'CI_FAILED', state: 'PENDING' },
+  ]);
+  await wakePRDelivery('w');
+  expect(mocks.enqueue).toHaveBeenCalledExactlyOnceWith('main', {
+    workspaceId: 'w',
+    prId: 'p',
+    bindingRevision: 1,
+  });
+});

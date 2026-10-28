@@ -94,7 +94,8 @@ describe('workspaceAccessor', () => {
               prEvents: {
                 where: {
                   state: { in: ['PENDING', 'DISPATCHING'] },
-                  OR: [{ prId: null }, { pr: { detachedAt: null } }],
+                  prId: { not: null },
+                  pr: { detachedAt: null },
                 },
               },
             },
@@ -131,7 +132,8 @@ describe('workspaceAccessor', () => {
               prEvents: {
                 where: {
                   state: { in: ['PENDING', 'DISPATCHING'] },
-                  OR: [{ prId: null }, { pr: { detachedAt: null } }],
+                  prId: { not: null },
+                  pr: { detachedAt: null },
                 },
               },
             },
@@ -173,7 +175,8 @@ describe('workspaceAccessor', () => {
             prEvents: {
               where: {
                 state: { in: ['PENDING', 'DISPATCHING'] },
-                OR: [{ prId: null }, { pr: { detachedAt: null } }],
+                prId: { not: null },
+                pr: { detachedAt: null },
               },
             },
           },

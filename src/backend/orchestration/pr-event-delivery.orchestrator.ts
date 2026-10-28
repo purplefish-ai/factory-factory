@@ -20,6 +20,9 @@ export async function guardPRDelivery(
   request: PRDeliveryRequest,
   services: PRDeliveryPorts
 ) {
+  if (!request.prId) {
+    return 'discard';
+  }
   const {
     workspacePRMonitoringService,
     sessionDomainService,
@@ -268,6 +271,10 @@ async function queueRecipients(
   const mode = config.deliveryMode ?? 'MAIN';
   const recipients = new Set<string>();
   for (const prId of new Set(pending.map((e) => e.prId))) {
+    // Older databases may retain workspace-level enablement controls.
+    if (!prId) {
+      continue;
+    }
     const recipient = await resolveRecipient(workspaceId, prId, config, services, isCurrent);
     const latest = await services.workspacePRMonitoringService.get(workspaceId);
     if (

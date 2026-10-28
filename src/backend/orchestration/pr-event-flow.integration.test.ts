@@ -52,7 +52,7 @@ vi.mock('@/backend/services/session', () => ({
     findAgentSessionById: (id: string) =>
       state.prisma?.agentSession.findUnique({ where: { id }, include: { workspace: true } }),
   },
-  sessionBackgroundDeliveryService: { enqueue: vi.fn() },
+  sessionBackgroundDeliveryService: { enqueue: vi.fn(), invalidate: vi.fn() },
   sessionDispatchService: { tryDispatchNextMessage: vi.fn(async () => undefined) },
   findPRDeliveryReceipt: vi.fn(),
 }));
@@ -70,6 +70,7 @@ import {
   createPRObservationPorts,
   defaultPRMonitoringServices,
 } from './pr-monitoring-dependencies';
+import { bindIssueMonitoringSession, setPRMonitoring } from './pr-monitoring.orchestrator';
 import { observeMonitoredPR } from './pr-observation.orchestrator';
 
 function deferred<T>() {
@@ -604,3 +605,65 @@ it('queues a committed failure after an empty idle wake without waiting for anot
     collector.stop();
   }
 });
+
+it.each([false, true])(
+  'keeps issue-start monitoring silent until PR events exist (attached PR=%s)',
+  async (attachedPR) => {
+    const workspaceId = `issue-start-${attachedPR}`;
+    const sessionId = `${workspaceId}-main`;
+    const prId = `${workspaceId}-pr`;
+    await db.prisma.workspace.create({
+      data: {
+        id: workspaceId,
+        projectId: 'project',
+        name: 'Issue start',
+        status: 'READY',
+        worktreePath: db.tempDir,
+        prMonitoring: { create: { enabled: true } },
+        ...(attachedPR ? { prs: { create: { id: prId, url: redObservation.url } } } : {}),
+      },
+    });
+    await db.prisma.agentSession.create({
+      data: {
+        id: sessionId,
+        workspaceId,
+        workflow: 'implement',
+        provider: 'CODEX',
+        providerSessionId: sessionId,
+        model: 'custom',
+      },
+    });
+    vi.mocked(sessionBackgroundDeliveryService.enqueue).mockClear();
+    vi.mocked(sessionDispatchService.tryDispatchNextMessage).mockClear();
+    await bindIssueMonitoringSession(workspaceId, sessionId);
+    const config = await workspacePRMonitoringService.get(workspaceId);
+    expect(config).toMatchObject({ enabled: true, recipientSessionId: sessionId });
+    await setPRMonitoring({
+      workspaceId,
+      enabled: true,
+      recipientSessionId: sessionId,
+      expectedBindingRevision: config!.bindingRevision,
+    });
+    expect(await db.prisma.workspacePREvent.count({ where: { workspaceId } })).toBe(0);
+    expect(sessionBackgroundDeliveryService.enqueue).not.toHaveBeenCalled();
+    expect(sessionDispatchService.tryDispatchNextMessage).not.toHaveBeenCalled();
+
+    if (!attachedPR) {
+      await db.prisma.workspacePR.create({
+        data: { id: prId, workspaceId, url: redObservation.url },
+      });
+    }
+    await workspacePrSnapshotService.acceptMonitoredObservation({
+      target: { workspaceId, prId },
+      expectedPrRevision: 0,
+      expectedEventEpoch: config!.eventEpoch,
+      observation: redObservation,
+    });
+    await wakePRDelivery(workspaceId);
+    expect(sessionBackgroundDeliveryService.enqueue).toHaveBeenCalledExactlyOnceWith(sessionId, {
+      workspaceId,
+      prId,
+      bindingRevision: config!.bindingRevision,
+    });
+  }
+);
