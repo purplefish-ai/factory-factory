@@ -90,7 +90,7 @@ export function WorkspaceItemContent({
         <span className="truncate text-sm">{workspace.name}</span>
       </div>
       {hasMetaRow && (
-        <div className="grid grid-cols-[1fr_auto_3rem] items-center gap-x-2 pl-[calc(0.5rem+8px)] text-[11px] text-muted-foreground min-w-0">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-2 pl-[calc(0.5rem+8px)] text-[11px] text-muted-foreground min-w-0">
           <span className="flex items-center gap-1 min-w-0 truncate">
             {showBranch && (
               <>
