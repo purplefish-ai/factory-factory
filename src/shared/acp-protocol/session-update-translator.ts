@@ -56,7 +56,7 @@ type TerminalOutputState = { sessionId: string; text: string; terminalIds: Set<s
  * and returns an empty array, so one bad event does not break the pipeline.
  */
 export class AcpEventTranslator {
-  private readonly sessionNotices = new Map<string, string>();
+  private readonly sessionNotices = new Map<string, Set<string>>();
   private readonly terminalOutput = new Map<string, TerminalOutputState>();
   // Retain replay identities until clearTerminalOutput tears down their session.
   private readonly compactions = new Map<string, { sessionId: string; status: string }>();
@@ -138,10 +138,12 @@ export class AcpEventTranslator {
     }
     const notice = parsed.data._meta.jetbrains.air.sessionFailure;
     const key = JSON.stringify([notice.id, notice.revision]);
-    if (this.sessionNotices.get(sessionId) === key) {
+    const seen = this.sessionNotices.get(sessionId) ?? new Set<string>();
+    if (seen.has(key)) {
       return [];
     }
-    this.sessionNotices.set(sessionId, key);
+    seen.add(key);
+    this.sessionNotices.set(sessionId, seen);
     const text = `Warning: ${notice.title}${notice.details ? `\n\n${notice.details}` : ''}\n\n`;
     return this.translateAgentMessageChunk({
       sessionUpdate: 'agent_message_chunk',

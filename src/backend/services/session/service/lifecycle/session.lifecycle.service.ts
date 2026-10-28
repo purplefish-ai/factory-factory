@@ -18,6 +18,7 @@ import type {
   StartSessionOptions,
 } from './session-startup.coordinator';
 import type { SessionStopReason, StopSessionOptions } from './session-termination.coordinator';
+import { getAcpWorkState } from './session-work-state';
 
 export type {
   GetOrCreateSessionClientOptions,
@@ -123,13 +124,19 @@ export class SessionLifecycleService {
       // A live process can outlast a failed prompt. The next prompt explicitly
       // clears this error; background activity alone cannot turn it into success.
       if (base.phase === 'error') {
-        return { ...base, processState: 'alive', activity: 'IDLE' };
+        return {
+          ...base,
+          processState: 'alive',
+          activity: 'IDLE',
+          work: getAcpWorkState(acpClient).work,
+        };
       }
       const isWorking = this.dependencies.runtimeManager.isSessionWorking(sessionId);
       return {
         phase: isWorking ? 'running' : 'idle',
         processState: 'alive',
         activity: isWorking ? 'WORKING' : 'IDLE',
+        ...getAcpWorkState(acpClient),
         updatedAt: base.updatedAt,
       };
     }

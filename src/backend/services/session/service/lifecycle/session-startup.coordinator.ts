@@ -29,6 +29,7 @@ import { SessionStartupPersistenceError } from './session-startup-configuration-
 import { prepareSessionStartup } from './session-startup-preparation';
 import { SessionStartupRequest } from './session-startup-request';
 import type { StopSessionOptions } from './session-termination.coordinator';
+import { getAcpWorkState } from './session-work-state';
 import type {
   PersistAcpConfigSnapshotParams,
   SessionConfigService,
@@ -641,6 +642,7 @@ export class SessionStartupCoordinator {
         phase: isWorking ? 'running' : 'idle',
         processState: 'alive',
         activity: isWorking ? 'WORKING' : 'IDLE',
+        ...getAcpWorkState(this.dependencies.runtimeManager.getClient(sessionId)),
         updatedAt: new Date().toISOString(),
       });
       return { handle: existingAcp, dispatchableNotificationCount: 0 };
@@ -687,6 +689,7 @@ export class SessionStartupCoordinator {
             phase: isWorking ? 'running' : 'idle',
             processState: 'alive',
             activity: isWorking ? 'WORKING' : 'IDLE',
+            ...getAcpWorkState(this.dependencies.runtimeManager.getClient(sessionId)),
             updatedAt: new Date().toISOString(),
           });
           return { handle, resolvedPreset, dispatchableNotificationCount };

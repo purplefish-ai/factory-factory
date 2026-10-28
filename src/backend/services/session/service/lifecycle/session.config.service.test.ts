@@ -417,6 +417,7 @@ describe('SessionConfigService', () => {
   it('rejects setSessionModel when requested model is not in ACP model options', async () => {
     runtimeManager.getClient.mockReturnValue(
       unsafeCoerce({
+        trackPendingConfigUpdate: vi.fn(),
         provider: 'CODEX',
         configOptions: [
           {
@@ -458,6 +459,7 @@ describe('SessionConfigService', () => {
     ];
     runtimeManager.getClient.mockReturnValue(
       unsafeCoerce({
+        trackPendingConfigUpdate: vi.fn(),
         provider: 'CLAUDE',
         providerSessionId: 'provider-session-1',
         configOptions,
@@ -494,6 +496,7 @@ describe('SessionConfigService', () => {
     ];
     runtimeManager.getClient.mockReturnValue(
       unsafeCoerce({
+        trackPendingConfigUpdate: vi.fn(),
         provider: 'CLAUDE',
         providerSessionId: 'provider-session-1',
         configOptions,
@@ -517,6 +520,7 @@ describe('SessionConfigService', () => {
   it('routes model config updates through ACP setSessionModel', async () => {
     runtimeManager.getClient.mockReturnValue(
       unsafeCoerce({
+        trackPendingConfigUpdate: vi.fn(),
         provider: 'CLAUDE',
         providerSessionId: 'provider-session-1',
         configOptions: [
@@ -561,6 +565,7 @@ describe('SessionConfigService', () => {
   it('routes mode config updates through ACP setSessionMode', async () => {
     runtimeManager.getClient.mockReturnValue(
       unsafeCoerce({
+        trackPendingConfigUpdate: vi.fn(),
         provider: 'CLAUDE',
         providerSessionId: 'provider-session-1',
         configOptions: [
@@ -616,6 +621,7 @@ describe('SessionConfigService', () => {
     };
     runtimeManager.getClient.mockReturnValue(
       unsafeCoerce({
+        trackPendingConfigUpdate: vi.fn(),
         provider: 'CODEX',
         providerSessionId: 'provider-session-1',
         configOptions: [modeConfig],
@@ -639,6 +645,7 @@ describe('SessionConfigService', () => {
   it('skips plan collaboration mode when the session does not advertise it', async () => {
     runtimeManager.getClient.mockReturnValue(
       unsafeCoerce({
+        trackPendingConfigUpdate: vi.fn(),
         provider: 'CLAUDE',
         providerSessionId: 'provider-session-1',
         configOptions: [
@@ -670,6 +677,7 @@ describe('SessionConfigService', () => {
     );
     runtimeManager.getClient.mockReturnValue(
       unsafeCoerce({
+        trackPendingConfigUpdate: vi.fn(),
         provider: 'CODEX',
         providerSessionId: 'provider-codex-1',
         configOptions: [

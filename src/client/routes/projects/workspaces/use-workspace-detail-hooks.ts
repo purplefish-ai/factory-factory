@@ -208,9 +208,16 @@ export function resolveSelectedSessionId({
 export function useSelectedSessionId(
   workspaceId: string,
   initialDbSessionId: string | null,
-  sessionIds: string[]
+  sessionIds: string[],
+  requestedSessionId: string | null = null,
+  onLinkedSession?: () => void,
+  requestedNavigationKey?: string
 ) {
   const storageKey = `${SESSION_TAB_STORAGE_PREFIX}${workspaceId}`;
+  const consumedLinkRef = useRef<string | null>(null);
+  const linkIdentity = requestedSessionId
+    ? `${requestedNavigationKey ?? ''}:${requestedSessionId}`
+    : null;
   const pendingSelectionRef = useRef<{ id: string | null; setAtMs: number | null }>({
     id: null,
     setAtMs: null,
@@ -218,10 +225,25 @@ export function useSelectedSessionId(
 
   const [selectedDbSessionId, setSelectedDbSessionIdRaw] = useState<string | null>(() => {
     const stored = localStorage.getItem(storageKey);
-    return stored ?? initialDbSessionId;
+    return requestedSessionId ?? stored ?? initialDbSessionId;
   });
 
   useEffect(() => {
+    if (!requestedSessionId) {
+      consumedLinkRef.current = null;
+    }
+    if (
+      requestedSessionId &&
+      linkIdentity !== consumedLinkRef.current &&
+      sessionIds.includes(requestedSessionId)
+    ) {
+      consumedLinkRef.current = linkIdentity;
+      pendingSelectionRef.current = { id: null, setAtMs: null };
+      localStorage.setItem(storageKey, requestedSessionId);
+      setSelectedDbSessionIdRaw(requestedSessionId);
+      onLinkedSession?.();
+      return;
+    }
     const pending = pendingSelectionRef.current;
     if (pending.id && sessionIds.includes(pending.id)) {
       pendingSelectionRef.current = { id: null, setAtMs: null };
@@ -239,7 +261,15 @@ export function useSelectedSessionId(
     if (resolved !== selectedDbSessionId) {
       setSelectedDbSessionIdRaw(resolved);
     }
-  }, [initialDbSessionId, selectedDbSessionId, sessionIds, storageKey]);
+  }, [
+    initialDbSessionId,
+    selectedDbSessionId,
+    sessionIds,
+    storageKey,
+    requestedSessionId,
+    onLinkedSession,
+    linkIdentity,
+  ]);
 
   const setSelectedDbSessionId = useCallback(
     (id: string | null) => {

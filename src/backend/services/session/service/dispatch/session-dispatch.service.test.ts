@@ -41,13 +41,14 @@ function harness(policy: 'allowed' | 'manual_resume' = 'allowed') {
     isSessionPromptInFlight: vi.fn(() => false),
     isSessionRunning: vi.fn(() => true),
   };
+  const resolveQueuedMessageSettings = vi.fn(
+    (_id: string, message: QueuedMessage) => message.settings
+  );
   const dispatcher = new SessionDispatchService({
     runtimeManager,
     configService: {
-      setSessionCollaborationMode: vi.fn().mockResolvedValue(undefined),
-      setSessionThinkingBudget: vi.fn().mockResolvedValue(undefined),
-      setSessionModel: vi.fn().mockResolvedValue(undefined),
-      setSessionReasoningEffort: vi.fn().mockResolvedValue(undefined),
+      resolveQueuedMessageSettings,
+      configureQueuedMessage: vi.fn((_id, message) => Promise.resolve(message.settings)),
     },
     promptService: { sendSessionMessage },
     backgroundDelivery: {
@@ -82,6 +83,7 @@ function harness(policy: 'allowed' | 'manual_resume' = 'allowed') {
   );
   return {
     dispatcher,
+    resolveQueuedMessageSettings,
     sendSessionMessage,
     startup,
     runtimeManager,
@@ -98,6 +100,33 @@ afterEach(() => {
 });
 
 describe('session dispatcher queue and lifecycle coordination', () => {
+  it('retains fresh background details already finalized by a failed prompt', async () => {
+    const { dispatcher, sendSessionMessage } = harness();
+    enqueue('follow-up');
+    sendSessionMessage.mockImplementation(() => {
+      sessionDomainService.setRuntimeSnapshot('session', {
+        phase: 'error',
+        processState: 'alive',
+        activity: 'IDLE',
+        errorMessage: 'Provider failed',
+        updatedAt: '2026-10-28T00:00:00.000Z',
+        work: {
+          promptInFlight: false,
+          backgroundTasks: [{ id: 'preview', name: 'pnpm storybook', kind: 'shell' }],
+          runningSubagents: 0,
+          activeGoals: 0,
+        },
+      });
+      return Promise.reject(new Error('Provider failed'));
+    });
+    await dispatcher.tryDispatchNextMessage('session');
+    expect(sessionDomainService.getRuntimeSnapshot('session')).toMatchObject({
+      phase: 'error',
+      errorMessage: 'Provider failed',
+      work: { promptInFlight: false, backgroundTasks: [{ name: 'pnpm storybook' }] },
+    });
+  });
+
   it('dispatches a follow-up while background activity keeps the session working', async () => {
     // A long-lived shell, child agent, or goal must not own the parent's prompt slot.
     const { dispatcher, runtimeManager, sendSessionMessage } = harness();
@@ -146,6 +175,29 @@ describe('session dispatcher queue and lifecycle coordination', () => {
     await pending;
     expect(sendSessionMessage).toHaveBeenCalledExactlyOnceWith('session', 'first');
     expect(sessionDomainService.peekNextMessage('session')).toBeUndefined();
+  });
+
+  it('uses newer accepted settings before starting a stopped session for an older queued turn', async () => {
+    const { dispatcher, startup, resolveQueuedMessageSettings } = harness();
+    enqueue('stopped-follow-up');
+    startup.getSessionClient.mockReturnValue(undefined);
+    startup.getOrCreateSessionClient.mockImplementation(() => {
+      startup.getSessionClient.mockReturnValue({});
+      return Promise.resolve({});
+    });
+    resolveQueuedMessageSettings.mockImplementation((_id, message) => ({
+      ...message.settings,
+      selectedModel: 'newer-model',
+      reasoningEffort: 'high',
+      planModeEnabled: true,
+    }));
+    await dispatcher.tryDispatchNextMessage('session');
+    expect(startup.getOrCreateSessionClient).toHaveBeenCalledWith('session', {
+      thinkingEnabled: false,
+      planModeEnabled: true,
+      model: 'newer-model',
+      reasoningEffort: 'high',
+    });
   });
 
   it('rechecks the prompt slot when another turn starts during auto-start', async () => {

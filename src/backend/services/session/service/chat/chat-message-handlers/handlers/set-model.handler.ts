@@ -15,11 +15,14 @@ export function createSetModelHandler(deps: {
 
   return async ({ sessionId }, message) => {
     try {
-      await sessionConfigService.setSessionModel(sessionId, message.model);
+      if (message.model !== undefined) {
+        await sessionConfigService.setSessionModel(sessionId, message.model, 'user');
+      }
       if ('reasoningEffort' in message) {
         await sessionConfigService.setSessionReasoningEffort(
           sessionId,
-          message.reasoningEffort ?? null
+          message.reasoningEffort ?? null,
+          'user'
         );
       }
       const capabilities = await sessionConfigService.getChatBarCapabilities(sessionId);

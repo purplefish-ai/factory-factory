@@ -53,10 +53,7 @@ export interface SessionDispatchDependencies {
   runtimeManager: Pick<AcpRuntimeManager, 'isSessionPromptInFlight' | 'isSessionRunning'>;
   configService: Pick<
     SessionConfigService,
-    | 'setSessionCollaborationMode'
-    | 'setSessionThinkingBudget'
-    | 'setSessionModel'
-    | 'setSessionReasoningEffort'
+    'configureQueuedMessage' | 'resolveQueuedMessageSettings'
   >;
   promptService: {
     sendSessionMessage(sessionId: string, content: string | AgentContentItem[]): Promise<void>;

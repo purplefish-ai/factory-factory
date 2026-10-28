@@ -632,6 +632,7 @@ describe('SessionStartupCoordinator', () => {
     harness.runtimeManager.getClient.mockReturnValue(harness.handle);
     const promptResult = createDeferred<{ stopReason: string }>();
     const promptRuntimeManager = {
+      getClient: () => harness.handle,
       sendPrompt: vi.fn(() => promptResult.promise),
       isSessionWorking: () => false,
     };

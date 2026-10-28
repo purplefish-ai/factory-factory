@@ -197,7 +197,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   const chat = useChatState({
     dbSessionId,
     send: useCallback((message: unknown) => sendRef.current(message), []),
-    connected: false, // Will be overridden by transport.connected in return value
+    connected: false, // Transport lifecycle is forwarded through handleDisconnected below.
   });
 
   const scheduleLoadRetry = useCallback(
@@ -284,13 +284,14 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
 
   // Handle disconnection - clear loading state to avoid stuck spinner
   const handleDisconnected = useCallback(() => {
+    chat.handleDisconnected();
     currentLoadRequestIdRef.current = null;
     exhaustedLoadRequestIdRef.current = null;
     currentLoadGenerationRef.current += 1;
     clearLoadTimeout();
     clearConnectLoadingTimeout();
     chat.dispatch({ type: 'SESSION_LOADING_END' });
-  }, [chat.dispatch, clearConnectLoadingTimeout, clearLoadTimeout]);
+  }, [chat.dispatch, chat.handleDisconnected, clearConnectLoadingTimeout, clearLoadTimeout]);
 
   // Ensure pending load timers cannot fire after unmount.
   useEffect(() => {

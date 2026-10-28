@@ -45,6 +45,41 @@ export const WorkspaceCreation: Story = {
 
 export const SessionLoading: Story = {};
 
+export const BackgroundPreview: Story = {
+  args: {
+    running: true,
+    loadingSession: false,
+    work: {
+      promptInFlight: false,
+      backgroundTasks: [
+        { id: 'preview', name: 'pnpm storybook --port 62770', kind: 'shell' as const },
+      ],
+      runningSubagents: 0,
+      activeGoals: 0,
+    },
+  },
+};
+
+export const BackgroundAfterFailedTurn: Story = {
+  args: { ...BackgroundPreview.args, running: false },
+};
+
+export const PromptWithBackgroundWork: Story = {
+  args: {
+    ...BackgroundPreview.args,
+    latestThinking: 'Checking the preview',
+    work: {
+      promptInFlight: true,
+      backgroundTasks: [
+        { id: 'preview', name: 'pnpm storybook --port 62770', kind: 'shell' as const },
+        { id: 'tests', name: 'pnpm test', kind: 'shell' as const },
+      ],
+      runningSubagents: 1,
+      activeGoals: 2,
+    },
+  },
+};
+
 const historyMessages: ChatMessage[] = [
   createUserMessage('What changed?', 0),
   {

@@ -64,10 +64,15 @@ describe('socket-free command registry', () => {
       requestId: 'request',
       optionId: 'allow',
     });
-    expect(sessionConfigService.setSessionModel).toHaveBeenCalledWith('injected-session', 'chosen');
+    expect(sessionConfigService.setSessionModel).toHaveBeenCalledWith(
+      'injected-session',
+      'chosen',
+      'user'
+    );
     expect(sessionConfigService.setSessionReasoningEffort).toHaveBeenCalledWith(
       'injected-session',
-      null
+      null,
+      'user'
     );
     expect(sessionConfigService.getChatBarCapabilities).toHaveBeenCalledWith('injected-session');
     expect(sessionConfigService.setSessionThinkingBudget).toHaveBeenCalledWith(

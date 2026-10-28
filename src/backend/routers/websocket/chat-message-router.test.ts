@@ -54,7 +54,11 @@ describe('chat message routing at the transport boundary', () => {
       '/tmp/work',
       { type: 'set_model', model: 'chosen' }
     );
-    expect(services.config.setSessionModel).toHaveBeenCalledWith('session-command', 'chosen');
+    expect(services.config.setSessionModel).toHaveBeenCalledWith(
+      'session-command',
+      'chosen',
+      'user'
+    );
     expect(outcome).toEqual({
       replies: [{ type: 'chat_capabilities', capabilities: EMPTY_CHAT_BAR_CAPABILITIES }],
     });

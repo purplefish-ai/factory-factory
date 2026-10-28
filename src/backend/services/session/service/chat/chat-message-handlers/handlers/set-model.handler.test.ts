@@ -50,8 +50,8 @@ describe('createSetModelHandler', () => {
       }
     );
 
-    expect(mocks.setSessionModel).toHaveBeenCalledWith('session-1', 'gpt-5.3-codex');
-    expect(mocks.setSessionReasoningEffort).toHaveBeenCalledWith('session-1', 'high');
+    expect(mocks.setSessionModel).toHaveBeenCalledWith('session-1', 'gpt-5.3-codex', 'user');
+    expect(mocks.setSessionReasoningEffort).toHaveBeenCalledWith('session-1', 'high', 'user');
     expect(mocks.getChatBarCapabilities).toHaveBeenCalledWith('session-1');
     expect(outcome).toEqual({
       replies: [
@@ -87,10 +87,22 @@ describe('createSetModelHandler', () => {
       }
     );
 
-    expect(mocks.setSessionModel).toHaveBeenCalledWith('session-1', 'gpt-5.3-codex');
+    expect(mocks.setSessionModel).toHaveBeenCalledWith('session-1', 'gpt-5.3-codex', 'user');
     expect(mocks.setSessionReasoningEffort).not.toHaveBeenCalled();
     expect(mocks.getChatBarCapabilities).toHaveBeenCalledWith('session-1');
     expect(outcome.replies).toHaveLength(1);
+  });
+
+  it('does not submit a model edit for a reasoning-only request', async () => {
+    await createSetModelHandler(deps)(
+      { sessionId: 'session-1', workingDir: '/tmp/project' },
+      {
+        type: 'set_model',
+        reasoningEffort: 'high',
+      }
+    );
+    expect(mocks.setSessionModel).not.toHaveBeenCalled();
+    expect(mocks.setSessionReasoningEffort).toHaveBeenCalledWith('session-1', 'high', 'user');
   });
 
   it.each([undefined, 'model-request'])(

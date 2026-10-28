@@ -111,10 +111,19 @@ sending a hardcoded client model. Pending model choices stay visible until
 confirmed. Rejected or unsent changes restore the confirmed model; request
 correlation prevents an older rejection from discarding a newer choice. Each
 conversation restores its own draft and attachments, including switches before
-draft autosave completes. Model/configuration writes serialize per session
-through persistence and state publication, including failure corrections;
-different sessions remain independent. Accepted native observations, successful
-RPC results, and startup snapshots share a configuration authority fence through
+draft autosave completes. Chat configuration controls remain editable during a
+turn. Edits retain a visible pending selection and apply after that prompt
+settles, before the next prompt can start; background activity alone does not
+delay them. Newer explicit edits supersede the corresponding settings in
+messages already queued for that session, including across runtime restarts;
+newer queued intent remains intact. Request acknowledgments and correlated
+failures settle only the matching pending choice, so an older response cannot
+discard a newer edit. Stopping or replacing the runtime rejects its deferred
+edits. Disconnecting clears unacknowledged selections so reconnect snapshots
+regain authority. Model/configuration writes serialize per session through
+persistence and state publication, including failure corrections; different
+sessions remain independent. Accepted native observations, successful RPC
+results, and startup snapshots share a configuration authority fence through
 metadata reads, CAS retries, and publication. Failed requests leave the last
 accepted state valid; superseded background writes stop without publishing a
 stale result. Public snapshot persistence exhaustion propagates an error and
@@ -267,11 +276,17 @@ and 2 MiB of serialized updates. Oldest whole turns are evicted; an oversized
 active turn is discarded until the next user turn. Cursors use monotonic turn
 offsets, and expired cursors fail explicitly instead of returning another turn.
 
-ACP negotiates structured session failures. An `end_turn` prompt response
-carrying an error in `_meta.jetbrains.air.sessionFailure` fails the turn through
-the normal provider-error lifecycle path, clearing its working indicator and
-recording a `TURN_INTERRUPTED` event. Warning notices and cleared failures do
-not fail a turn.
+ACP negotiates structured session failures. A prompt response carrying an error
+in `_meta.jetbrains.air.sessionFailure` fails the turn through the normal
+provider-error lifecycle path, regardless of its stop reason, clearing its
+working indicator and recording a `TURN_INTERRUPTED` event. The error remains on
+the session until the next prompt starts, across runtime reads and background
+activity updates. The known model-capacity message retains its
+retry/model-switch guidance; other provider errors use the existing
+public-message sanitization. Warning notices render as chat messages, including
+during idle session resume, without lifting transcript replay suppression. Each
+notice ID/revision is shown once per session runtime. Warnings and cleared
+failures do not fail a turn.
 
 ### Activity and prompt dispatch
 
@@ -282,6 +297,17 @@ active goals. It drives runtime activity and the yellow work indicator; a
 completed prompt retains that activity until the remaining work ends.
 `isSessionPromptInFlight` answers only whether the current active runtime has an
 unresolved prompt RPC. Browse-only runtimes do not own an active prompt slot.
+
+Runtime snapshots also carry prompt ownership and named background tasks, with
+counts for running subagents and active goals. Chat shows background processes
+and their commands separately from the active-turn spinner. A completed turn
+with a persistent preview server shows the remaining process instead of stale
+reasoning or “Agent is working”. Task-detail changes publish even while another
+task keeps the session busy, and reconnects restore current work from the live
+runtime. Idle and error transitions discard cached work unless fresh details are
+explicitly supplied; stopped transitions always clear work. A failed turn
+retains fresh background details from the live runtime, and chat keeps those
+processes visible alongside the error state.
 
 Ordinary chat messages may be composed and queued during any turn. Dispatch
 waits for the preceding prompt to complete, including time spent executing tools

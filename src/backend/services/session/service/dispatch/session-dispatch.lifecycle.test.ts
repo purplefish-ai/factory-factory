@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createTestSessionDispatcher } from '@/backend/services/session/service/dispatch/session-dispatch.test-helpers';
+import {
+  configureTestQueuedMessage,
+  createAttachmentMessage,
+  createTestSessionDispatcher,
+} from '@/backend/services/session/service/dispatch/session-dispatch.test-helpers';
 import { VOICE_MODE_BREVITY_INSTRUCTION } from '@/backend/services/session/service/voice/voice-mode-instructions';
 import type { QueuedMessage } from '@/shared/acp-protocol';
 
@@ -14,6 +18,7 @@ const {
     dequeueNext: vi.fn(),
     requeueFront: vi.fn(),
     markError: vi.fn(),
+    getRuntimeSnapshot: vi.fn(() => ({ phase: 'running' })),
     markIdle: vi.fn(),
     markRunning: vi.fn(),
     allocateOrder: vi.fn(),
@@ -35,6 +40,10 @@ const {
     isGenerationCurrent: vi.fn(),
     isSessionRunning: vi.fn(),
     isSessionPromptInFlight: vi.fn(),
+    resolveQueuedMessageSettings: (_id: string, message: QueuedMessage) => message.settings,
+    configureQueuedMessage: vi.fn((id: string, message: QueuedMessage, supportsThinking: boolean) =>
+      configureTestQueuedMessage(mockSessionService, id, message, supportsThinking)
+    ),
     setSessionModel: vi.fn(),
     setSessionReasoningEffort: vi.fn(),
     setSessionThinkingBudget: vi.fn(),
@@ -93,20 +102,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
       planModeEnabled: false,
     },
   };
-  const queuedMessageWithAttachment: QueuedMessage = {
-    ...queuedMessage,
-    text: 'preserve this draft',
-    attachments: [
-      {
-        id: 'attachment-1',
-        name: 'notes.txt',
-        type: 'text/plain',
-        size: 11,
-        data: 'draft notes',
-        contentType: 'text',
-      },
-    ],
-  };
+  const queuedMessageWithAttachment = createAttachmentMessage(queuedMessage);
 
   beforeEach(() => {
     vi.clearAllMocks();

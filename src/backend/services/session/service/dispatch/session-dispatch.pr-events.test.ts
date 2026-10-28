@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createTestSessionDispatcher } from '@/backend/services/session/service/dispatch/session-dispatch.test-helpers';
+import {
+  configureTestQueuedMessage,
+  createTestSessionDispatcher,
+} from '@/backend/services/session/service/dispatch/session-dispatch.test-helpers';
 import type { QueuedMessage } from '@/shared/acp-protocol';
 
 const {
@@ -15,6 +18,7 @@ const {
     dequeueNext: vi.fn(),
     requeueFront: vi.fn(),
     markError: vi.fn(),
+    getRuntimeSnapshot: vi.fn(() => ({ phase: 'running' })),
     markIdle: vi.fn(),
     markRunning: vi.fn(),
     allocateOrder: vi.fn(),
@@ -37,6 +41,10 @@ const {
     isGenerationCurrent: vi.fn(),
     isSessionRunning: vi.fn(),
     isSessionPromptInFlight: vi.fn(),
+    resolveQueuedMessageSettings: (_id: string, message: QueuedMessage) => message.settings,
+    configureQueuedMessage: vi.fn((id: string, message: QueuedMessage, supportsThinking: boolean) =>
+      configureTestQueuedMessage(mockSessionService, id, message, supportsThinking)
+    ),
     setSessionModel: vi.fn(),
     setSessionReasoningEffort: vi.fn(),
     setSessionThinkingBudget: vi.fn(),

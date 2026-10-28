@@ -672,6 +672,23 @@ describe('AcpEventTranslator', () => {
 
       expect(translator.translateSessionUpdate(update, 'session-1')).toEqual(expected);
       expect(translator.translateSessionUpdate(update, 'session-1')).toEqual([]);
+      const anotherNotice: SessionUpdate = {
+        sessionUpdate: 'session_info_update',
+        _meta: {
+          jetbrains: {
+            air: {
+              sessionFailure: {
+                id: 'notice-2',
+                revision: 1,
+                severity: 'warning',
+                title: 'Another warning',
+              },
+            },
+          },
+        },
+      };
+      expect(translator.translateSessionUpdate(anotherNotice, 'session-1')).toHaveLength(1);
+      expect(translator.translateSessionUpdate(update, 'session-1')).toEqual([]);
       expect(translator.translateSessionUpdate(update, 'session-2')).toEqual(expected);
       translator.clearTerminalOutput('session-1');
       expect(translator.translateSessionUpdate(update, 'session-1')).toEqual(expected);

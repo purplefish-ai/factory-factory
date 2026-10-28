@@ -4,8 +4,9 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from '
 import type { GroupedMessageItem } from '@/lib/chat-protocol';
 import { isStreamEventMessage, isToolSequence } from '@/lib/chat-protocol';
 import { PR_EVENT_MESSAGE_ID_PREFIX } from '@/shared/pr-monitoring';
+import type { SessionWorkState } from '@/shared/session-runtime';
 import type { WorkspaceInitBanner } from '@/shared/workspace-init';
-import { GroupedMessageItemRenderer, LoadingIndicator } from './agent-activity';
+import { GroupedMessageItemRenderer } from './agent-activity';
 import { ThinkingCompletionProvider } from './agent-activity/message-renderers';
 import {
   createToolCallExpansionKey,
@@ -13,6 +14,7 @@ import {
   useWorkspaceToolExpansionState,
 } from './agent-activity/tool-renderers/tool-expansion-state';
 import { CompactingIndicator } from './compacting-indicator';
+import { SessionActivityIndicator } from './session-activity-indicator';
 
 // =============================================================================
 // Types
@@ -23,6 +25,7 @@ interface VirtualizedMessageListProps {
   workspaceId?: string;
   messages: GroupedMessageItem[];
   running: boolean;
+  work?: SessionWorkState;
   startingSession: boolean;
   loadingSession: boolean;
   latestThinking?: string | null;
@@ -174,6 +177,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   workspaceId,
   messages: allMessages,
   running,
+  work,
   startingSession,
   loadingSession,
   latestThinking = null,
@@ -192,6 +196,9 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   onWorkspaceFileLink,
   initBanner,
 }: VirtualizedMessageListProps) {
+  const hasBackgroundActivity = Boolean(
+    work && (work.backgroundTasks.length > 0 || work.runningSubagents > 0 || work.activeGoals > 0)
+  );
   // Pending PR updates describe future work, so keep them after the current activity.
   const { messages, queuedPRUpdates } = useMemo(() => {
     const messages: GroupedMessageItem[] = [];
@@ -220,7 +227,11 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   loadingSessionRef.current = loadingSession;
   const showingInitSpinner = initBanner?.kind === 'info';
   const hasScrollableContent =
-    allMessages.length > 0 || running || startingSession || showingInitSpinner;
+    allMessages.length > 0 ||
+    running ||
+    hasBackgroundActivity ||
+    startingSession ||
+    showingInitSpinner;
   const getToolExpansionState = workspaceId ? getExpansionState : undefined;
   const setToolExpansionState = workspaceId ? setExpansionState : undefined;
   const getToolExpansionToken = useCallback(
@@ -603,7 +614,9 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
         )}
 
         {/* Loading indicators after messages */}
-        {running && <LoadingIndicator latestReasoning={latestThinking} className="py-4" />}
+        {(running || hasBackgroundActivity) && (
+          <SessionActivityIndicator work={work} latestThinking={latestThinking} />
+        )}
 
         {queuedPRUpdates.map((item) => (
           <GroupedMessageItemRenderer key={item.id} item={item} isQueued />

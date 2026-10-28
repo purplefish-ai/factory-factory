@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+import { AcpNativeSessionTracker } from '@/backend/services/session/service/acp/acp-native-session-tracker';
+import { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
@@ -36,6 +38,7 @@ function makeDeps(): AcpEventProcessorDependencies {
     } as unknown as AcpEventProcessorDependencies['runtimeManager'],
     sessionDomainService: {
       getRuntimeSnapshot: vi.fn().mockReturnValue({ phase: 'idle' }),
+      setRuntimeSnapshot: vi.fn(),
       emitDelta: vi.fn(),
       appendClaudeEvent: vi.fn(),
       upsertClaudeEvent: vi.fn(),
@@ -73,6 +76,78 @@ describe('AcpEventProcessor sub-agent invalidations', () => {
 
       expect(markRunning).not.toHaveBeenCalled();
       expect(markIdle).not.toHaveBeenCalled();
+    }
+  );
+  it.each([false, true])(
+    'refreshes background work after task completion with a failed turn: %s',
+    (failed) => {
+      const deps = makeDeps();
+      const domain = new SessionDomainService();
+      deps.sessionDomainService = domain;
+      const processor = new AcpEventProcessor(deps);
+      const { onAcpEvent } = processor.createRuntimeEventHandler('db-session-1');
+      const tracker = new AcpNativeSessionTracker({
+        onTaskStatusChanged: (active) => {
+          vi.mocked(deps.runtimeManager.isSessionWorking).mockReturnValue(active);
+          onAcpEvent?.('db-session-1', { type: 'acp_task_status_changed', active });
+        },
+      });
+      vi.mocked(deps.runtimeManager.getClient).mockReturnValue({
+        isPromptInFlight: false,
+        nativeSessionTracker: tracker,
+      } as never);
+      const taskUpdate = (update: Record<string, unknown>) =>
+        tracker.onRawMessage({
+          method: 'session/update',
+          params: { sessionId: 'root', update },
+        });
+      taskUpdate({
+        sessionUpdate: 'async_task_spawned',
+        asyncTaskId: 'preview',
+        name: 'pnpm storybook',
+        taskType: 'shell',
+      });
+      const work = {
+        promptInFlight: false,
+        backgroundTasks: [{ id: '["root","preview"]', name: 'pnpm storybook', kind: 'shell' }],
+        runningSubagents: 0,
+        activeGoals: 0,
+      };
+      expect(domain.getRuntimeSnapshot('db-session-1').work).toEqual(work);
+      const reloaded = domain.prepareLoad(
+        'db-session-1',
+        domain.getRuntimeSnapshot('db-session-1')
+      );
+      expect(reloaded.sessionRuntime.work).toEqual(work);
+      expect(reloaded.replayEvents).toContainEqual(
+        expect.objectContaining({
+          type: 'session_runtime_snapshot',
+          sessionRuntime: expect.objectContaining({ work }),
+        })
+      );
+      if (failed) {
+        domain.setRuntimeSnapshot('db-session-1', {
+          ...domain.getRuntimeSnapshot('db-session-1'),
+          phase: 'error',
+          activity: 'IDLE',
+          errorMessage: 'Selected model is at capacity.',
+        });
+      }
+      taskUpdate({
+        sessionUpdate: 'async_task_state_update',
+        asyncTaskId: 'preview',
+        state: 'completed',
+      });
+      expect(domain.getRuntimeSnapshot('db-session-1')).toMatchObject({ activity: 'IDLE' });
+      if (failed) {
+        expect(domain.getRuntimeSnapshot('db-session-1')).toMatchObject({
+          phase: 'error',
+          errorMessage: 'Selected model is at capacity.',
+          work: { backgroundTasks: [], promptInFlight: false },
+        });
+      } else {
+        expect(domain.getRuntimeSnapshot('db-session-1').work).toBeUndefined();
+      }
     }
   );
 

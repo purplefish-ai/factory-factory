@@ -204,11 +204,29 @@ describe('SessionLifecycleFacade', () => {
       activity: 'WORKING',
       updatedAt: '2026-08-12T00:00:00.000Z',
     });
+    runtimeManager.getClient.mockReturnValueOnce(
+      unsafeCoerce({
+        isPromptInFlight: false,
+        nativeSessionTracker: {
+          getBackgroundWork: () => ({
+            backgroundTasks: [],
+            runningSubagents: 0,
+            activeGoals: 0,
+          }),
+        },
+      })
+    );
     sessionDomainService.getRuntimeSnapshot.mockReturnValueOnce({
       phase: 'error',
       processState: 'alive',
       activity: 'IDLE',
       errorMessage: 'Selected model is at capacity.',
+      work: {
+        promptInFlight: false,
+        backgroundTasks: [{ id: 'old', name: 'pnpm test', kind: 'shell' }],
+        runningSubagents: 0,
+        activeGoals: 0,
+      },
       updatedAt: '2026-10-28T14:26:26.000Z',
     });
     // An alive process with background work must not hide a terminal turn error.
@@ -216,6 +234,7 @@ describe('SessionLifecycleFacade', () => {
       phase: 'error',
       activity: 'IDLE',
       errorMessage: 'Selected model is at capacity.',
+      work: { promptInFlight: false, backgroundTasks: [], runningSubagents: 0, activeGoals: 0 },
     });
     await expect(service.getSessionOptions('options-session')).resolves.toEqual(sessionOptions);
     await expect(service.persistClosedSession('closed-session')).resolves.toBeUndefined();

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SessionDomainService } from '@/backend/services/session';
 import { PromptTimeoutError } from '@/backend/services/session/service/acp';
+import { AcpNativeSessionTracker } from '@/backend/services/session/service/acp/acp-native-session-tracker';
 import { AcpEventProcessor } from './acp-event-processor';
 import { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import { SessionService } from './session.service';
@@ -76,7 +77,24 @@ function createDeferred<T>() {
 it('preserves background activity after a prompt completes and wakes queued prompts', async () => {
   const { service, runtimeManager, sessionDomainService, promptTurnCompletionService } =
     createPromptService();
-  runtimeManager.getClient.mockReturnValue({ supportsImages: () => true });
+  const tracker = new AcpNativeSessionTracker();
+  tracker.onRawMessage({
+    method: 'session/update',
+    params: {
+      sessionId: 'root',
+      update: {
+        sessionUpdate: 'async_task_spawned',
+        asyncTaskId: 'preview',
+        name: 'pnpm storybook',
+        taskType: 'shell',
+      },
+    },
+  });
+  runtimeManager.getClient.mockReturnValue({
+    supportsImages: () => true,
+    isPromptInFlight: false,
+    nativeSessionTracker: tracker,
+  });
   runtimeManager.sendPrompt.mockResolvedValue({ stopReason: 'end_turn' });
   runtimeManager.isSessionWorking.mockReturnValue(true);
 
@@ -84,8 +102,19 @@ it('preserves background activity after a prompt completes and wakes queued prom
 
   expect(sessionDomainService.setRuntimeSnapshot).toHaveBeenLastCalledWith(
     'session-1',
-    expect.objectContaining({ phase: 'running', activity: 'WORKING', processState: 'alive' })
+    expect.objectContaining({
+      phase: 'running',
+      activity: 'WORKING',
+      processState: 'alive',
+      work: {
+        promptInFlight: false,
+        backgroundTasks: [{ id: '["root","preview"]', name: 'pnpm storybook', kind: 'shell' }],
+        runningSubagents: 0,
+        activeGoals: 0,
+      },
+    })
   );
+  expect(sessionDomainService.setRuntimeSnapshot.mock.calls[0]?.[1].work.promptInFlight).toBe(true);
   expect(promptTurnCompletionService.schedule).toHaveBeenCalledWith('session-1');
 });
 
@@ -151,6 +180,42 @@ function createLifecyclePromptHarness() {
 }
 
 describe('SessionService prompt coordination', () => {
+  it('keeps fresh background work when a prompt fails while its runtime remains alive', async () => {
+    const { service, runtimeManager, sessionDomainService } = createLifecyclePromptHarness();
+    const tracker = new AcpNativeSessionTracker();
+    tracker.onRawMessage({
+      method: 'session/update',
+      params: {
+        sessionId: 'root',
+        update: {
+          sessionUpdate: 'async_task_spawned',
+          asyncTaskId: 'preview',
+          name: 'pnpm storybook',
+          taskType: 'shell',
+        },
+      },
+    });
+    runtimeManager.getClient.mockReturnValue(
+      Object.assign(
+        { supportsImages: () => true },
+        {
+          isPromptInFlight: false,
+          nativeSessionTracker: tracker,
+        }
+      )
+    );
+    runtimeManager.sendPrompt.mockRejectedValue(new Error('Provider failed'));
+    await expect(
+      service.sendAcpMessage('session-1', [{ type: 'text', text: 'follow-up' }])
+    ).rejects.toThrow('Provider failed');
+    expect(sessionDomainService.getRuntimeSnapshot('session-1')).toMatchObject({
+      phase: 'error',
+      processState: 'alive',
+      errorMessage: 'Provider failed',
+      work: { promptInFlight: false, backgroundTasks: [{ name: 'pnpm storybook', kind: 'shell' }] },
+    });
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -355,7 +420,11 @@ describe('SessionService prompt coordination', () => {
       expect.objectContaining({ phase: 'error', activity: 'IDLE', processState: 'alive' })
     );
     expect(lifecycleEventService.record).toHaveBeenCalledWith(
-      expect.objectContaining({ reason: 'PROVIDER_ERROR', kind: 'TURN_INTERRUPTED' })
+      expect.objectContaining({
+        reason: 'PROVIDER_ERROR',
+        kind: 'TURN_INTERRUPTED',
+        message: 'Turn stopped: the selected model is at capacity. Please try a different model.',
+      })
     );
     expect(workspaceBridge.markSessionIdle).toHaveBeenCalledWith('workspace-1', 'session-1', 1);
   });

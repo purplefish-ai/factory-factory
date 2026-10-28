@@ -16,6 +16,7 @@ import type { SessionDomainService } from '@/backend/services/session/service/se
 import { slashCommandCacheService } from '@/backend/services/session/service/store/slash-command-cache.service';
 import { isWorkspaceScopedCommandName } from '@/backend/services/session/service/store/slash-command-disk-scanner';
 import type { AgentMessage, CommandInfo, SessionDeltaEvent } from '@/shared/acp-protocol';
+import { getAcpWorkState } from './session-work-state';
 import type { SessionConfigService } from './session.config.service';
 import { toPublicProviderErrorMessage } from './session.error-message';
 import type { SessionPermissionService } from './session.permission.service';
@@ -140,7 +141,14 @@ export class AcpEventProcessor {
             deltaIndex: index,
             delta,
           });
-          this.handleAcpDelta(sid, delta as SessionDeltaEvent, configSource);
+          // The translator emits only validated warning notices for session info.
+          // These are live provider notices even during idle history loading.
+          this.handleAcpDelta(
+            sid,
+            delta as SessionDeltaEvent,
+            configSource,
+            update.sessionUpdate === 'session_info_update'
+          );
         }
       },
     };
@@ -152,11 +160,22 @@ export class AcpEventProcessor {
   ): void {
     if (event.type === 'acp_task_status_changed') {
       // Keep terminal prompt errors visible until an explicit retry starts.
-      if (this.sessionDomainService.getRuntimeSnapshot(sid).phase === 'error') {
+      const runtime = this.sessionDomainService.getRuntimeSnapshot(sid);
+      if (runtime.phase === 'error') {
+        this.sessionDomainService.setRuntimeSnapshot(sid, {
+          ...runtime,
+          work: getAcpWorkState(this.runtimeManager.getClient(sid)).work,
+          updatedAt: new Date().toISOString(),
+        });
         return;
       }
       if (event.active || this.runtimeManager.isSessionWorking(sid)) {
-        this.sessionDomainService.markRunning(sid);
+        const { work } = getAcpWorkState(this.runtimeManager.getClient(sid));
+        if (work) {
+          this.sessionDomainService.markRunning(sid, work);
+        } else {
+          this.sessionDomainService.markRunning(sid);
+        }
       } else {
         this.sessionDomainService.markIdle(sid, 'alive');
       }
@@ -267,12 +286,14 @@ export class AcpEventProcessor {
   handleAcpDelta(
     sid: string,
     delta: SessionDeltaEvent,
-    configSource?: AcpConfigObservationSource
+    configSource?: AcpConfigObservationSource,
+    allowDuringReplay = false
   ): void {
     this.maybeLiftReplaySuppression(sid);
 
     if (
       this.suppressAcpReplayForSession.has(sid) &&
+      !allowDuringReplay &&
       delta.type !== 'config_options_update' &&
       delta.type !== 'slash_commands'
     ) {

@@ -42,6 +42,15 @@ describe('toErrorMessage', () => {
 describe('provider failure messages', () => {
   it.each([
     ['  HTTP 529:   Overloaded  ', 'HTTP 529 (Overloaded)'],
+    [
+      'Selected model is at capacity. Please try a different model.',
+      'Selected model is at capacity. Please try a different model.',
+    ],
+    [
+      'Selected model is at capacity. Please try a different model. secret-token=abc',
+      'The provider returned an error.',
+    ],
+
     ['HTTP 500 opaque upstream detail', 'HTTP 500'],
     ['request failed: secret-token=abc', 'The provider returned an error.'],
     ['request failed: api_key=abc', 'The provider returned an error.'],
@@ -59,6 +68,15 @@ describe('provider failure messages', () => {
     ['the user asked to publish their private prompt fragment', 'The provider returned an error.'],
   ])('normalizes public provider text', (input, expected) => {
     expect(toPublicProviderErrorMessage(new Error(input))).toBe(expected);
+  });
+
+  it('preserves the actionable capacity guidance in the interrupted-turn message', () => {
+    expect(
+      toProviderFailureChatMessage(
+        'CODEX',
+        new Error('Selected model is at capacity. Please try a different model.')
+      )
+    ).toBe('Turn stopped: the selected model is at capacity. Please try a different model.');
   });
 
   it('adds the provider name and terminal punctuation', () => {

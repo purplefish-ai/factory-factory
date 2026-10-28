@@ -133,8 +133,8 @@ export class AcpRuntimeManager {
     timeoutMs?: number
   ): Promise<{ stopReason: string }> {
     const handle = this.requireInstalledHandle(sessionId);
-    while (handle.configurationReady !== undefined) {
-      await handle.configurationReady;
+    while (handle.configurationReady !== undefined || handle.pendingConfigUpdates !== undefined) {
+      await Promise.all([handle.configurationReady, handle.pendingConfigUpdates]);
     }
     if (
       this.supervisor.getClient(sessionId) !== handle ||

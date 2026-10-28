@@ -16,6 +16,7 @@ the one that matches your change before you touch it.
 | [integrations.md](./integrations.md)         | GitHub, Linear, periodic tasks                                    |
 | [file-previews.md](./file-previews.md)       | Bounded file reads, UTF-8 truncation, untracked diff limits       |
 | [client-loading.md](./client-loading.md)     | Route chunks, diagram loading, startup bundle measurement         |
+| [search.md](./search.md)                     | Metadata query bounds, Unicode matching, search navigation        |
 | [diff-rendering.md](./diff-rendering.md)     | Workers, virtual rows, scroll anchors, visual verification        |
 | [Chat message flow](../chat-message-flow.md) | ACP streaming, session loading, replay, client reduction          |
 
