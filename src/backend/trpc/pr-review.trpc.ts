@@ -25,7 +25,7 @@ export const prReviewRouter = router({
     }
 
     try {
-      const prs = await githubCLIService.listReviewRequests();
+      const prs = await ctx.appContext.services.listVisibleReviewRequests();
       return {
         prs,
         health,

@@ -16,6 +16,7 @@ function createCaller(overrides?: {
   return prReviewRouter.createCaller({
     appContext: {
       services: {
+        listVisibleReviewRequests: overrides?.listReviewRequests ?? (async () => []),
         githubCLIService: {
           checkHealth:
             overrides?.checkHealth ?? (async () => ({ isInstalled: true, isAuthenticated: true })),

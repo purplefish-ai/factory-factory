@@ -88,6 +88,29 @@ class WorkspaceQueryService {
     return this.prSnapshotBridge;
   }
 
+  async filterReviewRequests<T extends { url: string }>(prs: T[]): Promise<T[]> {
+    if (prs.length === 0) {
+      return prs;
+    }
+
+    const associations = await workspacePrAccessor.findReviewRequestAssociations(
+      prs.map((pr) => pr.url)
+    );
+    const archived = new Set<string>();
+    const live = new Set<string>();
+    for (const { url, workspace } of associations) {
+      if (
+        workspace.status === WorkspaceStatus.ARCHIVING ||
+        workspace.status === WorkspaceStatus.ARCHIVED
+      ) {
+        archived.add(url);
+      } else {
+        live.add(url);
+      }
+    }
+    return prs.filter((pr) => !archived.has(pr.url) || live.has(pr.url));
+  }
+
   refreshReviewCount(): Promise<number> {
     if (this.reviewCountRefreshPromise !== null) {
       return this.reviewCountRefreshPromise;

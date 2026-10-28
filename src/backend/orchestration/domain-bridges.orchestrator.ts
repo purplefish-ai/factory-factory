@@ -57,6 +57,7 @@ import { createPRObservationPorts, type PRMonitoringServices } from './pr-monito
 import { setPRMonitoring } from './pr-monitoring.orchestrator';
 import { observeMonitoredPR } from './pr-observation.orchestrator';
 import type { reconciliationService } from './reconciliation.service';
+import { listVisibleReviewRequests } from './review-requests.orchestrator';
 import type {
   initializeWorkspaceWorktree,
   recoverStaleProvisioningWorkspace,
@@ -173,7 +174,7 @@ export function configureDomainBridges(services: BridgeServices): void {
     },
     github: {
       checkHealth: () => githubCLIService.checkHealth(),
-      listReviewRequests: () => githubCLIService.listReviewRequests(),
+      listReviewRequests: () => listVisibleReviewRequests(services),
     },
     prSnapshot: {
       refreshWorkspace: (id, url) => prSnapshotService.refreshWorkspace(id, url),

@@ -15,6 +15,7 @@ import { healthService } from './orchestration/health.service';
 import { getWorkspaceLinearContext } from './orchestration/linear-config.helper';
 import { updateProjectSettings } from './orchestration/project-settings.orchestrator';
 import { reconciliationService } from './orchestration/reconciliation.service';
+import { listVisibleReviewRequests } from './orchestration/review-requests.orchestrator';
 import { schedulerService } from './orchestration/scheduler.service';
 import { SnapshotReconciliationService } from './orchestration/snapshot-reconciliation.orchestrator';
 import {
@@ -123,6 +124,7 @@ import {
 import { workspaceGitStateService } from './services/workspace-git-state.service';
 
 export type ApplicationServices = BridgeServices & {
+  listVisibleReviewRequests: () => ReturnType<typeof listVisibleReviewRequests>;
   sessionDispatchService: Pick<
     typeof sessionDispatchService,
     'configure' | 'tryDispatchNextMessage' | 'setManualDispatchResume' | 'resetDispatchState'
@@ -246,6 +248,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
       services.workspaceSnapshotStore.publishAcceptedName(id, name, updatedAt),
   });
   const services: ApplicationServices = {
+    listVisibleReviewRequests: () => listVisibleReviewRequests(services),
     acpRuntimeManager,
     acpTraceLogger,
     autoIterationService,

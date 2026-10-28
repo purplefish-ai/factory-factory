@@ -403,6 +403,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
   }) satisfies typeof chatEventForwarderService;
 
   const services = {
+    listVisibleReviewRequests: vi.fn(async () => []),
     ...defaultPRMonitoringServices,
     acpRuntimeManager: graphAcpRuntimeManager,
     acpTraceLogger,
