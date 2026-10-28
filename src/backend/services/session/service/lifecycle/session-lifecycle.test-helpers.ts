@@ -814,6 +814,7 @@ export function createLifecycleHarness(
   );
   const startupCoordinator = new SessionStartupCoordinator(
     unsafeCoerce({
+      hydrateProviderHistory: async () => undefined,
       repository,
       contextService,
       acpEnvironment,
