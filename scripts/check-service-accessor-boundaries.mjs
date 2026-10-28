@@ -7,6 +7,10 @@ const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts']);
 const SOURCE_ROOT = 'src/backend';
 
 const ACCESSOR_POLICIES = {
+  metadataSearchAccessor: {
+    owner: 'search',
+    module: 'src/backend/services/search/resources/metadata-search.accessor',
+  },
   projectAccessor: {
     owner: 'workspace',
     module: 'src/backend/services/workspace/resources/project.accessor',

@@ -89,6 +89,7 @@ vi.mock('@/backend/services/config.service', () => ({
 }));
 vi.mock('@/backend/services/crypto.service', () => ({ cryptoService: {} }));
 vi.mock('@/backend/services/decision-log', () => ({ decisionLogService: {} }));
+vi.mock('@/backend/services/search', () => ({ metadataSearchService: { search: vi.fn() } }));
 vi.mock('@/backend/services/github', () => ({
   prObservationService: { configure: vi.fn() },
   checkGithubAuth: vi.fn(),
@@ -288,6 +289,7 @@ import {
   runScriptStateMachine,
   startupScriptService,
 } from '@/backend/services/run-script';
+import { metadataSearchService } from '@/backend/services/search';
 import { createServerInstanceService } from '@/backend/services/server-instance.service';
 import {
   acpRuntimeManager,
@@ -438,6 +440,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     cryptoService,
     dataBackupService,
     decisionLogQueryService: decisionLogService,
+    metadataSearchService,
     executeStartupScriptPipeline,
     factoryConfigService: FactoryConfigService,
     claudeModelCatalogService,

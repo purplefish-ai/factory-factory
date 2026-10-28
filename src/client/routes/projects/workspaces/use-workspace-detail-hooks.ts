@@ -208,9 +208,12 @@ export function resolveSelectedSessionId({
 export function useSelectedSessionId(
   workspaceId: string,
   initialDbSessionId: string | null,
-  sessionIds: string[]
+  sessionIds: string[],
+  requestedSessionId: string | null = null,
+  onLinkedSession?: () => void
 ) {
   const storageKey = `${SESSION_TAB_STORAGE_PREFIX}${workspaceId}`;
+  const consumedLinkRef = useRef<string | null>(null);
   const pendingSelectionRef = useRef<{ id: string | null; setAtMs: number | null }>({
     id: null,
     setAtMs: null,
@@ -222,6 +225,21 @@ export function useSelectedSessionId(
   });
 
   useEffect(() => {
+    if (!requestedSessionId) {
+      consumedLinkRef.current = null;
+    }
+    if (
+      requestedSessionId &&
+      requestedSessionId !== consumedLinkRef.current &&
+      sessionIds.includes(requestedSessionId)
+    ) {
+      consumedLinkRef.current = requestedSessionId;
+      pendingSelectionRef.current = { id: null, setAtMs: null };
+      localStorage.setItem(storageKey, requestedSessionId);
+      setSelectedDbSessionIdRaw(requestedSessionId);
+      onLinkedSession?.();
+      return;
+    }
     const pending = pendingSelectionRef.current;
     if (pending.id && sessionIds.includes(pending.id)) {
       pendingSelectionRef.current = { id: null, setAtMs: null };
@@ -239,7 +257,14 @@ export function useSelectedSessionId(
     if (resolved !== selectedDbSessionId) {
       setSelectedDbSessionIdRaw(resolved);
     }
-  }, [initialDbSessionId, selectedDbSessionId, sessionIds, storageKey]);
+  }, [
+    initialDbSessionId,
+    selectedDbSessionId,
+    sessionIds,
+    storageKey,
+    requestedSessionId,
+    onLinkedSession,
+  ]);
 
   const setSelectedDbSessionId = useCallback(
     (id: string | null) => {

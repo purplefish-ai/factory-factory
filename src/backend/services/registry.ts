@@ -88,6 +88,7 @@ export const serviceNames = [
   'decision-log',
   'auto-iteration',
   'periodic-task',
+  'search',
 ] as const;
 
 export type ServiceName = (typeof serviceNames)[number];
@@ -98,6 +99,7 @@ type ServiceDefinition = {
 };
 
 export const serviceRegistry = {
+  search: { dependsOn: [], ownsModels: [] },
   session: {
     dependsOn: ['workspace', 'settings', 'terminal', 'github'],
     ownsModels: [

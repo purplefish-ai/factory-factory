@@ -63,6 +63,7 @@ import {
   runScriptStateMachine,
   startupScriptService,
 } from './services/run-script';
+import { metadataSearchService } from './services/search';
 import {
   type ServerInstanceService,
   serverInstanceService,
@@ -140,6 +141,7 @@ export type ApplicationServices = BridgeServices & {
   createLogger: typeof createLogger;
   dataBackupService: typeof dataBackupService;
   decisionLogQueryService: typeof decisionLogService;
+  metadataSearchService: typeof metadataSearchService;
   executeStartupScriptPipeline: typeof executeStartupScriptPipeline;
   claudeModelCatalogService: Pick<typeof claudeModelCatalogService, 'getModels'>;
   codexModelCatalogService: Pick<typeof codexModelCatalogService, 'getModels'>;
@@ -295,6 +297,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     createLogger,
     dataBackupService,
     decisionLogQueryService: decisionLogService,
+    metadataSearchService,
     executeStartupScriptPipeline,
     claudeModelCatalogService,
     codexModelCatalogService,

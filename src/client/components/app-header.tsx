@@ -1,5 +1,6 @@
 import { ListIcon } from '@phosphor-icons/react/dist/csr/List';
 import { SidebarSimpleIcon } from '@phosphor-icons/react/dist/csr/SidebarSimple';
+import { GlobalSearch } from '@/client/features/search';
 import { Button } from '@/components/ui/button';
 import { useSidebar } from '@/components/ui/sidebar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -40,6 +41,7 @@ export function AppHeader() {
         <div ref={setLeftExtraSlot} className="flex shrink-0 items-center gap-1" />
       </div>
       <div ref={setRightSlot} className="ml-auto flex shrink-0 items-center gap-1" />
+      <GlobalSearch />
     </header>
   );
 }

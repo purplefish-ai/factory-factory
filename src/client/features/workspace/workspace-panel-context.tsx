@@ -248,9 +248,14 @@ const WorkspacePanelContext = createContext<WorkspacePanelContextValue | null>(n
 interface WorkspacePanelProviderProps {
   workspaceId: string;
   children: React.ReactNode;
+  initialActiveTabId?: string;
 }
 
-export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanelProviderProps) {
+export function WorkspacePanelProvider({
+  workspaceId,
+  children,
+  initialActiveTabId,
+}: WorkspacePanelProviderProps) {
   const isMobile = useIsMobile();
   // Track which workspaceId has completed loading (enables persistence)
   const loadedForWorkspaceRef = useRef<string | null>(null);
@@ -275,7 +280,7 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
 
     // Load tabs and active tab (workspace-scoped)
     const storedTabs = loadTabsFromStorage(workspaceId);
-    const storedActiveTab = loadActiveTabFromStorage(workspaceId);
+    const storedActiveTab = initialActiveTabId ?? loadActiveTabFromStorage(workspaceId);
 
     setTabs(storedTabs);
     // Ensure active tab exists in tabs, fallback to 'chat'
@@ -298,7 +303,7 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
     // Mark as loaded at the end of this effect, so persist effect skips the
     // re-render triggered by the setState calls above
     loadedForWorkspaceRef.current = workspaceId;
-  }, [workspaceId]);
+  }, [workspaceId, initialActiveTabId]);
 
   // Persist tabs and active tab when they change (skip until load is complete)
   useEffect(() => {
