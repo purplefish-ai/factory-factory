@@ -60,7 +60,7 @@ describe('VirtualizedMessageList loading status', () => {
       expect(container.textContent).toContain('Old reasoning');
       expect(container.textContent).not.toContain('pnpm storybook');
       render(false, false, []);
-      expect(container.querySelector('[aria-label="Session activity"]')).toBeNull();
+      expect(container.querySelector('[role="status"]')).toBeNull();
     } finally {
       root.unmount();
     }

@@ -68,7 +68,8 @@ export const MultipleBackgroundProcesses: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Commands start collapsed. Click the process count to expand or collapse the list.',
+        story:
+          'Commands start collapsed. Click the process count to expand or collapse the list. Screen readers receive count updates separately from the control and commands.',
       },
     },
   },

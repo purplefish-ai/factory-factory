@@ -17,19 +17,26 @@ export function SessionActivityIndicator({
   const backgroundKind = backgroundTasks.every((task) => task.kind === 'shell')
     ? 'process'
     : 'task';
+  const backgroundLabel =
+    backgroundTasks.length === 1
+      ? `Background ${backgroundKind} running`
+      : `${backgroundTasks.length} background ${backgroundKind === 'process' ? 'processes' : 'tasks'} running`;
   return (
-    <div className="space-y-3 py-4" role="status" aria-label="Session activity">
-      {agentWorking && <LoadingIndicator latestReasoning={latestThinking} />}
+    <div className="space-y-3 py-4">
+      {agentWorking && (
+        <div role="status" aria-label="Session activity">
+          <LoadingIndicator latestReasoning={latestThinking} />
+        </div>
+      )}
       {backgroundTasks.length > 0 && (
         <Collapsible defaultOpen={false} className="text-sm text-muted-foreground">
+          <span role="status" aria-label="Background activity" className="sr-only">
+            {backgroundLabel}
+          </span>
           <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-sm text-left hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
             <CaretRightIcon className="h-4 w-4 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
             <TerminalIcon className="h-4 w-4 shrink-0" />
-            <span>
-              {backgroundTasks.length === 1
-                ? `Background ${backgroundKind} running`
-                : `${backgroundTasks.length} background ${backgroundKind === 'process' ? 'processes' : 'tasks'} running`}
-            </span>
+            <span>{backgroundLabel}</span>
           </CollapsibleTrigger>
           <CollapsibleContent>
             <ul className="mt-2 space-y-1 max-h-40 overflow-auto">
@@ -43,12 +50,12 @@ export function SessionActivityIndicator({
         </Collapsible>
       )}
       {!!work?.runningSubagents && (
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-muted-foreground" role="status">
           {work.runningSubagents} {work.runningSubagents === 1 ? 'sub-agent' : 'sub-agents'} running
         </p>
       )}
       {!!work?.activeGoals && (
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-muted-foreground" role="status">
           {work.activeGoals} {work.activeGoals === 1 ? 'goal' : 'goals'} active
         </p>
       )}
@@ -56,7 +63,9 @@ export function SessionActivityIndicator({
         backgroundTasks.length === 0 &&
         !work?.runningSubagents &&
         !work?.activeGoals && (
-          <p className="text-sm text-muted-foreground">Background activity running</p>
+          <p className="text-sm text-muted-foreground" role="status">
+            Background activity running
+          </p>
         )}
     </div>
   );
