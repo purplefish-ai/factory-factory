@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
+import { useState } from 'react';
 import { fn } from 'storybook/test';
 import type { AcpConfigOption } from '@/client/features/chat/reducer';
 import { AcpConfigSelector } from './acp-config-selector';
@@ -52,7 +53,22 @@ export const CodexAccess: Story = {
   },
 };
 
+function InteractiveToggle(args: React.ComponentProps<typeof AcpConfigSelector>) {
+  const [currentValue, setCurrentValue] = useState(args.configOption.currentValue);
+  return (
+    <AcpConfigSelector
+      {...args}
+      configOption={{ ...args.configOption, currentValue }}
+      onSelect={(id, value) => {
+        args.onSelect(id, value);
+        setCurrentValue(value);
+      }}
+    />
+  );
+}
+
 export const CodexPlanning: Story = {
+  render: (args) => <InteractiveToggle {...args} />,
   args: {
     configOption: {
       id: 'collaboration_mode',
@@ -66,4 +82,29 @@ export const CodexPlanning: Story = {
       ],
     },
   },
+};
+
+export const FastMode: Story = {
+  render: (args) => <InteractiveToggle {...args} />,
+  args: {
+    configOption: {
+      id: 'fast-mode',
+      name: 'Fast mode',
+      type: 'select',
+      currentValue: 'off',
+      description: 'Faster responses with increased usage.',
+      options: [
+        { value: 'off', name: 'Off' },
+        { value: 'on', name: 'On' },
+      ],
+    },
+  },
+};
+export const FastModeEnabled: Story = {
+  ...FastMode,
+  args: { configOption: { ...FastMode.args!.configOption!, currentValue: 'on' } },
+};
+export const DisabledPlanning: Story = {
+  ...CodexPlanning,
+  args: { ...CodexPlanning.args, disabled: true },
 };

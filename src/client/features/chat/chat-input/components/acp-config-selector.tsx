@@ -30,6 +30,21 @@ function isGroupedOption(
   return 'group' in option && Array.isArray(option.options);
 }
 
+function getToggleProps(
+  current: AcpConfigOptionValue | undefined,
+  next: AcpConfigOptionValue | undefined,
+  active: boolean,
+  onToggle: (value: string) => void,
+  disabled?: boolean
+) {
+  return {
+    'aria-pressed': active,
+    disabled: disabled || !(current && next),
+    indicator: false,
+    onClick: next ? () => onToggle(next.value) : undefined,
+  };
+}
+
 /** Provider-owned settings, with compact controls and explanations at the point of selection. */
 export function AcpConfigSelector({
   configOption,
@@ -37,14 +52,40 @@ export function AcpConfigSelector({
   disabled,
   compact = true,
 }: AcpConfigSelectorProps) {
-  const current = configOption.options
-    .flatMap((entry) => (isGroupedOption(entry) ? entry.options : [entry]))
-    .find((option) => option.value === configOption.currentValue);
+  const options = configOption.options.flatMap((entry) =>
+    isGroupedOption(entry) ? entry.options : [entry]
+  );
+  const current = options.find((option) => option.value === configOption.currentValue);
+  const next = options.find((option) => option.value !== configOption.currentValue);
   const displayName = current?.name ?? configOption.currentValue;
   const presentation = getConfigPresentation(configOption);
   const Icon = presentation.icon;
   const iconOnly = compact && presentation.compact;
   const label = `${presentation.label}: ${displayName}`;
+  const trigger = (
+    <ComposerMenuTrigger
+      aria-label={label}
+      {...(presentation.toggle
+        ? getToggleProps(
+            current,
+            next,
+            presentation.active,
+            (value) => onSelect(configOption.id, value),
+            disabled
+          )
+        : { disabled })}
+      iconOnly={iconOnly}
+      icon={Icon && <Icon className="size-3.5 shrink-0" aria-hidden="true" />}
+      className={cn(
+        'shrink-0',
+        presentation.active && 'bg-accent text-accent-foreground',
+        presentation.warning &&
+          'text-orange-600 hover:text-orange-600 dark:text-orange-400 dark:hover:text-orange-400'
+      )}
+    >
+      {displayName}
+    </ComposerMenuTrigger>
+  );
   const renderOption = (option: AcpConfigOptionValue) => {
     const item = getConfigPresentation({ ...configOption, currentValue: option.value });
     const ItemIcon = presentation.label === 'Access' ? item.icon : undefined;
@@ -74,48 +115,39 @@ export function AcpConfigSelector({
   return (
     <TooltipProvider>
       <Tooltip open={compact ? undefined : false}>
-        <DropdownMenu>
-          <TooltipTrigger asChild>
-            <DropdownMenuTrigger asChild>
-              <ComposerMenuTrigger
-                aria-label={label}
-                disabled={disabled}
-                iconOnly={iconOnly}
-                icon={Icon && <Icon className="size-3.5 shrink-0" aria-hidden="true" />}
-                className={cn(
-                  'shrink-0',
-                  presentation.active && 'bg-accent text-accent-foreground',
-                  presentation.warning &&
-                    'text-orange-600 hover:text-orange-600 dark:text-orange-400 dark:hover:text-orange-400'
-                )}
-              >
-                {displayName}
-              </ComposerMenuTrigger>
-            </DropdownMenuTrigger>
-          </TooltipTrigger>
-          <DropdownMenuContent align="start" className="w-64 max-w-[calc(100vw-2rem)]">
-            <DropdownMenuLabel>{presentation.label}</DropdownMenuLabel>
-            {configOption.description && (
-              <p className="px-2 pb-2 text-xs text-muted-foreground">{configOption.description}</p>
-            )}
-            <DropdownMenuRadioGroup
-              value={configOption.currentValue}
-              onValueChange={(value) => onSelect(configOption.id, value)}
-            >
-              {configOption.options.map((entry, idx) =>
-                isGroupedOption(entry) ? (
-                  <div key={entry.group}>
-                    {idx > 0 && <DropdownMenuSeparator />}
-                    <DropdownMenuLabel>{entry.group}</DropdownMenuLabel>
-                    {entry.options.map(renderOption)}
-                  </div>
-                ) : (
-                  renderOption(entry)
-                )
+        {presentation.toggle ? (
+          <TooltipTrigger asChild>{trigger}</TooltipTrigger>
+        ) : (
+          <DropdownMenu>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
+            </TooltipTrigger>
+            <DropdownMenuContent align="start" className="w-64 max-w-[calc(100vw-2rem)]">
+              <DropdownMenuLabel>{presentation.label}</DropdownMenuLabel>
+              {configOption.description && (
+                <p className="px-2 pb-2 text-xs text-muted-foreground">
+                  {configOption.description}
+                </p>
               )}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              <DropdownMenuRadioGroup
+                value={configOption.currentValue}
+                onValueChange={(value) => onSelect(configOption.id, value)}
+              >
+                {configOption.options.map((entry, idx) =>
+                  isGroupedOption(entry) ? (
+                    <div key={entry.group}>
+                      {idx > 0 && <DropdownMenuSeparator />}
+                      <DropdownMenuLabel>{entry.group}</DropdownMenuLabel>
+                      {entry.options.map(renderOption)}
+                    </div>
+                  ) : (
+                    renderOption(entry)
+                  )
+                )}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
         <TooltipContent side="top" className="max-w-64">
           <p>{label}</p>
           {(current?.description || configOption.description) && (

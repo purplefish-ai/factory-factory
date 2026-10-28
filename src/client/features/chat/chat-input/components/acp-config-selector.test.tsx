@@ -93,12 +93,7 @@ describe('AcpConfigSelector', () => {
   });
 });
 
-it.each([
-  ['mode', 'Access', 'acceptEdits', 'Accept edits'],
-  ['collaboration_mode', 'Planning', 'default', 'Default'],
-  ['fast-mode', 'Fast mode', 'off', 'Off'],
-  ['fast', 'Fast mode', 'off', 'Off'],
-])(
+it.each([['mode', 'Access', 'acceptEdits', 'Accept edits']])(
   'makes %s compact without losing its accessible name or selected value',
   (id, label, value, name) => {
     const container = document.createElement('div');
@@ -224,6 +219,67 @@ it.each([
     expect(selected?.className).toContain('text-orange-600');
     const manual = document.body.querySelector('[role="menuitemradio"][aria-checked="false"]');
     expect(manual?.className).not.toContain('text-orange-600');
+  } finally {
+    flushSync(() => root.unmount());
+  }
+});
+
+it.each([
+  ['collaboration_mode', undefined, 'default', 'plan'],
+  ['plan_mode', undefined, 'default', 'plan'],
+  ['fast-mode', undefined, 'off', 'on'],
+  ['fast', undefined, 'off', 'on'],
+  ['provider-planning', 'plan_mode', 'default', 'plan'],
+  ['provider-speed', 'fast', 'off', 'on'],
+])('toggles %s directly in both directions', (id, category, off, on) => {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  const onSelect = vi.fn();
+  const render = (value: string, disabled = false, compact = true) =>
+    flushSync(() =>
+      root.render(
+        createElement(AcpConfigSelector, {
+          configOption: {
+            id,
+            category,
+            name: 'Setting',
+            type: 'select',
+            currentValue: value,
+            options: [
+              {
+                group: 'Modes',
+                options: [
+                  { value: off, name: 'Off' },
+                  { value: on, name: 'On' },
+                ],
+              },
+            ],
+          },
+          onSelect,
+          disabled,
+          compact,
+        })
+      )
+    );
+  try {
+    render(off);
+    const button = container.querySelector('button');
+    expect(button?.getAttribute('aria-pressed')).toBe('false');
+    flushSync(() => button?.click());
+    expect(onSelect).toHaveBeenLastCalledWith(id, on);
+    expect(document.body.querySelector('[role="menu"]')).toBeNull();
+    expect(button?.hasAttribute('aria-haspopup')).toBe(false);
+
+    render(on, false, false);
+    expect(button?.getAttribute('aria-pressed')).toBe('true');
+    flushSync(() => button?.click());
+    expect(onSelect).toHaveBeenLastCalledWith(id, off);
+
+    onSelect.mockClear();
+    render(off, true);
+    flushSync(() => button?.click());
+    expect(onSelect).not.toHaveBeenCalled();
   } finally {
     flushSync(() => root.unmount());
   }

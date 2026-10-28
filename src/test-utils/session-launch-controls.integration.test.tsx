@@ -293,8 +293,7 @@ describe('real launch controls and tRPC payloads', () => {
       }
       await open(provider === 'CLAUDE' ? 'Thinking level: Default' : 'Thinking level: High');
       await choose(effort);
-      await open('Planning: Default');
-      await choose('Plan');
+      await act(() => button('Planning: Default')?.click());
       await act(() => button('Submit launch with message')?.click());
       await vi.waitFor(() =>
         expect(
@@ -491,8 +490,7 @@ describe('real launch controls and tRPC payloads', () => {
     await vi.waitFor(() => expect(button('Launch')?.disabled).toBe(false));
     await open('Thinking level: High');
     await choose('Ultra');
-    await open('Planning: Default');
-    await choose('Plan');
+    await act(() => button('Planning: Default')?.click());
     await act(() => button('Launch')?.click());
     await vi.waitFor(() =>
       expect(view.requests.some((request) => request.path === 'workspace.create')).toBe(true)

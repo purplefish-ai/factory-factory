@@ -101,15 +101,8 @@ describe('SessionLaunchControls', () => {
     );
     expect(plan?.disabled).toBe(false);
     expect(plan?.getAttribute('aria-description')).toContain('Turn Plan off to launch');
-    keyboardOpen(plan);
-    const selected = document.body.querySelector('[role="menuitemradio"][aria-checked="true"]');
-    expect(selected?.textContent).toBe('Plan');
-    expect(
-      [...document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]')]
-        .find((item) => item.textContent === 'Plan')
-        ?.getAttribute('data-disabled')
-    ).not.toBeNull();
-    keyboardSelect('Default');
+    expect(plan?.getAttribute('aria-pressed')).toBe('true');
+    flushSync(() => plan?.click());
     expect(onPlanChange).toHaveBeenCalledWith(false);
   });
   it('keeps the unavailable-thinking warning outside the truncated long label', () => {
@@ -136,14 +129,15 @@ describe('SessionLaunchControls', () => {
     keyboardSelect('Default');
     expect(mounted.props.reasoning?.onChange).toHaveBeenCalledWith(null);
   });
-  it('selects planning from a labeled menu like chat configuration', () => {
+  it('toggles planning directly without opening a menu', () => {
     const mounted = mount();
     const trigger = mounted.container.querySelector<HTMLButtonElement>(
       '[aria-label="Planning: Default"]'
     );
     expect(trigger?.getAttribute('aria-description')).toBe('Plan mode off');
-    keyboardOpen(trigger);
-    keyboardSelect('Plan');
+    expect(trigger?.getAttribute('aria-pressed')).toBe('false');
+    flushSync(() => trigger?.click());
+    expect(document.body.querySelector('[role="menu"]')).toBeNull();
     expect(mounted.props.planMode?.onChange).toHaveBeenCalledWith(true);
   });
   it('offers discovery retry while leaving provider and model selection available', () => {
