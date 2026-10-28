@@ -121,6 +121,16 @@ export class SessionLifecycleService {
 
     const acpClient = this.dependencies.runtimeManager.getClient(sessionId);
     if (acpClient) {
+      // A live process can outlast a failed prompt. The next prompt explicitly
+      // clears this error; background activity alone cannot turn it into success.
+      if (base.phase === 'error') {
+        return {
+          ...base,
+          processState: 'alive',
+          activity: 'IDLE',
+          work: getAcpWorkState(acpClient).work,
+        };
+      }
       const isWorking = this.dependencies.runtimeManager.isSessionWorking(sessionId);
       return {
         phase: isWorking ? 'running' : 'idle',

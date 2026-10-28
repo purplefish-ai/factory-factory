@@ -631,6 +631,84 @@ describe('AcpEventTranslator', () => {
     });
   });
 
+  describe('structured provider warnings', () => {
+    it('shows warning titles and details once per revision and independently per session', () => {
+      const { translator } = createTranslator();
+      const update: SessionUpdate = {
+        sessionUpdate: 'session_info_update',
+        _meta: {
+          jetbrains: {
+            air: {
+              sessionFailure: {
+                id: 'notice-1',
+                revision: 1,
+                severity: 'warning',
+                category: 'unknown',
+                title: 'Configuration warning',
+                details: 'A setting was ignored.',
+                actions: [],
+              },
+            },
+          },
+        },
+      };
+      const expected = [
+        {
+          type: 'agent_message',
+          data: {
+            type: 'assistant',
+            message: {
+              role: 'assistant',
+              content: [
+                {
+                  type: 'text',
+                  text: 'Warning: Configuration warning\n\nA setting was ignored.\n\n',
+                },
+              ],
+            },
+          },
+        },
+      ];
+
+      expect(translator.translateSessionUpdate(update, 'session-1')).toEqual(expected);
+      expect(translator.translateSessionUpdate(update, 'session-1')).toEqual([]);
+      const anotherNotice: SessionUpdate = {
+        sessionUpdate: 'session_info_update',
+        _meta: {
+          jetbrains: {
+            air: {
+              sessionFailure: {
+                id: 'notice-2',
+                revision: 1,
+                severity: 'warning',
+                title: 'Another warning',
+              },
+            },
+          },
+        },
+      };
+      expect(translator.translateSessionUpdate(anotherNotice, 'session-1')).toHaveLength(1);
+      expect(translator.translateSessionUpdate(update, 'session-1')).toEqual([]);
+      expect(translator.translateSessionUpdate(update, 'session-2')).toEqual(expected);
+      translator.clearTerminalOutput('session-1');
+      expect(translator.translateSessionUpdate(update, 'session-1')).toEqual(expected);
+    });
+
+    it.each([
+      null,
+      { id: 'notice-1', revision: 1, severity: 'error', title: 'Terminal failure' },
+      { id: 'notice-1', revision: 1, severity: 'warning', title: 42 },
+    ])('ignores cleared, terminal, or malformed notice metadata: %j', (sessionFailure) => {
+      const { translator } = createTranslator();
+      expect(
+        translator.translateSessionUpdate({
+          sessionUpdate: 'session_info_update',
+          _meta: { jetbrains: { air: { sessionFailure } } },
+        })
+      ).toEqual([]);
+    });
+  });
+
   describe('deferred types', () => {
     it.each(['current_mode_update', 'session_info_update', 'user_message_chunk'] as const)(
       '%s returns empty array',

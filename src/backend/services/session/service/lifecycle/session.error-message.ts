@@ -1,5 +1,6 @@
 const MAX_ERROR_MESSAGE_LENGTH = 4000;
 const GENERIC_PROVIDER_ERROR_MESSAGE = 'The provider returned an error.';
+const MODEL_CAPACITY_ERROR_MESSAGE = 'Selected model is at capacity. Please try a different model.';
 
 function truncate(value: string): string {
   if (value.length <= MAX_ERROR_MESSAGE_LENGTH) {
@@ -60,6 +61,10 @@ export function toErrorMessage(error: unknown): string {
 
 export function toPublicProviderErrorMessage(error: unknown): string {
   const message = toErrorMessage(error).replace(/\s+/g, ' ').trim();
+  // Preserve this known actionable message without exposing arbitrary provider detail.
+  if (message === MODEL_CAPACITY_ERROR_MESSAGE) {
+    return MODEL_CAPACITY_ERROR_MESSAGE;
+  }
   const overloadedMatch = /^HTTP\s+(\d{3})\s*(?::\s*Overloaded|\(\s*Overloaded\s*\))[.!]?$/i.exec(
     message
   );
@@ -80,6 +85,9 @@ export function toProviderFailureChatMessage(
   error: unknown
 ): string {
   const message = toPublicProviderErrorMessage(error);
+  if (message === MODEL_CAPACITY_ERROR_MESSAGE) {
+    return 'Turn stopped: the selected model is at capacity. Please try a different model.';
+  }
   if (message === GENERIC_PROVIDER_ERROR_MESSAGE) {
     return 'Turn stopped: the provider returned an error.';
   }

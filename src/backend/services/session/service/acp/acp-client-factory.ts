@@ -183,7 +183,7 @@ export class AcpClientFactory {
               elicitation: { form: {}, url: {} },
               _meta: {
                 terminal_output_delta: true,
-                jetbrains: { air: { version: 1, capabilities: ['asyncTasks'] } },
+                jetbrains: { air: { version: 1, capabilities: ['asyncTasks', 'sessionFailure'] } },
               },
             },
             clientInfo: {

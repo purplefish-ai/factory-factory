@@ -276,6 +276,18 @@ and 2 MiB of serialized updates. Oldest whole turns are evicted; an oversized
 active turn is discarded until the next user turn. Cursors use monotonic turn
 offsets, and expired cursors fail explicitly instead of returning another turn.
 
+ACP negotiates structured session failures. A prompt response carrying an error
+in `_meta.jetbrains.air.sessionFailure` fails the turn through the normal
+provider-error lifecycle path, regardless of its stop reason, clearing its
+working indicator and recording a `TURN_INTERRUPTED` event. The error remains on
+the session until the next prompt starts, across runtime reads and background
+activity updates. The known model-capacity message retains its
+retry/model-switch guidance; other provider errors use the existing
+public-message sanitization. Warning notices render as chat messages, including
+during idle session resume, without lifting transcript replay suppression. Each
+notice ID/revision is shown once per session runtime. Warnings and cleared
+failures do not fail a turn.
+
 ### Activity and prompt dispatch
 
 Workspace/session activity and ownership of a conversation's prompt slot are

@@ -53,6 +53,63 @@ describe('AcpRuntimeManager', () => {
       expect(handle.isPromptInFlight).toBe(false);
     });
 
+    it('rejects a terminal provider failure returned with end_turn and releases the prompt slot', async () => {
+      setupSuccessfulSpawn();
+      mockPrompt.mockResolvedValue({
+        stopReason: 'end_turn',
+        _meta: {
+          jetbrains: {
+            air: {
+              sessionFailure: {
+                id: 'turn-1:error',
+                revision: 1,
+                category: 'service',
+                severity: 'error',
+                title: 'Selected model is at capacity. Please try a different model.',
+                actions: ['retry'],
+              },
+            },
+          },
+        },
+      });
+      const handle = await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      await expect(
+        manager.sendPrompt('session-1', [{ type: 'text', text: 'Hello' }])
+      ).rejects.toThrow('Selected model is at capacity. Please try a different model.');
+      expect(handle.isPromptInFlight).toBe(false);
+    });
+
+    it.each([
+      null,
+      { id: 'notice-1', revision: 1, severity: 'warning', title: 'Recoverable notice' },
+      { id: 'notice-1', revision: 1, severity: 'error', title: 42 },
+    ])(
+      'does not fail a completed prompt for nonterminal or malformed metadata: %j',
+      async (sessionFailure) => {
+        setupSuccessfulSpawn();
+        mockPrompt.mockResolvedValue({
+          stopReason: 'end_turn',
+          _meta: { jetbrains: { air: { sessionFailure } } },
+        });
+        await manager.getOrCreateClient(
+          'session-1',
+          defaultOptions(),
+          defaultHandlers(),
+          defaultContext()
+        );
+
+        await expect(
+          manager.sendPrompt('session-1', [{ type: 'text', text: 'Hello' }])
+        ).resolves.toEqual({ stopReason: 'end_turn' });
+      }
+    );
+
     it('clears isPromptInFlight on error', async () => {
       setupSuccessfulSpawn();
       mockPrompt.mockRejectedValue(new Error('prompt failed'));

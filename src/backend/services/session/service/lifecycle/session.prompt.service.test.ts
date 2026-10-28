@@ -397,6 +397,38 @@ describe('SessionService prompt coordination', () => {
     );
   });
 
+  it('ends a failed turn in the error state even when background activity remains', async () => {
+    const {
+      service,
+      runtimeManager,
+      sessionDomainService,
+      lifecycleEventService,
+      workspaceBridge,
+    } = createPromptService();
+    runtimeManager.getClient.mockReturnValue({ supportsImages: () => true });
+    runtimeManager.isSessionWorking.mockReturnValue(true);
+    runtimeManager.sendPrompt.mockRejectedValue(
+      new Error('Selected model is at capacity. Please try a different model.')
+    );
+
+    await expect(service.sendSessionMessage('session-1', 'continue')).rejects.toThrow(
+      'at capacity'
+    );
+
+    expect(sessionDomainService.setRuntimeSnapshot).toHaveBeenLastCalledWith(
+      'session-1',
+      expect.objectContaining({ phase: 'error', activity: 'IDLE', processState: 'alive' })
+    );
+    expect(lifecycleEventService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: 'PROVIDER_ERROR',
+        kind: 'TURN_INTERRUPTED',
+        message: 'Turn stopped: the selected model is at capacity. Please try a different model.',
+      })
+    );
+    expect(workspaceBridge.markSessionIdle).toHaveBeenCalledWith('workspace-1', 'session-1', 1);
+  });
+
   it('preserves a useful HTTP 529 overload reason', async () => {
     const { service, runtimeManager, lifecycleEventService } = createPromptService();
     runtimeManager.getClient.mockReturnValue({ supportsImages: () => true });

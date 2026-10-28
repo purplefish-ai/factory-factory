@@ -334,7 +334,7 @@ describe('AcpClientFactory', () => {
         subagents: {},
         _meta: {
           terminal_output_delta: true,
-          jetbrains: { air: { version: 1, capabilities: ['asyncTasks'] } },
+          jetbrains: { air: { version: 1, capabilities: ['asyncTasks', 'sessionFailure'] } },
         },
       }),
       clientInfo: { name: 'factory-factory', title: 'Factory Factory', version: '1.2.0' },

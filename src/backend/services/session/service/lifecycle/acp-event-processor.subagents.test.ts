@@ -37,6 +37,8 @@ function makeDeps(): AcpEventProcessorDependencies {
       isSessionWorking: vi.fn().mockReturnValue(true),
     } as unknown as AcpEventProcessorDependencies['runtimeManager'],
     sessionDomainService: {
+      getRuntimeSnapshot: vi.fn().mockReturnValue({ phase: 'idle' }),
+      setRuntimeSnapshot: vi.fn(),
       emitDelta: vi.fn(),
       appendClaudeEvent: vi.fn(),
       upsertClaudeEvent: vi.fn(),
@@ -54,56 +56,100 @@ function makeDeps(): AcpEventProcessorDependencies {
 }
 
 describe('AcpEventProcessor sub-agent invalidations', () => {
-  it('preserves named background work in runtime replay and clears it when the task ends', () => {
-    const deps = makeDeps();
-    const domain = new SessionDomainService();
-    deps.sessionDomainService = domain;
-    const processor = new AcpEventProcessor(deps);
-    const { onAcpEvent } = processor.createRuntimeEventHandler('db-session-1');
-    const tracker = new AcpNativeSessionTracker({
-      onTaskStatusChanged: (active) => {
-        vi.mocked(deps.runtimeManager.isSessionWorking).mockReturnValue(active);
-        onAcpEvent?.('db-session-1', { type: 'acp_task_status_changed', active });
-      },
-    });
-    vi.mocked(deps.runtimeManager.getClient).mockReturnValue({
-      isPromptInFlight: false,
-      nativeSessionTracker: tracker,
-    } as never);
-    const taskUpdate = (update: Record<string, unknown>) =>
-      tracker.onRawMessage({
-        method: 'session/update',
-        params: { sessionId: 'root', update },
+  it.each([true, false])(
+    'preserves a terminal prompt error when task activity changes to %s',
+    (active) => {
+      const deps = makeDeps();
+      vi.mocked(deps.sessionDomainService.getRuntimeSnapshot).mockReturnValue({
+        phase: 'error',
+        processState: 'alive',
+        activity: 'IDLE',
+        errorMessage: 'Selected model is at capacity.',
+        updatedAt: '2026-10-28T14:26:26.000Z',
       });
-    taskUpdate({
-      sessionUpdate: 'async_task_spawned',
-      asyncTaskId: 'preview',
-      name: 'pnpm storybook',
-      taskType: 'shell',
-    });
-    const work = {
-      promptInFlight: false,
-      backgroundTasks: [{ id: '["root","preview"]', name: 'pnpm storybook', kind: 'shell' }],
-      runningSubagents: 0,
-      activeGoals: 0,
-    };
-    expect(domain.getRuntimeSnapshot('db-session-1').work).toEqual(work);
-    const reloaded = domain.prepareLoad('db-session-1', domain.getRuntimeSnapshot('db-session-1'));
-    expect(reloaded.sessionRuntime.work).toEqual(work);
-    expect(reloaded.replayEvents).toContainEqual(
-      expect.objectContaining({
-        type: 'session_runtime_snapshot',
-        sessionRuntime: expect.objectContaining({ work }),
-      })
-    );
-    taskUpdate({
-      sessionUpdate: 'async_task_state_update',
-      asyncTaskId: 'preview',
-      state: 'completed',
-    });
-    expect(domain.getRuntimeSnapshot('db-session-1')).toMatchObject({ activity: 'IDLE' });
-    expect(domain.getRuntimeSnapshot('db-session-1').work).toBeUndefined();
-  });
+      const markRunning = vi.fn();
+      const markIdle = vi.fn();
+      Object.assign(deps.sessionDomainService, { markRunning, markIdle });
+      const { onAcpEvent } = new AcpEventProcessor(deps).createRuntimeEventHandler('db-session-1');
+
+      onAcpEvent?.('db-session-1', { type: 'acp_task_status_changed', active });
+
+      expect(markRunning).not.toHaveBeenCalled();
+      expect(markIdle).not.toHaveBeenCalled();
+    }
+  );
+  it.each([false, true])(
+    'refreshes background work after task completion with a failed turn: %s',
+    (failed) => {
+      const deps = makeDeps();
+      const domain = new SessionDomainService();
+      deps.sessionDomainService = domain;
+      const processor = new AcpEventProcessor(deps);
+      const { onAcpEvent } = processor.createRuntimeEventHandler('db-session-1');
+      const tracker = new AcpNativeSessionTracker({
+        onTaskStatusChanged: (active) => {
+          vi.mocked(deps.runtimeManager.isSessionWorking).mockReturnValue(active);
+          onAcpEvent?.('db-session-1', { type: 'acp_task_status_changed', active });
+        },
+      });
+      vi.mocked(deps.runtimeManager.getClient).mockReturnValue({
+        isPromptInFlight: false,
+        nativeSessionTracker: tracker,
+      } as never);
+      const taskUpdate = (update: Record<string, unknown>) =>
+        tracker.onRawMessage({
+          method: 'session/update',
+          params: { sessionId: 'root', update },
+        });
+      taskUpdate({
+        sessionUpdate: 'async_task_spawned',
+        asyncTaskId: 'preview',
+        name: 'pnpm storybook',
+        taskType: 'shell',
+      });
+      const work = {
+        promptInFlight: false,
+        backgroundTasks: [{ id: '["root","preview"]', name: 'pnpm storybook', kind: 'shell' }],
+        runningSubagents: 0,
+        activeGoals: 0,
+      };
+      expect(domain.getRuntimeSnapshot('db-session-1').work).toEqual(work);
+      const reloaded = domain.prepareLoad(
+        'db-session-1',
+        domain.getRuntimeSnapshot('db-session-1')
+      );
+      expect(reloaded.sessionRuntime.work).toEqual(work);
+      expect(reloaded.replayEvents).toContainEqual(
+        expect.objectContaining({
+          type: 'session_runtime_snapshot',
+          sessionRuntime: expect.objectContaining({ work }),
+        })
+      );
+      if (failed) {
+        domain.setRuntimeSnapshot('db-session-1', {
+          ...domain.getRuntimeSnapshot('db-session-1'),
+          phase: 'error',
+          activity: 'IDLE',
+          errorMessage: 'Selected model is at capacity.',
+        });
+      }
+      taskUpdate({
+        sessionUpdate: 'async_task_state_update',
+        asyncTaskId: 'preview',
+        state: 'completed',
+      });
+      expect(domain.getRuntimeSnapshot('db-session-1')).toMatchObject({ activity: 'IDLE' });
+      if (failed) {
+        expect(domain.getRuntimeSnapshot('db-session-1')).toMatchObject({
+          phase: 'error',
+          errorMessage: 'Selected model is at capacity.',
+          work: { backgroundTasks: [], promptInFlight: false },
+        });
+      } else {
+        expect(domain.getRuntimeSnapshot('db-session-1').work).toBeUndefined();
+      }
+    }
+  );
 
   it('publishes runtime changes when task activity starts and stops', () => {
     const deps = makeDeps();
