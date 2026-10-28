@@ -265,6 +265,7 @@ export class SessionService {
         processState: 'alive',
         activity: 'IDLE',
         errorMessage: toErrorMessage(error),
+        ...getAcpWorkState(this.runtimeManager.getClient(sessionId)),
         updatedAt: new Date().toISOString(),
       });
       throw error;

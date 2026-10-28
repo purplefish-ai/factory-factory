@@ -410,7 +410,7 @@ export class AcpNativeSessionTracker {
     if (update.sessionUpdate === 'async_task_spawned' || parsed.data.state === 'running') {
       this.activeTasks.set(key, {
         name: parsed.data.name?.trim().slice(0, 500) || previous?.name || 'Background task',
-        kind: previous?.kind ?? taskKind(parsed.data.taskType),
+        kind: parsed.data.taskType ? taskKind(parsed.data.taskType) : (previous?.kind ?? 'task'),
         active: true,
       });
     } else if (parsed.data.state === 'paused' && previous) {

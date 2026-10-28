@@ -180,6 +180,42 @@ function createLifecyclePromptHarness() {
 }
 
 describe('SessionService prompt coordination', () => {
+  it('keeps fresh background work when a prompt fails while its runtime remains alive', async () => {
+    const { service, runtimeManager, sessionDomainService } = createLifecyclePromptHarness();
+    const tracker = new AcpNativeSessionTracker();
+    tracker.onRawMessage({
+      method: 'session/update',
+      params: {
+        sessionId: 'root',
+        update: {
+          sessionUpdate: 'async_task_spawned',
+          asyncTaskId: 'preview',
+          name: 'pnpm storybook',
+          taskType: 'shell',
+        },
+      },
+    });
+    runtimeManager.getClient.mockReturnValue(
+      Object.assign(
+        { supportsImages: () => true },
+        {
+          isPromptInFlight: false,
+          nativeSessionTracker: tracker,
+        }
+      )
+    );
+    runtimeManager.sendPrompt.mockRejectedValue(new Error('Provider failed'));
+    await expect(
+      service.sendAcpMessage('session-1', [{ type: 'text', text: 'follow-up' }])
+    ).rejects.toThrow('Provider failed');
+    expect(sessionDomainService.getRuntimeSnapshot('session-1')).toMatchObject({
+      phase: 'error',
+      processState: 'alive',
+      errorMessage: 'Provider failed',
+      work: { promptInFlight: false, backgroundTasks: [{ name: 'pnpm storybook', kind: 'shell' }] },
+    });
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
   });

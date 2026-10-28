@@ -37,6 +37,35 @@ function text(
 }
 
 describe('AcpNativeSessionTracker', () => {
+  it('uses a task type learned after the first update and preserves it on nameless updates', () => {
+    const tracker = new AcpNativeSessionTracker();
+    tracker.onRawMessage(
+      update('root', {
+        sessionUpdate: 'async_task_state_update',
+        asyncTaskId: 'turn',
+        state: 'running',
+      })
+    );
+    tracker.onRawMessage(
+      update('root', {
+        sessionUpdate: 'async_task_spawned',
+        asyncTaskId: 'turn',
+        name: 'Claude is working',
+        taskType: 'turn',
+      })
+    );
+    tracker.onRawMessage(
+      update('root', {
+        sessionUpdate: 'async_task_state_update',
+        asyncTaskId: 'turn',
+        state: 'running',
+      })
+    );
+    expect(tracker.getBackgroundWork().backgroundTasks).toEqual([
+      { id: '["root","turn"]', name: 'Claude is working', kind: 'turn' },
+    ]);
+  });
+
   it('retains command identity across a pause and a nameless running update', () => {
     const tracker = new AcpNativeSessionTracker();
     tracker.onRawMessage(

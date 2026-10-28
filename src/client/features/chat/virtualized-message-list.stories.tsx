@@ -60,6 +60,10 @@ export const BackgroundPreview: Story = {
   },
 };
 
+export const BackgroundAfterFailedTurn: Story = {
+  args: { ...BackgroundPreview.args, running: false },
+};
+
 export const PromptWithBackgroundWork: Story = {
   args: {
     ...BackgroundPreview.args,
@@ -71,7 +75,7 @@ export const PromptWithBackgroundWork: Story = {
         { id: 'tests', name: 'pnpm test', kind: 'shell' as const },
       ],
       runningSubagents: 1,
-      activeGoals: 1,
+      activeGoals: 2,
     },
   },
 };

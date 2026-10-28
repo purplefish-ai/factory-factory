@@ -196,6 +196,9 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   onWorkspaceFileLink,
   initBanner,
 }: VirtualizedMessageListProps) {
+  const hasBackgroundActivity = Boolean(
+    work && (work.backgroundTasks.length > 0 || work.runningSubagents > 0 || work.activeGoals > 0)
+  );
   // Pending PR updates describe future work, so keep them after the current activity.
   const { messages, queuedPRUpdates } = useMemo(() => {
     const messages: GroupedMessageItem[] = [];
@@ -224,7 +227,11 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   loadingSessionRef.current = loadingSession;
   const showingInitSpinner = initBanner?.kind === 'info';
   const hasScrollableContent =
-    allMessages.length > 0 || running || startingSession || showingInitSpinner;
+    allMessages.length > 0 ||
+    running ||
+    hasBackgroundActivity ||
+    startingSession ||
+    showingInitSpinner;
   const getToolExpansionState = workspaceId ? getExpansionState : undefined;
   const setToolExpansionState = workspaceId ? setExpansionState : undefined;
   const getToolExpansionToken = useCallback(
@@ -607,7 +614,9 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
         )}
 
         {/* Loading indicators after messages */}
-        {running && <SessionActivityIndicator work={work} latestThinking={latestThinking} />}
+        {(running || hasBackgroundActivity) && (
+          <SessionActivityIndicator work={work} latestThinking={latestThinking} />
+        )}
 
         {queuedPRUpdates.map((item) => (
           <GroupedMessageItemRenderer key={item.id} item={item} isQueued />

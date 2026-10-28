@@ -98,6 +98,33 @@ afterEach(() => {
 });
 
 describe('session dispatcher queue and lifecycle coordination', () => {
+  it('retains fresh background details already finalized by a failed prompt', async () => {
+    const { dispatcher, sendSessionMessage } = harness();
+    enqueue('follow-up');
+    sendSessionMessage.mockImplementation(() => {
+      sessionDomainService.setRuntimeSnapshot('session', {
+        phase: 'error',
+        processState: 'alive',
+        activity: 'IDLE',
+        errorMessage: 'Provider failed',
+        updatedAt: '2026-10-28T00:00:00.000Z',
+        work: {
+          promptInFlight: false,
+          backgroundTasks: [{ id: 'preview', name: 'pnpm storybook', kind: 'shell' }],
+          runningSubagents: 0,
+          activeGoals: 0,
+        },
+      });
+      return Promise.reject(new Error('Provider failed'));
+    });
+    await dispatcher.tryDispatchNextMessage('session');
+    expect(sessionDomainService.getRuntimeSnapshot('session')).toMatchObject({
+      phase: 'error',
+      errorMessage: 'Provider failed',
+      work: { promptInFlight: false, backgroundTasks: [{ name: 'pnpm storybook' }] },
+    });
+  });
+
   it('dispatches a follow-up while background activity keeps the session working', async () => {
     // A long-lived shell, child agent, or goal must not own the parent's prompt slot.
     const { dispatcher, runtimeManager, sendSessionMessage } = harness();

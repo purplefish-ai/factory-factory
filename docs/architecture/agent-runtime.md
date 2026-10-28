@@ -278,7 +278,10 @@ and their commands separately from the active-turn spinner. A completed turn
 with a persistent preview server shows the remaining process instead of stale
 reasoning or “Agent is working”. Task-detail changes publish even while another
 task keeps the session busy, and reconnects restore current work from the live
-runtime. Idle and stopped transitions clear prior work details.
+runtime. Idle and error transitions discard cached work unless fresh details are
+explicitly supplied; stopped transitions always clear work. A failed turn
+retains fresh background details from the live runtime, and chat keeps those
+processes visible alongside the error state.
 
 Ordinary chat messages may be composed and queued during any turn. Dispatch
 waits for the preceding prompt to complete, including time spent executing tools

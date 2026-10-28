@@ -42,7 +42,11 @@ export function SessionActivityIndicator({
           {work.runningSubagents} {work.runningSubagents === 1 ? 'sub-agent' : 'sub-agents'} running
         </p>
       )}
-      {!!work?.activeGoals && <p className="text-sm text-muted-foreground">Goal active</p>}
+      {!!work?.activeGoals && (
+        <p className="text-sm text-muted-foreground">
+          {work.activeGoals} {work.activeGoals === 1 ? 'goal' : 'goals'} active
+        </p>
+      )}
       {!agentWorking &&
         backgroundTasks.length === 0 &&
         !work?.runningSubagents &&

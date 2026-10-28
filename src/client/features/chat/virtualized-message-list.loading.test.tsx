@@ -18,13 +18,17 @@ describe('VirtualizedMessageList loading status', () => {
       runningSubagents: 0,
       activeGoals: 0,
     };
-    const render = (running: boolean, promptInFlight: boolean) => {
+    const render = (
+      running: boolean,
+      promptInFlight: boolean,
+      backgroundTasks = work.backgroundTasks
+    ) => {
       flushSync(() => {
         root.render(
           <VirtualizedMessageList
             messages={[]}
             running={running}
-            work={{ ...work, promptInFlight }}
+            work={{ ...work, promptInFlight, backgroundTasks }}
             latestThinking="Old reasoning from the finished turn"
             startingSession={false}
             loadingSession={false}
@@ -43,8 +47,40 @@ describe('VirtualizedMessageList loading status', () => {
       render(true, true);
       expect(container.textContent).toContain('Old reasoning');
       expect(container.textContent).toContain('pnpm storybook --port 62770');
-      render(false, false);
+      render(true, true, []);
+      expect(container.textContent).toContain('Old reasoning');
       expect(container.textContent).not.toContain('pnpm storybook');
+      render(false, false, []);
+      expect(container.querySelector('[aria-label="Session activity"]')).toBeNull();
+    } finally {
+      root.unmount();
+    }
+  });
+
+  it('shows remaining processes after a failed turn without claiming the agent is working', () => {
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    try {
+      flushSync(() =>
+        root.render(
+          <VirtualizedMessageList
+            messages={[]}
+            running={false}
+            startingSession={false}
+            loadingSession={false}
+            scrollContainerRef={{ current: null }}
+            work={{
+              promptInFlight: false,
+              backgroundTasks: [{ id: 'preview', name: 'pnpm storybook', kind: 'shell' }],
+              runningSubagents: 0,
+              activeGoals: 0,
+            }}
+          />
+        )
+      );
+      expect(container.textContent).toContain('pnpm storybook');
+      expect(container.textContent).not.toContain('Agent is working');
+      expect(container.querySelector('.animate-spin')).toBeNull();
     } finally {
       root.unmount();
     }

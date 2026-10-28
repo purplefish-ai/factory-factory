@@ -15,6 +15,7 @@ const {
     dequeueNext: vi.fn(),
     requeueFront: vi.fn(),
     markError: vi.fn(),
+    getRuntimeSnapshot: vi.fn(() => ({ phase: 'running' })),
     markIdle: vi.fn(),
     markRunning: vi.fn(),
     allocateOrder: vi.fn(),
