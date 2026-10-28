@@ -18,11 +18,14 @@ function LaunchControlsPreview({
   longLabels = false,
   planEnabled = false,
 }: PreviewProps) {
+  const unavailableEffort = longLabels
+    ? 'Maximum advertised thinking level no longer supported'
+    : 'ultra';
   const [provider, setProvider] = useState<ChatProvider>('CODEX');
   const [drafts, setDrafts] = useState<Record<ChatProvider, Draft>>({
     CODEX: {
       model: state === 'invalid' ? 'luna' : 'sol',
-      effort: state === 'invalid' ? 'ultra' : 'high',
+      effort: state === 'invalid' ? unavailableEffort : 'high',
       plan: planEnabled || state === 'unsupported',
     },
     CLAUDE: { model: 'sonnet', effort: null, plan: false },
@@ -59,7 +62,7 @@ function LaunchControlsPreview({
                 ? 'Maximum advertised thinking level'
                 : value.slice(0, 1).toUpperCase() + value.slice(1),
         }));
-  const invalid = state === 'invalid' && draft.effort === 'ultra';
+  const invalid = state === 'invalid' && draft.effort === unavailableEffort;
   return (
     <div className="w-[min(40rem,calc(100vw-2rem))] rounded-lg border p-2">
       <SessionLaunchControls
@@ -102,6 +105,10 @@ export const Dark: Story = { globals: { theme: 'dark' } };
 export const Loading: Story = { args: { state: 'loading' } };
 export const FailedDiscovery: Story = { args: { state: 'error' } };
 export const UnsupportedSelection: Story = { args: { state: 'invalid' } };
+export const LongUnsupportedSelection: Story = {
+  args: { state: 'invalid', longLabels: true },
+  parameters: { viewport: { value: 'mobile1' } },
+};
 export const UnsupportedPlan: Story = { args: { state: 'unsupported' } };
 export const LongLabels: Story = { args: { longLabels: true } };
 export const Narrow: Story = { ...LongLabels, parameters: { viewport: { value: 'mobile1' } } };

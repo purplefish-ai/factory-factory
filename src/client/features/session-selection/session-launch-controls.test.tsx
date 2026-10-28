@@ -113,6 +113,30 @@ describe('SessionLaunchControls', () => {
     keyboardSelect('Default');
     expect(onPlanChange).toHaveBeenCalledWith(false);
   });
+  it('keeps the unavailable-thinking warning outside the truncated long label', () => {
+    const label = 'Maximum advertised thinking level no longer supported';
+    const mounted = mount({
+      reasoning: {
+        value: label,
+        options: [{ value: 'high', label: 'High' }],
+        loading: false,
+        invalid: true,
+        onChange: vi.fn(),
+        onRetry: vi.fn(),
+      },
+    });
+    const trigger = mounted.container.querySelector<HTMLButtonElement>(
+      `[aria-label="Thinking level: ${label}"]`
+    );
+    const warning = trigger?.querySelector('[aria-label="Unavailable thinking level"]');
+    expect(warning).not.toBeNull();
+    const truncatedLabel = trigger?.querySelector('.truncate');
+    expect(truncatedLabel?.textContent).toBe(label);
+    expect(truncatedLabel?.contains(warning ?? null)).toBe(false);
+    keyboardOpen(trigger);
+    keyboardSelect('Default');
+    expect(mounted.props.reasoning?.onChange).toHaveBeenCalledWith(null);
+  });
   it('selects planning from a labeled menu like chat configuration', () => {
     const mounted = mount();
     const trigger = mounted.container.querySelector<HTMLButtonElement>(

@@ -1,3 +1,4 @@
+import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
 import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import type { ReactNode } from 'react';
 import { ComposerMenuTrigger } from '@/client/components/composer-menu-trigger';
@@ -100,14 +101,19 @@ function ThinkingLevelSelector({
           title={description}
           aria-busy={control.loading}
           aria-invalid={control.invalid}
+          indicator={
+            control.invalid ? (
+              <>
+                <WarningCircleIcon
+                  className="size-3 shrink-0"
+                  aria-label="Unavailable thinking level"
+                />
+                <CaretDownIcon className="size-3 shrink-0" />
+              </>
+            ) : undefined
+          }
         >
           {label}
-          {control.invalid && (
-            <WarningCircleIcon
-              className="ml-1 inline size-3"
-              aria-label="Unavailable thinking level"
-            />
-          )}
         </ComposerMenuTrigger>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64 max-w-[calc(100vw-2rem)]">
