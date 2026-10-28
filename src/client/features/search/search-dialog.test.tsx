@@ -58,6 +58,54 @@ async function render(overrides: Partial<React.ComponentProps<typeof SearchDialo
 }
 
 describe('SearchDialog', () => {
+  it.each(['button[aria-pressed]', 'button[aria-label="Close search"]'])(
+    'keeps Enter on the focused control %s',
+    async (selector) => {
+      const props = await render();
+      const button = document.querySelector(selector);
+      const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+      await act(() => button?.dispatchEvent(event));
+      expect(event.defaultPrevented).toBe(false);
+      expect(props.onSelect).not.toHaveBeenCalled();
+    }
+  );
+
+  it('resets keyboard selection when reopening cached results', async () => {
+    const second = { ...result, id: 'second', sessionId: 'second' };
+    const props = await render({ results: [result, second] });
+    await act(() =>
+      document
+        .querySelector('input')
+        ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+    );
+    await act(() => root.render(<SearchDialog {...props} open={false} />));
+    await act(() => root.render(<SearchDialog {...props} open />));
+    await act(() =>
+      document
+        .querySelector('input')
+        ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    );
+    expect(props.onSelect).toHaveBeenCalledWith(result);
+  });
+
+  it('shows a highlighted snippet for a metadata-only match', async () => {
+    await render({
+      query: 'omnibox',
+      results: [{ ...result, matchSnippet: 'Add Omnibox support' }],
+    });
+    expect(document.querySelector('mark')?.textContent).toBe('Omnibox');
+  });
+
+  it('highlights the longest overlapping term and canonically equivalent Unicode', async () => {
+    await render({
+      query: 'feat feature e\u0301clair',
+      results: [{ ...result, title: 'feature Éclair' }],
+    });
+    expect(Array.from(document.querySelectorAll('mark')).map((mark) => mark.textContent)).toEqual([
+      'feature',
+      'Éclair',
+    ]);
+  });
   it('focuses the search field and selects a result with the keyboard', async () => {
     const props = await render();
     const input = document.querySelector('input');

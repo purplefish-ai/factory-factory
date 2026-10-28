@@ -15,8 +15,12 @@ export function GlobalSearch() {
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [includeArchived, setIncludeArchived] = useState(false);
   const [archivePreview, setArchivePreview] = useState<SearchResult | null>(null);
+  const [archiveOpen, setArchiveOpen] = useState(false);
   const setSearchOpen = useCallback((value: boolean) => {
     setOpen(value);
+    if (value) {
+      setArchiveOpen(false);
+    }
     if (!value) {
       setQuery('');
       setDebouncedQuery('');
@@ -59,9 +63,11 @@ export function GlobalSearch() {
     if (result.archived) {
       setOpen(false);
       setArchivePreview(result);
+      setArchiveOpen(true);
       return;
     }
     setSearchOpen(false);
+    setArchiveOpen(false);
     void navigate(getSearchResultUrl(result));
   };
   const modifier = navigator.userAgent.includes('Mac') ? '⌘' : 'Ctrl';
@@ -75,8 +81,8 @@ export function GlobalSearch() {
         includeArchived={includeArchived}
         onIncludeArchivedChange={setIncludeArchived}
         results={search.data ?? []}
-        loading={query.trim() !== debouncedQuery || search.isPending}
-        error={query.trim() === debouncedQuery && search.isError}
+        loading={query.trim() !== debouncedQuery || search.isPending || search.isFetching}
+        error={query.trim() === debouncedQuery && search.isError && !search.isFetching}
         onRetry={() => {
           void search.refetch();
         }}
@@ -98,10 +104,11 @@ export function GlobalSearch() {
         }
       />
       <Dialog
-        open={archivePreview !== null}
+        open={archiveOpen}
         onOpenChange={(value) => {
           if (!value) {
-            setArchivePreview(null);
+            setArchiveOpen(false);
+            setSearchOpen(false);
           }
         }}
       >
@@ -118,7 +125,7 @@ export function GlobalSearch() {
           <Button
             variant="outline"
             onClick={() => {
-              setArchivePreview(null);
+              setArchiveOpen(false);
               setOpen(true);
             }}
           >

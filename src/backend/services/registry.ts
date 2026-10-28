@@ -99,7 +99,7 @@ type ServiceDefinition = {
 };
 
 export const serviceRegistry = {
-  search: { dependsOn: [], ownsModels: [] },
+  search: { dependsOn: ['workspace', 'session'], ownsModels: [] },
   session: {
     dependsOn: ['workspace', 'settings', 'terminal', 'github'],
     ownsModels: [

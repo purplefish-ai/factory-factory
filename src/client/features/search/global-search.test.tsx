@@ -42,6 +42,7 @@ beforeEach(() => {
       },
     ],
     isPending: false,
+    isFetching: false,
     isError: false,
     refetch: vi.fn(),
   });
@@ -74,6 +75,58 @@ async function key(keyValue: string, modifiers: KeyboardEventInit = {}) {
 }
 
 describe('GlobalSearch', () => {
+  it('hides cached results while a background refresh is fetching', async () => {
+    query.mockReturnValue({ ...query(), isFetching: true });
+    await render();
+    await key('k', { ctrlKey: true });
+    expect(document.querySelector('[role="option"]')).toBeNull();
+    await key('Enter');
+    expect(document.querySelector('output')?.textContent).toBe('/projects/factory/workspaces/ws');
+  });
+
+  it('dismisses an archive preview when the shortcut opens a live result', async () => {
+    const response = query();
+    query.mockReturnValue({
+      ...response,
+      data: response.data.map((r: { archived: boolean }) => ({ ...r, archived: true })),
+    });
+    await render();
+    await key('k', { ctrlKey: true });
+    await key('Enter');
+    query.mockReturnValue(response);
+    await key('k', { ctrlKey: true });
+    await key('Enter');
+    expect(document.querySelector('output')?.textContent).toContain('?session=chat-2');
+    expect(document.querySelector('[role="dialog"][data-state="open"]')).toBeNull();
+  });
+
+  it('clears the previous query when an archive preview is dismissed', async () => {
+    vi.useFakeTimers();
+    const response = query();
+    query.mockReturnValue({
+      ...response,
+      data: response.data.map((r: { archived: boolean }) => ({ ...r, archived: true })),
+    });
+    await render();
+    await key('k', { ctrlKey: true });
+    const input = document.querySelector('input');
+    if (!input) {
+      throw new Error('Missing input');
+    }
+    await act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+        input,
+        'review'
+      );
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(() => vi.advanceTimersByTime(150));
+    await key('Enter');
+    const close = document.querySelector('[data-slot="dialog-close"]');
+    await act(() => close?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await key('k', { ctrlKey: true });
+    expect(document.querySelector('input')?.value).toBe('');
+  });
   it('keeps archived results read-only and returns to the search', async () => {
     const response = query();
     query.mockReturnValue({

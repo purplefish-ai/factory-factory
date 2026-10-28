@@ -60,9 +60,10 @@ co-located tests/stories.
 
 The user explicitly authorized implementation of the scoped recommendation.
 Proceed inline; no additional design approval is needed. Metadata remains in its
-current tables. SQL prefilters metadata candidates, then the service applies
-consistent Unicode matching and ranking before limiting results. Transcript
-indexing remains a later release.
+current tables. A short-lived read-only SQLite connection registers Unicode
+matching and ranking functions, applies them before limiting results, and
+normalizes both text and numeric timestamps. Transcript indexing remains a later
+release.
 
 Review fixes cover Unicode names, same-workspace conversation selection, and
 chat navigation taking precedence over a restored file tab. Forty focused tests
@@ -72,3 +73,8 @@ Final verification: 8,433 tests pass (three skipped), `pnpm check` passes, and
 the relocated database search test passes all 15 cases. Visual checks cover
 desktop/mobile, light/dark, results, loading, empty, failure, and archived
 states.
+
+PR review follow-up adds database-bounded Unicode filtering, matched metadata
+snippets, kind-specific result identities, canonical highlighting, reliable
+keyboard controls, and archive dialog lifecycle fixes. The restored-file-tab
+tests cover both mount-time navigation and a link arriving after restoration.

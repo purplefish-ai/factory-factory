@@ -10,32 +10,33 @@ export const metadataSearchService = {
       ...parsed,
       query,
     });
-    const words = query.split(' ').filter(Boolean);
-    const results = candidates.filter((result) => {
-      const text = result.searchText.normalize('NFC').toLowerCase();
-      return words.every((word) => text.includes(word));
-    });
-    results.sort(
-      (a, b) =>
-        score(b.title, query) - score(a.title, query) ||
-        b.updatedAt - a.updatedAt ||
-        a.kind.localeCompare(b.kind) ||
-        a.id.localeCompare(b.id)
+    return candidates.map((result) =>
+      SearchResultSchema.parse({
+        ...result,
+        matchSnippet: matchedSnippet(result, query),
+      })
     );
-    return results.slice(0, parsed.limit).map((result) => SearchResultSchema.parse(result));
   },
 };
 
-function score(title: string, query: string): number {
-  if (!query) {
-    return 0;
+function matchedSnippet(
+  result: { title: string; subtitle: string; snippetText: string },
+  query: string
+): string | null {
+  const visible = `${result.title} ${result.subtitle}`.normalize('NFC').toLowerCase();
+  const missing = query.split(' ').find((word) => word && !visible.includes(word));
+  if (!missing) {
+    return null;
   }
-  const normalized = title.normalize('NFC').toLowerCase();
-  if (normalized === query) {
-    return 100;
+  const source = result.snippetText.normalize('NFC');
+  const text = (
+    source.split(/\r?\n/).find((line) => line.toLowerCase().includes(missing)) ?? source
+  ).replace(/\s+/g, ' ');
+  const index = text.toLowerCase().indexOf(missing);
+  if (index < 0) {
+    return null;
   }
-  if (normalized.startsWith(query)) {
-    return 80;
-  }
-  return normalized.includes(query) ? 60 : 20;
+  const start = Math.max(0, index - 40);
+  const end = Math.min(text.length, index + 140);
+  return `${start ? '…' : ''}${text.slice(start, end)}${end < text.length ? '…' : ''}`;
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useChatWebSocket } from '@/client/features/chat';
 import { useSessionLaunchSelection } from '@/client/features/session-selection';
 import {
@@ -35,6 +35,7 @@ export function WorkspaceDetailContainer() {
   const { slug = '', id: workspaceId = '' } = useParams<{ slug: string; id: string }>();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { key: navigationKey } = useLocation();
   const utils = trpc.useUtils();
 
   const { workspace, workspaceLoading, sessions, initialDbSessionId, maxSessions } =
@@ -79,7 +80,8 @@ export function WorkspaceDetailContainer() {
     initialDbSessionId ?? null,
     sessionIds,
     searchParams.get('session'),
-    activateLinkedChat
+    activateLinkedChat,
+    navigationKey
   );
   const setSelectedDbSessionId = useCallback(
     (id: string | null) => {

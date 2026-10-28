@@ -57,6 +57,72 @@ async function seed() {
 }
 
 describe('metadata search', () => {
+  it('uses complete legacy SQLite timestamps for recency before limiting', async () => {
+    const { project } = await seed();
+    const old = await db.prisma.workspace.create({
+      data: { projectId: project.id, name: 'Old result' },
+    });
+    const recent = await db.prisma.workspace.create({
+      data: { projectId: project.id, name: 'Recent result' },
+    });
+    await db.prisma
+      .$executeRaw`UPDATE Workspace SET updatedAt = '2026-01-01 10:00:00' WHERE id = ${old.id}`;
+    await db.prisma
+      .$executeRaw`UPDATE Workspace SET updatedAt = '2026-10-28 10:00:00' WHERE id = ${recent.id}`;
+    expect((await search.search({ query: 'result', limit: 1 })).map((r) => r.id)).toEqual([
+      recent.id,
+    ]);
+  });
+
+  it('filters Unicode in the database and bounds returned candidates before hydration', async () => {
+    const { project } = await seed();
+    await db.prisma.workspace.createMany({
+      data: Array.from({ length: 60 }, (_, i) => ({ projectId: project.id, name: `Другой ${i}` })),
+    });
+    const target = await db.prisma.workspace.create({
+      data: { projectId: project.id, name: 'Цель' },
+    });
+    const { metadataSearchAccessor } = await vi.importActual<
+      typeof import('@/backend/services/search/resources/metadata-search.accessor')
+    >('@/backend/services/search/resources/metadata-search.accessor');
+    const candidates = await metadataSearchAccessor.search({
+      query: 'цель',
+      includeArchived: false,
+      limit: 1,
+    });
+    expect(candidates.map((r) => r.id)).toEqual([target.id]);
+  });
+
+  it('excludes issue and PR URL boilerplate and exposes the matched metadata snippet', async () => {
+    const { workspace } = await seed();
+    expect(await search.search({ query: 'github' })).toEqual([]);
+    expect(await search.search({ query: 'pull' })).toEqual([]);
+    expect(await search.search({ query: 'omnibox' })).toEqual([
+      expect.objectContaining({
+        id: workspace.id,
+        matchSnippet: expect.stringContaining('Omnibox'),
+      }),
+    ]);
+    expect(await search.search({ query: 'keyboard' })).toEqual([
+      expect.objectContaining({
+        id: workspace.id,
+        matchSnippet: expect.stringContaining('Keyboard'),
+      }),
+    ]);
+  });
+
+  it('matches decomposed Unicode names and query terms', async () => {
+    const { project } = await seed();
+    const workspace = await db.prisma.workspace.create({
+      data: { projectId: project.id, name: 'E\u0301clair' },
+    });
+    expect(await search.search({ query: 'éclair' })).toEqual([
+      expect.objectContaining({ id: workspace.id }),
+    ]);
+    expect(await search.search({ query: 'e\u0301clair' })).toEqual([
+      expect.objectContaining({ id: workspace.id }),
+    ]);
+  });
   it.each(['Éclair', 'ПРОЕКТ', 'ΑΘΗΝΑ'])(
     'matches Unicode names case-insensitively and ranks exact names first: %s',
     async (name) => {

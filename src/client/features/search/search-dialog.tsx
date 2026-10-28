@@ -38,8 +38,10 @@ export function SearchDialog({
 }: SearchDialogProps) {
   const [selected, setSelected] = useState('');
   useEffect(() => {
-    setSelected(results[0] ? `${results[0].kind}:${results[0].id}` : '');
-  }, [results]);
+    if (open) {
+      setSelected(results[0] ? `${results[0].kind}:${results[0].id}` : '');
+    }
+  }, [results, open]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -68,16 +70,6 @@ export function SearchDialog({
               aria-label="Search metadata"
               className="h-14 pr-10 text-base sm:text-sm"
             />
-            <DialogClose asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Close search"
-                className="absolute right-2 top-2.5 size-8 text-muted-foreground"
-              >
-                <XIcon className="size-4" />
-              </Button>
-            </DialogClose>
           </div>
           <CommandList
             aria-label="Search results"
@@ -93,27 +85,37 @@ export function SearchDialog({
               onSelect={onSelect}
             />
           </CommandList>
-          <div className="flex items-center justify-between border-t px-3 py-2">
-            <button
-              type="button"
-              aria-pressed={includeArchived}
-              onClick={() => onIncludeArchivedChange(!includeArchived)}
-              className="flex min-h-8 items-center gap-1.5 rounded px-1 text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring aria-pressed:text-foreground"
-            >
-              <ArchiveIcon className="size-3.5" />
-              Include archived
-              {includeArchived && <span className="size-1.5 rounded-full bg-primary" />}
-            </button>
-            <span
-              className="hidden items-center gap-3 text-[11px] text-muted-foreground sm:flex"
-              aria-hidden="true"
-            >
-              <span>↑ ↓ navigate</span>
-              <span>↵ open</span>
-              <span>esc close</span>
-            </span>
-          </div>
         </Command>
+        <DialogClose asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Close search"
+            className="absolute right-2 top-2.5 size-8 text-muted-foreground"
+          >
+            <XIcon className="size-4" />
+          </Button>
+        </DialogClose>
+        <div className="flex items-center justify-between border-t px-3 py-2">
+          <button
+            type="button"
+            aria-pressed={includeArchived}
+            onClick={() => onIncludeArchivedChange(!includeArchived)}
+            className="flex min-h-8 items-center gap-1.5 rounded px-1 text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring aria-pressed:text-foreground"
+          >
+            <ArchiveIcon className="size-3.5" />
+            Include archived
+            {includeArchived && <span className="size-1.5 rounded-full bg-primary" />}
+          </button>
+          <span
+            className="hidden items-center gap-3 text-[11px] text-muted-foreground sm:flex"
+            aria-hidden="true"
+          >
+            <span>↑ ↓ navigate</span>
+            <span>↵ open</span>
+            <span>esc close</span>
+          </span>
+        </div>
       </DialogContent>
     </Dialog>
   );

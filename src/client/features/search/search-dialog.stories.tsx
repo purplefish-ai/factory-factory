@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { SearchResult } from '@/shared/search';
 import { SearchDialog, type SearchDialogProps } from './search-dialog';
 
@@ -49,6 +49,8 @@ const results: SearchResult[] = [
 function InteractiveSearch(props: SearchDialogProps) {
   const [query, setQuery] = useState(props.query);
   const [includeArchived, setIncludeArchived] = useState(props.includeArchived);
+  useEffect(() => setQuery(props.query), [props.query]);
+  useEffect(() => setIncludeArchived(props.includeArchived), [props.includeArchived]);
   return (
     <SearchDialog
       {...props}
@@ -59,7 +61,9 @@ function InteractiveSearch(props: SearchDialogProps) {
       results={props.results.filter(
         (r) =>
           (includeArchived || !r.archived) &&
-          `${r.title} ${r.subtitle}`.toLowerCase().includes(query.toLowerCase())
+          `${r.title} ${r.subtitle} ${r.matchSnippet ?? ''}`
+            .toLowerCase()
+            .includes(query.toLowerCase())
       )}
     />
   );
@@ -92,6 +96,12 @@ export const Empty: Story = { args: { query: 'missing', results: [] } };
 export const Loading: Story = { args: { query: 'search', loading: true } };
 export const Unavailable: Story = { args: { error: true, results: [] } };
 export const Archived: Story = { args: { includeArchived: true } };
+export const MetadataMatch: Story = {
+  args: {
+    query: 'omnibox',
+    results: [{ ...results[0]!, matchSnippet: 'Add Omnibox support to the workspace header' }],
+  },
+};
 export const LongNames: Story = {
   args: {
     results: [

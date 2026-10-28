@@ -210,10 +210,14 @@ export function useSelectedSessionId(
   initialDbSessionId: string | null,
   sessionIds: string[],
   requestedSessionId: string | null = null,
-  onLinkedSession?: () => void
+  onLinkedSession?: () => void,
+  requestedNavigationKey?: string
 ) {
   const storageKey = `${SESSION_TAB_STORAGE_PREFIX}${workspaceId}`;
   const consumedLinkRef = useRef<string | null>(null);
+  const linkIdentity = requestedSessionId
+    ? `${requestedNavigationKey ?? ''}:${requestedSessionId}`
+    : null;
   const pendingSelectionRef = useRef<{ id: string | null; setAtMs: number | null }>({
     id: null,
     setAtMs: null,
@@ -221,7 +225,7 @@ export function useSelectedSessionId(
 
   const [selectedDbSessionId, setSelectedDbSessionIdRaw] = useState<string | null>(() => {
     const stored = localStorage.getItem(storageKey);
-    return stored ?? initialDbSessionId;
+    return requestedSessionId ?? stored ?? initialDbSessionId;
   });
 
   useEffect(() => {
@@ -230,10 +234,10 @@ export function useSelectedSessionId(
     }
     if (
       requestedSessionId &&
-      requestedSessionId !== consumedLinkRef.current &&
+      linkIdentity !== consumedLinkRef.current &&
       sessionIds.includes(requestedSessionId)
     ) {
-      consumedLinkRef.current = requestedSessionId;
+      consumedLinkRef.current = linkIdentity;
       pendingSelectionRef.current = { id: null, setAtMs: null };
       localStorage.setItem(storageKey, requestedSessionId);
       setSelectedDbSessionIdRaw(requestedSessionId);
@@ -264,6 +268,7 @@ export function useSelectedSessionId(
     storageKey,
     requestedSessionId,
     onLinkedSession,
+    linkIdentity,
   ]);
 
   const setSelectedDbSessionId = useCallback(

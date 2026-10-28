@@ -6,6 +6,7 @@ import { StackSimpleIcon } from '@phosphor-icons/react/dist/csr/StackSimple';
 import { Button } from '@/components/ui/button';
 import { CommandGroup, CommandItem } from '@/components/ui/command';
 import type { SearchResult } from '@/shared/search';
+import { highlightSearchText } from './search-highlight';
 
 const resultKinds = {
   project: { label: 'Project', Icon: FolderSimpleIcon },
@@ -23,23 +24,15 @@ export interface SearchResultsProps {
 }
 
 function MatchedText({ text, query }: { text: string; query: string }) {
-  const words = query.trim().split(/\s+/).filter(Boolean);
-  if (!words.length) {
-    return <>{text}</>;
-  }
-  const expression = words.map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
-  let offset = 0;
-  return text.split(new RegExp(`(${expression})`, 'gi')).map((part) => {
-    const key = `${offset}:${part}`;
-    offset += part.length;
-    return words.some((word) => word.toLowerCase() === part.toLowerCase()) ? (
-      <mark key={key} className="bg-transparent font-semibold text-foreground">
-        {part}
+  return highlightSearchText(text, query).map((part) =>
+    part.matched ? (
+      <mark key={part.start} className="bg-transparent font-semibold text-foreground">
+        {part.text}
       </mark>
     ) : (
-      <span key={key}>{part}</span>
-    );
-  });
+      <span key={part.start}>{part.text}</span>
+    )
+  );
 }
 
 function ResultRow({
@@ -61,6 +54,11 @@ function ResultRow({
         <span className="block truncate text-sm">
           <MatchedText text={result.title} query={query} />
         </span>
+        {result.matchSnippet && (
+          <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+            <MatchedText text={result.matchSnippet} query={query} />
+          </span>
+        )}
         <span className="mt-0.5 block truncate text-xs text-muted-foreground">
           <MatchedText text={result.subtitle} query={query} />
         </span>
@@ -95,7 +93,16 @@ export function SearchResults({
         className="flex min-h-32 flex-col items-center justify-center gap-2 text-sm"
       >
         <p className="text-muted-foreground">Couldn’t search right now.</p>
-        <Button variant="ghost" size="sm" onClick={onRetry}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onRetry}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.stopPropagation();
+            }
+          }}
+        >
           Try again
         </Button>
       </div>
