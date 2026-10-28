@@ -91,7 +91,7 @@ function isDeliveryActive(
   services: PRDeliveryRecoveryPorts
 ) {
   return (
-    services.acpRuntimeManager.isSessionWorking(sessionId) ||
+    services.acpRuntimeManager.isSessionPromptInFlight(sessionId) ||
     services.sessionBackgroundDeliveryService.isDeliveryActive?.(deliveryId)
   );
 }

@@ -366,7 +366,7 @@ export class SessionDispatchService {
   ): Promise<boolean> {
     if (peeked.source) {
       if (
-        this.dependencies.runtimeManager.isSessionWorking(dbSessionId) ||
+        this.dependencies.runtimeManager.isSessionPromptInFlight(dbSessionId) ||
         sessionDomainService.getPendingInteractiveRequest(dbSessionId)
       ) {
         return false;
@@ -519,24 +519,19 @@ export class SessionDispatchService {
   ): Promise<{ client: unknown } | { blocked: 'busy' | 'resume_failed' } | null> {
     let client = this.lifecycle.startup.getSessionClient(dbSessionId);
 
-    let justAutoStarted = false;
     if (!client || msg.source) {
-      const hadClient = !!client;
       const started = await this.autoStartClientForQueue(dbSessionId, msg);
       if (!started) {
         return msg.source ? { blocked: 'resume_failed' } : null;
       }
       client = this.lifecycle.startup.getSessionClient(dbSessionId);
-      justAutoStarted = !hadClient;
     }
 
-    // Skip requeue check when the client was just auto-started: the "working" state
-    // comes from the startup itself, not from a prior user message being processed.
-    if (!justAutoStarted || msg.source) {
-      const reason = this.getRequeueReason(dbSessionId, client);
-      if (reason) {
-        return msg.source && reason !== 'stopped' ? { blocked: 'busy' } : null;
-      }
+    // Check the prompt slot even after startup: another caller may have acquired it
+    // while startup/configuration was awaited. Background activity is only a UI signal.
+    const reason = this.getRequeueReason(dbSessionId, client);
+    if (reason) {
+      return msg.source && reason !== 'stopped' ? { blocked: 'busy' } : null;
     }
 
     return { client };
@@ -747,7 +742,7 @@ export class SessionDispatchService {
     dbSessionId: string,
     client?: unknown
   ): 'working' | 'compacting' | 'stopped' | null {
-    if (this.dependencies.runtimeManager.isSessionWorking(dbSessionId)) {
+    if (this.dependencies.runtimeManager.isSessionPromptInFlight(dbSessionId)) {
       return 'working';
     }
     if (!this.dependencies.runtimeManager.isSessionRunning(dbSessionId)) {

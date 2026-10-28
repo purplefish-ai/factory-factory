@@ -51,7 +51,10 @@ vi.mock('@/backend/services/ratchet', () => ({
   RATCHET_DISPATCH_CHANGED: 'ratchet_dispatch_changed',
 }));
 vi.mock('@/backend/services/session', () => ({
-  acpRuntimeManager: { isSessionWorking: mocks.busy },
+  acpRuntimeManager: {
+    isSessionPromptInFlight: mocks.busy,
+    isSessionWorking: () => true,
+  },
   sessionDataService: {
     findAgentSessionById: mocks.session,
     findPRDedicatedSession: mocks.dedicated,
@@ -409,6 +412,46 @@ it('revalidates the frozen provider conversation after startup', async () => {
       deliveryProviderSessionId: 'old-conversation',
     })
   ).toBe(false);
+});
+
+it('allows delivery while background work keeps the recipient active', async () => {
+  expect(
+    await guardPRDelivery(
+      'main',
+      {
+        workspaceId: 'w',
+        prId: 'p',
+        bindingRevision: 1,
+      },
+      defaultPRDeliveryPorts
+    )
+  ).toBe('ready');
+});
+
+it('recovers an absent receipt while unrelated background activity continues', async () => {
+  mocks.receipt.mockResolvedValue('absent');
+  await recoverPRDeliveries('main');
+  expect(mocks.recover).toHaveBeenCalledWith('delivery', false, {
+    sessionId: 'main',
+    provider: 'CLAUDE',
+    providerSessionId: 'original',
+  });
+});
+
+it('keeps automated PR work queued for an unanswered interaction without an active prompt', async () => {
+  mocks.interaction.mockReturnValue({ requestId: 'approval', type: 'permission' });
+  expect(
+    await guardPRDelivery(
+      'main',
+      {
+        workspaceId: 'w',
+        prId: 'p',
+        bindingRevision: 1,
+      },
+      defaultPRDeliveryPorts
+    )
+  ).toBe('blocked');
+  expect(mocks.claim).not.toHaveBeenCalled();
 });
 
 it('does not reset a claim if a provider turn starts during receipt lookup', async () => {

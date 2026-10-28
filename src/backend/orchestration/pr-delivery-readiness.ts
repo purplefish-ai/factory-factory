@@ -15,7 +15,9 @@ export async function recipientCanDispatch(
     ]);
     return (
       !!sessions &&
-      !sessions.some((s) => s.id !== sessionId && services.acpRuntimeManager.isSessionWorking(s.id))
+      !sessions.some(
+        (s) => s.id !== sessionId && services.acpRuntimeManager.isSessionPromptInFlight(s.id)
+      )
     );
   } catch {
     return false;

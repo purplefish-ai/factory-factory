@@ -81,6 +81,7 @@ function setup(provider: ChatProvider) {
     getClient: () => handle,
     isStopInProgress: () => false,
     isSessionWorking: () => false,
+    isSessionPromptInFlight: () => false,
     isSessionRunning: () => true,
     setConfigOption: (id: string, configId: string, value: string) =>
       controller.setConfigOption(handle, configId, value, id),

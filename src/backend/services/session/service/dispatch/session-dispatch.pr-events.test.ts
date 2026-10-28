@@ -36,7 +36,7 @@ const {
     getGeneration: vi.fn(),
     isGenerationCurrent: vi.fn(),
     isSessionRunning: vi.fn(),
-    isSessionWorking: vi.fn(),
+    isSessionPromptInFlight: vi.fn(),
     setSessionModel: vi.fn(),
     setSessionReasoningEffort: vi.fn(),
     setSessionThinkingBudget: vi.fn(),
@@ -126,7 +126,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
     mockSessionDomainService.getTranscriptSnapshot.mockReturnValue([]);
     mockSessionDomainService.removeQueuedMessage.mockReturnValue(true);
     mockSessionService.getOrCreateSessionClient.mockResolvedValue(undefined);
-    mockSessionService.isSessionWorking.mockReturnValue(false);
+    mockSessionService.isSessionPromptInFlight.mockReturnValue(false);
     mockSessionService.isSessionRunning.mockReturnValue(true);
     mockSessionService.isSessionStopping.mockReturnValue(false);
     mockSessionService.getGeneration.mockReturnValue(0);
@@ -259,7 +259,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
         .spyOn(sessionBackgroundDeliveryService, 'prepare')
         .mockImplementation(() => {
           if (busy === 'working') {
-            mockSessionService.isSessionWorking.mockReturnValue(true);
+            mockSessionService.isSessionPromptInFlight.mockReturnValue(true);
           }
           return Promise.resolve({
             status: 'ready' as const,

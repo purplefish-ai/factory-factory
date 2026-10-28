@@ -301,10 +301,11 @@ export class SessionService {
     stopGeneration: number;
     stopReason: string;
   }): void {
+    const isWorking = this.runtimeManager.isSessionWorking(sessionId);
     this.completePromptTurnIfCurrent(sessionId, stopGeneration, `stop_reason:${stopReason}`, {
-      phase: 'idle',
+      phase: isWorking ? 'running' : 'idle',
       processState: 'alive',
-      activity: 'IDLE',
+      activity: isWorking ? 'WORKING' : 'IDLE',
       updatedAt: new Date().toISOString(),
     });
   }

@@ -199,6 +199,10 @@ export class AcpRuntimeManager {
     return this.supervisor.isSessionWorking(sessionId);
   }
 
+  isSessionPromptInFlight(sessionId: string): boolean {
+    return this.supervisor.isSessionPromptInFlight(sessionId);
+  }
+
   isAnySessionWorking(sessionIds: string[]): boolean {
     return this.supervisor.isAnySessionWorking(sessionIds);
   }
