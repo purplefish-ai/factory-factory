@@ -44,9 +44,15 @@ afterEach(() => {
   container.remove();
 });
 it('creates distinct fresh agents without inheriting the selected agent history or paused state', async () => {
-  actFlushSync(() =>
-    container.querySelector<HTMLAnchorElement>('a[href="/agents/dependencies"]')?.click()
+  const dependenciesLink = container.querySelector<HTMLAnchorElement>(
+    'a[href="/agents/dependencies"]'
   );
+  if (!dependenciesLink) {
+    throw new Error('Missing Dependencies agent rail link');
+  }
+  actFlushSync(() => dependenciesLink.click());
+  expect(container.querySelector('h2')?.textContent).toBe('Keep dependencies current');
+  expect(container.querySelector('main')?.textContent).toContain('Paused');
   const createdIds: string[] = [];
   for (const name of ['First new agent', 'Second new agent']) {
     actFlushSync(() => button('Create Agent').click());
