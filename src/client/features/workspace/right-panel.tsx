@@ -125,14 +125,14 @@ function TopPanelArea({
         />
         {periodicTaskId && (
           <TabButton
-            label="Periodic Task"
+            label="Agent"
             icon={<CalendarIcon className="h-3.5 w-3.5" />}
             isActive={showPeriodicTask}
             onSelect={() => onTopTabChange('periodic-task')}
           />
         )}
         <TabButton
-          label="Agents"
+          label="Sessions"
           icon={<TreeStructureIcon className="h-3.5 w-3.5" />}
           isActive={showAgents}
           onSelect={() => onTopTabChange('agents')}

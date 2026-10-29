@@ -49,6 +49,10 @@ function RightPanelStory({
                 }),
                 'workspace.getUnpushedFiles': () => ({ files: [], hasUpstream: true }),
                 'periodicTask.get': () => ({
+                  id: 'task-1',
+                  projectId: 'right-panel-project',
+                  scheduledTime: null,
+                  timezone: null,
                   name: 'Scheduled cleanup',
                   prompt: 'Clean up completed work',
                   cadence: 'DAILY',
@@ -56,6 +60,11 @@ function RightPanelStory({
                   lastRunAt: null,
                 }),
                 'periodicTask.listExecutions': () => [],
+                'project.getById': () => ({
+                  id: 'right-panel-project',
+                  slug: 'demo',
+                  name: 'Demo',
+                }),
               };
               const respond = responses[op.path];
               if (!respond) {
@@ -87,7 +96,7 @@ function RightPanelStory({
                   );
                 }}
               >
-                Delete periodic task
+                Delete Agent
               </Button>
               <div
                 className="flex h-[650px] border"
@@ -216,7 +225,7 @@ export const DeletedTaskPreference: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(await canvas.findByText('No changes')).toBeVisible();
-    await expect(canvas.queryByRole('button', { name: 'Periodic Task' })).not.toBeInTheDocument();
+    await expect(canvas.queryByRole('button', { name: 'Agent' })).not.toBeInTheDocument();
     await expect(localStorage.getItem(`workspace-right-panel-tab-${workspaceId}`)).toBe('changes');
   },
 };
@@ -225,7 +234,7 @@ export const DeleteWhileOpen: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText('Scheduled cleanup');
-    await userEvent.click(canvas.getByRole('button', { name: 'Delete periodic task' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Delete Agent' }));
     await expect(await canvas.findByText('No changes')).toBeVisible();
     await expect(localStorage.getItem(`workspace-right-panel-tab-${workspaceId}`)).toBe('changes');
   },
@@ -251,7 +260,7 @@ export const OpenAgentsFromActivity: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: '1 sub-agent running' }));
-    await expect(canvas.getByRole('button', { name: 'Agents' })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Sessions' })).toBeVisible();
     await expect(localStorage.getItem(`workspace-right-panel-tab-${workspaceId}`)).toBe('agents');
   },
 };

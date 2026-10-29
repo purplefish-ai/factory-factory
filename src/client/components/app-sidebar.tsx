@@ -2,6 +2,7 @@ import { DotOutlineIcon } from '@phosphor-icons/react/dist/csr/DotOutline';
 import { GearIcon } from '@phosphor-icons/react/dist/csr/Gear';
 import { GitPullRequestIcon } from '@phosphor-icons/react/dist/csr/GitPullRequest';
 import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
+import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import {
   type PointerEvent as ReactPointerEvent,
@@ -294,6 +295,17 @@ function SidebarInner({
 
       <SidebarFooter>
         <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              isActive={pathname === '/agents' || pathname.startsWith('/agents/')}
+            >
+              <Link to="/agents" onClick={onNavigate}>
+                <RobotIcon className="h-4 w-4" />
+                <span>Agents</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton
               asChild

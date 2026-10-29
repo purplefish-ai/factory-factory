@@ -64,6 +64,7 @@ describe('SessionActivityIndicator', () => {
       expect(button?.closest('[role="status"], [aria-live]')).toBeNull();
       expect(container.querySelector('[role="status"]')?.textContent).toBe(label);
       button?.click();
+      expect(button?.title).toBe('Open Sessions panel');
       expect(onOpenAgents).toHaveBeenCalledOnce();
     } finally {
       flushSync(() => root.unmount());

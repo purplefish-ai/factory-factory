@@ -207,5 +207,5 @@ async function selectSidebarLaunchMode(canvasElement: HTMLElement, mode: string)
 
 export const SidebarPeriodicTask: Story = {
   ...Sidebar,
-  play: ({ canvasElement }) => selectSidebarLaunchMode(canvasElement, 'Create Periodic Task'),
+  play: ({ canvasElement }) => selectSidebarLaunchMode(canvasElement, 'Create Agent'),
 };

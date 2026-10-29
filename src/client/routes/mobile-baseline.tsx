@@ -2,6 +2,7 @@ import { GitBranchIcon } from '@phosphor-icons/react/dist/csr/GitBranch';
 import { ListIcon } from '@phosphor-icons/react/dist/csr/List';
 import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { PageHeader } from '@/client/components/page-header';
 import { PRDetailPanel } from '@/client/components/pr-detail-panel';
 import { PRInboxItem } from '@/client/components/pr-inbox-item';
@@ -25,6 +26,7 @@ import {
 import type { ChatSettings, TokenStats } from '@/lib/chat-protocol';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import type { PRWithFullDetails } from '@/shared/github-types';
+import { MobileAgentsFixture } from './mobile-agents-fixture';
 
 const mobileBaselinePRs: PRWithFullDetails[] = [
   {
@@ -135,6 +137,15 @@ const baselineTokenStats: TokenStats = {
 const noop = () => undefined;
 
 export default function MobileBaselinePage() {
+  const [searchParams] = useSearchParams();
+  return searchParams.get('surface') === 'agents' ? (
+    <MobileAgentsFixture />
+  ) : (
+    <GeneralMobileBaselinePage />
+  );
+}
+
+function GeneralMobileBaselinePage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [repoPath, setRepoPath] = useState('/Users/example/repos/mobile-app');
   const [startupScript, setStartupScript] = useState('pnpm install && pnpm dev');

@@ -62,7 +62,7 @@ export function SessionActivityIndicator({
             type="button"
             onClick={onOpenAgents}
             disabled={!onOpenAgents}
-            title="Open Agents panel"
+            title="Open Sessions panel"
             className="block text-sm text-muted-foreground enabled:cursor-pointer enabled:hover:text-foreground enabled:hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
           >
             {subagentLabel}

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router';
 import { HeaderLeftExtraSlot, useAppHeader } from '@/client/components/app-header-context';
 import { Loading } from '@/client/components/loading';
 import { WorkspacesBackLink } from '@/client/features/workspace';
@@ -6,6 +7,7 @@ import { runInBackground } from '@/client/lib/background-task';
 import { resolveSelectedProjectSlug } from '@/client/lib/project-selection';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -18,7 +20,6 @@ import {
   DataBackupSection,
   IdeSettingsSection,
   NotificationSettingsSection,
-  PeriodicTasksSection,
   ProcessesSection,
   ProcessesSectionSkeleton,
   ProjectSettingsSection,
@@ -28,7 +29,7 @@ import {
   WorktreeCleanupSection,
 } from './admin/index';
 
-type SettingsTab = 'general' | 'appearance' | 'project' | 'periodic-tasks' | 'voice';
+type SettingsTab = 'general' | 'appearance' | 'project' | 'voice';
 
 export default function AdminDashboardPage() {
   useAppHeader({ title: 'Settings' });
@@ -73,6 +74,12 @@ export default function AdminDashboardPage() {
         </HeaderLeftExtraSlot>
       )}
       <div className="space-y-6 p-3 md:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4">
+          <p className="text-sm text-muted-foreground">Manage scheduled agents and their runs.</p>
+          <Button asChild variant="outline" size="sm">
+            <Link to="/agents">Agents</Link>
+          </Button>
+        </div>
         <Tabs value={settingsTab} onValueChange={(value) => setSettingsTab(value as SettingsTab)}>
           <TabsList className="w-full sm:w-auto">
             <TabsTrigger value="general" className="flex-1 sm:flex-initial">
@@ -83,9 +90,6 @@ export default function AdminDashboardPage() {
             </TabsTrigger>
             <TabsTrigger value="project" className="flex-1 sm:flex-initial">
               Project Settings
-            </TabsTrigger>
-            <TabsTrigger value="periodic-tasks" className="flex-1 sm:flex-initial">
-              Periodic Tasks
             </TabsTrigger>
             <TabsTrigger value="voice" className="flex-1 sm:flex-initial">
               Voice Mode
@@ -134,14 +138,6 @@ export default function AdminDashboardPage() {
           <TabsContent value="project" className="mt-4">
             {projects ? (
               <ProjectSettingsSection projects={projects} />
-            ) : (
-              <p className="text-sm text-muted-foreground">Loading projects...</p>
-            )}
-          </TabsContent>
-
-          <TabsContent value="periodic-tasks" className="mt-4">
-            {projects ? (
-              <PeriodicTasksSection projects={projects} />
             ) : (
               <p className="text-sm text-muted-foreground">Loading projects...</p>
             )}

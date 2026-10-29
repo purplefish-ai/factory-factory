@@ -110,3 +110,64 @@ for (const viewport of mobileViewports) {
     });
   });
 }
+
+for (const viewport of mobileViewports) {
+  test(`Agents mobile shell - ${viewport.name}`, async ({ page }) => {
+    await page.clock.setFixedTime(new Date('2026-01-12T12:00:00.000Z'));
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await page.goto('/__mobile-baseline?surface=agents');
+    await expect(page.getByRole('heading', { name: 'Agents', exact: true })).toBeVisible();
+    const rail = page.getByRole('navigation', { name: 'Agents', exact: true });
+    await expect(rail).toBeVisible();
+    const dependencies = rail.getByRole('link', { name: /Keep dependencies current/ });
+    await dependencies.click();
+    await expect(dependencies).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByRole('heading', { name: 'Keep dependencies current' })).toBeVisible();
+    const review = rail.getByRole('link', { name: /Review recent changes/ });
+    await review.focus();
+    await page.keyboard.press('Enter');
+    await expect(review).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByRole('heading', { name: 'Review recent changes' })).toBeVisible();
+    const workspaceLink = page.getByRole('link', { name: /Open workspace/ });
+    await workspaceLink.scrollIntoViewIfNeeded();
+    await expect(workspaceLink).toHaveAttribute(
+      'href',
+      '/projects/factory-factory/workspaces/archived-run'
+    );
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+    ).toBeLessThanOrEqual(1);
+    await page.locator('main').evaluate((element) => {
+      element.scrollTop = 0;
+    });
+    await review.blur();
+    await expect(page).toHaveScreenshot(`agents-detail-${viewport.name}.png`);
+    await workspaceLink.focus();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/\/projects\/factory-factory\/workspaces\/archived-run$/);
+    await page.goto('/__mobile-baseline?surface=agents');
+    await page.getByRole('button', { name: 'Create Agent', exact: true }).click();
+    await expect(rail).toBeVisible();
+    const form = page.locator('form');
+    await form.getByRole('textbox', { name: 'Name', exact: true }).fill('Review mobile layouts');
+    await form
+      .getByRole('textbox', { name: 'Instructions', exact: true })
+      .fill('Check narrow layouts and open a focused pull request.');
+    await form.getByRole('combobox', { name: 'Schedule', exact: true }).click();
+    await page.getByRole('option', { name: 'Weekly', exact: true }).click();
+    await form.getByLabel('Run time (optional)').fill('09:30');
+    await expect(
+      form.getByText('This agent runs immediately after creation, then follows its schedule.', {
+        exact: false,
+      })
+    ).toBeVisible();
+    await expect(form.getByRole('button', { name: 'Create Agent', exact: true })).toBeEnabled();
+    await form.getByRole('button', { name: 'Create Agent', exact: true }).scrollIntoViewIfNeeded();
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+    ).toBeLessThanOrEqual(1);
+    await expect(page).toHaveScreenshot(`agents-create-${viewport.name}.png`);
+    await form.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Review recent changes' })).toBeVisible();
+  });
+}

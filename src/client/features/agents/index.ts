@@ -1,3 +1,4 @@
+export { AgentForm, type AgentFormProps } from './agent-form';
 export { AgentsPage } from './agents-page';
 export {
   AgentRunHistory,

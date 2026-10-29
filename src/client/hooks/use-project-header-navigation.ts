@@ -15,9 +15,13 @@ export function useProjectHeaderNavigation() {
   const navigateToProject = useCallback(
     (slug: string) => {
       selectProjectSlug(slug);
-      void navigate(`/projects/${slug}/workspaces`);
+      void navigate(
+        pathname === '/agents' || pathname.startsWith('/agents/')
+          ? '/agents'
+          : `/projects/${slug}/workspaces`
+      );
     },
-    [navigate, selectProjectSlug]
+    [navigate, pathname, selectProjectSlug]
   );
 
   const handleProjectChange = useCallback(
