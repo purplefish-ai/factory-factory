@@ -6,6 +6,8 @@ import { PencilSimpleIcon } from '@phosphor-icons/react/dist/csr/PencilSimple';
 import { ShieldIcon } from '@phosphor-icons/react/dist/csr/Shield';
 import { ShieldCheckIcon } from '@phosphor-icons/react/dist/csr/ShieldCheck';
 import { ShieldWarningIcon } from '@phosphor-icons/react/dist/csr/ShieldWarning';
+import { SparkleIcon } from '@phosphor-icons/react/dist/csr/Sparkle';
+import { ToggleLeftIcon } from '@phosphor-icons/react/dist/csr/ToggleLeft';
 import type { AcpConfigOption } from '@/client/features/chat/reducer';
 
 export function getConfigPresentation(option: AcpConfigOption) {
@@ -69,12 +71,20 @@ export function getConfigPresentation(option: AcpConfigOption) {
       warning: false,
     };
   }
+  // ACP's select fallback for boolean settings advertises on/off values.
+  // Render those directly, including new provider settings without a local registry.
+  const values = option.options.flatMap((entry) =>
+    'group' in entry ? entry.options.map((item) => item.value) : [entry.value]
+  );
+  const toggle =
+    ['on', 'off'].includes(option.currentValue) &&
+    values.every((value) => value === 'on' || value === 'off');
   return {
-    toggle: false,
+    toggle,
     label: option.name,
-    icon: undefined,
-    compact: false,
-    active: false,
+    icon: toggle ? (option.id === 'ultracode' ? SparkleIcon : ToggleLeftIcon) : undefined,
+    compact: toggle,
+    active: toggle && option.currentValue === 'on',
     warning: false,
   };
 }

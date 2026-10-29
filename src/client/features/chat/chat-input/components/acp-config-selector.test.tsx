@@ -229,6 +229,8 @@ it.each([
   ['plan_mode', undefined, 'default', 'plan', 'Planning'],
   ['fast-mode', undefined, 'off', 'on', 'Fast mode'],
   ['fast', undefined, 'off', 'on', 'Fast mode'],
+  ['ultracode', 'model_config', 'off', 'on', 'Setting'],
+  ['provider-feature', 'model_config', 'off', 'on', 'Setting'],
   ['provider-planning', 'plan_mode', 'default', 'plan', 'Planning'],
   ['provider-speed', 'fast', 'off', 'on', 'Fast mode'],
 ])('toggles %s directly in both directions', (id, category, off, on, label) => {
@@ -292,6 +294,7 @@ it.each([
 it.each([
   ['collaboration_mode', 'plan', 'default'],
   ['fast-mode', 'on', 'off'],
+  ['ultracode', 'on', 'off'],
 ])('allows clearing an unsupported selected %s value', (id, selected, fallback) => {
   const container = document.createElement('div');
   document.body.appendChild(container);
