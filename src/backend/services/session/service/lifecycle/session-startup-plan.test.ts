@@ -95,6 +95,48 @@ describe('startup native planning', () => {
     expect(f.runtime.setSessionMode).toHaveBeenCalledWith('session', 'default');
     expect(f.handle.configOptions[0]?.currentValue).toBe('default');
   });
+  it.each([
+    { autoSupported: true, expected: 'auto' },
+    { autoSupported: false, expected: 'acceptEdits' },
+  ])(
+    'turns Claude Plan off into RELAXED Auto access (Auto supported: $autoSupported)',
+    async ({ autoSupported, expected }) => {
+      const f = fixture('CLAUDE', false);
+      f.handle.configOptions = f.handle.configOptions.map((option) =>
+        option.type === 'select'
+          ? {
+              ...option,
+              options: ['default', 'plan', 'acceptEdits', 'auto'].map((value) => ({
+                value,
+                name: value,
+              })),
+            }
+          : option
+      );
+      const apply = f.runtime.setSessionMode.getMockImplementation();
+      // Claude's adapter applies Accept edits when the model lacks Auto mode.
+      f.runtime.setSessionMode.mockImplementation((sid, value) =>
+        apply!(sid, value === 'auto' && !autoSupported ? 'acceptEdits' : value)
+      );
+      const confirmTarget = vi.fn();
+      await applyStartupLaunchPlan(
+        'session',
+        f.session,
+        f.handle,
+        'RELAXED',
+        f.runtime,
+        undefined,
+        undefined,
+        {
+          assertCurrent: vi.fn(),
+          confirmTarget,
+        }
+      );
+      expect(f.runtime.setSessionMode).toHaveBeenCalledWith('session', 'auto');
+      expect(f.handle.configOptions[0]?.currentValue).toBe(expected);
+      expect(confirmTarget).toHaveBeenCalledWith('mode', expected);
+    }
+  );
   it('resolves configured Claude access when require-existing resume omits its permission preset', async () => {
     const f = fixture('CLAUDE', false);
     vi.mocked(userSettingsService.get).mockResolvedValueOnce(

@@ -8,13 +8,18 @@ vi.mock('@/backend/services/settings', () => ({
   userSettingsService: { get: vi.fn() },
 }));
 
-it.each(
-  (['CODEX', 'CLAUDE'] as const).flatMap((provider) =>
-    (['STRICT', 'RELAXED', 'YOLO'] as const).map((preset) => ({ provider, preset }))
-  )
-)(
-  'preserves scheduled $provider native access with $preset defaults through startup',
-  async ({ provider, preset }) => {
+it.each([
+  ...(['CODEX', 'CLAUDE'] as const).flatMap((provider) =>
+    (['STRICT', 'RELAXED', 'YOLO'] as const).map((preset) => ({
+      provider,
+      preset,
+      autoSupported: true,
+    }))
+  ),
+  { provider: 'CLAUDE' as const, preset: 'RELAXED' as const, autoSupported: false },
+])(
+  'preserves scheduled $provider native access with $preset defaults through startup (Auto supported: $autoSupported)',
+  async ({ provider, preset, autoSupported }) => {
     vi.mocked(userSettingsService.get).mockResolvedValue(
       unsafeCoerce({
         defaultWorkspacePermissions: preset,
@@ -32,7 +37,7 @@ it.each(
           currentValue: provider === 'CODEX' ? 'workspace-write' : 'default',
           options: (provider === 'CODEX'
             ? ['read-only', 'workspace-write', 'agent', 'agent-full-access']
-            : ['default', 'acceptEdits', 'bypassPermissions', 'plan']
+            : ['default', 'acceptEdits', 'auto', 'bypassPermissions', 'plan']
           ).map((value) => ({ value, name: value })),
         },
         ...(provider === 'CODEX'
@@ -56,10 +61,14 @@ it.each(
       return Promise.resolve(handle.configOptions);
     };
     const setConfigOption = vi.fn(async (_sessionId: string, optionId: string, value: string) =>
-      updateOption(optionId, value)
+      updateOption(
+        optionId,
+        optionId === 'mode' && value === 'auto' && !autoSupported ? 'acceptEdits' : value
+      )
     );
+    // Claude's adapter applies Accept edits when the model lacks Auto mode.
     const setSessionMode = vi.fn(async (_sessionId: string, value: string) =>
-      updateOption('mode', value)
+      updateOption('mode', value === 'auto' && !autoSupported ? 'acceptEdits' : value)
     );
     const service = new SessionConfigService({
       codexModelCatalogService: unsafeCoerce({}),
@@ -81,7 +90,11 @@ it.each(
       unsafeCoerce({ id: 'session-1', workflow: 'periodic-task', provider }),
       handle
     );
-    const claudeModes = { STRICT: 'default', RELAXED: 'acceptEdits', YOLO: 'bypassPermissions' };
+    const claudeModes = {
+      STRICT: 'default',
+      RELAXED: autoSupported ? 'auto' : 'acceptEdits',
+      YOLO: 'bypassPermissions',
+    };
     expect(handle.configOptions.find((option) => option.id === 'mode')?.currentValue).toBe(
       provider === 'CODEX' ? 'agent-full-access' : claudeModes[preset]
     );

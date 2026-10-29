@@ -6,7 +6,10 @@ import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import type { SessionPermissionPreset } from '@prisma-gen/client';
 import { getConfigOptionValues } from './session-config-option-helpers';
 import { readSessionLaunchSettings } from './session-launch-settings';
-import { resolveConfiguredAccessModeTarget } from './session-permission-policy';
+import {
+  isAppliedAccessMode,
+  resolveConfiguredAccessModeTarget,
+} from './session-permission-policy';
 export async function applyStartupLaunchPlan(
   sessionId: string,
   session: AgentSessionRecord,
@@ -45,10 +48,11 @@ export async function applyStartupLaunchPlan(
       : runtime.setConfigOption(sessionId, option.id, target));
   }
   confirmation?.assertCurrent();
-  if (handle.configOptions.find((entry) => entry.id === option.id)?.currentValue !== target) {
+  const applied = handle.configOptions.find((entry) => entry.id === option.id)?.currentValue;
+  if (!isAppliedAccessMode(handle.provider, target, applied)) {
     throw new Error('Requested Plan mode was not applied');
   }
-  confirmation?.confirmTarget(option.id, target);
+  confirmation?.confirmTarget(option.id, applied);
 }
 
 async function requestedPlanMode(
