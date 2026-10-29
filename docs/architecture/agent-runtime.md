@@ -418,6 +418,13 @@ reports `resume_fallback` (load failed or load unsupported). Browsing continues
 to fail without creating a replacement. Startup keeps the replacement runtime
 unavailable until the lifecycle owner reconciles it.
 
+A Codex `thread_active_writer` load failure preserves the stored conversation
+and reports that its other client must release it before retrying; it never
+creates a replacement. Development backends running alongside the main backend
+must use separate `BASE_DIR`/`DATABASE_PATH` values to avoid sharing session
+ownership. After a legitimate fallback commits, startup accepts the replacement
+identity's durable native access and reasoning snapshot.
+
 The lifecycle owner archives the currently observed transcript through the
 existing closed-session history before clearing provider messages from the
 active chat. Durable stop evidence stays with the AgentSession; provider-owned

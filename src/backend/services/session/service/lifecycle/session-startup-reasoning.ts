@@ -65,6 +65,7 @@ function savedReasoningTarget(
     return undefined;
   }
   const identity =
+    handle.providerSessionId !== session.providerSessionId &&
     handle.sessionCreationOutcome.kind === 'resume_fallback'
       ? handle.sessionCreationOutcome.previousProviderSessionId
       : handle.providerSessionId;
