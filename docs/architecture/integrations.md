@@ -153,8 +153,9 @@ The PERIODIC_TASK launch policy persists a fresh workspace and requires a
 `periodic-task` / `Periodic task` session, without explicit provider resolution,
 CLI preflight, or a capacity gate. Session failure propagates with the workspace
 retained and no initialization scheduled. Successful provisioning starts
-initialization once in the background. A launched result means provisioning
-finished, not that the prompt or periodic execution completed.
+initialization once in the background. A launched result means workspace and
+session creation returned; worktree initialization continues in the background.
+It does not mean the prompt or periodic execution completed.
 
 Launch failures mark the reserved execution failed. A failed workspace-ID write
 leaves it running without a workspace link until the existing 15-minute timeout

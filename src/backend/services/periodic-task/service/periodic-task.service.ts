@@ -179,6 +179,9 @@ export class PeriodicTaskService {
           continue;
         }
 
+        // Once the following reservation attempt begins, shutdown drains it through
+        // launch and linkage, including the async monthly-anchor lookup before its
+        // transaction. This guard rejects work before that admission boundary.
         if (this.isShuttingDown) {
           break;
         }

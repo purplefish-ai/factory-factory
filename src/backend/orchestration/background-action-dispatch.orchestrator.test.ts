@@ -69,24 +69,36 @@ describe('dispatchBackgroundAction', () => {
     ]);
   });
 
-  it('returns queue admission while wakes remain pending and logs a later rejection', async () => {
+  it('returns queue admission before a rejected wake logs only its recipient workspaces', async () => {
     const wake = deferred<void>();
     const ports = sessionPorts();
-    ports.wakeSession = () => wake.promise;
+    ports.wakeSession = (sessionId) => (sessionId === 'main' ? wake.promise : Promise.resolve());
     await expect(
       dispatchBackgroundAction(
-        { target: 'existing_sessions', deliveries: [{ sessionId: 'main', request }] },
+        {
+          target: 'existing_sessions',
+          deliveries: [
+            { sessionId: 'main', request },
+            { sessionId: 'other', request: { ...request, workspaceId: 'unrelated' } },
+            { sessionId: 'main', request: { ...request, prId: 'pr-2' } },
+            { sessionId: 'main', request: { ...request, workspaceId: 'second' } },
+          ],
+        },
         ports
       )
-    ).resolves.toEqual({ status: 'queued', queuedCount: 1 });
+    ).resolves.toEqual({ status: 'queued', queuedCount: 4 });
 
     const error = new Error('Dispatch unavailable');
     wake.reject(error);
     await Promise.resolve();
-    expect(ports.logger.warn).toHaveBeenCalledWith('Background queue dispatch deferred', {
-      sessionId: 'main',
-      error,
-    });
+    expect(ports.logger.warn).toHaveBeenCalledExactlyOnceWith(
+      'Background queue dispatch deferred',
+      {
+        sessionId: 'main',
+        workspaceIds: ['workspace', 'second'],
+        error,
+      }
+    );
   });
 
   it('counts only admitted queue requests while preserving the recipient wake', async () => {

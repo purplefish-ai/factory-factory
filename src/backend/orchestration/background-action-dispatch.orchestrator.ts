@@ -52,7 +52,14 @@ export async function dispatchBackgroundAction(
     }
     for (const sessionId of recipients) {
       void ports.wakeSession(sessionId).catch((error: unknown) => {
-        ports.logger.warn('Background queue dispatch deferred', { sessionId, error });
+        const workspaceIds = [
+          ...new Set(
+            action.deliveries
+              .filter((delivery) => delivery.sessionId === sessionId)
+              .map((delivery) => delivery.request.workspaceId)
+          ),
+        ];
+        ports.logger.warn('Background queue dispatch deferred', { sessionId, workspaceIds, error });
       });
     }
     return { status: 'queued', queuedCount };
