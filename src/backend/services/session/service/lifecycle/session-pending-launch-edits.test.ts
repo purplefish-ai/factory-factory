@@ -122,6 +122,7 @@ describe('explicit stopped edits during a pending launch', () => {
       await f.service.setSessionConfigOption('session-1', f.mode, f.off);
       expect(readSessionLaunchSettings(f.session.providerMetadata)).toEqual({
         reasoningEffort: 'low',
+        ...(provider === 'CLAUDE' ? { accessMode: 'acceptEdits' } : {}),
         planModeEnabled: false,
         applied: false,
       });

@@ -56,6 +56,8 @@ export class SessionDomainService extends EventEmitter {
 
   /** In-memory store for initial messages to auto-enqueue on first load_session */
   private readonly initialMessages = new Map<string, string>();
+  // Retain publication evidence through cancellation and ordinary store eviction.
+  private readonly publishedInitialMessages = new Map<string, string>();
 
   storeInitialMessage(sessionId: string, text: string): void {
     this.initialMessages.set(sessionId, text);
@@ -229,6 +231,20 @@ export class SessionDomainService extends EventEmitter {
       return result;
     }
     this.publisher.forwardSnapshot(store, { reason: 'enqueue' });
+    return result;
+  }
+
+  enqueueInitialMessage(
+    sessionId: string,
+    message: QueuedMessage
+  ): { position: number } | { error: string } | null {
+    if (this.publishedInitialMessages.has(sessionId)) {
+      return null;
+    }
+    const result = this.enqueue(sessionId, message);
+    if (!('error' in result)) {
+      this.publishedInitialMessages.set(sessionId, message.id);
+    }
     return result;
   }
 
@@ -495,8 +511,22 @@ export class SessionDomainService extends EventEmitter {
     sessionId: string,
     options?: { preserveRejections?: boolean; permanentlyDeleted?: boolean }
   ): void {
+    const initialMessageId = this.publishedInitialMessages.get(sessionId);
+    const queuedMessages =
+      initialMessageId === undefined ? [] : this.registry.getQueueSnapshot(sessionId);
+    const hasPendingInitialMessage = queuedMessages.some(
+      (message) => message.id === initialMessageId
+    );
+    // Inactive-viewer cleanup must not discard a task still waiting for workspace setup.
+    const preserveQueue =
+      hasPendingInitialMessage && options?.preserveRejections && !options.permanentlyDeleted;
     this.initialMessages.delete(sessionId);
     this.registry.clearSession(sessionId, options);
+    if (preserveQueue) {
+      this.registry.getOrCreateActive(sessionId).queue = queuedMessages;
+    } else if (hasPendingInitialMessage) {
+      this.publishedInitialMessages.delete(sessionId);
+    }
     if (options?.permanentlyDeleted) {
       this.forgetProviderHistoryIdentity(sessionId);
     }
@@ -504,12 +534,14 @@ export class SessionDomainService extends EventEmitter {
 
   clearAllSessions(): void {
     this.initialMessages.clear();
+    this.publishedInitialMessages.clear();
     this.repairedProviderHistoryIdentities.clear();
     this.registry.clearAllSessions();
   }
 
   /** Call only after durable deletion; ordinary store eviction must retain this fence. */
   forgetProviderHistoryIdentity(sessionId: string): void {
+    this.publishedInitialMessages.delete(sessionId);
     this.repairedProviderHistoryIdentities.delete(sessionId);
     sessionResumeFences.forget(sessionId);
     this.emit('session_permanently_deleted', sessionId);

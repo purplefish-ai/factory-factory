@@ -7,8 +7,10 @@ preserved, and clearing it later does not replay the earlier recovery.
 Claude session history restores inline image blocks as attachments on the
 original user prompt, including image-only prompts. Image-reference metadata
 companions are omitted from chat replay; their temporary file paths are not
-read. Restoration rejects malformed base64 and images above the shared 10 MiB
-decoded size limit used for uploads.
+read. Codex history likewise restores user `input_image` data URLs, and images
+on legacy `user_message` events, onto the prompt; non-user images and
+`local_images` paths are skipped. Restoration rejects malformed base64 and
+images above the shared 10 MiB decoded size limit used for uploads.
 
 The new-workspace slash-command palette prefers project command descriptions
 over same-named global commands, matching the workspace-first precedence used
@@ -146,31 +148,41 @@ normalizes to the new model's confirmed default. Each session load has a
 10-second UI loading safety timer, including creation from an empty Quick Chat.
 This UI timer does not release backend configuration readiness.
 
-### Launch thinking and Plan
+### Launch permissions, thinking, and Plan
 
 Manual workspace creation offers the provider/model picker and compact thinking
-menus and a planning toggle styled like the chat configuration controls.
-Planning switches directly between Default and Plan; unsupported selected Plan
-can still be cleared. New conversations in an existing workspace (the workspace
-tab bar, Quick Chat, and quick actions) have no launch pickers: they reuse the
-provider and model of the workspace's oldest session, or the workspace provider
-and saved model default when it has none, and omit thinking and Plan so the
-saved thinking default applies with Plan off. Users change these per
-conversation from the composer. Thinking levels and planning availability come
-from a disposable ACP session configured with the selected provider/model; the
-provider-wide model catalog is not used as a thinking capability list. Discovery
-submits no prompt, rejects permission/tool callbacks, and closes its processes.
-Its endpoint requires the trusted-local boundary used for local execution.
-Successful native results are cached for 30 seconds per provider/model, with
-bounded cache and concurrent discovery counts. Failed discovery offers Retry;
-creation waits for confirmed options while model selection remains editable.
+menus, an Access icon, and a planning toggle styled like the chat configuration
+controls. Access offers the selected provider/model’s native permission choices
+and starts from the saved workspace permission preset. Explicit access choices
+are retained per provider and confirmed before the first prompt. Claude Plan
+takes precedence over the launch access choice while enabled. Planning switches
+directly between Default and Plan; unsupported selected Plan can still be
+cleared. New conversations in an existing workspace (the workspace tab bar,
+Quick Chat, and quick actions) have no launch pickers: they reuse the provider
+and model of the workspace's oldest session, or the workspace provider and saved
+model default when it has none, and omit thinking and Plan so the saved thinking
+default applies with Plan off. Users change these per conversation from the
+composer. Thinking levels and planning availability come from a disposable ACP
+session configured with the selected provider/model; the provider-wide model
+catalog is not used as a thinking capability list. Discovery submits no prompt,
+rejects permission/tool callbacks, and closes its processes. Its endpoint
+requires the trusted-local boundary used for local execution. Successful native
+results are cached for 30 seconds per provider/model, with bounded cache and
+concurrent discovery counts. Failed discovery offers Retry; creation waits for
+confirmed options while model selection remains editable.
 
 Each launch draft snapshots its saved provider defaults and retains explicit
 thinking/Plan choices across provider switches and settings refreshes. A model
 change that makes an explicit level unavailable keeps that choice visible and
 blocks creation until a supported level or Default is selected. Unsupported
-inherited preferences use the native default instead. Existing chat navigation
-and periodic-task creation do not depend on launch-option readiness.
+inherited thinking preferences use the native default instead. An unavailable
+saved permission preset requires an explicit choice from Access before launch;
+launch never silently replaces that preset with a potentially broader native
+default. Unavailable access choices show a warning and a disabled menu entry.
+Manual launch validates explicit access against discovered provider/model modes
+before workspace persistence; startup confirms the selected mode again before
+accepting a prompt. Existing chat navigation and periodic-task creation do not
+depend on launch-option readiness.
 
 Launch requests distinguish an omitted `reasoningEffort` (saved provider
 default), explicit null (native default), and a supported value (that exact
@@ -262,6 +274,11 @@ retained provider transcript, ACP replay remains the fallback. Terminal output
 deltas are negotiated explicitly, accumulated with per-tool and total
 pending-tool limits, and included in completed tool results. Buffers are
 isolated by session and cleared on teardown.
+
+For tracked tool calls, object-valued ACP `rawInput` refinements replace the
+existing card's input, preserving its original order and tool name through live
+updates and reconnects. Status-only updates and invalid inputs leave the input
+intact.
 
 Permission requests retain the provider's option IDs and choices. Upstream Codex
 plan review is normalized into the application's plan UI. Interactive sessions
@@ -422,6 +439,13 @@ reports `resume_fallback` (load failed or load unsupported). Browsing continues
 to fail without creating a replacement. Startup keeps the replacement runtime
 unavailable until the lifecycle owner reconciles it.
 
+A Codex `thread_active_writer` load failure preserves the stored conversation
+and reports that its other client must release it before retrying; it never
+creates a replacement. Development backends running alongside the main backend
+must use separate `BASE_DIR`/`DATABASE_PATH` values to avoid sharing session
+ownership. After a legitimate fallback commits, startup accepts the replacement
+identity's durable native access and reasoning snapshot.
+
 The lifecycle owner archives the currently observed transcript through the
 existing closed-session history before clearing provider messages from the
 active chat. Durable stop evidence stays with the AgentSession; provider-owned
@@ -575,12 +599,16 @@ public operations and the session composition root wires the owners.
 
 Provider-initiated sub-agents are session-scoped, read-only, and provider-owned.
 Factory Factory projects their native ACP metadata and transcripts into the
-Agents panel through its session-scoped tracker. Clicking the running sub-agent
-count in chat opens the right panel and selects Agents.
+Sessions panel through its session-scoped tracker. Clicking the running
+sub-agent count in chat opens the right panel and selects Sessions. Its stored
+panel key remains `agents`; child-workspace access remains available for parent
+workspaces. The count has a decorative group of up to three colorful botanical
+icons; larger groups keep the full count without adding more icons.
 
-Sub-agent transcript projection joins consecutive assistant text chunks before
-rendering Markdown. Tool, reasoning, non-text content, and provider message-ID
-changes end the text sequence, preserving separate replies and tool ordering.
+Sub-agent transcript projection applies the same refinements without duplicating
+tool cards and joins consecutive assistant text chunks before rendering
+Markdown. Tool, reasoning, non-text content, and provider message-ID changes end
+the text sequence, preserving separate replies and tool ordering.
 
 They are distinct from workspace-scoped child workspaces, and are recovered from
 the provider when a parent session is reloaded rather than persisted by Factory

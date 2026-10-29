@@ -18,6 +18,7 @@
  */
 
 import { EventEmitter } from 'node:events';
+import { toError } from '@/backend/lib/error-utils';
 import { createLogger } from '@/backend/services/logger.service';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
 import type { WorkspaceStatus } from '@/shared/core';
@@ -84,6 +85,14 @@ export interface TransitionOptions {
   errorMessage?: string;
   /** Warning message to store in initErrorMessage on READY transition (non-fatal setup failure) */
   warningMessage?: string;
+}
+
+export const WORKSPACE_CREATED = 'workspace_created' as const;
+
+/** Canonical row returned by the committed creation write, before session setup. */
+export interface WorkspaceCreatedEvent {
+  workspaceId: string;
+  workspace: Workspace;
 }
 
 export const WORKSPACE_STATE_CHANGED = 'workspace_state_changed' as const;
@@ -161,6 +170,20 @@ function applyTransitionData(
 }
 
 class WorkspaceStateMachineService extends EventEmitter {
+  /** Publish after commit without allowing a subscriber to fail persisted creation. */
+  publishCreated(workspace: Workspace): void {
+    const event: WorkspaceCreatedEvent = { workspaceId: workspace.id, workspace };
+    for (const listener of this.rawListeners(WORKSPACE_CREATED)) {
+      try {
+        listener.call(this, event);
+      } catch (error) {
+        logger.error('Failed to publish committed workspace creation', toError(error), {
+          workspaceId: workspace.id,
+        });
+      }
+    }
+  }
+
   /**
    * Check if a state transition is valid.
    */

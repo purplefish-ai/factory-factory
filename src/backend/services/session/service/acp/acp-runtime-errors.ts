@@ -96,9 +96,22 @@ export function createAcpResumeError(
     typeof data.details === 'string'
       ? data.details
       : undefined;
+  const recovery = isAcpSessionInUseError(error)
+    ? 'Close the session in the other client or stop the other Factory Factory backend, then retry.'
+    : 'Restore the provider history before retrying.';
   return new Error(
-    `Cannot restore existing ${provider} conversation "${providerSessionId}": ${message}${code !== undefined ? ` [code ${code}]` : ''}${detail ? ` (${detail})` : ''}. Restore the provider history before retrying.`,
+    `Cannot restore existing ${provider} conversation "${providerSessionId}": ${message}${code !== undefined ? ` [code ${code}]` : ''}${detail ? ` (${detail})` : ''}. ${recovery}`,
     { cause: error }
+  );
+}
+
+export function isAcpSessionInUseError(error: unknown): boolean {
+  const { data } = getAcpErrorLogDetails(error);
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    'reason' in data &&
+    data.reason === 'thread_active_writer'
   );
 }
 

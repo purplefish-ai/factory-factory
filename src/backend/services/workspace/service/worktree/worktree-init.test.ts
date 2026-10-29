@@ -22,7 +22,7 @@ const mocks = vi.hoisted(() => ({
   hasStartupScript: vi.fn(),
   startSession: vi.fn(),
   stopWorkspaceSessions: vi.fn(),
-  enqueue: vi.fn(),
+  enqueueInitialMessage: vi.fn(),
   emitDelta: vi.fn(),
   tryDispatchNextMessage: vi.fn(),
   createTerminalSession: vi.fn(),
@@ -77,7 +77,8 @@ vi.mock('@/backend/services/session', () => ({
     stopWorkspaceSessions: mocks.stopWorkspaceSessions,
   },
   sessionDomainService: {
-    enqueue: mocks.enqueue,
+    enqueue: vi.fn(),
+    enqueueInitialMessage: mocks.enqueueInitialMessage,
     emitDelta: mocks.emitDelta,
   },
   sessionDispatchService: {
@@ -174,7 +175,7 @@ describe('initializeWorkspaceWorktree orchestrator', () => {
     });
     mocks.startSession.mockResolvedValue(undefined);
     mocks.stopWorkspaceSessions.mockResolvedValue(undefined);
-    mocks.enqueue.mockReturnValue({ position: 0 });
+    mocks.enqueueInitialMessage.mockReturnValue({ position: 0 });
     mocks.tryDispatchNextMessage.mockResolvedValue(undefined);
     mocks.createTerminalSession.mockResolvedValue({});
     mocks.clearTerminalPid.mockResolvedValue(undefined);
@@ -263,7 +264,7 @@ describe('initializeWorkspaceWorktree orchestrator', () => {
       url: 'https://github.com/owner/repo/issues/123',
     });
     mocks.findByWorkspaceId.mockResolvedValue([{ id: 'session-1', status: SessionStatus.IDLE }]);
-    mocks.enqueue.mockReturnValue({ position: 0 });
+    mocks.enqueueInitialMessage.mockReturnValue({ position: 0 });
 
     await initializeWorkspaceWorktree('workspace-1', {
       branchName: 'main',

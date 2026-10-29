@@ -4,8 +4,7 @@ import { WorkspacesBoardView } from './components';
 import { useWorkspaceProjectNavigation } from './use-workspace-project-navigation';
 
 export default function WorkspacesListPage() {
-  const { slug, projects, handleProjectChange, handleCurrentProjectSelect } =
-    useWorkspaceProjectNavigation();
+  const { slug, projects } = useWorkspaceProjectNavigation();
 
   const { data: project } = trpc.project.getBySlug.useQuery({ slug });
 
@@ -16,9 +15,7 @@ export default function WorkspacesListPage() {
   return (
     <WorkspacesBoardView
       projectId={project.id}
-      selectedProjectSlug={slug}
-      onProjectChange={handleProjectChange}
-      onCurrentProjectSelect={handleCurrentProjectSelect}
+      projectName={project.name}
       projects={projects}
       slug={slug}
       issueProvider={project.issueProvider}

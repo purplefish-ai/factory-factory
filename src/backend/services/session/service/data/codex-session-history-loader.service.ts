@@ -7,7 +7,8 @@ import { z } from 'zod';
 import { createLogger } from '@/backend/services/logger.service';
 import { normalizeCodexSessionId as normalizeProviderSessionId } from '@/backend/services/session/service/acp/acp-session-identity';
 import { summarizeZodIssues } from '@/backend/services/session/service/zod-issue-summary';
-import type { HistoryMessage } from '@/shared/acp-protocol';
+import type { HistoryMessage, MessageAttachment } from '@/shared/acp-protocol';
+import { buildHistoryImageAttachments, parseImageDataUrl } from './history-image-attachment';
 import { readNonEmptyJsonlLines } from './session-history-jsonl-reader';
 
 const logger = createLogger('codex-session-history-loader');
@@ -46,9 +47,16 @@ const CodexMessageMetadataSchema = z.object({
   content_item_kinds: z.array(z.string()).optional(),
 });
 const CodexResponseMessageSchema = z.object({
+  id: z.string().optional(),
   type: z.literal('message'),
   role: z.enum(['user', 'assistant']),
-  content: z.array(z.object({ type: z.string(), text: z.string().optional() })),
+  content: z.array(
+    z.object({
+      type: z.string(),
+      text: z.string().optional(),
+      image_url: z.string().optional(),
+    })
+  ),
   phase: z.string().nullish(),
   channel: z.string().nullish(),
   internal_chat_message_metadata_passthrough: CodexMessageMetadataSchema.nullish(),
@@ -301,8 +309,9 @@ function parseCodexEventMessage(
 
   const eventType = entry.payload.type;
   if (eventType === 'user_message') {
-    const message = entry.payload.message;
-    if (typeof message !== 'string' || message.trim().length === 0) {
+    const message = typeof entry.payload.message === 'string' ? entry.payload.message : '';
+    const attachments = parseEventImageAttachments(entry.payload.images, timestamp);
+    if (message.trim().length === 0 && attachments.length === 0) {
       return null;
     }
 
@@ -310,6 +319,7 @@ function parseCodexEventMessage(
       type: 'user',
       content: message,
       timestamp,
+      ...(attachments.length > 0 ? { attachments } : {}),
     };
   }
 
@@ -327,6 +337,18 @@ function parseCodexEventMessage(
   }
 
   return null;
+}
+
+/** Legacy `user_message` events carry pasted images as data URLs; local file paths are not read. */
+function parseEventImageAttachments(images: unknown, timestamp: string): MessageAttachment[] {
+  if (!Array.isArray(images)) {
+    return [];
+  }
+  const sources = images.flatMap((image, index) => {
+    const source = parseImageDataUrl(image);
+    return source ? [{ source, index }] : [];
+  });
+  return buildHistoryImageAttachments(sources, `codex-history-image-${timestamp}`);
 }
 
 function normalizeCodexFunctionArgs(argumentsValue: unknown): Record<string, unknown> {
@@ -461,25 +483,57 @@ function parseResponseTextMessage(payload: unknown, timestamp: string): HistoryM
   ) {
     return [];
   }
+  const kinds = metadata?.content_item_kinds;
   const text = content
     .filter((block, index) =>
       role === 'assistant'
         ? block.type === 'output_text'
-        : block.type === 'input_text' &&
-          (!metadata?.content_item_kinds || metadata.content_item_kinds[index] === 'user.text')
+        : block.type === 'input_text' && (!kinds || kinds[index] === 'user.text')
     )
     .map((block) => block.text ?? '')
     .join('\n');
-  return text.trim() ? [{ type: role, content: text, timestamp }] : [];
+  const attachments =
+    role === 'user'
+      ? buildHistoryImageAttachments(
+          content.flatMap((block, index) => {
+            const isUserImage =
+              block.type === 'input_image' && (!kinds || kinds[index] === 'user.image');
+            const source = isUserImage ? parseImageDataUrl(block.image_url) : null;
+            return source ? [{ source, index }] : [];
+          }),
+          `codex-history-image-${parsed.data.id ?? timestamp}`
+        )
+      : [];
+  if (!text.trim() && attachments.length === 0) {
+    return [];
+  }
+  return [
+    {
+      type: role,
+      content: text,
+      timestamp,
+      ...(attachments.length > 0 ? { attachments } : {}),
+    },
+  ];
 }
 
 function appendHistoryTurn(history: HistoryMessage[], turn: CodexHistoryTurn): void {
   const eventTypes = new Set(
     turn.messages.filter((item) => item.source === 'event').map((item) => item.message.type)
   );
+  // Legacy event copies of the prompt may omit images that the response item kept.
+  const responseUserAttachments = turn.messages.find(
+    (item) => item.source === 'response' && item.message.type === 'user' && item.message.attachments
+  )?.message.attachments;
   for (const { source, message } of turn.messages) {
     if (source === 'event' || !eventTypes.has(message.type)) {
-      history.push(message);
+      const needsAttachments =
+        source === 'event' && message.type === 'user' && !message.attachments;
+      history.push(
+        needsAttachments && responseUserAttachments
+          ? { ...message, attachments: responseUserAttachments }
+          : message
+      );
     }
   }
   turn.messages = [];

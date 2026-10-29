@@ -1,8 +1,10 @@
 import { ArchiveIcon } from '@phosphor-icons/react/dist/csr/Archive';
 import { ChatIcon } from '@phosphor-icons/react/dist/csr/Chat';
 import { ClockIcon } from '@phosphor-icons/react/dist/csr/Clock';
+import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { formatDistanceToNow } from 'date-fns';
 import { useState } from 'react';
+import { getSessionDisplayName } from '@/client/lib/session-display-name';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import {
@@ -92,10 +94,17 @@ export function ClosedSessionsDropdown({
                 }}
                 className="flex items-start gap-2 px-3 py-2 cursor-pointer"
               >
-                <ChatIcon className="h-4 w-4 shrink-0 mt-0.5 text-muted-foreground" />
+                {session.workflow === 'periodic-task' ? (
+                  <RobotIcon
+                    aria-label="Agent session"
+                    className="h-4 w-4 shrink-0 mt-0.5 text-muted-foreground"
+                  />
+                ) : (
+                  <ChatIcon className="h-4 w-4 shrink-0 mt-0.5 text-muted-foreground" />
+                )}
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium truncate">
-                    {session.name || `${session.workflow} session`}
+                    {getSessionDisplayName(session, `${session.workflow} session`)}
                   </div>
                   <div className="flex items-center gap-1.5 mt-0.5 text-xs text-muted-foreground">
                     <ClockIcon className="h-3 w-3 shrink-0" />

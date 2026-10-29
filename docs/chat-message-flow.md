@@ -33,7 +33,8 @@ resume. `SessionLifecycleGate` owns lifecycle generations; the dispatcher
 applies its generation checks when validating dispatch eligibility and starting
 the runtime through injected capabilities. The queued message stays visible
 until dispatch is ready, so refreshing during startup does not remove it from
-the queue.
+the queue. The chat view keeps queued messages visible and cancellable alongside
+the workspace or session startup status while hiding partial history replay.
 
 The dispatcher uses notification and background-delivery capabilities for
 claims, preparation, validation, and completion. Those services retain claim and

@@ -1,3 +1,9 @@
+import type { AcpConfigOption } from '@/client/lib/acp-config';
+export type {
+  AcpConfigOption,
+  AcpConfigOptionValue,
+  AcpConfigOptionGroup,
+} from '@/client/lib/acp-config';
 import type {
   ActiveHookInfo,
   AgentMessage,
@@ -110,30 +116,6 @@ export interface TaskNotification {
   id: string;
   message: string;
   timestamp: string;
-}
-
-/** Individual config option value */
-export interface AcpConfigOptionValue {
-  value: string;
-  name: string;
-  description?: string;
-}
-
-/** Grouped config option values (for hierarchical option lists) */
-export interface AcpConfigOptionGroup {
-  group: string;
-  options: AcpConfigOptionValue[];
-}
-
-/** ACP agent-provided config option (model, mode, thought level, custom) */
-export interface AcpConfigOption {
-  id: string;
-  name: string;
-  description?: string | null;
-  type: string;
-  category?: string | null;
-  currentValue: string;
-  options: Array<AcpConfigOptionValue | AcpConfigOptionGroup>;
 }
 
 /** Rewind preview state for displaying confirmation dialog */

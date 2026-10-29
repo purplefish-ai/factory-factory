@@ -2,6 +2,30 @@
 
 ## Review requests
 
+Reviews lives at `/projects/:slug/reviews`. The navbar selects its project;
+Agents and Reviews remain in the sidebar above global Settings. The page and
+sidebar badge share a project-keyed query with a 30-second freshness/refresh
+policy. The badge excludes approved PRs. The URL project wins over a temporarily
+stale saved selection, including archived projects absent from the active menu.
+Local-only projects show an explicit repository empty state without fetching
+reviews or PR details.
+
+`prReview.listReviewRequests` accepts optional `{ projectId }`; the server
+resolves and validates that project's GitHub owner/repository and qualifies the
+GitHub search before pagination. Missing, unlinked, or malformed projects cannot
+fall back to a global search. Repository identity uses case-insensitive
+owner/repo matching. Undefined input retains the global review-count bridge and
+snapshot contract.
+
+Legacy `/reviews` links redirect to the selected project. Explicit `repo` links
+resolve a configured owner (selected match, active match, then archived match)
+or show an ownership error. A canonical page only selects deep-linked PRs
+present in its scoped visible list. A delayed target may become selected after
+refresh, unless the user has already selected a row or navigated the list.
+Project/repository changes reset selection, details, diffs, and the mobile
+sheet; late old-view completions cannot populate the new view. Repository
+metadata changes refresh the project's cached list.
+
 The Reviews list and review badge exclude repositories archived on GitHub at the
 search source. They also exclude PRs attached only to ARCHIVING or ARCHIVED
 workspaces. A PR attached to a live workspace remains visible, even when an

@@ -12,6 +12,7 @@ vi.mock('@/client/lib/trpc', () => ({
     useUtils: () => ({
       workspace: { listForProject: { invalidate: mocks.list }, get: { invalidate: mocks.get } },
     }),
+    project: { getBySlug: { useQuery: () => ({ data: undefined }) } },
     workspace: {
       rename: { useMutation: () => ({ mutateAsync: mocks.rename }) },
       attachPR: { useMutation: () => ({}) },
@@ -24,7 +25,9 @@ vi.mock('@/client/components/app-header-context', () => ({
   HeaderRightSlot: () => null,
   useAppHeader: () => undefined,
 }));
-vi.mock('@/client/components/project-selector', () => ({ ProjectSelectorDropdown: () => null }));
+vi.mock('@/client/components/project-header', () => ({
+  ProjectHeaderNavigation: () => null,
+}));
 vi.mock('@/client/routes/projects/workspaces/use-workspace-project-navigation', () => ({
   useWorkspaceProjectNavigation: () => ({ slug: 'project', projects: [] }),
 }));

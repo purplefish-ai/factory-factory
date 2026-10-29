@@ -271,12 +271,12 @@ describe('RightPanel Agents tab', () => {
   it.each([
     ['parent', 'MANUAL', 'true'],
     ['child', 'CHILD_WORKSPACE', 'false'],
-  ])('always labels the tab Agents for a %s workspace', (_kind, creationSource, isParent) => {
+  ])('always labels the tab Sessions for a %s workspace', (_kind, creationSource, isParent) => {
     mocks.workspaceData = { periodicTaskId: null, creationSource };
     render();
 
     const agentsTab = [...container.querySelectorAll('button')].find(
-      (button) => button.textContent === 'Agents'
+      (button) => button.textContent === 'Sessions'
     );
     expect(agentsTab).not.toBeUndefined();
     expect(container.textContent).not.toContain('Children');

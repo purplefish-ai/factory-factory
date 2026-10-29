@@ -7,6 +7,7 @@ import { ModelCatalogWarning } from '@/client/components/model-catalog-warning';
 import { AppLayout } from '@/client/components/resizable-layout';
 import { ThemeProvider } from '@/client/components/theme-provider';
 import { WorkspaceNotificationManager } from '@/client/features/workspace/WorkspaceNotificationManager';
+import { hasExplicitLegacyProjectOwner } from '@/client/lib/project-navigation';
 import { TRPCProvider, useProjects } from '@/client/lib/providers';
 import { Toaster } from '@/components/ui/sonner';
 import { useVisualViewportHeight } from '@/hooks/use-visual-viewport-height';
@@ -14,7 +15,7 @@ import { useVisualViewportHeight } from '@/hooks/use-visual-viewport-height';
 function RootLayout() {
   const { projects, isLoading } = useProjects();
   const navigate = useNavigate();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const { height: viewportHeight, offsetTop: viewportOffsetTop } = useVisualViewportHeight();
   const viewportTransform =
     viewportOffsetTop === '0px' ? undefined : `translateY(${viewportOffsetTop})`;
@@ -27,11 +28,12 @@ function RootLayout() {
       !isLoading &&
       projects?.length === 0 &&
       !pathname.startsWith('/projects/new') &&
-      !isProjectSpecificRoute
+      !isProjectSpecificRoute &&
+      !hasExplicitLegacyProjectOwner(pathname, search)
     ) {
       void navigate('/projects/new');
     }
-  }, [isLoading, projects, pathname, navigate]);
+  }, [isLoading, projects, pathname, search, navigate]);
 
   return (
     <div

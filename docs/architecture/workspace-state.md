@@ -27,9 +27,15 @@ back to the session loading status if history is still loading after setup.
 Workspace initialization finishes both factory setup and project startup scripts
 and persists READY before starting the default agent session. Provider startup
 hooks can depend on installed tools and generated files, so setup does not run
-inside the agent's startup timeout. Non-fatal script failures still persist
-READY with a warning before the agent starts; unexpected provisioning failures
-do not start an agent.
+inside the agent's startup timeout. Initial task preparation runs alongside
+provisioning, so issue lookups do not delay worktree creation or setup. The task
+is published as soon as it is ready, before READY, and remains cancellable
+during setup. Inactive disconnect cleanup retains the queue only while the
+initial task is undelivered. It resets hydrated history and runtime state while
+retaining unexpired recent rejections and terminal PR outcomes. Provisioning
+retries preserve cancellation within the running server. Non-fatal script
+failures still persist READY with a warning before the agent starts; unexpected
+provisioning failures do not start an agent or publish a late prompt.
 
 Retrying a ready workspace with a setup warning restores READY even when its
 setup and startup scripts have been removed, before queued messages dispatch.
@@ -334,17 +340,29 @@ all other date and transport policy. The store derives only after timestamp
 merges, using its private raw session-busy value; active ratchet state does not
 itself make `isWorking` true.
 
-Committed lifecycle events publish their row's metadata immediately, including
-initial provisioning, READY paths and setup errors. A NEW-only workspace before
-initialization gains metadata through reconciliation; no separate creation event
-is introduced. Reconciliation seeds metadata and runtime inputs before releasing
-its seed barrier and starting slow Git work. The client validates a complete
-claim before adopting the canonical flat summary. Complete metadata values,
-including explicit nulls, replace old list values. Legacy entries preserve HTTP
-metadata repair and retry. Malformed version claims fail wire validation. Board
-and navigation consumers use the shared summary type. Complete summaries still
-never create fetched full detail, and detail-only initialization fields remain
-HTTP-owned. Existing incomplete-row repair remains necessary.
+The creation service synchronously publishes `WORKSPACE_CREATED` on the shared
+workspace lifecycle event owner immediately after the database commit, before
+session provisioning or initialization waits. The collector projects the
+committed row's metadata and DB name/branch provenance directly into a missing
+snapshot entry. NEW derives to Working, so streamed creation appears in the
+sidebar while required session setup is pending. A creation fact cannot replace
+an existing entry, bypass a current removal tombstone, or seed
+ARCHIVING/ARCHIVED input. Subscriber failures are logged individually and do not
+fail persisted creation or block later subscribers. Collector stop detaches this
+subscription.
+
+Committed state-change events also publish their row's metadata immediately,
+including initial provisioning, READY paths and setup errors. Lifecycle updates
+and reconciliation keep their usual authority. Creation alone does not claim a
+complete summary; legacy HTTP metadata repair remains available. Reconciliation
+seeds metadata and runtime inputs before releasing its seed barrier and starting
+slow Git work. The client validates a complete claim before adopting the
+canonical flat summary. Complete metadata values, including explicit nulls,
+replace old list values. Legacy entries preserve HTTP metadata repair and retry.
+Malformed version claims fail wire validation. Board and navigation consumers
+use the shared summary type. Complete summaries still never create fetched full
+detail, and detail-only initialization fields remain HTTP-owned. Existing
+incomplete-row repair remains necessary.
 
 `workspace-detail-snapshot-transitions` owns snapshot departure discovery, exact
 detail resets, and live detail merging. Each snapshot hook mount retains one

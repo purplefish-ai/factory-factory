@@ -113,6 +113,9 @@ describe('due periodic tasks through shared dispatch', () => {
         resolveProvider: () => {
           throw new Error('Unexpected provider preflight');
         },
+        getLaunchOptions: () => {
+          throw new Error('Unexpected launch discovery');
+        },
         checkCliHealth: () => {
           throw new Error('Unexpected CLI preflight');
         },
@@ -146,7 +149,7 @@ describe('due periodic tasks through shared dispatch', () => {
       agentSessions: [
         expect.objectContaining({
           workflow: 'periodic-task',
-          name: 'Periodic task',
+          name: 'Agent',
           providerSessionId: null,
         }),
       ],

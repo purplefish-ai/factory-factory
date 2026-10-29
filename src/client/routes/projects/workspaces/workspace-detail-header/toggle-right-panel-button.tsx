@@ -13,6 +13,7 @@ export function ToggleRightPanelButton() {
         <Button
           variant="ghost"
           size="icon"
+          aria-label={rightPanelVisible ? 'Hide right panel' : 'Show right panel'}
           onClick={toggleRightPanel}
           className="h-6 w-6 md:h-8 md:w-8"
         >

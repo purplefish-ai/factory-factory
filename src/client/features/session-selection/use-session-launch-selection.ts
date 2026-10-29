@@ -2,13 +2,15 @@ import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import { resolveEffectiveSessionProvider } from '@/lib/session-provider-selection';
 import type { ChatModelOption, ChatProvider } from '@/shared/chat-capabilities';
-import type { SessionLaunchOptions, SessionLaunchSettings } from '@/shared/session-launch';
+import type { SessionPermissionPreset } from '@/shared/core';
+import { type SessionLaunchOptions, type SessionLaunchSettings } from '@/shared/session-launch';
 import { getEffectiveLaunchOptions } from './launch-options-state';
 import type { ProviderModelPickerProps } from './provider-model-picker';
 import type { SessionLaunchControlsProps } from './session-launch-controls';
 
 export interface SessionLaunchDefaults {
   defaultSessionProvider: ChatProvider;
+  defaultWorkspacePermissions?: SessionPermissionPreset;
   defaultClaudeModel?: string;
   defaultCodexModel?: string;
   defaultClaudeReasoningEffort?: string | null;
@@ -16,6 +18,7 @@ export interface SessionLaunchDefaults {
 }
 
 interface ProviderDraft {
+  accessMode?: string;
   model?: string;
   reasoningEffort?: string | null;
   planModeEnabled?: boolean;
@@ -74,8 +77,10 @@ export function useSessionLaunchSelectionState(
     provider,
     model,
     savedReasoningEffort,
+    savedAccessPreset: state.defaults?.defaultWorkspacePermissions,
     reasoningEffort: draft?.reasoningEffort,
     planModeEnabled: draft?.planModeEnabled,
+    accessMode: draft?.accessMode,
     loading: !state.defaults,
     defaults: state.defaults,
     onProviderChange: (next: ChatProvider, model?: string) =>
@@ -86,6 +91,7 @@ export function useSessionLaunchSelectionState(
       })),
     onModelChange: (model: string) => updateDraft({ model }),
     onReasoningChange: (reasoningEffort: string | null) => updateDraft({ reasoningEffort }),
+    onAccessModeChange: (accessMode: string) => updateDraft({ accessMode }),
     onPlanModeChange: (planModeEnabled: boolean) => updateDraft({ planModeEnabled }),
     reset,
   };
@@ -127,7 +133,8 @@ function getUnavailableReason(
   native: SessionLaunchOptions | undefined,
   nativeError: string | undefined,
   invalidReasoning: boolean,
-  invalidPlan: boolean
+  invalidPlan: boolean,
+  invalidAccess: boolean
 ) {
   if (error) {
     return error;
@@ -143,6 +150,9 @@ function getUnavailableReason(
   }
   if (invalidReasoning) {
     return 'Choose a supported thinking level or Default';
+  }
+  if (invalidAccess) {
+    return 'Choose a supported access mode';
   }
   if (invalidPlan) {
     return 'Turn Plan off because this model does not support it';
@@ -219,7 +229,7 @@ export function useSessionLaunchSelection(
     selection.model,
     scopeKey !== null && !selection.loading && !error
   );
-  const { native, error: nativeError, loading: nativeLoading } = discovery;
+  const { native, error: nativeError } = discovery;
   const effective = getEffectiveLaunchOptions(selection, native);
   const unavailableReason = getUnavailableReason(
     selection.loading,
@@ -227,7 +237,8 @@ export function useSessionLaunchSelection(
     native,
     nativeError,
     effective.invalidReasoning,
-    effective.invalidPlan
+    effective.invalidPlan,
+    effective.invalidAccess
   );
   const ready = !unavailableReason;
   const models = getModels(selection.provider, selection.model, catalog);
@@ -267,27 +278,7 @@ export function useSessionLaunchSelection(
     ...pickerProps,
     ready,
     unavailableReason,
-    reasoning: selection.provider
-      ? {
-          value: effective.reasoningEffort,
-          options: native?.reasoning.options ?? [],
-          defaultValue: native?.reasoning.defaultValue,
-          loading: nativeLoading,
-          error: nativeError,
-          invalid: effective.invalidReasoning,
-          onChange: selection.onReasoningChange,
-          onRetry: discovery.retry,
-        }
-      : undefined,
-    planMode: selection.provider
-      ? {
-          enabled: effective.planModeEnabled,
-          supported: native?.planMode.supported ?? false,
-          loading: nativeLoading,
-          error: nativeError,
-          onChange: selection.onPlanModeChange,
-        }
-      : undefined,
+    ...getConfigurationControls(selection, discovery, effective),
   };
   return {
     provider: selection.provider,
@@ -301,9 +292,50 @@ export function useSessionLaunchSelection(
     creationDefaults: {
       provider: selection.provider ?? undefined,
       model: selection.model,
+      ...(effective.accessMode !== undefined ? { accessMode: effective.accessMode } : {}),
       reasoningEffort: effective.reasoningEffort ?? null,
       planModeEnabled: effective.planModeEnabled,
     },
     reset: selection.reset,
+  };
+}
+
+function getConfigurationControls(
+  selection: ReturnType<typeof useSessionLaunchSelectionState>,
+  discovery: ReturnType<typeof useNativeLaunchOptions>,
+  effective: ReturnType<typeof getEffectiveLaunchOptions>
+): Pick<SessionLaunchControlsProps, 'reasoning' | 'accessMode' | 'planMode'> {
+  const { native, error: nativeError, loading: nativeLoading } = discovery;
+  return {
+    reasoning: selection.provider
+      ? {
+          value: effective.reasoningEffort,
+          options: native?.reasoning.options ?? [],
+          defaultValue: native?.reasoning.defaultValue,
+          loading: nativeLoading,
+          error: nativeError,
+          invalid: effective.invalidReasoning,
+          onChange: selection.onReasoningChange,
+          onRetry: discovery.retry,
+        }
+      : undefined,
+    accessMode: selection.provider
+      ? {
+          value: effective.accessMode,
+          options: native?.accessMode?.options ?? [],
+          loading: nativeLoading,
+          invalid: effective.invalidAccess,
+          onChange: selection.onAccessModeChange,
+        }
+      : undefined,
+    planMode: selection.provider
+      ? {
+          enabled: effective.planModeEnabled,
+          supported: native?.planMode.supported ?? false,
+          loading: nativeLoading,
+          error: nativeError,
+          onChange: selection.onPlanModeChange,
+        }
+      : undefined,
   };
 }

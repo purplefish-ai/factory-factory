@@ -1,7 +1,7 @@
 import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/session/service/acp';
-import { parseAcpConfigSnapshot } from './acp-config-snapshot';
+import { parseAcpConfigSnapshot, resolveSavedConfigIdentity } from './acp-config-snapshot';
 import { getConfigOptionValues } from './session-config-option-helpers';
 import { isAppliedAccessMode } from './session-permission-policy';
 
@@ -40,10 +40,7 @@ function savedModes(
     return null;
   }
   const snapshot = parseAcpConfigSnapshot(metadata);
-  const identity =
-    handle.sessionCreationOutcome?.kind === 'resume_fallback'
-      ? handle.sessionCreationOutcome.previousProviderSessionId
-      : handle.providerSessionId;
+  const identity = resolveSavedConfigIdentity(session, handle);
   if (
     !snapshot ||
     snapshot.provider !== session.provider ||

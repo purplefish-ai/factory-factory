@@ -5,7 +5,7 @@ import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
 import { summarizeZodIssues } from '@/backend/services/session/service/zod-issue-summary';
 import type { HistoryMessage, ToolResultContentValue } from '@/shared/acp-protocol';
-import { MAX_IMAGE_SIZE } from '@/shared/attachment-limits';
+import { buildHistoryImageAttachments, HistoryImageSourceSchema } from './history-image-attachment';
 import { readNonEmptyJsonlLines } from './session-history-jsonl-reader';
 
 const logger = createLogger('session-history-loader');
@@ -276,16 +276,7 @@ function parseChunkAsHistory(
 
 const HistoryImageSchema = z.object({
   type: z.literal('image'),
-  source: z.object({
-    type: z.literal('base64'),
-    media_type: z.enum(['image/png', 'image/jpeg', 'image/gif', 'image/webp']),
-    data: z
-      .string()
-      .min(1)
-      .max(Math.ceil(MAX_IMAGE_SIZE / 3) * 4)
-      .regex(/^[A-Za-z0-9+/]+={0,2}$/)
-      .refine((data) => data.length % 4 === 0),
-  }),
+  source: HistoryImageSourceSchema.extend({ type: z.literal('base64') }),
 });
 
 function restoreUserImages(
@@ -294,29 +285,11 @@ function restoreUserImages(
   timestamp: string,
   uuid: string | undefined
 ): void {
-  let imageIndex = 0;
-  const attachments = content.flatMap((chunk, index) => {
+  const images = content.flatMap((chunk, index) => {
     const parsed = HistoryImageSchema.safeParse(chunk);
-    if (!parsed.success) {
-      return [];
-    }
-    const { data, media_type: mediaType } = parsed.data.source;
-    const size = Buffer.byteLength(data, 'base64');
-    if (size > MAX_IMAGE_SIZE) {
-      return [];
-    }
-    imageIndex += 1;
-    return [
-      {
-        id: `history-image-${uuid ?? timestamp}-${index}`,
-        name: `image-${imageIndex}.${mediaType.slice('image/'.length)}`,
-        type: mediaType,
-        contentType: 'image' as const,
-        size,
-        data,
-      },
-    ];
+    return parsed.success ? [{ source: parsed.data.source, index }] : [];
   });
+  const attachments = buildHistoryImageAttachments(images, `history-image-${uuid ?? timestamp}`);
   if (attachments.length === 0) {
     return;
   }

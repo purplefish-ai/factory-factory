@@ -111,6 +111,10 @@ describe('native launch capability discovery', () => {
     ]);
     expect(result.reasoning.defaultValue).toBe('default');
     expect(result.planMode).toEqual({ supported: true, selected: false });
+    expect(result.accessMode).toEqual({
+      options: [{ value: 'default', label: 'default' }],
+      selected: 'default',
+    });
     expect(mocks.newSession).toHaveBeenCalledWith(
       expect.objectContaining({
         _meta: {

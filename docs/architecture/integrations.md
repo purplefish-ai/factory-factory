@@ -126,19 +126,25 @@ Failed Linear settings saves retain the validated key and selected team for
 retry. Successful saves clear the submitted form only if no key edits, team
 changes, or newer validation have superseded the submission.
 
-## Periodic tasks
+## Scheduled agents
 
-Scheduled recurring tasks that create a fresh workspace on a configured cadence
-(daily, weekly, monthly, or testing cadences every minute / five minutes).
-Daily/weekly/monthly tasks can optionally run at a specific time of day in the
-user's browser timezone (`scheduledTime` HH:MM + IANA `timezone` fields). Daily
-and weekly periodic tasks with a scheduled time advance calendar dates in the
-task timezone, preserving the scheduled day across daylight saving changes.
+<a id="periodic-tasks"></a>
+
+Agents are recurring instructions that create a fresh workspace on a configured
+cadence (daily, weekly, monthly, or testing cadences every minute / five
+minutes). Daily/weekly/monthly tasks can optionally run at a specific time of
+day in the user's browser timezone (`scheduledTime` HH:MM + IANA `timezone`
+fields). Daily and weekly periodic tasks with a scheduled time advance calendar
+dates in the task timezone, preserving the scheduled day across daylight saving
+changes.
 
 Each execution runs the configured prompt, monitors for PR creation, and
-advances the schedule. Concurrent runs are skipped. Default sessions use the
-`periodic-task` workflow, so non-interactive Codex startup selects unattended
-execution mode and tool approval prompts cannot stall scheduled runs.
+advances the schedule. Concurrent runs are skipped. Default sessions are named
+**Agent**. Existing sessions named exactly **Periodic task** display as
+**Agent** for the `periodic-task` workflow; custom names and stored records are
+preserved. Default sessions use the `periodic-task` workflow, so non-interactive
+Codex startup selects unattended execution mode and tool approval prompts cannot
+stall scheduled runs.
 
 The periodic capsule atomically reserves a `PeriodicTaskExecution` and advances
 its schedule before emitting a typed `timer_due` event. The event carries that
@@ -150,12 +156,15 @@ and returns the workspace ID; the periodic capsule owns linkage, failures and
 completion monitoring.
 
 The PERIODIC_TASK launch policy persists a fresh workspace and requires a
-`periodic-task` / `Periodic task` session, without explicit provider resolution,
-CLI preflight, or a capacity gate. Session failure propagates with the workspace
-retained and no initialization scheduled. Successful provisioning starts
-initialization once in the background. A launched result means workspace and
-session creation returned; worktree initialization continues in the background.
-It does not mean the prompt or periodic execution completed.
+`periodic-task` / `Agent` session, without explicit provider resolution, CLI
+preflight, or a capacity gate. Committed workspace creation publishes NEW to the
+snapshot stream before waiting for that required session; the sidebar can show
+it in Working immediately. Session failure propagates with the workspace
+retained and published, no initialization scheduled, and the reserved execution
+failed without a workspace link. Successful provisioning starts initialization
+once in the background. A launched result means workspace and session creation
+returned; worktree initialization continues in the background. It does not mean
+the prompt or periodic execution completed.
 
 Launch failures mark the reserved execution failed. A failed workspace-ID write
 leaves it running without a workspace link until the existing 15-minute timeout
@@ -163,12 +172,57 @@ marks it failed. Restart does not re-emit reserved runs. The launch/link crash
 gap remains; there is no replay or exactly-once guarantee. Timer events use no
 second run store, PR ledger entry, session queue delivery or receipt protocol.
 
-Managed via the "Periodic Tasks" admin tab and created from the Kanban launch
-dropdown. The workspace right panel shows execution history for
-periodic-task-sourced workspaces. Once workspace data loads, a stored
-right-panel selection falls back to Changes if its periodic task is no longer
-available, or if it points to the retired auto-iteration panel. Deleting a task
-therefore cannot leave that panel blank.
+Manage agents at `/projects/:slug/agents` or open an individual definition at
+`/projects/:slug/agents/:id`. The navbar project selector is the shared project
+context; Agents has no separate project filter. Agents and project-wide Reviews
+remain in the sidebar footer above global Settings. Settings links to Agents
+without a duplicate editor. Project switches preserve the current section and
+clear the selected definition. Legacy `/agents` and `/agents/:id` links resolve
+the definition's owner before trusting a stored project selection, including
+archived owners. A definition belonging to another project or an invalid ID
+shows project-local not found instead of selecting another agent.
+
+The Agents footer badge counts all definitions in the URL owner's project,
+including paused definitions and archived project owners. It warns when any
+agent's latest completed outcome is FAILED. RUNNING and SKIPPED retries retain
+that warning until the same agent creates a PR. The summary query selects the
+latest terminal outcome by start time, then ID, independently of history limits.
+It refreshes with management's 10-second cadence and after definition changes.
+Unknown/loading projects hide the badge; loaded empty projects show zero. A
+failed refresh retains the last successful count for that project.
+
+Agents stacks its rail and editor below 48rem of available content width,
+including when the workspace sidebar is expanded. Schedule fields share a row
+only above 26rem of their own available width. Resizing preserves form drafts.
+
+Create/edit use Name, Instructions and Schedule. Creation makes the first run
+due immediately; the existing periodic-task poll admits it, then follows the
+configured schedule. No new timer or admission policy is introduced. An
+unchanged clock time keeps an edited agent's timezone; changing the time uses
+the browser timezone. Clearing the time or switching to a minute cadence clears
+both schedule fields. Kanban's **Create Agent** launch mode keeps its
+instructions composer and uses the same schedule controls. It remains available
+while chat provider defaults load. No provider or unattended-execution policy
+changes accompany this UI.
+
+Pause affects future runs; an already running workspace continues. Deleting an
+agent requires confirmation and removes its definition and execution history,
+while existing workspaces and conversations remain available. Failed requests
+show an error and preserve form drafts. The management page polls task/history
+data without replacing unsaved edits.
+
+Both the management page and the workspace's **Agent** origin panel use the
+shared run history query, showing up to 50 recent runs with status, start time,
+workspace/PR links and errors. Workspace links use the agent owner's slug and
+remain available for non-null IDs, including archived workspaces. A running run
+without a workspace ID says no workspace yet; a terminal run without one says
+workspace unavailable. The origin panel links back to agent management.
+
+The workspace's provider sub-agent/child-workspace tab is **Sessions**. Stored
+panel keys remain `agents` for Sessions and `periodic-task` for Agent. Once
+workspace data loads, an unavailable origin tab falls back to Changes, as does a
+retired auto-iteration preference. Deleting a definition therefore cannot leave
+that panel blank.
 
 Service capsule: `src/backend/services/periodic-task/`.
 

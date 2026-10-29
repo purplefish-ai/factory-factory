@@ -82,8 +82,8 @@ Then:
   repository contents are not searched yet.
 - **Automatic PR progression:** Ratchet watches open pull requests and can
   dispatch follow-up agents for failing CI and actionable review feedback.
-- **Repeatable automation:** Quick actions, periodic tasks, and child workspaces
-  help split up or repeat common workflows.
+- **Repeatable automation:** Quick actions, scheduled agents, and child
+  workspaces help split up or repeat common workflows.
 
 The core model is intentionally small:
 

@@ -147,11 +147,11 @@ export function GlobalSearch() {
             size="sm"
             aria-label="Search"
             aria-keyshortcuts="Meta+K Control+K"
-            className="h-8 gap-2 px-2 text-muted-foreground"
+            className="h-8 shrink-0 gap-2 px-2 text-muted-foreground"
           >
             <MagnifyingGlassIcon className="size-4" />
-            <span className="hidden md:inline">Search</span>
-            <kbd className="hidden rounded border px-1 text-[10px] font-normal md:inline">
+            <span className="hidden @[72rem]/header:inline">Search</span>
+            <kbd className="hidden rounded border px-1 text-[10px] font-normal @[72rem]/header:inline">
               {modifier} K
             </kbd>
           </Button>

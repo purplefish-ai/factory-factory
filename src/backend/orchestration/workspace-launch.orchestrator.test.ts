@@ -70,6 +70,20 @@ function createPorts() {
       resolveSessionModelForProvider(model, 'CODEX');
       return Promise.resolve('CODEX' as const);
     }),
+    getLaunchOptions: vi.fn(() =>
+      Promise.resolve({
+        provider: 'CODEX' as const,
+        model: 'model',
+        reasoning: { options: [] },
+        planMode: { supported: true, selected: false },
+        accessMode: {
+          options: [
+            { value: 'read-only', label: 'Read only' },
+            { value: 'agent', label: 'Auto review' },
+          ],
+        },
+      })
+    ),
     checkCliHealth: vi.fn(() => {
       events.push('health');
       return Promise.resolve({
@@ -230,7 +244,7 @@ it.each([0, 2])(
 
 describe('manual launch settings forwarding', () => {
   it.each([
-    { reasoningEffort: 'max', planModeEnabled: true },
+    { reasoningEffort: 'max', planModeEnabled: true, accessMode: 'read-only' },
     { reasoningEffort: null, planModeEnabled: false },
     {},
   ])('preserves exact supplied intent and omits absent fields: %j', async (settings) => {
@@ -362,7 +376,7 @@ describe('periodic task launch policy', () => {
     expect(ports.createDefaultSession).toHaveBeenCalledWith({
       workspaceId: 'w-created',
       workflow: 'periodic-task',
-      name: 'Periodic task',
+      name: 'Agent',
     });
     expect(ports.initializeWorktree).toHaveBeenCalledExactlyOnceWith('w-created');
   });
@@ -407,4 +421,70 @@ describe.each([childSource, periodicSource])('$type background initialization', 
     );
     expect(ports.initializeWorktree).toHaveBeenCalledExactlyOnceWith('w-created');
   });
+});
+
+it.each(['plan', 'bypassPermissions', 'missing'])(
+  'rejects explicit access %s before workspace persistence',
+  async (accessMode) => {
+    const { ports } = createPorts();
+    await expect(
+      launchWorkspace(
+        {
+          type: 'MANUAL',
+          projectId: 'p1',
+          name: 'Invalid access',
+          provider: 'CODEX',
+          model: 'gpt-6-sol',
+          accessMode,
+        },
+        ports
+      )
+    ).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+    expect(ports.createWorkspace).not.toHaveBeenCalled();
+    expect(ports.createDefaultSession).not.toHaveBeenCalled();
+    expect(ports.initializeWorktree).not.toHaveBeenCalled();
+  }
+);
+
+it('validates supported access against the resolved provider/model before provisioning', async () => {
+  const { ports } = createPorts();
+  await launchWorkspace(
+    {
+      type: 'MANUAL',
+      projectId: 'p1',
+      name: 'Access',
+      provider: 'CODEX',
+      model: 'gpt-6-sol',
+      accessMode: 'agent',
+    },
+    ports
+  );
+  expect(ports.getLaunchOptions).toHaveBeenCalledWith({ provider: 'CODEX', model: 'gpt-6-sol' });
+  expect(ports.createDefaultSession).toHaveBeenCalledWith(
+    expect.objectContaining({ accessMode: 'agent' })
+  );
+});
+
+it('validates access even when capacity disables default session creation', async () => {
+  const { ports } = createPorts();
+  ports.getMaxSessionsPerWorkspace.mockReturnValue(0);
+  await expect(
+    launchWorkspace(
+      { type: 'MANUAL', projectId: 'p1', name: 'Access', accessMode: 'missing' },
+      ports
+    )
+  ).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+  expect(ports.createWorkspace).not.toHaveBeenCalled();
+});
+
+it('does not persist a workspace when access discovery fails', async () => {
+  const { ports } = createPorts();
+  ports.getLaunchOptions.mockRejectedValueOnce(new Error('Discovery unavailable'));
+  await expect(
+    launchWorkspace(
+      { type: 'MANUAL', projectId: 'p1', name: 'Access', provider: 'CODEX', accessMode: 'agent' },
+      ports
+    )
+  ).rejects.toThrow('Discovery unavailable');
+  expect(ports.createWorkspace).not.toHaveBeenCalled();
 });

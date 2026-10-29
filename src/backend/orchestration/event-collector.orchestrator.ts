@@ -56,6 +56,8 @@ import type { terminalService } from '@/backend/services/terminal';
 import type { SnapshotUpdateInput } from '@/backend/services/workspace';
 import {
   type computePendingRequestType,
+  WORKSPACE_CREATED,
+  type WorkspaceCreatedEvent,
   WORKSPACE_STATE_CHANGED,
   type WorkspaceStateChangedEvent,
   type workspaceActivityService,
@@ -403,26 +405,25 @@ async function refreshWorkspaceSessionSummariesForSession(
 }
 
 /**
- * Build the snapshot update for a workspace state change. Beyond the status,
- * forward the snapshot-relevant fields co-updated in the transition (e.g.
- * branchName on READY) from the re-read row, so they don't wait for the next
- * reconciliation pass. Carrying projectId also lets the coalescer seed
- * workspaces the store doesn't know yet; the state machine suppresses
- * superseded events, so this cannot re-seed an entry a newer ARCHIVED event
- * removed. hasHadSessions is deliberately excluded: the session-activity path
- * sets it optimistically in the store and a lagging DB row must not
- * downgrade it.
+ * Project committed creation and state-change rows without extra I/O. Lifecycle
+ * events may seed unknown entries after the state machine suppresses superseded
+ * transitions; creation uses the store's separate insertion guard. Preserve DB
+ * name/branch provenance in both paths. hasHadSessions stays with the optimistic
+ * session-activity path so a lagging DB row cannot downgrade it.
  */
-function buildWorkspaceStateChangeFields(event: WorkspaceStateChangedEvent): SnapshotUpdateInput {
+function buildWorkspaceSnapshotFields(
+  workspace: WorkspaceStateChangedEvent['workspace'],
+  status: WorkspaceStateChangedEvent['toStatus']
+): SnapshotUpdateInput {
   return {
-    ...projectWorkspaceSnapshotMetadata(event.workspace),
-    status: event.toStatus,
-    projectId: event.workspace.projectId,
-    name: event.workspace.name,
-    nameUpdatedAt: event.workspace.updatedAt.getTime(),
-    branchUpdatedAt: event.workspace.updatedAt.getTime(),
-    branchName: event.workspace.branchName,
-    createdAt: event.workspace.createdAt.toISOString(),
+    ...projectWorkspaceSnapshotMetadata(workspace),
+    status,
+    projectId: workspace.projectId,
+    name: workspace.name,
+    nameUpdatedAt: workspace.updatedAt.getTime(),
+    branchUpdatedAt: workspace.updatedAt.getTime(),
+    branchName: workspace.branchName,
+    createdAt: workspace.createdAt.toISOString(),
   };
 }
 
@@ -536,6 +537,18 @@ function startEventCollectorWithState(state: EventCollectorState): void {
       });
   };
 
+  const workspaceCreatedHandler = (event: WorkspaceCreatedEvent) => {
+    dependencies.workspaceSnapshotStore.seedCreated(
+      event.workspaceId,
+      buildWorkspaceSnapshotFields(event.workspace, event.workspace.status),
+      nextCoalescerTimestamp()
+    );
+  };
+  dependencies.workspaceStateMachine.on(WORKSPACE_CREATED, workspaceCreatedHandler);
+  state.teardownListeners.push(() =>
+    dependencies.workspaceStateMachine.off(WORKSPACE_CREATED, workspaceCreatedHandler)
+  );
+
   // 1. Workspace state changes
   const workspaceStateChangedHandler = (event: WorkspaceStateChangedEvent) => {
     if (event.toStatus === 'ARCHIVED') {
@@ -571,7 +584,7 @@ function startEventCollectorWithState(state: EventCollectorState): void {
     ratchetProjection.setArchived(event.workspaceId, false);
     coalescer.enqueue(
       event.workspaceId,
-      buildWorkspaceStateChangeFields(event),
+      buildWorkspaceSnapshotFields(event.workspace, event.toStatus),
       'event:workspace_state_changed',
       { immediate: true }
     );

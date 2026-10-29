@@ -5,8 +5,9 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 
 const CURRENT_PROJECT_VALUE = '__current_project__';
+const RETRY_PROJECTS_VALUE = '__retry_projects__';
 const DEFAULT_PROJECT_BUTTON_CLASS =
-  'h-7 w-auto max-w-[6rem] border-0 bg-transparent px-0.5 text-sm font-semibold text-foreground shadow-none focus:ring-0 sm:max-w-[18rem] sm:px-1 md:max-w-none md:overflow-visible md:text-clip';
+  'h-7 w-auto max-w-[6rem] border-0 bg-transparent px-0.5 text-sm font-semibold text-foreground shadow-none focus:ring-0 sm:max-w-[18rem] sm:px-1';
 
 function getProjectInitials(name: string): string {
   const tokens = name
@@ -36,6 +37,7 @@ export function ProjectSelectorDropdown({
   projectButtonClassName,
   triggerId = 'project-select',
   onCurrentProjectSelect,
+  onRetryProjects,
   showLeadingSlash = false,
   showTrailingSlash = false,
   trailingSeparatorType = 'chevron',
@@ -47,6 +49,7 @@ export function ProjectSelectorDropdown({
   projectButtonClassName?: string;
   triggerId?: string;
   onCurrentProjectSelect?: () => void;
+  onRetryProjects?: () => void;
   showLeadingSlash?: boolean;
   showTrailingSlash?: boolean;
   trailingSeparatorType?: 'chevron' | 'slash';
@@ -62,6 +65,10 @@ export function ProjectSelectorDropdown({
     : projects;
 
   const handleValueChange = (value: string) => {
+    if (value === RETRY_PROJECTS_VALUE) {
+      onRetryProjects?.();
+      return;
+    }
     if (value === CURRENT_PROJECT_VALUE) {
       onCurrentProjectSelect?.();
       return;
@@ -76,7 +83,7 @@ export function ProjectSelectorDropdown({
   return (
     <div className="flex min-w-0 items-center gap-0.5">
       {showLeadingSlash ? (
-        <span className="hidden text-muted-foreground md:inline-flex" aria-hidden>
+        <span className="hidden shrink-0 text-muted-foreground md:inline-flex" aria-hidden>
           <CaretRightIcon className="h-3.5 w-3.5" />
         </span>
       ) : null}
@@ -92,7 +99,8 @@ export function ProjectSelectorDropdown({
           DEFAULT_PROJECT_BUTTON_CLASS,
           projectButtonClassName
         )}
-        aria-label={`Open ${selectedProjectName} kanban`}
+        title={selectedProjectName}
+        aria-label={`Open ${selectedProjectName} workspaces`}
       >
         {projectButtonLabel}
       </button>
@@ -124,6 +132,11 @@ export function ProjectSelectorDropdown({
               {project.name}
             </SelectItem>
           ))}
+          {onRetryProjects ? (
+            <SelectItem value={RETRY_PROJECTS_VALUE} className="text-destructive">
+              Retry projects
+            </SelectItem>
+          ) : null}
           <SelectItem value="__create__" className="text-muted-foreground">
             + Create project
           </SelectItem>
@@ -133,7 +146,7 @@ export function ProjectSelectorDropdown({
         </SelectContent>
       </Select>
       {showTrailingSlash ? (
-        <span className="-ml-0.5 text-muted-foreground" aria-hidden>
+        <span className="-ml-0.5 shrink-0 text-muted-foreground" aria-hidden>
           {trailingSeparatorType === 'slash' ? (
             <span className="text-xs">/</span>
           ) : (

@@ -3,6 +3,7 @@ import { writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, isAbsolute, join, relative } from 'node:path';
 import { z } from 'zod';
+import { ApplicationError } from '@/backend/lib/application-error';
 import { searchFilesRecursive } from '@/backend/lib/file-helpers';
 import { gitCommandC } from '@/backend/lib/shell';
 import { toPublicProject } from '@/backend/orchestration/project-query-projection';
@@ -158,7 +159,7 @@ export const projectRouter = router({
     const { projectManagementService } = ctx.appContext.services;
     const project = await projectManagementService.findBySlug(input.slug);
     if (!project) {
-      throw new Error(`Project not found: ${input.slug}`);
+      throw new ApplicationError('NOT_FOUND', `Project not found: ${input.slug}`);
     }
     return toPublicProject(project);
   }),

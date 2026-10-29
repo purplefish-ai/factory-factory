@@ -1,10 +1,15 @@
-import { CalendarIcon } from '@phosphor-icons/react/dist/csr/Calendar';
 import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
+import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { useQueryClient } from '@tanstack/react-query';
 import type { inferRouterOutputs } from '@trpc/server';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import {
+  AgentScheduleFields,
+  resolveAgentSchedule,
+  supportsAgentClockTime,
+} from '@/client/features/agents';
 import {
   AttachmentPreview,
   collectAttachments,
@@ -15,6 +20,7 @@ import {
   useSlashCommands,
 } from '@/client/features/composer';
 import { useSessionLaunchSelection } from '@/client/features/session-selection';
+import { invalidateAgentProjectQueries } from '@/client/lib/agent-query-cache';
 import { runInBackground } from '@/client/lib/background-task';
 import type { AppRouter } from '@/client/lib/trpc';
 import { trpc } from '@/client/lib/trpc';
@@ -31,15 +37,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import type { MessageAttachment } from '@/lib/chat-protocol';
 import { SUPPORTED_IMAGE_TYPES, SUPPORTED_TEXT_EXTENSIONS } from '@/lib/image-utils';
@@ -110,7 +108,7 @@ async function processFileInput(event: React.ChangeEvent<HTMLInputElement>) {
 
 const launchButtonLabels: Record<string, string> = {
   STANDARD: 'Launch',
-  PERIODIC_TASK: 'Create Periodic Task',
+  PERIODIC_TASK: 'Create Agent',
 };
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
@@ -148,46 +146,16 @@ function PeriodicTaskConfigPanel({
   setScheduledTime: (v: string) => void;
   isCreating: boolean;
 }) {
-  const isLongCadence = cadence === 'DAILY' || cadence === 'WEEKLY' || cadence === 'MONTHLY';
+  const isLongCadence = supportsAgentClockTime(cadence);
   return (
     <div className="space-y-2 rounded-md border border-dashed border-primary/40 bg-primary/5 p-3">
-      <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
-        <CalendarIcon className="h-3 w-3" />
-        Periodic task config
-      </div>
-      <div className="space-y-1.5">
-        <Label className="text-xs text-muted-foreground">Cadence</Label>
-        <Select
-          value={cadence}
-          onValueChange={(v) =>
-            setCadence(v as 'EVERY_MINUTE' | 'EVERY_FIVE_MINUTES' | 'DAILY' | 'WEEKLY' | 'MONTHLY')
-          }
-          disabled={isCreating}
-        >
-          <SelectTrigger className="h-7 text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="EVERY_MINUTE">Every minute (testing)</SelectItem>
-            <SelectItem value="EVERY_FIVE_MINUTES">Every 5 minutes (testing)</SelectItem>
-            <SelectItem value="DAILY">Daily</SelectItem>
-            <SelectItem value="WEEKLY">Weekly</SelectItem>
-            <SelectItem value="MONTHLY">Monthly</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      {isLongCadence && (
-        <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">Run time (optional)</Label>
-          <Input
-            type="time"
-            className="h-7 text-xs"
-            value={scheduledTime}
-            onChange={(e) => setScheduledTime(e.target.value)}
-            disabled={isCreating}
-          />
-        </div>
-      )}
+      <AgentScheduleFields
+        cadence={cadence}
+        scheduledTime={scheduledTime}
+        onCadenceChange={setCadence}
+        onScheduledTimeChange={setScheduledTime}
+        disabled={isCreating}
+      />
       <p className="text-[10px] text-muted-foreground">
         Creates a new workspace on this schedule. The first run starts immediately.
         {isLongCadence && scheduledTime ? ' Subsequent runs will use the time above.' : ''}
@@ -206,6 +174,7 @@ export function InlineWorkspaceForm({
   const queryClient = useQueryClient();
   const { data: userSettings, isLoading: isLoadingSettings } = trpc.userSettings.get.useQuery();
 
+  const instructionsId = useId();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [initialPrompt, setInitialPrompt] = useState('');
@@ -320,12 +289,15 @@ export function InlineWorkspaceForm({
 
   const createPeriodicTaskMutation = trpc.periodicTask.create.useMutation({
     onSuccess: (task) => {
-      toast.success(`Periodic task "${task.name}" created`);
-      runInBackground(utils.periodicTask.list.invalidate({ projectId }), 'Could not refresh data');
+      toast.success(`Agent "${task.name}" created`);
+      runInBackground(
+        invalidateAgentProjectQueries(utils, task.projectId),
+        'Could not refresh data'
+      );
       onCancel();
     },
     onError: (error) => {
-      toast.error(`Failed to create periodic task: ${error.message}`);
+      toast.error(`Failed to create agent: ${error.message}`);
     },
   });
 
@@ -356,19 +328,16 @@ export function InlineWorkspaceForm({
 
   const launchPeriodicTask = (trimmedPrompt: string) => {
     if (!trimmedPrompt) {
-      toast.error('Periodic task requires a prompt.');
+      toast.error('Agent requires instructions.');
       return;
     }
     const name = generateWorkspaceNameFromPrompt(trimmedPrompt, existingNames);
-    const isLongCadence = cadence === 'DAILY' || cadence === 'WEEKLY' || cadence === 'MONTHLY';
-    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     createPeriodicTaskMutation.mutate({
       projectId,
       name,
       prompt: trimmedPrompt,
       cadence,
-      scheduledTime: isLongCadence && scheduledTime ? scheduledTime : null,
-      timezone: isLongCadence && scheduledTime ? timezone : null,
+      ...resolveAgentSchedule({ cadence, scheduledTime }),
     });
   };
 
@@ -418,6 +387,7 @@ export function InlineWorkspaceForm({
   return (
     <Card className="shrink-0 border-dashed border-primary/50 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-1 motion-safe:duration-150 motion-safe:ease-out">
       <CardContent className="p-3 space-y-3" onKeyDown={handleKeyDown}>
+        {mode === 'PERIODIC_TASK' && <Label htmlFor={instructionsId}>Instructions</Label>}
         <div className="relative">
           <SlashCommandPalette
             commands={projectCommands}
@@ -441,6 +411,7 @@ export function InlineWorkspaceForm({
             paletteRef={fileMentions.paletteRef}
           />
           <Textarea
+            id={instructionsId}
             ref={textareaRef}
             placeholder="What should the agent work on?"
             value={initialPrompt}
@@ -537,8 +508,8 @@ export function InlineWorkspaceForm({
                   Launch as Standard Workspace
                 </DropdownMenuItem>
                 <DropdownMenuItem className="text-xs" onClick={() => setMode('PERIODIC_TASK')}>
-                  <CalendarIcon className="mr-1.5 h-3 w-3" />
-                  Create Periodic Task
+                  <RobotIcon className="mr-1.5 h-3 w-3" />
+                  Create Agent
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

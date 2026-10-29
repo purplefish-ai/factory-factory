@@ -10,6 +10,7 @@ import {
 import { RUN_SCRIPT_STATUS_CHANGED, runScriptStateMachine } from '@/backend/services/run-script';
 import { sessionDomainService } from '@/backend/services/session';
 import {
+  WORKSPACE_CREATED,
   WORKSPACE_STATE_CHANGED,
   workspaceActivityService,
   workspaceStateMachine,
@@ -18,6 +19,7 @@ import {
 describe('event collector listener lifecycle', () => {
   it('restores every real EventEmitter listener count after stop', () => {
     const sources = [
+      [workspaceStateMachine, WORKSPACE_CREATED],
       [workspaceStateMachine, WORKSPACE_STATE_CHANGED],
       [prSnapshotService, PR_SNAPSHOT_UPDATED],
       [prSnapshotService, PR_URL_ATTACHED],

@@ -47,6 +47,7 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
         id: s.id,
         status: s.status,
         name: s.name ?? null,
+        workflow: s.workflow,
         createdAt: new Date(s.createdAt),
       })),
     [sessions]

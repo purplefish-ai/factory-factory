@@ -2,6 +2,7 @@
 
 import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { within } from 'storybook/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
 import { createOptimisticWorkspaceSummary } from '@/client/lib/workspace-summary';
@@ -159,3 +160,15 @@ describe('WorkspaceItemContent', () => {
     container.remove();
   });
 });
+
+it.each(['PERIODIC_TASK', 'MANUAL'] as const)(
+  'identifies only agent workspace origins with a robot: %s',
+  (creationSource) => {
+    const { container, root } = renderContent({ ...baseWorkspace, creationSource });
+    expect(within(container).queryByRole('img', { name: 'Agent workspace' }) !== null).toBe(
+      creationSource === 'PERIODIC_TASK'
+    );
+    actFlushSync(() => root.unmount());
+    container.remove();
+  }
+);

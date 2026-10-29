@@ -20,6 +20,7 @@ vi.mock('@/backend/services/run-script', () => ({
   RUN_SCRIPT_STATUS_CHANGED: 'run_script_status_changed',
 }));
 vi.mock('@/backend/services/workspace', () => ({
+  WORKSPACE_CREATED: 'workspace_created',
   WORKSPACE_STATE_CHANGED: 'workspace_state_changed',
 }));
 
