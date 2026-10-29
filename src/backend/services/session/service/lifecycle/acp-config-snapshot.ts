@@ -1,5 +1,7 @@
 import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { z } from 'zod';
+import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
+import type { AcpProcessHandle } from '@/backend/services/session/service/acp';
 import { normalizeSessionConfigOptions } from '@/backend/services/session/service/acp/acp-session-config-options';
 
 const extensionMetadataSchema = z.record(z.string(), z.unknown()).nullish();
@@ -48,6 +50,17 @@ const storedAcpConfigSnapshotSchema = z.object({
 });
 
 export type StoredAcpConfigSnapshot = z.infer<typeof storedAcpConfigSnapshotSchema>;
+
+/** Prefer the committed replacement identity over its captured fallback predecessor. */
+export function resolveSavedConfigIdentity(
+  session: Pick<AgentSessionRecord, 'providerSessionId'>,
+  handle: Pick<AcpProcessHandle, 'providerSessionId' | 'sessionCreationOutcome'>
+): string {
+  return handle.providerSessionId !== session.providerSessionId &&
+    handle.sessionCreationOutcome?.kind === 'resume_fallback'
+    ? handle.sessionCreationOutcome.previousProviderSessionId
+    : handle.providerSessionId;
+}
 
 /** Treat invalid persisted config as a cache miss before any protocol consumer sees it. */
 export function parseAcpConfigSnapshot(metadata: unknown): StoredAcpConfigSnapshot | null {

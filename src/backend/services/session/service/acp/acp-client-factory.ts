@@ -18,6 +18,7 @@ import {
   AcpBrowseSessionUnavailableError,
   createAcpResumeError,
   getAcpErrorLogDetails,
+  isAcpSessionInUseError,
 } from './acp-runtime-errors';
 import type {
   AcpRuntimeEvent,
@@ -361,7 +362,8 @@ export class AcpClientFactory {
       });
     } catch (error) {
       const legacyCodex = options.provider === 'CODEX' && storedId.startsWith('sess_');
-      const requireExisting = legacyCodex || options.resumePolicy === 'require_existing';
+      const requireExisting =
+        legacyCodex || options.resumePolicy === 'require_existing' || isAcpSessionInUseError(error);
       this.logLoadSessionFailure(
         sessionId,
         storedId,

@@ -286,6 +286,37 @@ describe('AcpClientFactory', () => {
     );
   });
 
+  it('preserves a Codex conversation held by another client instead of replacing it', async () => {
+    const child = setupSuccessfulSpawn(createMockChildProcess({ exitAfterSigterm: true }), {
+      loadSession: true,
+    });
+    const loadError = Object.assign(new Error('This Codex session is in use by another client'), {
+      code: -32_600,
+      data: { reason: 'thread_active_writer', threadId: 'native-thread' },
+    });
+    mocks.loadSession.mockRejectedValue(loadError);
+    const discardFailedResumeReplay = vi.fn();
+
+    await expect(
+      new AcpClientFactory().createClient({
+        ...createParams({
+          options: defaultOptions({ provider: 'CODEX', resumeProviderSessionId: 'native-thread' }),
+        }),
+        discardFailedResumeReplay,
+      })
+    ).rejects.toMatchObject({
+      message: expect.stringContaining('Close the session in the other client'),
+      cause: loadError,
+    });
+    expect(mocks.newSession).not.toHaveBeenCalled();
+    expect(discardFailedResumeReplay).not.toHaveBeenCalled();
+    expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+    expect(mocks.logger.warn).toHaveBeenCalledWith(
+      'loadSession failed',
+      expect.not.objectContaining({ fallback: 'newSession' })
+    );
+  });
+
   it('uses an adapter override verbatim', async () => {
     setupSuccessfulSpawn();
 

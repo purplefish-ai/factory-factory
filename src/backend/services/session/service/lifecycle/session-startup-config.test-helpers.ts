@@ -6,6 +6,7 @@ import type {
 } from '@/backend/services/session/resources/agent-session.accessor';
 import { AcpRuntimeConfigController } from '@/backend/services/session/service/acp/acp-runtime-config-controller';
 import { createTestProcessHandle } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
+import type { AcpSessionCreationOutcome } from '@/backend/services/session/service/acp/acp-session-creation-outcome';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { configOptions } from './session-config-authority.test-helpers';
 import { createLifecycleHarness } from './session-lifecycle.test-helpers';
@@ -29,7 +30,10 @@ export function startupConfigOptions(
   );
 }
 
-export function setupStartupConfig(provider: 'CLAUDE' | 'CODEX' = 'CODEX') {
+export function setupStartupConfig(
+  provider: 'CLAUDE' | 'CODEX' = 'CODEX',
+  sessionCreationOutcome: AcpSessionCreationOutcome = { kind: 'resumed' }
+) {
   const h = createLifecycleHarness({
     provider,
     providerSessionId: 'thread',
@@ -88,7 +92,7 @@ export function setupStartupConfig(provider: 'CLAUDE' | 'CODEX' = 'CODEX') {
   const handle = createTestProcessHandle({
     provider,
     providerSessionId: 'thread',
-    sessionCreationOutcome: { kind: 'resumed' },
+    sessionCreationOutcome,
     connection: unsafeCoerce({
       setSessionConfigOption: ({ configId, value }: { configId: string; value: string }) =>
         Promise.resolve({

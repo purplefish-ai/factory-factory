@@ -3,7 +3,7 @@ import type { AgentSessionRecord } from '@/backend/services/session/resources/ag
 import type { AcpProcessHandle } from '@/backend/services/session/service/acp';
 import { isReasoningConfigOption } from '@/backend/services/session/service/acp/acp-config-option-identification';
 import { userSettingsService } from '@/backend/services/settings';
-import { parseAcpConfigSnapshot } from './acp-config-snapshot';
+import { parseAcpConfigSnapshot, resolveSavedConfigIdentity } from './acp-config-snapshot';
 import type { SessionProvider } from './session-config-option-helpers';
 import { readSessionLaunchSettings } from './session-launch-settings';
 const logger = createLogger('session');
@@ -64,10 +64,7 @@ function savedReasoningTarget(
     }
     return undefined;
   }
-  const identity =
-    handle.sessionCreationOutcome.kind === 'resume_fallback'
-      ? handle.sessionCreationOutcome.previousProviderSessionId
-      : handle.providerSessionId;
+  const identity = resolveSavedConfigIdentity(session, handle);
   if (
     snapshot.provider !== session.provider ||
     snapshot.providerSessionId !== session.providerSessionId ||
