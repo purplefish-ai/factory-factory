@@ -92,6 +92,13 @@ production and Storybook builds, and generated Prisma drift checks. Hooks and CI
 supplement the verification above; report any local skips rather than assuming
 CI ran.
 
+CI runs the full Vitest suite across two parallel shards. Each shard collects
+coverage and uploads a blob report without checking partial coverage against
+whole-suite thresholds. The required `Test` job requires both shards to pass,
+merges their reports, and enforces the normal coverage thresholds and critical
+surface checks. Local `pnpm test:coverage` still runs and checks the complete
+suite in one process.
+
 ## Pull Request Process
 
 1. Fork the repository if needed and create a branch from `main`.
