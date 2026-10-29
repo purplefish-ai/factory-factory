@@ -39,6 +39,7 @@ export const WorkspaceSessionSummarySchema = z.object({
   workflow: z.string().nullable(),
   model: z.string().nullable(),
   provider: z.nativeEnum(SessionProvider).optional(),
+  codexAccountId: z.string().nullable().optional(),
   persistedStatus: z.nativeEnum(SessionStatus),
   runtimePhase: z.enum(SESSION_RUNTIME_PHASES),
   processState: z.enum(SESSION_RUNTIME_PROCESS_STATES),

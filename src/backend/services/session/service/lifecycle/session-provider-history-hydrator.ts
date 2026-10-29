@@ -1,3 +1,4 @@
+import type { CodexRuntimeContext } from '@/backend/services/codex-accounts';
 import { createLogger } from '@/backend/services/logger.service';
 import { codexSessionHistoryLoaderService } from '@/backend/services/session/service/data/codex-session-history-loader.service';
 import { claudeSessionHistoryLoaderService } from '@/backend/services/session/service/data/session-history-loader.service';
@@ -16,6 +17,8 @@ const CODEX_TOOL_BACKFILL_RECHECK_COOLDOWN_MS = 5000;
 
 export type ProviderHistorySession = {
   provider: 'CLAUDE' | 'CODEX';
+  codexAccountId?: string | null;
+  codexAccountContext?: CodexRuntimeContext;
   providerSessionId: string | null;
   providerMetadata: unknown;
   workspace: { worktreePath: string | null };
@@ -162,7 +165,13 @@ async function loadProviderHistory(
   };
   return dbSession.provider === 'CLAUDE'
     ? await claudeSessionHistoryLoaderService.loadSessionHistory(input)
-    : await codexSessionHistoryLoaderService.loadSessionHistory(input);
+    : await codexSessionHistoryLoaderService.loadSessionHistory({
+        ...input,
+        ...(dbSession.codexAccountId ? { codexAccountId: dbSession.codexAccountId } : {}),
+        ...(dbSession.codexAccountContext
+          ? { codexAccountContext: dbSession.codexAccountContext }
+          : {}),
+      });
 }
 
 function handleLoadedProviderHistory(

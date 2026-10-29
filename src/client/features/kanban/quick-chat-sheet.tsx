@@ -48,6 +48,7 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
         status: s.status,
         name: s.name ?? null,
         workflow: s.workflow,
+        provider: s.provider,
         createdAt: new Date(s.createdAt),
       })),
     [sessions]
@@ -99,6 +100,9 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
           {workspaceId && selectedSessionId ? (
             <QuickChatContent
               workspaceId={workspaceId}
+              codexAccountId={
+                sessions.find((session) => session.id === selectedSessionId)?.codexAccountId
+              }
               chatState={chatState}
               viewportRef={viewportRef}
               onScroll={onScroll}

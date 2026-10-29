@@ -128,6 +128,11 @@ export type WorkspacePRDiscovery = Prisma.WorkspacePRDiscoveryModel
  */
 export type WorkspaceRunScript = Prisma.WorkspaceRunScriptModel
 /**
+ * Model CodexAccount
+ * 
+ */
+export type CodexAccount = Prisma.CodexAccountModel
+/**
  * Model AgentSession
  * 
  */

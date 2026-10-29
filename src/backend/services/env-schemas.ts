@@ -75,6 +75,8 @@ export const ConfigEnvSchema = z.object({
     .optional()
     .catch(undefined),
   FF_RUN_SCRIPT_PROXY_ENABLED: z.preprocess(parseOneZeroBoolean, z.boolean()).catch(false),
+  CODEX_HOME: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
+  CODEX_SESSIONS_DIR: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   CLAUDE_CONFIG_DIR: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   CLAUDE_RATE_LIMIT_PER_MINUTE: PositiveIntEnvSchema.catch(60),
   CLAUDE_RATE_LIMIT_PER_HOUR: PositiveIntEnvSchema.catch(1000),

@@ -46,3 +46,15 @@ describe('session provider usage trust boundary', () => {
     expect(getUsage).toHaveBeenCalledExactlyOnceWith('CODEX');
   });
 });
+
+// A bound conversation must read the quota of its saved account, independently of defaults.
+it('forwards a saved Codex account to the quota service', async () => {
+  const { caller, getUsage, snapshot } = createCaller({
+    isLocal: true,
+    remoteAddress: '127.0.0.1',
+  });
+  await expect(
+    caller.getProviderUsage({ provider: 'CODEX', codexAccountId: 'account-b' })
+  ).resolves.toEqual(snapshot);
+  expect(getUsage).toHaveBeenCalledExactlyOnceWith('CODEX', 'account-b');
+});

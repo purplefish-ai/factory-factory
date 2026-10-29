@@ -32,6 +32,26 @@ describe('agentSessionAccessor', () => {
     vi.clearAllMocks();
   });
 
+  it('persists the account only at conversation creation and rejects account update attempts', async () => {
+    mockCreate.mockResolvedValue({ id: 'bound' });
+    await agentSessionAccessor.create({
+      workspaceId: 'w',
+      workflow: 'followup',
+      provider: 'CODEX',
+      model: 'default',
+      codexAccountId: 'saved',
+    });
+    expect(mockCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({ codexAccountId: 'saved' }),
+    });
+    const forged = { ...{ model: 'default' }, codexAccountId: 'replacement' };
+    expect(() => agentSessionAccessor.update('bound', forged)).toThrow('immutable');
+    await expect(
+      agentSessionAccessor.updateIfStatus('bound', forged, [SessionStatus.IDLE])
+    ).rejects.toThrow('immutable');
+    expect(mockUpdate).not.toHaveBeenCalled();
+    expect(mockUpdateMany).not.toHaveBeenCalled();
+  });
   it('create persists the resolved provider and model', async () => {
     mockCreate.mockResolvedValue({ id: 'session-1' });
 

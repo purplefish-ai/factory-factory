@@ -10,6 +10,7 @@ export const prismaModelNames = [
 
   'WorkspaceRunScript',
   'WorkspaceNotification',
+  'CodexAccount',
   'AgentSession',
   'SessionLifecycleEvent',
   'TerminalSession',
@@ -76,6 +77,7 @@ export const infrastructureServiceRegistry = {
 export type InfrastructureServiceName = keyof typeof infrastructureServiceRegistry;
 
 export const serviceNames = [
+  'codex-accounts',
   'session',
   'workspace',
   'terminal',
@@ -97,9 +99,10 @@ type ServiceDefinition = {
 };
 
 export const serviceRegistry = {
+  'codex-accounts': { dependsOn: [], ownsModels: ['CodexAccount'] },
   search: { dependsOn: ['workspace', 'session'], ownsModels: [] },
   session: {
-    dependsOn: ['workspace', 'settings', 'terminal', 'github'],
+    dependsOn: ['workspace', 'settings', 'terminal', 'github', 'codex-accounts'],
     ownsModels: [
       'AgentSession',
       'ClosedSession',

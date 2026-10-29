@@ -7,6 +7,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SELECTED_PROJECT_KEY } from '@/client/lib/project-selection';
 import AdminDashboardPage from './admin-page';
 
+vi.mock('@/client/features/codex-accounts', () => ({
+  CodexAccountsSettings: () => createElement('section', null, 'Codex accounts'),
+}));
 vi.mock('react-router', () => ({
   Link: ({ children, to }: { children: ReactNode; to: string }) =>
     createElement('a', { href: to }, children),

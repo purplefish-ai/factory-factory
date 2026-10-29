@@ -148,3 +148,6 @@ export const PeriodicTaskExecutionStatus = {
 } as const;
 export type PeriodicTaskExecutionStatus =
   (typeof PeriodicTaskExecutionStatus)[keyof typeof PeriodicTaskExecutionStatus];
+
+export const CodexAccountKind = { NATIVE_DEFAULT: 'NATIVE_DEFAULT', MANAGED: 'MANAGED' } as const;
+export type CodexAccountKind = (typeof CodexAccountKind)[keyof typeof CodexAccountKind];

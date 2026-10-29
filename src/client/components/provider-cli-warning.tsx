@@ -29,7 +29,8 @@ function getWarning(
       latestVersion?: string;
       isOutdated?: boolean;
     };
-  }
+  },
+  hasUsableCodexAccount = false
 ): {
   title: string;
   description: string;
@@ -67,7 +68,7 @@ function getWarning(
       description: 'Update or reinstall Factory Factory to restore its bundled Codex runtime.',
     };
   }
-  if (health.codex.isAuthenticated === false) {
+  if (health.codex.isAuthenticated === false && !hasUsableCodexAccount) {
     return {
       title: 'Codex is not authenticated',
       description: 'Run `ff codex login` in your terminal to authenticate.',
@@ -81,7 +82,13 @@ function getWarning(
  * is not installed or not authenticated.
  * Shares the checkCLIHealth query cache with CLIHealthBanner.
  */
-export function ProviderCliWarning({ provider }: { provider: 'CLAUDE' | 'CODEX' }) {
+export function ProviderCliWarning({
+  provider,
+  codexAccountId,
+}: {
+  provider: 'CLAUDE' | 'CODEX';
+  codexAccountId?: string;
+}) {
   const utils = trpc.useUtils();
   const upgradeProviderCli = trpc.admin.upgradeProviderCLI.useMutation({
     onSuccess: (result) => {
@@ -102,11 +109,21 @@ export function ProviderCliWarning({ provider }: { provider: 'CLAUDE' | 'CODEX' 
     }
   );
 
+  const { data: accounts } = trpc.codexAccounts.list.useQuery(undefined, {
+    enabled: provider === 'CODEX' && health?.codex.isAuthenticated === false,
+    staleTime: 30_000,
+    retry: false,
+  });
+  const hasUsableCodexAccount =
+    accounts?.some(
+      (account) =>
+        account.authenticated && (codexAccountId ? account.id === codexAccountId : account.enabled)
+    ) ?? false;
   if (!health) {
     return null;
   }
 
-  const warning = getWarning(provider, health);
+  const warning = getWarning(provider, health, hasUsableCodexAccount);
   if (!warning) {
     return null;
   }

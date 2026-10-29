@@ -1,4 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+vi.mock('@/backend/services/codex-accounts', () => ({
+  codexAccountService: {
+    getPreviewRuntimeContext: vi.fn(async () => ({ accountId: 'codex-native-default', env: {} })),
+    withAccountReservation: vi.fn(async (input, create) =>
+      create(input.accountId ?? 'codex-native-default')
+    ),
+  },
+}));
 import { createDefaultApplicationDependencies } from '@/backend/app-context';
 import { sessionProviderResolverService } from '@/backend/services/session';
 import {
@@ -24,6 +32,7 @@ function persisted(input: CreateAgentSessionInput): AgentSession {
     workspacePrId: input.workspacePrId ?? null,
     model: input.model,
     provider: input.provider,
+    codexAccountId: input.codexAccountId ?? null,
     status: 'IDLE',
     providerSessionId: null,
     providerProjectPath: input.providerProjectPath ?? null,
@@ -59,6 +68,7 @@ beforeEach(() => {
   vi.spyOn(agentSessionAccessor, 'createWithinWorkspaceLimit').mockImplementation(
     async (input) => ({ outcome: 'created', session: persisted(input) })
   );
+  vi.spyOn(prDedicatedSessionAccessor, 'find').mockResolvedValue(null);
   vi.spyOn(prDedicatedSessionAccessor, 'findWorkspace').mockResolvedValue(workspace);
   vi.spyOn(prDedicatedSessionAccessor, 'acquire').mockImplementation(async (input) => ({
     outcome: 'created',

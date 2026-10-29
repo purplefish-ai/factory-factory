@@ -95,6 +95,7 @@ export function launchOptionsFromConfig(
 export async function fetchSessionLaunchOptionsFromAcp(input: {
   provider: 'CLAUDE' | 'CODEX';
   model?: string;
+  env?: NodeJS.ProcessEnv;
 }): Promise<NativeSessionLaunchOptions> {
   const command = resolveProviderAcpSpawnCommand(input.provider);
   const cwd = tmpdir();
@@ -102,7 +103,7 @@ export async function fetchSessionLaunchOptionsFromAcp(input: {
     cwd,
     stdio: ['pipe', 'pipe', 'pipe'],
     env: {
-      ...getCurrentProcessEnv(),
+      ...(input.env ?? getCurrentProcessEnv()),
       BROWSER: 'none',
       ELECTRON_RUN_AS_NODE: '1',
       ...(input.provider === 'CODEX'

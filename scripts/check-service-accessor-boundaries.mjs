@@ -7,6 +7,14 @@ const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts']);
 const SOURCE_ROOT = 'src/backend';
 
 const ACCESSOR_POLICIES = {
+  codexAccountBackupAccessor: {
+    owner: 'codex-accounts',
+    module: 'src/backend/services/codex-accounts/resources/codex-account-backup.accessor',
+  },
+  codexAccountAccessor: {
+    owner: 'codex-accounts',
+    module: 'src/backend/services/codex-accounts/resources/codex-account.accessor',
+  },
   metadataSearchAccessor: {
     owner: 'search',
     module: 'src/backend/services/search/resources/metadata-search.accessor',

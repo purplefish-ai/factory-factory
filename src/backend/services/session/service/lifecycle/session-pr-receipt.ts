@@ -42,7 +42,8 @@ async function findLiveReceipt(session: ReceiptSession, deliveryId: string) {
     session.provider,
     session.providerSessionId,
     session.workspace.worktreePath,
-    deliveryId
+    deliveryId,
+    session.codexAccountId
   );
 }
 
@@ -69,7 +70,8 @@ async function findRolloverReceipt(
       session.provider,
       rollover.previousProviderSessionId,
       session.workspace.worktreePath,
-      deliveryId
+      deliveryId,
+      session.codexAccountId
     );
     if (receipt === 'delivered') {
       return receipt;
@@ -98,6 +100,7 @@ async function findArchivedReceipt(
           metadata: z.object({
             provider: z.enum(['CLAUDE', 'CODEX']),
             providerSessionId: z.string().min(1),
+            codexAccountId: z.string().nullish(),
           }),
         })
         .parse(
@@ -113,7 +116,8 @@ async function findArchivedReceipt(
         metadata.metadata.provider,
         metadata.metadata.providerSessionId,
         archive.workspace.worktreePath,
-        deliveryId
+        deliveryId,
+        metadata.metadata.codexAccountId
       );
       if (receipt === 'delivered') {
         return receipt;
@@ -129,7 +133,8 @@ async function loadReceipt(
   provider: 'CLAUDE' | 'CODEX',
   providerSessionId: string,
   workingDir: string,
-  deliveryId: string
+  deliveryId: string,
+  codexAccountId?: string | null
 ): Promise<'delivered' | 'absent' | 'unavailable'> {
   try {
     const input = {
@@ -139,7 +144,10 @@ async function loadReceipt(
     const result =
       provider === 'CLAUDE'
         ? await claudeSessionHistoryLoaderService.loadSessionHistory(input)
-        : await codexSessionHistoryLoaderService.loadSessionHistory(input);
+        : await codexSessionHistoryLoaderService.loadSessionHistory({
+            ...input,
+            ...(codexAccountId ? { codexAccountId } : {}),
+          });
     if (result.status !== 'loaded') {
       return 'unavailable';
     }

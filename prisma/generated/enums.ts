@@ -193,3 +193,11 @@ export const NotificationDirection = {
 } as const
 
 export type NotificationDirection = (typeof NotificationDirection)[keyof typeof NotificationDirection]
+
+
+export const CodexAccountKind = {
+  NATIVE_DEFAULT: 'NATIVE_DEFAULT',
+  MANAGED: 'MANAGED'
+} as const
+
+export type CodexAccountKind = (typeof CodexAccountKind)[keyof typeof CodexAccountKind]

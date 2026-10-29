@@ -146,6 +146,11 @@ export class SessionDomainService extends EventEmitter {
   }
 
   emitDelta(sessionId: string, event: SessionDeltaEvent): void {
+    if (event.type === 'slash_commands') {
+      this.registry.getOrCreateActive(sessionId).liveSlashCommands = structuredClone(
+        event.slashCommands ?? []
+      );
+    }
     this.publisher.emitDelta(sessionId, event);
   }
   rejectMessage(sessionId: string, messageId: string, errorMessage: string): void {

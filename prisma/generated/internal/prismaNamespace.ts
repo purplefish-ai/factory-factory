@@ -406,6 +406,7 @@ export const ModelName = {
   WorkspacePREvent: 'WorkspacePREvent',
   WorkspacePRDiscovery: 'WorkspacePRDiscovery',
   WorkspaceRunScript: 'WorkspaceRunScript',
+  CodexAccount: 'CodexAccount',
   AgentSession: 'AgentSession',
   SessionLifecycleEvent: 'SessionLifecycleEvent',
   TerminalSession: 'TerminalSession',
@@ -429,7 +430,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "project" | "decisionLog" | "workspace" | "workspacePR" | "workspacePRMonitoring" | "workspacePRDedicatedSession" | "workspacePREvent" | "workspacePRDiscovery" | "workspaceRunScript" | "agentSession" | "sessionLifecycleEvent" | "terminalSession" | "closedSession" | "userSettings" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification"
+    modelProps: "project" | "decisionLog" | "workspace" | "workspacePR" | "workspacePRMonitoring" | "workspacePRDedicatedSession" | "workspacePREvent" | "workspacePRDiscovery" | "workspaceRunScript" | "codexAccount" | "agentSession" | "sessionLifecycleEvent" | "terminalSession" | "closedSession" | "userSettings" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -1096,6 +1097,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         count: {
           args: Prisma.WorkspaceRunScriptCountArgs<ExtArgs>
           result: runtime.Types.Utils.Optional<Prisma.WorkspaceRunScriptCountAggregateOutputType> | number
+        }
+      }
+    }
+    CodexAccount: {
+      payload: Prisma.$CodexAccountPayload<ExtArgs>
+      fields: Prisma.CodexAccountFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.CodexAccountFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$CodexAccountPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.CodexAccountFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$CodexAccountPayload>
+        }
+        findFirst: {
+          args: Prisma.CodexAccountFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$CodexAccountPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.CodexAccountFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$CodexAccountPayload>
+        }
+        findMany: {
+          args: Prisma.CodexAccountFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$CodexAccountPayload>[]
+        }
+        create: {
+          args: Prisma.CodexAccountCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$CodexAccountPayload>
+        }
+        createMany: {
+          args: Prisma.CodexAccountCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.CodexAccountCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$CodexAccountPayload>[]
+        }
+        delete: {
+          args: Prisma.CodexAccountDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$CodexAccountPayload>
+        }
+        update: {
+          args: Prisma.CodexAccountUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$CodexAccountPayload>
+        }
+        deleteMany: {
+          args: Prisma.CodexAccountDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.CodexAccountUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.CodexAccountUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$CodexAccountPayload>[]
+        }
+        upsert: {
+          args: Prisma.CodexAccountUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$CodexAccountPayload>
+        }
+        aggregate: {
+          args: Prisma.CodexAccountAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateCodexAccount>
+        }
+        groupBy: {
+          args: Prisma.CodexAccountGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.CodexAccountGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.CodexAccountCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.CodexAccountCountAggregateOutputType> | number
         }
       }
     }
@@ -1891,6 +1966,19 @@ export const WorkspaceRunScriptScalarFieldEnum = {
 export type WorkspaceRunScriptScalarFieldEnum = (typeof WorkspaceRunScriptScalarFieldEnum)[keyof typeof WorkspaceRunScriptScalarFieldEnum]
 
 
+export const CodexAccountScalarFieldEnum = {
+  id: 'id',
+  label: 'label',
+  kind: 'kind',
+  enabled: 'enabled',
+  identityKey: 'identityKey',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type CodexAccountScalarFieldEnum = (typeof CodexAccountScalarFieldEnum)[keyof typeof CodexAccountScalarFieldEnum]
+
+
 export const AgentSessionScalarFieldEnum = {
   id: 'id',
   workspaceId: 'workspaceId',
@@ -1900,6 +1988,7 @@ export const AgentSessionScalarFieldEnum = {
   model: 'model',
   status: 'status',
   provider: 'provider',
+  codexAccountId: 'codexAccountId',
   providerSessionId: 'providerSessionId',
   providerProjectPath: 'providerProjectPath',
   providerProcessPid: 'providerProcessPid',
@@ -2190,6 +2279,13 @@ export type EnumRunScriptStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$
 
 
 /**
+ * Reference to a field of type 'CodexAccountKind'
+ */
+export type EnumCodexAccountKindFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'CodexAccountKind'>
+    
+
+
+/**
  * Reference to a field of type 'SessionStatus'
  */
 export type EnumSessionStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'SessionStatus'>
@@ -2418,6 +2514,7 @@ export type GlobalOmitConfig = {
   workspacePREvent?: Prisma.WorkspacePREventOmit
   workspacePRDiscovery?: Prisma.WorkspacePRDiscoveryOmit
   workspaceRunScript?: Prisma.WorkspaceRunScriptOmit
+  codexAccount?: Prisma.CodexAccountOmit
   agentSession?: Prisma.AgentSessionOmit
   sessionLifecycleEvent?: Prisma.SessionLifecycleEventOmit
   terminalSession?: Prisma.TerminalSessionOmit

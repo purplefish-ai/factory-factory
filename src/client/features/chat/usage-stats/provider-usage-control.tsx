@@ -252,13 +252,18 @@ interface ProviderUsageControlProps extends Omit<
   'planUsage' | 'refreshing' | 'error' | 'onRefresh' | 'onOpenChange'
 > {
   provider: UsageProvider;
+  codexAccountId?: string | null;
 }
 
 /** Read account limits once, on completion, and only poll while details are open. */
-export function ProviderUsageControl({ provider, ...props }: ProviderUsageControlProps) {
+export function ProviderUsageControl({
+  provider,
+  codexAccountId,
+  ...props
+}: ProviderUsageControlProps) {
   const [open, setOpen] = useState(false);
   const query = trpc.session.getProviderUsage.useQuery(
-    { provider },
+    { provider, ...(provider === 'CODEX' && codexAccountId ? { codexAccountId } : {}) },
     {
       staleTime: 30_000,
       refetchInterval: open ? 30_000 : false,

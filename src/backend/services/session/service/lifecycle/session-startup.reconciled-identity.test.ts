@@ -3,6 +3,18 @@ import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { parseAcpConfigSnapshot } from './acp-config-snapshot';
 import { setupStartupConfig } from './session-startup-config.test-helpers';
 
+vi.mock('@/backend/services/codex-accounts', () => ({
+  NATIVE_DEFAULT_CODEX_ACCOUNT_ID: 'codex-native-default',
+  codexAccountService: {
+    getRuntimeContext: vi.fn(async (accountId = 'codex-native-default') => ({
+      accountId,
+      homeDir: '/test/codex',
+      sessionsDir: '/test/codex/sessions',
+      env: { CODEX_HOME: '/test/codex' },
+    })),
+  },
+}));
+
 vi.mock('@/backend/services/workspace', () => ({
   workspaceDataService: { findById: vi.fn() },
   workspaceNotificationService: {

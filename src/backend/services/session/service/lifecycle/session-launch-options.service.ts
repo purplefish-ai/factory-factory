@@ -1,6 +1,6 @@
 import { resolveSessionModelForProvider } from '@/backend/lib/session-model';
 import type { SessionLaunchOptions } from '@/shared/session-launch';
-type Input = { provider: 'CLAUDE' | 'CODEX'; model?: string };
+type Input = { provider: 'CLAUDE' | 'CODEX'; model?: string; codexAccountId?: string };
 type Defaults = {
   defaultClaudeModel?: string;
   defaultCodexModel?: string;
@@ -17,6 +17,7 @@ export class SessionLaunchOptionsService {
     private readonly deps: {
       fetchOptions(input: Input): Promise<SessionLaunchOptions>;
       getSettings(): Promise<Defaults>;
+      resolveAccountId?(input: Input): Promise<string>;
     }
   ) {}
   async getOptions(input: Input): Promise<SessionLaunchOptions> {
@@ -26,7 +27,14 @@ export class SessionLaunchOptionsService {
       input.provider,
       input.provider === 'CLAUDE' ? defaults.defaultClaudeModel : defaults.defaultCodexModel
     );
-    const key = JSON.stringify([input.provider, model]);
+    if (input.provider === 'CODEX' && this.deps.resolveAccountId) {
+      input = { ...input, codexAccountId: await this.deps.resolveAccountId({ ...input, model }) };
+    }
+    const key = JSON.stringify([
+      input.provider,
+      model,
+      input.provider === 'CODEX' ? (input.codexAccountId ?? 'auto') : null,
+    ]);
     const native = await this.getNativeOptions(key, { ...input, model });
     const effort =
       input.provider === 'CLAUDE'

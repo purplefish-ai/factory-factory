@@ -295,6 +295,7 @@ export function WorkspaceDetailContainer() {
   const chatViewModel: ChatContentProps = {
     workspaceId,
     sessionId: selectedDbSessionId,
+    codexAccountId: sessions?.find((session) => session.id === selectedDbSessionId)?.codexAccountId,
     resolveWorkspaceFileLink: resolveWorkspaceChatFileLink,
     onWorkspaceFileLink: handleWorkspaceFileLink,
     onOpenAgents: handleOpenAgents,

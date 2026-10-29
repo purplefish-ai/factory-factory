@@ -23,6 +23,7 @@ export interface CreateAgentSessionInput {
   workspacePrId?: string | null;
   model: string;
   provider: SessionProvider;
+  codexAccountId?: string | null;
   providerProjectPath?: string | null;
   providerMetadata?: Prisma.InputJsonValue;
 }
@@ -41,22 +42,27 @@ export interface UpdateAgentSessionInput {
 
 const toAgentSessionUpdateData = (
   data: UpdateAgentSessionInput
-): Prisma.AgentSessionUpdateManyMutationInput => ({
-  name: data.name,
-  workflow: data.workflow,
-  model: data.model,
-  status: data.status,
-  provider: data.provider,
-  providerMetadata:
-    data.providerMetadata === undefined
-      ? undefined
-      : data.providerMetadata === null
-        ? Prisma.JsonNull
-        : data.providerMetadata,
-  providerSessionId: data.providerSessionId,
-  providerProjectPath: data.providerProjectPath,
-  providerProcessPid: data.providerProcessPid,
-});
+): Prisma.AgentSessionUpdateManyMutationInput => {
+  if ('codexAccountId' in data) {
+    throw new Error('A conversation Codex account binding is immutable');
+  }
+  return {
+    name: data.name,
+    workflow: data.workflow,
+    model: data.model,
+    status: data.status,
+    provider: data.provider,
+    providerMetadata:
+      data.providerMetadata === undefined
+        ? undefined
+        : data.providerMetadata === null
+          ? Prisma.JsonNull
+          : data.providerMetadata,
+    providerSessionId: data.providerSessionId,
+    providerProjectPath: data.providerProjectPath,
+    providerProcessPid: data.providerProcessPid,
+  };
+};
 
 export interface CreateLimitedAgentSessionInput extends CreateAgentSessionInput {
   maxSessions: number;
@@ -121,6 +127,7 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
         workspacePrId: data.workspacePrId,
         model: data.model,
         provider: data.provider,
+        ...(data.codexAccountId !== undefined ? { codexAccountId: data.codexAccountId } : {}),
         providerProjectPath: data.providerProjectPath ?? null,
         ...(data.providerMetadata !== undefined ? { providerMetadata: data.providerMetadata } : {}),
       },

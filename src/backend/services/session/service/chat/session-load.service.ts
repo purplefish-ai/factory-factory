@@ -110,12 +110,14 @@ export class SessionLoadService {
     if (configOptions.length > 0) {
       this.deps.domain.emitDelta(sessionId, { type: 'config_options_update', configOptions });
     }
-    const cached = await this.deps.getCachedCommands(provider);
+    const cached = provider === 'CLAUDE' ? await this.deps.getCachedCommands(provider) : null;
     const slashCommands =
       provider === 'CLAUDE'
         ? buildClaudeSlashCommandsForLoad(cached, worktreePath)
         : (cached ?? []);
-    this.deps.domain.emitDelta(sessionId, { type: 'slash_commands', slashCommands });
+    if (provider === 'CLAUDE' || this.deps.getRuntimeSnapshot(sessionId).processState !== 'alive') {
+      this.deps.domain.emitDelta(sessionId, { type: 'slash_commands', slashCommands });
+    }
     const text = this.deps.domain.consumeInitialMessage(sessionId);
     if (!text) {
       return;

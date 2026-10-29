@@ -5,6 +5,7 @@ import type { AgentSession, Prisma, SessionProvider, Workspace } from '@prisma-g
 
 export interface AcquirePRDedicatedSessionInput extends PRTarget {
   provider: SessionProvider;
+  codexAccountId?: string | null;
   model: string;
   maxSessions: number;
   expectedBindingRevision?: number;
@@ -134,6 +135,7 @@ class PRDedicatedSessionAccessor {
         workflow: PR_DEDICATED_WORKFLOW,
         name: `PR ${pr.number ?? pr.id}`,
         provider: input.provider,
+        codexAccountId: input.codexAccountId,
         model: input.model,
         providerProjectPath: pr.workspace.worktreePath,
       },

@@ -3,10 +3,10 @@ import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockw
 import { CameraIcon } from '@phosphor-icons/react/dist/csr/Camera';
 import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
 import { GitDiffIcon } from '@phosphor-icons/react/dist/csr/GitDiff';
-import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { useEffect } from 'react';
 import { AgentSessionStatus } from '@/client/components/agent-session-status';
+import { NewSessionAccountAction } from '@/client/features/session-selection';
 import { type SubagentSelection, useLiveSubagentSelection } from '@/client/features/subagents';
 import { getSessionDisplayName } from '@/client/lib/session-display-name';
 import { TabButton } from '@/components/ui/tab-button';
@@ -278,7 +278,7 @@ interface MainViewTabBarProps {
   currentSessionId?: string | null;
   sessionSummariesById?: ReadonlyMap<string, WorkspaceSessionRuntimeSummary>;
   onSelectSession?: (sessionId: string) => void;
-  onCreateSession?: () => void;
+  onCreateSession?: (codexAccountId?: string) => void;
   onCloseSession?: (sessionId: string) => void;
   onQuickAction?: (name: string, prompt: string) => void;
   onSelectClosedSession?: (sessionId: string) => void;
@@ -398,19 +398,13 @@ export function MainViewTabBar({
         <div className="mx-1 flex shrink-0 items-center py-1">
           <Tooltip>
             <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={onCreateSession}
-                disabled={isButtonDisabled}
-                className={cn(
-                  'flex h-7 w-7 items-center justify-center rounded-md',
-                  'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground',
-                  'transition-colors disabled:opacity-50'
-                )}
-                aria-label="New session"
-              >
-                <PlusIcon className="h-3.5 w-3.5" />
-              </button>
+              <span>
+                <NewSessionAccountAction
+                  provider={sessions?.[0]?.provider}
+                  onCreate={onCreateSession}
+                  disabled={isButtonDisabled}
+                />
+              </span>
             </TooltipTrigger>
             <TooltipContent>
               {isAtLimit ? `Maximum ${maxSessions} sessions per workspace` : 'New session'}

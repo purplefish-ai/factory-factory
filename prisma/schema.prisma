@@ -422,6 +422,22 @@ model WorkspaceRunScript {
   // this one does not need one. Nothing else filters or orders on these columns.
 }
 
+enum CodexAccountKind {
+  NATIVE_DEFAULT
+  MANAGED
+}
+
+model CodexAccount {
+  id String @id @default(cuid())
+  label String
+  kind CodexAccountKind
+  enabled Boolean @default(true)
+  identityKey String? @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  sessions AgentSession[]
+}
+
 model AgentSession {
   dedicatedPRBinding WorkspacePRDedicatedSession?
   prMonitoringBindings WorkspacePRMonitoring[] @relation("PRMonitoringRecipient")
@@ -434,6 +450,8 @@ model AgentSession {
   model               String        @default("sonnet")
   status              SessionStatus @default(IDLE)
   provider            SessionProvider
+  codexAccountId      String?
+  codexAccount        CodexAccount? @relation(fields: [codexAccountId], references: [id], onDelete: Restrict)
   providerSessionId   String?
   providerProjectPath String?
   providerProcessPid  Int?
@@ -444,6 +462,7 @@ model AgentSession {
   @@index([workspaceId])
   @@index([status])
   @@index([provider])
+  @@index([codexAccountId])
   @@index([workspaceId, provider])
   @@index([workspaceId, status])
   @@index([workspaceId, createdAt])

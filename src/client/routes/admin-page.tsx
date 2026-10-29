@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { HeaderLeftExtraSlot, useAppHeader } from '@/client/components/app-header-context';
 import { Loading } from '@/client/components/loading';
+import { CodexAccountsSettings } from '@/client/features/codex-accounts';
 import { WorkspacesBackLink } from '@/client/features/workspace';
 import { runInBackground } from '@/client/lib/background-task';
 import { resolveSelectedProjectSlug } from '@/client/lib/project-selection';
@@ -126,6 +127,7 @@ export default function AdminDashboardPage() {
             <NotificationSettingsSection />
             <IdeSettingsSection />
             <ChatProviderDefaultsSection />
+            <CodexAccountsSettings />
             <CliAuthSection />
             <RatchetSettingsSection />
             <AdversarialReviewSection />

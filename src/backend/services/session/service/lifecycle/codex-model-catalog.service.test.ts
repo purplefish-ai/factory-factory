@@ -17,6 +17,14 @@ function catalog() {
 }
 
 describe('CodexModelCatalogService', () => {
+  it('isolates concurrent and cached catalogs by saved account', async () => {
+    const fetchModels = vi.fn(async () => catalog());
+    const service = new CodexModelCatalogService({ fetchModels });
+    await Promise.all([service.getModels('a'), service.getModels('b'), service.getModels('a')]);
+    expect(fetchModels).toHaveBeenCalledTimes(2);
+    expect(fetchModels).toHaveBeenCalledWith('a');
+    expect(fetchModels).toHaveBeenCalledWith('b');
+  });
   afterEach(() => vi.useRealTimers());
 
   it('shares discovery across concurrent consumers', async () => {

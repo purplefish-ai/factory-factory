@@ -146,3 +146,18 @@ it.each([
   expect(input).not.toHaveProperty('reasoningEffort');
   expect(input).not.toHaveProperty('planModeEnabled');
 });
+
+it('passes an explicit account only for a human-created Codex chat, keeping quick actions on Auto', () => {
+  const commands = renderCommands('workspace', [{ provider: 'CODEX', model: 'sol' }]);
+  commands.createChat('work-account');
+  expect(mutate.mock.calls[0]?.[0]).toMatchObject({
+    codexAccountId: 'work-account',
+    provider: 'CODEX',
+  });
+  commands.createQuickAction('Review', 'Review this');
+  expect(mutate.mock.calls[1]?.[0]).not.toHaveProperty('codexAccountId');
+});
+it('does not send a Codex account when creating a Claude chat', () => {
+  renderCommands('workspace', [{ provider: 'CLAUDE' }]).createChat('work-account');
+  expect(mutate.mock.calls[0]?.[0]).not.toHaveProperty('codexAccountId');
+});

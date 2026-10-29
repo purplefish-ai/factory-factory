@@ -20,6 +20,7 @@ export {
   SessionLifecycleEventReason,
   SessionPermissionPreset,
   SessionProvider,
+  CodexAccountKind,
   SessionStatus,
   WorkspaceCreationSource,
   WorkspaceProviderSelection,

@@ -12,6 +12,7 @@ interface SessionLike {
   workflow: string | null;
   model: string | null;
   provider?: 'CLAUDE' | 'CODEX';
+  codexAccountId?: string | null;
   status: DbSessionStatus;
 }
 
@@ -27,6 +28,7 @@ export function buildWorkspaceSessionSummaries(
       workflow: session.workflow,
       model: session.model,
       provider: session.provider,
+      ...(session.codexAccountId !== undefined ? { codexAccountId: session.codexAccountId } : {}),
       persistedStatus: session.status,
       runtimePhase: runtime.phase,
       processState: runtime.processState,

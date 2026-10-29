@@ -49,7 +49,7 @@ interface CollectionMutation<TInput, TOutput = unknown> {
 interface SessionCollectionCommands {
   createSession: CollectionMutation<CreateSessionInput, { id: string }>;
   deleteSession: CollectionMutation<{ id: string }>;
-  createChat: () => void;
+  createChat: (codexAccountId?: string) => void;
   createQuickAction: (name: string, prompt: string) => void;
   createQuickActionAsync: (name: string, prompt: string) => Promise<void>;
 }
@@ -101,32 +101,36 @@ export function useSessionCollectionCommands({
     },
   });
 
-  const createChat = useCallback(() => {
-    if (!workspaceId) {
-      return;
-    }
-    if (!sessions) {
-      toast.error(SESSIONS_LOADING_MESSAGE);
-      return;
-    }
-    const existingNumbers = sessions
-      .map((session) => {
-        const match = session.name?.match(/^Chat (\d+)$/);
-        return match ? Number.parseInt(match[1] as string, 10) : 0;
-      })
-      .filter((number) => number > 0);
-    const nextNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : 1;
-    createSession.mutate(
-      {
-        workspaceId,
-        workflow: 'followup',
-        ...getWorkspaceCreationDefaults(sessions),
-        name: `Chat ${nextNumber}`,
-        initialPrompt: '',
-      },
-      { onSuccess: (session) => onCreated(session, workspaceId, 'chat') }
-    );
-  }, [workspaceId, sessions, createSession, onCreated]);
+  const createChat = useCallback(
+    (codexAccountId?: string) => {
+      if (!workspaceId) {
+        return;
+      }
+      if (!sessions) {
+        toast.error(SESSIONS_LOADING_MESSAGE);
+        return;
+      }
+      const existingNumbers = sessions
+        .map((session) => {
+          const match = session.name?.match(/^Chat (\d+)$/);
+          return match ? Number.parseInt(match[1] as string, 10) : 0;
+        })
+        .filter((number) => number > 0);
+      const nextNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : 1;
+      createSession.mutate(
+        {
+          workspaceId,
+          workflow: 'followup',
+          ...getWorkspaceCreationDefaults(sessions),
+          ...(sessions[0]?.provider === 'CODEX' && codexAccountId ? { codexAccountId } : {}),
+          name: `Chat ${nextNumber}`,
+          initialPrompt: '',
+        },
+        { onSuccess: (session) => onCreated(session, workspaceId, 'chat') }
+      );
+    },
+    [workspaceId, sessions, createSession, onCreated]
+  );
 
   const quickActionInput = useCallback(
     (name: string, prompt: string): CreateSessionInput | null => {

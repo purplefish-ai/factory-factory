@@ -49,3 +49,18 @@ describe('provider-cli-availability', () => {
     );
   });
 });
+
+it('defers Codex authentication to the selected account while retaining the runtime installation check', () => {
+  const health = {
+    claude: { isInstalled: true },
+    codex: { isInstalled: true, isAuthenticated: false },
+  };
+  expect(getProviderUnavailableMessage('CODEX', health, { accountScopedCodex: true })).toBeNull();
+  expect(
+    getProviderUnavailableMessage(
+      'CODEX',
+      { ...health, codex: { isInstalled: false } },
+      { accountScopedCodex: true }
+    )
+  ).toContain('not installed');
+});

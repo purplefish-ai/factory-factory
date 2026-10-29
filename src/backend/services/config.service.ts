@@ -105,6 +105,8 @@ interface SystemConfig {
   debugLogDir: string;
   acpTraceLogsPath: string;
   claudeConfigDir: string;
+  codexHome: string;
+  codexSessionsDir: string;
   wsLogsPath: string;
   frontendStaticPath?: string;
 
@@ -251,6 +253,9 @@ function loadSystemConfig(): SystemConfig {
     debugLogDir,
     acpTraceLogsPath: env.ACP_TRACE_LOGS_PATH ?? join(debugLogDir, 'acp-events'),
     claudeConfigDir: env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude'),
+    codexHome: env.CODEX_HOME ?? join(homedir(), '.codex'),
+    codexSessionsDir:
+      env.CODEX_SESSIONS_DIR ?? join(env.CODEX_HOME ?? join(homedir(), '.codex'), 'sessions'),
     wsLogsPath: env.WS_LOGS_PATH ?? join(process.cwd(), '.context', 'ws-logs'),
     frontendStaticPath: env.FRONTEND_STATIC_PATH,
 
@@ -560,6 +565,14 @@ class ConfigService {
   /**
    * Get Claude config directory path
    */
+  getCodexHome(): string {
+    return this.config.codexHome;
+  }
+
+  getCodexSessionsDir(): string {
+    return this.config.codexSessionsDir;
+  }
+
   getClaudeConfigDir(): string {
     return this.config.claudeConfigDir;
   }

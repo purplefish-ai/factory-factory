@@ -5,6 +5,11 @@
  * Used when database migrations require a reset.
  */
 import type { z } from 'zod';
+import {
+  exportCodexAccountMetadata,
+  restoreCodexAccountMetadata,
+  resolveRestoredCodexAccountId as restoredAccountId,
+} from '@/backend/services/codex-accounts';
 import { createLogger } from '@/backend/services/logger.service';
 import {
   type DataBackupTransactionClient,
@@ -13,6 +18,7 @@ import {
 } from '@/backend/services/settings/resources/data-backup.accessor';
 import { workspacePrSnapshotService } from '@/backend/services/workspace';
 import { normalizeColorScheme } from '@/shared/appearance';
+import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 import type {
   ExportData,
   exportedAgentSessionSchema,
@@ -318,7 +324,8 @@ async function importWorkspaces(
 
 async function importAgentSessions(
   sessions: ExportedAgentSession[],
-  tx: TransactionClient
+  tx: TransactionClient,
+  accountIds: ReadonlyMap<string, string> = new Map()
 ): Promise<ImportCounter> {
   const counter: ImportCounter = { imported: 0, skipped: 0 };
 
@@ -362,6 +369,7 @@ async function importAgentSessions(
         model: s.model,
         status: s.status === 'RUNNING' ? 'IDLE' : s.status,
         provider: s.provider,
+        codexAccountId: restoredAccountId(s.codexAccountId, accountIds),
         providerSessionId: s.providerSessionId,
         providerProjectPath: s.providerProjectPath,
         providerProcessPid: null,
@@ -494,7 +502,7 @@ class DataBackupService {
       meta: {
         exportedAt: new Date().toISOString(),
         version: appVersion,
-        schemaVersion: 6,
+        schemaVersion: 7,
       },
       data: {
         projects: projects.map((p) => ({
@@ -557,6 +565,7 @@ class DataBackupService {
           createdAt: w.createdAt.toISOString(),
           updatedAt: w.updatedAt.toISOString(),
         })),
+        codexAccounts: await exportCodexAccountMetadata(),
         agentSessions: agentSessions.map((s) => ({
           id: s.id,
           workspaceId: s.workspaceId,
@@ -566,6 +575,7 @@ class DataBackupService {
           model: s.model,
           status: s.status,
           provider: s.provider,
+          codexAccountId: s.codexAccountId,
           providerSessionId: s.providerSessionId,
           providerProjectPath: s.providerProjectPath,
           providerProcessPid: s.providerProcessPid,
@@ -634,12 +644,13 @@ class DataBackupService {
 
   /**
    * Import data from a backup file.
-   * Accepts normalized versions 4, 5, and 6 payloads.
+   * Accepts current and supported legacy backup payloads.
    * Skips records that already exist (by ID).
    * Returns counts of imported/skipped records.
    * All imports are wrapped in a transaction for atomicity.
    */
   async importData(input: ExportData): Promise<ImportResults> {
+    input = exportDataSchema.parse(input);
     logger.info('Starting data import', {
       schemaVersion: input.meta.schemaVersion,
       exportedAt: input.meta.exportedAt,
@@ -652,7 +663,8 @@ class DataBackupService {
       const projects = await importProjects(input.data.projects, tx);
       const importedWorkspaceIds: string[] = [];
       const workspaces = await importWorkspaces(input.data.workspaces, tx, importedWorkspaceIds);
-      const agentSessions = await importAgentSessions(input.data.agentSessions, tx);
+      const accountIds = await restoreCodexAccountMetadata(tx, input.data.codexAccounts);
+      const agentSessions = await importAgentSessions(input.data.agentSessions, tx, accountIds);
       await restorePRBackupState(input.data.workspaces, importedWorkspaceIds, tx);
       const terminalSessions = await importTerminalSessions(input.data.terminalSessions, tx);
       const userSettings = await importUserSettings(input.data.userSettings, tx);

@@ -9,6 +9,19 @@ const available = {
 afterEach(() => vi.useRealTimers());
 
 describe('ProviderUsageService', () => {
+  it('delegates account-scoped Codex usage without wrapping it in a provider cache', async () => {
+    const first = { ...available, provider: 'CODEX' as const, updatedAt: new Date().toISOString() };
+    const second = { ...first, windows: [] };
+    const accounts = {
+      getUsage: vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second),
+    };
+    const fetchUsage = vi.fn();
+    const service = new ProviderUsageService({ fetchUsage, accounts });
+    expect(await service.getUsage('CODEX', 'saved')).toEqual(first);
+    expect(await service.getUsage('CODEX', 'other')).toEqual(second);
+    expect(accounts.getUsage.mock.calls).toEqual([['saved'], ['other']]);
+    expect(fetchUsage).not.toHaveBeenCalled();
+  });
   it('coalesces concurrent reads and caches successful snapshots for 30 seconds', async () => {
     vi.useFakeTimers();
     const fetchUsage = vi.fn(async () => available);

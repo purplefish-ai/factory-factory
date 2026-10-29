@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AcpConfigOption } from '@/client/features/chat/reducer';
 import { ProviderUsageControl } from '@/client/features/chat/usage-stats/provider-usage-control';
+import { SavedCodexAccount } from '@/client/features/codex-accounts';
 import {
   FileMentionPalette,
   SlashCommandPalette,
@@ -59,6 +60,7 @@ export interface ChatInputProps {
   tokenStats?: TokenStats;
   // Workspace ID for file mentions
   workspaceId?: string;
+  codexAccountId?: string | null;
   // ACP config options from agent
   acpConfigOptions?: AcpConfigOption[] | null;
   // Called when user selects an ACP config option value
@@ -101,6 +103,7 @@ export const ChatInput = memo(function ChatInput({
   slashCommandsLoaded = false,
   tokenStats,
   workspaceId,
+  codexAccountId,
   acpConfigOptions,
   onSetConfigOption,
 }: ChatInputProps) {
@@ -334,11 +337,15 @@ export const ChatInput = memo(function ChatInput({
             disabled={isDisabled}
             inputRef={resolvedInputRef}
           >
+            {capabilities?.provider === 'CODEX' && codexAccountId && (
+              <SavedCodexAccount id={codexAccountId} />
+            )}
             {capabilities?.usageStats.enabled &&
               (capabilities.provider === 'CLAUDE' || capabilities.provider === 'CODEX') && (
                 <ProviderUsageControl
-                  key={capabilities.provider}
+                  key={`${capabilities.provider}:${codexAccountId ?? 'native'}`}
                   provider={capabilities.provider}
+                  codexAccountId={codexAccountId}
                   tokenStats={tokenStats}
                   busy={running || stopping || pendingMessageCount > 0}
                   compacting={isCompacting}

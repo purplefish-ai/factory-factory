@@ -18,6 +18,24 @@ function native(provider: 'CLAUDE' | 'CODEX', model: string): SessionLaunchOptio
   };
 }
 describe('selected-model launch discovery', () => {
+  it('isolates probes for the same model on different Codex accounts', async () => {
+    const fetchOptions = vi.fn().mockResolvedValue(native('CODEX', 'model'));
+    const service = new SessionLaunchOptionsService({
+      fetchOptions,
+      getSettings: vi.fn().mockResolvedValue({}),
+    });
+    await Promise.all(
+      ['a', 'b', 'a'].map((codexAccountId) =>
+        service.getOptions({ provider: 'CODEX', model: 'model', codexAccountId })
+      )
+    );
+    expect(fetchOptions).toHaveBeenCalledTimes(2);
+    expect(fetchOptions).toHaveBeenCalledWith({
+      provider: 'CODEX',
+      model: 'model',
+      codexAccountId: 'b',
+    });
+  });
   it('coalesces native discovery while applying fresh saved provider defaults', async () => {
     const fetchOptions = vi.fn(({ provider, model }) => Promise.resolve(native(provider, model)));
     const getSettings = vi.fn().mockResolvedValue({

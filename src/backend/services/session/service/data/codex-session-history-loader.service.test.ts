@@ -73,6 +73,38 @@ describe('codexSessionHistoryLoaderService', () => {
     expect(result).toEqual({ status: 'skipped', reason: 'invalid_provider_session_id' });
   });
 
+  it('isolates identical native history IDs and lookup caches by account directory', async () => {
+    const providerSessionId = 'same-native-history';
+    const workingDir = '/same/worktree';
+    const homes = ['first', 'second'].map((name) => join(tempDir, name));
+    for (const [index, home] of homes.entries()) {
+      writeSessionFile({
+        codexHomeDir: home,
+        relativeDir: '2026/02/14',
+        fileName: `rollout-${providerSessionId}.jsonl`,
+        entries: [
+          { type: 'session_meta', payload: { id: providerSessionId, cwd: workingDir } },
+          { type: 'event_msg', payload: { type: 'user_message', message: `account ${index}` } },
+        ],
+      });
+    }
+    for (const [index, home] of homes.entries()) {
+      const result = await codexSessionHistoryLoaderService.loadSessionHistory({
+        providerSessionId,
+        workingDir,
+        codexAccountContext: {
+          accountId: String(index),
+          homeDir: home,
+          sessionsDir: join(home, 'sessions'),
+          env: { CODEX_HOME: home },
+        },
+      });
+      expect(result).toMatchObject({
+        status: 'loaded',
+        history: [{ content: `account ${index}` }],
+      });
+    }
+  });
   it('loads and parses history from Codex session JSONL', async () => {
     const providerSessionId = '019c5dad-78c4-7d02-8f3a-e5cb6f68ae5b';
     const cwd = '/Users/test/project';

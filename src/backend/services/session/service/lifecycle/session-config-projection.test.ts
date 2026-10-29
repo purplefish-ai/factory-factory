@@ -95,7 +95,12 @@ function setup() {
     sessionDomainService: unsafeCoerce(domain),
   });
   const load = new SessionLoadService(
-    unsafeCoerce({ config, domain, getCachedCommands: async () => [] })
+    unsafeCoerce({
+      config,
+      domain,
+      getRuntimeSnapshot: () => ({ processState: 'stopped' }),
+      getCachedCommands: async () => [],
+    })
   );
   return {
     config,
@@ -246,6 +251,7 @@ describe('load configuration projection', () => {
       const load = new SessionLoadService(
         unsafeCoerce({
           config: test.config,
+          getRuntimeSnapshot: () => ({ processState: 'stopped' }),
           domain,
           getCachedCommands: () => {
             calls.push('commands');
@@ -281,7 +287,6 @@ describe('load configuration projection', () => {
         'runtime',
         'publish',
         'publish',
-        'commands',
         'publish',
         'consume',
         'publish',

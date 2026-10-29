@@ -56,6 +56,15 @@ function appendRecentRejectionEvents(
   }
 }
 
+function appendLiveSlashCommands(replayEvents: ReplayEventMessage[], store: SessionStore): void {
+  if (store.runtime.processState === 'alive' && store.liveSlashCommands) {
+    replayEvents.push({
+      type: 'slash_commands',
+      slashCommands: structuredClone(store.liveSlashCommands),
+    });
+  }
+}
+
 export function buildReplayEvents(store: SessionStore): ReplayEventMessage[] {
   const replayEvents: ReplayEventMessage[] = [
     {
@@ -64,6 +73,7 @@ export function buildReplayEvents(store: SessionStore): ReplayEventMessage[] {
     },
   ];
 
+  appendLiveSlashCommands(replayEvents, store);
   const transcript = selectRendererTranscriptWindow(store);
   appendRecentRejectionEvents(replayEvents, store, transcript);
 

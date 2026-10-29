@@ -128,6 +128,7 @@ export interface UseSessionManagementReturn {
       workspaceId: string;
       workflow: string;
       model?: string;
+      codexAccountId?: string;
       reasoningEffort?: string | null;
       planModeEnabled?: boolean;
       name: string;
@@ -144,7 +145,7 @@ export interface UseSessionManagementReturn {
   preferredIde: string;
   handleSelectSession: (dbSessionId: string) => void;
   handleCloseSession: (dbSessionId: string) => void;
-  handleNewChat: () => void;
+  handleNewChat: (codexAccountId?: string) => void;
   handleQuickAction: (name: string, prompt: string) => Promise<void>;
 }
 

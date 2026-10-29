@@ -22,7 +22,7 @@ interface WorkspaceContentViewProps {
   isCreatingSession: boolean;
   isDeletingSession: boolean;
   onSelectSession: (sessionId: string) => void;
-  onCreateSession: () => void;
+  onCreateSession: (codexAccountId?: string) => void;
   onCloseSession: (sessionId: string) => void;
   onRestartSession?: () => void;
   onQuickAction?: (name: string, prompt: string) => void;

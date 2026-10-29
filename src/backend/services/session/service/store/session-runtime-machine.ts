@@ -39,6 +39,9 @@ export class SessionRuntimeMachine {
       work: previousWork,
       ...previous
     } = store.runtime;
+    if (updates.processState === 'stopped') {
+      store.liveSlashCommands = undefined;
+    }
     const work = selectWork(updates, options?.replace ? undefined : previousWork);
     store.runtime = {
       ...(options?.replace ? {} : previous),

@@ -369,10 +369,10 @@ describe('userSettingsRouter', () => {
     mockGetCodexModels.mockReturnValue(codexCatalog);
 
     const providerOptions = createCaller().getProviderOptions();
-    await Promise.resolve();
-
-    expect(mockGetClaudeModels).toHaveBeenCalledTimes(1);
-    expect(mockGetCodexModels).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => {
+      expect(mockGetClaudeModels).toHaveBeenCalledTimes(1);
+      expect(mockGetCodexModels).toHaveBeenCalledTimes(1);
+    });
 
     resolveClaude!([{ id: 'default', displayName: 'Default', description: null }]);
     resolveCodex!([

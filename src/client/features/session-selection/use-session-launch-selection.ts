@@ -2,8 +2,9 @@ import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import { resolveEffectiveSessionProvider } from '@/lib/session-provider-selection';
 import type { ChatModelOption, ChatProvider } from '@/shared/chat-capabilities';
+import type { CodexAccountSummary } from '@/shared/codex-accounts';
 import type { SessionPermissionPreset } from '@/shared/core';
-import { type SessionLaunchOptions, type SessionLaunchSettings } from '@/shared/session-launch';
+import type { SessionLaunchOptions, SessionLaunchSettings } from '@/shared/session-launch';
 import { getEffectiveLaunchOptions } from './launch-options-state';
 import type { ProviderModelPickerProps } from './provider-model-picker';
 import type { SessionLaunchControlsProps } from './session-launch-controls';
@@ -20,6 +21,7 @@ export interface SessionLaunchDefaults {
 interface ProviderDraft {
   accessMode?: string;
   model?: string;
+  codexAccountId?: string;
   reasoningEffort?: string | null;
   planModeEnabled?: boolean;
 }
@@ -76,6 +78,8 @@ export function useSessionLaunchSelectionState(
   return {
     provider,
     model,
+    codexAccountId: provider === 'CODEX' ? draft?.codexAccountId : undefined,
+    onCodexAccountChange: (codexAccountId: string | undefined) => updateDraft({ codexAccountId }),
     savedReasoningEffort,
     savedAccessPreset: state.defaults?.defaultWorkspacePermissions,
     reasoningEffort: draft?.reasoningEffort,
@@ -106,7 +110,11 @@ export interface SessionLaunchSelection {
   pickerProps: ProviderModelPickerProps;
   controlsProps: SessionLaunchControlsProps;
   unavailableReason?: string;
-  creationDefaults: SessionLaunchSettings & { provider?: ChatProvider; model?: string };
+  creationDefaults: SessionLaunchSettings & {
+    provider?: ChatProvider;
+    model?: string;
+    codexAccountId?: string;
+  };
   reset: () => void;
 }
 
@@ -163,10 +171,15 @@ function getUnavailableReason(
 function useNativeLaunchOptions(
   provider: ChatProvider | null,
   model: string | undefined,
-  enabled: boolean
+  enabled: boolean,
+  codexAccountId?: string
 ) {
   const query = trpc.session.getLaunchOptions.useQuery(
-    { provider: provider ?? 'CLAUDE', model },
+    {
+      provider: provider ?? 'CLAUDE',
+      model,
+      ...(provider === 'CODEX' && codexAccountId ? { codexAccountId } : {}),
+    },
     { enabled: enabled && provider !== null, staleTime: 30_000, retry: false }
   );
   // The query is keyed by input; confirmed native IDs may differ from requested aliases.
@@ -182,6 +195,39 @@ function useNativeLaunchOptions(
   };
 }
 
+function getCodexAccountControl(
+  provider: ChatProvider | null,
+  accounts: readonly CodexAccountSummary[] | undefined,
+  value: string | undefined,
+  onChange: (id: string | undefined) => void
+): SessionLaunchControlsProps['account'] {
+  if (provider !== 'CODEX' || !accounts || (accounts.length <= 1 && !value)) {
+    return undefined;
+  }
+  return { accounts, value, onChange };
+}
+function useCodexAccountControl(
+  scopeKey: string | null,
+  selection: Pick<
+    ReturnType<typeof useSessionLaunchSelectionState>,
+    'provider' | 'codexAccountId' | 'onCodexAccountChange'
+  >
+) {
+  const { data: accounts } = trpc.codexAccounts.list.useQuery(undefined, {
+    enabled: selection.provider === 'CODEX' && scopeKey !== null,
+    staleTime: 30_000,
+    retry: false,
+  });
+  return getCodexAccountControl(
+    selection.provider,
+    accounts,
+    selection.codexAccountId,
+    selection.onCodexAccountChange
+  );
+}
+function getAccountInput(codexAccountId: string | undefined) {
+  return codexAccountId ? { codexAccountId } : undefined;
+}
 export function useSessionLaunchSelection(
   scopeKey: string | null,
   options: {
@@ -196,13 +242,6 @@ export function useSessionLaunchSelection(
     error: settingsError,
     refetch: refetchSettings,
   } = trpc.userSettings.get.useQuery();
-  const { data: catalog, isLoading: modelsLoading } = trpc.userSettings.getProviderOptions.useQuery(
-    undefined,
-    {
-      enabled: scopeKey !== null,
-      staleTime: 60_000,
-    }
-  );
   const selection = useSessionLaunchSelectionState(
     scopeKey,
     settings && options.ready !== false
@@ -215,6 +254,14 @@ export function useSessionLaunchSelection(
         }
       : undefined
   );
+  const { data: catalog, isLoading: modelsLoading } = trpc.userSettings.getProviderOptions.useQuery(
+    getAccountInput(selection.codexAccountId),
+    {
+      enabled: scopeKey !== null,
+      staleTime: 60_000,
+    }
+  );
+  const account = useCodexAccountControl(scopeKey, selection);
   const error =
     options.error ?? (!settings && settingsError ? 'Could not load chat defaults' : undefined);
   const loading = selection.loading && !error;
@@ -227,7 +274,8 @@ export function useSessionLaunchSelection(
   const discovery = useNativeLaunchOptions(
     selection.provider,
     selection.model,
-    scopeKey !== null && !selection.loading && !error
+    scopeKey !== null && !selection.loading && !error,
+    selection.codexAccountId
   );
   const { native, error: nativeError } = discovery;
   const effective = getEffectiveLaunchOptions(selection, native);
@@ -276,6 +324,7 @@ export function useSessionLaunchSelection(
   };
   const controlsProps: SessionLaunchControlsProps = {
     ...pickerProps,
+    account,
     ready,
     unavailableReason,
     ...getConfigurationControls(selection, discovery, effective),
@@ -293,6 +342,7 @@ export function useSessionLaunchSelection(
       provider: selection.provider ?? undefined,
       model: selection.model,
       ...(effective.accessMode !== undefined ? { accessMode: effective.accessMode } : {}),
+      ...getAccountInput(selection.codexAccountId),
       reasoningEffort: effective.reasoningEffort ?? null,
       planModeEnabled: effective.planModeEnabled,
     },

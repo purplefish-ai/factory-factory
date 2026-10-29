@@ -136,6 +136,7 @@ export class SessionWorkflowFinalizer {
       name: session.name,
       workflow: session.workflow,
       provider: session.provider,
+      codexAccountId: session.codexAccountId,
       ...(session.providerSessionId ? { providerSessionId: session.providerSessionId } : {}),
       model: session.model,
       startedAt: session.createdAt,

@@ -85,10 +85,13 @@ async function getClaudeProviderOptions(
 }
 
 async function getCodexProviderOptions(
-  codexModelCatalogService: ApplicationServices['codexModelCatalogService']
+  codexModelCatalogService: ApplicationServices['codexModelCatalogService'],
+  codexAccountId?: string
 ): Promise<ProviderOptions> {
   try {
-    const catalog = await codexModelCatalogService.getModels();
+    const catalog = await (codexAccountId === undefined
+      ? codexModelCatalogService.getModels()
+      : codexModelCatalogService.getModels(codexAccountId));
     const effortsByValue = new Map<string, string | null>();
     for (const model of catalog) {
       for (const effort of model.supportedReasoningEfforts ?? []) {
@@ -136,16 +139,21 @@ export const userSettingsRouter = router({
     return await ctx.appContext.services.userSettingsQueryService.get();
   }),
 
-  getProviderOptions: publicProcedure.query(async ({ ctx }) => {
-    const [claude, codex] = await Promise.all([
-      getClaudeProviderOptions(ctx.appContext.services.claudeModelCatalogService),
-      getCodexProviderOptions(ctx.appContext.services.codexModelCatalogService),
-    ]);
-    return {
-      CLAUDE: claude,
-      CODEX: codex,
-    };
-  }),
+  getProviderOptions: publicProcedure
+    .input(z.object({ codexAccountId: z.string().trim().min(1).optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      const [claude, codex] = await Promise.all([
+        getClaudeProviderOptions(ctx.appContext.services.claudeModelCatalogService),
+        getCodexProviderOptions(
+          ctx.appContext.services.codexModelCatalogService,
+          input?.codexAccountId
+        ),
+      ]);
+      return {
+        CLAUDE: claude,
+        CODEX: codex,
+      };
+    }),
 
   /**
    * Update user settings

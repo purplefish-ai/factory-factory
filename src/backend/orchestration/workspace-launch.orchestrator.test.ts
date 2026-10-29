@@ -147,12 +147,12 @@ describe.each(sources)(
       const { ports, events } = createPorts();
       ports.checkCliHealth.mockResolvedValue({
         claude: { isInstalled: true },
-        codex: { isInstalled: true, isAuthenticated: false },
+        codex: { isInstalled: false, isAuthenticated: false },
       });
       await expect(launchWorkspace(source, ports)).rejects.toMatchObject({
         code: 'PRECONDITION_FAILED',
         message:
-          'Cannot create workspace: Codex provider is unavailable: Codex CLI is not authenticated.',
+          'Cannot create workspace: Codex provider is unavailable: Codex CLI is not installed.',
       });
       expect(events).toEqual(['provider']);
       expect(ports.createWorkspace).not.toHaveBeenCalled();
@@ -244,7 +244,12 @@ it.each([0, 2])(
 
 describe('manual launch settings forwarding', () => {
   it.each([
-    { reasoningEffort: 'max', planModeEnabled: true, accessMode: 'read-only' },
+    {
+      reasoningEffort: 'max',
+      planModeEnabled: true,
+      accessMode: 'read-only',
+      codexAccountId: 'account-b',
+    },
     { reasoningEffort: null, planModeEnabled: false },
     {},
   ])('preserves exact supplied intent and omits absent fields: %j', async (settings) => {
@@ -446,24 +451,32 @@ it.each(['plan', 'bypassPermissions', 'missing'])(
   }
 );
 
-it('validates supported access against the resolved provider/model before provisioning', async () => {
-  const { ports } = createPorts();
-  await launchWorkspace(
-    {
-      type: 'MANUAL',
-      projectId: 'p1',
-      name: 'Access',
+it.each([undefined, 'account-b'])(
+  'validates supported access against the resolved provider/model and account %s before provisioning',
+  async (codexAccountId) => {
+    const { ports } = createPorts();
+    await launchWorkspace(
+      {
+        type: 'MANUAL',
+        projectId: 'p1',
+        name: 'Access',
+        provider: 'CODEX',
+        model: 'gpt-6-sol',
+        accessMode: 'agent',
+        ...(codexAccountId ? { codexAccountId } : {}),
+      },
+      ports
+    );
+    expect(ports.getLaunchOptions).toHaveBeenCalledWith({
       provider: 'CODEX',
       model: 'gpt-6-sol',
-      accessMode: 'agent',
-    },
-    ports
-  );
-  expect(ports.getLaunchOptions).toHaveBeenCalledWith({ provider: 'CODEX', model: 'gpt-6-sol' });
-  expect(ports.createDefaultSession).toHaveBeenCalledWith(
-    expect.objectContaining({ accessMode: 'agent' })
-  );
-});
+      ...(codexAccountId ? { codexAccountId } : {}),
+    });
+    expect(ports.createDefaultSession).toHaveBeenCalledWith(
+      expect.objectContaining({ accessMode: 'agent' })
+    );
+  }
+);
 
 it('validates access even when capacity disables default session creation', async () => {
   const { ports } = createPorts();
@@ -487,4 +500,50 @@ it('does not persist a workspace when access discovery fails', async () => {
     )
   ).rejects.toThrow('Discovery unavailable');
   expect(ports.createWorkspace).not.toHaveBeenCalled();
+});
+
+it('validates the chosen account before workspace persistence', async () => {
+  const { ports } = createPorts();
+  const validateCodexAccount = vi
+    .fn<() => Promise<void>>()
+    .mockRejectedValue(
+      new ApplicationError('PRECONDITION_FAILED', 'Selected account is unavailable')
+    );
+  await expect(
+    launchWorkspace(
+      {
+        type: 'MANUAL',
+        projectId: 'p1',
+        name: 'Account',
+        provider: 'CODEX',
+        codexAccountId: 'account-b',
+      },
+      { ...ports, validateCodexAccount }
+    )
+  ).rejects.toThrow('Selected account');
+  expect(validateCodexAccount).toHaveBeenCalledWith({ accountId: 'account-b', model: undefined });
+  expect(ports.createWorkspace).not.toHaveBeenCalled();
+});
+it('allows a usable managed account when the global Codex login is absent', async () => {
+  const { ports } = createPorts();
+  ports.checkCliHealth.mockResolvedValue({
+    claude: { isInstalled: true },
+    codex: { isInstalled: true, isAuthenticated: false },
+  });
+  const validateCodexAccount = vi.fn(async () => undefined);
+  await expect(
+    launchWorkspace(
+      {
+        type: 'MANUAL',
+        projectId: 'p1',
+        name: 'Managed',
+        provider: 'CODEX',
+        codexAccountId: 'account-b',
+      },
+      { ...ports, validateCodexAccount }
+    )
+  ).resolves.toMatchObject({ defaultSessionId: 'session-1' });
+  expect(ports.createDefaultSession).toHaveBeenCalledWith(
+    expect.objectContaining({ codexAccountId: 'account-b' })
+  );
 });

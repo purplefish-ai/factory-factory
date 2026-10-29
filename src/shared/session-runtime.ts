@@ -31,6 +31,7 @@ export interface SessionSummary {
   workflow: string | null;
   model: string | null;
   provider?: 'CLAUDE' | 'CODEX';
+  codexAccountId?: string | null;
   persistedStatus: SessionStatus;
   runtimePhase: SessionRuntimePhase;
   processState: SessionRuntimeProcessState;

@@ -53,6 +53,16 @@ vi.mock('sonner', () => ({
 
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
+    codexAccounts: {
+      list: {
+        useQuery: () => ({
+          data: [
+            { id: 'native', label: 'Personal', authenticated: true, enabled: true },
+            { id: 'work', label: 'Work', authenticated: true, enabled: true },
+          ],
+        }),
+      },
+    },
     useUtils: () => ({
       workspace: {
         get: { setData: mocks.getSetDataMock },
@@ -222,12 +232,19 @@ vi.mock('@/client/features/session-selection', async (importOriginal) => ({
     models,
     reasoning,
     planMode,
+    account,
     children,
   }: import('@/client/features/session-selection').SessionLaunchControlsProps) =>
     createElement(
       'div',
       { 'aria-label': 'New conversation provider and model' },
       `${provider} ${model}`,
+      account &&
+        createElement(
+          'button',
+          { 'aria-label': 'Choose Work account', onClick: () => account.onChange('work') },
+          'Work'
+        ),
       reasoning &&
         createElement(
           'button',
@@ -721,6 +738,28 @@ it('invalidates the created agent owner summary after Kanban creation', () => {
       mocks.agentMutationOptions?.onSuccess({ name: 'Agent', projectId: 'origin' })
     );
     expect(mocks.navigationSummaryInvalidate).toHaveBeenCalledWith({ projectId: 'origin' });
+  } finally {
+    actFlushSync(() => root.unmount());
+    container.remove();
+  }
+});
+
+it('propagates a manual Codex account into the workspace launch request', () => {
+  const { container, root } = renderForm();
+  try {
+    actFlushSync(() =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Choose Codex"]')?.click()
+    );
+    actFlushSync(() =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Choose Work account"]')?.click()
+    );
+    const launch = [...container.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent === 'Launch'
+    );
+    actFlushSync(() => launch?.click());
+    expect(mocks.createWorkspaceMutateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'CODEX', codexAccountId: 'work' })
+    );
   } finally {
     actFlushSync(() => root.unmount());
     container.remove();

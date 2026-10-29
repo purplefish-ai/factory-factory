@@ -79,6 +79,33 @@ vi.mock('@/backend/prompts/quick-actions', () => ({
   getQuickAction: vi.fn(),
   listQuickActions: vi.fn(),
 }));
+vi.mock('@/backend/services/codex-accounts', () => ({
+  codexAccountService: {
+    getAccounts: vi.fn(async () => []),
+    createAccount: vi.fn(),
+    updateAccount: vi.fn(),
+    getRuntimeContext: vi.fn(async (id = 'codex-native-default') => ({
+      accountId: id,
+      homeDir: '/tmp/.codex',
+      sessionsDir: '/tmp/.codex/sessions',
+      env: {},
+    })),
+    getPreviewRuntimeContext: vi.fn(async () => ({
+      accountId: 'codex-native-default',
+      homeDir: '/tmp/.codex',
+      sessionsDir: '/tmp/.codex/sessions',
+      env: {},
+    })),
+    withAccountReservation: vi.fn(async (input, operation) =>
+      operation(input.accountId ?? 'codex-native-default')
+    ),
+    getUsage: vi.fn(),
+    startLogin: vi.fn(),
+    getLoginStatus: vi.fn(),
+    cancelLogin: vi.fn(),
+    shutdown: vi.fn(),
+  },
+}));
 vi.mock('@/backend/services/config.service', () => ({
   configService: { getDebugConfig: () => ({ chatWebSocket: false }) },
 }));
@@ -255,6 +282,7 @@ import {
 } from '@/backend/orchestration/workspace-init.orchestrator';
 import { deliverWorkspaceNotification } from '@/backend/orchestration/workspace-notification-delivery.orchestrator';
 import { getQuickAction, listQuickActions } from '@/backend/prompts/quick-actions';
+import { codexAccountService } from '@/backend/services/codex-accounts';
 import { configService } from '@/backend/services/config.service';
 import { cryptoService } from '@/backend/services/crypto.service';
 import { decisionLogService } from '@/backend/services/decision-log';
@@ -334,6 +362,8 @@ const fakeSystemConfig = {
   debugLogDir: '/tmp/factory-factory/debug',
   acpTraceLogsPath: '/tmp/factory-factory/debug/acp-events',
   claudeConfigDir: '/tmp/.claude',
+  codexHome: '/tmp/.codex',
+  codexSessionsDir: '/tmp/.codex/sessions',
   wsLogsPath: '/tmp/factory-factory/ws-logs',
   backendPort: 3001,
   nodeEnv: 'test' as const,
@@ -416,6 +446,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
       graphEventCollector?.removeWorkspace(workspaceId),
     cliHealthService,
     configService: graphConfigService,
+    codexAccountService,
     computePendingRequestType,
     triggerAdversarialReview,
     createChildWorkspace: vi.fn<ApplicationServices['createChildWorkspace']>(),

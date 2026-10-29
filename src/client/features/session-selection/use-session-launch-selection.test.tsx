@@ -12,6 +12,12 @@ import {
 
 const mocks = vi.hoisted(() => ({
   settings: undefined as SessionLaunchDefaults | undefined,
+  launchQuery: vi.fn(),
+  catalogQuery: vi.fn(),
+  accounts: [
+    { id: 'native', label: 'Personal', authenticated: true, enabled: true },
+    { id: 'work', label: 'Work', authenticated: true, enabled: true },
+  ],
   launches: new Map<string, SessionLaunchOptions | undefined>(),
   launchErrors: new Map<string, Error>(),
   refetchLaunch: vi.fn().mockResolvedValue({}),
@@ -26,9 +32,15 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
+    codexAccounts: { list: { useQuery: () => ({ data: mocks.accounts }) } },
     session: {
       getLaunchOptions: {
-        useQuery: (input: { provider: 'CLAUDE' | 'CODEX'; model?: string }) => {
+        useQuery: (input: {
+          provider: 'CLAUDE' | 'CODEX';
+          model?: string;
+          codexAccountId?: string;
+        }) => {
+          mocks.launchQuery(input);
           const key = `${input.provider}:${input.model}`;
           return {
             data: mocks.launches.has(key)
@@ -53,7 +65,12 @@ vi.mock('@/client/lib/trpc', () => ({
           refetch: mocks.refetchSettings,
         }),
       },
-      getProviderOptions: { useQuery: () => ({ data: mocks.catalog, isLoading: !mocks.catalog }) },
+      getProviderOptions: {
+        useQuery: (input: unknown) => {
+          mocks.catalogQuery(input);
+          return { data: mocks.catalog, isLoading: !mocks.catalog };
+        },
+      },
     },
   },
 }));
@@ -446,4 +463,43 @@ it('requires an explicit permission choice when a saved strict preset is unavail
   flushSync(() => mounted.current.controlsProps.accessMode?.onChange('agent-full-access'));
   expect(mounted.current.ready).toBe(true);
   expect(mounted.current.creationDefaults.accessMode).toBe('agent-full-access');
+});
+
+it('keeps a manual Codex account choice through provider switches and resets it for a new workspace', () => {
+  const mounted = mount(defaults);
+  expect(mounted.current.codexAccountId).toBeUndefined();
+  flushSync(() => mounted.current.onCodexAccountChange('work-account'));
+  expect(mounted.current.codexAccountId).toBe('work-account');
+  flushSync(() => mounted.current.onProviderChange('CLAUDE'));
+  expect(mounted.current.codexAccountId).toBeUndefined();
+  flushSync(() => mounted.current.onProviderChange('CODEX'));
+  expect(mounted.current.codexAccountId).toBe('work-account');
+  mounted.render('workspace-b');
+  expect(mounted.current.codexAccountId).toBeUndefined();
+});
+
+it('uses the manual account for creation, launch options and model discovery, and clears it in Claude mode', () => {
+  mocks.settings = defaults;
+  mocks.launches.set('CODEX:saved-sol', {
+    ...solNative,
+    accessMode: { options: [{ value: 'read-only', label: 'Read only' }] },
+  });
+  const mounted = mountConnected();
+  expect(mounted.current.creationDefaults).not.toHaveProperty('codexAccountId');
+  expect(mounted.current.controlsProps.account?.value).toBeUndefined();
+  flushSync(() => mounted.current.controlsProps.account?.onChange('work'));
+  flushSync(() => mounted.current.controlsProps.accessMode?.onChange('read-only'));
+  expect(mounted.current.creationDefaults).toMatchObject({
+    provider: 'CODEX',
+    codexAccountId: 'work',
+    accessMode: 'read-only',
+  });
+  expect(mocks.launchQuery).toHaveBeenLastCalledWith(
+    expect.objectContaining({ provider: 'CODEX', codexAccountId: 'work' })
+  );
+  expect(mocks.catalogQuery).toHaveBeenLastCalledWith({ codexAccountId: 'work' });
+  flushSync(() => mounted.current.pickerProps.onProviderChange?.('CLAUDE'));
+  expect(mounted.current.creationDefaults).not.toHaveProperty('codexAccountId');
+  expect(mounted.current.controlsProps.account).toBeUndefined();
+  expect(mocks.catalogQuery).toHaveBeenLastCalledWith(undefined);
 });

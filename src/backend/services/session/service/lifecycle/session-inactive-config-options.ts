@@ -76,7 +76,7 @@ export async function setInactiveSessionConfigOption(
       `Cannot set config option for inactive session ${sessionId}: no cached ACP config available`
     );
   }
-  const models = await deps.catalog.getModels();
+  const models = await deps.catalog.getModels(session.codexAccountId ?? undefined);
   await settlePendingRuntime(sessionId, deps);
   const latest = await deps.repository.getSessionById(sessionId);
   if (deps.runtimeManager.getClient(sessionId)) {

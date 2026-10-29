@@ -125,7 +125,7 @@ beforeEach(async () => {
 });
 it('normalizes published version 5 PRs, tombstones, discovery, and legacy fixer identity', async () => {
   const exported = await dataBackupService.exportData('test');
-  expect(exported.meta.schemaVersion).toBe(6);
+  expect(exported.meta.schemaVersion).toBe(7);
   expect(exported.data.workspaces[0]?.prs).toHaveLength(3);
   await clearIntegrationDatabase(db.prisma);
   const normalized = exportDataSchema.parse(publishedVersion5(exported));
@@ -386,7 +386,7 @@ it('roundtrips dedicated mode and PR-session bindings in additive version 6 back
     },
   });
   const exported = await dataBackupService.exportData('test');
-  expect(exported.meta.schemaVersion).toBe(6);
+  expect(exported.meta.schemaVersion).toBe(7);
   expect(exported.data.workspaces[0]?.prMonitoring).toMatchObject({ deliveryMode: 'DEDICATED' });
   expect(exported.data.workspaces[0]?.prs.find((pr) => pr.id === 'a')).toMatchObject({
     dedicatedSession: { sessionId: 'dedicated' },

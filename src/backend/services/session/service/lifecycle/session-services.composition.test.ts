@@ -121,3 +121,25 @@ describe('session services composition', () => {
     );
   });
 });
+
+vi.mock('@/backend/services/codex-accounts', () => ({
+  NATIVE_DEFAULT_CODEX_ACCOUNT_ID: 'codex-native-default',
+  codexAccountService: {
+    getRuntimeContext: vi.fn(async (accountId = 'codex-native-default') => ({
+      accountId,
+      homeDir: '/test/codex',
+      sessionsDir: '/test/codex/sessions',
+      env: { CODEX_HOME: '/test/codex' },
+    })),
+    getPreviewRuntimeContext: vi.fn(async ({ accountId = 'codex-native-default' } = {}) => ({
+      accountId,
+      homeDir: '/test/codex',
+      sessionsDir: '/test/codex/sessions',
+      env: { CODEX_HOME: '/test/codex' },
+    })),
+    withAccountReservation: vi.fn(async (input, create) =>
+      create(input.accountId ?? 'codex-native-default')
+    ),
+    getUsage: vi.fn(),
+  },
+}));

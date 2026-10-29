@@ -1,3 +1,4 @@
+import { codexAccountService } from '@/backend/services/codex-accounts';
 import {
   agentSessionAccessor,
   type AgentSessionRecord as PersistenceAgentSessionRecord,
@@ -35,6 +36,7 @@ function toAgentSessionRecord(session: PersistenceAgentSessionRecord): AgentSess
     model: session.model,
     status: session.status,
     provider: session.provider,
+    codexAccountId: session.codexAccountId,
     providerSessionId: session.providerSessionId,
     providerProjectPath: session.providerProjectPath,
     providerProcessPid: session.providerProcessPid,
@@ -59,6 +61,7 @@ function toAgentSessionRecordWithWorkspace(
 
 export interface SessionDataDependencies {
   providerResolver: Pick<SessionProviderResolverService, 'resolveSessionDefaults'>;
+  accounts?: Pick<typeof codexAccountService, 'withAccountReservation'>;
 }
 
 class SessionDataImplementation {
@@ -94,6 +97,7 @@ class SessionDataImplementation {
     reasoningEffort?: string | null;
     planModeEnabled?: boolean;
     provider?: SessionProvider;
+    codexAccountId?: string;
     providerProjectPath?: string | null;
   }): Promise<AgentSessionRecord> {
     const defaults = await this.dependencies.providerResolver.resolveSessionDefaults({
@@ -102,12 +106,15 @@ class SessionDataImplementation {
       explicitModel: data.model,
     });
     const launchMetadata = createSessionLaunchMetadata(data);
-    return toAgentSessionRecord(
-      await agentSessionAccessor.create({
-        ...data,
-        ...defaults,
-        ...(launchMetadata ? { providerMetadata: launchMetadata } : {}),
-      })
+    return this.withAccountBinding(defaults, data.codexAccountId, async (codexAccountId) =>
+      toAgentSessionRecord(
+        await agentSessionAccessor.create({
+          ...data,
+          ...defaults,
+          codexAccountId,
+          ...(launchMetadata ? { providerMetadata: launchMetadata } : {}),
+        })
+      )
     );
   }
 
@@ -121,6 +128,7 @@ class SessionDataImplementation {
     reasoningEffort?: string | null;
     planModeEnabled?: boolean;
     provider?: SessionProvider;
+    codexAccountId?: string;
     providerProjectPath?: string | null;
     maxSessions: number;
   }) {
@@ -130,11 +138,14 @@ class SessionDataImplementation {
       explicitModel: data.model,
     });
     const launchMetadata = createSessionLaunchMetadata(data);
-    const result = await agentSessionAccessor.createWithinWorkspaceLimit({
-      ...data,
-      ...defaults,
-      ...(launchMetadata ? { providerMetadata: launchMetadata } : {}),
-    });
+    const result = await this.withAccountBinding(defaults, data.codexAccountId, (codexAccountId) =>
+      agentSessionAccessor.createWithinWorkspaceLimit({
+        ...data,
+        ...defaults,
+        codexAccountId,
+        ...(launchMetadata ? { providerMetadata: launchMetadata } : {}),
+      })
+    );
     return result.outcome === 'created'
       ? { ...result, session: toAgentSessionRecord(result.session) }
       : result;
@@ -159,11 +170,35 @@ class SessionDataImplementation {
     if (input.isCurrent?.() === false) {
       return { outcome: 'unavailable' as const };
     }
-    const result = await prDedicatedSessionAccessor.acquire({ ...input, ...defaults });
+    const existing = await prDedicatedSessionAccessor.find(input);
+    const result = existing
+      ? await prDedicatedSessionAccessor.acquire({
+          ...input,
+          ...defaults,
+          codexAccountId: existing.codexAccountId,
+        })
+      : await this.withAccountBinding(defaults, input.codexAccountId, (codexAccountId) =>
+          prDedicatedSessionAccessor.acquire({ ...input, ...defaults, codexAccountId })
+        );
     return 'session' in result
       ? { ...result, session: toAgentSessionRecord(result.session) }
       : result;
   }
+  private withAccountBinding<T>(
+    defaults: { provider: SessionProvider; model: string },
+    accountId: string | undefined,
+    create: (accountId: string | null) => Promise<T>
+  ): Promise<T> {
+    return defaults.provider === 'CODEX'
+      ? (this.dependencies.accounts ?? codexAccountService).withAccountReservation(
+          { accountId, model: defaults.model },
+          create
+        )
+      : accountId
+        ? Promise.reject(new Error('A Codex account can only be selected for a Codex conversation'))
+        : create(null);
+  }
+
   async findPRDedicatedSession(target: PRTarget): Promise<AgentSessionRecord | null> {
     const session = await prDedicatedSessionAccessor.find(target);
     return session ? toAgentSessionRecord(session) : null;

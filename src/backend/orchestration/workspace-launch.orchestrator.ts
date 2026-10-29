@@ -41,7 +41,9 @@ export interface WorkspaceLaunchPorts {
   getLaunchOptions(input: {
     provider: 'CLAUDE' | 'CODEX';
     model?: string;
+    codexAccountId?: string;
   }): Promise<SessionLaunchOptions>;
+  validateCodexAccount?(input: { accountId?: string; model?: string }): Promise<unknown>;
   createWorkspace: WorkspaceCreation;
   createDefaultSession(
     input: Parameters<typeof sessionDataService.createAgentSession>[0]
@@ -119,13 +121,14 @@ async function launchPeriodicTask(
 
 function explicitSessionModel(
   source: InteractiveLaunchSource
-): SessionLaunchSettings & { model?: string } {
+): SessionLaunchSettings & { model?: string; codexAccountId?: string } {
   if (source.type !== 'MANUAL') {
     return {};
   }
   return {
     ...(source.model !== undefined ? { model: source.model } : {}),
     ...(source.accessMode !== undefined ? { accessMode: source.accessMode } : {}),
+    ...(source.codexAccountId !== undefined ? { codexAccountId: source.codexAccountId } : {}),
     ...(source.reasoningEffort !== undefined ? { reasoningEffort: source.reasoningEffort } : {}),
     ...(source.planModeEnabled !== undefined ? { planModeEnabled: source.planModeEnabled } : {}),
   };
@@ -136,7 +139,7 @@ async function preflightInteractiveLaunch(
   capacity: number,
   ports: WorkspaceLaunchPorts
 ): Promise<Awaited<ReturnType<WorkspaceLaunchPorts['resolveProvider']>> | undefined> {
-  const { model, accessMode } = explicitSessionModel(source);
+  const { model, accessMode, codexAccountId } = explicitSessionModel(source);
   if (capacity <= 0 && model === undefined && accessMode === undefined) {
     return undefined;
   }
@@ -146,16 +149,41 @@ async function preflightInteractiveLaunch(
   );
   if (capacity > 0) {
     const health = await ports.checkCliHealth();
-    const unavailableMessage = getProviderUnavailableMessage(provider, health);
+    const unavailableMessage = getProviderUnavailableMessage(provider, health, {
+      accountScopedCodex: true,
+    });
     if (unavailableMessage) {
       throw new ApplicationError(
         'PRECONDITION_FAILED',
         `Cannot create workspace: ${unavailableMessage}`
       );
     }
+    if (provider === 'CODEX') {
+      await ports.validateCodexAccount?.({
+        accountId: source.type === 'MANUAL' ? source.codexAccountId : undefined,
+        model,
+      });
+    }
   }
+  await validateLaunchAccess({ provider, model, accessMode, codexAccountId }, ports);
+  return provider;
+}
+
+async function validateLaunchAccess(
+  input: SessionLaunchSettings & {
+    provider: 'CLAUDE' | 'CODEX';
+    model?: string;
+    codexAccountId?: string;
+  },
+  ports: Pick<WorkspaceLaunchPorts, 'getLaunchOptions'>
+): Promise<void> {
+  const { provider, model, accessMode, codexAccountId } = input;
   if (accessMode !== undefined) {
-    const options = await ports.getLaunchOptions({ provider, model });
+    const options = await ports.getLaunchOptions({
+      provider,
+      model,
+      ...(provider === 'CODEX' && codexAccountId ? { codexAccountId } : {}),
+    });
     if (
       accessMode === 'plan' ||
       !options.accessMode?.options.some((option) => option.value === accessMode)
@@ -166,7 +194,6 @@ async function preflightInteractiveLaunch(
       );
     }
   }
-  return provider;
 }
 
 /** Coordinate the existing interactive launch policy. */

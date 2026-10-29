@@ -16,6 +16,7 @@ export interface ClosedSessionTranscript {
     name: string | null;
     workflow: string;
     provider: SessionProvider;
+    codexAccountId?: string | null;
     providerSessionId?: string;
     model: string;
     startedAt: string; // ISO timestamp
@@ -31,6 +32,7 @@ export interface PersistClosedSessionInput {
   name: string | null;
   workflow: string;
   provider: SessionProvider;
+  codexAccountId?: string | null;
   providerSessionId?: string;
   model: string;
   startedAt: Date;
@@ -87,6 +89,7 @@ class ClosedSessionPersistenceService {
           name,
           workflow,
           provider,
+          ...(input.codexAccountId ? { codexAccountId: input.codexAccountId } : {}),
           ...(input.providerSessionId ? { providerSessionId: input.providerSessionId } : {}),
           model,
           startedAt: startedAt.toISOString(),

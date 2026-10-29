@@ -24,6 +24,7 @@ import { useRetryWorkspaceInit } from './use-retry-workspace-init';
 export interface ChatContentProps {
   workspaceId: string;
   sessionId: string | null;
+  codexAccountId?: string | null;
   resolveWorkspaceFileLink?: (href: string) => string | null;
   onWorkspaceFileLink?: (path: string) => void;
   onOpenAgents?: () => void;
@@ -350,6 +351,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
             slashCommandsLoaded={props.slashCommandsLoaded}
             tokenStats={props.tokenStats}
             workspaceId={props.workspaceId}
+            codexAccountId={props.codexAccountId}
             acpConfigOptions={props.acpConfigOptions}
             onSetConfigOption={props.setConfigOption}
           />

@@ -1,6 +1,7 @@
 import { adminRouter } from './admin.trpc';
 import { adversarialReviewRouter } from './adversarial-review.trpc';
 import { closedSessionsRouter } from './closed-sessions.trpc';
+import { codexAccountsRouter } from './codex-accounts.trpc';
 import { decisionLogRouter } from './decision-log.trpc';
 import { githubRouter } from './github.trpc';
 import { linearRouter } from './linear.trpc';
@@ -21,6 +22,7 @@ export const appRouter = router({
   adversarialReview: adversarialReviewRouter,
   workspace: workspaceRouter,
   session: sessionRouter,
+  codexAccounts: codexAccountsRouter,
   search: searchRouter,
   closedSessions: closedSessionsRouter,
   prReview: prReviewRouter,

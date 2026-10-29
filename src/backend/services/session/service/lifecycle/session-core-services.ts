@@ -1,3 +1,4 @@
+import { codexAccountService } from '@/backend/services/codex-accounts';
 import { createLogger } from '@/backend/services/logger.service';
 import { sessionLifecycleEventAccessor } from '@/backend/services/session/resources/session-lifecycle-event.accessor';
 import {
@@ -6,7 +7,6 @@ import {
   fetchCodexModelCatalogFromAppServer,
 } from '@/backend/services/session/service/acp';
 import { fetchClaudePlanUsage } from '@/backend/services/session/service/acp/claude-plan-usage-loader';
-import { fetchCodexPlanUsage } from '@/backend/services/session/service/acp/codex-plan-usage-loader';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
 import { workspaceDataService, workspaceNotificationService } from '@/backend/services/workspace';
@@ -66,7 +66,12 @@ export const sessionPermissionService = new SessionPermissionService({
 });
 
 export const codexModelCatalogService = new CodexModelCatalogService({
-  fetchModels: fetchCodexModelCatalogFromAppServer,
+  resolveAccountId: async (accountId) =>
+    (await codexAccountService.getPreviewRuntimeContext({ accountId })).accountId,
+  fetchModels: async (accountId) => {
+    const context = await codexAccountService.getRuntimeContext(accountId);
+    return fetchCodexModelCatalogFromAppServer({ env: context.env });
+  },
 });
 
 export const claudeModelCatalogService = new ClaudeModelCatalogService({
@@ -74,8 +79,8 @@ export const claudeModelCatalogService = new ClaudeModelCatalogService({
 });
 
 export const providerUsageService = new ProviderUsageService({
-  fetchUsage: (provider) =>
-    provider === 'CLAUDE' ? fetchClaudePlanUsage() : fetchCodexPlanUsage(),
+  fetchUsage: () => fetchClaudePlanUsage(),
+  accounts: codexAccountService,
 });
 
 export const sessionConfigService = new SessionConfigService({

@@ -70,14 +70,17 @@ describe('execCommand', () => {
   });
 
   it('force-kills the process when it ignores the timeout signal', async () => {
-    const script = "process.on('SIGTERM', () => {}); setTimeout(() => {}, 5000);";
+    const script =
+      "process.on('SIGTERM', () => {}); process.stdout.write('READY'); setTimeout(() => {}, 5000);";
 
     const result = await execCommand(process.execPath, ['-e', script], {
       forceKillAfterTimeout: 25,
-      timeout: 100,
+      // Allow the real Node child to install its handler under full-suite CPU load.
+      timeout: 1000,
     });
 
     expect(result.code).not.toBe(0);
+    expect(result.stdout).toContain('READY');
     expect(result.signal).toBe('SIGKILL');
     expect(result.timedOut).toBe(true);
   });

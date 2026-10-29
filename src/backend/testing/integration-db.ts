@@ -48,6 +48,10 @@ export async function createIntegrationDatabase(): Promise<IntegrationDatabase> 
 export async function clearIntegrationDatabase(prisma: PrismaClient): Promise<void> {
   await prisma.terminalSession.deleteMany();
   await prisma.agentSession.deleteMany();
+  await prisma.codexAccount.deleteMany();
+  await prisma.codexAccount.create({
+    data: { id: 'codex-native-default', label: 'Native default', kind: 'NATIVE_DEFAULT' },
+  });
   await prisma.workspace.deleteMany();
   await prisma.project.deleteMany();
   await prisma.userSettings.deleteMany();

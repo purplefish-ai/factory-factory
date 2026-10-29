@@ -27,6 +27,7 @@ beforeEach(() => {
     outcome: 'created',
     session: createLifecycleTestSession(),
   });
+  vi.spyOn(prDedicatedSessionAccessor, 'find').mockResolvedValue(null);
   vi.spyOn(prDedicatedSessionAccessor, 'findWorkspace').mockResolvedValue(workspace);
   vi.spyOn(prDedicatedSessionAccessor, 'acquire').mockResolvedValue({
     outcome: 'created',
@@ -160,6 +161,29 @@ describe('constructed session data service', () => {
       ...dedicated,
       provider: 'CODEX',
       model: 'gpt-configured',
+      codexAccountId: 'codex-native-default',
     });
   });
 });
+
+vi.mock('@/backend/services/codex-accounts', () => ({
+  NATIVE_DEFAULT_CODEX_ACCOUNT_ID: 'codex-native-default',
+  codexAccountService: {
+    getRuntimeContext: vi.fn(async (accountId = 'codex-native-default') => ({
+      accountId,
+      homeDir: '/test/codex',
+      sessionsDir: '/test/codex/sessions',
+      env: { CODEX_HOME: '/test/codex' },
+    })),
+    getPreviewRuntimeContext: vi.fn(async ({ accountId = 'codex-native-default' } = {}) => ({
+      accountId,
+      homeDir: '/test/codex',
+      sessionsDir: '/test/codex/sessions',
+      env: { CODEX_HOME: '/test/codex' },
+    })),
+    withAccountReservation: vi.fn(async (input, create) =>
+      create(input.accountId ?? 'codex-native-default')
+    ),
+    getUsage: vi.fn(),
+  },
+}));

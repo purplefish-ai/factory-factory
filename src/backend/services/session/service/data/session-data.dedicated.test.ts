@@ -40,6 +40,7 @@ it('resolves normal workspace provider and model defaults before atomic acquisit
     ...input,
     provider: 'CODEX',
     model: 'configured-model',
+    codexAccountId: 'codex-native-default',
   });
 });
 it('returns unavailable for a missing target before resolving preferences', async () => {
@@ -68,3 +69,25 @@ it.each(['limit_reached', 'unavailable'] as const)(
     expect(await sessionDataService.acquirePRDedicatedSession(input)).toEqual({ outcome });
   }
 );
+
+vi.mock('@/backend/services/codex-accounts', () => ({
+  NATIVE_DEFAULT_CODEX_ACCOUNT_ID: 'codex-native-default',
+  codexAccountService: {
+    getRuntimeContext: vi.fn(async (accountId = 'codex-native-default') => ({
+      accountId,
+      homeDir: '/test/codex',
+      sessionsDir: '/test/codex/sessions',
+      env: { CODEX_HOME: '/test/codex' },
+    })),
+    getPreviewRuntimeContext: vi.fn(async ({ accountId = 'codex-native-default' } = {}) => ({
+      accountId,
+      homeDir: '/test/codex',
+      sessionsDir: '/test/codex/sessions',
+      env: { CODEX_HOME: '/test/codex' },
+    })),
+    withAccountReservation: vi.fn(async (input, create) =>
+      create(input.accountId ?? 'codex-native-default')
+    ),
+    getUsage: vi.fn(),
+  },
+}));
