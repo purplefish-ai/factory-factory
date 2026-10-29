@@ -277,7 +277,19 @@ it.each([
         createSessionLaunchMetadata({ accessMode: mode, planModeEnabled: false })
       ),
     });
-    await h.service.startSession(h.session.id, { initialPrompt: 'Do work' });
+    const accessConfirmation = gate();
+    h.runtime.setSessionMode.mockImplementationOnce(async (id, value) => {
+      await accessConfirmation.wait();
+      return h.controller.setSessionMode(h.handle, value, id);
+    });
+    const starting = h.service.startSession(h.session.id, { initialPrompt: 'Do work' });
+    await accessConfirmation.started;
+    expect(h.sendSessionMessage).not.toHaveBeenCalled();
+    accessConfirmation.release();
+    await starting;
+    expect(h.runtime.setSessionMode.mock.invocationCallOrder[0]).toBeLessThan(
+      h.sendSessionMessage.mock.invocationCallOrder[0]!
+    );
     expect(h.handle.configOptions.find((option) => option.id === 'mode')?.currentValue).toBe(mode);
     expect(readSessionLaunchSettings(h.row().providerMetadata)).toMatchObject({
       accessMode: mode,

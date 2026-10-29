@@ -248,7 +248,7 @@ export function SessionLaunchControls({
               ? 'Selected access mode is unavailable. Choose a supported mode.'
               : undefined,
             type: 'select',
-            currentValue: accessMode.value ?? (accessMode.loading ? 'Loading…' : 'Unavailable'),
+            currentValue: accessMode.value ?? (accessMode.loading ? 'Loading…' : ''),
             options: accessMode.options.map((option) => ({
               value: option.value,
               name: option.label,

@@ -59,7 +59,7 @@ export function AcpConfigSelector({
   );
   const current = options.find((option) => option.value === configOption.currentValue);
   const next = options.find((option) => option.value !== configOption.currentValue);
-  const displayName = current?.name ?? configOption.currentValue;
+  const displayName = current?.name ?? (configOption.currentValue || 'Choose an option');
   const presentation = getConfigPresentation(configOption);
   const Icon = presentation.icon;
   const iconOnly = compact && presentation.compact;
@@ -138,7 +138,7 @@ export function AcpConfigSelector({
                 value={configOption.currentValue}
                 onValueChange={(value) => onSelect(configOption.id, value)}
               >
-                {invalid && !current && (
+                {hasUnavailableSelection(invalid, current, configOption.currentValue) && (
                   <DropdownMenuRadioItem value={configOption.currentValue} disabled>
                     {displayName} (unavailable)
                   </DropdownMenuRadioItem>
@@ -180,4 +180,12 @@ function ConfigOptionIcon({
     return <WarningCircleIcon className="size-3.5 shrink-0" aria-label="Unavailable access mode" />;
   }
   return Icon ? <Icon className="size-3.5 shrink-0" aria-hidden="true" /> : null;
+}
+
+function hasUnavailableSelection(
+  invalid: boolean,
+  current: AcpConfigOptionValue | undefined,
+  value: string
+) {
+  return invalid && !current && Boolean(value);
 }

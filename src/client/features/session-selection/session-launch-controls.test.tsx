@@ -232,3 +232,23 @@ it('warns about unavailable access before hover, retains it in the menu, and per
   keyboardSelect('Read only');
   expect(onChange).toHaveBeenCalledWith('read-only');
 });
+
+it('offers real access choices without a fabricated unavailable selection when the saved preset cannot resolve', () => {
+  const onChange = vi.fn();
+  const mounted = mount({
+    accessMode: {
+      options: [{ value: 'read-only', label: 'Read only' }],
+      invalid: true,
+      loading: false,
+      onChange,
+    },
+  });
+  const trigger = mounted.container.querySelector<HTMLButtonElement>('[aria-label^="Access:"]');
+  expect(trigger).not.toBeNull();
+  keyboardOpen(trigger);
+  const choices = [...document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]')];
+  expect(choices).toHaveLength(1);
+  expect(choices[0]?.textContent).toBe('Read only');
+  keyboardSelect('Read only');
+  expect(onChange).toHaveBeenCalledWith('read-only');
+});
