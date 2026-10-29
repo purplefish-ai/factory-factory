@@ -4,7 +4,7 @@ import { TRPCClientError } from '@trpc/client';
 import { observable } from '@trpc/server/observable';
 import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { trpc } from '@/client/lib/trpc';
@@ -78,6 +78,20 @@ const notFound = () =>
   });
 function Location() {
   return <output aria-label="Location">{useLocation().pathname}</output>;
+}
+function HeaderProjectSwitch() {
+  const navigate = useNavigate();
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        navigation.setSlug('stale');
+        void navigate('/agents');
+      }}
+    >
+      Switch header project
+    </button>
+  );
 }
 async function executeRequest(path: string, type: string, input: unknown) {
   if (type === 'mutation') {
@@ -171,6 +185,7 @@ function render(path = '/agents/agent') {
                   <>
                     <AgentsPage />
                     <Location />
+                    <HeaderProjectSwitch />
                   </>
                 }
               />
@@ -225,7 +240,7 @@ describe('AgentsPage coordination', () => {
       input: { periodicTaskId: 'agent', limit: 50 },
     });
     expect(container.querySelector('output')?.textContent).toBe('/agents/agent');
-    await act(async () => navigation.setSlug('stale'));
+    await act(async () => button('Switch header project').click());
     await waitForReact(() =>
       expect(
         requests.filter((request) => request.path === 'periodicTask.list').at(-1)?.input
@@ -374,7 +389,7 @@ describe('AgentsPage coordination', () => {
     await waitForReact(() =>
       expect(requests.some((request) => request.path === 'periodicTask.create')).toBe(true)
     );
-    actFlushSync(() => navigation.setSlug('stale'));
+    actFlushSync(() => button('Switch header project').click());
     await waitForReact(() =>
       expect(container.querySelector('output')?.textContent).toBe('/agents')
     );

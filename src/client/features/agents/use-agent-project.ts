@@ -3,7 +3,11 @@ import { useAppNavigationDataContext } from '@/client/hooks/use-app-navigation-d
 import { trpc } from '@/client/lib/trpc';
 import type { Agent } from './types';
 
-/** Resolve explicit deep links before trusting the last selected project. */
+/**
+ * Resolve explicit deep links before trusting the last selected project.
+ * Navigation belongs to explicit user actions; project state can normalize
+ * automatically while the requested task is still loading.
+ */
 export function useAgentProject(
   id: string | undefined,
   task: Agent | undefined,
@@ -19,15 +23,7 @@ export function useAgentProject(
   const owner = ownerInList ?? ownerQuery.data;
   const selectedProject = projects?.find((project) => project.slug === selectedProjectSlug);
   const project = id && task ? owner : selectedProject;
-  const previousSlug = useRef(selectedProjectSlug);
   const resolvedId = useRef<string | undefined>(undefined);
-
-  useEffect(() => {
-    if (previousSlug.current && previousSlug.current !== selectedProjectSlug) {
-      onProjectSwitch();
-    }
-    previousSlug.current = selectedProjectSlug;
-  }, [selectedProjectSlug, onProjectSwitch]);
 
   useEffect(() => {
     if (!id) {
@@ -38,8 +34,6 @@ export function useAgentProject(
       return;
     }
     resolvedId.current = id;
-    // Mark our own synchronization so it isn't mistaken for a user project switch.
-    previousSlug.current = ownerInList.slug;
     selectProjectSlug(ownerInList.slug);
   }, [id, ownerInList, selectProjectSlug]);
 
@@ -60,7 +54,6 @@ export function useAgentProject(
       if (!next) {
         return;
       }
-      previousSlug.current = next.slug;
       selectProjectSlug(next.slug);
       onProjectSwitch();
     },
