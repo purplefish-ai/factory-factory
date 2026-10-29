@@ -3,8 +3,6 @@ vi.mock('./pr-monitoring.orchestrator', () => ({ bindIssueMonitoringSession: vi.
 import { type Mock, vi } from 'vitest';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
-const mockInitialEnqueue = vi.hoisted(() => vi.fn());
-
 export const mockWorkspaceUpdate: Mock = vi.fn();
 export const mockLogger: Record<'debug' | 'info' | 'warn' | 'error', Mock> = {
   debug: vi.fn(),
@@ -47,8 +45,8 @@ vi.mock('@/backend/services/session', () => ({
     findAgentSessionsByWorkspaceId: vi.fn(),
   },
   sessionDomainService: {
-    enqueue: mockInitialEnqueue,
-    enqueueInitialMessage: mockInitialEnqueue,
+    enqueue: vi.fn(),
+    enqueueInitialMessage: vi.fn(),
     emitDelta: vi.fn(),
   },
   sessionLifecycleService: {

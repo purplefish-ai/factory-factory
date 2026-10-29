@@ -1,5 +1,6 @@
 import './workspace-init.test-harness';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { githubCLIService } from '@/backend/services/github';
 import { FactoryConfigService, startupScriptService } from '@/backend/services/run-script';
 import {
   sessionDataService,
@@ -7,7 +8,7 @@ import {
   sessionDomainService,
   sessionLifecycleService,
 } from '@/backend/services/session';
-import { workspaceStateMachine } from '@/backend/services/workspace';
+import { gitOpsService, workspaceStateMachine } from '@/backend/services/workspace';
 import { SessionStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import {
@@ -60,12 +61,81 @@ describe('workspace initialization startup order', () => {
     expect(sessionLifecycleService.startSession).toHaveBeenCalledTimes(1);
   });
 
+  it('runs setup during issue fetching and publishes the queue before readiness', async () => {
+    setupHappyPath({ githubIssueNumber: 42 });
+    vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
+      unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
+    ]);
+    const issue = deferred<Awaited<ReturnType<typeof githubCLIService.getIssue>>>();
+    const setupFinished = deferred<{ success: boolean }>();
+    vi.mocked(githubCLIService.getIssue).mockReturnValue(issue.promise);
+    vi.mocked(sessionDomainService.enqueueInitialMessage).mockReturnValue({ position: 0 });
+    vi.mocked(FactoryConfigService.readConfig).mockResolvedValue(
+      unsafeCoerce({ scripts: { setup: './setup.sh', run: null, cleanup: null } })
+    );
+    vi.mocked(startupScriptService.runStartupScript).mockImplementation(
+      () => setupFinished.promise as ReturnType<typeof startupScriptService.runStartupScript>
+    );
+    const initialization = initializeWorkspaceWorktree(WORKSPACE_ID);
+    try {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(gitOpsService.createWorktree).toHaveBeenCalledOnce();
+      expect(startupScriptService.runStartupScript).toHaveBeenCalledOnce();
+      setupFinished.resolve({ success: true });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(workspaceStateMachine.markReady).not.toHaveBeenCalled();
+      await expectAgentNotStarted();
+    } finally {
+      issue.resolve(
+        unsafeCoerce({ number: 42, title: 'Queued task', body: '', url: 'https://example.com/42' })
+      );
+      setupFinished.resolve({ success: true });
+      await initialization;
+    }
+    expect(sessionDomainService.enqueueInitialMessage).toHaveBeenCalledOnce();
+    expect(
+      vi.mocked(sessionDomainService.enqueueInitialMessage).mock.invocationCallOrder[0]
+    ).toBeLessThan(vi.mocked(workspaceStateMachine.markReady).mock.invocationCallOrder[0]!);
+  });
+
+  it('does not publish a late issue prompt after provisioning fails', async () => {
+    setupHappyPath({ githubIssueNumber: 42 });
+    vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
+      unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
+    ]);
+    const issue = deferred<Awaited<ReturnType<typeof githubCLIService.getIssue>>>();
+    const cleanupFinished =
+      deferred<Awaited<ReturnType<typeof workspaceStateMachine.markFailed>>>();
+    vi.mocked(githubCLIService.getIssue).mockReturnValue(issue.promise);
+    vi.mocked(gitOpsService.createWorktree).mockRejectedValue(new Error('Worktree failed'));
+    vi.mocked(workspaceStateMachine.markFailed).mockReturnValue(cleanupFinished.promise);
+    const initialization = initializeWorkspaceWorktree(WORKSPACE_ID);
+    try {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(workspaceStateMachine.markFailed).toHaveBeenCalledOnce();
+      issue.resolve(
+        unsafeCoerce({ number: 42, title: 'Late task', body: '', url: 'https://example.com/42' })
+      );
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(sessionDomainService.enqueueInitialMessage).not.toHaveBeenCalled();
+    } finally {
+      issue.resolve(
+        unsafeCoerce({ number: 42, title: 'Late task', body: '', url: 'https://example.com/42' })
+      );
+      cleanupFinished.resolve(unsafeCoerce({}));
+      await initialization;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    expect(sessionDomainService.enqueueInitialMessage).not.toHaveBeenCalled();
+    expect(sessionLifecycleService.startSession).not.toHaveBeenCalled();
+  });
+
   it('publishes the initial prompt before setup without starting or dispatching the agent', async () => {
     setupHappyPath({ creationMetadata: { initialPrompt: 'Fix the queued startup message' } });
     vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
       unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
     ]);
-    vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
+    vi.mocked(sessionDomainService.enqueueInitialMessage).mockReturnValue({ position: 0 });
     vi.mocked(FactoryConfigService.readConfig).mockResolvedValue(
       unsafeCoerce({ scripts: { setup: './setup.sh', run: null, cleanup: null } })
     );
@@ -79,7 +149,7 @@ describe('workspace initialization startup order', () => {
     const initialization = initializeWorkspaceWorktree(WORKSPACE_ID);
     try {
       await setupEntered.promise;
-      expect(sessionDomainService.enqueue).toHaveBeenCalledExactlyOnceWith(
+      expect(sessionDomainService.enqueueInitialMessage).toHaveBeenCalledExactlyOnceWith(
         'session-1',
         expect.objectContaining({ text: 'Fix the queued startup message' })
       );
@@ -97,7 +167,8 @@ describe('workspace initialization startup order', () => {
       setupFinished.resolve({ success: true });
       await initialization;
     }
-    expect(sessionDomainService.enqueue).toHaveBeenCalledTimes(1);
+    expect(sessionDomainService.enqueueInitialMessage).toHaveBeenCalledTimes(1);
+    expect(sessionDomainService.enqueue).not.toHaveBeenCalled();
     expect(sessionLifecycleService.startSession).toHaveBeenCalledTimes(1);
   });
 

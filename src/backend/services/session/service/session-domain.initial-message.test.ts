@@ -46,3 +46,19 @@ it('allows initial publication to retry when enqueue fails', () => {
   expect(domain.enqueueInitialMessage('session-1', message)).toEqual({ position: 0 });
   expect(domain.getQueueSnapshot('session-1')).toEqual([message]);
 });
+
+it('keeps the undelivered task queued across inactive disconnect cleanup', () => {
+  domain.enqueueInitialMessage('session-1', message);
+  domain.clearSession('session-1', { preserveRejections: true });
+  expect(domain.getQueueSnapshot('session-1')).toEqual([message]);
+  expect(domain.enqueueInitialMessage('session-1', { ...message, id: 'retry' })).toBeNull();
+  expect(domain.getQueueSnapshot('session-1')).toEqual([message]);
+});
+
+it('republishes an undelivered task after its queue is destructively cleared', () => {
+  domain.enqueueInitialMessage('session-1', message);
+  domain.clearSession('session-1');
+  const retry = { ...message, id: 'retry' };
+  expect(domain.enqueueInitialMessage('session-1', retry)).toEqual({ position: 0 });
+  expect(domain.getQueueSnapshot('session-1')).toEqual([retry]);
+});

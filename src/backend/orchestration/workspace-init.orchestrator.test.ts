@@ -1,6 +1,6 @@
 // Register the shared mocks before any service or orchestrator module loads.
 import './workspace-init.test-harness';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { assert, beforeEach, describe, expect, it, vi } from 'vitest';
 import { githubCLIService } from '@/backend/services/github';
 import {
   FactoryConfigService,
@@ -37,6 +37,8 @@ import {
   mockWorkspaceUpdate,
   setupHappyPath,
 } from './workspace-init.test-harness';
+
+const enqueueInitialMessage = vi.mocked(sessionDomainService.enqueueInitialMessage);
 
 function createDeferredPromise<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -793,14 +795,12 @@ describe('initializeWorkspaceWorktree', () => {
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
-      vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
+      enqueueInitialMessage.mockReturnValue({ position: 0 });
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      const queued = vi.mocked(sessionDomainService.enqueue).mock.calls[0]?.[1];
-      if (!queued) {
-        throw new Error('Expected an initial message to be queued');
-      }
+      const queued = enqueueInitialMessage.mock.calls[0]?.[1];
+      assert(queued, 'Expected an initial message to be queued');
       expect(queued.text).toContain('## Child Workspace Context');
       expect(queued.text).toContain('Report back when: a PR is opened');
       expect(queued.text.indexOf('## Child Workspace Context')).toBeLessThan(
@@ -829,11 +829,11 @@ describe('initializeWorkspaceWorktree', () => {
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
-      vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
+      enqueueInitialMessage.mockReturnValue({ position: 0 });
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(sessionDomainService.enqueue).toHaveBeenCalledWith(
+      expect(enqueueInitialMessage).toHaveBeenCalledWith(
         'session-1',
         expect.objectContaining({ text: expect.stringContaining('send_message_to_parent') })
       );
@@ -866,11 +866,11 @@ describe('initializeWorkspaceWorktree', () => {
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
-      vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
+      enqueueInitialMessage.mockReturnValue({ position: 0 });
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(sessionDomainService.enqueue).toHaveBeenCalledWith(
+      expect(enqueueInitialMessage).toHaveBeenCalledWith(
         'session-1',
         expect.objectContaining({
           text: expect.stringContaining('Review the evidence'),
@@ -910,11 +910,11 @@ describe('initializeWorkspaceWorktree', () => {
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
-      vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
+      enqueueInitialMessage.mockReturnValue({ position: 0 });
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(sessionDomainService.enqueue).toHaveBeenCalledWith(
+      expect(enqueueInitialMessage).toHaveBeenCalledWith(
         'session-1',
         expect.objectContaining({
           text: '## Child Workspace Context\nUse send_message_to_parent.',
@@ -943,11 +943,11 @@ describe('initializeWorkspaceWorktree', () => {
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
-      vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
+      enqueueInitialMessage.mockReturnValue({ position: 0 });
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(sessionDomainService.enqueue).toHaveBeenCalledWith(
+      expect(enqueueInitialMessage).toHaveBeenCalledWith(
         'session-1',
         expect.objectContaining({
           text: '## Child Workspace Context\nUse send_message_to_parent.',
@@ -973,7 +973,7 @@ describe('initializeWorkspaceWorktree', () => {
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
-      vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
+      enqueueInitialMessage.mockReturnValue({ position: 0 });
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
@@ -991,7 +991,7 @@ describe('initializeWorkspaceWorktree', () => {
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
-      vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
+      enqueueInitialMessage.mockReturnValue({ position: 0 });
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
@@ -1021,11 +1021,11 @@ describe('initializeWorkspaceWorktree', () => {
           },
         })
       );
-      vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
+      enqueueInitialMessage.mockReturnValue({ position: 0 });
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(sessionDomainService.enqueue).toHaveBeenCalledWith(
+      expect(enqueueInitialMessage).toHaveBeenCalledWith(
         'session-1',
         expect.objectContaining({
           text: '',
@@ -1070,12 +1070,12 @@ describe('initializeWorkspaceWorktree', () => {
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
-      vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
+      enqueueInitialMessage.mockReturnValue({ position: 0 });
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
       expect(githubCLIService.getIssue).not.toHaveBeenCalled();
-      expect(sessionDomainService.enqueue).toHaveBeenCalledWith(
+      expect(enqueueInitialMessage).toHaveBeenCalledWith(
         'session-1',
         expect.objectContaining({
           text: 'Custom edited prompt',
@@ -1098,12 +1098,12 @@ describe('initializeWorkspaceWorktree', () => {
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
-      vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
+      enqueueInitialMessage.mockReturnValue({ position: 0 });
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
       expect(githubCLIService.getIssue).not.toHaveBeenCalled();
-      expect(sessionDomainService.enqueue).toHaveBeenCalledWith(
+      expect(enqueueInitialMessage).toHaveBeenCalledWith(
         'session-1',
         expect.objectContaining({
           text: 'Custom <\\/task> prompt',
@@ -1126,12 +1126,12 @@ describe('initializeWorkspaceWorktree', () => {
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
-      vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
+      enqueueInitialMessage.mockReturnValue({ position: 0 });
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
       expect(githubCLIService.getIssue).not.toHaveBeenCalled();
-      expect(sessionDomainService.enqueue).not.toHaveBeenCalled();
+      expect(enqueueInitialMessage).not.toHaveBeenCalled();
     });
 
     it('skips enqueue for saved whitespace-only initial prompt without rebuilding issue prompt', async () => {
@@ -1149,12 +1149,12 @@ describe('initializeWorkspaceWorktree', () => {
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
-      vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
+      enqueueInitialMessage.mockReturnValue({ position: 0 });
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
       expect(githubCLIService.getIssue).not.toHaveBeenCalled();
-      expect(sessionDomainService.enqueue).not.toHaveBeenCalled();
+      expect(enqueueInitialMessage).not.toHaveBeenCalled();
     });
 
     it('enqueues attachments when saved initial prompt is empty but attachments exist', async () => {
@@ -1182,12 +1182,12 @@ describe('initializeWorkspaceWorktree', () => {
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
-      vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
+      enqueueInitialMessage.mockReturnValue({ position: 0 });
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
       expect(githubCLIService.getIssue).not.toHaveBeenCalled();
-      expect(sessionDomainService.enqueue).toHaveBeenCalledWith(
+      expect(enqueueInitialMessage).toHaveBeenCalledWith(
         'session-1',
         expect.objectContaining({
           text: '',
@@ -1215,11 +1215,11 @@ describe('initializeWorkspaceWorktree', () => {
           url: 'https://github.com/owner/repo/issues/42',
         })
       );
-      vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
+      enqueueInitialMessage.mockReturnValue({ position: 0 });
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(sessionDomainService.enqueue).toHaveBeenCalledWith(
+      expect(enqueueInitialMessage).toHaveBeenCalledWith(
         'session-1',
         expect.objectContaining({
           text: expect.stringContaining('Fix the bug'),
@@ -1242,7 +1242,7 @@ describe('initializeWorkspaceWorktree', () => {
           url: 'https://github.com/owner/repo/issues/42',
         })
       );
-      vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
+      enqueueInitialMessage.mockReturnValue({ position: 0 });
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
@@ -1270,7 +1270,7 @@ describe('initializeWorkspaceWorktree', () => {
           url: 'https://github.com/owner/repo/issues/42',
         })
       );
-      vi.mocked(sessionDomainService.enqueue).mockReturnValue({ error: 'queue full' } as never);
+      enqueueInitialMessage.mockReturnValue({ error: 'queue full' });
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
@@ -1286,7 +1286,7 @@ describe('initializeWorkspaceWorktree', () => {
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(sessionDomainService.enqueue).not.toHaveBeenCalled();
+      expect(enqueueInitialMessage).not.toHaveBeenCalled();
     });
 
     it('returns empty prompt when project lacks GitHub owner/repo', async () => {
@@ -1309,7 +1309,7 @@ describe('initializeWorkspaceWorktree', () => {
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
       expect(githubCLIService.getIssue).not.toHaveBeenCalled();
-      expect(sessionDomainService.enqueue).not.toHaveBeenCalled();
+      expect(enqueueInitialMessage).not.toHaveBeenCalled();
     });
 
     it('returns empty prompt when issue fetch fails', async () => {
@@ -1323,7 +1323,7 @@ describe('initializeWorkspaceWorktree', () => {
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(sessionDomainService.enqueue).not.toHaveBeenCalled();
+      expect(enqueueInitialMessage).not.toHaveBeenCalled();
     });
 
     it('returns empty prompt when issue fetch throws', async () => {
@@ -1338,7 +1338,7 @@ describe('initializeWorkspaceWorktree', () => {
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
       // Should not throw - error is caught inside buildInitialPromptFromGitHubIssue
-      expect(sessionDomainService.enqueue).not.toHaveBeenCalled();
+      expect(enqueueInitialMessage).not.toHaveBeenCalled();
     });
 
     it('includes issue body of "(No description provided)" when body is empty', async () => {
@@ -1356,11 +1356,11 @@ describe('initializeWorkspaceWorktree', () => {
           url: 'https://github.com/owner/repo/issues/42',
         })
       );
-      vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
+      enqueueInitialMessage.mockReturnValue({ position: 0 });
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(sessionDomainService.enqueue).toHaveBeenCalledWith(
+      expect(enqueueInitialMessage).toHaveBeenCalledWith(
         'session-1',
         expect.objectContaining({
           text: expect.stringContaining('(No description provided)'),

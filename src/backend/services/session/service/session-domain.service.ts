@@ -57,7 +57,7 @@ export class SessionDomainService extends EventEmitter {
   /** In-memory store for initial messages to auto-enqueue on first load_session */
   private readonly initialMessages = new Map<string, string>();
   // Retain publication evidence through cancellation and ordinary store eviction.
-  private readonly publishedInitialMessages = new Set<string>();
+  private readonly publishedInitialMessages = new Map<string, string>();
 
   storeInitialMessage(sessionId: string, text: string): void {
     this.initialMessages.set(sessionId, text);
@@ -243,7 +243,7 @@ export class SessionDomainService extends EventEmitter {
     }
     const result = this.enqueue(sessionId, message);
     if (!('error' in result)) {
-      this.publishedInitialMessages.add(sessionId);
+      this.publishedInitialMessages.set(sessionId, message.id);
     }
     return result;
   }
@@ -511,8 +511,19 @@ export class SessionDomainService extends EventEmitter {
     sessionId: string,
     options?: { preserveRejections?: boolean; permanentlyDeleted?: boolean }
   ): void {
+    const initialMessageId = this.publishedInitialMessages.get(sessionId);
+    const hasPendingInitialMessage =
+      initialMessageId !== undefined &&
+      this.registry.getQueueSnapshot(sessionId).some((message) => message.id === initialMessageId);
+    // Inactive-viewer cleanup must not discard a task still waiting for workspace setup.
+    if (hasPendingInitialMessage && options?.preserveRejections && !options.permanentlyDeleted) {
+      return;
+    }
     this.initialMessages.delete(sessionId);
     this.registry.clearSession(sessionId, options);
+    if (hasPendingInitialMessage) {
+      this.publishedInitialMessages.delete(sessionId);
+    }
     if (options?.permanentlyDeleted) {
       this.forgetProviderHistoryIdentity(sessionId);
     }

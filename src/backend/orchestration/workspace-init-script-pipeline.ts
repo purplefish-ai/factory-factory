@@ -16,6 +16,7 @@ interface StartupScriptPipelineContext {
   workspaceWithProject: WorkspaceWithProject;
   worktreePath: string;
   factoryConfig: Awaited<ReturnType<typeof FactoryConfigService.readConfig>>;
+  beforeReady?: () => Promise<void>;
 }
 
 interface StartupScriptPhaseDefinition {
@@ -105,6 +106,8 @@ export async function executeStartupScriptPipeline(
       }
     }
   }
+
+  await context.beforeReady?.();
 
   if (!handled) {
     return { handled: false, success: true };

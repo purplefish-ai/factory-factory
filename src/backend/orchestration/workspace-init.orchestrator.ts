@@ -390,7 +390,7 @@ async function bindInitialMonitoringSession(workspaceId: string, sessionId: stri
   }
 }
 
-async function prepareDefaultAgentSession(workspaceId: string) {
+async function prepareDefaultAgentSession(workspaceId: string, signal: AbortSignal) {
   try {
     const sessions = await sessionDataService.findAgentSessionsByWorkspaceId(workspaceId, {
       status: SessionStatus.IDLE,
@@ -424,6 +424,10 @@ async function prepareDefaultAgentSession(workspaceId: string) {
           attachments: initialMessage?.attachments,
         }
       : initialMessage;
+
+    if (signal.aborted) {
+      return null;
+    }
 
     // Route the initial prompt through the queue pipeline so runtime and replay remain consistent.
     if (messageToEnqueue) {
@@ -719,13 +723,17 @@ async function runWorkspaceInitialization(
   let worktreeRegistered = false;
   let createdWorktreeInfo: CreatedWorktreeInfo | undefined;
   let autoCreatedTerminalId: string | undefined;
+  const preparationController = new AbortController();
 
   try {
     const workspaceWithProject = await getWorkspaceWithProjectOrThrow(workspaceId);
     project = workspaceWithProject.project;
 
-    // Publish the initial queue before provisioning so setup never hides the user's task.
-    const preparedSession = await prepareDefaultAgentSession(workspaceId);
+    // Fetch issue prompts alongside setup, publishing the queue as soon as it is ready.
+    const preparedSessionPromise = prepareDefaultAgentSession(
+      workspaceId,
+      preparationController.signal
+    );
 
     const worktreeName = `workspace-${workspaceId}`;
     const baseBranch = options?.branchName ?? project.defaultBranch;
@@ -782,6 +790,9 @@ async function runWorkspaceInitialization(
       workspaceWithProject,
       worktreePath: worktreeInfo.worktreePath,
       factoryConfig,
+      beforeReady: async () => {
+        await preparedSessionPromise;
+      },
     });
     if (!startupScriptPipelineResult.handled) {
       await workspaceStateMachine.markReady(workspaceId);
@@ -789,6 +800,7 @@ async function runWorkspaceInitialization(
 
     // Provider startup hooks can depend on setup's files and installed tools.
     // Finish provisioning before starting the agent's bounded startup deadline.
+    const preparedSession = await preparedSessionPromise;
     const agentSessionPromise = startDefaultAgentSession(
       workspaceId,
       preparedSession,
@@ -808,6 +820,7 @@ async function runWorkspaceInitialization(
       dependencies
     );
   } catch (error) {
+    preparationController.abort();
     await handleWorkspaceInitFailure(
       workspaceId,
       toError(error),
@@ -817,6 +830,7 @@ async function runWorkspaceInitialization(
         : undefined
     );
   } finally {
+    preparationController.abort();
     if (worktreeCreated) {
       await worktreeLifecycleService.clearInitMode(workspaceId);
     }
