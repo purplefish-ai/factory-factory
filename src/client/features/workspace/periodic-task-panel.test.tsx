@@ -160,3 +160,23 @@ it('shows run-history failures and retries instead of presenting empty history',
     await view.dispose();
   }
 });
+
+it('retains cached agent details and allows retrying a failed definition refresh', async () => {
+  mocks.task.error = { message: 'Definition refresh unavailable' };
+  const view = await render();
+  try {
+    expect(view.container.textContent).toContain('Review changes');
+    expect(view.container.textContent).toContain(
+      'Could not refresh agent: Definition refresh unavailable'
+    );
+    const retry = [...view.container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Retry agent'
+    );
+    expect(retry).toBeDefined();
+    await act(() => retry?.click());
+    expect(mocks.task.refetch).toHaveBeenCalledOnce();
+    expect(view.container.querySelector('a[href="/agents/agent-1"]')).not.toBeNull();
+  } finally {
+    await view.dispose();
+  }
+});

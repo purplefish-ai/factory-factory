@@ -1,6 +1,6 @@
 import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
-import type { ReactNode } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 import { Link } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -37,8 +37,27 @@ export interface AgentsDashboardShellProps {
   onRetry?: () => void;
   onProjectChange: (projectId: string) => void;
   onCreate: () => void;
+  onAgentSelect?: (id: string) => void;
   createDisabled?: boolean;
   children: ReactNode;
+}
+
+function selectFromLink(
+  event: MouseEvent<HTMLAnchorElement>,
+  id: string,
+  onSelect?: (id: string) => void
+) {
+  if (
+    event.defaultPrevented ||
+    event.button !== 0 ||
+    event.metaKey ||
+    event.ctrlKey ||
+    event.shiftKey ||
+    event.altKey
+  ) {
+    return;
+  }
+  onSelect?.(id);
 }
 
 /** Presentational shell shared by Storybook and the mobile fixture. */
@@ -52,6 +71,7 @@ export function AgentsDashboardShell({
   onRetry,
   onProjectChange,
   onCreate,
+  onAgentSelect,
   createDisabled,
   children,
 }: AgentsDashboardShellProps) {
@@ -115,6 +135,7 @@ export function AgentsDashboardShell({
               <Link
                 key={agent.id}
                 to={`/agents/${agent.id}`}
+                onClick={(event) => selectFromLink(event, agent.id, onAgentSelect)}
                 aria-current={agent.id === selectedAgentId ? 'page' : undefined}
                 className={cn(
                   'mb-1 block min-w-0 rounded-md border border-transparent p-3 outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring',

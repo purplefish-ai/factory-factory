@@ -13,6 +13,8 @@ export function useAgentsController() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [mode, setMode] = useState<'detail' | 'create' | 'edit'>('detail');
+  const currentMode = useRef(mode);
+  currentMode.current = mode;
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -42,6 +44,14 @@ export function useAgentsController() {
   const update = trpc.periodicTask.update.useMutation();
   const toggle = trpc.periodicTask.toggleEnabled.useMutation();
   const remove = trpc.periodicTask.delete.useMutation();
+  const createDisabled =
+    pending ||
+    create.isPending ||
+    update.isPending ||
+    projectState.projectsLoading ||
+    projectState.ownerLoading ||
+    !project ||
+    (!!id && (!task.data || project.id !== task.data.projectId));
 
   const previousId = useRef(id);
   useEffect(() => {
@@ -76,7 +86,11 @@ export function useAgentsController() {
     if (mode === 'create') {
       const created = await create.mutateAsync({ projectId: project.id, ...values });
       invalidate(project.id, created.id);
-      if (currentId.current === id && currentProjectId.current === project.id) {
+      if (
+        currentId.current === id &&
+        currentProjectId.current === project.id &&
+        currentMode.current === 'create'
+      ) {
         setMode('detail');
         void navigate(`/agents/${created.id}`);
       }
@@ -137,7 +151,16 @@ export function useAgentsController() {
     actionError,
     pending: pending || create.isPending || update.isPending,
     save,
+    createDisabled,
+    selectAgent: () => {
+      setMode('detail');
+      setDeleteOpen(false);
+      setActionError(null);
+    },
     startCreate: () => {
+      if (createDisabled) {
+        return;
+      }
       setMode('create');
       setDeleteOpen(false);
       setActionError(null);

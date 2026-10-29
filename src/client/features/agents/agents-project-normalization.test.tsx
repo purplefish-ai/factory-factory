@@ -201,6 +201,48 @@ describe('explicit agent links during real project normalization', () => {
       'first-active'
     );
   });
+  it('waits for a deep-linked task owner before enabling creation in that project', async () => {
+    render(agent.id, 'first-active');
+    await waitForReact(() =>
+      expect(container.querySelector('output[aria-label="Selected project"]')?.textContent).toBe(
+        'first-active'
+      )
+    );
+    const create = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Create Agent'
+    );
+    expect(create?.disabled).toBe(true);
+    actFlushSync(() => create?.click());
+    expect(container.querySelector('form')).toBeNull();
+    await act(async () => {
+      finishTask();
+      await taskWait;
+    });
+    await waitForReact(() =>
+      expect(container.querySelector('h2')?.textContent).toBe('Requested agent')
+    );
+    expect(create?.disabled).toBe(false);
+    actFlushSync(() => create?.click());
+    expect(container.querySelector('form')).not.toBeNull();
+    expect(container.querySelector('main')?.textContent).toContain('Owner project');
+  });
+  it('keeps creation disabled when an explicit task lookup fails with unknown ownership', async () => {
+    render('missing-agent', 'first-active');
+    await act(async () => {
+      finishTask();
+      await taskWait;
+    });
+    await waitForReact(() => expect(container.textContent).toContain('Agent not found'));
+    const create = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Create Agent'
+    );
+    expect(create?.disabled).toBe(true);
+    actFlushSync(() => create?.click());
+    expect(container.querySelector('form')).toBeNull();
+    expect(container.querySelector('output[aria-label="Current route"]')?.textContent).toBe(
+      '/agents/missing-agent'
+    );
+  });
   it('keeps a delayed missing task ID and displays not found after normalization', async () => {
     render('missing-agent', 'removed-project');
     await waitForReact(() =>

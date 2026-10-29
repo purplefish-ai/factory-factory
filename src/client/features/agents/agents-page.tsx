@@ -172,7 +172,8 @@ export function AgentsPage() {
         }}
         onProjectChange={controller.selectProject}
         onCreate={controller.startCreate}
-        createDisabled={pending || controller.projectsLoading || controller.ownerLoading}
+        createDisabled={controller.createDisabled}
+        onAgentSelect={controller.selectAgent}
       >
         <AgentProjectContent controller={controller} />
       </AgentsDashboardShell>

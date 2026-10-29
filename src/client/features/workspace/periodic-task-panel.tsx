@@ -66,9 +66,14 @@ export function PeriodicTaskPanel({ periodicTaskId }: PeriodicTaskPanelProps) {
           Manage Agent
         </Link>
         {task.error && (
-          <p role="alert" className="text-xs text-destructive">
-            Could not refresh agent: {task.error.message}
-          </p>
+          <div className="space-y-2">
+            <p role="alert" className="text-xs text-destructive">
+              Could not refresh agent: {task.error.message}
+            </p>
+            <Button size="sm" variant="outline" onClick={() => void task.refetch()}>
+              Retry agent
+            </Button>
+          </div>
         )}
       </div>
       <div className="p-3">

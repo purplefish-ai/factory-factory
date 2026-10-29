@@ -451,6 +451,101 @@ describe('AgentsPage coordination', () => {
     expect(container.querySelector('a[href="/agents/agent"]')).toBeNull();
     await act(async () => finishList());
   });
+  it('leaves Create mode when selecting the current agent in the actual rail', async () => {
+    render();
+    await waitForReact(() =>
+      expect(container.querySelector('h2')?.textContent).toBe('Review changes')
+    );
+    actFlushSync(() => button('Create Agent').click());
+    expect(container.querySelector('form')).not.toBeNull();
+    const railLink = container.querySelector<HTMLAnchorElement>(
+      'nav[aria-label="Agents"] a[href="/agents/agent"]'
+    );
+    actFlushSync(() => railLink?.click());
+    expect(container.querySelector('form')).toBeNull();
+    expect(container.querySelector('h2')?.textContent).toBe('Review changes');
+    expect(railLink?.getAttribute('aria-current')).toBe('page');
+    expect(container.querySelector('output')?.textContent).toBe('/agents/agent');
+  });
+  it('keeps the explicitly reselected agent after an in-flight creation succeeds', async () => {
+    render();
+    await waitForReact(() =>
+      expect(container.querySelector('h2')?.textContent).toBe('Review changes')
+    );
+    actFlushSync(() => button('Create Agent').click());
+    actFlushSync(() => {
+      const name = container.querySelector('input[name="name"]');
+      const instructions = container.querySelector('textarea');
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+        name,
+        'New agent'
+      );
+      name?.dispatchEvent(new Event('input', { bubbles: true }));
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(
+        instructions,
+        'Review changes'
+      );
+      instructions?.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    let finishMutation: () => void = vi.fn();
+    mutationWait = new Promise<void>((resolve) => {
+      finishMutation = resolve;
+    });
+    actFlushSync(() =>
+      container
+        .querySelector('form')
+        ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    );
+    await waitForReact(() =>
+      expect(requests.some((request) => request.path === 'periodicTask.create')).toBe(true)
+    );
+    actFlushSync(() =>
+      container
+        .querySelector<HTMLAnchorElement>('nav[aria-label="Agents"] a[href="/agents/agent"]')
+        ?.click()
+    );
+    expect(container.querySelector('form')).toBeNull();
+    await act(async () => {
+      finishMutation();
+      await mutationWait;
+    });
+    await waitForReact(() => expect(button('Create Agent').disabled).toBe(false));
+    expect(container.querySelector('output')?.textContent).toBe('/agents/agent');
+  });
+  it.each([
+    { ctrlKey: true },
+    { metaKey: true },
+    { shiftKey: true },
+    { altKey: true },
+    { button: 1 },
+  ])(
+    'preserves Create mode and browser link behavior for modified rail clicks %j',
+    async (modifiers) => {
+      render();
+      await waitForReact(() =>
+        expect(container.querySelector('h2')?.textContent).toBe('Review changes')
+      );
+      actFlushSync(() => button('Create Agent').click());
+      const railLink = container.querySelector<HTMLAnchorElement>(
+        'nav[aria-label="Agents"] a[href="/agents/agent"]'
+      );
+      let browserActionPrevented = true;
+      const suppressTestNavigation = (event: MouseEvent) => {
+        browserActionPrevented = event.defaultPrevented;
+        event.preventDefault();
+      };
+      document.addEventListener('click', suppressTestNavigation, { once: true });
+      actFlushSync(() =>
+        railLink?.dispatchEvent(
+          new MouseEvent('click', { bubbles: true, cancelable: true, ...modifiers })
+        )
+      );
+      expect(browserActionPrevented).toBe(false);
+      expect(railLink?.getAttribute('href')).toBe('/agents/agent');
+      expect(container.querySelector('form')).not.toBeNull();
+      expect(container.querySelector('output')?.textContent).toBe('/agents/agent');
+    }
+  );
   it('creates in the selected project and opens the created agent only after success', async () => {
     navigation.slug = 'owner-slug';
     render('/agents');
