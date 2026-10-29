@@ -95,3 +95,9 @@ it('uses newest startedAt and then descending ID for tied terminal outcomes per 
   await run(failed.id, 'FAILED', 2);
   expect(await service.getNavigationSummary('alpha')).toEqual({ totalCount: 2, failedCount: 1 });
 });
+it('clears a failure when a later run completes without a PR', async () => {
+  const agent = await createAgent('Nothing to do');
+  await run(agent.id, 'FAILED', 1);
+  await run(agent.id, 'COMPLETED', 2);
+  expect(await service.getNavigationSummary('alpha')).toEqual({ totalCount: 1, failedCount: 0 });
+});

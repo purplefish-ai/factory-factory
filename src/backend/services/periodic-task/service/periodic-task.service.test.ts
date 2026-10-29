@@ -118,6 +118,8 @@ function createServiceWithWorkspaceStatus(status: {
   prNumber: number | null;
   isAgentWorking: boolean;
   initCompletedAt?: Date | null;
+  sessionFailureMessage?: string | null;
+  hasLaunchedSession?: boolean;
 }): PeriodicTaskService {
   const service = new PeriodicTaskService(logger);
   service.configure({
@@ -127,6 +129,8 @@ function createServiceWithWorkspaceStatus(status: {
     status: {
       getWorkspaceStatus: vi.fn().mockResolvedValue({
         initCompletedAt: now,
+        sessionFailureMessage: null,
+        hasLaunchedSession: true,
         ...status,
       }),
     },
@@ -429,7 +433,13 @@ describe('PeriodicTaskService', () => {
     expect(mockUpdateExecution).not.toHaveBeenCalled();
   });
 
-  it('marks stale READY executions without PR or active agent work as failed', async () => {
+  const linkedExecution = () => ({
+    id: 'exec-1',
+    workspaceId: 'ws-1',
+    startedAt: new Date(Date.now() - PERIODIC_TASK_READY_WITHOUT_PR_GRACE_MS - 1),
+  });
+
+  it('marks idle READY executions without a PR or session failure as completed', async () => {
     const service = createServiceWithWorkspaceStatus({
       status: WorkspaceStatus.READY,
       prUrl: null,
@@ -438,20 +448,164 @@ describe('PeriodicTaskService', () => {
       initCompletedAt: new Date(Date.now() - PERIODIC_TASK_READY_WITHOUT_PR_GRACE_MS - 1),
     });
 
-    await checkSingleExecution(service, {
-      id: 'exec-1',
-      workspaceId: 'ws-1',
-      startedAt: new Date(Date.now() - PERIODIC_TASK_READY_WITHOUT_PR_GRACE_MS - 1),
+    await checkSingleExecution(service, linkedExecution());
+
+    expect(mockUpdateExecution).toHaveBeenCalledExactlyOnceWith('exec-1', {
+      status: 'COMPLETED',
+      completedAt: expect.any(Date),
+    });
+  });
+
+  it('marks idle executions failed with the provider session failure message', async () => {
+    const service = createServiceWithWorkspaceStatus({
+      status: WorkspaceStatus.READY,
+      prUrl: null,
+      prNumber: null,
+      isAgentWorking: false,
+      // Failures are definitive, so they do not wait for the grace period.
+      initCompletedAt: new Date(Date.now() - 1),
+      sessionFailureMessage: 'Codex returned an error: rate limited',
     });
 
-    expect(mockUpdateExecution).toHaveBeenCalledWith(
-      'exec-1',
-      expect.objectContaining({
-        status: 'FAILED',
-        errorMessage: 'Workspace is READY without a PR and no agent work is active',
-        completedAt: expect.any(Date),
-      })
-    );
+    await checkSingleExecution(service, linkedExecution());
+
+    expect(mockUpdateExecution).toHaveBeenCalledExactlyOnceWith('exec-1', {
+      status: 'FAILED',
+      errorMessage: 'Codex returned an error: rate limited',
+      completedAt: expect.any(Date),
+    });
+  });
+
+  it('keeps executions with a session failure running while agent work continues', async () => {
+    const service = createServiceWithWorkspaceStatus({
+      status: WorkspaceStatus.READY,
+      prUrl: null,
+      prNumber: null,
+      isAgentWorking: true,
+      sessionFailureMessage: 'Claude returned an error: overloaded',
+    });
+
+    await checkSingleExecution(service, linkedExecution());
+
+    expect(mockUpdateExecution).not.toHaveBeenCalled();
+  });
+
+  it('marks executions completed when a human archives the workspace', async () => {
+    const service = createServiceWithWorkspaceStatus({
+      status: WorkspaceStatus.ARCHIVED,
+      prUrl: null,
+      prNumber: null,
+      isAgentWorking: false,
+      initCompletedAt: new Date(Date.now() - 1),
+    });
+
+    await checkSingleExecution(service, linkedExecution());
+
+    expect(mockUpdateExecution).toHaveBeenCalledExactlyOnceWith('exec-1', {
+      status: 'COMPLETED',
+      completedAt: expect.any(Date),
+    });
+  });
+
+  it('marks archived workspaces failed when their session failed', async () => {
+    const service = createServiceWithWorkspaceStatus({
+      status: WorkspaceStatus.ARCHIVED,
+      prUrl: null,
+      prNumber: null,
+      isAgentWorking: false,
+      sessionFailureMessage: 'Session stopped: agent process exited unexpectedly (code 1).',
+    });
+
+    await checkSingleExecution(service, linkedExecution());
+
+    expect(mockUpdateExecution).toHaveBeenCalledExactlyOnceWith('exec-1', {
+      status: 'FAILED',
+      errorMessage: 'Session stopped: agent process exited unexpectedly (code 1).',
+      completedAt: expect.any(Date),
+    });
+  });
+
+  it('marks idle READY executions failed when no agent session ever launched', async () => {
+    const service = createServiceWithWorkspaceStatus({
+      status: WorkspaceStatus.READY,
+      prUrl: null,
+      prNumber: null,
+      isAgentWorking: false,
+      initCompletedAt: new Date(Date.now() - PERIODIC_TASK_READY_WITHOUT_PR_GRACE_MS - 1),
+      hasLaunchedSession: false,
+    });
+
+    await checkSingleExecution(service, linkedExecution());
+
+    expect(mockUpdateExecution).toHaveBeenCalledExactlyOnceWith('exec-1', {
+      status: 'FAILED',
+      errorMessage: 'Agent session did not start',
+      completedAt: expect.any(Date),
+    });
+  });
+
+  it('marks archived executions failed when no agent session ever launched', async () => {
+    const service = createServiceWithWorkspaceStatus({
+      status: WorkspaceStatus.ARCHIVED,
+      prUrl: null,
+      prNumber: null,
+      isAgentWorking: false,
+      hasLaunchedSession: false,
+    });
+
+    await checkSingleExecution(service, linkedExecution());
+
+    expect(mockUpdateExecution).toHaveBeenCalledExactlyOnceWith('exec-1', {
+      status: 'FAILED',
+      errorMessage: 'Agent session did not start',
+      completedAt: expect.any(Date),
+    });
+  });
+
+  it('keeps unlaunched READY executions running during the grace period', async () => {
+    const service = createServiceWithWorkspaceStatus({
+      status: WorkspaceStatus.READY,
+      prUrl: null,
+      prNumber: null,
+      isAgentWorking: false,
+      initCompletedAt: new Date(Date.now() - 1),
+      hasLaunchedSession: false,
+    });
+
+    await checkSingleExecution(service, linkedExecution());
+
+    expect(mockUpdateExecution).not.toHaveBeenCalled();
+  });
+
+  it('marks executions failed when workspace setup fails', async () => {
+    const service = createServiceWithWorkspaceStatus({
+      status: WorkspaceStatus.FAILED,
+      prUrl: null,
+      prNumber: null,
+      isAgentWorking: false,
+      initCompletedAt: null,
+    });
+
+    await checkSingleExecution(service, linkedExecution());
+
+    expect(mockUpdateExecution).toHaveBeenCalledExactlyOnceWith('exec-1', {
+      status: 'FAILED',
+      errorMessage: 'Workspace setup failed',
+      completedAt: expect.any(Date),
+    });
+  });
+
+  it('keeps archiving workspaces running until archival finishes', async () => {
+    const service = createServiceWithWorkspaceStatus({
+      status: WorkspaceStatus.ARCHIVING,
+      prUrl: null,
+      prNumber: null,
+      isAgentWorking: false,
+    });
+
+    await checkSingleExecution(service, linkedExecution());
+
+    expect(mockUpdateExecution).not.toHaveBeenCalled();
   });
 
   it('keeps recent READY executions without PR running during the grace period', async () => {

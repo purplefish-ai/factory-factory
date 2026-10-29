@@ -5,7 +5,12 @@
  * 1. Finds enabled periodic tasks where nextRunAt <= now
  * 2. Skips tasks that already have a RUNNING execution
  * 3. Reserves an execution, awaits timer dispatch, and links the new workspace
- * 4. Monitors RUNNING executions for PR creation or failure
+ * 4. Monitors RUNNING executions until the agent finishes
+ *
+ * A run succeeds when its session finishes cleanly, with or without a PR (an
+ * agent that finds nothing to do is still a success). It fails only when the
+ * Claude/Codex session itself errors, or the workspace never got set up. The
+ * workspace is always left in place for a human to review and clean up.
  */
 
 import { toError } from '@/backend/lib/error-utils';
@@ -52,6 +57,10 @@ export interface PeriodicTaskWorkspaceStatusBridge {
     prNumber: number | null;
     isAgentWorking: boolean;
     initCompletedAt: Date | null;
+    /** Latest provider error, timeout, or crash recorded for the workspace's sessions. */
+    sessionFailureMessage: string | null;
+    /** Whether any agent session in the workspace ever started its provider. */
+    hasLaunchedSession: boolean;
   } | null>;
 }
 
@@ -271,6 +280,19 @@ export class PeriodicTaskService {
     });
   }
 
+  private async markExecutionFailed(
+    executionId: string,
+    errorMessage: string,
+    context: Record<string, unknown>
+  ): Promise<void> {
+    await periodicTaskAccessor.updateExecution(executionId, {
+      status: 'FAILED',
+      errorMessage,
+      completedAt: new Date(),
+    });
+    this.logger.warn('Periodic task execution failed', { executionId, errorMessage, ...context });
+  }
+
   private async markReservedExecutionFailed(executionId: string, error: unknown): Promise<void> {
     try {
       await periodicTaskAccessor.updateExecution(executionId, {
@@ -347,33 +369,50 @@ export class PeriodicTaskService {
         return;
       }
 
-      if (ws.status === WorkspaceStatus.FAILED || ws.status === WorkspaceStatus.ARCHIVED) {
-        await periodicTaskAccessor.updateExecution(execution.id, {
-          status: 'FAILED',
-          errorMessage: `Workspace ended in ${ws.status} state`,
-          completedAt: new Date(),
-        });
-        this.logger.warn('Periodic task execution failed', {
-          executionId: execution.id,
+      if (ws.status === WorkspaceStatus.FAILED) {
+        await this.markExecutionFailed(execution.id, 'Workspace setup failed', {
           workspaceStatus: ws.status,
         });
         return;
       }
 
-      const readyWithoutPrGraceElapsed =
-        ws.initCompletedAt !== null &&
-        Date.now() - ws.initCompletedAt.getTime() >= PERIODIC_TASK_READY_WITHOUT_PR_GRACE_MS;
-      if (ws.status === WorkspaceStatus.READY && !ws.isAgentWorking && readyWithoutPrGraceElapsed) {
-        await periodicTaskAccessor.updateExecution(execution.id, {
-          status: 'FAILED',
-          errorMessage: 'Workspace is READY without a PR and no agent work is active',
-          completedAt: new Date(),
-        });
-        this.logger.warn('Periodic task execution finished without PR', {
-          executionId: execution.id,
+      if (ws.isAgentWorking) {
+        return;
+      }
+
+      if (ws.sessionFailureMessage) {
+        await this.markExecutionFailed(execution.id, ws.sessionFailureMessage, {
           workspaceStatus: ws.status,
         });
+        return;
       }
+
+      // A human archiving the workspace ends the run; that is not a failure.
+      const archived = ws.status === WorkspaceStatus.ARCHIVED;
+      const readyGraceElapsed =
+        ws.status === WorkspaceStatus.READY &&
+        ws.initCompletedAt !== null &&
+        Date.now() - ws.initCompletedAt.getTime() >= PERIODIC_TASK_READY_WITHOUT_PR_GRACE_MS;
+      if (!(archived || readyGraceElapsed)) {
+        return;
+      }
+      // Session startup failures are not recorded as lifecycle events, so a
+      // finished run must also prove its agent session actually launched.
+      if (!ws.hasLaunchedSession) {
+        await this.markExecutionFailed(execution.id, 'Agent session did not start', {
+          workspaceStatus: ws.status,
+        });
+        return;
+      }
+
+      await periodicTaskAccessor.updateExecution(execution.id, {
+        status: 'COMPLETED',
+        completedAt: new Date(),
+      });
+      this.logger.info('Periodic task execution completed without PR', {
+        executionId: execution.id,
+        workspaceStatus: ws.status,
+      });
     } catch (error) {
       this.logger.error('Failed to check execution status', {
         executionId: execution.id,

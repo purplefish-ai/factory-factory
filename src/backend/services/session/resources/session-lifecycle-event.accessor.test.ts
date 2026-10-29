@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SessionLifecycleEventKind, SessionLifecycleEventReason } from '@/shared/core';
 
-const { mockFindMany, mockUpsert } = vi.hoisted(() => ({
+const { mockFindFirst, mockFindMany, mockUpsert } = vi.hoisted(() => ({
+  mockFindFirst: vi.fn(),
   mockFindMany: vi.fn(),
   mockUpsert: vi.fn(),
 }));
@@ -9,6 +10,7 @@ const { mockFindMany, mockUpsert } = vi.hoisted(() => ({
 vi.mock('@/backend/db', () => ({
   prisma: {
     sessionLifecycleEvent: {
+      findFirst: mockFindFirst,
       findMany: mockFindMany,
       upsert: mockUpsert,
     },
@@ -66,6 +68,20 @@ describe('sessionLifecycleEventAccessor', () => {
     expect(prisma.sessionLifecycleEvent.findMany).toHaveBeenCalledWith({
       where: { sessionId: 'session-1' },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+  });
+
+  it('finds the newest provider failure for a workspace, ignoring deliberate stops', async () => {
+    vi.mocked(prisma.sessionLifecycleEvent.findFirst).mockResolvedValue(null);
+
+    await sessionLifecycleEventAccessor.findLatestFailureByWorkspaceId('workspace-1');
+
+    expect(prisma.sessionLifecycleEvent.findFirst).toHaveBeenCalledWith({
+      where: {
+        workspaceId: 'workspace-1',
+        reason: { in: ['PROVIDER_ERROR', 'PROMPT_TIMEOUT', 'UNEXPECTED_EXIT'] },
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     });
   });
 });

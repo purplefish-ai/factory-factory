@@ -39,6 +39,7 @@ describe('SessionLifecycleEventService', () => {
   let store: {
     upsert: ReturnType<typeof vi.fn>;
     findBySessionId: ReturnType<typeof vi.fn>;
+    findLatestFailureByWorkspaceId: ReturnType<typeof vi.fn>;
   };
   let service: SessionLifecycleEventService;
 
@@ -48,11 +49,33 @@ describe('SessionLifecycleEventService', () => {
     store = {
       upsert: vi.fn().mockResolvedValue(eventRecord),
       findBySessionId: vi.fn(),
+      findLatestFailureByWorkspaceId: vi.fn(),
     };
     service = new SessionLifecycleEventService({
       store: store as SessionLifecycleEventStore,
       sessionDomainService: domain,
     });
+  });
+
+  it('returns the latest workspace session failure message', async () => {
+    const createdAt = new Date('2026-07-30T12:00:00Z');
+    store.findLatestFailureByWorkspaceId.mockResolvedValueOnce({
+      ...eventRecord,
+      message: 'Claude returned an error: overloaded',
+      createdAt,
+    });
+
+    await expect(service.findLatestSessionFailure('workspace-1')).resolves.toEqual({
+      message: 'Claude returned an error: overloaded',
+      createdAt,
+    });
+    expect(store.findLatestFailureByWorkspaceId).toHaveBeenCalledWith('workspace-1');
+  });
+
+  it('returns null when no workspace session failed', async () => {
+    store.findLatestFailureByWorkspaceId.mockResolvedValueOnce(null);
+
+    await expect(service.findLatestSessionFailure('workspace-1')).resolves.toBeNull();
   });
 
   it('persists before publishing and publishes a duplicate only once', async () => {

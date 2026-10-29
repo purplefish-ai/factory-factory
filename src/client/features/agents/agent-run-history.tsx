@@ -16,6 +16,7 @@ export interface AgentRunHistoryProps {
 const STATUS_LABELS: Record<AgentRun['status'], string> = {
   RUNNING: 'Running',
   PR_CREATED: 'PR created',
+  COMPLETED: 'Completed',
   FAILED: 'Failed',
   SKIPPED: 'Skipped',
 };
@@ -24,6 +25,7 @@ const MISSING_WORKSPACE_LABELS: Record<AgentRun['status'], string> = {
   RUNNING: 'No workspace yet',
   FAILED: 'No workspace linked',
   PR_CREATED: 'Workspace unavailable',
+  COMPLETED: 'Workspace unavailable',
   SKIPPED: 'Workspace unavailable',
 };
 

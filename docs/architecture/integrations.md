@@ -138,13 +138,31 @@ fields). Daily and weekly periodic tasks with a scheduled time advance calendar
 dates in the task timezone, preserving the scheduled day across daylight saving
 changes.
 
-Each execution runs the configured prompt, monitors for PR creation, and
-advances the schedule. Concurrent runs are skipped. Default sessions are named
-**Agent**. Existing sessions named exactly **Periodic task** display as
-**Agent** for the `periodic-task` workflow; custom names and stored records are
-preserved. Default sessions use the `periodic-task` workflow, so non-interactive
-Codex startup selects unattended execution mode and tool approval prompts cannot
-stall scheduled runs.
+Each execution runs the configured prompt, monitors the workspace until the
+agent finishes, and advances the schedule. Concurrent runs are skipped.
+
+A run's outcome depends on its PR, workspace setup and Claude/Codex session:
+
+- **PR created** when the workspace has an active PR.
+- **Completed** when the agent goes idle without a PR or session failure, for
+  example after finding nothing to do. Monitoring waits five minutes after
+  workspace setup before deciding, so a queued prompt or late PR discovery is
+  not missed.
+- **Failed** when a session records a provider error, the 4-hour turn timeout,
+  or an unexpected process exit. The run uses that session message as its error
+  and does not wait for the five-minute window. Deliberate stops are not
+  failures. A run also fails when workspace setup or launch fails, or when no
+  agent session ever started its provider, because the agent never ran.
+
+Runs never archive or clean up their workspace; a human reviews and archives it.
+Archiving it before the run finishes records Completed unless a session failure
+was recorded.
+
+Default sessions are named **Agent**. Existing sessions named exactly **Periodic
+task** display as **Agent** for the `periodic-task` workflow; custom names and
+stored records are preserved. Default sessions use the `periodic-task` workflow,
+so non-interactive Codex startup selects unattended execution mode and tool
+approval prompts cannot stall scheduled runs.
 
 The periodic capsule atomically reserves a `PeriodicTaskExecution` and advances
 its schedule before emitting a typed `timer_due` event. The event carries that
@@ -185,11 +203,12 @@ shows project-local not found instead of selecting another agent.
 The Agents footer badge counts all definitions in the URL owner's project,
 including paused definitions and archived project owners. It warns when any
 agent's latest completed outcome is FAILED. RUNNING and SKIPPED retries retain
-that warning until the same agent creates a PR. The summary query selects the
-latest terminal outcome by start time, then ID, independently of history limits.
-It refreshes with management's 10-second cadence and after definition changes.
-Unknown/loading projects hide the badge; loaded empty projects show zero. A
-failed refresh retains the last successful count for that project.
+that warning until the same agent completes a run or creates a PR. The summary
+query selects the latest terminal outcome by start time, then ID, independently
+of history limits. It refreshes with management's 10-second cadence and after
+definition changes. Unknown/loading projects hide the badge; loaded empty
+projects show zero. A failed refresh retains the last successful count for that
+project.
 
 Agents stacks its rail and editor below 48rem of available content width,
 including when the workspace sidebar is expanded. Schedule fields share a row

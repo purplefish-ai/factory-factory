@@ -85,6 +85,9 @@ vi.mock('@/backend/services/session', () => ({
   sessionPromptTurnCompletionService: {
     setHandler: vi.fn(),
   },
+  sessionLifecycleEventService: {
+    findLatestSessionFailure: vi.fn(async () => null),
+  },
   sessionDomainService: {
     clearSession: vi.fn(),
     injectCommittedUserMessage: vi.fn(),
@@ -147,6 +150,7 @@ import {
   sessionDispatchService,
   sessionDataService,
   sessionDomainService,
+  sessionLifecycleEventService,
   sessionLifecycleService,
   sessionPromptTurnCompletionService,
   sessionService,
@@ -193,6 +197,7 @@ function createBridgeServices(
     ratchetService,
     recoverStaleProvisioningWorkspace,
     reconciliationService,
+    sessionLifecycleEventService,
     sessionPromptTurnCompletionService,
     sessionService,
     startupScriptService,
@@ -610,6 +615,8 @@ describe('configureDomainBridges', () => {
         prNumber: null,
         isAgentWorking: true,
         initCompletedAt: new Date('2026-05-20T12:00:00Z'),
+        sessionFailureMessage: null,
+        hasLaunchedSession: false,
       });
       expect(acpRuntimeManager.isAnySessionWorking).toHaveBeenCalledWith([
         'session-1',
@@ -641,9 +648,42 @@ describe('configureDomainBridges', () => {
         prNumber: null,
         isAgentWorking: true,
         initCompletedAt: new Date('2026-05-20T12:00:00Z'),
+        sessionFailureMessage: null,
+        hasLaunchedSession: false,
       });
       expect(sessionDomainService.getQueueLength).toHaveBeenCalledWith('session-1');
       expect(sessionDomainService.getQueueLength).toHaveBeenCalledWith('session-2');
+    });
+
+    it('reports the latest provider session failure in periodic task workspace status', async () => {
+      vi.mocked(workspaceDataService.findStatusSnapshot).mockResolvedValue({
+        status: 'READY',
+        prUrl: null,
+        prNumber: null,
+        initCompletedAt: new Date('2026-05-20T12:00:00Z'),
+      } as Awaited<ReturnType<typeof workspaceDataService.findStatusSnapshot>>);
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
+        { id: 'session-1', providerSessionId: null },
+        { id: 'session-2', providerSessionId: 'provider-session-2' },
+      ] as Awaited<ReturnType<typeof sessionDataService.findAgentSessionsByWorkspaceId>>);
+      vi.mocked(acpRuntimeManager.isAnySessionWorking).mockReturnValue(false);
+      vi.mocked(acpRuntimeManager.isSessionRunning).mockReturnValue(false);
+      vi.mocked(sessionLifecycleEventService.findLatestSessionFailure).mockResolvedValueOnce({
+        message: 'Claude returned an error: overloaded',
+        createdAt: new Date('2026-05-20T12:05:00Z'),
+      });
+
+      configureDomainBridges(createBridgeServices());
+      const bridge = getBridge(periodicTaskService.configure);
+
+      await expect(bridge.status.getWorkspaceStatus('ws-periodic')).resolves.toMatchObject({
+        isAgentWorking: false,
+        sessionFailureMessage: 'Claude returned an error: overloaded',
+        hasLaunchedSession: true,
+      });
+      expect(sessionLifecycleEventService.findLatestSessionFailure).toHaveBeenCalledWith(
+        'ws-periodic'
+      );
     });
 
     it('does not read queued messages for stopped periodic task sessions', async () => {
