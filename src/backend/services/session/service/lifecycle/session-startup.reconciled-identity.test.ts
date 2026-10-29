@@ -18,7 +18,7 @@ vi.mock('@/backend/services/settings', () => ({
 
 describe('startup after durable provider identity reconciliation', () => {
   it.each([false, true])(
-    'completes fallback readiness with applied launch settings: %s',
+    'completes fallback readiness (applied launch settings present: %s)',
     async (appliedLaunch) => {
       const h = setupStartupConfig('CODEX', {
         kind: 'resume_fallback',
