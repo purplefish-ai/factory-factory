@@ -1,10 +1,11 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
-import { afterAll, describe, expect, it } from 'vitest';
+import { join, relative, resolve } from 'node:path';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
-const directory = mkdtempSync(join(tmpdir(), 'ff-oxlint-rules-'));
+const directory = realpathSync(mkdtempSync(join(tmpdir(), 'ff-oxlint-rules-')));
 const binary = resolve('node_modules/.bin/oxlint');
 const config = join(directory, '.oxlintrc.json');
 const rules = [
@@ -27,19 +28,19 @@ writeFileSync(
 
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
 
-function lint(source: string) {
-  const sourceDirectory = mkdtempSync(join(directory, 'fixture-'));
-  const file = join(sourceDirectory, 'fixture.tsx');
-  mkdirSync(sourceDirectory, { recursive: true });
-  writeFileSync(file, source);
-  return spawnSync(binary, ['--config', config, '--format', 'json', file], {
-    cwd: directory,
-    encoding: 'utf8',
-  });
-}
+const reportSchema = z.object({
+  diagnostics: z.array(
+    z.object({
+      filename: z.string(),
+      code: z.string(),
+      severity: z.string(),
+    })
+  ),
+  number_of_files: z.number().int().nonnegative(),
+});
 
 describe('Oxlint project guardrails', () => {
-  it.each([
+  const rejectedSources: [string, string][] = [
     ['no-await-import', 'async function load() { return await import("./module"); }'],
     ['no-native-dialogs', 'window.confirm("Continue?");'],
     ['no-native-dialogs', 'prompt("Name", "default");'],
@@ -52,15 +53,14 @@ describe('Oxlint project guardrails', () => {
     ['no-unsafe-json-parse-cast', 'const value = JSON.parse(input) as unknown as Response;'],
     ['no-unsafe-resolver-cast', 'const callback = resolve as (value: unknown) => void;'],
     ['no-unsafe-resolver-cast', 'const callback = resolve as (value: Array<unknown>) => void;'],
-  ])('rejects %s: %s', (rule, source) => {
-    const result = lint(source);
-    expect(result.error).toBeUndefined();
-    expect(result.stderr).toBe('');
-    expect(result.status).toBe(1);
-    expect(result.stdout).toContain(`factory(${rule})`);
-  });
+  ];
+  const rejectedFixtures = rejectedSources.map(([rule, source], index) => ({
+    rule,
+    source,
+    file: join(directory, `rejected-${index}.tsx`),
+  }));
 
-  it.each([
+  const acceptedFixtures = [
     'import { example } from "./module";',
     'async function load() { return import("./module"); }',
     'const dialog = { confirm(value: string) { return value; } }; dialog.confirm("hello");',
@@ -69,10 +69,43 @@ describe('Oxlint project guardrails', () => {
     'const callback = resolve as (value: string) => void;',
     'const description = "use client";',
     'function example() { return "use server"; }',
-  ])('permits %s', (source) => {
-    const result = lint(source);
+  ].map((source, index) => ({ source, file: join(directory, `accepted-${index}.tsx`) }));
+
+  let report: z.infer<typeof reportSchema>;
+  beforeAll(() => {
+    // Separate modules preserve every fixture's scope while sharing one real CLI startup.
+    const fixtures = [...rejectedFixtures, ...acceptedFixtures];
+    for (const { file, source } of fixtures) {
+      writeFileSync(file, source);
+    }
+    const result = spawnSync(
+      binary,
+      ['--config', config, '--format', 'json', ...fixtures.map(({ file }) => file)],
+      { cwd: directory, encoding: 'utf8' }
+    );
     expect(result.error).toBeUndefined();
+    expect(result.signal).toBeNull();
     expect(result.stderr).toBe('');
-    expect(result.status).toBe(0);
+    expect(result.status).toBe(1);
+    report = reportSchema.parse(JSON.parse(result.stdout));
+    expect(report.number_of_files).toBe(fixtures.length);
+    const filenames = fixtures.map(({ file }) => relative(directory, file));
+    for (const diagnostic of report.diagnostics) {
+      expect(filenames).toContain(diagnostic.filename);
+    }
+  });
+
+  it.each(rejectedFixtures)('rejects $rule: $source', ({ rule, file }) => {
+    expect(
+      report.diagnostics.filter(({ filename }) => filename === relative(directory, file))
+    ).toEqual([
+      { filename: relative(directory, file), code: `factory(${rule})`, severity: 'error' },
+    ]);
+  });
+
+  it.each(acceptedFixtures)('permits $source', ({ file }) => {
+    expect(
+      report.diagnostics.filter(({ filename }) => filename === relative(directory, file))
+    ).toEqual([]);
   });
 });
