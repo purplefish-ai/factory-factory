@@ -140,15 +140,27 @@ advances the schedule. Concurrent runs are skipped. Default sessions use the
 `periodic-task` workflow, so non-interactive Codex startup selects unattended
 execution mode and tool approval prompts cannot stall scheduled runs.
 
-The periodic bridge adapts the injected workspace-launch owner's result to a
-workspace ID. Its separate policy persists first and requires a `periodic-task`
-/ `Periodic task` session, without explicit provider resolution, CLI preflight,
-or a capacity gate. Session failure propagates with the workspace retained and
-no initialization scheduled. Successful provisioning starts initialization once
-in the background. The scheduler reserves the execution and advances the next
-run before launch. Launch failures are marked failed; a failed workspace-ID
-update leaves the reserved execution running without a workspace link until
-reservation-timeout recovery.
+The periodic capsule atomically reserves a `PeriodicTaskExecution` and advances
+its schedule before emitting a typed `timer_due` event. The event carries that
+execution ID as its correlation identity. Composition wires its narrow timer
+dispatch port to the `new_workspace` arm of
+`background-action-dispatch.orchestrator.ts`, shared with PR delivery's
+`existing_sessions` arm. Timer dispatch awaits the injected workspace launcher
+and returns the workspace ID; the periodic capsule owns linkage, failures and
+completion monitoring.
+
+The PERIODIC_TASK launch policy persists a fresh workspace and requires a
+`periodic-task` / `Periodic task` session, without explicit provider resolution,
+CLI preflight, or a capacity gate. Session failure propagates with the workspace
+retained and no initialization scheduled. Successful provisioning starts
+initialization once in the background. A launched result means provisioning
+finished, not that the prompt or periodic execution completed.
+
+Launch failures mark the reserved execution failed. A failed workspace-ID write
+leaves it running without a workspace link until the existing 15-minute timeout
+marks it failed. Restart does not re-emit reserved runs. The launch/link crash
+gap remains; there is no replay or exactly-once guarantee. Timer events use no
+second run store, PR ledger entry, session queue delivery or receipt protocol.
 
 Managed via the "Periodic Tasks" admin tab and created from the Kanban launch
 dropdown. The workspace right panel shows execution history for

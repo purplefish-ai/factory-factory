@@ -3,7 +3,7 @@
 // Consumers should import from '@/backend/services/periodic-task' only.
 
 export type {
-  PeriodicTaskWorkspaceBridge,
+  PeriodicTaskTimerDispatchBridge,
   PeriodicTaskWorkspaceStatusBridge,
 } from './periodic-task.service';
 export { PeriodicTaskService } from './periodic-task.service';

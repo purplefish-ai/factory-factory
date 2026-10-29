@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const prismaMock = vi.hoisted(() => ({
   $transaction: vi.fn(),
   periodicTask: {
+    findMany: vi.fn(),
     findUnique: vi.fn(),
     findUniqueOrThrow: vi.fn(),
     update: vi.fn(),
@@ -476,5 +477,22 @@ describe('periodicTaskAccessor.reserveExecutionAndMarkDispatched', () => {
       hour: '09',
       minute: '00',
     });
+  });
+});
+
+describe('periodicTaskAccessor.findDueTasks', () => {
+  it('selects only enabled tasks whose next run has arrived', async () => {
+    vi.useFakeTimers();
+    const now = new Date('2026-05-20T12:00:00Z');
+    vi.setSystemTime(now);
+    prismaMock.periodicTask.findMany.mockResolvedValue([]);
+    try {
+      await expect(periodicTaskAccessor.findDueTasks()).resolves.toEqual([]);
+      expect(prismaMock.periodicTask.findMany).toHaveBeenCalledExactlyOnceWith({
+        where: { isEnabled: true, nextRunAt: { lte: now } },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -4,7 +4,7 @@
  * Polling loop that:
  * 1. Finds enabled periodic tasks where nextRunAt <= now
  * 2. Skips tasks that already have a RUNNING execution
- * 3. Reserves an execution + creates a new workspace for due tasks
+ * 3. Reserves an execution, awaits timer dispatch, and links the new workspace
  * 4. Monitors RUNNING executions for PR creation or failure
  */
 
@@ -14,6 +14,7 @@ import { jobRunner } from '@/backend/services/job-runner.service';
 import type { createLogger } from '@/backend/services/logger.service';
 import { periodicTaskAccessor } from '@/backend/services/periodic-task/resources/periodic-task.accessor';
 import { type PeriodicTaskCadence, WorkspaceStatus } from '@/shared/core';
+import type { PeriodicTaskTimerEvent } from './periodic-task-timer-event';
 
 type Logger = ReturnType<typeof createLogger>;
 
@@ -38,14 +39,9 @@ function validateScheduleInput(input: {
 export const PERIODIC_TASK_READY_WITHOUT_PR_GRACE_MS = 5 * 60_000;
 export const PERIODIC_TASK_WORKSPACE_RESERVATION_TIMEOUT_MS = 15 * 60_000;
 
-/** Bridge for workspace creation — wired by orchestration layer. */
-export interface PeriodicTaskWorkspaceBridge {
-  createWorkspaceForTask(params: {
-    projectId: string;
-    name: string;
-    prompt: string;
-    periodicTaskId: string;
-  }): Promise<{ workspaceId: string }>;
+/** Awaited timer dispatch capability — wired by orchestration after reservation. */
+export interface PeriodicTaskTimerDispatchBridge {
+  dispatchTimerEvent(event: PeriodicTaskTimerEvent): Promise<{ workspaceId: string }>;
 }
 
 /** Bridge for checking workspace PR state. */
@@ -68,7 +64,7 @@ export class PeriodicTaskService {
   /** Whether the service itself has been stopped, independent of any run. */
   private stopped = false;
 
-  private workspaceBridge: PeriodicTaskWorkspaceBridge | null = null;
+  private timerDispatchBridge: PeriodicTaskTimerDispatchBridge | null = null;
   private statusBridge: PeriodicTaskWorkspaceStatusBridge | null = null;
 
   constructor(private readonly logger: Logger) {
@@ -90,10 +86,10 @@ export class PeriodicTaskService {
   }
 
   configure(bridges: {
-    workspace: PeriodicTaskWorkspaceBridge;
+    timerDispatch: PeriodicTaskTimerDispatchBridge;
     status: PeriodicTaskWorkspaceStatusBridge;
   }): void {
-    this.workspaceBridge = bridges.workspace;
+    this.timerDispatchBridge = bridges.timerDispatch;
     this.statusBridge = bridges.status;
   }
 
@@ -212,7 +208,7 @@ export class PeriodicTaskService {
     timezone: string | null,
     scheduledDayOfMonth: number | null
   ): Promise<void> {
-    if (!this.workspaceBridge) {
+    if (!this.timerDispatchBridge) {
       this.logger.warn('Periodic task service not configured — skipping dispatch');
       return;
     }
@@ -241,7 +237,9 @@ export class PeriodicTaskService {
 
     let result: { workspaceId: string };
     try {
-      result = await this.workspaceBridge.createWorkspaceForTask({
+      result = await this.timerDispatchBridge.dispatchTimerEvent({
+        kind: 'timer_due',
+        executionId: execution.id,
         projectId,
         name: `${name} — ${new Date().toLocaleDateString()}`,
         prompt,

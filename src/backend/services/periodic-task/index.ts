@@ -1,6 +1,6 @@
 export {
   PeriodicTaskService,
-  type PeriodicTaskWorkspaceBridge,
+  type PeriodicTaskTimerDispatchBridge,
   type PeriodicTaskWorkspaceStatusBridge,
   type PeriodicTaskTimerEvent,
 } from './service';

@@ -55,6 +55,21 @@ interruptibility is a shutdown concern rather than a scheduling feature.
 `stop()` waits unbounded for an in-flight run, exactly as every loop did before
 — bounding it would change shutdown to abandon work mid-flight.
 
+## Timer dispatch ownership
+
+The existing `periodic-task-poll` remains the only periodic-task scheduler.
+Eligibility, overlap checks, atomic execution reservation and schedule
+advancement belong to the periodic capsule. After reservation, it awaits a
+`timer_due` event through an injected dispatch port. Composition connects that
+port to the shared background-action dispatcher's `new_workspace` arm and
+existing PERIODIC_TASK workspace launcher. The capsule then links the workspace
+or settles a launch failure, and continues its existing completion monitoring.
+
+Stopping the poll prevents later task admission and drains an already admitted
+launch through its workspace link or failure settlement. It does not cancel or
+detach the dispatch promise. An unlinked reservation remains subject to the
+15-minute timeout; restarting the poll does not replay its launch.
+
 ## Out of scope by design
 
 The `fileLock`, `terminal`, `rateLimiter` and conversation-rename cleanup
