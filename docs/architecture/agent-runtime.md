@@ -574,7 +574,9 @@ public operations and the session composition root wires the owners.
 Provider-initiated sub-agents are session-scoped, read-only, and provider-owned.
 Factory Factory projects their native ACP metadata and transcripts into the
 Agents panel through its session-scoped tracker. Clicking the running sub-agent
-count in chat opens the right panel and selects Agents.
+count in chat opens the right panel and selects Agents. The count has a
+decorative group of up to three colorful botanical icons; larger groups keep the
+full count without adding more icons.
 
 Sub-agent transcript projection joins consecutive assistant text chunks before
 rendering Markdown. Tool, reasoning, non-text content, and provider message-ID
