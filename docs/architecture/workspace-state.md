@@ -271,7 +271,10 @@ Fresh requests started after settlement keep normal membership authority.
 The board keeps issue intake suppressed per pending operation and owns locked
 subset recovery, retries and selection. The detail route owns its dialogs and
 post-success navigation; leaving its committed workspace lifetime suppresses
-late navigation and dialog callbacks. IDE commands live separately in
+late navigation and dialog callbacks. The server broadcasts ARCHIVING before the
+archive work finishes, so the route's ARCHIVING/ARCHIVED redirect waits while
+its own archive is pending; lock recovery stays reachable, and archives started
+elsewhere still redirect immediately. IDE commands live separately in
 `useWorkspaceIdeActions` and have no archive cache policy.
 
 The route and right panel share `useWorkspaceDetailQuery` and the existing

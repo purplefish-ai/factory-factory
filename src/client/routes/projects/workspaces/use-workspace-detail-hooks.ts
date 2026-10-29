@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import {
@@ -315,4 +316,25 @@ export function useAutoFocusChatInput({
       setTimeout(() => inputRef.current?.focus(), 0);
     }
   }, [selectedDbSessionId, activeTabId, loadingSession, workspaceLoading, workspace, inputRef]);
+}
+
+export function useArchivedWorkspaceRedirect({
+  status,
+  slug,
+  archivePending,
+}: {
+  status: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>['status'] | undefined;
+  slug: string;
+  archivePending: boolean;
+}) {
+  const navigate = useNavigate();
+  useEffect(() => {
+    // The server broadcasts ARCHIVING before archiving. While this route's own
+    // archive is pending, stay mounted: success navigates and failure needs
+    // this route to show lock recovery.
+    if (archivePending || (status !== 'ARCHIVING' && status !== 'ARCHIVED')) {
+      return;
+    }
+    void navigate(slug ? `/projects/${slug}/workspaces` : '/projects', { replace: true });
+  }, [archivePending, status, slug, navigate]);
 }
