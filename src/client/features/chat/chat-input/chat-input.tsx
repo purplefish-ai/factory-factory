@@ -171,6 +171,8 @@ export const ChatInput = memo(function ChatInput({
     stopping,
     settings,
     capabilities,
+    acpConfigOptions,
+    onSetConfigOption,
     attachments,
     setAttachments,
     delegateToSlashMenu: slash.delegateToSlashMenu,

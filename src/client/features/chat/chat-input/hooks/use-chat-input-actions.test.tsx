@@ -4,6 +4,7 @@ import { createElement, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { AcpConfigOption } from '@/client/features/chat/reducer';
 import {
   type ChatSettings,
   DEFAULT_CHAT_SETTINGS,
@@ -14,6 +15,8 @@ import { useChatInputActions } from './use-chat-input-actions';
 
 interface ShortcutHarnessProps {
   capabilities: ChatBarCapabilities;
+  acpConfigOptions?: AcpConfigOption[] | null;
+  onSetConfigOption?: (configId: string, value: string) => void;
   disabled?: boolean;
   running?: boolean;
   settingsPlanEnabled?: boolean;
@@ -25,6 +28,8 @@ interface ShortcutHarnessProps {
 
 function ShortcutHarness({
   capabilities,
+  acpConfigOptions,
+  onSetConfigOption,
   disabled = false,
   running = false,
   settingsPlanEnabled = false,
@@ -43,6 +48,8 @@ function ShortcutHarness({
     onChange: () => undefined,
     onSettingsChange,
     capabilities,
+    acpConfigOptions,
+    onSetConfigOption,
     disabled,
     running,
     settings: {
@@ -129,6 +136,33 @@ function claudeChatBarCapabilities(): ChatBarCapabilities {
     usageStats: { enabled: true, contextWindow: true },
     rewind: { enabled: true },
   };
+}
+
+function claudeNativeConfigOptions(): AcpConfigOption[] {
+  return [
+    {
+      id: 'mode',
+      name: 'Mode',
+      type: 'select',
+      category: 'mode',
+      currentValue: 'acceptEdits',
+      options: [
+        { value: 'acceptEdits', name: 'Accept edits' },
+        { value: 'plan', name: 'Plan' },
+      ],
+    },
+    {
+      id: 'effort',
+      name: 'Effort',
+      type: 'select',
+      category: 'thought_level',
+      currentValue: 'high',
+      options: [
+        { value: 'high', name: 'High' },
+        { value: 'low', name: 'Low' },
+      ],
+    },
+  ];
 }
 
 afterEach(() => {
@@ -254,6 +288,63 @@ describe('useChatInputActions keyboard shortcuts', () => {
     dispatchModShiftShortcut(textarea, 't');
 
     expect(onSettingsChange).toHaveBeenCalledWith({ thinkingEnabled: true });
+
+    root.unmount();
+    container.remove();
+  });
+
+  it('ignores Mod+Shift+T when a native Claude effort option replaces the thinking toggle', () => {
+    const onSettingsChange = vi.fn();
+    const onSetConfigOption = vi.fn();
+    const { root, container, textarea } = renderHarness({
+      capabilities: claudeChatBarCapabilities(),
+      acpConfigOptions: claudeNativeConfigOptions(),
+      onSetConfigOption,
+      onSettingsChange,
+      settingsThinkingEnabled: false,
+    });
+
+    dispatchModShiftShortcut(textarea, 't');
+
+    expect(onSettingsChange).not.toHaveBeenCalled();
+    expect(onSetConfigOption).not.toHaveBeenCalled();
+
+    root.unmount();
+    container.remove();
+  });
+
+  it('keeps Mod+Shift+T on the legacy toggle when native options are read-only', () => {
+    const onSettingsChange = vi.fn();
+    const { root, container, textarea } = renderHarness({
+      capabilities: claudeChatBarCapabilities(),
+      acpConfigOptions: claudeNativeConfigOptions(),
+      onSettingsChange,
+      settingsThinkingEnabled: false,
+    });
+
+    dispatchModShiftShortcut(textarea, 't');
+
+    expect(onSettingsChange).toHaveBeenCalledWith({ thinkingEnabled: true });
+
+    root.unmount();
+    container.remove();
+  });
+
+  it('queues plan mode with Mod+Shift+P alongside a native Claude mode option', () => {
+    const onSettingsChange = vi.fn();
+    const onSetConfigOption = vi.fn();
+    const { root, container, textarea } = renderHarness({
+      capabilities: claudeChatBarCapabilities(),
+      acpConfigOptions: claudeNativeConfigOptions(),
+      onSetConfigOption,
+      onSettingsChange,
+      settingsPlanEnabled: false,
+    });
+
+    dispatchModShiftShortcut(textarea, 'p');
+
+    expect(onSettingsChange).toHaveBeenCalledWith({ planModeEnabled: true });
+    expect(onSetConfigOption).not.toHaveBeenCalled();
 
     root.unmount();
     container.remove();
