@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { AcpEventTranslator } from '@/shared/acp-protocol';
 import type { SessionStore } from './session-store.types';
 import {
   appendClaudeEvent,
@@ -72,6 +73,44 @@ function appendToolResult(
 }
 
 describe('session-transcript', () => {
+  it('retains refined ACP tool input at its original order for live delivery and reconnect', () => {
+    const store = createStore();
+    const options = createAppendOptions();
+    const translator = new AcpEventTranslator({ warn: () => undefined });
+    const updates = [
+      { sessionUpdate: 'tool_call', toolCallId: 'tool-1', title: 'Bash', rawInput: {} },
+      { sessionUpdate: 'tool_call_update', toolCallId: 'tool-1', rawInput: { command: 'pwd' } },
+      {
+        sessionUpdate: 'tool_call_update',
+        toolCallId: 'tool-1',
+        status: 'completed',
+        rawOutput: '/repo',
+      },
+    ] as const;
+    const orders: number[] = [];
+    for (const update of updates) {
+      for (const delta of translator.translateSessionUpdate(update, 's1')) {
+        if (delta.type === 'agent_message') {
+          orders.push(appendClaudeEvent(store, delta.data, options));
+        }
+      }
+    }
+    expect(orders).toEqual([0, 0, 1]);
+    expect(store.transcript).toHaveLength(2);
+    expect(store.transcript[0]).toMatchObject({
+      order: 0,
+      message: {
+        event: {
+          content_block: {
+            type: 'tool_use',
+            name: 'Bash',
+            input: { command: 'pwd' },
+          },
+        },
+      },
+    });
+  });
+
   it('replaces an indexed transcript message without changing stable order', () => {
     const store = createStore();
     store.transcript = [

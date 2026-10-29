@@ -574,9 +574,13 @@ Factory Factory projects their native ACP metadata and transcripts into the
 Agents panel through its session-scoped tracker. Clicking the running sub-agent
 count in chat opens the right panel and selects Agents.
 
-Sub-agent transcript projection joins consecutive assistant text chunks before
-rendering Markdown. Tool, reasoning, non-text content, and provider message-ID
-changes end the text sequence, preserving separate replies and tool ordering.
+Tool cards apply each ACP `rawInput` refinement to the existing tool call,
+preserving its original order and tool name through live updates and reconnects.
+Inputs are whole replacements; status-only updates leave the input intact.
+Sub-agent transcript projection applies the same refinements without duplicating
+tool cards and joins consecutive assistant text chunks before rendering
+Markdown. Tool, reasoning, non-text content, and provider message-ID changes end
+the text sequence, preserving separate replies and tool ordering.
 
 They are distinct from workspace-scoped child workspaces, and are recovered from
 the provider when a parent session is reloaded rather than persisted by Factory

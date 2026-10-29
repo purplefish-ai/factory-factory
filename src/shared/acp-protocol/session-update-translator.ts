@@ -39,6 +39,8 @@ const sessionNoticeSchema = z.object({
 const MAX_TERMINAL_OUTPUT_CHARS = 256 * 1024;
 const MAX_BUFFERED_TERMINAL_TOOLS = 64;
 const MAX_TERMINALS_PER_TOOL = 16;
+const MAX_TRACKED_TOOL_CALLS = 1024;
+const toolInputSchema = z.record(z.string(), z.unknown());
 const terminalOutputSchema = z.object({ data: z.string(), terminal_id: z.string().min(1) });
 const terminalReferenceSchema = z.object({
   type: z.literal('terminal'),
@@ -58,6 +60,7 @@ type TerminalOutputState = { sessionId: string; text: string; terminalIds: Set<s
 export class AcpEventTranslator {
   private readonly sessionNotices = new Map<string, Set<string>>();
   private readonly terminalOutput = new Map<string, TerminalOutputState>();
+  private readonly toolNames = new Map<string, { sessionId: string; name: string }>();
   // Retain replay identities until clearTerminalOutput tears down their session.
   private readonly compactions = new Map<string, { sessionId: string; status: string }>();
 
@@ -119,6 +122,11 @@ export class AcpEventTranslator {
 
   clearTerminalOutput(sessionId: string): void {
     this.sessionNotices.delete(sessionId);
+    for (const [key, tool] of this.toolNames) {
+      if (tool.sessionId === sessionId) {
+        this.toolNames.delete(key);
+      }
+    }
     for (const [key, state] of this.compactions) {
       if (state.sessionId === sessionId) {
         this.compactions.delete(key);
@@ -276,24 +284,19 @@ export class AcpEventTranslator {
       | { claudeCode?: { toolName?: string } }
       | undefined;
     const toolName = meta?.claudeCode?.toolName ?? update.title;
-
-    const events: AcpTranslatedDelta[] = [];
-    events.push({
-      type: 'agent_message',
-      data: {
-        type: 'stream_event',
-        event: {
-          type: 'content_block_start',
-          index: 0,
-          content_block: {
-            type: 'tool_use',
-            id: update.toolCallId,
-            name: toolName,
-            input: (update.rawInput as Record<string, unknown>) ?? {},
-          },
-        },
-      },
-    });
+    const key = JSON.stringify([sessionId, update.toolCallId]);
+    this.toolNames.delete(key);
+    this.toolNames.set(key, { sessionId, name: toolName });
+    if (this.toolNames.size > MAX_TRACKED_TOOL_CALLS) {
+      const oldest = this.toolNames.keys().next().value;
+      if (oldest !== undefined) {
+        this.toolNames.delete(oldest);
+      }
+    }
+    const input = toolInputSchema.safeParse(update.rawInput);
+    const events: AcpTranslatedDelta[] = [
+      this.createToolUseEvent(update.toolCallId, toolName, input.success ? input.data : {}),
+    ];
 
     const toolProgress: Record<string, unknown> = {
       type: 'tool_progress',
@@ -313,6 +316,29 @@ export class AcpEventTranslator {
     this.appendTerminalToolResultIfNeeded(events, update, sessionId);
 
     return events;
+  }
+
+  private createToolUseEvent(
+    toolCallId: string,
+    name: string,
+    input: Record<string, unknown>
+  ): AcpTranslatedDelta {
+    return {
+      type: 'agent_message',
+      data: {
+        type: 'stream_event',
+        event: {
+          type: 'content_block_start',
+          index: 0,
+          content_block: {
+            type: 'tool_use',
+            id: toolCallId,
+            name,
+            input,
+          },
+        },
+      },
+    };
   }
 
   private translateToolCallUpdate(
@@ -339,7 +365,15 @@ export class AcpEventTranslator {
       event.elapsed_time_seconds = 0;
     }
 
-    const events: AcpTranslatedDelta[] = [event as AcpTranslatedDelta];
+    const events: AcpTranslatedDelta[] = [];
+    const tool = this.toolNames.get(JSON.stringify([sessionId, update.toolCallId]));
+    const input = toolInputSchema.safeParse(update.rawInput);
+    if (tool && input.success) {
+      // rawInput is a whole replacement, not a JSON fragment. Reuse the tool
+      // start so the transcript store upserts its original order for live/replay.
+      events.push(this.createToolUseEvent(update.toolCallId, tool.name, input.data));
+    }
+    events.push(event as AcpTranslatedDelta);
 
     // Emit tool_result so the frontend can pair it with the tool_use (transitions pending → success/error)
     this.appendTerminalToolResultIfNeeded(events, update, sessionId);
@@ -440,6 +474,7 @@ export class AcpEventTranslator {
       terminalOutput: this.terminalOutput.get(key)?.text.slice(-MAX_TERMINAL_OUTPUT_CHARS) ?? '',
     });
     if (terminalResult) {
+      this.toolNames.delete(key);
       this.terminalOutput.delete(key);
       events.push(terminalResult);
     }
