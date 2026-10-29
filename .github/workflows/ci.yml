@@ -160,7 +160,7 @@ jobs:
   test:
     name: Test
     needs: test-shards
-    if: always() && !cancelled()
+    if: always()
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -169,7 +169,7 @@ jobs:
       DATABASE_URL: 'file:./test.db'
     steps:
       - name: Require every test shard to pass
-        if: needs.test-shards.result != 'success'
+        if: always() && needs.test-shards.result != 'success'
         run: exit 1
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
