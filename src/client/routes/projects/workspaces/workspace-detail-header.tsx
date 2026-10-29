@@ -204,6 +204,7 @@ export function WorkspaceDetailHeaderSlot({
           <ToggleRightPanelButton />
           <div className="@[72rem]/header:hidden">
             <WorkspaceHeaderOverflowMenu
+              isArchived={isArchived}
               workspace={workspace}
               workspaceId={workspaceId}
               availableIdes={availableIdes}

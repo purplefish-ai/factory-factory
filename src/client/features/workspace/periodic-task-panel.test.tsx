@@ -66,6 +66,7 @@ beforeEach(() => {
   mocks.task.isLoading = false;
   mocks.project.data = { id: 'owner', slug: 'archived-owner', name: 'Owner' };
   mocks.project.error = null;
+  mocks.project.isLoading = false;
   mocks.history.data = [
     {
       id: 'run-1',
@@ -211,6 +212,7 @@ it.each(['loading', 'error'])(
     mocks.task.error = { message: 'Agent gone', data: { code: 'NOT_FOUND' } };
     mocks.project.data = undefined;
     mocks.project.error = state === 'error' ? { message: 'Owner unavailable' } : null;
+    mocks.project.isLoading = state === 'loading';
     const view = await render();
     try {
       expect(view.container.querySelector('a[href="/agents"]')).toBeNull();

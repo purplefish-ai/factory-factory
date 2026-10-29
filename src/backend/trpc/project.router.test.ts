@@ -278,6 +278,14 @@ describe('projectRouter', () => {
     );
   });
 
+  it('returns the real NOT_FOUND transport code for a missing canonical project', async () => {
+    mockProjectManagementService.findBySlug.mockResolvedValue(null);
+    await expect(createCaller().getBySlug({ slug: 'deleted' })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+      message: 'Project not found: deleted',
+    });
+  });
+
   it('builds branch list from local and remote refs', async () => {
     mockProjectManagementService.findById.mockResolvedValue({
       id: 'p1',

@@ -20,9 +20,11 @@ snapshot contract.
 Legacy `/reviews` links redirect to the selected project. Explicit `repo` links
 resolve a configured owner (selected match, active match, then archived match)
 or show an ownership error. A canonical page only selects deep-linked PRs
-present in its scoped visible list. Project/repository changes reset selection,
-details, diffs, and the mobile sheet; late old-view completions cannot populate
-the new view. Repository metadata changes refresh the project's cached list.
+present in its scoped visible list. A delayed target may become selected after
+refresh, unless the user has already selected a row or navigated the list.
+Project/repository changes reset selection, details, diffs, and the mobile
+sheet; late old-view completions cannot populate the new view. Repository
+metadata changes refresh the project's cached list.
 
 The Reviews list and review badge exclude repositories archived on GitHub at the
 search source. They also exclude PRs attached only to ARCHIVING or ARCHIVED

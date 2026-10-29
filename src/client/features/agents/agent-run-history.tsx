@@ -1,5 +1,6 @@
 import { ArrowSquareOutIcon } from '@phosphor-icons/react/dist/csr/ArrowSquareOut';
 import { Link } from 'react-router';
+import { getProjectSectionPath } from '@/client/lib/project-navigation';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -17,6 +18,13 @@ const STATUS_LABELS: Record<AgentRun['status'], string> = {
   PR_CREATED: 'PR created',
   FAILED: 'Failed',
   SKIPPED: 'Skipped',
+};
+
+const MISSING_WORKSPACE_LABELS: Record<AgentRun['status'], string> = {
+  RUNNING: 'No workspace yet',
+  FAILED: 'No workspace linked',
+  PR_CREATED: 'Workspace unavailable',
+  SKIPPED: 'Workspace unavailable',
 };
 
 export function AgentRunHistory({
@@ -70,14 +78,14 @@ export function AgentRunHistory({
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                 {run.workspaceId ? (
                   <Link
-                    to={`/projects/${projectSlug}/workspaces/${run.workspaceId}`}
+                    to={`${getProjectSectionPath(projectSlug, 'workspaces')}/${encodeURIComponent(run.workspaceId)}`}
                     className="font-medium text-primary underline underline-offset-4"
                   >
                     Open workspace <span className="sr-only">for run {run.id}</span>
                   </Link>
                 ) : (
                   <span className="text-muted-foreground">
-                    {run.status === 'RUNNING' ? 'No workspace yet' : 'Workspace unavailable'}
+                    {MISSING_WORKSPACE_LABELS[run.status]}
                   </span>
                 )}
                 {run.prUrl && (

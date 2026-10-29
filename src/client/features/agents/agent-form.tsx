@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { resolveAgentSchedule } from './agent-schedule';
+import { resolveAgentSchedule, supportsAgentClockTime } from './agent-schedule';
 import { AgentScheduleFields } from './agent-schedule-fields';
 import type { AgentCadence, AgentFormValues } from './types';
 
@@ -110,7 +110,8 @@ export function AgentForm({ initialValues, onSave, onCancel }: AgentFormProps) {
         {baseline
           ? 'Changes apply to future runs. A running workspace continues unchanged.'
           : 'This agent runs immediately after creation, then follows its schedule.'}
-        {scheduledTime &&
+        {supportsAgentClockTime(cadence) &&
+          scheduledTime &&
           ' Clock times use the selected schedule timezone; changing the time uses your browser timezone.'}
       </p>
       {error && (

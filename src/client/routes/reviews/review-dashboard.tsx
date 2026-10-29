@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { PRDetailPanel } from '@/client/components/pr-detail-panel';
 import { PRInboxItem } from '@/client/components/pr-inbox-item';
@@ -126,7 +126,6 @@ function useInitialReviewSelection({
     if (applied.current === identity || !(initialRepo && initialPR) || prs.length === 0) {
       return;
     }
-    applied.current = identity;
     if (!/^[1-9]\d*$/.test(initialPR)) {
       return;
     }
@@ -140,9 +139,13 @@ function useInitialReviewSelection({
         pr.number === prNum
     );
     if (index >= 0) {
+      applied.current = identity;
       setSelectedIndex(index);
     }
   }, [initialRepo, initialPR, prs, setSelectedIndex]);
+  return useCallback(() => {
+    applied.current = `${initialRepo}#${initialPR}`;
+  }, [initialRepo, initialPR]);
 }
 
 function shouldIgnoreReviewShortcut(event: KeyboardEvent): boolean {
@@ -170,6 +173,12 @@ function shouldIgnoreReviewShortcut(event: KeyboardEvent): boolean {
   return !!control && !control.matches('[data-review-list] > button');
 }
 
+function moveReviewSelection(previous: number, count: number, step: number): number {
+  const last = Math.max(0, count - 1);
+  const current = Math.max(0, Math.min(previous, last));
+  return Math.max(0, Math.min(current + step, last));
+}
+
 function useReviewKeyboardShortcuts({
   prsLength,
   onOpenGitHub,
@@ -190,8 +199,8 @@ function useReviewKeyboardShortcuts({
       }
 
       const actionByKey: Partial<Record<string, () => void>> = {
-        j: () => setSelectedIndex((prev) => Math.min(prev + 1, prsLength - 1)),
-        k: () => setSelectedIndex((prev) => Math.max(prev - 1, 0)),
+        j: () => setSelectedIndex((prev) => moveReviewSelection(prev, prsLength, 1)),
+        k: () => setSelectedIndex((prev) => moveReviewSelection(prev, prsLength, -1)),
         o: onOpenGitHub,
         a: () => {
           if (reviewDecision !== 'APPROVED') {
@@ -441,12 +450,19 @@ export function ReviewDashboard({ project }: { project: ReviewProject }) {
     hasSelectedDetails: !!selectedDetails,
     setPrDetails,
   });
-  useInitialReviewSelection({
+  const markUserSelection = useInitialReviewSelection({
     initialRepo,
     initialPR,
     prs,
     setSelectedIndex,
   });
+  const selectReview = useCallback(
+    (update: React.SetStateAction<number>) => {
+      markUserSelection();
+      setSelectedIndex(update);
+    },
+    [markUserSelection]
+  );
   const { fetchDiff, handleApprove, handleOpenGitHub, approving } = useReviewActions({
     selectedPR,
     selectedKey,
@@ -461,7 +477,7 @@ export function ReviewDashboard({ project }: { project: ReviewProject }) {
     onOpenGitHub: handleOpenGitHub,
     onApprove: handleApprove,
     reviewDecision: selectedDetails?.reviewDecision,
-    setSelectedIndex,
+    setSelectedIndex: selectReview,
   });
   useScrollToSelectedReview(itemRefs, selectedIndex);
 
@@ -499,7 +515,7 @@ export function ReviewDashboard({ project }: { project: ReviewProject }) {
       selectedIndex={boundedIndex}
       itemRefs={itemRefs}
       onSelect={(index) => {
-        setSelectedIndex(index);
+        selectReview(index);
         setMobileDetailsOpen(true);
       }}
       mobileDetailsOpen={mobileDetailsOpen}
@@ -519,7 +535,7 @@ export function ReviewDashboard({ project }: { project: ReviewProject }) {
       prDetails={prDetails}
       selectedIndex={boundedIndex}
       itemRefs={itemRefs}
-      onSelect={setSelectedIndex}
+      onSelect={selectReview}
       selectedDetails={selectedDetails}
       selectedDiff={selectedDiff}
       diffLoading={diffLoading}

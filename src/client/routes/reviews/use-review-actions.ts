@@ -29,7 +29,7 @@ export function useReviewActions({
     };
   }, []);
 
-  const approveMutation = trpc.prReview.submitReview.useMutation({
+  const { mutate: submitApproval, isPending: approving } = trpc.prReview.submitReview.useMutation({
     onSuccess: (_data, variables) => {
       runInBackground(utils.prReview.listReviewRequests.invalidate(), 'Could not refresh data');
       if (!mounted.current) {
@@ -86,27 +86,27 @@ export function useReviewActions({
   }, [selectedPR, selectedKey, diffs, setPendingDiffs, setDiffs, utils.client.prReview.getDiff]);
 
   const handleApprove = useCallback(() => {
-    if (!selectedPR) {
+    if (!selectedPR || approving) {
       return;
     }
-    approveMutation.mutate({
+    submitApproval({
       repo: selectedPR.repository.nameWithOwner,
       number: selectedPR.number,
       action: 'approve',
     });
-  }, [selectedPR, approveMutation]);
+  }, [selectedPR, submitApproval, approving]);
 
   const handleOpenGitHub = useCallback(() => {
     if (!selectedPR) {
       return;
     }
-    window.open(selectedPR.url, '_blank');
+    window.open(selectedPR.url, '_blank', 'noopener,noreferrer');
   }, [selectedPR]);
 
   return {
     fetchDiff,
     handleApprove,
     handleOpenGitHub,
-    approving: approveMutation.isPending,
+    approving,
   };
 }

@@ -31,7 +31,7 @@ function LegacyAgentDetail({ id }: { id: string }) {
       </div>
     );
   }
-  if (owner.error) {
+  if (owner.error && !listedOwner) {
     return (
       <div role="alert" className="space-y-3 p-6">
         <p>Could not load agent project: {owner.error.message}</p>

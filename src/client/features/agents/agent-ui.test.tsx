@@ -70,11 +70,21 @@ describe('AgentRunHistory', () => {
     renderHistory([
       run({ id: 'running' }),
       run({ id: 'failed', status: 'FAILED', errorMessage: 'Provider permission denied' }),
+      run({ id: 'missing', status: 'PR_CREATED' }),
     ]);
     expect(container.textContent).toContain('No workspace yet');
+    expect(container.textContent).toContain('No workspace linked');
     expect(container.textContent).toContain('Workspace unavailable');
     expect(container.textContent).toContain('Provider permission denied');
     expect(container.textContent).not.toContain('deleted');
+  });
+  it('encodes imported project slugs and workspace IDs in run-history links', () => {
+    renderHistory([run({ workspaceId: 'workspace/one space' })], {
+      projectSlug: 'owner/project space',
+    });
+    expect(container.querySelector('a')?.getAttribute('href')).toBe(
+      '/projects/owner%2Fproject%20space/workspaces/workspace%2Fone%20space'
+    );
   });
   it('does not show a failed or loading request as an empty history and supports retry', () => {
     renderHistory(undefined, { isLoading: true });
@@ -91,6 +101,26 @@ describe('AgentRunHistory', () => {
 });
 
 describe('AgentForm', () => {
+  it('hides clock-time guidance when the selected cadence cannot save a clock time', () => {
+    actFlushSync(() =>
+      root.render(
+        <AgentForm
+          initialValues={{
+            name: 'Interval',
+            prompt: 'Check',
+            cadence: 'EVERY_MINUTE',
+            scheduledTime: '09:30',
+            timezone: 'Asia/Tokyo',
+          }}
+          onSave={vi.fn()}
+          onCancel={vi.fn()}
+        />
+      )
+    );
+    expect(container.querySelector('input[type="time"]')).toBeNull();
+    expect(container.textContent).not.toContain('Clock times');
+  });
+
   it('trims input, preserves the draft on failure, and prevents repeated pending submissions', async () => {
     let rejectSave: (error: Error) => void = vi.fn();
     const onSave = vi.fn(

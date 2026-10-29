@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { observable } from '@trpc/server/observable';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AppHeader } from '@/client/components/app-header';
 import { AppHeaderProvider } from '@/client/components/app-header-context';
 import { AppSidebar } from '@/client/components/app-sidebar';
@@ -95,6 +95,7 @@ const dependencies: Agent = {
 
 /** Frontend-only phone fixture; shared components retain their production links. */
 function MobileAgentsSession() {
+  const nextAgentId = useRef(1);
   const [agents, setAgents] = useState([review, dependencies]);
   const [selectedId, setSelectedId] = useState(review.id);
   const [formMode, setFormMode] = useState<'create' | 'edit' | null>(null);
@@ -158,7 +159,7 @@ function MobileAgentsSession() {
                             const base: Agent =
                               formMode === 'create'
                                 ? {
-                                    id: crypto.randomUUID(),
+                                    id: `fixture-agent-${nextAgentId.current++}`,
                                     projectId: project.id,
                                     name: '',
                                     prompt: '',

@@ -16,8 +16,10 @@ it('encodes path segments and recognizes only complete canonical sections', () =
 });
 it.each([
   ['/agents/archived-agent', '', true],
+  ['/AGENTS/archived-agent/', '', true],
   ['/agents', '', false],
   ['/reviews', '?repo=owner%2Frepo&pr=12', true],
+  ['/Reviews/', '?repo=owner%2Frepo&pr=12', true],
   ['/reviews', '', false],
   ['/admin', '?repo=owner/repo', false],
 ])(

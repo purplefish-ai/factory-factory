@@ -26,6 +26,7 @@ type SubmitReviewVariables = {
 };
 
 const reviewMocks = vi.hoisted(() => ({
+  approvalPending: false,
   getDiff: vi.fn(),
   detailsQuery: vi.fn(),
   detailsByKey: new Map<string, PRWithFullDetails>(),
@@ -162,7 +163,7 @@ vi.mock('@/client/lib/trpc', () => ({
           reviewMocks.submitReviewMutationOptions = options;
           return {
             mutate: reviewMocks.submitReviewMutate,
-            isPending: false,
+            isPending: reviewMocks.approvalPending,
           };
         },
       },
@@ -200,6 +201,7 @@ beforeEach(() => {
       })
     );
   reviewMocks.detailsByKey.clear();
+  reviewMocks.approvalPending = false;
   reviewMocks.submitReviewMutationOptions = undefined;
   reviewMocks.submittedReviewVariables = undefined;
   reviewMocks.submitReviewMutate.mockImplementation((variables: SubmitReviewVariables) => {
@@ -393,6 +395,85 @@ describe('project reviews', () => {
     view.unmount();
   });
 
+  it('selects a deep-link target when it appears in a later refresh', () => {
+    search = '?repo=org/repo&pr=2';
+    listReviewRequestsMock.mockReturnValue({ data: { prs: [makeDetails(1, 'A')] } });
+    const view = mountReviews();
+    listReviewRequestsMock.mockReturnValue({
+      data: { prs: [makeDetails(1, 'A'), makeDetails(2, 'B')] },
+    });
+    view.render();
+    click(view.container, 'Approve');
+    expect(reviewMocks.submitReviewMutate).toHaveBeenLastCalledWith({
+      repo: 'org/repo',
+      number: 2,
+      action: 'approve',
+    });
+    view.unmount();
+  });
+
+  it.each(['row', 'keyboard'])(
+    'keeps a manual %s selection when the deep-link target arrives later',
+    (method) => {
+      search = '?repo=org/repo&pr=2';
+      listReviewRequestsMock.mockReturnValue({
+        data: { prs: [makeDetails(1, 'A'), makeDetails(3, 'C')] },
+      });
+      const view = mountReviews();
+      if (method === 'row') {
+        click(view.container, '3:NONE');
+      } else {
+        actFlushSync(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'j' })));
+      }
+      listReviewRequestsMock.mockReturnValue({
+        data: { prs: [makeDetails(1, 'A'), makeDetails(3, 'C'), makeDetails(2, 'B')] },
+      });
+      view.render();
+      click(view.container, 'Approve');
+      expect(reviewMocks.submitReviewMutate).toHaveBeenLastCalledWith({
+        repo: 'org/repo',
+        number: 3,
+        action: 'approve',
+      });
+      view.unmount();
+    }
+  );
+
+  it('moves immediately from the bounded selection after the review list shrinks', () => {
+    listReviewRequestsMock.mockReturnValue({
+      data: { prs: [1, 2, 3, 4].map((number) => makeDetails(number, `PR ${number}`)) },
+    });
+    const view = mountReviews();
+    click(view.container, '4:NONE');
+    listReviewRequestsMock.mockReturnValue({
+      data: { prs: [1, 2].map((number) => makeDetails(number, `PR ${number}`)) },
+    });
+    view.render();
+    actFlushSync(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k' })));
+    click(view.container, 'Approve');
+    expect(reviewMocks.submitReviewMutate).toHaveBeenLastCalledWith({
+      repo: 'org/repo',
+      number: 1,
+      action: 'approve',
+    });
+    view.unmount();
+  });
+
+  it('keeps the selection valid when keyboard navigation precedes the first reviews', () => {
+    listReviewRequestsMock.mockReturnValue({ data: { prs: [] } });
+    const view = mountReviews();
+    actFlushSync(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'j' })));
+    listReviewRequestsMock.mockReturnValue({ data: { prs: [makeDetails(1, 'A')] } });
+    view.render();
+    click(view.container, 'Approve');
+    expect(reviewMocks.submitReviewMutate).toHaveBeenLastCalledWith({
+      repo: 'org/repo',
+      number: 1,
+      action: 'approve',
+    });
+    view.unmount();
+  });
+
   it('does not accept numeric-prefix PR links', () => {
     search = '?repo=org/repo&pr=2suffix';
     listReviewRequestsMock.mockReturnValue({
@@ -437,6 +518,21 @@ describe('project reviews', () => {
 });
 
 describe('ReviewsPage approval', () => {
+  it('ignores repeated approve shortcuts while a review submission is pending', () => {
+    const view = mountReviews();
+    actFlushSync(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' })));
+    expect(reviewMocks.submitReviewMutate).toHaveBeenCalledTimes(1);
+    reviewMocks.approvalPending = true;
+    view.render();
+    actFlushSync(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' })));
+    expect(reviewMocks.submitReviewMutate).toHaveBeenCalledTimes(1);
+    reviewMocks.approvalPending = false;
+    view.render();
+    actFlushSync(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' })));
+    expect(reviewMocks.submitReviewMutate).toHaveBeenCalledTimes(2);
+    view.unmount();
+  });
+
   it('updates the submitted PR when selection changes before approval completes', () => {
     listReviewRequestsMock.mockReturnValue({
       data: {

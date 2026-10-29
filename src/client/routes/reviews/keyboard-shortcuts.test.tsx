@@ -180,7 +180,11 @@ it('preserves deliberate page-level selection, approval, and open shortcuts', as
     await key(document.body, 'k');
     await key(document.body, 'o');
     expect(selected(view.container)).toBe('PR 1');
-    expect(mocks.open).toHaveBeenCalledWith('https://github.com/o/r/pull/1', '_blank');
+    expect(mocks.open).toHaveBeenCalledWith(
+      'https://github.com/o/r/pull/1',
+      '_blank',
+      'noopener,noreferrer'
+    );
   } finally {
     await view.cleanup();
   }
@@ -203,7 +207,11 @@ it('preserves review shortcuts after focusing and selecting an actual PRInboxIte
     await key(row!, 'k');
     await key(row!.querySelector('[title="PR 1"]')!, 'o');
     expect(selected(view.container)).toBe('PR 1');
-    expect(mocks.open).toHaveBeenCalledWith('https://github.com/o/r/pull/1', '_blank');
+    expect(mocks.open).toHaveBeenCalledWith(
+      'https://github.com/o/r/pull/1',
+      '_blank',
+      'noopener,noreferrer'
+    );
   } finally {
     await view.cleanup();
   }

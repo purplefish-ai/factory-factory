@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TRPCClientError } from '@trpc/client';
+import { getQueryKey } from '@trpc/react-query';
 import { observable } from '@trpc/server/observable';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -58,6 +59,8 @@ let archivedOwner: boolean;
 let noProjects: boolean;
 let failTask: boolean;
 let failProjects: boolean;
+let excludeOwner: boolean;
+let failOwner: boolean;
 function RealNavigationHarness() {
   const navigation = useAppNavigationData();
   const { pathname } = useLocation();
@@ -91,17 +94,27 @@ async function taskResponse(requestedId: string) {
   }
   return { ...agent, projectId: archivedOwner ? 'archived' : agent.projectId };
 }
+function projectListResponse() {
+  if (failProjects) {
+    throw new Error('Projects unavailable');
+  }
+  return noProjects
+    ? []
+    : excludeOwner
+      ? projects.filter((project) => project.id !== 'owner')
+      : projects;
+}
 async function response(path: string, requestedId: string, input: unknown) {
   if (path === 'project.list') {
-    if (failProjects) {
-      throw new Error('Projects unavailable');
-    }
-    return noProjects ? [] : projects;
+    return projectListResponse();
   }
   if (path === 'periodicTask.get') {
     return await taskResponse(requestedId);
   }
   if (path === 'project.getById') {
+    if (failOwner) {
+      throw new Error('Owner lookup failed');
+    }
     return { id: 'archived', slug: 'archived-owner', name: 'Archived owner' };
   }
   if (path === 'periodicTask.list') {
@@ -169,6 +182,8 @@ beforeEach(() => {
   noProjects = false;
   failTask = false;
   failProjects = false;
+  excludeOwner = false;
+  failOwner = false;
   taskWait = new Promise<void>((resolve) => {
     finishTask = resolve;
   });
@@ -259,6 +274,28 @@ describe('explicit agent links during real project normalization', () => {
       )
     );
   });
+  it('uses a newly listed owner after its independent lookup failed', async () => {
+    excludeOwner = true;
+    failOwner = true;
+    render(agent.id, 'first-active');
+    await act(async () => {
+      finishTask();
+      await taskWait;
+    });
+    await waitForReact(() => expect(container.textContent).toContain('Owner lookup failed'));
+    excludeOwner = false;
+    await act(async () => {
+      await queryClient.refetchQueries({
+        queryKey: getQueryKey(trpc.project.list, { isArchived: false }, 'query'),
+      });
+    });
+    await waitForReact(() =>
+      expect(container.querySelector('output[aria-label="Current route"]')?.textContent).toBe(
+        '/projects/owner-project/agents/requested-agent'
+      )
+    );
+  });
+
   it('shows a task failure and retry without any management form or owner guessing', async () => {
     failTask = true;
     render(agent.id, 'first-active');
@@ -285,7 +322,7 @@ describe('explicit agent links during real project normalization', () => {
     ['deleted-project', false, '/projects/first-active/agents'],
     ['deleted-project', true, '/projects/new'],
   ])(
-    'resolves the legacy index using valid saved selection or onboarding: %s',
+    'resolves the legacy index using saved selection %s with empty projects %s',
     async (saved, empty, target) => {
       noProjects = empty;
       render('', saved);

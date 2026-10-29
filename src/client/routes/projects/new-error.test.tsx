@@ -187,11 +187,14 @@ beforeEach(() => {
   });
 });
 afterEach(() => {
-  expect(listReviews).not.toHaveBeenCalled();
-  for (const cleanup of cleanups.splice(0)) {
-    cleanup();
+  try {
+    expect(listReviews).not.toHaveBeenCalled();
+  } finally {
+    for (const cleanup of cleanups.splice(0)) {
+      cleanup();
+    }
+    localStorage.clear();
   }
-  localStorage.clear();
 });
 
 describe('NewProjectPage project query recovery', () => {

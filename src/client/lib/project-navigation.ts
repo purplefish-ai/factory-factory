@@ -17,7 +17,7 @@ export function getProjectSection(pathname: string): ProjectSection | null {
 /** Explicit legacy owners must resolve before the root onboarding redirect. */
 export function hasExplicitLegacyProjectOwner(pathname: string, search: string): boolean {
   return (
-    /^\/agents\/[^/]+\/?$/.test(pathname) ||
-    (pathname === '/reviews' && !!new URLSearchParams(search).get('repo'))
+    /^\/agents\/[^/]+\/?$/i.test(pathname) ||
+    (/^\/reviews\/?$/i.test(pathname) && !!new URLSearchParams(search).get('repo'))
   );
 }

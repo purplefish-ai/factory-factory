@@ -8,15 +8,21 @@ vi.mock('@/client/layouts/project-layout', () => ({ ProjectLayout: () => null })
 import { router } from '@/client/router';
 
 describe('Agents routes', () => {
+  const rootRoute = router.routes.find((route) => route.path === '/');
+  const legacy = rootRoute?.children?.find((route) => route.path === 'agents/:id?');
+  const canonical = rootRoute?.children
+    ?.find((route) => route.path === 'projects')
+    ?.children?.find((route) => route.path === ':slug')
+    ?.children?.find((route) => route.path === 'agents/:id?');
   it.each([
-    '/agents',
-    '/agents/agent-id',
-    '/projects/example/agents',
-    '/projects/example/agents/agent-id',
-  ])('registers the management page at %s', (pathname) => {
-    const matches = matchRoutes(router.routes, pathname);
-    expect(matches?.at(-1)?.route.path).toBe('agents/:id?');
-    expect(matches?.at(-1)?.route.element).toBeTruthy();
+    ['/agents', 'legacy'],
+    ['/agents/agent-id', 'legacy'],
+    ['/projects/example/agents', 'canonical'],
+    ['/projects/example/agents/agent-id', 'canonical'],
+  ])('matches %s to the %s Agents route', (pathname, kind) => {
+    const expected = kind === 'legacy' ? legacy : canonical;
+    expect(expected).toBeDefined();
+    expect(matchRoutes(router.routes, pathname)?.at(-1)?.route).toBe(expected);
   });
   it('preserves the explicitly requested ID and rejects additional path segments', () => {
     expect(matchRoutes(router.routes, '/agents/missing-id')?.at(-1)?.params.id).toBe('missing-id');
