@@ -46,6 +46,7 @@ vi.mock('@/backend/services/session', () => ({
   },
   sessionDomainService: {
     enqueue: vi.fn(),
+    enqueueInitialMessage: vi.fn(),
     emitDelta: vi.fn(),
   },
   sessionLifecycleService: {
