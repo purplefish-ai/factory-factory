@@ -32,33 +32,6 @@ import {
 import { subagentsChangedParamsSchema } from '@/shared/acp-protocol/subagents';
 import { SessionLifecycleEventKind, SessionLifecycleEventReason } from '@/shared/core';
 
-// =============================================================================
-// UI Chat Message Group Types
-// =============================================================================
-
-/**
- * Message group type for rendering.
- */
-export type MessageGroupType = 'user' | 'assistant' | 'tool_group';
-
-/**
- * Grouped messages for rendering.
- */
-export interface MessageGroup {
-  type: MessageGroupType;
-  messages: ChatMessage[];
-  id: string;
-}
-
-// =============================================================================
-// Connection State Types
-// =============================================================================
-
-/**
- * Connection state for WebSocket.
- */
-export type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'error';
-
 const wsMessageTypes = new Set<string>(WEBSOCKET_MESSAGE_TYPES);
 const sessionDeltaExcludedMessageTypes = new Set<string>(SESSION_DELTA_EXCLUDED_MESSAGE_TYPES);
 const claudeMessageTypes = new Set<string>(AGENT_MESSAGE_TYPES);
@@ -240,42 +213,6 @@ export function getToolUseIdFromEvent(event: AgentStreamEvent): string | null {
 // =============================================================================
 // Helper Functions
 // =============================================================================
-
-/**
- * Groups messages by type for rendering.
- * Consecutive assistant messages and tool calls are grouped together.
- */
-export function groupMessages(messages: ChatMessage[]): MessageGroup[] {
-  const groups: MessageGroup[] = [];
-  let currentGroup: MessageGroup | null = null;
-
-  for (const message of messages) {
-    const isToolMessage =
-      message.message?.type === 'stream_event' &&
-      message.message.event?.type === 'content_block_start' &&
-      isToolUseContent(message.message.event.content_block);
-
-    const messageType: MessageGroupType =
-      message.source === 'user' ? 'user' : isToolMessage ? 'tool_group' : 'assistant';
-
-    // Start a new group if:
-    // - No current group
-    // - Different message type
-    // - User messages always get their own group
-    if (!currentGroup || currentGroup.type !== messageType || messageType === 'user') {
-      currentGroup = {
-        type: messageType,
-        messages: [],
-        id: `group-${message.id}`,
-      };
-      groups.push(currentGroup);
-    }
-
-    currentGroup.messages.push(message);
-  }
-
-  return groups;
-}
 
 /**
  * Extracts text from a content block start event.
