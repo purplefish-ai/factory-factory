@@ -133,7 +133,6 @@ export class AcpEventProcessor {
         }
 
         const { update } = event;
-        this.trackPendingToolInput(sid, update);
         if (
           update.sessionUpdate === 'user_message_chunk' &&
           'content' in update &&
@@ -706,21 +705,6 @@ export class AcpEventProcessor {
       acpLocations: update.acpLocations ?? existing?.acpLocations,
     });
     this.pendingAcpToolCalls.set(sid, pendingById);
-  }
-
-  /**
-   * Claude announces a tool call before its input and sends the input in a later
-   * update, so interceptors would otherwise see an empty command.
-   */
-  private trackPendingToolInput(sid: string, update: AcpSessionUpdateEvent['update']): void {
-    if (update.sessionUpdate !== 'tool_call_update') {
-      return;
-    }
-    const pending = this.getPendingToolCall(sid, update.toolCallId);
-    const toolInput = this.normalizeToolInput(update.rawInput);
-    if (pending && toolInput && Object.keys(toolInput).length > 0) {
-      this.upsertPendingToolCall(sid, update.toolCallId, { toolInput });
-    }
   }
 
   private handleSubagentToolUpdate(

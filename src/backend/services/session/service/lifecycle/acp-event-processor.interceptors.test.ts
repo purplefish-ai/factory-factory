@@ -120,7 +120,7 @@ describe('AcpEventProcessor tool interceptors', () => {
     expect(interceptorRegistry.notifyToolComplete).toHaveBeenCalledWith(
       {
         toolUseId: 'toolu_1',
-        toolName: 'gh pr create --fill',
+        toolName: 'Bash',
         input: { command: 'gh pr create --fill', description: 'Open the PR' },
         output: { content: `${PR_URL}\n`, isError: false },
       },
