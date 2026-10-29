@@ -1,6 +1,8 @@
 import type { ChangeEvent, KeyboardEvent } from 'react';
 import { useCallback, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
+import { getRuntimeControlVisibility } from '@/client/features/chat/chat-input/runtime-control-visibility';
+import type { AcpConfigOption } from '@/client/features/chat/reducer';
 import type { FileMentionKeyResult, SlashKeyResult } from '@/client/features/composer';
 import type { ChatSettings, MessageAttachment } from '@/lib/chat-protocol';
 import { SUPPORTED_IMAGE_TYPES } from '@/lib/image-utils';
@@ -16,6 +18,9 @@ interface UseChatInputActionsOptions {
   onChange?: (value: string) => void;
   onSettingsChange?: (settings: Partial<ChatSettings>) => void;
   capabilities?: ChatBarCapabilities;
+  /** Native ACP options; used to skip shortcuts for legacy controls they replace. */
+  acpConfigOptions?: AcpConfigOption[] | null;
+  onSetConfigOption?: (configId: string, value: string) => void;
   disabled: boolean;
   running: boolean;
   stopping?: boolean;
@@ -119,6 +124,8 @@ export function useChatInputActions({
   onChange,
   onSettingsChange,
   capabilities,
+  acpConfigOptions,
+  onSetConfigOption,
   disabled,
   running,
   stopping,
@@ -129,7 +136,12 @@ export function useChatInputActions({
   delegateToFileMentionMenu,
 }: UseChatInputActionsOptions): UseChatInputActionsReturn {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const thinkingEnabled = capabilities?.thinking.enabled === true;
+  // A native effort option replaces the legacy thinking toggle; the legacy budget would be a no-op.
+  const thinkingEnabled = getRuntimeControlVisibility({
+    capabilities,
+    acpConfigOptions,
+    onSetConfigOption,
+  }).showThinking;
   const planModeEnabled = capabilities?.planMode.enabled === true;
   const imageAttachmentsEnabled =
     capabilities?.attachments.enabled === true && capabilities.attachments.kinds.includes('image');

@@ -6,6 +6,9 @@ import { SlidersHorizontalIcon } from '@phosphor-icons/react/dist/csr/SlidersHor
 import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { SquareIcon } from '@phosphor-icons/react/dist/csr/Square';
 import { memo, useState } from 'react';
+import { getConfigPresentation } from '@/client/components/acp-config-presentation';
+import { AcpConfigSelector } from '@/client/components/acp-config-selector';
+import { getRuntimeControlVisibility } from '@/client/features/chat/chat-input/runtime-control-visibility';
 import type { AcpConfigOption } from '@/client/features/chat/reducer';
 import { AttachmentPreview } from '@/client/features/composer';
 import { ProviderModelPicker } from '@/client/features/session-selection';
@@ -27,8 +30,6 @@ import {
   type ChatModelOption,
   hasResolvedChatBarCapabilities,
 } from '@/shared/chat-capabilities';
-import { getConfigPresentation } from './acp-config-presentation';
-import { AcpConfigSelector } from './acp-config-selector';
 import { ModelSelector } from './model-selector';
 import { QuickActionsDropdown } from './quick-actions-dropdown';
 import { SettingsToggle } from './settings-toggle';
@@ -128,33 +129,10 @@ export interface LeftControlsProps {
   onSetConfigOption?: (configId: string, value: string) => void;
 }
 
-function providesPlanning(option: AcpConfigOption) {
-  const planningIds = ['collaboration_mode', 'plan_mode'];
-  if (planningIds.includes(option.id) || planningIds.includes(option.category ?? '')) {
-    return true;
-  }
-  return (
-    (option.id === 'mode' || option.category === 'mode') &&
-    option.options.some((entry) =>
-      'group' in entry
-        ? entry.options.some((choice) => choice.value === 'plan')
-        : entry.value === 'plan'
-    )
-  );
-}
-
 function getRuntimeControls(props: LeftControlsProps) {
-  const { capabilities, settings, acpConfigOptions, onSetConfigOption } = props;
-  const modelOption = acpConfigOptions?.find(
-    (option) => option.category === 'model' || option.id === 'model'
-  );
-  const nativeOptions = onSetConfigOption
-    ? (acpConfigOptions ?? []).filter((option) => option !== modelOption)
-    : [];
-  const hasNative = (...ids: string[]) =>
-    nativeOptions.some((option) => ids.includes(option.id) || ids.includes(option.category ?? ''));
-  const hasNativeReasoning = hasNative('reasoning', 'reasoning_effort', 'effort', 'thought_level');
-  const hasNativePlanning = nativeOptions.some(providesPlanning);
+  const { capabilities, settings, onSetConfigOption } = props;
+  const { modelOption, nativeOptions, showReasoning, showThinking, showPlanning } =
+    getRuntimeControlVisibility(props);
   const modelOptions: ChatModelOption[] = modelOption
     ? modelOption.options.flatMap((entry) =>
         'group' in entry
@@ -178,13 +156,9 @@ function getRuntimeControls(props: LeftControlsProps) {
       modelOption && onSetConfigOption
         ? (value: string) => onSetConfigOption(modelOption.id, value)
         : props.onModelChange,
-    showReasoning:
-      capabilities?.reasoning.enabled === true &&
-      capabilities.reasoning.options.length > 0 &&
-      !hasNativeReasoning,
-    showThinking:
-      capabilities?.thinking.enabled === true && !hasNative('thinking') && !hasNativeReasoning,
-    showPlanning: capabilities?.planMode.enabled === true && !hasNativePlanning,
+    showReasoning,
+    showThinking,
+    showPlanning,
   };
 }
 

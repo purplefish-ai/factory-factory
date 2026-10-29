@@ -39,6 +39,7 @@ const mockSetWorkspaceRatcheting = vi.hoisted(() => vi.fn());
 const mockCheckWorkspaceById = vi.hoisted(() => vi.fn());
 const mockSessionRuntimeSnapshot = vi.hoisted(() => vi.fn());
 const mockCreateAgentSession = vi.hoisted(() => vi.fn());
+const mockGetLaunchOptions = vi.hoisted(() => vi.fn());
 const mockResolveProviderForWorkspaceCreation = vi.hoisted(() =>
   vi.fn(async (_explicitProvider?: unknown, _explicitModel?: unknown) => 'CLAUDE')
 );
@@ -131,6 +132,9 @@ function createCaller(requestTrust?: {
     cliHealthService: Object.assign({}, fakeGraph.services.cliHealthService, cliHealthService),
     createLogger: () => logger,
     sessionLifecycleService: composedSessionLifecycleService,
+    sessionConfigService: Object.assign({}, fakeGraph.services.sessionConfigService, {
+      getLaunchOptions: mockGetLaunchOptions,
+    }),
     sessionDataService: Object.assign({}, fakeGraph.services.sessionDataService, {
       createAgentSession: (...args: unknown[]) => mockCreateAgentSession(...args),
       findAgentSessionsByWorkspaceId: (...args: unknown[]) =>
@@ -213,6 +217,7 @@ function createCaller(requestTrust?: {
         resolveProvider: (...args) =>
           services.sessionProviderResolverService.resolveProviderForWorkspaceCreation(...args),
         checkCliHealth: () => services.cliHealthService.checkHealth(),
+        getLaunchOptions: (input) => services.sessionConfigService.getLaunchOptions(input),
         createWorkspace: (...args) => mockWorkspaceCreationCreate(...args),
         createDefaultSession: (input) => services.sessionDataService.createAgentSession(input),
         initializeWorktree: (...args) => mockInitializeWorkspaceWorktree(...args),
@@ -293,6 +298,13 @@ describe('workspaceCoreRouter', () => {
     vi.clearAllMocks();
     mockFindSessionsByWorkspaceId.mockResolvedValue([{ id: 'deleted-session' }]);
     mockResolveProviderForWorkspaceCreation.mockResolvedValue('CLAUDE');
+    mockGetLaunchOptions.mockResolvedValue({
+      provider: 'CLAUDE',
+      model: 'sonnet',
+      reasoning: { options: [] },
+      planMode: { supported: true, selected: false },
+      accessMode: { options: [{ value: 'acceptEdits', label: 'Accept edits' }] },
+    });
     mockInitializeWorkspaceWorktree.mockResolvedValue(undefined);
     mockCheckWorkspaceById.mockResolvedValue(undefined);
     mockDeriveFlowState.mockReturnValue({
@@ -517,7 +529,7 @@ describe('workspaceCoreRouter', () => {
     );
   });
 
-  it('passes startup mode preset through manual workspace creation', async () => {
+  it('validates access and passes the planning preset through manual workspace creation', async () => {
     const { caller } = createCaller();
     mockWorkspaceCreationCreate.mockResolvedValue({ id: 'w-created' });
 
@@ -526,12 +538,14 @@ describe('workspaceCoreRouter', () => {
       projectId: 'p1',
       name: 'Planning Workspace',
       startupModePreset: 'plan',
+      accessMode: 'acceptEdits',
     });
 
     expect(mockWorkspaceCreationCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'MANUAL',
         startupModePreset: 'plan',
+        accessMode: 'acceptEdits',
       })
     );
   });

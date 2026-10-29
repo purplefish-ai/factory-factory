@@ -236,6 +236,27 @@ describe('SearchDialog', () => {
     expect(props.onSelect).toHaveBeenCalledWith(second);
   });
 
+  it.each(['k', 'j', 'n', 'p'])(
+    'leaves Ctrl+%s to the app instead of moving the selection',
+    async (keyValue) => {
+      const second = { ...result, id: 'session-3', sessionId: 'session-3', title: 'Other review' };
+      const props = await render({ results: [result, second] });
+      const input = document.querySelector('input');
+      const event = new KeyboardEvent('keydown', {
+        key: keyValue,
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      await act(() => input?.dispatchEvent(event));
+      expect(event.defaultPrevented).toBe(false);
+      await act(() =>
+        input?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+      );
+      expect(props.onSelect).toHaveBeenCalledWith(result);
+    }
+  );
+
   it('never selects stale results while a query is loading', async () => {
     const props = await render({ query: 'different', loading: true });
     expect(document.querySelector('[role="option"]')).toBeNull();

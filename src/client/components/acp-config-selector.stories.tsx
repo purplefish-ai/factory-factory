@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useArgs } from 'storybook/preview-api';
 import { fn } from 'storybook/test';
-import type { AcpConfigOption } from '@/client/features/chat/reducer';
+import type { AcpConfigOption } from '@/client/lib/acp-config';
 import { AcpConfigSelector } from './acp-config-selector';
 
 const modelOption: AcpConfigOption = {

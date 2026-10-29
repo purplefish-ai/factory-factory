@@ -294,6 +294,21 @@ describe('GlobalSearch', () => {
     expect(document.querySelector('[role="dialog"]')).not.toBeNull();
   });
 
+  it('closes with Ctrl+K while the search field has focus', async () => {
+    await render();
+    await key('k', { ctrlKey: true });
+    const input = document.querySelector('input');
+    expect(document.activeElement).toBe(input);
+    const event = new KeyboardEvent('keydown', {
+      key: 'k',
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    await act(() => input?.dispatchEvent(event));
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
   it('debounces typing and hides old results before the new request starts', async () => {
     vi.useFakeTimers();
     await render();

@@ -27,9 +27,15 @@ back to the session loading status if history is still loading after setup.
 Workspace initialization finishes both factory setup and project startup scripts
 and persists READY before starting the default agent session. Provider startup
 hooks can depend on installed tools and generated files, so setup does not run
-inside the agent's startup timeout. Non-fatal script failures still persist
-READY with a warning before the agent starts; unexpected provisioning failures
-do not start an agent.
+inside the agent's startup timeout. Initial task preparation runs alongside
+provisioning, so issue lookups do not delay worktree creation or setup. The task
+is published as soon as it is ready, before READY, and remains cancellable
+during setup. Inactive disconnect cleanup retains the queue only while the
+initial task is undelivered. It resets hydrated history and runtime state while
+retaining unexpired recent rejections and terminal PR outcomes. Provisioning
+retries preserve cancellation within the running server. Non-fatal script
+failures still persist READY with a warning before the agent starts; unexpected
+provisioning failures do not start an agent or publish a late prompt.
 
 Retrying a ready workspace with a setup warning restores READY even when its
 setup and startup scripts have been removed, before queued messages dispatch.
@@ -271,7 +277,10 @@ Fresh requests started after settlement keep normal membership authority.
 The board keeps issue intake suppressed per pending operation and owns locked
 subset recovery, retries and selection. The detail route owns its dialogs and
 post-success navigation; leaving its committed workspace lifetime suppresses
-late navigation and dialog callbacks. IDE commands live separately in
+late navigation and dialog callbacks. The server broadcasts ARCHIVING before the
+archive work finishes, so the route's ARCHIVING/ARCHIVED redirect waits while
+its own archive is pending; lock recovery stays reachable, and archives started
+elsewhere still redirect immediately. IDE commands live separately in
 `useWorkspaceIdeActions` and have no archive cache policy.
 
 The route and right panel share `useWorkspaceDetailQuery` and the existing

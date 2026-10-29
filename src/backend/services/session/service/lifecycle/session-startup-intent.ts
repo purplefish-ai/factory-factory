@@ -27,6 +27,7 @@ export function matchesSessionStartupIntent(
   const current = readSessionLaunchSettings(session.providerMetadata);
   return (
     (session.model === expected.model || session.model === expected.confirmedModel) &&
+    current?.accessMode === expected.launch?.accessMode &&
     (expected.overrides?.reasoningEffort !== undefined ||
       current?.reasoningEffort === expected.launch?.reasoningEffort) &&
     (expected.overrides?.planModeEnabled !== undefined ||

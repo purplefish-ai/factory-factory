@@ -32,6 +32,10 @@ export type NativeSessionLaunchOptions = {
     defaultValue?: string;
   };
   planMode: { supported: boolean; selected: boolean };
+  accessMode: {
+    options: Array<{ value: string; label: string; description?: string }>;
+    selected?: string;
+  };
 };
 const logger = createLogger('session-launch-options-probe');
 const TIMEOUT_MS = 30_000;
@@ -59,6 +63,7 @@ export function launchOptionsFromConfig(
   const plan = config.find((option) =>
     isNativeModeConfigOption(option, provider === 'CLAUDE' ? 'mode' : 'collaboration_mode')
   );
+  const access = config.find((option) => isNativeModeConfigOption(option, 'mode'));
   return {
     provider,
     model: model.currentValue,
@@ -69,6 +74,16 @@ export function launchOptionsFromConfig(
         ...(option.description ? { description: option.description } : {}),
       })),
       ...(selected !== undefined ? { selected, defaultValue: selected } : {}),
+    },
+    accessMode: {
+      options: choices(access)
+        .filter((option) => option.value !== 'plan')
+        .map((option) => ({
+          value: option.value,
+          label: option.name,
+          ...(option.description ? { description: option.description } : {}),
+        })),
+      ...(typeof access?.currentValue === 'string' ? { selected: access.currentValue } : {}),
     },
     planMode: {
       supported: choices(plan).some((option) => option.value === 'plan'),

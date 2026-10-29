@@ -271,6 +271,36 @@ describe('real final creation through application launch', () => {
     ).toHaveBeenCalledWith('CODEX');
   });
 
+  it('validates launch access through the graph configuration service before real persistence', async () => {
+    const { services, create } = launchGraph('CODEX', 'haiku', 'gpt-saved');
+    const discover = vi.spyOn(services.sessionConfigService, 'getLaunchOptions').mockResolvedValue({
+      provider: 'CODEX',
+      model: 'gpt-explicit',
+      reasoning: { options: [] },
+      planMode: { supported: true, selected: false },
+      accessMode: { options: [{ value: 'agent', label: 'Auto review' }] },
+    });
+    guardGlobals();
+    await expect(
+      services.launchWorkspace({
+        ...manual,
+        model: 'gpt-explicit',
+        accessMode: 'bypassPermissions',
+      })
+    ).rejects.toThrow('access mode');
+    expect(create).not.toHaveBeenCalled();
+    expect(agentSessionAccessor.create).not.toHaveBeenCalled();
+    await services.launchWorkspace({ ...manual, model: 'gpt-explicit', accessMode: 'agent' });
+    expect(discover).toHaveBeenLastCalledWith({ provider: 'CODEX', model: 'gpt-explicit' });
+    expect(agentSessionAccessor.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'CODEX',
+        model: 'gpt-explicit',
+        providerMetadata: { launchSettings: { accessMode: 'agent', applied: false } },
+      })
+    );
+  });
+
   it('preserves an explicit compatible model through real persistence', async () => {
     const { services, events } = launchGraph('CLAUDE', 'haiku', 'gpt-saved');
     guardGlobals();

@@ -4,7 +4,7 @@ import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { AcpConfigOption } from '@/client/features/chat/reducer';
+import type { AcpConfigOption } from '@/client/lib/acp-config';
 import { AcpConfigSelector } from './acp-config-selector';
 
 const modelOption: AcpConfigOption = {

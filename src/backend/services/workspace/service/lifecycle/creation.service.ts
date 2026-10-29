@@ -31,6 +31,7 @@ export type WorkspaceCreationSource =
       startupModePreset?: 'non_interactive' | 'plan';
       provider?: SessionProvider;
       model?: string;
+      accessMode?: string;
       reasoningEffort?: string | null;
       planModeEnabled?: boolean;
     }

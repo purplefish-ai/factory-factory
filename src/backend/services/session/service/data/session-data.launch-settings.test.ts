@@ -24,6 +24,7 @@ describe('durable session launch settings', () => {
       const input = {
         workspaceId: 'workspace',
         workflow: 'followup',
+        accessMode: 'agent',
         reasoningEffort: null,
         planModeEnabled: false,
       };
@@ -42,7 +43,12 @@ describe('durable session launch settings', () => {
       expect(writer).toHaveBeenCalledWith(
         expect.objectContaining({
           providerMetadata: {
-            launchSettings: { reasoningEffort: null, planModeEnabled: false, applied: false },
+            launchSettings: {
+              accessMode: 'agent',
+              reasoningEffort: null,
+              planModeEnabled: false,
+              applied: false,
+            },
           },
         })
       );

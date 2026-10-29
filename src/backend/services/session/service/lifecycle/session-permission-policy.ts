@@ -1,6 +1,7 @@
 import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
+import { CLAUDE_AUTO_FALLBACK, resolveLaunchAccessMode } from '@/shared/session-launch';
 import type { SessionPermissionPreset } from '@prisma-gen/client';
 import { parseAcpConfigSnapshot } from './acp-config-snapshot';
 import { getConfigOptionValues } from './session-config-option-helpers';
@@ -71,28 +72,14 @@ export async function applyReadOnlyReviewPermissions(
   return didUpdate;
 }
 
-// Presets name the adapters' shared mode kinds: standard, auto review, full access.
-const ACCESS_MODE_TARGETS: Record<'CLAUDE' | 'CODEX', Record<SessionPermissionPreset, string>> = {
-  CODEX: { STRICT: 'workspace-write', RELAXED: 'agent', YOLO: 'agent-full-access' },
-  CLAUDE: { STRICT: 'default', RELAXED: 'auto', YOLO: 'bypassPermissions' },
-};
-
-// Claude's adapter applies Accept edits when the selected model lacks Auto mode.
-const CLAUDE_AUTO_FALLBACK = 'acceptEdits';
-
 export function resolveConfiguredAccessModeTarget(
   provider: string,
   modeOption: SessionConfigOption,
   permissionPreset: SessionPermissionPreset
 ): string | null {
-  const target = ACCESS_MODE_TARGETS[provider === 'CODEX' ? 'CODEX' : 'CLAUDE'][permissionPreset];
-  const values = getConfigOptionValues(modeOption);
-  if (values.includes(target)) {
-    return target;
-  }
-  return provider === 'CLAUDE' && target === 'auto' && values.includes(CLAUDE_AUTO_FALLBACK)
-    ? CLAUDE_AUTO_FALLBACK
-    : null;
+  return (
+    resolveLaunchAccessMode(provider, permissionPreset, getConfigOptionValues(modeOption)) ?? null
+  );
 }
 
 /** Whether the adapter's current mode satisfies a requested access target. */

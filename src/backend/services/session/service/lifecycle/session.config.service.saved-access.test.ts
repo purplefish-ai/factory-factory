@@ -281,6 +281,21 @@ describe('saved native session access', () => {
     );
   });
 
+  it('restores access from the committed replacement snapshot after fallback', async () => {
+    const h = setup('CODEX', 'read-only', {
+      kind: 'resume_fallback',
+      previousProviderSessionId: 'old-thread',
+      reason: 'load_failed',
+    });
+    await h.service.applyConfiguredPermissionPreset(
+      'session',
+      unsafeCoerce(h.session),
+      h.handle,
+      'YOLO'
+    );
+    expect(h.handle.configOptions[0]?.currentValue).toBe('read-only');
+  });
+
   it('rejects an unrelated runtime identity', async () => {
     const h = setup();
     h.handle.providerSessionId = 'unrelated';

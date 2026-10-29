@@ -206,6 +206,7 @@ function createBridgeServices(
         getMaxSessionsPerWorkspace: vi.fn(),
         resolveProvider: vi.fn(),
         checkCliHealth: vi.fn(),
+        getLaunchOptions: vi.fn(),
         logger: services.createLogger('domain-bridges'),
       }),
     workspaceDataService,

@@ -72,6 +72,8 @@ export function SearchDialog({
           value={selected}
           onValueChange={setSelected}
           loop
+          // cmdk's vim bindings consume Ctrl+K, which must reach the global toggle.
+          vimBindings={false}
           className="**:data-[slot=command-input-wrapper]:h-14"
         >
           <div className="relative">

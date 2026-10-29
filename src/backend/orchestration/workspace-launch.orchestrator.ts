@@ -11,7 +11,7 @@ import type {
   sessionProviderResolverService,
 } from '@/backend/services/session';
 import type { WorkspaceCreationService } from '@/backend/services/workspace';
-import type { SessionLaunchSettings } from '@/shared/session-launch';
+import type { SessionLaunchOptions, SessionLaunchSettings } from '@/shared/session-launch';
 
 type WorkspaceCreation = WorkspaceCreationService['create'];
 
@@ -38,6 +38,10 @@ export interface WorkspaceLaunchPorts {
   getMaxSessionsPerWorkspace(): number;
   resolveProvider: typeof sessionProviderResolverService.resolveProviderForWorkspaceCreation;
   checkCliHealth(): Promise<ProviderCliHealthStatus>;
+  getLaunchOptions(input: {
+    provider: 'CLAUDE' | 'CODEX';
+    model?: string;
+  }): Promise<SessionLaunchOptions>;
   createWorkspace: WorkspaceCreation;
   createDefaultSession(
     input: Parameters<typeof sessionDataService.createAgentSession>[0]
@@ -121,6 +125,7 @@ function explicitSessionModel(
   }
   return {
     ...(source.model !== undefined ? { model: source.model } : {}),
+    ...(source.accessMode !== undefined ? { accessMode: source.accessMode } : {}),
     ...(source.reasoningEffort !== undefined ? { reasoningEffort: source.reasoningEffort } : {}),
     ...(source.planModeEnabled !== undefined ? { planModeEnabled: source.planModeEnabled } : {}),
   };
@@ -131,8 +136,8 @@ async function preflightInteractiveLaunch(
   capacity: number,
   ports: WorkspaceLaunchPorts
 ): Promise<Awaited<ReturnType<WorkspaceLaunchPorts['resolveProvider']>> | undefined> {
-  const { model } = explicitSessionModel(source);
-  if (capacity <= 0 && model === undefined) {
+  const { model, accessMode } = explicitSessionModel(source);
+  if (capacity <= 0 && model === undefined && accessMode === undefined) {
     return undefined;
   }
   const provider = await ports.resolveProvider(
@@ -146,6 +151,18 @@ async function preflightInteractiveLaunch(
       throw new ApplicationError(
         'PRECONDITION_FAILED',
         `Cannot create workspace: ${unavailableMessage}`
+      );
+    }
+  }
+  if (accessMode !== undefined) {
+    const options = await ports.getLaunchOptions({ provider, model });
+    if (
+      accessMode === 'plan' ||
+      !options.accessMode?.options.some((option) => option.value === accessMode)
+    ) {
+      throw new ApplicationError(
+        'INVALID_INPUT',
+        'Requested access mode is unavailable for the selected provider/model'
       );
     }
   }

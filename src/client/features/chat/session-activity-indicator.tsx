@@ -1,8 +1,17 @@
 import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
+import { CloverIcon } from '@phosphor-icons/react/dist/csr/Clover';
+import { FlowerIcon } from '@phosphor-icons/react/dist/csr/Flower';
+import { FlowerLotusIcon } from '@phosphor-icons/react/dist/csr/FlowerLotus';
 import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import type { SessionWorkState } from '@/shared/session-runtime';
 import { LoadingIndicator } from './agent-activity';
+
+const SUBAGENT_ICONS = [
+  { icon: FlowerIcon, color: 'text-amber-600 dark:text-amber-400' },
+  { icon: FlowerLotusIcon, color: 'text-teal-600 dark:text-teal-300' },
+  { icon: CloverIcon, color: 'text-violet-600 dark:text-violet-400' },
+];
 
 export function SessionActivityIndicator({
   work,
@@ -63,9 +72,18 @@ export function SessionActivityIndicator({
             onClick={onOpenAgents}
             disabled={!onOpenAgents}
             title="Open Sessions panel"
-            className="block text-sm text-muted-foreground enabled:cursor-pointer enabled:hover:text-foreground enabled:hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+            className="group flex max-w-full items-center gap-2 rounded-sm text-left text-sm text-muted-foreground transition-colors enabled:cursor-pointer enabled:hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            {subagentLabel}
+            <span aria-hidden="true" className="flex shrink-0 items-center gap-0.5">
+              {SUBAGENT_ICONS.slice(0, runningSubagents).map(({ icon: Icon, color }) => (
+                <Icon key={color} weight="duotone" className={`h-5 w-5 ${color}`} />
+              ))}
+            </span>
+            <span>{subagentLabel}</span>
+            <CaretRightIcon
+              aria-hidden="true"
+              className="h-3.5 w-3.5 shrink-0 opacity-50 transition-opacity group-enabled:group-hover:opacity-100"
+            />
           </button>
         </div>
       )}

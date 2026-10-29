@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { useRef } from 'react';
+import { type ComponentProps, useRef } from 'react';
 import type { ChatMessage } from '@/lib/chat-protocol';
 import {
   createAssistantMessage,
@@ -44,6 +44,47 @@ export const WorkspaceCreation: Story = {
 };
 
 export const SessionLoading: Story = {};
+
+const startupMessage = createUserMessage('Please fix the failing tests and explain what changed.');
+
+function StartupPreview(props: ComponentProps<typeof VirtualizedMessageList>) {
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  return (
+    <div ref={scrollContainerRef} className="h-full overflow-auto">
+      <VirtualizedMessageList {...props} scrollContainerRef={scrollContainerRef} />
+    </div>
+  );
+}
+
+export const QueuedDuringInitScript: Story = {
+  render: (args) => <StartupPreview {...args} />,
+  args: {
+    messages: [startupMessage],
+    queuedMessageIds: new Set([startupMessage.id]),
+    onRemoveQueuedMessage: () => undefined,
+    initBanner: {
+      kind: 'info',
+      message: 'Running init script...',
+      showRetry: false,
+      showPlay: false,
+      showDismiss: false,
+    },
+  },
+};
+
+export const QueuedDuringSessionLoading: Story = {
+  ...QueuedDuringInitScript,
+  args: { ...QueuedDuringInitScript.args, initBanner: null },
+};
+
+export const QueuedDuringAgentStartup: Story = {
+  ...QueuedDuringSessionLoading,
+  args: {
+    ...QueuedDuringSessionLoading.args,
+    loadingSession: false,
+    startingSession: true,
+  },
+};
 
 export const BackgroundPreview: Story = {
   args: {

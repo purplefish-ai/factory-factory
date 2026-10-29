@@ -254,7 +254,10 @@ function enqueueAutoMessage(
       planModeEnabled: false,
     },
   };
-  const enqueueResult = sessionDomainService.enqueue(sessionId, queued);
+  const enqueueResult = sessionDomainService.enqueueInitialMessage(sessionId, queued);
+  if (!enqueueResult) {
+    return;
+  }
   if ('error' in enqueueResult) {
     logger.warn('Failed to enqueue auto message for session', {
       workspaceId,
@@ -387,10 +390,7 @@ async function bindInitialMonitoringSession(workspaceId: string, sessionId: stri
   }
 }
 
-async function startDefaultAgentSession(
-  workspaceId: string,
-  dependencies: WorkspaceDispatchDependencies
-): Promise<string | null> {
+async function prepareDefaultAgentSession(workspaceId: string, signal: AbortSignal) {
   try {
     const sessions = await sessionDataService.findAgentSessionsByWorkspaceId(workspaceId, {
       status: SessionStatus.IDLE,
@@ -425,12 +425,9 @@ async function startDefaultAgentSession(
         }
       : initialMessage;
 
-    // Start the session - pass empty string to start without any initial prompt
-    // (undefined would default to 'Continue with the task.')
-    await sessionLifecycleService.startSession(session.id, {
-      initialPrompt: '',
-      startupModePreset,
-    });
+    if (signal.aborted) {
+      return null;
+    }
 
     // Route the initial prompt through the queue pipeline so runtime and replay remain consistent.
     if (messageToEnqueue) {
@@ -443,19 +440,46 @@ async function startDefaultAgentSession(
       );
     }
 
-    await bindInitialMonitoringSession(workspaceId, session.id);
+    return {
+      sessionId: session.id,
+      startupModePreset,
+      hasInitialPrompt: !!initialMessage?.text,
+      hasInitialAttachments: (initialMessage?.attachments?.length ?? 0) > 0,
+    };
+  } catch (error) {
+    logger.warn('Failed to prepare default agent session for workspace', {
+      workspaceId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
+async function startDefaultAgentSession(
+  workspaceId: string,
+  preparedSession: Awaited<ReturnType<typeof prepareDefaultAgentSession>>,
+  dependencies: WorkspaceDispatchDependencies
+): Promise<string | null> {
+  if (!preparedSession) {
+    return null;
+  }
+  const { sessionId, startupModePreset, hasInitialPrompt, hasInitialAttachments } = preparedSession;
+  try {
+    // The initial prompt is already queued; an empty string avoids the default continuation.
+    await sessionLifecycleService.startSession(sessionId, { initialPrompt: '', startupModePreset });
+    await bindInitialMonitoringSession(workspaceId, sessionId);
 
     // Trigger queue dispatch after init/session start so messages queued during
     // workspace provisioning are picked up immediately when dispatch is allowed.
-    await dependencies.sessionDispatch.tryDispatchNextMessage(session.id);
+    await dependencies.sessionDispatch.tryDispatchNextMessage(sessionId);
 
     logger.debug('Auto-started default Claude session for workspace', {
       workspaceId,
-      sessionId: session.id,
-      hasInitialPrompt: !!initialMessage?.text,
-      hasInitialAttachments: (initialMessage?.attachments?.length ?? 0) > 0,
+      sessionId,
+      hasInitialPrompt,
+      hasInitialAttachments,
     });
-    return session.id;
+    return sessionId;
   } catch (error) {
     logger.warn('Failed to auto-start default Claude session for workspace', {
       workspaceId,
@@ -699,10 +723,17 @@ async function runWorkspaceInitialization(
   let worktreeRegistered = false;
   let createdWorktreeInfo: CreatedWorktreeInfo | undefined;
   let autoCreatedTerminalId: string | undefined;
+  const preparationController = new AbortController();
 
   try {
     const workspaceWithProject = await getWorkspaceWithProjectOrThrow(workspaceId);
     project = workspaceWithProject.project;
+
+    // Fetch issue prompts alongside setup, publishing the queue as soon as it is ready.
+    const preparedSessionPromise = prepareDefaultAgentSession(
+      workspaceId,
+      preparationController.signal
+    );
 
     const worktreeName = `workspace-${workspaceId}`;
     const baseBranch = options?.branchName ?? project.defaultBranch;
@@ -759,6 +790,9 @@ async function runWorkspaceInitialization(
       workspaceWithProject,
       worktreePath: worktreeInfo.worktreePath,
       factoryConfig,
+      beforeReady: async () => {
+        await preparedSessionPromise;
+      },
     });
     if (!startupScriptPipelineResult.handled) {
       await workspaceStateMachine.markReady(workspaceId);
@@ -766,15 +800,18 @@ async function runWorkspaceInitialization(
 
     // Provider startup hooks can depend on setup's files and installed tools.
     // Finish provisioning before starting the agent's bounded startup deadline.
-    const agentSessionPromise = startDefaultAgentSession(workspaceId, dependencies).catch(
-      (error) => {
-        logger.error('Failed to start default Claude session', {
-          workspaceId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        return null;
-      }
-    );
+    const preparedSession = await preparedSessionPromise;
+    const agentSessionPromise = startDefaultAgentSession(
+      workspaceId,
+      preparedSession,
+      dependencies
+    ).catch((error) => {
+      logger.error('Failed to start default Claude session', {
+        workspaceId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    });
 
     await awaitSessionAndDispatchIfSuccess(
       workspaceId,
@@ -783,6 +820,7 @@ async function runWorkspaceInitialization(
       dependencies
     );
   } catch (error) {
+    preparationController.abort();
     await handleWorkspaceInitFailure(
       workspaceId,
       toError(error),
@@ -792,6 +830,7 @@ async function runWorkspaceInitialization(
         : undefined
     );
   } finally {
+    preparationController.abort();
     if (worktreeCreated) {
       await worktreeLifecycleService.clearInitMode(workspaceId);
     }

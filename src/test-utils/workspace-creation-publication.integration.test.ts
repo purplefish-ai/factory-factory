@@ -254,6 +254,9 @@ describe('committed workspace creation publication', () => {
                     resolveProvider: () => {
                       throw new Error('Unexpected provider resolution');
                     },
+                    getLaunchOptions: () => {
+                      throw new Error('Unexpected launch discovery');
+                    },
                     checkCliHealth: () => {
                       throw new Error('Unexpected CLI preflight');
                     },

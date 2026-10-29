@@ -16,6 +16,7 @@ import { isSessionSummaryWorking } from '@/shared/session-runtime';
 import { forgetResumeWorkspace } from './resume-workspace-storage';
 import { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
 import {
+  useArchivedWorkspaceRedirect,
   useAutoFocusChatInput,
   useSelectedSessionId,
   useWorkspaceHasChanges,
@@ -39,19 +40,6 @@ export function WorkspaceDetailContainer() {
 
   const { workspace, workspaceLoading, sessions, initialDbSessionId, maxSessions } =
     useWorkspaceData({ workspaceId: workspaceId });
-
-  useEffect(() => {
-    if (workspace?.status !== 'ARCHIVING' && workspace?.status !== 'ARCHIVED') {
-      return;
-    }
-
-    if (slug) {
-      void navigate(`/projects/${slug}/workspaces`, { replace: true });
-      return;
-    }
-
-    void navigate('/projects', { replace: true });
-  }, [workspace?.status, slug, navigate]);
 
   const {
     rightPanelVisible,
@@ -207,6 +195,11 @@ export function WorkspaceDetailContainer() {
     selectedDbSessionId,
     setSelectedDbSessionId,
     onArchiveGitIndexLocked: () => setArchiveGitLockDialogOpen(true),
+  });
+  useArchivedWorkspaceRedirect({
+    status: workspace?.status,
+    slug,
+    archivePending: archiveWorkspace.isPending,
   });
 
   const handleArchive = useCallback(

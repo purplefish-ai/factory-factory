@@ -7,7 +7,7 @@ import { observable } from '@trpc/server/observable';
 import { useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
-import { MemoryRouter, useLocation } from 'react-router';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { toast } from 'sonner';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useWorkspaceArchiveCommand } from '@/client/features/workspace/use-workspace-archive-command';
@@ -19,6 +19,7 @@ import {
   type ProjectWorkspaceCache,
 } from '@/client/lib/workspace-cache-reconciler';
 import { useSessionManagement } from '@/client/routes/projects/workspaces/use-workspace-detail';
+import { useArchivedWorkspaceRedirect } from '@/client/routes/projects/workspaces/use-workspace-detail-hooks';
 import { makeWorkspaceSnapshotEntry as entry } from '@/test-utils/workspace-snapshot';
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }));
@@ -39,17 +40,22 @@ function CommandProbe({
   onResult(useWorkspaceArchiveCommand());
   return null;
 }
+function LocationProbe({ onLocation }: { onLocation: (location: string) => void }) {
+  onLocation(useLocation().pathname);
+  return null;
+}
 function RouteProbe({
   workspaceId,
+  status,
   onResult,
   locked,
 }: {
   workspaceId: string;
-  onResult: (route: ReturnType<typeof useSessionManagement>, location: string) => void;
+  status: 'READY' | 'ARCHIVING' | 'ARCHIVED' | undefined;
+  onResult: (route: ReturnType<typeof useSessionManagement>) => void;
   locked: () => void;
 }) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const location = useLocation().pathname;
   const route = useSessionManagement({
     workspaceId,
     slug: 'project',
@@ -59,8 +65,20 @@ function RouteProbe({
     setSelectedDbSessionId: vi.fn(),
     onArchiveGitIndexLocked: locked,
   });
-  onResult(route, location);
+  useArchivedWorkspaceRedirect({
+    status,
+    slug: 'project',
+    archivePending: route.archiveWorkspace.isPending,
+  });
+  onResult(route);
   return null;
+}
+
+/** Router navigation commits a few tasks after the effect that requested it. */
+async function settleRouterNavigation() {
+  for (let task = 0; task < 10; task++) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
 }
 
 function fixture(surface: 'command' | 'route' = 'command', availabilityFailure = false) {
@@ -114,12 +132,17 @@ function fixture(surface: 'command' | 'route' = 'command', availabilityFailure =
   const locked = vi.fn();
   const root = createRoot(document.createElement('div'));
   roots.push(root);
-  const render = (workspaceId = 'ws-1') =>
+  const render = (workspaceId = 'ws-1', status?: 'READY' | 'ARCHIVING' | 'ARCHIVED') =>
     flushSync(() =>
       root.render(
         <QueryClientProvider client={queryClient}>
           <trpc.Provider client={client} queryClient={queryClient}>
             <MemoryRouter initialEntries={['/detail']}>
+              <LocationProbe
+                onLocation={(nextLocation) => {
+                  location = nextLocation;
+                }}
+              />
               {surface === 'command' ? (
                 <CommandProbe
                   onResult={(value) => {
@@ -127,14 +150,22 @@ function fixture(surface: 'command' | 'route' = 'command', availabilityFailure =
                   }}
                 />
               ) : (
-                <RouteProbe
-                  workspaceId={workspaceId}
-                  locked={locked}
-                  onResult={(value, nextLocation) => {
-                    route = value;
-                    location = nextLocation;
-                  }}
-                />
+                <Routes>
+                  <Route
+                    path="/detail"
+                    element={
+                      <RouteProbe
+                        workspaceId={workspaceId}
+                        status={status}
+                        locked={locked}
+                        onResult={(value) => {
+                          route = value;
+                        }}
+                      />
+                    }
+                  />
+                  <Route path="*" element={null} />
+                </Routes>
               )}
             </MemoryRouter>
           </trpc.Provider>
@@ -441,13 +472,14 @@ describe('workspace detail archive caller', () => {
     vi.spyOn(f.queryClient, 'invalidateQueries').mockRejectedValue(new Error('refresh failed'));
     f.route().archiveWorkspace.mutate({ id: 'ws-1' }, { onSuccess: success, onError: error });
     await vi.waitFor(() => expect(f.requests).toHaveLength(1));
+    // Success navigation unmounts the detail route, so check IDE state while it is live.
+    expect(f.route().availableIdes).toEqual([{ id: 'code', name: 'VS Code' }]);
+    expect(f.route().preferredIde).toBe('code');
     f.requests[0]!.resolve({ id: 'ws-1' });
     await vi.waitFor(() => expect(success).toHaveBeenCalledOnce());
     expect(error).not.toHaveBeenCalled();
-    expect(f.location()).toBe('/projects/project/workspaces');
+    await vi.waitFor(() => expect(f.location()).toBe('/projects/project/workspaces'));
     expect(f.rows().map((row) => row.id)).toEqual(['ws-2']);
-    expect(f.route().availableIdes).toEqual([{ id: 'code', name: 'VS Code' }]);
-    expect(f.route().preferredIde).toBe('code');
   });
 
   it.each(['ordinary', 'locked'])(
@@ -525,6 +557,81 @@ describe('workspace detail archive caller', () => {
     expect(f.location()).toBe('/detail');
     expect(f.rows()[0]?.name).toBe('latest failed route');
   });
+
+  it('stays on detail while its own archive is pending so a lock failure opens recovery', async () => {
+    const f = fixture('route');
+    const error = vi.fn();
+    f.route().archiveWorkspace.mutate({ id: 'ws-1' }, { onError: error });
+    await vi.waitFor(() => expect(f.requests).toHaveLength(1));
+    expect(f.route().archiveWorkspace.isPending).toBe(true);
+    // The server persists and broadcasts ARCHIVING before doing the archive work.
+    f.render('ws-1', 'ARCHIVING');
+    await settleRouterNavigation();
+    expect(f.location()).toBe('/detail');
+    // The server rolls the status back before rejecting with the lock error.
+    f.render('ws-1', 'READY');
+    const locked = TRPCClientError.from({
+      error: {
+        message: 'Git locked',
+        code: -32_603,
+        data: { applicationErrorKind: 'GIT_INDEX_LOCKED' },
+      },
+    });
+    f.requests[0]!.reject(locked);
+    await vi.waitFor(() => expect(f.locked).toHaveBeenCalledOnce());
+    expect(error).toHaveBeenCalledWith(locked);
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(f.location()).toBe('/detail');
+  });
+
+  it('keeps lock recovery mounted when the failed archive refresh leaves ARCHIVING cached', async () => {
+    const f = fixture('route');
+    vi.spyOn(f.queryClient, 'invalidateQueries').mockRejectedValue(new Error('refresh failed'));
+    f.route().archiveWorkspace.mutate({ id: 'ws-1' }, { onError: vi.fn() });
+    await vi.waitFor(() => expect(f.requests).toHaveLength(1));
+    f.render('ws-1', 'ARCHIVING');
+    await settleRouterNavigation();
+    f.requests[0]!.reject(
+      TRPCClientError.from({
+        error: {
+          message: 'Git locked',
+          code: -32_603,
+          data: { applicationErrorKind: 'GIT_INDEX_LOCKED' },
+        },
+      })
+    );
+    await vi.waitFor(() => expect(f.route().archiveWorkspace.isPending).toBe(false));
+    expect(f.locked).toHaveBeenCalledOnce();
+    await settleRouterNavigation();
+    expect(f.location()).toBe('/detail');
+    // Once a fresh status arrives, a later archive from another surface redirects again.
+    f.render('ws-1', 'READY');
+    await settleRouterNavigation();
+    f.render('ws-1', 'ARCHIVING');
+    await vi.waitFor(() => expect(f.location()).toBe('/projects/project/workspaces'));
+  });
+
+  it('navigates once its own pending archive succeeds while ARCHIVED is already visible', async () => {
+    const f = fixture('route');
+    const success = vi.fn();
+    f.route().archiveWorkspace.mutate({ id: 'ws-1' }, { onSuccess: success });
+    await vi.waitFor(() => expect(f.requests).toHaveLength(1));
+    f.render('ws-1', 'ARCHIVED');
+    await settleRouterNavigation();
+    expect(f.location()).toBe('/detail');
+    f.requests[0]!.resolve({ id: 'ws-1' });
+    await vi.waitFor(() => expect(success).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(f.location()).toBe('/projects/project/workspaces'));
+  });
+
+  it.each(['ARCHIVING', 'ARCHIVED'] as const)(
+    'redirects when %s comes from another archive surface',
+    async (status) => {
+      const f = fixture('route');
+      f.render('ws-1', status);
+      await vi.waitFor(() => expect(f.location()).toBe('/projects/project/workspaces'));
+    }
+  );
 
   it.each(['ws-2', 'ws-1'])(
     'keeps late success in its originating cache after navigation to %s',
