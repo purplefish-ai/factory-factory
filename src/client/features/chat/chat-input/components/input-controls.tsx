@@ -128,6 +128,21 @@ export interface LeftControlsProps {
   onSetConfigOption?: (configId: string, value: string) => void;
 }
 
+function providesPlanning(option: AcpConfigOption) {
+  const planningIds = ['collaboration_mode', 'plan_mode'];
+  if (planningIds.includes(option.id) || planningIds.includes(option.category ?? '')) {
+    return true;
+  }
+  return (
+    (option.id === 'mode' || option.category === 'mode') &&
+    option.options.some((entry) =>
+      'group' in entry
+        ? entry.options.some((choice) => choice.value === 'plan')
+        : entry.value === 'plan'
+    )
+  );
+}
+
 function getRuntimeControls(props: LeftControlsProps) {
   const { capabilities, settings, acpConfigOptions, onSetConfigOption } = props;
   const modelOption = acpConfigOptions?.find(
@@ -138,6 +153,8 @@ function getRuntimeControls(props: LeftControlsProps) {
     : [];
   const hasNative = (...ids: string[]) =>
     nativeOptions.some((option) => ids.includes(option.id) || ids.includes(option.category ?? ''));
+  const hasNativeReasoning = hasNative('reasoning', 'reasoning_effort', 'effort', 'thought_level');
+  const hasNativePlanning = nativeOptions.some(providesPlanning);
   const modelOptions: ChatModelOption[] = modelOption
     ? modelOption.options.flatMap((entry) =>
         'group' in entry
@@ -164,10 +181,10 @@ function getRuntimeControls(props: LeftControlsProps) {
     showReasoning:
       capabilities?.reasoning.enabled === true &&
       capabilities.reasoning.options.length > 0 &&
-      !hasNative('reasoning', 'reasoning_effort'),
-    showThinking: capabilities?.thinking.enabled === true && !hasNative('thinking'),
-    showPlanning:
-      capabilities?.planMode.enabled === true && !hasNative('collaboration_mode', 'plan_mode'),
+      !hasNativeReasoning,
+    showThinking:
+      capabilities?.thinking.enabled === true && !hasNative('thinking') && !hasNativeReasoning,
+    showPlanning: capabilities?.planMode.enabled === true && !hasNativePlanning,
   };
 }
 

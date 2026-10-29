@@ -212,7 +212,8 @@ export const ClaudeToolbar: Story = {
         options: [{ value: 'sonnet', label: 'Sonnet 5' }],
       },
       reasoning: { enabled: false, options: [] },
-      planMode: { enabled: false },
+      thinking: { enabled: true },
+      planMode: { enabled: true },
       attachments: { enabled: true, kinds: ['image'] },
     },
     acpConfigOptions: [
@@ -258,6 +259,18 @@ export const ClaudeToolbar: Story = {
         options: [
           { value: 'off', name: 'Off' },
           { value: 'on', name: 'On' },
+        ],
+      },
+      {
+        id: 'ultracode',
+        name: 'Ultracode',
+        type: 'select',
+        category: 'model_config',
+        currentValue: 'off',
+        description: 'Dynamic workflows on every task, at any effort level',
+        options: [
+          { value: 'on', name: 'On' },
+          { value: 'off', name: 'Off' },
         ],
       },
     ],

@@ -176,6 +176,68 @@ function renderSelectionControls(
 
 describe('provider and model selection', () => {
   it.each([false, true])(
+    'uses native Claude controls without legacy duplicates (mobile=%s)',
+    (mobile) => {
+      mocks.mobile = mobile;
+      const mounted = renderSelectionControls({
+        capabilities: { ...selectionCapabilities, provider: 'CLAUDE' },
+        acpConfigOptions: [
+          {
+            id: 'mode',
+            name: 'Mode',
+            type: 'select',
+            category: 'mode',
+            currentValue: 'acceptEdits',
+            options: [
+              { value: 'acceptEdits', name: 'Accept edits' },
+              { value: 'plan', name: 'Plan' },
+            ],
+          },
+          {
+            id: 'effort',
+            name: 'Effort',
+            type: 'select',
+            category: 'thought_level',
+            currentValue: 'high',
+            options: [
+              { value: 'high', name: 'High' },
+              { value: 'low', name: 'Low' },
+            ],
+          },
+        ],
+      });
+      try {
+        if (mobile) {
+          flushSync(() =>
+            mounted.container
+              .querySelector<HTMLButtonElement>('[aria-label="Open chat options"]')
+              ?.click()
+          );
+        }
+        const surface = mobile ? document.body : mounted.container;
+        expect(surface.querySelectorAll('[aria-label="Reasoning effort: High"]')).toHaveLength(1);
+        expect(surface.querySelector('[aria-label="Access: Accept edits"]')).not.toBeNull();
+        expect(surface.querySelector('[aria-label="Toggle thinking mode"]')).toBeNull();
+        expect(surface.querySelector('[aria-label="Toggle planning mode"]')).toBeNull();
+        flushSync(() =>
+          surface
+            .querySelector<HTMLButtonElement>('[aria-label="Reasoning effort: High"]')
+            ?.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowDown' }))
+        );
+        const low = [...document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]')].find(
+          (item) => item.textContent === 'Low'
+        );
+        flushSync(() => low?.click());
+        expect(mounted.props.onSetConfigOption).toHaveBeenCalledWith('effort', 'low');
+        expect(mounted.props.onThinkingChange).not.toHaveBeenCalled();
+        expect(mounted.props.onReasoningChange).not.toHaveBeenCalled();
+      } finally {
+        mounted.unmount();
+      }
+    }
+  );
+
+  it.each([false, true])(
     'keeps the selected model visible with mode-only ACP options (mobile=%s)',
     (mobile) => {
       mocks.mobile = mobile;

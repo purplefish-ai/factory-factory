@@ -103,6 +103,31 @@ export const FastModeEnabled: Story = {
   ...FastMode,
   args: { configOption: { ...FastMode.args!.configOption!, currentValue: 'on' } },
 };
+export const Ultracode: Story = {
+  render: InteractiveToggle,
+  args: {
+    configOption: {
+      id: 'ultracode',
+      name: 'Ultracode',
+      type: 'select',
+      category: 'model_config',
+      currentValue: 'off',
+      description: 'Dynamic workflows on every task, at any effort level',
+      options: [
+        { value: 'on', name: 'On' },
+        { value: 'off', name: 'Off' },
+      ],
+    },
+  },
+};
+export const UltracodeEnabled: Story = {
+  ...Ultracode,
+  args: { configOption: { ...Ultracode.args!.configOption!, currentValue: 'on' } },
+};
+export const UltracodeMobile: Story = {
+  ...Ultracode,
+  args: { ...Ultracode.args, compact: false },
+};
 export const DisabledPlanning: Story = {
   ...CodexPlanning,
   args: { ...CodexPlanning.args, disabled: true },
