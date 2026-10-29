@@ -2,6 +2,7 @@ export {
   PeriodicTaskService,
   type PeriodicTaskWorkspaceBridge,
   type PeriodicTaskWorkspaceStatusBridge,
+  type PeriodicTaskTimerEvent,
 } from './service';
 
 import { createLogger } from '@/backend/services/logger.service';

@@ -125,7 +125,7 @@ export function configureDomainBridges(services: BridgeServices): void {
 
   const { prObservationService, sessionBackgroundDeliveryService, userSettingsService } = services;
   const observationPorts = createPRObservationPorts(services);
-  const deliveryPorts = createPRDeliveryPorts(services);
+  const deliveryPorts = createPRDeliveryPorts(services, logger);
   // === Ratchet domain bridges ===
   ratchetService.configure({
     retireLegacy: () => retireLegacyRatchetSessions(services),
