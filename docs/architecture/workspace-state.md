@@ -30,11 +30,11 @@ hooks can depend on installed tools and generated files, so setup does not run
 inside the agent's startup timeout. Initial task preparation runs alongside
 provisioning, so issue lookups do not delay worktree creation or setup. The task
 is published as soon as it is ready, before READY, and remains cancellable
-during setup. Disconnect cleanup retains queued work while clearing cached
-history and runtime state; provisioning retries preserve cancellation within the
-running server. Non-fatal script failures still persist READY with a warning
-before the agent starts; unexpected provisioning failures do not start an agent
-or publish a late prompt.
+during setup. Inactive disconnect cleanup retains the queue only while the
+initial task is undelivered, and clears cached history and runtime state.
+Provisioning retries preserve cancellation within the running server. Non-fatal
+script failures still persist READY with a warning before the agent starts;
+unexpected provisioning failures do not start an agent or publish a late prompt.
 
 Retrying a ready workspace with a setup warning restores READY even when its
 setup and startup scripts have been removed, before queued messages dispatch.
