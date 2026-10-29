@@ -10,6 +10,5 @@
   "src/backend/services/session/service/lifecycle/session.service.test.ts": 2369,
   "src/backend/services/workspace/service/lifecycle/state-machine.service.test.ts": 1115,
   "src/cli/proxy.ts": 1022,
-  "src/client/features/chat/chat-reducer.test.ts": 4268,
-  "src/lib/claude-fixtures.ts": 1162
+  "src/client/features/chat/chat-reducer.test.ts": 4268
 }
