@@ -1,13 +1,11 @@
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { cruise } from 'dependency-cruiser';
-import extractTSConfig from 'dependency-cruiser/config-utl/extract-ts-config';
 import { expect, it } from 'vitest';
-import configuration from '../../../.dependency-cruiser.cjs';
+import { cruiseFixture } from '@/backend/testing/dependency-cruiser';
 
 async function checkBoundary(producer: string, ports = 'export interface Ports {}') {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), 'pr-observation-boundary-')));
+  const root = mkdtempSync(join(tmpdir(), 'pr-observation-boundary-'));
   const files = {
     'tsconfig.json': JSON.stringify({ compilerOptions: { module: 'ESNext' } }),
     'src/backend/orchestration/pr-observation.orchestrator.ts': producer,
@@ -25,18 +23,7 @@ async function checkBoundary(producer: string, ports = 'export interface Ports {
       mkdirSync(dirname(file), { recursive: true });
       writeFileSync(file, source);
     }
-    return await cruise(
-      ['src'],
-      {
-        ...configuration.options,
-        baseDir: root,
-        ruleSet: configuration,
-        validate: true,
-        outputType: 'err',
-      },
-      {},
-      { tsConfig: extractTSConfig(join(root, 'tsconfig.json')) }
-    );
+    return await cruiseFixture(root);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

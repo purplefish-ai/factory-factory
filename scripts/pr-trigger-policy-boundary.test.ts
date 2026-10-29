@@ -2,10 +2,8 @@ import { spawnSync } from 'node:child_process';
 import { copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { cruise } from 'dependency-cruiser';
-import extractTSConfig from 'dependency-cruiser/config-utl/extract-ts-config';
 import { afterAll, expect, it } from 'vitest';
-import configuration from '../.dependency-cruiser.cjs';
+import { cruiseFixture } from '@/backend/testing/dependency-cruiser';
 
 const directory = mkdtempSync(join(tmpdir(), 'ff-pr-trigger-policy-'));
 const binary = resolve('node_modules/dependency-cruiser/bin/dependency-cruiser.mjs');
@@ -36,19 +34,7 @@ function createFixture(source: string, target: string, typeOnly = true) {
 
 async function checkImport(source: string, target: string, typeOnly = true) {
   const root = createFixture(source, target, typeOnly);
-  const result = await cruise(
-    ['src'],
-    {
-      ...configuration.options,
-      // Resolve symlinks such as macOS /var before matching root-relative rules.
-      baseDir: root,
-      ruleSet: configuration,
-      validate: true,
-      outputType: 'err',
-    },
-    {},
-    { tsConfig: extractTSConfig(join(root, 'tsconfig.json')) }
-  );
+  const result = await cruiseFixture(root);
   return { status: result.exitCode, output: result.output };
 }
 
