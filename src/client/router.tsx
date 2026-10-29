@@ -19,6 +19,7 @@ const WorkspaceDetailPage = lazy(() => import('./routes/projects/workspaces/deta
 const WorkspacesListPage = lazy(() => import('./routes/projects/workspaces/list'));
 const NewWorkspacePage = lazy(() => import('./routes/projects/workspaces/new'));
 const ReviewsPage = lazy(() => import('./routes/reviews'));
+const LegacyReviewsPage = lazy(() => import('./routes/reviews/legacy'));
 
 const MobileBaselinePage = lazy(() => import('./routes/mobile-baseline'));
 const isDevelopmentMode = import.meta.env.MODE === 'development';
@@ -104,7 +105,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'reviews',
-        element: <ReviewsPage />,
+        element: <LegacyReviewsPage />,
       },
       {
         path: 'admin',

@@ -3,7 +3,8 @@ import { prReviewRouter } from './pr-review.trpc';
 
 function createCaller(overrides?: {
   checkHealth?: () => Promise<{ isInstalled: boolean; isAuthenticated: boolean }>;
-  listReviewRequests?: () => Promise<unknown[]>;
+  listReviewRequests?: (repository?: string) => Promise<unknown[]>;
+  findProject?: (id: string) => Promise<unknown>;
   getPRFullDetails?: (repo: string, number: number) => Promise<unknown>;
   getPRDiff?: (repo: string, number: number) => Promise<string>;
   submitReview?: (
@@ -16,6 +17,7 @@ function createCaller(overrides?: {
   return prReviewRouter.createCaller({
     appContext: {
       services: {
+        projectManagementService: { findById: overrides?.findProject ?? (async () => null) },
         listVisibleReviewRequests: overrides?.listReviewRequests ?? (async () => []),
         githubCLIService: {
           checkHealth:
@@ -95,5 +97,49 @@ describe('prReviewRouter', () => {
     ).resolves.toEqual({ success: true });
 
     expect(submitReview).toHaveBeenCalledWith('o/r', 12, 'request-changes', 'needs work');
+  });
+});
+
+describe('project-scoped reviews', () => {
+  it('resolves repository from the project, without changing global callers', async () => {
+    const listReviewRequests = vi.fn(async () => [{ number: 7 }]);
+    const findProject = vi.fn(async () => ({ githubOwner: 'Owner', githubRepo: 'Repo' }));
+    const caller = createCaller({ listReviewRequests, findProject });
+    expect((await caller.listReviewRequests({ projectId: 'p' })).prs).toEqual([{ number: 7 }]);
+    expect(findProject).toHaveBeenCalledWith('p');
+    expect(listReviewRequests).toHaveBeenCalledWith('Owner/Repo');
+    await caller.listReviewRequests();
+    expect(listReviewRequests).toHaveBeenLastCalledWith(undefined);
+  });
+
+  it.each([
+    [null, 'Project not found'],
+    [{ githubOwner: null, githubRepo: 'repo' }, 'Project is not linked to a GitHub repository'],
+    [{ githubOwner: 'owner', githubRepo: null }, 'Project is not linked to a GitHub repository'],
+    [{ githubOwner: 'owner', githubRepo: 'repo repo:foreign/repo' }, 'Invalid GitHub repository'],
+  ])(
+    'never falls back to global reviews for invalid project metadata %j',
+    async (project, error) => {
+      const listReviewRequests = vi.fn(async () => [{ number: 7 }]);
+      const caller = createCaller({ listReviewRequests, findProject: async () => project });
+      expect(await caller.listReviewRequests({ projectId: 'p' })).toMatchObject({ prs: [], error });
+      expect(listReviewRequests).not.toHaveBeenCalled();
+    }
+  );
+
+  it('short circuits unauthenticated scoped requests and handles project lookup failures', async () => {
+    const findProject = vi.fn(() => Promise.reject(new Error('lookup failed')));
+    const caller = createCaller({ findProject });
+    expect((await caller.listReviewRequests({ projectId: 'p' })).error).toBe('lookup failed');
+    findProject.mockClear();
+    const unhealthy = createCaller({
+      findProject,
+      checkHealth: async () => ({ isInstalled: true, isAuthenticated: false }),
+    });
+    expect(await unhealthy.listReviewRequests({ projectId: 'p' })).toMatchObject({
+      prs: [],
+      error: null,
+    });
+    expect(findProject).not.toHaveBeenCalled();
   });
 });
