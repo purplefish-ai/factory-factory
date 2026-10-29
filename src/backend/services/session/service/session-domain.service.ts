@@ -512,16 +512,19 @@ export class SessionDomainService extends EventEmitter {
     options?: { preserveRejections?: boolean; permanentlyDeleted?: boolean }
   ): void {
     const initialMessageId = this.publishedInitialMessages.get(sessionId);
-    const hasPendingInitialMessage =
-      initialMessageId !== undefined &&
-      this.registry.getQueueSnapshot(sessionId).some((message) => message.id === initialMessageId);
+    const queuedMessages =
+      initialMessageId === undefined ? [] : this.registry.getQueueSnapshot(sessionId);
+    const hasPendingInitialMessage = queuedMessages.some(
+      (message) => message.id === initialMessageId
+    );
     // Inactive-viewer cleanup must not discard a task still waiting for workspace setup.
-    if (hasPendingInitialMessage && options?.preserveRejections && !options.permanentlyDeleted) {
-      return;
-    }
+    const preserveQueue =
+      hasPendingInitialMessage && options?.preserveRejections && !options.permanentlyDeleted;
     this.initialMessages.delete(sessionId);
     this.registry.clearSession(sessionId, options);
-    if (hasPendingInitialMessage) {
+    if (preserveQueue) {
+      this.registry.getOrCreateActive(sessionId).queue = queuedMessages;
+    } else if (hasPendingInitialMessage) {
       this.publishedInitialMessages.delete(sessionId);
     }
     if (options?.permanentlyDeleted) {
