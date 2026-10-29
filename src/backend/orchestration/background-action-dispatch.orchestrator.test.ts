@@ -16,6 +16,16 @@ const event: PeriodicTaskTimerEvent = {
   prompt: 'Check the repository',
 };
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 function sessionPorts(): ExistingSessionDispatchPorts {
   return {
     enqueue: vi.fn(() => ({ queued: true })),
@@ -60,7 +70,7 @@ describe('dispatchBackgroundAction', () => {
   });
 
   it('returns queue admission while wakes remain pending and logs a later rejection', async () => {
-    const wake = Promise.withResolvers<void>();
+    const wake = deferred<void>();
     const ports = sessionPorts();
     ports.wakeSession = () => wake.promise;
     await expect(
@@ -100,7 +110,7 @@ describe('dispatchBackgroundAction', () => {
   });
 
   it('awaits PERIODIC_TASK launch and returns the launched workspace ID', async () => {
-    const launch = Promise.withResolvers<{ workspace: { id: string } }>();
+    const launch = deferred<{ workspace: { id: string } }>();
     const launchWorkspace = vi.fn(() => launch.promise);
     let settled = false;
     const dispatched = dispatchBackgroundAction(
