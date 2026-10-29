@@ -236,3 +236,22 @@ export const ScheduledAgent: Story = {
     currentSessionId: 'agent',
   },
 };
+
+export const AgentStates: Story = {
+  parameters: { layout: 'fullscreen' },
+  render: (args) => (
+    <div className="p-4">
+      <SessionTabBar {...args} />
+    </div>
+  ),
+  args: {
+    sessions: (['IDLE', 'RUNNING', 'PAUSED', 'COMPLETED', 'FAILED'] as const).map((status) => ({
+      id: status,
+      name: `Agent ${status.toLowerCase()}`,
+      workflow: 'periodic-task',
+      status,
+      createdAt: new Date('2026-01-12T12:00:00Z'),
+    })),
+    currentSessionId: 'RUNNING',
+  },
+};

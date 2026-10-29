@@ -5,10 +5,10 @@ import { CircleIcon } from '@phosphor-icons/react/dist/csr/Circle';
 import { PauseCircleIcon } from '@phosphor-icons/react/dist/csr/PauseCircle';
 import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { PulseIcon } from '@phosphor-icons/react/dist/csr/Pulse';
-import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import { XCircleIcon } from '@phosphor-icons/react/dist/csr/XCircle';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { AgentSessionStatus } from '@/client/components/agent-session-status';
 import { getSessionDisplayName } from '@/client/lib/session-display-name';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -60,7 +60,7 @@ function getStatusIcon(status: SessionStatus, isRunning: boolean) {
 
 function getStatusIconClass(status: SessionStatus, isRunning: boolean) {
   if (isRunning || status === 'RUNNING') {
-    return 'text-brand animate-pulse';
+    return 'text-brand';
   }
   if (status === 'IDLE') {
     return 'text-emerald-500';
@@ -100,7 +100,10 @@ function SessionTab({
   readOnly,
 }: SessionTabProps) {
   const isAgent = session.workflow === 'periodic-task';
-  const StatusIcon = isAgent ? RobotIcon : getStatusIcon(session.status, isRunning);
+  const StatusIcon = getStatusIcon(session.status, isRunning);
+  const statusLabel = isRunning
+    ? 'Running'
+    : session.status[0] + session.status.slice(1).toLowerCase();
 
   const handleClose = useCallback(
     (e: React.MouseEvent) => {
@@ -144,10 +147,22 @@ function SessionTab({
       )}
     >
       {/* Status indicator */}
-      <StatusIcon
-        aria-label={isAgent ? `Agent: ${isRunning ? 'RUNNING' : session.status}` : undefined}
-        className={cn('h-3.5 w-3.5 shrink-0', getStatusIconClass(session.status, isRunning))}
-      />
+      {isAgent ? (
+        <AgentSessionStatus
+          label={statusLabel}
+          icon={StatusIcon}
+          color={getStatusIconClass(session.status, isRunning)}
+          pulse={isRunning || session.status === 'RUNNING'}
+        />
+      ) : (
+        <StatusIcon
+          className={cn(
+            'h-3.5 w-3.5 shrink-0',
+            getStatusIconClass(session.status, isRunning),
+            (isRunning || session.status === 'RUNNING') && 'animate-pulse'
+          )}
+        />
+      )}
 
       <span className="truncate max-w-[120px]">{displayName}</span>
 

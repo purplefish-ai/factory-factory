@@ -1,8 +1,17 @@
 // @vitest-environment jsdom
 
+import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
+import { CircleIcon } from '@phosphor-icons/react/dist/csr/Circle';
+import { ProhibitIcon } from '@phosphor-icons/react/dist/csr/Prohibit';
+import { PulseIcon } from '@phosphor-icons/react/dist/csr/Pulse';
+import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
+import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
+import { XCircleIcon } from '@phosphor-icons/react/dist/csr/XCircle';
 import { composeStories } from '@storybook/react';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { within } from 'storybook/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SubagentSelection } from '@/client/features/subagents';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -13,6 +22,7 @@ import {
 } from '@/test-utils/subagent-tabs';
 import { MainViewTabBar } from './main-view-tab-bar';
 import * as tabBarStories from './main-view-tab-bar.stories';
+import type { WorkspaceSessionRuntimeSummary } from './session-tab-runtime';
 import { WorkspacePanelProvider } from './workspace-panel-context';
 
 const { RunningSubagent } = composeStories(tabBarStories);
@@ -255,16 +265,87 @@ it('labels only legacy agent defaults and keeps agent identity with runtime stat
     expect(tabs[1]?.textContent).toBe('Dependency review');
     expect(tabs[2]?.textContent).toBe('Periodic task');
     expect(
-      tabs[0]?.querySelector('svg[aria-label="Agent: Running"]')?.classList.contains('text-brand')
+      tabs[0]?.querySelector('[aria-label="Agent: Running"]')?.classList.contains('text-brand')
     ).toBe(true);
     expect(
-      tabs[1]
-        ?.querySelector('svg[aria-label="Agent: Failed"]')
-        ?.classList.contains('text-destructive')
+      tabs[1]?.querySelector('[aria-label="Agent: Failed"]')?.classList.contains('text-destructive')
     ).toBe(true);
-    expect(tabs[2]?.querySelector('svg[aria-label^="Agent:"]')).toBeNull();
+    expect(tabs[2]?.querySelector('[aria-label^="Agent:"]')).toBeNull();
   } finally {
     await act(() => root.unmount());
     container.remove();
   }
 });
+
+it.each([
+  ['IDLE', 'Idle', CircleIcon],
+  ['RUNNING', 'Running', PulseIcon],
+  ['PAUSED', 'Paused', ProhibitIcon],
+  ['COMPLETED', 'Completed', CheckCircleIcon],
+  ['FAILED', 'Failed', XCircleIcon],
+  ['loading', 'Loading', SpinnerGapIcon],
+  ['starting', 'Starting', SpinnerGapIcon],
+] as const)(
+  'keeps robot identity and a distinct %s marker in workspace tabs',
+  async (state, label, Icon) => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const expected = document.createElement('div');
+    expected.innerHTML = renderToStaticMarkup(
+      <>
+        <RobotIcon />
+        <Icon />
+      </>
+    );
+    const runtime: WorkspaceSessionRuntimeSummary | undefined =
+      state === 'loading' || state === 'starting'
+        ? {
+            sessionId: 'agent',
+            name: 'Custom agent',
+            workflow: 'periodic-task',
+            model: 'sonnet',
+            persistedStatus: 'IDLE',
+            runtimePhase: state,
+            processState: 'alive',
+            activity: 'IDLE',
+            updatedAt: '2026-10-29T00:00:00Z',
+            lastExit: null,
+          }
+        : undefined;
+    try {
+      await act(() =>
+        root.render(
+          <TooltipProvider>
+            <WorkspacePanelProvider workspaceId={`agent-${state}`}>
+              <MainViewTabBar
+                workspaceId={`agent-${state}`}
+                sessions={[
+                  {
+                    id: 'agent',
+                    name: 'Custom agent',
+                    workflow: 'periodic-task',
+                    status: state === 'loading' || state === 'starting' ? 'IDLE' : state,
+                  },
+                ]}
+                sessionSummariesById={runtime ? new Map([['agent', runtime]]) : undefined}
+              />
+            </WorkspacePanelProvider>
+          </TooltipProvider>
+        )
+      );
+      const identity = within(container).getByRole('img', { name: `Agent: ${label}` });
+      const icons = identity.querySelectorAll('svg');
+      expect(icons).toHaveLength(2);
+      expect(icons[0]?.innerHTML).toBe(expected.querySelectorAll('svg')[0]?.innerHTML);
+      expect(icons[1]?.innerHTML).toBe(expected.querySelectorAll('svg')[1]?.innerHTML);
+      expect(icons[1]?.classList.contains('animate-spin')).toBe(
+        state === 'loading' || state === 'starting'
+      );
+      expect(container.querySelector('[role="tab"]')?.textContent).toBe('Custom agent');
+    } finally {
+      await act(() => root.unmount());
+      container.remove();
+    }
+  }
+);

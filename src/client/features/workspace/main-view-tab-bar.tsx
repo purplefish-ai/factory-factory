@@ -6,6 +6,7 @@ import { GitDiffIcon } from '@phosphor-icons/react/dist/csr/GitDiff';
 import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { useEffect } from 'react';
+import { AgentSessionStatus } from '@/client/components/agent-session-status';
 import { type SubagentSelection, useLiveSubagentSelection } from '@/client/features/subagents';
 import { getSessionDisplayName } from '@/client/lib/session-display-name';
 import { TabButton } from '@/components/ui/tab-button';
@@ -85,7 +86,7 @@ interface StatusDotProps {
 
 function StatusDot({ sessionSummary, isCIFix, isAgent, persistedStatus }: StatusDotProps) {
   const status = deriveSessionTabRuntime(sessionSummary, persistedStatus);
-  const StatusIcon = isAgent ? RobotIcon : status.icon;
+  const StatusIcon = status.icon;
 
   // CI fix sessions show wrench icon instead of dot
   if (isCIFix) {
@@ -115,16 +116,25 @@ function StatusDot({ sessionSummary, isCIFix, isAgent, persistedStatus }: Status
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className="flex items-center justify-center w-3.5 h-3.5">
-          <StatusIcon
-            aria-label={isAgent ? `Agent: ${status.label}` : undefined}
-            className={cn(
-              'h-3.5 w-3.5 shrink-0',
-              status.color,
-              status.pulse && 'animate-pulse',
-              !isAgent && status.spin && 'animate-spin'
-            )}
-          />
+        <span className="flex items-center justify-center">
+          {isAgent ? (
+            <AgentSessionStatus
+              label={status.label}
+              icon={StatusIcon}
+              color={status.color}
+              pulse={status.pulse}
+              spin={status.spin}
+            />
+          ) : (
+            <StatusIcon
+              className={cn(
+                'h-3.5 w-3.5 shrink-0',
+                status.color,
+                status.pulse && 'animate-pulse',
+                status.spin && 'animate-spin'
+              )}
+            />
+          )}
         </span>
       </TooltipTrigger>
       <TooltipContent side="bottom" className="text-xs">

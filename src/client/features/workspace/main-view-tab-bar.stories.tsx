@@ -124,3 +124,41 @@ export const WithSessions: Story = {
     </WorkspacePanelProvider>
   ),
 };
+
+export const AgentStates: Story = {
+  render: () => (
+    <WorkspacePanelProvider workspaceId="agent-status-states">
+      <MainViewTabBar
+        workspaceId="agent-status-states"
+        sessions={[
+          ...(['IDLE', 'RUNNING', 'PAUSED', 'COMPLETED', 'FAILED'] as const).map((status) => ({
+            id: status,
+            name: `Agent ${status.toLowerCase()}`,
+            workflow: 'periodic-task',
+            status,
+          })),
+          { id: 'loading', name: 'Agent loading', workflow: 'periodic-task', status: 'IDLE' },
+        ]}
+        sessionSummariesById={
+          new Map([
+            [
+              'loading',
+              {
+                sessionId: 'loading',
+                name: 'Agent loading',
+                workflow: 'periodic-task',
+                model: 'sonnet',
+                persistedStatus: 'IDLE',
+                runtimePhase: 'loading',
+                processState: 'unknown',
+                activity: 'IDLE',
+                updatedAt: '2026-10-29T00:00:00Z',
+                lastExit: null,
+              },
+            ],
+          ])
+        }
+      />
+    </WorkspacePanelProvider>
+  ),
+};

@@ -11,7 +11,11 @@ import { getVisibleWorkspaceStatusReason } from '@/client/lib/workspace-status-r
 function CreationSourceIcon({ creationSource }: { creationSource?: string | null }) {
   if (creationSource === 'PERIODIC_TASK') {
     return (
-      <RobotIcon aria-label="Agent workspace" className="h-3 w-3 shrink-0 text-muted-foreground" />
+      <RobotIcon
+        role="img"
+        aria-label="Agent workspace"
+        className="h-3 w-3 shrink-0 text-muted-foreground"
+      />
     );
   }
   if (creationSource === 'CHILD_WORKSPACE') {

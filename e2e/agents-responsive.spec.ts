@@ -33,6 +33,18 @@ async function assertEditorBounds(page: Page) {
   }
 }
 
+function assertWidePanels(editor: { x: number } | null, rail: { x: number; width: number } | null) {
+  if (!(editor && rail)) {
+    throw new Error('Missing Agents panels');
+  }
+  expect(editor.x).toBeGreaterThanOrEqual(rail.x + rail.width);
+}
+
+test('wide Agents geometry requires both panels', () => {
+  expect(() => assertWidePanels({ x: 100 }, null)).toThrow('Missing Agents panels');
+  expect(() => assertWidePanels(null, { x: 0, width: 100 })).toThrow('Missing Agents panels');
+});
+
 for (const width of [768, 810, 1024, 1280]) {
   test(`Agents use available content width with expanded sidebar at ${width}px`, async ({
     page,
@@ -69,7 +81,7 @@ for (const width of [768, 810, 1024, 1280]) {
     const wideRail = await page
       .getByRole('navigation', { name: 'Agents', exact: true })
       .boundingBox();
-    expect(wideEditor?.x).toBeGreaterThanOrEqual((wideRail?.x ?? 0) + (wideRail?.width ?? 0));
+    assertWidePanels(wideEditor, wideRail);
     await expect(page.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue(
       'Keep edit draft'
     );

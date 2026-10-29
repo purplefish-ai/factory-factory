@@ -58,7 +58,7 @@ vi.mock('@/client/features/chat', async (importOriginal) => ({
   }),
 }));
 
-it('preserves scheduled session identity from session transport through the quick-chat sheet', async () => {
+it('renders scheduled session identity in quick-chat tabs', async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   const container = document.createElement('div');
   document.body.appendChild(container);
@@ -75,13 +75,13 @@ it('preserves scheduled session identity from session transport through the quic
       'Periodic task',
     ]);
     expect(
-      tabs[0]?.querySelector('[aria-label="Agent: RUNNING"]')?.classList.contains('text-brand')
+      tabs[0]?.querySelector('[aria-label="Agent: Running"]')?.classList.contains('text-brand')
     ).toBe(true);
     expect(
-      tabs[1]?.querySelector('[aria-label="Agent: IDLE"]')?.classList.contains('text-emerald-500')
+      tabs[1]?.querySelector('[aria-label="Agent: Idle"]')?.classList.contains('text-emerald-500')
     ).toBe(true);
     expect(
-      tabs[2]?.querySelector('[aria-label="Agent: FAILED"]')?.classList.contains('text-destructive')
+      tabs[2]?.querySelector('[aria-label="Agent: Failed"]')?.classList.contains('text-destructive')
     ).toBe(true);
     expect(tabs[3]?.querySelector('[aria-label^="Agent:"]')).toBeNull();
     expect(tabs[3]?.querySelector('svg')?.classList.contains('text-emerald-500')).toBe(true);
