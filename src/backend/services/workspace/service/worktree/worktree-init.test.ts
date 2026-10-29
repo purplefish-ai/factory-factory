@@ -78,6 +78,7 @@ vi.mock('@/backend/services/session', () => ({
   },
   sessionDomainService: {
     enqueue: mocks.enqueue,
+    enqueueInitialMessage: mocks.enqueue,
     emitDelta: mocks.emitDelta,
   },
   sessionDispatchService: {

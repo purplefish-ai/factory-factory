@@ -27,9 +27,11 @@ back to the session loading status if history is still loading after setup.
 Workspace initialization finishes both factory setup and project startup scripts
 and persists READY before starting the default agent session. Provider startup
 hooks can depend on installed tools and generated files, so setup does not run
-inside the agent's startup timeout. Non-fatal script failures still persist
-READY with a warning before the agent starts; unexpected provisioning failures
-do not start an agent.
+inside the agent's startup timeout. The initial task is queued and published
+before provisioning so it remains visible and cancellable throughout setup;
+retrying provisioning preserves the task's queue or cancellation state within
+the running server. Non-fatal script failures still persist READY with a warning
+before the agent starts; unexpected provisioning failures do not start an agent.
 
 Retrying a ready workspace with a setup warning restores READY even when its
 setup and startup scripts have been removed, before queued messages dispatch.

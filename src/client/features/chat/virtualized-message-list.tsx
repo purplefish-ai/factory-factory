@@ -206,6 +206,10 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
     const messages: GroupedMessageItem[] = [];
     let queuedPRUpdate: GroupedMessageItem | undefined;
     for (const item of allMessages) {
+      // Keep the queue visible during startup without exposing partial history replay.
+      if (loadingSession && !queuedMessageIds?.has(item.id)) {
+        continue;
+      }
       const isQueuedPRUpdate =
         !isToolSequence(item) &&
         queuedMessageIds?.has(item.id) &&
@@ -217,7 +221,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
       }
     }
     return { messages, queuedPRUpdate };
-  }, [allMessages, queuedMessageIds]);
+  }, [allMessages, loadingSession, queuedMessageIds]);
   const { getExpansionState, setExpansionState } = useWorkspaceToolExpansionState(workspaceId);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const prevMessageCountRef = useRef(allMessages.length);
@@ -523,7 +527,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
 
   // Show loading state while session is loading (prevents flicker during event replay)
   // Workspace setup takes priority over the session's loading status.
-  if (loadingSession) {
+  if (loadingSession && messages.length === 0 && !queuedPRUpdate) {
     return (
       <div className="flex items-center justify-center h-full text-center p-8">
         <div className="flex items-center gap-2 text-muted-foreground">
@@ -603,16 +607,18 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
         {/* Context compaction indicator */}
         <CompactingIndicator isCompacting={isCompacting} className="mb-4" />
 
-        {/* Workspace initialization spinner (e.g., creating worktree, running init script) */}
-        {initBanner && initBanner.kind === 'info' && (
+        {/* Startup status stays below queued messages while history loads. */}
+        {(showingInitSpinner || loadingSession) && (
           <div className="flex items-center gap-2 text-muted-foreground py-4">
             <SpinnerGapIcon className="h-4 w-4 animate-spin" />
-            <span className="text-sm">{initBanner.message}</span>
+            <span className="text-sm">
+              {showingInitSpinner ? initBanner.message : 'Loading session...'}
+            </span>
           </div>
         )}
 
         {/* Agent starting spinner */}
-        {startingSession && !running && (
+        {startingSession && !running && !loadingSession && !showingInitSpinner && (
           <div className="flex items-center gap-2 text-muted-foreground py-4">
             <SpinnerGapIcon className="h-4 w-4 animate-spin" />
             <span className="text-sm">{startingLabel}</span>
