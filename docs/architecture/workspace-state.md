@@ -31,10 +31,11 @@ inside the agent's startup timeout. Initial task preparation runs alongside
 provisioning, so issue lookups do not delay worktree creation or setup. The task
 is published as soon as it is ready, before READY, and remains cancellable
 during setup. Inactive disconnect cleanup retains the queue only while the
-initial task is undelivered, and clears cached history and runtime state.
-Provisioning retries preserve cancellation within the running server. Non-fatal
-script failures still persist READY with a warning before the agent starts;
-unexpected provisioning failures do not start an agent or publish a late prompt.
+initial task is undelivered. It resets hydrated history and runtime state while
+retaining unexpired recent rejections and terminal PR outcomes. Provisioning
+retries preserve cancellation within the running server. Non-fatal script
+failures still persist READY with a warning before the agent starts; unexpected
+provisioning failures do not start an agent or publish a late prompt.
 
 Retrying a ready workspace with a setup warning restores READY even when its
 setup and startup scripts have been removed, before queued messages dispatch.
