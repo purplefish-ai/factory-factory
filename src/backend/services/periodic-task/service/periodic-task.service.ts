@@ -179,6 +179,10 @@ export class PeriodicTaskService {
           continue;
         }
 
+        if (this.isShuttingDown) {
+          break;
+        }
+
         await this.dispatchTask(
           task.id,
           task.projectId,

@@ -9,6 +9,7 @@ import {
   destroyIntegrationDatabase,
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
+import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type { PrismaClient } from '@prisma-gen/client';
 import { dispatchBackgroundAction } from './background-action-dispatch.orchestrator';
 import { launchWorkspace, type PeriodicTaskLaunchSource } from './workspace-launch.orchestrator';
@@ -242,6 +243,40 @@ describe('due periodic tasks through shared dispatch', () => {
         completedAt: expect.any(Date),
       }),
     ]);
+  });
+
+  it('stops before reservation when the overlap lookup is still pending', async () => {
+    const task = await createTask();
+    const creation = new WorkspaceCreationService({ logger });
+    const launch = vi.fn((source: PeriodicTaskLaunchSource) =>
+      creation.create(source).then((workspace) => ({ workspace }))
+    );
+    configure(launch);
+    const lookupStarted = deferred<void>();
+    const overlap = deferred<number>();
+    vi.spyOn(db.prisma.periodicTaskExecution, 'count').mockImplementationOnce(() => {
+      lookupStarted.resolve();
+      return unsafeCoerce<ReturnType<typeof db.prisma.periodicTaskExecution.count>>(
+        overlap.promise
+      );
+    });
+    const reserve = vi.spyOn(db.prisma, '$transaction');
+    service.start();
+    await lookupStarted.promise;
+
+    const stop = service.stop();
+    overlap.resolve(0);
+    await stop;
+
+    expect(reserve).not.toHaveBeenCalled();
+    expect(events).toEqual([]);
+    expect(launch).not.toHaveBeenCalled();
+    expect(await db.prisma.periodicTaskExecution.count()).toBe(0);
+    expect(await db.prisma.workspace.count()).toBe(0);
+    expect(await service.get(task.id)).toMatchObject({
+      nextRunAt: task.nextRunAt,
+      lastRunAt: null,
+    });
   });
 
   it('drains an admitted launch and its link on stop, without admitting the next due task', async () => {
