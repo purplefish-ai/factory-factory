@@ -263,6 +263,11 @@ deltas are negotiated explicitly, accumulated with per-tool and total
 pending-tool limits, and included in completed tool results. Buffers are
 isolated by session and cleared on teardown.
 
+For tracked tool calls, object-valued ACP `rawInput` refinements replace the
+existing card's input, preserving its original order and tool name through live
+updates and reconnects. Status-only updates and invalid inputs leave the input
+intact.
+
 Permission requests retain the provider's option IDs and choices. Upstream Codex
 plan review is normalized into the application's plan UI. Interactive sessions
 wait for a user response; read-only reviewers automatically reject plan
@@ -576,9 +581,10 @@ Factory Factory projects their native ACP metadata and transcripts into the
 Agents panel through its session-scoped tracker. Clicking the running sub-agent
 count in chat opens the right panel and selects Agents.
 
-Sub-agent transcript projection joins consecutive assistant text chunks before
-rendering Markdown. Tool, reasoning, non-text content, and provider message-ID
-changes end the text sequence, preserving separate replies and tool ordering.
+Sub-agent transcript projection applies the same refinements without duplicating
+tool cards and joins consecutive assistant text chunks before rendering
+Markdown. Tool, reasoning, non-text content, and provider message-ID changes end
+the text sequence, preserving separate replies and tool ordering.
 
 They are distinct from workspace-scoped child workspaces, and are recovered from
 the provider when a parent session is reloaded rather than persisted by Factory

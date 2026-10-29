@@ -145,6 +145,48 @@ function* coalesceAgentTextChunks(
   }
 }
 
+function upsertPendingTool(
+  messages: ChatMessage[],
+  pendingTools: Map<string, number>,
+  message: ChatMessage
+): boolean {
+  const event = message.message?.event;
+  if (event?.type !== 'content_block_start' || event.content_block.type !== 'tool_use') {
+    return false;
+  }
+  const toolId = event.content_block.id;
+  const previousIndex = pendingTools.get(toolId);
+  if (previousIndex === undefined) {
+    pendingTools.set(toolId, messages.length);
+    return false;
+  }
+  const previous = messages[previousIndex];
+  if (!previous) {
+    return false;
+  }
+  messages[previousIndex] = { ...message, id: previous.id, order: previous.order };
+  return true;
+}
+
+function collectProjectedMessage(
+  messages: ChatMessage[],
+  pendingTools: Map<string, number>,
+  message: ChatMessage
+): void {
+  if (upsertPendingTool(messages, pendingTools, message)) {
+    return;
+  }
+  const content = message.message?.message?.content;
+  if (Array.isArray(content)) {
+    for (const item of content) {
+      if (item.type === 'tool_result') {
+        pendingTools.delete(item.tool_use_id);
+      }
+    }
+  }
+  messages.push(message);
+}
+
 export function projectAcpTranscriptUpdates(updates: SubagentTranscriptUpdate[]): ChatMessage[] {
   const translator = new AcpEventTranslator(transcriptLogger);
   const emptyState = createInitialChatState({
@@ -153,12 +195,13 @@ export function projectAcpTranscriptUpdates(updates: SubagentTranscriptUpdate[])
   });
   let state = emptyState;
   const messages: ChatMessage[] = [];
-  // Subagent events have increasing local orders. Only consecutive thought
-  // chunks update an earlier message, so keep that one reasoning seed in the
-  // reducer until its sequence ends. All other messages can be collected once.
-  // This keeps reducer copies and indexes bounded by one update, not the page.
+  const pendingTools = new Map<string, number>();
+  // Keep only the current reasoning sequence in the reducer. Collect other
+  // messages once and enrich pending tools by index, keeping projection linear.
   const collectMessages = () => {
-    messages.push(...state.messages);
+    for (const message of state.messages) {
+      collectProjectedMessage(messages, pendingTools, message);
+    }
     state = emptyState;
   };
   let order = 0;

@@ -119,6 +119,36 @@ const streamedState: SubagentTranscriptState = {
 export const StreamedReplyDesktop = story(selection('running'), streamedState, desktop);
 export const StreamedReplyNarrow = story(selection('running'), streamedState, narrow);
 
+export const RefinedBashInput = story(
+  selection('completed'),
+  {
+    ...readyState,
+    hasOlder: false,
+    messages: projectAcpTranscriptUpdates([
+      {
+        sessionUpdate: 'tool_call',
+        toolCallId: 'bash-1',
+        title: 'Terminal',
+        _meta: { claudeCode: { toolName: 'Bash' } },
+        rawInput: {},
+        status: 'pending',
+      },
+      {
+        sessionUpdate: 'tool_call_update',
+        toolCallId: 'bash-1',
+        rawInput: { command: 'git status --short', description: 'Inspect working tree changes' },
+      },
+      {
+        sessionUpdate: 'tool_call_update',
+        toolCallId: 'bash-1',
+        status: 'completed',
+        rawOutput: ' M src/shared/acp-protocol/session-update-translator.ts',
+      },
+    ]),
+  },
+  desktop
+);
+
 export const CompletedDesktop = story(selection('completed'), readyState, desktop);
 export const CompletedNarrow = story(selection('completed'), readyState, narrow);
 

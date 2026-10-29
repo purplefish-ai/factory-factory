@@ -353,7 +353,7 @@ describe('projectAcpTranscriptUpdates', () => {
         sessionUpdate: 'tool_call_update',
         toolCallId: 'reused',
         status: 'in_progress',
-        rawInput: { path: 'ignored.ts' },
+        rawInput: { path: 'refined.ts' },
       },
       {
         sessionUpdate: 'tool_call_update',
@@ -382,14 +382,14 @@ describe('projectAcpTranscriptUpdates', () => {
       },
     ];
     const messages = projectAcpTranscriptUpdates(updates);
-    expect(messages.map((message) => message.order)).toEqual([0, 4, 5, 7, 8]);
+    expect(messages.map((message) => message.order)).toEqual([0, 5, 6, 8, 9]);
     expect(
       messages.map((message) => {
         const event = message.message?.event;
         return event?.type === 'content_block_start' ? event.content_block : undefined;
       })
     ).toEqual([
-      { type: 'tool_use', id: 'reused', name: 'Read', input: { path: 'first.ts' } },
+      { type: 'tool_use', id: 'reused', name: 'Read', input: { path: 'refined.ts' } },
       undefined,
       { type: 'tool_use', id: 'reused', name: 'Read', input: { path: 'second.ts' } },
       undefined,
