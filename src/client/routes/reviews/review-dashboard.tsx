@@ -145,6 +145,25 @@ function useInitialReviewSelection({
   }, [initialRepo, initialPR, prs, setSelectedIndex]);
 }
 
+function shouldIgnoreReviewShortcut(event: KeyboardEvent): boolean {
+  if (
+    event.defaultPrevented ||
+    event.isComposing ||
+    event.altKey ||
+    event.ctrlKey ||
+    event.metaKey ||
+    event.shiftKey
+  ) {
+    return true;
+  }
+  const target = event.target instanceof Element ? event.target : document.activeElement;
+  return !!target?.closest(
+    'input, textarea, select, button, a[href], dialog, [contenteditable]:not([contenteditable="false"]), ' +
+      '[role="combobox"], [role="listbox"], [role="option"], [role="menu"], [role="menubar"], ' +
+      '[role^="menuitem"], [role="dialog"], [role="alertdialog"], [role="textbox"], [role="searchbox"]'
+  );
+}
+
 function useReviewKeyboardShortcuts({
   prsLength,
   onOpenGitHub,
@@ -160,7 +179,7 @@ function useReviewKeyboardShortcuts({
 }) {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+      if (shouldIgnoreReviewShortcut(event)) {
         return;
       }
 

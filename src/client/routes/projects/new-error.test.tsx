@@ -13,10 +13,13 @@ import { SELECTED_PROJECT_KEY } from '@/client/lib/project-selection';
 import { trpc } from '@/client/lib/trpc';
 import NewProjectPage from './new';
 
-const { listProjects } = vi.hoisted(() => ({ listProjects: vi.fn() }));
+const { listProjects, listReviews } = vi.hoisted(() => ({
+  listProjects: vi.fn(),
+  listReviews: vi.fn(),
+}));
 const projects = [
-  { id: 'alpha-id', slug: 'alpha', name: 'Alpha' },
-  { id: 'beta-id', slug: 'beta', name: 'Beta' },
+  { id: 'alpha-id', slug: 'alpha', name: 'Alpha', githubOwner: null, githubRepo: null },
+  { id: 'beta-id', slug: 'beta', name: 'Beta', githubOwner: null, githubRepo: null },
 ];
 
 vi.mock('@/client/hooks/use-project-workspace-query', () => {
@@ -31,8 +34,27 @@ vi.mock('@/client/hooks/use-project-workspace-query', () => {
 
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
-    useUtils: () => ({ project: { list: { invalidate: vi.fn() } } }),
+    useUtils: () => ({
+      project: { list: { invalidate: vi.fn() } },
+      prReview: { listReviewRequests: { reset: vi.fn() } },
+    }),
+    prReview: {
+      listReviewRequests: {
+        useQuery: (
+          input: { projectId: string },
+          options: { enabled: boolean; staleTime: number; refetchInterval: number }
+        ) => useQuery({ queryKey: ['project-reviews', input], queryFn: listReviews, ...options }),
+      },
+    },
     project: {
+      getBySlug: {
+        useQuery: ({ slug }: { slug: string }, { enabled }: { enabled: boolean }) =>
+          useQuery({
+            queryKey: ['project-by-slug', slug],
+            queryFn: async () => projects.find((project) => project.slug === slug),
+            enabled,
+          }),
+      },
       list: {
         useQuery: () => useQuery({ queryKey: ['projects'], queryFn: listProjects }),
       },
@@ -158,8 +180,14 @@ beforeEach(() => {
   localStorage.clear();
   localStorage.setItem(SELECTED_PROJECT_KEY, 'beta');
   listProjects.mockReset();
+  listReviews.mockReset().mockResolvedValue({
+    prs: [],
+    health: { isInstalled: true, isAuthenticated: true },
+    error: null,
+  });
 });
 afterEach(() => {
+  expect(listReviews).not.toHaveBeenCalled();
   for (const cleanup of cleanups.splice(0)) {
     cleanup();
   }

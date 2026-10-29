@@ -131,7 +131,9 @@ describe('AdminDashboardPage settings tabs', () => {
 
     expect(container.textContent).toContain('General Settings');
     expect(container.textContent).toContain('Project Settings');
-    expect(container.querySelector('a[href="/agents"]')?.textContent).toContain('Agents');
+    expect(container.querySelector('a[href="/projects/alpha/agents"]')?.textContent).toContain(
+      'Agents'
+    );
     expect(container.textContent).not.toContain('Periodic Tasks');
     const tabs = Array.from(container.querySelectorAll('[role="tab"]')) as HTMLElement[];
     const generalTab = tabs.find((tab) => tab.textContent?.includes('General Settings'));

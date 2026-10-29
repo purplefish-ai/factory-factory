@@ -14,7 +14,7 @@ import {
 import { trpc } from '@/client/lib/trpc';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { WorkspaceDetailHeaderSlot } from './projects/workspaces/workspace-detail-header';
+import { WorkspaceDetailHeaderSlot } from './projects/workspaces/workspace-detail-header.js';
 import type { WorkspaceHeaderWorkspace } from './projects/workspaces/workspace-detail-header/types';
 
 const project = {
