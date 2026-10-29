@@ -3,6 +3,7 @@ import type { AgentSessionRecord } from '@/backend/services/session/resources/ag
 import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import { parseAcpConfigSnapshot } from './acp-config-snapshot';
 import { getConfigOptionValues } from './session-config-option-helpers';
+import { isAppliedAccessMode } from './session-permission-policy';
 
 type NativeModeKind = 'mode' | 'collaboration_mode';
 type Runtime = Pick<AcpRuntimeManager, 'setConfigOption' | 'setSessionMode' | 'getClient'>;
@@ -106,10 +107,8 @@ export async function restoreSavedNativeModes(
   }
   assertCurrentRuntime(sessionId, handle, runtime);
   for (const saved of targets) {
-    if (
-      handle.configOptions.find((option) => option.id === saved.id)?.currentValue !==
-      saved.currentValue
-    ) {
+    const current = handle.configOptions.find((option) => option.id === saved.id)?.currentValue;
+    if (!isAppliedAccessMode(handle.provider, saved.currentValue, current)) {
       throw new Error(`Saved native session mode was not applied: ${saved.id}`);
     }
   }

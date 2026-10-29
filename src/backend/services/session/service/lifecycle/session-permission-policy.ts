@@ -96,11 +96,7 @@ export function resolveConfiguredAccessModeTarget(
 }
 
 /** Whether the adapter's current mode satisfies a requested access target. */
-export function isAppliedAccessMode(
-  provider: string,
-  target: string,
-  current: unknown
-): current is string {
+export function isAppliedAccessMode(provider: string, target: unknown, current: unknown): boolean {
   return (
     current === target ||
     (provider === 'CLAUDE' && target === 'auto' && current === CLAUDE_AUTO_FALLBACK)
@@ -199,10 +195,10 @@ export class SessionStartupPermissions {
       }
     }
     for (const expected of this.required.get(handle) ?? []) {
-      if (
-        handle.configOptions.find((option) => option.id === expected.id)?.currentValue !==
-        expected.value
-      ) {
+      const current = handle.configOptions.find(
+        (option) => option.id === expected.id
+      )?.currentValue;
+      if (!isAppliedAccessMode(handle.provider, expected.value, current)) {
         throw new SessionStartupPermissionError();
       }
     }

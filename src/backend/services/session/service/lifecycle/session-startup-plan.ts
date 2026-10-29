@@ -52,7 +52,7 @@ export async function applyStartupLaunchPlan(
   if (!isAppliedAccessMode(handle.provider, target, applied)) {
     throw new Error('Requested Plan mode was not applied');
   }
-  confirmation?.confirmTarget(option.id, applied);
+  confirmation?.confirmTarget(option.id, String(applied));
 }
 
 async function requestedPlanMode(

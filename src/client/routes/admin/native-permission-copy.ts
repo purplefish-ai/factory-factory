@@ -6,7 +6,7 @@ export const NATIVE_PERMISSION_OPTIONS = [
 ] as const;
 
 export const NATIVE_PERMISSION_DESCRIPTION =
-  'Standard uses Claude approval prompts and Codex workspace access. Auto review uses Claude Auto mode and Codex Auto review, which only ask about actions they flag as risky; Claude uses Accept edits on models without Auto mode. Full access skips approval prompts.';
+  'Standard uses Claude approval prompts and Codex workspace access. Auto review uses Claude Auto mode and Codex Auto review, which replace routine approval prompts with provider-native safety checks; explicit permission rules still apply. Claude uses Accept edits when Auto mode is unavailable. Full access skips approval prompts.';
 
 export function isNativePermissionPreset(
   value: string

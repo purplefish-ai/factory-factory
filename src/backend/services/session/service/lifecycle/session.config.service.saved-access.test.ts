@@ -14,7 +14,7 @@ function setup(
   const values =
     provider === 'CODEX'
       ? ['read-only', 'workspace-write', 'agent', 'agent-full-access']
-      : ['plan', 'default', 'acceptEdits', 'bypassPermissions'];
+      : ['plan', 'default', 'acceptEdits', 'bypassPermissions', 'auto'];
   const access = (value: string): SessionConfigOption => ({
     id: 'mode',
     name: 'Access',
@@ -125,6 +125,39 @@ describe('saved native session access', () => {
       expect(h.handle.configOptions[0]?.currentValue).toBe(saved);
     }
   );
+
+  it('resumes saved Claude Auto access when the adapter applies its Accept edits fallback', async () => {
+    const h = setup('CLAUDE', 'auto');
+    // Claude's adapter applies Accept edits when the model lacks Auto mode.
+    const apply = h.runtime.setSessionMode.getMockImplementation()!;
+    h.runtime.setSessionMode.mockImplementation((sessionId, value) =>
+      apply(sessionId, value === 'auto' ? 'acceptEdits' : value)
+    );
+    await h.service.applyConfiguredPermissionPreset(
+      'session',
+      unsafeCoerce(h.session),
+      h.handle,
+      'RELAXED'
+    );
+    expect(h.runtime.setSessionMode).toHaveBeenCalledWith('session', 'auto');
+    expect(h.handle.configOptions[0]?.currentValue).toBe('acceptEdits');
+  });
+
+  it('rejects saved Claude Auto access that the adapter broadens', async () => {
+    const h = setup('CLAUDE', 'auto');
+    const apply = h.runtime.setSessionMode.getMockImplementation()!;
+    h.runtime.setSessionMode.mockImplementation((sessionId, value) =>
+      apply(sessionId, value === 'auto' ? 'bypassPermissions' : value)
+    );
+    await expect(
+      h.service.applyConfiguredPermissionPreset(
+        'session',
+        unsafeCoerce(h.session),
+        h.handle,
+        'RELAXED'
+      )
+    ).rejects.toThrow('not applied');
+  });
 
   it.each(['missing', 'new'] as const)(
     'initializes configured access for %s snapshots',
