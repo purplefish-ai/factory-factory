@@ -95,6 +95,46 @@ describe('startup native planning', () => {
     expect(f.runtime.setSessionMode).toHaveBeenCalledWith('session', 'default');
     expect(f.handle.configOptions[0]?.currentValue).toBe('default');
   });
+  // `model-fallback` mirrors Claude's adapter: Auto is advertised but the model lacks it.
+  it.each([
+    { auto: 'supported', requested: 'auto', expected: 'auto' },
+    { auto: 'model-fallback', requested: 'auto', expected: 'acceptEdits' },
+    { auto: 'unadvertised', requested: 'acceptEdits', expected: 'acceptEdits' },
+  ] as const)(
+    'turns Claude Plan off into RELAXED Auto access (Auto: $auto)',
+    async ({ auto, requested, expected }) => {
+      const f = fixture('CLAUDE', false);
+      const values = ['default', 'plan', 'acceptEdits', 'auto'].filter(
+        (value) => value !== 'auto' || auto !== 'unadvertised'
+      );
+      f.handle.configOptions = f.handle.configOptions.map((option) =>
+        option.type === 'select'
+          ? { ...option, options: values.map((value) => ({ value, name: value })) }
+          : option
+      );
+      const apply = f.runtime.setSessionMode.getMockImplementation()!;
+      f.runtime.setSessionMode.mockImplementation((sid, value) => {
+        if (!values.includes(value)) {
+          return Promise.reject(new Error('Invalid Mode'));
+        }
+        return apply(sid, value === 'auto' && auto === 'model-fallback' ? 'acceptEdits' : value);
+      });
+      const confirmTarget = vi.fn();
+      await applyStartupLaunchPlan(
+        'session',
+        f.session,
+        f.handle,
+        'RELAXED',
+        f.runtime,
+        undefined,
+        undefined,
+        { assertCurrent: vi.fn(), confirmTarget }
+      );
+      expect(f.runtime.setSessionMode).toHaveBeenCalledWith('session', requested);
+      expect(f.handle.configOptions[0]?.currentValue).toBe(expected);
+      expect(confirmTarget).toHaveBeenCalledWith('mode', expected);
+    }
+  );
   it('resolves configured Claude access when require-existing resume omits its permission preset', async () => {
     const f = fixture('CLAUDE', false);
     vi.mocked(userSettingsService.get).mockResolvedValueOnce(

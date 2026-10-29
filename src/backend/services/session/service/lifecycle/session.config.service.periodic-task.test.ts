@@ -8,13 +8,22 @@ vi.mock('@/backend/services/settings', () => ({
   userSettingsService: { get: vi.fn() },
 }));
 
-it.each(
-  (['CODEX', 'CLAUDE'] as const).flatMap((provider) =>
-    (['STRICT', 'RELAXED', 'YOLO'] as const).map((preset) => ({ provider, preset }))
-  )
-)(
-  'preserves scheduled $provider native access with $preset defaults through startup',
-  async ({ provider, preset }) => {
+/** `model-fallback` mirrors Claude's adapter: Auto is advertised but the model lacks it. */
+type AutoSupport = 'supported' | 'model-fallback' | 'unadvertised';
+
+it.each([
+  ...(['CODEX', 'CLAUDE'] as const).flatMap((provider) =>
+    (['STRICT', 'RELAXED', 'YOLO'] as const).map((preset) => ({
+      provider,
+      preset,
+      auto: 'supported' as AutoSupport,
+    }))
+  ),
+  { provider: 'CLAUDE' as const, preset: 'RELAXED' as const, auto: 'model-fallback' as const },
+  { provider: 'CLAUDE' as const, preset: 'RELAXED' as const, auto: 'unadvertised' as const },
+])(
+  'preserves scheduled $provider native access with $preset defaults through startup (Auto: $auto)',
+  async ({ provider, preset, auto }) => {
     vi.mocked(userSettingsService.get).mockResolvedValue(
       unsafeCoerce({
         defaultWorkspacePermissions: preset,
@@ -32,7 +41,9 @@ it.each(
           currentValue: provider === 'CODEX' ? 'workspace-write' : 'default',
           options: (provider === 'CODEX'
             ? ['read-only', 'workspace-write', 'agent', 'agent-full-access']
-            : ['default', 'acceptEdits', 'bypassPermissions', 'plan']
+            : ['default', 'acceptEdits', 'auto', 'bypassPermissions', 'plan'].filter(
+                (value) => value !== 'auto' || auto !== 'unadvertised'
+              )
           ).map((value) => ({ value, name: value })),
         },
         ...(provider === 'CODEX'
@@ -49,7 +60,12 @@ it.each(
           : []),
       ],
     });
-    const updateOption = (id: string, value: string) => {
+    const updateOption = (id: string, requested: string) => {
+      if (id === 'mode' && requested === 'auto' && auto === 'unadvertised') {
+        return Promise.reject(new Error('Invalid Mode'));
+      }
+      // Claude's adapter applies Accept edits when the model lacks Auto mode.
+      const value = requested === 'auto' && auto === 'model-fallback' ? 'acceptEdits' : requested;
       handle.configOptions = handle.configOptions.map((option) =>
         option.id === id && option.type === 'select' ? { ...option, currentValue: value } : option
       );
@@ -81,7 +97,18 @@ it.each(
       unsafeCoerce({ id: 'session-1', workflow: 'periodic-task', provider }),
       handle
     );
-    const claudeModes = { STRICT: 'default', RELAXED: 'acceptEdits', YOLO: 'bypassPermissions' };
+    const claudeModes = {
+      STRICT: 'default',
+      RELAXED: auto === 'supported' ? 'auto' : 'acceptEdits',
+      YOLO: 'bypassPermissions',
+    };
+    if (provider === 'CLAUDE' && preset === 'RELAXED') {
+      expect(setConfigOption).toHaveBeenLastCalledWith(
+        'session-1',
+        'mode',
+        auto === 'unadvertised' ? 'acceptEdits' : 'auto'
+      );
+    }
     expect(handle.configOptions.find((option) => option.id === 'mode')?.currentValue).toBe(
       provider === 'CODEX' ? 'agent-full-access' : claudeModes[preset]
     );

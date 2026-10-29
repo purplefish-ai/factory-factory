@@ -58,14 +58,18 @@ appearing only as `Internal error`.
 Provider-native configuration controls own access permissions. Codex `mode`
 selects access and `collaboration_mode` selects planning independently. Claude
 `mode` owns its native access/planning modes. Saved STRICT/RELAXED/YOLO defaults
-remain backward-compatible preset inputs, mapped to advertised native values;
-the ACP client never automatically grants a permission because of a preset.
-Read-only review sessions use the provider's read-only/plan mode and reject all
-permission escalation. Access modes, including Claude planning, use
-`session/set_mode`. Models and other settings, including Codex collaboration,
-use `session/set_config_option`; legacy model/mode response fallbacks remain
-supported. Boolean options remain in backend snapshots while current chat
-controls render select options.
+remain backward-compatible preset inputs, mapped to advertised native values
+that match the adapters' standard, auto-review, and full-access mode kinds.
+RELAXED selects Codex `agent` and Claude `auto`. Claude uses `acceptEdits` when
+Auto mode is unavailable: the adapter applies it for models without Auto, and
+startup selects it when `auto` is not advertised. Startup and saved-mode
+restoration accept this fallback. The ACP client never automatically grants a
+permission because of a preset. Read-only review sessions use the provider's
+read-only/plan mode and reject all permission escalation. Access modes,
+including Claude planning, use `session/set_mode`. Models and other settings,
+including Codex collaboration, use `session/set_config_option`; legacy
+model/mode response fallbacks remain supported. Boolean options remain in
+backend snapshots while current chat controls render select options.
 
 The conversation composer keeps the model visible and shows reasoning effort
 when supported by native configuration or resolved capabilities. Access,

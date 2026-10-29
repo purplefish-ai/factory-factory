@@ -6,7 +6,10 @@ import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import {
   applyReadOnlyReviewPermissions,
   assertReadOnlyReviewConfigOption,
+  isAppliedAccessMode,
   resolveConfiguredAccessModeTarget,
+  SessionStartupPermissionError,
+  SessionStartupPermissions,
 } from './session-permission-policy';
 
 function mode(currentValue: string, values: string[], id = 'mode'): SessionConfigOption {
@@ -26,18 +29,51 @@ describe('provider native access policy', () => {
     ['CODEX', 'RELAXED', 'agent'],
     ['CODEX', 'YOLO', 'agent-full-access'],
     ['CLAUDE', 'STRICT', 'default'],
-    ['CLAUDE', 'RELAXED', 'acceptEdits'],
+    ['CLAUDE', 'RELAXED', 'auto'],
     ['CLAUDE', 'YOLO', 'bypassPermissions'],
   ] as const)('maps %s %s to native access %s', (provider, preset, target) => {
     const option = mode('plan', [
       'default',
       'acceptEdits',
+      'auto',
       'bypassPermissions',
       'workspace-write',
       'agent',
       'agent-full-access',
     ]);
     expect(resolveConfiguredAccessModeTarget(provider, option, preset)).toBe(target);
+  });
+
+  it('maps Claude RELAXED to Accept edits when Auto is not advertised', () => {
+    const option = mode('plan', ['default', 'acceptEdits', 'plan']);
+    expect(resolveConfiguredAccessModeTarget('CLAUDE', option, 'RELAXED')).toBe('acceptEdits');
+  });
+
+  it.each([
+    ['CLAUDE', 'auto', 'auto', true],
+    ['CLAUDE', 'auto', 'acceptEdits', true],
+    ['CLAUDE', 'auto', 'bypassPermissions', false],
+    ['CLAUDE', 'auto', 'default', false],
+    ['CLAUDE', 'default', 'acceptEdits', false],
+    ['CODEX', 'agent', 'agent', true],
+    ['CODEX', 'agent', 'workspace-write', false],
+  ] as const)(
+    'treats %s target %s with current %s as applied: %s',
+    (provider, target, current, ok) => {
+      expect(isAppliedAccessMode(provider, target, current)).toBe(ok);
+    }
+  );
+
+  it('accepts the adapter Auto fallback as the confirmed startup access', () => {
+    const handle = unsafeCoerce<AcpProcessHandle>({
+      provider: 'CLAUDE',
+      configOptions: [mode('acceptEdits', ['default', 'acceptEdits', 'auto'])],
+    });
+    const permissions = new SessionStartupPermissions();
+    expect(() => permissions.expectAccess(handle, 'mode', 'auto')).not.toThrow();
+    expect(() => permissions.assertCurrent(handle)).not.toThrow();
+    handle.configOptions = [mode('bypassPermissions', ['default', 'acceptEdits', 'auto'])];
+    expect(() => permissions.assertCurrent(handle)).toThrow(SessionStartupPermissionError);
   });
 
   it('restricts Codex access independently of collaboration mode', async () => {

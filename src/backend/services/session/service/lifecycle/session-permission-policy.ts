@@ -71,17 +71,36 @@ export async function applyReadOnlyReviewPermissions(
   return didUpdate;
 }
 
+// Presets name the adapters' shared mode kinds: standard, auto review, full access.
+const ACCESS_MODE_TARGETS: Record<'CLAUDE' | 'CODEX', Record<SessionPermissionPreset, string>> = {
+  CODEX: { STRICT: 'workspace-write', RELAXED: 'agent', YOLO: 'agent-full-access' },
+  CLAUDE: { STRICT: 'default', RELAXED: 'auto', YOLO: 'bypassPermissions' },
+};
+
+// Claude's adapter applies Accept edits when the selected model lacks Auto mode.
+const CLAUDE_AUTO_FALLBACK = 'acceptEdits';
+
 export function resolveConfiguredAccessModeTarget(
   provider: string,
   modeOption: SessionConfigOption,
   permissionPreset: SessionPermissionPreset
 ): string | null {
-  const targets =
-    provider === 'CODEX'
-      ? { STRICT: 'workspace-write', RELAXED: 'agent', YOLO: 'agent-full-access' }
-      : { STRICT: 'default', RELAXED: 'acceptEdits', YOLO: 'bypassPermissions' };
-  const target = targets[permissionPreset];
-  return getConfigOptionValues(modeOption).includes(target) ? target : null;
+  const target = ACCESS_MODE_TARGETS[provider === 'CODEX' ? 'CODEX' : 'CLAUDE'][permissionPreset];
+  const values = getConfigOptionValues(modeOption);
+  if (values.includes(target)) {
+    return target;
+  }
+  return provider === 'CLAUDE' && target === 'auto' && values.includes(CLAUDE_AUTO_FALLBACK)
+    ? CLAUDE_AUTO_FALLBACK
+    : null;
+}
+
+/** Whether the adapter's current mode satisfies a requested access target. */
+export function isAppliedAccessMode(provider: string, target: unknown, current: unknown): boolean {
+  return (
+    current === target ||
+    (provider === 'CLAUDE' && target === 'auto' && current === CLAUDE_AUTO_FALLBACK)
+  );
 }
 
 export class SessionStartupTargetError extends Error {
@@ -137,7 +156,8 @@ export class SessionStartupPermissions {
   }
 
   expectAccess(handle: AcpProcessHandle, id: string, value: string): void {
-    if (handle.configOptions.find((option) => option.id === id)?.currentValue !== value) {
+    const current = handle.configOptions.find((option) => option.id === id)?.currentValue;
+    if (!isAppliedAccessMode(handle.provider, value, current)) {
       throw new SessionStartupPermissionError();
     }
     this.capture(handle);
@@ -175,10 +195,10 @@ export class SessionStartupPermissions {
       }
     }
     for (const expected of this.required.get(handle) ?? []) {
-      if (
-        handle.configOptions.find((option) => option.id === expected.id)?.currentValue !==
-        expected.value
-      ) {
+      const current = handle.configOptions.find(
+        (option) => option.id === expected.id
+      )?.currentValue;
+      if (!isAppliedAccessMode(handle.provider, expected.value, current)) {
         throw new SessionStartupPermissionError();
       }
     }
