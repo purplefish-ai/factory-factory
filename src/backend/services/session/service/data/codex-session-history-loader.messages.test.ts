@@ -219,3 +219,150 @@ describe('Codex response-item history messages', () => {
     }
   );
 });
+
+describe('Codex history image attachments', () => {
+  let tempDir: string;
+  const png =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII=';
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'ff-codex-image-history-'));
+    vi.stubEnv('CODEX_HOME', tempDir);
+    vi.stubEnv('CODEX_SESSIONS_DIR', 'undefined');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  async function load(entries: unknown[]) {
+    const directory = join(tempDir, 'sessions', '2026', '10', '29');
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(
+      join(directory, 'rollout-image-history.jsonl'),
+      [{ type: 'session_meta', payload: { id: 'image-history', cwd: '/tmp/work' } }, ...entries]
+        .map((entry) => JSON.stringify(entry))
+        .join('\n')
+    );
+    const result = await codexSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId: 'image-history',
+      workingDir: '/tmp/work',
+    });
+    expect(result.status).toBe('loaded');
+    return result.status === 'loaded' ? result.history : [];
+  }
+
+  function userResponse(content: unknown[], kinds?: string[]) {
+    return {
+      type: 'response_item',
+      payload: {
+        type: 'message',
+        role: 'user',
+        content,
+        internal_chat_message_metadata_passthrough: {
+          turn_id: 'turn-1',
+          ...(kinds ? { content_item_kinds: kinds } : {}),
+        },
+      },
+    };
+  }
+
+  it('restores native input_image blocks as attachments on the user prompt', async () => {
+    const history = await load([
+      event('task_started', undefined, 'turn-1'),
+      userResponse(
+        [
+          { type: 'input_text', text: 'Look at this screenshot' },
+          { type: 'input_image', image_url: `data:image/png;base64,${png}`, detail: 'high' },
+        ],
+        ['user.text', 'user.image']
+      ),
+      {
+        type: 'event_msg',
+        payload: {
+          type: 'item_completed',
+          turn_id: 'turn-1',
+          item: {
+            type: 'UserMessage',
+            content: [{ type: 'text', text: 'Look at this screenshot' }],
+          },
+        },
+      },
+      response('assistant', 'Nice screenshot', { turnId: 'turn-1', phase: 'final_answer' }),
+    ]);
+    expect(history).toHaveLength(2);
+    expect(history[0]).toMatchObject({ type: 'user', content: 'Look at this screenshot' });
+    expect(history[0]?.attachments).toEqual([
+      {
+        id: expect.any(String),
+        name: 'image-1.png',
+        type: 'image/png',
+        contentType: 'image',
+        size: 68,
+        data: png,
+      },
+    ]);
+  });
+
+  it('restores image-only prompts and skips malformed or non-user images', async () => {
+    const history = await load([
+      event('task_started', undefined, 'turn-1'),
+      userResponse(
+        [
+          { type: 'input_image', image_url: 'data:image/jpeg;base64,/9j/2Q==' },
+          { type: 'input_image', image_url: 'data:text/html;base64,YWJj' },
+          { type: 'input_image', image_url: 'https://example.com/image.png' },
+          { type: 'input_image', image_url: 'data:image/png;base64,not base64!' },
+          { type: 'input_image', image_url: `data:image/png;base64,${png}` },
+        ],
+        ['user.image', 'user.image', 'user.image', 'user.image', 'environments.screenshot']
+      ),
+    ]);
+    expect(history).toHaveLength(1);
+    expect(history[0]).toMatchObject({ type: 'user', content: '' });
+    expect(history[0]?.attachments).toMatchObject([
+      { name: 'image-1.jpeg', type: 'image/jpeg', size: 4, data: '/9j/2Q==' },
+    ]);
+  });
+
+  it('keeps response image attachments when a legacy user_message event replaces the text', async () => {
+    const history = await load([
+      event('task_started', undefined, 'legacy-turn'),
+      {
+        type: 'response_item',
+        payload: {
+          type: 'message',
+          role: 'user',
+          content: [
+            { type: 'input_text', text: 'Legacy prompt' },
+            { type: 'input_image', image_url: `data:image/png;base64,${png}` },
+          ],
+        },
+      },
+      event('user_message', 'Legacy prompt'),
+      event('agent_message', 'Legacy answer'),
+    ]);
+    expect(history.map(({ type, content }) => ({ type, content }))).toEqual([
+      { type: 'user', content: 'Legacy prompt' },
+      { type: 'assistant', content: 'Legacy answer' },
+    ]);
+    expect(history[0]?.attachments).toMatchObject([{ type: 'image/png', data: png }]);
+  });
+
+  it('restores data URL images from legacy user_message events', async () => {
+    const history = await load([
+      {
+        type: 'event_msg',
+        payload: {
+          type: 'user_message',
+          message: 'Event prompt',
+          images: [`data:image/png;base64,${png}`, 'data:image/png;base64,'],
+          local_images: ['/private/tmp/codex/image.png'],
+        },
+      },
+    ]);
+    expect(history).toHaveLength(1);
+    expect(history[0]?.attachments).toMatchObject([{ name: 'image-1.png', data: png }]);
+  });
+});
