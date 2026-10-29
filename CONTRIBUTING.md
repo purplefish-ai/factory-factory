@@ -72,6 +72,13 @@ may name additional focused checks for their contracts. Inspect the final diff,
 report failed or unavailable checks, and never weaken assertions or guardrails
 to pass. Repeat successful checks only after edits or new evidence.
 
+Vitest keeps application, UI, native and integration tests isolated. The
+`shared` project reuses thread workers for the audited `reusableSharedTests`
+allowlist in `vitest.config.ts` to avoid repeated imports. Those tests must
+clean up their resources and avoid module mocks or shared global mutations. New
+files stay isolated by default; remove a file from the allowlist if it needs
+isolation. `pnpm test:integration` still selects only backend integration tests.
+
 `pnpm check` covers linting, formatting, file lengths, environment access,
 ownership, foreign-key indexes, and dependencies. Upstream ACP adapters own
 their provider protocol schemas; test ACP client contracts when upgrading either
