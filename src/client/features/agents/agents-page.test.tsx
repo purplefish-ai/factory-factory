@@ -21,7 +21,8 @@ const navigation = vi.hoisted(
     slug: string;
     setSlug: (slug: string) => void;
     setProjectsError: (error: Error | null) => void;
-  } => ({ slug: 'stale', setSlug: vi.fn(), setProjectsError: vi.fn() })
+    refetchProjects: ReturnType<typeof vi.fn>;
+  } => ({ slug: 'stale', setSlug: vi.fn(), setProjectsError: vi.fn(), refetchProjects: vi.fn() })
 );
 const projects = [
   { id: 'stale', slug: 'stale', name: 'Other project' },
@@ -39,7 +40,7 @@ vi.mock('@/client/hooks/use-app-navigation-data', async (importOriginal) => ({
       projects,
       selectedProjectSlug: slug,
       selectProjectSlug: setSlug,
-      refetchProjects: vi.fn(),
+      refetchProjects: navigation.refetchProjects,
       projectsError,
     };
   },
@@ -267,6 +268,11 @@ beforeEach(() => {
   document.body.append(container);
   root = createRoot(container);
   navigation.slug = 'stale';
+  navigation.refetchProjects.mockClear();
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+    configurable: true,
+    value: vi.fn(),
+  });
   notifications.error.mockClear();
   failMutation = null;
   failQuery = null;
@@ -508,14 +514,44 @@ describe('AgentsPage coordination', () => {
       expect(container.querySelector('h2')?.textContent).toBe('Review changes')
     );
     actFlushSync(() => button('Edit Agent').click());
-    actFlushSync(() => navigation.setProjectsError(new Error('Project refresh unavailable')));
-    expect(container.textContent).toContain('Project refresh unavailable');
-    expect(button('Retry projects')).toBeDefined();
-    expect(container.querySelector('form')).not.toBeNull();
-    expect(container.querySelector<HTMLInputElement>('input[name="name"]')?.value).toBe(
-      'Review changes'
-    );
-    expect(container.querySelector('form')).not.toBeNull();
+    const originalForm = container.querySelector('form');
+    const name = container.querySelector<HTMLInputElement>('input[name="name"]');
+    actFlushSync(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+        name,
+        'Unsaved review draft'
+      );
+      name?.dispatchEvent(new Event('input', { bubbles: true }));
+      navigation.setProjectsError(new Error('Project refresh unavailable'));
+    });
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      expect(container.textContent).toContain('Project refresh unavailable');
+      await act(() =>
+        container
+          .querySelector('[aria-label="Open project menu"]')
+          ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+      );
+      const retry = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
+        (option) => option.textContent === 'Retry projects'
+      );
+      expect(retry).toBeDefined();
+      await act(() => {
+        retry?.focus();
+      });
+      await act(() =>
+        retry?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+      );
+      expect(navigation.refetchProjects).toHaveBeenCalledTimes(attempt);
+      expect(container.querySelector('output')?.textContent).toBe(
+        '/projects/owner-slug/agents/agent'
+      );
+      expect(container.querySelector('form')).toBe(originalForm);
+      expect(container.querySelector<HTMLInputElement>('input[name="name"]')).toBe(name);
+      expect(name?.value).toBe('Unsaved review draft');
+      expect(
+        container.querySelector('[aria-label="Open Owner project workspaces"]')
+      ).not.toBeNull();
+    }
   });
   it('does not override a project switch when a pending creation succeeds', async () => {
     navigation.slug = 'owner-slug';

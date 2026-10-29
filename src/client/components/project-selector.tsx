@@ -5,6 +5,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 
 const CURRENT_PROJECT_VALUE = '__current_project__';
+const RETRY_PROJECTS_VALUE = '__retry_projects__';
 const DEFAULT_PROJECT_BUTTON_CLASS =
   'h-7 w-auto max-w-[6rem] border-0 bg-transparent px-0.5 text-sm font-semibold text-foreground shadow-none focus:ring-0 sm:max-w-[18rem] sm:px-1';
 
@@ -36,6 +37,7 @@ export function ProjectSelectorDropdown({
   projectButtonClassName,
   triggerId = 'project-select',
   onCurrentProjectSelect,
+  onRetryProjects,
   showLeadingSlash = false,
   showTrailingSlash = false,
   trailingSeparatorType = 'chevron',
@@ -47,6 +49,7 @@ export function ProjectSelectorDropdown({
   projectButtonClassName?: string;
   triggerId?: string;
   onCurrentProjectSelect?: () => void;
+  onRetryProjects?: () => void;
   showLeadingSlash?: boolean;
   showTrailingSlash?: boolean;
   trailingSeparatorType?: 'chevron' | 'slash';
@@ -62,6 +65,10 @@ export function ProjectSelectorDropdown({
     : projects;
 
   const handleValueChange = (value: string) => {
+    if (value === RETRY_PROJECTS_VALUE) {
+      onRetryProjects?.();
+      return;
+    }
     if (value === CURRENT_PROJECT_VALUE) {
       onCurrentProjectSelect?.();
       return;
@@ -125,6 +132,11 @@ export function ProjectSelectorDropdown({
               {project.name}
             </SelectItem>
           ))}
+          {onRetryProjects ? (
+            <SelectItem value={RETRY_PROJECTS_VALUE} className="text-destructive">
+              Retry projects
+            </SelectItem>
+          ) : null}
           <SelectItem value="__create__" className="text-muted-foreground">
             + Create project
           </SelectItem>

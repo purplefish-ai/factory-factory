@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TRPCClientError } from '@trpc/client';
 import { observable } from '@trpc/server/observable';
-import { useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { AppHeader } from '@/client/components/app-header';
 import { AppHeaderProvider, useAppHeader } from '@/client/components/app-header-context';
@@ -85,6 +85,36 @@ const navigation: AppNavigationData = {
   clearAttention: () => undefined,
   currentWorkspaceId: workspace.id,
 };
+function FixtureNavigation({
+  projectsError,
+  children,
+}: {
+  projectsError: boolean;
+  children: ReactNode;
+}) {
+  const [retryCount, setRetryCount] = useState(0);
+  const projects = trpc.project.list.useQuery({ isArchived: false }, { enabled: false });
+  return (
+    <AppNavigationDataProvider
+      value={{
+        ...navigation,
+        projectsError:
+          projectsError && retryCount === 0
+            ? TRPCClientError.from(new Error('Project refresh unavailable'))
+            : null,
+        refetchProjects: () => {
+          setRetryCount((count) => count + 1);
+          return projects.refetch();
+        },
+      }}
+    >
+      {children}
+      <output aria-label="Project retry count" className="sr-only">
+        {retryCount}
+      </output>
+    </AppNavigationDataProvider>
+  );
+}
 function GenericHeader() {
   useAppHeader({ title: 'Application settings with an exceptionally long page title' });
   return null;
@@ -114,7 +144,10 @@ function FixtureHeader({ variant }: { variant: string | null }) {
 }
 
 /** Actual portal/header composition with isolated static reads and no backend writes. */
-export function WorkspaceHeaderFixture({ variant: storyVariant }: { variant?: string } = {}) {
+export function WorkspaceHeaderFixture({
+  variant: storyVariant,
+  projectsError = false,
+}: { variant?: string; projectsError?: boolean } = {}) {
   const [params] = useSearchParams();
   const [queryClient] = useState(
     () => new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
@@ -171,7 +204,7 @@ export function WorkspaceHeaderFixture({ variant: storyVariant }: { variant?: st
   return (
     <trpc.Provider client={client} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
-        <AppNavigationDataProvider value={navigation}>
+        <FixtureNavigation projectsError={projectsError || params.get('projectsError') === '1'}>
           <SidebarProvider className="h-dvh min-h-0 w-full flex-col">
             <TooltipProvider>
               <AppHeaderProvider>
@@ -183,7 +216,7 @@ export function WorkspaceHeaderFixture({ variant: storyVariant }: { variant?: st
               </AppHeaderProvider>
             </TooltipProvider>
           </SidebarProvider>
-        </AppNavigationDataProvider>
+        </FixtureNavigation>
       </QueryClientProvider>
     </trpc.Provider>
   );

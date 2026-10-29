@@ -17,3 +17,8 @@ export const PhoneWorkspace: Story = {
 };
 export const Project: Story = { args: { variant: 'project' } };
 export const Generic: Story = { args: { variant: 'generic' } };
+
+export const ProjectListError: Story = {
+  args: { projectsError: true },
+  globals: { viewport: { value: 'mobile1', isRotated: false } },
+};

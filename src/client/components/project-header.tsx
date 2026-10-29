@@ -38,23 +38,18 @@ export function ProjectHeaderNavigation({
         showLeadingSlash
         showTrailingSlash={showTrailingSlash}
         triggerId={triggerId}
+        onRetryProjects={
+          projectsError
+            ? () => {
+                void refetchProjects();
+              }
+            : undefined
+        }
       />
       {projectsError ? (
-        <>
-          <span role="alert" className="sr-only">
-            Could not load projects: {projectsError.message}
-          </span>
-          <button
-            type="button"
-            className="shrink-0 whitespace-nowrap text-xs text-destructive underline"
-            title={projectsError.message}
-            onClick={() => {
-              void refetchProjects();
-            }}
-          >
-            Retry projects
-          </button>
-        </>
+        <span role="alert" className="sr-only">
+          Could not load projects: {projectsError.message}
+        </span>
       ) : null}
     </div>
   );

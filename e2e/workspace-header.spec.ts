@@ -123,3 +123,52 @@ for (const width of [375, 768, 810, 1024, 1280]) {
     });
   }
 }
+
+for (const width of [375, 810]) {
+  for (const variant of ['workspace', 'project']) {
+    test(`${variant} project retry keeps one row at ${width}`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 720 });
+      await page.goto(`/__mobile-baseline?surface=header&header=${variant}&projectsError=1`);
+      await expect(page.getByRole('alert')).toContainText('Project refresh unavailable');
+      await expectOneRow(page);
+      const currentProject = page.getByRole('button', {
+        name: 'Open Factory Factory with an exceptionally long project name workspaces',
+        exact: true,
+      });
+      await expect(currentProject).toBeVisible();
+      await expect(page.locator('header')).toHaveScreenshot(
+        `${variant}-header-project-error-${width}.png`
+      );
+      await page.getByRole('combobox', { name: 'Open project menu' }).click();
+      await expect(
+        page.getByRole('option', {
+          name: 'Factory Factory with an exceptionally long project name',
+          exact: true,
+        })
+      ).toBeVisible();
+      const retry = page.getByRole('option', { name: 'Retry projects', exact: true });
+      await expect(retry).toBeVisible();
+      await retry.focus();
+      await page.keyboard.press('Enter');
+      await expect(page.getByLabel('Project retry count')).toHaveText('1');
+      await expect(page.getByRole('alert')).toHaveCount(0);
+      await expect(currentProject).toBeVisible();
+      await expectOneRow(page);
+      if (variant === 'workspace') {
+        await page.getByRole('combobox', { name: /Open workspace menu/ }).click();
+        await expect(page.getByText('Waiting · 0')).toBeVisible();
+        await page.keyboard.press('Escape');
+      }
+      await page.getByRole('combobox', { name: 'Open project menu' }).click();
+      await expect(page.getByRole('option', { name: 'Retry projects', exact: true })).toHaveCount(
+        0
+      );
+      await expect(
+        page.getByRole('option', { name: '+ Create project', exact: true })
+      ).toBeVisible();
+      await expect(
+        page.getByRole('option', { name: 'Manage projects...', exact: true })
+      ).toBeVisible();
+    });
+  }
+}
