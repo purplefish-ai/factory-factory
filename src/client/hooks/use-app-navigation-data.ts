@@ -127,7 +127,7 @@ export function useAppNavigationData() {
     const next = { id: reviewProject.id, repository: getReviewRepository(reviewProject) };
     const previous = previousReviewScope.current;
     previousReviewScope.current = next;
-    if (previous?.id === next.id && previous.repository !== next.repository) {
+    if (previous && previous.id === next.id && previous.repository !== next.repository) {
       void utils.prReview.listReviewRequests.reset({ projectId: next.id });
     }
   }, [reviewProject, utils]);

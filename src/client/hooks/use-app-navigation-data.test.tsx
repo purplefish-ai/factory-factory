@@ -223,3 +223,34 @@ it('refreshes project review cache when repository metadata changes on the same 
     flushSync(() => root.unmount());
   }
 });
+
+it('does not treat initial project metadata without an ID as a previous scope', () => {
+  mocks.resetReviews.mockClear();
+  mocks.getBySlug.mockReturnValue({ data: { success: true } });
+  window.history.replaceState({}, '', '/');
+  localStorage.clear();
+  const onUncaughtError = vi.fn();
+  const root = createRoot(document.createElement('div'), { onUncaughtError });
+  const selected: { reviewCount?: number } = {};
+  try {
+    flushSync(() =>
+      root.render(
+        createElement(
+          MemoryRouter,
+          { initialEntries: ['/projects/archived-owner/agents/requested-agent'] },
+          createElement(NavigationHarness, { selected })
+        )
+      )
+    );
+    expect(onUncaughtError).not.toHaveBeenCalled();
+    expect(selected.reviewCount).toBe(0);
+    expect(mocks.resetReviews).not.toHaveBeenCalled();
+    expect(mocks.reviewQuery).toHaveBeenLastCalledWith(
+      { projectId: '' },
+      expect.objectContaining({ enabled: false })
+    );
+  } finally {
+    flushSync(() => root.unmount());
+    localStorage.clear();
+  }
+});
