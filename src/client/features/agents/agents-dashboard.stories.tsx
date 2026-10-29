@@ -118,6 +118,17 @@ function StoryContent({
             errorMessage: null,
           },
           {
+            id: 'nothing-to-do',
+            periodicTaskId: agent.id,
+            workspaceId: 'run-nothing-to-do',
+            status: 'COMPLETED',
+            startedAt: new Date('2026-10-27T18:00:00Z'),
+            completedAt: new Date('2026-10-27T18:06:00Z'),
+            prUrl: null,
+            prNumber: null,
+            errorMessage: null,
+          },
+          {
             id: 'failed',
             periodicTaskId: agent.id,
             workspaceId: null,

@@ -179,6 +179,7 @@ export type PeriodicTaskCadence = (typeof PeriodicTaskCadence)[keyof typeof Peri
 export const PeriodicTaskExecutionStatus = {
   RUNNING: 'RUNNING',
   PR_CREATED: 'PR_CREATED',
+  COMPLETED: 'COMPLETED',
   FAILED: 'FAILED',
   SKIPPED: 'SKIPPED'
 } as const

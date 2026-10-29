@@ -78,6 +78,14 @@ describe('AgentRunHistory', () => {
     expect(container.textContent).toContain('Provider permission denied');
     expect(container.textContent).not.toContain('deleted');
   });
+  it('shows runs that finished without a PR as completed rather than failed', () => {
+    renderHistory([run({ id: 'quiet', workspaceId: 'quiet-workspace', status: 'COMPLETED' })]);
+    const badge = container.querySelector('[data-slot="badge"]');
+    expect(badge?.textContent).toBe('Completed');
+    expect(badge?.getAttribute('data-variant')).not.toBe('destructive');
+    expect(container.textContent).not.toContain('Failed');
+    expect(container.textContent).toContain('Open workspace');
+  });
   it('encodes imported project slugs and workspace IDs in run-history links', () => {
     renderHistory([run({ workspaceId: 'workspace/one space' })], {
       projectSlug: 'owner/project space',

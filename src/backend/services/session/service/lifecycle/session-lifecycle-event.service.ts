@@ -63,6 +63,17 @@ export class SessionLifecycleEventService {
     return event;
   }
 
+  /**
+   * The most recent provider failure (error, timeout, or crash) recorded for any
+   * session in the workspace. Deliberate stops are not failures.
+   */
+  async findLatestSessionFailure(
+    workspaceId: string
+  ): Promise<{ message: string; createdAt: Date } | null> {
+    const event = await this.dependencies.store.findLatestFailureByWorkspaceId(workspaceId);
+    return event ? { message: event.message, createdAt: event.createdAt } : null;
+  }
+
   async hydrate(sessionId: string): Promise<void> {
     let events: SessionLifecycleEventRecord[];
     try {

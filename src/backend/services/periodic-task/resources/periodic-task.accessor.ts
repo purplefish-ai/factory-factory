@@ -378,7 +378,7 @@ export const periodicTaskAccessor = {
         COALESCE(SUM((
           SELECT execution.status FROM PeriodicTaskExecution AS execution
           WHERE execution.periodicTaskId = agent.id
-            AND execution.status IN ('FAILED', 'PR_CREATED')
+            AND execution.status IN ('FAILED', 'PR_CREATED', 'COMPLETED')
           ORDER BY execution.startedAt DESC, execution.id DESC
           LIMIT 1
         ) = 'FAILED'), 0) AS failedCount

@@ -138,7 +138,8 @@ enum PeriodicTaskCadence {
 enum PeriodicTaskExecutionStatus {
   RUNNING       // Workspace created, agent working
   PR_CREATED    // Agent created a PR
-  FAILED        // Workspace failed or errored
+  COMPLETED     // Agent session finished without error and without a PR
+  FAILED        // Agent session errored, or the workspace could not be set up
   SKIPPED       // Skipped (previous run still active)
 }
 

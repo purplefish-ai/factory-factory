@@ -22,6 +22,7 @@ import type {
   sessionDispatchService,
   sessionDataService,
   sessionDomainService,
+  sessionLifecycleEventService,
   sessionLifecycleService,
   sessionPromptTurnCompletionService,
   sessionService,
@@ -75,6 +76,10 @@ export type BridgeServices = PRMonitoringServices & {
   acpRuntimeManager: typeof acpRuntimeManager;
   sessionDataService: typeof sessionDataService;
   sessionDomainService: typeof sessionDomainService;
+  sessionLifecycleEventService: Pick<
+    typeof sessionLifecycleEventService,
+    'findLatestSessionFailure'
+  >;
   sessionLifecycleService: typeof sessionLifecycleService;
   sessionPromptTurnCompletionService: typeof sessionPromptTurnCompletionService;
   sessionService: typeof sessionService;
@@ -107,6 +112,7 @@ export function configureDomainBridges(services: BridgeServices): void {
     reconciliationService,
     sessionDataService,
     sessionDomainService,
+    sessionLifecycleEventService,
     sessionLifecycleService,
     sessionPromptTurnCompletionService,
     sessionService,
@@ -263,7 +269,10 @@ export function configureDomainBridges(services: BridgeServices): void {
         if (!ws) {
           return null;
         }
-        const sessions = await sessionDataService.findAgentSessionsByWorkspaceId(workspaceId);
+        const [sessions, sessionFailure] = await Promise.all([
+          sessionDataService.findAgentSessionsByWorkspaceId(workspaceId),
+          sessionLifecycleEventService.findLatestSessionFailure(workspaceId),
+        ]);
         const sessionIds = sessions.map((session) => session.id);
         return {
           status: ws.status,
@@ -277,6 +286,7 @@ export function configureDomainBridges(services: BridgeServices): void {
                 sessionDomainService.getQueueLength(sessionId) > 0
             ),
           initCompletedAt: ws.initCompletedAt,
+          sessionFailureMessage: sessionFailure?.message ?? null,
         };
       },
     },
