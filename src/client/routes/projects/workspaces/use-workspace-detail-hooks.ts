@@ -328,11 +328,25 @@ export function useArchivedWorkspaceRedirect({
   archivePending: boolean;
 }) {
   const navigate = useNavigate();
+  const wasPendingRef = useRef(archivePending);
+  const staleArchivingRef = useRef(false);
   useEffect(() => {
+    const justSettled = wasPendingRef.current && !archivePending;
+    wasPendingRef.current = archivePending;
     // The server broadcasts ARCHIVING before archiving. While this route's own
     // archive is pending, stay mounted: success navigates and failure needs
     // this route to show lock recovery.
-    if (archivePending || (status !== 'ARCHIVING' && status !== 'ARCHIVED')) {
+    if (archivePending) {
+      return;
+    }
+    // If the post-archive refresh failed, ARCHIVING can outlive our own archive.
+    // Ignore it until a fresh status arrives so a failure keeps its recovery UI.
+    if (status !== 'ARCHIVING') {
+      staleArchivingRef.current = false;
+    } else if (justSettled) {
+      staleArchivingRef.current = true;
+    }
+    if (staleArchivingRef.current || (status !== 'ARCHIVING' && status !== 'ARCHIVED')) {
       return;
     }
     void navigate(slug ? `/projects/${slug}/workspaces` : '/projects', { replace: true });

@@ -472,13 +472,14 @@ describe('workspace detail archive caller', () => {
     vi.spyOn(f.queryClient, 'invalidateQueries').mockRejectedValue(new Error('refresh failed'));
     f.route().archiveWorkspace.mutate({ id: 'ws-1' }, { onSuccess: success, onError: error });
     await vi.waitFor(() => expect(f.requests).toHaveLength(1));
+    // Success navigation unmounts the detail route, so check IDE state while it is live.
+    expect(f.route().availableIdes).toEqual([{ id: 'code', name: 'VS Code' }]);
+    expect(f.route().preferredIde).toBe('code');
     f.requests[0]!.resolve({ id: 'ws-1' });
     await vi.waitFor(() => expect(success).toHaveBeenCalledOnce());
     expect(error).not.toHaveBeenCalled();
     await vi.waitFor(() => expect(f.location()).toBe('/projects/project/workspaces'));
     expect(f.rows().map((row) => row.id)).toEqual(['ws-2']);
-    expect(f.route().availableIdes).toEqual([{ id: 'code', name: 'VS Code' }]);
-    expect(f.route().preferredIde).toBe('code');
   });
 
   it.each(['ordinary', 'locked'])(
@@ -581,6 +582,33 @@ describe('workspace detail archive caller', () => {
     expect(error).toHaveBeenCalledWith(locked);
     expect(toast.error).not.toHaveBeenCalled();
     expect(f.location()).toBe('/detail');
+  });
+
+  it('keeps lock recovery mounted when the failed archive refresh leaves ARCHIVING cached', async () => {
+    const f = fixture('route');
+    vi.spyOn(f.queryClient, 'invalidateQueries').mockRejectedValue(new Error('refresh failed'));
+    f.route().archiveWorkspace.mutate({ id: 'ws-1' }, { onError: vi.fn() });
+    await vi.waitFor(() => expect(f.requests).toHaveLength(1));
+    f.render('ws-1', 'ARCHIVING');
+    await settleRouterNavigation();
+    f.requests[0]!.reject(
+      TRPCClientError.from({
+        error: {
+          message: 'Git locked',
+          code: -32_603,
+          data: { applicationErrorKind: 'GIT_INDEX_LOCKED' },
+        },
+      })
+    );
+    await vi.waitFor(() => expect(f.route().archiveWorkspace.isPending).toBe(false));
+    expect(f.locked).toHaveBeenCalledOnce();
+    await settleRouterNavigation();
+    expect(f.location()).toBe('/detail');
+    // Once a fresh status arrives, a later archive from another surface redirects again.
+    f.render('ws-1', 'READY');
+    await settleRouterNavigation();
+    f.render('ws-1', 'ARCHIVING');
+    await vi.waitFor(() => expect(f.location()).toBe('/projects/project/workspaces'));
   });
 
   it('navigates once its own pending archive succeeds while ARCHIVED is already visible', async () => {
