@@ -1,9 +1,9 @@
-import { CalendarIcon } from '@phosphor-icons/react/dist/csr/Calendar';
 import { CameraIcon } from '@phosphor-icons/react/dist/csr/Camera';
 import { FileDashedIcon } from '@phosphor-icons/react/dist/csr/FileDashed';
 import { FilesIcon } from '@phosphor-icons/react/dist/csr/Files';
 import { ListChecksIcon } from '@phosphor-icons/react/dist/csr/ListChecks';
 import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
+import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
 import { TreeStructureIcon } from '@phosphor-icons/react/dist/csr/TreeStructure';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -128,7 +128,7 @@ function TopPanelArea({
         {periodicTaskId && (
           <TabButton
             label="Agent"
-            icon={<CalendarIcon className="h-3.5 w-3.5" />}
+            icon={<RobotIcon className="h-3.5 w-3.5" />}
             isActive={showPeriodicTask}
             onSelect={() => onTopTabChange('periodic-task')}
           />

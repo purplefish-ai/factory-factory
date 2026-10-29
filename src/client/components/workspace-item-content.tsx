@@ -1,7 +1,7 @@
-import { ClockIcon } from '@phosphor-icons/react/dist/csr/Clock';
 import { DotOutlineIcon } from '@phosphor-icons/react/dist/csr/DotOutline';
 import { GitBranchIcon } from '@phosphor-icons/react/dist/csr/GitBranch';
 import { GitPullRequestIcon } from '@phosphor-icons/react/dist/csr/GitPullRequest';
+import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { TreeStructureIcon } from '@phosphor-icons/react/dist/csr/TreeStructure';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
 import { WorkspaceStatusIcon } from '@/client/components/workspace-status-icon';
@@ -10,7 +10,9 @@ import { getVisibleWorkspaceStatusReason } from '@/client/lib/workspace-status-r
 
 function CreationSourceIcon({ creationSource }: { creationSource?: string | null }) {
   if (creationSource === 'PERIODIC_TASK') {
-    return <ClockIcon className="h-3 w-3 shrink-0 text-muted-foreground" />;
+    return (
+      <RobotIcon aria-label="Agent workspace" className="h-3 w-3 shrink-0 text-muted-foreground" />
+    );
   }
   if (creationSource === 'CHILD_WORKSPACE') {
     return <TreeStructureIcon className="h-3 w-3 shrink-0 text-violet-500" />;

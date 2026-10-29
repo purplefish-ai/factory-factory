@@ -362,7 +362,7 @@ describe('periodic task launch policy', () => {
     expect(ports.createDefaultSession).toHaveBeenCalledWith({
       workspaceId: 'w-created',
       workflow: 'periodic-task',
-      name: 'Periodic task',
+      name: 'Agent',
     });
     expect(ports.initializeWorktree).toHaveBeenCalledExactlyOnceWith('w-created');
   });

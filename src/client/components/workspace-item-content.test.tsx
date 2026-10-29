@@ -159,3 +159,15 @@ describe('WorkspaceItemContent', () => {
     container.remove();
   });
 });
+
+it.each(['PERIODIC_TASK', 'MANUAL'] as const)(
+  'identifies only agent workspace origins with a robot: %s',
+  (creationSource) => {
+    const { container, root } = renderContent({ ...baseWorkspace, creationSource });
+    expect(container.querySelector('svg[aria-label="Agent workspace"]') !== null).toBe(
+      creationSource === 'PERIODIC_TASK'
+    );
+    actFlushSync(() => root.unmount());
+    container.remove();
+  }
+);

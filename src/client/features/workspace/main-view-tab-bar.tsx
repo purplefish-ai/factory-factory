@@ -7,6 +7,7 @@ import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { useEffect } from 'react';
 import { type SubagentSelection, useLiveSubagentSelection } from '@/client/features/subagents';
+import { getSessionDisplayName } from '@/client/lib/session-display-name';
 import { TabButton } from '@/components/ui/tab-button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -78,12 +79,13 @@ function getSubagentIconClass(status: SubagentSelection['subagent']['status']): 
 interface StatusDotProps {
   sessionSummary?: WorkspaceSessionRuntimeSummary;
   isCIFix?: boolean;
+  isAgent?: boolean;
   persistedStatus?: DbSessionStatus;
 }
 
-function StatusDot({ sessionSummary, isCIFix, persistedStatus }: StatusDotProps) {
+function StatusDot({ sessionSummary, isCIFix, isAgent, persistedStatus }: StatusDotProps) {
   const status = deriveSessionTabRuntime(sessionSummary, persistedStatus);
-  const StatusIcon = status.icon;
+  const StatusIcon = isAgent ? RobotIcon : status.icon;
 
   // CI fix sessions show wrench icon instead of dot
   if (isCIFix) {
@@ -115,11 +117,12 @@ function StatusDot({ sessionSummary, isCIFix, persistedStatus }: StatusDotProps)
       <TooltipTrigger asChild>
         <span className="flex items-center justify-center w-3.5 h-3.5">
           <StatusIcon
+            aria-label={isAgent ? `Agent: ${status.label}` : undefined}
             className={cn(
               'h-3.5 w-3.5 shrink-0',
               status.color,
               status.pulse && 'animate-pulse',
-              status.spin && 'animate-spin'
+              !isAgent && status.spin && 'animate-spin'
             )}
           />
         </span>
@@ -219,6 +222,7 @@ interface SessionTabItemProps {
   isActive: boolean;
   sessionSummary?: WorkspaceSessionRuntimeSummary;
   isCIFix?: boolean;
+  isAgent?: boolean;
   persistedStatus?: DbSessionStatus;
   onSelect: () => void;
   onClose?: () => void;
@@ -229,6 +233,7 @@ function SessionTabItem({
   isActive,
   sessionSummary,
   isCIFix,
+  isAgent,
   persistedStatus,
   onSelect,
   onClose,
@@ -239,6 +244,7 @@ function SessionTabItem({
         <StatusDot
           sessionSummary={sessionSummary}
           isCIFix={isCIFix}
+          isAgent={isAgent}
           persistedStatus={persistedStatus}
         />
       }
@@ -308,7 +314,7 @@ export function MainViewTabBar({
         {/* Session tabs (Chat 1, Chat 2, etc.) */}
         {sessions?.map((session, index) => {
           const isSelected = session.id === currentSessionId;
-          const baseLabel = session.name ?? `Chat ${index + 1}`;
+          const baseLabel = getSessionDisplayName(session, `Chat ${index + 1}`);
           return (
             <SessionTabItem
               key={session.id}
@@ -316,6 +322,7 @@ export function MainViewTabBar({
               isActive={isSelected && activeTabId === 'chat'}
               sessionSummary={sessionSummariesById?.get(session.id)}
               isCIFix={session.workflow === 'ci-fix'}
+              isAgent={session.workflow === 'periodic-task'}
               persistedStatus={session.status}
               onSelect={() => {
                 onSelectSession?.(session.id);

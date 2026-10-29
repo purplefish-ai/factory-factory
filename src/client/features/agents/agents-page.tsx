@@ -71,7 +71,6 @@ function AgentSelectionContent({ controller }: { controller: Controller }) {
     return (
       <>
         <div>
-          <p className="mb-2 text-xs text-muted-foreground">{project.name}</p>
           <h2 className="text-xl font-semibold">Create Agent</h2>
         </div>
         <AgentForm
@@ -109,7 +108,6 @@ function AgentSelectionContent({ controller }: { controller: Controller }) {
         <AgentRequestError task={task} refresh />
         <AgentDetail
           agent={task.data}
-          projectName={project.name}
           onEdit={() => controller.setMode('edit')}
           onToggle={controller.toggle}
           onDelete={controller.openDelete}

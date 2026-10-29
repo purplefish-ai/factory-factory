@@ -109,6 +109,13 @@ export const WithSessions: Story = {
         sessions={[
           { id: 'existing', name: 'Chat 1', status: 'RUNNING', provider: 'CODEX' },
           { id: 'second', name: 'Chat 2', status: 'IDLE', provider: 'CODEX' },
+          {
+            id: 'agent',
+            name: 'Periodic task',
+            workflow: 'periodic-task',
+            status: 'RUNNING',
+            provider: 'CODEX',
+          },
         ]}
         currentSessionId="existing"
         onCreateSession={fn()}

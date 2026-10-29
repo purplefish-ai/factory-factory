@@ -1,5 +1,5 @@
-import { CalendarIcon } from '@phosphor-icons/react/dist/csr/Calendar';
 import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
+import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { useQueryClient } from '@tanstack/react-query';
 import type { inferRouterOutputs } from '@trpc/server';
@@ -504,7 +504,7 @@ export function InlineWorkspaceForm({
                   Launch as Standard Workspace
                 </DropdownMenuItem>
                 <DropdownMenuItem className="text-xs" onClick={() => setMode('PERIODIC_TASK')}>
-                  <CalendarIcon className="mr-1.5 h-3 w-3" />
+                  <RobotIcon className="mr-1.5 h-3 w-3" />
                   Create Agent
                 </DropdownMenuItem>
               </DropdownMenuContent>

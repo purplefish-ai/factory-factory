@@ -65,7 +65,7 @@ export function AgentsDashboardShell({
   children,
 }: AgentsDashboardShellProps) {
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+    <div className="@container/agents flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
       <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b px-4 py-4 sm:px-6">
         <div>
           <h1 className="text-lg font-semibold tracking-tight">Agents</h1>
@@ -78,8 +78,8 @@ export function AgentsDashboardShell({
           Create Agent
         </Button>
       </header>
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col md:flex-row">
-        <aside className="flex max-h-64 shrink-0 flex-col border-b bg-muted/15 md:max-h-none md:w-72 md:border-r md:border-b-0 lg:w-80">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col @[48rem]/agents:flex-row">
+        <aside className="flex max-h-64 shrink-0 flex-col border-b bg-muted/15 @[48rem]/agents:max-h-none @[48rem]/agents:w-72 @[48rem]/agents:border-r @[48rem]/agents:border-b-0 @[64rem]/agents:w-80">
           <nav aria-label="Agents" className="min-h-0 overflow-y-auto p-2">
             {error && (
               <div role="alert" className="space-y-2 p-2 text-xs">

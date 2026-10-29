@@ -298,6 +298,7 @@ describe('AgentsPage coordination', () => {
         container.querySelector('a[href="/projects/owner-slug/workspaces/archived-workspace"]')
       ).not.toBeNull()
     );
+    expect(container.querySelector('main')?.textContent).not.toContain('Owner project');
     expect(requests).toContainEqual({ path: 'periodicTask.list', input: { projectId: 'owner' } });
     expect(requests).toContainEqual({
       path: 'periodicTask.listExecutions',
@@ -759,7 +760,7 @@ describe('AgentsPage coordination', () => {
       expect(container.querySelector('h2')?.textContent).toBe('Review changes')
     );
     actFlushSync(() => button('Create Agent').click());
-    expect(container.textContent).toContain('runs immediately after creation');
+    expect(container.textContent).toContain('first run starts shortly after creation');
     const setters = [
       ['input[name="name"]', 'Daily agent'],
       ['textarea', 'Review code'],

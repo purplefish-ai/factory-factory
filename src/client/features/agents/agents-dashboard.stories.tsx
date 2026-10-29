@@ -59,7 +59,6 @@ function StoryContent({
   return mode === 'create' || mode === 'edit' ? (
     <>
       <div>
-        <p className="mb-2 text-xs text-muted-foreground">{project.name}</p>
         <h2 className="text-xl font-semibold">{mode === 'edit' ? 'Edit Agent' : 'Create Agent'}</h2>
       </div>
       <AgentForm
@@ -89,7 +88,6 @@ function StoryContent({
   ) : (
     <AgentDetail
       agent={{ ...agent, isEnabled: enabled }}
-      projectName={project.name}
       onEdit={() => setMode('edit')}
       onToggle={onToggle}
       onDelete={() => setMode('empty')}
@@ -165,8 +163,18 @@ function DashboardSession({
     </div>
   );
 }
-function DashboardStory({ state = 'populated' }: { state?: StoryMode }) {
-  return <DashboardSession key={state} state={state} />;
+function DashboardStory({
+  state = 'populated',
+  contentWidth,
+}: {
+  state?: StoryMode;
+  contentWidth?: number;
+}) {
+  return (
+    <div style={{ width: contentWidth, maxWidth: '100%' }}>
+      <DashboardSession key={state} state={state} />
+    </div>
+  );
 }
 const meta = {
   title: 'Agents/Focused Dashboard',
@@ -181,3 +189,8 @@ export const Loading: Story = { args: { state: 'loading' } };
 export const RequestFailure: Story = { args: { state: 'error' } };
 export const Create: Story = { args: { state: 'create' } };
 export const Edit: Story = { args: { state: 'edit' } };
+
+// A wide browser can still leave a narrow editor beside the workspace sidebar.
+export const ConstrainedCreate: Story = { args: { state: 'create', contentWidth: 458 } };
+export const ConstrainedEdit: Story = { args: { state: 'edit', contentWidth: 640 } };
+export const ConstrainedDetail: Story = { args: { state: 'populated', contentWidth: 416 } };

@@ -1,4 +1,4 @@
-import { CalendarIcon } from '@phosphor-icons/react/dist/csr/Calendar';
+import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { Link } from 'react-router';
 import { AgentRunHistoryQuery, describeAgentSchedule } from '@/client/features/agents';
 import { getProjectAgentPath, getProjectSectionPath } from '@/client/lib/project-navigation';
@@ -124,7 +124,7 @@ export function PeriodicTaskPanel({ periodicTaskId, projectId }: PeriodicTaskPan
     <div className="h-full overflow-y-auto">
       <div className="space-y-2 border-b bg-muted/30 px-3 py-3">
         <div className="flex flex-wrap items-center gap-2">
-          <CalendarIcon className="size-3.5 text-muted-foreground" />
+          <RobotIcon className="size-3.5 text-muted-foreground" />
           <span className="min-w-0 break-words text-sm font-medium">{agent.name}</span>
           <Badge variant="secondary">{agent.isEnabled ? 'Active' : 'Paused'}</Badge>
         </div>

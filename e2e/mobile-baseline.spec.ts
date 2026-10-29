@@ -188,7 +188,7 @@ for (const viewport of mobileViewports) {
     await page.getByRole('option', { name: 'Weekly', exact: true }).click();
     await form.getByLabel('Run time (optional)').fill('09:30');
     await expect(
-      form.getByText('This agent runs immediately after creation, then follows its schedule.', {
+      form.getByText('The first run starts shortly after creation, then follows this schedule.', {
         exact: false,
       })
     ).toBeVisible();

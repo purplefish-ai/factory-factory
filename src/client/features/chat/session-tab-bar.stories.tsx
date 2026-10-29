@@ -221,3 +221,18 @@ export const DisabledState: Story = {
     },
   },
 };
+
+export const ScheduledAgent: Story = {
+  args: {
+    sessions: [
+      {
+        id: 'agent',
+        name: 'Periodic task',
+        workflow: 'periodic-task',
+        status: 'RUNNING',
+        createdAt: new Date('2026-01-12T12:00:00Z'),
+      },
+    ],
+    currentSessionId: 'agent',
+  },
+};

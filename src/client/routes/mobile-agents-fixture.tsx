@@ -192,7 +192,6 @@ function MobileAgentsSession() {
                     ) : (
                       <AgentDetail
                         agent={selected}
-                        projectName={project.name}
                         onEdit={() => setFormMode('edit')}
                         onToggle={() =>
                           setAgents((current) =>

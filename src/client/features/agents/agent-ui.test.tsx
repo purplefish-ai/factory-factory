@@ -101,6 +101,13 @@ describe('AgentRunHistory', () => {
 });
 
 describe('AgentForm', () => {
+  it('explains that the first run starts shortly after creation', () => {
+    actFlushSync(() => root.render(<AgentForm onSave={vi.fn()} onCancel={vi.fn()} />));
+    expect(container.textContent).toContain(
+      'The first run starts shortly after creation, then follows this schedule.'
+    );
+  });
+
   it('hides clock-time guidance when the selected cadence cannot save a clock time', () => {
     actFlushSync(() =>
       root.render(

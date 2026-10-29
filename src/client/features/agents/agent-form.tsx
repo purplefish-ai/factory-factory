@@ -109,7 +109,7 @@ export function AgentForm({ initialValues, onSave, onCancel }: AgentFormProps) {
       <p className="text-xs text-muted-foreground">
         {baseline
           ? 'Changes apply to future runs. A running workspace continues unchanged.'
-          : 'This agent runs immediately after creation, then follows its schedule.'}
+          : 'The first run starts shortly after creation, then follows this schedule.'}
         {supportsAgentClockTime(cadence) &&
           scheduledTime &&
           ' Clock times use the selected schedule timezone; changing the time uses your browser timezone.'}

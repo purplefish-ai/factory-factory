@@ -28,42 +28,44 @@ export function AgentScheduleFields({
 }: AgentScheduleFieldsProps) {
   const id = useId();
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
-      <div className="space-y-2">
-        <Label htmlFor={`${id}-cadence`}>Schedule</Label>
-        <Select
-          value={cadence}
-          onValueChange={(value) => {
-            if (value in AGENT_CADENCE_LABELS) {
-              onCadenceChange(value as AgentCadence);
-            }
-          }}
-          disabled={disabled}
-        >
-          <SelectTrigger id={`${id}-cadence`} className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.entries(AGENT_CADENCE_LABELS).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      {supportsAgentClockTime(cadence) && (
-        <div className="space-y-2">
-          <Label htmlFor={`${id}-time`}>Run time (optional)</Label>
-          <Input
-            id={`${id}-time`}
-            type="time"
-            value={scheduledTime}
-            onChange={(event) => onScheduledTimeChange(event.target.value)}
+    <div className="@container/schedule">
+      <div className="grid gap-4 @[26rem]/schedule:grid-cols-2">
+        <div className="min-w-0 space-y-2">
+          <Label htmlFor={`${id}-cadence`}>Schedule</Label>
+          <Select
+            value={cadence}
+            onValueChange={(value) => {
+              if (value in AGENT_CADENCE_LABELS) {
+                onCadenceChange(value as AgentCadence);
+              }
+            }}
             disabled={disabled}
-          />
+          >
+            <SelectTrigger id={`${id}-cadence`} className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(AGENT_CADENCE_LABELS).map(([value, label]) => (
+                <SelectItem key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-      )}
+        {supportsAgentClockTime(cadence) && (
+          <div className="min-w-0 space-y-2">
+            <Label htmlFor={`${id}-time`}>Run time (optional)</Label>
+            <Input
+              id={`${id}-time`}
+              type="time"
+              value={scheduledTime}
+              onChange={(event) => onScheduledTimeChange(event.target.value)}
+              disabled={disabled}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

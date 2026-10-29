@@ -146,7 +146,7 @@ describe('due periodic tasks through shared dispatch', () => {
       agentSessions: [
         expect.objectContaining({
           workflow: 'periodic-task',
-          name: 'Periodic task',
+          name: 'Agent',
           providerSessionId: null,
         }),
       ],

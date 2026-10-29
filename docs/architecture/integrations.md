@@ -139,9 +139,12 @@ dates in the task timezone, preserving the scheduled day across daylight saving
 changes.
 
 Each execution runs the configured prompt, monitors for PR creation, and
-advances the schedule. Concurrent runs are skipped. Default sessions use the
-`periodic-task` workflow, so non-interactive Codex startup selects unattended
-execution mode and tool approval prompts cannot stall scheduled runs.
+advances the schedule. Concurrent runs are skipped. Default sessions are named
+**Agent**. Existing sessions named exactly **Periodic task** display as
+**Agent** for the `periodic-task` workflow; custom names and stored records are
+preserved. Default sessions use the `periodic-task` workflow, so non-interactive
+Codex startup selects unattended execution mode and tool approval prompts cannot
+stall scheduled runs.
 
 The periodic capsule atomically reserves a `PeriodicTaskExecution` and advances
 its schedule before emitting a typed `timer_due` event. The event carries that
@@ -153,8 +156,8 @@ and returns the workspace ID; the periodic capsule owns linkage, failures and
 completion monitoring.
 
 The PERIODIC_TASK launch policy persists a fresh workspace and requires a
-`periodic-task` / `Periodic task` session, without explicit provider resolution,
-CLI preflight, or a capacity gate. Session failure propagates with the workspace
+`periodic-task` / `Agent` session, without explicit provider resolution, CLI
+preflight, or a capacity gate. Session failure propagates with the workspace
 retained and no initialization scheduled. Successful provisioning starts
 initialization once in the background. A launched result means workspace and
 session creation returned; worktree initialization continues in the background.
@@ -175,6 +178,10 @@ clear the selected definition. Legacy `/agents` and `/agents/:id` links resolve
 the definition's owner before trusting a stored project selection, including
 archived owners. A definition belonging to another project or an invalid ID
 shows project-local not found instead of selecting another agent.
+
+Agents stacks its rail and editor below 48rem of available content width,
+including when the workspace sidebar is expanded. Schedule fields share a row
+only above 26rem of their own available width. Resizing preserves form drafts.
 
 Create/edit use Name, Instructions and Schedule. Creation starts the first run
 immediately, then follows the configured schedule. An unchanged clock time keeps

@@ -22,6 +22,7 @@ it('resets the visual session and form when Storybook Controls change the state 
   try {
     render('create');
     expect(container.querySelector('h2')?.textContent).toBe('Create Agent');
+    expect(container.querySelector('main')?.textContent).not.toContain('Factory Factory');
     const draftName = container.querySelector<HTMLInputElement>('input[name="name"]');
     const draftInstructions = container.querySelector<HTMLTextAreaElement>('textarea');
     if (!(draftName && draftInstructions)) {
@@ -57,6 +58,7 @@ it('resets the visual session and form when Storybook Controls change the state 
     expect(container.querySelector('form')).toBeNull();
     render('populated');
     expect(container.querySelector('h2')?.textContent).toBe('Review recent changes');
+    expect(container.querySelector('main')?.textContent).not.toContain('Factory Factory');
   } finally {
     actFlushSync(() => root.unmount());
     container.remove();

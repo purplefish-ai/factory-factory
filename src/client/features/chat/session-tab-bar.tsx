@@ -5,9 +5,11 @@ import { CircleIcon } from '@phosphor-icons/react/dist/csr/Circle';
 import { PauseCircleIcon } from '@phosphor-icons/react/dist/csr/PauseCircle';
 import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { PulseIcon } from '@phosphor-icons/react/dist/csr/Pulse';
+import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import { XCircleIcon } from '@phosphor-icons/react/dist/csr/XCircle';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { getSessionDisplayName } from '@/client/lib/session-display-name';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { SessionStatus } from '@/shared/core';
@@ -20,6 +22,7 @@ export interface SessionData {
   id: string;
   status: SessionStatus;
   name?: string | null;
+  workflow?: string | null;
   createdAt: Date;
 }
 
@@ -38,16 +41,6 @@ interface SessionTabBarProps {
 // =============================================================================
 // Helper Functions
 // =============================================================================
-
-/**
- * Gets the display name for a session based on its index.
- */
-function getSessionDisplayName(session: SessionData, index: number): string {
-  if (session.name) {
-    return session.name;
-  }
-  return `Session ${index + 1}`;
-}
 
 function getStatusIcon(status: SessionStatus, isRunning: boolean) {
   if (isRunning || status === 'RUNNING') {
@@ -106,7 +99,8 @@ function SessionTab({
   disabled,
   readOnly,
 }: SessionTabProps) {
-  const StatusIcon = getStatusIcon(session.status, isRunning);
+  const isAgent = session.workflow === 'periodic-task';
+  const StatusIcon = isAgent ? RobotIcon : getStatusIcon(session.status, isRunning);
 
   const handleClose = useCallback(
     (e: React.MouseEvent) => {
@@ -135,6 +129,7 @@ function SessionTab({
       tabIndex={disabled ? -1 : 0}
       onClick={disabled ? undefined : onSelect}
       onKeyDown={handleKeyDown}
+      title={isRunning ? 'Running' : session.status}
       aria-selected={isActive}
       aria-disabled={disabled}
       className={cn(
@@ -150,6 +145,7 @@ function SessionTab({
     >
       {/* Status indicator */}
       <StatusIcon
+        aria-label={isAgent ? `Agent: ${isRunning ? 'RUNNING' : session.status}` : undefined}
         className={cn('h-3.5 w-3.5 shrink-0', getStatusIconClass(session.status, isRunning))}
       />
 
@@ -284,7 +280,7 @@ export function SessionTabBar({
               <SessionTab
                 key={session.id}
                 session={session}
-                displayName={getSessionDisplayName(session, index)}
+                displayName={getSessionDisplayName(session, `Session ${index + 1}`)}
                 isActive={isActive}
                 isRunning={isRunning}
                 onSelect={() => onSelectSession(session.id)}

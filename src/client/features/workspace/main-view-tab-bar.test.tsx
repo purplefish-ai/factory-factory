@@ -225,3 +225,46 @@ it('disables the new-session button until sessions load', async () => {
     await act(() => root.unmount());
   }
 });
+
+it('labels only legacy agent defaults and keeps agent identity with runtime status', async () => {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  const sessions = [
+    { id: 'legacy', name: 'Periodic task', workflow: 'periodic-task', status: 'RUNNING' as const },
+    {
+      id: 'custom',
+      name: 'Dependency review',
+      workflow: 'periodic-task',
+      status: 'FAILED' as const,
+    },
+    { id: 'ordinary', name: 'Periodic task', workflow: null, status: 'IDLE' as const },
+  ];
+  try {
+    await act(() =>
+      root.render(
+        <TooltipProvider>
+          <WorkspacePanelProvider workspaceId="agent-identity">
+            <MainViewTabBar workspaceId="agent-identity" sessions={sessions} />
+          </WorkspacePanelProvider>
+        </TooltipProvider>
+      )
+    );
+    const tabs = container.querySelectorAll('[role="tab"]');
+    expect(tabs[0]?.textContent).toBe('Agent');
+    expect(tabs[1]?.textContent).toBe('Dependency review');
+    expect(tabs[2]?.textContent).toBe('Periodic task');
+    expect(
+      tabs[0]?.querySelector('svg[aria-label="Agent: Running"]')?.classList.contains('text-brand')
+    ).toBe(true);
+    expect(
+      tabs[1]
+        ?.querySelector('svg[aria-label="Agent: Failed"]')
+        ?.classList.contains('text-destructive')
+    ).toBe(true);
+    expect(tabs[2]?.querySelector('svg[aria-label^="Agent:"]')).toBeNull();
+  } finally {
+    await act(() => root.unmount());
+    container.remove();
+  }
+});
