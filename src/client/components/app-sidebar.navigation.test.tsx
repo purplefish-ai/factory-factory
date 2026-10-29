@@ -20,6 +20,7 @@ const navData: AppNavigationData = {
   issueProvider: 'GITHUB',
   serverWorkspaces: [],
   reviewCount: 3,
+  agentsSummary: undefined,
   needsAttention: () => false,
   clearAttention: vi.fn(),
   currentWorkspaceId: undefined,

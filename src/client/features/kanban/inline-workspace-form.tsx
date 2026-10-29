@@ -20,6 +20,7 @@ import {
   useSlashCommands,
 } from '@/client/features/composer';
 import { useSessionLaunchSelection } from '@/client/features/session-selection';
+import { invalidateAgentProjectQueries } from '@/client/lib/agent-query-cache';
 import { runInBackground } from '@/client/lib/background-task';
 import type { AppRouter } from '@/client/lib/trpc';
 import { trpc } from '@/client/lib/trpc';
@@ -289,7 +290,10 @@ export function InlineWorkspaceForm({
   const createPeriodicTaskMutation = trpc.periodicTask.create.useMutation({
     onSuccess: (task) => {
       toast.success(`Agent "${task.name}" created`);
-      runInBackground(utils.periodicTask.list.invalidate({ projectId }), 'Could not refresh data');
+      runInBackground(
+        invalidateAgentProjectQueries(utils, task.projectId),
+        'Could not refresh data'
+      );
       onCancel();
     },
     onError: (error) => {

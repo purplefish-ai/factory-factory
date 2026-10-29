@@ -84,6 +84,18 @@ const notFound = () =>
       },
     },
   });
+function summaryRequests(projectId: string) {
+  return requests.filter(
+    (request) =>
+      request.path === 'periodicTask.navigationSummary' &&
+      z.object({ projectId: z.string() }).parse(request.input).projectId === projectId
+  );
+}
+function SummaryProbe() {
+  trpc.periodicTask.navigationSummary.useQuery({ projectId: 'owner' });
+  trpc.periodicTask.navigationSummary.useQuery({ projectId: 'stale' });
+  return null;
+}
 function Location() {
   return <output aria-label="Location">{useLocation().pathname}</output>;
 }
@@ -158,6 +170,10 @@ async function listResponse(input: unknown) {
   return removed || projectId !== (archived ? 'archived' : task.projectId) ? [] : [task];
 }
 async function queryResponse(path: string, input: unknown) {
+  if (path === 'periodicTask.navigationSummary') {
+    const totalCount = (await listResponse(input)).length;
+    return { totalCount, failedCount: totalCount };
+  }
   if (path === 'periodicTask.get') {
     return taskResponse(input);
   }
@@ -233,6 +249,7 @@ function render(path = '/projects/owner-slug/agents/agent') {
       <trpc.Provider client={client} queryClient={queryClient}>
         <QueryClientProvider client={queryClient}>
           <MemoryRouter initialEntries={[path]}>
+            <SummaryProbe />
             <Routes>
               <Route
                 path="/projects/:slug/agents/:id?"
@@ -472,6 +489,9 @@ describe('AgentsPage coordination', () => {
         ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
     );
     await waitForReact(() => expect(container.querySelector('form')).toBeNull());
+    expect(
+      requests.slice(before).some((request) => request.path === 'periodicTask.navigationSummary')
+    ).toBe(true);
     expect(requests.slice(before).some((request) => request.path === 'periodicTask.list')).toBe(
       true
     );
@@ -600,6 +620,8 @@ describe('AgentsPage coordination', () => {
     );
     expect(container.querySelector('form')).toBeNull();
     expect(requests).toContainEqual({ path: 'periodicTask.list', input: { projectId: 'stale' } });
+    await waitForReact(() => expect(summaryRequests('owner')).toHaveLength(2));
+    expect(summaryRequests('stale')).toHaveLength(1);
   });
   it('prevents repeated pause requests while pending and refreshes both task and rail afterward', async () => {
     render();
@@ -626,6 +648,7 @@ describe('AgentsPage coordination', () => {
       await Promise.resolve();
     });
     await waitForReact(() => expect(button('Pause').disabled).toBe(false));
+    await waitForReact(() => expect(summaryRequests('owner')).toHaveLength(2));
     expect(requests.slice(before).some((request) => request.path === 'periodicTask.get')).toBe(
       true
     );
@@ -648,6 +671,7 @@ describe('AgentsPage coordination', () => {
       expect(container.querySelector('output')?.textContent).toBe('/projects/owner-slug/agents')
     );
     expect(container.querySelector('a[href="/projects/owner-slug/agents/agent"]')).toBeNull();
+    await waitForReact(() => expect(summaryRequests('owner')).toHaveLength(2));
     await act(async () => finishList());
   });
   it('leaves Create mode when selecting the current agent in the actual rail', async () => {

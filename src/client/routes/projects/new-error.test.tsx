@@ -38,6 +38,7 @@ vi.mock('@/client/lib/trpc', () => ({
       project: { list: { invalidate: vi.fn() } },
       prReview: { listReviewRequests: { reset: vi.fn() } },
     }),
+    periodicTask: { navigationSummary: { useQuery: () => ({ data: undefined }) } },
     prReview: {
       listReviewRequests: {
         useQuery: (

@@ -29,6 +29,7 @@ vi.mock('@/client/lib/trpc', () => ({
   trpc: {
     useUtils: () => ({ prReview: { listReviewRequests: { reset: mocks.resetReviews } } }),
     prReview: { listReviewRequests: { useQuery: mocks.reviewQuery } },
+    periodicTask: { navigationSummary: { useQuery: () => ({ data: undefined }) } },
     project: {
       getBySlug: { useQuery: mocks.getBySlug },
       list: {
@@ -102,6 +103,14 @@ beforeEach(() => {
 });
 
 describe('project route selection', () => {
+  it.each([
+    ['/PROJECTS/space%20here/agents', 'space here'],
+    ['/Projects/a%2Fb/reviews', 'a/b'],
+    ['/PROJECTS/NEW/', null],
+  ])('decodes the React Router URL owner in %s', (path, slug) => {
+    expect(getProjectSlugFromPath(path)).toBe(slug);
+  });
+
   it.each(['/projects/new', '/projects/new/'])('keeps %s as the project creation route', (path) => {
     expect(getProjectSlugFromPath(path)).toBeNull();
   });

@@ -22,6 +22,7 @@ const meta = {
             issueProvider: 'GITHUB',
             serverWorkspaces: undefined,
             reviewCount: 0,
+            agentsSummary: undefined,
             needsAttention: () => false,
             clearAttention: () => undefined,
             currentWorkspaceId: undefined,

@@ -92,6 +92,7 @@ function ReviewsStoryNavigation() {
         issueProvider: 'GITHUB',
         serverWorkspaces: [],
         reviewCount: reviews.prs.filter((pr) => pr.reviewDecision !== 'APPROVED').length,
+        agentsSummary: undefined,
         needsAttention: () => false,
         clearAttention: fn(),
         currentWorkspaceId: undefined,

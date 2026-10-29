@@ -144,7 +144,17 @@ for (const viewport of mobileViewports) {
       'href',
       '/admin'
     );
-    expect(await footer.locator('a').allTextContents()).toEqual(['Agents', 'Reviews2', 'Settings']);
+    expect(
+      await footer
+        .locator('a')
+        .evaluateAll((links) =>
+          links.map((link) => link.getAttribute('aria-label') ?? link.textContent)
+        )
+    ).toEqual(['Agents', 'Reviews2', 'Settings']);
+    await expect(
+      footer.getByRole('link', { name: 'Agents', exact: true })
+    ).toHaveAccessibleDescription('2 agents');
+    await expect(footer.locator('[data-agent-count]')).toHaveText('2');
     await expect(page).toHaveScreenshot(`agents-sidebar-${viewport.name}.png`);
     await sidebar.getByRole('button', { name: 'Close sidebar', exact: true }).click();
     await expect(sidebar).toBeHidden();

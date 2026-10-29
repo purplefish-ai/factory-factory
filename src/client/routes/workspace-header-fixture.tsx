@@ -81,6 +81,7 @@ const navigation: AppNavigationData = {
   issueProvider: 'GITHUB',
   serverWorkspaces: [],
   reviewCount: 0,
+  agentsSummary: undefined,
   needsAttention: () => false,
   clearAttention: () => undefined,
   currentWorkspaceId: workspace.id,

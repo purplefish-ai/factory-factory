@@ -10,6 +10,7 @@ it('encodes path segments and recognizes only complete canonical sections', () =
   expect(getProjectAgentPath('a/b', 'c/d')).toBe('/projects/a%2Fb/agents/c%2Fd');
   expect(getProjectSectionPath('space here', 'reviews')).toBe('/projects/space%20here/reviews');
   expect(getProjectSection('/projects/a/agents/id')).toBe('agents');
+  expect(getProjectSection('/PROJECTS/a/AGENTS/id')).toBe('agents');
   expect(getProjectSection('/projects/a/reviews')).toBe('reviews');
   expect(getProjectSection('/projects/a/agents-other')).toBeNull();
   expect(getProjectSection('/agents')).toBeNull();

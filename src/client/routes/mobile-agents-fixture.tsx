@@ -48,6 +48,7 @@ const navigation: AppNavigationData = {
   issueProvider: 'GITHUB',
   serverWorkspaces: [],
   reviewCount: 2,
+  agentsSummary: undefined,
   needsAttention: () => false,
   clearAttention: () => undefined,
   currentWorkspaceId: undefined,
@@ -99,6 +100,20 @@ function MobileAgentsSession() {
   const [agents, setAgents] = useState([review, dependencies]);
   const [selectedId, setSelectedId] = useState(review.id);
   const [formMode, setFormMode] = useState<'create' | 'edit' | null>(null);
+  const navData = {
+    ...navigation,
+    agentsSummary: {
+      totalCount: agents.length,
+      failedCount: agents.filter(
+        (agent) =>
+          agent.executions
+            .filter((run) => run.status === 'FAILED' || run.status === 'PR_CREATED')
+            .sort(
+              (a, b) => b.startedAt.getTime() - a.startedAt.getTime() || b.id.localeCompare(a.id)
+            )[0]?.status === 'FAILED'
+      ).length,
+    },
+  };
   const selected = agents.find((agent) => agent.id === selectedId) ?? review;
   return (
     <div
@@ -130,14 +145,14 @@ function MobileAgentsSession() {
         }
       }}
     >
-      <AppNavigationDataProvider value={navigation}>
+      <AppNavigationDataProvider value={navData}>
         <SidebarProvider className="h-full min-h-0 w-full flex-col">
           <TooltipProvider>
             <AppHeaderProvider>
               <AppHeader />
               <ProjectHeader project={project} />
               <div className="flex min-h-0 w-full flex-1 overflow-hidden">
-                <AppSidebar navData={navigation} />
+                <AppSidebar navData={navData} />
                 <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
                   <AgentsDashboardShell
                     projectSlug={project.slug}

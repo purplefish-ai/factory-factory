@@ -18,6 +18,10 @@ const mocks = vi.hoisted(() => ({
   settingsLoading: false,
   settingsError: null as Error | null,
   createPeriodicTaskMutateMock: vi.fn(),
+  navigationSummaryInvalidate: vi.fn(),
+  agentMutationOptions: undefined as
+    | { onSuccess: (task: { name: string; projectId: string }) => void }
+    | undefined,
   detectFileMentionMock: vi.fn(),
   toastErrorMock: vi.fn(),
   listForProjectCancelMock: vi.fn(),
@@ -43,6 +47,7 @@ vi.mock('@phosphor-icons/react/dist/csr/SpinnerGap', () => ({ SpinnerGapIcon: ()
 vi.mock('sonner', () => ({
   toast: {
     error: mocks.toastErrorMock,
+    success: vi.fn(),
   },
 }));
 
@@ -60,6 +65,7 @@ vi.mock('@/client/lib/trpc', () => ({
       },
       periodicTask: {
         list: { invalidate: vi.fn() },
+        navigationSummary: { invalidate: mocks.navigationSummaryInvalidate },
       },
     }),
     userSettings: {
@@ -129,10 +135,10 @@ vi.mock('@/client/lib/trpc', () => ({
     },
     periodicTask: {
       create: {
-        useMutation: () => ({
-          mutate: mocks.createPeriodicTaskMutateMock,
-          isPending: false,
-        }),
+        useMutation: (options: typeof mocks.agentMutationOptions) => {
+          mocks.agentMutationOptions = options;
+          return { mutate: mocks.createPeriodicTaskMutateMock, isPending: false };
+        },
       },
     },
     project: {
@@ -704,5 +710,19 @@ it('creates an agent with shared schedule fields and clears time and timezone fo
     );
   } finally {
     actFlushSync(() => root.unmount());
+  }
+});
+
+it('invalidates the created agent owner summary after Kanban creation', () => {
+  mocks.navigationSummaryInvalidate.mockClear();
+  const { root, container } = renderForm();
+  try {
+    actFlushSync(() =>
+      mocks.agentMutationOptions?.onSuccess({ name: 'Agent', projectId: 'origin' })
+    );
+    expect(mocks.navigationSummaryInvalidate).toHaveBeenCalledWith({ projectId: 'origin' });
+  } finally {
+    actFlushSync(() => root.unmount());
+    container.remove();
   }
 });

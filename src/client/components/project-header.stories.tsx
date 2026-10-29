@@ -22,6 +22,7 @@ function HeaderStory({
         issueProvider: 'GITHUB',
         serverWorkspaces: [],
         reviewCount: 0,
+        agentsSummary: undefined,
         needsAttention: () => false,
         clearAttention: fn(),
         currentWorkspaceId: undefined,

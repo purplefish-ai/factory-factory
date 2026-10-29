@@ -10,7 +10,9 @@ export function getProjectAgentPath(slug: string, id: string): string {
 }
 
 export function getProjectSection(pathname: string): ProjectSection | null {
-  const section = /^\/projects\/[^/]+\/(workspaces|agents|reviews)(?:\/|$)/.exec(pathname)?.[1];
+  const section = /^\/projects\/[^/]+\/(workspaces|agents|reviews)(?:\/|$)/i
+    .exec(pathname)?.[1]
+    ?.toLowerCase();
   return section === 'workspaces' || section === 'agents' || section === 'reviews' ? section : null;
 }
 

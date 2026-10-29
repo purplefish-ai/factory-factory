@@ -22,9 +22,16 @@ import { trpc } from '@/client/lib/trpc';
 import type { WorkspaceSummary } from '@/shared/workspace-summary';
 
 export function getProjectSlugFromPath(pathname: string): string | null {
-  const match = pathname.match(/^\/projects\/([^/]+)/);
-  const slug = match?.[1];
-  return slug && !/^\/projects\/new\/?$/.test(pathname) ? slug : null;
+  const match = pathname.match(/^\/projects\/([^/]+)/i);
+  const segment = match?.[1];
+  if (!segment || /^\/projects\/new\/?$/i.test(pathname)) {
+    return null;
+  }
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
 }
 
 function persistSelectedProjectSlug(slug: string) {
@@ -118,6 +125,16 @@ export function useAppNavigationData() {
   );
   const reviewProject = urlSlug ? urlProject.data : selectedProject;
   const reviews = useProjectReviewRequests(reviewProject);
+  const agentProject = urlSlug
+    ? urlProject.data?.slug === urlSlug
+      ? urlProject.data
+      : undefined
+    : selectedProject;
+  const agentSummary = trpc.periodicTask.navigationSummary.useQuery(
+    { projectId: agentProject?.id ?? '' },
+    { enabled: !!agentProject?.id, refetchInterval: 10_000 }
+  );
+  const agentsSummary = agentProject?.id ? agentSummary.data : undefined;
   const utils = trpc.useUtils();
   const previousReviewScope = useRef<{ id: string; repository: string | null } | null>(null);
   useEffect(() => {
@@ -170,6 +187,7 @@ export function useAppNavigationData() {
     issueProvider,
     serverWorkspaces,
     reviewCount,
+    agentsSummary,
     needsAttention,
     clearAttention,
     currentWorkspaceId,

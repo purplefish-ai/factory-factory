@@ -182,6 +182,15 @@ the definition's owner before trusting a stored project selection, including
 archived owners. A definition belonging to another project or an invalid ID
 shows project-local not found instead of selecting another agent.
 
+The Agents footer badge counts all definitions in the URL owner's project,
+including paused definitions and archived project owners. It warns when any
+agent's latest completed outcome is FAILED. RUNNING and SKIPPED retries retain
+that warning until the same agent creates a PR. The summary query selects the
+latest terminal outcome by start time, then ID, independently of history limits.
+It refreshes with management's 10-second cadence and after definition changes.
+Unknown/loading projects hide the badge; loaded empty projects show zero. A
+failed refresh retains the last successful count for that project.
+
 Agents stacks its rail and editor below 48rem of available content width,
 including when the workspace sidebar is expanded. Schedule fields share a row
 only above 26rem of their own available width. Resizing preserves form drafts.

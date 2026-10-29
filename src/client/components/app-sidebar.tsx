@@ -3,10 +3,12 @@ import { GearIcon } from '@phosphor-icons/react/dist/csr/Gear';
 import { GitPullRequestIcon } from '@phosphor-icons/react/dist/csr/GitPullRequest';
 import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
+import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import {
   type PointerEvent as ReactPointerEvent,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -187,6 +189,38 @@ function IssueGroup({ issues }: { issues: NormalizedIssue[] | undefined }) {
 // Sidebar content (shared between desktop and mobile)
 // =============================================================================
 
+function AgentNavigationBadge({
+  summary,
+  descriptionId,
+}: {
+  summary: NavigationData['agentsSummary'];
+  descriptionId: string;
+}) {
+  if (!summary) {
+    return null;
+  }
+  const description = `${summary.totalCount} ${summary.totalCount === 1 ? 'agent' : 'agents'}${summary.failedCount > 0 ? `, ${summary.failedCount} with a failed last completed run` : ''}`;
+  return (
+    <>
+      <Badge
+        data-agent-count
+        aria-hidden="true"
+        variant="secondary"
+        className={cn(
+          'ml-auto h-5 min-w-5 gap-1 px-1.5 text-xs',
+          summary.failedCount > 0 && 'bg-destructive/10 text-destructive border-destructive/30'
+        )}
+      >
+        {summary.failedCount > 0 ? <WarningIcon className="h-3 w-3" /> : null}
+        {summary.totalCount}
+      </Badge>
+      <span id={descriptionId} className="sr-only">
+        {description}
+      </span>
+    </>
+  );
+}
+
 function ProjectFooterLinks({
   navData,
   onNavigate,
@@ -199,6 +233,9 @@ function ProjectFooterLinks({
     getProjectSlugFromPath(pathname) ??
     (navData.selectedProjectId ? navData.selectedProjectSlug : '');
   const activeSection = getProjectSection(pathname);
+  const descriptionId = useId();
+  const summary = projectSlug ? navData.agentsSummary : undefined;
+
   return (
     [
       { section: 'agents', label: 'Agents', Icon: RobotIcon },
@@ -209,6 +246,9 @@ function ProjectFooterLinks({
       <>
         <Icon className="h-4 w-4" />
         <span>{label}</span>
+        {section === 'agents' ? (
+          <AgentNavigationBadge summary={summary} descriptionId={descriptionId} />
+        ) : null}
         {projectSlug && section === 'reviews' && navData.reviewCount > 0 ? (
           <Badge
             variant="secondary"
@@ -227,7 +267,12 @@ function ProjectFooterLinks({
           isActive={activeSection === section}
         >
           {projectSlug ? (
-            <Link to={getProjectSectionPath(projectSlug, section)} onClick={onNavigate}>
+            <Link
+              to={getProjectSectionPath(projectSlug, section)}
+              onClick={onNavigate}
+              aria-label={section === 'agents' ? 'Agents' : undefined}
+              aria-describedby={section === 'agents' && summary ? descriptionId : undefined}
+            >
               {content}
             </Link>
           ) : (

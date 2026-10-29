@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
+import { invalidateAgentProjectQueries } from '@/client/lib/agent-query-cache';
 import { runInBackground } from '@/client/lib/background-task';
 import { getProjectAgentPath, getProjectSectionPath } from '@/client/lib/project-navigation';
 import { trpc } from '@/client/lib/trpc';
@@ -79,7 +80,7 @@ export function useAgentsController(project: AgentProject) {
   const invalidate = (projectId: string, agentId: string) => {
     runInBackground(
       Promise.all([
-        utils.periodicTask.list.invalidate({ projectId }),
+        invalidateAgentProjectQueries(utils, projectId),
         utils.periodicTask.get.invalidate({ id: agentId }),
       ]),
       'Could not refresh agents'
