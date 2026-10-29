@@ -10,6 +10,7 @@ import {
   isAppliedAccessMode,
   resolveConfiguredAccessModeTarget,
 } from './session-permission-policy';
+import { applyStartupLaunchAccess } from './session-startup-access';
 export async function applyStartupLaunchPlan(
   sessionId: string,
   session: AgentSessionRecord,
@@ -22,6 +23,7 @@ export async function applyStartupLaunchPlan(
 ): Promise<void> {
   const launch = readSessionLaunchSettings(session.providerMetadata);
   const enabled = override ?? (launch && !launch.applied ? launch.planModeEnabled : undefined);
+  await applyStartupLaunchAccess(sessionId, session, handle, runtime, enabled, confirmation);
   if (enabled === undefined) {
     return;
   }

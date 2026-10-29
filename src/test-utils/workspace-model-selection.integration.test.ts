@@ -52,6 +52,7 @@ describe('manual workspace model launch', () => {
     const ports: WorkspaceLaunchPorts = {
       getMaxSessionsPerWorkspace: () => 2,
       resolveProvider: vi.fn().mockResolvedValue('CLAUDE'),
+      getLaunchOptions: vi.fn(),
       checkCliHealth: vi.fn().mockResolvedValue({
         claude: { isInstalled: true },
         codex: { isInstalled: true, isAuthenticated: true },

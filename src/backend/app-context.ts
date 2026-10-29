@@ -428,6 +428,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
         resolveProvider: (...args) =>
           services.sessionProviderResolverService.resolveProviderForWorkspaceCreation(...args),
         checkCliHealth: () => services.cliHealthService.checkHealth(),
+        getLaunchOptions: (input) => services.sessionConfigService.getLaunchOptions(input),
         createWorkspace: (input) =>
           source.type === 'PERIODIC_TASK'
             ? services.workspaceCreationService.create(input)

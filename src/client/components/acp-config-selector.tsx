@@ -1,9 +1,10 @@
+import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import { ComposerMenuTrigger } from '@/client/components/composer-menu-trigger';
 import type {
   AcpConfigOption,
   AcpConfigOptionGroup,
   AcpConfigOptionValue,
-} from '@/client/features/chat/reducer';
+} from '@/client/lib/acp-config';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,6 +23,7 @@ interface AcpConfigSelectorProps {
   onSelect: (configId: string, value: string) => void;
   disabled?: boolean;
   compact?: boolean;
+  invalid?: boolean;
 }
 
 function isGroupedOption(
@@ -50,13 +52,14 @@ export function AcpConfigSelector({
   onSelect,
   disabled,
   compact = true,
+  invalid = false,
 }: AcpConfigSelectorProps) {
   const options = configOption.options.flatMap((entry) =>
     isGroupedOption(entry) ? entry.options : [entry]
   );
   const current = options.find((option) => option.value === configOption.currentValue);
   const next = options.find((option) => option.value !== configOption.currentValue);
-  const displayName = current?.name ?? configOption.currentValue;
+  const displayName = current?.name ?? (configOption.currentValue || 'Choose an option');
   const presentation = getConfigPresentation(configOption);
   const Icon = presentation.icon;
   const iconOnly = compact && presentation.compact;
@@ -64,6 +67,7 @@ export function AcpConfigSelector({
   const trigger = (
     <ComposerMenuTrigger
       aria-label={label}
+      aria-invalid={invalid || undefined}
       {...(presentation.toggle
         ? getToggleProps(
             next,
@@ -73,12 +77,15 @@ export function AcpConfigSelector({
           )
         : { disabled })}
       iconOnly={iconOnly}
-      icon={Icon && <Icon className="size-3.5 shrink-0" aria-hidden="true" />}
+      icon={<ConfigOptionIcon invalid={invalid} Icon={Icon} />}
+
       className={cn(
         'shrink-0',
         presentation.active && 'bg-accent text-accent-foreground',
         presentation.warning &&
-          'text-orange-600 hover:text-orange-600 dark:text-orange-400 dark:hover:text-orange-400'
+          'text-orange-600 hover:text-orange-600 dark:text-orange-400 dark:hover:text-orange-400',
+        invalid &&
+          'text-destructive hover:text-destructive dark:text-destructive dark:hover:text-destructive'
       )}
     >
       {displayName}
@@ -131,6 +138,11 @@ export function AcpConfigSelector({
                 value={configOption.currentValue}
                 onValueChange={(value) => onSelect(configOption.id, value)}
               >
+                {hasUnavailableSelection(invalid, current, configOption.currentValue) && (
+                  <DropdownMenuRadioItem value={configOption.currentValue} disabled>
+                    {displayName} (unavailable)
+                  </DropdownMenuRadioItem>
+                )}
                 {configOption.options.map((entry, idx) =>
                   isGroupedOption(entry) ? (
                     <div key={entry.group}>
@@ -155,4 +167,25 @@ export function AcpConfigSelector({
       </Tooltip>
     </TooltipProvider>
   );
+}
+
+function ConfigOptionIcon({
+  invalid,
+  Icon,
+}: {
+  invalid: boolean;
+  Icon: ReturnType<typeof getConfigPresentation>['icon'];
+}) {
+  if (invalid) {
+    return <WarningCircleIcon className="size-3.5 shrink-0" aria-label="Unavailable access mode" />;
+  }
+  return Icon ? <Icon className="size-3.5 shrink-0" aria-hidden="true" /> : null;
+}
+
+function hasUnavailableSelection(
+  invalid: boolean,
+  current: AcpConfigOptionValue | undefined,
+  value: string
+) {
+  return invalid && !current && Boolean(value);
 }

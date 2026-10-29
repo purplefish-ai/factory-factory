@@ -8,7 +8,7 @@ import { ShieldCheckIcon } from '@phosphor-icons/react/dist/csr/ShieldCheck';
 import { ShieldWarningIcon } from '@phosphor-icons/react/dist/csr/ShieldWarning';
 import { SparkleIcon } from '@phosphor-icons/react/dist/csr/Sparkle';
 import { ToggleLeftIcon } from '@phosphor-icons/react/dist/csr/ToggleLeft';
-import type { AcpConfigOption } from '@/client/features/chat/reducer';
+import type { AcpConfigOption } from '@/client/lib/acp-config';
 
 export function getConfigPresentation(option: AcpConfigOption) {
   const matches = (...names: string[]) =>
