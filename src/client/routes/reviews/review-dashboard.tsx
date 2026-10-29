@@ -68,7 +68,7 @@ function ReviewsListPanel({
   onSelect: (index: number) => void;
 }) {
   return (
-    <div className="flex-1 overflow-auto p-2 space-y-2">
+    <div data-review-list="" className="flex-1 overflow-auto p-2 space-y-2">
       {prs.map((pr, index) => {
         const key = `${pr.repository.nameWithOwner}#${pr.number}`;
         const details = prDetails.get(key);
@@ -157,11 +157,17 @@ function shouldIgnoreReviewShortcut(event: KeyboardEvent): boolean {
     return true;
   }
   const target = event.target instanceof Element ? event.target : document.activeElement;
-  return !!target?.closest(
-    'input, textarea, select, button, a[href], dialog, [contenteditable]:not([contenteditable="false"]), ' +
-      '[role="combobox"], [role="listbox"], [role="option"], [role="menu"], [role="menubar"], ' +
-      '[role^="menuitem"], [role="dialog"], [role="alertdialog"], [role="textbox"], [role="searchbox"]'
-  );
+  if (
+    target?.closest(
+      'input, textarea, select, dialog, [contenteditable]:not([contenteditable="false"]), ' +
+        '[role="combobox"], [role="listbox"], [role="option"], [role="menu"], [role="menubar"], ' +
+        '[role^="menuitem"], [role="dialog"], [role="alertdialog"], [role="textbox"], [role="searchbox"]'
+    )
+  ) {
+    return true;
+  }
+  const control = target?.closest('button, a[href]');
+  return !!control && !control.matches('[data-review-list] > button');
 }
 
 function useReviewKeyboardShortcuts({

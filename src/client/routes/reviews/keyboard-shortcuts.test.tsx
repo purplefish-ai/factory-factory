@@ -1,10 +1,9 @@
 // @vitest-environment jsdom
-import { act, forwardRef } from 'react';
+import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ProjectHeaderNavigation } from '@/client/components/project-header';
-import type { PRWithFullDetails } from '@/shared/github-types';
 import { ReviewDashboard } from './review-dashboard';
 
 const mocks = vi.hoisted(() => ({ approve: vi.fn(), open: vi.fn() }));
@@ -21,17 +20,6 @@ vi.mock('@/client/hooks/use-app-navigation-data', () => ({
   }),
 }));
 vi.mock('@/client/components/pr-detail-panel', () => ({ PRDetailPanel: () => null }));
-vi.mock('@/client/components/pr-inbox-item', () => ({
-  PRInboxItem: forwardRef<HTMLButtonElement, { pr: PRWithFullDetails; isSelected: boolean }>(
-    function Item({ pr, isSelected }, ref) {
-      return (
-        <button ref={ref} type="button" aria-pressed={isSelected}>
-          Review {pr.number}
-        </button>
-      );
-    }
-  ),
-}));
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
     useUtils: () => ({
@@ -116,7 +104,7 @@ async function key(
   });
 }
 function selected(container: HTMLElement) {
-  return container.querySelector('[aria-pressed="true"]')?.textContent;
+  return container.querySelector('button.bg-muted [title^="PR "]')?.textContent;
 }
 it('lets actual project-selector typeahead consume review shortcuts without approving, opening, or changing selection', async () => {
   const view = await render();
@@ -129,7 +117,7 @@ it('lets actual project-selector typeahead consume review shortcuts without appr
     }
     expect(mocks.approve).not.toHaveBeenCalled();
     expect(mocks.open).not.toHaveBeenCalled();
-    expect(selected(view.container)).toBe('Review 1');
+    expect(selected(view.container)).toBe('PR 1');
   } finally {
     await view.cleanup();
   }
@@ -176,7 +164,7 @@ it.each([
     await key(target, 'o');
     expect(mocks.approve).not.toHaveBeenCalled();
     expect(mocks.open).not.toHaveBeenCalled();
-    expect(selected(view.container)).toBe('Review 1');
+    expect(selected(view.container)).toBe('PR 1');
   } finally {
     context.remove();
     await view.cleanup();
@@ -186,13 +174,73 @@ it('preserves deliberate page-level selection, approval, and open shortcuts', as
   const view = await render();
   try {
     await key(document.body, 'j');
-    expect(selected(view.container)).toBe('Review 2');
+    expect(selected(view.container)).toBe('PR 2');
     await key(document.body, 'a');
     expect(mocks.approve).toHaveBeenLastCalledWith({ repo: 'o/r', number: 2, action: 'approve' });
     await key(document.body, 'k');
     await key(document.body, 'o');
-    expect(selected(view.container)).toBe('Review 1');
+    expect(selected(view.container)).toBe('PR 1');
     expect(mocks.open).toHaveBeenCalledWith('https://github.com/o/r/pull/1', '_blank');
+  } finally {
+    await view.cleanup();
+  }
+});
+
+it('preserves review shortcuts after focusing and selecting an actual PRInboxItem row', async () => {
+  const view = await render();
+  try {
+    const row = view.container.querySelector('[title="PR 1"]')?.closest('button');
+    expect(row).toBeInstanceOf(HTMLButtonElement);
+    await act(() => {
+      row!.focus();
+      row!.click();
+    });
+    expect(document.activeElement).toBe(row);
+    await key(row!, 'j');
+    expect(selected(view.container)).toBe('PR 2');
+    await key(row!, 'a');
+    expect(mocks.approve).toHaveBeenLastCalledWith({ repo: 'o/r', number: 2, action: 'approve' });
+    await key(row!, 'k');
+    await key(row!.querySelector('[title="PR 1"]')!, 'o');
+    expect(selected(view.container)).toBe('PR 1');
+    expect(mocks.open).toHaveBeenCalledWith('https://github.com/o/r/pull/1', '_blank');
+  } finally {
+    await view.cleanup();
+  }
+});
+it.each(['dialog', 'menu'])(
+  'keeps %s precedence over focused review-row shortcuts',
+  async (role) => {
+    const view = await render();
+    try {
+      view.container.setAttribute('role', role);
+      const row = view.container.querySelector('[title="PR 1"]')?.closest('button');
+      await act(() => row!.focus());
+      for (const value of ['a', 'o', 'j', 'k']) {
+        await key(row!, value);
+      }
+      expect(mocks.approve).not.toHaveBeenCalled();
+      expect(mocks.open).not.toHaveBeenCalled();
+      expect(selected(view.container)).toBe('PR 1');
+    } finally {
+      await view.cleanup();
+    }
+  }
+);
+it('keeps unrelated shared-header buttons outside the review-row exception', async () => {
+  const view = await render();
+  try {
+    const projectButton = view.container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Open Beta workspaces"]'
+    );
+    expect(projectButton).not.toBeNull();
+    await act(() => projectButton!.focus());
+    for (const value of ['a', 'o', 'j', 'k']) {
+      await key(projectButton!, value);
+    }
+    expect(mocks.approve).not.toHaveBeenCalled();
+    expect(mocks.open).not.toHaveBeenCalled();
+    expect(selected(view.container)).toBe('PR 1');
   } finally {
     await view.cleanup();
   }
