@@ -18,6 +18,10 @@ const mocks = vi.hoisted(() => ({
   settingsLoading: false,
   settingsError: null as Error | null,
   createPeriodicTaskMutateMock: vi.fn(),
+  navigationSummaryInvalidate: vi.fn(),
+  agentMutationOptions: undefined as
+    | { onSuccess: (task: { name: string; projectId: string }) => void }
+    | undefined,
   detectFileMentionMock: vi.fn(),
   toastErrorMock: vi.fn(),
   listForProjectCancelMock: vi.fn(),
@@ -43,6 +47,7 @@ vi.mock('@phosphor-icons/react/dist/csr/SpinnerGap', () => ({ SpinnerGapIcon: ()
 vi.mock('sonner', () => ({
   toast: {
     error: mocks.toastErrorMock,
+    success: vi.fn(),
   },
 }));
 
@@ -60,6 +65,7 @@ vi.mock('@/client/lib/trpc', () => ({
       },
       periodicTask: {
         list: { invalidate: vi.fn() },
+        navigationSummary: { invalidate: mocks.navigationSummaryInvalidate },
       },
     }),
     userSettings: {
@@ -129,10 +135,10 @@ vi.mock('@/client/lib/trpc', () => ({
     },
     periodicTask: {
       create: {
-        useMutation: () => ({
-          mutate: mocks.createPeriodicTaskMutateMock,
-          isPending: false,
-        }),
+        useMutation: (options: typeof mocks.agentMutationOptions) => {
+          mocks.agentMutationOptions = options;
+          return { mutate: mocks.createPeriodicTaskMutateMock, isPending: false };
+        },
       },
     },
     project: {
@@ -298,9 +304,30 @@ vi.mock('@/components/ui/card', () => ({
 }));
 
 vi.mock('@/components/ui/select', () => ({
-  Select: ({ children }: { children: ReactNode }) => createElement('div', null, children),
+  Select: ({
+    children,
+    onValueChange,
+  }: {
+    children: ReactNode;
+    onValueChange?: (value: string) => void;
+  }) =>
+    createElement(
+      'div',
+      {
+        onClick: (event: React.MouseEvent<HTMLElement>) => {
+          const value = (event.target as HTMLElement)
+            .closest('[data-select-value]')
+            ?.getAttribute('data-select-value');
+          if (value) {
+            onValueChange?.(value);
+          }
+        },
+      },
+      children
+    ),
   SelectContent: ({ children }: { children: ReactNode }) => createElement('div', null, children),
-  SelectItem: ({ children }: { children: ReactNode }) => createElement('div', null, children),
+  SelectItem: ({ children, value }: { children: ReactNode; value: string }) =>
+    createElement('div', { 'data-select-value': value }, children),
   SelectTrigger: ({ children }: { children: ReactNode }) => createElement('button', null, children),
   SelectValue: () => null,
 }));
@@ -316,6 +343,11 @@ vi.mock('@/components/ui/textarea', () => ({
 vi.mock('@/client/features/workspace', () => ({
   RatchetToggleButton: () => createElement('button', { 'aria-label': 'Toggle ratchet' }),
 }));
+
+function textareaLabel(container: HTMLElement) {
+  const textarea = container.querySelector('textarea');
+  return container.querySelector(`label[for="${textarea?.id}"]`)?.textContent;
+}
 
 function renderForm(): {
   container: HTMLDivElement;
@@ -385,7 +417,7 @@ describe('InlineWorkspaceForm', () => {
     const { container, root } = renderForm();
     try {
       expect(container.textContent).toContain('Launch');
-      expect(container.textContent).toContain('Create Periodic Task');
+      expect(container.textContent).toContain('Create Agent');
       expect(container.textContent).not.toMatch(/auto.iterat/i);
       expect(container.querySelector('#test-command')).toBeNull();
       expect(container.querySelector('#target-description')).toBeNull();
@@ -413,7 +445,7 @@ describe('InlineWorkspaceForm', () => {
   it('hides ignored workspace-only toolbar controls in periodic task mode', () => {
     const { container, root } = renderForm();
     const periodicTaskItem = Array.from(container.querySelectorAll('div')).find(
-      (element) => element.textContent === 'Create Periodic Task'
+      (element) => element.textContent === 'Create Agent'
     );
 
     if (!periodicTaskItem) {
@@ -430,7 +462,8 @@ describe('InlineWorkspaceForm', () => {
     expect(container.textContent).not.toContain('Default');
     expect(container.textContent).not.toContain('Plan');
     expect(container.querySelectorAll('[aria-label="Attach files"]')).toHaveLength(0);
-    expect(container.textContent).toContain('Periodic task config');
+    expect(container.textContent?.match(/Schedule/g)).toHaveLength(1);
+    expect(textareaLabel(container)).toBe('Instructions');
     expect(container.textContent).toContain('Daily');
 
     actFlushSync(() => root.unmount());
@@ -592,7 +625,7 @@ it.each(['loading', 'failed'])(
           )?.disabled
         ).toBe(true);
         const periodicMode = [...container.querySelectorAll('div')].find(
-          (element) => element.textContent === 'Create Periodic Task'
+          (element) => element.textContent === 'Create Agent'
         );
         actFlushSync(() => periodicMode?.click());
         const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
@@ -601,7 +634,7 @@ it.each(['loading', 'failed'])(
           textarea.dispatchEvent(new Event('input', { bubbles: true }));
         });
         const create = [...container.querySelectorAll<HTMLButtonElement>('button')].find(
-          (button) => button.textContent === 'Create Periodic Task'
+          (button) => button.textContent === 'Create Agent'
         );
         expect(create?.disabled).toBe(false);
         actFlushSync(() => create?.click());
@@ -635,4 +668,61 @@ it('explains why keyboard workspace creation is blocked while defaults are unava
       actFlushSync(() => root.unmount());
     }
   });
+});
+
+it('creates an agent with shared schedule fields and clears time and timezone for minute schedules', () => {
+  const { container, root, textarea } = renderForm();
+  try {
+    actFlushSync(() =>
+      [...container.querySelectorAll('div')]
+        .find((element) => element.textContent === 'Create Agent')
+        ?.click()
+    );
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+    actFlushSync(() => {
+      setter?.call(textarea, '  Review changes  ');
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const time = container.querySelector('input[type="time"]');
+    const timeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    actFlushSync(() => {
+      timeSetter?.call(time, '09:30');
+      time?.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const create = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Create Agent'
+    );
+    actFlushSync(() => create?.click());
+    expect(mocks.createPeriodicTaskMutateMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        prompt: 'Review changes',
+        scheduledTime: '09:30',
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      })
+    );
+    actFlushSync(() =>
+      container.querySelector<HTMLElement>('[data-select-value="EVERY_MINUTE"]')?.click()
+    );
+    expect(container.querySelector('input[type="time"]')).toBeNull();
+    actFlushSync(() => create?.click());
+    expect(mocks.createPeriodicTaskMutateMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ cadence: 'EVERY_MINUTE', scheduledTime: null, timezone: null })
+    );
+  } finally {
+    actFlushSync(() => root.unmount());
+  }
+});
+
+it('invalidates the created agent owner summary after Kanban creation', () => {
+  mocks.navigationSummaryInvalidate.mockClear();
+  const { root, container } = renderForm();
+  try {
+    actFlushSync(() =>
+      mocks.agentMutationOptions?.onSuccess({ name: 'Agent', projectId: 'origin' })
+    );
+    expect(mocks.navigationSummaryInvalidate).toHaveBeenCalledWith({ projectId: 'origin' });
+  } finally {
+    actFlushSync(() => root.unmount());
+    container.remove();
+  }
 });

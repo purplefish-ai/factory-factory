@@ -8,7 +8,7 @@ import {
   HeaderRightSlot,
   useAppHeader,
 } from '@/client/components/app-header-context';
-import { ProjectSelectorDropdown } from '@/client/components/project-selector';
+import { ProjectHeaderNavigation } from '@/client/components/project-header';
 import { RunScriptButton, RunScriptPortBadge } from '@/client/features/workspace';
 import { useInlineWorkspaceRename } from '@/client/hooks/use-inline-workspace-rename';
 import { runInBackground } from '@/client/lib/background-task';
@@ -16,7 +16,6 @@ import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { cn } from '@/lib/utils';
 import { useWorkspaceProjectNavigation } from './use-workspace-project-navigation';
 import {
   ArchiveActionButton,
@@ -52,8 +51,8 @@ export function WorkspaceDetailHeaderSlot({
   hasChanges,
 }: WorkspaceHeaderProps) {
   const isMobile = useIsMobile();
-  const { slug, projects, handleProjectChange, handleCurrentProjectSelect } =
-    useWorkspaceProjectNavigation();
+  const { slug, projects } = useWorkspaceProjectNavigation();
+  const routeProject = trpc.project.getBySlug.useQuery({ slug }, { enabled: !!slug });
 
   const utils = trpc.useUtils();
   const renameMutation = trpc.workspace.rename.useMutation({
@@ -90,17 +89,21 @@ export function WorkspaceDetailHeaderSlot({
   return (
     <>
       <HeaderLeftStartSlot>
-        <div className="flex min-w-0 items-center gap-0.5">
-          <ProjectSelectorDropdown
-            selectedProjectSlug={slug}
-            onProjectChange={handleProjectChange}
-            onCurrentProjectSelect={handleCurrentProjectSelect}
-            projects={projects}
-            showLeadingSlash
-            showTrailingSlash
-            trailingSeparatorType="chevron"
-            triggerId="workspace-detail-project-select"
-          />
+        <div className="flex min-w-0 flex-1 items-center gap-0.5">
+          <div className="min-w-0 max-w-[50%] shrink md:max-w-[40%]">
+            <ProjectHeaderNavigation
+              showTrailingSlash
+              triggerId="workspace-detail-project-select"
+              project={
+                routeProject.data ??
+                projects?.find((candidate) => candidate.slug === slug) ?? {
+                  id: workspace.projectId,
+                  slug,
+                  name: slug,
+                }
+              }
+            />
+          </div>
           {isEditing ? (
             <input
               ref={inputRef}
@@ -120,10 +123,10 @@ export function WorkspaceDetailHeaderSlot({
                 e.stopPropagation();
               }}
               onBlur={() => void handleSaveRename()}
-              className="min-w-0 max-w-[18rem] text-sm font-semibold bg-transparent border-b border-primary outline-none"
+              className="min-w-0 w-0 flex-1 max-w-[24rem] text-sm font-semibold bg-transparent border-b border-primary outline-none"
             />
           ) : (
-            <div className="group flex min-w-0 items-center gap-0.5">
+            <div className="group flex min-w-0 flex-1 items-center gap-0.5">
               <WorkspaceSwitcherDropdown
                 projectSlug={slug}
                 projectId={workspace.projectId}
@@ -139,7 +142,7 @@ export function WorkspaceDetailHeaderSlot({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="hidden @[72rem]/header:inline-flex h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
                   onClick={handleStartEdit}
                   disabled={isSaving}
                   aria-label="Rename workspace"
@@ -150,7 +153,7 @@ export function WorkspaceDetailHeaderSlot({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                className="hidden @[72rem]/header:inline-flex h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
                 onClick={() => setDetailsOpen(true)}
                 aria-label="View workspace details"
               >
@@ -161,7 +164,7 @@ export function WorkspaceDetailHeaderSlot({
         </div>
       </HeaderLeftStartSlot>
       <HeaderLeftExtraSlot>
-        <div className="hidden md:flex items-center gap-2 min-w-0">
+        <div className="hidden @[48rem]/header:flex shrink-0 items-center gap-2">
           <WorkspacePrAction
             workspace={workspace}
             hasChanges={hasChanges}
@@ -171,47 +174,67 @@ export function WorkspaceDetailHeaderSlot({
               runInBackground(handleQuickAction(name, prompt), 'Could not run quick action');
             }}
           />
-          <WorkspaceIssueLink workspace={workspace} />
+          <div className="hidden @[72rem]/header:flex items-center gap-2">
+            <WorkspaceIssueLink workspace={workspace} />
+            <RunScriptPortBadge workspaceId={workspaceId} />
+          </div>
           <WorkspaceCiStatus workspace={workspace} />
-          <RunScriptPortBadge workspaceId={workspaceId} />
         </div>
       </HeaderLeftExtraSlot>
       <HeaderRightSlot>
-        <div className={cn('flex items-center gap-0.5 shrink-0', !isMobile && 'flex-wrap gap-0.5')}>
+        <div className="flex shrink-0 items-center gap-0.5">
           <RunScriptButton workspaceId={workspaceId} />
           <RatchetingToggle workspace={workspace} workspaceId={workspaceId} />
-          {isMobile ? (
-            <>
-              <ToggleRightPanelButton />
-              <WorkspaceHeaderOverflowMenu
-                workspace={workspace}
-                workspaceId={workspaceId}
-                availableIdes={availableIdes}
-                preferredIde={preferredIde}
-                openInIde={openInIde}
-                archivePending={archivePending}
-                onArchiveRequest={onArchiveRequest}
-              />
-            </>
-          ) : (
-            <>
-              <WorkspaceProviderSettings workspace={workspace} workspaceId={workspaceId} />
-              <WorkspaceBranchLink workspace={workspace} />
-              <OpenInIdeAction
-                workspaceId={workspaceId}
-                hasWorktreePath={Boolean(workspace.worktreePath)}
-                availableIdes={availableIdes}
-                preferredIde={preferredIde}
-                openInIde={openInIde}
-              />
-              <ArchiveActionButton
-                workspace={workspace}
-                archivePending={archivePending}
-                onArchiveRequest={onArchiveRequest}
-              />
-              <ToggleRightPanelButton />
-            </>
-          )}
+          <div className="hidden @[72rem]/header:flex items-center gap-0.5">
+            <WorkspaceProviderSettings workspace={workspace} workspaceId={workspaceId} />
+            <WorkspaceBranchLink workspace={workspace} />
+            <OpenInIdeAction
+              workspaceId={workspaceId}
+              hasWorktreePath={Boolean(workspace.worktreePath)}
+              availableIdes={availableIdes}
+              preferredIde={preferredIde}
+              openInIde={openInIde}
+            />
+            <ArchiveActionButton
+              workspace={workspace}
+              archivePending={archivePending}
+              onArchiveRequest={onArchiveRequest}
+            />
+          </div>
+          <ToggleRightPanelButton />
+          <div className="@[72rem]/header:hidden">
+            <WorkspaceHeaderOverflowMenu
+              isArchived={isArchived}
+              workspace={workspace}
+              workspaceId={workspaceId}
+              availableIdes={availableIdes}
+              preferredIde={preferredIde}
+              openInIde={openInIde}
+              archivePending={archivePending}
+              onArchiveRequest={onArchiveRequest}
+              statusContent={
+                <>
+                  <WorkspacePrAction
+                    renderAsMenuItem
+                    workspace={workspace}
+                    hasChanges={hasChanges}
+                    running={running}
+                    isCreatingSession={isCreatingSession}
+                    handleQuickAction={(name, prompt) => {
+                      runInBackground(
+                        handleQuickAction(name, prompt),
+                        'Could not run quick action'
+                      );
+                    }}
+                  />
+                  <div className="px-2 py-1">
+                    <WorkspaceCiStatus workspace={workspace} />
+                  </div>
+                  <WorkspaceIssueLink workspace={workspace} renderAsMenuItem />
+                </>
+              }
+            />
+          </div>
         </div>
       </HeaderRightSlot>
       <WorkspaceDetailsDialog

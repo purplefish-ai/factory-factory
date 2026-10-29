@@ -29,6 +29,12 @@ export const periodicTaskRouter = router({
     return ctx.appContext.services.periodicTaskService.list(input.projectId);
   }),
 
+  navigationSummary: publicProcedure
+    .input(z.object({ projectId: z.string() }))
+    .query(({ ctx, input }) => {
+      return ctx.appContext.services.periodicTaskService.getNavigationSummary(input.projectId);
+    }),
+
   get: publicProcedure.input(z.object({ id: z.string() })).query(async ({ ctx, input }) => {
     const { periodicTaskService } = ctx.appContext.services;
     const task = await periodicTaskService.get(input.id);

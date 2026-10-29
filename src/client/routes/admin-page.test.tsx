@@ -30,7 +30,6 @@ vi.mock('./admin/index', () => ({
   AdversarialReviewSection: () => createElement('section', null, 'Adversarial Review'),
   ApiUsageSection: () => createElement('section', null, 'API Usage'),
   AppearanceSettingsSection: () => createElement('section', null, 'Appearance Settings'),
-  PeriodicTasksSection: () => createElement('section', null, 'Periodic Tasks'),
   ProcessesSection: () => createElement('section', null, 'Processes'),
   ProcessesSectionSkeleton: () => createElement('section', null, 'Processes Loading'),
   VoiceModeSection: () => createElement('section', null, 'Voice Mode'),
@@ -132,6 +131,10 @@ describe('AdminDashboardPage settings tabs', () => {
 
     expect(container.textContent).toContain('General Settings');
     expect(container.textContent).toContain('Project Settings');
+    expect(container.querySelector('a[href="/projects/alpha/agents"]')?.textContent).toContain(
+      'Agents'
+    );
+    expect(container.textContent).not.toContain('Periodic Tasks');
     const tabs = Array.from(container.querySelectorAll('[role="tab"]')) as HTMLElement[];
     const generalTab = tabs.find((tab) => tab.textContent?.includes('General Settings'));
     const projectTab = tabs.find((tab) => tab.textContent?.includes('Project Settings'));

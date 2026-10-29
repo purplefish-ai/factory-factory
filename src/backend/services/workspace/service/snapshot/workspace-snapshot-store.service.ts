@@ -701,6 +701,23 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     return { accepted: true, changed: true, emitted: true };
   }
 
+  /** Creation facts can seed membership, but never replace observations or removals. */
+  seedCreated(
+    workspaceId: string,
+    update: SnapshotUpdateInput,
+    timestamp?: number
+  ): SnapshotUpsertResult {
+    if (
+      this.entries.has(workspaceId) ||
+      this.removalTimestamps.has(workspaceId) ||
+      update.status === 'ARCHIVING' ||
+      update.status === 'ARCHIVED'
+    ) {
+      return { accepted: false, changed: false, emitted: false };
+    }
+    return this.upsert(workspaceId, update, 'event:workspace_created', timestamp);
+  }
+
   /**
    * Publish a committed name from the application's serialized rename writer.
    * Equal DB milliseconds are allowed only on this ordered accepted-write path;

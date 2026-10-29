@@ -1,37 +1,12 @@
-import {
-  HeaderLeftStartSlot,
-  HeaderRightSlot,
-  useAppHeader,
-} from '@/client/components/app-header-context';
-import { ProjectSelectorDropdown } from '@/client/components/project-selector';
+import { HeaderRightSlot } from '@/client/components/app-header-context';
+import { ProjectHeader } from '@/client/components/project-header';
 import { KanbanBoard, KanbanControls, KanbanProvider } from '@/client/features/kanban';
 import type { IssueProvider } from '@/shared/core';
 
-function BoardHeaderSlot({
-  selectedProjectSlug,
-  onProjectChange,
-  onCurrentProjectSelect,
-  projects,
-}: {
-  selectedProjectSlug: string;
-  onProjectChange: (value: string) => void;
-  onCurrentProjectSelect: () => void;
-  projects: Array<{ id: string; slug: string; name: string }> | undefined;
-}) {
-  useAppHeader({ title: '' });
-
+function BoardHeaderSlot({ project }: { project: { id: string; slug: string; name: string } }) {
   return (
     <>
-      <HeaderLeftStartSlot>
-        <ProjectSelectorDropdown
-          selectedProjectSlug={selectedProjectSlug}
-          onProjectChange={onProjectChange}
-          onCurrentProjectSelect={onCurrentProjectSelect}
-          projects={projects}
-          showLeadingSlash
-          triggerId="header-project-select"
-        />
-      </HeaderLeftStartSlot>
+      <ProjectHeader project={project} />
       <HeaderRightSlot>
         <KanbanControls />
       </HeaderRightSlot>
@@ -41,17 +16,13 @@ function BoardHeaderSlot({
 
 export function WorkspacesBoardView({
   projectId,
-  selectedProjectSlug,
-  onProjectChange,
-  onCurrentProjectSelect,
   projects,
+  projectName,
   slug,
   issueProvider,
 }: {
   projectId: string;
-  selectedProjectSlug: string;
-  onProjectChange: (value: string) => void;
-  onCurrentProjectSelect: () => void;
+  projectName?: string;
   projects: Array<{ id: string; slug: string; name: string }> | undefined;
   slug: string;
   issueProvider: IssueProvider;
@@ -64,10 +35,13 @@ export function WorkspacesBoardView({
       issueProvider={issueProvider}
     >
       <BoardHeaderSlot
-        selectedProjectSlug={selectedProjectSlug}
-        onProjectChange={onProjectChange}
-        onCurrentProjectSelect={onCurrentProjectSelect}
-        projects={projects}
+        project={
+          projects?.find((candidate) => candidate.id === projectId) ?? {
+            id: projectId,
+            slug,
+            name: projectName ?? slug,
+          }
+        }
       />
       <div className="flex flex-col h-full p-3 md:p-6 gap-3 md:gap-4">
         <div className="flex-1 min-h-0">

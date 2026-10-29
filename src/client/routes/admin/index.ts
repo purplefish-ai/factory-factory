@@ -8,7 +8,6 @@ export { DataBackupSection } from './DataBackupSection';
 export { IdeSettingsSection } from './IdeSettingsSection';
 export { ProjectIssueTrackingCard } from './IssueTrackingSection';
 export { NotificationSettingsSection } from './NotificationSettingsSection';
-export { PeriodicTasksSection } from './PeriodicTasksSection';
 export {
   type ProcessesData,
   ProcessesSection,

@@ -107,7 +107,7 @@ async function launchPeriodicTask(
   const session = await ports.createDefaultSession({
     workspaceId: workspace.id,
     workflow: 'periodic-task',
-    name: 'Periodic task',
+    name: 'Agent',
   });
   void ports.initializeWorktree(workspace.id).catch((error: unknown) => {
     ports.logger.error('Failed to initialize workspace for periodic task', toError(error), {

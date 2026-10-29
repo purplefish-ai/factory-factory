@@ -1,143 +1,175 @@
-import { ArrowSquareOutIcon } from '@phosphor-icons/react/dist/csr/ArrowSquareOut';
-import { CalendarIcon } from '@phosphor-icons/react/dist/csr/Calendar';
+import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
+import { Link } from 'react-router';
+import { AgentRunHistoryQuery, describeAgentSchedule } from '@/client/features/agents';
+import { getProjectAgentPath, getProjectSectionPath } from '@/client/lib/project-navigation';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 
 interface PeriodicTaskPanelProps {
   periodicTaskId: string;
+  projectId?: string;
 }
 
-export function PeriodicTaskPanel({ periodicTaskId }: PeriodicTaskPanelProps) {
-  const { data: task } = trpc.periodicTask.get.useQuery(
-    { id: periodicTaskId },
-    { refetchInterval: 10_000 }
-  );
+function agentReadError(
+  error: { message: string; data?: { code: string } | null },
+  refresh = false
+): string {
+  if (error.data?.code === 'NOT_FOUND') {
+    return 'Agent not found. Its existing workspaces remain available.';
+  }
+  return `Could not ${refresh ? 'refresh' : 'load'} agent: ${error.message}`;
+}
 
-  const { data: executions } = trpc.periodicTask.listExecutions.useQuery(
-    { periodicTaskId, limit: 50 },
-    { refetchInterval: 10_000 }
-  );
+function managementPath(slug: string | undefined, id?: string): string {
+  if (!slug) {
+    return id ? `/agents/${encodeURIComponent(id)}` : '/agents';
+  }
+  return id ? getProjectAgentPath(slug, id) : getProjectSectionPath(slug, 'agents');
+}
 
-  if (!task) {
+function ProjectLookupState({
+  error,
+  retry,
+}: {
+  error: { message: string } | null;
+  retry: () => void;
+}) {
+  if (!error) {
     return (
-      <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-        Loading...
-      </div>
+      <p role="status" className="text-xs text-muted-foreground">
+        Loading agent project…
+      </p>
     );
   }
-
-  const cadenceLabel =
-    (
-      {
-        EVERY_MINUTE: 'Every minute',
-        EVERY_FIVE_MINUTES: 'Every 5 minutes',
-        DAILY: 'Daily',
-        WEEKLY: 'Weekly',
-        MONTHLY: 'Monthly',
-      } as Record<string, string>
-    )[task.cadence] ?? task.cadence;
-
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      {/* Header */}
-      <div className="px-3 py-2 border-b bg-muted/30 space-y-1">
-        <div className="flex items-center gap-2">
-          <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground" />
-          <span className="font-medium text-sm truncate">{task.name}</span>
-          <Badge variant="secondary" className="text-[10px] shrink-0">
-            {cadenceLabel}
-          </Badge>
-          <Badge
-            variant={task.isEnabled ? 'default' : 'secondary'}
-            className="text-[10px] shrink-0"
-          >
-            {task.isEnabled ? 'Active' : 'Paused'}
-          </Badge>
-        </div>
-        <p className="text-[11px] text-muted-foreground line-clamp-2">{task.prompt}</p>
-        <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
-          {task.lastRunAt && <span>Last run: {new Date(task.lastRunAt).toLocaleString()}</span>}
-          {task.isEnabled && <span>Next run: {new Date(task.nextRunAt).toLocaleString()}</span>}
-        </div>
-      </div>
-
-      {/* Execution list */}
-      <div className="flex-1 overflow-y-auto">
-        {!executions || executions.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
-            No executions yet
-          </div>
-        ) : (
-          <div className="divide-y">
-            {executions.map((exec) => (
-              <ExecutionRow key={exec.id} execution={exec} />
-            ))}
-          </div>
-        )}
-      </div>
+    <div role="alert" className="space-y-2 text-xs">
+      <p className="text-destructive">Could not load agent project: {error.message}</p>
+      <Button size="sm" variant="outline" onClick={retry}>
+        Retry project
+      </Button>
     </div>
   );
 }
 
-function ExecutionRow({
-  execution,
+function MissingAgentState({
+  taskError,
+  retryTask,
+  ownerSlug,
+  hasKnownOwner,
+  ownerError,
+  retryOwner,
 }: {
-  execution: {
-    id: string;
-    status: string;
-    prUrl: string | null;
-    prNumber: number | null;
-    errorMessage: string | null;
-    startedAt: Date;
-    completedAt: Date | null;
-  };
+  taskError: Parameters<typeof agentReadError>[0] | null;
+  retryTask: () => void;
+  ownerSlug?: string;
+  hasKnownOwner: boolean;
+  ownerError: { message: string } | null;
+  retryOwner: () => void;
 }) {
-  const statusColors: Record<string, string> = {
-    RUNNING: 'bg-yellow-500/10 text-yellow-700 border-yellow-500/30',
-    PR_CREATED: 'bg-green-500/10 text-green-700 border-green-500/30',
-    FAILED: 'bg-red-500/10 text-red-700 border-red-500/30',
-    SKIPPED: 'bg-gray-500/10 text-gray-700 border-gray-500/30',
-  };
-
-  const statusLabel: Record<string, string> = {
-    RUNNING: 'Running',
-    PR_CREATED: 'PR Created',
-    FAILED: 'Failed',
-    SKIPPED: 'Skipped',
-  };
-
   return (
-    <div className="px-3 py-2 text-xs space-y-1">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span
-            className={cn(
-              'px-1.5 py-0.5 rounded text-[10px] font-medium border',
-              statusColors[execution.status] ?? 'bg-muted text-muted-foreground'
-            )}
-          >
-            {statusLabel[execution.status] ?? execution.status}
-          </span>
-          <span className="text-muted-foreground">
-            {new Date(execution.startedAt).toLocaleString()}
-          </span>
+    <div className="space-y-3 p-4 text-sm">
+      {taskError ? (
+        <>
+          <p role="alert" className="text-destructive">
+            {agentReadError(taskError)}
+          </p>
+          <Button size="sm" variant="outline" onClick={retryTask}>
+            Retry agent
+          </Button>
+          {ownerSlug || !hasKnownOwner ? (
+            <Link to={managementPath(ownerSlug)} className="block text-primary underline">
+              Manage Agents
+            </Link>
+          ) : (
+            <ProjectLookupState error={ownerError} retry={retryOwner} />
+          )}
+        </>
+      ) : (
+        <p role="status" className="text-muted-foreground">
+          Loading agent…
+        </p>
+      )}
+    </div>
+  );
+}
+
+export function PeriodicTaskPanel({ periodicTaskId, projectId }: PeriodicTaskPanelProps) {
+  const task = trpc.periodicTask.get.useQuery({ id: periodicTaskId }, { refetchInterval: 10_000 });
+  const ownerProjectId = task.data?.projectId ?? projectId;
+  const project = trpc.project.getById.useQuery(
+    { id: ownerProjectId ?? '' },
+    { enabled: !!ownerProjectId }
+  );
+
+  if (!task.data) {
+    return (
+      <MissingAgentState
+        taskError={task.error}
+        retryTask={() => {
+          void task.refetch();
+        }}
+        ownerSlug={project.data?.slug}
+        hasKnownOwner={!!ownerProjectId}
+        ownerError={project.error}
+        retryOwner={() => {
+          void project.refetch();
+        }}
+      />
+    );
+  }
+
+  const agent = task.data;
+  return (
+    <div className="h-full overflow-y-auto">
+      <div className="space-y-2 border-b bg-muted/30 px-3 py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <RobotIcon className="size-3.5 text-muted-foreground" />
+          <span className="min-w-0 break-words text-sm font-medium">{agent.name}</span>
+          <Badge variant="secondary">{agent.isEnabled ? 'Active' : 'Paused'}</Badge>
         </div>
-        {execution.prUrl && (
-          <a
-            href={execution.prUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1 text-primary hover:underline shrink-0"
-          >
-            PR #{execution.prNumber}
-            <ArrowSquareOutIcon className="h-3 w-3" />
-          </a>
+        <p className="text-xs text-muted-foreground">{describeAgentSchedule(agent)}</p>
+        <p className="whitespace-pre-wrap break-words text-xs text-muted-foreground">
+          {agent.prompt}
+        </p>
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          {agent.lastRunAt && <span>Last run: {new Date(agent.lastRunAt).toLocaleString()}</span>}
+          {agent.isEnabled && <span>Next run: {new Date(agent.nextRunAt).toLocaleString()}</span>}
+        </div>
+        <Link
+          to={managementPath(project.data?.slug, periodicTaskId)}
+          className="inline-block text-xs text-primary underline underline-offset-4"
+        >
+          Manage Agent
+        </Link>
+        {task.error && (
+          <div className="space-y-2">
+            <p role="alert" className="text-xs text-destructive">
+              {agentReadError(task.error, true)}
+            </p>
+            <Button size="sm" variant="outline" onClick={() => void task.refetch()}>
+              Retry agent
+            </Button>
+          </div>
         )}
       </div>
-      {execution.errorMessage && (
-        <p className="text-[10px] text-destructive truncate">{execution.errorMessage}</p>
-      )}
+      <div className="p-3">
+        {project.error && (
+          <ProjectLookupState
+            error={project.error}
+            retry={() => {
+              void project.refetch();
+            }}
+          />
+        )}
+        {project.data ? (
+          <AgentRunHistoryQuery periodicTaskId={periodicTaskId} projectSlug={project.data.slug} />
+        ) : !project.error ? (
+          <p role="status" className="text-xs text-muted-foreground">
+            Loading agent project…
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }

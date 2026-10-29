@@ -71,7 +71,7 @@ export function SessionActivityIndicator({
             type="button"
             onClick={onOpenAgents}
             disabled={!onOpenAgents}
-            title="Open Agents panel"
+            title="Open Sessions panel"
             className="group flex max-w-full items-center gap-2 rounded-sm text-left text-sm text-muted-foreground transition-colors enabled:cursor-pointer enabled:hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <span aria-hidden="true" className="flex shrink-0 items-center gap-0.5">

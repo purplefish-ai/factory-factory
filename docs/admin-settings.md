@@ -5,6 +5,11 @@ preferences, chat defaults, and server logs. Appearance controls the color
 scheme, text size, and fonts. Project Settings controls the selected project's
 factory configuration and issue provider.
 
+Scheduled agents are managed from **Agents** in the sidebar or the Agents link
+in Settings. The management page replaces the former Periodic Tasks settings
+editor. See [scheduled agents](architecture/integrations.md#scheduled-agents)
+for schedule and run behavior.
+
 ## Appearance
 
 Color scheme, color overrides, font size, and fonts are saved with the other

@@ -47,6 +47,7 @@ function createMockStore(): MockStore {
 }
 
 vi.mock('@/backend/services/workspace', () => ({
+  WORKSPACE_CREATED: 'workspace_created',
   WORKSPACE_STATE_CHANGED: 'workspace_state_changed',
   workspaceStateMachine: { on: vi.fn(), off: vi.fn() },
   workspaceActivityService: { on: vi.fn(), off: vi.fn(), clearWorkspace: vi.fn() },
@@ -525,10 +526,9 @@ describe('configureEventCollector', () => {
     stopEventCollector();
   });
 
-  it('registers 13 event listeners on domain singletons', () => {
+  it('registers domain event listeners on singletons', () => {
     configureEventCollector();
 
-    // workspaceStateMachine: 1 listener (WORKSPACE_STATE_CHANGED)
     expect(workspaceStateMachine.on).toHaveBeenCalledWith(
       'workspace_state_changed',
       expect.any(Function)

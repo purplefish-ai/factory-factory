@@ -1,9 +1,9 @@
-import { CalendarIcon } from '@phosphor-icons/react/dist/csr/Calendar';
 import { CameraIcon } from '@phosphor-icons/react/dist/csr/Camera';
 import { FileDashedIcon } from '@phosphor-icons/react/dist/csr/FileDashed';
 import { FilesIcon } from '@phosphor-icons/react/dist/csr/Files';
 import { ListChecksIcon } from '@phosphor-icons/react/dist/csr/ListChecks';
 import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
+import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
 import { TreeStructureIcon } from '@phosphor-icons/react/dist/csr/TreeStructure';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -57,6 +57,7 @@ interface RightPanelProps {
 
 interface TopPanelAreaProps {
   workspaceId: string;
+  projectId?: string;
   messages: ChatMessage[];
   activeTopTab: TopPanelTab;
   onTopTabChange: (tab: TopPanelTab) => void;
@@ -72,6 +73,7 @@ interface TopPanelAreaProps {
 
 function TopPanelArea({
   workspaceId,
+  projectId,
   messages,
   activeTopTab,
   onTopTabChange,
@@ -125,14 +127,14 @@ function TopPanelArea({
         />
         {periodicTaskId && (
           <TabButton
-            label="Periodic Task"
-            icon={<CalendarIcon className="h-3.5 w-3.5" />}
+            label="Agent"
+            icon={<RobotIcon className="h-3.5 w-3.5" />}
             isActive={showPeriodicTask}
             onSelect={() => onTopTabChange('periodic-task')}
           />
         )}
         <TabButton
-          label="Agents"
+          label="Sessions"
           icon={<TreeStructureIcon className="h-3.5 w-3.5" />}
           isActive={showAgents}
           onSelect={() => onTopTabChange('agents')}
@@ -172,7 +174,7 @@ function TopPanelArea({
           />
         )}
         {showPeriodicTask && periodicTaskId && (
-          <PeriodicTaskPanel periodicTaskId={periodicTaskId} />
+          <PeriodicTaskPanel periodicTaskId={periodicTaskId} projectId={projectId} />
         )}
         {showAgents && (
           <AgentsPanel
@@ -365,6 +367,7 @@ export function RightPanel({
       {/* Top Panel: Git Status / File Browser */}
       <ResizablePanel defaultSize="60%" minSize="20%">
         <TopPanelArea
+          projectId={workspace?.projectId}
           workspaceId={workspaceId}
           messages={messages}
           activeTopTab={activeTopTab}

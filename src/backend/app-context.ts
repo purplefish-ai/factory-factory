@@ -124,7 +124,7 @@ import {
 import { workspaceGitStateService } from './services/workspace-git-state.service';
 
 export type ApplicationServices = BridgeServices & {
-  listVisibleReviewRequests: () => ReturnType<typeof listVisibleReviewRequests>;
+  listVisibleReviewRequests: (repository?: string) => ReturnType<typeof listVisibleReviewRequests>;
   sessionDispatchService: Pick<
     typeof sessionDispatchService,
     'configure' | 'tryDispatchNextMessage' | 'setManualDispatchResume' | 'resetDispatchState'
@@ -251,7 +251,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
       services.workspaceSnapshotStore.publishAcceptedName(id, name, updatedAt),
   });
   const services: ApplicationServices = {
-    listVisibleReviewRequests: () => listVisibleReviewRequests(services),
+    listVisibleReviewRequests: (repository) => listVisibleReviewRequests(services, repository),
     acpRuntimeManager,
     acpTraceLogger,
     chatEventForwarderService,

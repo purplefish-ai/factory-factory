@@ -2,7 +2,7 @@ import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SELECTED_PROJECT_KEY } from '@/client/lib/project-selection';
 // @vitest-environment jsdom
 import { trpc } from '@/client/lib/trpc';
@@ -10,6 +10,9 @@ import { trpc } from '@/client/lib/trpc';
 const mocks = vi.hoisted(() => ({
   listForProject: vi.fn(() => ({ data: { workspaces: [], reviewCount: 0 } })),
   mutate: vi.fn(),
+  getBySlug: vi.fn(),
+  reviewQuery: vi.fn(),
+  resetReviews: vi.fn(),
 }));
 const mutation = { mutate: mocks.mutate };
 vi.mock('@/client/hooks/use-project-workspace-query', () => {
@@ -24,12 +27,30 @@ vi.mock('@/client/hooks/use-project-workspace-query', () => {
 
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
+    useUtils: () => ({ prReview: { listReviewRequests: { reset: mocks.resetReviews } } }),
+    prReview: { listReviewRequests: { useQuery: mocks.reviewQuery } },
+    periodicTask: { navigationSummary: { useQuery: () => ({ data: undefined }) } },
     project: {
+      getBySlug: { useQuery: mocks.getBySlug },
       list: {
         useQuery: () => ({
           data: [
-            { id: 'alpha-id', slug: 'alpha', name: 'Alpha', issueProvider: 'GITHUB' },
-            { id: 'new-id', slug: 'new', name: 'New', issueProvider: 'GITHUB' },
+            {
+              id: 'alpha-id',
+              slug: 'alpha',
+              name: 'Alpha',
+              issueProvider: 'GITHUB',
+              githubOwner: 'o',
+              githubRepo: 'alpha',
+            },
+            {
+              id: 'new-id',
+              slug: 'new',
+              name: 'New',
+              issueProvider: 'GITHUB',
+              githubOwner: 'o',
+              githubRepo: 'new',
+            },
           ],
         }),
       },
@@ -50,15 +71,46 @@ import { getProjectSlugFromPath, useAppNavigationData } from './use-app-navigati
 function NavigationHarness({
   selected,
 }: {
-  selected: { selectedProjectSlug?: string; selectedProjectId?: string };
+  selected: { selectedProjectSlug?: string; selectedProjectId?: string; reviewCount?: number };
 }) {
   const navigation = useAppNavigationData();
   selected.selectedProjectSlug = navigation.selectedProjectSlug;
   selected.selectedProjectId = navigation.selectedProjectId;
+  selected.reviewCount = navigation.reviewCount;
   return null;
 }
 
+beforeEach(() => {
+  mocks.reviewQuery.mockReset().mockReturnValue({
+    data: {
+      prs: [
+        { repository: { nameWithOwner: 'O/NEW' }, reviewDecision: 'REVIEW_REQUIRED' },
+        { repository: { nameWithOwner: 'o/new' }, reviewDecision: 'APPROVED' },
+        { repository: { nameWithOwner: 'foreign/new' }, reviewDecision: 'REVIEW_REQUIRED' },
+      ],
+    },
+  });
+  mocks.getBySlug.mockReset().mockImplementation(({ slug }: { slug: string }) => ({
+    data: {
+      id: `${slug}-id`,
+      slug,
+      name: slug,
+      githubOwner: 'o',
+      githubRepo: slug,
+    },
+  }));
+  mocks.listForProject.mockReturnValue({ data: { workspaces: [], reviewCount: 99 } });
+});
+
 describe('project route selection', () => {
+  it.each([
+    ['/PROJECTS/space%20here/agents', 'space here'],
+    ['/Projects/a%2Fb/reviews', 'a/b'],
+    ['/PROJECTS/NEW/', null],
+  ])('decodes the React Router URL owner in %s', (path, slug) => {
+    expect(getProjectSlugFromPath(path)).toBe(slug);
+  });
+
   it.each(['/projects/new', '/projects/new/'])('keeps %s as the project creation route', (path) => {
     expect(getProjectSlugFromPath(path)).toBeNull();
   });
@@ -75,7 +127,11 @@ describe('project route selection', () => {
     window.history.replaceState({}, '', '/projects/new/workspaces');
     const container = document.createElement('div');
     const root = createRoot(container);
-    const selected: { selectedProjectSlug?: string; selectedProjectId?: string } = {};
+    const selected: {
+      selectedProjectSlug?: string;
+      selectedProjectId?: string;
+      reviewCount?: number;
+    } = {};
     try {
       flushSync(() =>
         root.render(
@@ -87,6 +143,11 @@ describe('project route selection', () => {
             createElement(NavigationHarness, { selected })
           )
         )
+      );
+      expect(selected.reviewCount).toBe(1);
+      expect(mocks.reviewQuery).toHaveBeenLastCalledWith(
+        { projectId: 'new-id' },
+        expect.objectContaining({ enabled: true, staleTime: 30_000 })
       );
       expect(selected.selectedProjectSlug).toBe('new');
       expect(selected.selectedProjectId).toBe('new-id');
@@ -101,4 +162,104 @@ describe('project route selection', () => {
       window.history.replaceState({}, '', '/');
     }
   });
+});
+
+it.each([
+  [
+    'archived',
+    { id: 'archived-id', slug: 'archived', githubOwner: 'o', githubRepo: 'new' },
+    true,
+    1,
+  ],
+  ['local', { id: 'local-id', slug: 'local', githubOwner: null, githubRepo: null }, false, 0],
+  ['pending', undefined, false, 0],
+])(
+  'scopes URL %s before saved selection and without an active project match',
+  (slug, project, enabled, count) => {
+    localStorage.setItem(SELECTED_PROJECT_KEY, 'alpha');
+    window.history.replaceState({}, '', '/');
+    mocks.getBySlug.mockReturnValue({ data: project });
+    const root = createRoot(document.createElement('div'));
+    const selected: { reviewCount?: number } = {};
+    try {
+      flushSync(() =>
+        root.render(
+          createElement(
+            MemoryRouter,
+            { initialEntries: [`/projects/${slug}/reviews`] },
+            createElement(NavigationHarness, { selected })
+          )
+        )
+      );
+      expect(selected.reviewCount).toBe(count);
+      expect(mocks.reviewQuery).toHaveBeenCalledWith(
+        { projectId: project?.id ?? '' },
+        expect.objectContaining({ enabled })
+      );
+      expect(
+        mocks.reviewQuery.mock.calls.some(
+          ([input, options]) => input.projectId === 'alpha-id' && options.enabled
+        )
+      ).toBe(false);
+    } finally {
+      flushSync(() => root.unmount());
+      localStorage.clear();
+    }
+  }
+);
+
+it('refreshes project review cache when repository metadata changes on the same project', () => {
+  mocks.resetReviews.mockClear();
+  window.history.replaceState({}, '', '/');
+  const root = createRoot(document.createElement('div'));
+  const selected: { reviewCount?: number } = {};
+  const tree = () =>
+    createElement(
+      MemoryRouter,
+      { initialEntries: ['/projects/new/reviews'] },
+      createElement(NavigationHarness, { selected })
+    );
+  try {
+    flushSync(() => root.render(tree()));
+    expect(selected.reviewCount).toBe(1);
+    mocks.getBySlug.mockReturnValue({
+      data: { id: 'new-id', slug: 'new', githubOwner: 'changed', githubRepo: 'new' },
+    });
+    flushSync(() => root.render(tree()));
+    expect(selected.reviewCount).toBe(0);
+    expect(mocks.resetReviews).toHaveBeenCalledWith({ projectId: 'new-id' });
+  } finally {
+    flushSync(() => root.unmount());
+  }
+});
+
+it('does not treat initial project metadata without an ID as a previous scope', () => {
+  mocks.resetReviews.mockClear();
+  mocks.getBySlug.mockReturnValue({ data: { success: true } });
+  window.history.replaceState({}, '', '/');
+  localStorage.clear();
+  const onUncaughtError = vi.fn();
+  const root = createRoot(document.createElement('div'), { onUncaughtError });
+  const selected: { reviewCount?: number } = {};
+  try {
+    flushSync(() =>
+      root.render(
+        createElement(
+          MemoryRouter,
+          { initialEntries: ['/projects/archived-owner/agents/requested-agent'] },
+          createElement(NavigationHarness, { selected })
+        )
+      )
+    );
+    expect(onUncaughtError).not.toHaveBeenCalled();
+    expect(selected.reviewCount).toBe(0);
+    expect(mocks.resetReviews).not.toHaveBeenCalled();
+    expect(mocks.reviewQuery).toHaveBeenLastCalledWith(
+      { projectId: '' },
+      expect.objectContaining({ enabled: false })
+    );
+  } finally {
+    flushSync(() => root.unmount());
+    localStorage.clear();
+  }
 });

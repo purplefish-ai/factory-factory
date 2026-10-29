@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { prisma } from '@/backend/db';
 import type { PeriodicTaskCadence, PeriodicTaskExecutionStatus } from '@/shared/core';
 import type { PeriodicTask, PeriodicTaskExecution } from '@prisma-gen/client';
@@ -367,6 +368,28 @@ export const periodicTaskAccessor = {
       include: { executions: { orderBy: { startedAt: 'desc' }, take: 5 } },
       orderBy: { createdAt: 'desc' },
     });
+  },
+
+  async getNavigationSummary(projectId: string) {
+    // The correlated terminal lookup uses the task index and ignores pending
+    // retries before LIMIT, without fetching any execution histories.
+    const rows = await prisma.$queryRaw`
+      SELECT COUNT(*) AS totalCount,
+        COALESCE(SUM((
+          SELECT execution.status FROM PeriodicTaskExecution AS execution
+          WHERE execution.periodicTaskId = agent.id
+            AND execution.status IN ('FAILED', 'PR_CREATED')
+          ORDER BY execution.startedAt DESC, execution.id DESC
+          LIMIT 1
+        ) = 'FAILED'), 0) AS failedCount
+      FROM PeriodicTask AS agent
+      WHERE agent.projectId = ${projectId}
+    `;
+    const count = z
+      .union([z.bigint(), z.number()])
+      .transform(Number)
+      .pipe(z.number().int().nonnegative());
+    return z.tuple([z.object({ totalCount: count, failedCount: count })]).parse(rows)[0];
   },
 
   async update(id: string, input: UpdatePeriodicTaskInput): Promise<PeriodicTask> {

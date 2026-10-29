@@ -10,6 +10,10 @@ import {
 } from 'react';
 import { useLocation } from 'react-router';
 import { toast } from 'sonner';
+import {
+  getReviewRepository,
+  useProjectReviewRequests,
+} from '@/client/hooks/use-project-review-requests';
 import { useProjectSnapshotSync } from '@/client/hooks/use-project-snapshot-sync';
 import { useProjectWorkspaceQuery } from '@/client/hooks/use-project-workspace-query';
 import { useWorkspaceAttention } from '@/client/hooks/use-workspace-attention';
@@ -18,9 +22,16 @@ import { trpc } from '@/client/lib/trpc';
 import type { WorkspaceSummary } from '@/shared/workspace-summary';
 
 export function getProjectSlugFromPath(pathname: string): string | null {
-  const match = pathname.match(/^\/projects\/([^/]+)/);
-  const slug = match?.[1];
-  return slug && !/^\/projects\/new\/?$/.test(pathname) ? slug : null;
+  const match = pathname.match(/^\/projects\/([^/]+)/i);
+  const segment = match?.[1];
+  if (!segment || /^\/projects\/new\/?$/i.test(pathname)) {
+    return null;
+  }
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
 }
 
 function persistSelectedProjectSlug(slug: string) {
@@ -107,6 +118,37 @@ export function useAppNavigationData() {
   const selectedProjectId = selectedProject?.id;
   const issueProvider = selectedProject?.issueProvider ?? 'GITHUB';
 
+  const urlSlug = getProjectSlugFromPath(pathname);
+  const urlProject = trpc.project.getBySlug.useQuery(
+    { slug: urlSlug ?? '' },
+    { enabled: !!urlSlug }
+  );
+  const reviewProject = urlSlug ? urlProject.data : selectedProject;
+  const reviews = useProjectReviewRequests(reviewProject);
+  const agentProject = urlSlug
+    ? urlProject.data?.slug === urlSlug
+      ? urlProject.data
+      : undefined
+    : selectedProject;
+  const agentSummary = trpc.periodicTask.navigationSummary.useQuery(
+    { projectId: agentProject?.id ?? '' },
+    { enabled: !!agentProject?.id, refetchInterval: 10_000 }
+  );
+  const agentsSummary = agentProject?.id ? agentSummary.data : undefined;
+  const utils = trpc.useUtils();
+  const previousReviewScope = useRef<{ id: string; repository: string | null } | null>(null);
+  useEffect(() => {
+    if (!reviewProject) {
+      return;
+    }
+    const next = { id: reviewProject.id, repository: getReviewRepository(reviewProject) };
+    const previous = previousReviewScope.current;
+    previousReviewScope.current = next;
+    if (previous && previous.id === next.id && previous.repository !== next.repository) {
+      void utils.prReview.listReviewRequests.reset({ projectId: next.id });
+    }
+  }, [reviewProject, utils]);
+
   const { data: projectState } = useProjectWorkspaceQuery(selectedProjectId);
 
   // Sync PR statuses from GitHub once when project changes
@@ -122,7 +164,7 @@ export function useAppNavigationData() {
   useProjectSlugSync(pathname, projects, selectedProjectSlug, selectProjectSlug);
 
   const serverWorkspaces: WorkspaceSummary<Date>[] | undefined = projectState?.workspaces;
-  const reviewCount = projectState?.reviewCount ?? 0;
+  const reviewCount = reviews.prs.filter((pr) => pr.reviewDecision !== 'APPROVED').length;
 
   // Get current workspace ID from URL
   const currentWorkspaceId = pathname.match(/\/workspaces\/([^/]+)/)?.[1];
@@ -145,6 +187,7 @@ export function useAppNavigationData() {
     issueProvider,
     serverWorkspaces,
     reviewCount,
+    agentsSummary,
     needsAttention,
     clearAttention,
     currentWorkspaceId,

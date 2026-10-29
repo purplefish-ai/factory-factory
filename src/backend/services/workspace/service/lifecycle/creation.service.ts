@@ -10,6 +10,7 @@ import { gitOpsService } from '@/backend/services/workspace/service/worktree/git
 import { worktreeLifecycleService } from '@/backend/services/workspace/service/worktree/worktree-lifecycle.service';
 import type { MessageAttachment } from '@/shared/acp-protocol';
 import type { Prisma, SessionProvider } from '@prisma-gen/client';
+import { workspaceStateMachine } from './state-machine.service';
 
 type Logger = ReturnType<typeof createLogger>;
 
@@ -157,6 +158,8 @@ export class WorkspaceCreationService {
       ...preparedInput,
       ratchetEnabled,
     });
+
+    workspaceStateMachine.publishCreated(workspace);
 
     // Set initialization mode if resuming existing branch
     if (initMode) {

@@ -2,10 +2,13 @@ import { DotOutlineIcon } from '@phosphor-icons/react/dist/csr/DotOutline';
 import { GearIcon } from '@phosphor-icons/react/dist/csr/Gear';
 import { GitPullRequestIcon } from '@phosphor-icons/react/dist/csr/GitPullRequest';
 import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
+import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
+import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import {
   type PointerEvent as ReactPointerEvent,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -13,9 +16,13 @@ import {
 import { Link, useLocation, useNavigate } from 'react-router';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
 import { InlineWorkspaceForm } from '@/client/features/kanban/inline-workspace-form';
-import type { useAppNavigationData } from '@/client/hooks/use-app-navigation-data';
+import {
+  getProjectSlugFromPath,
+  type useAppNavigationData,
+} from '@/client/hooks/use-app-navigation-data';
 import { useProjectIssues } from '@/client/hooks/use-project-issues';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
+import { getProjectSection, getProjectSectionPath } from '@/client/lib/project-navigation';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -182,6 +189,101 @@ function IssueGroup({ issues }: { issues: NormalizedIssue[] | undefined }) {
 // Sidebar content (shared between desktop and mobile)
 // =============================================================================
 
+function AgentNavigationBadge({
+  summary,
+  descriptionId,
+}: {
+  summary: NavigationData['agentsSummary'];
+  descriptionId: string;
+}) {
+  if (!summary) {
+    return null;
+  }
+  const description = `${summary.totalCount} ${summary.totalCount === 1 ? 'agent' : 'agents'}${summary.failedCount > 0 ? `, ${summary.failedCount} with a failed last completed run` : ''}`;
+  return (
+    <>
+      <Badge
+        data-agent-count
+        aria-hidden="true"
+        variant="secondary"
+        className={cn(
+          'ml-auto h-5 min-w-5 gap-1 px-1.5 text-xs',
+          summary.failedCount > 0 && 'bg-destructive/10 text-destructive border-destructive/30'
+        )}
+      >
+        {summary.failedCount > 0 ? <WarningIcon className="h-3 w-3" /> : null}
+        {summary.totalCount}
+      </Badge>
+      <span id={descriptionId} className="sr-only">
+        {description}
+      </span>
+    </>
+  );
+}
+
+function ProjectFooterLinks({
+  navData,
+  onNavigate,
+}: {
+  navData: NavigationData;
+  onNavigate?: () => void;
+}) {
+  const { pathname } = useLocation();
+  const projectSlug =
+    getProjectSlugFromPath(pathname) ??
+    (navData.selectedProjectId ? navData.selectedProjectSlug : '');
+  const activeSection = getProjectSection(pathname);
+  const descriptionId = useId();
+  const summary = projectSlug ? navData.agentsSummary : undefined;
+
+  return (
+    [
+      { section: 'agents', label: 'Agents', Icon: RobotIcon },
+      { section: 'reviews', label: 'Reviews', Icon: GitPullRequestIcon },
+    ] as const
+  ).map(({ section, label, Icon }) => {
+    const content = (
+      <>
+        <Icon className="h-4 w-4" />
+        <span>{label}</span>
+        {section === 'agents' ? (
+          <AgentNavigationBadge summary={summary} descriptionId={descriptionId} />
+        ) : null}
+        {projectSlug && section === 'reviews' && navData.reviewCount > 0 ? (
+          <Badge
+            variant="secondary"
+            className="ml-auto h-5 min-w-5 px-1.5 text-xs bg-orange-500/20 text-orange-600 border-orange-500/30"
+          >
+            {navData.reviewCount}
+          </Badge>
+        ) : null}
+      </>
+    );
+    return (
+      <SidebarMenuItem key={section}>
+        <SidebarMenuButton
+          asChild={!!projectSlug}
+          disabled={!projectSlug}
+          isActive={activeSection === section}
+        >
+          {projectSlug ? (
+            <Link
+              to={getProjectSectionPath(projectSlug, section)}
+              onClick={onNavigate}
+              aria-label={section === 'agents' ? 'Agents' : undefined}
+              aria-describedby={section === 'agents' && summary ? descriptionId : undefined}
+            >
+              {content}
+            </Link>
+          ) : (
+            content
+          )}
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    );
+  });
+}
+
 function SidebarInner({
   navData,
   issues,
@@ -294,25 +396,7 @@ function SidebarInner({
 
       <SidebarFooter>
         <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              isActive={pathname === '/reviews' || pathname?.startsWith('/reviews/')}
-            >
-              <Link to="/reviews" onClick={onNavigate}>
-                <GitPullRequestIcon className="h-4 w-4" />
-                <span>Reviews</span>
-                {navData.reviewCount > 0 && (
-                  <Badge
-                    variant="secondary"
-                    className="ml-auto h-5 min-w-5 px-1.5 text-xs bg-orange-500/20 text-orange-600 border-orange-500/30"
-                  >
-                    {navData.reviewCount}
-                  </Badge>
-                )}
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
+          <ProjectFooterLinks navData={navData} onNavigate={onNavigate} />
           <SidebarMenuItem>
             <div className="flex items-center gap-1">
               <SidebarMenuButton

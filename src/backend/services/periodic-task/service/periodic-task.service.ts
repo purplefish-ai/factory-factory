@@ -97,6 +97,10 @@ export class PeriodicTaskService {
     return periodicTaskAccessor.listByProject(projectId);
   }
 
+  getNavigationSummary(projectId: string) {
+    return periodicTaskAccessor.getNavigationSummary(projectId);
+  }
+
   get(id: string) {
     return periodicTaskAccessor.findById(id);
   }

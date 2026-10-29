@@ -121,13 +121,13 @@ it('allows opening the real launch menu and switching to periodic mode before ch
       modeTrigger?.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowDown' }))
     );
     const periodic = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
-      (item) => item.textContent === 'Create Periodic Task'
+      (item) => item.textContent === 'Create Agent'
     );
     expect(periodic).toBeDefined();
     await act(() => periodic?.click());
     expect(
       [...container.querySelectorAll<HTMLButtonElement>('button')].find(
-        (button) => button.textContent === 'Create Periodic Task'
+        (button) => button.textContent === 'Create Agent'
       )?.disabled
     ).toBe(false);
   } finally {

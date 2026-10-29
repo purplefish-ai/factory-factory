@@ -66,14 +66,15 @@ export function WorkspaceSwitcherDropdown({
     <Select value={currentWorkspaceId} onValueChange={handleValueChange}>
       <SelectTrigger
         id="workspace-detail-workspace-select"
+        title={currentWorkspaceName}
         aria-label={`Open workspace menu (${queueSummaryLabel})`}
-        className="h-7 min-w-0 w-auto max-w-[10rem] border-0 bg-transparent px-0.5 text-[11px] font-normal text-muted-foreground shadow-none focus:ring-0 hover:[&>.workspace-switcher-label]:underline focus-visible:[&>.workspace-switcher-label]:underline md:max-w-[18rem] md:px-1 md:text-sm lg:max-w-none [&>svg:last-of-type]:hidden"
+        className="h-7 min-w-0 w-auto max-w-[10rem] border-0 bg-transparent px-0.5 text-[11px] font-normal text-muted-foreground shadow-none focus:ring-0 hover:[&>.workspace-switcher-label]:underline focus-visible:[&>.workspace-switcher-label]:underline md:max-w-[24rem] md:px-1 md:text-sm [&>svg:last-of-type]:hidden"
       >
         <span className="workspace-switcher-label flex-1 min-w-0 truncate text-foreground font-semibold">
           {currentWorkspaceLabel}
         </span>
         <span className="shrink-0" aria-hidden>
-          <span className="ml-1 hidden text-[10px] font-normal text-muted-foreground tabular-nums lg:block">
+          <span className="ml-1 hidden text-[10px] font-normal text-muted-foreground tabular-nums @[72rem]/header:block">
             {grouped.working.length} wk · {grouped.waiting.length} wait
           </span>
         </span>

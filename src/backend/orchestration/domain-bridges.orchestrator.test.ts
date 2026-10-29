@@ -443,7 +443,7 @@ describe('configureDomainBridges', () => {
       expect(sessionDataService.createAgentSession).toHaveBeenCalledWith({
         workspaceId: 'ws-periodic',
         workflow: 'periodic-task',
-        name: 'Periodic task',
+        name: 'Agent',
       });
       expect(mockLogger.error).toHaveBeenCalledWith(
         'Failed to initialize workspace for periodic task',
@@ -580,7 +580,7 @@ describe('configureDomainBridges', () => {
       expect(createAgentSession).toHaveBeenCalledExactlyOnceWith({
         workspaceId: 'overridden-workspace',
         workflow: 'periodic-task',
-        name: 'Periodic task',
+        name: 'Agent',
       });
       expect(initialize).toHaveBeenCalledExactlyOnceWith('overridden-workspace', undefined);
       expect(mockWorkspaceCreationService.create).not.toHaveBeenCalled();

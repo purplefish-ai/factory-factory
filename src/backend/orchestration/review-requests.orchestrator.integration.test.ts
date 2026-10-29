@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import type { ReviewRequestedPR } from '@/backend/services/github';
-import { workspaceQueryService } from '@/backend/services/workspace';
+import { projectManagementService, workspaceQueryService } from '@/backend/services/workspace';
 import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,
@@ -25,7 +25,15 @@ beforeAll(async () => {
   db = await createIntegrationDatabase();
   database.prisma = db.prisma;
   await db.prisma.project.create({
-    data: { id: 'p', name: 'P', slug: 'p', repoPath: '/tmp/p', worktreeBasePath: '/tmp/w' },
+    data: {
+      id: 'p',
+      name: 'P',
+      slug: 'p',
+      repoPath: '/tmp/p',
+      worktreeBasePath: '/tmp/w',
+      githubOwner: 'O',
+      githubRepo: 'R',
+    },
   });
   for (const [id, status, numbers] of [
     ['archived', 'ARCHIVED', [1, 2, 4]],
@@ -70,7 +78,11 @@ it('excludes all PRs attached only to archived or archiving workspaces from Revi
     deletions: 0,
     changedFiles: 1,
   }));
-  prs.push({ ...prs[0]!, url: 'https://github.com/other/repo/pull/1' });
+  prs.push({
+    ...prs[0]!,
+    url: 'https://github.com/other/repo/pull/1',
+    repository: { nameWithOwner: 'other/repo' },
+  });
   const services = {
     githubCLIService: {
       checkHealth: async () => ({ isInstalled: true, isAuthenticated: true }),
@@ -82,7 +94,9 @@ it('excludes all PRs attached only to archived or archiving workspaces from Revi
     appContext: {
       services: {
         ...services,
-        listVisibleReviewRequests: () => listVisibleReviewRequests(services),
+        listVisibleReviewRequests: (repository?: string) =>
+          listVisibleReviewRequests(services, repository),
+        projectManagementService,
       },
     },
   } as never);
@@ -95,6 +109,15 @@ it('excludes all PRs attached only to archived or archiving workspaces from Revi
     'https://github.com/o/r/pull/6',
     'https://github.com/o/r/pull/7',
     'https://github.com/other/repo/pull/1',
+  ]);
+
+  const scoped = await caller.listReviewRequests({ projectId: 'p' });
+  expect(scoped.error).toBeNull();
+  expect(scoped.prs.map((pr) => pr.url)).toEqual([
+    'https://github.com/o/r/pull/4',
+    'https://github.com/o/r/pull/5',
+    'https://github.com/o/r/pull/6',
+    'https://github.com/o/r/pull/7',
   ]);
 
   workspaceQueryService.configure({
@@ -112,4 +135,56 @@ it('excludes all PRs attached only to archived or archiving workspaces from Revi
     'https://github.com/o/r/pull/1'
   );
   expect(await workspaceQueryService.refreshReviewCount()).toBe(6);
+});
+
+it('defensively restricts repository identity case-insensitively before workspace visibility', async () => {
+  const base: ReviewRequestedPR = {
+    number: 6,
+    title: 'Scoped PR',
+    url: 'https://github.com/o/r/pull/6',
+    repository: { nameWithOwner: 'o/r' },
+    author: { login: 'author' },
+    createdAt: '2026-01-01T00:00:00Z',
+    isDraft: false,
+    reviewDecision: 'REVIEW_REQUIRED',
+    additions: 1,
+    deletions: 0,
+    changedFiles: 1,
+  };
+  const list = vi.fn(async () => [
+    base,
+    {
+      ...base,
+      number: 8,
+      repository: { nameWithOwner: 'O/R' },
+      url: 'https://github.com/o/r/pull/8',
+    },
+    { ...base, repository: { nameWithOwner: 'other/r' }, url: 'https://github.com/other/r/pull/6' },
+    {
+      ...base,
+      repository: { nameWithOwner: 'o/r-other' },
+      url: 'https://github.com/o/r-other/pull/6',
+    },
+  ]);
+  const services = { githubCLIService: { listReviewRequests: list }, workspaceQueryService };
+  const caller = prReviewRouter.createCaller({
+    appContext: {
+      services: {
+        projectManagementService,
+        githubCLIService: {
+          checkHealth: async () => ({ isInstalled: true, isAuthenticated: true }),
+        },
+        listVisibleReviewRequests: (repository?: string) =>
+          listVisibleReviewRequests(services, repository),
+      },
+    },
+  } as never);
+  const scoped = await caller.listReviewRequests({ projectId: 'p' });
+  expect(scoped.error).toBeNull();
+  expect(scoped.prs.map((pr) => pr.url)).toEqual([
+    'https://github.com/o/r/pull/6',
+    'https://github.com/o/r/pull/8',
+  ]);
+  expect(list).toHaveBeenCalledWith('O/R');
+  expect((await caller.listReviewRequests()).prs).toHaveLength(4);
 });

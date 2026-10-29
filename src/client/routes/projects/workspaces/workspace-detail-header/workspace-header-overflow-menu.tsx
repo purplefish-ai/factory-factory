@@ -2,7 +2,7 @@ import { DotsThreeIcon } from '@phosphor-icons/react/dist/csr/DotsThree';
 import { GearSixIcon } from '@phosphor-icons/react/dist/csr/GearSix';
 import { InfoIcon } from '@phosphor-icons/react/dist/csr/Info';
 import { PencilIcon } from '@phosphor-icons/react/dist/csr/Pencil';
-import { useRef, useState } from 'react';
+import { type ReactNode, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -38,6 +38,8 @@ export function WorkspaceHeaderOverflowMenu({
   openInIde,
   archivePending,
   onArchiveRequest,
+  statusContent,
+  isArchived,
 }: {
   workspace: WorkspaceHeaderWorkspace;
   workspaceId: string;
@@ -46,6 +48,8 @@ export function WorkspaceHeaderOverflowMenu({
   openInIde: WorkspaceSessionManagement['openInIde'];
   archivePending: boolean;
   onArchiveRequest: () => void;
+  statusContent?: ReactNode;
+  isArchived: boolean;
 }) {
   const [providerSettingsOpen, setProviderSettingsOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
@@ -59,6 +63,9 @@ export function WorkspaceHeaderOverflowMenu({
   });
 
   const handleRenameOpen = () => {
+    if (isArchived) {
+      return;
+    }
     setRenameValue(workspace.name);
     setRenameOpen(true);
     requestAnimationFrame(() => {
@@ -68,7 +75,7 @@ export function WorkspaceHeaderOverflowMenu({
 
   const handleRenameSubmit = async () => {
     const trimmed = renameValue.trim();
-    if (renameMutation.isPending) {
+    if (isArchived || renameMutation.isPending) {
       return;
     }
     if (!trimmed || trimmed === workspace.name) {
@@ -131,7 +138,7 @@ export function WorkspaceHeaderOverflowMenu({
         onOpenChange={setProviderSettingsOpen}
         showTrigger={false}
       />
-      <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
+      <Dialog open={renameOpen && !isArchived} onOpenChange={setRenameOpen}>
         <DialogContent className="sm:max-w-sm" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Rename workspace</DialogTitle>
@@ -183,6 +190,7 @@ export function WorkspaceHeaderOverflowMenu({
         </Tooltip>
         <DropdownMenuContent align="end" className="w-60">
           <DropdownMenuLabel>Workspace actions</DropdownMenuLabel>
+          {statusContent}
           <DropdownMenuItem
             onSelect={(event) => {
               event.preventDefault();
@@ -194,17 +202,19 @@ export function WorkspaceHeaderOverflowMenu({
             <InfoIcon className="h-4 w-4" />
             View details
           </DropdownMenuItem>
-          <DropdownMenuItem
-            onSelect={(event) => {
-              event.preventDefault();
-              requestAnimationFrame(() => {
-                handleRenameOpen();
-              });
-            }}
-          >
-            <PencilIcon className="h-4 w-4" />
-            Rename workspace
-          </DropdownMenuItem>
+          {!isArchived && (
+            <DropdownMenuItem
+              onSelect={(event) => {
+                event.preventDefault();
+                requestAnimationFrame(() => {
+                  handleRenameOpen();
+                });
+              }}
+            >
+              <PencilIcon className="h-4 w-4" />
+              Rename workspace
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem
             onSelect={(event) => {
               event.preventDefault();
