@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useState } from 'react';
-import { ArchivingOverlay, InitializationOverlay, ScriptFailedBanner } from './workspace-overlays';
+import { ArchivingOverlay, ScriptFailedBanner } from './workspace-overlays';
 
 const meta = {
   title: 'Workspaces/Overlays',
@@ -26,42 +26,6 @@ type Story = StoryObj<typeof meta>;
 
 export const Archiving: Story = {
   render: () => <ArchivingOverlay />,
-};
-
-export const InitializingWithoutScript: Story = {
-  render: () => (
-    <InitializationOverlay
-      workspaceId="test-workspace"
-      status="PROVISIONING"
-      initErrorMessage={null}
-      initOutput={null}
-      hasStartupScript={false}
-    />
-  ),
-};
-
-export const InitializingWithScript: Story = {
-  render: () => (
-    <InitializationOverlay
-      workspaceId="test-workspace"
-      status="PROVISIONING"
-      initErrorMessage={null}
-      initOutput="Installing dependencies...\nnpm install\n✓ All dependencies installed"
-      hasStartupScript={true}
-    />
-  ),
-};
-
-export const InitializationFailed: Story = {
-  render: () => (
-    <InitializationOverlay
-      workspaceId="test-workspace"
-      status="FAILED"
-      initErrorMessage="Failed to run startup script: Command exited with code 1"
-      initOutput="Installing dependencies...\nnpm install\nERROR: Package not found"
-      hasStartupScript={true}
-    />
-  ),
 };
 
 export const ScriptFailedLongMessage: Story = {
