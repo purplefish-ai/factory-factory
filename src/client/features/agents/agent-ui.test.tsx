@@ -61,6 +61,9 @@ describe('AgentRunHistory', () => {
     expect(
       container.querySelector('a[href="https://github.com/example/repo/pull/4"]')?.textContent
     ).toContain('#4');
+    expect(container.querySelector('a[target="_blank"]')?.textContent).toContain(
+      '(opens in new tab)'
+    );
     expect(container.textContent).toContain('Up to 50 recent runs');
   });
   it('distinguishes a running workspace not yet created from an unavailable terminal workspace', () => {
@@ -136,6 +139,40 @@ describe('AgentForm', () => {
       '  Review code  '
     );
   });
+  it.each(['name', 'instructions'])(
+    'clears stale required validation when %s is edited',
+    (fieldName) => {
+      actFlushSync(() =>
+        root.render(
+          <AgentForm
+            initialValues={{
+              name: ' ',
+              prompt: ' ',
+              cadence: 'DAILY',
+              scheduledTime: null,
+              timezone: null,
+            }}
+            onSave={vi.fn()}
+            onCancel={vi.fn()}
+          />
+        )
+      );
+      actFlushSync(() =>
+        container
+          .querySelector('form')
+          ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      );
+      expect(container.textContent).toContain('Name and instructions are required');
+      const field = container.querySelector(`[name="${fieldName}"]`);
+      const prototype =
+        fieldName === 'name' ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype;
+      actFlushSync(() => {
+        Object.getOwnPropertyDescriptor(prototype, 'value')?.set?.call(field, 'Valid text');
+        field?.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      expect(container.querySelector('[role="alert"]')).toBeNull();
+    }
+  );
   it('rejects whitespace-only required fields', () => {
     const onSave = vi.fn();
     actFlushSync(() =>

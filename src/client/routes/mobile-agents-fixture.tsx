@@ -1,13 +1,26 @@
 import { useState } from 'react';
-import {
-  type Agent,
-  AgentDetail,
-  AgentForm,
-  AgentRunHistory,
-  AgentsDashboardShell,
-} from '@/client/features/agents';
+import { AgentDetail } from '@/client/features/agents/agent-detail';
+import { AgentForm } from '@/client/features/agents/agent-form';
+import { AgentRunHistory } from '@/client/features/agents/agent-run-history';
+import { AgentsDashboardShell } from '@/client/features/agents/agents-dashboard-shell';
+import type { Agent, AgentRun } from '@/client/features/agents/types';
 
 const project = { id: 'factory', slug: 'factory-factory', name: 'Factory Factory' };
+function previousRuns(periodicTaskId: string): AgentRun[] {
+  return [
+    {
+      id: 'previous-run',
+      periodicTaskId,
+      workspaceId: 'archived-run',
+      status: 'PR_CREATED',
+      startedAt: new Date('2026-01-12T14:00:00.000Z'),
+      completedAt: new Date('2026-01-12T14:10:00.000Z'),
+      prUrl: 'https://github.com/example/repo/pull/42',
+      prNumber: 42,
+      errorMessage: null,
+    },
+  ];
+}
 const review: Agent = {
   id: 'review',
   projectId: project.id,
@@ -22,7 +35,7 @@ const review: Agent = {
   lastRunAt: new Date('2026-01-12T14:00:00.000Z'),
   createdAt: new Date('2026-01-01T14:00:00.000Z'),
   updatedAt: new Date('2026-01-12T14:00:00.000Z'),
-  executions: [],
+  executions: previousRuns('review'),
 };
 const dependencies: Agent = {
   ...review,
@@ -31,6 +44,7 @@ const dependencies: Agent = {
   prompt: 'Check for safe dependency updates and open a focused pull request.',
   cadence: 'WEEKLY',
   isEnabled: false,
+  executions: previousRuns('dependencies'),
 };
 
 /** Frontend-only phone fixture; shared components retain their production links. */
@@ -43,6 +57,16 @@ export function MobileAgentsFixture() {
     <div
       className="h-dvh min-w-0"
       onClickCapture={(event) => {
+        if (
+          event.defaultPrevented ||
+          event.button !== 0 ||
+          event.metaKey ||
+          event.ctrlKey ||
+          event.shiftKey ||
+          event.altKey
+        ) {
+          return;
+        }
         const target = event.target;
         if (!(target instanceof Element)) {
           return;
@@ -75,11 +99,27 @@ export function MobileAgentsFixture() {
               initialValues={formMode === 'edit' ? selected : undefined}
               onCancel={() => setFormMode(null)}
               onSave={(values) => {
-                const updated = {
-                  ...selected,
-                  ...values,
-                  id: formMode === 'create' ? 'created' : selected.id,
-                };
+                const now = new Date();
+                const base: Agent =
+                  formMode === 'create'
+                    ? {
+                        id: crypto.randomUUID(),
+                        projectId: project.id,
+                        name: '',
+                        prompt: '',
+                        cadence: 'DAILY',
+                        scheduledTime: null,
+                        timezone: null,
+                        scheduledDayOfMonth: null,
+                        isEnabled: true,
+                        nextRunAt: now,
+                        lastRunAt: null,
+                        createdAt: now,
+                        updatedAt: now,
+                        executions: [],
+                      }
+                    : selected;
+                const updated = { ...base, ...values, updatedAt: now };
                 setAgents((current) =>
                   formMode === 'create'
                     ? [...current, updated]
@@ -105,22 +145,7 @@ export function MobileAgentsFixture() {
             }
             onDelete={() => undefined}
           >
-            <AgentRunHistory
-              projectSlug={project.slug}
-              runs={[
-                {
-                  id: 'previous-run',
-                  periodicTaskId: selected.id,
-                  workspaceId: 'archived-run',
-                  status: 'PR_CREATED',
-                  startedAt: new Date('2026-01-12T14:00:00.000Z'),
-                  completedAt: new Date('2026-01-12T14:10:00.000Z'),
-                  prUrl: 'https://github.com/example/repo/pull/42',
-                  prNumber: 42,
-                  errorMessage: null,
-                },
-              ]}
-            />
+            <AgentRunHistory projectSlug={project.slug} runs={selected.executions} />
           </AgentDetail>
         )}
       </AgentsDashboardShell>

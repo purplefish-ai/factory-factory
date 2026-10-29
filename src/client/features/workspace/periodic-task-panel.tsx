@@ -9,6 +9,16 @@ interface PeriodicTaskPanelProps {
   periodicTaskId: string;
 }
 
+function agentReadError(
+  error: { message: string; data?: { code: string } | null },
+  refresh = false
+): string {
+  if (error.data?.code === 'NOT_FOUND') {
+    return 'Agent not found. Its existing workspaces remain available.';
+  }
+  return `Could not ${refresh ? 'refresh' : 'load'} agent: ${error.message}`;
+}
+
 export function PeriodicTaskPanel({ periodicTaskId }: PeriodicTaskPanelProps) {
   const task = trpc.periodicTask.get.useQuery({ id: periodicTaskId }, { refetchInterval: 10_000 });
   const project = trpc.project.getById.useQuery(
@@ -22,9 +32,7 @@ export function PeriodicTaskPanel({ periodicTaskId }: PeriodicTaskPanelProps) {
         {task.error ? (
           <>
             <p role="alert" className="text-destructive">
-              {task.error.data?.code === 'NOT_FOUND'
-                ? 'Agent not found. Its existing workspaces remain available.'
-                : `Could not load agent: ${task.error.message}`}
+              {agentReadError(task.error)}
             </p>
             <Button size="sm" variant="outline" onClick={() => void task.refetch()}>
               Retry agent
@@ -68,7 +76,7 @@ export function PeriodicTaskPanel({ periodicTaskId }: PeriodicTaskPanelProps) {
         {task.error && (
           <div className="space-y-2">
             <p role="alert" className="text-xs text-destructive">
-              Could not refresh agent: {task.error.message}
+              {agentReadError(task.error, true)}
             </p>
             <Button size="sm" variant="outline" onClick={() => void task.refetch()}>
               Retry agent

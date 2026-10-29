@@ -7,6 +7,8 @@ import { resolveAgentSchedule } from './agent-schedule';
 import { AgentScheduleFields } from './agent-schedule-fields';
 import type { AgentCadence, AgentFormValues } from './types';
 
+const REQUIRED_FIELDS_ERROR = 'Name and instructions are required.';
+
 export interface AgentFormProps {
   initialValues?: AgentFormValues;
   onSave: (values: AgentFormValues) => Promise<void>;
@@ -25,12 +27,15 @@ export function AgentForm({ initialValues, onSave, onCancel }: AgentFormProps) {
   const pendingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
+  const clearValidationError = () =>
+    setError((current) => (current === REQUIRED_FIELDS_ERROR ? null : current));
+
   const submit = async () => {
     if (pendingRef.current) {
       return;
     }
     if (!(name.trim() && prompt.trim())) {
-      setError('Name and instructions are required.');
+      setError(REQUIRED_FIELDS_ERROR);
       return;
     }
     pendingRef.current = true;
@@ -66,7 +71,10 @@ export function AgentForm({ initialValues, onSave, onCancel }: AgentFormProps) {
           name="name"
           autoFocus
           value={name}
-          onChange={(event) => setName(event.target.value)}
+          onChange={(event) => {
+            setName(event.target.value);
+            clearValidationError();
+          }}
           disabled={pending}
           required
           placeholder="Review recent changes"
@@ -79,7 +87,10 @@ export function AgentForm({ initialValues, onSave, onCancel }: AgentFormProps) {
           name="instructions"
           className="min-h-44 resize-y"
           value={prompt}
-          onChange={(event) => setPrompt(event.target.value)}
+          onChange={(event) => {
+            setPrompt(event.target.value);
+            clearValidationError();
+          }}
           disabled={pending}
           required
           placeholder="Describe what this agent should do on each run…"

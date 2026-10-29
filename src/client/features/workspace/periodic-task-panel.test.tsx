@@ -180,3 +180,22 @@ it('retains cached agent details and allows retrying a failed definition refresh
     await view.dispose();
   }
 });
+
+it('uses friendly cached NOT_FOUND copy and preserves the definition retry action', async () => {
+  mocks.task.error = { message: 'Periodic task not found', data: { code: 'NOT_FOUND' } };
+  const view = await render();
+  try {
+    expect(view.container.querySelector('[role="alert"]')?.textContent).toContain(
+      'Agent not found. Its existing workspaces remain available.'
+    );
+    expect(view.container.textContent).not.toContain('Periodic task not found');
+    await act(() =>
+      [...view.container.querySelectorAll('button')]
+        .find((button) => button.textContent === 'Retry agent')
+        ?.click()
+    );
+    expect(mocks.task.refetch).toHaveBeenCalledOnce();
+  } finally {
+    await view.dispose();
+  }
+});

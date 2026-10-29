@@ -22,7 +22,7 @@ export function useAgentProject(
   );
   const owner = ownerInList ?? ownerQuery.data;
   const selectedProject = projects?.find((project) => project.slug === selectedProjectSlug);
-  const project = id && task ? owner : selectedProject;
+  const project = id ? owner : selectedProject;
   const resolvedId = useRef<string | undefined>(undefined);
 
   useEffect(() => {

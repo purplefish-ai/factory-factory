@@ -89,6 +89,7 @@ export function AgentRunHistory({
                   >
                     {run.prNumber ? `PR #${run.prNumber}` : 'Pull request'}
                     <ArrowSquareOutIcon className="size-3" />
+                    <span className="sr-only"> (opens in new tab)</span>
                   </a>
                 )}
               </div>

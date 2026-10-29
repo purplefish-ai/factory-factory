@@ -33,6 +33,29 @@ function Loading({ children }: { children: ReactNode }) {
     </p>
   );
 }
+function AgentRequestError({
+  task,
+  refresh = false,
+}: {
+  task: Controller['task'];
+  refresh?: boolean;
+}) {
+  if (!task.error) {
+    return null;
+  }
+  return (
+    <RequestError
+      label="Retry agent"
+      retry={() => {
+        void task.refetch();
+      }}
+    >
+      {task.error.data?.code === 'NOT_FOUND'
+        ? 'Agent not found. This agent is no longer available.'
+        : `Could not ${refresh ? 'refresh' : 'load'} agent: ${task.error.message}`}
+    </RequestError>
+  );
+}
 function AgentSelectionContent({ controller }: { controller: Controller }) {
   const { id, task, project, mode } = controller;
   if (mode === 'create' && project) {
@@ -50,21 +73,15 @@ function AgentSelectionContent({ controller }: { controller: Controller }) {
       </>
     );
   }
+  if (id && task.error && (!task.data || task.error.data?.code === 'NOT_FOUND')) {
+    return <AgentRequestError task={task} />;
+  }
   // Keep mounted editors and their drafts during background query failures.
   if (mode === 'edit' && task.data) {
     return (
       <>
         <h2 className="text-xl font-semibold">Edit Agent</h2>
-        {task.error && (
-          <RequestError
-            label="Retry agent"
-            retry={() => {
-              void task.refetch();
-            }}
-          >
-            Could not refresh agent: {task.error.message}
-          </RequestError>
-        )}
+        <AgentRequestError task={task} refresh />
         <AgentForm
           key={`edit-${task.data.id}`}
           initialValues={task.data}
@@ -74,36 +91,25 @@ function AgentSelectionContent({ controller }: { controller: Controller }) {
       </>
     );
   }
-  if (id && task.error) {
-    return (
-      <RequestError
-        label="Retry agent"
-        retry={() => {
-          void task.refetch();
-        }}
-      >
-        {task.error.data?.code === 'NOT_FOUND'
-          ? 'Agent not found. This agent is no longer available.'
-          : `Could not load agent: ${task.error.message}`}
-      </RequestError>
-    );
-  }
   if (id && task.isLoading) {
     return <Loading>Loading agent…</Loading>;
   }
   if (task.data && project) {
     return (
-      <AgentDetail
-        agent={task.data}
-        projectName={project.name}
-        onEdit={() => controller.setMode('edit')}
-        onToggle={controller.toggle}
-        onDelete={() => controller.setDeleteOpen(true)}
-        pending={controller.pending}
-        error={controller.actionError}
-      >
-        <AgentRunHistoryQuery periodicTaskId={task.data.id} projectSlug={project.slug} />
-      </AgentDetail>
+      <>
+        <AgentRequestError task={task} refresh />
+        <AgentDetail
+          agent={task.data}
+          projectName={project.name}
+          onEdit={() => controller.setMode('edit')}
+          onToggle={controller.toggle}
+          onDelete={controller.openDelete}
+          pending={controller.pending}
+          error={controller.actionError}
+        >
+          <AgentRunHistoryQuery periodicTaskId={task.data.id} projectSlug={project.slug} />
+        </AgentDetail>
+      </>
     );
   }
   return (
@@ -157,7 +163,7 @@ function AgentProjectContent({ controller }: { controller: Controller }) {
 }
 export function AgentsPage() {
   const controller = useAgentsController();
-  const { id, list, project, mode, pending, actionError } = controller;
+  const { id, task, list, project, mode, pending, actionError } = controller;
   return (
     <>
       <AgentsDashboardShell
@@ -165,7 +171,12 @@ export function AgentsPage() {
         projectId={project?.id}
         agents={list.data}
         selectedAgentId={mode === 'create' ? undefined : id}
-        isLoading={list.isLoading || controller.projectsLoading || controller.ownerLoading}
+        isLoading={
+          list.isLoading ||
+          controller.projectsLoading ||
+          controller.ownerLoading ||
+          (!!id && task.isLoading)
+        }
         error={list.error ? `Could not load agents: ${list.error.message}` : undefined}
         onRetry={() => {
           void list.refetch();

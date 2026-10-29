@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
+import { toast } from 'sonner';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import type { AgentFormValues } from './types';
@@ -40,10 +41,19 @@ export function useAgentsController() {
     { projectId: project?.id ?? '' },
     { enabled: !!project, refetchInterval: 10_000 }
   );
-  const create = trpc.periodicTask.create.useMutation();
-  const update = trpc.periodicTask.update.useMutation();
-  const toggle = trpc.periodicTask.toggleEnabled.useMutation();
-  const remove = trpc.periodicTask.delete.useMutation();
+  const create = trpc.periodicTask.create.useMutation({
+    onError: (error) => toast.error(`Failed to create agent: ${error.message}`),
+  });
+  const update = trpc.periodicTask.update.useMutation({
+    onError: (error) => toast.error(`Failed to update agent: ${error.message}`),
+  });
+  const toggle = trpc.periodicTask.toggleEnabled.useMutation({
+    onError: (error, variables) =>
+      toast.error(`Failed to ${variables.enabled ? 'resume' : 'pause'} agent: ${error.message}`),
+  });
+  const remove = trpc.periodicTask.delete.useMutation({
+    onError: (error) => toast.error(`Failed to delete agent: ${error.message}`),
+  });
   const createDisabled =
     pending ||
     create.isPending ||
@@ -152,6 +162,10 @@ export function useAgentsController() {
     pending: pending || create.isPending || update.isPending,
     save,
     createDisabled,
+    openDelete: () => {
+      setActionError(null);
+      setDeleteOpen(true);
+    },
     selectAgent: () => {
       setMode('detail');
       setDeleteOpen(false);

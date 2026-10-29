@@ -138,7 +138,7 @@ function StoryContent({
   );
 }
 
-function DashboardStory({
+function DashboardSession({
   state = 'populated',
 }: {
   state?: 'populated' | 'empty' | 'error' | 'loading' | 'create' | 'edit';
@@ -167,6 +167,9 @@ function DashboardStory({
       </AgentsDashboardShell>
     </div>
   );
+}
+function DashboardStory({ state = 'populated' }: { state?: StoryMode }) {
+  return <DashboardSession key={state} state={state} />;
 }
 const meta = {
   title: 'Agents/Focused Dashboard',

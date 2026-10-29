@@ -12,6 +12,8 @@ import { actFlushSync, waitForReact } from '@/test-utils/react-act';
 import { AgentsPage } from './agents-page';
 import type { Agent } from './types';
 
+const notifications = vi.hoisted(() => ({ error: vi.fn() }));
+vi.mock('sonner', () => ({ toast: notifications }));
 const navigation = vi.hoisted(
   (): {
     slug: string;
@@ -211,6 +213,7 @@ beforeEach(() => {
   document.body.append(container);
   root = createRoot(container);
   navigation.slug = 'stale';
+  notifications.error.mockClear();
   failMutation = null;
   failQuery = null;
   missing = false;
@@ -276,6 +279,47 @@ describe('AgentsPage coordination', () => {
       expect(container.querySelector('h2')?.textContent).toBe('Review changes')
     );
   });
+  it('retains cached detail and history after a network poll failure and retries the task', async () => {
+    render();
+    await waitForReact(() =>
+      expect(container.querySelector('h2')?.textContent).toBe('Review changes')
+    );
+    await waitForReact(() =>
+      expect(
+        container.querySelector('a[href="/projects/owner-slug/workspaces/archived-workspace"]')
+      ).not.toBeNull()
+    );
+    failQuery = 'periodicTask.get';
+    await act(async () => {
+      await queryClient.invalidateQueries();
+    });
+    await waitForReact(() => expect(container.textContent).toContain('Connection unavailable'));
+    expect(container.querySelector('h2')?.textContent).toBe('Review changes');
+    expect(container.querySelector('main')?.textContent).toContain('Find bugs');
+    expect(
+      container.querySelector('a[href="/projects/owner-slug/workspaces/archived-workspace"]')
+    ).not.toBeNull();
+    const before = requests.filter((request) => request.path === 'periodicTask.get').length;
+    failQuery = null;
+    actFlushSync(() => button('Retry agent').click());
+    await waitForReact(() => expect(container.textContent).not.toContain('Connection unavailable'));
+    expect(
+      requests.filter((request) => request.path === 'periodicTask.get').length
+    ).toBeGreaterThan(before);
+  });
+  it('shows NOT_FOUND instead of stale cached detail when the definition no longer exists', async () => {
+    render();
+    await waitForReact(() =>
+      expect(container.querySelector('h2')?.textContent).toBe('Review changes')
+    );
+    missing = true;
+    await act(async () => {
+      await queryClient.invalidateQueries();
+    });
+    await waitForReact(() => expect(container.textContent).toContain('Agent not found'));
+    expect(container.querySelector('main h2')).toBeNull();
+    expect(container.querySelector('main [aria-label="Run history"]')).toBeNull();
+  });
   it('retains edit drafts after failure and polling, then invalidates list and task on success', async () => {
     render();
     await waitForReact(() =>
@@ -295,11 +339,15 @@ describe('AgentsPage coordination', () => {
         ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
     );
     await waitForReact(() => expect(container.textContent).toContain('Server refused the change'));
+    expect(notifications.error).toHaveBeenCalled();
     await act(async () => {
       await queryClient.invalidateQueries();
     });
     expect(container.querySelector<HTMLInputElement>('input[name="name"]')?.value).toBe(
       'Changed name'
+    );
+    expect(notifications.error).toHaveBeenCalledWith(
+      'Failed to update agent: Server refused the change'
     );
     failQuery = 'periodicTask.get';
     await act(async () => {
@@ -333,14 +381,24 @@ describe('AgentsPage coordination', () => {
     failMutation = 'periodicTask.toggleEnabled';
     actFlushSync(() => button('Pause').click());
     await waitForReact(() => expect(container.textContent).toContain('Server refused the change'));
+    expect(notifications.error).toHaveBeenCalled();
+    expect(notifications.error).toHaveBeenCalledWith(
+      'Failed to pause agent: Server refused the change'
+    );
     failMutation = 'periodicTask.delete';
     actFlushSync(() => button('Delete').click());
+    expect(document.querySelector('[role="alertdialog"]')?.textContent).not.toContain(
+      'Server refused the change'
+    );
     expect(document.body.textContent).toContain('workspaces and conversations are preserved');
     actFlushSync(() => button('Delete Agent').click());
     await waitForReact(() =>
       expect(document.body.textContent).toContain('Server refused the change')
     );
     expect(document.querySelector('[role="alertdialog"]')).not.toBeNull();
+    expect(notifications.error).toHaveBeenCalledWith(
+      'Failed to delete agent: Server refused the change'
+    );
     expect(container.querySelector('output')?.textContent).toBe('/agents/agent');
   });
   it('preserves an edit draft when the background project request fails', async () => {
@@ -574,8 +632,12 @@ describe('AgentsPage coordination', () => {
         ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
     );
     await waitForReact(() => expect(container.textContent).toContain('Server refused the change'));
+    expect(notifications.error).toHaveBeenCalled();
     expect(container.querySelector<HTMLInputElement>('input[name="name"]')?.value).toBe(
       'Daily agent'
+    );
+    expect(notifications.error).toHaveBeenCalledWith(
+      'Failed to create agent: Server refused the change'
     );
     failMutation = null;
     await act(async () =>

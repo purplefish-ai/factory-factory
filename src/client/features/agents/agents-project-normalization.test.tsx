@@ -6,6 +6,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import {
   AppNavigationDataProvider,
   useAppNavigationData,
@@ -51,6 +52,8 @@ let container: HTMLDivElement;
 let queryClient: QueryClient;
 let finishTask: () => void;
 let taskWait: Promise<void>;
+let listRequests: string[];
+let showForeignRail: boolean;
 function RealNavigationHarness() {
   const navigation = useAppNavigationData();
   const { pathname } = useLocation();
@@ -62,7 +65,7 @@ function RealNavigationHarness() {
     </AppNavigationDataProvider>
   );
 }
-async function response(path: string, requestedId: string) {
+async function response(path: string, requestedId: string, input: unknown) {
   if (path === 'project.list') {
     return projects;
   }
@@ -81,7 +84,14 @@ async function response(path: string, requestedId: string) {
     }
     return agent;
   }
-  if (path === 'periodicTask.list' || path === 'periodicTask.listExecutions') {
+  if (path === 'periodicTask.list') {
+    const { projectId } = z.object({ projectId: z.string() }).parse(input);
+    listRequests.push(projectId);
+    return showForeignRail && projectId === 'first'
+      ? [{ ...agent, id: 'foreign-agent', projectId: 'first', name: 'Foreign agent' }]
+      : [];
+  }
+  if (path === 'periodicTask.listExecutions') {
     return [];
   }
   return { success: true };
@@ -94,7 +104,7 @@ function render(requestedId: string, persistedSlug: string) {
       () =>
         ({ op }) =>
           observable((observer) => {
-            void response(op.path, requestedId).then(
+            void response(op.path, requestedId, op.input).then(
               (data) => {
                 observer.next({ result: { data } });
                 observer.complete();
@@ -133,6 +143,8 @@ beforeEach(() => {
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
   });
+  listRequests = [];
+  showForeignRail = false;
   taskWait = new Promise<void>((resolve) => {
     finishTask = resolve;
   });
@@ -200,6 +212,30 @@ describe('explicit agent links during real project normalization', () => {
     expect(container.querySelector('output[aria-label="Selected project"]')?.textContent).toBe(
       'first-active'
     );
+  });
+  it('keeps the persisted project rail unset while an explicit owner is unresolved', async () => {
+    showForeignRail = true;
+    render(agent.id, 'first-active');
+    await waitForReact(() =>
+      expect(container.querySelector('output[aria-label="Selected project"]')?.textContent).toBe(
+        'first-active'
+      )
+    );
+    expect(container.querySelector('nav')?.textContent).not.toContain('Foreign agent');
+    expect(listRequests).not.toContain('first');
+    expect(container.querySelector('button[role="combobox"]')?.textContent).toBe(
+      'Select a project'
+    );
+    expect(container.querySelector('nav')?.textContent).toContain('Loading agents');
+    await act(async () => {
+      finishTask();
+      await taskWait;
+    });
+    await waitForReact(() =>
+      expect(container.querySelector('h2')?.textContent).toBe('Requested agent')
+    );
+    expect(container.querySelector('button[role="combobox"]')?.textContent).toBe('Owner project');
+    expect(listRequests).toContain('owner');
   });
   it('waits for a deep-linked task owner before enabling creation in that project', async () => {
     render(agent.id, 'first-active');

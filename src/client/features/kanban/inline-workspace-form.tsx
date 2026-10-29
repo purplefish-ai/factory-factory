@@ -148,10 +148,6 @@ function PeriodicTaskConfigPanel({
   const isLongCadence = supportsAgentClockTime(cadence);
   return (
     <div className="space-y-2 rounded-md border border-dashed border-primary/40 bg-primary/5 p-3">
-      <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
-        <CalendarIcon className="h-3 w-3" />
-        Schedule
-      </div>
       <AgentScheduleFields
         cadence={cadence}
         scheduledTime={scheduledTime}

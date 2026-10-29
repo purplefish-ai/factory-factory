@@ -456,7 +456,7 @@ describe('InlineWorkspaceForm', () => {
     expect(container.textContent).not.toContain('Default');
     expect(container.textContent).not.toContain('Plan');
     expect(container.querySelectorAll('[aria-label="Attach files"]')).toHaveLength(0);
-    expect(container.textContent).toContain('Schedule');
+    expect(container.textContent?.match(/Schedule/g)).toHaveLength(1);
     expect(textareaLabel(container)).toBe('Instructions');
     expect(container.textContent).toContain('Daily');
 
