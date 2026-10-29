@@ -287,6 +287,8 @@ export function configureDomainBridges(services: BridgeServices): void {
             ),
           initCompletedAt: ws.initCompletedAt,
           sessionFailureMessage: sessionFailure?.message ?? null,
+          // Every successful provider start persists its session ID before prompting.
+          hasLaunchedSession: sessions.some((session) => Boolean(session.providerSessionId)),
         };
       },
     },

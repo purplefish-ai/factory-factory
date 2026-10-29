@@ -141,7 +141,7 @@ changes.
 Each execution runs the configured prompt, monitors the workspace until the
 agent finishes, and advances the schedule. Concurrent runs are skipped.
 
-A run's outcome depends only on its Claude/Codex session:
+A run's outcome depends on its PR, workspace setup and Claude/Codex session:
 
 - **PR created** when the workspace has an active PR.
 - **Completed** when the agent goes idle without a PR or session failure, for
@@ -151,8 +151,8 @@ A run's outcome depends only on its Claude/Codex session:
 - **Failed** when a session records a provider error, the 4-hour turn timeout,
   or an unexpected process exit. The run uses that session message as its error
   and does not wait for the five-minute window. Deliberate stops are not
-  failures. A run also fails when workspace setup or launch fails, because the
-  agent never ran.
+  failures. A run also fails when workspace setup or launch fails, or when no
+  agent session ever started its provider, because the agent never ran.
 
 Runs never archive or clean up their workspace; a human reviews and archives it.
 Archiving it before the run finishes records Completed unless a session failure

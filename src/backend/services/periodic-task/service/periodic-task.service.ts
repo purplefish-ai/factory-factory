@@ -59,6 +59,8 @@ export interface PeriodicTaskWorkspaceStatusBridge {
     initCompletedAt: Date | null;
     /** Latest provider error, timeout, or crash recorded for the workspace's sessions. */
     sessionFailureMessage: string | null;
+    /** Whether any agent session in the workspace ever started its provider. */
+    hasLaunchedSession: boolean;
   } | null>;
 }
 
@@ -391,16 +393,26 @@ export class PeriodicTaskService {
         ws.status === WorkspaceStatus.READY &&
         ws.initCompletedAt !== null &&
         Date.now() - ws.initCompletedAt.getTime() >= PERIODIC_TASK_READY_WITHOUT_PR_GRACE_MS;
-      if (archived || readyGraceElapsed) {
-        await periodicTaskAccessor.updateExecution(execution.id, {
-          status: 'COMPLETED',
-          completedAt: new Date(),
-        });
-        this.logger.info('Periodic task execution completed without PR', {
-          executionId: execution.id,
+      if (!(archived || readyGraceElapsed)) {
+        return;
+      }
+      // Session startup failures are not recorded as lifecycle events, so a
+      // finished run must also prove its agent session actually launched.
+      if (!ws.hasLaunchedSession) {
+        await this.markExecutionFailed(execution.id, 'Agent session did not start', {
           workspaceStatus: ws.status,
         });
+        return;
       }
+
+      await periodicTaskAccessor.updateExecution(execution.id, {
+        status: 'COMPLETED',
+        completedAt: new Date(),
+      });
+      this.logger.info('Periodic task execution completed without PR', {
+        executionId: execution.id,
+        workspaceStatus: ws.status,
+      });
     } catch (error) {
       this.logger.error('Failed to check execution status', {
         executionId: execution.id,
