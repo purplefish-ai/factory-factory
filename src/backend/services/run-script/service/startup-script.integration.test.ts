@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { expect, it, vi } from 'vitest';
@@ -12,6 +12,7 @@ import { startupScriptService } from './startup-script.service';
 it('completes provisioning while a background descendant still holds output pipes', async () => {
   const worktreePath = await mkdtemp(path.join(tmpdir(), 'ff-background-startup-'));
   let descendantPid: number | undefined;
+  let rootPid: number | undefined;
   const markReady = vi.fn();
   const clearInitScriptPid = vi.fn().mockResolvedValue(undefined);
   startupScriptService.configure({
@@ -26,7 +27,10 @@ it('completes provisioning while a background descendant still holds output pipe
         }
         return Promise.resolve();
       }),
-      setInitScriptPid: vi.fn().mockResolvedValue(undefined),
+      setInitScriptPid: vi.fn((_workspaceId: string, pid: number) => {
+        rootPid = pid;
+        return Promise.resolve();
+      }),
       clearInitScriptPid,
     },
   });
@@ -35,14 +39,22 @@ it('completes provisioning while a background descendant still holds output pipe
     const result = await startupScriptService.runStartupScript(
       { id: 'background-init', worktreePath } as never,
       {
-        // exec keeps the reported PID on the only background process, including
-        // during the initial delay, so cleanup cannot orphan a sleep child.
+        // Keep a real inherited stdout pipe open until the test releases it
+        // after provisioning. Check the file after installing the watcher too,
+        // so a slow descendant cannot miss the release signal.
         startupScriptCommand: `(exec node -e '
-          setTimeout(() => {
-            process.stdout.write("late output\\n");
-            require("node:fs").writeFileSync("background-wrote", "alive");
-          }, 2000);
-          setTimeout(() => {}, 30000);
+          const fs = require("node:fs");
+          let wrote = false;
+          const writeWhenReleased = () => {
+            if (wrote || !fs.existsSync("release-background")) return;
+            wrote = true;
+            process.stdout.write("late output\\n", (error) => {
+              if (error) throw error;
+              fs.writeFileSync("background-wrote", "alive");
+            });
+          };
+          fs.watch(".", writeWhenReleased);
+          writeWhenReleased();
         ') & printf "descendant:%s\\n" "$!"; echo complete`,
         startupScriptTimeout: 10,
       } as never
@@ -50,6 +62,11 @@ it('completes provisioning while a background descendant still holds output pipe
 
     expect(result).toMatchObject({ success: true, exitCode: 0, timedOut: false });
     expect(result.stdout).toContain('complete\n');
+    expect(rootPid).toBeDefined();
+    expect(() => process.kill(rootPid!, 0)).toThrow();
+    expect(descendantPid).toBeDefined();
+    expect(() => process.kill(descendantPid!, 0)).not.toThrow();
+    await writeFile(path.join(worktreePath, 'release-background'), 'release');
     await expect
       .poll(() => readFile(path.join(worktreePath, 'background-wrote'), 'utf8'), { timeout: 2000 })
       .toBe('alive');
