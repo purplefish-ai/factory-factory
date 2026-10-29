@@ -84,7 +84,7 @@ async function renderToggle(overrides: Partial<WorkspaceHeaderWorkspace> = {}) {
       </TooltipProvider>
     )
   );
-  const trigger = document.querySelector('[aria-label="Pull requests and updates"]');
+  const trigger = document.querySelector('[aria-label^="Pull requests and updates"]');
   expect(trigger).not.toBeNull();
   await act(() =>
     trigger!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
@@ -239,5 +239,26 @@ it.each(['ARCHIVED', 'ARCHIVING'] as const)(
     );
     expect(document.body.textContent).not.toContain('Run review');
     expect(document.body.textContent).not.toContain('Remove from workspace');
+  }
+);
+
+it.each([
+  { enabled: false, state: 'CI_RUNNING', label: 'Pull requests and updates, updates off' },
+  { enabled: true, state: 'IDLE', label: 'Pull requests and updates, updates on (Watching)' },
+  {
+    enabled: true,
+    state: 'CI_RUNNING',
+    label: 'Pull requests and updates, updates on (CI in progress)',
+  },
+  {
+    enabled: true,
+    state: 'REVIEW_PENDING',
+    label: 'Pull requests and updates, updates on (Addressing reviews)',
+  },
+] as const)(
+  'includes monitoring state in the accessible name: $label',
+  async ({ enabled, state, label }) => {
+    await renderToggle({ ratchetEnabled: enabled, ratchetState: state });
+    expect(container.querySelector('button')?.getAttribute('aria-label')).toBe(label);
   }
 );

@@ -15,6 +15,7 @@ export function RatchetingToggle({
   workspaceId: string;
 }) {
   const enabled = workspace.ratchetEnabled ?? false;
+  const updateState = enabled ? `on (${getRatchetStateLabel(workspace.ratchetState)})` : 'off';
   const readOnly = workspace.status === 'ARCHIVED' || workspace.status === 'ARCHIVING';
   return (
     <ConnectedWorkspacePrMenu
@@ -30,8 +31,8 @@ export function RatchetingToggle({
           variant="outline"
           size="sm"
           className="h-7 gap-1 px-2 data-[state=open]:bg-accent"
-          aria-label="Pull requests and updates"
-          title={`PR updates ${enabled ? `on (${getRatchetStateLabel(workspace.ratchetState)})` : 'off'}`}
+          aria-label={`Pull requests and updates, updates ${updateState}`}
+          title={`PR updates ${updateState}`}
         >
           <RatchetWrenchIcon
             enabled={enabled}

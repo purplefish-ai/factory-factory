@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { observable } from '@trpc/server/observable';
 import { useState } from 'react';
+import { expect, within } from 'storybook/test';
 import { z } from 'zod';
 import { trpc } from '@/client/lib/trpc';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -31,7 +32,7 @@ function RatchetingDropdown({
     ...workspace,
     status: archived ? 'ARCHIVED' : 'READY',
     worktreePath: '/tmp/workspace',
-    ratchetState: 'IDLE',
+    ratchetState: animated ? 'CI_RUNNING' : 'IDLE',
     ratchetEnabled: enabled,
     ratchetButtonAnimated: animated,
     prs: withPr
@@ -126,5 +127,14 @@ export const MobileDedicatedDestination: Story = {
 
 export const UpdatesOff: Story = {};
 export const UpdatesOn: Story = { args: { enabled: true, withPr: true } };
-export const ActiveUpdates: Story = { args: { enabled: true, animated: true, withPr: true } };
+export const ActiveUpdates: Story = {
+  args: { enabled: true, animated: true, withPr: true },
+  play: async ({ canvasElement }) => {
+    await expect(
+      within(canvasElement).getByRole('button', {
+        name: 'Pull requests and updates, updates on (CI in progress)',
+      })
+    ).toBeVisible();
+  },
+};
 export const Archived: Story = { args: { archived: true, withPr: true } };
