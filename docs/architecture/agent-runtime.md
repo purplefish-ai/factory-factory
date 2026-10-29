@@ -355,8 +355,8 @@ Factory Factory versions; native configuration for other servers is retained.
 Session stop history is durable: `SessionLifecycleEvent` rows are append-only,
 deduplicated by session/attempt key, merged chronologically with provider
 history, and rendered as structured chat rows after reconnect or restart. Normal
-user turns have a four-hour deadline; auto-iteration has its own timeout.
-Startup/stop incarnation fences protect runtime replacement and shutdown.
+user turns have a four-hour deadline. Startup/stop incarnation fences protect
+runtime replacement and shutdown.
 
 Provider protocol schemas are maintained by upstream adapters. Keep focused ACP
 client contract tests when upgrading either dependency, including saved-session
@@ -464,10 +464,6 @@ messages:
   Delivery uses the source-aware session queue and strict provider resume; see
   [PR updates](pull-requests.md).
 - Quick actions: `prompts/quick-actions/` (see below).
-- Auto-iteration: `src/backend/services/auto-iteration/service/prompts.ts`.
-  Implementation turns make one focused change; the loop owns verification and
-  keep/revert decisions. Measurement and critique turns retain their JSON
-  contracts, and the final turn creates a PR for accepted changes.
 - Child workspace starts append `buildChildWorkspaceContext` through workspace
   initialization. Conversation-based branch renaming sends a separate prompt
   through the rename interceptor.
@@ -482,21 +478,12 @@ behavior. Before introducing custom system-prompt metadata, revisit the SDK's
 custom/append snapshot semantics. See
 [the upgrade validation](../superpowers/plans/2026-09-09-remaining-dependencies.md).
 
-Auto-iteration session start, prompt, transcript reads, stop, recycle, and their
-compensation belong to `auto-iteration-session.orchestrator.ts`.
-`configureDomainBridges` constructs that bridge from narrow session and
-workspace capabilities. Recycling stops the predecessor, creates and starts its
-replacement, writes the loop pointer, sends the handoff, then retires the
-predecessor. Failed handoffs settle only matching session IDs and clean up the
-replacement without masking the original error. Successful pointer writes remain
-unconditional; the auto-iteration caller also writes the returned session ID.
-
-Auto-iteration sessions use `autoIterationPermissions`, with YOLO as the
-fallback if settings cannot be read. Auto-iteration uses the same native
-access-mode mapping as manual sessions. Scheduled Codex tasks retain their YOLO
-access preset and scheduled Claude tasks retain their configured access preset.
-PR updates inherit their main conversation’s configuration and do not use a
-workflow-specific permission preset.
+Scheduled Codex tasks retain their YOLO access preset and scheduled Claude tasks
+retain their configured access preset. MAIN PR updates inherit their main
+conversation’s configuration. DEDICATED updates use the workspace’s provider
+selection and normal user model defaults; later updates reuse that dedicated
+conversation’s saved configuration. PR updates do not use a workflow-specific
+permission preset.
 
 Chat command composition belongs to `routers/websocket/chat-message-router.ts`;
 application commands receive plain contexts and typed outcomes. Loading prepares

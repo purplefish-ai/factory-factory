@@ -1,5 +1,4 @@
 import { ApplicationError } from '@/backend/lib/application-error';
-import type { AutoIterationConfig } from '@/backend/services/auto-iteration';
 import type { createLogger } from '@/backend/services/logger.service';
 import { userSettingsService } from '@/backend/services/settings';
 import { projectAccessor } from '@/backend/services/workspace/resources/project.accessor';
@@ -10,7 +9,6 @@ import {
 import { gitOpsService } from '@/backend/services/workspace/service/worktree/git-ops.service';
 import { worktreeLifecycleService } from '@/backend/services/workspace/service/worktree/worktree-lifecycle.service';
 import type { MessageAttachment } from '@/shared/acp-protocol';
-import { autoIterationConfigSchema } from '@/shared/schemas/auto-iteration.schema';
 import type { Prisma, SessionProvider } from '@prisma-gen/client';
 
 type Logger = ReturnType<typeof createLogger>;
@@ -34,8 +32,6 @@ export type WorkspaceCreationSource =
       model?: string;
       reasoningEffort?: string | null;
       planModeEnabled?: boolean;
-      mode?: 'STANDARD' | 'AUTO_ITERATION';
-      autoIterationConfig?: AutoIterationConfig;
     }
   | {
       type: 'RESUME_BRANCH';
@@ -116,8 +112,6 @@ type PreparedWorkspaceCreation = {
       | 'CHILD_WORKSPACE';
     creationMetadata?: Prisma.InputJsonValue;
     defaultSessionProvider?: Prisma.WorkspaceCreateInput['defaultSessionProvider'];
-    mode?: 'STANDARD' | 'AUTO_ITERATION';
-    autoIterationConfig?: Prisma.InputJsonValue;
     parentWorkspaceId?: string;
     periodicTaskId?: string;
   };
@@ -197,29 +191,6 @@ export class WorkspaceCreationService {
   private prepareManualCreation(
     source: Extract<WorkspaceCreationSource, { type: 'MANUAL' }>
   ): PreparedWorkspaceCreation {
-    if (source.mode === 'AUTO_ITERATION' && !source.autoIterationConfig) {
-      throw new ApplicationError(
-        'INVALID_INPUT',
-        'autoIterationConfig is required for AUTO_ITERATION workspaces'
-      );
-    }
-    if (source.autoIterationConfig && source.mode !== 'AUTO_ITERATION') {
-      throw new ApplicationError(
-        'INVALID_INPUT',
-        'autoIterationConfig is only allowed for AUTO_ITERATION workspaces'
-      );
-    }
-    const configParsed = source.autoIterationConfig
-      ? autoIterationConfigSchema.safeParse(source.autoIterationConfig)
-      : null;
-    if (configParsed && !configParsed.success) {
-      throw new ApplicationError(
-        'INVALID_INPUT',
-        `Invalid auto-iteration config: ${configParsed.error.message}`
-      );
-    }
-    const autoIterationConfig = configParsed?.success ? configParsed.data : undefined;
-
     const metadata: Record<string, unknown> = {};
     if (hasInitialPrompt(source)) {
       metadata.initialPrompt = source.initialPrompt;
@@ -241,10 +212,6 @@ export class WorkspaceCreationService {
         creationSource: 'MANUAL',
         ...(Object.keys(metadata).length > 0
           ? { creationMetadata: metadata as Prisma.InputJsonValue }
-          : {}),
-        ...(source.mode ? { mode: source.mode } : {}),
-        ...(autoIterationConfig
-          ? { autoIterationConfig: autoIterationConfig as unknown as Prisma.InputJsonValue }
           : {}),
       },
     };

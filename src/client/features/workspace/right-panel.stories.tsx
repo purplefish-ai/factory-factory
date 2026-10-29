@@ -36,7 +36,6 @@ function RightPanelStory({
                 'workspace.get': () => ({
                   id: workspaceId,
                   projectId: 'right-panel-project',
-                  mode: 'STANDARD',
                   periodicTaskId: taskPresent.current ? 'task-1' : null,
                   creationSource: showActivity ? 'CHILD_WORKSPACE' : 'MANUAL',
                 }),
@@ -202,6 +201,17 @@ const meta = {
 } satisfies Meta<typeof RightPanelStory>;
 export default meta;
 type Story = StoryObj<typeof meta>;
+export const LegacyIterationPreference: Story = {
+  beforeEach: () => {
+    localStorage.setItem(`workspace-right-panel-tab-${workspaceId}`, 'auto-iteration');
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText('No changes')).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: 'Iterations' })).not.toBeInTheDocument();
+    await expect(localStorage.getItem(`workspace-right-panel-tab-${workspaceId}`)).toBe('changes');
+  },
+};
 export const DeletedTaskPreference: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);

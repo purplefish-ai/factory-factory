@@ -34,9 +34,6 @@ export const snapshotFieldPolicy = {
     required: true,
     drift: { excluded: 'session history input' },
   },
-  mode: { group: 'autoIteration', required: true, drift: 'autoIteration' },
-  autoIterationStatus: { group: 'autoIteration', required: true, drift: 'autoIteration' },
-  autoIteration: { group: 'autoIteration', required: true, drift: 'autoIteration' },
   prs: { group: 'pr', required: true, drift: 'pr' },
   prSummary: { group: 'pr', required: true, drift: 'pr' },
   prUrl: {
@@ -89,7 +86,6 @@ export const snapshotClockDefaults = {
   reconciliation: 0,
   git: 0,
   metadata: 0,
-  autoIteration: 0,
 } satisfies Record<SnapshotFieldGroup, number>;
 
 export function authoritativeSnapshotInput(): Required<SnapshotUpdateInput> {
@@ -102,9 +98,6 @@ export function authoritativeSnapshotInput(): Required<SnapshotUpdateInput> {
     createdAt: '2026-01-01T00:00:00.000Z',
     branchName: 'feature',
     hasHadSessions: false,
-    mode: 'STANDARD',
-    autoIterationStatus: null,
-    autoIteration: null,
     prs: [],
     prSummary: {
       totalCount: 0,
@@ -158,14 +151,6 @@ export function changedSnapshotInput(): Required<SnapshotUpdateInput> {
     createdAt: '2026-02-01T00:00:00.000Z',
     branchName: 'other-branch',
     hasHadSessions: true,
-    mode: 'AUTO_ITERATION',
-    autoIterationStatus: 'RUNNING',
-    autoIteration: {
-      status: 'RUNNING',
-      currentIteration: 2,
-      maxIterations: 10,
-      currentMetricSummary: 'score=2',
-    },
     prs: [
       {
         id: 'pr-1',

@@ -63,12 +63,11 @@ it('creates an active-project child with its parent and side-table rows', async 
   expect(
     await db.prisma.workspace.findUnique({
       where: { id: child.id },
-      include: { prMonitoring: true, prDiscovery: true, runScript: true, autoIteration: true },
+      include: { prMonitoring: true, prDiscovery: true, runScript: true },
     })
   ).toMatchObject({
     prMonitoring: expect.objectContaining({ workspaceId: child.id }),
     prDiscovery: expect.objectContaining({ workspaceId: child.id }),
     runScript: expect.objectContaining({ workspaceId: child.id }),
-    autoIteration: expect.objectContaining({ workspaceId: child.id }),
   });
 });

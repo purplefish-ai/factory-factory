@@ -13,7 +13,6 @@ import {
 } from '@/backend/services/workspace';
 import { KanbanColumn } from '@/shared/core';
 import { prDeliveryModeSchema } from '@/shared/pr-monitoring';
-import { autoIterationConfigSchema } from '@/shared/schemas/auto-iteration.schema';
 import { sessionLaunchSettingsSchema } from '@/shared/session-launch';
 import { AttachmentSchema } from '@/shared/websocket';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
@@ -64,25 +63,8 @@ const workspaceCreationSourceSchema = z.discriminatedUnion('type', [
       provider: z.nativeEnum(SessionProvider).optional(),
       model: z.string().trim().min(1).optional(),
       ...sessionLaunchSettingsSchema.shape,
-      mode: z.enum(['STANDARD', 'AUTO_ITERATION']).optional(),
-      autoIterationConfig: autoIterationConfigSchema.optional(),
     })
-    .superRefine((data, ctx) => {
-      if (data.mode === 'AUTO_ITERATION' && !data.autoIterationConfig) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: 'autoIterationConfig is required when mode is AUTO_ITERATION',
-          path: ['autoIterationConfig'],
-        });
-      }
-      if (data.autoIterationConfig && data.mode !== 'AUTO_ITERATION') {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: 'autoIterationConfig is only allowed when mode is AUTO_ITERATION',
-          path: ['autoIterationConfig'],
-        });
-      }
-    }),
+    .strict(),
   z.object({
     type: z.literal('RESUME_BRANCH'),
     projectId: z.string(),

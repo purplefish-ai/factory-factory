@@ -81,7 +81,6 @@ beforeEach(async () => {
       name: 'W',
       status: 'READY',
       runScript: { create: {} },
-      autoIteration: { create: {} },
       prDiscovery: { create: { retryCount: 4, nextCheckAt: new Date('2026-11-01') } },
       prs: {
         create: [

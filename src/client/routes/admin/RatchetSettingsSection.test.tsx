@@ -12,7 +12,6 @@ const mocks = vi.hoisted(() => ({
     ratchetEnabled: false,
     ratchetReplyToPrComments: true,
     ratchetReviewTriggerMode: 'CHANGES_REQUESTED' as 'CHANGES_REQUESTED' | 'ALL_REVIEW_FEEDBACK',
-    autoIterationPermissions: 'YOLO',
   },
 }));
 
@@ -40,6 +39,20 @@ afterEach(() => {
 vi.mock('@/client/features/workspace', () => ({ RatchetWrenchIcon: () => createElement('span') }));
 
 describe('RatchetSettingsSection', () => {
+  it('keeps Ratchet settings without auto-iteration permission controls', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    try {
+      flushSync(() => root.render(createElement(RatchetSettingsSection)));
+      expect(container.textContent).toContain('Review feedback trigger');
+      expect(container.textContent).not.toMatch(/auto.iteration/i);
+      expect(container.querySelector('#auto-iteration-permissions')).toBeNull();
+    } finally {
+      root.unmount();
+    }
+  });
+
   it('updates the Ratchet review feedback trigger mode', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);

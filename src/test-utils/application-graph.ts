@@ -79,11 +79,6 @@ vi.mock('@/backend/prompts/quick-actions', () => ({
   getQuickAction: vi.fn(),
   listQuickActions: vi.fn(),
 }));
-vi.mock('@/backend/services/auto-iteration', () => ({
-  autoIterationService: {},
-  insightsService: {},
-  logbookService: {},
-}));
 vi.mock('@/backend/services/config.service', () => ({
   configService: { getDebugConfig: () => ({ chatWebSocket: false }) },
 }));
@@ -206,7 +201,6 @@ vi.mock('@/backend/services/workspace', async () => ({
   projectManagementService: {},
   WorkspaceCreationService: class {},
   workspaceActivityService: {},
-  workspaceAutoIterationService: {},
   workspaceDataService: {},
   workspaceMaintenanceService: {},
   workspaceNotificationService: {},
@@ -261,11 +255,6 @@ import {
 } from '@/backend/orchestration/workspace-init.orchestrator';
 import { deliverWorkspaceNotification } from '@/backend/orchestration/workspace-notification-delivery.orchestrator';
 import { getQuickAction, listQuickActions } from '@/backend/prompts/quick-actions';
-import {
-  autoIterationService,
-  insightsService,
-  logbookService,
-} from '@/backend/services/auto-iteration';
 import { configService } from '@/backend/services/config.service';
 import { cryptoService } from '@/backend/services/crypto.service';
 import { decisionLogService } from '@/backend/services/decision-log';
@@ -324,7 +313,6 @@ import {
   gitOpsService,
   projectManagementService,
   workspaceActivityService,
-  workspaceAutoIterationService,
   workspaceDataService,
   workspaceMaintenanceService,
   workspaceNotificationService,
@@ -409,7 +397,6 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     ...defaultPRMonitoringServices,
     acpRuntimeManager: graphAcpRuntimeManager,
     acpTraceLogger,
-    autoIterationService,
     archiveWorkspace,
     chatEventForwarderService: graphChatEventForwarderService,
     sessionCommandFactories,
@@ -459,11 +446,9 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     githubCLIService,
     healthService,
     initializeWorkspaceWorktree,
-    insightsService,
     linearClientService,
     linearStateSyncService,
     listQuickActions,
-    logbookService,
     periodicTaskService,
     persistChildNotification,
     persistParentNotification,
@@ -496,7 +481,6 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     userSettingsQueryService: userSettingsService,
     voiceNarrationService,
     workspaceActivityService,
-    workspaceAutoIterationService,
     workspaceCreationService: {
       create: vi.fn(),
     } as unknown as ApplicationServices['workspaceCreationService'],

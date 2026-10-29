@@ -104,10 +104,7 @@ export const acpEventProcessor = new AcpEventProcessor({
   onToolCallTimeout: cancelTimedOutToolPrompt,
 });
 
-export type SessionPromptService = Pick<
-  SessionService,
-  'configure' | 'sendAcpMessage' | 'sendSessionMessage'
->;
+export type SessionPromptService = Pick<SessionService, 'configure' | 'sendSessionMessage'>;
 
 export const sessionLifecycleGate = new SessionLifecycleGate({
   isRuntimeStopInProgress: (sessionId) => acpRuntimeManager.isStopInProgress(sessionId),

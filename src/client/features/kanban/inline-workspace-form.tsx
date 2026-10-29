@@ -1,4 +1,3 @@
-import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
 import { CalendarIcon } from '@phosphor-icons/react/dist/csr/Calendar';
 import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
 import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
@@ -26,7 +25,6 @@ import {
 import { createOptimisticWorkspaceSummary } from '@/client/lib/workspace-summary';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -112,7 +110,6 @@ async function processFileInput(event: React.ChangeEvent<HTMLInputElement>) {
 
 const launchButtonLabels: Record<string, string> = {
   STANDARD: 'Launch',
-  AUTO_ITERATION: 'Launch (auto-iterate)',
   PERIODIC_TASK: 'Create Periodic Task',
 };
 
@@ -136,145 +133,6 @@ function withOptimisticWorkspaceFirst(
     workspaces: [optimisticWorkspace, ...withoutReplaced],
     reviewCount: cache?.reviewCount ?? 0,
   };
-}
-
-function ModeConfigPanel({
-  mode,
-  cadence,
-  setCadence,
-  scheduledTime,
-  setScheduledTime,
-  isCreating,
-  testCommand,
-  setTestCommand,
-  targetDescription,
-  setTargetDescription,
-  maxIterations,
-  setMaxIterations,
-  unlimitedIterations,
-  setUnlimitedIterations,
-  testTimeoutSeconds,
-  setTestTimeoutSeconds,
-  baseBranch,
-  setBaseBranch,
-}: {
-  mode: 'STANDARD' | 'AUTO_ITERATION' | 'PERIODIC_TASK';
-  cadence: 'EVERY_MINUTE' | 'EVERY_FIVE_MINUTES' | 'DAILY' | 'WEEKLY' | 'MONTHLY';
-  setCadence: (v: 'EVERY_MINUTE' | 'EVERY_FIVE_MINUTES' | 'DAILY' | 'WEEKLY' | 'MONTHLY') => void;
-  scheduledTime: string;
-  setScheduledTime: (v: string) => void;
-  isCreating: boolean;
-  testCommand: string;
-  setTestCommand: (v: string) => void;
-  targetDescription: string;
-  setTargetDescription: (v: string) => void;
-  maxIterations: number;
-  setMaxIterations: (v: number) => void;
-  unlimitedIterations: boolean;
-  setUnlimitedIterations: (v: boolean) => void;
-  testTimeoutSeconds: number;
-  setTestTimeoutSeconds: (v: number) => void;
-  baseBranch: string;
-  setBaseBranch: (v: string) => void;
-}) {
-  if (mode === 'PERIODIC_TASK') {
-    return (
-      <PeriodicTaskConfigPanel
-        cadence={cadence}
-        setCadence={setCadence}
-        scheduledTime={scheduledTime}
-        setScheduledTime={setScheduledTime}
-        isCreating={isCreating}
-      />
-    );
-  }
-  if (mode === 'AUTO_ITERATION') {
-    return (
-      <div className="space-y-2 rounded-md border border-dashed border-primary/40 bg-primary/5 p-3">
-        <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
-          <ArrowsClockwiseIcon className="h-3 w-3" />
-          Auto-iteration config
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">Test command</Label>
-          <Input
-            className="h-7 text-xs font-mono"
-            placeholder="e.g. pnpm test"
-            value={testCommand}
-            onChange={(e) => setTestCommand(e.target.value)}
-            disabled={isCreating}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">Target description</Label>
-          <Input
-            className="h-7 text-xs"
-            placeholder="e.g. All tests pass with no regressions"
-            value={targetDescription}
-            onChange={(e) => setTargetDescription(e.target.value)}
-            disabled={isCreating}
-          />
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Max iterations</Label>
-            <Input
-              className="h-7 w-20 text-xs"
-              type="number"
-              min={1}
-              value={unlimitedIterations ? '' : maxIterations}
-              onChange={(e) => {
-                if (e.target.value === '') {
-                  return;
-                }
-                const val = Number(e.target.value);
-                setMaxIterations(Number.isNaN(val) ? 25 : Math.max(1, val));
-              }}
-              disabled={isCreating || unlimitedIterations}
-              placeholder="25"
-            />
-          </div>
-          <label className="mt-4 flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Checkbox
-              checked={unlimitedIterations}
-              onCheckedChange={(checked) => setUnlimitedIterations(checked === true)}
-              disabled={isCreating}
-              className="h-3.5 w-3.5"
-            />
-            Unlimited
-          </label>
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Test timeout (s)</Label>
-            <Input
-              className="h-7 w-20 text-xs"
-              type="number"
-              min={1}
-              value={testTimeoutSeconds}
-              onChange={(e) => {
-                if (e.target.value === '') {
-                  return;
-                }
-                const val = Number(e.target.value);
-                setTestTimeoutSeconds(Number.isNaN(val) ? 300 : Math.max(1, val));
-              }}
-              disabled={isCreating}
-            />
-          </div>
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">Base branch (optional)</Label>
-          <Input
-            className="h-7 text-xs font-mono"
-            placeholder="defaults to project default branch"
-            value={baseBranch}
-            onChange={(e) => setBaseBranch(e.target.value)}
-            disabled={isCreating}
-          />
-        </div>
-      </div>
-    );
-  }
-  return null;
 }
 
 function PeriodicTaskConfigPanel({
@@ -354,17 +212,11 @@ export function InlineWorkspaceForm({
   const [attachments, setAttachments] = useState<MessageAttachment[]>([]);
   const [ratchetEnabled, setRatchetEnabled] = useState(false);
   const launchSelection = useSessionLaunchSelection(projectId);
-  const [mode, setMode] = useState<'STANDARD' | 'AUTO_ITERATION' | 'PERIODIC_TASK'>('STANDARD');
+  const [mode, setMode] = useState<'STANDARD' | 'PERIODIC_TASK'>('STANDARD');
   const [cadence, setCadence] = useState<
     'EVERY_MINUTE' | 'EVERY_FIVE_MINUTES' | 'DAILY' | 'WEEKLY' | 'MONTHLY'
   >('DAILY');
   const [scheduledTime, setScheduledTime] = useState('');
-  const [testCommand, setTestCommand] = useState('');
-  const [targetDescription, setTargetDescription] = useState('');
-  const [maxIterations, setMaxIterations] = useState(25);
-  const [unlimitedIterations, setUnlimitedIterations] = useState(false);
-  const [testTimeoutSeconds, setTestTimeoutSeconds] = useState(600);
-  const [baseBranch, setBaseBranch] = useState('');
 
   const autoResize = useCallback(() => {
     const el = textareaRef.current;
@@ -419,7 +271,6 @@ export function InlineWorkspaceForm({
         projectId,
         name: input.type === 'MANUAL' ? input.name : 'New Workspace',
         ratchetEnabled: input.type === 'MANUAL' ? (input.ratchetEnabled ?? true) : true,
-        mode: input.type === 'MANUAL' ? (input.mode ?? 'STANDARD') : 'STANDARD',
       });
 
       await utils.workspace.listForProject.cancel({ projectId });
@@ -436,7 +287,6 @@ export function InlineWorkspaceForm({
         projectId: workspace.projectId,
         name: workspace.name,
         ratchetEnabled: workspace.ratchetEnabled,
-        mode: workspace.mode ?? 'STANDARD',
         createdAt: workspace.createdAt,
       });
 
@@ -504,18 +354,6 @@ export function InlineWorkspaceForm({
     }
   };
 
-  const buildAutoIterationConfig = () => ({
-    testCommand: testCommand.trim(),
-    targetDescription: targetDescription.trim(),
-    maxIterations: unlimitedIterations ? 0 : maxIterations,
-    testTimeoutSeconds,
-  });
-
-  const getAutoIterationBranchName = () => {
-    const trimmed = baseBranch.trim();
-    return trimmed || undefined;
-  };
-
   const launchPeriodicTask = (trimmedPrompt: string) => {
     if (!trimmedPrompt) {
       toast.error('Periodic task requires a prompt.');
@@ -534,11 +372,10 @@ export function InlineWorkspaceForm({
     });
   };
 
-  const launchWorkspace = (trimmedPrompt: string, launchMode: 'STANDARD' | 'AUTO_ITERATION') => {
+  const launchWorkspace = (trimmedPrompt: string) => {
     const name = trimmedPrompt
       ? generateWorkspaceNameFromPrompt(trimmedPrompt, existingNames)
       : generateUniqueWorkspaceName(existingNames);
-    const isAutoIterate = launchMode === 'AUTO_ITERATION';
     createWorkspaceMutation.mutate({
       type: 'MANUAL',
       projectId,
@@ -547,26 +384,19 @@ export function InlineWorkspaceForm({
       initialAttachments: attachments.length > 0 ? attachments : undefined,
       ratchetEnabled,
       ...launchSelection.creationDefaults,
-      mode: launchMode,
-      autoIterationConfig: isAutoIterate ? buildAutoIterationConfig() : undefined,
-      branchName: isAutoIterate ? getAutoIterationBranchName() : undefined,
     });
   };
 
-  const handleLaunch = (launchMode: 'STANDARD' | 'AUTO_ITERATION' | 'PERIODIC_TASK' = mode) => {
+  const handleLaunch = (launchMode: 'STANDARD' | 'PERIODIC_TASK' = mode) => {
     if (isLaunchDisabled) {
       reportUnavailableLaunch(launchDisabledReason);
-      return;
-    }
-    if (launchMode === 'AUTO_ITERATION' && !(testCommand.trim() && targetDescription.trim())) {
-      toast.error('Auto-iteration requires a test command and target description.');
       return;
     }
     const trimmedPrompt = initialPrompt.trim();
     if (launchMode === 'PERIODIC_TASK') {
       launchPeriodicTask(trimmedPrompt);
     } else {
-      launchWorkspace(trimmedPrompt, launchMode);
+      launchWorkspace(trimmedPrompt);
     }
   };
 
@@ -636,26 +466,15 @@ export function InlineWorkspaceForm({
             }
           />
         ) : null}
-        <ModeConfigPanel
-          mode={mode}
-          cadence={cadence}
-          setCadence={setCadence}
-          scheduledTime={scheduledTime}
-          setScheduledTime={setScheduledTime}
-          isCreating={isCreating}
-          testCommand={testCommand}
-          setTestCommand={setTestCommand}
-          targetDescription={targetDescription}
-          setTargetDescription={setTargetDescription}
-          maxIterations={maxIterations}
-          setMaxIterations={setMaxIterations}
-          unlimitedIterations={unlimitedIterations}
-          setUnlimitedIterations={setUnlimitedIterations}
-          testTimeoutSeconds={testTimeoutSeconds}
-          setTestTimeoutSeconds={setTestTimeoutSeconds}
-          baseBranch={baseBranch}
-          setBaseBranch={setBaseBranch}
-        />
+        {mode === 'PERIODIC_TASK' && (
+          <PeriodicTaskConfigPanel
+            cadence={cadence}
+            setCadence={setCadence}
+            scheduledTime={scheduledTime}
+            setScheduledTime={setScheduledTime}
+            isCreating={isCreating}
+          />
+        )}
         {supportsWorkspaceOptions && (
           <input
             ref={fileInputRef}
@@ -716,10 +535,6 @@ export function InlineWorkspaceForm({
               <DropdownMenuContent align="end" className="text-xs">
                 <DropdownMenuItem className="text-xs" onClick={() => setMode('STANDARD')}>
                   Launch as Standard Workspace
-                </DropdownMenuItem>
-                <DropdownMenuItem className="text-xs" onClick={() => setMode('AUTO_ITERATION')}>
-                  <ArrowsClockwiseIcon className="mr-1.5 h-3 w-3" />
-                  Launch as Auto-Iteration Workspace
                 </DropdownMenuItem>
                 <DropdownMenuItem className="text-xs" onClick={() => setMode('PERIODIC_TASK')}>
                   <CalendarIcon className="mr-1.5 h-3 w-3" />

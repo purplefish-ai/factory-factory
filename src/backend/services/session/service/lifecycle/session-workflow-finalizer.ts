@@ -3,7 +3,6 @@ import type { AgentSessionRecord } from '@/backend/services/session/resources/ag
 import type { AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import type {
   RatchetSessionEndOutcome,
-  SessionAutoIterationExitBridge,
   SessionLifecycleWorkspaceBridge,
 } from '@/backend/services/session/service/bridges';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
@@ -39,18 +38,13 @@ type WorkflowFinalizerDependencies = {
 
 export class SessionWorkflowFinalizer {
   private workspaceBridge: SessionLifecycleWorkspaceBridge | null = null;
-  private autoIterationExitBridge: SessionAutoIterationExitBridge | null = null;
   private readonly persistedTransientSessionIds = new Set<string>();
   private readonly transientSessionPersistenceOperations = new Map<string, Promise<void>>();
 
   constructor(private readonly dependencies: WorkflowFinalizerDependencies) {}
 
-  configure(bridges: {
-    workspace: SessionLifecycleWorkspaceBridge;
-    autoIterationExit?: SessionAutoIterationExitBridge;
-  }): void {
+  configure(bridges: { workspace: SessionLifecycleWorkspaceBridge }): void {
     this.workspaceBridge = bridges.workspace;
-    this.autoIterationExitBridge = bridges.autoIterationExit ?? null;
   }
 
   async finalizeDeliberateStop(input: {
@@ -106,10 +100,6 @@ export class SessionWorkflowFinalizer {
 
     if (session.workflow === 'ratchet') {
       await this.cleanupTransientRatchetSession(sessionId, 'exit');
-    }
-
-    if (session.workflow === 'auto-iteration' && !deliberate) {
-      this.autoIterationExitBridge?.onAutoIterationSessionExit(session.workspaceId, sessionId);
     }
   }
 

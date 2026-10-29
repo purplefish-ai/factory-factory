@@ -6,7 +6,6 @@ import {
   RatchetState,
   RunScriptStatus,
   WorkspaceCreationSource,
-  WorkspaceMode,
   WorkspaceStatus,
 } from '@/shared/core';
 import { DEFAULT_DEEPGRAM_TTS_MODEL } from '@/shared/deepgram-voices';
@@ -181,27 +180,10 @@ const mockWorkspace: WorkspaceForExport = {
   prEvents: [],
   prDiscovery: null,
   hasHadSessions: true,
-  autoIteration: {
-    workspaceId: 'ws-1',
-    mode: WorkspaceMode.STANDARD,
-    status: null,
-    config: null,
-    progress: null,
-    sessionId: null,
-  },
   periodicTaskId: null,
   parentWorkspaceId: null,
   createdAt: new Date('2025-01-01T00:00:00.000Z'),
   updatedAt: new Date('2025-01-01T00:35:00.000Z'),
-};
-
-const mockAutoIterationConfig = {
-  testCommand: 'pnpm test:coverage',
-  targetDescription: 'Raise covered statements above 90%',
-  maxIterations: 5,
-  testTimeoutSeconds: 600,
-  sessionRecycleInterval: 3,
-  promptTimeoutSeconds: 900,
 };
 
 const mockAgentSession: AgentSession = {
@@ -249,7 +231,6 @@ const mockUserSettings: UserSettings = {
   defaultClaudeReasoningEffort: null,
   defaultCodexReasoningEffort: 'high',
   defaultWorkspacePermissions: 'STRICT',
-  autoIterationPermissions: 'YOLO',
   // Non-default values — an export/import test that only ever exercises
   // defaults can't tell a real persisted preference from a value the
   // schema's default happened to backfill (see the voiceModeEnabled et al.
@@ -394,7 +375,6 @@ function createImportData(
         defaultClaudeModel: 'sonnet',
         defaultCodexModel: 'gpt-5-codex',
         defaultWorkspacePermissions: 'STRICT',
-        autoIterationPermissions: 'YOLO',
         // Non-default so the import test below actually exercises restoring
         // a persisted preference, not just the schema's own default.
         reviewerSessionProvider: SessionProvider.CLAUDE,
@@ -484,7 +464,6 @@ describe('DataBackupService', () => {
           defaultClaudeModel: 'sonnet',
           defaultCodexModel: 'gpt-5-codex',
           defaultWorkspacePermissions: 'STRICT',
-          autoIterationPermissions: 'YOLO',
           reviewerSessionProvider: SessionProvider.CLAUDE,
           reviewerClaudeModel: 'opus',
           reviewerCodexModel: 'gpt-5-codex-high',
@@ -521,7 +500,6 @@ describe('DataBackupService', () => {
           defaultClaudeModel: 'sonnet',
           defaultCodexModel: 'default',
           defaultWorkspacePermissions: 'STRICT',
-          autoIterationPermissions: 'YOLO',
         },
       });
 
@@ -540,64 +518,77 @@ describe('DataBackupService', () => {
       expect(result.data.userSettings).toBeNull();
     });
 
-    it('exports and imports auto-iteration workspace configuration', async () => {
-      const autoIterationWorkspace: WorkspaceForExport = {
-        ...mockWorkspace,
-        autoIteration: {
-          workspaceId: 'ws-1',
-          mode: WorkspaceMode.AUTO_ITERATION,
-          config: mockAutoIterationConfig,
-          // Set, and deliberately not exported: the loop does not survive a
-          // backup, so only `mode` and `config` are in the v4 format.
-          status: 'RUNNING',
-          progress: { currentIteration: 2 },
-          sessionId: 'auto-session-1',
-        },
-      };
-
+    it('loads retired auto-iteration workspaces as ordinary workspaces with sessions', async () => {
       vi.mocked(prisma.project.findMany).mockResolvedValue([mockProject]);
-      vi.mocked(prisma.workspace.findMany).mockResolvedValue([autoIterationWorkspace]);
-      vi.mocked(prisma.agentSession.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.workspace.findMany).mockResolvedValue([mockWorkspace]);
+      vi.mocked(prisma.agentSession.findMany).mockResolvedValue([
+        { ...mockAgentSession, workflow: 'auto-iteration' },
+      ]);
       vi.mocked(prisma.terminalSession.findMany).mockResolvedValue([]);
-      vi.mocked(prisma.userSettings.findFirst).mockResolvedValue(null);
-
+      vi.mocked(prisma.userSettings.findFirst).mockResolvedValue(mockUserSettings);
       const exported = await dataBackupService.exportData('1.0.0');
       const exportedWorkspace = exported.data.workspaces[0];
-
-      expect(exportedWorkspace).toEqual(
-        expect.objectContaining({
-          mode: WorkspaceMode.AUTO_ITERATION,
-          autoIterationConfig: mockAutoIterationConfig,
-        })
-      );
-      expect(exportedWorkspace).not.toHaveProperty('autoIterationStatus');
-      expect(exportedWorkspace).not.toHaveProperty('autoIterationProgress');
-      expect(exportedWorkspace).not.toHaveProperty('autoIterationSessionId');
-      expect(exportDataSchema.safeParse(exported).success).toBe(true);
-
-      vi.mocked(mockTx.project.findUnique)
+      for (const field of [
+        'mode',
+        'autoIterationConfig',
+        'autoIterationStatus',
+        'autoIterationProgress',
+        'autoIterationSessionId',
+      ]) {
+        expect(exportedWorkspace).not.toHaveProperty(field);
+      }
+      expect(exported.data.userSettings).not.toHaveProperty('autoIterationPermissions');
+      const restored = exportDataSchema.parse({
+        ...exported,
+        data: {
+          ...exported.data,
+          workspaces: exported.data.workspaces.map((workspace) => ({
+            ...workspace,
+            mode: 'AUTO_ITERATION',
+            autoIterationConfig: { testCommand: 'pnpm test', targetDescription: 'coverage' },
+            autoIterationStatus: 'RUNNING',
+            autoIterationProgress: { currentIteration: 2 },
+            autoIterationSessionId: mockAgentSession.id,
+          })),
+          userSettings: { ...exported.data.userSettings, autoIterationPermissions: 'YOLO' },
+        },
+      });
+      const workspace = restored.data.workspaces[0]!;
+      for (const field of [
+        'mode',
+        'autoIterationConfig',
+        'autoIterationStatus',
+        'autoIterationProgress',
+        'autoIterationSessionId',
+      ]) {
+        expect(workspace).not.toHaveProperty(field);
+      }
+      expect(restored.data.userSettings).not.toHaveProperty('autoIterationPermissions');
+      expect(restored.data.workspaces).toEqual(exported.data.workspaces);
+      expect(restored.data.agentSessions).toEqual(exported.data.agentSessions);
+      vi.mocked(mockTx.project.findUnique).mockResolvedValue(mockProject);
+      vi.mocked(mockTx.workspace.findUnique)
         .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce(null)
-        .mockResolvedValue(mockProject);
-      vi.mocked(mockTx.project.create).mockResolvedValue(mockProject);
-      vi.mocked(mockTx.workspace.findUnique).mockResolvedValue(null);
-      vi.mocked(mockTx.workspace.create).mockResolvedValue(autoIterationWorkspace);
-
-      const result = await dataBackupService.importData(exported);
-
+        .mockResolvedValue(mockWorkspace);
+      vi.mocked(mockTx.workspace.create).mockResolvedValue(mockWorkspace);
+      vi.mocked(mockTx.agentSession.findUnique).mockResolvedValue(null);
+      vi.mocked(mockTx.agentSession.create).mockResolvedValue(mockAgentSession);
+      const result = await dataBackupService.importData(restored);
       expect(result.workspaces.imported).toBe(1);
-      // The two exported fields restore into the WorkspaceAutoIteration row the
-      // create brings with it; the three unexported ones are left at defaults,
-      // so a loop that was running when the backup was taken comes back idle.
-      expect(mockTx.workspace.create).toHaveBeenCalledWith({
+      expect(result.agentSessions.imported).toBe(1);
+      const created = mockTx.workspace.create.mock.calls[0]?.[0].data;
+      expect(created).toMatchObject({
+        id: 'ws-1',
+        worktreePath: mockWorkspace.worktreePath,
+        branchName: mockWorkspace.branchName,
+      });
+      expect(created).not.toHaveProperty('autoIteration');
+      expect(mockTx.agentSession.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
-          id: 'ws-1',
-          autoIteration: {
-            create: {
-              mode: WorkspaceMode.AUTO_ITERATION,
-              config: mockAutoIterationConfig,
-            },
-          },
+          id: mockAgentSession.id,
+          workspaceId: 'ws-1',
+          workflow: 'auto-iteration',
+          providerSessionId: 'thread-123',
         }),
       });
     });
@@ -714,7 +705,6 @@ describe('DataBackupService', () => {
       expect(mockTx.workspace.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           id: 'ws-1',
-          autoIteration: { create: { mode: WorkspaceMode.STANDARD, config: undefined } },
           // The v4 format's flat run-script fields land in the nested row too.
           // `postRunCommand` is absent because the format never carried it, so it
           // restores as null and the next reconcile reads it back off disk.
@@ -790,7 +780,6 @@ describe('DataBackupService', () => {
           defaultClaudeModel: 'sonnet',
           defaultCodexModel: 'gpt-5-codex',
           defaultWorkspacePermissions: 'STRICT',
-          autoIterationPermissions: 'YOLO',
           voiceModeEnabled: true,
           voiceTtsModel: 'aura-2-apollo-en',
           voiceTtsSpeed: 0.72,

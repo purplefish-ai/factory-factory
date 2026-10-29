@@ -20,8 +20,6 @@ vi.mock('@/backend/services/run-script', () => ({
   RUN_SCRIPT_STATUS_CHANGED: 'run_script_status_changed',
 }));
 vi.mock('@/backend/services/workspace', () => ({
-  AUTO_ITERATION_STATUS_CHANGED: 'auto_iteration_status_changed',
-  AUTO_ITERATION_SUMMARY_CHANGED: 'auto_iteration_summary_changed',
   WORKSPACE_STATE_CHANGED: 'workspace_state_changed',
 }));
 
@@ -36,7 +34,6 @@ function createCollector() {
     workspaceStateMachine: new EventEmitter(),
     ratchetService: new EventEmitter(),
     runScriptStateMachine: new EventEmitter(),
-    workspaceAutoIterationService: new EventEmitter(),
     sessionDomainService: new EventEmitter(),
     workspaceDataService: { subscribeAcceptedBranch: () => vi.fn() },
     workspaceSnapshotStore: {

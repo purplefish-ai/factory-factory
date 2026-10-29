@@ -18,8 +18,6 @@ const base: WorkspaceStatusReasonInput = {
   ratchetEnabled: true,
   hasMergeConflict: false,
   dispatchStalled: false,
-  mode: 'STANDARD',
-  autoIterationStatus: null,
 };
 it('reports a queued update as waiting until the recipient is actually working', () => {
   expect(

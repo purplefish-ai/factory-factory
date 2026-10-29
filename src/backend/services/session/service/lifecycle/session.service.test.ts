@@ -107,6 +107,12 @@ const activeRuntime = {
   managed: false,
 } as const;
 const getAcpProcessorState = () => acpEventProcessor;
+function mockActivePromptClient() {
+  vi.mocked(acpRuntimeManager.getClient).mockReturnValue(
+    unsafeCoerce({ supportsImages: () => true })
+  );
+}
+
 describe('SessionService', () => {
   const sessionId = 'session-fixture-isolation';
   beforeEach(() => {
@@ -823,21 +829,18 @@ describe('SessionService', () => {
   });
 
   it('rejects queued ACP prompts during manual stop', async () => {
+    mockActivePromptClient();
     const firstPrompt = createDeferred<{ stopReason: string }>();
     vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
     vi.mocked(acpRuntimeManager.sendPrompt).mockReturnValueOnce(firstPrompt.promise as never);
     vi.mocked(acpRuntimeManager.stopClient).mockResolvedValue();
     vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
 
-    const firstSend = sessionService.sendAcpMessage('session-queued-stop', [
-      { type: 'text', text: 'first' },
-    ]);
+    const firstSend = sessionService.sendSessionMessage('session-queued-stop', 'first');
     await Promise.resolve();
     expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1);
 
-    const secondSend = sessionService.sendAcpMessage('session-queued-stop', [
-      { type: 'text', text: 'second' },
-    ]);
+    const secondSend = sessionService.sendSessionMessage('session-queued-stop', 'second');
     const secondRejection = expect(secondSend).rejects.toMatchObject({ name: 'AbortError' });
     await Promise.resolve();
     expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1);
@@ -847,11 +850,12 @@ describe('SessionService', () => {
     expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1);
 
     firstPrompt.resolve({ stopReason: 'end_turn' });
-    await expect(firstSend).resolves.toBe('end_turn');
+    await expect(firstSend).resolves.toBeUndefined();
     expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1);
   });
 
   it('does not queue restarted prompts behind an unresolved stopped prompt', async () => {
+    mockActivePromptClient();
     const firstPrompt = createDeferred<{ stopReason: string }>();
     vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
     vi.mocked(acpRuntimeManager.sendPrompt)
@@ -860,27 +864,27 @@ describe('SessionService', () => {
     vi.mocked(acpRuntimeManager.stopClient).mockResolvedValue();
     vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
 
-    const firstSend = sessionService.sendAcpMessage('session-restarted-after-stop', [
-      { type: 'text', text: 'first' },
-    ]);
+    const firstSend = sessionService.sendSessionMessage('session-restarted-after-stop', 'first');
     await Promise.resolve();
     expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1);
 
     await sessionLifecycleService.stopSession('session-restarted-after-stop');
 
-    const restartedSend = sessionService.sendAcpMessage('session-restarted-after-stop', [
-      { type: 'text', text: 'after restart' },
-    ]);
+    const restartedSend = sessionService.sendSessionMessage(
+      'session-restarted-after-stop',
+      'after restart'
+    );
     await Promise.resolve();
 
     expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(2);
-    await expect(restartedSend).resolves.toBe('end_turn');
+    await expect(restartedSend).resolves.toBeUndefined();
 
     firstPrompt.resolve({ stopReason: 'end_turn' });
-    await expect(firstSend).resolves.toBe('end_turn');
+    await expect(firstSend).resolves.toBeUndefined();
   });
 
   it('marks prompt turns idle with the activity generation that started them', async () => {
+    mockActivePromptClient();
     const markSessionRunning = vi.fn().mockReturnValueOnce(101).mockReturnValueOnce(102);
     const markSessionIdle = vi.fn();
     sessionService.configure({
@@ -897,12 +901,8 @@ describe('SessionService', () => {
       .mockResolvedValueOnce({ stopReason: 'end_turn' })
       .mockResolvedValueOnce({ stopReason: 'end_turn' });
 
-    await sessionService.sendAcpMessage('session-activity-generation', [
-      { type: 'text', text: 'first' },
-    ]);
-    await sessionService.sendAcpMessage('session-activity-generation', [
-      { type: 'text', text: 'second' },
-    ]);
+    await sessionService.sendSessionMessage('session-activity-generation', 'first');
+    await sessionService.sendSessionMessage('session-activity-generation', 'second');
 
     expect(markSessionRunning).toHaveBeenNthCalledWith(
       1,
@@ -963,21 +963,18 @@ describe('SessionService', () => {
     vi.mocked(sessionRepository.updateSession).mockResolvedValue(session);
     mockCreatedAcpClient(acpRuntimeManager, acpHandle);
     await sessionLifecycleService.getOrCreateSessionClient('session-runtime-exit');
+    mockActivePromptClient();
 
     const acpHandlers = vi.mocked(acpRuntimeManager.getOrCreateClient).mock.calls[0]![2];
 
     const firstPrompt = createDeferred<{ stopReason: string }>();
     vi.mocked(acpRuntimeManager.sendPrompt).mockReturnValueOnce(firstPrompt.promise as never);
 
-    const firstSend = sessionService.sendAcpMessage('session-runtime-exit', [
-      { type: 'text', text: 'first' },
-    ]);
+    const firstSend = sessionService.sendSessionMessage('session-runtime-exit', 'first');
     await Promise.resolve();
     expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1);
 
-    const secondSend = sessionService.sendAcpMessage('session-runtime-exit', [
-      { type: 'text', text: 'second' },
-    ]);
+    const secondSend = sessionService.sendSessionMessage('session-runtime-exit', 'second');
     const secondRejection = expect(secondSend).rejects.toMatchObject({ name: 'AbortError' });
     await Promise.resolve();
     expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1);
@@ -987,7 +984,7 @@ describe('SessionService', () => {
     expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1);
 
     firstPrompt.resolve({ stopReason: 'end_turn' });
-    await expect(firstSend).resolves.toBe('end_turn');
+    await expect(firstSend).resolves.toBeUndefined();
     expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1);
   });
 
@@ -1090,6 +1087,7 @@ describe('SessionService', () => {
   });
 
   it('drops active ACP prompt serialization during manual stop', async () => {
+    mockActivePromptClient();
     const firstPrompt = createDeferred<{ stopReason: string }>();
     const thirdPrompt = createDeferred<{ stopReason: string }>();
     vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
@@ -1099,15 +1097,11 @@ describe('SessionService', () => {
     vi.mocked(acpRuntimeManager.stopClient).mockResolvedValue();
     vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
 
-    const firstSend = sessionService.sendAcpMessage('session-active-stop', [
-      { type: 'text', text: 'first' },
-    ]);
+    const firstSend = sessionService.sendSessionMessage('session-active-stop', 'first');
     await Promise.resolve();
     expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1);
 
-    const secondSend = sessionService.sendAcpMessage('session-active-stop', [
-      { type: 'text', text: 'second' },
-    ]);
+    const secondSend = sessionService.sendSessionMessage('session-active-stop', 'second');
     const secondRejection = expect(secondSend).rejects.toMatchObject({ name: 'AbortError' });
     await Promise.resolve();
     expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1);
@@ -1115,17 +1109,15 @@ describe('SessionService', () => {
     await sessionLifecycleService.stopSession('session-active-stop');
     await secondRejection;
 
-    const thirdSend = sessionService.sendAcpMessage('session-active-stop', [
-      { type: 'text', text: 'third' },
-    ]);
+    const thirdSend = sessionService.sendSessionMessage('session-active-stop', 'third');
     await Promise.resolve();
     expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(2);
 
     thirdPrompt.resolve({ stopReason: 'end_turn' });
-    await expect(thirdSend).resolves.toBe('end_turn');
+    await expect(thirdSend).resolves.toBeUndefined();
 
     firstPrompt.resolve({ stopReason: 'end_turn' });
-    await expect(firstSend).resolves.toBe('end_turn');
+    await expect(firstSend).resolves.toBeUndefined();
   });
 
   it('clears in-memory session state after manual stop when no clients are connected', async () => {
@@ -1160,6 +1152,7 @@ describe('SessionService', () => {
   });
 
   it('clears the active prompt attempt after managed stop with a connected viewer', async () => {
+    mockActivePromptClient();
     const sessionId = 'session-stopped-with-active-prompt';
     const prompt = createDeferred<{ stopReason: string }>();
     vi.mocked(acpRuntimeManager.sendPrompt).mockReturnValue(prompt.promise as never);
@@ -1169,9 +1162,7 @@ describe('SessionService', () => {
     );
 
     try {
-      const sendPromise = sessionService.sendAcpMessage(sessionId, [
-        { type: 'text', text: 'hello' },
-      ]);
+      const sendPromise = sessionService.sendSessionMessage(sessionId, 'hello');
       await vi.waitFor(() => {
         expect(getAcpProcessorState().getActivePromptAttemptKey(sessionId)).toBeDefined();
       });
@@ -1903,6 +1894,7 @@ describe('SessionService', () => {
   });
 
   it('finalizes orphaned ACP tool calls when prompt ends without terminal updates', async () => {
+    mockActivePromptClient();
     const pendingToolCalls = getAcpProcessorState().pendingAcpToolCalls as Map<
       string,
       Map<
@@ -1938,7 +1930,7 @@ describe('SessionService', () => {
       .spyOn(sessionDomainService, 'appendClaudeEvent')
       .mockReturnValue(77);
 
-    await sessionService.sendAcpMessage('session-1', [{ type: 'text', text: 'hello' }]);
+    await sessionService.sendSessionMessage('session-1', 'hello');
 
     expect(emitDeltaSpy).toHaveBeenCalledWith(
       'session-1',
@@ -1968,30 +1960,33 @@ describe('SessionService', () => {
   });
 
   it('does not synthesize tool call completion when no ACP tool calls are pending', async () => {
+    mockActivePromptClient();
     vi.mocked(acpRuntimeManager.sendPrompt).mockResolvedValue({ stopReason: 'end_turn' } as never);
     const appendClaudeEventSpy = vi.spyOn(sessionDomainService, 'appendClaudeEvent');
 
-    await sessionService.sendAcpMessage('session-1', [{ type: 'text', text: 'hello' }]);
+    await sessionService.sendSessionMessage('session-1', 'hello');
 
     expect(appendClaudeEventSpy).not.toHaveBeenCalled();
   });
 
   it('closes assistant text streaming when an ACP prompt completes', async () => {
+    mockActivePromptClient();
     vi.mocked(acpRuntimeManager.sendPrompt).mockResolvedValue({ stopReason: 'end_turn' } as never);
     const finishPromptTurnSpy = vi.spyOn(getAcpProcessorState(), 'finishPromptTurn');
 
-    await sessionService.sendAcpMessage('session-1', [{ type: 'text', text: 'hello' }]);
+    await sessionService.sendSessionMessage('session-1', 'hello');
 
     expect(finishPromptTurnSpy).toHaveBeenCalledWith('session-1');
   });
 
   it('closes assistant text streaming when an ACP prompt fails', async () => {
+    mockActivePromptClient();
     vi.mocked(acpRuntimeManager.sendPrompt).mockRejectedValue(new Error('prompt failed'));
     const finishPromptTurnSpy = vi.spyOn(getAcpProcessorState(), 'finishPromptTurn');
 
-    await expect(
-      sessionService.sendAcpMessage('session-1', [{ type: 'text', text: 'hello' }])
-    ).rejects.toThrow('prompt failed');
+    await expect(sessionService.sendSessionMessage('session-1', 'hello')).rejects.toThrow(
+      'prompt failed'
+    );
 
     expect(finishPromptTurnSpy).toHaveBeenCalledWith('session-1');
   });
@@ -2042,6 +2037,7 @@ describe('SessionService', () => {
   });
 
   it('schedules prompt-turn completion callbacks after ACP prompt settles', async () => {
+    mockActivePromptClient();
     vi.useFakeTimers();
     try {
       const onPromptTurnComplete = vi.fn().mockResolvedValue(undefined);
@@ -2050,7 +2046,7 @@ describe('SessionService', () => {
         stopReason: 'end_turn',
       } as never);
 
-      await sessionService.sendAcpMessage('session-1', [{ type: 'text', text: 'hello' }]);
+      await sessionService.sendSessionMessage('session-1', 'hello');
 
       expect(onPromptTurnComplete).not.toHaveBeenCalled();
       await vi.runOnlyPendingTimersAsync();
@@ -2061,6 +2057,7 @@ describe('SessionService', () => {
   });
 
   it('does not schedule prompt-turn completion callbacks after provider busy errors', async () => {
+    mockActivePromptClient();
     vi.useFakeTimers();
     try {
       const onPromptTurnComplete = vi.fn().mockResolvedValue(undefined);
@@ -2071,9 +2068,7 @@ describe('SessionService', () => {
         data: { reason: 'A turn is already in progress for this session' },
       } as never);
 
-      await expect(
-        sessionService.sendAcpMessage('session-1', [{ type: 'text', text: 'hello' }])
-      ).rejects.toMatchObject({
+      await expect(sessionService.sendSessionMessage('session-1', 'hello')).rejects.toMatchObject({
         data: { reason: 'A turn is already in progress for this session' },
       });
 
@@ -2085,15 +2080,16 @@ describe('SessionService', () => {
   });
 
   it('schedules prompt-turn completion callbacks after non-busy prompt errors', async () => {
+    mockActivePromptClient();
     vi.useFakeTimers();
     try {
       const onPromptTurnComplete = vi.fn().mockResolvedValue(undefined);
       sessionPromptTurnCompletionService.setHandler(onPromptTurnComplete);
       vi.mocked(acpRuntimeManager.sendPrompt).mockRejectedValue(new Error('network blip'));
 
-      await expect(
-        sessionService.sendAcpMessage('session-1', [{ type: 'text', text: 'hello' }])
-      ).rejects.toThrow('network blip');
+      await expect(sessionService.sendSessionMessage('session-1', 'hello')).rejects.toThrow(
+        'network blip'
+      );
 
       expect(onPromptTurnComplete).not.toHaveBeenCalled();
       await vi.runOnlyPendingTimersAsync();
@@ -2104,6 +2100,7 @@ describe('SessionService', () => {
   });
 
   it('cancels scheduled prompt-turn completion callback when session stops first', async () => {
+    mockActivePromptClient();
     vi.useFakeTimers();
     try {
       const onPromptTurnComplete = vi.fn().mockResolvedValue(undefined);
@@ -2114,7 +2111,7 @@ describe('SessionService', () => {
       vi.mocked(acpRuntimeManager.stopClient).mockResolvedValue();
       vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
 
-      await sessionService.sendAcpMessage('session-1', [{ type: 'text', text: 'hello' }]);
+      await sessionService.sendSessionMessage('session-1', 'hello');
       await sessionLifecycleService.stopSession('session-1');
 
       await vi.runOnlyPendingTimersAsync();
@@ -2125,6 +2122,7 @@ describe('SessionService', () => {
   });
 
   it('does not dispatch prompt-turn completion when a prompt settles during stop', async () => {
+    mockActivePromptClient();
     vi.useFakeTimers();
     try {
       const prompt = createDeferred<{ stopReason: string }>();
@@ -2134,9 +2132,7 @@ describe('SessionService', () => {
       vi.mocked(acpRuntimeManager.sendPrompt).mockReturnValue(prompt.promise as never);
       vi.mocked(acpRuntimeManager.stopClient).mockReturnValue(runtimeStop.promise);
 
-      const sendPromise = sessionService.sendAcpMessage('session-1', [
-        { type: 'text', text: 'hello' },
-      ]);
+      const sendPromise = sessionService.sendSessionMessage('session-1', 'hello');
       await Promise.resolve();
 
       const stopPromise = sessionLifecycleService.stopSession('session-1');
@@ -2145,7 +2141,7 @@ describe('SessionService', () => {
       });
 
       prompt.resolve({ stopReason: 'end_turn' });
-      await expect(sendPromise).resolves.toBe('end_turn');
+      await expect(sendPromise).resolves.toBeUndefined();
       await vi.runOnlyPendingTimersAsync();
       const completionDispatchedDuringStop = onPromptTurnComplete.mock.calls.length > 0;
 
@@ -2159,6 +2155,7 @@ describe('SessionService', () => {
   });
 
   it('preserves stopped runtime when an in-flight prompt times out after stop completes', async () => {
+    mockActivePromptClient();
     vi.useFakeTimers();
     const sessionId = 'session-prompt-timeout-after-stop';
     sessionEventBus.registerViewerCountProvider((viewedSessionId) =>
@@ -2170,17 +2167,18 @@ describe('SessionService', () => {
       const onPromptTurnComplete = vi.fn().mockResolvedValue(undefined);
       sessionPromptTurnCompletionService.setHandler(onPromptTurnComplete);
       vi.mocked(acpRuntimeManager.sendPrompt).mockReturnValue(prompt.promise as never);
-      vi.mocked(acpRuntimeManager.stopClient).mockResolvedValue();
+      vi.mocked(acpRuntimeManager.stopClient).mockImplementation(() => {
+        vi.mocked(acpRuntimeManager.getClient).mockReturnValue(undefined);
+        return Promise.resolve();
+      });
 
-      const sendPromise = sessionService.sendAcpMessage(sessionId, [
-        { type: 'text', text: 'hello' },
-      ]);
+      const sendPromise = sessionService.sendSessionMessage(sessionId, 'hello');
       const sendRejection = expect(sendPromise).rejects.toThrow('Prompt timed out');
       await vi.waitFor(() => {
         expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledWith(
           sessionId,
           [{ type: 'text', text: 'hello' }],
-          undefined
+          14_400_000
         );
       });
 
@@ -2216,6 +2214,7 @@ describe('SessionService', () => {
   });
 
   it('does not finalize a restarted prompt when a stopped prompt later times out', async () => {
+    mockActivePromptClient();
     const sessionId = 'session-restarted-before-old-prompt-timeout';
     const stoppedPrompt = createDeferred<{ stopReason: string }>();
     const restartedPrompt = createDeferred<{ stopReason: string }>();
@@ -2224,18 +2223,14 @@ describe('SessionService', () => {
       .mockReturnValueOnce(restartedPrompt.promise as never);
     vi.mocked(acpRuntimeManager.stopClient).mockResolvedValue();
 
-    const stoppedSend = sessionService.sendAcpMessage(sessionId, [
-      { type: 'text', text: 'before stop' },
-    ]);
+    const stoppedSend = sessionService.sendSessionMessage(sessionId, 'before stop');
     const stoppedSendRejection = expect(stoppedSend).rejects.toThrow('Prompt timed out');
     await vi.waitFor(() => {
       expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1);
     });
     await sessionLifecycleService.stopSession(sessionId);
 
-    const restartedSend = sessionService.sendAcpMessage(sessionId, [
-      { type: 'text', text: 'after restart' },
-    ]);
+    const restartedSend = sessionService.sendSessionMessage(sessionId, 'after restart');
     await vi.waitFor(() => {
       expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(2);
     });
@@ -2267,13 +2262,14 @@ describe('SessionService', () => {
 
     pendingToolCalls.delete(sessionId);
     restartedPrompt.resolve({ stopReason: 'end_turn' });
-    await expect(restartedSend).resolves.toBe('end_turn');
+    await expect(restartedSend).resolves.toBeUndefined();
 
     expect(restartedToolCallSurvived).toBe(true);
     expect(stalePromptFinalizedToolCall).toBe(false);
   });
 
   it('swallows prompt-turn completion callback failures', async () => {
+    mockActivePromptClient();
     vi.useFakeTimers();
     try {
       const onPromptTurnComplete = vi.fn().mockRejectedValue(new Error('dispatch failed'));
@@ -2283,8 +2279,8 @@ describe('SessionService', () => {
       } as never);
 
       await expect(
-        sessionService.sendAcpMessage('session-1', [{ type: 'text', text: 'hello' }])
-      ).resolves.toBe('end_turn');
+        sessionService.sendSessionMessage('session-1', 'hello')
+      ).resolves.toBeUndefined();
       await vi.runOnlyPendingTimersAsync();
       expect(onPromptTurnComplete).toHaveBeenCalledWith('session-1');
     } finally {

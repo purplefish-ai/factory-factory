@@ -136,9 +136,6 @@ function createTestHarness(options: TestHarnessOptions = {}) {
     terminalService: {
       cleanup: vi.fn(),
     },
-    workspaceAccessor: {
-      resetStaleAutoIterationStatuses: vi.fn(async () => []),
-    },
     workspaceGitStateService: {
       stop: vi.fn(),
     },

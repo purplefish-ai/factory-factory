@@ -71,7 +71,6 @@ function previewResponse(path: string, input: unknown, provider: ChatProvider) {
       status: 'NEW',
       createdAt: new Date(),
       ratchetEnabled: false,
-      mode: 'STANDARD',
     },
   };
   return responses[path] ?? {};
@@ -206,11 +205,6 @@ async function selectSidebarLaunchMode(canvasElement: HTMLElement, mode: string)
   await expect(menu.right).toBeLessThanOrEqual(card?.right ?? 0);
 }
 
-export const SidebarAutoIteration: Story = {
-  ...Sidebar,
-  play: ({ canvasElement }) =>
-    selectSidebarLaunchMode(canvasElement, 'Launch as Auto-Iteration Workspace'),
-};
 export const SidebarPeriodicTask: Story = {
   ...Sidebar,
   play: ({ canvasElement }) => selectSidebarLaunchMode(canvasElement, 'Create Periodic Task'),

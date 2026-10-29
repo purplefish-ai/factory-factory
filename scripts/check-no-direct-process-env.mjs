@@ -16,7 +16,6 @@ const DEFAULT_ALLOWLISTED_FILES = new Set([
   'src/backend/services/session/service/acp/child-workspace-mcp-server.ts',
   'src/backend/services/session/service/data/codex-session-history-loader.service.ts',
   'src/backend/services/session/service/store/file-lock.service.ts',
-  'src/backend/services/auto-iteration/service/test-runner.service.ts',
 ]);
 
 function toPosixPath(filePath) {

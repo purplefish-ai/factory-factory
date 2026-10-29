@@ -22,7 +22,6 @@ let db: IntegrationDatabase;
 let prisma: PrismaClient;
 
 let workspaceDataService: typeof import('@/backend/services/workspace').workspaceDataService;
-let workspaceAutoIterationService: typeof import('@/backend/services/workspace').workspaceAutoIterationService;
 let workspaceMaintenanceService: typeof import('@/backend/services/workspace').workspaceMaintenanceService;
 let workspacePRMonitoringService: typeof import('@/backend/services/workspace').workspacePRMonitoringService;
 let workspaceRunScriptService: typeof import('@/backend/services/workspace').workspaceRunScriptService;
@@ -41,7 +40,6 @@ beforeAll(async () => {
 
   ({
     projectManagementService,
-    workspaceAutoIterationService,
     workspaceDataService,
     workspaceMaintenanceService,
     workspacePRMonitoringService,
@@ -101,10 +99,9 @@ async function createWorkspaceFixture(
     ratchet?: Prisma.WorkspacePRMonitoringCreateWithoutWorkspaceInput;
     pr?: Prisma.WorkspacePRCreateWithoutWorkspaceInput;
     runScript?: Prisma.WorkspaceRunScriptCreateWithoutWorkspaceInput;
-    autoIteration?: Prisma.WorkspaceAutoIterationCreateWithoutWorkspaceInput;
   } = {}
 ) {
-  const { ratchet, pr, runScript, autoIteration, ...workspaceOverrides } = overrides;
+  const { ratchet, pr, runScript, ...workspaceOverrides } = overrides;
   return await prisma.workspace.create({
     data: {
       projectId,
@@ -117,7 +114,6 @@ async function createWorkspaceFixture(
       prDiscovery: { create: {} },
       prs: { create: pr ? [pr] : [] },
       runScript: { create: runScript ?? {} },
-      autoIteration: { create: autoIteration ?? {} },
     },
   });
 }
@@ -353,23 +349,6 @@ describe('resource accessors integration', () => {
 
       const reloaded = await findWorkspaceOrThrow(workspace.id);
       expect(reloaded.updatedAt.getTime()).toBeGreaterThan(staleUpdatedAt.getTime());
-    });
-
-    it('clears auto-iteration session only when the expected pointer still matches', async () => {
-      const project = await createProjectFixture();
-      const workspace = await createWorkspaceFixture(project.id, {
-        autoIteration: { sessionId: 'session-1' },
-      });
-
-      await expect(
-        workspaceAutoIterationService.clearSessionIfMatching(workspace.id, 'different-session')
-      ).resolves.toBe(false);
-      expect((await findWorkspaceOrThrow(workspace.id)).autoIterationSessionId).toBe('session-1');
-
-      await expect(
-        workspaceAutoIterationService.clearSessionIfMatching(workspace.id, 'session-1')
-      ).resolves.toBe(true);
-      expect((await findWorkspaceOrThrow(workspace.id)).autoIterationSessionId).toBeNull();
     });
   });
 

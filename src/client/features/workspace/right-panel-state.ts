@@ -5,7 +5,6 @@ export type TopPanelTab =
   | 'files'
   | 'tasks'
   | 'screenshots'
-  | 'auto-iteration'
   | 'periodic-task'
   | 'agents';
 
@@ -19,7 +18,6 @@ export function parseStoredTopTab(value: string | null): TopPanelTab | null {
     value === 'files' ||
     value === 'tasks' ||
     value === 'screenshots' ||
-    value === 'auto-iteration' ||
     value === 'periodic-task' ||
     value === 'agents'
   ) {
@@ -28,7 +26,7 @@ export function parseStoredTopTab(value: string | null): TopPanelTab | null {
   if (value === 'child-workspaces') {
     return 'agents';
   }
-  if (value === 'unstaged' || value === 'diff-vs-main') {
+  if (value === 'unstaged' || value === 'diff-vs-main' || value === 'auto-iteration') {
     return 'changes';
   }
   return null;

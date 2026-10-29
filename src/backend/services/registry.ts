@@ -9,7 +9,6 @@ export const prismaModelNames = [
   'WorkspacePRDiscovery',
 
   'WorkspaceRunScript',
-  'WorkspaceAutoIteration',
   'WorkspaceNotification',
   'AgentSession',
   'SessionLifecycleEvent',
@@ -86,7 +85,6 @@ export const serviceNames = [
   'run-script',
   'settings',
   'decision-log',
-  'auto-iteration',
   'periodic-task',
   'search',
 ] as const;
@@ -110,7 +108,7 @@ export const serviceRegistry = {
     ],
   },
   workspace: {
-    dependsOn: ['settings', 'auto-iteration'],
+    dependsOn: ['settings'],
     ownsModels: [
       'Project',
       'Workspace',
@@ -120,7 +118,6 @@ export const serviceRegistry = {
       'WorkspacePRDiscovery',
 
       'WorkspaceRunScript',
-      'WorkspaceAutoIteration',
       'WorkspaceNotification',
     ],
   },
@@ -151,10 +148,6 @@ export const serviceRegistry = {
   'decision-log': {
     dependsOn: [],
     ownsModels: ['DecisionLog'],
-  },
-  'auto-iteration': {
-    dependsOn: [],
-    ownsModels: [],
   },
   'periodic-task': {
     dependsOn: ['workspace', 'settings'],

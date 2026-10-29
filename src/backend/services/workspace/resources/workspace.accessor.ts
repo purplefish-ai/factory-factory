@@ -1,11 +1,5 @@
 import { prisma } from '@/backend/db';
 import {
-  flattenWorkspaceAutoIteration,
-  type WorkspaceAutoIterationFields,
-  type WorkspaceAutoIterationWriteResult,
-  workspaceAutoIterationAccessor,
-} from '@/backend/services/workspace/resources/workspace-auto-iteration.accessor';
-import {
   projectWorkspacePRCollection,
   selectActiveWorkspacePR,
   type WorkspacePRFields,
@@ -34,20 +28,10 @@ import type {
   WorkspaceProviderSelectionSnapshot,
   WorkspaceStatusSnapshot,
 } from '@/backend/services/workspace/types';
-import type {
-  AutoIterationStatus,
-  RatchetState,
-  RunScriptStatus,
-  WorkspaceStatus,
-} from '@/shared/core';
+import type { RatchetState, RunScriptStatus, WorkspaceStatus } from '@/shared/core';
 import type { WorkspacePullRequest } from '@/shared/workspace-pr';
 import type { WorkspacePRSummary } from '@/shared/workspace-pr-summary';
-import type {
-  Prisma,
-  Workspace,
-  WorkspaceAutoIteration,
-  WorkspacePRDiscovery,
-} from '@prisma-gen/client';
+import type { Prisma, Workspace, WorkspacePRDiscovery } from '@prisma-gen/client';
 import {
   type PrAggregatePersistenceResult,
   type PrObservationPersistenceInput,
@@ -60,21 +44,6 @@ export type {
   PrSnapshotPersistenceInput,
 } from './workspace-pr-aggregate.accessor';
 import { flattenPRDiscovery } from './workspace-pr-discovery.accessor';
-
-/**
- * Spans both tables now: the worktree path is the workspace's, the session id is
- * the loop's. Declared explicitly rather than via `WorkspaceGetPayload` because
- * the payload shape no longer matches the flat one callers consume.
- */
-const autoIterationExecutionContextSelect = {
-  worktreePath: true,
-  autoIteration: { select: { sessionId: true } },
-} satisfies Prisma.WorkspaceSelect;
-
-export interface AutoIterationExecutionContext {
-  worktreePath: string | null;
-  autoIterationSessionId: string | null;
-}
 
 /** Run-script process fields projected under their existing flat names. */
 export type RunScriptExecutionState = RunScriptExecutionFields;
@@ -114,8 +83,6 @@ interface CreateWorkspaceInput {
     | 'PERIODIC_TASK'
     | 'CHILD_WORKSPACE';
   creationMetadata?: Prisma.InputJsonValue;
-  mode?: 'STANDARD' | 'AUTO_ITERATION';
-  autoIterationConfig?: Prisma.InputJsonValue;
   periodicTaskId?: string;
   parentWorkspaceId?: string;
 }
@@ -135,8 +102,6 @@ interface UpdateWorkspaceInput {
   // Activity tracking
   hasHadSessions?: boolean;
   // The run-script group lives on WorkspaceRunScript; see workspaceRunScriptAccessor.
-  // The auto-iteration group lives on WorkspaceAutoIteration; see
-  // workspaceAutoIterationAccessor.
 }
 
 interface FindByProjectIdFilters {
@@ -144,14 +109,10 @@ interface FindByProjectIdFilters {
 }
 
 /** Flatten side-table inputs at the read boundary; Ratchet state is derived, never stored. */
-type Flattened<T> = Omit<
-  T,
-  'prMonitoring' | 'prs' | 'prDiscovery' | 'runScript' | 'autoIteration' | '_count'
-> &
+type Flattened<T> = Omit<T, 'prMonitoring' | 'prs' | 'prDiscovery' | 'runScript' | '_count'> &
   WorkspaceRatchetFields &
   WorkspacePRFields &
-  WorkspaceRunScriptFields &
-  WorkspaceAutoIterationFields & {
+  WorkspaceRunScriptFields & {
     ratchetState: RatchetState;
     prs: WorkspacePullRequest[];
     prSummary: WorkspacePRSummary;
@@ -163,11 +124,10 @@ function flatten<
     prs?: WorkspacePRRow[];
     prDiscovery?: WorkspacePRDiscovery | null;
     runScript?: WorkspaceRunScriptRow | null;
-    autoIteration?: WorkspaceAutoIteration | null;
     _count?: { prEvents: number };
   },
 >(row: T): Flattened<T> {
-  const { prMonitoring, prs = [], prDiscovery, runScript, autoIteration, _count, ...rest } = row;
+  const { prMonitoring, prs = [], prDiscovery, runScript, _count, ...rest } = row;
   const ratchetFields = flattenWorkspaceRatchet(prMonitoring, _count?.prEvents ?? 0);
   return {
     ...rest,
@@ -175,7 +135,6 @@ function flatten<
     ...projectWorkspacePRCollection(prs, ratchetFields.ratchetEnabled),
     ...flattenPRDiscovery(prDiscovery),
     ...flattenWorkspaceRunScript(runScript),
-    ...flattenWorkspaceAutoIteration(autoIteration),
   };
 }
 
@@ -185,7 +144,6 @@ const sideTables = {
   prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
   prDiscovery: true,
   runScript: true,
-  autoIteration: true,
   _count: { select: { prEvents: { where: pendingPREventWhere } } },
 } satisfies Prisma.WorkspaceInclude;
 
@@ -211,31 +169,24 @@ export type WorkspaceWithSessions = WorkspaceWithAgentSessions;
  * decides whether to comment on the linked issue from `prState`/`prUrl`. The
  * ratchet fields are not, because none of them do.
  */
-/**
- * A narrower read than the full flatten: this one joins only what its callers
- * use. `autoIteration` is here because workspace init branches on `mode` to
- * decide whether to start a default session or leave the loop to manage its own.
- */
 const projectAndPR = {
   project: true,
   prMonitoring: { select: { enabled: true } },
   prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
   prDiscovery: true,
-  autoIteration: true,
 } satisfies Prisma.WorkspaceInclude;
 type WorkspaceWithProjectInclude = typeof projectAndPR;
 
 type WorkspaceWithProject = Omit<
   Prisma.WorkspaceGetPayload<{ include: WorkspaceWithProjectInclude }>,
-  'prs' | 'prDiscovery' | 'autoIteration' | 'prMonitoring'
+  'prs' | 'prDiscovery' | 'prMonitoring'
 > &
-  WorkspacePRFields &
-  WorkspaceAutoIterationFields & { prs: WorkspacePullRequest[]; prSummary: WorkspacePRSummary };
+  WorkspacePRFields & { prs: WorkspacePullRequest[]; prSummary: WorkspacePRSummary };
 
 function withProjectAndPR(
   row: Prisma.WorkspaceGetPayload<{ include: WorkspaceWithProjectInclude }>
 ): WorkspaceWithProject {
-  const { prs = [], prDiscovery, autoIteration, prMonitoring, ...rest } = row;
+  const { prs = [], prDiscovery, prMonitoring, ...rest } = row;
   // Project metadata reads expose PR facts without the full ratchet fields.
   const { ratchetState: _ratchetState, ...prFields } = projectWorkspacePRCollection(
     prs,
@@ -245,7 +196,6 @@ function withProjectAndPR(
     ...rest,
     ...prFields,
     ...flattenPRDiscovery(prDiscovery),
-    ...flattenWorkspaceAutoIteration(autoIteration),
   };
 }
 
@@ -291,11 +241,7 @@ class WorkspaceAccessor {
         linearIssueIdentifier: data.linearIssueIdentifier,
         linearIssueUrl: data.linearIssueUrl,
         isAutoGeneratedBranch: data.isAutoGeneratedBranch ?? false,
-        // Every workspace gets all four side-table rows here, so no later code
-        // path can create a workspace that their row-guarded writes would skip. PR
-        // discovery in particular claims its backoff before any PR exists, the
-        // run-script status compare-and-swap needs a row before the first start,
-        // and the auto-iteration session guards need one before the first loop.
+        // Create side-table rows before guarded PR discovery and run-script writes.
         prMonitoring: {
           create: {
             enabled: data.ratchetEnabled ?? false,
@@ -304,9 +250,6 @@ class WorkspaceAccessor {
         },
         prDiscovery: { create: {} },
         runScript: { create: {} },
-        // `mode` and `config` are the two auto-iteration columns known at
-        // creation; the loop's own three are written by its accessor later.
-        autoIteration: { create: { mode: data.mode, config: data.autoIterationConfig } },
         defaultSessionProvider: data.defaultSessionProvider,
 
         creationSource: data.creationSource,
@@ -417,22 +360,6 @@ class WorkspaceAccessor {
     return prisma.workspace.findUniqueOrThrow({
       where: { id },
     });
-  }
-
-  async findAutoIterationExecutionContext(
-    id: string
-  ): Promise<AutoIterationExecutionContext | null> {
-    const workspace = await prisma.workspace.findUnique({
-      where: { id },
-      select: autoIterationExecutionContextSelect,
-    });
-    if (!workspace) {
-      return null;
-    }
-    return {
-      worktreePath: workspace.worktreePath,
-      autoIterationSessionId: workspace.autoIteration?.sessionId ?? null,
-    };
   }
 
   findRunScriptExecutionState(id: string): Promise<RunScriptExecutionState | null> {
@@ -561,46 +488,6 @@ class WorkspaceAccessor {
   /** Refresh the cached commands from the worktree's `factory-factory.json`. */
   setRunScriptCommands(id: string, commands: RunScriptCommandFields): Promise<void> {
     return workspaceRunScriptAccessor.writeCommands(id, commands);
-  }
-
-  setAutoIterationStatus(
-    id: string,
-    status: AutoIterationStatus
-  ): Promise<WorkspaceAutoIterationWriteResult> {
-    return workspaceAutoIterationAccessor.setStatus(id, status);
-  }
-
-  setAutoIterationProgress(
-    id: string,
-    progress: Prisma.InputJsonValue
-  ): Promise<WorkspaceAutoIterationWriteResult> {
-    return workspaceAutoIterationAccessor.setProgress(id, progress);
-  }
-
-  setAutoIterationSessionId(id: string, sessionId: string | null): Promise<void> {
-    return workspaceAutoIterationAccessor.setSession(id, sessionId);
-  }
-
-  finishAutoIterationIfSessionMatches(
-    id: string,
-    sessionId: string,
-    status: AutoIterationStatus
-  ): Promise<WorkspaceAutoIterationWriteResult | null> {
-    return workspaceAutoIterationAccessor.finishIfSessionMatches(id, sessionId, status);
-  }
-
-  clearAutoIterationSessionIfMatches(id: string, sessionId: string): Promise<boolean> {
-    return workspaceAutoIterationAccessor.clearSessionIfMatches(id, sessionId);
-  }
-
-  /**
-   * Reset auto-iteration loops left RUNNING by a crash or restart. Called at
-   * server startup; see the accessor for why FAILED rather than PAUSED.
-   */
-  resetStaleAutoIterationStatuses(): Promise<
-    Array<{ id: string; written: WorkspaceAutoIterationWriteResult }>
-  > {
-    return workspaceAutoIterationAccessor.resetStaleRunningStatuses();
   }
 
   /**

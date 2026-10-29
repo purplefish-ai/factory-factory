@@ -38,8 +38,6 @@ function mutationOnlyFieldDefaults() {
   return {
     initErrorMessage: null,
     worktreePath: null,
-    autoIterationConfig: null,
-    autoIterationProgress: null,
     githubIssueNumber: null,
     githubIssueUrl: null,
     linearIssueId: null,
@@ -122,8 +120,6 @@ function projectLegacyPRState(entry: WorkspaceSnapshotEntry, prs: WorkspacePullR
     hasMergeConflict: prSummary.hasMergeConflict,
     dispatchStalled: false,
     prMonitoring: entry.prMonitoring,
-    mode: entry.mode,
-    autoIterationStatus: entry.autoIterationStatus,
   });
   return {
     prSummary,
@@ -161,8 +157,6 @@ function projectSnapshotToLiveFields(
     projectId: entry.projectId,
     name: entry.name,
     status: entry.status,
-    mode: entry.mode,
-    autoIterationStatus: entry.autoIterationStatus,
     createdAt:
       existing?.createdAt && existing.createdAt.getTime() === createdAt.getTime()
         ? existing.createdAt
@@ -204,7 +198,6 @@ export function projectSnapshotToWorkspace(
       ...existing,
       ...liveFields,
       ...projectWorkspaceSnapshotMetadata(entry),
-      autoIteration: entry.autoIteration,
       gitStats: entry.gitStats,
       lastActivityAt: entry.lastActivityAt,
     };
@@ -213,16 +206,6 @@ export function projectSnapshotToWorkspace(
     ...mutationOnlyFieldDefaults(),
     ...existing,
     ...liveFields,
-    autoIteration:
-      entry.mode === 'AUTO_ITERATION'
-        ? {
-            currentIteration: null,
-            maxIterations: null,
-            currentMetricSummary: null,
-            ...existing?.autoIteration,
-            status: entry.autoIterationStatus,
-          }
-        : null,
     gitStats: entry.gitStats,
     lastActivityAt: entry.lastActivityAt,
   };

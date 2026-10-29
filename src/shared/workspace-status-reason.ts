@@ -1,11 +1,4 @@
-import type {
-  AutoIterationStatus,
-  CIStatus,
-  PRState,
-  RatchetState,
-  WorkspaceMode,
-  WorkspaceStatus,
-} from '@/shared/core';
+import type { CIStatus, PRState, RatchetState, WorkspaceStatus } from '@/shared/core';
 import type { WorkspaceCiObservation, WorkspaceFlowPhase } from '@/shared/workspace-flow-state';
 import type { PRMonitoringProjection } from './pr-monitoring';
 
@@ -39,7 +32,6 @@ export const WORKSPACE_STATUS_REASON_CODES = [
   'ARCHIVED',
   'AGENT_WORKING',
   'STARTING_SESSION',
-  'AUTO_ITERATING',
   'WAITING_FOR_CI',
   'FIXING_CI_FAILURES',
   'FIXING_REVIEW_COMMENTS',
@@ -85,8 +77,6 @@ export interface WorkspaceStatusReasonInput {
   hasMergeConflict: boolean;
   dispatchStalled: boolean;
   prMonitoring?: PRMonitoringProjection;
-  mode: WorkspaceMode;
-  autoIterationStatus: AutoIterationStatus | null;
 }
 
 type OptionalWorkspaceStatusReason = WorkspaceStatusReason | null;
@@ -169,10 +159,6 @@ function deriveActiveReason(input: WorkspaceStatusReasonInput): OptionalWorkspac
 
   if (input.isSessionStarting) {
     return reason('STARTING_SESSION', 'Starting session', 'working');
-  }
-
-  if (input.mode === 'AUTO_ITERATION' && input.autoIterationStatus === 'RUNNING') {
-    return reason('AUTO_ITERATING', 'Auto-iterating', 'working');
   }
 
   return null;

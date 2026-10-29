@@ -89,7 +89,6 @@ describe('failed PR attachment streaming', () => {
         workspaceActivityService: new EventEmitter(),
         workspaceStateMachine: new EventEmitter(),
         runScriptStateMachine: new EventEmitter(),
-        workspaceAutoIterationService: new EventEmitter(),
         sessionDomainService: new EventEmitter(),
         sessionDataService: { findAgentSessionsByWorkspaceId: findSessions },
       } as unknown as EventCollectorDependencies;

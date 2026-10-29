@@ -84,11 +84,6 @@ describe('WorkspaceCreationService', () => {
     runScriptPort: null,
     runScriptStartedAt: null,
     runScriptStatus: 'IDLE',
-    mode: 'STANDARD' as const,
-    autoIterationStatus: null,
-    autoIterationConfig: null,
-    autoIterationProgress: null,
-    autoIterationSessionId: null,
     periodicTaskId: null,
     parentWorkspaceId: null,
     createdAt: new Date(),
@@ -148,7 +143,6 @@ describe('WorkspaceCreationService', () => {
       defaultClaudeReasoningEffort: null,
       defaultCodexReasoningEffort: null,
       defaultWorkspacePermissions: 'STRICT',
-      autoIterationPermissions: 'YOLO',
       reviewerSessionProvider: 'CODEX',
       reviewerClaudeModel: null,
       reviewerCodexModel: null,
@@ -258,7 +252,6 @@ describe('WorkspaceCreationService', () => {
           defaultClaudeReasoningEffort: null,
           defaultCodexReasoningEffort: null,
           defaultWorkspacePermissions: 'STRICT',
-          autoIterationPermissions: 'YOLO',
           reviewerSessionProvider: 'CODEX',
           reviewerClaudeModel: null,
           reviewerCodexModel: null,
@@ -356,56 +349,6 @@ describe('WorkspaceCreationService', () => {
             },
           })
         );
-      });
-
-      it('defaults and persists auto-iteration config for auto-iteration workspaces', async () => {
-        const source = unsafeCoerce<WorkspaceCreationSource>({
-          type: 'MANUAL',
-          projectId: 'proj-1',
-          name: 'Auto Iteration Workspace',
-          mode: 'AUTO_ITERATION',
-          autoIterationConfig: {
-            testCommand: 'pnpm test',
-            targetDescription: 'Improve coverage',
-          },
-        });
-
-        await service.create(source);
-
-        expect(workspaceAccessorModule.workspaceAccessor.create).toHaveBeenCalledWith(
-          expect.objectContaining({
-            mode: 'AUTO_ITERATION',
-            autoIterationConfig: {
-              testCommand: 'pnpm test',
-              targetDescription: 'Improve coverage',
-              maxIterations: 25,
-              testTimeoutSeconds: 600,
-              sessionRecycleInterval: 10,
-            },
-          })
-        );
-      });
-
-      it('rejects invalid auto-iteration config for auto-iteration workspaces', async () => {
-        const source = unsafeCoerce<WorkspaceCreationSource>({
-          type: 'MANUAL',
-          projectId: 'proj-1',
-          name: 'Auto Iteration Workspace',
-          mode: 'AUTO_ITERATION',
-          autoIterationConfig: {
-            testCommand: '',
-            targetDescription: 'Improve coverage',
-          },
-        });
-
-        const error = await service.create(source).catch((caught: unknown) => caught);
-
-        expect(error).toBeInstanceOf(ApplicationError);
-        expect(error).toMatchObject({
-          code: 'INVALID_INPUT',
-          message: expect.stringContaining('Invalid auto-iteration config'),
-        });
-        expect(workspaceAccessorModule.workspaceAccessor.create).not.toHaveBeenCalled();
       });
     });
 

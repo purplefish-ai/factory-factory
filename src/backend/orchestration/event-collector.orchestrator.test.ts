@@ -58,8 +58,6 @@ vi.mock('@/backend/services/workspace', () => ({
     remove: vi.fn(),
   },
   computePendingRequestType: vi.fn().mockReturnValue(null),
-  AUTO_ITERATION_SUMMARY_CHANGED: 'auto_iteration_summary_changed',
-  workspaceAutoIterationService: { on: vi.fn(), off: vi.fn() },
 }));
 
 vi.mock('@/backend/services/github', () => ({
@@ -150,7 +148,6 @@ import { terminalService } from '@/backend/services/terminal';
 import {
   computePendingRequestType,
   workspaceActivityService,
-  workspaceAutoIterationService,
   workspaceDataService,
   workspaceSnapshotStore,
   workspaceStateMachine,
@@ -168,7 +165,6 @@ function configureEventCollector(): void {
   activeEventCollector = createEventCollectorOrchestrator({
     chatEventForwarderService,
     computePendingRequestType,
-    workspaceAutoIterationService,
     createLogger: () => ({ info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() }),
     getWorkspaceLinearContext,
     fireLifecycleNotification: vi.fn().mockResolvedValue(undefined),
@@ -470,26 +466,6 @@ describe('Event-to-field mapping', () => {
     );
   });
 
-  it('maps auto-iteration status change to { mode, autoIterationStatus }', () => {
-    // Both fields, not just the status: the store's copy of `mode` is otherwise
-    // seeded only by reconciliation, and the status reason needs the pair to
-    // report AUTO_ITERATING for a loop between iterations.
-    const coalescer = new EventCoalescer(mockStore, 150);
-    coalescer.enqueue(
-      'ws-1',
-      { mode: 'AUTO_ITERATION' as const, autoIterationStatus: 'RUNNING' as const },
-      'event:auto_iteration_status_changed'
-    );
-    vi.advanceTimersByTime(150);
-
-    expect(mockStore.upsert).toHaveBeenCalledWith(
-      'ws-1',
-      { mode: 'AUTO_ITERATION', autoIterationStatus: 'RUNNING' },
-      'event:auto_iteration_status_changed',
-      expect.any(Number)
-    );
-  });
-
   it('maps run-script status change to { runScriptStatus }', () => {
     const coalescer = new EventCoalescer(mockStore, 150);
     coalescer.enqueue(
@@ -575,12 +551,6 @@ describe('configureEventCollector', () => {
     // runScriptStateMachine: 1 listener (RUN_SCRIPT_STATUS_CHANGED)
     expect(runScriptStateMachine.on).toHaveBeenCalledWith(
       'run_script_status_changed',
-      expect.any(Function)
-    );
-
-    // workspaceAutoIterationService: accepted compact state
-    expect(workspaceAutoIterationService.on).toHaveBeenCalledWith(
-      'auto_iteration_summary_changed',
       expect.any(Function)
     );
 
@@ -1517,7 +1487,6 @@ describe('per-graph event collector lifecycle', () => {
       }),
       runScriptStateMachine: createSource(),
       sessionDataService,
-      workspaceAutoIterationService: createSource(),
       sessionDomainService: createSource(),
       sessionLifecycleService,
       terminalService,

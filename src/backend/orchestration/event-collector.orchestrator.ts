@@ -55,13 +55,10 @@ import type {
 import type { terminalService } from '@/backend/services/terminal';
 import type { SnapshotUpdateInput } from '@/backend/services/workspace';
 import {
-  AUTO_ITERATION_SUMMARY_CHANGED,
-  type AutoIterationSummaryChangedEvent,
   type computePendingRequestType,
   WORKSPACE_STATE_CHANGED,
   type WorkspaceStateChangedEvent,
   type workspaceActivityService,
-  type workspaceAutoIterationService,
   type workspaceDataService,
   type workspaceSnapshotStore,
   type workspaceStateMachine,
@@ -141,7 +138,6 @@ export type EventCollectorDependencies = {
   prSnapshotService: typeof prSnapshotService;
   ratchetService: typeof ratchetService;
   runScriptStateMachine: typeof runScriptStateMachine;
-  workspaceAutoIterationService: typeof workspaceAutoIterationService;
   sessionDataService: typeof sessionDataService;
   sessionDomainService: typeof sessionDomainService;
   sessionLifecycleService: typeof sessionLifecycleService;
@@ -729,21 +725,6 @@ function startEventCollectorWithState(state: EventCollectorState): void {
   dependencies.runScriptStateMachine.on(RUN_SCRIPT_STATUS_CHANGED, runScriptStatusChangedHandler);
   state.teardownListeners.push(() =>
     dependencies.runScriptStateMachine.off(RUN_SCRIPT_STATUS_CHANGED, runScriptStatusChangedHandler)
-  );
-
-  // Accepted compact state is the sole loop projection owner. Legacy status
-  // events remain available to other consumers without racing this full fact.
-  const loopSummaryChanged = ({ workspaceId, ...fields }: AutoIterationSummaryChangedEvent) => {
-    coalescer.enqueue(workspaceId, fields, 'event:auto_iteration_summary_changed', {
-      immediate: true,
-    });
-  };
-  dependencies.workspaceAutoIterationService.on(AUTO_ITERATION_SUMMARY_CHANGED, loopSummaryChanged);
-  state.teardownListeners.push(() =>
-    dependencies.workspaceAutoIterationService.off(
-      AUTO_ITERATION_SUMMARY_CHANGED,
-      loopSummaryChanged
-    )
   );
 
   // 6. Workspace activity (active)

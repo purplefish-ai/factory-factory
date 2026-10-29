@@ -56,7 +56,6 @@ function fixture() {
       workspaceStateMachine: workspaceEvents,
       ratchetService: ratchet,
       runScriptStateMachine: new EventEmitter(),
-      workspaceAutoIterationService: new EventEmitter(),
       sessionDomainService: new EventEmitter(),
       workspaceDataService,
       workspaceSnapshotStore: store,

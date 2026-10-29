@@ -42,7 +42,6 @@ import {
   type workspaceSnapshotStore,
 } from '@/backend/services/workspace';
 import { projectWorkspaceSnapshotMetadata } from '@/shared/workspace-snapshot';
-import { projectAutoIterationSummary } from '@/shared/workspace-summary';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -137,10 +136,7 @@ type DriftComparableField =
   | 'linearIssueId'
   | 'linearIssueIdentifier'
   | 'linearIssueUrl'
-  | 'creationSource'
-  | 'autoIteration'
-  | 'mode'
-  | 'autoIterationStatus';
+  | 'creationSource';
 
 const DRIFT_FIELD_GROUPS: { group: string; fields: DriftComparableField[] }[] = [
   {
@@ -156,7 +152,6 @@ const DRIFT_FIELD_GROUPS: { group: string; fields: DriftComparableField[] }[] = 
       'creationSource',
     ],
   },
-  { group: 'autoIteration', fields: ['mode', 'autoIterationStatus', 'autoIteration'] },
   { group: 'workspace', fields: ['status'] },
   { group: 'branch', fields: ['branchName'] },
   { group: 'name', fields: ['name'] },
@@ -278,7 +273,6 @@ export class SnapshotReconciliationService {
 
     return {
       ...projectWorkspaceSnapshotMetadata(ws),
-      autoIteration: projectAutoIterationSummary(ws),
       projectId: ws.projectId,
       name: ws.name,
       nameUpdatedAt: ws.updatedAt.getTime(),
@@ -287,8 +281,6 @@ export class SnapshotReconciliationService {
       createdAt: ws.createdAt.toISOString(),
       branchName: ws.branchName,
       hasHadSessions: ws.hasHadSessions,
-      mode: ws.mode,
-      autoIterationStatus: ws.autoIterationStatus,
       prs: ws.prs,
       prSummary: ws.prSummary,
       prUrl: ws.prUrl,

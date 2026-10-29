@@ -8,9 +8,7 @@ import { useWorkspacePanel, WorkspacePanelProvider } from './workspace-panel-con
 
 const mocks = vi.hoisted(() => ({
   agentsProps: vi.fn(),
-  workspaceData: undefined as
-    | undefined
-    | { mode: string; periodicTaskId: string | null; creationSource: string },
+  workspaceData: undefined as undefined | { periodicTaskId: string | null; creationSource: string },
 }));
 
 vi.mock('@phosphor-icons/react/dist/csr/ArrowsClockwise', () => ({
@@ -102,9 +100,6 @@ vi.mock('./agents-panel', () => ({
   },
 }));
 
-vi.mock('./auto-iteration-panel', () => ({
-  AutoIterationPanel: () => createElement('div', { 'data-testid': 'auto-iteration-panel' }),
-}));
 vi.mock('./combined-changes-panel', () => ({
   CombinedChangesPanel: () => createElement('div', { 'data-testid': 'changes-panel' }),
 }));
@@ -159,7 +154,6 @@ describe('RightPanel Agents tab', () => {
     vi.stubGlobal('matchMedia', () => ({ matches: false }));
     localStorage.clear();
     mocks.workspaceData = {
-      mode: 'STANDARD',
       periodicTaskId: null,
       creationSource: 'MANUAL',
     };
@@ -225,12 +219,28 @@ describe('RightPanel Agents tab', () => {
     }
   );
 
+  it('opens Changes for a former auto-iteration workspace after its data loads', () => {
+    localStorage.setItem('workspace-right-panel-tab-workspace-1', 'auto-iteration');
+    mocks.workspaceData = undefined;
+    render();
+    const legacyWorkspace = {
+      mode: 'AUTO_ITERATION',
+      periodicTaskId: null,
+      creationSource: 'MANUAL',
+    };
+    mocks.workspaceData = legacyWorkspace;
+    render();
+    expect(container.querySelector('[data-testid="changes-panel"]')).not.toBeNull();
+    expect(container.textContent).not.toContain('Iterations');
+    expect(localStorage.getItem('workspace-right-panel-tab-workspace-1')).toBe('changes');
+  });
+
   it('waits for workspace capabilities before rejecting a periodic-task preference', () => {
     localStorage.setItem('workspace-right-panel-tab-workspace-1', 'periodic-task');
     mocks.workspaceData = undefined;
     render();
     expect(localStorage.getItem('workspace-right-panel-tab-workspace-1')).toBe('periodic-task');
-    mocks.workspaceData = { mode: 'STANDARD', periodicTaskId: 'task-1', creationSource: 'MANUAL' };
+    mocks.workspaceData = { periodicTaskId: 'task-1', creationSource: 'MANUAL' };
     render();
     expect(container.querySelector('[data-testid="periodic-task-panel"]')).not.toBeNull();
     expect(localStorage.getItem('workspace-right-panel-tab-workspace-1')).toBe('periodic-task');
@@ -238,10 +248,10 @@ describe('RightPanel Agents tab', () => {
 
   it('falls back when an open workspace loses its periodic task', () => {
     localStorage.setItem('workspace-right-panel-tab-workspace-1', 'periodic-task');
-    mocks.workspaceData = { mode: 'STANDARD', periodicTaskId: 'task-1', creationSource: 'MANUAL' };
+    mocks.workspaceData = { periodicTaskId: 'task-1', creationSource: 'MANUAL' };
     render();
     expect(container.querySelector('[data-testid="periodic-task-panel"]')).not.toBeNull();
-    mocks.workspaceData = { mode: 'STANDARD', periodicTaskId: null, creationSource: 'MANUAL' };
+    mocks.workspaceData = { periodicTaskId: null, creationSource: 'MANUAL' };
     render();
     expect(container.querySelector('[data-testid="changes-panel"]')).not.toBeNull();
     expect(localStorage.getItem('workspace-right-panel-tab-workspace-1')).toBe('changes');
@@ -250,9 +260,9 @@ describe('RightPanel Agents tab', () => {
   it('preserves another workspace preference when switching from a periodic task', () => {
     localStorage.setItem('workspace-right-panel-tab-workspace-1', 'periodic-task');
     localStorage.setItem('workspace-right-panel-tab-workspace-2', 'agents');
-    mocks.workspaceData = { mode: 'STANDARD', periodicTaskId: 'task-1', creationSource: 'MANUAL' };
+    mocks.workspaceData = { periodicTaskId: 'task-1', creationSource: 'MANUAL' };
     render();
-    mocks.workspaceData = { mode: 'STANDARD', periodicTaskId: null, creationSource: 'MANUAL' };
+    mocks.workspaceData = { periodicTaskId: null, creationSource: 'MANUAL' };
     render('workspace-2');
     expect(container.querySelector('[data-testid="agents-panel"]')).not.toBeNull();
     expect(localStorage.getItem('workspace-right-panel-tab-workspace-2')).toBe('agents');
@@ -262,7 +272,7 @@ describe('RightPanel Agents tab', () => {
     ['parent', 'MANUAL', 'true'],
     ['child', 'CHILD_WORKSPACE', 'false'],
   ])('always labels the tab Agents for a %s workspace', (_kind, creationSource, isParent) => {
-    mocks.workspaceData = { mode: 'STANDARD', periodicTaskId: null, creationSource };
+    mocks.workspaceData = { periodicTaskId: null, creationSource };
     render();
 
     const agentsTab = [...container.querySelectorAll('button')].find(
@@ -297,7 +307,6 @@ describe('RightPanel Agents tab', () => {
     );
 
     mocks.workspaceData = {
-      mode: 'STANDARD',
       periodicTaskId: null,
       creationSource: 'CHILD_WORKSPACE',
     };

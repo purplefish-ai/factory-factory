@@ -21,8 +21,6 @@ function makeInput(
     hasMergeConflict: false,
     ratchetEnabled: false,
     dispatchStalled: false,
-    mode: 'STANDARD',
-    autoIterationStatus: null,
     ...overrides,
   };
 }
@@ -155,22 +153,6 @@ describe('deriveWorkspaceStatusReason', () => {
     expect(
       deriveWorkspaceStatusReason(makeInput({ isSessionStarting: true, lifecycle: 'PROVISIONING' }))
     ).toMatchObject({ code: 'SETTING_UP' });
-  });
-
-  it('reports a running auto-iteration loop between sessions as working', () => {
-    expect(
-      deriveWorkspaceStatusReason(
-        makeInput({ mode: 'AUTO_ITERATION', autoIterationStatus: 'RUNNING' })
-      )
-    ).toMatchObject({ code: 'AUTO_ITERATING', tone: 'working', needsUser: false });
-  });
-
-  it('prefers the live session over the loop when both are active', () => {
-    expect(
-      deriveWorkspaceStatusReason(
-        makeInput({ mode: 'AUTO_ITERATION', autoIterationStatus: 'RUNNING', isWorking: true })
-      )
-    ).toMatchObject({ code: 'AGENT_WORKING' });
   });
 
   it('reports a conflicted PR as being fixed when the ratchet is on', () => {

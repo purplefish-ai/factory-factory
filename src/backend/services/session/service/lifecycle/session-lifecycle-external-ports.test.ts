@@ -37,7 +37,6 @@ describe('session lifecycle external ports', () => {
     async (provider) => {
       vi.mocked(userSettingsService.get).mockResolvedValueOnce(
         unsafeCoerce({
-          autoIterationPermissions: 'STRICT',
           defaultWorkspacePermissions: 'RELAXED',
         })
       );
@@ -53,12 +52,11 @@ describe('session lifecycle external ports', () => {
   );
 
   it.each(['STRICT', 'RELAXED', 'YOLO'] as const)(
-    'uses unattended permissions %s for auto-iteration',
+    'uses ordinary workspace permissions %s for legacy sessions',
     async (preset) => {
       vi.mocked(userSettingsService.get).mockResolvedValueOnce(
         unsafeCoerce({
-          autoIterationPermissions: preset,
-          defaultWorkspacePermissions: 'STRICT',
+          defaultWorkspacePermissions: preset,
         })
       );
       await expect(

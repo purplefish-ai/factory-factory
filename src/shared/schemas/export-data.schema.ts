@@ -27,7 +27,6 @@ import {
   SessionProvider as CoreSessionProvider,
   SessionStatus as CoreSessionStatus,
   WorkspaceCreationSource as CoreWorkspaceCreationSource,
-  WorkspaceMode as CoreWorkspaceMode,
   WorkspaceProviderSelection as CoreWorkspaceProviderSelection,
   WorkspaceStatus as CoreWorkspaceStatus,
 } from '@/shared/core';
@@ -45,7 +44,6 @@ import {
   VOICE_UTTERANCE_END_MS_MAX,
   VOICE_UTTERANCE_END_MS_MIN,
 } from '@/shared/voice-vad';
-import { autoIterationConfigSchema } from './auto-iteration.schema';
 import { validateBackupPRs, validateLegacyFixerOwnership } from './export-data-pr-validation';
 import {
   prAssociationBackupSchema,
@@ -63,7 +61,6 @@ const WorkspaceStatus = z.enum(enumValues(CoreWorkspaceStatus));
 const WorkspaceCreationSource = z.enum(enumValues(CoreWorkspaceCreationSource));
 const IssueProvider = z.enum(enumValues(CoreIssueProvider));
 const RunScriptStatus = z.enum(enumValues(CoreRunScriptStatus));
-const WorkspaceMode = z.enum(enumValues(CoreWorkspaceMode));
 const PRState = z.enum(enumValues(CorePRState));
 const CIStatus = z.enum(enumValues(CoreCIStatus));
 const RatchetState = z.enum(enumValues(CoreRatchetState));
@@ -92,6 +89,7 @@ const exportedProjectSchema = z.object({
   updatedAt: z.string(),
 });
 
+// Zod strips retired mode/autoIteration fields from old backups at this boundary.
 const exportedWorkspaceSchema = z.object({
   prs: z.array(prAssociationBackupSchema).optional().default([]),
   prDiscovery: prDiscoveryBackupSchema.nullable().optional().default(null),
@@ -119,8 +117,6 @@ const exportedWorkspaceSchema = z.object({
   runScriptPort: z.number().nullable(),
   runScriptStartedAt: z.string().nullable(),
   runScriptStatus: RunScriptStatus,
-  mode: WorkspaceMode.optional().default('STANDARD'),
-  autoIterationConfig: autoIterationConfigSchema.nullable().optional().default(null),
   prUrl: z.string().nullable(),
   githubIssueNumber: z.number().nullable(),
   githubIssueUrl: z.string().nullable(),
@@ -194,7 +190,6 @@ const exportedUserSettingsSchema = z.object({
   defaultCodexReasoningEffort: z.string().nullable().optional().default(null),
   defaultWorkspacePermissions: SessionPermissionPreset.optional().default('STRICT'),
   ratchetPermissions: SessionPermissionPreset.optional(),
-  autoIterationPermissions: SessionPermissionPreset.optional(),
   // Adversarial review settings
   reviewerSessionProvider: SessionProvider.optional().default('CODEX'),
   reviewerClaudeModel: z.string().nullable().optional().default(null),

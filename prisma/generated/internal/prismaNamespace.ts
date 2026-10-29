@@ -406,7 +406,6 @@ export const ModelName = {
   WorkspacePREvent: 'WorkspacePREvent',
   WorkspacePRDiscovery: 'WorkspacePRDiscovery',
   WorkspaceRunScript: 'WorkspaceRunScript',
-  WorkspaceAutoIteration: 'WorkspaceAutoIteration',
   AgentSession: 'AgentSession',
   SessionLifecycleEvent: 'SessionLifecycleEvent',
   TerminalSession: 'TerminalSession',
@@ -430,7 +429,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "project" | "decisionLog" | "workspace" | "workspacePR" | "workspacePRMonitoring" | "workspacePRDedicatedSession" | "workspacePREvent" | "workspacePRDiscovery" | "workspaceRunScript" | "workspaceAutoIteration" | "agentSession" | "sessionLifecycleEvent" | "terminalSession" | "closedSession" | "userSettings" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification"
+    modelProps: "project" | "decisionLog" | "workspace" | "workspacePR" | "workspacePRMonitoring" | "workspacePRDedicatedSession" | "workspacePREvent" | "workspacePRDiscovery" | "workspaceRunScript" | "agentSession" | "sessionLifecycleEvent" | "terminalSession" | "closedSession" | "userSettings" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -1097,80 +1096,6 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         count: {
           args: Prisma.WorkspaceRunScriptCountArgs<ExtArgs>
           result: runtime.Types.Utils.Optional<Prisma.WorkspaceRunScriptCountAggregateOutputType> | number
-        }
-      }
-    }
-    WorkspaceAutoIteration: {
-      payload: Prisma.$WorkspaceAutoIterationPayload<ExtArgs>
-      fields: Prisma.WorkspaceAutoIterationFieldRefs
-      operations: {
-        findUnique: {
-          args: Prisma.WorkspaceAutoIterationFindUniqueArgs<ExtArgs>
-          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceAutoIterationPayload> | null
-        }
-        findUniqueOrThrow: {
-          args: Prisma.WorkspaceAutoIterationFindUniqueOrThrowArgs<ExtArgs>
-          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceAutoIterationPayload>
-        }
-        findFirst: {
-          args: Prisma.WorkspaceAutoIterationFindFirstArgs<ExtArgs>
-          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceAutoIterationPayload> | null
-        }
-        findFirstOrThrow: {
-          args: Prisma.WorkspaceAutoIterationFindFirstOrThrowArgs<ExtArgs>
-          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceAutoIterationPayload>
-        }
-        findMany: {
-          args: Prisma.WorkspaceAutoIterationFindManyArgs<ExtArgs>
-          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceAutoIterationPayload>[]
-        }
-        create: {
-          args: Prisma.WorkspaceAutoIterationCreateArgs<ExtArgs>
-          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceAutoIterationPayload>
-        }
-        createMany: {
-          args: Prisma.WorkspaceAutoIterationCreateManyArgs<ExtArgs>
-          result: BatchPayload
-        }
-        createManyAndReturn: {
-          args: Prisma.WorkspaceAutoIterationCreateManyAndReturnArgs<ExtArgs>
-          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceAutoIterationPayload>[]
-        }
-        delete: {
-          args: Prisma.WorkspaceAutoIterationDeleteArgs<ExtArgs>
-          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceAutoIterationPayload>
-        }
-        update: {
-          args: Prisma.WorkspaceAutoIterationUpdateArgs<ExtArgs>
-          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceAutoIterationPayload>
-        }
-        deleteMany: {
-          args: Prisma.WorkspaceAutoIterationDeleteManyArgs<ExtArgs>
-          result: BatchPayload
-        }
-        updateMany: {
-          args: Prisma.WorkspaceAutoIterationUpdateManyArgs<ExtArgs>
-          result: BatchPayload
-        }
-        updateManyAndReturn: {
-          args: Prisma.WorkspaceAutoIterationUpdateManyAndReturnArgs<ExtArgs>
-          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceAutoIterationPayload>[]
-        }
-        upsert: {
-          args: Prisma.WorkspaceAutoIterationUpsertArgs<ExtArgs>
-          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceAutoIterationPayload>
-        }
-        aggregate: {
-          args: Prisma.WorkspaceAutoIterationAggregateArgs<ExtArgs>
-          result: runtime.Types.Utils.Optional<Prisma.AggregateWorkspaceAutoIteration>
-        }
-        groupBy: {
-          args: Prisma.WorkspaceAutoIterationGroupByArgs<ExtArgs>
-          result: runtime.Types.Utils.Optional<Prisma.WorkspaceAutoIterationGroupByOutputType>[]
-        }
-        count: {
-          args: Prisma.WorkspaceAutoIterationCountArgs<ExtArgs>
-          result: runtime.Types.Utils.Optional<Prisma.WorkspaceAutoIterationCountAggregateOutputType> | number
         }
       }
     }
@@ -1966,18 +1891,6 @@ export const WorkspaceRunScriptScalarFieldEnum = {
 export type WorkspaceRunScriptScalarFieldEnum = (typeof WorkspaceRunScriptScalarFieldEnum)[keyof typeof WorkspaceRunScriptScalarFieldEnum]
 
 
-export const WorkspaceAutoIterationScalarFieldEnum = {
-  workspaceId: 'workspaceId',
-  mode: 'mode',
-  status: 'status',
-  config: 'config',
-  progress: 'progress',
-  sessionId: 'sessionId'
-} as const
-
-export type WorkspaceAutoIterationScalarFieldEnum = (typeof WorkspaceAutoIterationScalarFieldEnum)[keyof typeof WorkspaceAutoIterationScalarFieldEnum]
-
-
 export const AgentSessionScalarFieldEnum = {
   id: 'id',
   workspaceId: 'workspaceId',
@@ -2059,7 +1972,6 @@ export const UserSettingsScalarFieldEnum = {
   defaultClaudeReasoningEffort: 'defaultClaudeReasoningEffort',
   defaultCodexReasoningEffort: 'defaultCodexReasoningEffort',
   defaultWorkspacePermissions: 'defaultWorkspacePermissions',
-  autoIterationPermissions: 'autoIterationPermissions',
   reviewerSessionProvider: 'reviewerSessionProvider',
   reviewerClaudeModel: 'reviewerClaudeModel',
   reviewerCodexModel: 'reviewerCodexModel',
@@ -2274,20 +2186,6 @@ export type EnumCIStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaM
  * Reference to a field of type 'RunScriptStatus'
  */
 export type EnumRunScriptStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'RunScriptStatus'>
-    
-
-
-/**
- * Reference to a field of type 'WorkspaceMode'
- */
-export type EnumWorkspaceModeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'WorkspaceMode'>
-    
-
-
-/**
- * Reference to a field of type 'AutoIterationStatus'
- */
-export type EnumAutoIterationStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'AutoIterationStatus'>
     
 
 
@@ -2520,7 +2418,6 @@ export type GlobalOmitConfig = {
   workspacePREvent?: Prisma.WorkspacePREventOmit
   workspacePRDiscovery?: Prisma.WorkspacePRDiscoveryOmit
   workspaceRunScript?: Prisma.WorkspaceRunScriptOmit
-  workspaceAutoIteration?: Prisma.WorkspaceAutoIterationOmit
   agentSession?: Prisma.AgentSessionOmit
   sessionLifecycleEvent?: Prisma.SessionLifecycleEventOmit
   terminalSession?: Prisma.TerminalSessionOmit

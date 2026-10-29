@@ -78,7 +78,6 @@ const workspace = {
   status: 'READY',
   prState: 'NONE',
   prCiStatus: 'UNKNOWN',
-  mode: 'STANDARD',
   kanbanColumn: 'WAITING',
   sessionSummaries: [],
 };

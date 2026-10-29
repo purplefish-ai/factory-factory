@@ -20,12 +20,10 @@ import { SERVICE_CACHE_TTL_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
 import { toWorkspaceDerivedStateInput } from '@/backend/services/workspace/service/state/workspace-read-state';
 import type {
-  AutoIterationStatus,
   CIStatus,
   PRState,
   RatchetState,
   RunScriptStatus,
-  WorkspaceMode,
   WorkspaceStatus,
 } from '@/shared/core';
 import type { SessionSummary } from '@/shared/session-runtime';
@@ -68,9 +66,6 @@ export interface SnapshotUpdateInput extends Partial<WorkspaceSnapshotMetadata> 
   /** Input-only canonical DB branch provenance. */
   branchUpdatedAt?: number;
   hasHadSessions?: boolean;
-  mode?: WorkspaceMode;
-  autoIterationStatus?: AutoIterationStatus | null;
-  autoIteration?: WorkspaceSnapshotEntry['autoIteration'];
 
   // PR fields (group: 'pr')
   prs?: WorkspacePullRequest[];
@@ -192,7 +187,6 @@ const METADATA_FIELDS = [
   'linearIssueUrl',
   'creationSource',
 ] as const;
-const AUTO_ITERATION_FIELDS = ['mode', 'autoIterationStatus', 'autoIteration'] as const;
 
 type SnapshotField = keyof SnapshotUpdateInput & keyof WorkspaceSnapshotEntry;
 
@@ -212,7 +206,6 @@ const FIELD_GROUP_MAPPINGS: FieldGroupMapping[] = [
   { group: 'reconciliation', fields: RECONCILIATION_FIELDS },
   { group: 'git', fields: GIT_FIELDS },
   { group: 'metadata', fields: METADATA_FIELDS },
-  { group: 'autoIteration', fields: AUTO_ITERATION_FIELDS },
 ];
 
 // ---------------------------------------------------------------------------
@@ -235,7 +228,6 @@ function createDefaultFieldTimestamps(): Record<SnapshotFieldGroup, number> {
     reconciliation: 0,
     git: 0,
     metadata: 0,
-    autoIteration: 0,
   };
 }
 
@@ -294,7 +286,7 @@ function snapshotFieldValuesEqual(
   left: WorkspaceSnapshotEntry[SnapshotField],
   right: WorkspaceSnapshotEntry[SnapshotField]
 ): boolean {
-  if (field === 'prMonitoring' || field === 'autoIteration') {
+  if (field === 'prMonitoring') {
     return isDeepStrictEqual(left, right);
   }
   if (field === 'gitStats') {
@@ -438,8 +430,6 @@ export class WorkspaceSnapshotStore extends EventEmitter {
       },
       runScriptStatus: 'IDLE' as RunScriptStatus,
       hasHadSessions: false,
-      mode: 'STANDARD' as WorkspaceMode,
-      autoIterationStatus: null,
       isWorking: false,
       pendingRequestType: null,
       sessionSummaries: [],
@@ -523,7 +513,6 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     let rawChanged = false;
     const hydrated = this.hydratedFields.get(entry.workspaceId) ?? new Set<SnapshotField>();
     this.hydratedFields.set(entry.workspaceId, hydrated);
-    const previousMode = entry.mode;
     for (const mapping of FIELD_GROUP_MAPPINGS) {
       if (!this.canMergeGroup(entry, update, mapping, ts)) {
         continue;
@@ -538,34 +527,11 @@ export class WorkspaceSnapshotStore extends EventEmitter {
           hydrated.add(field);
         }
       }
-      if (
-        mapping.group === 'autoIteration' &&
-        previousMode !== entry.mode &&
-        update.autoIteration === undefined
-      ) {
-        entry.autoIteration = undefined;
-        hydrated.delete('autoIteration');
-      }
     }
     return { accepted, rawChanged };
   }
 
   private updateSummaryCompleteness(entry: WorkspaceSnapshotEntry): boolean {
-    const previousCompact = entry.autoIteration;
-    const compact =
-      entry.mode === 'AUTO_ITERATION'
-        ? {
-            status: entry.autoIterationStatus,
-            currentIteration: previousCompact?.currentIteration ?? null,
-            maxIterations: previousCompact?.maxIterations ?? null,
-            currentMetricSummary: previousCompact?.currentMetricSummary ?? null,
-          }
-        : null;
-    const compactChanged = !isDeepStrictEqual(previousCompact, compact);
-    if (compactChanged) {
-      entry.autoIteration = compact;
-    }
-
     const hydrated = this.hydratedFields.get(entry.workspaceId) ?? new Set<SnapshotField>();
     const complete =
       hydrated.has('name') &&
@@ -576,7 +542,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
       WorkspaceSnapshotEntrySchema.safeParse({ ...entry, summaryVersion: 1 }).success;
     const versionChanged = entry.summaryVersion !== (complete ? 1 : undefined);
     entry.summaryVersion = complete ? 1 : undefined;
-    return compactChanged || versionChanged;
+    return versionChanged;
   }
 
   /**

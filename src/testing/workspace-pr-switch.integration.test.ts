@@ -118,7 +118,6 @@ function createFixture(previous: { prNumber?: number; prUrl?: string; prState?: 
     workspaceActivityService: new EventEmitter(),
     workspaceStateMachine: new EventEmitter(),
     runScriptStateMachine: new EventEmitter(),
-    workspaceAutoIterationService: new EventEmitter(),
     sessionDomainService: new EventEmitter(),
     sessionDataService: { findAgentSessionsByWorkspaceId: vi.fn().mockResolvedValue([]) },
   } as unknown as EventCollectorDependencies;

@@ -60,7 +60,6 @@ export const ModelName = {
   WorkspacePREvent: 'WorkspacePREvent',
   WorkspacePRDiscovery: 'WorkspacePRDiscovery',
   WorkspaceRunScript: 'WorkspaceRunScript',
-  WorkspaceAutoIteration: 'WorkspaceAutoIteration',
   AgentSession: 'AgentSession',
   SessionLifecycleEvent: 'SessionLifecycleEvent',
   TerminalSession: 'TerminalSession',
@@ -248,18 +247,6 @@ export const WorkspaceRunScriptScalarFieldEnum = {
 export type WorkspaceRunScriptScalarFieldEnum = (typeof WorkspaceRunScriptScalarFieldEnum)[keyof typeof WorkspaceRunScriptScalarFieldEnum]
 
 
-export const WorkspaceAutoIterationScalarFieldEnum = {
-  workspaceId: 'workspaceId',
-  mode: 'mode',
-  status: 'status',
-  config: 'config',
-  progress: 'progress',
-  sessionId: 'sessionId'
-} as const
-
-export type WorkspaceAutoIterationScalarFieldEnum = (typeof WorkspaceAutoIterationScalarFieldEnum)[keyof typeof WorkspaceAutoIterationScalarFieldEnum]
-
-
 export const AgentSessionScalarFieldEnum = {
   id: 'id',
   workspaceId: 'workspaceId',
@@ -341,7 +328,6 @@ export const UserSettingsScalarFieldEnum = {
   defaultClaudeReasoningEffort: 'defaultClaudeReasoningEffort',
   defaultCodexReasoningEffort: 'defaultCodexReasoningEffort',
   defaultWorkspacePermissions: 'defaultWorkspacePermissions',
-  autoIterationPermissions: 'autoIterationPermissions',
   reviewerSessionProvider: 'reviewerSessionProvider',
   reviewerClaudeModel: 'reviewerClaudeModel',
   reviewerCodexModel: 'reviewerCodexModel',

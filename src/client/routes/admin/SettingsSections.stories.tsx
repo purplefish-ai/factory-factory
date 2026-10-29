@@ -36,7 +36,6 @@ const defaultSettings = {
   ratchetEnabled: false,
   ratchetReplyToPrComments: true,
   ratchetReviewTriggerMode: 'CHANGES_REQUESTED',
-  autoIterationPermissions: 'YOLO',
   appearanceColorScheme: 'factory',
   appearanceBackgroundColor: null as string | null,
   appearanceForegroundColor: null as string | null,

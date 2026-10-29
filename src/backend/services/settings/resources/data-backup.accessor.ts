@@ -20,7 +20,6 @@ export type WorkspaceForExport = Prisma.WorkspaceGetPayload<{
     prDiscovery: true;
     prs: { include: { dedicatedSession: true } };
     runScript: true;
-    autoIteration: true;
   };
 }>;
 
@@ -44,7 +43,6 @@ class DataBackupAccessor {
           prDiscovery: true,
           prs: { include: { dedicatedSession: true } },
           runScript: true,
-          autoIteration: true,
         },
       }),
       prisma.agentSession.findMany({ orderBy: { createdAt: 'asc' } }),

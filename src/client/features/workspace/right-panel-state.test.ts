@@ -43,13 +43,16 @@ describe('right panel persisted state', () => {
     expect(loadPersistedTopPanelState(storage, 'workspace-1')).toEqual({ topTab: 'agents' });
   });
 
-  it.each(['unstaged', 'diff-vs-main'])('keeps the existing %s migration', (legacyTab) => {
-    const storage = memoryStorage({ 'workspace-right-panel-tab-workspace-1': legacyTab });
-    const setItem = vi.spyOn(storage, 'setItem');
+  it.each(['unstaged', 'diff-vs-main', 'auto-iteration'])(
+    'keeps the existing %s migration',
+    (legacyTab) => {
+      const storage = memoryStorage({ 'workspace-right-panel-tab-workspace-1': legacyTab });
+      const setItem = vi.spyOn(storage, 'setItem');
 
-    expect(loadPersistedTopPanelState(storage, 'workspace-1')).toEqual({ topTab: 'changes' });
-    expect(setItem).toHaveBeenCalledWith('workspace-right-panel-tab-workspace-1', 'changes');
-  });
+      expect(loadPersistedTopPanelState(storage, 'workspace-1')).toEqual({ topTab: 'changes' });
+      expect(setItem).toHaveBeenCalledWith('workspace-right-panel-tab-workspace-1', 'changes');
+    }
+  );
 
   it('falls back to changes for unknown values and storage failures', () => {
     expect(parseStoredTopTab('mystery')).toBeNull();

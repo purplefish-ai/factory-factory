@@ -133,10 +133,6 @@ vi.mock('@/client/features/workspace', () => ({
   },
 }));
 
-vi.mock('./auto-iteration-progress-banner', () => ({
-  AutoIterationProgressBanner: () => null,
-}));
-
 vi.mock('./workspace-detail-chat-content', () => ({
   ChatContent: (props: ChatContentProps) =>
     createElement('section', { ref: props.viewportRef, 'data-testid': 'parent-chat' }, 'Chat'),
@@ -174,7 +170,6 @@ function createViewProps(activeChildCount: number): WorkspaceDetailViewProps {
       workspaceLoading: false,
       workspace: {
         id: 'workspace-1',
-        mode: 'STANDARD',
       } as WorkspaceDetailViewProps['workspaceState']['workspace'],
       workspaceId: 'workspace-1',
       handleBackToWorkspaces: vi.fn(),

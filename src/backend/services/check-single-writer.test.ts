@@ -512,55 +512,6 @@ describe('check-single-writer', () => {
     expect(result.status).toBe(0);
   });
 
-  // Auto-iteration's five fields left `Workspace` for `WorkspaceAutoIteration`,
-  // so the field-ownership rules that used to police `autoIterationConfig` are
-  // gone and OWNED_SIDE_TABLES polices the table instead. These two cover the
-  // same invariant at its new home.
-  it('allows the auto-iteration row to be created alongside its workspace', () => {
-    const tempRoot = createTempBackend([
-      {
-        relPath: 'src/backend/services/workspace/service/lifecycle/creation.service.ts',
-        content: `
-          async function createAutoIteration(prisma, projectId) {
-            await prisma.workspace.create({
-              data: {
-                projectId,
-                name: 'x',
-                autoIteration: { create: { mode: 'AUTO_ITERATION', config: { maxIterations: 3 } } },
-              },
-            });
-          }
-        `,
-      },
-    ]);
-
-    const result = runChecker(tempRoot);
-
-    expect(result.status).toBe(0);
-  });
-
-  it('rejects orchestration writes to the auto-iteration table', () => {
-    const tempRoot = createTempBackend([
-      {
-        relPath: 'src/backend/orchestration/domain-bridges.orchestrator.ts',
-        content: `
-          import { prisma } from '@/backend/db';
-          async function configure(workspaceId) {
-            await prisma.workspaceAutoIteration.updateMany({
-              where: { workspaceId },
-              data: { config: { maxIterations: 3 } },
-            });
-          }
-        `,
-      },
-    ]);
-
-    const result = runChecker(tempRoot);
-
-    expect(result.status).toBe(1);
-    expect(result.output).toContain('unauthorized write to workspaceAutoIteration');
-  });
-
   it('checks ownership for updateMany payload mutators', () => {
     const tempRoot = createTempBackend([
       {

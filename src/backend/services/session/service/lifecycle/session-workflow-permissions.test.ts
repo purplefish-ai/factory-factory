@@ -1,25 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import { getWorkflowPermissionPreset, isUnattendedWorkflow } from './session-workflow-permissions';
 
-describe('unattended workflows', () => {
-  it('recognizes scheduled sessions without changing ordinary implementation sessions', () => {
+describe('workflow permissions', () => {
+  it('recognizes scheduled sessions while legacy sessions use ordinary controls', () => {
     expect(isUnattendedWorkflow('periodic-task')).toBe(true);
-    expect(isUnattendedWorkflow('auto-iteration')).toBe(true);
+    expect(isUnattendedWorkflow('auto-iteration')).toBe(false);
     expect(isUnattendedWorkflow('implement')).toBe(false);
   });
 
-  it.each(['STRICT', 'YOLO'] as const)(
-    'keeps scheduled permissions independent of %s auto-iteration permissions',
-    (autoIterationPermissions) => {
-      const settings = {
-        autoIterationPermissions,
-        defaultWorkspacePermissions: 'STRICT',
-      } as const;
+  it.each(['STRICT', 'RELAXED', 'YOLO'] as const)(
+    'uses workspace permissions %s for legacy sessions while preserving periodic-task policy',
+    (defaultWorkspacePermissions) => {
+      const settings = { defaultWorkspacePermissions };
       expect(getWorkflowPermissionPreset('periodic-task', 'CODEX', settings)).toBe('YOLO');
-      expect(getWorkflowPermissionPreset('periodic-task', 'CLAUDE', settings)).toBe('STRICT');
-      expect(getWorkflowPermissionPreset('implement', 'CODEX', settings)).toBe('STRICT');
+      expect(getWorkflowPermissionPreset('periodic-task', 'CLAUDE', settings)).toBe(
+        defaultWorkspacePermissions
+      );
+      expect(getWorkflowPermissionPreset('implement', 'CODEX', settings)).toBe(
+        defaultWorkspacePermissions
+      );
       expect(getWorkflowPermissionPreset('auto-iteration', 'CODEX', settings)).toBe(
-        autoIterationPermissions
+        defaultWorkspacePermissions
       );
     }
   );

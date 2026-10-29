@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import {
-  AutoIterationStatus,
   CIStatus,
   KanbanColumn,
   PRState,
@@ -11,13 +10,8 @@ import {
   WORKSPACE_SIDEBAR_ACTIVITY_STATES,
   WORKSPACE_SIDEBAR_CI_STATES,
   WorkspaceCreationSource,
-  WorkspaceMode,
   WorkspaceStatus,
 } from '@/shared/core';
-import {
-  autoIterationConfigSchema,
-  autoIterationProgressSchema,
-} from '@/shared/schemas/auto-iteration.schema';
 import { prDeliveryModeSchema } from '@/shared/schemas/pr-event.schema';
 import {
   SESSION_RUNTIME_ACTIVITIES,
@@ -73,46 +67,7 @@ export const WorkspaceStatusReasonSchema = z.object({
   needsUser: z.boolean(),
 });
 
-export const WorkspaceAutoIterationSummarySchema = z.object({
-  status: z.nativeEnum(AutoIterationStatus).nullable(),
-  currentIteration: z.number().int().nonnegative().nullable(),
-  maxIterations: z.number().int().nonnegative().nullable(),
-  currentMetricSummary: z.string().nullable(),
-});
-export type WorkspaceAutoIterationSummary = z.infer<typeof WorkspaceAutoIterationSummarySchema>;
-
-// Remove the configuration input default: an absent summary value is unknown.
-const summaryConfigSchema = z.object({
-  maxIterations: autoIterationConfigSchema.shape.maxIterations.removeDefault().optional(),
-});
-const summaryIterationSchema = autoIterationProgressSchema
-  .pick({ currentIteration: true })
-  .partial();
-const summaryMetricSchema = autoIterationProgressSchema
-  .pick({ currentMetricSummary: true })
-  .partial();
-
-export function projectAutoIterationSummary(input: {
-  mode: WorkspaceMode;
-  autoIterationStatus: AutoIterationStatus | null;
-  autoIterationConfig: unknown;
-  autoIterationProgress: unknown;
-}): WorkspaceAutoIterationSummary | null {
-  if (input.mode !== 'AUTO_ITERATION') {
-    return null;
-  }
-  const config = summaryConfigSchema.safeParse(input.autoIterationConfig);
-  const iteration = summaryIterationSchema.safeParse(input.autoIterationProgress);
-  const metric = summaryMetricSchema.safeParse(input.autoIterationProgress);
-  return {
-    status: input.autoIterationStatus,
-    currentIteration: iteration.success ? (iteration.data.currentIteration ?? null) : null,
-    maxIterations: config.success ? (config.data.maxIterations ?? null) : null,
-    currentMetricSummary: metric.success ? (metric.data.currentMetricSummary ?? null) : null,
-  };
-}
-
-/** Flat board/sidebar contract. Detail-only configuration/progress remains outside it. */
+/** Flat board/sidebar contract. */
 export const WorkspaceSummarySchema = z.object({
   id: z.string(),
   projectId: z.string(),
@@ -122,9 +77,6 @@ export const WorkspaceSummarySchema = z.object({
   branchName: z.string().nullable(),
   worktreePath: z.string().nullable(),
   initErrorMessage: z.string().nullable(),
-  mode: z.nativeEnum(WorkspaceMode),
-  autoIterationStatus: z.nativeEnum(AutoIterationStatus).nullable(),
-  autoIteration: WorkspaceAutoIterationSummarySchema.nullable(),
   prs: z.array(WorkspacePullRequestSchema),
   prSummary: WorkspacePRSummarySchema,
   prUrl: z.string().nullable(),

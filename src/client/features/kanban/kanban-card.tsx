@@ -1,5 +1,4 @@
 import { ArchiveIcon } from '@phosphor-icons/react/dist/csr/Archive';
-import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
 import { ChatIcon } from '@phosphor-icons/react/dist/csr/Chat';
 import { DotOutlineIcon } from '@phosphor-icons/react/dist/csr/DotOutline';
 import { GitBranchIcon } from '@phosphor-icons/react/dist/csr/GitBranch';
@@ -342,7 +341,6 @@ function deriveCardState(workspace: WorkspaceWithKanban) {
     Boolean(workspace.prs?.length) ||
     !!issue ||
     !!sessionRuntimeError ||
-    workspace.mode === 'AUTO_ITERATION' ||
     workspace.creationSource === 'CHILD_WORKSPACE';
   return {
     showPR,
@@ -353,32 +351,6 @@ function deriveCardState(workspace: WorkspaceWithKanban) {
     showBranch,
     hasMetadata,
   };
-}
-
-function AutoIterationBadge({ workspace }: { workspace: WorkspaceWithKanban }) {
-  const summary = workspace.autoIteration;
-  const status = summary?.status;
-  // Preserve the existing display fallback without making unknown cache values known.
-  const current = summary?.currentIteration ?? 0;
-  const max = summary?.maxIterations ?? 25;
-  const maxLabel = max === 0 ? '∞' : String(max);
-  const isRunning = status === 'RUNNING';
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <div className="flex items-center gap-1.5 text-[11px] text-primary/80">
-          <ArrowsClockwiseIcon className={cn('h-3 w-3', isRunning && 'animate-spin')} />
-          <span className="font-mono">
-            Iter {current}/{maxLabel}
-          </span>
-        </div>
-      </TooltipTrigger>
-      <TooltipContent>
-        <p>{summary?.currentMetricSummary || 'Auto-iteration workspace'}</p>
-      </TooltipContent>
-    </Tooltip>
-  );
 }
 
 export function KanbanCard({
@@ -482,7 +454,6 @@ export function KanbanCard({
                 <BranchRow branchName={workspace.branchName} />
               </div>
             )}
-            {workspace.mode === 'AUTO_ITERATION' && <AutoIterationBadge workspace={workspace} />}
             {workspace.creationSource === 'CHILD_WORKSPACE' && (
               <div className="flex items-center gap-1 text-[11px] text-violet-600 dark:text-violet-400">
                 <TreeStructureIcon className="h-3 w-3" />

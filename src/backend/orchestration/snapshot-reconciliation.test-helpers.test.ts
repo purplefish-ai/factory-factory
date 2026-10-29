@@ -23,53 +23,12 @@ it('creates a complete fixture with explicit required nullable fields', () => {
     linearIssueIdentifier: null,
     linearIssueUrl: null,
     creationSource: 'MANUAL',
-    autoIteration: null,
     prs: [],
     prSummary: { totalCount: 0, openCount: 0, hasNonterminal: false },
   });
   expect(WorkspaceSnapshotEntrySchema.parse(entry)).toEqual(entry);
 });
 
-it('creates a canonical compact loop for complete AUTO fixtures with overridden status', () => {
-  const entry = createSnapshotEntry({
-    summaryVersion: 1,
-    mode: 'AUTO_ITERATION',
-    autoIterationStatus: 'RUNNING',
-  });
-  expect(entry.autoIteration).toEqual({
-    status: 'RUNNING',
-    currentIteration: null,
-    maxIterations: null,
-    currentMetricSummary: null,
-  });
-  expect(WorkspaceSnapshotEntrySchema.parse(entry)).toEqual(entry);
-});
-
-it('preserves explicit compact loop fixture values including an unlimited iteration cap', () => {
-  const entry = createSnapshotEntry({
-    summaryVersion: 1,
-    mode: 'AUTO_ITERATION',
-    autoIterationStatus: 'RUNNING',
-    autoIteration: {
-      status: 'RUNNING',
-      currentIteration: 3,
-      maxIterations: 0,
-      currentMetricSummary: '3 passing checks',
-    },
-    worktreePath: '/workspace/auto',
-  });
-  expect(entry.autoIteration).toEqual({
-    status: 'RUNNING',
-    currentIteration: 3,
-    maxIterations: 0,
-    currentMetricSummary: '3 passing checks',
-  });
-  expect(entry.worktreePath).toBe('/workspace/auto');
-});
-
-it('rejects explicit incomplete or inconsistent complete fixture overrides', () => {
+it('rejects explicit incomplete complete fixture overrides', () => {
   expect(() => createSnapshotEntry({ summaryVersion: 1, worktreePath: undefined })).toThrow();
-  expect(() =>
-    createSnapshotEntry({ summaryVersion: 1, mode: 'AUTO_ITERATION', autoIteration: null })
-  ).toThrow();
 });

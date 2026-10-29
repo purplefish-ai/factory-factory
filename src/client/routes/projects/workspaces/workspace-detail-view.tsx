@@ -18,7 +18,6 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { AutoIterationProgressBanner } from './auto-iteration-progress-banner';
 import type { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
 import type { useWorkspaceInitStatus } from './use-workspace-detail-hooks';
 import { ChatContent, type ChatContentProps } from './workspace-detail-chat-content';
@@ -236,11 +235,6 @@ export function WorkspaceDetailView({
         setupWarningDismissed={workspaceState.setupWarningDismissed}
         dismissSetupWarning={workspaceState.dismissSetupWarning}
         resumeQueuedMessages={chat.resumeQueuedMessages}
-      />
-
-      <AutoIterationProgressBanner
-        workspaceId={workspaceState.workspaceId}
-        mode={workspaceState.workspace?.mode}
       />
 
       {isMobile ? (

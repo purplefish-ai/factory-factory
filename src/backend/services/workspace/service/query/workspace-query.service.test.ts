@@ -13,7 +13,6 @@ import {
   PRState,
   RatchetState,
   RunScriptStatus,
-  WorkspaceMode,
   WorkspaceStatus,
 } from '@/shared/core';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
@@ -720,8 +719,6 @@ describe('WorkspaceQueryService', () => {
         pendingEventCount: 0,
       },
       prHasMergeConflict: false,
-      mode: WorkspaceMode.STANDARD,
-      autoIterationStatus: null,
       runScriptStatus: RunScriptStatus.IDLE,
       hasHadSessions: true,
       githubIssueNumber: null,
@@ -778,8 +775,6 @@ describe('WorkspaceQueryService', () => {
         ratchetEnabled: workspace.ratchetEnabled,
         ratchetState: workspace.ratchetState,
         hasMergeConflict: workspace.prHasMergeConflict,
-        mode: workspace.mode,
-        autoIterationStatus: workspace.autoIterationStatus,
         runScriptStatus: workspace.runScriptStatus,
         hasHadSessions: workspace.hasHadSessions,
         isWorking: false,

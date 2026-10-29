@@ -59,7 +59,7 @@ mid-turn stays queued for the next turn.
 
 Enablement and delivery destination are workspace-scoped. In MAIN mode, a unique
 ordinary conversation can be bound automatically; multiple candidates require an
-explicit choice. Auxiliary Ratchet, PR-monitoring, auto-iteration, and
+explicit choice. Auxiliary Ratchet, PR-monitoring, retired auto-iteration, and
 adversarial-review sessions are ineligible as main recipients. Issue starts bind
 their created conversation after its initial human message is queued. The
 workspace menu allows changing the destination or main recipient. DEDICATED mode
@@ -316,9 +316,9 @@ The cutover retains exact legacy fixer IDs and all session/transcript rows,
 retires and archives each legacy fixer, and fences delivery until retention is
 confirmed. It drops old fixer dispatch tables and the Ratchet provider override.
 Existing enabled workspaces bind their sole ordinary conversation during
-migration. Ambiguous workspaces require an explicit recipient selection. The
-former permission default migrates to `autoIterationPermissions` for the
-independent auto-iteration workflow. Main conversation settings remain intact.
+migration. Ambiguous workspaces require an explicit recipient selection. Main
+conversation settings remain intact. The later auto-iteration removal drops its
+obsolete permission setting without changing PR recipient access.
 
 Version-6 backups preserve every PR association, normalized observation,
 monitoring binding/pause, and event including frozen delivery metadata. Versions

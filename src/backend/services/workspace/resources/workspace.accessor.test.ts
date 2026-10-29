@@ -14,8 +14,6 @@ const mockRatchetUpdateMany = vi.fn();
 const mockPrFindUnique = vi.fn();
 const mockPrUpdateMany = vi.fn();
 const mockRunScriptUpdateMany = vi.fn();
-const mockAutoIterationFindMany = vi.fn();
-const mockAutoIterationUpdateMany = vi.fn();
 
 vi.mock('@/backend/db', () => ({
   prisma: {
@@ -39,10 +37,6 @@ vi.mock('@/backend/db', () => ({
     workspaceRunScript: {
       updateMany: (...args: unknown[]) => mockRunScriptUpdateMany(...args),
     },
-    workspaceAutoIteration: {
-      findMany: (...args: unknown[]) => mockAutoIterationFindMany(...args),
-      updateMany: (...args: unknown[]) => mockAutoIterationUpdateMany(...args),
-    },
     $executeRaw: (...args: unknown[]) => mockExecuteRaw(...args),
     $transaction: (...args: unknown[]) => mockTransaction(...args),
   },
@@ -59,7 +53,6 @@ describe('workspaceAccessor', () => {
     mockRatchetUpdateMany.mockReset();
     mockPrUpdateMany.mockReset();
     mockRunScriptUpdateMany.mockReset();
-    mockAutoIterationUpdateMany.mockReset();
   });
 
   describe('create', () => {
@@ -81,14 +74,12 @@ describe('workspaceAccessor', () => {
           prMonitoring: { create: { enabled: false, eventEpoch: 0 } },
           prDiscovery: { create: {} },
           runScript: { create: {} },
-          autoIteration: { create: { mode: undefined, config: undefined } },
         }),
         include: {
           prMonitoring: true,
           prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
           prDiscovery: true,
           runScript: true,
-          autoIteration: true,
           _count: {
             select: {
               prEvents: {
@@ -119,14 +110,12 @@ describe('workspaceAccessor', () => {
           prMonitoring: { create: { enabled: false, eventEpoch: 0 } },
           prDiscovery: { create: {} },
           runScript: { create: {} },
-          autoIteration: { create: { mode: undefined, config: undefined } },
         }),
         include: {
           prMonitoring: true,
           prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
           prDiscovery: true,
           runScript: true,
-          autoIteration: true,
           _count: {
             select: {
               prEvents: {
@@ -169,7 +158,6 @@ describe('workspaceAccessor', () => {
         prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
         prDiscovery: true,
         runScript: true,
-        autoIteration: true,
         _count: {
           select: {
             prEvents: {
@@ -203,7 +191,6 @@ describe('workspaceAccessor', () => {
         prMonitoring: { select: { enabled: true } },
         prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
         prDiscovery: true,
-        autoIteration: true,
       },
     });
   });
@@ -242,7 +229,6 @@ describe('workspaceAccessor', () => {
             prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
             prDiscovery: true,
             runScript: true,
-            autoIteration: true,
           }),
         })
       );
@@ -331,7 +317,6 @@ describe('workspaceAccessor', () => {
           prMonitoring: { select: { enabled: true } },
           prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
           prDiscovery: true,
-          autoIteration: true,
         },
         orderBy: { updatedAt: 'asc' },
       });

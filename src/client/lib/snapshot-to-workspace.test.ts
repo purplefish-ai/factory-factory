@@ -82,52 +82,6 @@ describe('workspace snapshot cache projections', () => {
     expect(projectSnapshotToWorkspace(snapshot, invalid).createdAt).toEqual(before.createdAt);
   });
 
-  it.each(['RUNNING', 'PAUSED', 'COMPLETED', null] as const)(
-    'constructs snapshot-first compact auto-iteration state for %s without fabricated counters',
-    (status) => {
-      const row = projectSnapshotToWorkspace(
-        makeEntry({ mode: 'AUTO_ITERATION', autoIterationStatus: status })
-      );
-      expect(row.autoIteration).toEqual({
-        status,
-        currentIteration: null,
-        maxIterations: null,
-        currentMetricSummary: null,
-      });
-    }
-  );
-
-  it('refreshes compact status while preserving known iteration values, including unlimited zero', () => {
-    const running = projectSnapshotToWorkspace(
-      makeEntry({ mode: 'AUTO_ITERATION', autoIterationStatus: 'RUNNING' })
-    );
-    const existing = {
-      ...running,
-      autoIteration: {
-        status: 'RUNNING' as const,
-        currentIteration: 7,
-        maxIterations: 0,
-        currentMetricSummary: '12 tests passing',
-      },
-    };
-    const paused = projectSnapshotToWorkspace(
-      makeEntry({ mode: 'AUTO_ITERATION', autoIterationStatus: 'PAUSED' }),
-      existing
-    );
-    expect(paused.autoIteration).toEqual({ ...existing.autoIteration, status: 'PAUSED' });
-    const clearedStatus = projectSnapshotToWorkspace(
-      makeEntry({ mode: 'AUTO_ITERATION', autoIterationStatus: null }),
-      paused
-    );
-    expect(clearedStatus.autoIteration).toEqual({ ...existing.autoIteration, status: null });
-    expect(
-      projectSnapshotToWorkspace(
-        makeEntry({ mode: 'STANDARD', autoIterationStatus: null }),
-        existing
-      ).autoIteration
-    ).toBeNull();
-  });
-
   it('projects the same live fields into the list and detail caches', () => {
     const entry = makeEntry({
       sessionSummaries: [
@@ -417,7 +371,6 @@ describe('workspace snapshot cache projections', () => {
       'STARTING_SESSION',
       'WORKING',
     ],
-    [{ mode: 'AUTO_ITERATION', autoIterationStatus: 'RUNNING' }, 'AUTO_ITERATING', 'WORKING'],
   ] as const)(
     'preserves non-PR signals %j while correcting legacy aggregate status',
     (overrides, reasonCode, column) => {
@@ -564,40 +517,6 @@ describe('workspace snapshot cache projections', () => {
     });
   });
 
-  it('projects mode from the snapshot entry rather than the existing cache row', () => {
-    const entry = makeEntry({ mode: 'AUTO_ITERATION' });
-    const existing: ProjectWorkspace = {
-      ...projectSnapshotToWorkspace(makeEntry({ mode: 'STANDARD' })),
-      mode: 'STANDARD',
-    };
-
-    expect(projectSnapshotToWorkspace(entry, existing).mode).toBe('AUTO_ITERATION');
-  });
-
-  it.each(['PAUSED', 'COMPLETED', null] as const)(
-    'replaces cached RUNNING auto-iteration status with %s in both caches',
-    (autoIterationStatus) => {
-      const existing: ProjectWorkspace = {
-        ...projectSnapshotToWorkspace(makeEntry({ mode: 'AUTO_ITERATION' })),
-        autoIterationStatus: 'RUNNING',
-      };
-      const entry = makeEntry({ mode: 'AUTO_ITERATION', autoIterationStatus });
-
-      expect(projectSnapshotToWorkspace(entry, existing).autoIterationStatus).toBe(
-        autoIterationStatus
-      );
-      expect(
-        mergeProjectSnapshotIntoWorkspaceDetail(entry, seedDetail(existing))?.autoIterationStatus
-      ).toBe(autoIterationStatus);
-    }
-  );
-
-  it('projects auto-iteration status when a snapshot introduces a workspace', () => {
-    const entry = makeEntry({ mode: 'AUTO_ITERATION', autoIterationStatus: 'RUNNING' });
-
-    expect(projectSnapshotToWorkspace(entry).autoIterationStatus).toBe('RUNNING');
-  });
-
   it('supplies mutation-only defaults for a workspace the snapshot introduces first', () => {
     expect(projectSnapshotToWorkspace(makeEntry())).toMatchObject({
       creationSource: 'MANUAL',
@@ -608,9 +527,6 @@ describe('workspace snapshot cache projections', () => {
       linearIssueId: null,
       linearIssueIdentifier: null,
       linearIssueUrl: null,
-      autoIterationStatus: null,
-      autoIterationConfig: null,
-      autoIterationProgress: null,
     });
   });
 

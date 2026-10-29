@@ -20,7 +20,6 @@ function fixture() {
       workspaceStateMachine: new EventEmitter(),
       ratchetService: new EventEmitter(),
       runScriptStateMachine: new EventEmitter(),
-      workspaceAutoIterationService: new EventEmitter(),
       sessionDomainService: new EventEmitter(),
       workspaceDataService: {
         subscribeAcceptedBranch: () => vi.fn(),

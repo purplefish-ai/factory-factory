@@ -538,7 +538,6 @@ it('queues a committed failure after an empty idle wake without waiting for anot
     workspaceActivityService: new EventEmitter(),
     workspaceStateMachine: new EventEmitter(),
     runScriptStateMachine: new EventEmitter(),
-    workspaceAutoIterationService: new EventEmitter(),
     sessionDomainService: new EventEmitter(),
     workspaceDataService: {
       subscribeAcceptedBranch: () => vi.fn(),

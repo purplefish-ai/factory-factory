@@ -53,8 +53,6 @@ function makeUpdate(overrides: Partial<SnapshotUpdateInput> = {}): SnapshotUpdat
     },
     runScriptStatus: 'IDLE',
     hasHadSessions: false,
-    mode: 'STANDARD',
-    autoIterationStatus: null,
     isWorking: false,
     pendingRequestType: null,
     gitStats: null,
@@ -164,14 +162,12 @@ describe('WorkspaceSnapshotStore', () => {
       expect(store.size()).toBe(3);
     });
 
-    it('accepts and stores the merge conflict, mode, auto-iteration, and stall fields', () => {
+    it('accepts and stores merge conflict and stall fields', () => {
       store.upsert('ws-1', makeUpdate({ projectId: 'proj-A' }), 'test', 100);
       store.upsert(
         'ws-1',
         makeUpdate({
           hasMergeConflict: true,
-          mode: 'AUTO_ITERATION',
-          autoIterationStatus: 'RUNNING',
           prMonitoring: {
             deliveryMode: 'MAIN',
             enabled: true,
@@ -187,8 +183,6 @@ describe('WorkspaceSnapshotStore', () => {
 
       expect(store.getByWorkspaceId('ws-1')).toMatchObject({
         hasMergeConflict: true,
-        mode: 'AUTO_ITERATION',
-        autoIterationStatus: 'RUNNING',
         prMonitoring: {
           deliveryMode: 'MAIN',
           enabled: true,
