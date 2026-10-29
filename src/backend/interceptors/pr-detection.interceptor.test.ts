@@ -50,6 +50,25 @@ describe('prDetectionInterceptor', () => {
     });
   });
 
+  it('attaches PRs that a native sub-agent opens from its own branch', async () => {
+    expect(prDetectionInterceptor.observesSubagents).toBe(true);
+    const event = createEvent({
+      toolName: 'Bash',
+      input: { command: 'gh pr create --base main --head fix-search-toggle --fill' },
+      output: {
+        content: 'https://github.com/purplefish-ai/factory-factory/pull/2648\n',
+        isError: false,
+      },
+    });
+
+    await prDetectionInterceptor.onToolComplete!(event, { ...context, subagentId: 'child-1' });
+
+    expect(mockAttachAndRefreshPR).toHaveBeenCalledWith(
+      'workspace-1',
+      'https://github.com/purplefish-ai/factory-factory/pull/2648'
+    );
+  });
+
   it('detects PR URL from Bash output', async () => {
     const event = createEvent({
       toolName: 'Bash',

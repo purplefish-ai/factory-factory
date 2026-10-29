@@ -90,7 +90,14 @@ class InterceptorRegistry {
   /**
    * Check if an interceptor should handle a given tool.
    */
-  private shouldHandle(interceptor: ToolInterceptor, toolName: string): boolean {
+  private shouldHandle(
+    interceptor: ToolInterceptor,
+    toolName: string,
+    context: InterceptorContext
+  ): boolean {
+    if (context.subagentId && !interceptor.observesSubagents) {
+      return false;
+    }
     if (interceptor.tools === '*') {
       return true;
     }
@@ -106,7 +113,7 @@ class InterceptorRegistry {
       if (!interceptor.onToolStart) {
         continue;
       }
-      if (!this.shouldHandle(interceptor, event.toolName)) {
+      if (!this.shouldHandle(interceptor, event.toolName, context)) {
         continue;
       }
 
@@ -130,7 +137,7 @@ class InterceptorRegistry {
       if (!interceptor.onToolComplete) {
         continue;
       }
-      if (!this.shouldHandle(interceptor, event.toolName)) {
+      if (!this.shouldHandle(interceptor, event.toolName, context)) {
         continue;
       }
 

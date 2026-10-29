@@ -216,6 +216,7 @@ describe('AcpClientHandler', () => {
 
 describe('AcpClientHandler callbacks', () => {
   it('AcpEventCallback is a discriminated ACP runtime event union', () => {
+    expect.assertions(7);
     const onEvent: AcpEventCallback = (_sessionId, event) => {
       if (event.type === 'acp_session_update') {
         expect(event.update.sessionUpdate).toBe('agent_message_chunk');
@@ -229,6 +230,12 @@ describe('AcpClientHandler callbacks', () => {
 
       if (event.type === 'acp_task_status_changed') {
         expect(event.active).toBe(true);
+        return;
+      }
+
+      if (event.type === 'acp_subagent_tool_update') {
+        expect(event.subagentId).toBe('child-1');
+        expect(event.update.toolCallId).toBe('tc-1');
         return;
       }
 
@@ -257,6 +264,17 @@ describe('AcpClientHandler callbacks', () => {
     onEvent('test-session', {
       type: 'acp_task_status_changed',
       active: true,
+    });
+
+    onEvent('test-session', {
+      type: 'acp_subagent_tool_update',
+      subagentId: 'child-1',
+      update: {
+        sessionUpdate: 'tool_call',
+        toolCallId: 'tc-1',
+        title: 'Terminal',
+        rawInput: { command: 'gh pr create --fill' },
+      },
     });
 
     onEvent('test-session', {

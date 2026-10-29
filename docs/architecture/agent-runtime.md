@@ -298,14 +298,16 @@ prompts.
 
 Native subagent/session updates are captured before SDK validation because the
 subagent contract is still a draft. Children retain separate transcripts and
-permissions remain routed through the owning parent. The client negotiates
-upstream background-task metadata and combines subagent, goal and task activity
-so provider work outside a prompt keeps the session running. Native session
-loading reconstructs child histories; no Factory Factory extension is required
-from either adapter. Each child's in-memory transcript retains at most 100 turns
-and 2 MiB of serialized updates. Oldest whole turns are evicted; an oversized
-active turn is discarded until the next user turn. Cursors use monotonic turn
-offsets, and expired cursors fail explicitly instead of returning another turn.
+permissions remain routed through the owning parent. Child tool calls also reach
+interceptors that opt in to sub-agent events, such as PR detection. The client
+negotiates upstream background-task metadata and combines subagent, goal and
+task activity so provider work outside a prompt keeps the session running.
+Native session loading reconstructs child histories; no Factory Factory
+extension is required from either adapter. Each child's in-memory transcript
+retains at most 100 turns and 2 MiB of serialized updates. Oldest whole turns
+are evicted; an oversized active turn is discarded until the next user turn.
+Cursors use monotonic turn offsets, and expired cursors fail explicitly instead
+of returning another turn.
 
 ACP negotiates structured session failures. A prompt response carrying an error
 in `_meta.jetbrains.air.sessionFailure` fails the turn through the normal

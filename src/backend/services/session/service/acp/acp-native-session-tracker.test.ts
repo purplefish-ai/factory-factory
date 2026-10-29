@@ -37,6 +37,37 @@ function text(
 }
 
 describe('AcpNativeSessionTracker', () => {
+  it('forwards child tool updates, but not root or text updates, to tool observers', () => {
+    const onSubagentToolUpdate = vi.fn();
+    const tracker = new AcpNativeSessionTracker({ onSubagentToolUpdate });
+    tracker.setRootSessionId('root');
+    spawn(tracker);
+    const toolCall = {
+      sessionUpdate: 'tool_call',
+      toolCallId: 'toolu_1',
+      title: 'Terminal',
+      kind: 'execute',
+      status: 'pending',
+    };
+    const toolUpdate = {
+      sessionUpdate: 'tool_call_update',
+      toolCallId: 'toolu_1',
+      rawInput: { command: 'gh pr create --fill' },
+    };
+
+    expect(tracker.onRawMessage(update('child', toolCall))).toBe(true);
+    expect(tracker.onRawMessage(update('child', toolUpdate))).toBe(true);
+    text(tracker, 'child', 'agent', 'Opened the PR.');
+    expect(tracker.onRawMessage(update('root', { ...toolCall, toolCallId: 'toolu_root' }))).toBe(
+      false
+    );
+
+    expect(onSubagentToolUpdate.mock.calls).toEqual([
+      ['child', expect.objectContaining(toolCall)],
+      ['child', expect.objectContaining(toolUpdate)],
+    ]);
+  });
+
   it('uses a task type learned after the first update and preserves it on nameless updates', () => {
     const tracker = new AcpNativeSessionTracker();
     tracker.onRawMessage(

@@ -145,6 +145,12 @@ export class AcpClientFactory {
           }),
         onTaskStatusChanged: (active) =>
           handlers.onAcpEvent?.(sessionId, { type: 'acp_task_status_changed', active }),
+        onSubagentToolUpdate: (subagentId, update) =>
+          handlers.onAcpEvent?.(sessionId, {
+            type: 'acp_subagent_tool_update',
+            subagentId,
+            update,
+          }),
       });
       if (options.resumeProviderSessionId) {
         nativeSessionTracker.setRootSessionId(

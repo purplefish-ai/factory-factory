@@ -15,6 +15,7 @@ export type {
   AcpSessionCreationOutcome,
   AcpSessionUpdateEvent,
   AcpSubagentsChangedEvent,
+  AcpSubagentToolUpdateEvent,
   AcpTaskStatusChangedEvent,
 } from './acp-runtime-events';
 export { AcpRuntimeManager, acpRuntimeManager, PromptTimeoutError } from './acp-runtime-manager';

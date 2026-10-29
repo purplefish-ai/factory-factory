@@ -21,6 +21,7 @@ import { getAcpWorkState } from './session-work-state';
 import type { SessionConfigService } from './session.config.service';
 import { toPublicProviderErrorMessage } from './session.error-message';
 import type { SessionPermissionService } from './session.permission.service';
+import { SubagentToolEventCollector } from './subagent-tool-events';
 
 const logger = createLogger('session');
 
@@ -71,6 +72,7 @@ export class AcpEventProcessor {
   private readonly sessionPermissionService: SessionPermissionService;
   private readonly sessionConfigService: SessionConfigService;
   private readonly acpEventTranslator = new AcpEventTranslator(logger);
+  private readonly subagentToolEvents = new SubagentToolEventCollector();
   private readonly onToolCallTimeout: (
     sessionId: string,
     toolUseId: string,
@@ -200,6 +202,11 @@ export class AcpEventProcessor {
       return;
     }
 
+    if (event.type === 'acp_subagent_tool_update') {
+      this.handleSubagentToolUpdate(sid, event);
+      return;
+    }
+
     if (event.type === 'acp_subagents_changed') {
       this.sessionDomainService.emitDelta(sid, {
         type: 'subagents_changed',
@@ -260,6 +267,7 @@ export class AcpEventProcessor {
 
   clearPendingToolCalls(sessionId: string): void {
     this.acpEventTranslator.clearTerminalOutput(sessionId);
+    this.subagentToolEvents.clearSession(sessionId);
     this.pendingAcpToolCalls.delete(sessionId);
     this.clearAllToolCallTimers(sessionId);
   }
@@ -666,8 +674,9 @@ export class AcpEventProcessor {
     // ACP translator can emit terminal tool_progress before tool_result in the
     // same batch, so we still keep pending metadata until tool_result arrives.
     const existing = this.getPendingToolCall(sid, progress.tool_use_id);
+    // Updates without a title keep the name reported when the tool started.
     this.upsertPendingToolCall(sid, progress.tool_use_id, {
-      toolName: progress.tool_name ?? 'ACP Tool',
+      toolName: progress.tool_name,
       acpKind: progress.acpKind,
       acpLocations: progress.acpLocations,
     });
@@ -684,8 +693,7 @@ export class AcpEventProcessor {
   private upsertPendingToolCall(
     sid: string,
     toolUseId: string,
-    update: Pick<PendingAcpToolCall, 'toolName'> &
-      Partial<Pick<PendingAcpToolCall, 'toolInput' | 'acpKind' | 'acpLocations'>>
+    update: Partial<Pick<PendingAcpToolCall, 'toolName' | 'toolInput' | 'acpKind' | 'acpLocations'>>
   ): void {
     const pendingById = this.pendingAcpToolCalls.get(sid) ?? new Map<string, PendingAcpToolCall>();
     const existing = pendingById.get(toolUseId);
@@ -697,6 +705,25 @@ export class AcpEventProcessor {
       acpLocations: update.acpLocations ?? existing?.acpLocations,
     });
     this.pendingAcpToolCalls.set(sid, pendingById);
+  }
+
+  private handleSubagentToolUpdate(
+    sid: string,
+    event: Extract<AcpRuntimeEvent, { type: 'acp_subagent_tool_update' }>
+  ): void {
+    // History replay must not repeat side effects of tool calls that already ran.
+    this.maybeLiftReplaySuppression(sid);
+    if (this.suppressAcpReplayForSession.has(sid)) {
+      return;
+    }
+    const toolEvent = this.subagentToolEvents.collect(sid, event);
+    const context = toolEvent ? this.getInterceptorContext(sid) : null;
+    if (toolEvent && context) {
+      interceptorRegistry.notifyToolComplete(toolEvent, {
+        ...context,
+        subagentId: event.subagentId,
+      });
+    }
   }
 
   private getPendingToolCall(sid: string, toolUseId: string): PendingAcpToolCall | undefined {
