@@ -90,6 +90,15 @@ owns branch lookup scheduling separately. An observation and its
 identity and revision. Attaching or merging one PR preserves sibling
 associations and events.
 
+Branch discovery only matches the workspace branch, so PR detection also
+attaches the URL printed by an agent's `gh pr create` or GitHub MCP PR creation.
+This covers native sub-agents, which may push another branch from their own
+worktree. Their tool calls stay out of the parent transcript but are offered to
+tool interceptors that set `observesSubagents`; only PR detection does, so a
+sub-agent's pushes never rename the workspace branch. Claude sends a command
+after announcing its tool call, so the command reaches interceptors when the
+call completes. Sub-agent calls replayed while loading history are ignored.
+
 Successful ACP prompt turns reset the workspace's PR discovery backoff, as do
 runtime exits. ACP processes remain alive between turns, so waiting for process
 exit alone can leave a newly opened PR undiscovered after its checks fail. The

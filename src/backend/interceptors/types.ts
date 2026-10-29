@@ -13,6 +13,8 @@ export interface InterceptorContext {
   workspaceId: string;
   workingDir: string;
   timestamp: Date;
+  /** Set when a native sub-agent of the session ran the tool, not the session itself. */
+  subagentId?: string;
 }
 
 /**
@@ -40,6 +42,12 @@ export interface ToolInterceptor {
 
   /** Tools to intercept: array of tool names or '*' for all tools */
   readonly tools: string[] | '*';
+
+  /**
+   * Whether to receive tool events run by native sub-agents. Sub-agents may work in
+   * their own worktree and branch, so workspace-local side effects must not opt in.
+   */
+  readonly observesSubagents?: boolean;
 
   /** Optional lifecycle hook called during server startup */
   start?(): void | Promise<void>;

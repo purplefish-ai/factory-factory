@@ -49,9 +49,16 @@ type ChildSession = {
   pendingPrompt: boolean;
 };
 
+export type SubagentToolUpdate = Extract<
+  SubagentTranscriptUpdate,
+  { sessionUpdate: 'tool_call' | 'tool_call_update' }
+>;
+
 type TrackerCallbacks = {
   onSubagentsChanged?: (params: SubagentsChangedParams) => void;
   onTaskStatusChanged?: (active: boolean) => void;
+  /** Child tool activity stays out of the parent transcript but still reaches observers. */
+  onSubagentToolUpdate?: (subagentId: string, update: SubagentToolUpdate) => void;
 };
 
 function record(value: unknown): Record<string, unknown> | undefined {
@@ -331,6 +338,9 @@ export class AcpNativeSessionTracker {
     this.appendTurn(child, value);
     this.updateSummary(child.summary, value);
     this.changed(child.summary.id, 'updated');
+    if (value.sessionUpdate === 'tool_call' || value.sessionUpdate === 'tool_call_update') {
+      this.callbacks.onSubagentToolUpdate?.(child.summary.id, value);
+    }
   }
 
   private appendTurn(child: ChildSession, value: SubagentTranscriptUpdate): void {

@@ -232,6 +232,11 @@ describe('AcpClientHandler callbacks', () => {
         return;
       }
 
+      if (event.type === 'acp_subagent_tool_update') {
+        expect(event.update.toolCallId).toBe('tc-1');
+        return;
+      }
+
       expect(event.subagentId).toBe('child-1');
       expect(event.change).toBe('updated');
     };

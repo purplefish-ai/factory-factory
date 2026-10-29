@@ -151,6 +151,8 @@ function extractPrUrlFromEvent(event: ToolEvent): string | null {
 export const prDetectionInterceptor: ToolInterceptor = {
   name: 'pr-detection',
   tools: '*',
+  // A sub-agent's PR belongs to the workspace even when it pushed another branch.
+  observesSubagents: true,
 
   async onToolComplete(event: ToolEvent, context: InterceptorContext): Promise<void> {
     // Check if this was a `gh pr create` command.

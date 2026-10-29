@@ -3,6 +3,7 @@ import type {
   SessionNotification,
 } from '@agentclientprotocol/sdk/unstable';
 import type { SubagentsChangedParams } from '@/shared/acp-protocol/subagents';
+import type { SubagentToolUpdate } from './acp-native-session-tracker';
 import type { AcpPermissionBridge } from './acp-permission-bridge';
 import type { AcpSessionCreationOutcome } from './acp-session-creation-outcome';
 export type { AcpSessionCreationOutcome } from './acp-session-creation-outcome';
@@ -77,6 +78,13 @@ export type AcpSubagentsChangedEvent = {
   change: SubagentsChangedParams['change'];
 };
 
+/** A native sub-agent's tool call; never rendered in the parent transcript. */
+export type AcpSubagentToolUpdateEvent = {
+  type: 'acp_subagent_tool_update';
+  subagentId: string;
+  update: SubagentToolUpdate;
+};
+
 export type AcpTaskStatusChangedEvent = {
   type: 'acp_task_status_changed';
   active: boolean;
@@ -86,4 +94,5 @@ export type AcpRuntimeEvent =
   | AcpSessionUpdateEvent
   | AcpPermissionRequestEvent
   | AcpSubagentsChangedEvent
+  | AcpSubagentToolUpdateEvent
   | AcpTaskStatusChangedEvent;

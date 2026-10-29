@@ -171,4 +171,37 @@ describe('interceptorRegistry', () => {
 
     expect(interceptor.start).toHaveBeenCalledTimes(1);
   });
+
+  it('sends sub-agent tool events only to interceptors that observe sub-agents', () => {
+    const registry = interceptorRegistry;
+    const onStartWorkspace = vi.fn(async () => undefined);
+    const onCompleteWorkspace = vi.fn(async () => undefined);
+    const onStartObserver = vi.fn(async () => undefined);
+    const onCompleteObserver = vi.fn(async () => undefined);
+    registry.register({
+      name: 'workspace-local',
+      tools: '*',
+      onToolStart: onStartWorkspace,
+      onToolComplete: onCompleteWorkspace,
+    });
+    registry.register({
+      name: 'observer',
+      tools: '*',
+      observesSubagents: true,
+      onToolStart: onStartObserver,
+      onToolComplete: onCompleteObserver,
+    });
+    const subagentContext = { ...context, subagentId: 'child-1' };
+
+    registry.notifyToolStart(event, subagentContext);
+    registry.notifyToolComplete(event, subagentContext);
+
+    expect(onStartWorkspace).not.toHaveBeenCalled();
+    expect(onCompleteWorkspace).not.toHaveBeenCalled();
+    expect(onStartObserver).toHaveBeenCalledWith(event, subagentContext);
+    expect(onCompleteObserver).toHaveBeenCalledWith(event, subagentContext);
+
+    registry.notifyToolComplete(event, context);
+    expect(onCompleteWorkspace).toHaveBeenCalledWith(event, context);
+  });
 });
