@@ -6,7 +6,6 @@ import type { ToggleRatchetingInput } from '@/client/hooks/use-toggle-ratcheting
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { RatchetingToggle } from './ratcheting-toggle';
 import type { WorkspaceHeaderWorkspace } from './types';
-import { WorkspaceHeaderOverflowMenu } from './workspace-header-overflow-menu';
 
 type SelectionResult = { status: 'recipient_required'; bindingRevision: number; candidates: [] };
 const mocks = vi.hoisted(() => ({
@@ -26,6 +25,7 @@ vi.mock('@/client/lib/trpc', () => ({
         listForProject: { invalidate: mocks.invalidate },
       },
     }),
+    adversarialReview: { trigger: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) } },
     workspace: {
       toggleRatcheting: {
         useMutation: (options: NonNullable<typeof mocks.options>) => {
@@ -33,17 +33,12 @@ vi.mock('@/client/lib/trpc', () => ({
           return { mutate: mocks.mutate, mutateAsync: mocks.mutate, isPending: false };
         },
       },
-      rename: { useMutation: () => ({ mutateAsync: vi.fn(), isPending: false }) },
+      attachPR: { useMutation: () => ({ mutateAsync: vi.fn(), isPending: false }) },
+      detachPR: { useMutation: () => ({ mutateAsync: vi.fn(), isPending: false }) },
     },
   },
 }));
 vi.mock('sonner', () => ({ toast: { error: mocks.error } }));
-vi.mock('./workspace-provider-settings', () => ({ WorkspaceProviderSettings: () => null }));
-vi.mock('./adversarial-review-button', () => ({ AdversarialReviewButton: () => null }));
-vi.mock('./archive-action-button', () => ({ ArchiveActionButton: () => null }));
-vi.mock('./open-dev-app-action', () => ({ OpenDevAppAction: () => null }));
-vi.mock('./open-in-ide-action', () => ({ OpenInIdeAction: () => null }));
-vi.mock('./workspace-branch-link', () => ({ WorkspaceBranchLink: () => null }));
 
 let root: Root;
 let container: HTMLDivElement;
@@ -63,39 +58,54 @@ afterEach(async () => {
   await act(() => root.unmount());
   container.remove();
 });
+async function renderToggle(overrides: Partial<WorkspaceHeaderWorkspace> = {}) {
+  const workspace: Partial<WorkspaceHeaderWorkspace> = {
+    id: 'w',
+    projectId: 'p',
+    name: 'Workspace',
+    prs: [],
+    status: 'READY',
+    ratchetState: 'IDLE',
+    ratchetEnabled: false,
+    prMonitoring: {
+      deliveryMode: 'MAIN',
+      enabled: false,
+      pauseReason: null,
+      bindingRevision: 3,
+      recipientSessionId: null,
+      pendingEventCount: 0,
+    },
+    ...overrides,
+  };
+  await act(() =>
+    root.render(
+      <TooltipProvider>
+        <RatchetingToggle workspace={workspace as WorkspaceHeaderWorkspace} workspaceId="w" />
+      </TooltipProvider>
+    )
+  );
+  const trigger = document.querySelector('[aria-label="Pull requests and updates"]');
+  expect(trigger).not.toBeNull();
+  await act(() =>
+    trigger!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+  );
+}
 async function openMenu(
   mode: 'MAIN' | 'DEDICATED' = 'MAIN',
   enabled = false,
   pauseReason: string | null = null
 ) {
-  await act(() =>
-    root.render(
-      <TooltipProvider>
-        <WorkspaceHeaderOverflowMenu
-          workspace={
-            {
-              id: 'w',
-              projectId: 'p',
-              name: 'Workspace',
-              ratchetEnabled: enabled,
-              prMonitoring: { deliveryMode: mode, pauseReason, bindingRevision: 3 },
-            } as WorkspaceHeaderWorkspace
-          }
-          workspaceId="w"
-          availableIdes={[]}
-          preferredIde="code"
-          openInIde={{ mutate: vi.fn(), isPending: false }}
-          archivePending={false}
-          onArchiveRequest={vi.fn()}
-        />
-      </TooltipProvider>
-    )
-  );
-  await act(() =>
-    document
-      .querySelector('[aria-label="More actions"]')!
-      .dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0, ctrlKey: false }))
-  );
+  await renderToggle({
+    ratchetEnabled: enabled,
+    prMonitoring: {
+      deliveryMode: mode,
+      enabled,
+      pauseReason,
+      bindingRevision: 3,
+      recipientSessionId: null,
+      pendingEventCount: 0,
+    },
+  });
   const item = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
     (candidate) =>
       candidate.textContent?.includes(enabled ? 'Turn off PR updates' : 'Turn on PR updates')
@@ -114,7 +124,7 @@ async function requestRecipient() {
     )
   );
 }
-it('keeps the recipient dialog alive after selecting and closing the overflow menu', async () => {
+it('keeps the recipient dialog alive after selecting and closing the PR menu', async () => {
   await requestRecipient();
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
     'Choose the main conversation'
@@ -157,7 +167,7 @@ it('shows the current dedicated destination and preserves it when switching moni
 });
 
 it.each(['MAIN', 'DEDICATED'] as const)(
-  'resumes paused %s updates from the mobile menu with the current revision',
+  'resumes paused %s updates from the combined menu with the current revision',
   async (mode) => {
     await openMenu(mode, true, 'SESSION_FAILED');
     const resume = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
@@ -175,35 +185,59 @@ it.each(['MAIN', 'DEDICATED'] as const)(
   }
 );
 
-it('enables monitoring from a stale mobile destination without overwriting the saved mode', async () => {
+it('enables monitoring from a stale destination without overwriting the saved mode', async () => {
   const toggle = await openMenu('MAIN', false);
   await act(() => toggle.click());
   expect(mocks.mutate).toHaveBeenCalledWith({ workspaceId: 'w', enabled: true });
 });
-it.each(['MAIN', 'DEDICATED'] as const)(
-  'enables monitoring from a stale desktop %s destination without changing it',
-  async (deliveryMode) => {
+it('opens one combined menu without changing monitoring and keeps Add PR usable after closing', async () => {
+  await openMenu();
+  expect(container.querySelectorAll('button')).toHaveLength(1);
+  expect(mocks.mutate).not.toHaveBeenCalled();
+  expect(document.body.textContent).toContain('No PRs yet');
+  const add = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
+    (item) => item.textContent === 'Add PR'
+  )!;
+  expect(add).toBeDefined();
+  await act(() => add.click());
+  expect(document.querySelector('[role="menu"]')).toBeNull();
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Add PR');
+  expect(
+    document.querySelector('input[placeholder="https://github.com/owner/repo/pull/123"]')
+  ).not.toBeNull();
+});
+
+it.each(['ARCHIVED', 'ARCHIVING'] as const)(
+  'keeps %s PR links accessible without edit controls',
+  async (status) => {
+    await renderToggle({
+      status,
+      prs: [
+        {
+          id: 'pr-42',
+          url: 'https://github.com/team/repository/pull/42',
+          number: 42,
+          title: 'Simplify workspace PR controls',
+          headRefName: 'feature/pr-menu',
+          baseRefName: 'main',
+          state: 'OPEN',
+          reviewState: null,
+          ciStatus: 'SUCCESS',
+          hasMergeConflict: false,
+          syncedAt: null,
+        },
+      ],
+    });
+    expect(document.body.textContent).not.toContain('Add PR');
+    expect(document.body.textContent).not.toContain('Turn on PR updates');
+    const row = document.querySelector('[role="menuitem"]')!;
     await act(() =>
-      root.render(
-        <TooltipProvider>
-          <RatchetingToggle
-            workspaceId="w"
-            workspace={
-              {
-                id: 'w',
-                projectId: 'p',
-                ratchetEnabled: false,
-                ratchetState: 'IDLE',
-                prMonitoring: { deliveryMode, bindingRevision: 3 },
-              } as WorkspaceHeaderWorkspace
-            }
-          />
-        </TooltipProvider>
-      )
+      row.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }))
     );
-    await act(() =>
-      document.querySelector<HTMLButtonElement>('[aria-label="Enable PR updates"]')!.click()
+    await vi.waitFor(() =>
+      expect(document.querySelector('a')?.href).toBe('https://github.com/team/repository/pull/42')
     );
-    expect(mocks.mutate).toHaveBeenCalledWith({ workspaceId: 'w', enabled: true });
+    expect(document.body.textContent).not.toContain('Run review');
+    expect(document.body.textContent).not.toContain('Remove from workspace');
   }
 );

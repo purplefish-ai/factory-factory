@@ -1,7 +1,7 @@
 import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
 import { GitPullRequestIcon } from '@phosphor-icons/react/dist/csr/GitPullRequest';
 import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
-import { useState } from 'react';
+import { type ReactElement, useState } from 'react';
 import { CiStatusChip } from '@/client/components/ci-status-chip';
 import { PrStateBadge } from '@/client/components/pr-state-badge';
 import { useToggleRatcheting } from '@/client/hooks/use-toggle-ratcheting';
@@ -43,6 +43,7 @@ export function WorkspacePrMenu({
   pending = false,
   compact = false,
   monitoring,
+  trigger,
 }: {
   prs: readonly WorkspacePullRequest[];
   onAdd?: () => void;
@@ -51,6 +52,7 @@ export function WorkspacePrMenu({
   pending?: boolean;
   compact?: boolean;
   monitoring?: PRMonitoringMenuProps;
+  trigger?: ReactElement;
 }) {
   const ordered = [...prs].sort(
     (a, b) =>
@@ -60,23 +62,25 @@ export function WorkspacePrMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          aria-label={`PRs (${prs.length})`}
-          className={compact ? 'h-5 gap-1 px-0 text-[11px]' : 'h-7 gap-1 px-2 text-xs'}
-          onClick={(event) => event.stopPropagation()}
-          onPointerDown={(event) => event.stopPropagation()}
-          onPointerUp={(event) => event.stopPropagation()}
-        >
-          <GitPullRequestIcon className="h-3 w-3" />
-          <span>
-            {prs.length === 1 && prs[0]?.number
-              ? `#${prs[0].number}`
-              : `PRs${prs.length > 0 ? ` ${prs.length}` : ''}`}
-          </span>
-          <CaretDownIcon className="h-2.5 w-2.5" />
-        </Button>
+        {trigger ?? (
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={`PRs (${prs.length})`}
+            className={compact ? 'h-5 gap-1 px-0 text-[11px]' : 'h-7 gap-1 px-2 text-xs'}
+            onClick={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
+            onPointerUp={(event) => event.stopPropagation()}
+          >
+            <GitPullRequestIcon className="h-3 w-3" />
+            <span>
+              {prs.length === 1 && prs[0]?.number
+                ? `#${prs[0].number}`
+                : `PRs${prs.length > 0 ? ` ${prs.length}` : ''}`}
+            </span>
+            <CaretDownIcon className="h-2.5 w-2.5" />
+          </Button>
+        )}
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
@@ -99,10 +103,15 @@ export function WorkspacePrMenu({
             />
           ))}
         </div>
-        {monitoring && <PRMonitoringMenuItems {...monitoring} />}
-        {onAdd && (
+        {monitoring && (
           <>
             <DropdownMenuSeparator />
+            <PRMonitoringMenuItems {...monitoring} />
+          </>
+        )}
+        {onAdd && (
+          <>
+            {!monitoring && <DropdownMenuSeparator />}
             <DropdownMenuItem className="shrink-0" disabled={pending} onSelect={onAdd}>
               <PlusIcon />
               Add PR
@@ -197,6 +206,7 @@ function ConnectedPRMonitoringMenu({
   actions,
   onAdd,
   onRemove,
+  trigger,
 }: {
   workspaceId: string;
   projectId?: string;
@@ -208,12 +218,14 @@ function ConnectedPRMonitoringMenu({
   };
   onAdd(): void;
   onRemove(id: string): void;
+  trigger?: ReactElement;
 }) {
   const toggle = useToggleRatcheting(projectId);
   return (
     <>
       {toggle.recipientPicker}
       <WorkspacePrMenu
+        trigger={trigger}
         prs={prs}
         compact={compact}
         pending={actions.pending}
@@ -234,6 +246,7 @@ export function ConnectedWorkspacePrMenu({
   monitoring,
   reviewEnabled = true,
   compact = false,
+  trigger,
 }: {
   workspaceId: string;
   projectId?: string;
@@ -242,6 +255,7 @@ export function ConnectedWorkspacePrMenu({
   monitoring?: PRMonitoringProjection;
   reviewEnabled?: boolean;
   compact?: boolean;
+  trigger?: ReactElement;
 }) {
   const [open, setOpen] = useState(false);
   const [removeId, setRemoveId] = useState<string | null>(null);
@@ -263,6 +277,7 @@ export function ConnectedWorkspacePrMenu({
     >
       {monitoring && !readOnly ? (
         <ConnectedPRMonitoringMenu
+          trigger={trigger}
           workspaceId={workspaceId}
           projectId={projectId}
           prs={prs}
@@ -274,6 +289,7 @@ export function ConnectedWorkspacePrMenu({
         />
       ) : (
         <WorkspacePrMenu
+          trigger={trigger}
           prs={prs}
           compact={compact}
           pending={actions.pending}
