@@ -6,14 +6,7 @@ export function parseBenchmarkOrigin(input = 'http://127.0.0.1:5173/') {
   } catch {
     throw new Error(invalidOrigin);
   }
-  if (
-    !['http:', 'https:'].includes(origin.protocol) ||
-    origin.pathname !== '/' ||
-    origin.search ||
-    origin.hash ||
-    origin.username ||
-    origin.password
-  ) {
+  if (!['http:', 'https:'].includes(origin.protocol) || origin.href !== `${origin.origin}/`) {
     throw new Error(invalidOrigin);
   }
   return origin;
