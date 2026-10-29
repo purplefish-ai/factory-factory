@@ -86,6 +86,12 @@ adapter. After reducing oversized legacy files, run
 `pnpm check:file-length:update` to lower their exact ceilings; it never allows
 growth.
 
+CI caches the Node native-module binaries by operating system, Ubuntu release,
+architecture, Node ABI, dependency lockfile and native-module setup script. It
+restores only the binary cache directory, so the setup script still copies those
+binaries into the fresh installation before tests; the active-runtime marker is
+never restored from CI cache.
+
 The [pre-commit hook](.husky/pre-commit) formats staged files and checks types,
 migration drift, dependencies, and unused code. CI also runs coverage,
 production and Storybook builds, and generated Prisma drift checks. Hooks and CI
