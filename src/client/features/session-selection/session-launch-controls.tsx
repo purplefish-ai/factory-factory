@@ -3,6 +3,7 @@ import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
 import { MapTrifoldIcon } from '@phosphor-icons/react/dist/csr/MapTrifold';
 import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import type { ReactNode } from 'react';
+import { AcpConfigSelector } from '@/client/components/acp-config-selector';
 import { ComposerMenuTrigger } from '@/client/components/composer-menu-trigger';
 import {
   DropdownMenu,
@@ -28,6 +29,13 @@ export interface LaunchReasoningControl {
   onChange: (value: string | null) => void;
   onRetry: () => void;
 }
+export interface LaunchAccessControl {
+  value?: string;
+  options: readonly ChatReasoningOption[];
+  loading: boolean;
+  invalid: boolean;
+  onChange: (value: string) => void;
+}
 export interface LaunchPlanControl {
   enabled: boolean;
   supported: boolean;
@@ -39,6 +47,7 @@ export interface SessionLaunchControlsProps extends ProviderModelPickerProps {
   children?: ReactNode;
   reasoning?: LaunchReasoningControl;
   planMode?: LaunchPlanControl;
+  accessMode?: LaunchAccessControl;
   ready?: boolean;
   unavailableReason?: string;
 }
@@ -215,6 +224,7 @@ export function PlanningSelector({
 export function SessionLaunchControls({
   reasoning,
   planMode,
+  accessMode,
   children,
   ...picker
 }: SessionLaunchControlsProps) {
@@ -226,6 +236,26 @@ export function SessionLaunchControls({
           control={reasoning}
           disabled={picker.disabled}
           disabledReason={picker.disabledReason}
+        />
+      )}
+      {accessMode && (
+        <AcpConfigSelector
+          configOption={{
+            id: 'mode',
+            name: 'Access',
+            description: accessMode.invalid
+              ? 'Selected access mode is unavailable. Choose a supported mode.'
+              : undefined,
+            type: 'select',
+            currentValue: accessMode.value ?? (accessMode.loading ? 'Loading…' : 'Unavailable'),
+            options: accessMode.options.map((option) => ({
+              value: option.value,
+              name: option.label,
+              description: option.description,
+            })),
+          }}
+          disabled={picker.disabled || accessMode.loading || !accessMode.options.length}
+          onSelect={(_id, value) => accessMode.onChange(value)}
         />
       )}
       {planMode && (

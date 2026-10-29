@@ -3,7 +3,7 @@ import type {
   AcpConfigOption,
   AcpConfigOptionGroup,
   AcpConfigOptionValue,
-} from '@/client/features/chat/reducer';
+} from '@/client/lib/acp-config';
 import {
   DropdownMenu,
   DropdownMenuContent,

@@ -38,6 +38,7 @@ describe('manual workspace model selection', () => {
       projectId: 'project',
       name: 'Workspace',
       provider: 'CLAUDE' as const,
+      accessMode: 'acceptEdits',
       reasoningEffort: null,
       planModeEnabled: false,
     };

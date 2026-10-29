@@ -263,3 +263,123 @@ describe('integrated mandatory native launch authority', () => {
     expect(h.sendSessionMessage).not.toHaveBeenCalled();
   });
 });
+
+it.each([
+  { provider: 'CODEX' as const, mode: 'read-only' },
+  { provider: 'CODEX' as const, mode: 'agent-full-access' },
+  { provider: 'CLAUDE' as const, mode: 'acceptEdits' },
+])(
+  'applies explicit $provider launch access $mode before first prompt and restores it on resume',
+  async ({ provider, mode }) => {
+    const h = setupLaunch(provider, false);
+    h.setSession({
+      providerMetadata: unsafeCoerce(
+        createSessionLaunchMetadata({ accessMode: mode, planModeEnabled: false })
+      ),
+    });
+    await h.service.startSession(h.session.id, { initialPrompt: 'Do work' });
+    expect(h.handle.configOptions.find((option) => option.id === 'mode')?.currentValue).toBe(mode);
+    expect(readSessionLaunchSettings(h.row().providerMetadata)).toMatchObject({
+      accessMode: mode,
+      applied: true,
+    });
+    expect(h.sendSessionMessage).toHaveBeenCalledExactlyOnceWith(h.session.id, 'Do work');
+    h.handle.configOptions = h.handle.configOptions.map((option) =>
+      option.type === 'select' && option.id === 'mode'
+        ? { ...option, currentValue: provider === 'CODEX' ? 'workspace-write' : 'default' }
+        : option
+    );
+    await h.config.applyConfiguredPermissionPreset(h.session.id, h.row(), h.handle, 'YOLO');
+    expect(h.handle.configOptions.find((option) => option.id === 'mode')?.currentValue).toBe(mode);
+  }
+);
+
+it('rejects unsupported explicit launch access before sending a prompt', async () => {
+  const h = setupLaunch();
+  h.setSession({
+    providerMetadata: unsafeCoerce({ launchSettings: { accessMode: 'missing', applied: false } }),
+  });
+  await expect(h.service.startSession(h.session.id, { initialPrompt: 'Do work' })).rejects.toThrow(
+    'access mode'
+  );
+  expect(h.sendSessionMessage).not.toHaveBeenCalled();
+  expect(h.complete).not.toHaveBeenCalled();
+});
+
+it('keeps Claude Plan read-only when launch access grants full permissions', async () => {
+  const h = setupLaunch('CLAUDE');
+  h.setSession({
+    providerMetadata: unsafeCoerce(
+      createSessionLaunchMetadata({ accessMode: 'bypassPermissions', planModeEnabled: true })
+    ),
+  });
+  await h.service.startSession(h.session.id, { initialPrompt: 'Plan work' });
+  expect(h.handle.configOptions.find((option) => option.id === 'mode')?.currentValue).toBe('plan');
+  expect(readSessionLaunchSettings(h.row().providerMetadata)?.applied).toBe(true);
+  expect(h.sendSessionMessage).toHaveBeenCalledExactlyOnceWith(h.session.id, 'Plan work');
+  expect(h.runtime.setSessionMode).not.toHaveBeenCalledWith(h.session.id, 'bypassPermissions');
+});
+
+it('does not dispatch when the provider fails to confirm launch access', async () => {
+  const h = setupLaunch('CODEX', false);
+  h.setSession({
+    providerMetadata: unsafeCoerce(createSessionLaunchMetadata({ accessMode: 'read-only' })),
+  });
+  h.runtime.setSessionMode.mockResolvedValueOnce(h.handle.configOptions);
+  await expect(h.service.startSession(h.session.id, { initialPrompt: 'Do work' })).rejects.toThrow(
+    'access mode was not applied'
+  );
+  expect(h.sendSessionMessage).not.toHaveBeenCalled();
+  expect(h.complete).not.toHaveBeenCalled();
+});
+
+it('reapplies a concurrent access edit instead of acknowledging stale launch intent', async () => {
+  const h = setupLaunch('CODEX', false);
+  h.setSession({
+    providerMetadata: unsafeCoerce(
+      createSessionLaunchMetadata({ accessMode: 'agent-full-access' })
+    ),
+  });
+  let edited = false;
+  h.hooks.cas = (_number, data) => {
+    if (!edited && readSessionLaunchSettings(data.providerMetadata)?.applied) {
+      edited = true;
+      const metadata = h.row().providerMetadata;
+      if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+        throw new Error('Expected session metadata');
+      }
+      h.setSession({
+        providerMetadata: unsafeCoerce({
+          ...metadata,
+          ...createSessionLaunchMetadata({ accessMode: 'read-only' }),
+        }),
+      });
+    }
+    return Promise.resolve();
+  };
+  await h.service.startSession(h.session.id, { initialPrompt: 'Do work' });
+  expect(edited).toBe(true);
+  expect(h.handle.configOptions.find((option) => option.id === 'mode')?.currentValue).toBe(
+    'read-only'
+  );
+  expect(readSessionLaunchSettings(h.row().providerMetadata)).toMatchObject({
+    accessMode: 'read-only',
+    applied: true,
+  });
+  expect(h.sendSessionMessage).toHaveBeenCalledExactlyOnceWith(h.session.id, 'Do work');
+});
+
+it('preserves an explicit Claude startup Plan preset when launch only selects access', async () => {
+  const h = setupLaunch('CLAUDE', false);
+  h.setSession({
+    providerMetadata: unsafeCoerce(
+      createSessionLaunchMetadata({ accessMode: 'bypassPermissions' })
+    ),
+  });
+  await h.service.startSession(h.session.id, {
+    initialPrompt: 'Plan work',
+    startupModePreset: 'plan',
+  });
+  expect(h.handle.configOptions.find((option) => option.id === 'mode')?.currentValue).toBe('plan');
+  expect(h.sendSessionMessage).toHaveBeenCalledExactlyOnceWith(h.session.id, 'Plan work');
+});

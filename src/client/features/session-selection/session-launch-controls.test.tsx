@@ -175,3 +175,34 @@ describe('SessionLaunchControls', () => {
     ).toBe(true);
   });
 });
+
+it('offers native permission choices from the compact Access icon and marks full access', () => {
+  const onChange = vi.fn();
+  const mounted = mount({
+    accessMode: {
+      value: 'agent-full-access',
+      options: [
+        { value: 'read-only', label: 'Read only', description: 'No edits' },
+        { value: 'agent-full-access', label: 'Full access' },
+      ],
+      loading: false,
+      invalid: false,
+      onChange,
+    },
+  });
+  const trigger = mounted.container.querySelector<HTMLButtonElement>(
+    '[aria-label="Access: Full access"]'
+  );
+  expect(trigger).not.toBeNull();
+  expect(trigger?.className).toContain('text-orange-600');
+  expect(trigger?.querySelector('.truncate')).toBeNull();
+  keyboardOpen(trigger);
+  const readOnly = [...document.body.querySelectorAll('[role="menuitemradio"]')].find((option) =>
+    option.textContent?.includes('Read only')
+  );
+  expect(readOnly?.textContent).toContain('No edits');
+  flushSync(() =>
+    readOnly?.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }))
+  );
+  expect(onChange).toHaveBeenCalledWith('read-only');
+});

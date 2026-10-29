@@ -1,6 +1,10 @@
-import type { SessionLaunchOptions } from '@/shared/session-launch';
+import type { SessionPermissionPreset } from '@/shared/core';
+import { resolveLaunchAccessMode, type SessionLaunchOptions } from '@/shared/session-launch';
 
 interface DraftOptions {
+  provider?: string | null;
+  accessMode?: string;
+  savedAccessPreset?: SessionPermissionPreset;
   reasoningEffort?: string | null;
   savedReasoningEffort?: string | null;
   planModeEnabled?: boolean;
@@ -25,5 +29,29 @@ export function getEffectiveLaunchOptions(
   );
   const planModeEnabled = draft.planModeEnabled ?? native?.planMode.selected ?? false;
   const invalidPlan = Boolean(native && planModeEnabled && !native.planMode.supported);
-  return { reasoningEffort, planModeEnabled, invalidReasoning, invalidPlan };
+  return {
+    reasoningEffort,
+    planModeEnabled,
+    invalidReasoning,
+    invalidPlan,
+    ...getAccessOptions(draft, native),
+  };
+}
+
+function getAccessOptions(draft: DraftOptions, native: SessionLaunchOptions | undefined) {
+  const accessOptions = native?.accessMode?.options ?? [];
+  const accessMode =
+    draft.accessMode ??
+    resolveLaunchAccessMode(
+      draft.provider ?? 'CLAUDE',
+      draft.savedAccessPreset ?? 'STRICT',
+      accessOptions.map((option) => option.value)
+    );
+  const invalidAccess = Boolean(
+    native &&
+    (accessMode
+      ? !accessOptions.some((option) => option.value === accessMode)
+      : accessOptions.length)
+  );
+  return { accessMode, invalidAccess };
 }

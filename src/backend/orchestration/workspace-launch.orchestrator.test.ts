@@ -230,7 +230,7 @@ it.each([0, 2])(
 
 describe('manual launch settings forwarding', () => {
   it.each([
-    { reasoningEffort: 'max', planModeEnabled: true },
+    { reasoningEffort: 'max', planModeEnabled: true, accessMode: 'read-only' },
     { reasoningEffort: null, planModeEnabled: false },
     {},
   ])('preserves exact supplied intent and omits absent fields: %j', async (settings) => {

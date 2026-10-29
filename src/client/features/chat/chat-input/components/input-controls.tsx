@@ -6,6 +6,8 @@ import { SlidersHorizontalIcon } from '@phosphor-icons/react/dist/csr/SlidersHor
 import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { SquareIcon } from '@phosphor-icons/react/dist/csr/Square';
 import { memo, useState } from 'react';
+import { getConfigPresentation } from '@/client/components/acp-config-presentation';
+import { AcpConfigSelector } from '@/client/components/acp-config-selector';
 import { getRuntimeControlVisibility } from '@/client/features/chat/chat-input/runtime-control-visibility';
 import type { AcpConfigOption } from '@/client/features/chat/reducer';
 import { AttachmentPreview } from '@/client/features/composer';
@@ -28,8 +30,6 @@ import {
   type ChatModelOption,
   hasResolvedChatBarCapabilities,
 } from '@/shared/chat-capabilities';
-import { getConfigPresentation } from './acp-config-presentation';
-import { AcpConfigSelector } from './acp-config-selector';
 import { ModelSelector } from './model-selector';
 import { QuickActionsDropdown } from './quick-actions-dropdown';
 import { SettingsToggle } from './settings-toggle';

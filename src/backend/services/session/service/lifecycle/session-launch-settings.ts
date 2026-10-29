@@ -23,11 +23,16 @@ export function readSessionLaunchSettings(
 }
 export function createSessionLaunchMetadata(input: SessionLaunchSettings) {
   const settings = sessionLaunchSettingsSchema.parse(input);
-  if (settings.reasoningEffort === undefined && settings.planModeEnabled === undefined) {
+  if (
+    settings.reasoningEffort === undefined &&
+    settings.planModeEnabled === undefined &&
+    settings.accessMode === undefined
+  ) {
     return undefined;
   }
   return {
     launchSettings: {
+      ...(settings.accessMode !== undefined ? { accessMode: settings.accessMode } : {}),
       ...(settings.reasoningEffort !== undefined
         ? { reasoningEffort: settings.reasoningEffort }
         : {}),
@@ -63,6 +68,11 @@ export function pendingSessionLaunchSettingsPatch(
     option,
     provider === 'CLAUDE' ? 'mode' : 'collaboration_mode'
   );
+  if (isNativeModeConfigOption(option, 'mode')) {
+    return provider === 'CLAUDE'
+      ? { ...(value !== 'plan' ? { accessMode: value } : {}), planModeEnabled: value === 'plan' }
+      : { accessMode: value };
+  }
   const edited = reasoning
     ? { reasoningEffort: value }
     : planning

@@ -390,3 +390,42 @@ it('keeps saved native Default visible and in the outbound payload across native
   expect(mounted.current.controlsProps.reasoning?.value).toBeNull();
   expect(mounted.current.creationDefaults.reasoningEffort).toBeNull();
 });
+
+it('submits the displayed permission default and preserves explicit access per provider until reset', () => {
+  mocks.settings = { ...defaults, defaultWorkspacePermissions: 'RELAXED' };
+  mocks.launches.set('CODEX:saved-sol', {
+    ...solNative,
+    accessMode: {
+      options: [
+        { value: 'workspace-write', label: 'Workspace' },
+        { value: 'agent', label: 'Auto' },
+        { value: 'agent-full-access', label: 'Full access' },
+      ],
+      selected: 'workspace-write',
+    },
+  });
+  const mounted = mountConnected();
+  expect(mounted.current.creationDefaults.accessMode).toBe('agent');
+  expect(mounted.current.controlsProps.accessMode?.value).toBe('agent');
+  flushSync(() => mounted.current.controlsProps.accessMode?.onChange('agent-full-access'));
+  flushSync(() => mounted.current.pickerProps.onProviderChange?.('CLAUDE'));
+  flushSync(() => mounted.current.pickerProps.onProviderChange?.('CODEX'));
+  mocks.settings = { ...defaults, defaultWorkspacePermissions: 'STRICT' };
+  mounted.render();
+  expect(mounted.current.creationDefaults.accessMode).toBe('agent-full-access');
+  flushSync(() => mounted.current.reset());
+  expect(mounted.current.creationDefaults.accessMode).toBe('workspace-write');
+});
+
+it('blocks launch when explicit access becomes unavailable after a model switch', () => {
+  mocks.settings = defaults;
+  mocks.launches.set('CODEX:saved-sol', {
+    ...solNative,
+    accessMode: { options: [{ value: 'agent', label: 'Auto' }] },
+  });
+  const mounted = mountConnected();
+  flushSync(() => mounted.current.controlsProps.accessMode?.onChange('agent'));
+  flushSync(() => mounted.current.pickerProps.onModelChange?.('luna'));
+  expect(mounted.current.ready).toBe(false);
+  expect(mounted.current.unavailableReason).toContain('access mode');
+});

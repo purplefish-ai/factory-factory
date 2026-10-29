@@ -90,6 +90,7 @@ class SessionDataImplementation {
     workspacePrId?: string;
     workflow: string;
     model?: string;
+    accessMode?: string;
     reasoningEffort?: string | null;
     planModeEnabled?: boolean;
     provider?: SessionProvider;
@@ -116,6 +117,7 @@ class SessionDataImplementation {
     workspacePrId?: string;
     workflow: string;
     model?: string;
+    accessMode?: string;
     reasoningEffort?: string | null;
     planModeEnabled?: boolean;
     provider?: SessionProvider;

@@ -121,6 +121,7 @@ function explicitSessionModel(
   }
   return {
     ...(source.model !== undefined ? { model: source.model } : {}),
+    ...(source.accessMode !== undefined ? { accessMode: source.accessMode } : {}),
     ...(source.reasoningEffort !== undefined ? { reasoningEffort: source.reasoningEffort } : {}),
     ...(source.planModeEnabled !== undefined ? { planModeEnabled: source.planModeEnabled } : {}),
   };

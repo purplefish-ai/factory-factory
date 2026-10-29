@@ -7,16 +7,19 @@ interface Draft {
   model: string;
   effort: string | null;
   plan: boolean;
+  access: string;
 }
 interface PreviewProps {
   state?: 'ready' | 'loading' | 'error' | 'invalid' | 'unsupported';
   longLabels?: boolean;
   planEnabled?: boolean;
+  fullAccess?: boolean;
 }
 function LaunchControlsPreview({
   state = 'ready',
   longLabels = false,
   planEnabled = false,
+  fullAccess = false,
 }: PreviewProps) {
   const unavailableEffort = longLabels
     ? 'Maximum advertised thinking level no longer supported'
@@ -26,9 +29,10 @@ function LaunchControlsPreview({
     CODEX: {
       model: state === 'invalid' ? 'luna' : 'sol',
       effort: state === 'invalid' ? unavailableEffort : 'high',
+      access: fullAccess ? 'agent-full-access' : 'workspace-write',
       plan: planEnabled || state === 'unsupported',
     },
-    CLAUDE: { model: 'sonnet', effort: null, plan: false },
+    CLAUDE: { model: 'sonnet', effort: null, plan: false, access: 'default' },
   });
   const draft = drafts[provider];
   const update = (patch: Partial<Draft>) =>
@@ -94,6 +98,34 @@ function LaunchControlsPreview({
           onChange: (effort) => update({ effort }),
           onRetry: () => undefined,
         }}
+        accessMode={{
+          value: draft.access,
+          options:
+            provider === 'CODEX'
+              ? [
+                  {
+                    value: 'read-only',
+                    label: 'Read only',
+                    description: 'Read files without making changes.',
+                  },
+                  { value: 'workspace-write', label: 'Workspace write' },
+                  { value: 'agent', label: 'Auto review' },
+                  {
+                    value: 'agent-full-access',
+                    label: 'Full access',
+                    description: 'Run commands with unrestricted access.',
+                  },
+                ]
+              : [
+                  { value: 'default', label: 'Default' },
+                  { value: 'acceptEdits', label: 'Accept edits' },
+                  { value: 'auto', label: 'Auto' },
+                  { value: 'bypassPermissions', label: 'Bypass permissions' },
+                ],
+          loading: state === 'loading',
+          invalid: false,
+          onChange: (access) => update({ access }),
+        }}
         planMode={{
           enabled: draft.plan,
           supported: state !== 'unsupported',
@@ -128,3 +160,5 @@ export const LongUnsupportedSelection: Story = {
 export const UnsupportedPlan: Story = { args: { state: 'unsupported' } };
 export const LongLabels: Story = { args: { longLabels: true } };
 export const Narrow: Story = { ...LongLabels, parameters: { viewport: { value: 'mobile1' } } };
+
+export const FullAccess: Story = { args: { fullAccess: true } };
