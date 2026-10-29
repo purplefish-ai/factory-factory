@@ -36,6 +36,14 @@ destination and rename metadata to disambiguate filenames containing spaces.
 Metadata only updates filenames before a hunk; header-like additions and
 deletions inside hunks remain diff content.
 
+## Workspace PR menu
+
+The top-right wrench and chevron form one dropdown button on desktop and mobile.
+Opening it shows attached PRs, review and attachment actions, and PR update
+settings; it does not toggle monitoring. The wrench retains its enabled and
+activity states. Archived and archiving workspaces retain PR links but hide
+attachment, review, and monitoring controls.
+
 ## PR event delivery destinations
 
 PR monitoring replaces the former Ratchet fixer workflow. The two-minute

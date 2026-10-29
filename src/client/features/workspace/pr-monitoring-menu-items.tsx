@@ -1,4 +1,3 @@
-import { LightningIcon } from '@phosphor-icons/react/dist/csr/Lightning';
 import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import {
   DropdownMenuItem,
@@ -8,6 +7,7 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import { canResumePRMonitoring, PRDeliveryMode } from '@/shared/pr-monitoring';
+import { RatchetWrenchIcon } from './ratchet-wrench-icon';
 
 export interface PRMonitoringMenuProps {
   enabled: boolean;
@@ -35,7 +35,7 @@ export function PRMonitoringMenuItems({
         {pending ? (
           <SpinnerGapIcon className="h-4 w-4 animate-spin" />
         ) : (
-          <LightningIcon className="h-4 w-4" />
+          <RatchetWrenchIcon enabled={enabled} className="size-4" />
         )}
         {enabled ? 'Turn off PR updates' : 'Turn on PR updates'}
       </DropdownMenuItem>

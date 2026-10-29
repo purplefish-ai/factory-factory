@@ -4,7 +4,6 @@ import { InfoIcon } from '@phosphor-icons/react/dist/csr/Info';
 import { PencilIcon } from '@phosphor-icons/react/dist/csr/Pencil';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { useToggleRatcheting } from '@/client/hooks/use-toggle-ratcheting';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import {
@@ -27,7 +26,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { ArchiveActionButton } from './archive-action-button';
 import { OpenDevAppAction } from './open-dev-app-action';
 import { OpenInIdeAction } from './open-in-ide-action';
-import { RatchetingMenuItems } from './ratcheting-toggle';
 import type { WorkspaceHeaderWorkspace, WorkspaceSessionManagement } from './types';
 import { WorkspaceBranchLink } from './workspace-branch-link';
 import { WorkspaceProviderSettings } from './workspace-provider-settings';
@@ -49,7 +47,6 @@ export function WorkspaceHeaderOverflowMenu({
   archivePending: boolean;
   onArchiveRequest: () => void;
 }) {
-  const toggleRatcheting = useToggleRatcheting(workspace.projectId);
   const [providerSettingsOpen, setProviderSettingsOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState('');
@@ -96,7 +93,6 @@ export function WorkspaceHeaderOverflowMenu({
 
   return (
     <>
-      {toggleRatcheting.recipientPicker}
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
         <DialogContent className="sm:max-w-lg" aria-describedby={undefined}>
           <DialogHeader>
@@ -220,11 +216,6 @@ export function WorkspaceHeaderOverflowMenu({
             <GearSixIcon className="h-4 w-4" />
             Provider settings
           </DropdownMenuItem>
-          <RatchetingMenuItems
-            workspace={workspace}
-            workspaceId={workspaceId}
-            toggleRatcheting={toggleRatcheting}
-          />
           <WorkspaceBranchLink workspace={workspace} renderAsMenuItem />
           <OpenInIdeAction
             workspaceId={workspaceId}

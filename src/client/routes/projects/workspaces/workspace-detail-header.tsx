@@ -9,11 +9,7 @@ import {
   useAppHeader,
 } from '@/client/components/app-header-context';
 import { ProjectSelectorDropdown } from '@/client/components/project-selector';
-import {
-  ConnectedWorkspacePrMenu,
-  RunScriptButton,
-  RunScriptPortBadge,
-} from '@/client/features/workspace';
+import { RunScriptButton, RunScriptPortBadge } from '@/client/features/workspace';
 import { useInlineWorkspaceRename } from '@/client/hooks/use-inline-workspace-rename';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
@@ -160,15 +156,6 @@ export function WorkspaceDetailHeaderSlot({
               >
                 <InfoIcon className="h-3 w-3" />
               </Button>
-              <ConnectedWorkspacePrMenu
-                key={workspaceId}
-                workspaceId={workspaceId}
-                projectId={workspace.projectId}
-                prs={workspace.prs}
-                monitoring={workspace.prMonitoring}
-                readOnly={isArchived}
-                reviewEnabled={Boolean(workspace.worktreePath)}
-              />
             </div>
           )}
         </div>
@@ -192,6 +179,7 @@ export function WorkspaceDetailHeaderSlot({
       <HeaderRightSlot>
         <div className={cn('flex items-center gap-0.5 shrink-0', !isMobile && 'flex-wrap gap-0.5')}>
           <RunScriptButton workspaceId={workspaceId} />
+          <RatchetingToggle workspace={workspace} workspaceId={workspaceId} />
           {isMobile ? (
             <>
               <ToggleRightPanelButton />
@@ -208,7 +196,6 @@ export function WorkspaceDetailHeaderSlot({
           ) : (
             <>
               <WorkspaceProviderSettings workspace={workspace} workspaceId={workspaceId} />
-              <RatchetingToggle workspace={workspace} workspaceId={workspaceId} />
               <WorkspaceBranchLink workspace={workspace} />
               <OpenInIdeAction
                 workspaceId={workspaceId}
