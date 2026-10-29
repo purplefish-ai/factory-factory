@@ -73,9 +73,6 @@ function AgentSelectionContent({ controller }: { controller: Controller }) {
       </>
     );
   }
-  if (id && task.error && (!task.data || task.error.data?.code === 'NOT_FOUND')) {
-    return <AgentRequestError task={task} />;
-  }
   // Keep mounted editors and their drafts during background query failures.
   if (mode === 'edit' && task.data) {
     return (
@@ -90,6 +87,9 @@ function AgentSelectionContent({ controller }: { controller: Controller }) {
         />
       </>
     );
+  }
+  if (id && task.error && (!task.data || task.error.data?.code === 'NOT_FOUND')) {
+    return <AgentRequestError task={task} />;
   }
   if (id && task.isLoading) {
     return <Loading>Loading agent…</Loading>;

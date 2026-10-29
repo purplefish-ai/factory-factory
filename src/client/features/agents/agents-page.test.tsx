@@ -320,6 +320,46 @@ describe('AgentsPage coordination', () => {
     expect(container.querySelector('main h2')).toBeNull();
     expect(container.querySelector('main [aria-label="Run history"]')).toBeNull();
   });
+  it('preserves exact unsaved instructions through cached NOT_FOUND, retry, and a failed save', async () => {
+    render();
+    await waitForReact(() =>
+      expect(container.querySelector('h2')?.textContent).toBe('Review changes')
+    );
+    actFlushSync(() => button('Edit Agent').click());
+    const form = container.querySelector('form');
+    const instructions = container.querySelector<HTMLTextAreaElement>('textarea');
+    const draft = 'Unsaved instructions with specific changes.\nKeep this second line too.';
+    actFlushSync(() => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(
+        instructions,
+        draft
+      );
+      instructions?.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    missing = true;
+    await act(async () => {
+      await queryClient.invalidateQueries();
+    });
+    await waitForReact(() =>
+      expect(container.textContent).toContain('Agent not found. This agent is no longer available.')
+    );
+    expect(container.querySelector('form')).toBe(form);
+    expect(container.querySelector<HTMLTextAreaElement>('textarea')?.value).toBe(draft);
+    const before = requests.filter((request) => request.path === 'periodicTask.get').length;
+    actFlushSync(() => button('Retry agent').click());
+    await waitForReact(() =>
+      expect(
+        requests.filter((request) => request.path === 'periodicTask.get').length
+      ).toBeGreaterThan(before)
+    );
+    failMutation = 'periodicTask.update';
+    actFlushSync(() =>
+      form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    );
+    await waitForReact(() => expect(container.textContent).toContain('Server refused the change'));
+    expect(container.querySelector('form')).toBe(form);
+    expect(container.querySelector<HTMLTextAreaElement>('textarea')?.value).toBe(draft);
+  });
   it('retains edit drafts after failure and polling, then invalidates list and task on success', async () => {
     render();
     await waitForReact(() =>
