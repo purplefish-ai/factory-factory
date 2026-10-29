@@ -83,6 +83,7 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
               variant="ghost"
               size="icon"
               className="h-6 w-6 md:h-8 md:w-8"
+              aria-label="Setup dev server"
               onClick={() => setSetupPanelOpen(true)}
             >
               <PlayIcon className="h-3 w-3 text-green-600 md:h-4 md:w-4" weight="fill" />
@@ -136,6 +137,7 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
                   variant="ghost"
                   size="icon"
                   className="h-6 w-6 md:h-8 md:w-8"
+                  aria-label={tooltipText}
                   onClick={handleClick}
                   disabled={isLoading}
                 >

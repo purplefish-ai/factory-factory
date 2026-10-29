@@ -2,7 +2,7 @@ import { DotsThreeIcon } from '@phosphor-icons/react/dist/csr/DotsThree';
 import { GearSixIcon } from '@phosphor-icons/react/dist/csr/GearSix';
 import { InfoIcon } from '@phosphor-icons/react/dist/csr/Info';
 import { PencilIcon } from '@phosphor-icons/react/dist/csr/Pencil';
-import { useRef, useState } from 'react';
+import { type ReactNode, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -38,6 +38,7 @@ export function WorkspaceHeaderOverflowMenu({
   openInIde,
   archivePending,
   onArchiveRequest,
+  statusContent,
 }: {
   workspace: WorkspaceHeaderWorkspace;
   workspaceId: string;
@@ -46,6 +47,7 @@ export function WorkspaceHeaderOverflowMenu({
   openInIde: WorkspaceSessionManagement['openInIde'];
   archivePending: boolean;
   onArchiveRequest: () => void;
+  statusContent?: ReactNode;
 }) {
   const [providerSettingsOpen, setProviderSettingsOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
@@ -183,6 +185,7 @@ export function WorkspaceHeaderOverflowMenu({
         </Tooltip>
         <DropdownMenuContent align="end" className="w-60">
           <DropdownMenuLabel>Workspace actions</DropdownMenuLabel>
+          {statusContent}
           <DropdownMenuItem
             onSelect={(event) => {
               event.preventDefault();

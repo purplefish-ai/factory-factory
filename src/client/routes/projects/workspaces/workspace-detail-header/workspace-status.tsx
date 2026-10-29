@@ -3,6 +3,7 @@ import { GitPullRequestIcon } from '@phosphor-icons/react/dist/csr/GitPullReques
 import { CiStatusChip } from '@/client/components/ci-status-chip';
 import { PrStateBadge } from '@/client/components/pr-state-badge';
 import { Button } from '@/components/ui/button';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { WorkspaceHeaderWorkspace } from './types';
 
@@ -12,6 +13,7 @@ type WorkspacePrActionProps = {
   running: boolean;
   isCreatingSession: boolean;
   handleQuickAction: (title: string, prompt: string) => void;
+  renderAsMenuItem?: boolean;
 };
 
 export function WorkspacePrAction({
@@ -20,6 +22,7 @@ export function WorkspacePrAction({
   running,
   isCreatingSession,
   handleQuickAction,
+  renderAsMenuItem = false,
 }: WorkspacePrActionProps) {
   if (
     hasChanges &&
@@ -31,6 +34,19 @@ export function WorkspacePrAction({
         (!pr.headRefName || pr.headRefName === workspace.branchName)
     )
   ) {
+    const createPr = () =>
+      handleQuickAction(
+        'Create Pull Request',
+        'Create a pull request for the current branch using the GitHub CLI (gh). Include a clear title and description summarizing the changes.'
+      );
+    if (renderAsMenuItem) {
+      return (
+        <DropdownMenuItem disabled={isCreatingSession} onSelect={createPr}>
+          <GitPullRequestIcon className="h-3 w-3" />
+          Create PR
+        </DropdownMenuItem>
+      );
+    }
     return (
       <Tooltip>
         <TooltipTrigger asChild>
@@ -39,12 +55,7 @@ export function WorkspacePrAction({
             size="sm"
             className="h-6 gap-1 text-xs px-2"
             disabled={isCreatingSession}
-            onClick={() =>
-              handleQuickAction(
-                'Create Pull Request',
-                'Create a pull request for the current branch using the GitHub CLI (gh). Include a clear title and description summarizing the changes.'
-              )
-            }
+            onClick={createPr}
           >
             <GitPullRequestIcon className="h-3 w-3" />
             Create PR
@@ -58,7 +69,30 @@ export function WorkspacePrAction({
   return null;
 }
 
-export function WorkspaceIssueLink({ workspace }: { workspace: WorkspaceHeaderWorkspace }) {
+export function WorkspaceIssueLink({
+  workspace,
+  renderAsMenuItem = false,
+}: {
+  workspace: WorkspaceHeaderWorkspace;
+  renderAsMenuItem?: boolean;
+}) {
+  const hasLinearIssue = Boolean(workspace.linearIssueIdentifier && workspace.linearIssueUrl);
+  const url = hasLinearIssue ? workspace.linearIssueUrl : workspace.githubIssueUrl;
+  const label = hasLinearIssue
+    ? workspace.linearIssueIdentifier
+    : workspace.githubIssueNumber
+      ? `#${workspace.githubIssueNumber}`
+      : null;
+  if (renderAsMenuItem) {
+    return url && label ? (
+      <DropdownMenuItem asChild>
+        <a href={url} target="_blank" rel="noopener noreferrer">
+          <DotOutlineIcon className="h-3 w-3" />
+          {label}
+        </a>
+      </DropdownMenuItem>
+    ) : null;
+  }
   if (workspace.linearIssueIdentifier && workspace.linearIssueUrl) {
     return (
       <a

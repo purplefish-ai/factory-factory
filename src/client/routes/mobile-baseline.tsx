@@ -27,6 +27,7 @@ import type { ChatSettings, TokenStats } from '@/lib/chat-protocol';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import type { PRWithFullDetails } from '@/shared/github-types';
 import { MobileAgentsFixture } from './mobile-agents-fixture';
+import { WorkspaceHeaderFixture } from './workspace-header-fixture';
 
 const mobileBaselinePRs: PRWithFullDetails[] = [
   {
@@ -138,6 +139,9 @@ const noop = () => undefined;
 
 export default function MobileBaselinePage() {
   const [searchParams] = useSearchParams();
+  if (searchParams.get('surface') === 'header') {
+    return <WorkspaceHeaderFixture />;
+  }
   return searchParams.get('surface') === 'agents' ? (
     <MobileAgentsFixture />
   ) : (

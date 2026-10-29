@@ -166,13 +166,15 @@ marks it failed. Restart does not re-emit reserved runs. The launch/link crash
 gap remains; there is no replay or exactly-once guarantee. Timer events use no
 second run store, PR ledger entry, session queue delivery or receipt protocol.
 
-Manage agents at `/agents` or open an individual definition at `/agents/:id`.
-The sidebar and Settings link to this page; Settings no longer has a duplicate
-editor. The project filter shows one project's agents at a time. Explicit header
-project switches stay in Agents and clear the selected definition. Deep links
-resolve the definition's owner before trusting a stored project selection,
-including owners archived from active project navigation. An invalid definition
-ID shows an error instead of selecting another agent.
+Manage agents at `/projects/:slug/agents` or open an individual definition at
+`/projects/:slug/agents/:id`. The navbar project selector is the shared project
+context; Agents has no separate project filter. Agents and project-wide Reviews
+remain in the sidebar footer above global Settings. Settings links to Agents
+without a duplicate editor. Project switches preserve the current section and
+clear the selected definition. Legacy `/agents` and `/agents/:id` links resolve
+the definition's owner before trusting a stored project selection, including
+archived owners. A definition belonging to another project or an invalid ID
+shows project-local not found instead of selecting another agent.
 
 Create/edit use Name, Instructions and Schedule. Creation starts the first run
 immediately, then follows the configured schedule. An unchanged clock time keeps

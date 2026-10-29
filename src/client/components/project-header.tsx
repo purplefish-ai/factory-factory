@@ -29,7 +29,7 @@ export function ProjectHeaderNavigation({
     ? projects
     : [project, ...(projects ?? [])];
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-1">
+    <div className="flex min-w-0 items-center gap-1">
       <ProjectSelectorDropdown
         selectedProjectSlug={project.slug}
         onProjectChange={handleProjectChange}
@@ -46,7 +46,7 @@ export function ProjectHeaderNavigation({
           </span>
           <button
             type="button"
-            className="text-xs text-destructive underline"
+            className="shrink-0 whitespace-nowrap text-xs text-destructive underline"
             title={projectsError.message}
             onClick={() => {
               void refetchProjects();
