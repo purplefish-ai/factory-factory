@@ -375,8 +375,10 @@ resume, plan approval, questions, native subagents, and reviewer permissions.
 The composer usage control shows the latest ACP `usage_update.used` against
 `usage_update.size`. These are current conversation occupancy snapshots,
 including post-compaction readings; cumulative token accounting is separate.
-Unknown occupancy stays unavailable until the provider reports it. Both
-providers support the same control.
+Unknown occupancy stays unavailable until the provider reports it. Snapshots
+sent while attaching to an idle resumed session bypass history replay
+suppression, so occupancy and Compact survive a backend restart. Both providers
+support the same control.
 
 Plan limits are account-level readings shared across workspaces, available only
 to trusted local clients. The session capsule coalesces and caches provider

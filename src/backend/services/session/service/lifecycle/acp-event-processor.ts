@@ -9,6 +9,7 @@ import {
   type AcpRuntimeEvent,
   type AcpRuntimeEventHandlers,
   type AcpRuntimeManager,
+  type AcpSessionUpdateEvent,
 } from '@/backend/services/session/service/acp';
 import { acpTraceLogger } from '@/backend/services/session/service/logging/acp-trace-logger.service';
 import { sessionFileLogger } from '@/backend/services/session/service/logging/session-file-logger.service';
@@ -30,6 +31,17 @@ type PendingAcpToolCall = {
   acpKind?: string;
   acpLocations?: Array<{ path: string; line?: number | null }>;
 };
+
+/**
+ * ACP updates that report current provider state rather than transcript history,
+ * so their deltas pass replay suppression during idle history loading. The
+ * translator emits only validated warning notices for `session_info_update`.
+ * A `usage_update` becomes a non-rendering occupancy `result`; hydrated history
+ * has no result rows, and the provider sends the snapshot at attach.
+ */
+function isReplayExemptSessionUpdate(update: AcpSessionUpdateEvent['update']): boolean {
+  return update.sessionUpdate === 'session_info_update' || update.sessionUpdate === 'usage_update';
+}
 
 const DEFAULT_TOOL_CALL_TIMEOUT_MS = 3_600_000; // 60 minutes
 const DEFAULT_TEXT_FLUSH_INTERVAL_MS = 25;
@@ -141,13 +153,11 @@ export class AcpEventProcessor {
             deltaIndex: index,
             delta,
           });
-          // The translator emits only validated warning notices for session info.
-          // These are live provider notices even during idle history loading.
           this.handleAcpDelta(
             sid,
             delta as SessionDeltaEvent,
             configSource,
-            update.sessionUpdate === 'session_info_update'
+            isReplayExemptSessionUpdate(update)
           );
         }
       },
