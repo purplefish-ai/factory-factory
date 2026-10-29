@@ -474,9 +474,11 @@ custom/append snapshot semantics. See
 [the upgrade validation](../superpowers/plans/2026-09-09-remaining-dependencies.md).
 
 Scheduled Codex tasks retain their YOLO access preset and scheduled Claude tasks
-retain their configured access preset. PR updates inherit their main
-conversation’s configuration and do not use a workflow-specific permission
-preset.
+retain their configured access preset. MAIN PR updates inherit their main
+conversation’s configuration. DEDICATED updates use the workspace’s provider
+selection and normal user model defaults; later updates reuse that dedicated
+conversation’s saved configuration. PR updates do not use a workflow-specific
+permission preset.
 
 Chat command composition belongs to `routers/websocket/chat-message-router.ts`;
 application commands receive plain contexts and typed outcomes. Loading prepares

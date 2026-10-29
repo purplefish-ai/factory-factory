@@ -21,6 +21,7 @@ import {
 } from '@prisma-gen/client';
 
 const mockTx = vi.hoisted(() => ({
+  workspacePR: { findUnique: vi.fn() },
   workspacePRMonitoring: { upsert: vi.fn() },
   project: {
     findUnique: vi.fn<(args: { where: { id: string } }) => Promise<unknown>>(),
@@ -78,6 +79,7 @@ vi.mock('@/backend/db', () => ({
 }));
 
 import { prisma } from '@/backend/db';
+import { createLegacyLoopBackup } from './data-backup-legacy.test-fixtures';
 import { dataBackupService } from './data-backup.service';
 
 const mockProject: Project = {
@@ -538,28 +540,50 @@ describe('DataBackupService', () => {
           expect(exportedWorkspace).not.toHaveProperty(field);
         }
         expect(exported.data.userSettings).not.toHaveProperty('autoIterationPermissions');
-        const restored = exportDataSchema.parse({
-          ...exported,
-          meta: { ...exported.meta, schemaVersion },
-          data: {
-            ...exported.data,
-            workspaces: exported.data.workspaces.map((workspace) => ({
-              ...workspace,
-              mode: 'AUTO_ITERATION',
-              autoIterationConfig: { testCommand: 'pnpm test', targetDescription: 'coverage' },
-              autoIterationStatus: 'RUNNING',
-            })),
-            userSettings: { ...exported.data.userSettings, autoIterationPermissions: 'YOLO' },
-          },
-        });
-        expect(restored.data.workspaces[0]).not.toHaveProperty('mode');
-        expect(restored.data.workspaces[0]).not.toHaveProperty('autoIterationConfig');
+        const restored = exportDataSchema.parse(createLegacyLoopBackup(exported, schemaVersion));
+        const workspace = restored.data.workspaces[0]!;
+        expect(restored.meta.schemaVersion).toBe(6);
+        for (const field of [
+          'mode',
+          'autoIterationConfig',
+          'autoIterationStatus',
+          'autoIterationProgress',
+          'autoIterationSessionId',
+        ]) {
+          expect(workspace).not.toHaveProperty(field);
+        }
         expect(restored.data.userSettings).not.toHaveProperty('autoIterationPermissions');
+        expect(workspace.prs[0]).toMatchObject({
+          url: 'https://github.com/test/repo/pull/1',
+          number: 1,
+          state: PRState.OPEN,
+          reviewState: 'APPROVED',
+          ciStatus: CIStatus.SUCCESS,
+          reviewLastCheckedAt: '2025-01-01T00:20:00.000Z',
+          reviewLastCommentId: 'comment-123',
+        });
+        expect(workspace.prs[0]).not.toHaveProperty('ratchet');
+        expect(workspace.prMonitoring).toEqual({
+          enabled: true,
+          deliveryMode: 'MAIN',
+          recipientSessionId: null,
+          bindingRevision: 0,
+          eventEpoch: 1,
+          deliveryPauseReason: schemaVersion === 6 ? null : 'LEGACY_FIXER',
+          legacySessionIds: schemaVersion === 6 ? [] : ['session-1'],
+          lastCheckedAt: '2025-01-01T00:25:00.000Z',
+        });
+        if (schemaVersion === 5) {
+          expect(workspace).toMatchObject({ prUrl: null, prState: 'NONE', ratchetState: 'IDLE' });
+          expect(workspace.prs[0]?.id).toBe('pr1');
+          expect(restored.data.agentSessions[0]?.workspacePrId).toBe('pr1');
+        }
         vi.mocked(mockTx.project.findUnique).mockResolvedValue(mockProject);
         vi.mocked(mockTx.workspace.findUnique)
           .mockResolvedValueOnce(null)
           .mockResolvedValue(mockWorkspace);
         vi.mocked(mockTx.workspace.create).mockResolvedValue(mockWorkspace);
+        vi.mocked(mockTx.workspacePR.findUnique).mockResolvedValue({ workspaceId: 'ws-1' });
         vi.mocked(mockTx.agentSession.findUnique).mockResolvedValue(null);
         vi.mocked(mockTx.agentSession.create).mockResolvedValue(mockAgentSession);
         const result = await dataBackupService.importData(restored);
@@ -572,8 +596,21 @@ describe('DataBackupService', () => {
           branchName: mockWorkspace.branchName,
         });
         expect(created).not.toHaveProperty('autoIteration');
+        expect(mockTx.workspacePRMonitoring.upsert).toHaveBeenCalledWith(
+          expect.objectContaining({
+            create: expect.objectContaining({
+              ...workspace.prMonitoring,
+              lastCheckedAt: new Date('2025-01-01T00:25:00.000Z'),
+            }),
+          })
+        );
         expect(mockTx.agentSession.create).toHaveBeenCalledWith({
-          data: expect.objectContaining({ id: mockAgentSession.id, workspaceId: 'ws-1' }),
+          data: expect.objectContaining({
+            id: mockAgentSession.id,
+            workspaceId: 'ws-1',
+            workflow: 'auto-iteration',
+            providerSessionId: 'thread-123',
+          }),
         });
       }
     );

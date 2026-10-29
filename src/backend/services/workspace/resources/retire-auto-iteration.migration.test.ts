@@ -34,12 +34,60 @@ it('retires loop metadata while preserving workspaces, sessions and worktree ref
       INSERT INTO WorkspaceAutoIteration(workspaceId,mode,status,config,progress,sessionId) VALUES('ordinary','STANDARD',NULL,NULL,NULL,NULL),('legacy','AUTO_ITERATION','RUNNING','{"testCommand":"pnpm test"}','{"currentIteration":2}','loop-session');
       INSERT INTO AgentSession(id,workspaceId,workflow,model,provider,providerSessionId,updatedAt) VALUES('main-session','ordinary','implement','sonnet','CLAUDE','main-history',1000),('loop-session','legacy','auto-iteration','sonnet','CLAUDE','loop-history',1000);
       INSERT INTO WorkspacePRMonitoring(workspaceId,enabled,recipientSessionId,bindingRevision,eventEpoch) VALUES('ordinary',true,'main-session',7,3);
-      INSERT INTO UserSettings(id,preferredIde,autoIterationPermissions,updatedAt) VALUES('settings','cursor','YOLO',1000);
     `);
+    const settingsFixture = {
+      id: 'settings',
+      userId: 'migration-user',
+      preferredIde: 'custom',
+      customIdeCommand: 'editor {workspace}',
+      playSoundOnComplete: 0,
+      notificationSoundPath: '/sounds/complete.wav',
+      workspaceOrder: '{"p":["legacy","ordinary"]}',
+      cachedSlashCommands: '{"commands":["/review"]}',
+      ratchetEnabled: 1,
+      ratchetReplyToPrComments: 0,
+      ratchetReviewTriggerMode: 'ALL_REVIEW_FEEDBACK',
+      defaultSessionProvider: 'CODEX',
+      defaultClaudeModel: 'opus',
+      defaultCodexModel: 'gpt-5-codex',
+      defaultClaudeReasoningEffort: 'high',
+      defaultCodexReasoningEffort: 'medium',
+      defaultWorkspacePermissions: 'YOLO',
+      autoIterationPermissions: 'YOLO',
+      reviewerSessionProvider: 'CLAUDE',
+      reviewerClaudeModel: 'opus',
+      reviewerCodexModel: 'gpt-5-codex',
+      postReviewToGitHub: 0,
+      voiceModeEnabled: 1,
+      deepgramApiKeyEncrypted: 'encrypted-test-fixture',
+      voiceTtsModel: 'flux-cliff-en',
+      voiceTtsSpeed: 1.3,
+      voiceUtteranceEndMs: 2500,
+      voiceBargeInSustainedMs: 24,
+      appearanceColorScheme: 'solarized',
+      appearanceBackgroundColor: '#002b36',
+      appearanceForegroundColor: '#93a1a1',
+      appearanceFontScale: 125,
+      appearanceFontSans: 'Inter',
+      appearanceFontMono: 'Fira Code',
+      createdAt: 1000,
+      updatedAt: 2000,
+    };
+    const columns = Object.keys(settingsFixture);
+    db.prepare(
+      `INSERT INTO UserSettings(${columns.join(',')}) VALUES(${columns.map((column) => `@${column}`).join(',')})`
+    ).run(settingsFixture);
     const workspaces = db.prepare('SELECT * FROM Workspace ORDER BY id').all();
     const sessions = db.prepare('SELECT * FROM AgentSession ORDER BY id').all();
     const monitoring = db.prepare('SELECT * FROM WorkspacePRMonitoring ORDER BY workspaceId').all();
-    const settings = db.prepare('SELECT preferredIde FROM UserSettings').all();
+    const settings = db
+      .prepare<[], Record<string, unknown>>('SELECT * FROM UserSettings ORDER BY id')
+      .all()
+      .map((row) =>
+        Object.fromEntries(
+          Object.entries(row).filter(([column]) => column !== 'autoIterationPermissions')
+        )
+      );
     db.close();
     db = undefined;
     for (const name of readdirSync(source)) {
@@ -54,7 +102,7 @@ it('retires loop metadata while preserving workspaces, sessions and worktree ref
     expect(db.prepare('SELECT * FROM WorkspacePRMonitoring ORDER BY workspaceId').all()).toEqual(
       monitoring
     );
-    expect(db.prepare('SELECT preferredIde FROM UserSettings').all()).toEqual(settings);
+    expect(db.prepare('SELECT * FROM UserSettings ORDER BY id').all()).toEqual(settings);
     expect(
       db.prepare("SELECT name FROM sqlite_master WHERE name='WorkspaceAutoIteration'").all()
     ).toEqual([]);

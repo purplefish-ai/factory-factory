@@ -41,9 +41,9 @@ in `start()`, or a restart would inherit the previous stop's aborted signal.
 `waitForCurrentRun(name)` resolves on the run already in flight, not the next
 one. Snapshot reconciliation has a narrower `waitForSeed()` barrier: the
 `/snapshots` WebSocket handler waits only until database/runtime fields are in
-the store and stale entries are removed. Authoritative metadata and compact loop
-hydration are part of that seed. The store sets `summaryVersion: 1` only after
-its field-timestamp merge has accepted authoritative values for every required
+the store and stale entries are removed. Authoritative metadata hydration is
+part of that seed. The store sets `summaryVersion: 1` only after its
+field-timestamp merge has accepted authoritative values for every required
 summary field. Fields may be accepted across multiple updates; attempted values
 in rejected timestamp groups and unhydrated defaults do not count. Git stats
 continue streaming while the job remains in flight, so `stop()` still waits for

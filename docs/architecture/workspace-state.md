@@ -328,24 +328,20 @@ selection and normalized derived-state inputs for project lists, child reads,
 workspace details, and snapshot re-derivation. The activity helper returns the
 selected timestamp as an ISO string or null; callers retain runtime reads and
 all other date and transport policy. The store derives only after timestamp
-merges, using its private raw session-busy value; active loop or ratchet state
-does not itself make `isWorking` true.
+merges, using its private raw session-busy value; active ratchet state does not
+itself make `isWorking` true.
 
 Committed lifecycle events publish their row's metadata immediately, including
 initial provisioning, READY paths and setup errors. A NEW-only workspace before
 initialization gains metadata through reconciliation; no separate creation event
-is introduced. Reconciliation seeds metadata, validated compact loop data and
-runtime inputs before releasing its seed barrier and starting slow Git work. The
-client validates a complete claim before adopting the canonical flat summary.
-Complete metadata and compact loop values, including explicit nulls, replace old
-list values. Legacy entries preserve HTTP metadata repair and retry. Malformed
-version claims fail wire validation. Board and navigation consumers use the
-shared summary type; the loop badge reads its compact counters and metric. Null
-counters remain unknown in cache, with the existing 0/25 display fallback
-applied only in the badge. Raw loop payloads remain available for legacy/detail
-consumers. Complete summaries still never create fetched full detail, and
-detail-only initialization fields remain HTTP-owned. Existing incomplete-row
-repair remains necessary.
+is introduced. Reconciliation seeds metadata and runtime inputs before releasing
+its seed barrier and starting slow Git work. The client validates a complete
+claim before adopting the canonical flat summary. Complete metadata values,
+including explicit nulls, replace old list values. Legacy entries preserve HTTP
+metadata repair and retry. Malformed version claims fail wire validation. Board
+and navigation consumers use the shared summary type. Complete summaries still
+never create fetched full detail, and detail-only initialization fields remain
+HTTP-owned. Existing incomplete-row repair remains necessary.
 
 `workspace-detail-snapshot-transitions` owns snapshot departure discovery, exact
 detail resets, and live detail merging. Each snapshot hook mount retains one

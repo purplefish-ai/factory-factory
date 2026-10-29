@@ -51,9 +51,9 @@ mid-turn stays queued for the next turn.
 
 Enablement and delivery destination are workspace-scoped. In MAIN mode, a unique
 ordinary conversation can be bound automatically; multiple candidates require an
-explicit choice. Auxiliary Ratchet, PR-monitoring, retired automated workflows,
-and adversarial-review sessions are ineligible as main recipients. Issue starts
-bind their created conversation after its initial human message is queued. The
+explicit choice. Auxiliary Ratchet, PR-monitoring, retired auto-iteration, and
+adversarial-review sessions are ineligible as main recipients. Issue starts bind
+their created conversation after its initial human message is queued. The
 workspace menu allows changing the destination or main recipient. DEDICATED mode
 creates a normal workspace conversation lazily when that PR has pending events,
 using the workspace's provider selection, normal user model defaults, and the

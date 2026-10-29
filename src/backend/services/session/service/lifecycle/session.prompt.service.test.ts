@@ -373,19 +373,6 @@ describe('SessionService prompt coordination', () => {
     );
   });
 
-  it('applies the ordinary four-hour deadline to queued user messages', async () => {
-    const { service, runtimeManager } = createPromptService();
-    runtimeManager.sendPrompt.mockResolvedValue({ stopReason: 'end_turn' });
-
-    await service.sendSessionMessage('session-1', 'continue');
-
-    expect(runtimeManager.sendPrompt).toHaveBeenCalledWith(
-      'session-1',
-      [{ type: 'text', text: 'continue' }],
-      14_400_000
-    );
-  });
-
   it('ends a failed turn in the error state even when background activity remains', async () => {
     const {
       service,
@@ -549,7 +536,7 @@ describe('SessionService prompt coordination', () => {
     ).toBe(true);
   });
 
-  it('serializes concurrent ACP prompts for the same session', async () => {
+  it('serializes concurrent ACP prompts with the four-hour deadline for the queued turn', async () => {
     const { service, runtimeManager } = createPromptService();
     const firstPrompt = createDeferred<{ stopReason: string }>();
     const secondPrompt = createDeferred<{ stopReason: string }>();
@@ -569,6 +556,13 @@ describe('SessionService prompt coordination', () => {
     await vi.waitFor(() => {
       expect(runtimeManager.sendPrompt).toHaveBeenCalledTimes(2);
     });
+
+    expect(runtimeManager.sendPrompt).toHaveBeenNthCalledWith(
+      2,
+      'session-1',
+      [{ type: 'text', text: 'second' }],
+      14_400_000
+    );
 
     secondPrompt.resolve({ stopReason: 'end_turn' });
     await expect(second).resolves.toBeUndefined();
