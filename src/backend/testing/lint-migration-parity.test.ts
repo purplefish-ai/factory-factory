@@ -62,12 +62,8 @@ function lint() {
   });
 }
 
-function oxlint(fixtures: string | { file: string; source: string }[]) {
-  const sources =
-    typeof fixtures === 'string'
-      ? [{ file: join(directory, 'rejected.ts'), source: fixtures }]
-      : fixtures;
-  const files = sources.map(({ file, source }) => {
+function oxlint(fixtures: { file: string; source: string }[]) {
+  const files = fixtures.map(({ file, source }) => {
     writeFileSync(file, source);
     return file;
   });
@@ -102,29 +98,37 @@ describe('lint coverage retained during Oxc migration', () => {
     source,
     file: join(directory, `callback-${index}.ts`),
   }));
-  let acceptedReport: z.infer<typeof oxlintReportSchema>;
+  const rejectedFixtures = [
+    {
+      name: 'unused destructuring parameters',
+      source: 'export function f({ unused }: { unused: string }) { /* Intentionally empty. */ }',
+    },
+    {
+      name: 'unused catch bindings',
+      source: 'export function f() { try { throw new Error(); } catch (error) { return; } }',
+    },
+  ].map((fixture, index) => ({ ...fixture, file: join(directory, `rejected-${index}.ts`) }));
+  let oxlintReport: z.infer<typeof oxlintReportSchema>;
   let biomeResult: ReturnType<typeof lint>;
   beforeAll(() => {
-    // One real type-aware CLI run must accept every fixture; each file stays a
-    // separate module so declarations cannot influence another fixture.
-    const acceptedResult = oxlint(acceptedFixtures);
-    expect(acceptedResult.error).toBeUndefined();
-    expect(acceptedResult.signal).toBeNull();
-    expect(acceptedResult.stderr).toBe('');
-    acceptedReport = oxlintReportSchema.parse(JSON.parse(acceptedResult.stdout));
-    expect(acceptedReport.number_of_files).toBe(acceptedFixtures.length);
-    const filenames = acceptedFixtures.map(({ file }) => relative(process.cwd(), file));
-    for (const diagnostic of acceptedReport.diagnostics) {
+    // A single real type-aware CLI run checks separate modules for both outcomes.
+    const fixtures = [...acceptedFixtures, ...rejectedFixtures];
+    const result = oxlint(fixtures);
+    expect(result.error).toBeUndefined();
+    expect(result.signal).toBeNull();
+    expect(result.stderr).toBe('');
+    oxlintReport = oxlintReportSchema.parse(JSON.parse(result.stdout));
+    expect(oxlintReport.number_of_files).toBe(fixtures.length);
+    const filenames = fixtures.map(({ file }) => relative(process.cwd(), file));
+    for (const diagnostic of oxlintReport.diagnostics) {
       expect(filenames).toContain(diagnostic.filename);
     }
-    expect(acceptedResult.status).toBe(acceptedReport.diagnostics.length === 0 ? 0 : 1);
+    expect(result.status).toBe(1);
     biomeResult = lint();
   });
   it.each(acceptedFixtures)('permits $name', ({ file }) => {
     expect(
-      acceptedReport.diagnostics.filter(
-        ({ filename }) => filename === relative(process.cwd(), file)
-      )
+      oxlintReport.diagnostics.filter(({ filename }) => filename === relative(process.cwd(), file))
     ).toEqual([]);
   });
 
@@ -143,20 +147,15 @@ describe('lint coverage retained during Oxc migration', () => {
     );
   });
 
-  it('rejects unused destructuring parameters without an underscore prefix', () => {
-    const result = oxlint(
-      'export function f({ unused }: { unused: string }) { /* Intentionally empty. */ }'
-    );
-    expect(result.status).toBe(1);
-    expect(result.stdout + result.stderr).toContain('no-unused-vars');
-  });
-
-  it('rejects unused catch bindings without an underscore prefix', () => {
-    const result = oxlint(
-      'export function f() { try { throw new Error(); } catch (error) { return; } }'
-    );
-    expect(result.error).toBeUndefined();
-    expect(result.status).toBe(1);
-    expect(result.stdout + result.stderr).toContain('no-unused-vars');
+  it.each(rejectedFixtures)('rejects $name without an underscore prefix', ({ file }) => {
+    expect(
+      oxlintReport.diagnostics.filter(({ filename }) => filename === relative(process.cwd(), file))
+    ).toEqual([
+      expect.objectContaining({
+        filename: relative(process.cwd(), file),
+        code: 'eslint(no-unused-vars)',
+        severity: 'error',
+      }),
+    ]);
   });
 });

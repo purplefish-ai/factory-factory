@@ -1,13 +1,13 @@
-import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join } from 'node:path';
+import { cruise } from 'dependency-cruiser';
+import extractTSConfig from 'dependency-cruiser/config-utl/extract-ts-config';
 import { expect, it } from 'vitest';
+import configuration from '../../../.dependency-cruiser.cjs';
 
-const repositoryRoot = process.cwd();
-
-function checkBoundary(producer: string, ports = 'export interface Ports {}') {
-  const root = mkdtempSync(join(tmpdir(), 'pr-observation-boundary-'));
+async function checkBoundary(producer: string, ports = 'export interface Ports {}') {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'pr-observation-boundary-')));
   const files = {
     'tsconfig.json': JSON.stringify({ compilerOptions: { module: 'ESNext' } }),
     'src/backend/orchestration/pr-observation.orchestrator.ts': producer,
@@ -25,27 +25,29 @@ function checkBoundary(producer: string, ports = 'export interface Ports {}') {
       mkdirSync(dirname(file), { recursive: true });
       writeFileSync(file, source);
     }
-    return spawnSync(
-      process.execPath,
-      [
-        resolve(repositoryRoot, 'node_modules/dependency-cruiser/bin/dependency-cruiser.mjs'),
-        'src',
-        '--config',
-        resolve(repositoryRoot, '.dependency-cruiser.cjs'),
-      ],
-      { cwd: root, encoding: 'utf8' }
+    return await cruise(
+      ['src'],
+      {
+        ...configuration.options,
+        baseDir: root,
+        ruleSet: configuration,
+        validate: true,
+        outputType: 'err',
+      },
+      {},
+      { tsConfig: extractTSConfig(join(root, 'tsconfig.json')) }
     );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 }
 
-it('allows observation to depend on its narrow ports and shared contracts', () => {
-  const result = checkBoundary(
+it('allows observation to depend on its narrow ports and shared contracts', async () => {
+  const result = await checkBoundary(
     "import type { Ports } from './pr-observation-ports'; export type Input = Ports;",
     "import type { Observation } from '../../shared/observation'; export type Ports = Observation;"
   );
-  expect(result.status, result.stdout + result.stderr).toBe(0);
+  expect(result.exitCode, String(result.output)).toBe(0);
 });
 
 it.each([
@@ -53,19 +55,19 @@ it.each([
   '../services/session',
   '../services/ratchet',
   './pr-delivery-dependencies',
-])('rejects producer runtime imports from %s', (dependency) => {
-  const result = checkBoundary(
+])('rejects producer runtime imports from %s', async (dependency) => {
+  const result = await checkBoundary(
     `import { service } from '${dependency}'; export const value = service;`
   );
-  expect(result.status).toBe(1);
-  expect(result.stdout).toContain('pr-observation-producer-has-no-runtime-backend-dependencies');
+  expect(result.exitCode).toBe(1);
+  expect(result.output).toContain('pr-observation-producer-has-no-runtime-backend-dependencies');
 });
 
-it('rejects broad service contracts in observation ports even for type-only imports', () => {
-  const result = checkBoundary(
+it('rejects broad service contracts in observation ports even for type-only imports', async () => {
+  const result = await checkBoundary(
     "import type { Ports } from './pr-observation-ports'; export type Input = Ports;",
     "import type { Contract } from '../services/github'; export type Ports = Contract;"
   );
-  expect(result.status).toBe(1);
-  expect(result.stdout).toContain('pr-observation-ports-are-application-independent');
+  expect(result.exitCode).toBe(1);
+  expect(result.output).toContain('pr-observation-ports-are-application-independent');
 });
