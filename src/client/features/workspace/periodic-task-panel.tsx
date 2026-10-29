@@ -28,6 +28,72 @@ function managementPath(slug: string | undefined, id?: string): string {
   return id ? getProjectAgentPath(slug, id) : getProjectSectionPath(slug, 'agents');
 }
 
+function ProjectLookupState({
+  error,
+  retry,
+}: {
+  error: { message: string } | null;
+  retry: () => void;
+}) {
+  if (!error) {
+    return (
+      <p role="status" className="text-xs text-muted-foreground">
+        Loading agent project…
+      </p>
+    );
+  }
+  return (
+    <div role="alert" className="space-y-2 text-xs">
+      <p className="text-destructive">Could not load agent project: {error.message}</p>
+      <Button size="sm" variant="outline" onClick={retry}>
+        Retry project
+      </Button>
+    </div>
+  );
+}
+
+function MissingAgentState({
+  taskError,
+  retryTask,
+  ownerSlug,
+  hasKnownOwner,
+  ownerError,
+  retryOwner,
+}: {
+  taskError: Parameters<typeof agentReadError>[0] | null;
+  retryTask: () => void;
+  ownerSlug?: string;
+  hasKnownOwner: boolean;
+  ownerError: { message: string } | null;
+  retryOwner: () => void;
+}) {
+  return (
+    <div className="space-y-3 p-4 text-sm">
+      {taskError ? (
+        <>
+          <p role="alert" className="text-destructive">
+            {agentReadError(taskError)}
+          </p>
+          <Button size="sm" variant="outline" onClick={retryTask}>
+            Retry agent
+          </Button>
+          {ownerSlug || !hasKnownOwner ? (
+            <Link to={managementPath(ownerSlug)} className="block text-primary underline">
+              Manage Agents
+            </Link>
+          ) : (
+            <ProjectLookupState error={ownerError} retry={retryOwner} />
+          )}
+        </>
+      ) : (
+        <p role="status" className="text-muted-foreground">
+          Loading agent…
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function PeriodicTaskPanel({ periodicTaskId, projectId }: PeriodicTaskPanelProps) {
   const task = trpc.periodicTask.get.useQuery({ id: periodicTaskId }, { refetchInterval: 10_000 });
   const ownerProjectId = task.data?.projectId ?? projectId;
@@ -38,25 +104,18 @@ export function PeriodicTaskPanel({ periodicTaskId, projectId }: PeriodicTaskPan
 
   if (!task.data) {
     return (
-      <div className="space-y-3 p-4 text-sm">
-        {task.error ? (
-          <>
-            <p role="alert" className="text-destructive">
-              {agentReadError(task.error)}
-            </p>
-            <Button size="sm" variant="outline" onClick={() => void task.refetch()}>
-              Retry agent
-            </Button>
-            <Link to={managementPath(project.data?.slug)} className="block text-primary underline">
-              Manage Agents
-            </Link>
-          </>
-        ) : (
-          <p role="status" className="text-muted-foreground">
-            Loading agent…
-          </p>
-        )}
-      </div>
+      <MissingAgentState
+        taskError={task.error}
+        retryTask={() => {
+          void task.refetch();
+        }}
+        ownerSlug={project.data?.slug}
+        hasKnownOwner={!!ownerProjectId}
+        ownerError={project.error}
+        retryOwner={() => {
+          void project.refetch();
+        }}
+      />
     );
   }
 
@@ -96,14 +155,12 @@ export function PeriodicTaskPanel({ periodicTaskId, projectId }: PeriodicTaskPan
       </div>
       <div className="p-3">
         {project.error && (
-          <div role="alert" className="space-y-2 text-xs">
-            <p className="text-destructive">
-              Could not load agent project: {project.error.message}
-            </p>
-            <Button size="sm" variant="outline" onClick={() => void project.refetch()}>
-              Retry project
-            </Button>
-          </div>
+          <ProjectLookupState
+            error={project.error}
+            retry={() => {
+              void project.refetch();
+            }}
+          />
         )}
         {project.data ? (
           <AgentRunHistoryQuery periodicTaskId={periodicTaskId} projectSlug={project.data.slug} />

@@ -1,5 +1,5 @@
 import { useParams } from 'react-router';
-import { ProjectSectionHeader } from '@/client/components/project-section-header';
+import { ProjectHeader } from '@/client/components/project-header';
 import { AgentsPage } from '@/client/features/agents/agents-page';
 import { trpc } from '@/client/lib/trpc';
 
@@ -11,7 +11,7 @@ export default function AgentsRoute() {
   } // ProjectLayout owns loading and error states.
   return (
     <>
-      <ProjectSectionHeader project={project.data} />
+      <ProjectHeader project={project.data} />
       <AgentsPage key={project.data.id} project={project.data} />
     </>
   );

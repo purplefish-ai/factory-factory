@@ -40,11 +40,11 @@ describe('explicit header project navigation', () => {
   it.each([
     ['/projects/alpha/agents/task-1?agent=old', 'Beta', '/projects/beta/agents', 'beta'],
     ['/projects/alpha/agents', 'Beta', '/projects/beta/agents', 'beta'],
-    ['/projects/alpha/agents/task-1', 'Current', '/projects/alpha/agents', 'alpha'],
+    ['/projects/alpha/agents/task-1', 'Current', '/projects/alpha/workspaces', 'alpha'],
     ['/projects/alpha/workspaces/workspace-1', 'Beta', '/projects/beta/workspaces', 'beta'],
     ['/projects/alpha/reviews?repo=old&pr=12', 'Beta', '/projects/beta/reviews', 'beta'],
     ['/projects/alpha/workspaces', 'Beta', '/projects/beta/workspaces', 'beta'],
-    ['/projects/archived/agents/task', 'Current', '/projects/archived/agents', 'archived'],
+    ['/projects/archived/agents/task', 'Current', '/projects/archived/workspaces', 'archived'],
     ['/projects/alpha/agents', 'Create', '/projects/new', ''],
     ['/projects/alpha/reviews', 'Manage', '/projects', ''],
   ])('switches from %s using %s', async (from, button, destination, slug) => {

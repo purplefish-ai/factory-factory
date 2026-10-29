@@ -3,7 +3,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router';
 import { afterEach, expect, it, vi } from 'vitest';
-import { ProjectSectionNavigation } from './project-section-header';
+import { ProjectHeaderNavigation } from './project-header';
 
 vi.mock('@/client/hooks/use-app-navigation-data', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/client/hooks/use-app-navigation-data')>()),
@@ -18,7 +18,7 @@ afterEach(() => {
   document.body.innerHTML = '';
   vi.unstubAllGlobals();
 });
-it('shows the explicit archived project alongside active project choices and canonical section links', async () => {
+it('shows the explicit archived project alongside active project choices without section tabs', async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
     configurable: true,
@@ -31,20 +31,17 @@ it('shows the explicit archived project alongside active project choices and can
     await act(() =>
       root.render(
         <MemoryRouter initialEntries={['/projects/archived/agents/task?old=1']}>
-          <ProjectSectionNavigation
+          <ProjectHeaderNavigation
             project={{ id: 'archived-id', slug: 'archived', name: 'Archived owner' }}
           />
         </MemoryRouter>
       )
     );
     expect(
-      container.querySelector('button[aria-label="Open Archived owner project"]')
+      container.querySelector('button[aria-label="Open Archived owner workspaces"]')
     ).not.toBeNull();
-    expect(
-      container.querySelector('a[href="/projects/archived/agents"]')?.getAttribute('aria-current')
-    ).toBe('page');
-    expect(container.querySelector('a[href="/projects/archived/workspaces"]')).not.toBeNull();
-    expect(container.querySelector('a[href="/projects/archived/reviews"]')).not.toBeNull();
+    expect(container.querySelector('nav')).toBeNull();
+    expect(container.querySelector('a')).toBeNull();
     await act(() =>
       container
         .querySelector('[role="combobox"]')

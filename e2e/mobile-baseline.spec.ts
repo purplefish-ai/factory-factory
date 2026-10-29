@@ -118,27 +118,36 @@ for (const viewport of mobileViewports) {
     await page.goto('/__mobile-baseline?surface=agents');
     await expect(page.getByRole('heading', { name: 'Agents', exact: true })).toBeVisible();
     await expect(
-      page.getByRole('button', { name: 'Open Factory Factory project', exact: true })
+      page.getByRole('button', { name: 'Open Factory Factory workspaces', exact: true })
     ).toBeVisible();
     await expect(page.getByRole('button', { name: 'Toggle sidebar', exact: true })).toBeVisible();
-    const sections = page.getByRole('navigation', { name: 'Project sections', exact: true });
-    await expect(sections).toBeVisible();
-    await expect(sections.getByRole('link', { name: 'Workspaces', exact: true })).toHaveAttribute(
-      'href',
-      '/projects/factory-factory/workspaces'
-    );
-    await expect(sections.getByRole('link', { name: 'Agents', exact: true })).toHaveAttribute(
-      'href',
-      '/projects/factory-factory/agents'
-    );
-    await expect(sections.getByRole('link', { name: /Reviews/ })).toHaveAttribute(
-      'href',
-      '/projects/factory-factory/reviews'
-    );
+    await expect(
+      page.getByRole('navigation', { name: 'Project sections', exact: true })
+    ).toHaveCount(0);
     await page.getByRole('combobox', { name: 'Open project menu', exact: true }).click();
     await expect(page.getByRole('option', { name: 'Factory Factory', exact: true })).toBeVisible();
     await expect(page.getByRole('option', { name: 'Other project', exact: true })).toBeVisible();
     await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Toggle sidebar', exact: true }).click();
+    const sidebar = page.getByRole('dialog', { name: 'Navigation', exact: true });
+    await expect(sidebar).toBeVisible();
+    const footer = sidebar.locator('[data-sidebar="footer"]');
+    await expect(footer.getByRole('link', { name: 'Agents', exact: true })).toHaveAttribute(
+      'href',
+      '/projects/factory-factory/agents'
+    );
+    await expect(footer.getByRole('link', { name: /Reviews/ })).toHaveAttribute(
+      'href',
+      '/projects/factory-factory/reviews'
+    );
+    await expect(footer.getByRole('link', { name: 'Settings', exact: true })).toHaveAttribute(
+      'href',
+      '/admin'
+    );
+    expect(await footer.locator('a').allTextContents()).toEqual(['Agents', 'Reviews2', 'Settings']);
+    await expect(page).toHaveScreenshot(`agents-sidebar-${viewport.name}.png`);
+    await sidebar.getByRole('button', { name: 'Close sidebar', exact: true }).click();
+    await expect(sidebar).toBeHidden();
     const rail = page.getByRole('navigation', { name: 'Agents', exact: true });
     await expect(rail).toBeVisible();
     const dependencies = rail.getByRole('link', { name: /Keep dependencies current/ });

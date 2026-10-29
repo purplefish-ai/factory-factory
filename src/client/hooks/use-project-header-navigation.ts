@@ -9,14 +9,8 @@ import { getProjectSection, getProjectSectionPath } from '@/client/lib/project-n
 export function useProjectHeaderNavigation() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const {
-    projects,
-    projectsError,
-    refetchProjects,
-    selectedProjectSlug,
-    selectProjectSlug,
-    reviewCount,
-  } = useAppNavigationDataContext();
+  const { projects, projectsError, refetchProjects, selectedProjectSlug, selectProjectSlug } =
+    useAppNavigationDataContext();
   const currentProjectSlug = getProjectSlugFromPath(pathname) ?? selectedProjectSlug;
 
   const navigateToProject = useCallback(
@@ -46,14 +40,14 @@ export function useProjectHeaderNavigation() {
     if (!currentProjectSlug) {
       return;
     }
-    navigateToProject(currentProjectSlug);
-  }, [currentProjectSlug, navigateToProject]);
+    selectProjectSlug(currentProjectSlug);
+    void navigate(getProjectSectionPath(currentProjectSlug, 'workspaces'));
+  }, [currentProjectSlug, navigate, selectProjectSlug]);
 
   return {
     selectedProjectSlug: currentProjectSlug,
     projects,
     projectsError,
-    reviewCount,
     refetchProjects,
     handleProjectChange,
     handleCurrentProjectSelect,

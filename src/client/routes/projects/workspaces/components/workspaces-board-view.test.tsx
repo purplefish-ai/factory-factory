@@ -41,8 +41,8 @@ vi.mock('@/client/components/app-header-context', () => ({
   HeaderLeftStartSlot: ({ children }: { children: ReactNode }) => children,
   HeaderRightSlot: () => null,
 }));
-vi.mock('@/client/components/project-section-header', () => ({
-  ProjectSectionHeader: () => null,
+vi.mock('@/client/components/project-header', () => ({
+  ProjectHeader: () => null,
 }));
 vi.mock('@/client/features/kanban', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/client/features/kanban')>();

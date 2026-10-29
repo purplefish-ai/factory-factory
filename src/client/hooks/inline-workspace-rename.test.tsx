@@ -25,8 +25,8 @@ vi.mock('@/client/components/app-header-context', () => ({
   HeaderRightSlot: () => null,
   useAppHeader: () => undefined,
 }));
-vi.mock('@/client/components/project-section-header', () => ({
-  ProjectSectionNavigation: () => null,
+vi.mock('@/client/components/project-header', () => ({
+  ProjectHeaderNavigation: () => null,
 }));
 vi.mock('@/client/routes/projects/workspaces/use-workspace-project-navigation', () => ({
   useWorkspaceProjectNavigation: () => ({ slug: 'project', projects: [] }),

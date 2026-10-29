@@ -8,7 +8,7 @@ import {
   HeaderRightSlot,
   useAppHeader,
 } from '@/client/components/app-header-context';
-import { ProjectSectionNavigation } from '@/client/components/project-section-header';
+import { ProjectHeaderNavigation } from '@/client/components/project-header';
 import { RunScriptButton, RunScriptPortBadge } from '@/client/features/workspace';
 import { useInlineWorkspaceRename } from '@/client/hooks/use-inline-workspace-rename';
 import { runInBackground } from '@/client/lib/background-task';
@@ -91,7 +91,9 @@ export function WorkspaceDetailHeaderSlot({
     <>
       <HeaderLeftStartSlot>
         <div className="flex min-w-0 items-center gap-0.5">
-          <ProjectSectionNavigation
+          <ProjectHeaderNavigation
+            showTrailingSlash
+            triggerId="workspace-detail-project-select"
             project={
               routeProject.data ??
               projects?.find((candidate) => candidate.slug === slug) ?? {

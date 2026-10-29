@@ -1,7 +1,10 @@
-import { useState } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { observable } from '@trpc/server/observable';
+import { useEffect, useState } from 'react';
 import { AppHeader } from '@/client/components/app-header';
 import { AppHeaderProvider } from '@/client/components/app-header-context';
-import { ProjectSectionHeader } from '@/client/components/project-section-header';
+import { AppSidebar } from '@/client/components/app-sidebar';
+import { ProjectHeader } from '@/client/components/project-header';
 import { AgentDetail } from '@/client/features/agents/agent-detail';
 import { AgentForm } from '@/client/features/agents/agent-form';
 import { AgentRunHistory } from '@/client/features/agents/agent-run-history';
@@ -11,6 +14,7 @@ import {
   AppNavigationDataProvider,
   type AppNavigationData,
 } from '@/client/hooks/use-app-navigation-data';
+import { trpc } from '@/client/lib/trpc';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
@@ -90,7 +94,7 @@ const dependencies: Agent = {
 };
 
 /** Frontend-only phone fixture; shared components retain their production links. */
-export function MobileAgentsFixture() {
+function MobileAgentsSession() {
   const [agents, setAgents] = useState([review, dependencies]);
   const [selectedId, setSelectedId] = useState(review.id);
   const [formMode, setFormMode] = useState<'create' | 'edit' | null>(null);
@@ -130,81 +134,115 @@ export function MobileAgentsFixture() {
           <TooltipProvider>
             <AppHeaderProvider>
               <AppHeader />
-              <ProjectSectionHeader project={project} />
-              <div className="min-h-0 w-full flex-1 overflow-hidden">
-                <AgentsDashboardShell
-                  projectSlug={project.slug}
-                  agents={agents}
-                  selectedAgentId={formMode === 'create' ? undefined : selected.id}
-                  onCreate={() => setFormMode('create')}
-                >
-                  {formMode ? (
-                    <>
-                      <h2 className="text-xl font-semibold">
-                        {formMode === 'edit' ? 'Edit Agent' : 'Create Agent'}
-                      </h2>
-                      <AgentForm
-                        key={`${formMode}-${selectedId}`}
-                        initialValues={formMode === 'edit' ? selected : undefined}
-                        onCancel={() => setFormMode(null)}
-                        onSave={(values) => {
-                          const now = new Date();
-                          const base: Agent =
-                            formMode === 'create'
-                              ? {
-                                  id: crypto.randomUUID(),
-                                  projectId: project.id,
-                                  name: '',
-                                  prompt: '',
-                                  cadence: 'DAILY',
-                                  scheduledTime: null,
-                                  timezone: null,
-                                  scheduledDayOfMonth: null,
-                                  isEnabled: true,
-                                  nextRunAt: now,
-                                  lastRunAt: null,
-                                  createdAt: now,
-                                  updatedAt: now,
-                                  executions: [],
-                                }
-                              : selected;
-                          const updated = { ...base, ...values, updatedAt: now };
+              <ProjectHeader project={project} />
+              <div className="flex min-h-0 w-full flex-1 overflow-hidden">
+                <AppSidebar navData={navigation} />
+                <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
+                  <AgentsDashboardShell
+                    projectSlug={project.slug}
+                    agents={agents}
+                    selectedAgentId={formMode === 'create' ? undefined : selected.id}
+                    onCreate={() => setFormMode('create')}
+                  >
+                    {formMode ? (
+                      <>
+                        <h2 className="text-xl font-semibold">
+                          {formMode === 'edit' ? 'Edit Agent' : 'Create Agent'}
+                        </h2>
+                        <AgentForm
+                          key={`${formMode}-${selectedId}`}
+                          initialValues={formMode === 'edit' ? selected : undefined}
+                          onCancel={() => setFormMode(null)}
+                          onSave={(values) => {
+                            const now = new Date();
+                            const base: Agent =
+                              formMode === 'create'
+                                ? {
+                                    id: crypto.randomUUID(),
+                                    projectId: project.id,
+                                    name: '',
+                                    prompt: '',
+                                    cadence: 'DAILY',
+                                    scheduledTime: null,
+                                    timezone: null,
+                                    scheduledDayOfMonth: null,
+                                    isEnabled: true,
+                                    nextRunAt: now,
+                                    lastRunAt: null,
+                                    createdAt: now,
+                                    updatedAt: now,
+                                    executions: [],
+                                  }
+                                : selected;
+                            const updated = { ...base, ...values, updatedAt: now };
+                            setAgents((current) =>
+                              formMode === 'create'
+                                ? [...current, updated]
+                                : current.map((agent) =>
+                                    agent.id === selected.id ? updated : agent
+                                  )
+                            );
+                            setSelectedId(updated.id);
+                            setFormMode(null);
+                            return Promise.resolve();
+                          }}
+                        />
+                      </>
+                    ) : (
+                      <AgentDetail
+                        agent={selected}
+                        projectName={project.name}
+                        onEdit={() => setFormMode('edit')}
+                        onToggle={() =>
                           setAgents((current) =>
-                            formMode === 'create'
-                              ? [...current, updated]
-                              : current.map((agent) => (agent.id === selected.id ? updated : agent))
-                          );
-                          setSelectedId(updated.id);
-                          setFormMode(null);
-                          return Promise.resolve();
-                        }}
-                      />
-                    </>
-                  ) : (
-                    <AgentDetail
-                      agent={selected}
-                      projectName={project.name}
-                      onEdit={() => setFormMode('edit')}
-                      onToggle={() =>
-                        setAgents((current) =>
-                          current.map((agent) =>
-                            agent.id === selected.id
-                              ? { ...agent, isEnabled: !agent.isEnabled }
-                              : agent
+                            current.map((agent) =>
+                              agent.id === selected.id
+                                ? { ...agent, isEnabled: !agent.isEnabled }
+                                : agent
+                            )
                           )
-                        )
-                      }
-                      onDelete={() => undefined}
-                    >
-                      <AgentRunHistory projectSlug={project.slug} runs={selected.executions} />
-                    </AgentDetail>
-                  )}
-                </AgentsDashboardShell>
+                        }
+                        onDelete={() => undefined}
+                      >
+                        <AgentRunHistory projectSlug={project.slug} runs={selected.executions} />
+                      </AgentDetail>
+                    )}
+                  </AgentsDashboardShell>
+                </div>
               </div>
             </AppHeaderProvider>
           </TooltipProvider>
         </SidebarProvider>
       </AppNavigationDataProvider>
     </div>
+  );
+}
+
+/** Isolate frontend-only sidebar/search fixture queries from the real backend. */
+export function MobileAgentsFixture() {
+  const [queryClient] = useState(
+    () => new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
+  );
+  const [client] = useState(() =>
+    trpc.createClient({
+      links: [
+        () =>
+          ({ op }) =>
+            observable((observer) => {
+              observer.next({
+                result: { data: op.path === 'github.listIssuesForProject' ? { issues: [] } : [] },
+              });
+              observer.complete();
+            }),
+      ],
+    })
+  );
+  useEffect(() => () => queryClient.clear(), [queryClient]);
+  return (
+    <trpc.Provider client={client} queryClient={queryClient}>
+      <QueryClientProvider client={queryClient}>
+        <MobileAgentsSession />
+      </QueryClientProvider>
+    </trpc.Provider>
   );
 }

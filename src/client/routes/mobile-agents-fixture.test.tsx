@@ -10,6 +10,7 @@ vi.mock('@/client/features/search', () => ({
   GlobalSearch: () => <button aria-label="Search">Search</button>,
 }));
 vi.mock('@/hooks/use-mobile', () => ({ MOBILE_BREAKPOINT: 768, useIsMobile: () => true }));
+vi.mock('@/client/hooks/use-project-issues', () => ({ useProjectIssues: () => ({ issues: [] }) }));
 let container: HTMLDivElement;
 let root: Root;
 function button(name: string, scope: ParentNode = container) {
@@ -113,25 +114,18 @@ it.each([
   expect(container.querySelector('h2')?.textContent).toBe('Review recent changes');
 });
 
-it('renders the shared project navbar, project menu and canonical section links', () => {
+it('keeps the project selector in the navbar and section links in the real mobile sidebar', () => {
   expect(
-    container.querySelector('button[aria-label="Open Factory Factory project"]')
+    container.querySelector('button[aria-label="Open Factory Factory workspaces"]')
   ).not.toBeNull();
-  expect(container.querySelector('button[aria-label="Toggle sidebar"]')).not.toBeNull();
-  expect(
-    container.querySelector(
-      'nav[aria-label="Project sections"] a[href="/projects/factory-factory/workspaces"]'
-    )
-  ).not.toBeNull();
-  expect(
-    container.querySelector(
-      'nav[aria-label="Project sections"] a[href="/projects/factory-factory/agents"]'
-    )
-  ).not.toBeNull();
-  expect(
-    container.querySelector(
-      'nav[aria-label="Project sections"] a[href="/projects/factory-factory/reviews"]'
-    )
-  ).not.toBeNull();
+  expect(container.querySelector('nav[aria-label="Project sections"]')).toBeNull();
   expect(container.querySelector('#agents-project-filter')).toBeNull();
+  actFlushSync(() =>
+    container.querySelector<HTMLButtonElement>('button[aria-label="Toggle sidebar"]')?.click()
+  );
+  const footer = document.querySelector('[role="dialog"] [data-sidebar="footer"]');
+  expect(
+    [...(footer?.querySelectorAll('a') ?? [])].map((link) => link.getAttribute('href'))
+  ).toEqual(['/projects/factory-factory/agents', '/projects/factory-factory/reviews', '/admin']);
+  expect(footer?.textContent).toContain('Reviews2');
 });

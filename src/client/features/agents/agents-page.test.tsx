@@ -8,7 +8,7 @@ import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-rou
 import { useParams } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { ProjectSectionNavigation } from '@/client/components/project-section-header';
+import { ProjectHeaderNavigation } from '@/client/components/project-header';
 import { trpc } from '@/client/lib/trpc';
 import { actFlushSync, waitForReact } from '@/test-utils/react-act';
 import { AgentsPage } from './agents-page';
@@ -199,7 +199,7 @@ function ScopedPage() {
   };
   return (
     <>
-      <ProjectSectionNavigation project={project} />
+      <ProjectHeaderNavigation project={project} />
       <AgentsPage key={project.id} project={project} />
     </>
   );

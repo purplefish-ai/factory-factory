@@ -86,14 +86,14 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
-async function render() {
+async function render(projectId: string | null = 'owner') {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
   await act(() =>
     root.render(
       <MemoryRouter>
-        <PeriodicTaskPanel periodicTaskId="agent-1" projectId="owner" />
+        <PeriodicTaskPanel periodicTaskId="agent-1" projectId={projectId ?? undefined} />
       </MemoryRouter>
     )
   );
@@ -200,6 +200,44 @@ it('uses friendly cached NOT_FOUND copy and preserves the definition retry actio
         ?.click()
     );
     expect(mocks.task.refetch).toHaveBeenCalledOnce();
+  } finally {
+    await view.dispose();
+  }
+});
+it.each(['loading', 'error'])(
+  'keeps missing-agent management scoped while its known workspace owner is %s',
+  async (state) => {
+    mocks.task.data = undefined;
+    mocks.task.error = { message: 'Agent gone', data: { code: 'NOT_FOUND' } };
+    mocks.project.data = undefined;
+    mocks.project.error = state === 'error' ? { message: 'Owner unavailable' } : null;
+    const view = await render();
+    try {
+      expect(view.container.querySelector('a[href="/agents"]')).toBeNull();
+      expect(view.container.textContent).toContain(
+        state === 'error' ? 'Owner unavailable' : 'Loading agent project'
+      );
+      if (state === 'error') {
+        await act(() =>
+          [...view.container.querySelectorAll('button')]
+            .find((button) => button.textContent === 'Retry project')
+            ?.click()
+        );
+        expect(mocks.project.refetch).toHaveBeenCalledOnce();
+      }
+    } finally {
+      await view.dispose();
+    }
+  }
+);
+
+it('uses the compatibility index only when no workspace owner can be recovered', async () => {
+  mocks.task.data = undefined;
+  mocks.task.error = { message: 'Agent gone', data: { code: 'NOT_FOUND' } };
+  mocks.project.data = undefined;
+  const view = await render(null);
+  try {
+    expect(view.container.querySelector('a[href="/agents"]')).not.toBeNull();
   } finally {
     await view.dispose();
   }

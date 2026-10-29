@@ -1,12 +1,12 @@
 import { HeaderRightSlot } from '@/client/components/app-header-context';
-import { ProjectSectionHeader } from '@/client/components/project-section-header';
+import { ProjectHeader } from '@/client/components/project-header';
 import { KanbanBoard, KanbanControls, KanbanProvider } from '@/client/features/kanban';
 import type { IssueProvider } from '@/shared/core';
 
 function BoardHeaderSlot({ project }: { project: { id: string; slug: string; name: string } }) {
   return (
     <>
-      <ProjectSectionHeader project={project} />
+      <ProjectHeader project={project} />
       <HeaderRightSlot>
         <KanbanControls />
       </HeaderRightSlot>
