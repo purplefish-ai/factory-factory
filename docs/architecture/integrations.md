@@ -157,11 +157,14 @@ completion monitoring.
 
 The PERIODIC_TASK launch policy persists a fresh workspace and requires a
 `periodic-task` / `Agent` session, without explicit provider resolution, CLI
-preflight, or a capacity gate. Session failure propagates with the workspace
-retained and no initialization scheduled. Successful provisioning starts
-initialization once in the background. A launched result means workspace and
-session creation returned; worktree initialization continues in the background.
-It does not mean the prompt or periodic execution completed.
+preflight, or a capacity gate. Committed workspace creation publishes NEW to the
+snapshot stream before waiting for that required session; the sidebar can show
+it in Working immediately. Session failure propagates with the workspace
+retained and published, no initialization scheduled, and the reserved execution
+failed without a workspace link. Successful provisioning starts initialization
+once in the background. A launched result means workspace and session creation
+returned; worktree initialization continues in the background. It does not mean
+the prompt or periodic execution completed.
 
 Launch failures mark the reserved execution failed. A failed workspace-ID write
 leaves it running without a workspace link until the existing 15-minute timeout
@@ -183,13 +186,15 @@ Agents stacks its rail and editor below 48rem of available content width,
 including when the workspace sidebar is expanded. Schedule fields share a row
 only above 26rem of their own available width. Resizing preserves form drafts.
 
-Create/edit use Name, Instructions and Schedule. Creation starts the first run
-immediately, then follows the configured schedule. An unchanged clock time keeps
-an edited agent's timezone; changing the time uses the browser timezone.
-Clearing the time or switching to a minute cadence clears both schedule fields.
-Kanban's **Create Agent** launch mode keeps its instructions composer and uses
-the same schedule controls. It remains available while chat provider defaults
-load. No provider or unattended-execution policy changes accompany this UI.
+Create/edit use Name, Instructions and Schedule. Creation makes the first run
+due immediately; the existing periodic-task poll admits it, then follows the
+configured schedule. No new timer or admission policy is introduced. An
+unchanged clock time keeps an edited agent's timezone; changing the time uses
+the browser timezone. Clearing the time or switching to a minute cadence clears
+both schedule fields. Kanban's **Create Agent** launch mode keeps its
+instructions composer and uses the same schedule controls. It remains available
+while chat provider defaults load. No provider or unattended-execution policy
+changes accompany this UI.
 
 Pause affects future runs; an already running workspace continues. Deleting an
 agent requires confirmation and removes its definition and execution history,

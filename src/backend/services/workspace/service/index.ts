@@ -14,6 +14,8 @@ export type { AcceptedWorkspaceBranch } from './lifecycle/accepted-branch';
 export { workspaceDataService } from './lifecycle/data.service';
 // --- Workspace lifecycle ---
 export {
+  WORKSPACE_CREATED,
+  type WorkspaceCreatedEvent,
   WORKSPACE_STATE_CHANGED,
   type WorkspaceStateChangedEvent,
   workspaceStateMachine,
