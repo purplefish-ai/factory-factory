@@ -1,7 +1,7 @@
 import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
-import { resolveLaunchAccessMode } from '@/shared/session-launch';
+import { CLAUDE_AUTO_FALLBACK, resolveLaunchAccessMode } from '@/shared/session-launch';
 import type { SessionPermissionPreset } from '@prisma-gen/client';
 import { parseAcpConfigSnapshot } from './acp-config-snapshot';
 import { getConfigOptionValues } from './session-config-option-helpers';
@@ -71,8 +71,6 @@ export async function applyReadOnlyReviewPermissions(
   }
   return didUpdate;
 }
-
-const CLAUDE_AUTO_FALLBACK = 'acceptEdits';
 
 export function resolveConfiguredAccessModeTarget(
   provider: string,

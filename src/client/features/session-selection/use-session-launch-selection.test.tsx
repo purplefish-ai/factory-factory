@@ -429,3 +429,21 @@ it('blocks launch when explicit access becomes unavailable after a model switch'
   expect(mounted.current.ready).toBe(false);
   expect(mounted.current.unavailableReason).toContain('access mode');
 });
+
+it('requires an explicit permission choice when a saved strict preset is unavailable, even if native defaults grant full access', () => {
+  mocks.settings = { ...defaults, defaultWorkspacePermissions: 'STRICT' };
+  mocks.launches.set('CODEX:saved-sol', {
+    ...solNative,
+    accessMode: {
+      options: [{ value: 'agent-full-access', label: 'Full access' }],
+      selected: 'agent-full-access',
+    },
+  });
+  const mounted = mountConnected();
+  expect(mounted.current.ready).toBe(false);
+  expect(mounted.current.controlsProps.accessMode?.invalid).toBe(true);
+  expect(mounted.current.creationDefaults.accessMode).toBeUndefined();
+  flushSync(() => mounted.current.controlsProps.accessMode?.onChange('agent-full-access'));
+  expect(mounted.current.ready).toBe(true);
+  expect(mounted.current.creationDefaults.accessMode).toBe('agent-full-access');
+});

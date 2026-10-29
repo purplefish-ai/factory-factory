@@ -206,3 +206,29 @@ it('offers native permission choices from the compact Access icon and marks full
   );
   expect(onChange).toHaveBeenCalledWith('read-only');
 });
+
+it('warns about unavailable access before hover, retains it in the menu, and permits a supported choice', () => {
+  const onChange = vi.fn();
+  const mounted = mount({
+    accessMode: {
+      value: 'retired-mode',
+      options: [{ value: 'read-only', label: 'Read only' }],
+      invalid: true,
+      loading: false,
+      onChange,
+    },
+  });
+  const trigger = mounted.container.querySelector<HTMLButtonElement>(
+    '[aria-label="Access: retired-mode"]'
+  );
+  expect(trigger?.getAttribute('aria-invalid')).toBe('true');
+  expect(trigger?.querySelector('[aria-label="Unavailable access mode"]')).not.toBeNull();
+  keyboardOpen(trigger);
+  const unavailable = [
+    ...document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]'),
+  ].find((item) => item.textContent?.includes('retired-mode'));
+  expect(unavailable?.getAttribute('aria-disabled')).toBe('true');
+  expect(unavailable?.textContent).toContain('unavailable');
+  keyboardSelect('Read only');
+  expect(onChange).toHaveBeenCalledWith('read-only');
+});

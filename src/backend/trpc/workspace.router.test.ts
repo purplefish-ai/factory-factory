@@ -213,6 +213,7 @@ function createCaller(requestTrust?: {
         resolveProvider: (...args) =>
           services.sessionProviderResolverService.resolveProviderForWorkspaceCreation(...args),
         checkCliHealth: () => services.cliHealthService.checkHealth(),
+        getLaunchOptions: (input) => services.sessionConfigService.getLaunchOptions(input),
         createWorkspace: (...args) => mockWorkspaceCreationCreate(...args),
         createDefaultSession: (input) => services.sessionDataService.createAgentSession(input),
         initializeWorktree: (...args) => mockInitializeWorkspaceWorktree(...args),

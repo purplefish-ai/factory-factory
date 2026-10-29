@@ -60,6 +60,7 @@ const childPorts = {
       initializeWorktree: (id) => initializeWorkspaceWorktree(id),
       getMaxSessionsPerWorkspace: vi.fn(),
       checkCliHealth: vi.fn(),
+      getLaunchOptions: vi.fn(),
       logger: { warn: vi.fn(), error: vi.fn() },
     })
   ),

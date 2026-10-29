@@ -14,12 +14,14 @@ interface PreviewProps {
   longLabels?: boolean;
   planEnabled?: boolean;
   fullAccess?: boolean;
+  unavailableAccess?: boolean;
 }
 function LaunchControlsPreview({
   state = 'ready',
   longLabels = false,
   planEnabled = false,
   fullAccess = false,
+  unavailableAccess = false,
 }: PreviewProps) {
   const unavailableEffort = longLabels
     ? 'Maximum advertised thinking level no longer supported'
@@ -29,7 +31,7 @@ function LaunchControlsPreview({
     CODEX: {
       model: state === 'invalid' ? 'luna' : 'sol',
       effort: state === 'invalid' ? unavailableEffort : 'high',
-      access: fullAccess ? 'agent-full-access' : 'workspace-write',
+      access: getInitialAccess(unavailableAccess, fullAccess),
       plan: planEnabled || state === 'unsupported',
     },
     CLAUDE: { model: 'sonnet', effort: null, plan: false, access: 'default' },
@@ -100,30 +102,9 @@ function LaunchControlsPreview({
         }}
         accessMode={{
           value: draft.access,
-          options:
-            provider === 'CODEX'
-              ? [
-                  {
-                    value: 'read-only',
-                    label: 'Read only',
-                    description: 'Read files without making changes.',
-                  },
-                  { value: 'workspace-write', label: 'Workspace write' },
-                  { value: 'agent', label: 'Auto review' },
-                  {
-                    value: 'agent-full-access',
-                    label: 'Full access',
-                    description: 'Run commands with unrestricted access.',
-                  },
-                ]
-              : [
-                  { value: 'default', label: 'Default' },
-                  { value: 'acceptEdits', label: 'Accept edits' },
-                  { value: 'auto', label: 'Auto' },
-                  { value: 'bypassPermissions', label: 'Bypass permissions' },
-                ],
+          options: getPreviewAccessOptions(provider, state),
           loading: state === 'loading',
-          invalid: false,
+          invalid: draft.access === 'retired-mode',
           onChange: (access) => update({ access }),
         }}
         planMode={{
@@ -162,3 +143,39 @@ export const LongLabels: Story = { args: { longLabels: true } };
 export const Narrow: Story = { ...LongLabels, parameters: { viewport: { value: 'mobile1' } } };
 
 export const FullAccess: Story = { args: { fullAccess: true } };
+
+export const UnavailableAccess: Story = { args: { unavailableAccess: true } };
+
+function getInitialAccess(unavailable: boolean, fullAccess: boolean) {
+  if (unavailable) {
+    return 'retired-mode';
+  }
+  return fullAccess ? 'agent-full-access' : 'workspace-write';
+}
+
+function getPreviewAccessOptions(provider: ChatProvider, state: PreviewProps['state']) {
+  if (state === 'error' || state === 'loading') {
+    return [];
+  }
+  return provider === 'CODEX'
+    ? [
+        {
+          value: 'read-only',
+          label: 'Read only',
+          description: 'Read files without making changes.',
+        },
+        { value: 'workspace-write', label: 'Workspace write' },
+        { value: 'agent', label: 'Auto review' },
+        {
+          value: 'agent-full-access',
+          label: 'Full access',
+          description: 'Run commands with unrestricted access.',
+        },
+      ]
+    : [
+        { value: 'default', label: 'Default' },
+        { value: 'acceptEdits', label: 'Accept edits' },
+        { value: 'auto', label: 'Auto' },
+        { value: 'bypassPermissions', label: 'Bypass permissions' },
+      ];
+}

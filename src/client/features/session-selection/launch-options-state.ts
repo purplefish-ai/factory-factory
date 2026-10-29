@@ -9,7 +9,7 @@ interface DraftOptions {
   savedReasoningEffort?: string | null;
   planModeEnabled?: boolean;
 }
-/** Keep explicit intent, but resolve inherited unsupported preferences to the native default. */
+/** Preserve explicit intent; only unsupported inherited thinking falls back to native defaults. */
 export function getEffectiveLaunchOptions(
   draft: DraftOptions,
   native: SessionLaunchOptions | undefined

@@ -173,8 +173,14 @@ Each launch draft snapshots its saved provider defaults and retains explicit
 thinking/Plan choices across provider switches and settings refreshes. A model
 change that makes an explicit level unavailable keeps that choice visible and
 blocks creation until a supported level or Default is selected. Unsupported
-inherited preferences use the native default instead. Existing chat navigation
-and periodic-task creation do not depend on launch-option readiness.
+inherited thinking preferences use the native default instead. An unavailable
+saved permission preset requires an explicit choice from Access before launch;
+launch never silently replaces that preset with a potentially broader native
+default. Unavailable access choices show a warning and a disabled menu entry.
+Manual launch validates explicit access against discovered provider/model modes
+before workspace persistence; startup confirms the selected mode again before
+accepting a prompt. Existing chat navigation and periodic-task creation do not
+depend on launch-option readiness.
 
 Launch requests distinguish an omitted `reasoningEffort` (saved provider
 default), explicit null (native default), and a supported value (that exact

@@ -240,6 +240,7 @@ export function SessionLaunchControls({
       )}
       {accessMode && (
         <AcpConfigSelector
+          invalid={accessMode.invalid}
           configOption={{
             id: 'mode',
             name: 'Access',

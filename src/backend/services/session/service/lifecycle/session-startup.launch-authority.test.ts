@@ -284,13 +284,34 @@ it.each([
       applied: true,
     });
     expect(h.sendSessionMessage).toHaveBeenCalledExactlyOnceWith(h.session.id, 'Do work');
-    h.handle.configOptions = h.handle.configOptions.map((option) =>
-      option.type === 'select' && option.id === 'mode'
-        ? { ...option, currentValue: provider === 'CODEX' ? 'workspace-write' : 'default' }
-        : option
+    h.runtimeManager.isSessionRunning.mockReturnValue(true);
+    h.runtimeManager.stopAndQuiesce.mockImplementation(() => {
+      h.runtimeManager.getClient.mockReturnValue(undefined);
+      return Promise.resolve();
+    });
+    h.repository.updateSessionIfStatus.mockImplementation((_id, data, allowed) => {
+      if (!allowed.includes(h.row().status)) {
+        return Promise.resolve(0);
+      }
+      h.setSession(data);
+      return Promise.resolve(1);
+    });
+    await h.service.stopSession(h.session.id, { reason: 'USER_STOP' });
+    expect(h.row().status).toBe('IDLE');
+    expect(h.runtimeManager.getClient(h.session.id)).toBeUndefined();
+    // A fresh lifecycle graph/runtime resumes only from the durable session row.
+    const resumed = setupLaunch(provider, false);
+    resumed.setSession(h.row());
+    await resumed.service.startSession(h.session.id, { initialPrompt: 'Continue work' });
+    expect(resumed.handle).not.toBe(h.handle);
+    expect(resumed.handle.configOptions.find((option) => option.id === 'mode')?.currentValue).toBe(
+      mode
     );
-    await h.config.applyConfiguredPermissionPreset(h.session.id, h.row(), h.handle, 'YOLO');
-    expect(h.handle.configOptions.find((option) => option.id === 'mode')?.currentValue).toBe(mode);
+    expect(resumed.complete).toHaveBeenCalledOnce();
+    expect(resumed.sendSessionMessage).toHaveBeenCalledExactlyOnceWith(
+      h.session.id,
+      'Continue work'
+    );
   }
 );
 

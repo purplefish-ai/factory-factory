@@ -2,6 +2,8 @@ import { z } from 'zod';
 import type { ChatProvider, ChatReasoningOption } from './chat-capabilities';
 import type { SessionPermissionPreset } from './core';
 
+export const CLAUDE_AUTO_FALLBACK = 'acceptEdits';
+
 export const sessionLaunchSettingsSchema = z.object({
   accessMode: z.string().trim().min(1).optional(),
   reasoningEffort: z.string().trim().min(1).nullable().optional(),
@@ -30,7 +32,7 @@ export function resolveLaunchAccessMode(
   if (values.includes(target)) {
     return target;
   }
-  return provider === 'CLAUDE' && target === 'auto' && values.includes('acceptEdits')
-    ? 'acceptEdits'
+  return provider === 'CLAUDE' && target === 'auto' && values.includes(CLAUDE_AUTO_FALLBACK)
+    ? CLAUDE_AUTO_FALLBACK
     : undefined;
 }
