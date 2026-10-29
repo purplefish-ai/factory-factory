@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AcpEventTranslator } from '@/shared/acp-protocol';
+import { buildReplayEvents, buildSnapshotMessages } from './session-replay-builder';
 import type { SessionStore } from './session-store.types';
 import {
   appendClaudeEvent,
@@ -108,6 +109,14 @@ describe('session-transcript', () => {
           },
         },
       },
+    });
+    expect(buildSnapshotMessages(store)[0]).toMatchObject({
+      order: 0,
+      message: { event: { content_block: { input: { command: 'pwd' } } } },
+    });
+    expect(buildReplayEvents(store).find((event) => event.type === 'agent_message')).toMatchObject({
+      order: 0,
+      data: { event: { content_block: { input: { command: 'pwd' } } } },
     });
   });
 

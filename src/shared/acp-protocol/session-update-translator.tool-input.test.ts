@@ -69,7 +69,17 @@ describe('ACP tool input refinement', () => {
           },
           's1'
         )[0]
-      ).toMatchObject({ data: { event: { content_block: { input: rawInput } } } });
+      ).toEqual({
+        type: 'agent_message',
+        data: {
+          type: 'stream_event',
+          event: {
+            type: 'content_block_start',
+            index: 0,
+            content_block: { type: 'tool_use', id: 'bash-1', name: 'Bash', input: rawInput },
+          },
+        },
+      });
     }
   });
 
