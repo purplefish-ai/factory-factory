@@ -6,6 +6,10 @@ import { RATCHET_DISPATCH_CHANGED } from '@/backend/services/ratchet';
 import type { PRBackgroundDeliveryPort } from '@/backend/services/session';
 import { type PRDeliveryRequest } from '@/shared/pr-monitoring';
 import { prFactPayloadSchema } from '@/shared/schemas/pr-event.schema';
+import {
+  dispatchBackgroundAction,
+  type BackgroundAction,
+} from './background-action-dispatch.orchestrator';
 import { ensureDedicatedPRRecipient } from './pr-dedicated-session.orchestrator';
 import { defaultPRDeliveryPorts } from './pr-delivery-dependencies';
 import { recipientCanDispatch } from './pr-delivery-readiness';
@@ -380,7 +384,7 @@ async function queueRecipients(
   }
   const revision = config.bindingRevision;
   const mode = config.deliveryMode ?? 'MAIN';
-  const recipients = new Set<string>();
+  const deliveries: Extract<BackgroundAction, { target: 'existing_sessions' }>['deliveries'] = [];
   for (const prId of new Set(pending.map((e) => e.prId))) {
     // Older databases may retain workspace-level enablement controls.
     if (!prId) {
@@ -400,19 +404,20 @@ async function queueRecipients(
     if (!recipient) {
       continue;
     }
-    services.sessionBackgroundDeliveryService.enqueue(recipient, {
-      workspaceId,
-      prId,
-      bindingRevision: revision,
-      ...(mode === 'DEDICATED' ? { deliveryMode: mode } : {}),
+    deliveries.push({
+      sessionId: recipient,
+      request: {
+        workspaceId,
+        prId,
+        bindingRevision: revision,
+        ...(mode === 'DEDICATED' ? { deliveryMode: mode } : {}),
+      },
     });
-    recipients.add(recipient);
   }
-  for (const sessionId of recipients) {
-    void services.sessionDispatchService
-      .tryDispatchNextMessage(sessionId)
-      .catch((error) => logger.warn('PR queue dispatch deferred', { workspaceId, error }));
-  }
+  await dispatchBackgroundAction(
+    { target: 'existing_sessions', deliveries },
+    services.backgroundDispatch
+  );
 }
 async function resolveRecipient(
   workspaceId: string,

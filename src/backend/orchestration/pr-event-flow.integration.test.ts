@@ -53,7 +53,10 @@ vi.mock('@/backend/services/session', () => ({
     findAgentSessionById: (id: string) =>
       state.prisma?.agentSession.findUnique({ where: { id }, include: { workspace: true } }),
   },
-  sessionBackgroundDeliveryService: { enqueue: vi.fn(), invalidate: vi.fn() },
+  sessionBackgroundDeliveryService: {
+    enqueue: vi.fn(() => ({ queued: true })),
+    invalidate: vi.fn(),
+  },
   sessionDispatchService: { tryDispatchNextMessage: vi.fn(async () => undefined) },
   findPRDeliveryReceipt: vi.fn(),
 }));

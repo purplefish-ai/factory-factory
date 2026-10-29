@@ -240,6 +240,21 @@ retained rather than inferred resolved. Unknown CI results never become green.
 
 ### Delivery and recovery
 
+PR delivery resolves recipients and prepares requests before using the
+`existing_sessions` arm of `background-action-dispatch.orchestrator.ts`. That
+shared boundary attempts to enqueue every request before waking each unique
+session once. The queue can reject individual requests; the result counts only
+successful admissions. Wakes are asynchronous; failures leave delivery deferred
+for the existing poll or idle transition. A queued result describes admission,
+not a completed agent turn. Observation, claim/freeze, receipts and recovery
+retain their existing owners below.
+
+Periodic-task timer events use the dispatcher's separate `new_workspace` arm.
+Their existing execution reservation is their correlation identity; they never
+enter `WorkspacePREvent` or PR session delivery and receipt handling. The
+periodic capsule awaits launch and owns workspace linkage and completion; see
+[integrations](./integrations.md#periodic-tasks).
+
 The session queue carries a backend-owned `pr_event` source. Browser messages
 cannot supply it or reserved message IDs. MAIN preparation refreshes distinct
 PRs with pending candidate facts, with at most three refreshes in flight. Failed

@@ -41,6 +41,7 @@ import {
   type workspaceStateMachine,
 } from '@/backend/services/workspace';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
+import { dispatchBackgroundAction } from './background-action-dispatch.orchestrator';
 import { createPRDeliveryPorts } from './pr-delivery-dependencies';
 import { createPRBackgroundDeliveryPort } from './pr-event-delivery-port';
 import { wakePRDelivery } from './pr-event-delivery.orchestrator';
@@ -125,7 +126,7 @@ export function configureDomainBridges(services: BridgeServices): void {
 
   const { prObservationService, sessionBackgroundDeliveryService, userSettingsService } = services;
   const observationPorts = createPRObservationPorts(services);
-  const deliveryPorts = createPRDeliveryPorts(services);
+  const deliveryPorts = createPRDeliveryPorts(services, logger);
   // === Ratchet domain bridges ===
   ratchetService.configure({
     retireLegacy: () => retireLegacyRatchetSessions(services),
@@ -247,18 +248,13 @@ export function configureDomainBridges(services: BridgeServices): void {
 
   // === Periodic task domain bridges ===
   periodicTaskService.configure({
-    workspace: {
-      async createWorkspaceForTask({ projectId, name, prompt, periodicTaskId }) {
-        const { workspace } = await launchWorkspace({
-          type: 'PERIODIC_TASK',
-          projectId,
-          name,
-          periodicTaskId,
-          initialPrompt: prompt,
-          ratchetEnabled: true,
-        });
-
-        return { workspaceId: workspace.id };
+    timerDispatch: {
+      async dispatchTimerEvent(event) {
+        const { workspaceId } = await dispatchBackgroundAction(
+          { target: 'new_workspace', event },
+          { launchWorkspace }
+        );
+        return { workspaceId };
       },
     },
     status: {

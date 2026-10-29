@@ -2,7 +2,6 @@ import type { configService } from '@/backend/services/config.service';
 import type { ratchetService } from '@/backend/services/ratchet';
 import type {
   acpRuntimeManager,
-  sessionDispatchService,
   findPRDeliveryReceipt,
   sessionBackgroundDeliveryService,
   sessionDataService,
@@ -15,6 +14,7 @@ import type {
   workspacePrSnapshotService,
 } from '@/backend/services/workspace';
 import type { PRTarget } from '@/shared/pr-monitoring';
+import type { ExistingSessionDispatchPorts } from './background-action-dispatch.orchestrator';
 
 export interface PRRecipientReadinessPorts {
   sessionDataService: Pick<typeof sessionDataService, 'findAgentSessionsByWorkspaceId'>;
@@ -62,14 +62,11 @@ export type PRDeliveryPorts = PRDedicatedSessionPorts &
     // Freshness is a delivery prerequisite; the producer and its fetcher stay behind this port.
     refreshObservation: (target: PRTarget) => Promise<boolean>;
     sessionDomainService: Pick<typeof sessionDomainService, 'getPendingInteractiveRequest'>;
-    sessionDispatchService: Pick<typeof sessionDispatchService, 'tryDispatchNextMessage'>;
+    backgroundDispatch: ExistingSessionDispatchPorts;
     userSettingsService: Pick<typeof userSettingsService, 'get'>;
     workspacePrSnapshotService: Pick<typeof workspacePrSnapshotService, 'find' | 'list'>;
     ratchetService: Pick<typeof ratchetService, 'emit'>;
-    sessionBackgroundDeliveryService: Pick<
-      typeof sessionBackgroundDeliveryService,
-      'enqueue' | 'invalidate'
-    >;
+    sessionBackgroundDeliveryService: Pick<typeof sessionBackgroundDeliveryService, 'invalidate'>;
     workspacePRMonitoringService: Pick<
       typeof workspacePRMonitoringService,
       'claimDelivery' | 'settleDelivery' | 'deferBusy' | 'pause' | 'resume'

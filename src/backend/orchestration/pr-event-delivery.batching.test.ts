@@ -78,7 +78,7 @@ vi.mock('./pr-dedicated-session.orchestrator', () => ({
   ensureDedicatedPRRecipient: mocks.ensureDedicated,
 }));
 import { defaultPRDeliveryPorts } from './pr-delivery-dependencies';
-import { preparePRDelivery } from './pr-event-delivery.orchestrator';
+import { preparePRDelivery, wakePRDelivery } from './pr-event-delivery.orchestrator';
 
 function fact(prId: string, id = `event-${prId}`) {
   return {
@@ -122,6 +122,8 @@ beforeEach(() => {
   mocks.interaction.mockReturnValue(null);
   mocks.otherReady.mockResolvedValue(true);
   mocks.observe.mockResolvedValue(true);
+  mocks.enqueue.mockReturnValue({ queued: true });
+  mocks.dispatch.mockResolvedValue(undefined);
   mocks.pending.mockResolvedValue([fact('p'), fact('q')]);
   mocks.claim.mockImplementation(async (_request, input) => ({
     ...input,
@@ -136,6 +138,24 @@ beforeEach(() => {
     { id: 'q' },
     { id: 'unrelated-idle' },
   ] as never);
+});
+it('dispatches the resolved PR batch through the injected background capabilities', async () => {
+  const operations: string[] = [];
+  const backgroundDispatch = {
+    enqueue: (sessionId: string, request: { prId: string | null }) => {
+      operations.push(`enqueue:${sessionId}:${request.prId}`);
+      return { queued: true };
+    },
+    wakeSession: (sessionId: string) => {
+      operations.push(`wake:${sessionId}`);
+      return Promise.resolve();
+    },
+    logger: { warn: vi.fn() },
+  };
+  await wakePRDelivery('w', { ...defaultPRDeliveryPorts, backgroundDispatch });
+  expect(operations).toEqual(['enqueue:main:p', 'enqueue:main:q', 'wake:main']);
+  expect(mocks.enqueue).not.toHaveBeenCalled();
+  expect(mocks.dispatch).not.toHaveBeenCalled();
 });
 it('refreshes each pending candidate PR once and skips unrelated attached PRs', async () => {
   mocks.pending.mockResolvedValue([fact('p'), fact('p', 'more-p'), fact('q')]);

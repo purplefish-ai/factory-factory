@@ -1,3 +1,5 @@
+import { createLogger } from '@/backend/services/logger.service';
+import type { ExistingSessionDispatchPorts } from './background-action-dispatch.orchestrator';
 import {
   defaultPRMonitoringServices,
   createPRObservationPorts,
@@ -7,10 +9,19 @@ import type { PRDeliveryPorts } from './pr-monitoring-ports';
 import { observeMonitoredPR } from './pr-observation.orchestrator';
 
 // Composition is the only place delivery is connected to the observation producer.
-export function createPRDeliveryPorts(services: PRMonitoringServices): PRDeliveryPorts {
+export function createPRDeliveryPorts(
+  services: PRMonitoringServices,
+  logger: ExistingSessionDispatchPorts['logger'] = createLogger('background-action-dispatch')
+): PRDeliveryPorts {
   const observationPorts = createPRObservationPorts(services);
   return {
     refreshObservation: (target) => observeMonitoredPR(observationPorts, target, { force: true }),
+    backgroundDispatch: {
+      enqueue: (sessionId, request) =>
+        services.sessionBackgroundDeliveryService.enqueue(sessionId, request),
+      wakeSession: (sessionId) => services.sessionDispatchService.tryDispatchNextMessage(sessionId),
+      logger,
+    },
     get configService() {
       return services.configService;
     },
@@ -19,9 +30,6 @@ export function createPRDeliveryPorts(services: PRMonitoringServices): PRDeliver
     },
     get acpRuntimeManager() {
       return services.acpRuntimeManager;
-    },
-    get sessionDispatchService() {
-      return services.sessionDispatchService;
     },
     get findPRDeliveryReceipt() {
       return services.findPRDeliveryReceipt;

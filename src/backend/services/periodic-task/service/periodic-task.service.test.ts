@@ -97,13 +97,13 @@ async function dispatchTask(
   );
 }
 
-function createServiceWithWorkspaceBridge(
-  createWorkspaceForTask = vi.fn().mockResolvedValue({ workspaceId: 'workspace-1' })
+function createServiceWithTimerDispatch(
+  dispatchTimerEvent = vi.fn().mockResolvedValue({ workspaceId: 'workspace-1' })
 ): PeriodicTaskService {
   const service = new PeriodicTaskService(logger);
   service.configure({
-    workspace: {
-      createWorkspaceForTask,
+    timerDispatch: {
+      dispatchTimerEvent,
     },
     status: {
       getWorkspaceStatus: vi.fn(),
@@ -121,8 +121,8 @@ function createServiceWithWorkspaceStatus(status: {
 }): PeriodicTaskService {
   const service = new PeriodicTaskService(logger);
   service.configure({
-    workspace: {
-      createWorkspaceForTask: vi.fn(),
+    timerDispatch: {
+      dispatchTimerEvent: vi.fn(),
     },
     status: {
       getWorkspaceStatus: vi.fn().mockResolvedValue({
@@ -266,9 +266,9 @@ describe('PeriodicTaskService', () => {
     expect(mockListExecutionsByWorkspacePeriodicTask).toHaveBeenCalledWith('task-1');
   });
 
-  it('reserves the execution and advances the next run before creating the workspace', async () => {
-    const createWorkspaceForTask = vi.fn().mockResolvedValue({ workspaceId: 'workspace-1' });
-    const service = createServiceWithWorkspaceBridge(createWorkspaceForTask);
+  it('reserves and advances the schedule before dispatching exactly one correlated timer event', async () => {
+    const dispatchTimerEvent = vi.fn().mockResolvedValue({ workspaceId: 'workspace-1' });
+    const service = createServiceWithTimerDispatch(dispatchTimerEvent);
 
     await dispatchTask(service);
 
@@ -285,7 +285,9 @@ describe('PeriodicTaskService', () => {
         scheduledDayOfMonth: null,
       }
     );
-    expect(createWorkspaceForTask).toHaveBeenCalledWith({
+    expect(dispatchTimerEvent).toHaveBeenCalledExactlyOnceWith({
+      kind: 'timer_due',
+      executionId: 'exec-1',
       projectId: 'project-1',
       name: expect.stringContaining('Daily cleanup'),
       prompt: 'Clean up stale data',
@@ -297,7 +299,7 @@ describe('PeriodicTaskService', () => {
     expect(mockCreateExecution).not.toHaveBeenCalled();
     expect(mockMarkDispatched).not.toHaveBeenCalled();
     const [persistDispatchOrder] = mockReserveExecutionAndMarkDispatched.mock.invocationCallOrder;
-    const [createWorkspaceOrder] = createWorkspaceForTask.mock.invocationCallOrder;
+    const [createWorkspaceOrder] = dispatchTimerEvent.mock.invocationCallOrder;
     expect(persistDispatchOrder).toBeDefined();
     expect(createWorkspaceOrder).toBeDefined();
     if (persistDispatchOrder === undefined || createWorkspaceOrder === undefined) {
@@ -306,11 +308,11 @@ describe('PeriodicTaskService', () => {
     expect(persistDispatchOrder).toBeLessThan(createWorkspaceOrder);
   });
 
-  it('marks the reserved execution failed when workspace creation fails', async () => {
-    const createWorkspaceForTask = vi
+  it('marks the reserved execution failed when timer dispatch fails', async () => {
+    const dispatchTimerEvent = vi
       .fn()
       .mockRejectedValue(new Error('default session create failed'));
-    const service = createServiceWithWorkspaceBridge(createWorkspaceForTask);
+    const service = createServiceWithTimerDispatch(dispatchTimerEvent);
 
     await expect(dispatchTask(service)).rejects.toThrow('default session create failed');
 
@@ -326,9 +328,9 @@ describe('PeriodicTaskService', () => {
     expect(mockMarkDispatched).not.toHaveBeenCalled();
   });
 
-  it('does not create a workspace when dispatch reservation fails', async () => {
-    const createWorkspaceForTask = vi.fn().mockResolvedValue({ workspaceId: 'workspace-1' });
-    const service = createServiceWithWorkspaceBridge(createWorkspaceForTask);
+  it('does not dispatch a timer event when reservation fails', async () => {
+    const dispatchTimerEvent = vi.fn().mockResolvedValue({ workspaceId: 'workspace-1' });
+    const service = createServiceWithTimerDispatch(dispatchTimerEvent);
     mockReserveExecutionAndMarkDispatched.mockRejectedValue(
       new Error('dispatch persistence failed')
     );
@@ -336,20 +338,54 @@ describe('PeriodicTaskService', () => {
     await expect(dispatchTask(service)).rejects.toThrow('dispatch persistence failed');
 
     expect(mockReserveExecutionAndMarkDispatched).toHaveBeenCalled();
-    expect(createWorkspaceForTask).not.toHaveBeenCalled();
+    expect(dispatchTimerEvent).not.toHaveBeenCalled();
     expect(mockCreateExecution).not.toHaveBeenCalled();
     expect(mockMarkDispatched).not.toHaveBeenCalled();
   });
 
-  it('does not create a workspace when another poller claims the reservation', async () => {
-    const createWorkspaceForTask = vi.fn().mockResolvedValue({ workspaceId: 'workspace-1' });
-    const service = createServiceWithWorkspaceBridge(createWorkspaceForTask);
+  it('does not dispatch a timer event when another poller claims the reservation', async () => {
+    const dispatchTimerEvent = vi.fn().mockResolvedValue({ workspaceId: 'workspace-1' });
+    const service = createServiceWithTimerDispatch(dispatchTimerEvent);
     mockReserveExecutionAndMarkDispatched.mockResolvedValue(null);
 
     await dispatchTask(service);
 
-    expect(createWorkspaceForTask).not.toHaveBeenCalled();
+    expect(dispatchTimerEvent).not.toHaveBeenCalled();
     expect(mockUpdateExecution).not.toHaveBeenCalled();
+  });
+
+  it('awaits timer dispatch before linking its workspace to the reservation', async () => {
+    let finish!: (result: { workspaceId: string }) => void;
+    const dispatchTimerEvent = vi.fn(
+      () =>
+        new Promise<{ workspaceId: string }>((resolve) => {
+          finish = resolve;
+        })
+    );
+    const service = createServiceWithTimerDispatch(dispatchTimerEvent);
+    const dispatch = dispatchTask(service);
+    await vi.waitFor(() => expect(dispatchTimerEvent).toHaveBeenCalledOnce());
+    expect(mockUpdateExecution).not.toHaveBeenCalled();
+
+    finish({ workspaceId: 'launched-workspace' });
+    await dispatch;
+
+    expect(mockUpdateExecution).toHaveBeenCalledExactlyOnceWith('exec-1', {
+      workspaceId: 'launched-workspace',
+    });
+  });
+
+  it('leaves an unlinked reservation running when the workspace link write fails', async () => {
+    const dispatchTimerEvent = vi.fn().mockResolvedValue({ workspaceId: 'workspace-1' });
+    const service = createServiceWithTimerDispatch(dispatchTimerEvent);
+    mockUpdateExecution.mockRejectedValueOnce(new Error('link write failed'));
+
+    await expect(dispatchTask(service)).rejects.toThrow('link write failed');
+
+    expect(dispatchTimerEvent).toHaveBeenCalledOnce();
+    expect(mockUpdateExecution).toHaveBeenCalledExactlyOnceWith('exec-1', {
+      workspaceId: 'workspace-1',
+    });
   });
 
   it('marks stale workspace reservations as failed', async () => {

@@ -163,6 +163,7 @@ import {
   workspaceSnapshotStore,
   workspaceStateMachine,
 } from '@/backend/services/workspace';
+import * as backgroundDispatch from './background-action-dispatch.orchestrator';
 import { type BridgeServices, configureDomainBridges } from './domain-bridges.orchestrator';
 import { defaultPRMonitoringServices } from './pr-monitoring-dependencies';
 import { reconciliationService } from './reconciliation.service';
@@ -419,7 +420,9 @@ describe('configureDomainBridges', () => {
       const bridge = getBridge(periodicTaskService.configure);
 
       await expect(
-        bridge.workspace.createWorkspaceForTask({
+        bridge.timerDispatch.dispatchTimerEvent({
+          kind: 'timer_due',
+          executionId: 'execution-1',
           projectId: 'project-1',
           name: 'Periodic task run',
           prompt: 'Do the recurring work',
@@ -449,6 +452,7 @@ describe('configureDomainBridges', () => {
     });
 
     it('adapts the supplied launch result without creating or initializing a second workspace', async () => {
+      const dispatch = vi.spyOn(backgroundDispatch, 'dispatchBackgroundAction');
       const launch = vi.fn().mockResolvedValue({
         workspace: { id: 'injected-periodic' },
         defaultSessionId: 'session-injected',
@@ -456,7 +460,9 @@ describe('configureDomainBridges', () => {
       configureDomainBridges(createBridgeServices({ launchWorkspace: launch }));
       const bridge = getBridge(periodicTaskService.configure);
       await expect(
-        bridge.workspace.createWorkspaceForTask({
+        bridge.timerDispatch.dispatchTimerEvent({
+          kind: 'timer_due',
+          executionId: 'execution-1',
           projectId: 'p1',
           name: 'Scheduled name',
           prompt: 'Scheduled prompt',
@@ -471,6 +477,20 @@ describe('configureDomainBridges', () => {
         periodicTaskId: 'task-1',
         ratchetEnabled: true,
       });
+      expect(dispatch).toHaveBeenCalledExactlyOnceWith(
+        {
+          target: 'new_workspace',
+          event: {
+            kind: 'timer_due',
+            executionId: 'execution-1',
+            projectId: 'p1',
+            name: 'Scheduled name',
+            prompt: 'Scheduled prompt',
+            periodicTaskId: 'task-1',
+          },
+        },
+        { launchWorkspace: launch }
+      );
       expect(mockWorkspaceCreationService.create).not.toHaveBeenCalled();
       expect(sessionDataService.createAgentSession).not.toHaveBeenCalled();
       expect(initializeWorkspaceWorktree).not.toHaveBeenCalled();
@@ -483,7 +503,9 @@ describe('configureDomainBridges', () => {
       configureDomainBridges(createBridgeServices());
       const bridge = getBridge(periodicTaskService.configure);
       await expect(
-        bridge.workspace.createWorkspaceForTask({
+        bridge.timerDispatch.dispatchTimerEvent({
+          kind: 'timer_due',
+          executionId: 'execution-1',
           projectId: 'p1',
           name: 'Scheduled name',
           prompt: 'Scheduled prompt',
@@ -535,12 +557,14 @@ describe('configureDomainBridges', () => {
       );
       const bridge = getBridge(periodicTaskService.configure);
       const input = {
+        kind: 'timer_due' as const,
+        executionId: 'execution-override',
         projectId: 'p1',
         name: 'Overridden task',
         prompt: 'Run scheduled work',
         periodicTaskId: 'task-override',
       };
-      await expect(bridge.workspace.createWorkspaceForTask(input)).resolves.toEqual({
+      await expect(bridge.timerDispatch.dispatchTimerEvent(input)).resolves.toEqual({
         workspaceId: 'overridden-workspace',
       });
       expect(events).toEqual(['workspace', 'session', 'initialize']);

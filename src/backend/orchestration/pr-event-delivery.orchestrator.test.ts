@@ -126,6 +126,7 @@ beforeEach(() => {
   mocks.observe.mockResolvedValue(true);
   mocks.busy.mockReturnValue(false);
   mocks.dispatch.mockResolvedValue(undefined);
+  mocks.enqueue.mockReturnValue({ queued: true });
   mocks.interaction.mockReturnValue(null);
   mocks.otherReady.mockResolvedValue(true);
   mocks.pause.mockResolvedValue({ count: 1 });
