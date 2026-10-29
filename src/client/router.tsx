@@ -7,6 +7,7 @@ import { ProjectLayout } from './layouts/project-layout';
 import { Root } from './root';
 
 // Route modules load only when their page is rendered.
+const AgentsPage = lazy(() => import('./routes/agents'));
 const AdminPage = lazy(() => import('./routes/admin-page'));
 const HomePage = lazy(() => import('./routes/home'));
 const LogsPage = lazy(() => import('./routes/logs'));
@@ -93,6 +94,10 @@ export const router = createBrowserRouter([
             ],
           },
         ],
+      },
+      {
+        path: 'agents/:id?',
+        element: <AgentsPage />,
       },
       {
         path: 'reviews',
