@@ -1,22 +1,7 @@
 import { chromium } from '@playwright/test';
-const input = process.argv[2] ?? 'http://127.0.0.1:5173/';
-const invalidOrigin = 'Expected an HTTP(S) origin without a path, query, hash, or credentials';
-let origin;
-try {
-  origin = new URL(input);
-} catch {
-  throw new Error(invalidOrigin);
-}
-if (
-  !['http:', 'https:'].includes(origin.protocol) ||
-  origin.pathname !== '/' ||
-  origin.search ||
-  origin.hash ||
-  origin.username ||
-  origin.password
-) {
-  throw new Error(invalidOrigin);
-}
+import { parseBenchmarkOrigin } from './file-viewer-origin.mjs';
+
+const origin = parseBenchmarkOrigin(process.argv[2]);
 const browser = await chromium.launch({ channel: 'chrome', headless: true });
 try {
   const page = await browser.newPage();
