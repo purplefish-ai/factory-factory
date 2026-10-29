@@ -72,12 +72,13 @@ when supported by native configuration or resolved capabilities. Access,
 planning, Fast mode, and Ultracode use compact icons with the current value in a
 tooltip and accessible label. Planning and provider settings advertising On/Off
 choices toggle directly without opening a menu, with their state exposed through
-`aria-pressed`. ACP supplies their current values, choices, and descriptions;
-Ultracode uses a sparkle icon. Active toggles are highlighted; unrestricted
-access uses an orange warning icon. Native effort options replace the legacy
-thinking/reasoning controls, and a native mode menu offering Plan replaces the
-legacy planning toggle. Menus show provider-supplied descriptions for settings
-and choices. On mobile, the options sheet retains text labels.
+`aria-pressed`. ACP supplies their current values and choices; descriptions are
+shown when provider-supplied. Ultracode uses a sparkle icon. Active toggles are
+highlighted; unrestricted access uses an orange warning icon. Native effort
+options replace the legacy thinking/reasoning controls, and a native mode menu
+offering Plan replaces the legacy planning toggle. Menus show provider-supplied
+descriptions for settings and choices. On mobile, the options sheet retains text
+labels.
 
 ### Provider and model selection
 

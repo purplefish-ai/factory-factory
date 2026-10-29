@@ -78,6 +78,7 @@ export function getConfigPresentation(option: AcpConfigOption) {
   );
   const toggle =
     ['on', 'off'].includes(option.currentValue) &&
+    values.length > 0 &&
     values.every((value) => value === 'on' || value === 'off');
   return {
     toggle,

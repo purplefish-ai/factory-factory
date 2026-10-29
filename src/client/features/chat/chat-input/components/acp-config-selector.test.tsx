@@ -326,3 +326,36 @@ it.each([
     flushSync(() => root.unmount());
   }
 });
+
+it.each([{ options: [] }, { options: [{ group: 'Unavailable', options: [] }] }])(
+  'does not present an unavailable provider setting as a toggle (%j)',
+  ({ options }) => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const onSelect = vi.fn();
+    flushSync(() =>
+      root.render(
+        createElement(AcpConfigSelector, {
+          configOption: {
+            id: 'ultracode',
+            name: 'Ultracode',
+            type: 'select',
+            currentValue: 'on',
+            options,
+          },
+          onSelect,
+        })
+      )
+    );
+    try {
+      const button = container.querySelector('button');
+      expect(button?.hasAttribute('aria-pressed')).toBe(false);
+      expect(button?.textContent).toBe('on');
+      flushSync(() => button?.click());
+      expect(onSelect).not.toHaveBeenCalled();
+    } finally {
+      flushSync(() => root.unmount());
+    }
+  }
+);
