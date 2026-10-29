@@ -8,7 +8,7 @@ import {
   HeaderRightSlot,
   useAppHeader,
 } from '@/client/components/app-header-context';
-import { ProjectSelectorDropdown } from '@/client/components/project-selector';
+import { ProjectSectionNavigation } from '@/client/components/project-section-header';
 import { RunScriptButton, RunScriptPortBadge } from '@/client/features/workspace';
 import { useInlineWorkspaceRename } from '@/client/hooks/use-inline-workspace-rename';
 import { runInBackground } from '@/client/lib/background-task';
@@ -52,8 +52,8 @@ export function WorkspaceDetailHeaderSlot({
   hasChanges,
 }: WorkspaceHeaderProps) {
   const isMobile = useIsMobile();
-  const { slug, projects, handleProjectChange, handleCurrentProjectSelect } =
-    useWorkspaceProjectNavigation();
+  const { slug, projects } = useWorkspaceProjectNavigation();
+  const routeProject = trpc.project.getBySlug.useQuery({ slug }, { enabled: !!slug });
 
   const utils = trpc.useUtils();
   const renameMutation = trpc.workspace.rename.useMutation({
@@ -91,15 +91,15 @@ export function WorkspaceDetailHeaderSlot({
     <>
       <HeaderLeftStartSlot>
         <div className="flex min-w-0 items-center gap-0.5">
-          <ProjectSelectorDropdown
-            selectedProjectSlug={slug}
-            onProjectChange={handleProjectChange}
-            onCurrentProjectSelect={handleCurrentProjectSelect}
-            projects={projects}
-            showLeadingSlash
-            showTrailingSlash
-            trailingSeparatorType="chevron"
-            triggerId="workspace-detail-project-select"
+          <ProjectSectionNavigation
+            project={
+              routeProject.data ??
+              projects?.find((candidate) => candidate.slug === slug) ?? {
+                id: workspace.projectId,
+                slug,
+                name: slug,
+              }
+            }
           />
           {isEditing ? (
             <input

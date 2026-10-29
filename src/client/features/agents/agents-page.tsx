@@ -1,10 +1,12 @@
 import type { ReactNode } from 'react';
+import { useLocation } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { AgentDetail } from './agent-detail';
 import { AgentForm } from './agent-form';
 import { AgentRunHistoryQuery } from './agent-run-history';
 import { AgentsDashboardShell } from './agents-dashboard-shell';
+import type { AgentProject } from './types';
 import { useAgentsController } from './use-agents-controller';
 
 type Controller = ReturnType<typeof useAgentsController>;
@@ -58,6 +60,13 @@ function AgentRequestError({
 }
 function AgentSelectionContent({ controller }: { controller: Controller }) {
   const { id, task, project, mode } = controller;
+  if (controller.wrongOwner) {
+    return (
+      <p role="alert" className="text-sm text-destructive">
+        Agent not found in this project.
+      </p>
+    );
+  }
   if (mode === 'create' && project) {
     return (
       <>
@@ -114,79 +123,32 @@ function AgentSelectionContent({ controller }: { controller: Controller }) {
   }
   return (
     <div className="py-12 text-center">
-      <h2 className="text-lg font-semibold">
-        {project ? 'Give recurring work an agent' : 'Choose a project to get started'}
-      </h2>
+      <h2 className="text-lg font-semibold">Give recurring work an agent</h2>
       <p className="mt-2 text-sm text-muted-foreground">
-        {project
-          ? 'Create an agent with instructions and a schedule.'
-          : 'Create a project before adding an agent.'}
+        Create an agent with instructions and a schedule.
       </p>
     </div>
   );
 }
-function AgentProjectContent({ controller }: { controller: Controller }) {
-  if (controller.projectsLoading) {
-    return <Loading>Loading projects…</Loading>;
-  }
-  if (controller.ownerLoading) {
-    return <Loading>Loading agent project…</Loading>;
-  }
-  const hasProjectError = controller.projectsError || controller.ownerError;
-  return (
-    <>
-      {controller.projectsError && (
-        <RequestError
-          label="Retry projects"
-          retry={() => {
-            void controller.retryProjects();
-          }}
-        >
-          Could not load projects: {controller.projectsError.message}
-        </RequestError>
-      )}
-      {controller.ownerError && (
-        <RequestError
-          label="Retry project"
-          retry={() => {
-            void controller.retryOwner();
-          }}
-        >
-          Could not load agent project: {controller.ownerError.message}
-        </RequestError>
-      )}
-      {(controller.project || !hasProjectError) && (
-        <AgentSelectionContent controller={controller} />
-      )}
-    </>
-  );
-}
-export function AgentsPage() {
-  const controller = useAgentsController();
+function AgentsPageSession({ project: routeProject }: { project: AgentProject }) {
+  const controller = useAgentsController(routeProject);
   const { id, task, list, project, mode, pending, actionError } = controller;
   return (
     <>
       <AgentsDashboardShell
-        projects={controller.projects}
-        projectId={project?.id}
+        projectSlug={project.slug}
         agents={list.data}
         selectedAgentId={mode === 'create' ? undefined : id}
-        isLoading={
-          list.isLoading ||
-          controller.projectsLoading ||
-          controller.ownerLoading ||
-          (!!id && task.isLoading)
-        }
+        isLoading={list.isLoading || (!!id && task.isLoading)}
         error={list.error ? `Could not load agents: ${list.error.message}` : undefined}
         onRetry={() => {
           void list.refetch();
         }}
-        onProjectChange={controller.selectProject}
         onCreate={controller.startCreate}
         createDisabled={controller.createDisabled}
         onAgentSelect={controller.selectAgent}
       >
-        <AgentProjectContent controller={controller} />
+        <AgentSelectionContent controller={controller} />
       </AgentsDashboardShell>
       <ConfirmDialog
         open={controller.deleteOpen}
@@ -204,4 +166,10 @@ export function AgentsPage() {
       />
     </>
   );
+}
+
+/** Navigation creates a fresh editing session; polling keeps the existing draft. */
+export function AgentsPage({ project }: { project: AgentProject }) {
+  const location = useLocation();
+  return <AgentsPageSession key={`${project.id}:${location.key}`} project={project} />;
 }

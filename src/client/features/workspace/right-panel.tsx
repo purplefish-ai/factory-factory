@@ -57,6 +57,7 @@ interface RightPanelProps {
 
 interface TopPanelAreaProps {
   workspaceId: string;
+  projectId?: string;
   messages: ChatMessage[];
   activeTopTab: TopPanelTab;
   onTopTabChange: (tab: TopPanelTab) => void;
@@ -72,6 +73,7 @@ interface TopPanelAreaProps {
 
 function TopPanelArea({
   workspaceId,
+  projectId,
   messages,
   activeTopTab,
   onTopTabChange,
@@ -172,7 +174,7 @@ function TopPanelArea({
           />
         )}
         {showPeriodicTask && periodicTaskId && (
-          <PeriodicTaskPanel periodicTaskId={periodicTaskId} />
+          <PeriodicTaskPanel periodicTaskId={periodicTaskId} projectId={projectId} />
         )}
         {showAgents && (
           <AgentsPanel
@@ -365,6 +367,7 @@ export function RightPanel({
       {/* Top Panel: Git Status / File Browser */}
       <ResizablePanel defaultSize="60%" minSize="20%">
         <TopPanelArea
+          projectId={workspace?.projectId}
           workspaceId={workspaceId}
           messages={messages}
           activeTopTab={activeTopTab}

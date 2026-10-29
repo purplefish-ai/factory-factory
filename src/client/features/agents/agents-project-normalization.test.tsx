@@ -13,8 +13,8 @@ import {
 } from '@/client/hooks/use-app-navigation-data';
 import { SELECTED_PROJECT_KEY } from '@/client/lib/project-selection';
 import { trpc } from '@/client/lib/trpc';
+import LegacyAgentsRoute from '@/client/routes/agents/legacy';
 import { actFlushSync, waitForReact } from '@/test-utils/react-act';
-import { AgentsPage } from './agents-page';
 import type { Agent } from './types';
 
 // Keep real navigation state/normalization; unrelated workspace subscriptions
@@ -54,35 +54,55 @@ let finishTask: () => void;
 let taskWait: Promise<void>;
 let listRequests: string[];
 let showForeignRail: boolean;
+let archivedOwner: boolean;
+let noProjects: boolean;
+let failTask: boolean;
+let failProjects: boolean;
 function RealNavigationHarness() {
   const navigation = useAppNavigationData();
   const { pathname } = useLocation();
   return (
     <AppNavigationDataProvider value={navigation}>
-      <AgentsPage />
+      <Routes>
+        <Route path="/agents/:id?" element={<LegacyAgentsRoute />} />
+        <Route path="/projects/:slug/agents/:id?" element={<p>Canonical agents</p>} />
+        <Route path="/projects/new" element={<p>Onboarding</p>} />
+      </Routes>
       <output aria-label="Current route">{pathname}</output>
       <output aria-label="Selected project">{navigation.selectedProjectSlug}</output>
     </AppNavigationDataProvider>
   );
 }
+async function taskResponse(requestedId: string) {
+  await taskWait;
+  if (requestedId === 'missing-agent') {
+    throw new TRPCClientError('Agent does not exist', {
+      result: {
+        error: {
+          message: 'Agent does not exist',
+          code: -32_004,
+          data: { code: 'NOT_FOUND', httpStatus: 404 },
+        },
+      },
+    });
+  }
+  if (failTask) {
+    throw new Error('Connection unavailable');
+  }
+  return { ...agent, projectId: archivedOwner ? 'archived' : agent.projectId };
+}
 async function response(path: string, requestedId: string, input: unknown) {
   if (path === 'project.list') {
-    return projects;
+    if (failProjects) {
+      throw new Error('Projects unavailable');
+    }
+    return noProjects ? [] : projects;
   }
   if (path === 'periodicTask.get') {
-    await taskWait;
-    if (requestedId === 'missing-agent') {
-      throw new TRPCClientError('Agent does not exist', {
-        result: {
-          error: {
-            message: 'Agent does not exist',
-            code: -32_004,
-            data: { code: 'NOT_FOUND', httpStatus: 404 },
-          },
-        },
-      });
-    }
-    return agent;
+    return await taskResponse(requestedId);
+  }
+  if (path === 'project.getById') {
+    return { id: 'archived', slug: 'archived-owner', name: 'Archived owner' };
   }
   if (path === 'periodicTask.list') {
     const { projectId } = z.object({ projectId: z.string() }).parse(input);
@@ -123,7 +143,7 @@ function render(requestedId: string, persistedSlug: string) {
         <QueryClientProvider client={queryClient}>
           <MemoryRouter initialEntries={[`/agents/${requestedId}`]}>
             <Routes>
-              <Route path="/agents/:id?" element={<RealNavigationHarness />} />
+              <Route path="*" element={<RealNavigationHarness />} />
             </Routes>
           </MemoryRouter>
         </QueryClientProvider>
@@ -145,6 +165,10 @@ beforeEach(() => {
   });
   listRequests = [];
   showForeignRail = false;
+  archivedOwner = false;
+  noProjects = false;
+  failTask = false;
+  failProjects = false;
   taskWait = new Promise<void>((resolve) => {
     finishTask = resolve;
   });
@@ -174,45 +198,15 @@ describe('explicit agent links during real project normalization', () => {
         finishTask();
         await taskWait;
       });
-      await waitForReact(() =>
-        expect(container.querySelector('h2')?.textContent).toBe('Requested agent')
-      );
+      await waitForReact(() => expect(container.textContent).toContain('Canonical agents'));
       expect(container.querySelector('output[aria-label="Selected project"]')?.textContent).toBe(
         'owner-project'
       );
       expect(container.querySelector('output[aria-label="Current route"]')?.textContent).toBe(
-        '/agents/requested-agent'
+        '/projects/owner-project/agents/requested-agent'
       );
     }
   );
-  it('navigates inside Agents when the user explicitly changes the project filter', async () => {
-    render(agent.id, 'removed-project');
-    await act(async () => {
-      finishTask();
-      await taskWait;
-    });
-    await waitForReact(() =>
-      expect(container.querySelector('h2')?.textContent).toBe('Requested agent')
-    );
-    actFlushSync(() =>
-      container
-        .querySelector('[role="combobox"]')
-        ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
-    );
-    const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
-      (candidate) => candidate.textContent === 'First active project'
-    );
-    expect(option).toBeDefined();
-    actFlushSync(() => option?.click());
-    await waitForReact(() =>
-      expect(container.querySelector('output[aria-label="Current route"]')?.textContent).toBe(
-        '/agents'
-      )
-    );
-    expect(container.querySelector('output[aria-label="Selected project"]')?.textContent).toBe(
-      'first-active'
-    );
-  });
   it('keeps the persisted project rail unset while an explicit owner is unresolved', async () => {
     showForeignRail = true;
     render(agent.id, 'first-active');
@@ -221,62 +215,17 @@ describe('explicit agent links during real project normalization', () => {
         'first-active'
       )
     );
-    expect(container.querySelector('nav')?.textContent).not.toContain('Foreign agent');
+    expect(container.textContent).not.toContain('Foreign agent');
     expect(listRequests).not.toContain('first');
-    expect(container.querySelector('button[role="combobox"]')?.textContent).toBe(
-      'Select a project'
-    );
-    expect(container.querySelector('nav')?.textContent).toContain('Loading agents');
-    await act(async () => {
-      finishTask();
-      await taskWait;
-    });
-    await waitForReact(() =>
-      expect(container.querySelector('h2')?.textContent).toBe('Requested agent')
-    );
-    expect(container.querySelector('button[role="combobox"]')?.textContent).toBe('Owner project');
-    expect(listRequests).toContain('owner');
-  });
-  it('waits for a deep-linked task owner before enabling creation in that project', async () => {
-    render(agent.id, 'first-active');
-    await waitForReact(() =>
-      expect(container.querySelector('output[aria-label="Selected project"]')?.textContent).toBe(
-        'first-active'
-      )
-    );
-    const create = [...container.querySelectorAll('button')].find(
-      (button) => button.textContent === 'Create Agent'
-    );
-    expect(create?.disabled).toBe(true);
-    actFlushSync(() => create?.click());
     expect(container.querySelector('form')).toBeNull();
+    expect(container.querySelector('button')).toBeNull();
     await act(async () => {
       finishTask();
       await taskWait;
     });
-    await waitForReact(() =>
-      expect(container.querySelector('h2')?.textContent).toBe('Requested agent')
-    );
-    expect(create?.disabled).toBe(false);
-    actFlushSync(() => create?.click());
-    expect(container.querySelector('form')).not.toBeNull();
-    expect(container.querySelector('main')?.textContent).toContain('Owner project');
-  });
-  it('keeps creation disabled when an explicit task lookup fails with unknown ownership', async () => {
-    render('missing-agent', 'first-active');
-    await act(async () => {
-      finishTask();
-      await taskWait;
-    });
-    await waitForReact(() => expect(container.textContent).toContain('Agent not found'));
-    const create = [...container.querySelectorAll('button')].find(
-      (button) => button.textContent === 'Create Agent'
-    );
-    expect(create?.disabled).toBe(true);
-    actFlushSync(() => create?.click());
-    expect(container.querySelector('form')).toBeNull();
+    await waitForReact(() => expect(container.textContent).toContain('Canonical agents'));
     expect(container.querySelector('output[aria-label="Current route"]')?.textContent).toBe(
-      '/agents/missing-agent'
+      '/projects/owner-project/agents/requested-agent'
     );
   });
   it('keeps a delayed missing task ID and displays not found after normalization', async () => {
@@ -293,6 +242,74 @@ describe('explicit agent links during real project normalization', () => {
     await waitForReact(() => expect(container.textContent).toContain('Agent not found'));
     expect(container.querySelector('output[aria-label="Current route"]')?.textContent).toBe(
       '/agents/missing-agent'
+    );
+  });
+  it('resolves an archived owner when no active projects remain', async () => {
+    archivedOwner = true;
+    noProjects = true;
+    render(agent.id, 'removed-project');
+    expect(container.querySelector('form')).toBeNull();
+    await act(async () => {
+      finishTask();
+      await taskWait;
+    });
+    await waitForReact(() =>
+      expect(container.querySelector('output[aria-label="Current route"]')?.textContent).toBe(
+        '/projects/archived-owner/agents/requested-agent'
+      )
+    );
+  });
+  it('shows a task failure and retry without any management form or owner guessing', async () => {
+    failTask = true;
+    render(agent.id, 'first-active');
+    await act(async () => {
+      finishTask();
+      await taskWait;
+    });
+    await waitForReact(() => expect(container.textContent).toContain('Connection unavailable'));
+    expect(container.querySelector('form')).toBeNull();
+    expect(container.querySelector('output[aria-label="Current route"]')?.textContent).toBe(
+      '/agents/requested-agent'
+    );
+    failTask = false;
+    actFlushSync(() => container.querySelector<HTMLButtonElement>('button')?.click());
+    await waitForReact(() =>
+      expect(container.querySelector('output[aria-label="Current route"]')?.textContent).toBe(
+        '/projects/owner-project/agents/requested-agent'
+      )
+    );
+  });
+
+  it.each([
+    ['owner-project', false, '/projects/owner-project/agents'],
+    ['deleted-project', false, '/projects/first-active/agents'],
+    ['deleted-project', true, '/projects/new'],
+  ])(
+    'resolves the legacy index using valid saved selection or onboarding: %s',
+    async (saved, empty, target) => {
+      noProjects = empty;
+      render('', saved);
+      await waitForReact(() =>
+        expect(container.querySelector('output[aria-label="Current route"]')?.textContent).toBe(
+          target
+        )
+      );
+      expect(container.querySelector('form')).toBeNull();
+    }
+  );
+  it('holds the legacy index at its project-list error and retries without choosing a project', async () => {
+    failProjects = true;
+    render('', 'owner-project');
+    await waitForReact(() => expect(container.textContent).toContain('Projects unavailable'));
+    expect(container.querySelector('output[aria-label="Current route"]')?.textContent).toBe(
+      '/agents/'
+    );
+    failProjects = false;
+    actFlushSync(() => container.querySelector<HTMLButtonElement>('button')?.click());
+    await waitForReact(() =>
+      expect(container.querySelector('output[aria-label="Current route"]')?.textContent).toBe(
+        '/projects/owner-project/agents'
+      )
     );
   });
 });

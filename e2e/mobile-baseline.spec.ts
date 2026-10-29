@@ -117,6 +117,28 @@ for (const viewport of mobileViewports) {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await page.goto('/__mobile-baseline?surface=agents');
     await expect(page.getByRole('heading', { name: 'Agents', exact: true })).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: 'Open Factory Factory project', exact: true })
+    ).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Toggle sidebar', exact: true })).toBeVisible();
+    const sections = page.getByRole('navigation', { name: 'Project sections', exact: true });
+    await expect(sections).toBeVisible();
+    await expect(sections.getByRole('link', { name: 'Workspaces', exact: true })).toHaveAttribute(
+      'href',
+      '/projects/factory-factory/workspaces'
+    );
+    await expect(sections.getByRole('link', { name: 'Agents', exact: true })).toHaveAttribute(
+      'href',
+      '/projects/factory-factory/agents'
+    );
+    await expect(sections.getByRole('link', { name: /Reviews/ })).toHaveAttribute(
+      'href',
+      '/projects/factory-factory/reviews'
+    );
+    await page.getByRole('combobox', { name: 'Open project menu', exact: true }).click();
+    await expect(page.getByRole('option', { name: 'Factory Factory', exact: true })).toBeVisible();
+    await expect(page.getByRole('option', { name: 'Other project', exact: true })).toBeVisible();
+    await page.keyboard.press('Escape');
     const rail = page.getByRole('navigation', { name: 'Agents', exact: true });
     await expect(rail).toBeVisible();
     const dependencies = rail.getByRole('link', { name: /Keep dependencies current/ });

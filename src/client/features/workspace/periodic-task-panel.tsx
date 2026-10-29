@@ -1,12 +1,14 @@
 import { CalendarIcon } from '@phosphor-icons/react/dist/csr/Calendar';
 import { Link } from 'react-router';
 import { AgentRunHistoryQuery, describeAgentSchedule } from '@/client/features/agents';
+import { getProjectAgentPath, getProjectSectionPath } from '@/client/lib/project-navigation';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
 interface PeriodicTaskPanelProps {
   periodicTaskId: string;
+  projectId?: string;
 }
 
 function agentReadError(
@@ -19,11 +21,19 @@ function agentReadError(
   return `Could not ${refresh ? 'refresh' : 'load'} agent: ${error.message}`;
 }
 
-export function PeriodicTaskPanel({ periodicTaskId }: PeriodicTaskPanelProps) {
+function managementPath(slug: string | undefined, id?: string): string {
+  if (!slug) {
+    return id ? `/agents/${encodeURIComponent(id)}` : '/agents';
+  }
+  return id ? getProjectAgentPath(slug, id) : getProjectSectionPath(slug, 'agents');
+}
+
+export function PeriodicTaskPanel({ periodicTaskId, projectId }: PeriodicTaskPanelProps) {
   const task = trpc.periodicTask.get.useQuery({ id: periodicTaskId }, { refetchInterval: 10_000 });
+  const ownerProjectId = task.data?.projectId ?? projectId;
   const project = trpc.project.getById.useQuery(
-    { id: task.data?.projectId ?? '' },
-    { enabled: !!task.data }
+    { id: ownerProjectId ?? '' },
+    { enabled: !!ownerProjectId }
   );
 
   if (!task.data) {
@@ -37,7 +47,7 @@ export function PeriodicTaskPanel({ periodicTaskId }: PeriodicTaskPanelProps) {
             <Button size="sm" variant="outline" onClick={() => void task.refetch()}>
               Retry agent
             </Button>
-            <Link to="/agents" className="block text-primary underline">
+            <Link to={managementPath(project.data?.slug)} className="block text-primary underline">
               Manage Agents
             </Link>
           </>
@@ -68,7 +78,7 @@ export function PeriodicTaskPanel({ periodicTaskId }: PeriodicTaskPanelProps) {
           {agent.isEnabled && <span>Next run: {new Date(agent.nextRunAt).toLocaleString()}</span>}
         </div>
         <Link
-          to={`/agents/${periodicTaskId}`}
+          to={managementPath(project.data?.slug, periodicTaskId)}
           className="inline-block text-xs text-primary underline underline-offset-4"
         >
           Manage Agent

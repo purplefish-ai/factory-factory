@@ -4,22 +4,25 @@ import {
   getProjectSlugFromPath,
   useAppNavigationDataContext,
 } from '@/client/hooks/use-app-navigation-data';
+import { getProjectSection, getProjectSectionPath } from '@/client/lib/project-navigation';
 
 export function useProjectHeaderNavigation() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const { projects, projectsError, refetchProjects, selectedProjectSlug, selectProjectSlug } =
-    useAppNavigationDataContext();
+  const {
+    projects,
+    projectsError,
+    refetchProjects,
+    selectedProjectSlug,
+    selectProjectSlug,
+    reviewCount,
+  } = useAppNavigationDataContext();
   const currentProjectSlug = getProjectSlugFromPath(pathname) ?? selectedProjectSlug;
 
   const navigateToProject = useCallback(
     (slug: string) => {
       selectProjectSlug(slug);
-      void navigate(
-        pathname === '/agents' || pathname.startsWith('/agents/')
-          ? '/agents'
-          : `/projects/${slug}/workspaces`
-      );
+      void navigate(getProjectSectionPath(slug, getProjectSection(pathname) ?? 'workspaces'));
     },
     [navigate, pathname, selectProjectSlug]
   );
@@ -50,6 +53,7 @@ export function useProjectHeaderNavigation() {
     selectedProjectSlug: currentProjectSlug,
     projects,
     projectsError,
+    reviewCount,
     refetchProjects,
     handleProjectChange,
     handleCurrentProjectSelect,

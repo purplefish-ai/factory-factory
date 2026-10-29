@@ -5,8 +5,10 @@ import { observable } from '@trpc/server/observable';
 import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router';
+import { useParams } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { ProjectSectionNavigation } from '@/client/components/project-section-header';
 import { trpc } from '@/client/lib/trpc';
 import { actFlushSync, waitForReact } from '@/test-utils/react-act';
 import { AgentsPage } from './agents-page';
@@ -25,7 +27,9 @@ const projects = [
   { id: 'stale', slug: 'stale', name: 'Other project' },
   { id: 'owner', slug: 'owner-slug', name: 'Owner project' },
 ];
-vi.mock('@/client/hooks/use-app-navigation-data', () => ({
+vi.mock('@/hooks/use-mobile', () => ({ useIsMobile: () => false }));
+vi.mock('@/client/hooks/use-app-navigation-data', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/client/hooks/use-app-navigation-data')>()),
   useAppNavigationDataContext: () => {
     const [slug, setSlug] = useState(navigation.slug);
     navigation.setSlug = setSlug;
@@ -68,6 +72,7 @@ let requests: { path: string; input: unknown }[];
 let mutationWait: Promise<void> | undefined;
 let removed: boolean;
 let listWait: Promise<void> | undefined;
+let discoveredAgent: boolean;
 const notFound = () =>
   new TRPCClientError('Agent does not exist', {
     result: {
@@ -81,6 +86,33 @@ const notFound = () =>
 function Location() {
   return <output aria-label="Location">{useLocation().pathname}</output>;
 }
+function OpenCurrentIndex() {
+  const navigate = useNavigate();
+  const { slug } = useParams();
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        void navigate(`/projects/${slug}/agents`);
+      }}
+    >
+      Open current index
+    </button>
+  );
+}
+function ReturnToOwner() {
+  const navigate = useNavigate();
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        void navigate('/projects/owner-slug/agents');
+      }}
+    >
+      Return to owner
+    </button>
+  );
+}
 function HeaderProjectSwitch() {
   const navigate = useNavigate();
   return (
@@ -88,7 +120,7 @@ function HeaderProjectSwitch() {
       type="button"
       onClick={() => {
         navigation.setSlug('stale');
-        void navigate('/agents');
+        void navigate('/projects/stale/agents');
       }}
     >
       Switch header project
@@ -114,6 +146,16 @@ function taskResponse(input: unknown) {
   const { id } = z.object({ id: z.string() }).parse(input);
   return { ...task, id, projectId: archived ? 'archived' : task.projectId };
 }
+async function listResponse(input: unknown) {
+  if (removed) {
+    await listWait;
+  }
+  const { projectId } = z.object({ projectId: z.string() }).parse(input);
+  if (discoveredAgent && projectId === 'stale') {
+    return [{ ...task, projectId: 'stale' }];
+  }
+  return removed || projectId !== (archived ? 'archived' : task.projectId) ? [] : [task];
+}
 async function queryResponse(path: string, input: unknown) {
   if (path === 'periodicTask.get') {
     return taskResponse(input);
@@ -122,11 +164,7 @@ async function queryResponse(path: string, input: unknown) {
     return { id: 'archived', slug: 'archived-owner', name: 'Archived project' };
   }
   if (path === 'periodicTask.list') {
-    if (removed) {
-      await listWait;
-    }
-    const { projectId } = z.object({ projectId: z.string() }).parse(input);
-    return removed || projectId !== (archived ? 'archived' : task.projectId) ? [] : [task];
+    return await listResponse(input);
   }
   if (path === 'periodicTask.delete') {
     removed = true;
@@ -152,7 +190,21 @@ async function queryResponse(path: string, input: unknown) {
   }
   return task;
 }
-function render(path = '/agents/agent') {
+function ScopedPage() {
+  const { slug } = useParams();
+  const project = projects.find((p) => p.slug === slug) ?? {
+    id: 'archived',
+    slug: 'archived-owner',
+    name: 'Archived project',
+  };
+  return (
+    <>
+      <ProjectSectionNavigation project={project} />
+      <AgentsPage key={project.id} project={project} />
+    </>
+  );
+}
+function render(path = '/projects/owner-slug/agents/agent') {
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
   });
@@ -182,12 +234,14 @@ function render(path = '/agents/agent') {
           <MemoryRouter initialEntries={[path]}>
             <Routes>
               <Route
-                path="/agents/:id?"
+                path="/projects/:slug/agents/:id?"
                 element={
                   <>
-                    <AgentsPage />
+                    <ScopedPage />
                     <Location />
                     <HeaderProjectSwitch />
+                    <ReturnToOwner />
+                    <OpenCurrentIndex />
                   </>
                 }
               />
@@ -222,6 +276,7 @@ beforeEach(() => {
   mutationWait = undefined;
   removed = false;
   listWait = undefined;
+  discoveredAgent = false;
 });
 afterEach(() => {
   actFlushSync(() => root.unmount());
@@ -242,7 +297,9 @@ describe('AgentsPage coordination', () => {
       path: 'periodicTask.listExecutions',
       input: { periodicTaskId: 'agent', limit: 50 },
     });
-    expect(container.querySelector('output')?.textContent).toBe('/agents/agent');
+    expect(container.querySelector('output')?.textContent).toBe(
+      '/projects/owner-slug/agents/agent'
+    );
     await act(async () => button('Switch header project').click());
     await waitForReact(() =>
       expect(
@@ -251,22 +308,24 @@ describe('AgentsPage coordination', () => {
     );
     expect(container.querySelector('output')?.textContent).toContain('/agents');
   });
-  it('resolves an archived owner through project.getById', async () => {
+  it('uses the explicitly resolved archived route project', async () => {
     archived = true;
-    render();
+    render('/projects/archived-owner/agents/agent');
     await waitForReact(() =>
       expect(
         container.querySelector('a[href="/projects/archived-owner/workspaces/archived-workspace"]')
       ).not.toBeNull()
     );
-    expect(requests).toContainEqual({ path: 'project.getById', input: { id: 'archived' } });
+    expect(requests.some((request) => request.path === 'project.getById')).toBe(false);
     expect(container.textContent).toContain('Archived project');
   });
   it('keeps an explicit missing ID and distinguishes not found from request failure', async () => {
     missing = true;
-    render('/agents/missing');
+    render('/projects/owner-slug/agents/missing');
     await waitForReact(() => expect(container.textContent).toContain('Agent not found'));
-    expect(container.querySelector('output')?.textContent).toBe('/agents/missing');
+    expect(container.querySelector('output')?.textContent).toBe(
+      '/projects/owner-slug/agents/missing'
+    );
     expect(container.querySelector('nav[aria-label="Agents"]')).not.toBeNull();
   });
   it('shows task network failure with retry instead of replacing the selection', async () => {
@@ -439,7 +498,9 @@ describe('AgentsPage coordination', () => {
     expect(notifications.error).toHaveBeenCalledWith(
       'Failed to delete agent: Server refused the change'
     );
-    expect(container.querySelector('output')?.textContent).toBe('/agents/agent');
+    expect(container.querySelector('output')?.textContent).toBe(
+      '/projects/owner-slug/agents/agent'
+    );
   });
   it('preserves an edit draft when the background project request fails', async () => {
     render();
@@ -448,15 +509,17 @@ describe('AgentsPage coordination', () => {
     );
     actFlushSync(() => button('Edit Agent').click());
     actFlushSync(() => navigation.setProjectsError(new Error('Project refresh unavailable')));
+    expect(container.textContent).toContain('Project refresh unavailable');
+    expect(button('Retry projects')).toBeDefined();
     expect(container.querySelector('form')).not.toBeNull();
     expect(container.querySelector<HTMLInputElement>('input[name="name"]')?.value).toBe(
       'Review changes'
     );
-    expect(container.textContent).toContain('Project refresh unavailable');
+    expect(container.querySelector('form')).not.toBeNull();
   });
   it('does not override a project switch when a pending creation succeeds', async () => {
     navigation.slug = 'owner-slug';
-    render('/agents');
+    render('/projects/owner-slug/agents');
     await waitForReact(() =>
       expect(container.querySelector('h2')?.textContent).toBe('Review changes')
     );
@@ -489,16 +552,17 @@ describe('AgentsPage coordination', () => {
     );
     actFlushSync(() => button('Switch header project').click());
     await waitForReact(() =>
-      expect(container.querySelector('output')?.textContent).toBe('/agents')
+      expect(container.querySelector('output')?.textContent).toBe('/projects/stale/agents')
     );
     await act(async () => {
       finishMutation();
       await Promise.resolve();
     });
     await waitForReact(() =>
-      expect(container.querySelector('output')?.textContent).toBe('/agents')
+      expect(container.querySelector('output')?.textContent).toBe('/projects/stale/agents')
     );
-    expect(container.textContent).toContain('Other project');
+    expect(container.querySelector('form')).toBeNull();
+    expect(requests).toContainEqual({ path: 'periodicTask.list', input: { projectId: 'stale' } });
   });
   it('prevents repeated pause requests while pending and refreshes both task and rail afterward', async () => {
     render();
@@ -544,9 +608,9 @@ describe('AgentsPage coordination', () => {
     actFlushSync(() => button('Delete').click());
     actFlushSync(() => button('Delete Agent').click());
     await waitForReact(() =>
-      expect(container.querySelector('output')?.textContent).toBe('/agents')
+      expect(container.querySelector('output')?.textContent).toBe('/projects/owner-slug/agents')
     );
-    expect(container.querySelector('a[href="/agents/agent"]')).toBeNull();
+    expect(container.querySelector('a[href="/projects/owner-slug/agents/agent"]')).toBeNull();
     await act(async () => finishList());
   });
   it('leaves Create mode when selecting the current agent in the actual rail', async () => {
@@ -557,13 +621,15 @@ describe('AgentsPage coordination', () => {
     actFlushSync(() => button('Create Agent').click());
     expect(container.querySelector('form')).not.toBeNull();
     const railLink = container.querySelector<HTMLAnchorElement>(
-      'nav[aria-label="Agents"] a[href="/agents/agent"]'
+      'nav[aria-label="Agents"] a[href="/projects/owner-slug/agents/agent"]'
     );
     actFlushSync(() => railLink?.click());
     expect(container.querySelector('form')).toBeNull();
     expect(container.querySelector('h2')?.textContent).toBe('Review changes');
     expect(railLink?.getAttribute('aria-current')).toBe('page');
-    expect(container.querySelector('output')?.textContent).toBe('/agents/agent');
+    expect(container.querySelector('output')?.textContent).toBe(
+      '/projects/owner-slug/agents/agent'
+    );
   });
   it('keeps the explicitly reselected agent after an in-flight creation succeeds', async () => {
     render();
@@ -599,7 +665,9 @@ describe('AgentsPage coordination', () => {
     );
     actFlushSync(() =>
       container
-        .querySelector<HTMLAnchorElement>('nav[aria-label="Agents"] a[href="/agents/agent"]')
+        .querySelector<HTMLAnchorElement>(
+          'nav[aria-label="Agents"] a[href="/projects/owner-slug/agents/agent"]'
+        )
         ?.click()
     );
     expect(container.querySelector('form')).toBeNull();
@@ -608,7 +676,9 @@ describe('AgentsPage coordination', () => {
       await mutationWait;
     });
     await waitForReact(() => expect(button('Create Agent').disabled).toBe(false));
-    expect(container.querySelector('output')?.textContent).toBe('/agents/agent');
+    expect(container.querySelector('output')?.textContent).toBe(
+      '/projects/owner-slug/agents/agent'
+    );
   });
   it.each([
     { ctrlKey: true },
@@ -625,7 +695,7 @@ describe('AgentsPage coordination', () => {
       );
       actFlushSync(() => button('Create Agent').click());
       const railLink = container.querySelector<HTMLAnchorElement>(
-        'nav[aria-label="Agents"] a[href="/agents/agent"]'
+        'nav[aria-label="Agents"] a[href="/projects/owner-slug/agents/agent"]'
       );
       let browserActionPrevented = true;
       const suppressTestNavigation = (event: MouseEvent) => {
@@ -639,14 +709,16 @@ describe('AgentsPage coordination', () => {
         )
       );
       expect(browserActionPrevented).toBe(false);
-      expect(railLink?.getAttribute('href')).toBe('/agents/agent');
+      expect(railLink?.getAttribute('href')).toBe('/projects/owner-slug/agents/agent');
       expect(container.querySelector('form')).not.toBeNull();
-      expect(container.querySelector('output')?.textContent).toBe('/agents/agent');
+      expect(container.querySelector('output')?.textContent).toBe(
+        '/projects/owner-slug/agents/agent'
+      );
     }
   );
   it('creates in the selected project and opens the created agent only after success', async () => {
     navigation.slug = 'owner-slug';
-    render('/agents');
+    render('/projects/owner-slug/agents');
     await waitForReact(() =>
       expect(container.querySelector('h2')?.textContent).toBe('Review changes')
     );
@@ -686,7 +758,9 @@ describe('AgentsPage coordination', () => {
         ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
     );
     await waitForReact(() =>
-      expect(container.querySelector('output')?.textContent).toBe('/agents/created')
+      expect(container.querySelector('output')?.textContent).toBe(
+        '/projects/owner-slug/agents/created'
+      )
     );
     expect(requests).toContainEqual({
       path: 'periodicTask.create',
@@ -699,5 +773,157 @@ describe('AgentsPage coordination', () => {
         timezone: null,
       },
     });
+  });
+  it('rejects an agent belonging to another canonical project without switching owner', async () => {
+    render('/projects/stale/agents/agent');
+    await waitForReact(() => expect(container.textContent).toContain('Agent not found'));
+    expect(container.querySelector('form')).toBeNull();
+    expect(container.querySelector('main h2')).toBeNull();
+    expect(container.querySelector('output')?.textContent).toBe('/projects/stale/agents/agent');
+    expect(requests).toContainEqual({ path: 'periodicTask.list', input: { projectId: 'stale' } });
+  });
+
+  it.each(['create', 'delete'] as const)(
+    'keeps the new A lifetime intact after pending %s completes across A → B → A',
+    async (kind) => {
+      render();
+      await waitForReact(() =>
+        expect(container.querySelector('h2')?.textContent).toBe('Review changes')
+      );
+      if (kind === 'create') {
+        actFlushSync(() => button('Create Agent').click());
+        actFlushSync(() => {
+          for (const [selector, value, prototype] of [
+            ['input[name="name"]', 'Old lifetime', HTMLInputElement.prototype],
+            ['textarea', 'Old instructions', HTMLTextAreaElement.prototype],
+          ] as const) {
+            const field = container.querySelector(selector);
+            Object.getOwnPropertyDescriptor(prototype, 'value')?.set?.call(field, value);
+            field?.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+        });
+      } else {
+        actFlushSync(() => button('Delete').click());
+      }
+      let finishMutation: () => void = vi.fn();
+      mutationWait = new Promise<void>((resolve) => {
+        finishMutation = resolve;
+      });
+      actFlushSync(() => {
+        if (kind === 'create') {
+          container
+            .querySelector('form')
+            ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        } else {
+          button('Delete Agent').click();
+        }
+      });
+      await waitForReact(() =>
+        expect(requests.some((request) => request.path === `periodicTask.${kind}`)).toBe(true)
+      );
+      actFlushSync(() => button('Switch header project').click());
+      await waitForReact(() =>
+        expect(container.querySelector('output')?.textContent).toBe('/projects/stale/agents')
+      );
+      actFlushSync(() => button('Return to owner').click());
+      await waitForReact(() =>
+        expect(container.querySelector('output')?.textContent).toBe(
+          '/projects/owner-slug/agents/agent'
+        )
+      );
+      await waitForReact(() =>
+        expect(container.querySelector('h2')?.textContent).toBe('Review changes')
+      );
+      actFlushSync(() => button('Create Agent').click());
+      const form = container.querySelector('form');
+      const input = container.querySelector<HTMLInputElement>('input[name="name"]');
+      actFlushSync(() => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+          input,
+          'New lifetime draft'
+        );
+        input?.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      await act(async () => {
+        finishMutation();
+        await mutationWait;
+      });
+      await waitForReact(() =>
+        expect(
+          requests.filter((request) => request.path === 'periodicTask.list').length
+        ).toBeGreaterThan(2)
+      );
+      expect(container.querySelector('output')?.textContent).toBe(
+        '/projects/owner-slug/agents/agent'
+      );
+      expect(container.querySelector('form')).toBe(form);
+      expect(container.querySelector<HTMLInputElement>('input[name="name"]')?.value).toBe(
+        'New lifetime draft'
+      );
+      if (kind === 'delete') {
+        expect(container.querySelector('nav[aria-label="Agents"] a')).toBeNull();
+      }
+    }
+  );
+  it('keeps B selected after a pending delete from A completes', async () => {
+    render();
+    await waitForReact(() =>
+      expect(container.querySelector('h2')?.textContent).toBe('Review changes')
+    );
+    let finishMutation: () => void = vi.fn();
+    mutationWait = new Promise<void>((resolve) => {
+      finishMutation = resolve;
+    });
+    actFlushSync(() => button('Delete').click());
+    actFlushSync(() => button('Delete Agent').click());
+    await waitForReact(() =>
+      expect(requests.some((request) => request.path === 'periodicTask.delete')).toBe(true)
+    );
+    actFlushSync(() => button('Switch header project').click());
+    await waitForReact(() =>
+      expect(container.querySelector('output')?.textContent).toBe('/projects/stale/agents')
+    );
+    await act(async () => {
+      finishMutation();
+      await mutationWait;
+    });
+    expect(container.querySelector('output')?.textContent).toBe('/projects/stale/agents');
+    expect(container.querySelector('form')).toBeNull();
+  });
+
+  it('exits Create when explicitly reopening the same idless project index', async () => {
+    render('/projects/stale/agents');
+    await waitForReact(() => expect(button('Create Agent').disabled).toBe(false));
+    actFlushSync(() => button('Create Agent').click());
+    expect(container.querySelector('form')).not.toBeNull();
+    actFlushSync(() => button('Open current index').click());
+    await waitForReact(() => expect(container.querySelector('form')).toBeNull());
+    expect(container.querySelector('output')?.textContent).toBe('/projects/stale/agents');
+  });
+  it('preserves Create and its draft when polling discovers the first agent in an empty project', async () => {
+    render('/projects/stale/agents');
+    await waitForReact(() => expect(button('Create Agent').disabled).toBe(false));
+    actFlushSync(() => button('Create Agent').click());
+    const form = container.querySelector('form');
+    const input = container.querySelector<HTMLInputElement>('input[name="name"]');
+    actFlushSync(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+        input,
+        'Draft during polling'
+      );
+      input?.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    discoveredAgent = true;
+    await act(async () => {
+      await queryClient.invalidateQueries();
+    });
+    await waitForReact(() =>
+      expect(container.querySelector('nav[aria-label="Agents"] a')).not.toBeNull()
+    );
+    expect(container.querySelector('form')).toBe(form);
+    expect(container.querySelector<HTMLInputElement>('input[name="name"]')?.value).toBe(
+      'Draft during polling'
+    );
+    expect(container.querySelector('output')?.textContent).toBe('/projects/stale/agents');
   });
 });

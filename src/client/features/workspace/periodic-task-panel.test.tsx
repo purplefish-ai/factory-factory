@@ -93,7 +93,7 @@ async function render() {
   await act(() =>
     root.render(
       <MemoryRouter>
-        <PeriodicTaskPanel periodicTaskId="agent-1" />
+        <PeriodicTaskPanel periodicTaskId="agent-1" projectId="owner" />
       </MemoryRouter>
     )
   );
@@ -102,9 +102,9 @@ async function render() {
 it('links to Agent management and shared history using the agent owner, including archived workspaces', async () => {
   const view = await render();
   try {
-    expect(view.container.querySelector('a[href="/agents/agent-1"]')?.textContent).toContain(
-      'Manage Agent'
-    );
+    expect(
+      view.container.querySelector('a[href="/projects/archived-owner/agents/agent-1"]')?.textContent
+    ).toContain('Manage Agent');
     expect(mocks.projectInput).toHaveBeenCalledWith({ id: 'owner' });
     expect(mocks.historyInput).toHaveBeenCalledWith({ periodicTaskId: 'agent-1', limit: 50 });
     expect(view.container.textContent).toContain('Up to 50 recent runs');
@@ -133,6 +133,9 @@ it.each(['loading', 'NOT_FOUND', 'network'])('shows explicit %s agent state', as
           : 'Read failed'
     );
     if (state !== 'loading') {
+      expect(
+        view.container.querySelector('a[href="/projects/archived-owner/agents"]')
+      ).not.toBeNull();
       const retry = [...view.container.querySelectorAll('button')].find(
         (button) => button.textContent === 'Retry agent'
       );
@@ -175,7 +178,9 @@ it('retains cached agent details and allows retrying a failed definition refresh
     expect(retry).toBeDefined();
     await act(() => retry?.click());
     expect(mocks.task.refetch).toHaveBeenCalledOnce();
-    expect(view.container.querySelector('a[href="/agents/agent-1"]')).not.toBeNull();
+    expect(
+      view.container.querySelector('a[href="/projects/archived-owner/agents/agent-1"]')
+    ).not.toBeNull();
   } finally {
     await view.dispose();
   }

@@ -77,7 +77,11 @@ export default function AdminDashboardPage() {
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4">
           <p className="text-sm text-muted-foreground">Manage scheduled agents and their runs.</p>
           <Button asChild variant="outline" size="sm">
-            <Link to="/agents">Agents</Link>
+            <Link
+              to={projectSlug ? `/projects/${encodeURIComponent(projectSlug)}/agents` : '/agents'}
+            >
+              Agents
+            </Link>
           </Button>
         </div>
         <Tabs value={settingsTab} onValueChange={(value) => setSettingsTab(value as SettingsTab)}>

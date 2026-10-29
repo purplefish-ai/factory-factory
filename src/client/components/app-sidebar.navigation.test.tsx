@@ -31,8 +31,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
   document.body.innerHTML = '';
 });
-it.each(['/agents', '/agents/review'])(
-  'marks Agents active for %s and exposes its navigation link',
+it.each(['/projects/alpha/agents', '/projects/alpha/reviews', '/admin'])(
+  'keeps Settings global and project sections in the navbar for %s',
   async (path) => {
     const container = document.createElement('div');
     document.body.appendChild(container);
@@ -47,11 +47,13 @@ it.each(['/agents', '/agents/review'])(
           </MemoryRouter>
         )
       );
-      const link = container.querySelector('a[href="/agents"]');
-      expect(link?.textContent).toBe('Agents');
-      expect(link?.getAttribute('data-active')).toBe('true');
+      expect(
+        [...container.querySelectorAll('a')].some(
+          (link) => link.textContent === 'Agents' || link.textContent === 'Reviews'
+        )
+      ).toBe(false);
       expect(container.querySelector('a[href="/admin"]')?.getAttribute('data-active')).toBe(
-        'false'
+        path === '/admin' ? 'true' : 'false'
       );
     } finally {
       await act(() => root.unmount());

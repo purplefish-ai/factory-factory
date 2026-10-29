@@ -1,11 +1,53 @@
 import { useState } from 'react';
+import { AppHeader } from '@/client/components/app-header';
+import { AppHeaderProvider } from '@/client/components/app-header-context';
+import { ProjectSectionHeader } from '@/client/components/project-section-header';
 import { AgentDetail } from '@/client/features/agents/agent-detail';
 import { AgentForm } from '@/client/features/agents/agent-form';
 import { AgentRunHistory } from '@/client/features/agents/agent-run-history';
 import { AgentsDashboardShell } from '@/client/features/agents/agents-dashboard-shell';
 import type { Agent, AgentRun } from '@/client/features/agents/types';
+import {
+  AppNavigationDataProvider,
+  type AppNavigationData,
+} from '@/client/hooks/use-app-navigation-data';
+import { SidebarProvider } from '@/components/ui/sidebar';
+import { TooltipProvider } from '@/components/ui/tooltip';
 
 const project = { id: 'factory', slug: 'factory-factory', name: 'Factory Factory' };
+const projectDefaults = {
+  repoPath: '/fixture/repository',
+  worktreeBasePath: '/fixture/worktrees',
+  defaultBranch: 'main',
+  githubOwner: 'example',
+  githubRepo: 'repo',
+  isArchived: false,
+  issueProvider: 'GITHUB' as const,
+  issueTrackerConfig: null,
+  startupScriptCommand: null,
+  startupScriptPath: null,
+  startupScriptTimeout: 300,
+  createdAt: new Date('2026-01-01T00:00:00Z'),
+  updatedAt: new Date('2026-01-01T00:00:00Z'),
+  _count: { workspaces: 0 },
+};
+const navigation: AppNavigationData = {
+  projects: [
+    { ...projectDefaults, ...project },
+    { ...projectDefaults, id: 'other', slug: 'other', name: 'Other project' },
+  ],
+  projectsError: null,
+  refetchProjects: () => Promise.reject(new Error('Fixture projects are static.')),
+  selectedProjectSlug: project.slug,
+  selectProjectSlug: () => undefined,
+  selectedProjectId: project.id,
+  issueProvider: 'GITHUB',
+  serverWorkspaces: [],
+  reviewCount: 2,
+  needsAttention: () => false,
+  clearAttention: () => undefined,
+  currentWorkspaceId: undefined,
+};
 function previousRuns(periodicTaskId: string): AgentRun[] {
   return [
     {
@@ -72,7 +114,9 @@ export function MobileAgentsFixture() {
           return;
         }
         const href = target.closest('a')?.getAttribute('href');
-        const agent = agents.find((candidate) => href === `/agents/${candidate.id}`);
+        const agent = agents.find(
+          (candidate) => href === `/projects/${project.slug}/agents/${candidate.id}`
+        );
         if (agent) {
           // Only selection is local to this fixture. Workspace links use the real router.
           event.preventDefault();
@@ -81,74 +125,86 @@ export function MobileAgentsFixture() {
         }
       }}
     >
-      <AgentsDashboardShell
-        projects={[project]}
-        projectId={project.id}
-        agents={agents}
-        selectedAgentId={formMode === 'create' ? undefined : selected.id}
-        onProjectChange={() => undefined}
-        onCreate={() => setFormMode('create')}
-      >
-        {formMode ? (
-          <>
-            <h2 className="text-xl font-semibold">
-              {formMode === 'edit' ? 'Edit Agent' : 'Create Agent'}
-            </h2>
-            <AgentForm
-              key={`${formMode}-${selectedId}`}
-              initialValues={formMode === 'edit' ? selected : undefined}
-              onCancel={() => setFormMode(null)}
-              onSave={(values) => {
-                const now = new Date();
-                const base: Agent =
-                  formMode === 'create'
-                    ? {
-                        id: crypto.randomUUID(),
-                        projectId: project.id,
-                        name: '',
-                        prompt: '',
-                        cadence: 'DAILY',
-                        scheduledTime: null,
-                        timezone: null,
-                        scheduledDayOfMonth: null,
-                        isEnabled: true,
-                        nextRunAt: now,
-                        lastRunAt: null,
-                        createdAt: now,
-                        updatedAt: now,
-                        executions: [],
+      <AppNavigationDataProvider value={navigation}>
+        <SidebarProvider className="h-full min-h-0 w-full flex-col">
+          <TooltipProvider>
+            <AppHeaderProvider>
+              <AppHeader />
+              <ProjectSectionHeader project={project} />
+              <div className="min-h-0 w-full flex-1 overflow-hidden">
+                <AgentsDashboardShell
+                  projectSlug={project.slug}
+                  agents={agents}
+                  selectedAgentId={formMode === 'create' ? undefined : selected.id}
+                  onCreate={() => setFormMode('create')}
+                >
+                  {formMode ? (
+                    <>
+                      <h2 className="text-xl font-semibold">
+                        {formMode === 'edit' ? 'Edit Agent' : 'Create Agent'}
+                      </h2>
+                      <AgentForm
+                        key={`${formMode}-${selectedId}`}
+                        initialValues={formMode === 'edit' ? selected : undefined}
+                        onCancel={() => setFormMode(null)}
+                        onSave={(values) => {
+                          const now = new Date();
+                          const base: Agent =
+                            formMode === 'create'
+                              ? {
+                                  id: crypto.randomUUID(),
+                                  projectId: project.id,
+                                  name: '',
+                                  prompt: '',
+                                  cadence: 'DAILY',
+                                  scheduledTime: null,
+                                  timezone: null,
+                                  scheduledDayOfMonth: null,
+                                  isEnabled: true,
+                                  nextRunAt: now,
+                                  lastRunAt: null,
+                                  createdAt: now,
+                                  updatedAt: now,
+                                  executions: [],
+                                }
+                              : selected;
+                          const updated = { ...base, ...values, updatedAt: now };
+                          setAgents((current) =>
+                            formMode === 'create'
+                              ? [...current, updated]
+                              : current.map((agent) => (agent.id === selected.id ? updated : agent))
+                          );
+                          setSelectedId(updated.id);
+                          setFormMode(null);
+                          return Promise.resolve();
+                        }}
+                      />
+                    </>
+                  ) : (
+                    <AgentDetail
+                      agent={selected}
+                      projectName={project.name}
+                      onEdit={() => setFormMode('edit')}
+                      onToggle={() =>
+                        setAgents((current) =>
+                          current.map((agent) =>
+                            agent.id === selected.id
+                              ? { ...agent, isEnabled: !agent.isEnabled }
+                              : agent
+                          )
+                        )
                       }
-                    : selected;
-                const updated = { ...base, ...values, updatedAt: now };
-                setAgents((current) =>
-                  formMode === 'create'
-                    ? [...current, updated]
-                    : current.map((agent) => (agent.id === selected.id ? updated : agent))
-                );
-                setSelectedId(updated.id);
-                setFormMode(null);
-                return Promise.resolve();
-              }}
-            />
-          </>
-        ) : (
-          <AgentDetail
-            agent={selected}
-            projectName={project.name}
-            onEdit={() => setFormMode('edit')}
-            onToggle={() =>
-              setAgents((current) =>
-                current.map((agent) =>
-                  agent.id === selected.id ? { ...agent, isEnabled: !agent.isEnabled } : agent
-                )
-              )
-            }
-            onDelete={() => undefined}
-          >
-            <AgentRunHistory projectSlug={project.slug} runs={selected.executions} />
-          </AgentDetail>
-        )}
-      </AgentsDashboardShell>
+                      onDelete={() => undefined}
+                    >
+                      <AgentRunHistory projectSlug={project.slug} runs={selected.executions} />
+                    </AgentDetail>
+                  )}
+                </AgentsDashboardShell>
+              </div>
+            </AppHeaderProvider>
+          </TooltipProvider>
+        </SidebarProvider>
+      </AppNavigationDataProvider>
     </div>
   );
 }

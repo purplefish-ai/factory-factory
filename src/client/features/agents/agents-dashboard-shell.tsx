@@ -2,18 +2,11 @@ import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import type { MouseEvent, ReactNode } from 'react';
 import { Link } from 'react-router';
+import { getProjectAgentPath } from '@/client/lib/project-navigation';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { describeAgentSchedule } from './agent-schedule';
-import type { Agent, AgentProject } from './types';
+import type { Agent } from './types';
 
 type RailAgent = Pick<
   Agent,
@@ -28,14 +21,12 @@ type RailAgent = Pick<
   | 'lastRunAt'
 >;
 export interface AgentsDashboardShellProps {
-  projects: AgentProject[];
-  projectId?: string;
+  projectSlug: string;
   agents?: RailAgent[];
   selectedAgentId?: string;
   isLoading?: boolean;
   error?: string | null;
   onRetry?: () => void;
-  onProjectChange: (projectId: string) => void;
   onCreate: () => void;
   onAgentSelect?: (id: string) => void;
   createDisabled?: boolean;
@@ -62,14 +53,12 @@ function selectFromLink(
 
 /** Presentational shell shared by Storybook and the mobile fixture. */
 export function AgentsDashboardShell({
-  projects,
-  projectId,
+  projectSlug,
   agents,
   selectedAgentId,
   isLoading,
   error,
   onRetry,
-  onProjectChange,
   onCreate,
   onAgentSelect,
   createDisabled,
@@ -84,34 +73,13 @@ export function AgentsDashboardShell({
             Instructions that run on a schedule, in their own workspaces.
           </p>
         </div>
-        <Button size="sm" onClick={onCreate} disabled={createDisabled || !projectId}>
+        <Button size="sm" onClick={onCreate} disabled={createDisabled}>
           <PlusIcon className="size-4" />
           Create Agent
         </Button>
       </header>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col md:flex-row">
         <aside className="flex max-h-64 shrink-0 flex-col border-b bg-muted/15 md:max-h-none md:w-72 md:border-r md:border-b-0 lg:w-80">
-          <div className="space-y-2 border-b px-4 py-3">
-            <Label htmlFor="agents-project-filter" className="text-xs text-muted-foreground">
-              Project
-            </Label>
-            <Select
-              value={projectId ?? ''}
-              onValueChange={onProjectChange}
-              disabled={projects.length === 0}
-            >
-              <SelectTrigger id="agents-project-filter" className="w-full">
-                <SelectValue placeholder="Select a project" />
-              </SelectTrigger>
-              <SelectContent>
-                {projects.map((project) => (
-                  <SelectItem key={project.id} value={project.id}>
-                    {project.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
           <nav aria-label="Agents" className="min-h-0 overflow-y-auto p-2">
             {error && (
               <div role="alert" className="space-y-2 p-2 text-xs">
@@ -134,7 +102,7 @@ export function AgentsDashboardShell({
             {agents?.map((agent) => (
               <Link
                 key={agent.id}
-                to={`/agents/${agent.id}`}
+                to={getProjectAgentPath(projectSlug, agent.id)}
                 onClick={(event) => selectFromLink(event, agent.id, onAgentSelect)}
                 aria-current={agent.id === selectedAgentId ? 'page' : undefined}
                 className={cn(

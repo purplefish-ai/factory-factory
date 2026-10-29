@@ -92,7 +92,7 @@ export function ProjectSelectorDropdown({
           DEFAULT_PROJECT_BUTTON_CLASS,
           projectButtonClassName
         )}
-        aria-label={`Open ${selectedProjectName} kanban`}
+        aria-label={`Open ${selectedProjectName} project`}
       >
         {projectButtonLabel}
       </button>

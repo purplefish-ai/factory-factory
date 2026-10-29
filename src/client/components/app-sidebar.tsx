@@ -1,8 +1,6 @@
 import { DotOutlineIcon } from '@phosphor-icons/react/dist/csr/DotOutline';
 import { GearIcon } from '@phosphor-icons/react/dist/csr/Gear';
-import { GitPullRequestIcon } from '@phosphor-icons/react/dist/csr/GitPullRequest';
 import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
-import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import {
   type PointerEvent as ReactPointerEvent,
@@ -17,7 +15,6 @@ import { InlineWorkspaceForm } from '@/client/features/kanban/inline-workspace-f
 import type { useAppNavigationData } from '@/client/hooks/use-app-navigation-data';
 import { useProjectIssues } from '@/client/hooks/use-project-issues';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Sheet,
@@ -295,36 +292,6 @@ function SidebarInner({
 
       <SidebarFooter>
         <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              isActive={pathname === '/agents' || pathname.startsWith('/agents/')}
-            >
-              <Link to="/agents" onClick={onNavigate}>
-                <RobotIcon className="h-4 w-4" />
-                <span>Agents</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              isActive={pathname === '/reviews' || pathname?.startsWith('/reviews/')}
-            >
-              <Link to="/reviews" onClick={onNavigate}>
-                <GitPullRequestIcon className="h-4 w-4" />
-                <span>Reviews</span>
-                {navData.reviewCount > 0 && (
-                  <Badge
-                    variant="secondary"
-                    className="ml-auto h-5 min-w-5 px-1.5 text-xs bg-orange-500/20 text-orange-600 border-orange-500/30"
-                  >
-                    {navData.reviewCount}
-                  </Badge>
-                )}
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
           <SidebarMenuItem>
             <div className="flex items-center gap-1">
               <SidebarMenuButton

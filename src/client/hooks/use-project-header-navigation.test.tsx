@@ -18,7 +18,12 @@ function HeaderSwitch() {
     <>
       <button onClick={() => handleProjectChange('beta')}>Beta</button>
       <button onClick={handleCurrentProjectSelect}>Current</button>
-      <output>{location.pathname}</output>
+      <button onClick={() => handleProjectChange('__create__')}>Create</button>
+      <button onClick={() => handleProjectChange('__manage__')}>Manage</button>
+      <output>
+        {location.pathname}
+        {location.search}
+      </output>
     </>
   );
 }
@@ -33,11 +38,15 @@ afterEach(() => {
 });
 describe('explicit header project navigation', () => {
   it.each([
-    ['/agents/task-1', 'Beta', '/agents', 'beta'],
-    ['/agents', 'Beta', '/agents', 'beta'],
-    ['/agents/task-1', 'Current', '/agents', 'alpha'],
+    ['/projects/alpha/agents/task-1?agent=old', 'Beta', '/projects/beta/agents', 'beta'],
+    ['/projects/alpha/agents', 'Beta', '/projects/beta/agents', 'beta'],
+    ['/projects/alpha/agents/task-1', 'Current', '/projects/alpha/agents', 'alpha'],
     ['/projects/alpha/workspaces/workspace-1', 'Beta', '/projects/beta/workspaces', 'beta'],
-    ['/reviews', 'Beta', '/projects/beta/workspaces', 'beta'],
+    ['/projects/alpha/reviews?repo=old&pr=12', 'Beta', '/projects/beta/reviews', 'beta'],
+    ['/projects/alpha/workspaces', 'Beta', '/projects/beta/workspaces', 'beta'],
+    ['/projects/archived/agents/task', 'Current', '/projects/archived/agents', 'archived'],
+    ['/projects/alpha/agents', 'Create', '/projects/new', ''],
+    ['/projects/alpha/reviews', 'Manage', '/projects', ''],
   ])('switches from %s using %s', async (from, button, destination, slug) => {
     const container = document.createElement('div');
     document.body.appendChild(container);
@@ -53,7 +62,11 @@ describe('explicit header project navigation', () => {
         ?.click()
     );
     expect(container.querySelector('output')?.textContent).toBe(destination);
-    expect(selectProjectSlug).toHaveBeenCalledWith(slug);
+    if (slug) {
+      expect(selectProjectSlug).toHaveBeenCalledWith(slug);
+    } else {
+      expect(selectProjectSlug).not.toHaveBeenCalled();
+    }
     await act(() => root.unmount());
   });
 });

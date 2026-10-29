@@ -1,6 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useState } from 'react';
-import { fn } from 'storybook/test';
 import { AgentDetail } from './agent-detail';
 import { AgentForm } from './agent-form';
 import { AgentRunHistory } from './agent-run-history';
@@ -148,14 +147,12 @@ function DashboardSession({
   return (
     <div className="h-dvh bg-background text-foreground">
       <AgentsDashboardShell
-        projects={[project]}
-        projectId={project.id}
+        projectSlug={project.slug}
         agents={mode === 'empty' ? [] : mode === 'loading' || mode === 'error' ? undefined : agents}
         selectedAgentId={mode === 'create' ? undefined : agent.id}
         isLoading={mode === 'loading'}
         error={mode === 'error' ? 'Could not load agents: Connection unavailable.' : undefined}
         onRetry={() => setMode('populated')}
-        onProjectChange={fn()}
         onCreate={() => setMode('create')}
       >
         <StoryContent

@@ -1,16 +1,23 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { runInBackground } from '@/client/lib/background-task';
+import { getProjectAgentPath, getProjectSectionPath } from '@/client/lib/project-navigation';
 import { trpc } from '@/client/lib/trpc';
-import type { AgentFormValues } from './types';
-import { useAgentProject } from './use-agent-project';
+import type { AgentFormValues, AgentProject } from './types';
 
 function mutationErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Could not update agent. Please try again.';
 }
 
-export function useAgentsController() {
+export function useAgentsController(project: AgentProject) {
+  const active = useRef(true);
+  useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [mode, setMode] = useState<'detail' | 'create' | 'edit'>('detail');
@@ -27,19 +34,11 @@ export function useAgentsController() {
     { id: id ?? '' },
     { enabled: !!id, refetchInterval: 10_000, retry: false }
   );
-  const onProjectSwitch = useCallback(() => {
-    setMode('detail');
-    setDeleteOpen(false);
-    setActionError(null);
-    void navigate('/agents');
-  }, [navigate]);
-  const projectState = useAgentProject(id, task.data, onProjectSwitch);
-  const { project } = projectState;
-  const currentProjectId = useRef(project?.id);
-  currentProjectId.current = project?.id;
+  const currentProjectId = useRef(project.id);
+  currentProjectId.current = project.id;
   const list = trpc.periodicTask.list.useQuery(
-    { projectId: project?.id ?? '' },
-    { enabled: !!project, refetchInterval: 10_000 }
+    { projectId: project.id },
+    { refetchInterval: 10_000 }
   );
   const create = trpc.periodicTask.create.useMutation({
     onError: (error) => toast.error(`Failed to create agent: ${error.message}`),
@@ -58,9 +57,6 @@ export function useAgentsController() {
     pending ||
     create.isPending ||
     update.isPending ||
-    projectState.projectsLoading ||
-    projectState.ownerLoading ||
-    !project ||
     (!!id && (!task.data || project.id !== task.data.projectId));
 
   const previousId = useRef(id);
@@ -76,9 +72,9 @@ export function useAgentsController() {
   useEffect(() => {
     const first = list.data?.[0];
     if (!id && mode === 'detail' && first && !list.error) {
-      void navigate(`/agents/${first.id}`, { replace: true });
+      void navigate(getProjectAgentPath(project.slug, first.id), { replace: true });
     }
-  }, [id, list.data, list.error, mode, navigate]);
+  }, [id, list.data, list.error, mode, navigate, project.slug]);
 
   const invalidate = (projectId: string, agentId: string) => {
     runInBackground(
@@ -90,30 +86,34 @@ export function useAgentsController() {
     );
   };
   const save = async (values: AgentFormValues) => {
-    if (!project) {
-      throw new Error('Select a project before saving this agent.');
-    }
     if (mode === 'create') {
       const created = await create.mutateAsync({ projectId: project.id, ...values });
       invalidate(project.id, created.id);
       if (
+        active.current &&
         currentId.current === id &&
         currentProjectId.current === project.id &&
         currentMode.current === 'create'
       ) {
         setMode('detail');
-        void navigate(`/agents/${created.id}`);
+        void navigate(getProjectAgentPath(project.slug, created.id));
       }
-    } else if (id && task.data) {
+    } else if (id && task.data?.projectId === project.id) {
       await update.mutateAsync({ id, ...values });
       invalidate(task.data.projectId, id);
-      if (currentId.current === id) {
+      if (active.current && currentId.current === id) {
         setMode('detail');
       }
     }
   };
+  const finishAction = () => {
+    pendingRef.current = false;
+    if (active.current) {
+      setPending(false);
+    }
+  };
   const performAction = async (kind: 'toggle' | 'delete') => {
-    if (!(task.data && id) || pendingRef.current) {
+    if (!(task.data && id) || task.data.projectId !== project.id || pendingRef.current) {
       return;
     }
     const target = task.data;
@@ -133,19 +133,18 @@ export function useAgentsController() {
         );
       }
       invalidate(target.projectId, targetId);
-      if (kind === 'delete' && currentId.current === targetId) {
+      if (active.current && kind === 'delete' && currentId.current === targetId) {
         setDeleteOpen(false);
         setMode('detail');
-        void navigate('/agents');
+        void navigate(getProjectSectionPath(project.slug, 'agents'));
       }
     } catch (error) {
-      if (currentId.current !== targetId) {
+      if (!active.current || currentId.current !== targetId) {
         return;
       }
       setActionError(mutationErrorMessage(error));
     } finally {
-      pendingRef.current = false;
-      setPending(false);
+      finishAction();
     }
   };
 
@@ -153,7 +152,8 @@ export function useAgentsController() {
     id,
     task: { data: task.data, error: task.error, isLoading: task.isLoading, refetch: task.refetch },
     list: { data: list.data, error: list.error, isLoading: list.isLoading, refetch: list.refetch },
-    ...projectState,
+    project,
+    wrongOwner: !!task.data && task.data.projectId !== project.id,
     mode,
     setMode,
     deleteOpen,

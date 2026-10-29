@@ -13,8 +13,7 @@ it('keeps the project rail visible beside task errors and links explicit selecti
     root.render(
       <MemoryRouter>
         <AgentsDashboardShell
-          projects={[{ id: 'project', slug: 'project', name: 'My project' }]}
-          projectId="project"
+          projectSlug="project"
           agents={[
             {
               id: 'one',
@@ -29,7 +28,6 @@ it('keeps the project rail visible beside task errors and links explicit selecti
             },
           ]}
           selectedAgentId="invalid"
-          onProjectChange={vi.fn()}
           onCreate={vi.fn()}
         >
           <p role="alert">Agent not found</p>
@@ -38,8 +36,11 @@ it('keeps the project rail visible beside task errors and links explicit selecti
     )
   );
   expect(container.querySelector('nav[aria-label="Agents"]')).not.toBeNull();
-  expect(container.querySelector('a[href="/agents/one"]')?.textContent).toContain('Review code');
+  expect(container.querySelector('a[href="/projects/project/agents/one"]')?.textContent).toContain(
+    'Review code'
+  );
   expect(container.querySelector('a[aria-current="page"]')).toBeNull();
   expect(container.textContent).toContain('Agent not found');
+  expect(container.querySelector('[role=combobox]')).toBeNull();
   actFlushSync(() => root.unmount());
 });

@@ -8,6 +8,7 @@ import { Root } from './root';
 
 // Route modules load only when their page is rendered.
 const AgentsPage = lazy(() => import('./routes/agents'));
+const LegacyAgentsPage = lazy(() => import('./routes/agents/legacy'));
 const AdminPage = lazy(() => import('./routes/admin-page'));
 const HomePage = lazy(() => import('./routes/home'));
 const LogsPage = lazy(() => import('./routes/logs'));
@@ -70,6 +71,8 @@ export const router = createBrowserRouter([
             path: ':slug',
             element: <ProjectLayout />,
             children: [
+              { path: 'agents/:id?', element: <AgentsPage /> },
+              { path: 'reviews', element: <ReviewsPage /> },
               {
                 index: true,
                 element: <ProjectRedirectPage />,
@@ -97,7 +100,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'agents/:id?',
-        element: <AgentsPage />,
+        element: <LegacyAgentsPage />,
       },
       {
         path: 'reviews',

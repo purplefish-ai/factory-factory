@@ -2,10 +2,14 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router';
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { actFlushSync } from '@/test-utils/react-act';
 import { MobileAgentsFixture } from './mobile-agents-fixture';
 
+vi.mock('@/client/features/search', () => ({
+  GlobalSearch: () => <button aria-label="Search">Search</button>,
+}));
+vi.mock('@/hooks/use-mobile', () => ({ MOBILE_BREAKPOINT: 768, useIsMobile: () => true }));
 let container: HTMLDivElement;
 let root: Root;
 function button(name: string, scope: ParentNode = container) {
@@ -28,6 +32,10 @@ function fill(selector: string, value: string) {
 }
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+    configurable: true,
+    value: vi.fn(),
+  });
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
@@ -45,7 +53,7 @@ afterEach(() => {
 });
 it('creates distinct fresh agents without inheriting the selected agent history or paused state', async () => {
   const dependenciesLink = container.querySelector<HTMLAnchorElement>(
-    'a[href="/agents/dependencies"]'
+    'a[href="/projects/factory-factory/agents/dependencies"]'
   );
   if (!dependenciesLink) {
     throw new Error('Missing Dependencies agent rail link');
@@ -74,7 +82,7 @@ it('creates distinct fresh agents without inheriting the selected agent history 
     expect(container.querySelector('main a[href*="/workspaces/"]')).toBeNull();
   }
   expect(new Set(createdIds).size).toBe(2);
-  const allLinks = [...container.querySelectorAll('nav a')].map((link) =>
+  const allLinks = [...container.querySelectorAll('nav[aria-label="Agents"] a')].map((link) =>
     link.getAttribute('href')
   );
   expect(allLinks).toHaveLength(4);
@@ -98,9 +106,32 @@ it.each([
   );
   actFlushSync(() =>
     container
-      .querySelector<HTMLAnchorElement>('a[href="/agents/dependencies"]')
+      .querySelector<HTMLAnchorElement>('a[href="/projects/factory-factory/agents/dependencies"]')
       ?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, ...modifiers }))
   );
   expect(prevented).toBe(false);
   expect(container.querySelector('h2')?.textContent).toBe('Review recent changes');
+});
+
+it('renders the shared project navbar, project menu and canonical section links', () => {
+  expect(
+    container.querySelector('button[aria-label="Open Factory Factory project"]')
+  ).not.toBeNull();
+  expect(container.querySelector('button[aria-label="Toggle sidebar"]')).not.toBeNull();
+  expect(
+    container.querySelector(
+      'nav[aria-label="Project sections"] a[href="/projects/factory-factory/workspaces"]'
+    )
+  ).not.toBeNull();
+  expect(
+    container.querySelector(
+      'nav[aria-label="Project sections"] a[href="/projects/factory-factory/agents"]'
+    )
+  ).not.toBeNull();
+  expect(
+    container.querySelector(
+      'nav[aria-label="Project sections"] a[href="/projects/factory-factory/reviews"]'
+    )
+  ).not.toBeNull();
+  expect(container.querySelector('#agents-project-filter')).toBeNull();
 });
