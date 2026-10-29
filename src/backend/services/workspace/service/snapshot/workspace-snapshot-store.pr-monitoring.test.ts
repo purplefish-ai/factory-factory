@@ -31,8 +31,6 @@ function makeUpdate(overrides: Partial<SnapshotUpdateInput> = {}): SnapshotUpdat
     },
     runScriptStatus: 'IDLE',
     hasHadSessions: false,
-    mode: 'STANDARD',
-    autoIterationStatus: null,
     isWorking: false,
     pendingRequestType: null,
     gitStats: null,

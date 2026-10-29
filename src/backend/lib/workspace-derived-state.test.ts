@@ -21,8 +21,6 @@ function makeInput(
     ratchetEnabled: false,
     hasMergeConflict: false,
     dispatchStalled: false,
-    mode: 'STANDARD',
-    autoIterationStatus: null,
     flowState: {
       phase: 'NO_PR',
       ciObservation: 'CHECKS_UNKNOWN',

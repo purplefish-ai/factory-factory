@@ -85,43 +85,6 @@ describe('complete workspace summary adoption', () => {
     expect(row.statusReason).toEqual(snapshot.statusReason);
   });
 
-  it.each(['RUNNING', 'PAUSED', 'COMPLETED', null] as const)(
-    'adopts compact %s loop counters and clears unknown values',
-    (status) => {
-      const snapshot = complete({
-        mode: 'AUTO_ITERATION',
-        autoIterationStatus: status,
-        autoIteration: {
-          status,
-          currentIteration: 7,
-          maxIterations: 0,
-          currentMetricSummary: 'score 95',
-        },
-      });
-      const initial = projectSnapshotToWorkspace(snapshot);
-      expect(initial.autoIteration).toEqual(snapshot.autoIteration);
-      const unknown = projectSnapshotToWorkspace(
-        complete({
-          mode: 'AUTO_ITERATION',
-          autoIterationStatus: null,
-          autoIteration: {
-            status: null,
-            currentIteration: null,
-            maxIterations: null,
-            currentMetricSummary: null,
-          },
-        }),
-        initial
-      );
-      expect(unknown.autoIteration).toEqual({
-        status: null,
-        currentIteration: null,
-        maxIterations: null,
-        currentMetricSummary: null,
-      });
-    }
-  );
-
   it.each(['http-first', 'stream-first', 'resolution-gap'] as const)(
     'reconciles mixed complete/legacy membership and metadata at the actual %s cache commit',
     async (ordering) => {
@@ -184,39 +147,21 @@ describe('complete workspace summary adoption', () => {
     }
   );
 
-  it('shares unchanged complete rows and keeps explicit loop nulls after a late HTTP repair', async () => {
+  it('shares unchanged complete rows and keeps explicit metadata nulls after a late HTTP repair', async () => {
     const f = fixture();
-    const snapshot = complete({
-      mode: 'AUTO_ITERATION',
-      autoIterationStatus: 'RUNNING',
-      autoIteration: {
-        status: 'RUNNING',
-        currentIteration: 8,
-        maxIterations: 0,
-        currentMetricSummary: 'score 95',
-      },
-    });
+    const snapshot = complete({ worktreePath: '/worktrees/live' });
     const full = { type: 'snapshot_full' as const, projectId: 'proj-1', entries: [snapshot] };
     f.owner.apply(f.connection, full);
     const before = f.client.getQueryData<ProjectWorkspaceCache>(f.options.queryKey)!;
     f.owner.apply(f.connection, structuredClone(full));
     expect(f.client.getQueryData(f.options.queryKey)).toBe(before);
     const request = f.client.fetchQuery({ ...f.options, staleTime: 0 });
-    const unknown = complete({
-      mode: 'AUTO_ITERATION',
-      autoIterationStatus: null,
-      autoIteration: {
-        status: null,
-        currentIteration: null,
-        maxIterations: null,
-        currentMetricSummary: null,
-      },
-    });
+    const unknown = complete({ worktreePath: null });
     f.owner.apply(f.connection, { type: 'snapshot_changed', workspaceId: 'ws-1', entry: unknown });
     f.resolve(before);
     await request;
     const after = f.client.getQueryData<ProjectWorkspaceCache>(f.options.queryKey)!;
-    expect(after.workspaces[0]?.autoIteration).toEqual(unknown.autoIteration);
+    expect(after.workspaces[0]?.worktreePath).toBeNull();
     expect(after.workspaces[0]?.createdAt).toBe(before.workspaces[0]?.createdAt);
     expect(after.workspaces[0]?.sessionSummaries).toBe(before.workspaces[0]?.sessionSummaries);
   });

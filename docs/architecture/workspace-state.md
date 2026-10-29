@@ -190,83 +190,16 @@ creation. Project slugs and worktree base paths must be nonempty; legacy backups
 with empty values are rejected before any records are imported. Valid backup
 paths are preserved rather than recomputed for the current machine.
 
-## Auto-iteration state
+## Retired auto-iteration
 
-The loop's five fields live in a 1:1 `WorkspaceAutoIteration` row (`mode`,
-`status`, `config`, `progress`, `sessionId`), written only by
-`workspace-auto-iteration.accessor.ts`; reads flatten it back under the old
-`mode`/`autoIteration*` names.
-
-`mode` travels with the group rather than staying on `Workspace`: it reads like
-a general workspace attribute, but every consumer is an auto-iteration consumer
-(the kanban badge, the right panel, the progress banner, creation validation,
-and the `auto-iteration.trpc.ts` entry guard), so it is the group's discriminant
-— the same call the ratchet split made for `ratchetEnabled`.
-
-`mode`, `autoIterationStatus`, and compact `autoIteration` travel on the
-snapshot wire. The compact projection contains only status, current iteration,
-maximum iterations, and the current metric summary. Unknown individual values
-remain null, and explicit nulls clear prior progress. Full configuration, test
-output, progress, and logbook data stay outside the compact snapshot. Existing
-detail and legacy list paths retain their current payloads, including raw
-`autoIterationConfig` and `autoIterationProgress` on legacy lists.
-
-The loop fields share their own snapshot timestamp group, independent of
-lifecycle and metadata freshness. An accepted reset or newer loop update fences
-older reconciliation reads; changing mode invalidates compact hydration until
-new compact input is accepted. Default or rejected values never earn the
-complete-summary version.
-
-Only `mode` and `config` are exported — `status`, `progress` and `sessionId`
-describe a loop that does not survive a backup, so a workspace whose loop was
-running when the backup was taken restores idle.
-
-`setStatus`/`setProgress`/`setSession` are unconditional writes that throw on a
-missing row (the pre-split path used `prisma.workspace.update`, which threw);
-`finishIfSessionMatches` and `clearSessionIfMatches` are compare-and-swaps on
-`sessionId`, so a recycled session cannot stamp its outcome over a loop that has
-moved on.
-
-`workspaceAutoIterationService` retains `AUTO_ITERATION_STATUS_CHANGED` for
-status writes and successful completion compare-and-swaps. Status/progress
-writes, successful completion, and guarded startup recovery return mode, status,
-config, and progress from the same `updateManyAndReturn` statement. The service
-publishes `AUTO_ITERATION_SUMMARY_CHANGED` from those accepted rows using the
-shared HTTP/reconciliation projector. Failed writes, missing rows, and missed
-compare-and-swaps publish nothing. There is no post-write reread, publication
-read token, or existence check: the event describes the accepted write even if
-the row has since been changed or deleted. Loop/session authority remains with
-the existing workflow and persistence guards.
-
-Startup recovery retains its parallel per-row session/status guards and batch
-result ordering. It publishes the accepted rows when the batch completes, then
-returns only their IDs. Recovery runs before the startup HTTP/WebSocket command
-gate opens and before recurring tasks start; it is not a user-triggered repair
-operation. A rejected batch retains its existing rejection behavior, with any
-partially landed rows repaired by reconciliation.
-
-The collector immediately flushes compact updates as the sole loop projection
-owner; legacy status events remain available to other consumers. Its timestamp
-fences a reconciliation pass started before the accepted event. Equal compact
-values produce no delta. Creation is currently the only config writer;
-reconciliation seeds that configuration, missing entries, and restart state. An
-accepted initial progress write publishes the current persisted configuration as
-well. Unknown workspaces still await the existing lifecycle membership event or
-reconciliation before loop events can update them.
-
-A rejected auto-iteration loop stops its backing session before settling
-terminal state. Session teardown is best-effort so a failed stop does not
-prevent terminal persistence or removal of the in-memory loop.
-
-Startup sweeps only `RUNNING` to `FAILED` — `PAUSED` is a state the user chose
-and the terminal states are results they have not seen.
-
-Auto-iteration treats the root `.factory-factory/` directory as runtime state:
-it does not count toward implementation changes and is excluded from iteration
-commits and amendments, even when already staged. No-op iterations are recorded
-as `crashed` before committing or measuring again, and rejecting code changes
-preserves the strategy file for the next iteration. Nested directories with the
-same name remain implementation files.
+Auto-iteration is removed. Workspaces, conversations, worktrees, branches, and
+commits created through that feature remain ordinary workspace data. Its loop
+runtime, configuration/progress side table, snapshot fields, permissions
+setting, and launch controls are gone. No loop is resumed or finalized on
+startup. Older backups are normalized at import by discarding the retired
+fields; normal workspace and session data remain available. Existing on-disk
+insight/logbook files are user workspace files and are not deleted by the
+application migration.
 
 ## Kanban model
 
@@ -366,14 +299,9 @@ do not erase deliberately reopened archived detail. Initialization retains
 hydrate omitted metadata through the shared detail options.
 
 `WorkspaceSummarySchema` defines the required board/sidebar fields independently
-of backend and client code. The HTTP list projector retains every legacy list
-field, including raw `autoIterationConfig` and `autoIterationProgress`, and adds
-a compact `autoIteration` projection. That projection is null for standard
-workspaces; for loop workspaces its status, iteration, limit, and metric may be
-null when unknown. Configuration input defaults do not turn missing summary
-values into iteration zero or a limit of 25; those remain UI presentation
-choices. Large configuration, progress, and logbook data are outside the shared
-summary contract.
+of backend and client code. The HTTP list projector and snapshot summaries share
+that contract. Retired loop configuration and progress are absent from list,
+detail, and snapshot projections.
 
 The list still returns `createdAt` as a Date through tRPC. Explicit summary
 adapters convert only that field to/from ISO for serialized summaries; session
@@ -386,18 +314,14 @@ wire, and legacy list/detail hydration fallbacks remain in place.
 
 Snapshot entries may advertise `summaryVersion: 1` once every required summary
 input has been accepted from an authoritative read or event. The flat entry
-includes issue links, creation source, worktree path, initialization error, and
-the compact `autoIteration` object; raw configuration, progress and logbook
-remain on legacy/detail paths. A complete claim requires explicit nullable
-fields and does not inherit legacy schema defaults. Unversioned entries remain
-valid and still use consumer repair.
+includes issue links, creation source, worktree path, and initialization error.
+A complete claim requires explicit nullable fields and does not inherit legacy
+schema defaults. Unversioned entries remain valid and still use consumer repair.
 
 The store tracks accepted hydration separately from values: a default-shaped
 field or a value rejected by a timestamp guard cannot make an entry complete.
-Metadata and compact loop state have independent timestamp groups, so a newer
-lifecycle transition does not block older unknown metadata from a reconciliation
-seed. Mode changes invalidate prior compact-loop hydration; accepted current
-mode/status determine its shape and status while known counters are preserved.
+Metadata has an independent timestamp group, so a newer lifecycle transition
+does not block older unknown metadata from a reconciliation seed.
 
 The workspace capsule's pure `workspace-read-state` helpers own last-activity
 selection and normalized derived-state inputs for project lists, child reads,

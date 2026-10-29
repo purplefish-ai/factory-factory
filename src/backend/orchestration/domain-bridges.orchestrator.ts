@@ -1,10 +1,4 @@
 import type {
-  AutoIterationLogbookBridge,
-  AutoIterationWorkspaceBridge,
-  autoIterationService,
-  logbookService,
-} from '@/backend/services/auto-iteration';
-import type {
   githubCLIService,
   prFetchCoordinator,
   prSnapshotService,
@@ -38,7 +32,6 @@ import {
   type getWorkspaceInitPolicy,
   type WorkspaceInitPolicyInput,
   type workspaceActivityService,
-  type workspaceAutoIterationService,
   type workspaceDataService,
   type workspaceMaintenanceService,
   type workspacePrSnapshotService,
@@ -48,7 +41,6 @@ import {
   type workspaceStateMachine,
 } from '@/backend/services/workspace';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
-import { createAutoIterationSessionBridge } from './auto-iteration-session.orchestrator';
 import { createPRDeliveryPorts } from './pr-delivery-dependencies';
 import { createPRBackgroundDeliveryPort } from './pr-event-delivery-port';
 import { wakePRDelivery } from './pr-event-delivery.orchestrator';
@@ -64,7 +56,6 @@ import type {
 } from './workspace-init.orchestrator';
 import type { PeriodicTaskLaunchSource, WorkspaceLauncher } from './workspace-launch.orchestrator';
 export type BridgeServices = PRMonitoringServices & {
-  autoIterationService: typeof autoIterationService;
   chatEventForwarderService: typeof chatEventForwarderService;
   sessionDispatchService: Pick<
     typeof sessionDispatchService,
@@ -74,7 +65,6 @@ export type BridgeServices = PRMonitoringServices & {
   getWorkspaceInitPolicy: typeof getWorkspaceInitPolicy;
   githubCLIService: typeof githubCLIService;
   initializeWorkspaceWorktree: typeof initializeWorkspaceWorktree;
-  logbookService: typeof logbookService;
   periodicTaskService: typeof periodicTaskService;
   prFetchCoordinator: typeof prFetchCoordinator;
   prSnapshotService: typeof prSnapshotService;
@@ -90,7 +80,6 @@ export type BridgeServices = PRMonitoringServices & {
   startupScriptService: typeof startupScriptService;
   terminalSessionService: typeof terminalSessionService;
   workspaceActivityService: typeof workspaceActivityService;
-  workspaceAutoIterationService: typeof workspaceAutoIterationService;
   launchWorkspace: WorkspaceLauncher<PeriodicTaskLaunchSource>;
   workspaceDataService: typeof workspaceDataService;
   workspaceMaintenanceService: typeof workspaceMaintenanceService;
@@ -104,14 +93,12 @@ export type BridgeServices = PRMonitoringServices & {
 export function configureDomainBridges(services: BridgeServices): void {
   const {
     acpRuntimeManager,
-    autoIterationService,
     chatEventForwarderService,
     sessionDispatchService,
     createLogger,
     getWorkspaceInitPolicy,
     githubCLIService,
     initializeWorkspaceWorktree,
-    logbookService,
     periodicTaskService,
     prSnapshotService,
     ratchetService,
@@ -125,7 +112,6 @@ export function configureDomainBridges(services: BridgeServices): void {
     startupScriptService,
     terminalSessionService,
     workspaceActivityService,
-    workspaceAutoIterationService,
     launchWorkspace,
     workspaceDataService,
     workspaceMaintenanceService,
@@ -233,10 +219,6 @@ export function configureDomainBridges(services: BridgeServices): void {
       tryDispatchNextMessage: (sessionId) =>
         sessionDispatchService.tryDispatchNextMessage(sessionId),
     },
-    autoIterationExit: {
-      onAutoIterationSessionExit: (workspaceId, sessionId) =>
-        autoIterationService.onSessionDeath(workspaceId, sessionId),
-    },
   });
 
   sessionDispatchService.configure({
@@ -262,45 +244,6 @@ export function configureDomainBridges(services: BridgeServices): void {
       clearInitScriptPid: (id, pid) => workspaceRunScriptService.clearInitScriptPid(id, pid),
     },
   });
-
-  // === Auto-iteration domain bridges ===
-  const autoIterationWorkspaceBridge: AutoIterationWorkspaceBridge = {
-    async getWorktreePath(workspaceId) {
-      const ws = await workspaceAutoIterationService.getExecutionContext(workspaceId);
-      if (!ws?.worktreePath) {
-        throw new Error(`Workspace ${workspaceId} has no worktree path`);
-      }
-      return ws.worktreePath;
-    },
-    async updateAutoIterationStatus(workspaceId, status) {
-      await workspaceAutoIterationService.setStatus(workspaceId, status);
-    },
-    async updateAutoIterationProgress(workspaceId, progress) {
-      await workspaceAutoIterationService.setProgress(workspaceId, progress);
-    },
-    async updateAutoIterationSessionId(workspaceId, sessionId) {
-      await workspaceAutoIterationService.setSession(workspaceId, sessionId);
-    },
-    finishAutoIterationIfSessionMatches(workspaceId, sessionId, status) {
-      return workspaceAutoIterationService.finishSessionIfMatching(workspaceId, sessionId, status);
-    },
-  };
-
-  const autoIterationSessionBridge = createAutoIterationSessionBridge({
-    sessionDataService,
-    sessionDomainService,
-    sessionLifecycleService,
-    sessionService,
-    workspaceAutoIterationService,
-  });
-
-  const autoIterationLogbookBridge: AutoIterationLogbookBridge = logbookService;
-
-  autoIterationService.configure(
-    autoIterationSessionBridge,
-    autoIterationWorkspaceBridge,
-    autoIterationLogbookBridge
-  );
 
   // === Periodic task domain bridges ===
   periodicTaskService.configure({

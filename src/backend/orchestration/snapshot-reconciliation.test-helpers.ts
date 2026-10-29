@@ -35,8 +35,6 @@ export function createMockWorkspace(
       pendingEventCount: 0,
     },
     prHasMergeConflict: false,
-    mode: 'STANDARD',
-    autoIterationStatus: null,
     runScriptStatus: 'IDLE',
     agentSessions: [
       {
@@ -106,8 +104,6 @@ export function createSnapshotEntry(
       pendingEventCount: 0,
     },
     hasMergeConflict: false,
-    mode: 'STANDARD',
-    autoIterationStatus: null,
     runScriptStatus: 'IDLE',
     hasHadSessions: true,
     isWorking: false,
@@ -146,15 +142,6 @@ export function createSnapshotEntry(
           linearIssueIdentifier: null,
           linearIssueUrl: null,
           creationSource: 'MANUAL',
-          autoIteration:
-            overrides.mode === 'AUTO_ITERATION'
-              ? {
-                  status: overrides.autoIterationStatus ?? null,
-                  currentIteration: null,
-                  maxIterations: null,
-                  currentMetricSummary: null,
-                }
-              : null,
           prs: [],
           prSummary: {
             totalCount: 0,

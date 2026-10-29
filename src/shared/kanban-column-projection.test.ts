@@ -17,7 +17,6 @@ describe('kanbanColumnForStatusReason', () => {
       'SETTING_UP',
       'STARTING_SESSION',
       'AGENT_WORKING',
-      'AUTO_ITERATING',
       'WAITING_FOR_CI',
       'FIXING_CI_FAILURES',
       'FIXING_REVIEW_COMMENTS',

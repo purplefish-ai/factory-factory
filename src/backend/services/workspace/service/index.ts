@@ -18,13 +18,6 @@ export {
   type WorkspaceStateChangedEvent,
   workspaceStateMachine,
 } from './lifecycle/state-machine.service';
-export {
-  AUTO_ITERATION_STATUS_CHANGED,
-  type AutoIterationStatusChangedEvent,
-  AUTO_ITERATION_SUMMARY_CHANGED,
-  type AutoIterationSummaryChangedEvent,
-  workspaceAutoIterationService,
-} from './lifecycle/workspace-auto-iteration.service';
 export { workspacePRMonitoringService } from './lifecycle/workspace-pr-monitoring.service';
 export { workspacePrSnapshotService } from './lifecycle/workspace-pr-snapshot.service';
 export { workspaceRelationshipsService } from './lifecycle/workspace-relationships.service';

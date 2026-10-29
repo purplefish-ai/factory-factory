@@ -381,6 +381,19 @@ afterEach(() => {
 });
 
 describe('InlineWorkspaceForm', () => {
+  it('offers ordinary launch and periodic tasks without auto-iteration controls', () => {
+    const { container, root } = renderForm();
+    try {
+      expect(container.textContent).toContain('Launch');
+      expect(container.textContent).toContain('Create Periodic Task');
+      expect(container.textContent).not.toMatch(/auto.iterat/i);
+      expect(container.querySelector('#test-command')).toBeNull();
+      expect(container.querySelector('#target-description')).toBeNull();
+    } finally {
+      actFlushSync(() => root.unmount());
+    }
+  });
+
   it('shows workspace-only toolbar controls in standard mode', () => {
     const { container, root } = renderForm();
 

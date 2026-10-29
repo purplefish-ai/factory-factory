@@ -32,7 +32,6 @@ it.each(['PROVISIONING', 'READY', 'FAILED'] as const)(
       workspaceStateMachine: workspaceEvents,
       ratchetService: new EventEmitter(),
       runScriptStateMachine: new EventEmitter(),
-      workspaceAutoIterationService: new EventEmitter(),
       sessionDomainService: new EventEmitter(),
       workspaceDataService: { subscribeAcceptedBranch: () => vi.fn(), findById },
       workspaceSnapshotStore: store,

@@ -282,7 +282,6 @@ it('persists one parent notification per accepted NONE-to-OPEN association and n
         wakePendingEvents: vi.fn().mockResolvedValue(undefined),
       }),
       runScriptStateMachine: new EventEmitter(),
-      workspaceAutoIterationService: new EventEmitter(),
       sessionDomainService: new EventEmitter(),
       workspaceDataService: {
         subscribeAcceptedBranch: () => vi.fn(),

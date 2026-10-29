@@ -16,7 +16,6 @@ vi.mock('@/client/features/workspace', () => ({
 vi.mock('./workspace-detail-chat-content', () => ({
   ChatContent: () => <div data-testid="chat">Mock workspace chat</div>,
 }));
-vi.mock('./auto-iteration-progress-banner', () => ({ AutoIterationProgressBanner: () => null }));
 vi.mock('./workspace-overlays', () => ({
   ArchivingOverlay: () => null,
   ScriptFailedBanner: () => null,
@@ -58,7 +57,7 @@ async function render(workspaceId: string, visible = true) {
   const props = {
     workspaceState: {
       workspaceId,
-      workspace: { id: workspaceId, mode: 'STANDARD' },
+      workspace: { id: workspaceId },
       workspaceLoading: false,
       isScriptFailed: false,
       setupWarningDismissed: false,

@@ -47,7 +47,6 @@ function createHarness(prState: 'OPEN' | 'MERGED' | 'CLOSED' | null = 'OPEN') {
     prFetchCoordinator: { removeWorkspace: vi.fn() },
     ratchetService,
     runScriptStateMachine: new EventEmitter(),
-    workspaceAutoIterationService: new EventEmitter(),
     sessionDomainService: new EventEmitter(),
     workspaceActivityService: Object.assign(new EventEmitter(), { clearWorkspace: vi.fn() }),
     workspaceStateMachine,

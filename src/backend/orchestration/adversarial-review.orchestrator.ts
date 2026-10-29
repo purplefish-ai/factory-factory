@@ -276,7 +276,7 @@ export function summarizeExistingActivity(
     .join('\n\n');
 }
 
-/** Mirrors the transcript-reading pattern in `domain-bridges.orchestrator.ts`'s auto-iteration bridge. */
+/** Read durable session history for the review transcript. */
 function getLastAssistantMessageText(sessionId: string): string {
   const transcript = sessionDomainService.getTranscriptSnapshot(sessionId);
   for (let i = transcript.length - 1; i >= 0; i--) {

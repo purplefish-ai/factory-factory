@@ -1,19 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
-import {
-  AUTO_ITERATION_STATUS_CHANGED,
-  type AutoIterationStatusChangedEvent,
-  workspaceAutoIterationService,
-} from './workspace-auto-iteration.service';
 import { workspaceRunScriptService } from './workspace-run-script.service';
 
 vi.mock('@/backend/services/workspace/resources/workspace.accessor', () => ({
   workspaceAccessor: {
-    findAutoIterationExecutionContext: vi.fn(),
-    setAutoIterationStatus: vi.fn(),
     findRunScriptExecutionState: vi.fn(),
     findRunScriptExecutionStateOrThrow: vi.fn(),
-    finishAutoIterationIfSessionMatches: vi.fn(),
     casRunScriptStatusUpdate: vi.fn(),
     registerInitializedWorktree: vi.fn(),
     setRunScriptCommands: vi.fn(),
@@ -23,94 +15,6 @@ vi.mock('@/backend/services/workspace/resources/workspace.accessor', () => ({
 
 describe('workspace state capabilities', () => {
   beforeEach(() => vi.clearAllMocks());
-
-  // The service is a module singleton, so a listener a failing test never got to
-  // remove would keep pushing into that test's array for the rest of the file.
-  afterEach(() => workspaceAutoIterationService.removeAllListeners(AUTO_ITERATION_STATUS_CHANGED));
-
-  it('announces a status change so the live snapshot stream does not wait for reconciliation', async () => {
-    // `mode` and `autoIterationStatus` are derivation inputs on the snapshot
-    // wire. Without this event the store learned about a transition only from
-    // the reconciliation sweep, so a running loop could read as waiting between
-    // iterations for up to one sweep interval.
-    vi.mocked(workspaceAccessor.setAutoIterationStatus).mockResolvedValue({
-      mode: 'AUTO_ITERATION',
-      status: 'RUNNING',
-      config: null,
-      progress: null,
-    });
-    const events: AutoIterationStatusChangedEvent[] = [];
-    workspaceAutoIterationService.on(
-      AUTO_ITERATION_STATUS_CHANGED,
-      (event: AutoIterationStatusChangedEvent) => events.push(event)
-    );
-
-    await workspaceAutoIterationService.setStatus('ws-1', 'RUNNING');
-
-    expect(events).toEqual([{ workspaceId: 'ws-1', mode: 'AUTO_ITERATION', status: 'RUNNING' }]);
-  });
-
-  it('announces the settled status when a matching session finishes the loop', async () => {
-    vi.mocked(workspaceAccessor.finishAutoIterationIfSessionMatches).mockResolvedValue({
-      mode: 'AUTO_ITERATION',
-      status: 'COMPLETED',
-      config: null,
-      progress: null,
-    });
-    const events: AutoIterationStatusChangedEvent[] = [];
-    workspaceAutoIterationService.on(
-      AUTO_ITERATION_STATUS_CHANGED,
-      (event: AutoIterationStatusChangedEvent) => events.push(event)
-    );
-
-    await workspaceAutoIterationService.finishSessionIfMatching('ws-1', 'session-1', 'COMPLETED');
-
-    expect(events).toEqual([{ workspaceId: 'ws-1', mode: 'AUTO_ITERATION', status: 'COMPLETED' }]);
-  });
-
-  it('announces nothing when the compare-and-swap settles no loop', async () => {
-    vi.mocked(workspaceAccessor.finishAutoIterationIfSessionMatches).mockResolvedValue(null);
-    const events: AutoIterationStatusChangedEvent[] = [];
-    workspaceAutoIterationService.on(
-      AUTO_ITERATION_STATUS_CHANGED,
-      (event: AutoIterationStatusChangedEvent) => events.push(event)
-    );
-
-    await workspaceAutoIterationService.finishSessionIfMatching('ws-1', 'stale-session', 'FAILED');
-
-    expect(events).toEqual([]);
-  });
-
-  it('finishes auto-iteration only when the active session still matches', async () => {
-    vi.mocked(workspaceAccessor.finishAutoIterationIfSessionMatches).mockResolvedValue({
-      mode: 'AUTO_ITERATION',
-      status: 'COMPLETED',
-      config: null,
-      progress: null,
-    });
-
-    await expect(
-      workspaceAutoIterationService.finishSessionIfMatching('ws-1', 'session-1', 'COMPLETED')
-    ).resolves.toBe(true);
-    expect(workspaceAccessor.finishAutoIterationIfSessionMatches).toHaveBeenCalledWith(
-      'ws-1',
-      'session-1',
-      'COMPLETED'
-    );
-  });
-
-  it('reads only the auto-iteration execution context', async () => {
-    vi.mocked(workspaceAccessor.findAutoIterationExecutionContext).mockResolvedValue({
-      worktreePath: '/tmp/worktree',
-      autoIterationSessionId: 'session-1',
-    });
-
-    await expect(workspaceAutoIterationService.getExecutionContext('ws-1')).resolves.toEqual({
-      worktreePath: '/tmp/worktree',
-      autoIterationSessionId: 'session-1',
-    });
-    expect(workspaceAccessor.findAutoIterationExecutionContext).toHaveBeenCalledWith('ws-1');
-  });
 
   it('reads only run-script execution state', async () => {
     vi.mocked(workspaceAccessor.findRunScriptExecutionState).mockResolvedValue({

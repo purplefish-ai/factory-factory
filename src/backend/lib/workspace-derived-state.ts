@@ -1,12 +1,4 @@
-import type {
-  AutoIterationStatus,
-  CIStatus,
-  KanbanColumn,
-  PRState,
-  RatchetState,
-  WorkspaceMode,
-  WorkspaceStatus,
-} from '@/shared/core';
+import type { CIStatus, KanbanColumn, PRState, RatchetState, WorkspaceStatus } from '@/shared/core';
 import { kanbanColumnForStatusReason } from '@/shared/kanban-column-projection';
 import type { PRMonitoringProjection } from '@/shared/pr-monitoring';
 import type { WorkspaceCiObservation, WorkspaceFlowPhase } from '@/shared/workspace-flow-state';
@@ -40,8 +32,6 @@ export interface WorkspaceDerivedStateInput {
   hasMergeConflict: boolean;
   dispatchStalled: boolean;
   prMonitoring?: PRMonitoringProjection;
-  mode: WorkspaceMode;
-  autoIterationStatus: AutoIterationStatus | null;
   flowState: WorkspaceDerivedFlowState;
 }
 
@@ -90,8 +80,6 @@ export function assembleWorkspaceDerivedState(
     hasMergeConflict: input.hasMergeConflict,
     dispatchStalled: input.dispatchStalled,
     prMonitoring: input.prMonitoring,
-    mode: input.mode,
-    autoIterationStatus: input.autoIterationStatus,
   });
 
   return {

@@ -7,7 +7,6 @@ export {
   reduceCheckRollupToLatestRunAttempts,
 } from './ci-status.js';
 export {
-  AutoIterationStatus,
   CIStatus,
   IssueProvider,
   KanbanColumn,
@@ -23,7 +22,6 @@ export {
   SessionProvider,
   SessionStatus,
   WorkspaceCreationSource,
-  WorkspaceMode,
   WorkspaceProviderSelection,
   WorkspaceStatus,
 } from './enums.js';

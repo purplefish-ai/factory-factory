@@ -66,15 +66,15 @@ const derivedState = {
   flowPhase: 'NO_PR' as const,
   ciObservation: 'NOT_FETCHED' as const,
   statusReason: {
-    code: 'AUTO_ITERATING' as const,
-    label: 'Auto-iterating',
+    code: 'AGENT_WORKING' as const,
+    label: 'Working',
     tone: 'working' as const,
     needsUser: false,
   },
 };
 
 describe('HTTP workspace summary projector', () => {
-  it('preserves legacy/raw list fields and Date while deriving a small validated loop summary', () => {
+  it('omits retired loop fields while preserving workspace, PR binding and Date', () => {
     const workspace = source();
     const row = projectWorkspaceSummary(workspace, {
       sessionSummaries: [],
@@ -89,12 +89,6 @@ describe('HTTP workspace summary projector', () => {
       status: 'READY',
       branchName: 'feature',
       worktreePath: '/worktree',
-      autoIteration: {
-        status: 'RUNNING',
-        currentIteration: 7,
-        maxIterations: 0,
-        currentMetricSummary: '85% coverage',
-      },
       githubIssueNumber: 4,
       githubIssueUrl: 'https://github.com/org/repo/issues/4',
       creationSource: 'GITHUB_ISSUE',
@@ -102,34 +96,19 @@ describe('HTTP workspace summary projector', () => {
       gitStats: { total: 8, additions: 6, deletions: 2, hasUncommitted: true },
       runScriptStatus: 'RUNNING',
       lastActivityAt: '2026-10-27T13:00:00Z',
-      statusReason: { code: 'AUTO_ITERATING' },
+      statusReason: { code: 'AGENT_WORKING' },
     });
     expect(row.createdAt).toBe(workspace.createdAt);
-    expect(row.autoIterationConfig).toBe(workspace.autoIterationConfig);
-    expect(row.autoIterationProgress).toBe(workspace.autoIterationProgress);
+    for (const key of [
+      'mode',
+      'autoIteration',
+      'autoIterationStatus',
+      'autoIterationConfig',
+      'autoIterationProgress',
+    ]) {
+      expect(row).not.toHaveProperty(key);
+    }
     expect(row.prs).toBe(workspace.prs);
     expect(row).not.toHaveProperty('detailOnlySecret');
-    expect(row.autoIteration).not.toHaveProperty('lastTestOutput');
-  });
-
-  it('retains unknown progress and configuration instead of claiming zero iterations or a default limit', () => {
-    const row = projectWorkspaceSummary(
-      { ...source(), autoIterationConfig: {}, autoIterationProgress: null },
-      {
-        sessionSummaries: [],
-        pendingRequestType: 'permission_request',
-        derivedState,
-        gitStats: null,
-        lastActivityAt: null,
-      }
-    );
-    expect(row.autoIteration).toEqual({
-      status: 'RUNNING',
-      currentIteration: null,
-      maxIterations: null,
-      currentMetricSummary: null,
-    });
-    expect(row.autoIterationConfig).toEqual({});
-    expect(row.pendingRequestType).toBe('permission_request');
   });
 });

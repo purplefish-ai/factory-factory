@@ -41,7 +41,6 @@ vi.mock('@/backend/services/settings', () => ({
   userSettingsService: {
     get: vi.fn(async () => ({
       defaultWorkspacePermissions: 'STRICT',
-      autoIterationPermissions: 'YOLO',
     })),
   },
 }));
@@ -144,7 +143,6 @@ describe('SessionLifecycleFacade', () => {
       markSessionIdle: vi.fn(),
     });
     const messageQueueBridge = { tryDispatchNextMessage: vi.fn(async () => undefined) };
-    const autoIterationExit = { onAutoIterationSessionExit: vi.fn() };
     const startOptions = { initialPrompt: 'Continue exactly' };
     const stopOptions = { reason: 'USER_STOP' as const };
     const clientOptions = { model: 'delegated-model', reasoningEffort: 'high' };
@@ -184,7 +182,6 @@ describe('SessionLifecycleFacade', () => {
     service.configure({
       workspace: workspaceBridge,
       messageQueue: messageQueueBridge,
-      autoIterationExit,
     });
     await expect(service.startSession('start-session', startOptions)).rejects.toBe(startupFailure);
     await service.restartSession('restart-session', startOptions);
@@ -245,7 +242,6 @@ describe('SessionLifecycleFacade', () => {
 
     expect(workflowFinalizer.configure).toHaveBeenCalledExactlyOnceWith({
       workspace: workspaceBridge,
-      autoIterationExit,
     });
     expect(terminationCoordinator.configure).toHaveBeenCalledExactlyOnceWith({
       workspace: workspaceBridge,
@@ -437,7 +433,6 @@ describe('SessionLifecycleFacade', () => {
       markSessionIdle: vi.fn(),
     });
     const retryMessageQueueBridge = { tryDispatchNextMessage: vi.fn(async () => undefined) };
-    const retryAutoIterationExit = { onAutoIterationSessionExit: vi.fn() };
     const reconfigurationFailures = [
       {
         name: 'workflow finalizer',
@@ -471,7 +466,6 @@ describe('SessionLifecycleFacade', () => {
         service.configure({
           workspace: retryWorkspaceBridge,
           messageQueue: retryMessageQueueBridge,
-          autoIterationExit: retryAutoIterationExit,
         })
       ).toThrow(failure);
 
@@ -484,12 +478,10 @@ describe('SessionLifecycleFacade', () => {
       service.configure({
         workspace: retryWorkspaceBridge,
         messageQueue: retryMessageQueueBridge,
-        autoIterationExit: retryAutoIterationExit,
       });
       await expect(service.startSession(`restored-after-${name}`)).resolves.toBeUndefined();
       expect(workflowFinalizer.configure).toHaveBeenLastCalledWith({
         workspace: retryWorkspaceBridge,
-        autoIterationExit: retryAutoIterationExit,
       });
       expect(terminationCoordinator.configure).toHaveBeenLastCalledWith({
         workspace: retryWorkspaceBridge,

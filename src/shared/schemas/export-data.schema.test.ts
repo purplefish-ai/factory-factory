@@ -15,7 +15,6 @@ import {
   RunScriptStatus as PrismaRunScriptStatus,
   SessionStatus as PrismaSessionStatus,
   WorkspaceCreationSource as PrismaWorkspaceCreationSource,
-  WorkspaceMode as PrismaWorkspaceMode,
   WorkspaceStatus as PrismaWorkspaceStatus,
 } from '@/shared/core';
 import {
@@ -89,13 +88,7 @@ describe('Enum sync with Prisma schema', () => {
     expect(zodValues).toEqual(prismaValues);
   });
 
-  it('WorkspaceMode matches Prisma', () => {
-    const zodValues = getEnumOptions(exportedWorkspaceSchema.shape.mode);
-    const prismaValues = Object.values(PrismaWorkspaceMode);
-    expect(zodValues).toEqual(prismaValues);
-  });
-
-  it('defaults legacy workspace mode and auto-iteration config', () => {
+  it('omits retired fields from ordinary workspace backups', () => {
     const parsed = exportedWorkspaceSchema.parse({
       id: 'ws-1',
       projectId: 'proj-1',
@@ -145,12 +138,12 @@ describe('Enum sync with Prisma schema', () => {
       updatedAt: '2025-01-01T00:00:00.000Z',
     });
 
-    expect(parsed.mode).toBe('STANDARD');
-    expect(parsed.autoIterationConfig).toBeNull();
+    expect(parsed).not.toHaveProperty('mode');
+    expect(parsed).not.toHaveProperty('autoIterationConfig');
     expect(parsed.parentWorkspaceId).toBeNull();
   });
 
-  it('validates and defaults exported auto-iteration config', () => {
+  it('strips retired loop configuration from legacy workspace backups', () => {
     const parsed = exportedWorkspaceSchema.parse({
       id: 'ws-1',
       projectId: 'proj-1',
@@ -205,13 +198,8 @@ describe('Enum sync with Prisma schema', () => {
       updatedAt: '2025-01-01T00:00:00.000Z',
     });
 
-    expect(parsed.autoIterationConfig).toEqual({
-      testCommand: 'pnpm test',
-      targetDescription: 'Improve coverage',
-      maxIterations: 25,
-      testTimeoutSeconds: 600,
-      sessionRecycleInterval: 10,
-    });
+    expect(parsed).not.toHaveProperty('mode');
+    expect(parsed).not.toHaveProperty('autoIterationConfig');
   });
 
   it('PRState matches Prisma', () => {

@@ -98,7 +98,7 @@ describe('startup native planning', () => {
   it('resolves configured Claude access when require-existing resume omits its permission preset', async () => {
     const f = fixture('CLAUDE', false);
     vi.mocked(userSettingsService.get).mockResolvedValueOnce(
-      unsafeCoerce({ defaultWorkspacePermissions: 'STRICT', autoIterationPermissions: 'YOLO' })
+      unsafeCoerce({ defaultWorkspacePermissions: 'STRICT' })
     );
     const service = new SessionConfigService({
       repository: unsafeCoerce({}),

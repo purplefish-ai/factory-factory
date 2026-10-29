@@ -17,7 +17,6 @@ it.each(
   async ({ provider, preset }) => {
     vi.mocked(userSettingsService.get).mockResolvedValue(
       unsafeCoerce({
-        autoIterationPermissions: preset,
         defaultWorkspacePermissions: preset,
       })
     );

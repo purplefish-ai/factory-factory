@@ -1,6 +1,6 @@
 import type { WorkspaceDerivedState } from '@/backend/lib/workspace-derived-state';
 import type { SessionSummary } from '@/shared/session-runtime';
-import { projectAutoIterationSummary, type WorkspaceSummary } from '@/shared/workspace-summary';
+import { type WorkspaceSummary } from '@/shared/workspace-summary';
 
 type WorkspaceSummarySource = Omit<
   WorkspaceSummary<Date>,
@@ -9,15 +9,11 @@ type WorkspaceSummarySource = Omit<
   | 'pendingRequestType'
   | 'gitStats'
   | 'lastActivityAt'
-  | 'autoIteration'
 >;
 
-/** Preserve legacy raw loop fields while returning the canonical board/sidebar projection. */
-export function projectWorkspaceSummary<TConfig, TProgress>(
-  w: WorkspaceSummarySource & {
-    autoIterationConfig: TConfig;
-    autoIterationProgress: TProgress;
-  },
+/** Return the canonical board/sidebar projection. */
+export function projectWorkspaceSummary(
+  w: WorkspaceSummarySource,
   fields: {
     sessionSummaries: SessionSummary[];
     pendingRequestType: WorkspaceSummary['pendingRequestType'];
@@ -25,7 +21,7 @@ export function projectWorkspaceSummary<TConfig, TProgress>(
     lastActivityAt: string | null;
     derivedState: WorkspaceDerivedState;
   }
-): WorkspaceSummary<Date> & { autoIterationConfig: TConfig; autoIterationProgress: TProgress } {
+): WorkspaceSummary<Date> {
   return {
     id: w.id,
     projectId: w.projectId,
@@ -35,11 +31,6 @@ export function projectWorkspaceSummary<TConfig, TProgress>(
     branchName: w.branchName,
     worktreePath: w.worktreePath,
     initErrorMessage: w.initErrorMessage,
-    mode: w.mode,
-    autoIterationStatus: w.autoIterationStatus,
-    autoIteration: projectAutoIterationSummary(w),
-    autoIterationConfig: w.autoIterationConfig,
-    autoIterationProgress: w.autoIterationProgress,
     prs: w.prs,
     prSummary: w.prSummary,
     prUrl: w.prUrl,

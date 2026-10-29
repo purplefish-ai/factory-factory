@@ -78,7 +78,7 @@ export class AcpEventProcessor {
    * already hydrated from on-disk history during passive load_session.
    */
   readonly suppressAcpReplayForSession = new Set<string>();
-  /** Maps sessionId → workspaceId for bridge calls during sendAcpMessage */
+  /** Maps sessionId → workspaceId for bridge calls during prompt dispatch */
   readonly sessionToWorkspace = new Map<string, string>();
   /** Maps sessionId → workingDir for interceptor context */
   readonly sessionToWorkingDir = new Map<string, string>();

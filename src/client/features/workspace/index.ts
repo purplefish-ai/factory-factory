@@ -1,7 +1,6 @@
 export * from './agents-panel';
 export * from './archive-git-lock-dialog';
 export * from './archive-workspace-dialog';
-export * from './auto-iteration-panel';
 export * from './dev-server-setup-panel';
 export * from './diff-viewer';
 export * from './file-browser-panel';

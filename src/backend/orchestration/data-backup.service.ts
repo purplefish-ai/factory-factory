@@ -13,7 +13,6 @@ import {
 } from '@/backend/services/settings/resources/data-backup.accessor';
 import { workspacePrSnapshotService } from '@/backend/services/workspace';
 import { normalizeColorScheme } from '@/shared/appearance';
-import { autoIterationConfigSchema } from '@/shared/schemas/auto-iteration.schema';
 import type {
   ExportData,
   exportedAgentSessionSchema,
@@ -59,8 +58,6 @@ type ExportedUserSettings = z.infer<typeof exportedUserSettingsSchema>;
 
 const toISOString = (date: Date | null): string | null => (date ? date.toISOString() : null);
 const parseDate = (str: string | null): Date | null => (str ? new Date(str) : null);
-const parseAutoIterationConfigForExport = (value: unknown) =>
-  value == null ? null : autoIterationConfigSchema.parse(value);
 
 function exportedPRFields(workspace: WorkspaceForExport) {
   const fields = workspacePrSnapshotService.projectCollection(
@@ -99,22 +96,6 @@ function exportedRunScriptFields(workspace: WorkspaceForExport) {
     runScriptPort: runScript?.port ?? null,
     runScriptStartedAt: toISOString(runScript?.startedAt ?? null),
     runScriptStatus: runScript?.status ?? 'IDLE',
-  };
-}
-
-/**
- * The two auto-iteration fields a v4 export file carries, flattened out of
- * `WorkspaceAutoIteration`. Extracted for the same reason as the run-script
- * fields above: the mapper is at the lint's complexity ceiling.
- *
- * `status`, `progress` and `sessionId` are absent because the format never
- * carried them — they describe a loop that does not survive an export.
- */
-function exportedAutoIterationFields(workspace: WorkspaceForExport) {
-  const autoIteration = workspace.autoIteration;
-  return {
-    mode: autoIteration?.mode ?? 'STANDARD',
-    autoIterationConfig: parseAutoIterationConfigForExport(autoIteration?.config ?? null),
   };
 }
 
@@ -323,21 +304,6 @@ async function importWorkspaces(
             status: workspace.runScriptStatus,
           },
         },
-        // The v4 export carries two of the five auto-iteration fields as flat
-        // workspace fields; they now live in the WorkspaceAutoIteration row this
-        // create brings with it. `status`, `progress` and `sessionId` were never
-        // exported — they describe a loop that does not survive the export — so
-        // they restore at their defaults, and a workspace whose loop was running
-        // when the backup was taken comes back idle rather than half-resumed.
-        autoIteration: {
-          create: {
-            mode: workspace.mode,
-            config:
-              workspace.autoIterationConfig != null
-                ? (workspace.autoIterationConfig as Prisma.InputJsonValue)
-                : undefined,
-          },
-        },
         hasHadSessions: workspace.hasHadSessions,
         createdAt: new Date(workspace.createdAt),
         updatedAt: new Date(workspace.updatedAt),
@@ -481,7 +447,6 @@ async function importUserSettings(
       defaultClaudeReasoningEffort: settings.defaultClaudeReasoningEffort,
       defaultCodexReasoningEffort: settings.defaultCodexReasoningEffort,
       defaultWorkspacePermissions: settings.defaultWorkspacePermissions,
-      autoIterationPermissions: settings.autoIterationPermissions ?? settings.ratchetPermissions,
       // Adversarial review settings
       reviewerSessionProvider: settings.reviewerSessionProvider,
       reviewerClaudeModel: settings.reviewerClaudeModel,
@@ -571,9 +536,6 @@ class DataBackupService {
           // Flattened out of WorkspaceRunScript, same as the PR cache below: the
           // v4 export format carries these as workspace fields.
           ...exportedRunScriptFields(w),
-          // Flattened out of WorkspaceAutoIteration. Only two of the five are in
-          // the v4 format; see the helper.
-          ...exportedAutoIterationFields(w),
           githubIssueNumber: w.githubIssueNumber,
           githubIssueUrl: w.githubIssueUrl,
           linearIssueId: w.linearIssueId,
@@ -636,7 +598,6 @@ class DataBackupService {
               defaultClaudeReasoningEffort: userSettings.defaultClaudeReasoningEffort,
               defaultCodexReasoningEffort: userSettings.defaultCodexReasoningEffort,
               defaultWorkspacePermissions: userSettings.defaultWorkspacePermissions,
-              autoIterationPermissions: userSettings.autoIterationPermissions,
               // Adversarial review settings
               reviewerSessionProvider: userSettings.reviewerSessionProvider,
               reviewerClaudeModel: userSettings.reviewerClaudeModel,

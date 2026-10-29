@@ -656,7 +656,7 @@ describe('SessionStartupCoordinator', () => {
       },
     });
 
-    const prompt = promptService.sendAcpMessage('session-1', [{ type: 'text', text: 'hello' }]);
+    const prompt = promptService.sendSessionMessage('session-1', 'hello');
     await vi.waitFor(() => {
       expect(promptRuntimeManager.sendPrompt).toHaveBeenCalledOnce();
     });

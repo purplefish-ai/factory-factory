@@ -1,5 +1,4 @@
 import { toError } from '@/backend/lib/error-utils';
-import { autoIterationService } from '@/backend/services/auto-iteration';
 import { githubCLIService } from '@/backend/services/github';
 import { linearStateSyncService } from '@/backend/services/linear';
 import { createLogger } from '@/backend/services/logger.service';
@@ -25,9 +24,8 @@ import {
   worktreeLifecycleService,
 } from '@/backend/services/workspace';
 import { type MessageAttachment, MessageState, resolveSelectedModel } from '@/shared/acp-protocol';
-import { SessionStatus, WorkspaceMode } from '@/shared/core';
+import { SessionStatus } from '@/shared/core';
 import { isPRMonitoringRecipient } from '@/shared/pr-monitoring';
-import { autoIterationConfigSchema } from '@/shared/schemas/auto-iteration.schema';
 import { AttachmentSchema } from '@/shared/websocket';
 import { getWorkspaceLinearContext } from './linear-config.helper';
 import { bindIssueMonitoringSession } from './pr-monitoring.orchestrator';
@@ -684,62 +682,6 @@ async function awaitSessionAndDispatchIfSuccess(
   }
 }
 
-/**
- * Check if a workspace is an auto-iteration workspace and start the loop if so.
- * Called after the worktree is ready and scripts have run.
- */
-async function maybeStartAutoIteration(workspaceId: string): Promise<boolean> {
-  try {
-    const workspace = await workspaceDataService.findById(workspaceId);
-    if (!workspace || workspace.mode !== WorkspaceMode.AUTO_ITERATION) {
-      return false;
-    }
-    if (!workspace.autoIterationConfig) {
-      logger.warn('Auto-iteration workspace missing config, skipping auto-start', { workspaceId });
-      return false;
-    }
-
-    const configParsed = autoIterationConfigSchema.safeParse(workspace.autoIterationConfig);
-    if (!configParsed.success) {
-      logger.error('Auto-iteration workspace has invalid config, skipping auto-start', {
-        workspaceId,
-        error: configParsed.error.message,
-      });
-      return false;
-    }
-    const config = configParsed.data;
-    logger.info('Starting auto-iteration loop for workspace', { workspaceId, config });
-    await autoIterationService.start(workspaceId, config);
-    return true;
-  } catch (error) {
-    logger.error('Failed to start auto-iteration loop', {
-      workspaceId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return false;
-  }
-}
-
-/**
- * Handle post-init for standard workspaces: wait for session start and dispatch.
- * For auto-iteration workspaces: fire-and-forget the auto-iteration loop start.
- */
-async function handlePostInitSessionStart(
-  workspaceId: string,
-  isAutoIteration: boolean,
-  agentSessionPromise: Promise<string | null>,
-  success: boolean,
-  dependencies: WorkspaceDispatchDependencies
-): Promise<void> {
-  if (isAutoIteration) {
-    if (success) {
-      void maybeStartAutoIteration(workspaceId);
-    }
-  } else {
-    await awaitSessionAndDispatchIfSuccess(workspaceId, agentSessionPromise, success, dependencies);
-  }
-}
-
 async function runWorkspaceInitialization(
   workspaceId: string,
   options: WorkspaceInitializationOptions | undefined,
@@ -812,10 +754,6 @@ async function runWorkspaceInitialization(
     // Mark Linear issue as started (fire-and-forget, non-fatal)
     void markLinearIssueStartedIfApplicable(workspaceId);
 
-    // Check if this is an auto-iteration workspace before starting the default session.
-    // Auto-iteration workspaces manage their own ACP session via autoIterationService.
-    const isAutoIteration = workspaceWithProject.mode === WorkspaceMode.AUTO_ITERATION;
-
     const startupScriptPipelineResult = await executeStartupScriptPipeline({
       workspaceId,
       workspaceWithProject,
@@ -826,22 +764,20 @@ async function runWorkspaceInitialization(
       await workspaceStateMachine.markReady(workspaceId);
     }
 
-    let agentSessionPromise: Promise<string | null> = Promise.resolve(null);
-    if (!isAutoIteration) {
-      // Provider startup hooks can depend on setup's files and installed tools.
-      // Finish provisioning before starting the agent's bounded startup deadline.
-      agentSessionPromise = startDefaultAgentSession(workspaceId, dependencies).catch((error) => {
+    // Provider startup hooks can depend on setup's files and installed tools.
+    // Finish provisioning before starting the agent's bounded startup deadline.
+    const agentSessionPromise = startDefaultAgentSession(workspaceId, dependencies).catch(
+      (error) => {
         logger.error('Failed to start default Claude session', {
           workspaceId,
           error: error instanceof Error ? error.message : String(error),
         });
         return null;
-      });
-    }
+      }
+    );
 
-    await handlePostInitSessionStart(
+    await awaitSessionAndDispatchIfSuccess(
       workspaceId,
-      isAutoIteration,
       agentSessionPromise,
       startupScriptPipelineResult.success,
       dependencies

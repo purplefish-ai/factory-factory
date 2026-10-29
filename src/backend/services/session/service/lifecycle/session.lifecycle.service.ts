@@ -1,6 +1,5 @@
 import type { AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import type {
-  SessionAutoIterationExitBridge,
   SessionLifecycleMessageQueueBridge,
   SessionLifecycleWorkspaceBridge,
 } from '@/backend/services/session/service/bridges';
@@ -29,7 +28,6 @@ export type { SessionStopReason, StopSessionOptions } from './session-terminatio
 export type LifecycleBridges = {
   workspace: SessionLifecycleWorkspaceBridge;
   messageQueue?: SessionLifecycleMessageQueueBridge;
-  autoIterationExit?: SessionAutoIterationExitBridge;
 };
 
 export type SessionLifecycleServiceDependencies = {
@@ -67,7 +65,6 @@ export class SessionLifecycleService {
     this.configured = false;
     this.dependencies.workflowFinalizer.configure({
       workspace: bridges.workspace,
-      autoIterationExit: bridges.autoIterationExit,
     });
     this.dependencies.terminationCoordinator.configure({ workspace: bridges.workspace });
     this.dependencies.startupCoordinator.configure({ messageQueue: bridges.messageQueue });

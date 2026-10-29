@@ -106,7 +106,7 @@ describe('SessionConfigService', () => {
     );
   });
 
-  it.each(['auto-iteration', 'periodic-task'])(
+  it.each(['periodic-task'])(
     'sets %s collaboration independently of native access at startup',
     async (workflow) => {
       const access = {
@@ -237,8 +237,7 @@ describe('SessionConfigService', () => {
     async (workflow) => {
       vi.mocked(userSettingsService.get).mockResolvedValue(
         unsafeCoerce({
-          autoIterationPermissions: workflow === 'default' ? 'STRICT' : 'RELAXED',
-          defaultWorkspacePermissions: workflow === 'default' ? 'RELAXED' : 'STRICT',
+          defaultWorkspacePermissions: 'RELAXED',
         })
       );
 
@@ -306,7 +305,6 @@ describe('SessionConfigService', () => {
   it('applies configured permission preset for CLAUDE sessions that expose permission config', async () => {
     vi.mocked(userSettingsService.get).mockResolvedValue(
       unsafeCoerce({
-        autoIterationPermissions: 'YOLO',
         defaultWorkspacePermissions: 'YOLO',
       })
     );

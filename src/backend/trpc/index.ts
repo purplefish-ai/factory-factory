@@ -1,6 +1,5 @@
 import { adminRouter } from './admin.trpc';
 import { adversarialReviewRouter } from './adversarial-review.trpc';
-import { autoIterationRouter } from './auto-iteration.trpc';
 import { closedSessionsRouter } from './closed-sessions.trpc';
 import { decisionLogRouter } from './decision-log.trpc';
 import { githubRouter } from './github.trpc';
@@ -28,7 +27,6 @@ export const appRouter = router({
   userSettings: userSettingsRouter,
   github: githubRouter,
   linear: linearRouter,
-  autoIteration: autoIterationRouter,
   periodicTask: periodicTaskRouter,
   voice: voiceRouter,
 });

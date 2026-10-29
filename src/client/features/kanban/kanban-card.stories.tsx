@@ -40,9 +40,6 @@ export const baseWorkspace: WorkspaceWithKanban = {
   createdAt: new Date(),
   branchName: 'feature/auth',
   initErrorMessage: null,
-  mode: 'STANDARD',
-  autoIterationStatus: null,
-  autoIteration: null,
   prs: [],
   prSummary: deriveWorkspacePRSummary([], true),
   prUrl: null,
@@ -113,80 +110,6 @@ function withPR(overrides: Partial<WorkspaceWithKanban>): WorkspaceWithKanban {
 export const NoPR: Story = {
   args: {
     workspace: baseWorkspace,
-    projectSlug: 'my-project',
-  },
-};
-
-export const AutoIterationRunning: Story = {
-  args: {
-    workspace: {
-      ...baseWorkspace,
-      mode: 'AUTO_ITERATION',
-      autoIterationStatus: 'RUNNING',
-      autoIteration: {
-        status: 'RUNNING',
-        currentIteration: 3,
-        maxIterations: 25,
-        currentMetricSummary: null,
-      },
-      statusReason: {
-        code: 'AUTO_ITERATING',
-        label: 'Auto-iterating',
-        tone: 'working',
-        needsUser: false,
-      },
-    },
-    projectSlug: 'my-project',
-  },
-};
-
-export const AutoIterationPaused: Story = {
-  args: {
-    workspace: {
-      ...baseWorkspace,
-      mode: 'AUTO_ITERATION',
-      autoIterationStatus: 'PAUSED',
-      autoIteration: {
-        status: 'PAUSED',
-        currentIteration: 3,
-        maxIterations: 25,
-        currentMetricSummary: null,
-      },
-    },
-    projectSlug: 'my-project',
-  },
-};
-
-export const AutoIterationCompleted: Story = {
-  args: {
-    workspace: {
-      ...baseWorkspace,
-      mode: 'AUTO_ITERATION',
-      autoIterationStatus: 'COMPLETED',
-      autoIteration: {
-        status: 'COMPLETED',
-        currentIteration: 25,
-        maxIterations: 25,
-        currentMetricSummary: null,
-      },
-    },
-    projectSlug: 'my-project',
-  },
-};
-
-export const AutoIterationUnknown: Story = {
-  args: {
-    workspace: {
-      ...baseWorkspace,
-      mode: 'AUTO_ITERATION',
-      autoIterationStatus: null,
-      autoIteration: {
-        status: null,
-        currentIteration: null,
-        maxIterations: null,
-        currentMetricSummary: null,
-      },
-    },
     projectSlug: 'my-project',
   },
 };

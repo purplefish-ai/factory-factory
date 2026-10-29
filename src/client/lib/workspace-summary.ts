@@ -8,10 +8,8 @@ export function createOptimisticWorkspaceSummary(params: {
   projectId: string;
   name: string;
   ratchetEnabled: boolean;
-  mode?: 'STANDARD' | 'AUTO_ITERATION';
   createdAt?: Date;
-}): WorkspaceSummary<Date> & { autoIterationConfig: null; autoIterationProgress: null } {
-  const mode = params.mode ?? 'STANDARD';
+}): WorkspaceSummary<Date> {
   return {
     id: params.id,
     projectId: params.projectId,
@@ -21,14 +19,6 @@ export function createOptimisticWorkspaceSummary(params: {
     branchName: null,
     worktreePath: null,
     initErrorMessage: null,
-    mode,
-    autoIterationStatus: null,
-    autoIteration:
-      mode === 'AUTO_ITERATION'
-        ? { status: null, currentIteration: null, maxIterations: null, currentMetricSummary: null }
-        : null,
-    autoIterationConfig: null,
-    autoIterationProgress: null,
     prs: [],
     prSummary: deriveWorkspacePRSummary([], params.ratchetEnabled),
     prUrl: null,

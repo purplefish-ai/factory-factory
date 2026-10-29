@@ -143,12 +143,10 @@ describe('workspace snapshot transport contract', () => {
     ).toBe(7);
   });
 
-  it('carries merge conflict, mode, auto-iteration status, and dispatch stall', () => {
+  it('carries merge conflict and dispatch stall', () => {
     const parsed = WorkspaceSnapshotEntrySchema.parse({
       ...makeCompleteSnapshot(),
       hasMergeConflict: true,
-      mode: 'AUTO_ITERATION',
-      autoIterationStatus: 'RUNNING',
       prMonitoring: {
         enabled: true,
         recipientSessionId: 'main',
@@ -160,8 +158,6 @@ describe('workspace snapshot transport contract', () => {
 
     expect(parsed).toMatchObject({
       hasMergeConflict: true,
-      mode: 'AUTO_ITERATION',
-      autoIterationStatus: 'RUNNING',
       prMonitoring: {
         enabled: true,
         recipientSessionId: 'main',

@@ -20,9 +20,6 @@ function seed(): SnapshotUpdateInput {
     createdAt: '2026-01-01T00:00:00.000Z',
     branchName: 'feature/issue',
     hasHadSessions: false,
-    mode: 'STANDARD',
-    autoIterationStatus: null,
-    autoIteration: null,
     worktreePath: '/work/issue',
     initErrorMessage: null,
     githubIssueNumber: 42,
@@ -99,7 +96,6 @@ function completeEntry() {
       runScript: 1,
       reconciliation: 1,
       metadata: 1,
-      autoIteration: 1,
     },
   };
 }
@@ -163,34 +159,6 @@ describe('accepted summary hydration', () => {
     });
   });
 
-  it('does not count rejected mode or session history even when stored defaults have valid shapes', () => {
-    const value = store();
-    value.upsert(
-      'ws',
-      {
-        projectId: 'project-1',
-        name: 'Issue workspace',
-        status: 'READY',
-        createdAt: '2026-01-01T00:00:00.000Z',
-        branchName: 'feature/issue',
-        autoIterationStatus: null,
-      },
-      'lifecycle',
-      500
-    );
-    value.upsert('ws', seed(), 'older seed', 100);
-    expect(value.getByWorkspaceId('ws')).toMatchObject({ mode: 'STANDARD', hasHadSessions: false });
-    expect(value.getByWorkspaceId('ws')?.summaryVersion).toBeUndefined();
-    value.upsert('ws', { mode: 'STANDARD' }, 'mode accepted', 600);
-    expect(value.getByWorkspaceId('ws')?.summaryVersion).toBeUndefined();
-    value.upsert('ws', { hasHadSessions: false }, 'history accepted', 700);
-    expect(value.getByWorkspaceId('ws')?.summaryVersion).toBeUndefined();
-    // Compact loop input was rejected with the older group, so it must be
-    // explicitly accepted before a complete summary can be claimed.
-    value.upsert('ws', { autoIteration: null }, 'compact accepted', 800);
-    expect(value.getByWorkspaceId('ws')?.summaryVersion).toBe(1);
-  });
-
   it('publishes completeness when an accepted value equals its unhydrated default', () => {
     const value = store();
     const { sessionSummaries: _omitted, ...partial } = seed();
@@ -235,44 +203,6 @@ describe('accepted summary hydration', () => {
     });
   });
 
-  it('requires new accepted loop hydration after a mode switch and ignores an older different-mode seed', () => {
-    const value = store();
-    value.upsert('ws', seed(), 'seed', 100);
-    value.upsert('ws', { mode: 'AUTO_ITERATION', autoIterationStatus: 'RUNNING' }, 'mode', 800);
-    expect(value.getByWorkspaceId('ws')?.autoIteration).toEqual({
-      status: 'RUNNING',
-      currentIteration: null,
-      maxIterations: null,
-      currentMetricSummary: null,
-    });
-    expect(value.getByWorkspaceId('ws')?.summaryVersion).toBeUndefined();
-    value.upsert('ws', { mode: 'STANDARD', autoIteration: null }, 'stale loop seed', 700);
-    expect(value.getByWorkspaceId('ws')?.summaryVersion).toBeUndefined();
-    value.upsert(
-      'ws',
-      {
-        mode: 'AUTO_ITERATION',
-        autoIteration: {
-          status: 'PAUSED',
-          currentIteration: 3,
-          maxIterations: 0,
-          currentMetricSummary: 'metric=5',
-        },
-      },
-      'loop seed',
-      900
-    );
-    expect(value.getByWorkspaceId('ws')).toMatchObject({
-      summaryVersion: 1,
-      autoIteration: {
-        status: 'RUNNING',
-        currentIteration: 3,
-        maxIterations: 0,
-        currentMetricSummary: 'metric=5',
-      },
-    });
-  });
-
   it('does not retain hydration after removal and recreation', () => {
     const value = store();
     value.upsert('ws', seed(), 'seed', 100);
@@ -296,7 +226,6 @@ describe('summary completeness protocol', () => {
     'linearIssueIdentifier',
     'linearIssueUrl',
     'creationSource',
-    'autoIteration',
     'prs',
     'prSummary',
     'prMonitoring',
@@ -334,219 +263,14 @@ describe('summary completeness protocol', () => {
       }).success
     ).toBe(false);
   });
-  it('rejects a compact loop inconsistent with the accepted mode/status', () => {
-    expect(
-      WorkspaceSnapshotEntrySchema.safeParse({
-        ...completeEntry(),
-        mode: 'AUTO_ITERATION',
-        autoIteration: null,
-      }).success
-    ).toBe(false);
-    expect(
-      WorkspaceSnapshotEntrySchema.safeParse({
-        ...completeEntry(),
-        mode: 'AUTO_ITERATION',
-        autoIterationStatus: 'RUNNING',
-        autoIteration: {
-          status: 'PAUSED',
-          currentIteration: null,
-          maxIterations: null,
-          currentMetricSummary: null,
-        },
-      }).success
-    ).toBe(false);
-  });
 });
 
-it('keeps accepted loop progress independent of newer lifecycle metadata and fences resets', () => {
+it('publishes ordinary snapshots without retired loop fields or freshness groups', () => {
   const value = store();
-  value.upsert('ws', seed(), 'seed', 100);
-  value.upsert('ws', { status: 'READY', name: 'new name' }, 'lifecycle', 900);
-  value.upsert(
-    'ws',
-    {
-      mode: 'AUTO_ITERATION',
-      autoIterationStatus: 'RUNNING',
-      autoIteration: {
-        status: 'RUNNING',
-        currentIteration: 4,
-        maxIterations: 10,
-        currentMetricSummary: 'score=4',
-      },
-    },
-    'accepted progress',
-    200
-  );
-  expect(value.getByWorkspaceId('ws')).toMatchObject({
-    mode: 'AUTO_ITERATION',
-    autoIterationStatus: 'RUNNING',
-    autoIteration: { currentIteration: 4 },
-    name: 'new name',
-  });
-  value.upsert(
-    'ws',
-    { mode: 'STANDARD', autoIterationStatus: null, autoIteration: null },
-    'reset',
-    300
-  );
-  value.upsert(
-    'ws',
-    {
-      mode: 'AUTO_ITERATION',
-      autoIterationStatus: 'RUNNING',
-      autoIteration: {
-        status: 'RUNNING',
-        currentIteration: 9,
-        maxIterations: 10,
-        currentMetricSummary: 'stale',
-      },
-    },
-    'stale reconciliation',
-    250
-  );
-  expect(value.getByWorkspaceId('ws')).toMatchObject({
-    mode: 'STANDARD',
-    autoIterationStatus: null,
-    autoIteration: null,
-  });
-});
-
-it('clears previous loop metrics when accepted mode changes before compact hydration', () => {
-  const value = store();
-  value.upsert(
-    'ws',
-    {
-      ...seed(),
-      mode: 'AUTO_ITERATION',
-      autoIterationStatus: 'RUNNING',
-      autoIteration: {
-        status: 'RUNNING',
-        currentIteration: 9,
-        maxIterations: 12,
-        currentMetricSummary: 'old loop',
-      },
-    },
-    'old loop',
-    100
-  );
-  value.upsert('ws', { mode: 'STANDARD', autoIterationStatus: null }, 'reset', 200);
-  value.upsert('ws', { mode: 'AUTO_ITERATION', autoIterationStatus: 'RUNNING' }, 'new loop', 300);
-  expect(value.getByWorkspaceId('ws')?.autoIteration).toEqual({
-    status: 'RUNNING',
-    currentIteration: null,
-    maxIterations: null,
-    currentMetricSummary: null,
-  });
-  expect(value.getByWorkspaceId('ws')?.summaryVersion).toBeUndefined();
-});
-
-it('keeps accepted rename provenance independent of compact loop updates and resets', () => {
-  const value = store();
-  value.upsert('ws', seed(), 'seed', 100);
-  value.upsert('ws', { status: 'READY' }, 'lifecycle', 900);
-  value.publishAcceptedName('ws', 'First accepted name', 200);
-  value.upsert(
-    'ws',
-    {
-      mode: 'AUTO_ITERATION',
-      autoIterationStatus: 'RUNNING',
-      autoIteration: {
-        status: 'RUNNING',
-        currentIteration: 4,
-        maxIterations: 10,
-        currentMetricSummary: 'score=4',
-      },
-    },
-    'accepted compact',
-    300
-  );
-  value.publishAcceptedName('ws', 'Second accepted name', 200);
-  expect(
-    value.upsert(
-      'ws',
-      { name: 'First accepted name', nameUpdatedAt: 200 },
-      'late name observation',
-      5000
-    ).accepted
-  ).toBe(false);
-  expect(value.getByWorkspaceId('ws')).toMatchObject({
-    name: 'Second accepted name',
-    mode: 'AUTO_ITERATION',
-    autoIterationStatus: 'RUNNING',
-    autoIteration: { currentIteration: 4, currentMetricSummary: 'score=4' },
-    fieldTimestamps: { workspace: 900, autoIteration: 300 },
-    summaryVersion: 1,
-  });
-  value.upsert(
-    'ws',
-    { mode: 'STANDARD', autoIterationStatus: null, autoIteration: null },
-    'accepted reset',
-    400
-  );
-  value.publishAcceptedName('ws', 'Name after reset', 250);
-  value.upsert(
-    'ws',
-    {
-      mode: 'AUTO_ITERATION',
-      autoIterationStatus: 'RUNNING',
-      autoIteration: {
-        status: 'RUNNING',
-        currentIteration: 9,
-        maxIterations: 10,
-        currentMetricSummary: 'stale loop',
-      },
-    },
-    'older compact',
-    350
-  );
+  value.upsert('ws', seed(), 'test', 100);
   const entry = value.getByWorkspaceId('ws');
-  expect(entry).toMatchObject({
-    name: 'Name after reset',
-    mode: 'STANDARD',
-    autoIterationStatus: null,
-    autoIteration: null,
-    fieldTimestamps: { workspace: 900, autoIteration: 400 },
-    summaryVersion: 1,
-  });
-  expect(entry).not.toHaveProperty('nameUpdatedAt');
-  expect(entry?.fieldTimestamps).not.toHaveProperty('name');
-});
-
-it('requires accepted name and compact hydration independently before claiming a complete loop summary', () => {
-  const value = store();
-  const { name: _name, autoIteration: _compact, ...known } = seed();
-  value.upsert(
-    'ws',
-    { ...known, mode: 'AUTO_ITERATION', autoIterationStatus: 'RUNNING' },
-    'partial seed',
-    100
-  );
-  value.upsert('ws', { status: 'READY' }, 'lifecycle', 900);
-  expect(value.getByWorkspaceId('ws')?.summaryVersion).toBeUndefined();
-  expect(value.publishAcceptedName('ws', '', 200).accepted).toBe(true);
-  expect(value.getByWorkspaceId('ws')?.summaryVersion).toBeUndefined();
-  value.upsert(
-    'ws',
-    {
-      autoIteration: {
-        status: 'RUNNING',
-        currentIteration: null,
-        maxIterations: null,
-        currentMetricSummary: null,
-      },
-    },
-    'accepted unknown compact',
-    300
-  );
-  expect(value.getByWorkspaceId('ws')).toMatchObject({
-    name: '',
-    summaryVersion: 1,
-    autoIteration: {
-      status: 'RUNNING',
-      currentIteration: null,
-      maxIterations: null,
-      currentMetricSummary: null,
-    },
-    fieldTimestamps: { workspace: 900, autoIteration: 300 },
-  });
+  expect(entry).not.toHaveProperty('mode');
+  expect(entry).not.toHaveProperty('autoIteration');
+  expect(entry).not.toHaveProperty('autoIterationStatus');
+  expect(entry?.fieldTimestamps).not.toHaveProperty('autoIteration');
 });

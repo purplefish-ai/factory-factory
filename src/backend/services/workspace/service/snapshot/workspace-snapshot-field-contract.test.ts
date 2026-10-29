@@ -54,10 +54,6 @@ describe('raw snapshot input contract', () => {
   it.each(snapshotInputFields)('%s advances only its declared ordinary group', (field) => {
     const store = createStore();
     const baseline = authoritativeSnapshotInput();
-    if (field === 'autoIteration') {
-      baseline.mode = 'AUTO_ITERATION';
-      baseline.autoIterationStatus = 'RUNNING';
-    }
     store.upsert('ws', baseline, 'authoritative', 100);
     const before = { ...store.getByWorkspaceId('ws')!.fieldTimestamps };
     const result = store.upsert('ws', fieldUpdate(field), 'one raw input', 200);
@@ -208,101 +204,6 @@ describe('raw snapshot input contract', () => {
       name: 'repaired',
       branchName: 'repaired',
       fieldTimestamps: clocks,
-    });
-  });
-
-  it('invalidates compact hydration across modes and accepts explicit null to clear old counters', () => {
-    const store = createStore();
-    store.upsert(
-      'ws',
-      {
-        ...authoritativeSnapshotInput(),
-        mode: 'AUTO_ITERATION',
-        autoIterationStatus: 'RUNNING',
-        autoIteration: changedSnapshotInput().autoIteration,
-      },
-      'loop',
-      100
-    );
-    store.upsert('ws', { mode: 'STANDARD', autoIterationStatus: null }, 'mode change', 200);
-    expect(store.getByWorkspaceId('ws')).toMatchObject({ autoIteration: null });
-    expect(store.getByWorkspaceId('ws')?.summaryVersion).toBeUndefined();
-    store.upsert('ws', { autoIteration: null }, 'known absent loop', 300);
-    expect(store.getByWorkspaceId('ws')?.summaryVersion).toBe(1);
-    store.upsert('ws', { mode: 'AUTO_ITERATION', autoIterationStatus: 'RUNNING' }, 'new loop', 400);
-    expect(store.getByWorkspaceId('ws')?.autoIteration).toEqual({
-      status: 'RUNNING',
-      currentIteration: null,
-      maxIterations: null,
-      currentMetricSummary: null,
-    });
-    expect(store.getByWorkspaceId('ws')?.summaryVersion).toBeUndefined();
-    store.upsert(
-      'ws',
-      { autoIteration: changedSnapshotInput().autoIteration },
-      'same-mode progress',
-      500
-    );
-    expect(store.getByWorkspaceId('ws')).toMatchObject({
-      mode: 'AUTO_ITERATION',
-      autoIterationStatus: 'RUNNING',
-      summaryVersion: 1,
-      autoIteration: {
-        status: 'RUNNING',
-        currentIteration: 2,
-        maxIterations: 10,
-        currentMetricSummary: 'score=2',
-      },
-    });
-    store.upsert('ws', { autoIteration: null }, 'explicit clear while running', 600);
-    expect(store.getByWorkspaceId('ws')).toMatchObject({
-      mode: 'AUTO_ITERATION',
-      autoIterationStatus: 'RUNNING',
-      summaryVersion: 1,
-      autoIteration: {
-        status: 'RUNNING',
-        currentIteration: null,
-        maxIterations: null,
-        currentMetricSummary: null,
-      },
-    });
-  });
-
-  it('keeps raw session busy distinct from loop working reason and rederives from accepted inputs', () => {
-    const store = createStore();
-    store.upsert(
-      'ws',
-      {
-        ...authoritativeSnapshotInput(),
-        mode: 'AUTO_ITERATION',
-        autoIterationStatus: 'RUNNING',
-        autoIteration: changedSnapshotInput().autoIteration,
-      },
-      'loop with idle runtime',
-      100
-    );
-    expect(store.getByWorkspaceId('ws')).toMatchObject({
-      isWorking: false,
-      statusReason: { code: 'AUTO_ITERATING' },
-      kanbanColumn: 'WORKING',
-    });
-    store.upsert('ws', { isWorking: true }, 'runtime busy', 300);
-    store.upsert(
-      'ws',
-      { isWorking: false, mode: 'STANDARD', autoIterationStatus: null, autoIteration: null },
-      'stale runtime but current loop',
-      200
-    );
-    expect(store.getByWorkspaceId('ws')).toMatchObject({
-      isWorking: true,
-      kanbanColumn: 'WORKING',
-      fieldTimestamps: { session: 300, autoIteration: 200 },
-    });
-    store.upsert('ws', { isWorking: false }, 'runtime idle', 400);
-    expect(store.getByWorkspaceId('ws')).toMatchObject({
-      isWorking: false,
-      statusReason: { code: 'NO_SESSION_STARTED' },
-      kanbanColumn: 'WAITING',
     });
   });
 });

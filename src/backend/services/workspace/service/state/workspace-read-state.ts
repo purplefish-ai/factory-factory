@@ -17,8 +17,6 @@ export interface WorkspaceDerivedStateSource extends Pick<
   | 'ratchetEnabled'
   | 'hasMergeConflict'
   | 'prMonitoring'
-  | 'mode'
-  | 'autoIterationStatus'
 > {
   status: WorkspaceDerivedStateInput['lifecycle'];
 }
@@ -52,8 +50,6 @@ export function toWorkspaceDerivedStateInput(
     hasMergeConflict: source.hasMergeConflict,
     dispatchStalled: Boolean(source.prMonitoring?.pauseReason),
     prMonitoring: source.prMonitoring,
-    mode: source.mode,
-    autoIterationStatus: source.autoIterationStatus,
     flowState: runtime.flowState,
   };
 }

@@ -71,7 +71,6 @@ export function createServer(application: Application, requestedPort?: number): 
     sessionFileLogger,
     sessionLifecycleService,
     terminalService,
-    workspaceAutoIterationService,
     workspaceGitStateService,
   } = services;
   const {
@@ -411,16 +410,6 @@ export function createServer(application: Application, requestedPort?: number): 
     }
   };
 
-  const recoverStaleAutoIterationOnStartup = async (): Promise<void> => {
-    const recovered = await workspaceAutoIterationService.recoverStaleStatuses();
-    if (recovered.length > 0) {
-      logger.info('Recovered stale auto-iteration states on startup', {
-        count: recovered.length,
-        workspaceIds: recovered.map((w) => w.id),
-      });
-    }
-  };
-
   const performCleanup = (): Promise<void> => {
     if (cleanupPromise !== null) {
       return cleanupPromise;
@@ -519,12 +508,6 @@ export function createServer(application: Application, requestedPort?: number): 
         await runStartupTask(
           'Failed to recover stale archiving workspaces on startup',
           recoverStaleArchivingOnStartup
-        );
-
-        // Reset auto-iteration states left in RUNNING by a prior crash
-        await runStartupTask(
-          'Failed to recover stale auto-iteration states on startup',
-          recoverStaleAutoIterationOnStartup
         );
       };
 

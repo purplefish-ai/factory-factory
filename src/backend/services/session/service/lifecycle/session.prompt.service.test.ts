@@ -8,7 +8,7 @@ import { SessionService } from './session.service';
 
 function createPromptService() {
   const runtimeManager = {
-    getClient: vi.fn(),
+    getClient: vi.fn().mockReturnValue({ supportsImages: () => true }),
     sendPrompt: vi.fn(),
     isSessionWorking: vi.fn().mockReturnValue(false),
   };
@@ -206,9 +206,9 @@ describe('SessionService prompt coordination', () => {
       )
     );
     runtimeManager.sendPrompt.mockRejectedValue(new Error('Provider failed'));
-    await expect(
-      service.sendAcpMessage('session-1', [{ type: 'text', text: 'follow-up' }])
-    ).rejects.toThrow('Provider failed');
+    await expect(service.sendSessionMessage('session-1', 'follow-up')).rejects.toThrow(
+      'Provider failed'
+    );
     expect(sessionDomainService.getRuntimeSnapshot('session-1')).toMatchObject({
       phase: 'error',
       processState: 'alive',
@@ -225,7 +225,7 @@ describe('SessionService prompt coordination', () => {
     const { service, runtimeManager, workspaceBridge } = createPromptService();
     const prompt = createDeferred<{ stopReason: string }>();
     runtimeManager.sendPrompt.mockReturnValueOnce(prompt.promise);
-    const pending = service.sendAcpMessage('session-1', [{ type: 'text', text: 'open a PR' }]);
+    const pending = service.sendSessionMessage('session-1', 'open a PR');
     await Promise.resolve();
     expect(workspaceBridge.resetPRDiscoveryBackoff).not.toHaveBeenCalled();
 
@@ -233,12 +233,12 @@ describe('SessionService prompt coordination', () => {
     const reset = createDeferred<boolean>();
     workspaceBridge.resetPRDiscoveryBackoff.mockReturnValueOnce(reset.promise);
     prompt.resolve({ stopReason: 'end_turn' });
-    await expect(pending).resolves.toBe('end_turn');
+    await expect(pending).resolves.toBeUndefined();
     expect(workspaceBridge.resetPRDiscoveryBackoff).toHaveBeenCalledExactlyOnceWith('workspace-1');
     reset.resolve(true);
 
     runtimeManager.sendPrompt.mockResolvedValueOnce({ stopReason: 'end_turn' });
-    await service.sendAcpMessage('session-1', [{ type: 'text', text: 'push changes' }]);
+    await service.sendSessionMessage('session-1', 'push changes');
     expect(workspaceBridge.resetPRDiscoveryBackoff).toHaveBeenCalledTimes(2);
   });
 
@@ -250,7 +250,7 @@ describe('SessionService prompt coordination', () => {
       new Error('database unavailable')
     );
 
-    await expect(service.sendAcpMessage('session-1', [])).resolves.toBe('end_turn');
+    await expect(service.sendSessionMessage('session-1', '')).resolves.toBeUndefined();
     expect(workspaceBridge.resetPRDiscoveryBackoff).toHaveBeenCalledWith('workspace-1');
     expect(promptTurnCompletionService.schedule).toHaveBeenCalledWith('session-1');
   });
@@ -278,9 +278,9 @@ describe('SessionService prompt coordination', () => {
               scenario === 'busy' ? 'A turn is already in progress for this session' : 'failed'
             )
           );
-        await expect(service.sendAcpMessage('session-1', [])).rejects.toThrow();
+        await expect(service.sendSessionMessage('session-1', '')).rejects.toThrow();
       } else {
-        await service.sendAcpMessage('session-1', []);
+        await service.sendSessionMessage('session-1', '');
       }
       expect(workspaceBridge.resetPRDiscoveryBackoff).not.toHaveBeenCalled();
     }
@@ -289,20 +289,17 @@ describe('SessionService prompt coordination', () => {
   it('rejects when sendSessionMessage is called without an ACP client', async () => {
     const { service, runtimeManager } = createPromptService();
     runtimeManager.getClient.mockReturnValue(undefined);
-    const sendAcpMessageSpy = vi.spyOn(service, 'sendAcpMessage');
 
     await expect(service.sendSessionMessage('session-1', 'hello')).rejects.toThrow(
       'No ACP client found for sendSessionMessage: session-1'
     );
-    expect(sendAcpMessageSpy).not.toHaveBeenCalled();
+    expect(runtimeManager.sendPrompt).not.toHaveBeenCalled();
   });
 
   it('converts supported content into ACP blocks', async () => {
     const { service, runtimeManager } = createPromptService();
     runtimeManager.getClient.mockReturnValue({ supportsImages: () => true });
-    const sendAcpMessageSpy = vi
-      .spyOn(service, 'sendAcpMessage')
-      .mockResolvedValue('end_turn' as never);
+    runtimeManager.sendPrompt.mockResolvedValue({ stopReason: 'end_turn' });
 
     await service.sendSessionMessage('session-1', [
       { type: 'text', text: 'hello' },
@@ -313,7 +310,7 @@ describe('SessionService prompt coordination', () => {
       { type: 'unsupported' } as never,
     ] as never);
 
-    expect(sendAcpMessageSpy).toHaveBeenCalledWith(
+    expect(runtimeManager.sendPrompt).toHaveBeenCalledWith(
       'session-1',
       [
         { type: 'text', text: 'hello' },
@@ -322,27 +319,23 @@ describe('SessionService prompt coordination', () => {
         { type: 'text', text: 'tool output' },
         { type: 'text', text: '{"ok":true}' },
       ],
-      14_400_000,
-      { timeoutKind: 'standard_user_turn' }
+      14_400_000
     );
   });
 
   it('uses a text placeholder when the provider does not support images', async () => {
     const { service, runtimeManager } = createPromptService();
     runtimeManager.getClient.mockReturnValue({ supportsImages: () => false });
-    const sendAcpMessageSpy = vi
-      .spyOn(service, 'sendAcpMessage')
-      .mockResolvedValue('end_turn' as never);
+    runtimeManager.sendPrompt.mockResolvedValue({ stopReason: 'end_turn' });
 
     await service.sendSessionMessage('session-1', [
       { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'abc' } },
     ] as never);
 
-    expect(sendAcpMessageSpy).toHaveBeenCalledWith(
+    expect(runtimeManager.sendPrompt).toHaveBeenCalledWith(
       'session-1',
       [{ type: 'text', text: '[Image: not supported by this provider]' }],
-      14_400_000,
-      { timeoutKind: 'standard_user_turn' }
+      14_400_000
     );
   });
 
@@ -380,21 +373,16 @@ describe('SessionService prompt coordination', () => {
     );
   });
 
-  it('records the configured auto-iteration timeout instead of the four-hour copy', async () => {
-    const { service, runtimeManager, lifecycleEventService } = createPromptService();
-    runtimeManager.sendPrompt.mockRejectedValue(new PromptTimeoutError('session-1', 300_000));
+  it('applies the ordinary four-hour deadline to queued user messages', async () => {
+    const { service, runtimeManager } = createPromptService();
+    runtimeManager.sendPrompt.mockResolvedValue({ stopReason: 'end_turn' });
 
-    await expect(
-      service.sendAcpMessage('session-1', [{ type: 'text', text: 'iterate' }], 300_000, {
-        timeoutKind: 'configured',
-      })
-    ).rejects.toThrow(PromptTimeoutError);
+    await service.sendSessionMessage('session-1', 'continue');
 
-    expect(lifecycleEventService.record).toHaveBeenCalledWith(
-      expect.objectContaining({
-        reason: 'PROMPT_TIMEOUT',
-        message: 'Turn stopped: reached the configured 5-minute limit.',
-      })
+    expect(runtimeManager.sendPrompt).toHaveBeenCalledWith(
+      'session-1',
+      [{ type: 'text', text: 'continue' }],
+      14_400_000
     );
   });
 
@@ -569,21 +557,21 @@ describe('SessionService prompt coordination', () => {
       .mockImplementationOnce(() => firstPrompt.promise)
       .mockImplementationOnce(() => secondPrompt.promise);
 
-    const first = service.sendAcpMessage('session-1', [{ type: 'text', text: 'first' }]);
+    const first = service.sendSessionMessage('session-1', 'first');
     await Promise.resolve();
-    const second = service.sendAcpMessage('session-1', [{ type: 'text', text: 'second' }]);
+    const second = service.sendSessionMessage('session-1', 'second');
     await Promise.resolve();
 
     expect(runtimeManager.sendPrompt).toHaveBeenCalledTimes(1);
 
     firstPrompt.resolve({ stopReason: 'end_turn' });
-    await expect(first).resolves.toBe('end_turn');
+    await expect(first).resolves.toBeUndefined();
     await vi.waitFor(() => {
       expect(runtimeManager.sendPrompt).toHaveBeenCalledTimes(2);
     });
 
     secondPrompt.resolve({ stopReason: 'end_turn' });
-    await expect(second).resolves.toBe('end_turn');
+    await expect(second).resolves.toBeUndefined();
   });
 
   it('does not serialize ACP prompts across sessions', async () => {
@@ -594,15 +582,15 @@ describe('SessionService prompt coordination', () => {
       .mockImplementationOnce(() => firstPrompt.promise)
       .mockImplementationOnce(() => secondPrompt.promise);
 
-    const first = service.sendAcpMessage('session-1', [{ type: 'text', text: 'first' }]);
-    const second = service.sendAcpMessage('session-2', [{ type: 'text', text: 'second' }]);
+    const first = service.sendSessionMessage('session-1', 'first');
+    const second = service.sendSessionMessage('session-2', 'second');
     await Promise.resolve();
 
     expect(runtimeManager.sendPrompt).toHaveBeenCalledTimes(2);
 
     firstPrompt.resolve({ stopReason: 'end_turn' });
     secondPrompt.resolve({ stopReason: 'end_turn' });
-    await expect(Promise.all([first, second])).resolves.toEqual(['end_turn', 'end_turn']);
+    await expect(Promise.all([first, second])).resolves.toEqual([undefined, undefined]);
   });
 
   it('continues a session prompt queue after a prompt fails', async () => {
@@ -613,8 +601,8 @@ describe('SessionService prompt coordination', () => {
       .mockImplementationOnce(() => firstPrompt.promise)
       .mockImplementationOnce(() => secondPrompt.promise);
 
-    const first = service.sendAcpMessage('session-1', [{ type: 'text', text: 'first' }]);
-    const second = service.sendAcpMessage('session-1', [{ type: 'text', text: 'second' }]);
+    const first = service.sendSessionMessage('session-1', 'first');
+    const second = service.sendSessionMessage('session-1', 'second');
 
     firstPrompt.reject(new Error('prompt failed'));
     await expect(first).rejects.toThrow('prompt failed');
@@ -623,6 +611,6 @@ describe('SessionService prompt coordination', () => {
     });
 
     secondPrompt.resolve({ stopReason: 'end_turn' });
-    await expect(second).resolves.toBe('end_turn');
+    await expect(second).resolves.toBeUndefined();
   });
 });

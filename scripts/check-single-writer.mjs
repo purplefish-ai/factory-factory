@@ -96,12 +96,6 @@ const workspaceFieldOwners = {
   // writer, which had stopped writing them at some point — the table cannot
   // detect an owner that no longer writes, so it went on granting permission
   // nobody used.
-
-  // The auto-iteration group's five fields are absent for the same reason as the
-  // three groups above: they live on `WorkspaceAutoIteration` now, and
-  // OWNED_SIDE_TABLES keeps the write in one file. `mode` went with them --
-  // every consumer of it is an auto-iteration consumer, so it is that group's
-  // discriminant rather than a workspace attribute that happens to sit nearby.
 };
 
 const workspaceMutationDeniedFields = new Set([
@@ -544,8 +538,6 @@ const OWNED_SIDE_TABLES = {
   workspacePRDiscovery:
     'src/backend/services/workspace/resources/workspace-pr-discovery.accessor.ts',
   workspaceRunScript: 'src/backend/services/workspace/resources/workspace-run-script.accessor.ts',
-  workspaceAutoIteration:
-    'src/backend/services/workspace/resources/workspace-auto-iteration.accessor.ts',
 };
 
 /**
@@ -577,7 +569,6 @@ const SIDE_TABLE_RELATIONS = {
   prDiscovery: 'workspacePRDiscovery',
   runScript: 'workspaceRunScript',
   sessionLifecycleEvents: 'sessionLifecycleEvent',
-  autoIteration: 'workspaceAutoIteration',
 };
 
 /** Paired rows that are initialized as part of every workspace creation. */
@@ -586,7 +577,6 @@ const WORKSPACE_CREATION_SIDE_TABLES = new Set([
   'workspacePR',
   'workspacePRDiscovery',
   'workspaceRunScript',
-  'workspaceAutoIteration',
 ]);
 
 /**

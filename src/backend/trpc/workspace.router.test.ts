@@ -536,34 +536,21 @@ describe('workspaceCoreRouter', () => {
     );
   });
 
-  it('defaults auto-iteration config before workspace creation', async () => {
+  it.each([
+    {
+      mode: 'AUTO_ITERATION',
+      autoIterationConfig: { testCommand: 'pnpm test', targetDescription: 'Improve coverage' },
+    },
+    { mode: 'STANDARD' },
+    { autoIterationConfig: { testCommand: 'pnpm test', targetDescription: 'Improve coverage' } },
+  ])('rejects obsolete workspace creation fields %j before persistence', async (legacyFields) => {
     const { caller } = createCaller();
     mockWorkspaceCreationCreate.mockResolvedValue({ id: 'w-created' });
+    const input = { type: 'MANUAL' as const, projectId: 'p1', name: 'Workspace', ...legacyFields };
 
-    await caller.create({
-      type: 'MANUAL',
-      projectId: 'p1',
-      name: 'Auto Iteration Workspace',
-      mode: 'AUTO_ITERATION',
-      autoIterationConfig: {
-        testCommand: 'pnpm test',
-        targetDescription: 'Improve coverage',
-      },
-    });
-
-    expect(mockWorkspaceCreationCreate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'MANUAL',
-        mode: 'AUTO_ITERATION',
-        autoIterationConfig: {
-          testCommand: 'pnpm test',
-          targetDescription: 'Improve coverage',
-          maxIterations: 25,
-          testTimeoutSeconds: 600,
-          sessionRecycleInterval: 10,
-        },
-      })
-    );
+    await expect(caller.create(input)).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(mockWorkspaceCreationCreate).not.toHaveBeenCalled();
+    expect(mockInitializeWorkspaceWorktree).not.toHaveBeenCalled();
   });
 
   it('passes startup mode preset through GitHub issue workspace creation', async () => {

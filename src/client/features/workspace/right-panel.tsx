@@ -1,4 +1,3 @@
-import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
 import { CalendarIcon } from '@phosphor-icons/react/dist/csr/Calendar';
 import { CameraIcon } from '@phosphor-icons/react/dist/csr/Camera';
 import { FileDashedIcon } from '@phosphor-icons/react/dist/csr/FileDashed';
@@ -17,7 +16,6 @@ import { TabButton } from '@/components/ui/tab-button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { AgentsPanel } from './agents-panel';
-import { AutoIterationPanel } from './auto-iteration-panel';
 import { CombinedChangesPanel } from './combined-changes-panel';
 import { DevLogsPanel } from './dev-logs-panel';
 import { FileBrowserPanel } from './file-browser-panel';
@@ -64,7 +62,6 @@ interface TopPanelAreaProps {
   onTopTabChange: (tab: TopPanelTab) => void;
   isTakingScreenshots: boolean;
   onTakeScreenshots?: () => void;
-  isAutoIteration: boolean;
   periodicTaskId: string | null;
   isParentWorkspace: boolean;
   selectedSessionId: string | null;
@@ -80,7 +77,6 @@ function TopPanelArea({
   onTopTabChange,
   isTakingScreenshots,
   onTakeScreenshots,
-  isAutoIteration,
   periodicTaskId,
   isParentWorkspace,
   selectedSessionId,
@@ -92,7 +88,6 @@ function TopPanelArea({
   const showFiles = activeTopTab === 'files';
   const showTasks = activeTopTab === 'tasks';
   const showScreenshots = activeTopTab === 'screenshots';
-  const showAutoIteration = isAutoIteration && activeTopTab === 'auto-iteration';
   const showPeriodicTask = !!periodicTaskId && activeTopTab === 'periodic-task';
   const showAgents = activeTopTab === 'agents';
 
@@ -128,14 +123,6 @@ function TopPanelArea({
           isActive={showTasks}
           onSelect={() => onTopTabChange('tasks')}
         />
-        {isAutoIteration && (
-          <TabButton
-            label="Iterations"
-            icon={<ArrowsClockwiseIcon className="h-3.5 w-3.5" />}
-            isActive={showAutoIteration}
-            onSelect={() => onTopTabChange('auto-iteration')}
-          />
-        )}
         {periodicTaskId && (
           <TabButton
             label="Periodic Task"
@@ -184,7 +171,6 @@ function TopPanelArea({
             onTakeScreenshots={onTakeScreenshots}
           />
         )}
-        {showAutoIteration && <AutoIterationPanel workspaceId={workspaceId} />}
         {showPeriodicTask && periodicTaskId && (
           <PeriodicTaskPanel periodicTaskId={periodicTaskId} />
         )}
@@ -243,7 +229,6 @@ export function RightPanel({
   }, []);
 
   const { data: workspace } = useWorkspaceDetailQuery(workspaceId);
-  const isAutoIteration = workspace?.mode === 'AUTO_ITERATION';
   const periodicTaskId =
     (workspace as { periodicTaskId?: string | null } | undefined)?.periodicTaskId ?? null;
   const creationSource =
@@ -284,28 +269,23 @@ export function RightPanel({
     if (workspace === undefined) {
       return;
     }
-    if (
-      (activeTopTab === 'auto-iteration' && !isAutoIteration) ||
-      (activeTopTab === 'periodic-task' && !periodicTaskId)
-    ) {
+    if (activeTopTab === 'periodic-task' && !periodicTaskId) {
       handleTopTabChange('changes');
     }
-  }, [workspace, activeTopTab, isAutoIteration, periodicTaskId, handleTopTabChange]);
+  }, [workspace, activeTopTab, periodicTaskId, handleTopTabChange]);
 
   const handleTakeScreenshots = useCallback(() => {
     handleTopTabChange('screenshots');
     void onTakeScreenshots?.();
   }, [handleTopTabChange, onTakeScreenshots]);
 
-  // Auto-select the auto-iteration or periodic-task tab on first load,
+  // Auto-select the periodic-task tab on first load,
   // but only when the user has no persisted tab preference for this workspace.
-  const autoIterationTabSelectedRef = useRef(false);
   const periodicTaskTabSelectedRef = useRef(false);
   const prevWorkspaceIdRef = useRef(workspaceId);
   useEffect(() => {
     if (prevWorkspaceIdRef.current !== workspaceId) {
       prevWorkspaceIdRef.current = workspaceId;
-      autoIterationTabSelectedRef.current = false;
       periodicTaskTabSelectedRef.current = false;
     }
     const hasPersistedTabCheck = () => {
@@ -319,19 +299,13 @@ export function RightPanel({
       }
     };
 
-    if (isAutoIteration && !autoIterationTabSelectedRef.current) {
-      autoIterationTabSelectedRef.current = true;
-      if (!hasPersistedTabCheck()) {
-        handleTopTabChange('auto-iteration');
-      }
-    }
     if (periodicTaskId && !periodicTaskTabSelectedRef.current) {
       periodicTaskTabSelectedRef.current = true;
       if (!hasPersistedTabCheck()) {
         handleTopTabChange('periodic-task');
       }
     }
-  }, [isAutoIteration, periodicTaskId, handleTopTabChange, workspaceId]);
+  }, [periodicTaskId, handleTopTabChange, workspaceId]);
 
   const handleBottomTabChange = useCallback(
     (tab: BottomPanelTab) => {
@@ -397,7 +371,6 @@ export function RightPanel({
           onTopTabChange={handleTopTabChange}
           isTakingScreenshots={isTakingScreenshots}
           onTakeScreenshots={onTakeScreenshots ? handleTakeScreenshots : undefined}
-          isAutoIteration={isAutoIteration}
           periodicTaskId={periodicTaskId}
           isParentWorkspace={isParentWorkspace}
           selectedSessionId={selectedSessionId}

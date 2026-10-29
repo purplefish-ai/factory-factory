@@ -165,14 +165,6 @@ export const RunScriptStatus = {
 export type RunScriptStatus = (typeof RunScriptStatus)[keyof typeof RunScriptStatus]
 
 
-export const WorkspaceMode = {
-  STANDARD: 'STANDARD',
-  AUTO_ITERATION: 'AUTO_ITERATION'
-} as const
-
-export type WorkspaceMode = (typeof WorkspaceMode)[keyof typeof WorkspaceMode]
-
-
 export const PeriodicTaskCadence = {
   EVERY_MINUTE: 'EVERY_MINUTE',
   EVERY_FIVE_MINUTES: 'EVERY_FIVE_MINUTES',
@@ -192,19 +184,6 @@ export const PeriodicTaskExecutionStatus = {
 } as const
 
 export type PeriodicTaskExecutionStatus = (typeof PeriodicTaskExecutionStatus)[keyof typeof PeriodicTaskExecutionStatus]
-
-
-export const AutoIterationStatus = {
-  IDLE: 'IDLE',
-  RUNNING: 'RUNNING',
-  PAUSED: 'PAUSED',
-  COMPLETED: 'COMPLETED',
-  MAX_ITERATIONS: 'MAX_ITERATIONS',
-  STOPPED: 'STOPPED',
-  FAILED: 'FAILED'
-} as const
-
-export type AutoIterationStatus = (typeof AutoIterationStatus)[keyof typeof AutoIterationStatus]
 
 
 export const NotificationDirection = {

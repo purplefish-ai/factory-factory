@@ -78,8 +78,6 @@ describe('workspace detail HTTP/stream commit ownership', () => {
         status: 'READY',
         runScriptStatus: 'RUNNING',
         hasHadSessions: true,
-        mode: 'AUTO_ITERATION',
-        autoIterationStatus: 'PAUSED',
         pendingRequestType: 'plan_approval',
       }),
     });
@@ -89,8 +87,6 @@ describe('workspace detail HTTP/stream commit ownership', () => {
       status: 'READY',
       runScriptStatus: 'RUNNING',
       hasHadSessions: true,
-      mode: 'AUTO_ITERATION',
-      autoIterationStatus: 'PAUSED',
       pendingRequestType: 'plan_approval',
       worktreePath: '/ready/path',
       initErrorMessage: 'Setup warning',

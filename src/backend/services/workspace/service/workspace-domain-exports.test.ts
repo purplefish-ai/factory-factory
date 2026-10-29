@@ -12,7 +12,6 @@ import {
   WorkspaceCreationService,
   WorkspaceSnapshotStore,
   workspaceActivityService,
-  workspaceAutoIterationService,
   workspaceDataService,
   workspaceMaintenanceService,
   workspaceNotificationService,
@@ -66,7 +65,6 @@ describe('Workspace domain exports', () => {
   });
 
   it.each([
-    ['workspaceAutoIterationService', workspaceAutoIterationService],
     ['workspacePrSnapshotService', workspacePrSnapshotService],
     ['workspacePRMonitoringService', workspacePRMonitoringService],
     ['workspaceRunScriptService', workspaceRunScriptService],

@@ -404,7 +404,6 @@ export type WorkspaceWhereInput = {
   prs?: Prisma.WorkspacePRListRelationFilter
   prDiscovery?: Prisma.XOR<Prisma.WorkspacePRDiscoveryNullableScalarRelationFilter, Prisma.WorkspacePRDiscoveryWhereInput> | null
   runScript?: Prisma.XOR<Prisma.WorkspaceRunScriptNullableScalarRelationFilter, Prisma.WorkspaceRunScriptWhereInput> | null
-  autoIteration?: Prisma.XOR<Prisma.WorkspaceAutoIterationNullableScalarRelationFilter, Prisma.WorkspaceAutoIterationWhereInput> | null
   periodicTask?: Prisma.XOR<Prisma.PeriodicTaskNullableScalarRelationFilter, Prisma.PeriodicTaskWhereInput> | null
   periodicTaskExecution?: Prisma.XOR<Prisma.PeriodicTaskExecutionNullableScalarRelationFilter, Prisma.PeriodicTaskExecutionWhereInput> | null
   parentWorkspace?: Prisma.XOR<Prisma.WorkspaceNullableScalarRelationFilter, Prisma.WorkspaceWhereInput> | null
@@ -450,7 +449,6 @@ export type WorkspaceOrderByWithRelationInput = {
   prs?: Prisma.WorkspacePROrderByRelationAggregateInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryOrderByWithRelationInput
   runScript?: Prisma.WorkspaceRunScriptOrderByWithRelationInput
-  autoIteration?: Prisma.WorkspaceAutoIterationOrderByWithRelationInput
   periodicTask?: Prisma.PeriodicTaskOrderByWithRelationInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionOrderByWithRelationInput
   parentWorkspace?: Prisma.WorkspaceOrderByWithRelationInput
@@ -499,7 +497,6 @@ export type WorkspaceWhereUniqueInput = Prisma.AtLeast<{
   prs?: Prisma.WorkspacePRListRelationFilter
   prDiscovery?: Prisma.XOR<Prisma.WorkspacePRDiscoveryNullableScalarRelationFilter, Prisma.WorkspacePRDiscoveryWhereInput> | null
   runScript?: Prisma.XOR<Prisma.WorkspaceRunScriptNullableScalarRelationFilter, Prisma.WorkspaceRunScriptWhereInput> | null
-  autoIteration?: Prisma.XOR<Prisma.WorkspaceAutoIterationNullableScalarRelationFilter, Prisma.WorkspaceAutoIterationWhereInput> | null
   periodicTask?: Prisma.XOR<Prisma.PeriodicTaskNullableScalarRelationFilter, Prisma.PeriodicTaskWhereInput> | null
   periodicTaskExecution?: Prisma.XOR<Prisma.PeriodicTaskExecutionNullableScalarRelationFilter, Prisma.PeriodicTaskExecutionWhereInput> | null
   parentWorkspace?: Prisma.XOR<Prisma.WorkspaceNullableScalarRelationFilter, Prisma.WorkspaceWhereInput> | null
@@ -610,7 +607,6 @@ export type WorkspaceCreateInput = {
   prs?: Prisma.WorkspacePRCreateNestedManyWithoutWorkspaceInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryCreateNestedOneWithoutWorkspaceInput
   runScript?: Prisma.WorkspaceRunScriptCreateNestedOneWithoutWorkspaceInput
-  autoIteration?: Prisma.WorkspaceAutoIterationCreateNestedOneWithoutWorkspaceInput
   periodicTask?: Prisma.PeriodicTaskCreateNestedOneWithoutWorkspacesInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionCreateNestedOneWithoutWorkspaceInput
   parentWorkspace?: Prisma.WorkspaceCreateNestedOneWithoutChildWorkspacesInput
@@ -655,7 +651,6 @@ export type WorkspaceUncheckedCreateInput = {
   prs?: Prisma.WorkspacePRUncheckedCreateNestedManyWithoutWorkspaceInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUncheckedCreateNestedOneWithoutWorkspaceInput
   runScript?: Prisma.WorkspaceRunScriptUncheckedCreateNestedOneWithoutWorkspaceInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUncheckedCreateNestedOneWithoutWorkspaceInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedCreateNestedOneWithoutWorkspaceInput
   childWorkspaces?: Prisma.WorkspaceUncheckedCreateNestedManyWithoutParentWorkspaceInput
   notifications?: Prisma.WorkspaceNotificationUncheckedCreateNestedManyWithoutWorkspaceInput
@@ -696,7 +691,6 @@ export type WorkspaceUpdateInput = {
   prs?: Prisma.WorkspacePRUpdateManyWithoutWorkspaceNestedInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUpdateOneWithoutWorkspaceNestedInput
   runScript?: Prisma.WorkspaceRunScriptUpdateOneWithoutWorkspaceNestedInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUpdateOneWithoutWorkspaceNestedInput
   periodicTask?: Prisma.PeriodicTaskUpdateOneWithoutWorkspacesNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUpdateOneWithoutWorkspaceNestedInput
   parentWorkspace?: Prisma.WorkspaceUpdateOneWithoutChildWorkspacesNestedInput
@@ -741,7 +735,6 @@ export type WorkspaceUncheckedUpdateInput = {
   prs?: Prisma.WorkspacePRUncheckedUpdateManyWithoutWorkspaceNestedInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUncheckedUpdateOneWithoutWorkspaceNestedInput
   runScript?: Prisma.WorkspaceRunScriptUncheckedUpdateOneWithoutWorkspaceNestedInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUncheckedUpdateOneWithoutWorkspaceNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedUpdateOneWithoutWorkspaceNestedInput
   childWorkspaces?: Prisma.WorkspaceUncheckedUpdateManyWithoutParentWorkspaceNestedInput
   notifications?: Prisma.WorkspaceNotificationUncheckedUpdateManyWithoutWorkspaceNestedInput
@@ -1150,20 +1143,6 @@ export type WorkspaceUpdateOneRequiredWithoutRunScriptNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.WorkspaceUpdateToOneWithWhereWithoutRunScriptInput, Prisma.WorkspaceUpdateWithoutRunScriptInput>, Prisma.WorkspaceUncheckedUpdateWithoutRunScriptInput>
 }
 
-export type WorkspaceCreateNestedOneWithoutAutoIterationInput = {
-  create?: Prisma.XOR<Prisma.WorkspaceCreateWithoutAutoIterationInput, Prisma.WorkspaceUncheckedCreateWithoutAutoIterationInput>
-  connectOrCreate?: Prisma.WorkspaceCreateOrConnectWithoutAutoIterationInput
-  connect?: Prisma.WorkspaceWhereUniqueInput
-}
-
-export type WorkspaceUpdateOneRequiredWithoutAutoIterationNestedInput = {
-  create?: Prisma.XOR<Prisma.WorkspaceCreateWithoutAutoIterationInput, Prisma.WorkspaceUncheckedCreateWithoutAutoIterationInput>
-  connectOrCreate?: Prisma.WorkspaceCreateOrConnectWithoutAutoIterationInput
-  upsert?: Prisma.WorkspaceUpsertWithoutAutoIterationInput
-  connect?: Prisma.WorkspaceWhereUniqueInput
-  update?: Prisma.XOR<Prisma.XOR<Prisma.WorkspaceUpdateToOneWithWhereWithoutAutoIterationInput, Prisma.WorkspaceUpdateWithoutAutoIterationInput>, Prisma.WorkspaceUncheckedUpdateWithoutAutoIterationInput>
-}
-
 export type WorkspaceCreateNestedOneWithoutAgentSessionsInput = {
   create?: Prisma.XOR<Prisma.WorkspaceCreateWithoutAgentSessionsInput, Prisma.WorkspaceUncheckedCreateWithoutAgentSessionsInput>
   connectOrCreate?: Prisma.WorkspaceCreateOrConnectWithoutAgentSessionsInput
@@ -1324,7 +1303,6 @@ export type WorkspaceCreateWithoutProjectInput = {
   prs?: Prisma.WorkspacePRCreateNestedManyWithoutWorkspaceInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryCreateNestedOneWithoutWorkspaceInput
   runScript?: Prisma.WorkspaceRunScriptCreateNestedOneWithoutWorkspaceInput
-  autoIteration?: Prisma.WorkspaceAutoIterationCreateNestedOneWithoutWorkspaceInput
   periodicTask?: Prisma.PeriodicTaskCreateNestedOneWithoutWorkspacesInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionCreateNestedOneWithoutWorkspaceInput
   parentWorkspace?: Prisma.WorkspaceCreateNestedOneWithoutChildWorkspacesInput
@@ -1368,7 +1346,6 @@ export type WorkspaceUncheckedCreateWithoutProjectInput = {
   prs?: Prisma.WorkspacePRUncheckedCreateNestedManyWithoutWorkspaceInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUncheckedCreateNestedOneWithoutWorkspaceInput
   runScript?: Prisma.WorkspaceRunScriptUncheckedCreateNestedOneWithoutWorkspaceInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUncheckedCreateNestedOneWithoutWorkspaceInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedCreateNestedOneWithoutWorkspaceInput
   childWorkspaces?: Prisma.WorkspaceUncheckedCreateNestedManyWithoutParentWorkspaceInput
   notifications?: Prisma.WorkspaceNotificationUncheckedCreateNestedManyWithoutWorkspaceInput
@@ -1467,7 +1444,6 @@ export type WorkspaceCreateWithoutChildWorkspacesInput = {
   prs?: Prisma.WorkspacePRCreateNestedManyWithoutWorkspaceInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryCreateNestedOneWithoutWorkspaceInput
   runScript?: Prisma.WorkspaceRunScriptCreateNestedOneWithoutWorkspaceInput
-  autoIteration?: Prisma.WorkspaceAutoIterationCreateNestedOneWithoutWorkspaceInput
   periodicTask?: Prisma.PeriodicTaskCreateNestedOneWithoutWorkspacesInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionCreateNestedOneWithoutWorkspaceInput
   parentWorkspace?: Prisma.WorkspaceCreateNestedOneWithoutChildWorkspacesInput
@@ -1511,7 +1487,6 @@ export type WorkspaceUncheckedCreateWithoutChildWorkspacesInput = {
   prs?: Prisma.WorkspacePRUncheckedCreateNestedManyWithoutWorkspaceInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUncheckedCreateNestedOneWithoutWorkspaceInput
   runScript?: Prisma.WorkspaceRunScriptUncheckedCreateNestedOneWithoutWorkspaceInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUncheckedCreateNestedOneWithoutWorkspaceInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedCreateNestedOneWithoutWorkspaceInput
   notifications?: Prisma.WorkspaceNotificationUncheckedCreateNestedManyWithoutWorkspaceInput
   prMonitoring?: Prisma.WorkspacePRMonitoringUncheckedCreateNestedOneWithoutWorkspaceInput
@@ -1556,7 +1531,6 @@ export type WorkspaceCreateWithoutParentWorkspaceInput = {
   prs?: Prisma.WorkspacePRCreateNestedManyWithoutWorkspaceInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryCreateNestedOneWithoutWorkspaceInput
   runScript?: Prisma.WorkspaceRunScriptCreateNestedOneWithoutWorkspaceInput
-  autoIteration?: Prisma.WorkspaceAutoIterationCreateNestedOneWithoutWorkspaceInput
   periodicTask?: Prisma.PeriodicTaskCreateNestedOneWithoutWorkspacesInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionCreateNestedOneWithoutWorkspaceInput
   childWorkspaces?: Prisma.WorkspaceCreateNestedManyWithoutParentWorkspaceInput
@@ -1599,7 +1573,6 @@ export type WorkspaceUncheckedCreateWithoutParentWorkspaceInput = {
   prs?: Prisma.WorkspacePRUncheckedCreateNestedManyWithoutWorkspaceInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUncheckedCreateNestedOneWithoutWorkspaceInput
   runScript?: Prisma.WorkspaceRunScriptUncheckedCreateNestedOneWithoutWorkspaceInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUncheckedCreateNestedOneWithoutWorkspaceInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedCreateNestedOneWithoutWorkspaceInput
   childWorkspaces?: Prisma.WorkspaceUncheckedCreateNestedManyWithoutParentWorkspaceInput
   notifications?: Prisma.WorkspaceNotificationUncheckedCreateNestedManyWithoutWorkspaceInput
@@ -1660,7 +1633,6 @@ export type WorkspaceUpdateWithoutChildWorkspacesInput = {
   prs?: Prisma.WorkspacePRUpdateManyWithoutWorkspaceNestedInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUpdateOneWithoutWorkspaceNestedInput
   runScript?: Prisma.WorkspaceRunScriptUpdateOneWithoutWorkspaceNestedInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUpdateOneWithoutWorkspaceNestedInput
   periodicTask?: Prisma.PeriodicTaskUpdateOneWithoutWorkspacesNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUpdateOneWithoutWorkspaceNestedInput
   parentWorkspace?: Prisma.WorkspaceUpdateOneWithoutChildWorkspacesNestedInput
@@ -1704,7 +1676,6 @@ export type WorkspaceUncheckedUpdateWithoutChildWorkspacesInput = {
   prs?: Prisma.WorkspacePRUncheckedUpdateManyWithoutWorkspaceNestedInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUncheckedUpdateOneWithoutWorkspaceNestedInput
   runScript?: Prisma.WorkspaceRunScriptUncheckedUpdateOneWithoutWorkspaceNestedInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUncheckedUpdateOneWithoutWorkspaceNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedUpdateOneWithoutWorkspaceNestedInput
   notifications?: Prisma.WorkspaceNotificationUncheckedUpdateManyWithoutWorkspaceNestedInput
   prMonitoring?: Prisma.WorkspacePRMonitoringUncheckedUpdateOneWithoutWorkspaceNestedInput
@@ -1759,7 +1730,6 @@ export type WorkspaceCreateWithoutPrsInput = {
   closedSessions?: Prisma.ClosedSessionCreateNestedManyWithoutWorkspaceInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryCreateNestedOneWithoutWorkspaceInput
   runScript?: Prisma.WorkspaceRunScriptCreateNestedOneWithoutWorkspaceInput
-  autoIteration?: Prisma.WorkspaceAutoIterationCreateNestedOneWithoutWorkspaceInput
   periodicTask?: Prisma.PeriodicTaskCreateNestedOneWithoutWorkspacesInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionCreateNestedOneWithoutWorkspaceInput
   parentWorkspace?: Prisma.WorkspaceCreateNestedOneWithoutChildWorkspacesInput
@@ -1803,7 +1773,6 @@ export type WorkspaceUncheckedCreateWithoutPrsInput = {
   closedSessions?: Prisma.ClosedSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUncheckedCreateNestedOneWithoutWorkspaceInput
   runScript?: Prisma.WorkspaceRunScriptUncheckedCreateNestedOneWithoutWorkspaceInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUncheckedCreateNestedOneWithoutWorkspaceInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedCreateNestedOneWithoutWorkspaceInput
   childWorkspaces?: Prisma.WorkspaceUncheckedCreateNestedManyWithoutParentWorkspaceInput
   notifications?: Prisma.WorkspaceNotificationUncheckedCreateNestedManyWithoutWorkspaceInput
@@ -1859,7 +1828,6 @@ export type WorkspaceUpdateWithoutPrsInput = {
   closedSessions?: Prisma.ClosedSessionUpdateManyWithoutWorkspaceNestedInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUpdateOneWithoutWorkspaceNestedInput
   runScript?: Prisma.WorkspaceRunScriptUpdateOneWithoutWorkspaceNestedInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUpdateOneWithoutWorkspaceNestedInput
   periodicTask?: Prisma.PeriodicTaskUpdateOneWithoutWorkspacesNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUpdateOneWithoutWorkspaceNestedInput
   parentWorkspace?: Prisma.WorkspaceUpdateOneWithoutChildWorkspacesNestedInput
@@ -1903,7 +1871,6 @@ export type WorkspaceUncheckedUpdateWithoutPrsInput = {
   closedSessions?: Prisma.ClosedSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUncheckedUpdateOneWithoutWorkspaceNestedInput
   runScript?: Prisma.WorkspaceRunScriptUncheckedUpdateOneWithoutWorkspaceNestedInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUncheckedUpdateOneWithoutWorkspaceNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedUpdateOneWithoutWorkspaceNestedInput
   childWorkspaces?: Prisma.WorkspaceUncheckedUpdateManyWithoutParentWorkspaceNestedInput
   notifications?: Prisma.WorkspaceNotificationUncheckedUpdateManyWithoutWorkspaceNestedInput
@@ -1944,7 +1911,6 @@ export type WorkspaceCreateWithoutPrMonitoringInput = {
   prs?: Prisma.WorkspacePRCreateNestedManyWithoutWorkspaceInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryCreateNestedOneWithoutWorkspaceInput
   runScript?: Prisma.WorkspaceRunScriptCreateNestedOneWithoutWorkspaceInput
-  autoIteration?: Prisma.WorkspaceAutoIterationCreateNestedOneWithoutWorkspaceInput
   periodicTask?: Prisma.PeriodicTaskCreateNestedOneWithoutWorkspacesInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionCreateNestedOneWithoutWorkspaceInput
   parentWorkspace?: Prisma.WorkspaceCreateNestedOneWithoutChildWorkspacesInput
@@ -1988,7 +1954,6 @@ export type WorkspaceUncheckedCreateWithoutPrMonitoringInput = {
   prs?: Prisma.WorkspacePRUncheckedCreateNestedManyWithoutWorkspaceInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUncheckedCreateNestedOneWithoutWorkspaceInput
   runScript?: Prisma.WorkspaceRunScriptUncheckedCreateNestedOneWithoutWorkspaceInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUncheckedCreateNestedOneWithoutWorkspaceInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedCreateNestedOneWithoutWorkspaceInput
   childWorkspaces?: Prisma.WorkspaceUncheckedCreateNestedManyWithoutParentWorkspaceInput
   notifications?: Prisma.WorkspaceNotificationUncheckedCreateNestedManyWithoutWorkspaceInput
@@ -2044,7 +2009,6 @@ export type WorkspaceUpdateWithoutPrMonitoringInput = {
   prs?: Prisma.WorkspacePRUpdateManyWithoutWorkspaceNestedInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUpdateOneWithoutWorkspaceNestedInput
   runScript?: Prisma.WorkspaceRunScriptUpdateOneWithoutWorkspaceNestedInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUpdateOneWithoutWorkspaceNestedInput
   periodicTask?: Prisma.PeriodicTaskUpdateOneWithoutWorkspacesNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUpdateOneWithoutWorkspaceNestedInput
   parentWorkspace?: Prisma.WorkspaceUpdateOneWithoutChildWorkspacesNestedInput
@@ -2088,7 +2052,6 @@ export type WorkspaceUncheckedUpdateWithoutPrMonitoringInput = {
   prs?: Prisma.WorkspacePRUncheckedUpdateManyWithoutWorkspaceNestedInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUncheckedUpdateOneWithoutWorkspaceNestedInput
   runScript?: Prisma.WorkspaceRunScriptUncheckedUpdateOneWithoutWorkspaceNestedInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUncheckedUpdateOneWithoutWorkspaceNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedUpdateOneWithoutWorkspaceNestedInput
   childWorkspaces?: Prisma.WorkspaceUncheckedUpdateManyWithoutParentWorkspaceNestedInput
   notifications?: Prisma.WorkspaceNotificationUncheckedUpdateManyWithoutWorkspaceNestedInput
@@ -2128,7 +2091,6 @@ export type WorkspaceCreateWithoutPrEventsInput = {
   prs?: Prisma.WorkspacePRCreateNestedManyWithoutWorkspaceInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryCreateNestedOneWithoutWorkspaceInput
   runScript?: Prisma.WorkspaceRunScriptCreateNestedOneWithoutWorkspaceInput
-  autoIteration?: Prisma.WorkspaceAutoIterationCreateNestedOneWithoutWorkspaceInput
   periodicTask?: Prisma.PeriodicTaskCreateNestedOneWithoutWorkspacesInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionCreateNestedOneWithoutWorkspaceInput
   parentWorkspace?: Prisma.WorkspaceCreateNestedOneWithoutChildWorkspacesInput
@@ -2172,7 +2134,6 @@ export type WorkspaceUncheckedCreateWithoutPrEventsInput = {
   prs?: Prisma.WorkspacePRUncheckedCreateNestedManyWithoutWorkspaceInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUncheckedCreateNestedOneWithoutWorkspaceInput
   runScript?: Prisma.WorkspaceRunScriptUncheckedCreateNestedOneWithoutWorkspaceInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUncheckedCreateNestedOneWithoutWorkspaceInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedCreateNestedOneWithoutWorkspaceInput
   childWorkspaces?: Prisma.WorkspaceUncheckedCreateNestedManyWithoutParentWorkspaceInput
   notifications?: Prisma.WorkspaceNotificationUncheckedCreateNestedManyWithoutWorkspaceInput
@@ -2228,7 +2189,6 @@ export type WorkspaceUpdateWithoutPrEventsInput = {
   prs?: Prisma.WorkspacePRUpdateManyWithoutWorkspaceNestedInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUpdateOneWithoutWorkspaceNestedInput
   runScript?: Prisma.WorkspaceRunScriptUpdateOneWithoutWorkspaceNestedInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUpdateOneWithoutWorkspaceNestedInput
   periodicTask?: Prisma.PeriodicTaskUpdateOneWithoutWorkspacesNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUpdateOneWithoutWorkspaceNestedInput
   parentWorkspace?: Prisma.WorkspaceUpdateOneWithoutChildWorkspacesNestedInput
@@ -2272,7 +2232,6 @@ export type WorkspaceUncheckedUpdateWithoutPrEventsInput = {
   prs?: Prisma.WorkspacePRUncheckedUpdateManyWithoutWorkspaceNestedInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUncheckedUpdateOneWithoutWorkspaceNestedInput
   runScript?: Prisma.WorkspaceRunScriptUncheckedUpdateOneWithoutWorkspaceNestedInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUncheckedUpdateOneWithoutWorkspaceNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedUpdateOneWithoutWorkspaceNestedInput
   childWorkspaces?: Prisma.WorkspaceUncheckedUpdateManyWithoutParentWorkspaceNestedInput
   notifications?: Prisma.WorkspaceNotificationUncheckedUpdateManyWithoutWorkspaceNestedInput
@@ -2311,7 +2270,6 @@ export type WorkspaceCreateWithoutPrDiscoveryInput = {
   closedSessions?: Prisma.ClosedSessionCreateNestedManyWithoutWorkspaceInput
   prs?: Prisma.WorkspacePRCreateNestedManyWithoutWorkspaceInput
   runScript?: Prisma.WorkspaceRunScriptCreateNestedOneWithoutWorkspaceInput
-  autoIteration?: Prisma.WorkspaceAutoIterationCreateNestedOneWithoutWorkspaceInput
   periodicTask?: Prisma.PeriodicTaskCreateNestedOneWithoutWorkspacesInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionCreateNestedOneWithoutWorkspaceInput
   parentWorkspace?: Prisma.WorkspaceCreateNestedOneWithoutChildWorkspacesInput
@@ -2355,7 +2313,6 @@ export type WorkspaceUncheckedCreateWithoutPrDiscoveryInput = {
   closedSessions?: Prisma.ClosedSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   prs?: Prisma.WorkspacePRUncheckedCreateNestedManyWithoutWorkspaceInput
   runScript?: Prisma.WorkspaceRunScriptUncheckedCreateNestedOneWithoutWorkspaceInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUncheckedCreateNestedOneWithoutWorkspaceInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedCreateNestedOneWithoutWorkspaceInput
   childWorkspaces?: Prisma.WorkspaceUncheckedCreateNestedManyWithoutParentWorkspaceInput
   notifications?: Prisma.WorkspaceNotificationUncheckedCreateNestedManyWithoutWorkspaceInput
@@ -2411,7 +2368,6 @@ export type WorkspaceUpdateWithoutPrDiscoveryInput = {
   closedSessions?: Prisma.ClosedSessionUpdateManyWithoutWorkspaceNestedInput
   prs?: Prisma.WorkspacePRUpdateManyWithoutWorkspaceNestedInput
   runScript?: Prisma.WorkspaceRunScriptUpdateOneWithoutWorkspaceNestedInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUpdateOneWithoutWorkspaceNestedInput
   periodicTask?: Prisma.PeriodicTaskUpdateOneWithoutWorkspacesNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUpdateOneWithoutWorkspaceNestedInput
   parentWorkspace?: Prisma.WorkspaceUpdateOneWithoutChildWorkspacesNestedInput
@@ -2455,7 +2411,6 @@ export type WorkspaceUncheckedUpdateWithoutPrDiscoveryInput = {
   closedSessions?: Prisma.ClosedSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   prs?: Prisma.WorkspacePRUncheckedUpdateManyWithoutWorkspaceNestedInput
   runScript?: Prisma.WorkspaceRunScriptUncheckedUpdateOneWithoutWorkspaceNestedInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUncheckedUpdateOneWithoutWorkspaceNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedUpdateOneWithoutWorkspaceNestedInput
   childWorkspaces?: Prisma.WorkspaceUncheckedUpdateManyWithoutParentWorkspaceNestedInput
   notifications?: Prisma.WorkspaceNotificationUncheckedUpdateManyWithoutWorkspaceNestedInput
@@ -2495,7 +2450,6 @@ export type WorkspaceCreateWithoutRunScriptInput = {
   closedSessions?: Prisma.ClosedSessionCreateNestedManyWithoutWorkspaceInput
   prs?: Prisma.WorkspacePRCreateNestedManyWithoutWorkspaceInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryCreateNestedOneWithoutWorkspaceInput
-  autoIteration?: Prisma.WorkspaceAutoIterationCreateNestedOneWithoutWorkspaceInput
   periodicTask?: Prisma.PeriodicTaskCreateNestedOneWithoutWorkspacesInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionCreateNestedOneWithoutWorkspaceInput
   parentWorkspace?: Prisma.WorkspaceCreateNestedOneWithoutChildWorkspacesInput
@@ -2539,7 +2493,6 @@ export type WorkspaceUncheckedCreateWithoutRunScriptInput = {
   closedSessions?: Prisma.ClosedSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   prs?: Prisma.WorkspacePRUncheckedCreateNestedManyWithoutWorkspaceInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUncheckedCreateNestedOneWithoutWorkspaceInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUncheckedCreateNestedOneWithoutWorkspaceInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedCreateNestedOneWithoutWorkspaceInput
   childWorkspaces?: Prisma.WorkspaceUncheckedCreateNestedManyWithoutParentWorkspaceInput
   notifications?: Prisma.WorkspaceNotificationUncheckedCreateNestedManyWithoutWorkspaceInput
@@ -2595,7 +2548,6 @@ export type WorkspaceUpdateWithoutRunScriptInput = {
   closedSessions?: Prisma.ClosedSessionUpdateManyWithoutWorkspaceNestedInput
   prs?: Prisma.WorkspacePRUpdateManyWithoutWorkspaceNestedInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUpdateOneWithoutWorkspaceNestedInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUpdateOneWithoutWorkspaceNestedInput
   periodicTask?: Prisma.PeriodicTaskUpdateOneWithoutWorkspacesNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUpdateOneWithoutWorkspaceNestedInput
   parentWorkspace?: Prisma.WorkspaceUpdateOneWithoutChildWorkspacesNestedInput
@@ -2639,191 +2591,6 @@ export type WorkspaceUncheckedUpdateWithoutRunScriptInput = {
   closedSessions?: Prisma.ClosedSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   prs?: Prisma.WorkspacePRUncheckedUpdateManyWithoutWorkspaceNestedInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUncheckedUpdateOneWithoutWorkspaceNestedInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUncheckedUpdateOneWithoutWorkspaceNestedInput
-  periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedUpdateOneWithoutWorkspaceNestedInput
-  childWorkspaces?: Prisma.WorkspaceUncheckedUpdateManyWithoutParentWorkspaceNestedInput
-  notifications?: Prisma.WorkspaceNotificationUncheckedUpdateManyWithoutWorkspaceNestedInput
-  prMonitoring?: Prisma.WorkspacePRMonitoringUncheckedUpdateOneWithoutWorkspaceNestedInput
-  prEvents?: Prisma.WorkspacePREventUncheckedUpdateManyWithoutWorkspaceNestedInput
-}
-
-export type WorkspaceCreateWithoutAutoIterationInput = {
-  id?: string
-  name: string
-  description?: string | null
-  status?: $Enums.WorkspaceStatus
-  worktreePath?: string | null
-  branchName?: string | null
-  isAutoGeneratedBranch?: boolean
-  creationSource?: $Enums.WorkspaceCreationSource
-  creationMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
-  initErrorMessage?: string | null
-  initOutput?: string | null
-  initStartedAt?: Date | string | null
-  initCompletedAt?: Date | string | null
-  initScriptPid?: number | null
-  initRetryCount?: number
-  githubIssueNumber?: number | null
-  githubIssueUrl?: string | null
-  linearIssueId?: string | null
-  linearIssueIdentifier?: string | null
-  linearIssueUrl?: string | null
-  defaultSessionProvider?: $Enums.WorkspaceProviderSelection
-  createdAt?: Date | string
-  updatedAt?: Date | string
-  hasHadSessions?: boolean
-  project: Prisma.ProjectCreateNestedOneWithoutWorkspacesInput
-  agentSessions?: Prisma.AgentSessionCreateNestedManyWithoutWorkspaceInput
-  sessionLifecycleEvents?: Prisma.SessionLifecycleEventCreateNestedManyWithoutWorkspaceInput
-  terminalSessions?: Prisma.TerminalSessionCreateNestedManyWithoutWorkspaceInput
-  closedSessions?: Prisma.ClosedSessionCreateNestedManyWithoutWorkspaceInput
-  prs?: Prisma.WorkspacePRCreateNestedManyWithoutWorkspaceInput
-  prDiscovery?: Prisma.WorkspacePRDiscoveryCreateNestedOneWithoutWorkspaceInput
-  runScript?: Prisma.WorkspaceRunScriptCreateNestedOneWithoutWorkspaceInput
-  periodicTask?: Prisma.PeriodicTaskCreateNestedOneWithoutWorkspacesInput
-  periodicTaskExecution?: Prisma.PeriodicTaskExecutionCreateNestedOneWithoutWorkspaceInput
-  parentWorkspace?: Prisma.WorkspaceCreateNestedOneWithoutChildWorkspacesInput
-  childWorkspaces?: Prisma.WorkspaceCreateNestedManyWithoutParentWorkspaceInput
-  notifications?: Prisma.WorkspaceNotificationCreateNestedManyWithoutWorkspaceInput
-  prMonitoring?: Prisma.WorkspacePRMonitoringCreateNestedOneWithoutWorkspaceInput
-  prEvents?: Prisma.WorkspacePREventCreateNestedManyWithoutWorkspaceInput
-}
-
-export type WorkspaceUncheckedCreateWithoutAutoIterationInput = {
-  id?: string
-  projectId: string
-  name: string
-  description?: string | null
-  status?: $Enums.WorkspaceStatus
-  worktreePath?: string | null
-  branchName?: string | null
-  isAutoGeneratedBranch?: boolean
-  creationSource?: $Enums.WorkspaceCreationSource
-  creationMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
-  initErrorMessage?: string | null
-  initOutput?: string | null
-  initStartedAt?: Date | string | null
-  initCompletedAt?: Date | string | null
-  initScriptPid?: number | null
-  initRetryCount?: number
-  githubIssueNumber?: number | null
-  githubIssueUrl?: string | null
-  linearIssueId?: string | null
-  linearIssueIdentifier?: string | null
-  linearIssueUrl?: string | null
-  defaultSessionProvider?: $Enums.WorkspaceProviderSelection
-  createdAt?: Date | string
-  updatedAt?: Date | string
-  periodicTaskId?: string | null
-  parentWorkspaceId?: string | null
-  hasHadSessions?: boolean
-  agentSessions?: Prisma.AgentSessionUncheckedCreateNestedManyWithoutWorkspaceInput
-  sessionLifecycleEvents?: Prisma.SessionLifecycleEventUncheckedCreateNestedManyWithoutWorkspaceInput
-  terminalSessions?: Prisma.TerminalSessionUncheckedCreateNestedManyWithoutWorkspaceInput
-  closedSessions?: Prisma.ClosedSessionUncheckedCreateNestedManyWithoutWorkspaceInput
-  prs?: Prisma.WorkspacePRUncheckedCreateNestedManyWithoutWorkspaceInput
-  prDiscovery?: Prisma.WorkspacePRDiscoveryUncheckedCreateNestedOneWithoutWorkspaceInput
-  runScript?: Prisma.WorkspaceRunScriptUncheckedCreateNestedOneWithoutWorkspaceInput
-  periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedCreateNestedOneWithoutWorkspaceInput
-  childWorkspaces?: Prisma.WorkspaceUncheckedCreateNestedManyWithoutParentWorkspaceInput
-  notifications?: Prisma.WorkspaceNotificationUncheckedCreateNestedManyWithoutWorkspaceInput
-  prMonitoring?: Prisma.WorkspacePRMonitoringUncheckedCreateNestedOneWithoutWorkspaceInput
-  prEvents?: Prisma.WorkspacePREventUncheckedCreateNestedManyWithoutWorkspaceInput
-}
-
-export type WorkspaceCreateOrConnectWithoutAutoIterationInput = {
-  where: Prisma.WorkspaceWhereUniqueInput
-  create: Prisma.XOR<Prisma.WorkspaceCreateWithoutAutoIterationInput, Prisma.WorkspaceUncheckedCreateWithoutAutoIterationInput>
-}
-
-export type WorkspaceUpsertWithoutAutoIterationInput = {
-  update: Prisma.XOR<Prisma.WorkspaceUpdateWithoutAutoIterationInput, Prisma.WorkspaceUncheckedUpdateWithoutAutoIterationInput>
-  create: Prisma.XOR<Prisma.WorkspaceCreateWithoutAutoIterationInput, Prisma.WorkspaceUncheckedCreateWithoutAutoIterationInput>
-  where?: Prisma.WorkspaceWhereInput
-}
-
-export type WorkspaceUpdateToOneWithWhereWithoutAutoIterationInput = {
-  where?: Prisma.WorkspaceWhereInput
-  data: Prisma.XOR<Prisma.WorkspaceUpdateWithoutAutoIterationInput, Prisma.WorkspaceUncheckedUpdateWithoutAutoIterationInput>
-}
-
-export type WorkspaceUpdateWithoutAutoIterationInput = {
-  id?: Prisma.StringFieldUpdateOperationsInput | string
-  name?: Prisma.StringFieldUpdateOperationsInput | string
-  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  status?: Prisma.EnumWorkspaceStatusFieldUpdateOperationsInput | $Enums.WorkspaceStatus
-  worktreePath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  branchName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  isAutoGeneratedBranch?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  creationSource?: Prisma.EnumWorkspaceCreationSourceFieldUpdateOperationsInput | $Enums.WorkspaceCreationSource
-  creationMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
-  initErrorMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  initOutput?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  initStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  initCompletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  initScriptPid?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
-  initRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
-  githubIssueNumber?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
-  githubIssueUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  linearIssueId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  linearIssueIdentifier?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  linearIssueUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  defaultSessionProvider?: Prisma.EnumWorkspaceProviderSelectionFieldUpdateOperationsInput | $Enums.WorkspaceProviderSelection
-  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
-  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
-  hasHadSessions?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  project?: Prisma.ProjectUpdateOneRequiredWithoutWorkspacesNestedInput
-  agentSessions?: Prisma.AgentSessionUpdateManyWithoutWorkspaceNestedInput
-  sessionLifecycleEvents?: Prisma.SessionLifecycleEventUpdateManyWithoutWorkspaceNestedInput
-  terminalSessions?: Prisma.TerminalSessionUpdateManyWithoutWorkspaceNestedInput
-  closedSessions?: Prisma.ClosedSessionUpdateManyWithoutWorkspaceNestedInput
-  prs?: Prisma.WorkspacePRUpdateManyWithoutWorkspaceNestedInput
-  prDiscovery?: Prisma.WorkspacePRDiscoveryUpdateOneWithoutWorkspaceNestedInput
-  runScript?: Prisma.WorkspaceRunScriptUpdateOneWithoutWorkspaceNestedInput
-  periodicTask?: Prisma.PeriodicTaskUpdateOneWithoutWorkspacesNestedInput
-  periodicTaskExecution?: Prisma.PeriodicTaskExecutionUpdateOneWithoutWorkspaceNestedInput
-  parentWorkspace?: Prisma.WorkspaceUpdateOneWithoutChildWorkspacesNestedInput
-  childWorkspaces?: Prisma.WorkspaceUpdateManyWithoutParentWorkspaceNestedInput
-  notifications?: Prisma.WorkspaceNotificationUpdateManyWithoutWorkspaceNestedInput
-  prMonitoring?: Prisma.WorkspacePRMonitoringUpdateOneWithoutWorkspaceNestedInput
-  prEvents?: Prisma.WorkspacePREventUpdateManyWithoutWorkspaceNestedInput
-}
-
-export type WorkspaceUncheckedUpdateWithoutAutoIterationInput = {
-  id?: Prisma.StringFieldUpdateOperationsInput | string
-  projectId?: Prisma.StringFieldUpdateOperationsInput | string
-  name?: Prisma.StringFieldUpdateOperationsInput | string
-  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  status?: Prisma.EnumWorkspaceStatusFieldUpdateOperationsInput | $Enums.WorkspaceStatus
-  worktreePath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  branchName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  isAutoGeneratedBranch?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  creationSource?: Prisma.EnumWorkspaceCreationSourceFieldUpdateOperationsInput | $Enums.WorkspaceCreationSource
-  creationMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
-  initErrorMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  initOutput?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  initStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  initCompletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  initScriptPid?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
-  initRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
-  githubIssueNumber?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
-  githubIssueUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  linearIssueId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  linearIssueIdentifier?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  linearIssueUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  defaultSessionProvider?: Prisma.EnumWorkspaceProviderSelectionFieldUpdateOperationsInput | $Enums.WorkspaceProviderSelection
-  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
-  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
-  periodicTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  parentWorkspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  hasHadSessions?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  agentSessions?: Prisma.AgentSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
-  sessionLifecycleEvents?: Prisma.SessionLifecycleEventUncheckedUpdateManyWithoutWorkspaceNestedInput
-  terminalSessions?: Prisma.TerminalSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
-  closedSessions?: Prisma.ClosedSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
-  prs?: Prisma.WorkspacePRUncheckedUpdateManyWithoutWorkspaceNestedInput
-  prDiscovery?: Prisma.WorkspacePRDiscoveryUncheckedUpdateOneWithoutWorkspaceNestedInput
-  runScript?: Prisma.WorkspaceRunScriptUncheckedUpdateOneWithoutWorkspaceNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedUpdateOneWithoutWorkspaceNestedInput
   childWorkspaces?: Prisma.WorkspaceUncheckedUpdateManyWithoutParentWorkspaceNestedInput
   notifications?: Prisma.WorkspaceNotificationUncheckedUpdateManyWithoutWorkspaceNestedInput
@@ -2863,7 +2630,6 @@ export type WorkspaceCreateWithoutAgentSessionsInput = {
   prs?: Prisma.WorkspacePRCreateNestedManyWithoutWorkspaceInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryCreateNestedOneWithoutWorkspaceInput
   runScript?: Prisma.WorkspaceRunScriptCreateNestedOneWithoutWorkspaceInput
-  autoIteration?: Prisma.WorkspaceAutoIterationCreateNestedOneWithoutWorkspaceInput
   periodicTask?: Prisma.PeriodicTaskCreateNestedOneWithoutWorkspacesInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionCreateNestedOneWithoutWorkspaceInput
   parentWorkspace?: Prisma.WorkspaceCreateNestedOneWithoutChildWorkspacesInput
@@ -2907,7 +2673,6 @@ export type WorkspaceUncheckedCreateWithoutAgentSessionsInput = {
   prs?: Prisma.WorkspacePRUncheckedCreateNestedManyWithoutWorkspaceInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUncheckedCreateNestedOneWithoutWorkspaceInput
   runScript?: Prisma.WorkspaceRunScriptUncheckedCreateNestedOneWithoutWorkspaceInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUncheckedCreateNestedOneWithoutWorkspaceInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedCreateNestedOneWithoutWorkspaceInput
   childWorkspaces?: Prisma.WorkspaceUncheckedCreateNestedManyWithoutParentWorkspaceInput
   notifications?: Prisma.WorkspaceNotificationUncheckedCreateNestedManyWithoutWorkspaceInput
@@ -2963,7 +2728,6 @@ export type WorkspaceUpdateWithoutAgentSessionsInput = {
   prs?: Prisma.WorkspacePRUpdateManyWithoutWorkspaceNestedInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUpdateOneWithoutWorkspaceNestedInput
   runScript?: Prisma.WorkspaceRunScriptUpdateOneWithoutWorkspaceNestedInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUpdateOneWithoutWorkspaceNestedInput
   periodicTask?: Prisma.PeriodicTaskUpdateOneWithoutWorkspacesNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUpdateOneWithoutWorkspaceNestedInput
   parentWorkspace?: Prisma.WorkspaceUpdateOneWithoutChildWorkspacesNestedInput
@@ -3007,7 +2771,6 @@ export type WorkspaceUncheckedUpdateWithoutAgentSessionsInput = {
   prs?: Prisma.WorkspacePRUncheckedUpdateManyWithoutWorkspaceNestedInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUncheckedUpdateOneWithoutWorkspaceNestedInput
   runScript?: Prisma.WorkspaceRunScriptUncheckedUpdateOneWithoutWorkspaceNestedInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUncheckedUpdateOneWithoutWorkspaceNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedUpdateOneWithoutWorkspaceNestedInput
   childWorkspaces?: Prisma.WorkspaceUncheckedUpdateManyWithoutParentWorkspaceNestedInput
   notifications?: Prisma.WorkspaceNotificationUncheckedUpdateManyWithoutWorkspaceNestedInput
@@ -3047,7 +2810,6 @@ export type WorkspaceCreateWithoutSessionLifecycleEventsInput = {
   prs?: Prisma.WorkspacePRCreateNestedManyWithoutWorkspaceInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryCreateNestedOneWithoutWorkspaceInput
   runScript?: Prisma.WorkspaceRunScriptCreateNestedOneWithoutWorkspaceInput
-  autoIteration?: Prisma.WorkspaceAutoIterationCreateNestedOneWithoutWorkspaceInput
   periodicTask?: Prisma.PeriodicTaskCreateNestedOneWithoutWorkspacesInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionCreateNestedOneWithoutWorkspaceInput
   parentWorkspace?: Prisma.WorkspaceCreateNestedOneWithoutChildWorkspacesInput
@@ -3091,7 +2853,6 @@ export type WorkspaceUncheckedCreateWithoutSessionLifecycleEventsInput = {
   prs?: Prisma.WorkspacePRUncheckedCreateNestedManyWithoutWorkspaceInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUncheckedCreateNestedOneWithoutWorkspaceInput
   runScript?: Prisma.WorkspaceRunScriptUncheckedCreateNestedOneWithoutWorkspaceInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUncheckedCreateNestedOneWithoutWorkspaceInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedCreateNestedOneWithoutWorkspaceInput
   childWorkspaces?: Prisma.WorkspaceUncheckedCreateNestedManyWithoutParentWorkspaceInput
   notifications?: Prisma.WorkspaceNotificationUncheckedCreateNestedManyWithoutWorkspaceInput
@@ -3147,7 +2908,6 @@ export type WorkspaceUpdateWithoutSessionLifecycleEventsInput = {
   prs?: Prisma.WorkspacePRUpdateManyWithoutWorkspaceNestedInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUpdateOneWithoutWorkspaceNestedInput
   runScript?: Prisma.WorkspaceRunScriptUpdateOneWithoutWorkspaceNestedInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUpdateOneWithoutWorkspaceNestedInput
   periodicTask?: Prisma.PeriodicTaskUpdateOneWithoutWorkspacesNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUpdateOneWithoutWorkspaceNestedInput
   parentWorkspace?: Prisma.WorkspaceUpdateOneWithoutChildWorkspacesNestedInput
@@ -3191,7 +2951,6 @@ export type WorkspaceUncheckedUpdateWithoutSessionLifecycleEventsInput = {
   prs?: Prisma.WorkspacePRUncheckedUpdateManyWithoutWorkspaceNestedInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUncheckedUpdateOneWithoutWorkspaceNestedInput
   runScript?: Prisma.WorkspaceRunScriptUncheckedUpdateOneWithoutWorkspaceNestedInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUncheckedUpdateOneWithoutWorkspaceNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedUpdateOneWithoutWorkspaceNestedInput
   childWorkspaces?: Prisma.WorkspaceUncheckedUpdateManyWithoutParentWorkspaceNestedInput
   notifications?: Prisma.WorkspaceNotificationUncheckedUpdateManyWithoutWorkspaceNestedInput
@@ -3231,7 +2990,6 @@ export type WorkspaceCreateWithoutTerminalSessionsInput = {
   prs?: Prisma.WorkspacePRCreateNestedManyWithoutWorkspaceInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryCreateNestedOneWithoutWorkspaceInput
   runScript?: Prisma.WorkspaceRunScriptCreateNestedOneWithoutWorkspaceInput
-  autoIteration?: Prisma.WorkspaceAutoIterationCreateNestedOneWithoutWorkspaceInput
   periodicTask?: Prisma.PeriodicTaskCreateNestedOneWithoutWorkspacesInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionCreateNestedOneWithoutWorkspaceInput
   parentWorkspace?: Prisma.WorkspaceCreateNestedOneWithoutChildWorkspacesInput
@@ -3275,7 +3033,6 @@ export type WorkspaceUncheckedCreateWithoutTerminalSessionsInput = {
   prs?: Prisma.WorkspacePRUncheckedCreateNestedManyWithoutWorkspaceInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUncheckedCreateNestedOneWithoutWorkspaceInput
   runScript?: Prisma.WorkspaceRunScriptUncheckedCreateNestedOneWithoutWorkspaceInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUncheckedCreateNestedOneWithoutWorkspaceInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedCreateNestedOneWithoutWorkspaceInput
   childWorkspaces?: Prisma.WorkspaceUncheckedCreateNestedManyWithoutParentWorkspaceInput
   notifications?: Prisma.WorkspaceNotificationUncheckedCreateNestedManyWithoutWorkspaceInput
@@ -3331,7 +3088,6 @@ export type WorkspaceUpdateWithoutTerminalSessionsInput = {
   prs?: Prisma.WorkspacePRUpdateManyWithoutWorkspaceNestedInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUpdateOneWithoutWorkspaceNestedInput
   runScript?: Prisma.WorkspaceRunScriptUpdateOneWithoutWorkspaceNestedInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUpdateOneWithoutWorkspaceNestedInput
   periodicTask?: Prisma.PeriodicTaskUpdateOneWithoutWorkspacesNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUpdateOneWithoutWorkspaceNestedInput
   parentWorkspace?: Prisma.WorkspaceUpdateOneWithoutChildWorkspacesNestedInput
@@ -3375,7 +3131,6 @@ export type WorkspaceUncheckedUpdateWithoutTerminalSessionsInput = {
   prs?: Prisma.WorkspacePRUncheckedUpdateManyWithoutWorkspaceNestedInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUncheckedUpdateOneWithoutWorkspaceNestedInput
   runScript?: Prisma.WorkspaceRunScriptUncheckedUpdateOneWithoutWorkspaceNestedInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUncheckedUpdateOneWithoutWorkspaceNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedUpdateOneWithoutWorkspaceNestedInput
   childWorkspaces?: Prisma.WorkspaceUncheckedUpdateManyWithoutParentWorkspaceNestedInput
   notifications?: Prisma.WorkspaceNotificationUncheckedUpdateManyWithoutWorkspaceNestedInput
@@ -3415,7 +3170,6 @@ export type WorkspaceCreateWithoutClosedSessionsInput = {
   prs?: Prisma.WorkspacePRCreateNestedManyWithoutWorkspaceInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryCreateNestedOneWithoutWorkspaceInput
   runScript?: Prisma.WorkspaceRunScriptCreateNestedOneWithoutWorkspaceInput
-  autoIteration?: Prisma.WorkspaceAutoIterationCreateNestedOneWithoutWorkspaceInput
   periodicTask?: Prisma.PeriodicTaskCreateNestedOneWithoutWorkspacesInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionCreateNestedOneWithoutWorkspaceInput
   parentWorkspace?: Prisma.WorkspaceCreateNestedOneWithoutChildWorkspacesInput
@@ -3459,7 +3213,6 @@ export type WorkspaceUncheckedCreateWithoutClosedSessionsInput = {
   prs?: Prisma.WorkspacePRUncheckedCreateNestedManyWithoutWorkspaceInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUncheckedCreateNestedOneWithoutWorkspaceInput
   runScript?: Prisma.WorkspaceRunScriptUncheckedCreateNestedOneWithoutWorkspaceInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUncheckedCreateNestedOneWithoutWorkspaceInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedCreateNestedOneWithoutWorkspaceInput
   childWorkspaces?: Prisma.WorkspaceUncheckedCreateNestedManyWithoutParentWorkspaceInput
   notifications?: Prisma.WorkspaceNotificationUncheckedCreateNestedManyWithoutWorkspaceInput
@@ -3515,7 +3268,6 @@ export type WorkspaceUpdateWithoutClosedSessionsInput = {
   prs?: Prisma.WorkspacePRUpdateManyWithoutWorkspaceNestedInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUpdateOneWithoutWorkspaceNestedInput
   runScript?: Prisma.WorkspaceRunScriptUpdateOneWithoutWorkspaceNestedInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUpdateOneWithoutWorkspaceNestedInput
   periodicTask?: Prisma.PeriodicTaskUpdateOneWithoutWorkspacesNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUpdateOneWithoutWorkspaceNestedInput
   parentWorkspace?: Prisma.WorkspaceUpdateOneWithoutChildWorkspacesNestedInput
@@ -3559,7 +3311,6 @@ export type WorkspaceUncheckedUpdateWithoutClosedSessionsInput = {
   prs?: Prisma.WorkspacePRUncheckedUpdateManyWithoutWorkspaceNestedInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUncheckedUpdateOneWithoutWorkspaceNestedInput
   runScript?: Prisma.WorkspaceRunScriptUncheckedUpdateOneWithoutWorkspaceNestedInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUncheckedUpdateOneWithoutWorkspaceNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedUpdateOneWithoutWorkspaceNestedInput
   childWorkspaces?: Prisma.WorkspaceUncheckedUpdateManyWithoutParentWorkspaceNestedInput
   notifications?: Prisma.WorkspaceNotificationUncheckedUpdateManyWithoutWorkspaceNestedInput
@@ -3600,7 +3351,6 @@ export type WorkspaceCreateWithoutPeriodicTaskInput = {
   prs?: Prisma.WorkspacePRCreateNestedManyWithoutWorkspaceInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryCreateNestedOneWithoutWorkspaceInput
   runScript?: Prisma.WorkspaceRunScriptCreateNestedOneWithoutWorkspaceInput
-  autoIteration?: Prisma.WorkspaceAutoIterationCreateNestedOneWithoutWorkspaceInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionCreateNestedOneWithoutWorkspaceInput
   parentWorkspace?: Prisma.WorkspaceCreateNestedOneWithoutChildWorkspacesInput
   childWorkspaces?: Prisma.WorkspaceCreateNestedManyWithoutParentWorkspaceInput
@@ -3643,7 +3393,6 @@ export type WorkspaceUncheckedCreateWithoutPeriodicTaskInput = {
   prs?: Prisma.WorkspacePRUncheckedCreateNestedManyWithoutWorkspaceInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUncheckedCreateNestedOneWithoutWorkspaceInput
   runScript?: Prisma.WorkspaceRunScriptUncheckedCreateNestedOneWithoutWorkspaceInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUncheckedCreateNestedOneWithoutWorkspaceInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedCreateNestedOneWithoutWorkspaceInput
   childWorkspaces?: Prisma.WorkspaceUncheckedCreateNestedManyWithoutParentWorkspaceInput
   notifications?: Prisma.WorkspaceNotificationUncheckedCreateNestedManyWithoutWorkspaceInput
@@ -3709,7 +3458,6 @@ export type WorkspaceCreateWithoutPeriodicTaskExecutionInput = {
   prs?: Prisma.WorkspacePRCreateNestedManyWithoutWorkspaceInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryCreateNestedOneWithoutWorkspaceInput
   runScript?: Prisma.WorkspaceRunScriptCreateNestedOneWithoutWorkspaceInput
-  autoIteration?: Prisma.WorkspaceAutoIterationCreateNestedOneWithoutWorkspaceInput
   periodicTask?: Prisma.PeriodicTaskCreateNestedOneWithoutWorkspacesInput
   parentWorkspace?: Prisma.WorkspaceCreateNestedOneWithoutChildWorkspacesInput
   childWorkspaces?: Prisma.WorkspaceCreateNestedManyWithoutParentWorkspaceInput
@@ -3753,7 +3501,6 @@ export type WorkspaceUncheckedCreateWithoutPeriodicTaskExecutionInput = {
   prs?: Prisma.WorkspacePRUncheckedCreateNestedManyWithoutWorkspaceInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUncheckedCreateNestedOneWithoutWorkspaceInput
   runScript?: Prisma.WorkspaceRunScriptUncheckedCreateNestedOneWithoutWorkspaceInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUncheckedCreateNestedOneWithoutWorkspaceInput
   childWorkspaces?: Prisma.WorkspaceUncheckedCreateNestedManyWithoutParentWorkspaceInput
   notifications?: Prisma.WorkspaceNotificationUncheckedCreateNestedManyWithoutWorkspaceInput
   prMonitoring?: Prisma.WorkspacePRMonitoringUncheckedCreateNestedOneWithoutWorkspaceInput
@@ -3809,7 +3556,6 @@ export type WorkspaceUpdateWithoutPeriodicTaskExecutionInput = {
   prs?: Prisma.WorkspacePRUpdateManyWithoutWorkspaceNestedInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUpdateOneWithoutWorkspaceNestedInput
   runScript?: Prisma.WorkspaceRunScriptUpdateOneWithoutWorkspaceNestedInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUpdateOneWithoutWorkspaceNestedInput
   periodicTask?: Prisma.PeriodicTaskUpdateOneWithoutWorkspacesNestedInput
   parentWorkspace?: Prisma.WorkspaceUpdateOneWithoutChildWorkspacesNestedInput
   childWorkspaces?: Prisma.WorkspaceUpdateManyWithoutParentWorkspaceNestedInput
@@ -3853,7 +3599,6 @@ export type WorkspaceUncheckedUpdateWithoutPeriodicTaskExecutionInput = {
   prs?: Prisma.WorkspacePRUncheckedUpdateManyWithoutWorkspaceNestedInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUncheckedUpdateOneWithoutWorkspaceNestedInput
   runScript?: Prisma.WorkspaceRunScriptUncheckedUpdateOneWithoutWorkspaceNestedInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUncheckedUpdateOneWithoutWorkspaceNestedInput
   childWorkspaces?: Prisma.WorkspaceUncheckedUpdateManyWithoutParentWorkspaceNestedInput
   notifications?: Prisma.WorkspaceNotificationUncheckedUpdateManyWithoutWorkspaceNestedInput
   prMonitoring?: Prisma.WorkspacePRMonitoringUncheckedUpdateOneWithoutWorkspaceNestedInput
@@ -3893,7 +3638,6 @@ export type WorkspaceCreateWithoutNotificationsInput = {
   prs?: Prisma.WorkspacePRCreateNestedManyWithoutWorkspaceInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryCreateNestedOneWithoutWorkspaceInput
   runScript?: Prisma.WorkspaceRunScriptCreateNestedOneWithoutWorkspaceInput
-  autoIteration?: Prisma.WorkspaceAutoIterationCreateNestedOneWithoutWorkspaceInput
   periodicTask?: Prisma.PeriodicTaskCreateNestedOneWithoutWorkspacesInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionCreateNestedOneWithoutWorkspaceInput
   parentWorkspace?: Prisma.WorkspaceCreateNestedOneWithoutChildWorkspacesInput
@@ -3937,7 +3681,6 @@ export type WorkspaceUncheckedCreateWithoutNotificationsInput = {
   prs?: Prisma.WorkspacePRUncheckedCreateNestedManyWithoutWorkspaceInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUncheckedCreateNestedOneWithoutWorkspaceInput
   runScript?: Prisma.WorkspaceRunScriptUncheckedCreateNestedOneWithoutWorkspaceInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUncheckedCreateNestedOneWithoutWorkspaceInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedCreateNestedOneWithoutWorkspaceInput
   childWorkspaces?: Prisma.WorkspaceUncheckedCreateNestedManyWithoutParentWorkspaceInput
   prMonitoring?: Prisma.WorkspacePRMonitoringUncheckedCreateNestedOneWithoutWorkspaceInput
@@ -3993,7 +3736,6 @@ export type WorkspaceUpdateWithoutNotificationsInput = {
   prs?: Prisma.WorkspacePRUpdateManyWithoutWorkspaceNestedInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUpdateOneWithoutWorkspaceNestedInput
   runScript?: Prisma.WorkspaceRunScriptUpdateOneWithoutWorkspaceNestedInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUpdateOneWithoutWorkspaceNestedInput
   periodicTask?: Prisma.PeriodicTaskUpdateOneWithoutWorkspacesNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUpdateOneWithoutWorkspaceNestedInput
   parentWorkspace?: Prisma.WorkspaceUpdateOneWithoutChildWorkspacesNestedInput
@@ -4037,7 +3779,6 @@ export type WorkspaceUncheckedUpdateWithoutNotificationsInput = {
   prs?: Prisma.WorkspacePRUncheckedUpdateManyWithoutWorkspaceNestedInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUncheckedUpdateOneWithoutWorkspaceNestedInput
   runScript?: Prisma.WorkspaceRunScriptUncheckedUpdateOneWithoutWorkspaceNestedInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUncheckedUpdateOneWithoutWorkspaceNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedUpdateOneWithoutWorkspaceNestedInput
   childWorkspaces?: Prisma.WorkspaceUncheckedUpdateManyWithoutParentWorkspaceNestedInput
   prMonitoring?: Prisma.WorkspacePRMonitoringUncheckedUpdateOneWithoutWorkspaceNestedInput
@@ -4105,7 +3846,6 @@ export type WorkspaceUpdateWithoutProjectInput = {
   prs?: Prisma.WorkspacePRUpdateManyWithoutWorkspaceNestedInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUpdateOneWithoutWorkspaceNestedInput
   runScript?: Prisma.WorkspaceRunScriptUpdateOneWithoutWorkspaceNestedInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUpdateOneWithoutWorkspaceNestedInput
   periodicTask?: Prisma.PeriodicTaskUpdateOneWithoutWorkspacesNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUpdateOneWithoutWorkspaceNestedInput
   parentWorkspace?: Prisma.WorkspaceUpdateOneWithoutChildWorkspacesNestedInput
@@ -4149,7 +3889,6 @@ export type WorkspaceUncheckedUpdateWithoutProjectInput = {
   prs?: Prisma.WorkspacePRUncheckedUpdateManyWithoutWorkspaceNestedInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUncheckedUpdateOneWithoutWorkspaceNestedInput
   runScript?: Prisma.WorkspaceRunScriptUncheckedUpdateOneWithoutWorkspaceNestedInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUncheckedUpdateOneWithoutWorkspaceNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedUpdateOneWithoutWorkspaceNestedInput
   childWorkspaces?: Prisma.WorkspaceUncheckedUpdateManyWithoutParentWorkspaceNestedInput
   notifications?: Prisma.WorkspaceNotificationUncheckedUpdateManyWithoutWorkspaceNestedInput
@@ -4248,7 +3987,6 @@ export type WorkspaceUpdateWithoutParentWorkspaceInput = {
   prs?: Prisma.WorkspacePRUpdateManyWithoutWorkspaceNestedInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUpdateOneWithoutWorkspaceNestedInput
   runScript?: Prisma.WorkspaceRunScriptUpdateOneWithoutWorkspaceNestedInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUpdateOneWithoutWorkspaceNestedInput
   periodicTask?: Prisma.PeriodicTaskUpdateOneWithoutWorkspacesNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUpdateOneWithoutWorkspaceNestedInput
   childWorkspaces?: Prisma.WorkspaceUpdateManyWithoutParentWorkspaceNestedInput
@@ -4291,7 +4029,6 @@ export type WorkspaceUncheckedUpdateWithoutParentWorkspaceInput = {
   prs?: Prisma.WorkspacePRUncheckedUpdateManyWithoutWorkspaceNestedInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUncheckedUpdateOneWithoutWorkspaceNestedInput
   runScript?: Prisma.WorkspaceRunScriptUncheckedUpdateOneWithoutWorkspaceNestedInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUncheckedUpdateOneWithoutWorkspaceNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedUpdateOneWithoutWorkspaceNestedInput
   childWorkspaces?: Prisma.WorkspaceUncheckedUpdateManyWithoutParentWorkspaceNestedInput
   notifications?: Prisma.WorkspaceNotificationUncheckedUpdateManyWithoutWorkspaceNestedInput
@@ -4390,7 +4127,6 @@ export type WorkspaceUpdateWithoutPeriodicTaskInput = {
   prs?: Prisma.WorkspacePRUpdateManyWithoutWorkspaceNestedInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUpdateOneWithoutWorkspaceNestedInput
   runScript?: Prisma.WorkspaceRunScriptUpdateOneWithoutWorkspaceNestedInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUpdateOneWithoutWorkspaceNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUpdateOneWithoutWorkspaceNestedInput
   parentWorkspace?: Prisma.WorkspaceUpdateOneWithoutChildWorkspacesNestedInput
   childWorkspaces?: Prisma.WorkspaceUpdateManyWithoutParentWorkspaceNestedInput
@@ -4433,7 +4169,6 @@ export type WorkspaceUncheckedUpdateWithoutPeriodicTaskInput = {
   prs?: Prisma.WorkspacePRUncheckedUpdateManyWithoutWorkspaceNestedInput
   prDiscovery?: Prisma.WorkspacePRDiscoveryUncheckedUpdateOneWithoutWorkspaceNestedInput
   runScript?: Prisma.WorkspaceRunScriptUncheckedUpdateOneWithoutWorkspaceNestedInput
-  autoIteration?: Prisma.WorkspaceAutoIterationUncheckedUpdateOneWithoutWorkspaceNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedUpdateOneWithoutWorkspaceNestedInput
   childWorkspaces?: Prisma.WorkspaceUncheckedUpdateManyWithoutParentWorkspaceNestedInput
   notifications?: Prisma.WorkspaceNotificationUncheckedUpdateManyWithoutWorkspaceNestedInput
@@ -4600,7 +4335,6 @@ export type WorkspaceSelect<ExtArgs extends runtime.Types.Extensions.InternalArg
   prs?: boolean | Prisma.Workspace$prsArgs<ExtArgs>
   prDiscovery?: boolean | Prisma.Workspace$prDiscoveryArgs<ExtArgs>
   runScript?: boolean | Prisma.Workspace$runScriptArgs<ExtArgs>
-  autoIteration?: boolean | Prisma.Workspace$autoIterationArgs<ExtArgs>
   periodicTask?: boolean | Prisma.Workspace$periodicTaskArgs<ExtArgs>
   periodicTaskExecution?: boolean | Prisma.Workspace$periodicTaskExecutionArgs<ExtArgs>
   parentWorkspace?: boolean | Prisma.Workspace$parentWorkspaceArgs<ExtArgs>
@@ -4717,7 +4451,6 @@ export type WorkspaceInclude<ExtArgs extends runtime.Types.Extensions.InternalAr
   prs?: boolean | Prisma.Workspace$prsArgs<ExtArgs>
   prDiscovery?: boolean | Prisma.Workspace$prDiscoveryArgs<ExtArgs>
   runScript?: boolean | Prisma.Workspace$runScriptArgs<ExtArgs>
-  autoIteration?: boolean | Prisma.Workspace$autoIterationArgs<ExtArgs>
   periodicTask?: boolean | Prisma.Workspace$periodicTaskArgs<ExtArgs>
   periodicTaskExecution?: boolean | Prisma.Workspace$periodicTaskExecutionArgs<ExtArgs>
   parentWorkspace?: boolean | Prisma.Workspace$parentWorkspaceArgs<ExtArgs>
@@ -4749,7 +4482,6 @@ export type $WorkspacePayload<ExtArgs extends runtime.Types.Extensions.InternalA
     prs: Prisma.$WorkspacePRPayload<ExtArgs>[]
     prDiscovery: Prisma.$WorkspacePRDiscoveryPayload<ExtArgs> | null
     runScript: Prisma.$WorkspaceRunScriptPayload<ExtArgs> | null
-    autoIteration: Prisma.$WorkspaceAutoIterationPayload<ExtArgs> | null
     periodicTask: Prisma.$PeriodicTaskPayload<ExtArgs> | null
     periodicTaskExecution: Prisma.$PeriodicTaskExecutionPayload<ExtArgs> | null
     parentWorkspace: Prisma.$WorkspacePayload<ExtArgs> | null
@@ -5188,7 +4920,6 @@ export interface Prisma__WorkspaceClient<T, Null = never, ExtArgs extends runtim
   prs<T extends Prisma.Workspace$prsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Workspace$prsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$WorkspacePRPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   prDiscovery<T extends Prisma.Workspace$prDiscoveryArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Workspace$prDiscoveryArgs<ExtArgs>>): Prisma.Prisma__WorkspacePRDiscoveryClient<runtime.Types.Result.GetResult<Prisma.$WorkspacePRDiscoveryPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   runScript<T extends Prisma.Workspace$runScriptArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Workspace$runScriptArgs<ExtArgs>>): Prisma.Prisma__WorkspaceRunScriptClient<runtime.Types.Result.GetResult<Prisma.$WorkspaceRunScriptPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
-  autoIteration<T extends Prisma.Workspace$autoIterationArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Workspace$autoIterationArgs<ExtArgs>>): Prisma.Prisma__WorkspaceAutoIterationClient<runtime.Types.Result.GetResult<Prisma.$WorkspaceAutoIterationPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   periodicTask<T extends Prisma.Workspace$periodicTaskArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Workspace$periodicTaskArgs<ExtArgs>>): Prisma.Prisma__PeriodicTaskClient<runtime.Types.Result.GetResult<Prisma.$PeriodicTaskPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   periodicTaskExecution<T extends Prisma.Workspace$periodicTaskExecutionArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Workspace$periodicTaskExecutionArgs<ExtArgs>>): Prisma.Prisma__PeriodicTaskExecutionClient<runtime.Types.Result.GetResult<Prisma.$PeriodicTaskExecutionPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   parentWorkspace<T extends Prisma.Workspace$parentWorkspaceArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Workspace$parentWorkspaceArgs<ExtArgs>>): Prisma.Prisma__WorkspaceClient<runtime.Types.Result.GetResult<Prisma.$WorkspacePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
@@ -5806,25 +5537,6 @@ export type Workspace$runScriptArgs<ExtArgs extends runtime.Types.Extensions.Int
    */
   include?: Prisma.WorkspaceRunScriptInclude<ExtArgs> | null
   where?: Prisma.WorkspaceRunScriptWhereInput
-}
-
-/**
- * Workspace.autoIteration
- */
-export type Workspace$autoIterationArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
-  /**
-   * Select specific fields to fetch from the WorkspaceAutoIteration
-   */
-  select?: Prisma.WorkspaceAutoIterationSelect<ExtArgs> | null
-  /**
-   * Omit specific fields from the WorkspaceAutoIteration
-   */
-  omit?: Prisma.WorkspaceAutoIterationOmit<ExtArgs> | null
-  /**
-   * Choose, which related nodes to fetch as well
-   */
-  include?: Prisma.WorkspaceAutoIterationInclude<ExtArgs> | null
-  where?: Prisma.WorkspaceAutoIterationWhereInput
 }
 
 /**

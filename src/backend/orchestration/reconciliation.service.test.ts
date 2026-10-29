@@ -421,7 +421,6 @@ describe('workspaceMaintenanceService.findNeedingWorktree', () => {
         prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
         prMonitoring: { select: { enabled: true } },
         prDiscovery: true,
-        autoIteration: true,
       },
       orderBy: { createdAt: 'asc' },
     });

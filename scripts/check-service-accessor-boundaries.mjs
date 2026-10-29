@@ -47,10 +47,6 @@ const ACCESSOR_POLICIES = {
     owner: 'workspace',
     module: 'src/backend/services/workspace/resources/workspace-run-script.accessor',
   },
-  workspaceAutoIterationAccessor: {
-    owner: 'workspace',
-    module: 'src/backend/services/workspace/resources/workspace-auto-iteration.accessor',
-  },
   workspaceNotificationAccessor: {
     owner: 'workspace',
     module: 'src/backend/services/workspace/resources/workspace-notification.accessor',

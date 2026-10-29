@@ -16,7 +16,6 @@ describe('workspace-cache-helpers', () => {
       projectId: 'proj-1',
       name: 'Created',
       status: 'NEW',
-      mode: 'STANDARD',
       createdAt: new Date('2026-01-01'),
       ratchetEnabled: false,
     });

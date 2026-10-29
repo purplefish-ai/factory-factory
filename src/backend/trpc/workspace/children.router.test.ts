@@ -205,11 +205,11 @@ describe('workspaceChildrenRouter', () => {
 
   it.each([
     {
-      name: 'an idle active loop',
+      name: 'an idle legacy loop session',
       fields: { mode: 'AUTO_ITERATION', autoIterationStatus: 'RUNNING' },
       runtime: {},
       pending: false,
-      column: 'WORKING',
+      column: 'WAITING',
     },
     {
       name: 'permission blocking an active loop',
@@ -273,8 +273,6 @@ describe('workspaceChildrenRouter', () => {
       ratchetEnabled: false,
       ratchetState: 'IDLE',
       hasHadSessions: true,
-      mode: 'STANDARD',
-      autoIterationStatus: null,
       project: { name: 'Child Project', slug: 'child-project' },
       agentSessions: [{ id: 'sess-1', name: null, workflow: null, model: null, status: 'RUNNING' }],
       createdAt,

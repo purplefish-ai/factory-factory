@@ -1,12 +1,10 @@
 import { z } from 'zod';
 import {
-  AutoIterationStatus,
   CIStatus,
   KanbanColumn,
   PRState,
   RatchetState,
   RunScriptStatus,
-  WorkspaceMode,
   WorkspaceStatus,
 } from '@/shared/core';
 import { WORKSPACE_CI_OBSERVATIONS, WORKSPACE_FLOW_PHASES } from '@/shared/workspace-flow-state';
@@ -17,7 +15,6 @@ import {
   WorkspaceSidebarStatusSchema,
   WorkspaceStatusReasonSchema,
   WorkspaceSummarySchema,
-  WorkspaceAutoIterationSummarySchema,
 } from '@/shared/workspace-summary';
 import { prDeliveryModeSchema } from './schemas/pr-event.schema';
 import { WorkspacePullRequestSchema } from './workspace-pr';
@@ -32,7 +29,6 @@ const SnapshotFieldGroupSchema = z.enum([
   'reconciliation',
   'git',
   'metadata',
-  'autoIteration',
 ]);
 
 export type SnapshotFieldGroup = z.infer<typeof SnapshotFieldGroupSchema>;
@@ -57,7 +53,6 @@ export function projectWorkspaceSnapshotMetadata(source: Partial<WorkspaceSnapsh
 
 const SnapshotEntrySchema = z.object({
   ...WorkspaceSnapshotMetadataSchema.partial().shape,
-  autoIteration: WorkspaceAutoIterationSummarySchema.nullable().optional(),
   workspaceId: z.string(),
   projectId: z.string(),
   version: z.number(),
@@ -96,8 +91,6 @@ const SnapshotEntrySchema = z.object({
     }),
   runScriptStatus: z.nativeEnum(RunScriptStatus),
   hasHadSessions: z.boolean(),
-  mode: z.nativeEnum(WorkspaceMode),
-  autoIterationStatus: z.nativeEnum(AutoIterationStatus).nullable(),
   isWorking: z.boolean(),
   pendingRequestType: z.enum(WORKSPACE_PENDING_REQUEST_TYPES).nullable(),
   sessionSummaries: z.array(WorkspaceSessionSummarySchema),
@@ -118,7 +111,6 @@ const SnapshotEntrySchema = z.object({
     reconciliation: z.number(),
     git: z.number().optional(),
     metadata: z.number().optional(),
-    autoIteration: z.number().optional(),
   }),
 });
 
@@ -127,7 +119,6 @@ const SnapshotEntrySchema = z.object({
 const CompleteSnapshotEntrySchema = SnapshotEntrySchema.extend({
   ...WorkspaceSnapshotMetadataSchema.shape,
   summaryVersion: z.literal(1),
-  autoIteration: WorkspaceAutoIterationSummarySchema.nullable(),
   prs: z.array(WorkspacePullRequestSchema),
   prSummary: WorkspacePRSummarySchema,
   prMonitoring: WorkspaceSummarySchema.shape.prMonitoring,
@@ -137,19 +128,6 @@ const CompleteSnapshotEntrySchema = SnapshotEntrySchema.extend({
     for (const issue of result.error.issues) {
       context.addIssue({ code: 'custom', message: issue.message, path: issue.path });
     }
-  }
-  if ((entry.mode === 'AUTO_ITERATION') !== (entry.autoIteration !== null)) {
-    context.addIssue({
-      code: 'custom',
-      path: ['autoIteration'],
-      message: 'Compact loop must match workspace mode',
-    });
-  } else if (entry.autoIteration && entry.autoIteration.status !== entry.autoIterationStatus) {
-    context.addIssue({
-      code: 'custom',
-      path: ['autoIteration', 'status'],
-      message: 'Compact loop status must match workspace status',
-    });
   }
 });
 

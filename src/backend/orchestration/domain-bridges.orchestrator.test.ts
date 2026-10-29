@@ -3,7 +3,6 @@ import {
   launchWorkspace,
   type WorkspaceLaunchPorts,
 } from '@/backend/orchestration/workspace-launch.orchestrator';
-import { autoIterationService, logbookService } from '@/backend/services/auto-iteration';
 
 const mockLogger = vi.hoisted(() => ({
   info: vi.fn(),
@@ -28,14 +27,6 @@ vi.mock('@/backend/services/workspace', () => ({
   workspacePRMonitoringService: { get: vi.fn(), listConfigs: vi.fn() },
   WorkspaceCreationService: class {
     create = mockWorkspaceCreationService.create;
-  },
-  workspaceAutoIterationService: {
-    getExecutionContext: vi.fn(),
-    setStatus: vi.fn(),
-    setProgress: vi.fn(),
-    setSession: vi.fn(),
-    finishSessionIfMatching: vi.fn(),
-    clearSessionIfMatching: vi.fn(),
   },
   workspaceDataService: {
     findById: vi.fn(),
@@ -84,7 +75,6 @@ vi.mock('@/backend/services/session', () => ({
   sessionService: {
     configure: vi.fn(),
     sendSessionMessage: vi.fn(),
-    sendAcpMessage: vi.fn(),
   },
   sessionLifecycleService: {
     configure: vi.fn(),
@@ -165,7 +155,6 @@ import { terminalSessionService } from '@/backend/services/terminal';
 import {
   getWorkspaceInitPolicy,
   workspaceActivityService,
-  workspaceAutoIterationService,
   workspaceDataService,
   workspaceMaintenanceService,
   workspacePrSnapshotService,
@@ -192,13 +181,11 @@ function createBridgeServices(
 ): BridgeServices {
   const services: BridgeServices = {
     ...defaultPRMonitoringServices,
-    autoIterationService,
     chatEventForwarderService,
     sessionDispatchService,
     createLogger,
     getWorkspaceInitPolicy,
     githubCLIService,
-    logbookService,
     periodicTaskService,
     prFetchCoordinator,
     prSnapshotService,
@@ -210,7 +197,6 @@ function createBridgeServices(
     startupScriptService,
     terminalSessionService,
     workspaceActivityService,
-    workspaceAutoIterationService,
     launchWorkspace: (source) =>
       launchWorkspace(source, {
         createWorkspace,
@@ -657,42 +643,6 @@ describe('configureDomainBridges', () => {
       expect(acpRuntimeManager.isSessionRunning).toHaveBeenCalledWith('session-1');
       expect(sessionDomainService.getQueueLength).not.toHaveBeenCalled();
     });
-  });
-
-  it('wires auto-iteration session capabilities through the configured service graph', async () => {
-    const configure = vi.spyOn(autoIterationService, 'configure').mockReturnValue(undefined);
-    const injectedCreate = vi.mocked(sessionDataService.createAgentSession).mockResolvedValue({
-      id: 'injected-session',
-    } as Awaited<ReturnType<typeof sessionDataService.createAgentSession>>);
-    const injectedStart = vi.mocked(sessionLifecycleService.startSession);
-    const injectedStop = vi.mocked(sessionLifecycleService.stopSession);
-    const injectedSend = vi.mocked(sessionService.sendAcpMessage);
-    configureDomainBridges(createBridgeServices());
-    const [sessionBridge, workspaceBridge, logbookBridge] = configure.mock.calls[0]!;
-
-    await expect(sessionBridge.startSession('ws-wired', { initialPrompt: 'start' })).resolves.toBe(
-      'injected-session'
-    );
-    await sessionBridge.sendPrompt('injected-session', 'next', 123);
-    await sessionBridge.stopSession('injected-session');
-    expect(injectedCreate).toHaveBeenCalledWith({
-      workspaceId: 'ws-wired',
-      name: 'Auto-iteration',
-      workflow: 'auto-iteration',
-    });
-    expect(injectedStart).toHaveBeenCalledWith('injected-session', {
-      initialPrompt: 'start',
-      startupModePreset: undefined,
-    });
-    expect(injectedSend).toHaveBeenCalledWith(
-      'injected-session',
-      [{ type: 'text', text: 'next' }],
-      123,
-      { timeoutKind: 'configured' }
-    );
-    expect(injectedStop).toHaveBeenCalledWith('injected-session');
-    expect(workspaceBridge.updateAutoIterationSessionId).toBeTypeOf('function');
-    expect(logbookBridge).toBe(logbookService);
   });
 
   describe('session bridge delegation', () => {

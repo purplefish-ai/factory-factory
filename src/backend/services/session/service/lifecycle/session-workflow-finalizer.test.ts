@@ -71,7 +71,9 @@ function createFinalizerHarness(options?: {
     runtimeManager: runtime,
     countViewers: viewerCount,
   });
-  finalizer.configure({ workspace: workspaceBridge, autoIterationExit });
+  // Stale callers cannot revive the former finalization callback.
+  const legacyBridges = { workspace: workspaceBridge, autoIterationExit };
+  finalizer.configure(legacyBridges);
 
   return {
     finalizer,
@@ -281,7 +283,7 @@ describe('SessionWorkflowFinalizer', () => {
     });
   });
 
-  it('notifies auto-iteration only for unmanaged runtime exits', async () => {
+  it('keeps legacy sessions and transcripts intact without notifying a loop', async () => {
     const harness = createFinalizerHarness({
       session: createLifecycleTestSession({ workflow: 'auto-iteration' }),
     });
@@ -299,11 +301,10 @@ describe('SessionWorkflowFinalizer', () => {
       deliberate: false,
     });
 
-    expect(harness.autoIterationExit.onAutoIterationSessionExit).toHaveBeenCalledOnce();
-    expect(harness.autoIterationExit.onAutoIterationSessionExit).toHaveBeenCalledWith(
-      'workspace-1',
-      'session-1'
-    );
+    expect(harness.autoIterationExit.onAutoIterationSessionExit).not.toHaveBeenCalled();
+    expect(harness.repository.deleteSession).not.toHaveBeenCalled();
+    expect(harness.domain.clearSession).not.toHaveBeenCalled();
+    expect(harness.workspaceBridge.resetPRDiscoveryBackoff).toHaveBeenCalledWith('workspace-1');
   });
 
   it('schedules PR discovery after a runtime exit without delaying finalization', async () => {

@@ -19,8 +19,6 @@ const raw: WorkspaceDerivedStateSource = {
   ratchetEnabled: false,
   hasHadSessions: true,
   hasMergeConflict: false,
-  mode: 'STANDARD',
-  autoIterationStatus: null,
 };
 const flowState = {
   phase: 'NO_PR',
@@ -85,7 +83,6 @@ describe('toWorkspaceDerivedStateInput', () => {
     expect(input).toMatchObject({
       lifecycle: 'READY',
       prUrl: null,
-      autoIterationStatus: null,
       pendingRequestType: null,
       prSummary: undefined,
       prMonitoring: undefined,
@@ -184,8 +181,6 @@ describe('toWorkspaceDerivedStateInput', () => {
     (busy) => {
       const source: WorkspaceDerivedStateSource = {
         ...raw,
-        mode: 'AUTO_ITERATION',
-        autoIterationStatus: 'RUNNING',
         ratchetEnabled: true,
       };
       const http = assembleWorkspaceDerivedState(
@@ -236,10 +231,10 @@ describe('toWorkspaceDerivedStateInput', () => {
       expect(entry).toMatchObject(http);
       expect(http).toMatchObject({
         isWorking: busy,
-        kanbanColumn: 'WORKING',
+        kanbanColumn: busy ? 'WORKING' : 'WAITING',
         sidebarStatus: { activityState: busy ? 'WORKING' : 'IDLE', ciState: 'NONE' },
         ratchetButtonAnimated: false,
-        statusReason: { code: busy ? 'AGENT_WORKING' : 'AUTO_ITERATING' },
+        statusReason: { code: busy ? 'AGENT_WORKING' : 'READY_FOR_NEXT_PROMPT' },
       });
       // Re-derivation keeps raw busy through a later PR-only update.
       store.upsert('ws', { prCiStatus: 'UNKNOWN' }, 'PR refresh', 400);

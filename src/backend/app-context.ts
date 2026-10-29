@@ -40,7 +40,6 @@ import { launchWorkspace } from './orchestration/workspace-launch.orchestrator';
 import { deliverWorkspaceNotification } from './orchestration/workspace-notification-delivery.orchestrator';
 import { createWorkspaceRename } from './orchestration/workspace-rename.orchestrator';
 import { getQuickAction, listQuickActions } from './prompts/quick-actions';
-import { autoIterationService, insightsService, logbookService } from './services/auto-iteration';
 import { configService } from './services/config.service';
 import { cryptoService } from './services/crypto.service';
 import { decisionLogService } from './services/decision-log';
@@ -110,7 +109,6 @@ import {
   projectManagementService,
   WorkspaceCreationService,
   workspaceActivityService,
-  workspaceAutoIterationService,
   workspaceDataService,
   workspaceMaintenanceService,
   workspaceNotificationService,
@@ -161,7 +159,6 @@ export type ApplicationServices = BridgeServices & {
   getWorkspaceLinearContext: typeof getWorkspaceLinearContext;
   healthService: typeof healthService;
   initializeWorkspaceWorktree: typeof initializeWorkspaceWorktree;
-  insightsService: typeof insightsService;
   linearClientService: typeof linearClientService;
   linearStateSyncService: typeof linearStateSyncService;
   listQuickActions: typeof listQuickActions;
@@ -257,7 +254,6 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     listVisibleReviewRequests: () => listVisibleReviewRequests(services),
     acpRuntimeManager,
     acpTraceLogger,
-    autoIterationService,
     chatEventForwarderService,
     sessionCommandFactories,
     sessionLoadService: createSessionLoadService({
@@ -327,10 +323,8 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
       initializeWorkspaceWorktree(workspaceId, options, {
         sessionDispatch: services.sessionDispatchService,
       }),
-    insightsService,
     getWorkspaceInitPolicy,
     githubCLIService,
-    logbookService,
     linearClientService,
     linearStateSyncService,
     listQuickActions,
@@ -387,7 +381,6 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     userSettingsService,
     voiceNarrationService,
     workspaceActivityService,
-    workspaceAutoIterationService,
     workspaceCreationService,
     workspaceDataService,
     renameWorkspace: workspaceRename.rename,
