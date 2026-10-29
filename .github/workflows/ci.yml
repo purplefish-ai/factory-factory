@@ -144,9 +144,12 @@ jobs:
       - name: Generate Prisma client
         run: pnpm db:generate
 
-      - name: Resolve native module ABI
+      - name: Resolve native module ABI and OS version
         id: native-abi
-        run: echo "version=$(node -p 'process.versions.modules')" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "version=$(node -p 'process.versions.modules')" >> "$GITHUB_OUTPUT"
+          . /etc/os-release
+          echo "distribution=$ID-$VERSION_ID" >> "$GITHUB_OUTPUT"
 
       - name: Cache Node native modules
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -154,7 +157,7 @@ jobs:
           # Do not cache .current-target: a fresh install still needs the cached
           # binaries copied into node_modules by ensure-native-modules.mjs.
           path: .native-cache/node-abi${{ steps.native-abi.outputs.version }}/
-          key: ff-native-v1-${{ runner.os }}-${{ runner.arch }}-node-abi${{ steps.native-abi.outputs.version }}-${{ hashFiles('pnpm-lock.yaml', 'scripts/ensure-native-modules.mjs') }}
+          key: ff-native-v1-${{ runner.os }}-${{ steps.native-abi.outputs.distribution }}-${{ runner.arch }}-node-abi${{ steps.native-abi.outputs.version }}-${{ hashFiles('pnpm-lock.yaml', 'scripts/ensure-native-modules.mjs') }}
 
       - name: Run tests with coverage
         run: pnpm test --config vitest.shard.config.ts --coverage --reporter=default --reporter=blob --shard=${{ matrix.shard }}/2
