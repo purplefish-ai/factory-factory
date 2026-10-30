@@ -4,7 +4,8 @@ import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { dispatchSubagentChange } from '@/client/lib/subagent-events';
-import type { SubagentSelection } from './types';
+import type { getNextSubagentPageParam } from './subagent-pagination';
+import type { SubagentListResult, SubagentSelection } from './types';
 import { useLiveSubagentSelection } from './use-live-subagent-selection';
 
 const mocks = vi.hoisted(() => ({
@@ -13,9 +14,8 @@ const mocks = vi.hoisted(() => ({
     Promise.resolve({ data: undefined as unknown, dataUpdatedAt: 0, isSuccess: false })
   ),
   listInfiniteQueryResult: {
-    data: undefined as unknown,
+    data: undefined as { pages: SubagentListResult[]; pageParams: unknown[] } | undefined,
     dataUpdatedAt: 0,
-    hasNextPage: false,
     isFetchedAfterMount: false,
     isFetching: false,
     isFetchNextPageError: false,
@@ -29,10 +29,24 @@ vi.mock('@/client/lib/trpc', () => ({
   trpc: {
     session: {
       listSubagents: {
-        useInfiniteQuery: (...args: unknown[]) => {
-          mocks.useListInfiniteQuery(...args);
+        useInfiniteQuery: (
+          input: unknown,
+          options: { getNextPageParam: typeof getNextSubagentPageParam }
+        ) => {
+          mocks.useListInfiniteQuery(input, options);
+          const data = mocks.listInfiniteQueryResult.data;
+          const lastPage = data?.pages.at(-1);
           return {
             ...mocks.listInfiniteQueryResult,
+            hasNextPage:
+              lastPage && data
+                ? options.getNextPageParam(
+                    lastPage,
+                    data.pages,
+                    data.pageParams.at(-1),
+                    data.pageParams
+                  ) !== undefined
+                : false,
             fetchNextPage: mocks.fetchNextPage,
             refetch: mocks.listRefetch,
           };
@@ -77,7 +91,6 @@ describe('useLiveSubagentSelection', () => {
     });
     mocks.listInfiniteQueryResult.data = undefined;
     mocks.listInfiniteQueryResult.dataUpdatedAt = 0;
-    mocks.listInfiniteQueryResult.hasNextPage = false;
     mocks.listInfiniteQueryResult.isFetchedAfterMount = false;
     mocks.listInfiniteQueryResult.isFetching = false;
     mocks.listInfiniteQueryResult.isFetchNextPageError = false;
@@ -109,12 +122,29 @@ describe('useLiveSubagentSelection', () => {
       nextCursor: string | null;
     }>
   ) {
-    mocks.listInfiniteQueryResult.data = { pages, pageParams: pages.map(() => null) };
+    mocks.listInfiniteQueryResult.data = {
+      pages,
+      pageParams: pages.map((_, index) =>
+        index === 0 ? null : (pages[index - 1]?.nextCursor ?? null)
+      ),
+    };
   }
 
   function renderHookProbe(selected = selection()) {
     void act(() => root.render(createElement(LiveSelectionProbe, { selected })));
   }
+
+  it('stops searching for a restored child when provider cursors cycle', () => {
+    setPages([
+      { supported: true, subagents: [], nextCursor: 'page-2' },
+      { supported: true, subagents: [], nextCursor: 'page-3' },
+      { supported: true, subagents: [], nextCursor: 'page-2' },
+    ]);
+    const stored = selection();
+    renderHookProbe(stored);
+    expect(mocks.fetchNextPage).not.toHaveBeenCalled();
+    expect(JSON.parse(container.textContent ?? '')).toEqual(stored);
+  });
 
   async function dispatchMatchingChange() {
     await act(async () => {
@@ -383,7 +413,6 @@ describe('useLiveSubagentSelection', () => {
       nextCursor: 'page-3',
     };
     setPages([firstPage]);
-    mocks.listInfiniteQueryResult.hasNextPage = true;
 
     renderHookProbe(stored);
     expect(mocks.fetchNextPage).toHaveBeenCalledOnce();
@@ -397,7 +426,6 @@ describe('useLiveSubagentSelection', () => {
       secondPage,
       { supported: true, subagents: [completed], nextCursor: null },
     ]);
-    mocks.listInfiniteQueryResult.hasNextPage = false;
     mocks.listInfiniteQueryResult.dataUpdatedAt = Date.parse('2026-08-10T10:05:00.000Z');
     mocks.listInfiniteQueryResult.isFetchedAfterMount = true;
     renderHookProbe(stored);
