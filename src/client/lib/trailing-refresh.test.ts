@@ -21,7 +21,7 @@ describe('createTrailingRefresh', () => {
   it('runs one follow-up for triggers that arrive during a refresh', async () => {
     const runs = [deferred(), deferred()];
     const refresh = vi.fn(() => runs[refresh.mock.calls.length - 1]?.promise);
-    const trigger = createTrailingRefresh(refresh);
+    const { trigger } = createTrailingRefresh(refresh);
 
     trigger();
     await settle();
@@ -45,7 +45,7 @@ describe('createTrailingRefresh', () => {
       .fn<() => Promise<void>>()
       .mockReturnValueOnce(first.promise)
       .mockResolvedValue(undefined);
-    const trigger = createTrailingRefresh(refresh);
+    const { trigger } = createTrailingRefresh(refresh);
 
     trigger();
     await settle();
@@ -63,7 +63,7 @@ describe('createTrailingRefresh', () => {
         throw new Error('boom');
       })
       .mockResolvedValue(undefined);
-    const trigger = createTrailingRefresh(refresh);
+    const { trigger } = createTrailingRefresh(refresh);
 
     trigger();
     expect(refresh).toHaveBeenCalledOnce();
@@ -72,9 +72,25 @@ describe('createTrailingRefresh', () => {
     expect(refresh).toHaveBeenCalledTimes(2);
   });
 
+  it('drops a queued follow-up and ignores triggers after dispose', async () => {
+    const first = deferred();
+    const refresh = vi.fn(() => first.promise);
+    const { trigger, dispose } = createTrailingRefresh(refresh);
+
+    trigger();
+    await settle();
+    trigger();
+    dispose();
+    first.resolve();
+    await settle();
+    trigger();
+
+    expect(refresh).toHaveBeenCalledOnce();
+  });
+
   it('starts a fresh refresh once idle', async () => {
     const refresh = vi.fn().mockResolvedValue(undefined);
-    const trigger = createTrailingRefresh(refresh);
+    const { trigger } = createTrailingRefresh(refresh);
 
     trigger();
     await settle();

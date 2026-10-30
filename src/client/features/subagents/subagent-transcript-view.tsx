@@ -59,14 +59,18 @@ export function SubagentTranscriptView({ selection, workspaceId }: SubagentTrans
   useEffect(() => {
     // Change bursts run one refetch at a time plus one trailing refetch.
     const refreshOnChange = createTrailingRefresh(() => query.refetch());
-    return subscribeToSubagentChanges((detail) => {
+    const unsubscribe = subscribeToSubagentChanges((detail) => {
       if (
         detail.sessionId === selection.parentSessionId &&
         detail.subagentId === selection.subagent.id
       ) {
-        refreshOnChange();
+        refreshOnChange.trigger();
       }
     });
+    return () => {
+      unsubscribe();
+      refreshOnChange.dispose();
+    };
   }, [query.refetch, selection.parentSessionId, selection.subagent.id]);
 
   const handleLoadOlder = useCallback(() => {

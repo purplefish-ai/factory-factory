@@ -121,14 +121,18 @@ export function useLiveSubagentSelection(selection: SubagentSelection): Subagent
   useEffect(() => {
     // Change bursts run one refetch at a time plus one trailing refetch.
     const refreshOnChange = createTrailingRefresh(refetch);
-    return subscribeToSubagentChanges((detail) => {
+    const unsubscribe = subscribeToSubagentChanges((detail) => {
       if (
         detail.sessionId === selection.parentSessionId &&
         detail.subagentId === selection.subagent.id
       ) {
-        refreshOnChange();
+        refreshOnChange.trigger();
       }
     });
+    return () => {
+      unsubscribe();
+      refreshOnChange.dispose();
+    };
   }, [refetch, selection.parentSessionId, selection.subagent.id]);
 
   const loadedPageCount = query.data?.pages.length ?? 0;

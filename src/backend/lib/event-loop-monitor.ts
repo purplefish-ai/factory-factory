@@ -35,14 +35,15 @@ export class EventLoopMonitor {
   private owners = 0;
 
   start(resolutionMs = DEFAULT_RESOLUTION_MS): void {
-    this.owners += 1;
-    if (this.histogram) {
-      return;
+    if (!this.histogram) {
+      // Create before taking ownership so a failed start leaves no phantom owner.
+      const histogram = monitorEventLoopDelay({ resolution: resolutionMs });
+      histogram.enable();
+      this.histogram = histogram;
+      this.resolutionMs = resolutionMs;
+      this.resetWindow();
     }
-    this.resolutionMs = resolutionMs;
-    this.histogram = monitorEventLoopDelay({ resolution: resolutionMs });
-    this.histogram.enable();
-    this.resetWindow();
+    this.owners += 1;
   }
 
   stop(): void {

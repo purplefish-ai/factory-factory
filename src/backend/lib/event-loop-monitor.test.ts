@@ -44,6 +44,14 @@ describe('EventLoopMonitor', () => {
     expect(idle?.delayMs.max).toBeLessThan(blocked?.delayMs.max ?? 0);
   });
 
+  it('does not count an owner when starting fails', () => {
+    expect(() => monitor.start(0)).toThrow();
+
+    monitor.start();
+    monitor.stop();
+    expect(monitor.read()).toBeNull();
+  });
+
   it('keeps running until every owner has stopped it', () => {
     monitor.start();
     monitor.start();

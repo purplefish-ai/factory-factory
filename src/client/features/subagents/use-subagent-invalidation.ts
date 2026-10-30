@@ -41,11 +41,15 @@ export function useSubagentInvalidation(sessionId: string | null, enabled: boole
 
     // Change bursts run one invalidation at a time plus one trailing invalidation.
     const refreshOnChange = createTrailingRefresh(() => invalidateList({ sessionId }));
-    return subscribeToSubagentChanges((detail) => {
+    const unsubscribe = subscribeToSubagentChanges((detail) => {
       if (detail.sessionId === sessionId) {
-        refreshOnChange();
+        refreshOnChange.trigger();
       }
     });
+    return () => {
+      unsubscribe();
+      refreshOnChange.dispose();
+    };
   }, [invalidateList, sessionId]);
 
   return enabled && !reconnecting;
