@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { dispatchSubagentChange } from '@/client/lib/subagent-events';
 import { ProviderSubagentsSection } from './provider-subagents-section';
+import type { SubagentListItem } from './types';
 
 const mocks = vi.hoisted(() => ({
   fetchNextPage: vi.fn(() => Promise.resolve()),
@@ -86,6 +87,55 @@ describe('ProviderSubagentsSection', () => {
   function render(props: Parameters<typeof ProviderSubagentsSection>[0]) {
     void act(() => root.render(createElement(ProviderSubagentsSection, props)));
   }
+
+  it.each<{ statuses: SubagentListItem['status'][]; count: number }>([
+    {
+      statuses: [
+        'running',
+        'waiting',
+        'completed',
+        'completed',
+        'completed',
+        'failed',
+        'cancelled',
+        'interrupted',
+      ],
+      count: 2,
+    },
+    { statuses: ['starting', 'running', 'waiting'], count: 3 },
+    { statuses: ['completed', 'failed', 'cancelled', 'interrupted'], count: 0 },
+  ])('counts only active agents for $statuses', ({ statuses, count }) => {
+    mocks.queryResult.data = {
+      supported: true,
+      subagents: statuses.map((status, index) => ({
+        id: `child-${index}`,
+        name: `Agent ${index}`,
+        status,
+        createdAt: null,
+        updatedAt: null,
+        completedAt: null,
+        latestActivity: null,
+        resultPreview: null,
+      })),
+      nextCursor: null,
+    };
+    const props = {
+      sessionId: 'session-1',
+      parentSessionName: 'Session 1',
+      enabled: true,
+      onSelect: vi.fn(),
+    };
+    render(props);
+
+    expect(container.querySelector('[aria-label="Active sub-agents"]')?.textContent).toBe(
+      String(count)
+    );
+    expect(container.querySelectorAll('button[aria-pressed]')).toHaveLength(count);
+
+    mocks.queryResult.data = { supported: true, subagents: [], nextCursor: null };
+    render(props);
+    expect(container.querySelector('[aria-label="Active sub-agents"]')).toBeNull();
+  });
 
   it('keeps the parent-scoped query disabled until the selected session is hydrated', () => {
     render({

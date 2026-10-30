@@ -48,6 +48,27 @@ describe('SubagentList', () => {
     void act(() => root.render(createElement(SubagentList, props)));
   }
 
+  it('uses the colorful botanical icons for rows and repeats the palette for larger groups', () => {
+    render({
+      state: {
+        kind: 'ready',
+        subagents: Array.from({ length: 4 }, (_, index) => subagent({ id: `agent-${index}` })),
+      },
+      onSelect: vi.fn(),
+    });
+
+    const icons = [...container.querySelectorAll('li button svg')];
+    expect(icons).toHaveLength(4);
+    for (const icon of icons) {
+      expect(icon.getAttribute('aria-hidden')).toBe('true');
+      expect(icon.querySelector('[opacity="0.2"]')).not.toBeNull();
+    }
+    expect(icons[0]?.classList.contains('text-amber-600')).toBe(true);
+    expect(icons[1]?.classList.contains('text-teal-600')).toBe(true);
+    expect(icons[2]?.classList.contains('text-violet-600')).toBe(true);
+    expect(icons[3]?.innerHTML).toBe(icons[0]?.innerHTML);
+  });
+
   it('sorts active sub-agents oldest first and keeps terminal results collapsed', () => {
     render({
       state: {

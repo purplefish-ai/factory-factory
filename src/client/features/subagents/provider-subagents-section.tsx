@@ -2,6 +2,7 @@ import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { useCallback, useMemo } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import { SubagentList, type SubagentListState } from './subagent-list';
+import { isActiveSubagent } from './subagent-status';
 import type { SubagentListItem, SubagentSelection } from './types';
 import { useSubagentInvalidation } from './use-subagent-invalidation';
 
@@ -101,8 +102,12 @@ export function ProviderSubagentsSection({
         <RobotIcon className="h-3.5 w-3.5 text-muted-foreground" />
         <h2 className="text-xs font-medium">Sub-agents</h2>
         {state.kind === 'ready' && state.subagents.length > 0 && (
-          <span className="rounded-full bg-secondary px-1.5 text-[10px] text-secondary-foreground">
-            {state.subagents.length}
+          <span
+            role="status"
+            aria-label="Active sub-agents"
+            className="rounded-full bg-secondary px-1.5 text-[10px] text-secondary-foreground"
+          >
+            {state.subagents.filter(isActiveSubagent).length}
           </span>
         )}
       </div>
