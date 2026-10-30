@@ -5,6 +5,7 @@
       "entry": [
         "src/backend/server.ts",
         "src/backend/migrate.ts",
+        "src/backend/electron-utility-entry.ts",
         "electron/main/index.ts",
         "electron/preload/index.cts"
       ],

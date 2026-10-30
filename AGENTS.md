@@ -52,7 +52,7 @@ Read the matching note before changing these areas:
   `WorkspacePR`, `gh` coordination.
 - [Workspace state](docs/architecture/workspace-state.md): run scripts, Kanban.
 - [Agent runtime](docs/architecture/agent-runtime.md): ACP, subagents, child
-  workspaces, quick actions.
+  workspaces, quick actions, the desktop backend utility process.
 - [Integrations](docs/architecture/integrations.md): GitHub, Linear, periodic
   tasks.
 

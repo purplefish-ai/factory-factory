@@ -7,7 +7,7 @@ directories:
   output: release
   buildResources: build-resources
 files:
-  # Compiled backend (runs in Electron main process)
+  # Compiled backend (runs in an Electron utility process)
   - dist/src/backend/**/*
   # Markdown prompts resolved relative to the compiled backend
   - dist/prompts/**/*
@@ -67,7 +67,7 @@ asarUnpack:
   # including pure-JS packages such as diff and zod. Keep runtime resolution intact.
   - node_modules/**/*
   - dist/prisma/generated/**/*
-  # Compiled backend (runs in Electron main process)
+  # Compiled backend (runs in an Electron utility process)
   - dist/src/backend/**/*
   # Markdown prompts resolved relative to the compiled backend
   - dist/prompts/**/*

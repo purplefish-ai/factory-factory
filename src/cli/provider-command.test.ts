@@ -9,6 +9,7 @@ vi.mock('node:child_process', async (original) => ({
   spawn,
 }));
 vi.mock('@/backend/services/logger.service', () => ({ getCurrentProcessEnv: () => ({}) }));
+vi.mock('@/backend/lib/node-runtime', () => ({ getNodeExecPath: () => process.execPath }));
 
 beforeEach(() => {
   vi.useFakeTimers();

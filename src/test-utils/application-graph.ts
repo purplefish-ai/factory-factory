@@ -366,6 +366,7 @@ const fakeSystemConfig = {
   codexHome: '/tmp/.codex',
   codexSessionsDir: '/tmp/.codex/sessions',
   wsLogsPath: '/tmp/factory-factory/ws-logs',
+  nodeExecPath: '/usr/local/bin/node',
   backendPort: 3001,
   nodeEnv: 'test' as const,
   shellPath: '/bin/sh',

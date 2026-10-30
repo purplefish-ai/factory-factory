@@ -51,6 +51,7 @@ export const sessionAcpEnvironment: SessionAcpEnvironmentPort = {
   getBackendPort,
   getMcpServers: ({ workspaceId, parentWorkspaceId }) => [
     getChildWorkspaceMcpServerConfig({
+      nodeExecPath: configService.getNodeExecPath(),
       workspaceId,
       parentWorkspaceId,
       apiBaseUrl: getBackendBaseUrl(),

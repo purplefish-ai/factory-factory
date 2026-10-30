@@ -6,6 +6,9 @@ vi.mock('@/backend/services/config.service', () => ({
   configService: {
     getBackendHost: vi.fn(() => '192.0.2.10'),
     getBackendPort: vi.fn(() => 3001),
+    getNodeExecPath: vi.fn(
+      () => '/Applications/Factory Factory.app/Contents/MacOS/Factory Factory'
+    ),
   },
 }));
 
@@ -90,6 +93,14 @@ describe('session lifecycle external ports', () => {
     expect(mcpServers?.[0]?.env).toMatchObject({
       FF_API_BASE_URL: 'http://192.0.2.10:3002',
     });
+    // The MCP server runs with the configured Node exec path, not the
+    // Electron Helper that hosts the desktop backend.
+    expect(mcpServers?.[0]?.command).toBe(
+      '/Applications/Factory Factory.app/Contents/MacOS/Factory Factory'
+    );
+    // Codex does not inherit the backend env, so the server config must say
+    // to run the Electron binary as Node.
+    expect(mcpServers?.[0]?.env).toMatchObject({ ELECTRON_RUN_AS_NODE: '1' });
   });
 
   it.each(['0.0.0.0', '::', '::0', '0:0:0:0:0:0:0:0', '0::', '0:0::', '::0:0', '0000::', '[0::]'])(
