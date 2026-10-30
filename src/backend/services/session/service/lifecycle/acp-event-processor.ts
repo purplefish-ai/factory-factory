@@ -459,7 +459,7 @@ export class AcpEventProcessor {
   private cacheSlashCommandsFromDelta(sid: string, delta: SessionDeltaEvent): void {
     const commands = (delta as { slashCommands?: CommandInfo[] }).slashCommands;
     const provider = this.sessionToProvider.get(sid);
-    if (!(provider && commands)) {
+    if (provider !== 'CLAUDE' || !commands) {
       return;
     }
 

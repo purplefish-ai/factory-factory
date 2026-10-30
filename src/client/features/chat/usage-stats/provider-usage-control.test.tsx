@@ -153,3 +153,21 @@ it('polls account limits only while the popover is open and refreshes after work
   flushSync(() => root?.render(createElement(ProviderUsageControl, { ...props, busy: false })));
   expect(queryMocks.refetch).toHaveBeenCalledOnce();
 });
+
+it('reads the saved Codex account usage instead of the current default', () => {
+  const container = document.createElement('div');
+  document.body.append(container);
+  root = createRoot(container);
+  flushSync(() =>
+    root?.render(
+      createElement(ProviderUsageControl, {
+        provider: 'CODEX',
+        codexAccountId: 'saved-account',
+      })
+    )
+  );
+  expect(queryMocks.useQuery).toHaveBeenLastCalledWith(
+    { provider: 'CODEX', codexAccountId: 'saved-account' },
+    expect.anything()
+  );
+});

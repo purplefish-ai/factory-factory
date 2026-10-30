@@ -1,5 +1,6 @@
 import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import type { AcpRuntimeManager } from '@/backend/services/session/service/acp';
+import { NATIVE_DEFAULT_CODEX_ACCOUNT_ID } from '@/shared/codex-accounts';
 import { parseAcpConfigSnapshot } from './acp-config-snapshot';
 import type { CodexModelCatalogService } from './codex-model-catalog.service';
 import type { AcceptedConfigCommit } from './session-config-commit-authority';
@@ -76,7 +77,9 @@ export async function setInactiveSessionConfigOption(
       `Cannot set config option for inactive session ${sessionId}: no cached ACP config available`
     );
   }
-  const models = await deps.catalog.getModels();
+  const models = await deps.catalog.getModels(
+    session.codexAccountId ?? NATIVE_DEFAULT_CODEX_ACCOUNT_ID
+  );
   await settlePendingRuntime(sessionId, deps);
   const latest = await deps.repository.getSessionById(sessionId);
   if (deps.runtimeManager.getClient(sessionId)) {

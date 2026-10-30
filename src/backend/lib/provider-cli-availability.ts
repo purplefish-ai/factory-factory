@@ -18,7 +18,8 @@ function getProviderLabel(provider: SessionProvider): string {
 
 export function getProviderBlockingIssue(
   provider: SessionProvider,
-  health: ProviderCliHealthStatus
+  health: ProviderCliHealthStatus,
+  options?: { accountScopedCodex?: boolean }
 ): string | null {
   if (provider === 'CLAUDE') {
     if (!health.claude.isInstalled) {
@@ -30,7 +31,7 @@ export function getProviderBlockingIssue(
   if (!health.codex.isInstalled) {
     return health.codex.error ?? 'Codex CLI is not installed.';
   }
-  if (health.codex.isAuthenticated === false) {
+  if (!options?.accountScopedCodex && health.codex.isAuthenticated === false) {
     return health.codex.error ?? 'Codex CLI is not authenticated.';
   }
 
@@ -39,9 +40,10 @@ export function getProviderBlockingIssue(
 
 export function getProviderUnavailableMessage(
   provider: SessionProvider,
-  health: ProviderCliHealthStatus
+  health: ProviderCliHealthStatus,
+  options?: { accountScopedCodex?: boolean }
 ): string | null {
-  const issue = getProviderBlockingIssue(provider, health);
+  const issue = getProviderBlockingIssue(provider, health, options);
   if (!issue) {
     return null;
   }

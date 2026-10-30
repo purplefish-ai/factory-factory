@@ -147,12 +147,12 @@ describe.each(sources)(
       const { ports, events } = createPorts();
       ports.checkCliHealth.mockResolvedValue({
         claude: { isInstalled: true },
-        codex: { isInstalled: true, isAuthenticated: false },
+        codex: { isInstalled: false, isAuthenticated: false },
       });
       await expect(launchWorkspace(source, ports)).rejects.toMatchObject({
         code: 'PRECONDITION_FAILED',
         message:
-          'Cannot create workspace: Codex provider is unavailable: Codex CLI is not authenticated.',
+          'Cannot create workspace: Codex provider is unavailable: Codex CLI is not installed.',
       });
       expect(events).toEqual(['provider']);
       expect(ports.createWorkspace).not.toHaveBeenCalled();
@@ -244,7 +244,12 @@ it.each([0, 2])(
 
 describe('manual launch settings forwarding', () => {
   it.each([
-    { reasoningEffort: 'max', planModeEnabled: true, accessMode: 'read-only' },
+    {
+      reasoningEffort: 'max',
+      planModeEnabled: true,
+      accessMode: 'read-only',
+      codexAccountId: 'account-b',
+    },
     { reasoningEffort: null, planModeEnabled: false },
     {},
   ])('preserves exact supplied intent and omits absent fields: %j', async (settings) => {
@@ -446,24 +451,32 @@ it.each(['plan', 'bypassPermissions', 'missing'])(
   }
 );
 
-it('validates supported access against the resolved provider/model before provisioning', async () => {
-  const { ports } = createPorts();
-  await launchWorkspace(
-    {
-      type: 'MANUAL',
-      projectId: 'p1',
-      name: 'Access',
+it.each([undefined, 'account-b'])(
+  'validates supported access against the resolved provider/model and account %s before provisioning',
+  async (codexAccountId) => {
+    const { ports } = createPorts();
+    await launchWorkspace(
+      {
+        type: 'MANUAL',
+        projectId: 'p1',
+        name: 'Access',
+        provider: 'CODEX',
+        model: 'gpt-6-sol',
+        accessMode: 'agent',
+        ...(codexAccountId ? { codexAccountId } : {}),
+      },
+      ports
+    );
+    expect(ports.getLaunchOptions).toHaveBeenCalledWith({
       provider: 'CODEX',
       model: 'gpt-6-sol',
-      accessMode: 'agent',
-    },
-    ports
-  );
-  expect(ports.getLaunchOptions).toHaveBeenCalledWith({ provider: 'CODEX', model: 'gpt-6-sol' });
-  expect(ports.createDefaultSession).toHaveBeenCalledWith(
-    expect.objectContaining({ accessMode: 'agent' })
-  );
-});
+      ...(codexAccountId ? { codexAccountId } : {}),
+    });
+    expect(ports.createDefaultSession).toHaveBeenCalledWith(
+      expect.objectContaining({ accessMode: 'agent' })
+    );
+  }
+);
 
 it('validates access even when capacity disables default session creation', async () => {
   const { ports } = createPorts();
@@ -488,3 +501,138 @@ it('does not persist a workspace when access discovery fails', async () => {
   ).rejects.toThrow('Discovery unavailable');
   expect(ports.createWorkspace).not.toHaveBeenCalled();
 });
+
+it('validates the chosen account before workspace persistence', async () => {
+  const { ports } = createPorts();
+  const validateCodexAccount = vi
+    .fn<() => Promise<void>>()
+    .mockRejectedValue(
+      new ApplicationError('PRECONDITION_FAILED', 'Selected account is unavailable')
+    );
+  await expect(
+    launchWorkspace(
+      {
+        type: 'MANUAL',
+        projectId: 'p1',
+        name: 'Account',
+        provider: 'CODEX',
+        codexAccountId: 'account-b',
+      },
+      { ...ports, validateCodexAccount }
+    )
+  ).rejects.toThrow('Selected account');
+  expect(validateCodexAccount).toHaveBeenCalledWith({ accountId: 'account-b', model: undefined });
+  expect(ports.createWorkspace).not.toHaveBeenCalled();
+});
+it('allows a usable managed account when the global Codex login is absent', async () => {
+  const { ports } = createPorts();
+  ports.checkCliHealth.mockResolvedValue({
+    claude: { isInstalled: true },
+    codex: { isInstalled: true, isAuthenticated: false },
+  });
+  const validateCodexAccount = vi.fn(async () => undefined);
+  await expect(
+    launchWorkspace(
+      {
+        type: 'MANUAL',
+        projectId: 'p1',
+        name: 'Managed',
+        provider: 'CODEX',
+        codexAccountId: 'account-b',
+      },
+      { ...ports, validateCodexAccount }
+    )
+  ).resolves.toMatchObject({ defaultSessionId: 'session-1' });
+  expect(ports.createDefaultSession).toHaveBeenCalledWith(
+    expect.objectContaining({ codexAccountId: 'account-b' })
+  );
+});
+
+it.each(['CLAUDE', undefined] as const)(
+  'rejects a Codex account with effective Claude provider before persistence (explicit=%s)',
+  async (provider) => {
+    const { ports } = createPorts();
+    ports.resolveProvider.mockResolvedValue(unsafeCoerce('CLAUDE'));
+    await expect(
+      launchWorkspace(
+        { type: 'MANUAL', projectId: 'p1', name: 'Invalid', provider, codexAccountId: 'managed' },
+        ports
+      )
+    ).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+    expect(ports.createWorkspace).not.toHaveBeenCalled();
+    expect(ports.createDefaultSession).not.toHaveBeenCalled();
+  }
+);
+
+it('validates an explicit account/model even when workspace session provisioning is disabled', async () => {
+  const { ports } = createPorts();
+  ports.getMaxSessionsPerWorkspace.mockReturnValue(0);
+  const validateCodexAccount = vi
+    .fn()
+    .mockRejectedValue(new ApplicationError('PRECONDITION_FAILED', 'Unsupported account model'));
+  await expect(
+    launchWorkspace(
+      {
+        type: 'MANUAL',
+        projectId: 'p1',
+        name: 'Invalid',
+        provider: 'CODEX',
+        model: 'gpt-unsupported',
+        codexAccountId: 'managed',
+      },
+      { ...ports, validateCodexAccount }
+    )
+  ).rejects.toThrow('Unsupported account model');
+  expect(validateCodexAccount).toHaveBeenCalledWith({
+    accountId: 'managed',
+    model: 'gpt-unsupported',
+  });
+  expect(ports.createWorkspace).not.toHaveBeenCalled();
+});
+
+it('maps unavailable account admission to a recoverable precondition before persistence', async () => {
+  const { ports } = createPorts();
+  ports.checkCliHealth.mockResolvedValue({
+    claude: { isInstalled: true },
+    codex: { isInstalled: true, isAuthenticated: false },
+  });
+  const validateCodexAccount = vi.fn().mockRejectedValue(new Error('No signed-in account'));
+  await expect(
+    launchWorkspace(
+      { type: 'MANUAL', projectId: 'p1', name: 'Invalid', provider: 'CODEX' },
+      { ...ports, validateCodexAccount }
+    )
+  ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED', message: 'No signed-in account' });
+  expect(ports.createWorkspace).not.toHaveBeenCalled();
+});
+
+it.each(['xhigh', null] as const)(
+  'validates explicit reasoning effort before workspace persistence (%s)',
+  async (reasoningEffort) => {
+    const { ports } = createPorts();
+    const validateCodexAccount = vi
+      .fn()
+      .mockRejectedValue(
+        new ApplicationError('PRECONDITION_FAILED', 'Requested effort unavailable')
+      );
+    await expect(
+      launchWorkspace(
+        {
+          type: 'MANUAL',
+          projectId: 'p1',
+          name: 'Effort',
+          provider: 'CODEX',
+          model: 'gpt',
+          reasoningEffort,
+        },
+        { ...ports, validateCodexAccount }
+      )
+    ).rejects.toThrow('Requested effort unavailable');
+    expect(validateCodexAccount).toHaveBeenCalledWith({
+      accountId: undefined,
+      model: 'gpt',
+      reasoningEffort,
+    });
+    expect(ports.createWorkspace).not.toHaveBeenCalled();
+  }
+);

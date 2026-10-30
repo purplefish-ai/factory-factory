@@ -35,6 +35,16 @@ describe('SessionRuntimeMachine', () => {
     activeGoals: 0,
   };
 
+  it('clears cached and published slash commands when the runtime stops', () => {
+    const clearCommands = vi.fn();
+    const machine = new SessionRuntimeMachine(vi.fn(), () => 'now', clearCommands);
+    const store = createStore();
+    store.liveSlashCommands = [{ name: '/private', description: 'Account skill' }];
+    machine.markRuntime(store, { phase: 'idle', processState: 'stopped', activity: 'IDLE' });
+    expect(store.liveSlashCommands).toBeUndefined();
+    expect(clearCommands).toHaveBeenCalledExactlyOnceWith('s1');
+  });
+
   it('retains explicit work when restoring an alive idle snapshot', () => {
     const machine = new SessionRuntimeMachine(
       () => undefined,

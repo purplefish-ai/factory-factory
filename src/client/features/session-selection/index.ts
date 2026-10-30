@@ -8,3 +8,4 @@ export {
   SessionLaunchControls,
   type SessionLaunchControlsProps,
 } from './session-launch-controls';
+export { NewSessionAccountAction } from './new-session-account-action';

@@ -32,6 +32,7 @@ export type WorkspaceCreationSource =
       provider?: SessionProvider;
       model?: string;
       accessMode?: string;
+      codexAccountId?: string;
       reasoningEffort?: string | null;
       planModeEnabled?: boolean;
     }

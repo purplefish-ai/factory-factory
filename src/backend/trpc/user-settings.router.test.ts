@@ -290,6 +290,20 @@ describe('userSettingsRouter', () => {
     });
   });
 
+  it('returns unavailable choices for a failed account-specific catalog', async () => {
+    mockGetCodexModels.mockRejectedValue(new Error('Selected account is unavailable'));
+    await expect(
+      createCaller().getProviderOptions({ codexAccountId: 'managed' })
+    ).resolves.toMatchObject({
+      CODEX: {
+        source: 'fallback',
+        error: 'Selected account is unavailable',
+        models: [],
+        efforts: [],
+      },
+    });
+    expect(mockGetCodexModels).toHaveBeenCalledExactlyOnceWith('managed');
+  });
   it('falls back to static Codex provider options when catalog loading fails', async () => {
     mockGetCodexModels.mockRejectedValue(new Error('codex unavailable'));
 
@@ -369,10 +383,10 @@ describe('userSettingsRouter', () => {
     mockGetCodexModels.mockReturnValue(codexCatalog);
 
     const providerOptions = createCaller().getProviderOptions();
-    await Promise.resolve();
-
-    expect(mockGetClaudeModels).toHaveBeenCalledTimes(1);
-    expect(mockGetCodexModels).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => {
+      expect(mockGetClaudeModels).toHaveBeenCalledTimes(1);
+      expect(mockGetCodexModels).toHaveBeenCalledTimes(1);
+    });
 
     resolveClaude!([{ id: 'default', displayName: 'Default', description: null }]);
     resolveCodex!([

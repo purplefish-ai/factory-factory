@@ -5,14 +5,17 @@ import type { AgentSession, Prisma, SessionProvider, Workspace } from '@prisma-g
 
 export interface AcquirePRDedicatedSessionInput extends PRTarget {
   provider: SessionProvider;
+  codexAccountId?: string | null;
   model: string;
   maxSessions: number;
   expectedBindingRevision?: number;
   isCurrent?: () => boolean;
+  reuseOnly?: boolean;
 }
 export type PRDedicatedSessionAcquisition =
   | { outcome: 'created' | 'reused'; session: AgentSession }
-  | { outcome: 'limit_reached' | 'unavailable' };
+  | { outcome: 'limit_reached' | 'unavailable' }
+  | { outcome: 'missing' };
 
 class AcquisitionCancelled extends Error {}
 
@@ -118,6 +121,9 @@ class PRDedicatedSessionAccessor {
         ? { outcome: 'reused', session }
         : { outcome: 'unavailable' };
     }
+    if (input.reuseOnly) {
+      return { outcome: 'missing' };
+    }
     const count = await tx.agentSession.count({
       where: { workspaceId: input.workspaceId, status: { in: ['RUNNING', 'IDLE'] } },
     });
@@ -134,6 +140,7 @@ class PRDedicatedSessionAccessor {
         workflow: PR_DEDICATED_WORKFLOW,
         name: `PR ${pr.number ?? pr.id}`,
         provider: input.provider,
+        codexAccountId: input.codexAccountId,
         model: input.model,
         providerProjectPath: pr.workspace.worktreePath,
       },

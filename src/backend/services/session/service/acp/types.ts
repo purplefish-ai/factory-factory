@@ -2,6 +2,14 @@ export type AcpProvider = 'CLAUDE' | 'CODEX';
 
 export type PermissionPreset = 'STRICT' | 'RELAXED' | 'YOLO';
 
+/** An opaque server-resolved profile; ACP owns no account lookup or admission policy. */
+export interface AcpCodexAccountContext {
+  accountId: string;
+  homeDir: string;
+  sessionsDir: string;
+  env: NodeJS.ProcessEnv;
+}
+
 export interface AcpMcpServerConfig {
   /** Human-readable name for the MCP server (required by ACP SDK) */
   name: string;
@@ -12,6 +20,8 @@ export interface AcpMcpServerConfig {
 
 export interface AcpClientOptions {
   provider: AcpProvider;
+  /** Server-resolved immutable profile; never accepted directly from clients. */
+  codexAccountContext?: AcpCodexAccountContext;
   /** Whether the adapter is serving an active turn or read-only history browsing. */
   purpose?: 'active' | 'browse';
   /** Lifecycle setup must finish before this incarnation accepts prompts. */

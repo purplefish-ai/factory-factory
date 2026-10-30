@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 
 interface QuickChatContentProps {
   workspaceId: string;
+  codexAccountId?: string | null;
   chatState: UseChatWebSocketReturn;
   viewportRef: React.RefObject<HTMLDivElement | null>;
   onScroll: () => void;
@@ -21,6 +22,7 @@ interface QuickChatContentProps {
 
 export function QuickChatContent({
   workspaceId,
+  codexAccountId,
   chatState,
   viewportRef,
   onScroll,
@@ -121,6 +123,7 @@ export function QuickChatContent({
           onHeightChange={handleHeightChange}
           pendingMessageCount={chatState.pendingMessages.size}
           workspaceId={workspaceId}
+          codexAccountId={codexAccountId}
           acpConfigOptions={chatState.acpConfigOptions}
           onSetConfigOption={chatState.setConfigOption}
         />

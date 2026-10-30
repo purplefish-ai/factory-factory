@@ -327,6 +327,50 @@ describe('AcpClientFactory', () => {
     expect(mocks.spawn).toHaveBeenCalledWith('/opt/custom-acp', [], expect.any(Object));
   });
 
+  it('spawns a saved Codex profile without inheriting default credentials', async () => {
+    setupSuccessfulSpawn();
+    const factory = new AcpClientFactory();
+    factory.configureEnvironment({
+      childProcessEnvProvider: () => ({ OPENAI_API_KEY: 'wrong', CODEX_HOME: '/default' }),
+    });
+    await factory.createClient(
+      createParams({
+        options: defaultOptions({
+          provider: 'CODEX',
+          codexAccountContext: {
+            accountId: 'managed',
+            homeDir: '/managed',
+            sessionsDir: '/managed/sessions',
+            env: { CODEX_HOME: '/managed' },
+          },
+        }),
+      })
+    );
+    expect(mocks.spawn.mock.calls[0]?.[2].env).toMatchObject({ CODEX_HOME: '/managed' });
+    expect(mocks.spawn.mock.calls[0]?.[2].env).not.toHaveProperty('OPENAI_API_KEY');
+  });
+  it('never replaces a failed modern Codex resume on its saved account', async () => {
+    setupSuccessfulSpawn(createMockChildProcess({ exitAfterSigterm: true }), { loadSession: true });
+    mocks.loadSession.mockRejectedValue(new Error('account does not own this rollout'));
+    await expect(
+      new AcpClientFactory().createClient(
+        createParams({
+          options: defaultOptions({
+            provider: 'CODEX',
+            resumeProviderSessionId: '01900000-1111-7777-8888-111111111111',
+            codexAccountContext: {
+              accountId: 'saved-resume',
+              homeDir: '/saved-resume',
+              sessionsDir: '/saved-resume/sessions',
+              env: { CODEX_HOME: '/saved-resume' },
+            },
+          }),
+        })
+      )
+    ).rejects.toThrow('account does not own this rollout');
+    expect(mocks.spawn.mock.calls[0]?.[2].env).toMatchObject({ CODEX_HOME: '/saved-resume' });
+    expect(mocks.newSession).not.toHaveBeenCalled();
+  });
   it('uses configured environment and orphan-safe stdio spawn options', async () => {
     setupSuccessfulSpawn();
     const factory = new AcpClientFactory();

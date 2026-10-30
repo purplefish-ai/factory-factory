@@ -252,3 +252,17 @@ it('offers real access choices without a fabricated unavailable selection when t
   keyboardSelect('Read only');
   expect(onChange).toHaveBeenCalledWith('read-only');
 });
+
+it('selects Auto or a named Codex account with the keyboard and hides account controls for Claude', () => {
+  const onChange = vi.fn();
+  const account = { id: 'work', label: 'Work', authenticated: true, enabled: false };
+  const mounted = mount({ account: { accounts: [account], onChange } });
+  keyboardOpen(mounted.container.querySelector('[aria-label="Codex account: Auto"]'));
+  keyboardSelect('Work');
+  expect(onChange).toHaveBeenCalledWith('work');
+  keyboardOpen(mounted.container.querySelector('[aria-label="Codex account: Auto"]'));
+  keyboardSelect('Auto');
+  expect(onChange).toHaveBeenCalledWith(undefined);
+  const claude = mount({ provider: 'CLAUDE', account: { accounts: [account], onChange } });
+  expect(claude.container.querySelector('[aria-label^="Codex account:"]')).toBeNull();
+});

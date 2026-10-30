@@ -1,4 +1,5 @@
 import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
+import { codexAccountService } from '@/backend/services/codex-accounts';
 import { createLogger } from '@/backend/services/logger.service';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/session/service/acp';
@@ -8,13 +9,13 @@ import {
   resolveAcpModelSelection,
 } from '@/backend/services/session/service/acp/acp-model-selection';
 import { normalizeSessionConfigOptions } from '@/backend/services/session/service/acp/acp-session-config-options';
-import { fetchSessionLaunchOptionsFromAcp } from '@/backend/services/session/service/acp/session-launch-options-probe';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { userSettingsService } from '@/backend/services/settings';
 import type { SessionDeltaEvent, QueuedMessage } from '@/shared/acp-protocol';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
+import { NATIVE_DEFAULT_CODEX_ACCOUNT_ID } from '@/shared/codex-accounts';
 import type { SessionLaunchOptions } from '@/shared/session-launch';
 import type { SessionPermissionPreset } from '@prisma-gen/client';
 import { parseAcpConfigSnapshot } from './acp-config-snapshot';
@@ -36,6 +37,7 @@ import {
   SessionConfigSnapshotPersistence,
   type PersistAcpConfigSnapshotParams,
 } from './session-config-snapshot-persistence';
+import { fetchAccountSessionLaunchOptions } from './session-launch-options-provider';
 export type { PersistAcpConfigSnapshotParams } from './session-config-snapshot-persistence';
 import { setInactiveSessionConfigOption } from './session-inactive-config-options';
 import { SessionLaunchOptionsService } from './session-launch-options.service';
@@ -102,7 +104,14 @@ export class SessionConfigService {
     this.launchOptionsService =
       options.launchOptionsService ??
       new SessionLaunchOptionsService({
-        fetchOptions: fetchSessionLaunchOptionsFromAcp,
+        fetchOptions: fetchAccountSessionLaunchOptions,
+        resolveAccountId: async (input) =>
+          (
+            await codexAccountService.getPreviewRuntimeContext({
+              accountId: input.codexAccountId,
+              model: input.model,
+            })
+          ).accountId,
         getSettings: () => userSettingsService.get(),
       });
     this.repository = options.repository;
@@ -202,6 +211,7 @@ export class SessionConfigService {
   getLaunchOptions(input: {
     provider: SessionProvider;
     model?: string;
+    codexAccountId?: string;
   }): Promise<SessionLaunchOptions> {
     return this.launchOptionsService.getOptions(input);
   }
@@ -488,12 +498,14 @@ export class SessionConfigService {
     }
     let modelCatalog = null;
     if (session?.provider === 'CODEX') {
-      context.catalog ??= this.codexModelCatalogService.getModels().catch((error: unknown) => {
-        logger.warn('Failed to refresh Codex model catalog from app-server fallback', {
-          error: error instanceof Error ? error.message : String(error),
+      context.catalog ??= this.codexModelCatalogService
+        .getModels(session.codexAccountId ?? NATIVE_DEFAULT_CODEX_ACCOUNT_ID)
+        .catch((error: unknown) => {
+          logger.warn('Failed to refresh Codex model catalog from app-server fallback', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+          return null;
         });
-        return null;
-      });
       modelCatalog = await context.catalog;
       // Passive discovery must not retain a selection from before a stopped edit.
       session = await this.repository.getSessionById(sessionId);

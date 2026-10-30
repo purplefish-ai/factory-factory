@@ -3,12 +3,12 @@ import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
 import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
 import { CircleIcon } from '@phosphor-icons/react/dist/csr/Circle';
 import { PauseCircleIcon } from '@phosphor-icons/react/dist/csr/PauseCircle';
-import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { PulseIcon } from '@phosphor-icons/react/dist/csr/Pulse';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import { XCircleIcon } from '@phosphor-icons/react/dist/csr/XCircle';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AgentSessionStatus } from '@/client/components/agent-session-status';
+import { NewSessionAccountAction } from '@/client/features/session-selection';
 import { getSessionDisplayName } from '@/client/lib/session-display-name';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -24,14 +24,16 @@ export interface SessionData {
   name?: string | null;
   workflow?: string | null;
   createdAt: Date;
+  provider?: 'CLAUDE' | 'CODEX';
 }
 
 interface SessionTabBarProps {
   sessions: SessionData[];
+  workspaceProvider?: 'CLAUDE' | 'CODEX';
   currentSessionId: string | null;
   runningSessionId?: string | null;
   onSelectSession: (sessionId: string) => void;
-  onCreateSession: () => void;
+  onCreateSession: (codexAccountId?: string) => void;
   onCloseSession: (sessionId: string) => void;
   disabled?: boolean;
   className?: string;
@@ -195,6 +197,7 @@ function SessionTab({
 export function SessionTabBar({
   sessions,
   currentSessionId,
+  workspaceProvider,
   runningSessionId,
   onSelectSession,
   onCreateSession,
@@ -324,16 +327,11 @@ export function SessionTabBar({
 
       {/* New session button — hidden in readOnly mode */}
       {!readOnly && (
-        <button
-          type="button"
-          onClick={onCreateSession}
+        <NewSessionAccountAction
+          provider={sessions[0]?.provider ?? workspaceProvider}
+          onCreate={onCreateSession}
           disabled={disabled}
-          title="New Session"
-          aria-label="New session"
-          className="h-7 w-7 shrink-0 ml-1 flex items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-sidebar-accent hover:text-foreground disabled:opacity-50 disabled:pointer-events-none"
-        >
-          <PlusIcon className="h-4 w-4" />
-        </button>
+        />
       )}
     </div>
   );

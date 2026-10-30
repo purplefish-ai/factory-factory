@@ -16,7 +16,7 @@ vi.mock('@/backend/services/session/service/lifecycle/session-provider-history-h
   hydrateProviderHistoryIfNeeded: vi.fn(),
 }));
 vi.mock('@/backend/services/session/service/lifecycle/session-core-services', () => ({
-  sessionLifecycleService: { getRuntimeSnapshot: () => ({ processState: 'alive' }) },
+  sessionLifecycleService: { getRuntimeSnapshot: () => ({ processState: 'stopped' }) },
   sessionLifecycleEventService: { hydrate: vi.fn() },
   sessionConfigService: {
     getSessionConfigProjection: async () => ({
@@ -26,6 +26,7 @@ vi.mock('@/backend/services/session/service/lifecycle/session-core-services', ()
 }));
 vi.mock('@/backend/services/session/service/session-domain.service', () => ({
   sessionDomainService: {
+    getTranscriptSnapshot: () => [],
     prepareLoad: (_id: string, runtime: unknown) => ({ replayEvents: [], sessionRuntime: runtime }),
     finishLoad: vi.fn(),
     emitDelta: mocks.emitDelta,
@@ -80,4 +81,25 @@ it('merges scoped cached commands against complete workspace disk namespaces', a
   } finally {
     rmSync(worktreePath, { recursive: true, force: true });
   }
+});
+
+it('never reuses provider-global Codex skills when opening another saved account', async () => {
+  mocks.getCachedCommands.mockClear();
+  mocks.emitDelta.mockClear();
+  mocks.findById.mockResolvedValue({
+    provider: 'CODEX',
+    codexAccountId: 'account-b',
+    status: 'IDLE',
+    workspace: { status: 'READY', worktreePath: '/work' },
+  });
+  mocks.getCachedCommands.mockResolvedValue([
+    { name: '/account-a-skill', description: 'Private account A' },
+  ]);
+  const handler = createLoadSessionTestHandler({ tryDispatchNextMessage: vi.fn() });
+  await handler({ sessionId: 'account-b-session', message: { type: 'load_session' } });
+  expect(mocks.getCachedCommands).not.toHaveBeenCalled();
+  expect(mocks.emitDelta).toHaveBeenCalledWith('account-b-session', {
+    type: 'slash_commands',
+    slashCommands: [],
+  });
 });

@@ -4,7 +4,8 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { z } from 'zod';
-import { createLogger } from '@/backend/services/logger.service';
+import { codexAccountService, type CodexRuntimeContext } from '@/backend/services/codex-accounts';
+import { createLogger, getCurrentProcessEnv } from '@/backend/services/logger.service';
 import { normalizeCodexSessionId as normalizeProviderSessionId } from '@/backend/services/session/service/acp/acp-session-identity';
 import { summarizeZodIssues } from '@/backend/services/session/service/zod-issue-summary';
 import type { HistoryMessage, MessageAttachment } from '@/shared/acp-protocol';
@@ -95,7 +96,7 @@ export type CodexSessionHistoryLoadResult =
   | { status: 'error'; reason: 'read_failed'; filePath: string };
 
 function getOptionalEnvPath(name: 'CODEX_HOME' | 'CODEX_SESSIONS_DIR'): string | undefined {
-  const value = process.env[name];
+  const value = getCurrentProcessEnv()[name]?.trim();
   if (!value || value === 'undefined' || value === 'null') {
     return undefined;
   }
@@ -827,9 +828,9 @@ async function resolveUncachedSessionFilePath(
 
 async function resolveSessionFilePath(
   workingDir: string,
-  providerSessionId: string
+  providerSessionId: string,
+  sessionsDir: string
 ): Promise<string | null> {
-  const sessionsDir = getCodexSessionsDir();
   try {
     await access(sessionsDir);
   } catch {
@@ -855,6 +856,8 @@ class CodexSessionHistoryLoaderService {
   async loadSessionHistory(params: {
     providerSessionId: string | null | undefined;
     workingDir: string;
+    codexAccountId?: string | null;
+    codexAccountContext?: CodexRuntimeContext;
   }): Promise<CodexSessionHistoryLoadResult> {
     const providerSessionId = params.providerSessionId;
     if (!providerSessionId) {
@@ -868,7 +871,16 @@ class CodexSessionHistoryLoaderService {
       return { status: 'skipped', reason: 'invalid_provider_session_id' };
     }
 
-    const filePath = await resolveSessionFilePath(params.workingDir, providerSessionId);
+    const context =
+      params.codexAccountContext ??
+      (params.codexAccountId
+        ? await codexAccountService.getHistoryContext(params.codexAccountId)
+        : undefined);
+    const filePath = await resolveSessionFilePath(
+      params.workingDir,
+      providerSessionId,
+      context?.sessionsDir ?? getCodexSessionsDir()
+    );
     if (filePath === null) {
       return { status: 'not_found' };
     }

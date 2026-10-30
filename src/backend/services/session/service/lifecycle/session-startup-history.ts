@@ -1,3 +1,4 @@
+import type { CodexRuntimeContext } from '@/backend/services/codex-accounts';
 import type { AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { isLocalTranscriptMessage } from '@/backend/services/session/service/store/session-local-transcript';
@@ -22,7 +23,8 @@ const pendingPreparations = new WeakMap<
 export function prepareSessionHistoryForResume(
   sessionId: string,
   context: SessionContext,
-  dependencies: SessionStartupHistoryDependencies
+  dependencies: SessionStartupHistoryDependencies,
+  codexAccountContext?: CodexRuntimeContext
 ): Promise<boolean | undefined> {
   // Another startup owns any replay already underway. Do not mutate its history
   // or suppression policy while joining that runtime.
@@ -39,7 +41,12 @@ export function prepareSessionHistoryForResume(
   if (existing) {
     return existing;
   }
-  const preparation = hydrateSessionHistory(sessionId, context, dependencies).finally(() => {
+  const preparation = hydrateSessionHistory(
+    sessionId,
+    context,
+    dependencies,
+    codexAccountContext
+  ).finally(() => {
     preparations.delete(key);
   });
   preparations.set(key, preparation);
@@ -49,13 +56,15 @@ export function prepareSessionHistoryForResume(
 async function hydrateSessionHistory(
   sessionId: string,
   context: SessionContext,
-  dependencies: SessionStartupHistoryDependencies
+  dependencies: SessionStartupHistoryDependencies,
+  codexAccountContext?: CodexRuntimeContext
 ): Promise<boolean> {
   const hadProviderTranscript = dependencies.sessionDomainService
     .getTranscriptSnapshot(sessionId)
     .some((message) => !isLocalTranscriptMessage(message));
   await dependencies.hydrateProviderHistory(sessionId, {
     ...context.session,
+    ...(codexAccountContext ? { codexAccountContext } : {}),
     workspace: { worktreePath: context.workingDir },
   });
   return Boolean(

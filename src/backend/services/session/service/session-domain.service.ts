@@ -72,16 +72,22 @@ export class SessionDomainService extends EventEmitter {
     return null;
   }
 
-  private readonly runtimeMachine = new SessionRuntimeMachine((sessionId, runtime) => {
-    this.publisher.emitDelta(sessionId, {
-      type: 'session_runtime_updated',
-      sessionRuntime: runtime,
-    });
-    this.emit('runtime_changed', {
-      sessionId,
-      runtime,
-    });
-  }, this.nowIso);
+  private readonly runtimeMachine = new SessionRuntimeMachine(
+    (sessionId, runtime) => {
+      this.publisher.emitDelta(sessionId, {
+        type: 'session_runtime_updated',
+        sessionRuntime: runtime,
+      });
+      this.emit('runtime_changed', {
+        sessionId,
+        runtime,
+      });
+    },
+    this.nowIso,
+    (sessionId) => {
+      this.publisher.emitDelta(sessionId, { type: 'slash_commands', slashCommands: [] });
+    }
+  );
 
   private transitionRuntime(
     sessionId: string,
@@ -146,6 +152,11 @@ export class SessionDomainService extends EventEmitter {
   }
 
   emitDelta(sessionId: string, event: SessionDeltaEvent): void {
+    if (event.type === 'slash_commands') {
+      this.registry.getOrCreateActive(sessionId).liveSlashCommands = structuredClone(
+        event.slashCommands ?? []
+      );
+    }
     this.publisher.emitDelta(sessionId, event);
   }
   rejectMessage(sessionId: string, messageId: string, errorMessage: string): void {

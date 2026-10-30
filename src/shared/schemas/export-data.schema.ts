@@ -16,6 +16,7 @@ import {
   hexColorSchema,
   normalizeColorScheme,
 } from '@/shared/appearance';
+import { codexAccountMetadataSchema } from '@/shared/codex-account-backup';
 import {
   CIStatus as CoreCIStatus,
   IssueProvider as CoreIssueProvider,
@@ -157,6 +158,7 @@ const exportedAgentSessionSchema = z.object({
   model: z.string(),
   status: SessionStatus,
   provider: SessionProvider,
+  codexAccountId: z.string().nullable().optional().default(null),
   providerSessionId: z.string().nullable(),
   providerProjectPath: z.string().nullable(),
   providerProcessPid: z.number().nullable(),
@@ -247,12 +249,13 @@ const legacyAndCurrentSchema = z.object({
   meta: z.object({
     exportedAt: z.string(),
     version: z.string(),
-    schemaVersion: z.union([z.literal(4), z.literal(5), z.literal(6)]),
+    schemaVersion: z.union([z.literal(4), z.literal(5), z.literal(6), z.literal(7)]),
   }),
   data: z.object({
     projects: z.array(exportedProjectSchema),
     workspaces: z.array(exportedWorkspaceSchema),
     agentSessions: z.array(exportedAgentSessionSchema),
+    codexAccounts: z.array(codexAccountMetadataSchema).optional().default([]),
     terminalSessions: z.array(exportedTerminalSessionSchema),
     userSettings: exportedUserSettingsSchema.nullable(),
   }),
@@ -347,8 +350,8 @@ function normalizePublishedVersion5(data: z.infer<typeof publishedVersion5Schema
   };
 }
 function normalizeLegacyAndCurrent(data: z.infer<typeof legacyAndCurrentSchema>) {
-  if (data.meta.schemaVersion === 6) {
-    return { ...data, meta: { ...data.meta, schemaVersion: 6 as const } };
+  if (data.meta.schemaVersion === 6 || data.meta.schemaVersion === 7) {
+    return { ...data, meta: { ...data.meta, schemaVersion: data.meta.schemaVersion } };
   }
   const workspaces = data.data.workspaces.map((workspace) => {
     const legacySessionIds = [
@@ -429,6 +432,21 @@ function safelyNormalize<T, R>(
     return z.NEVER;
   }
 }
+function validateAccountReferences(
+  backup: z.infer<typeof legacyAndCurrentSchema>,
+  ctx: z.RefinementCtx
+) {
+  const ids = new Set(backup.data.codexAccounts.map((account) => account.id));
+  backup.data.agentSessions.forEach((session, index) => {
+    if (session.codexAccountId !== null && !ids.has(session.codexAccountId)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['data', 'agentSessions', index, 'codexAccountId'],
+        message: 'Saved Codex account metadata is required',
+      });
+    }
+  });
+}
 export const exportDataSchema = z
   .union([
     publishedVersion5Schema.transform((input, ctx) =>
@@ -438,7 +456,8 @@ export const exportDataSchema = z
       safelyNormalize(input, ctx, normalizeLegacyAndCurrent)
     ),
   ])
-  .superRefine(validateBackupPRs);
+  .superRefine(validateBackupPRs)
+  .superRefine(validateAccountReferences);
 
 export {
   exportedAgentSessionSchema,

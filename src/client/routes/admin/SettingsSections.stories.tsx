@@ -78,6 +78,7 @@ function SettingsStoryProvider({
       },
     ];
     const responses: Record<string, (input: unknown) => unknown> = {
+      'codexAccounts.list': () => [],
       'userSettings.get': () => settings,
       'userSettings.update': (input) => {
         settings = { ...settings, ...(typeof input === 'object' ? input : {}) };

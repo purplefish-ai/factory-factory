@@ -399,6 +399,23 @@ export type EnumRunScriptStatusWithAggregatesFilter<$PrismaModel = never> = {
   _max?: Prisma.NestedEnumRunScriptStatusFilter<$PrismaModel>
 }
 
+export type EnumCodexAccountKindFilter<$PrismaModel = never> = {
+  equals?: $Enums.CodexAccountKind | Prisma.EnumCodexAccountKindFieldRefInput<$PrismaModel>
+  in?: $Enums.CodexAccountKind[]
+  notIn?: $Enums.CodexAccountKind[]
+  not?: Prisma.NestedEnumCodexAccountKindFilter<$PrismaModel> | $Enums.CodexAccountKind
+}
+
+export type EnumCodexAccountKindWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.CodexAccountKind | Prisma.EnumCodexAccountKindFieldRefInput<$PrismaModel>
+  in?: $Enums.CodexAccountKind[]
+  notIn?: $Enums.CodexAccountKind[]
+  not?: Prisma.NestedEnumCodexAccountKindWithAggregatesFilter<$PrismaModel> | $Enums.CodexAccountKind
+  _count?: Prisma.NestedIntFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumCodexAccountKindFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumCodexAccountKindFilter<$PrismaModel>
+}
+
 export type EnumSessionStatusFilter<$PrismaModel = never> = {
   equals?: $Enums.SessionStatus | Prisma.EnumSessionStatusFieldRefInput<$PrismaModel>
   in?: $Enums.SessionStatus[]
@@ -935,6 +952,23 @@ export type NestedEnumRunScriptStatusWithAggregatesFilter<$PrismaModel = never> 
   _count?: Prisma.NestedIntFilter<$PrismaModel>
   _min?: Prisma.NestedEnumRunScriptStatusFilter<$PrismaModel>
   _max?: Prisma.NestedEnumRunScriptStatusFilter<$PrismaModel>
+}
+
+export type NestedEnumCodexAccountKindFilter<$PrismaModel = never> = {
+  equals?: $Enums.CodexAccountKind | Prisma.EnumCodexAccountKindFieldRefInput<$PrismaModel>
+  in?: $Enums.CodexAccountKind[]
+  notIn?: $Enums.CodexAccountKind[]
+  not?: Prisma.NestedEnumCodexAccountKindFilter<$PrismaModel> | $Enums.CodexAccountKind
+}
+
+export type NestedEnumCodexAccountKindWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.CodexAccountKind | Prisma.EnumCodexAccountKindFieldRefInput<$PrismaModel>
+  in?: $Enums.CodexAccountKind[]
+  notIn?: $Enums.CodexAccountKind[]
+  not?: Prisma.NestedEnumCodexAccountKindWithAggregatesFilter<$PrismaModel> | $Enums.CodexAccountKind
+  _count?: Prisma.NestedIntFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumCodexAccountKindFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumCodexAccountKindFilter<$PrismaModel>
 }
 
 export type NestedEnumSessionStatusFilter<$PrismaModel = never> = {

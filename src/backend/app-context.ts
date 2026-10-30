@@ -40,6 +40,7 @@ import { launchWorkspace } from './orchestration/workspace-launch.orchestrator';
 import { deliverWorkspaceNotification } from './orchestration/workspace-notification-delivery.orchestrator';
 import { createWorkspaceRename } from './orchestration/workspace-rename.orchestrator';
 import { getQuickAction, listQuickActions } from './prompts/quick-actions';
+import { codexAccountService } from './services/codex-accounts';
 import { configService } from './services/config.service';
 import { cryptoService } from './services/crypto.service';
 import { decisionLogService } from './services/decision-log';
@@ -138,6 +139,7 @@ export type ApplicationServices = BridgeServices & {
   checkGithubAuth: typeof checkGithubAuth;
   cliHealthService: typeof cliHealthService;
   configService: typeof configService;
+  codexAccountService: typeof codexAccountService;
   cryptoService: typeof cryptoService;
   createLogger: typeof createLogger;
   dataBackupService: typeof dataBackupService;
@@ -294,6 +296,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     checkGithubAuth,
     cliHealthService,
     configService,
+    codexAccountService,
     computePendingRequestType,
     triggerAdversarialReview,
     cryptoService,
@@ -353,6 +356,10 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     schedulerService,
     serverInstanceService,
     sessionDataService: createSessionDataService({
+      accounts: {
+        withAccountReservation: (input, operation) =>
+          services.codexAccountService.withAccountReservation(input, operation),
+      },
       providerResolver: {
         resolveSessionDefaults: (input) =>
           services.sessionProviderResolverService.resolveSessionDefaults(input),
@@ -429,6 +436,13 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
           services.sessionProviderResolverService.resolveProviderForWorkspaceCreation(...args),
         checkCliHealth: () => services.cliHealthService.checkHealth(),
         getLaunchOptions: (input) => services.sessionConfigService.getLaunchOptions(input),
+        validateCodexAccount: async (input) => {
+          const settings = await services.userSettingsQueryService.get();
+          return services.codexAccountService.getPreviewRuntimeContext({
+            ...input,
+            model: input.model ?? settings.defaultCodexModel,
+          });
+        },
         createWorkspace: (input) =>
           source.type === 'PERIODIC_TASK'
             ? services.workspaceCreationService.create(input)
@@ -497,6 +511,7 @@ export function createApplication(
 }
 
 export async function disposeApplication(application: Application): Promise<void> {
+  await application.services.codexAccountService.shutdown();
   application.lifecycle.eventCollector.stop();
   await application.lifecycle.snapshotReconciliation.stop();
   application.services.workspaceGitStateService.stop();

@@ -261,3 +261,23 @@ it.each([false, true])(
     expect(await db.prisma.workspacePRDedicatedSession.count()).toBe(0);
   }
 );
+
+it('probes reuse atomically without creating an unreserved replacement', async () => {
+  await expect(prDedicatedSessionAccessor.acquire({ ...input, reuseOnly: true })).resolves.toEqual({
+    outcome: 'missing',
+  });
+  expect(await db.prisma.agentSession.count()).toBe(0);
+  const created = await prDedicatedSessionAccessor.acquire(input);
+  expect(created.outcome).toBe('created');
+  await expect(
+    prDedicatedSessionAccessor.acquire({ ...input, reuseOnly: true })
+  ).resolves.toMatchObject({ outcome: 'reused' });
+  if (!('session' in created)) {
+    throw new Error('Expected session');
+  }
+  await db.prisma.agentSession.delete({ where: { id: created.session.id } });
+  await expect(prDedicatedSessionAccessor.acquire({ ...input, reuseOnly: true })).resolves.toEqual({
+    outcome: 'missing',
+  });
+  expect(await db.prisma.agentSession.count()).toBe(0);
+});

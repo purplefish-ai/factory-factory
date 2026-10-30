@@ -60,6 +60,7 @@ export const ModelName = {
   WorkspacePREvent: 'WorkspacePREvent',
   WorkspacePRDiscovery: 'WorkspacePRDiscovery',
   WorkspaceRunScript: 'WorkspaceRunScript',
+  CodexAccount: 'CodexAccount',
   AgentSession: 'AgentSession',
   SessionLifecycleEvent: 'SessionLifecycleEvent',
   TerminalSession: 'TerminalSession',
@@ -247,6 +248,19 @@ export const WorkspaceRunScriptScalarFieldEnum = {
 export type WorkspaceRunScriptScalarFieldEnum = (typeof WorkspaceRunScriptScalarFieldEnum)[keyof typeof WorkspaceRunScriptScalarFieldEnum]
 
 
+export const CodexAccountScalarFieldEnum = {
+  id: 'id',
+  label: 'label',
+  kind: 'kind',
+  enabled: 'enabled',
+  identityKey: 'identityKey',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type CodexAccountScalarFieldEnum = (typeof CodexAccountScalarFieldEnum)[keyof typeof CodexAccountScalarFieldEnum]
+
+
 export const AgentSessionScalarFieldEnum = {
   id: 'id',
   workspaceId: 'workspaceId',
@@ -256,6 +270,7 @@ export const AgentSessionScalarFieldEnum = {
   model: 'model',
   status: 'status',
   provider: 'provider',
+  codexAccountId: 'codexAccountId',
   providerSessionId: 'providerSessionId',
   providerProjectPath: 'providerProjectPath',
   providerProcessPid: 'providerProcessPid',

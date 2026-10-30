@@ -62,6 +62,7 @@ const workspaceCreationSourceSchema = z.discriminatedUnion('type', [
       startupModePreset: z.enum(['non_interactive', 'plan']).optional(),
       provider: z.nativeEnum(SessionProvider).optional(),
       model: z.string().trim().min(1).optional(),
+      codexAccountId: z.string().trim().min(1).optional(),
       ...sessionLaunchSettingsSchema.shape,
     })
     .strict(),

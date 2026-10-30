@@ -5,6 +5,7 @@ import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle'
 import type { ReactNode } from 'react';
 import { AcpConfigSelector } from '@/client/components/acp-config-selector';
 import { ComposerMenuTrigger } from '@/client/components/composer-menu-trigger';
+import { CodexAccountPicker, type CodexAccountPickerProps } from '@/client/features/codex-accounts';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,6 +46,7 @@ export interface LaunchPlanControl {
 }
 export interface SessionLaunchControlsProps extends ProviderModelPickerProps {
   children?: ReactNode;
+  account?: Omit<CodexAccountPickerProps, 'disabled'>;
   reasoning?: LaunchReasoningControl;
   planMode?: LaunchPlanControl;
   accessMode?: LaunchAccessControl;
@@ -223,14 +225,18 @@ export function PlanningSelector({
 /** Pure shared launch controls; native discovery and draft ownership live in the caller's hook. */
 export function SessionLaunchControls({
   reasoning,
+  account,
   planMode,
   accessMode,
   children,
   ...picker
 }: SessionLaunchControlsProps) {
   return (
-    <div className="flex min-w-0 items-center gap-1">
+    <div className="flex min-w-0 flex-wrap items-center gap-1">
       <ProviderModelPicker {...picker} />
+      {picker.provider === 'CODEX' && account && (
+        <CodexAccountPicker {...account} disabled={picker.disabled} />
+      )}
       {reasoning && (
         <ThinkingLevelSelector
           control={reasoning}

@@ -1,4 +1,4 @@
-import type { ChatMessage, MessageState, QueuedMessage } from '@/shared/acp-protocol';
+import type { ChatMessage, CommandInfo, MessageState, QueuedMessage } from '@/shared/acp-protocol';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 
@@ -22,6 +22,7 @@ export interface SessionStore {
   historySuspended?: boolean;
   historyHydratedAt?: string;
   historyHydrationSource?: 'jsonl' | 'acp_fallback' | 'none';
+  liveSlashCommands?: CommandInfo[];
   transcript: ChatMessage[];
   transcriptIdToIndex: Map<string, number>;
   queue: QueuedMessage[];

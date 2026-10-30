@@ -11,6 +11,16 @@ import {
 import { DEFAULT_DEEPGRAM_TTS_MODEL } from '@/shared/deepgram-voices';
 import type { ExportData } from '@/shared/schemas/export-data.schema';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
+
+vi.mock('@/backend/services/codex-accounts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/backend/services/codex-accounts')>()),
+  exportCodexAccountMetadata: vi.fn(async () => [
+    { id: 'account-b', label: 'Work', kind: 'MANAGED', enabled: true, identityKey: 'a'.repeat(64) },
+  ]),
+  restoreCodexAccountMetadata: vi.fn((_tx, rows) =>
+    Promise.resolve(new Map(rows.map((row: { id: string }) => [row.id, row.id])))
+  ),
+}));
 import {
   type AgentSession,
   type Project,
@@ -187,6 +197,7 @@ const mockWorkspace: WorkspaceForExport = {
 };
 
 const mockAgentSession: AgentSession = {
+  codexAccountId: 'account-b',
   workspacePrId: null,
   id: 'session-1',
   workspaceId: 'ws-1',
@@ -437,7 +448,7 @@ describe('DataBackupService', () => {
       expect(exported.data.workspaces[0]?.prs).toHaveLength(3);
     });
 
-    it('exports v4 format with all fields', async () => {
+    it('exports version 7 with account bindings and all settings fields', async () => {
       vi.mocked(prisma.project.findMany).mockResolvedValue([mockProject]);
       vi.mocked(prisma.workspace.findMany).mockResolvedValue([mockWorkspace]);
       vi.mocked(prisma.agentSession.findMany).mockResolvedValue([mockAgentSession]);
@@ -446,15 +457,25 @@ describe('DataBackupService', () => {
 
       const result = await dataBackupService.exportData('1.0.0');
 
-      expect(result.meta.schemaVersion).toBe(6);
+      expect(result.meta.schemaVersion).toBe(7);
       expect(result.data.agentSessions).toHaveLength(1);
       expect(result.data.agentSessions[0]).toEqual(
         expect.objectContaining({
           id: 'session-1',
           provider: SessionProvider.CODEX,
           providerSessionId: 'thread-123',
+          codexAccountId: 'account-b',
         })
       );
+      expect(result.data.codexAccounts).toEqual([
+        {
+          id: 'account-b',
+          label: 'Work',
+          kind: 'MANAGED',
+          enabled: true,
+          identityKey: 'a'.repeat(64),
+        },
+      ]);
       expect(result.data.userSettings).toEqual(
         expect.objectContaining({
           ratchetEnabled: true,
@@ -588,6 +609,7 @@ describe('DataBackupService', () => {
           id: mockAgentSession.id,
           workspaceId: 'ws-1',
           workflow: 'auto-iteration',
+          codexAccountId: 'account-b',
           providerSessionId: 'thread-123',
         }),
       });

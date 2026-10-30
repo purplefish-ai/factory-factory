@@ -17,6 +17,7 @@ export interface AgentSessionRecord {
   model: string;
   status: SessionStatus;
   provider: SessionProvider;
+  codexAccountId?: string | null;
   providerSessionId: string | null;
   providerProjectPath: string | null;
   providerProcessPid: number | null;
@@ -31,6 +32,7 @@ export interface AgentSessionRecordWithWorkspace extends AgentSessionRecord {
 
 export interface AcquirePRDedicatedSessionInput extends PRTarget {
   provider?: SessionProvider;
+  codexAccountId?: string;
   model?: string;
   maxSessions: number;
   expectedBindingRevision?: number;

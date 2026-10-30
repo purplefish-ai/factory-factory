@@ -92,6 +92,32 @@ describe('AcpEventProcessor slash command caching', () => {
     }
   });
 
+  it('publishes Codex skills only to their live session without caching them across accounts', () => {
+    const deps = makeDeps();
+    const processor = new AcpEventProcessor(deps);
+    processor.registerSessionContext('codex-a', {
+      workspaceId: 'w',
+      workingDir: '/work',
+      provider: 'CODEX',
+    });
+    processor.registerSessionContext('codex-b', {
+      workspaceId: 'w',
+      workingDir: '/work',
+      provider: 'CODEX',
+    });
+    const commands = [{ name: '/private-account-skill', description: 'Only account A' }];
+    processor.handleAcpDelta('codex-a', { type: 'slash_commands', slashCommands: commands });
+    expect(mocks.setCachedCommands).not.toHaveBeenCalled();
+    expect(deps.sessionDomainService.emitDelta).toHaveBeenCalledTimes(1);
+    expect(deps.sessionDomainService.emitDelta).not.toHaveBeenCalledWith(
+      'codex-b',
+      expect.anything()
+    );
+    expect(deps.sessionDomainService.emitDelta).toHaveBeenCalledWith('codex-a', {
+      type: 'slash_commands',
+      slashCommands: commands,
+    });
+  });
   it('excludes workspace-local Claude commands from provider cache writes', () => {
     const worktreePath = mkdtempSync(join(tmpdir(), 'ff-acp-slash-commands-'));
     tempDirs.push(worktreePath);

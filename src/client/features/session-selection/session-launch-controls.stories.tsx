@@ -15,6 +15,7 @@ interface PreviewProps {
   planEnabled?: boolean;
   fullAccess?: boolean;
   unavailableAccess?: boolean;
+  multipleAccounts?: boolean;
 }
 function LaunchControlsPreview({
   state = 'ready',
@@ -22,10 +23,12 @@ function LaunchControlsPreview({
   planEnabled = false,
   fullAccess = false,
   unavailableAccess = false,
+  multipleAccounts = false,
 }: PreviewProps) {
   const unavailableEffort = longLabels
     ? 'Maximum advertised thinking level no longer supported'
     : 'ultra';
+  const [codexAccountId, setCodexAccountId] = useState<string>();
   const [provider, setProvider] = useState<ChatProvider>('CODEX');
   const [drafts, setDrafts] = useState<Record<ChatProvider, Draft>>({
     CODEX: {
@@ -80,6 +83,18 @@ function LaunchControlsPreview({
       <SessionLaunchControls
         provider={provider}
         model={draft.model}
+        account={
+          multipleAccounts
+            ? {
+                accounts: [
+                  { id: 'personal', label: 'Personal', authenticated: true, enabled: true },
+                  { id: 'work', label: 'Work account', authenticated: true, enabled: true },
+                ],
+                value: codexAccountId,
+                onChange: setCodexAccountId,
+              }
+            : undefined
+        }
         models={providerOptions[provider].models}
         providerOptions={providerOptions}
         onProviderChange={(next, model) => {
@@ -179,3 +194,4 @@ function getPreviewAccessOptions(provider: ChatProvider, state: PreviewProps['st
         { value: 'bypassPermissions', label: 'Bypass permissions' },
       ];
 }
+export const MultipleCodexAccounts: Story = { args: { multipleAccounts: true } };

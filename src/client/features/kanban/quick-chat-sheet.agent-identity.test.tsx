@@ -45,7 +45,10 @@ vi.mock('./kanban-context', () => ({
 vi.mock('./quick-chat-content', () => ({ QuickChatContent: () => null }));
 vi.mock('@/client/features/workspace', () => ({ QuickActionsMenu: () => null }));
 vi.mock('@/client/lib/trpc', () => ({
-  trpc: { session: { listSessions: { useQuery: () => ({ data: sessions }) } } },
+  trpc: {
+    userSettings: { get: { useQuery: () => ({ data: { defaultSessionProvider: 'CLAUDE' } }) } },
+    session: { listSessions: { useQuery: () => ({ data: sessions }) } },
+  },
 }));
 vi.mock('@/client/features/chat', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/client/features/chat')>()),

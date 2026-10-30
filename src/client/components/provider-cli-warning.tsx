@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
+import type { CodexAccountSummary } from '@/shared/codex-accounts';
 
 const PROVIDER_INFO = {
   CLAUDE: {
@@ -29,7 +30,8 @@ function getWarning(
       latestVersion?: string;
       isOutdated?: boolean;
     };
-  }
+  },
+  hasUsableCodexAccount = false
 ): {
   title: string;
   description: string;
@@ -67,7 +69,7 @@ function getWarning(
       description: 'Update or reinstall Factory Factory to restore its bundled Codex runtime.',
     };
   }
-  if (health.codex.isAuthenticated === false) {
+  if (health.codex.isAuthenticated === false && !hasUsableCodexAccount) {
     return {
       title: 'Codex is not authenticated',
       description: 'Run `ff codex login` in your terminal to authenticate.',
@@ -76,12 +78,34 @@ function getWarning(
   return null;
 }
 
+function getAccountWarning(
+  provider: 'CLAUDE' | 'CODEX',
+  account?: Pick<CodexAccountSummary, 'kind' | 'authenticated'>
+): ReturnType<typeof getWarning> {
+  if (provider !== 'CODEX' || account?.authenticated !== false) {
+    return null;
+  }
+  return {
+    title: 'Codex account is not authenticated',
+    description:
+      account.kind === 'MANAGED'
+        ? 'Sign in to this account from Settings.'
+        : 'Run `ff codex login` in your terminal to authenticate.',
+  };
+}
+
 /**
  * Inline warning shown below a provider select when the selected provider's CLI
  * is not installed or not authenticated.
  * Shares the checkCLIHealth query cache with CLIHealthBanner.
  */
-export function ProviderCliWarning({ provider }: { provider: 'CLAUDE' | 'CODEX' }) {
+export function ProviderCliWarning({
+  provider,
+  codexAccountId,
+}: {
+  provider: 'CLAUDE' | 'CODEX';
+  codexAccountId?: string;
+}) {
   const utils = trpc.useUtils();
   const upgradeProviderCli = trpc.admin.upgradeProviderCLI.useMutation({
     onSuccess: (result) => {
@@ -102,11 +126,27 @@ export function ProviderCliWarning({ provider }: { provider: 'CLAUDE' | 'CODEX' 
     }
   );
 
+  const { data: accounts } = trpc.codexAccounts.list.useQuery(undefined, {
+    enabled: provider === 'CODEX' && (!!codexAccountId || health?.codex.isAuthenticated === false),
+    staleTime: 30_000,
+    retry: false,
+  });
+  const hasUsableCodexAccount =
+    accounts?.some(
+      (account) =>
+        account.authenticated && (codexAccountId ? account.id === codexAccountId : account.enabled)
+    ) ?? false;
   if (!health) {
     return null;
   }
 
-  const warning = getWarning(provider, health);
+  const selectedAccount = codexAccountId
+    ? accounts?.find((account) => account.id === codexAccountId)
+    : undefined;
+  const warning =
+    getWarning(provider, health, hasUsableCodexAccount || !!selectedAccount) ??
+    getAccountWarning(provider, selectedAccount);
+
   if (!warning) {
     return null;
   }

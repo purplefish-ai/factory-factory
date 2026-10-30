@@ -39,6 +39,7 @@ function previewResponse(path: string, input: unknown, provider: ChatProvider) {
     return previewLaunchOptions(input);
   }
   const responses: Record<string, unknown> = {
+    'codexAccounts.list': [],
     'userSettings.get': {
       defaultSessionProvider: provider,
       defaultClaudeModel: 'sonnet',

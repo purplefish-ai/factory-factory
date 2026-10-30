@@ -1,5 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+vi.mock('@/backend/services/codex-accounts', () => ({
+  codexAccountService: {
+    getPreviewRuntimeContext: vi.fn(async () => ({ accountId: 'codex-native-default', env: {} })),
+    withAccountReservation: vi.fn(async (input, create) =>
+      create(input.accountId ?? 'codex-native-default')
+    ),
+  },
+}));
 import { createDefaultApplicationDependencies } from '@/backend/app-context';
+import { codexAccountService } from '@/backend/services/codex-accounts';
 import { sessionProviderResolverService } from '@/backend/services/session';
 import {
   agentSessionAccessor,
@@ -24,6 +33,7 @@ function persisted(input: CreateAgentSessionInput): AgentSession {
     workspacePrId: input.workspacePrId ?? null,
     model: input.model,
     provider: input.provider,
+    codexAccountId: input.codexAccountId ?? null,
     status: 'IDLE',
     providerSessionId: null,
     providerProjectPath: input.providerProjectPath ?? null,
@@ -59,6 +69,7 @@ beforeEach(() => {
   vi.spyOn(agentSessionAccessor, 'createWithinWorkspaceLimit').mockImplementation(
     async (input) => ({ outcome: 'created', session: persisted(input) })
   );
+  vi.spyOn(prDedicatedSessionAccessor, 'find').mockResolvedValue(null);
   vi.spyOn(prDedicatedSessionAccessor, 'findWorkspace').mockResolvedValue(workspace);
   vi.spyOn(prDedicatedSessionAccessor, 'acquire').mockImplementation(async (input) => ({
     outcome: 'created',
@@ -250,6 +261,18 @@ function launchGraph(provider: SessionProvider, claude: string, codex: string) {
 }
 
 describe('real final creation through application launch', () => {
+  it('forwards explicit effort with the effective model into real graph account preflight', async () => {
+    const { services } = launchGraph('CODEX', 'haiku', 'gpt-saved');
+    const preview = vi.mocked(codexAccountService.getPreviewRuntimeContext);
+    preview.mockClear();
+    await services.launchWorkspace({ ...manual, reasoningEffort: 'xhigh' });
+    expect(preview).toHaveBeenCalledExactlyOnceWith({
+      accountId: undefined,
+      model: 'gpt-saved',
+      reasoningEffort: 'xhigh',
+    });
+  });
+
   it('uses both graphs saved models after explicit-provider interactive preflight', async () => {
     const a = launchGraph('CLAUDE', 'haiku', 'gpt-a');
     guardGlobals();
@@ -345,16 +368,16 @@ describe('real final creation through application launch', () => {
   });
 
   it.each([manual, child, periodic])(
-    'retains $type settings failure policy at the final creation boundary',
+    'applies $type settings failure policy at the account validation boundary',
     async (source) => {
       const { services, events, logger } = launchGraph('CLAUDE', 'haiku', 'gpt-saved');
       vi.mocked(services.userSettingsQueryService.get).mockRejectedValue(
         new Error('settings unavailable')
       );
       guardGlobals();
-      if (source.type === 'PERIODIC_TASK') {
+      if (source.type === 'PERIODIC_TASK' || source.type === 'MANUAL') {
         await expect(services.launchWorkspace(source)).rejects.toThrow('settings unavailable');
-        expect(events).toEqual(['workspace']);
+        expect(events).toEqual(source.type === 'MANUAL' ? ['provider', 'health'] : ['workspace']);
       } else {
         expect(await services.launchWorkspace(source)).toMatchObject({ defaultSessionId: null });
         expect(logger.warn).toHaveBeenCalledOnce();

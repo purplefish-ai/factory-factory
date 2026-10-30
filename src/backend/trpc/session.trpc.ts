@@ -10,7 +10,13 @@ import { SessionStatus } from '@/shared/core';
 import { providerPlanUsageSchema, usageProviderSchema } from '@/shared/provider-usage';
 import { sessionLaunchSettingsSchema } from '@/shared/session-launch';
 import { SessionProvider } from '@prisma-gen/client';
-import { type Context, publicProcedure, router, trustedLocalProcedure } from './trpc';
+import {
+  assertTrustedLocalContext,
+  type Context,
+  publicProcedure,
+  router,
+  trustedLocalProcedure,
+} from './trpc';
 
 const createSessionInputSchema = sessionLaunchSettingsSchema.extend({
   workspaceId: z.string(),
@@ -19,6 +25,7 @@ const createSessionInputSchema = sessionLaunchSettingsSchema.extend({
   model: z.string().optional(),
   provider: z.nativeEnum(SessionProvider).optional(),
   initialMessage: z.string().optional(),
+  codexAccountId: z.string().trim().min(1).optional(),
 });
 
 const SUBAGENT_APPLICATION_ERROR_CODES = [
@@ -51,6 +58,9 @@ async function createAgentSessionFromInput(
   ctx: Context,
   input: z.infer<typeof createSessionInputSchema>
 ) {
+  if (input.codexAccountId !== undefined) {
+    assertTrustedLocalContext(ctx);
+  }
   const {
     configService,
     sessionDataService,
@@ -65,7 +75,9 @@ async function createAgentSessionFromInput(
   });
 
   const cliHealth = await ctx.appContext.services.cliHealthService.checkHealth();
-  const providerUnavailableMessage = getProviderUnavailableMessage(provider, cliHealth);
+  const providerUnavailableMessage = getProviderUnavailableMessage(provider, cliHealth, {
+    accountScopedCodex: true,
+  });
   if (providerUnavailableMessage) {
     throw new TRPCError({
       code: 'PRECONDITION_FAILED',
@@ -81,6 +93,7 @@ async function createAgentSessionFromInput(
     ...(input.reasoningEffort !== undefined ? { reasoningEffort: input.reasoningEffort } : {}),
     ...(input.planModeEnabled !== undefined ? { planModeEnabled: input.planModeEnabled } : {}),
     provider,
+    ...(input.codexAccountId !== undefined ? { codexAccountId: input.codexAccountId } : {}),
     maxSessions,
   });
   if (creation.outcome === 'limit_reached') {
@@ -127,16 +140,32 @@ export const sessionRouter = router({
       z.object({
         provider: z.nativeEnum(SessionProvider),
         model: z.string().trim().min(1).optional(),
+        codexAccountId: z.string().trim().min(1).optional(),
       })
     )
     .query(({ ctx, input }) =>
       ctx.appContext.services.sessionConfigService.getLaunchOptions(input)
     ),
   getProviderUsage: trustedLocalProcedure
-    .input(z.object({ provider: usageProviderSchema }))
+    .input(
+      z
+        .object({
+          provider: usageProviderSchema,
+          codexAccountId: z.string().trim().min(1).optional(),
+        })
+        .refine(
+          (input) => input.provider === 'CODEX' || input.codexAccountId === undefined,
+          'Account selection is available for Codex only'
+        )
+    )
     .output(providerPlanUsageSchema)
     .query(({ ctx, input }) =>
-      ctx.appContext.services.providerUsageService.getUsage(input.provider)
+      input.codexAccountId === undefined
+        ? ctx.appContext.services.providerUsageService.getUsage(input.provider)
+        : ctx.appContext.services.providerUsageService.getUsage(
+            input.provider,
+            input.codexAccountId
+          )
     ),
 
   // Session limits

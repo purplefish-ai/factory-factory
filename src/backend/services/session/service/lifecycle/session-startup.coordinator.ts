@@ -15,6 +15,11 @@ import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import { SessionStatus } from '@/shared/core';
 import type { AcpEventProcessor } from './acp-event-processor';
+import {
+  assertSessionAccountBinding,
+  resolveSessionCodexContext,
+  type SessionCodexAccountPort,
+} from './session-codex-account';
 import type { SessionContextService } from './session-context.service';
 import { type SessionLifecycleGate, SessionStartupCancelledError } from './session-lifecycle-gate';
 import type { SessionAcpEnvironmentPort } from './session-lifecycle.types';
@@ -68,6 +73,7 @@ export type StartSessionOptions = {
 };
 
 export type SessionStartupCoordinatorDependencies = {
+  accounts?: SessionCodexAccountPort;
   hydrateProviderHistory: SessionStartupHistoryDependencies['hydrateProviderHistory'];
   repository: Pick<
     SessionRepository,
@@ -388,6 +394,11 @@ export class SessionStartupCoordinator {
     }
     await this.assertCreationAllowed(sessionId, stopGeneration, options.assertCurrent);
 
+    const codexAccountContext = await resolveSessionCodexContext(
+      session,
+      this.dependencies.accounts
+    );
+    await this.assertCreationAllowed(sessionId, stopGeneration, options.assertCurrent);
     const browseOnly = options.purpose === 'browse';
     if (!browseOnly) {
       await this.dependencies.repository.markWorkspaceHasHadSessions(sessionContext.workspaceId);
@@ -411,7 +422,8 @@ export class SessionStartupCoordinator {
     const suppressReplay = await prepareSessionHistoryForResume(
       sessionId,
       sessionContext,
-      this.dependencies
+      this.dependencies,
+      codexAccountContext
     );
     await this.assertCreationAllowed(sessionId, stopGeneration, options.assertCurrent);
     if (suppressReplay !== undefined) {
@@ -420,6 +432,7 @@ export class SessionStartupCoordinator {
 
     const clientOptions: AcpClientOptions = {
       provider: session.provider,
+      codexAccountContext,
       purpose: options.purpose,
       deferPromptReadiness: !browseOnly,
       workingDir: sessionContext.workingDir,
@@ -440,6 +453,7 @@ export class SessionStartupCoordinator {
     if (!latest) {
       throw new Error(`Session not found: ${sessionId}`);
     }
+    assertSessionAccountBinding(session, latest);
     clientOptions.model = options.model ?? latest.model;
     const creationPromise = this.dependencies.runtimeManager.getOrCreateClient(
       sessionId,

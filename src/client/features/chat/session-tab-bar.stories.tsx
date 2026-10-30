@@ -1,5 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { observable } from '@trpc/server/observable';
+import { type PropsWithChildren, useState } from 'react';
 import { fn } from 'storybook/test';
+import { trpc } from '@/client/lib/trpc';
 import type { SessionData } from './session-tab-bar';
 import { SessionTabBar } from './session-tab-bar';
 
@@ -254,4 +258,44 @@ export const AgentStates: Story = {
     })),
     currentSessionId: 'RUNNING',
   },
+};
+
+function AccountStoryProvider({ children }: PropsWithChildren) {
+  const [queryClient] = useState(
+    () => new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  );
+  const [client] = useState(() =>
+    trpc.createClient({
+      links: [
+        () => () =>
+          observable((observer) => {
+            observer.next({
+              result: {
+                data: [
+                  { id: 'native', label: 'Personal', authenticated: true },
+                  { id: 'work', label: 'Work', authenticated: true },
+                ],
+              },
+            });
+            observer.complete();
+          }),
+      ],
+    })
+  );
+  return (
+    <trpc.Provider client={client} queryClient={queryClient}>
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    </trpc.Provider>
+  );
+}
+
+export const EmptyCodexWorkspace: Story = {
+  args: { sessions: [], currentSessionId: null, workspaceProvider: 'CODEX' },
+  decorators: [
+    (Story) => (
+      <AccountStoryProvider>
+        <Story />
+      </AccountStoryProvider>
+    ),
+  ],
 };

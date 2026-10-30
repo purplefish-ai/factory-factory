@@ -19,11 +19,13 @@ vi.mock('@/backend/db', () => ({
   },
 }));
 function publishedVersion5(exported: Awaited<ReturnType<typeof dataBackupService.exportData>>) {
+  const { codexAccounts: _accounts, ...historicalData } = exported.data;
   return {
     ...exported,
     meta: { ...exported.meta, schemaVersion: 5 },
     data: {
-      ...exported.data,
+      ...historicalData,
+      agentSessions: exported.data.agentSessions.map(({ codexAccountId: _account, ...row }) => row),
       workspaces: exported.data.workspaces.map((workspace) => {
         const {
           prUrl: _url,
@@ -125,7 +127,7 @@ beforeEach(async () => {
 });
 it('normalizes published version 5 PRs, tombstones, discovery, and legacy fixer identity', async () => {
   const exported = await dataBackupService.exportData('test');
-  expect(exported.meta.schemaVersion).toBe(6);
+  expect(exported.meta.schemaVersion).toBe(7);
   expect(exported.data.workspaces[0]?.prs).toHaveLength(3);
   await clearIntegrationDatabase(db.prisma);
   const normalized = exportDataSchema.parse(publishedVersion5(exported));
@@ -146,6 +148,31 @@ it('normalizes published version 5 PRs, tombstones, discovery, and legacy fixer 
     workspacePrId: 'a',
     status: 'COMPLETED',
   });
+});
+
+it('imports published version 6 PRs and discovery without account metadata', async () => {
+  const exported = await dataBackupService.exportData('test');
+  const { codexAccounts: _accounts, ...historicalData } = exported.data;
+  const historical = {
+    ...exported,
+    meta: { ...exported.meta, schemaVersion: 6 },
+    data: {
+      ...historicalData,
+      agentSessions: exported.data.agentSessions.map(({ codexAccountId: _account, ...row }) => row),
+    },
+  };
+  const normalized = exportDataSchema.parse(historical);
+  expect(normalized.meta.schemaVersion).toBe(6);
+  expect(normalized.data.codexAccounts).toEqual([]);
+  expect(normalized.data.agentSessions[0]?.codexAccountId).toBeNull();
+  await clearIntegrationDatabase(db.prisma);
+  await dataBackupService.importData(normalized);
+  const restored = await dataBackupService.exportData('test');
+  expect(restored.data.workspaces[0]?.prs).toEqual(exported.data.workspaces[0]?.prs);
+  expect(restored.data.workspaces[0]?.prDiscovery).toEqual(
+    exported.data.workspaces[0]?.prDiscovery
+  );
+  expect(restored.data.agentSessions[0]?.codexAccountId).toBeNull();
 });
 it('rejects duplicate and foreign ownership before any database write', async () => {
   const exported = await dataBackupService.exportData('test');
@@ -386,7 +413,7 @@ it('roundtrips dedicated mode and PR-session bindings in additive version 6 back
     },
   });
   const exported = await dataBackupService.exportData('test');
-  expect(exported.meta.schemaVersion).toBe(6);
+  expect(exported.meta.schemaVersion).toBe(7);
   expect(exported.data.workspaces[0]?.prMonitoring).toMatchObject({ deliveryMode: 'DEDICATED' });
   expect(exported.data.workspaces[0]?.prs.find((pr) => pr.id === 'a')).toMatchObject({
     dedicatedSession: { sessionId: 'dedicated' },

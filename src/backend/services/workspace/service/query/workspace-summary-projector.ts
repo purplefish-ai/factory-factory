@@ -27,6 +27,7 @@ export function projectWorkspaceSummary(
     projectId: w.projectId,
     name: w.name,
     status: w.status,
+    defaultSessionProvider: w.defaultSessionProvider,
     createdAt: w.createdAt,
     branchName: w.branchName,
     worktreePath: w.worktreePath,

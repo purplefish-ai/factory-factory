@@ -551,6 +551,7 @@ describe('backup import trust boundary', () => {
     expect(mockImportData).toHaveBeenCalledWith({
       ...input,
       meta: { ...input.meta, schemaVersion: 6 },
+      data: { ...input.data, codexAccounts: [] },
     });
   });
 });

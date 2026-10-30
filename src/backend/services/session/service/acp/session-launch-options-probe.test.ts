@@ -97,6 +97,19 @@ describe('native launch capability discovery', () => {
       planMode: { supported: true, selected: true },
     });
   });
+  it('uses the caller-resolved Codex environment without resolving account services in ACP', async () => {
+    const child = createMockChildProcess();
+    exitChildAfterSigterm(child);
+    mocks.spawn.mockReturnValue(child);
+    await fetchSessionLaunchOptionsFromAcp({
+      provider: 'CODEX',
+      env: { CODEX_HOME: '/chosen/profile', ACCOUNT_CONTEXT_ONLY: 'yes' },
+    });
+    expect(mocks.spawn.mock.calls[0]?.[2].env).toMatchObject({
+      CODEX_HOME: '/chosen/profile',
+      ACCOUNT_CONTEXT_ONLY: 'yes',
+    });
+  });
   it('selects the requested Claude model and exposes native extended effort levels without a prompt', async () => {
     const child = createMockChildProcess();
     exitChildAfterSigterm(child);

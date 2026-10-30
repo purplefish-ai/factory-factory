@@ -20,6 +20,7 @@ import { waitForReact } from '@/test-utils/react-act';
 const inputSchema = z.object({
   provider: z.enum(['CLAUDE', 'CODEX']),
   model: z.string().optional(),
+  codexAccountId: z.string().optional(),
 });
 const roots: Root[] = [];
 const clients: QueryClient[] = [];
@@ -121,7 +122,7 @@ function respondToProbe(
   reject: (error: Error) => void
 ) {
   const input = inputSchema.parse(raw);
-  const key = `${input.provider}:${input.model}`;
+  const key = `${input.provider}:${input.model}${input.codexAccountId ? `:${input.codexAccountId}` : ''}`;
   if (state.failed.has(key)) {
     reject(new Error('Native discovery failed'));
     return;
@@ -176,6 +177,21 @@ function renderLaunch(inline = false) {
             }
             const responses: Record<string, unknown> = {
               'userSettings.get': settings,
+              'codexAccounts.list': ['personal', 'work'].map((id) => ({
+                id,
+                label: id === 'work' ? 'Work account' : 'Personal',
+                kind: 'MANAGED',
+                enabled: true,
+                authenticated: true,
+                email: null,
+                planType: null,
+                usage: {
+                  provider: 'CODEX',
+                  status: 'unavailable',
+                  updatedAt: '2026-10-29T12:00:00Z',
+                  windows: [],
+                },
+              })),
               'userSettings.getProviderOptions': {
                 CODEX: {
                   models: [
@@ -507,4 +523,27 @@ describe('real launch controls and tRPC payloads', () => {
       planModeEnabled: true,
     });
   });
+});
+
+it('sends a manual account through the real picker, catalog, launch options and workspace payload', async () => {
+  const view = renderLaunch(true);
+  await view.render();
+  await waitForReact(() => expect(button('Launch')?.disabled).toBe(false));
+  await open('Codex account: Auto');
+  await choose('Work account');
+  await waitForReact(() => expect(button('Launch')?.disabled).toBe(false));
+  expect(view.requests).toContainEqual({
+    path: 'userSettings.getProviderOptions',
+    input: { codexAccountId: 'work' },
+  });
+  expect(view.requests).toContainEqual({
+    path: 'session.getLaunchOptions',
+    input: { provider: 'CODEX', model: 'sol', codexAccountId: 'work' },
+  });
+  await act(() => button('Launch')?.click());
+  await waitForReact(() =>
+    expect(
+      view.requests.find((request) => request.path === 'workspace.create')?.input
+    ).toMatchObject({ provider: 'CODEX', codexAccountId: 'work' })
+  );
 });

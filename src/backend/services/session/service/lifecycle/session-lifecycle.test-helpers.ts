@@ -411,6 +411,7 @@ export function createLifecycleTestSession(
     model: 'claude-sonnet',
     status: SessionStatus.IDLE,
     provider: 'CLAUDE',
+    codexAccountId: null,
     providerSessionId: null,
     providerProjectPath: null,
     providerProcessPid: 4242,

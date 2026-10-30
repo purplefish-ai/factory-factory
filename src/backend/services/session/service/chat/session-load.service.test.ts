@@ -153,7 +153,6 @@ describe('SessionLoadService', () => {
       'runtime',
       'projection',
       'chat_capabilities',
-      'commands',
       'slash_commands',
       'consume',
       'enqueue',

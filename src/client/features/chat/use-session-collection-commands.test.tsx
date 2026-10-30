@@ -30,17 +30,25 @@ type HarnessSession = { name?: string | null; provider?: 'CLAUDE' | 'CODEX'; mod
 function Harness({
   workspaceId,
   sessions,
+  workspaceProvider,
   onCommands,
 }: {
   workspaceId: string | null;
   sessions: HarnessSession[] | undefined;
+  workspaceProvider?: 'CLAUDE' | 'CODEX';
   onCommands: (commands: ReturnType<typeof useSessionCollectionCommands>) => void;
 }) {
-  onCommands(useSessionCollectionCommands({ workspaceId, sessions, onCreated: vi.fn() }));
+  onCommands(
+    useSessionCollectionCommands({ workspaceId, sessions, workspaceProvider, onCreated: vi.fn() })
+  );
   return null;
 }
 
-function renderCommands(workspaceId: string | null, sessions: HarnessSession[] | undefined) {
+function renderCommands(
+  workspaceId: string | null,
+  sessions: HarnessSession[] | undefined,
+  workspaceProvider?: 'CLAUDE' | 'CODEX'
+) {
   let commands: ReturnType<typeof useSessionCollectionCommands> | undefined;
   const root = createRoot(document.createElement('div'));
   roots.push(root);
@@ -49,6 +57,7 @@ function renderCommands(workspaceId: string | null, sessions: HarnessSession[] |
       createElement(Harness, {
         workspaceId,
         sessions,
+        workspaceProvider,
         onCommands: (value) => {
           commands = value;
         },
@@ -145,4 +154,37 @@ it.each([
   }
   expect(input).not.toHaveProperty('reasoningEffort');
   expect(input).not.toHaveProperty('planModeEnabled');
+});
+
+it('passes an explicit account only for a human-created Codex chat, keeping quick actions on Auto', () => {
+  const commands = renderCommands('workspace', [{ provider: 'CODEX', model: 'sol' }]);
+  commands.createChat('work-account');
+  expect(mutate.mock.calls[0]?.[0]).toMatchObject({
+    codexAccountId: 'work-account',
+    provider: 'CODEX',
+  });
+  commands.createQuickAction('Review', 'Review this');
+  expect(mutate.mock.calls[1]?.[0]).not.toHaveProperty('codexAccountId');
+});
+it('does not send a Codex account when creating a Claude chat', () => {
+  renderCommands('workspace', [{ provider: 'CLAUDE' }]).createChat('work-account');
+  expect(mutate.mock.calls[0]?.[0]).not.toHaveProperty('codexAccountId');
+});
+
+it('uses the workspace provider without inheriting an unowned legacy model, preserving the account choice', async () => {
+  mutateAsync.mockResolvedValue({ id: 'created' });
+  const commands = renderCommands('workspace', [{ provider: undefined, model: 'sonnet' }], 'CODEX');
+  commands.createChat('work-account');
+  expect(mutate.mock.calls[0]?.[0]).toMatchObject({
+    provider: 'CODEX',
+    codexAccountId: 'work-account',
+  });
+  expect(mutate.mock.calls[0]?.[0]).not.toHaveProperty('model');
+
+  commands.createQuickAction('Review', 'Review prompt');
+  expect(mutate.mock.calls[1]?.[0]).toMatchObject({ provider: 'CODEX' });
+  expect(mutate.mock.calls[1]?.[0]).not.toHaveProperty('model');
+  await commands.createQuickActionAsync('Review', 'Review prompt');
+  expect(mutateAsync.mock.calls[0]?.[0]).toMatchObject({ provider: 'CODEX' });
+  expect(mutateAsync.mock.calls[0]?.[0]).not.toHaveProperty('model');
 });

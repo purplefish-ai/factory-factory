@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { codexAccountService } from '@/backend/services/codex-accounts';
 import { agentSessionAccessor } from '@/backend/services/session/resources/agent-session.accessor';
 import { prDedicatedSessionAccessor } from '@/backend/services/session/resources/pr-dedicated-session.accessor';
 import { createLifecycleTestSession } from '@/backend/services/session/service/lifecycle/session-lifecycle.test-helpers';
@@ -27,6 +28,7 @@ beforeEach(() => {
     outcome: 'created',
     session: createLifecycleTestSession(),
   });
+  vi.spyOn(prDedicatedSessionAccessor, 'find').mockResolvedValue(null);
   vi.spyOn(prDedicatedSessionAccessor, 'findWorkspace').mockResolvedValue(workspace);
   vi.spyOn(prDedicatedSessionAccessor, 'acquire').mockResolvedValue({
     outcome: 'created',
@@ -148,6 +150,7 @@ describe('constructed session data service', () => {
 
   it('preserves reused session identity and stored choices despite newly resolved defaults', async () => {
     const { service } = dataService();
+    vi.mocked(codexAccountService.withAccountReservation).mockClear();
     vi.mocked(prDedicatedSessionAccessor.acquire).mockResolvedValue({
       outcome: 'reused',
       session: createLifecycleTestSession({ id: 'existing', provider: 'CLAUDE', model: 'opus' }),
@@ -156,10 +159,34 @@ describe('constructed session data service', () => {
       outcome: 'reused',
       session: { id: 'existing', provider: 'CLAUDE', model: 'opus' },
     });
-    expect(prDedicatedSessionAccessor.acquire).toHaveBeenCalledWith({
+    expect(codexAccountService.withAccountReservation).not.toHaveBeenCalled();
+    expect(prDedicatedSessionAccessor.acquire).toHaveBeenCalledExactlyOnceWith({
       ...dedicated,
       provider: 'CODEX',
       model: 'gpt-configured',
+      reuseOnly: true,
     });
   });
 });
+
+vi.mock('@/backend/services/codex-accounts', () => ({
+  NATIVE_DEFAULT_CODEX_ACCOUNT_ID: 'codex-native-default',
+  codexAccountService: {
+    getRuntimeContext: vi.fn(async (accountId = 'codex-native-default') => ({
+      accountId,
+      homeDir: '/test/codex',
+      sessionsDir: '/test/codex/sessions',
+      env: { CODEX_HOME: '/test/codex' },
+    })),
+    getPreviewRuntimeContext: vi.fn(async ({ accountId = 'codex-native-default' } = {}) => ({
+      accountId,
+      homeDir: '/test/codex',
+      sessionsDir: '/test/codex/sessions',
+      env: { CODEX_HOME: '/test/codex' },
+    })),
+    withAccountReservation: vi.fn(async (input, create) =>
+      create(input.accountId ?? 'codex-native-default')
+    ),
+    getUsage: vi.fn(),
+  },
+}));

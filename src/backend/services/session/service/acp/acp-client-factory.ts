@@ -102,7 +102,9 @@ export class AcpClientFactory {
       cwd: options.workingDir,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: {
-        ...this.childProcessEnvProvider(),
+        ...(isCodex && options.codexAccountContext
+          ? options.codexAccountContext.env
+          : this.childProcessEnvProvider()),
         BROWSER: 'none',
         ELECTRON_RUN_AS_NODE: '1',
         ...(isCodex ? { DOTENV_CONFIG_QUIET: 'true', DISABLE_MCP_CONFIG_FILTERING: 'true' } : {}),
@@ -321,6 +323,9 @@ export class AcpClientFactory {
       );
     }
 
+    if (storedId && options.provider === 'CODEX') {
+      throw new Error('Codex does not support restoring the saved conversation');
+    }
     if (storedId) {
       discardFailedResumeReplay?.();
     }
@@ -367,9 +372,10 @@ export class AcpClientFactory {
         mcpServers,
       });
     } catch (error) {
-      const legacyCodex = options.provider === 'CODEX' && storedId.startsWith('sess_');
       const requireExisting =
-        legacyCodex || options.resumePolicy === 'require_existing' || isAcpSessionInUseError(error);
+        options.provider === 'CODEX' ||
+        options.resumePolicy === 'require_existing' ||
+        isAcpSessionInUseError(error);
       this.logLoadSessionFailure(
         sessionId,
         storedId,
