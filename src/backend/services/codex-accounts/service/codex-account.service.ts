@@ -40,7 +40,11 @@ const unknownUsage = (): ProviderPlanUsage => ({
 export class CodexAccountService {
   private cache = new Map<string, { expires: number; observation: AccountObservation }>();
   private pending = new Map<string, Promise<AccountObservation>>();
+  // Monotonic invalidation counter. A read is stale only when its own account
+  // (or every account) was invalidated after it started.
   private revision = 0;
+  private globalRevision = 0;
+  private accountRevisions = new Map<string, number>();
   private reservations = new Map<string, number>();
   private recency = new Map<string, number>();
   private sequence = 0;
@@ -73,15 +77,27 @@ export class CodexAccountService {
       verify: async (id, identity, persist) =>
         this.verifyIdentity(await this.row(id), identity, persist, true),
       login: dependencies.login,
-      invalidate: () => this.invalidate(),
+      invalidate: (id) => this.invalidate(id),
     });
   }
-  invalidate(): void {
+  invalidate(accountId?: string): void {
     this.revision++;
-    this.cache.clear();
-    this.pending.clear();
-    this.identityCache.clear();
-    this.identityPending.clear();
+    if (accountId === undefined) {
+      this.globalRevision = this.revision;
+      this.cache.clear();
+      this.pending.clear();
+      this.identityCache.clear();
+      this.identityPending.clear();
+      return;
+    }
+    this.accountRevisions.set(accountId, this.revision);
+    this.cache.delete(accountId);
+    this.pending.delete(accountId);
+    this.identityCache.delete(accountId);
+    this.identityPending.delete(accountId);
+  }
+  private revisionOf(id: string): number {
+    return Math.max(this.globalRevision, this.accountRevisions.get(id) ?? 0);
   }
   private getReservationCount(id: string): number {
     return this.reservations.get(id) ?? 0;
@@ -122,13 +138,13 @@ export class CodexAccountService {
     if (pending !== undefined) {
       return pending;
     }
-    const revision = this.revision;
+    const revision = this.revisionOf(row.id);
     const reading = resolveAccountContext(row, this.dependencies.config)
       .then(
         (context) => this.dependencies.probeIdentity?.(context) ?? this.dependencies.probe(context)
       )
       .then((identity) => {
-        if (revision !== this.revision) {
+        if (revision !== this.revisionOf(row.id)) {
           throw new Error('Codex account changed during identity observation');
         }
         this.identityCache.set(row.id, { expires: Date.now() + 30_000, identity });
@@ -151,14 +167,17 @@ export class CodexAccountService {
     if (existing) {
       return existing;
     }
-    const revision = this.revision;
+    const revision = this.revisionOf(row.id);
     const reading = resolveAccountContext(row, this.dependencies.config)
       .then((context) => this.dependencies.probe(context))
       .then(async (observation) => {
-        if (revision !== this.revision) {
+        if (revision !== this.revisionOf(row.id)) {
           throw new Error('Codex account changed during observation');
         }
-        await this.verifyIdentity(row, observation);
+        await this.verifyIdentity(row, observation, true, false, revision);
+        if (revision !== this.revisionOf(row.id)) {
+          throw new Error('Codex account changed during observation');
+        }
         this.cache.set(row.id, { expires: Date.now() + 30_000, observation });
         this.identityCache.set(row.id, { expires: Date.now() + 30_000, identity: observation });
         return observation;
@@ -175,17 +194,16 @@ export class CodexAccountService {
     row: AccountRow,
     observation: AccountIdentity,
     persist = true,
-    staged = false
+    staged = false,
+    revision?: number
   ): Promise<void> {
+    // Callers may hold a row object that is updated in place; pin the key read now.
+    const pinned = row.identityKey;
     if (row.kind === 'MANAGED' && observation.authenticated && !hasVerifiedScope(observation)) {
       throw new Error('Codex managed account identity could not be verified');
     }
-    const upgrading =
-      staged &&
-      row.kind === 'MANAGED' &&
-      hasVerifiedScope(observation) &&
-      matchesNativeEmailFallback(row.identityKey, observation.email);
-    if (row.identityKey && observation.identityKey !== row.identityKey && !upgrading) {
+    const upgrading = this.upgradesNativeEmailFallback(row.kind, pinned, observation, staged);
+    if (pinned && observation.identityKey !== pinned && !upgrading) {
       throw this.identityChangedError(row);
     }
     if (staged && row.kind === 'MANAGED') {
@@ -198,10 +216,41 @@ export class CodexAccountService {
       if (duplicate) {
         throw new Error('This Codex account is already connected');
       }
-      if ((!row.identityKey || upgrading) && persist) {
-        await this.dependencies.store.update(row.id, { identityKey: observation.identityKey });
+      if ((!pinned || upgrading) && persist) {
+        await this.persistIdentity(row.id, pinned, observation.identityKey, revision);
       }
     }
+  }
+  // Never let a stale read overwrite a pin changed by a login or another reader.
+  private async persistIdentity(
+    id: string,
+    pinned: string | null,
+    identityKey: string,
+    revision?: number
+  ): Promise<void> {
+    const current = await this.dependencies.store.get(id);
+    if (
+      (revision !== undefined && revision !== this.revisionOf(id)) ||
+      (current?.identityKey ?? null) !== pinned
+    ) {
+      throw new Error('Codex account changed during identity verification');
+    }
+    await this.dependencies.store.update(id, { identityKey });
+  }
+  // A native email fallback (keyring credentials) may upgrade to the verified
+  // scope of the same email: a staged managed login, or native default
+  // credentials moving from the keyring to file storage.
+  private upgradesNativeEmailFallback(
+    kind: AccountRow['kind'],
+    pinned: string | null,
+    observation: AccountIdentity,
+    staged: boolean
+  ): boolean {
+    return (
+      (kind === 'NATIVE_DEFAULT' || (staged && kind === 'MANAGED')) &&
+      hasVerifiedScope(observation) &&
+      matchesNativeEmailFallback(pinned, observation.email)
+    );
   }
   private identityChangedError(row: AccountRow): Error {
     return new Error(
@@ -304,12 +353,13 @@ export class CodexAccountService {
   async getRuntimeContext(id?: string): Promise<CodexRuntimeContext> {
     const row = await this.row(id);
     this.ensureAdmission(row.id);
+    const revision = this.revisionOf(row.id);
     const identity = await this.readIdentity(row, true);
     this.ensureAdmission(row.id);
     if (!identity.authenticated) {
       throw new Error('Codex account is not signed in');
     }
-    await this.verifyIdentity(row, identity);
+    await this.verifyIdentity(row, identity, true, false, revision);
     this.ensureAdmission(row.id);
     const context = await resolveAccountContext(row, this.dependencies.config);
     this.ensureAdmission(row.id);

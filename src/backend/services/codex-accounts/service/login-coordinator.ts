@@ -21,7 +21,7 @@ export class LoginCoordinator {
       probe(context: CodexRuntimeContext, signal: AbortSignal): Promise<AccountIdentity>;
       verify(id: string, identity: AccountIdentity, persist: boolean): Promise<void>;
       login: NativeLogin;
-      invalidate(): void;
+      invalidate(id: string): void;
     }
   ) {}
   isPending(id: string): boolean {
@@ -128,7 +128,7 @@ export class LoginCoordinator {
         // Publish the outcome only once the account is usable again, so callers
         // that react to a finished login never hit the pending-login guard.
         this.states.set(id, outcome);
-        this.dependencies.invalidate();
+        this.dependencies.invalidate(id);
       });
     return preparation.then(() => this.status(id));
   }

@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { CodexAccountService } from './codex-account.service';
+import { nativeEmailFallbackKey } from './identity';
 import type { AccountObservation, CodexRuntimeContext, NativeLogin } from './types';
 const logs = vi.hoisted(() => ({ info: vi.fn(), warn: vi.fn() }));
 vi.mock('@/backend/services/logger.service', () => ({
@@ -91,7 +92,7 @@ async function fixture() {
     probe,
     login,
   });
-  return { service, rows, observations, observation, baseDir, login, unverified, probe };
+  return { service, rows, observations, observation, baseDir, login, unverified, probe, store };
 }
 it('preserves native environment and isolates managed history and authentication', async () => {
   const { service, baseDir } = await fixture();
@@ -401,4 +402,155 @@ it('lists enabled account IDs without any native probes', async () => {
   rows[0]!.enabled = false;
   expect(await service.getEnabledAccountIds()).toEqual([account.id]);
   expect(probe).not.toHaveBeenCalled();
+});
+
+// Starts a browser login for another account that stays pending until cancelled,
+// and holds every following probe until `release` is called.
+async function holdReadsDuringUnrelatedLogin(
+  { service, login, probe }: Awaited<ReturnType<typeof fixture>>,
+  accountId: string
+) {
+  const other = await service.createAccount('Other');
+  login.mockImplementation(
+    (_context, signal) =>
+      new Promise((_resolve, reject) =>
+        signal.addEventListener('abort', () => reject(new Error('cancelled')), { once: true })
+      )
+  );
+  expect((await service.startLogin(other.id)).status).toBe('pending');
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const read = probe.getMockImplementation()!;
+  probe.mockClear();
+  probe.mockImplementation(async (context) => {
+    await gate;
+    return read(context);
+  });
+  return {
+    async endLoginMidRead() {
+      await vi.waitFor(() =>
+        expect(probe).toHaveBeenCalledWith(expect.objectContaining({ accountId }))
+      );
+      expect((await service.cancelLogin(other.id)).status).toBe('cancelled');
+      release();
+    },
+  };
+}
+it('Auto selection survives an unrelated login finishing while usage is being read', async () => {
+  const setup = await fixture();
+  const held = await holdReadsDuringUnrelatedLogin(setup, 'codex-native-default');
+  const auto = setup.service.withAccountReservation({}, async (id) => id);
+  await held.endLoginMidRead();
+  await expect(auto).resolves.toBe('codex-native-default');
+});
+it('starting a session on a saved account survives an unrelated login finishing mid-read', async () => {
+  const setup = await fixture();
+  const held = await holdReadsDuringUnrelatedLogin(setup, 'codex-native-default');
+  const start = setup.service.getRuntimeContext('codex-native-default');
+  await held.endLoginMidRead();
+  await expect(start).resolves.toMatchObject({ accountId: 'codex-native-default' });
+});
+it('still rejects an identity change read while an unrelated login finishes', async () => {
+  const setup = await fixture();
+  const id = 'codex-native-default';
+  setup.observations.set(id, { ...setup.observation(), identityKey: 'original' });
+  await setup.service.getRuntimeContext(id);
+  setup.observations.set(id, { ...setup.observation(), identityKey: 'replacement' });
+  setup.service.invalidate(id);
+  const held = await holdReadsDuringUnrelatedLogin(setup, id);
+  const start = setup.service.getRuntimeContext(id);
+  await held.endLoginMidRead();
+  await expect(start).rejects.toThrow('ff codex login');
+  expect(setup.rows[0]?.identityKey).toBe('original');
+});
+it('upgrades the native default from keyring email fallback to verified file scope', async () => {
+  const { service, observations, observation, rows } = await fixture();
+  const id = 'codex-native-default';
+  const email = 'person@example.com';
+  observations.set(id, {
+    ...observation(10),
+    email,
+    scopeVerified: false,
+    identityKey: nativeEmailFallbackKey(email),
+  });
+  expect((await service.getRuntimeContext(id)).accountId).toBe(id);
+  expect(rows[0]?.identityKey).toBe(nativeEmailFallbackKey(email));
+  // Same login, now read from file-backed credentials with verified account scope.
+  const verifiedKey = 'a'.repeat(64);
+  observations.set(id, {
+    ...observation(10),
+    email,
+    scopeVerified: true,
+    identityKey: verifiedKey,
+  });
+  service.invalidate();
+  await expect(service.getRuntimeContext(id)).resolves.toMatchObject({ accountId: id });
+  expect(rows[0]?.identityKey).toBe(verifiedKey);
+});
+it('does not upgrade the native default fallback to a different email or unverified scope', async () => {
+  const { service, observations, observation, rows } = await fixture();
+  const id = 'codex-native-default';
+  const email = 'person@example.com';
+  const fallback = nativeEmailFallbackKey(email);
+  observations.set(id, { ...observation(), email, scopeVerified: false, identityKey: fallback });
+  await service.getRuntimeContext(id);
+  for (const replacement of [
+    { email: 'other@example.com', scopeVerified: true, identityKey: 'b'.repeat(64) },
+    { email, scopeVerified: false, identityKey: 'c'.repeat(64) },
+  ]) {
+    observations.set(id, { ...observation(), ...replacement });
+    service.invalidate();
+    await expect(service.getRuntimeContext(id)).rejects.toThrow('ff codex login');
+    expect(rows[0]?.identityKey).toBe(fallback);
+  }
+});
+// Holds the first store.list() made after a probe, i.e. the one inside identity
+// verification, until `release` is called.
+function holdVerification({ store, probe }: Awaited<ReturnType<typeof fixture>>) {
+  const list = store.list;
+  let held = false;
+  let entered!: () => void;
+  const waiting = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  vi.spyOn(store, 'list').mockImplementation(async () => {
+    if (!held && probe.mock.calls.length > 0) {
+      held = true;
+      entered();
+      await gate;
+    }
+    return list();
+  });
+  return { waiting, release };
+}
+it('does not pin or cache a read whose account is invalidated during verification', async () => {
+  const setup = await fixture();
+  const id = 'codex-native-default';
+  const held = holdVerification(setup);
+  const usage = setup.service.getUsage(id);
+  await held.waiting;
+  setup.service.invalidate(id);
+  held.release();
+  await expect(usage).rejects.toThrow('changed during identity verification');
+  expect(setup.rows[0]?.identityKey).toBeNull();
+  const probes = setup.probe.mock.calls.length;
+  await setup.service.getUsage(id);
+  expect(setup.probe.mock.calls.length).toBe(probes + 1);
+});
+it('does not overwrite an identity pinned by another writer during verification', async () => {
+  const setup = await fixture();
+  const id = 'codex-native-default';
+  const held = holdVerification(setup);
+  const usage = setup.service.getUsage(id);
+  await held.waiting;
+  setup.rows[0]!.identityKey = 'other-writer';
+  held.release();
+  await expect(usage).rejects.toThrow('changed during identity verification');
+  expect(setup.rows[0]?.identityKey).toBe('other-writer');
 });
