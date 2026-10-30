@@ -394,8 +394,16 @@ unresolved prompt RPC. Browse-only runtimes do not own an active prompt slot.
 Runtime snapshots also carry prompt ownership and named background tasks, with
 counts for running subagents and active goals. A transition that changes only
 the runtime timestamp refreshes the stored state without publishing a delta, so
-repeated task notifications do not trigger workspace summary refreshes. Chat
-shows background processes separately from the active-turn spinner, with a
+repeated task notifications do not trigger workspace summary refreshes. The
+event collector remembers each session's workspace (sharing one lookup while it
+is first resolved). Session-summary and pending-request refreshes each run at
+most one query per workspace at a time plus one trailing rerun, so a burst of
+one kind of event costs two queries instead of one per event. Thought chunks are
+merged per 25 ms window like assistant text. They are flushed before the next
+translated update, replayed user message, runtime event, turn boundary or
+provider identity rollover, so transcript order is unchanged. Permission
+prompts, which show outside the transcript, do not wait for them. Chat shows
+background processes separately from the active-turn spinner, with a
 process-count header that expands to show their commands. The command list
 starts collapsed. Live status announcements contain the process count separately
 from the control and commands. A completed turn with a persistent preview server

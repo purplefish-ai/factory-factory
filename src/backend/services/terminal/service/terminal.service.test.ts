@@ -18,7 +18,13 @@ interface MockPidUsageStat {
   timestamp: number;
 }
 
-const mockPidusage = vi.hoisted(() => vi.fn<(pid: number | string) => Promise<MockPidUsageStat>>());
+const mockPidusage = vi.hoisted(() =>
+  vi.fn<
+    (
+      pid: number | string | number[]
+    ) => Promise<MockPidUsageStat | Record<number, MockPidUsageStat>>
+  >()
+);
 
 let onDataCallback: ((data: string) => void) | null = null;
 let onExitCallback: ((e: { exitCode: number }) => void) | null = null;
@@ -414,76 +420,89 @@ describe('TerminalService', () => {
   // =========================================================================
   // resource monitoring
   // =========================================================================
-  describe('resource monitoring', () => {
-    it('stores cached resource usage for admin terminal snapshots', async () => {
+  describe('resource usage', () => {
+    const TERMINAL_PID = 12_345;
+
+    it('does not sample in the background', async () => {
       vi.useFakeTimers();
-      mockPidusage.mockResolvedValueOnce(createPidUsageStat(7.25, 4096));
-
       await service.createTerminal(defaultOpts);
-      await vi.advanceTimersByTimeAsync(5000);
+      await vi.advanceTimersByTimeAsync(60_000);
 
-      expect(service.getAllTerminals()[0]?.resourceUsage).toEqual(
-        expect.objectContaining({
-          cpu: 7.25,
-          memory: 4096,
-          timestamp: expect.any(Date),
-        })
+      expect(mockPidusage).not.toHaveBeenCalled();
+    });
+
+    const SECOND_PID = 22_222;
+
+    async function createTwoTerminals(): Promise<void> {
+      await service.createTerminal(defaultOpts);
+      mockPtySpawn.mockImplementationOnce(() => ({
+        pid: SECOND_PID,
+        onData: mockPtyOnData,
+        onExit: mockPtyOnExit,
+        write: mockPtyWrite,
+        resize: mockPtyResize,
+        kill: mockPtyKill,
+      }));
+      await service.createTerminal({ ...defaultOpts, workspaceId: 'ws-2' });
+    }
+
+    function usageByPid(): Record<number, unknown> {
+      return Object.fromEntries(
+        service.getAllTerminals().map((terminal) => [terminal.pid, terminal.resourceUsage])
       );
+    }
+
+    it('samples all terminals with one batched call on demand', async () => {
+      mockPidusage.mockResolvedValueOnce({
+        [TERMINAL_PID]: createPidUsageStat(7.25, 4096),
+        [SECOND_PID]: createPidUsageStat(1.5, 2048),
+      });
+
+      await createTwoTerminals();
+      await service.refreshResourceUsage();
+
+      expect(mockPidusage).toHaveBeenCalledOnce();
+      expect(mockPidusage).toHaveBeenCalledWith([TERMINAL_PID, SECOND_PID]);
+      expect(usageByPid()).toEqual({
+        [TERMINAL_PID]: expect.objectContaining({ cpu: 7.25, memory: 4096 }),
+        [SECOND_PID]: expect.objectContaining({ cpu: 1.5, memory: 2048 }),
+      });
     });
 
-    it('skips interval ticks while a resource update is still running', async () => {
-      vi.useFakeTimers();
-      const pendingUsage = createDeferred<ReturnType<typeof createPidUsageStat>>();
+    it('shares one sample between concurrent callers', async () => {
+      const pendingUsage = createDeferred<Record<number, ReturnType<typeof createPidUsageStat>>>();
       mockPidusage.mockReturnValueOnce(pendingUsage.promise);
-
       await service.createTerminal(defaultOpts);
 
-      await vi.advanceTimersByTimeAsync(5000);
-      expect(mockPidusage).toHaveBeenCalledTimes(1);
+      const first = service.refreshResourceUsage();
+      const second = service.refreshResourceUsage();
+      pendingUsage.resolve({ [TERMINAL_PID]: createPidUsageStat(1, 1) });
+      await Promise.all([first, second]);
 
-      await vi.advanceTimersByTimeAsync(5000);
-      expect(mockPidusage).toHaveBeenCalledTimes(1);
-
-      pendingUsage.resolve(createPidUsageStat(3.5, 2048));
-      await pendingUsage.promise;
-      await vi.advanceTimersByTimeAsync(0);
-
-      await vi.advanceTimersByTimeAsync(5000);
-      expect(mockPidusage).toHaveBeenCalledTimes(2);
+      expect(mockPidusage).toHaveBeenCalledOnce();
     });
 
-    it('does not let an unresolved update from the last terminal block restarted monitoring', async () => {
-      vi.useFakeTimers();
-      const firstPendingUsage = createDeferred<ReturnType<typeof createPidUsageStat>>();
-      const secondPendingUsage = createDeferred<ReturnType<typeof createPidUsageStat>>();
-      mockPidusage
-        .mockReturnValueOnce(firstPendingUsage.promise)
-        .mockReturnValueOnce(secondPendingUsage.promise);
+    it('falls back to sampling each terminal when the batch fails', async () => {
+      mockPidusage.mockImplementation((pid) => {
+        if (Array.isArray(pid)) {
+          return Promise.reject(new Error('No matching pid found'));
+        }
+        return pid === SECOND_PID
+          ? Promise.reject(new Error('No matching pid found'))
+          : Promise.resolve(createPidUsageStat(3.5, 2048));
+      });
 
-      const { terminalId } = await service.createTerminal(defaultOpts);
+      await createTwoTerminals();
+      await service.refreshResourceUsage();
 
-      await vi.advanceTimersByTimeAsync(5000);
-      expect(mockPidusage).toHaveBeenCalledTimes(1);
-
-      service.destroyTerminal(defaultOpts.workspaceId, terminalId);
-      await service.createTerminal(defaultOpts);
-
-      await vi.advanceTimersByTimeAsync(5000);
-      expect(mockPidusage).toHaveBeenCalledTimes(2);
-
-      firstPendingUsage.resolve(createPidUsageStat(3.5, 2048));
-      await firstPendingUsage.promise;
-      await vi.advanceTimersByTimeAsync(0);
-
-      await vi.advanceTimersByTimeAsync(5000);
-      expect(mockPidusage).toHaveBeenCalledTimes(2);
-
-      secondPendingUsage.resolve(createPidUsageStat(4.5, 4096));
-      await secondPendingUsage.promise;
-      await vi.advanceTimersByTimeAsync(0);
-
-      await vi.advanceTimersByTimeAsync(5000);
+      // One batch attempt, then one call per terminal.
       expect(mockPidusage).toHaveBeenCalledTimes(3);
+      expect(mockPidusage).toHaveBeenCalledWith(TERMINAL_PID);
+      expect(mockPidusage).toHaveBeenCalledWith(SECOND_PID);
+      expect(usageByPid()).toEqual({
+        [TERMINAL_PID]: expect.objectContaining({ cpu: 3.5, memory: 2048 }),
+        [SECOND_PID]: undefined,
+      });
     });
   });
 

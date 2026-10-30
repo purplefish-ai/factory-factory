@@ -23,6 +23,12 @@ export class SessionPublisher {
     store: SessionStore,
     options?: { loadRequestId?: string; reason?: SnapshotReason; includeParitySnapshot?: boolean }
   ): void {
+    // Building a snapshot walks the whole transcript. Unviewed sessions skip it:
+    // a client that starts viewing hydrates through load_session, which replays
+    // the current store. Load replies always go out.
+    if (!options?.loadRequestId && sessionEventBus.hasNoViewers(store.sessionId)) {
+      return;
+    }
     const snapshotMessages = buildSnapshotMessages(store);
     const payload: WebSocketMessage = {
       type: 'session_snapshot',

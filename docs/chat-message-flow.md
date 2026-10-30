@@ -146,7 +146,9 @@ Replay reconstructs the renderer's transcript window, queued messages, runtime,
 pending interactive request, and retained recent rejections. `SessionPublisher`
 also supports `session_snapshot`; loading is not split into an initial snapshot
 protocol and a separate reconnect protocol. `loadRequestId` associates responses
-with the client's load request.
+with the client's load request. Snapshots for a session nobody is viewing are
+not built, since a viewer that arrives later hydrates through `load_session`;
+load replies are always sent.
 
 Provider history comes from the Claude or Codex history loader selected by the
 session's provider and identity. In-memory pending requests can survive a viewer

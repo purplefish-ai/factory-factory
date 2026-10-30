@@ -92,6 +92,20 @@ function toolStartDelta(): SessionDeltaEvent {
   };
 }
 
+function thoughtDelta(text: string): SessionDeltaEvent {
+  return {
+    type: 'agent_message',
+    data: {
+      type: 'stream_event',
+      event: {
+        type: 'content_block_delta',
+        index: 0,
+        delta: { type: 'thinking_delta', thinking: text },
+      },
+    },
+  };
+}
+
 function persistedText(message: AgentMessage): string | undefined {
   const content = message.message?.content;
   if (!Array.isArray(content)) {
@@ -298,6 +312,83 @@ describe('AcpEventProcessor assistant text streaming', () => {
     vi.advanceTimersByTime(25);
     expect(deps.sessionDomainService.emitDelta).toHaveBeenCalledOnce();
     expect(processor.acpStreamState.has('sid')).toBe(false);
+  });
+
+  it('merges thought chunks and writes them before the next message', () => {
+    const deps = makeDeps();
+    const processor = new AcpEventProcessor(deps);
+
+    processor.handleAcpDelta('sid', thoughtDelta('Let me '));
+    processor.handleAcpDelta('sid', thoughtDelta('check'));
+    expect(deps.sessionDomainService.appendClaudeEvent).not.toHaveBeenCalled();
+
+    processor.handleAcpDelta('sid', toolStartDelta());
+
+    const appended = vi.mocked(deps.sessionDomainService.appendClaudeEvent).mock.calls;
+    expect(appended).toHaveLength(2);
+    expect(appended[0]?.[1]).toMatchObject({
+      type: 'stream_event',
+      event: { delta: { type: 'thinking_delta', thinking: 'Let me check' } },
+    });
+    expect(appended[1]?.[1]).toMatchObject({
+      event: { type: 'content_block_start', content_block: { type: 'tool_use' } },
+    });
+    // Live emission keeps the same order.
+    const emitted = vi.mocked(deps.sessionDomainService.emitDelta).mock.calls;
+    expect(emitted[0]?.[1]).toMatchObject({
+      data: { event: { delta: { type: 'thinking_delta', thinking: 'Let me check' } } },
+    });
+    expect(emitted[1]?.[1]).toMatchObject({
+      data: { event: { type: 'content_block_start', content_block: { type: 'tool_use' } } },
+    });
+  });
+
+  it('writes a pending thought before a replayed user message', () => {
+    const deps = makeDeps();
+    vi.mocked(deps.runtimeManager.isSessionWorking).mockReturnValue(false);
+    const injectCommittedUserMessage = vi.fn();
+    Object.assign(deps.sessionDomainService, { injectCommittedUserMessage });
+    const processor = new AcpEventProcessor(deps);
+    const { onAcpEvent } = processor.createRuntimeEventHandler('sid');
+
+    processor.handleAcpDelta('sid', thoughtDelta('earlier'));
+    onAcpEvent?.('sid', {
+      type: 'acp_session_update',
+      update: { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: 'next' } },
+    } as Parameters<NonNullable<typeof onAcpEvent>>[1]);
+
+    expect(deps.sessionDomainService.appendClaudeEvent).toHaveBeenCalledOnce();
+    expect(
+      vi.mocked(deps.sessionDomainService.appendClaudeEvent).mock.invocationCallOrder[0]
+    ).toBeLessThan(injectCommittedUserMessage.mock.invocationCallOrder[0] ?? 0);
+  });
+
+  it('flushes a pending thought when the prompt turn finishes', () => {
+    const deps = makeDeps();
+    const processor = new AcpEventProcessor(deps);
+
+    processor.handleAcpDelta('sid', thoughtDelta('done thinking'));
+    processor.finishPromptTurn('sid');
+
+    expect(deps.sessionDomainService.emitDelta).toHaveBeenCalledOnce();
+    expect(deps.sessionDomainService.emitDelta).toHaveBeenCalledWith(
+      'sid',
+      expect.objectContaining({ type: 'agent_message', order: 3 })
+    );
+  });
+
+  it('closes an open text block when a thought starts', () => {
+    const deps = makeDeps();
+    vi.mocked(deps.sessionDomainService.allocateOrder)
+      .mockReturnValueOnce(2)
+      .mockReturnValueOnce(4);
+    const processor = new AcpEventProcessor(deps);
+
+    processor.handleAcpDelta('sid', assistantDelta('before'));
+    processor.handleAcpDelta('sid', thoughtDelta('hmm'));
+    processor.handleAcpDelta('sid', assistantDelta('after'));
+
+    expect(deps.sessionDomainService.allocateOrder).toHaveBeenCalledTimes(2);
   });
 
   it('ignores empty assistant chunks without allocating an order', () => {

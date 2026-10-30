@@ -16,6 +16,7 @@
  * - NOT re-exported from orchestration/index.ts (circular dep risk)
  */
 
+import { KeyedTrailingRunner } from '@/backend/lib/keyed-trailing-runner';
 import {
   buildWorkspaceSessionSummaries,
   hasWorkingSessionSummary,
@@ -119,6 +120,7 @@ interface PendingRequestChangedEvent {
 
 const DEFAULT_WINDOW_MS = 150;
 const IDLE_PR_REFRESH_COOLDOWN_MS = 30_000;
+const SESSION_WORKSPACE_CACHE_MAX_ENTRIES = 5000;
 let lastCoalescerTimestamp = 0;
 
 function nextCoalescerTimestamp(): number {
@@ -288,6 +290,10 @@ class EventCollectorState {
   linearMergeCompletion: LinearMergeCompletion | null = null;
   teardownListeners: Array<() => void> = [];
   ratchetProjection: RatchetProjectionWorker | null = null;
+  readonly sessionRefreshes = new KeyedTrailingRunner();
+  readonly sessionWorkspaceIds = new Map<string, string>();
+  readonly sessionWorkspaceLookups = new Map<string, Promise<string | null>>();
+  sessionWorkspaceGeneration = 0;
 
   constructor(readonly dependencies: Readonly<EventCollectorDependencies>) {
     this.logger = dependencies.createLogger('event-collector');
@@ -301,12 +307,86 @@ function removeWorkspaceWithState(state: EventCollectorState, workspaceId: strin
     state.dependencies.workspaceSnapshotStore.remove(workspaceId);
   }
   state.lastIdlePrRefreshByWorkspace.delete(workspaceId);
+  for (const [sessionId, sessionWorkspaceId] of state.sessionWorkspaceIds) {
+    if (sessionWorkspaceId === workspaceId) {
+      state.sessionWorkspaceIds.delete(sessionId);
+    }
+  }
+  state.sessionWorkspaceGeneration += 1;
+  state.sessionWorkspaceLookups.clear();
   state.linearMergeCompletion?.removeWorkspace(workspaceId);
   state.dependencies.workspaceActivityService.clearWorkspace(workspaceId);
   state.dependencies.prFetchCoordinator.removeWorkspace(workspaceId);
 }
 
-async function refreshWorkspaceSessionSummaries(
+/**
+ * Session rows never move between workspaces, so remember each session's
+ * workspace instead of reloading the session (and its workspace row) for every
+ * runtime or pending-request event.
+ */
+async function resolveSessionWorkspaceId(
+  state: EventCollectorState,
+  sessionId: string
+): Promise<string | null> {
+  const cached = state.sessionWorkspaceIds.get(sessionId);
+  if (cached) {
+    return cached;
+  }
+  // Share one lookup between events that arrive before the first one resolves.
+  const existing = state.sessionWorkspaceLookups.get(sessionId);
+  if (existing !== undefined) {
+    return await existing;
+  }
+  const lookup: Promise<string | null> = lookUpSessionWorkspaceId(
+    state,
+    sessionId,
+    state.sessionWorkspaceGeneration
+  ).finally(() => {
+    if (state.sessionWorkspaceLookups.get(sessionId) === lookup) {
+      state.sessionWorkspaceLookups.delete(sessionId);
+    }
+  });
+  state.sessionWorkspaceLookups.set(sessionId, lookup);
+  return await lookup;
+}
+
+async function lookUpSessionWorkspaceId(
+  state: EventCollectorState,
+  sessionId: string,
+  generation: number
+): Promise<string | null> {
+  const session = await state.dependencies.sessionDataService.findAgentSessionById(sessionId);
+  if (!session) {
+    return null;
+  }
+  // A workspace removal or collector stop since this lookup began invalidates it.
+  if (generation !== state.sessionWorkspaceGeneration) {
+    return session.workspaceId;
+  }
+  if (state.sessionWorkspaceIds.size >= SESSION_WORKSPACE_CACHE_MAX_ENTRIES) {
+    state.sessionWorkspaceIds.clear();
+  }
+  state.sessionWorkspaceIds.set(sessionId, session.workspaceId);
+  return session.workspaceId;
+}
+
+/**
+ * Bursts of session events for one workspace share one query at a time plus a
+ * single trailing rerun, so N subagent transitions do not run N queries.
+ */
+function refreshWorkspaceSessionSummaries(
+  state: EventCollectorState,
+  coalescer: EventCoalescer,
+  workspaceId: string,
+  source: string,
+  options?: { includeWorking?: boolean }
+): void {
+  state.sessionRefreshes.run(`summaries:${workspaceId}`, () =>
+    loadWorkspaceSessionSummaries(state, coalescer, workspaceId, source, options)
+  );
+}
+
+async function loadWorkspaceSessionSummaries(
   state: EventCollectorState,
   coalescer: EventCoalescer,
   workspaceId: string,
@@ -354,26 +434,41 @@ async function refreshWorkspacePendingRequestType(
     if (state.activeCoalescer !== coalescer) {
       return;
     }
-    const session = await state.dependencies.sessionDataService.findAgentSessionById(sessionId);
-    if (!session || state.activeCoalescer !== coalescer) {
+    const workspaceId = await resolveSessionWorkspaceId(state, sessionId);
+    if (!workspaceId || state.activeCoalescer !== coalescer) {
       return;
     }
-
-    const sessions = await state.dependencies.sessionDataService.findAgentSessionsByWorkspaceId(
-      session.workspaceId
+    state.sessionRefreshes.run(`pending-request:${workspaceId}`, () =>
+      loadWorkspacePendingRequestType(state, coalescer, workspaceId, source)
     );
+  } catch (error) {
+    state.logger.warn('Failed to refresh workspace pending request type', {
+      sessionId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+async function loadWorkspacePendingRequestType(
+  state: EventCollectorState,
+  coalescer: EventCoalescer,
+  workspaceId: string,
+  source: string
+): Promise<void> {
+  try {
+    const sessions =
+      await state.dependencies.sessionDataService.findAgentSessionsByWorkspaceId(workspaceId);
     if (state.activeCoalescer !== coalescer) {
       return;
     }
-
     const pendingRequestType = state.dependencies.computePendingRequestType(
       sessions.map((s) => s.id),
       state.dependencies.chatEventForwarderService.getAllPendingRequests()
     );
-    coalescer.enqueue(session.workspaceId, { pendingRequestType }, source);
+    coalescer.enqueue(workspaceId, { pendingRequestType }, source);
   } catch (error) {
     state.logger.warn('Failed to refresh workspace pending request type', {
-      sessionId,
+      workspaceId,
       error: error instanceof Error ? error.message : String(error),
     });
   }
@@ -389,11 +484,11 @@ async function refreshWorkspaceSessionSummariesForSession(
     if (state.activeCoalescer !== coalescer) {
       return;
     }
-    const session = await state.dependencies.sessionDataService.findAgentSessionById(sessionId);
-    if (!session || state.activeCoalescer !== coalescer) {
+    const workspaceId = await resolveSessionWorkspaceId(state, sessionId);
+    if (!workspaceId || state.activeCoalescer !== coalescer) {
       return;
     }
-    await refreshWorkspaceSessionSummaries(state, coalescer, session.workspaceId, source, {
+    refreshWorkspaceSessionSummaries(state, coalescer, workspaceId, source, {
       includeWorking: true,
     });
   } catch (error) {
@@ -780,7 +875,7 @@ function startEventCollectorWithState(state: EventCollectorState): void {
     sessionId: string;
     isWorking: boolean;
   }) => {
-    void refreshWorkspaceSessionSummaries(
+    refreshWorkspaceSessionSummaries(
       state,
       coalescer,
       workspaceId,
@@ -802,15 +897,9 @@ function startEventCollectorWithState(state: EventCollectorState): void {
   // 9. Prime session summaries on startup so fresh clients have tab runtime
   // state before the first activity transition or reconciliation tick.
   for (const workspaceId of dependencies.workspaceSnapshotStore.getAllWorkspaceIds()) {
-    void refreshWorkspaceSessionSummaries(
-      state,
-      coalescer,
-      workspaceId,
-      'event:collector_startup',
-      {
-        includeWorking: true,
-      }
-    );
+    refreshWorkspaceSessionSummaries(state, coalescer, workspaceId, 'event:collector_startup', {
+      includeWorking: true,
+    });
   }
 
   // 10. Pending interactive request transitions (set/clear)
@@ -861,6 +950,10 @@ function stopEventCollectorWithState(state: EventCollectorState): void {
     state.activeCoalescer.flushAll();
     state.activeCoalescer = null;
     state.lastIdlePrRefreshByWorkspace.clear();
+    state.sessionRefreshes.clear();
+    state.sessionWorkspaceIds.clear();
+    state.sessionWorkspaceLookups.clear();
+    state.sessionWorkspaceGeneration += 1;
     state.linearMergeCompletion?.stop();
     state.linearMergeCompletion = null;
     state.logger.info('Event collector stopped');
