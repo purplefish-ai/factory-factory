@@ -10,10 +10,6 @@ import AdminDashboardPage from './admin-page';
 vi.mock('@/client/features/codex-accounts', () => ({
   CodexAccountsSettings: () => createElement('section', null, 'Codex accounts'),
 }));
-vi.mock('react-router', () => ({
-  Link: ({ children, to }: { children: ReactNode; to: string }) =>
-    createElement('a', { href: to }, children),
-}));
 
 vi.mock('@/client/components/app-header-context', () => ({
   HeaderLeftExtraSlot: ({ children }: { children: ReactNode }) =>
@@ -134,9 +130,8 @@ describe('AdminDashboardPage settings tabs', () => {
 
     expect(container.textContent).toContain('General Settings');
     expect(container.textContent).toContain('Project Settings');
-    expect(container.querySelector('a[href="/projects/alpha/agents"]')?.textContent).toContain(
-      'Agents'
-    );
+    expect(container.textContent).not.toContain('Manage scheduled agents and their runs.');
+    expect(container.querySelector('a[href="/projects/alpha/agents"]')).toBeNull();
     expect(container.textContent).not.toContain('Periodic Tasks');
     const tabs = Array.from(container.querySelectorAll('[role="tab"]')) as HTMLElement[];
     const generalTab = tabs.find((tab) => tab.textContent?.includes('General Settings'));
