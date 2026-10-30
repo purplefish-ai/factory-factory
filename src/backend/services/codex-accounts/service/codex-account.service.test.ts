@@ -92,7 +92,7 @@ async function fixture() {
     probe,
     login,
   });
-  return { service, rows, observations, observation, baseDir, login, unverified, probe };
+  return { service, rows, observations, observation, baseDir, login, unverified, probe, store };
 }
 it('preserves native environment and isolates managed history and authentication', async () => {
   const { service, baseDir } = await fixture();
@@ -505,4 +505,52 @@ it('does not upgrade the native default fallback to a different email or unverif
     await expect(service.getRuntimeContext(id)).rejects.toThrow('ff codex login');
     expect(rows[0]?.identityKey).toBe(fallback);
   }
+});
+// Holds the first store.list() made after a probe, i.e. the one inside identity
+// verification, until `release` is called.
+function holdVerification({ store, probe }: Awaited<ReturnType<typeof fixture>>) {
+  const list = store.list;
+  let held = false;
+  let entered!: () => void;
+  const waiting = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  vi.spyOn(store, 'list').mockImplementation(async () => {
+    if (!held && probe.mock.calls.length > 0) {
+      held = true;
+      entered();
+      await gate;
+    }
+    return list();
+  });
+  return { waiting, release };
+}
+it('does not pin or cache a read whose account is invalidated during verification', async () => {
+  const setup = await fixture();
+  const id = 'codex-native-default';
+  const held = holdVerification(setup);
+  const usage = setup.service.getUsage(id);
+  await held.waiting;
+  setup.service.invalidate(id);
+  held.release();
+  await expect(usage).rejects.toThrow('changed during identity verification');
+  expect(setup.rows[0]?.identityKey).toBeNull();
+  const probes = setup.probe.mock.calls.length;
+  await setup.service.getUsage(id);
+  expect(setup.probe.mock.calls.length).toBe(probes + 1);
+});
+it('does not overwrite an identity pinned by another writer during verification', async () => {
+  const setup = await fixture();
+  const id = 'codex-native-default';
+  const held = holdVerification(setup);
+  const usage = setup.service.getUsage(id);
+  await held.waiting;
+  setup.rows[0]!.identityKey = 'other-writer';
+  held.release();
+  await expect(usage).rejects.toThrow('changed during identity verification');
+  expect(setup.rows[0]?.identityKey).toBe('other-writer');
 });
