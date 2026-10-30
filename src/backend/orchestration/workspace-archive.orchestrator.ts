@@ -267,7 +267,7 @@ async function performArchive(
     interruptedArchiveSources.delete(requestedWorkspace.id);
     throw new ApplicationError('NOT_FOUND', `Workspace not found: ${requestedWorkspace.id}`);
   }
-  const resumeSource = await getArchiveResumeSource(workspace);
+  const resumeSource = getArchiveResumeSource(workspace);
   if (workspace.status === 'ARCHIVED' || (workspace.status === 'ARCHIVING' && !resumeSource)) {
     return workspace;
   }
@@ -316,20 +316,13 @@ async function performArchive(
   });
 }
 
-async function getArchiveResumeSource(
-  workspace: WorkspaceWithProject
-): Promise<ArchiveSourceStatus | undefined> {
+function getArchiveResumeSource(workspace: WorkspaceWithProject): ArchiveSourceStatus | undefined {
   if (workspace.status !== 'ARCHIVING') {
     interruptedArchiveSources.delete(workspace.id);
     return undefined;
   }
-  const source = interruptedArchiveSources.get(workspace.id);
-  if (source) {
-    return source;
-  }
-  // Reuse startup recovery's age threshold before taking over an unknown owner.
-  const stale = await workspaceMaintenanceService.findStaleArchiving();
-  return stale.some((candidate) => candidate.id === workspace.id) ? 'FAILED' : undefined;
+  // Age alone cannot establish that another process has stopped cleanup.
+  return interruptedArchiveSources.get(workspace.id);
 }
 
 async function resolveArchiveTransitionConflict(

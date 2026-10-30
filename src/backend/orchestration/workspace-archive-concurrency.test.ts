@@ -223,22 +223,14 @@ describe('concurrent workspace archives', () => {
     }
   );
 
-  it('resumes a stale ARCHIVING row left by a prior process', async () => {
-    row = { ...row, status: 'ARCHIVING' };
+  it('does not take over a stale archive that could still belong to another process', async () => {
+    row = { ...row, status: 'ARCHIVING', updatedAt: new Date(0) };
     vi.mocked(workspaceMaintenanceService.findStaleArchiving).mockResolvedValue([row]);
     await expect(archiveWorkspace(row, {}, services)).resolves.toMatchObject({
-      status: 'ARCHIVED',
+      status: 'ARCHIVING',
     });
-    expect(worktreeLifecycleService.cleanupWorkspaceWorktree).toHaveBeenCalledTimes(1);
-  });
-
-  it('reports stale archive recovery failures and leaves the workspace retryable', async () => {
-    row = { ...row, status: 'ARCHIVING' };
-    vi.mocked(workspaceMaintenanceService.findStaleArchiving).mockResolvedValue([row]);
-    const error = new Error('Worktree cleanup failed');
-    vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree).mockRejectedValueOnce(error);
-    await expect(archiveWorkspace(row, {}, services)).rejects.toBe(error);
-    expect(row.status).toBe('FAILED');
+    expect(worktreeLifecycleService.cleanupWorkspaceWorktree).not.toHaveBeenCalled();
+    expect(persistence.transitionWithCas).not.toHaveBeenCalled();
   });
 
   it('retries a transition lost to an archive that rolled back', async () => {
