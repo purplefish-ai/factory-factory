@@ -499,4 +499,47 @@ describe('permission response pending state', () => {
     await expect(older).resolves.toMatchObject({ outcome: { outcome: 'selected' } });
     await expect(replacement).resolves.toMatchObject({ outcome: { outcome: 'selected' } });
   });
+
+  it('restores an older concurrent request after the newer one is answered', async () => {
+    const { domain, service, bridge, request } = setup();
+    const emitDelta = vi.spyOn(domain, 'emitDelta');
+    const older = request('req-1');
+    const newer = request('req-2');
+    expect(domain.getPendingInteractiveRequest('session-1')?.requestId).toBe('req-2');
+    emitDelta.mockClear();
+
+    expect(service.respondToPermission('session-1', 'req-2', 'allow_once')).toBe(true);
+
+    expect(bridge.hasPending('req-1')).toBe(true);
+    expect(domain.getPendingInteractiveRequest('session-1')?.requestId).toBe('req-1');
+    expect(emitDelta).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({ type: 'permission_request', requestId: 'req-1' })
+    );
+    await expect(newer).resolves.toMatchObject({ outcome: { outcome: 'selected' } });
+    expect(service.respondToPermission('session-1', 'req-1', 'reject_once')).toBe(true);
+    expect(domain.getPendingInteractiveRequest('session-1')).toBeNull();
+    await expect(older).resolves.toEqual({
+      outcome: { outcome: 'selected', optionId: 'reject_once' },
+    });
+  });
+
+  it('does not restore concurrent requests cancelled together', async () => {
+    const { domain, bridge, request } = setup();
+    const emitDelta = vi.spyOn(domain, 'emitDelta');
+    const responses = [request('req-1'), request('req-2')];
+    emitDelta.mockClear();
+
+    bridge.cancelAll();
+
+    await expect(Promise.all(responses)).resolves.toEqual([
+      { outcome: { outcome: 'cancelled' } },
+      { outcome: { outcome: 'cancelled' } },
+    ]);
+    expect(domain.getPendingInteractiveRequest('session-1')).toBeNull();
+    expect(emitDelta).not.toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({ type: 'permission_request' })
+    );
+  });
 });

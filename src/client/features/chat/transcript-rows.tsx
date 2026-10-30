@@ -32,14 +32,12 @@ function TranscriptMessage({
   return (
     <GroupedMessageItemRenderer
       item={item}
+      onOpenAgents={display.onOpenAgents}
       isQueued={queued}
       toolExpansionToken={
         display.workspaceId && isToolSequence(item)
           ? [
-              getExpansionState(
-                createToolSequenceExpansionKey(item.id),
-                item.pairedCalls.length > 1
-              ),
+              getExpansionState(createToolSequenceExpansionKey(item.id), false),
               ...item.pairedCalls.map((call) =>
                 getExpansionState(createToolCallExpansionKey(item.id, call.id), false)
               ),

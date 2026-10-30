@@ -346,7 +346,8 @@ describe('session selection hydration and outbound settings', () => {
         type: 'set_model',
         model: 'opus',
         reasoningEffort: 'high',
-      })
+      }),
+      { queuePolicy: 'drop' }
     );
   });
 
@@ -356,7 +357,8 @@ describe('session selection hydration and outbound settings', () => {
     await harness.capabilities();
     await act(() => harness.chat.updateSettings({ selectedModel: 'opus' }));
     expect(harness.send).toHaveBeenLastCalledWith(
-      expect.objectContaining({ model: 'opus', reasoningEffort: 'high' })
+      expect.objectContaining({ model: 'opus', reasoningEffort: 'high' }),
+      { queuePolicy: 'drop' }
     );
     await act(() => {
       harness.chat.handleMessage({

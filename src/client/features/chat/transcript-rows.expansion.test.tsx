@@ -15,7 +15,7 @@ vi.mock('./agent-activity', () => ({
         type="button"
         data-message={props.item.id}
         onClick={() =>
-          props.setToolExpansionState?.(createToolSequenceExpansionKey(props.item.id), false)
+          props.setToolExpansionState?.(createToolSequenceExpansionKey(props.item.id), true)
         }
       >
         Toggle tool
@@ -28,6 +28,7 @@ it('rerenders a memoized tool row when persisted expansion changes without remou
   const host = document.createElement('div');
   document.body.append(host);
   const root = createRoot(host);
+  const onOpenAgents = vi.fn();
   const item = {
     type: 'tool_sequence' as const,
     id: 'expansion-tool',
@@ -47,13 +48,16 @@ it('rerenders a memoized tool row when persisted expansion changes without remou
           running={false}
           startingSession={false}
           loadingSession={false}
+          onOpenAgents={onOpenAgents}
         />
       )
     );
     const node = host.querySelector<HTMLButtonElement>('[data-message="expansion-tool"]');
     const before = render.mock.lastCall?.[0].toolExpansionToken;
+    expect(before).toBe('false:false:false');
+    expect(render.mock.lastCall?.[0].onOpenAgents).toBe(onOpenAgents);
     flushSync(() => node?.click());
-    expect(render.mock.lastCall?.[0].toolExpansionToken).not.toBe(before);
+    expect(render.mock.lastCall?.[0].toolExpansionToken).toBe('true:false:false');
     expect(host.querySelector('[data-message="expansion-tool"]')).toBe(node);
     flushSync(() =>
       root.render(

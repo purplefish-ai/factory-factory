@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { trpc } from '@/client/lib/trpc';
-import { useWebSocketTransport } from '@/hooks/use-websocket-transport';
+import { useWebSocketTransport, type WebSocketSend } from '@/hooks/use-websocket-transport';
 import type {
   ChatMessage,
   ChatSettings,
@@ -161,7 +161,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   // This works because:
   // 1. sendRef.current is updated synchronously after useWebSocketTransport returns
   // 2. The callback wrapper ((msg) => sendRef.current(msg)) always uses the latest ref value
-  const sendRef = useRef<(message: unknown) => boolean>(() => false);
+  const sendRef = useRef<WebSocketSend>(() => false);
   const currentLoadRequestIdRef = useRef<string | null>(null);
   const exhaustedLoadRequestIdRef = useRef<string | null>(null);
   const currentLoadGenerationRef = useRef(0);
@@ -195,7 +195,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
 
   const chat = useChatState({
     dbSessionId,
-    send: useCallback((message: unknown) => sendRef.current(message), []),
+    send: useCallback<WebSocketSend>((message, options) => sendRef.current(message, options), []),
     connected: false, // Transport lifecycle is forwarded through handleDisconnected below.
   });
 

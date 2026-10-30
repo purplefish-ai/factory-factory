@@ -495,16 +495,16 @@ cannot occlude the jump overlay. Browser suites use separate output directories;
 cold Storybook graph compilation is warmed before the timed composer interaction
 cases.
 
-Final verification after PR review and integrating main: `pnpm check:fix`,
-`pnpm typecheck` and `pnpm check` passed. Before integrating main, the full unit
-suite passed 9,239 tests. The merged full run passed 9,345 tests, skipped 3, and
-hit one upstream native Codex RPC timeout; that unchanged integration test
-passed its isolated rerun. Browser suites passed 38 transcript, 4 Storybook
-(composer and subagent restoration/width), and 30 existing mobile cases. Mobile,
+Final verification after PR review and both main integrations: `pnpm check:fix`,
+`pnpm typecheck` and `pnpm check` passed. The full unit suite passed 9,425 tests
+with 3 skipped and no failures. Browser verification covered all 38 transcript,
+4 Storybook and 30 existing mobile cases. The expanded tool-burst case was also
+repeated five times per viewport. It records both scroll position and total
+extent, rejecting backward corrections beyond measured extent shrink. Mobile,
 desktop and wide subagent Storybook screenshots were inspected. Main's inline
-task list is preserved in the measured transcript tail, including ACP updates
-and hydration behavior. The engine contract was re-characterized successfully on
-virtual-core 3.19.9.
+tasks, subagent lifecycle rows, recovery/retry status and collapsed tool group
+default are preserved in the shared renderer. The engine contract was
+re-characterized successfully on virtual-core 3.19.9.
 
 PR review follow-up restores workspace-owned subagent positions across pane
 unmounts and retains the prior content width. Node-keyed weak measurements

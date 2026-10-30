@@ -189,3 +189,7 @@ describe('ChatContent transcript ownership', () => {
     }
   });
 });
+
+vi.mock('@/client/features/subagents', () => ({
+  useSubagentTimelineMessages: (messages: unknown[]) => ({ messages, error: null }),
+}));

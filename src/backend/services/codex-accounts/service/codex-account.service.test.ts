@@ -4,6 +4,10 @@ import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { CodexAccountService } from './codex-account.service';
 import type { AccountObservation, CodexRuntimeContext, NativeLogin } from './types';
+const logs = vi.hoisted(() => ({ info: vi.fn(), warn: vi.fn() }));
+vi.mock('@/backend/services/logger.service', () => ({
+  createLogger: () => ({ info: logs.info, debug: vi.fn(), warn: logs.warn, error: vi.fn() }),
+}));
 const directories: string[] = [];
 afterEach(async () => {
   await Promise.all(
@@ -175,6 +179,29 @@ it('rejects every known exhausted account', async () => {
   await expect(service.withAccountReservation({}, async (id) => id)).rejects.toThrow(
     'remaining capacity'
   );
+});
+it('logs why each Auto candidate was skipped', async () => {
+  const { service, observations, observation, probe } = await fixture();
+  const exhausted = await service.createAccount('Exhausted');
+  const usable = await service.createAccount('Usable');
+  observations.set(exhausted.id, observation(100));
+  observations.set(usable.id, observation(10));
+  const read = probe.getMockImplementation()!;
+  probe.mockImplementation((context) =>
+    context.accountId === 'codex-native-default'
+      ? Promise.reject(new Error('Codex native account operation failed'))
+      : read(context)
+  );
+  logs.info.mockClear();
+  logs.warn.mockClear();
+  expect(await service.withAccountReservation({}, async (id) => id)).toBe(usable.id);
+  expect(logs.warn).toHaveBeenCalledWith('Skipping Codex account: account status check failed', {
+    accountId: 'codex-native-default',
+    error: 'Codex native account operation failed',
+  });
+  expect(logs.info).toHaveBeenCalledWith('Skipping Codex account: no remaining capacity', {
+    accountId: exhausted.id,
+  });
 });
 it('refuses duplicate identities including the native default', async () => {
   const { service, observations, observation } = await fixture();

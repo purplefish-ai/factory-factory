@@ -253,3 +253,25 @@ export const PastSession: Story = {
 export const LiveActivity: Story = {
   render: () => <HistoryPreview running />,
 };
+
+export const SubagentTimelineRecovery: Story = {
+  render: (args) => <StartupPreview {...args} />,
+  args: {
+    loadingSession: false,
+    subagentTimelineError: {
+      message: 'Some sub-agent activity could not be loaded.',
+      onRetry: () => undefined,
+    },
+  },
+};
+
+export const SubagentTimelineRecoveryWithTasks: Story = {
+  ...SubagentTimelineRecovery,
+  args: {
+    ...SubagentTimelineRecovery.args,
+    acpPlan: {
+      entries: [{ content: 'Verify chat activity', status: 'in_progress', priority: 'high' }],
+      updatedAt: '2026-10-30T12:00:00Z',
+    },
+  },
+};

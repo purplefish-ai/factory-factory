@@ -20,14 +20,22 @@ test('same-key tool bursts and activity changes stay attached', async ({ page })
   await expect.poll(() => gap(viewport)).toBeLessThanOrEqual(1);
   await viewport.evaluate((element) => element.setAttribute('data-scroll-probe', 'running'));
   const sampledPositions = viewport.evaluate(async (element) => {
-    const positions: number[] = [];
+    const positions: Array<{ top: number; max: number }> = [];
     while (element.hasAttribute('data-scroll-probe')) {
       await new Promise(requestAnimationFrame);
-      positions.push(element.scrollTop);
+      positions.push({
+        top: element.scrollTop,
+        max: Math.max(0, element.scrollHeight - element.clientHeight),
+      });
     }
     return positions;
   });
   await page.getByRole('button', { name: 'Tool burst', exact: true }).click();
+  await expect.poll(() => gap(viewport)).toBeLessThanOrEqual(1);
+  const groupToggle = viewport.locator('[data-tool-sequence="true"] button[aria-expanded]').first();
+  await expect(groupToggle).toHaveAttribute('aria-expanded', 'false');
+  await groupToggle.click();
+  await expect(groupToggle).toHaveAttribute('aria-expanded', 'true');
   await expect.poll(() => gap(viewport)).toBeLessThanOrEqual(1);
   const count = await viewport.locator('[data-transcript-key]').count();
   await page.getByRole('button', { name: 'Tool burst', exact: true }).click();
@@ -39,7 +47,14 @@ test('same-key tool bursts and activity changes stay attached', async ({ page })
   await viewport.evaluate((element) => element.removeAttribute('data-scroll-probe'));
   const positions = await sampledPositions;
   expect(positions.length).toBeGreaterThan(0);
-  expect(positions.every((top, index) => top >= (positions[index - 1] ?? top) - 1)).toBe(true);
+  const backwardFrames = positions.flatMap((top, index) => {
+    const previous = positions[index - 1] ?? top;
+    // Replacing estimates can shrink the extent while we remain at the end.
+    // Reject backward corrections beyond that legitimate geometry change.
+    const shrink = Math.max(0, previous.max - top.max);
+    return top.top < previous.top - shrink - 1 ? [{ index, previous, top }] : [];
+  });
+  expect(backwardFrames).toEqual([]);
   const previousGroupKey = await viewport
     .locator('[data-tool-sequence="true"]')
     .getAttribute('data-transcript-key');

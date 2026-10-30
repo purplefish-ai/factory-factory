@@ -207,9 +207,9 @@ measured positioning and above-viewport compensation. A leading header stays
 mounted so offscreen image/banner changes remain measured. ResizeObserver
 batches run through the virtualizer's frame scheduler to avoid delivery loops
 when compensation mounts more rows. Headers and the final message's activity
-tail share the measured extent. Native CSS anchoring is disabled on the
-controlled viewport. The jump button overlays the viewport, so showing it cannot
-change its height.
+tail, inline tasks and subagent recovery status share the measured extent.
+Native CSS anchoring is disabled on the controlled viewport. The jump button
+overlays the viewport, so showing it cannot change its height.
 
 Returning to a pane restores follow intent or a keyed visible-row offset. Row
 offsets are signed: a position in a gap anchors to the next visible row, keeping

@@ -68,6 +68,18 @@ describe('TopicBroadcaster', () => {
       expect(onEmpty).toHaveBeenCalledTimes(1);
     });
 
+    it('ignores a stale disposer after the socket re-subscribes to the topic', () => {
+      const broadcaster = createBroadcaster();
+      const ws = new MockWebSocket().asWebSocket();
+
+      const firstDispose = broadcaster.subscribe('topic-a', ws);
+      firstDispose();
+      broadcaster.subscribe('topic-a', ws);
+      firstDispose();
+
+      expect(broadcaster.subscriberCount('topic-a')).toBe(1);
+    });
+
     it('keeps distinct topics independent', () => {
       const broadcaster = createBroadcaster();
       const ws1 = new MockWebSocket();

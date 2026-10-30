@@ -31,6 +31,20 @@ export const IDE_CONFIGS: Record<
 };
 
 /**
+ * Run a command and report whether it exited successfully. execCommand resolves
+ * with a non-zero code (or timedOut) when the command fails and rejects only
+ * when it cannot be spawned, so all of these count as failure.
+ */
+async function runsSuccessfully(command: string, args: string[]): Promise<boolean> {
+  try {
+    const result = await execCommand(command, args);
+    return result.code === 0 && !result.timedOut;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Check if an IDE is available on the system
  */
 export async function checkIdeAvailable(ide: string): Promise<boolean> {
@@ -40,25 +54,24 @@ export async function checkIdeAvailable(ide: string): Promise<boolean> {
   }
 
   // Check if CLI is in PATH
-  try {
-    await execCommand('which', [config.cliCommand]);
+  if (await runsSuccessfully('which', [config.cliCommand])) {
     return true;
-  } catch {
-    // CLI not in PATH, check for macOS app
-    if (process.platform === 'darwin' && config.macBundleId) {
-      try {
-        const result = await execCommand('mdfind', [
-          `kMDItemCFBundleIdentifier == "${config.macBundleId}"`,
-        ]);
-        if (result.stdout.trim()) {
-          return true;
-        }
-      } catch {
-        // mdfind failed
-      }
-    }
-    return false;
   }
+
+  // CLI not in PATH, check for macOS app
+  if (process.platform === 'darwin' && config.macBundleId) {
+    try {
+      const result = await execCommand('mdfind', [
+        `kMDItemCFBundleIdentifier == "${config.macBundleId}"`,
+      ]);
+      if (result.code === 0 && result.stdout.trim()) {
+        return true;
+      }
+    } catch {
+      // mdfind failed
+    }
+  }
+  return false;
 }
 
 /**
@@ -88,12 +101,7 @@ export async function openCustomIde(customCommand: string, targetPath: string): 
     return false;
   }
 
-  try {
-    await execCommand(cmd, args);
-    return true;
-  } catch {
-    return false;
-  }
+  return await runsSuccessfully(cmd, args);
 }
 
 /**
@@ -106,21 +114,15 @@ export async function openBuiltInIde(ide: string, targetPath: string): Promise<b
   }
 
   // Try CLI command first
-  try {
-    await execCommand(config.cliCommand, [targetPath]);
+  if (await runsSuccessfully(config.cliCommand, [targetPath])) {
     return true;
-  } catch {
-    // Fallback to 'open -a' on macOS
-    if (process.platform === 'darwin' && config.macAppName) {
-      try {
-        await execCommand('open', ['-a', config.macAppName, targetPath]);
-        return true;
-      } catch {
-        // Failed to open
-      }
-    }
-    return false;
   }
+
+  // Fallback to 'open -a' on macOS
+  if (process.platform === 'darwin' && config.macAppName) {
+    return await runsSuccessfully('open', ['-a', config.macAppName, targetPath]);
+  }
+  return false;
 }
 
 /**

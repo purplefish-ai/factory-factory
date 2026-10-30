@@ -85,6 +85,7 @@ export function TranscriptTail({
     !background &&
     !initializing &&
     !starting &&
+    !props.subagentTimelineError &&
     !loadingSession;
   return (
     <>
@@ -92,6 +93,18 @@ export function TranscriptTail({
         <div className="py-12 text-center text-muted-foreground">
           <p className="text-lg font-medium">Ready to start</p>
           <p className="text-sm">Send a message to start the agent and begin your conversation.</p>
+        </div>
+      )}
+      {props.subagentTimelineError && (
+        <div role="status" className="flex items-center gap-2 py-1 text-sm text-muted-foreground">
+          <span className="min-w-0">{props.subagentTimelineError.message}</span>
+          <button
+            type="button"
+            onClick={props.subagentTimelineError.onRetry}
+            className="shrink-0 rounded-sm underline underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            Retry
+          </button>
         </div>
       )}
       {!loadingSession && <TodoPanel todoState={todoState} />}
@@ -109,7 +122,13 @@ export function TranscriptTail({
           onOpenAgents={props.onOpenAgents}
         />
       )}
-      {queuedPRUpdate && <GroupedMessageItemRenderer item={queuedPRUpdate} isQueued />}
+      {queuedPRUpdate && (
+        <GroupedMessageItemRenderer
+          item={queuedPRUpdate}
+          isQueued
+          onOpenAgents={props.onOpenAgents}
+        />
+      )}
     </>
   );
 }

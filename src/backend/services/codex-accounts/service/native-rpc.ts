@@ -4,8 +4,10 @@ import { createInterface } from 'node:readline';
 import { z } from 'zod';
 import { getOwnedCodexCommand } from '@/backend/lib/owned-codex-command';
 import { terminateDisposableProcessTree } from '@/backend/lib/owned-process-cleanup';
+import { createLogger } from '@/backend/services/logger.service';
 import { acquireNativeSlot } from './native-slots';
 import type { CodexRuntimeContext } from './types';
+const logger = createLogger('codex-native-rpc');
 const responseSchema = z.object({
   id: z.number().optional(),
   method: z.string().optional(),
@@ -156,6 +158,12 @@ async function runNativeRpc<T>(
     try {
       await terminateDisposableProcessTree(child, {
         timeoutMs: Math.max(0, options.deadline - Date.now()),
+      });
+    } catch (error) {
+      // Cleanup must not replace the operation's own result or error.
+      logger.warn('Codex native process cleanup failed', {
+        accountId: context.accountId,
+        error: error instanceof Error ? error.message : String(error),
       });
     } finally {
       child.stdin.destroy();

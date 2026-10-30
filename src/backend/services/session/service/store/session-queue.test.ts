@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SERVICE_LIMITS } from '@/backend/services/constants';
+import type { QueuedMessage } from '@/shared/acp-protocol';
 import {
   clearPendingInteractiveRequest,
   clearPendingInteractiveRequestIfMatches,
@@ -27,6 +28,21 @@ function createStore(): SessionStore {
   };
 }
 
+function message(id: string, source?: QueuedMessage['source']): QueuedMessage {
+  return {
+    id,
+    text: id,
+    timestamp: '2026-02-01T00:00:00.000Z',
+    settings: {
+      selectedModel: null,
+      reasoningEffort: null,
+      thinkingEnabled: false,
+      planModeEnabled: false,
+    },
+    ...(source ? { source } : {}),
+  };
+}
+
 describe('session-queue', () => {
   it('enqueues and returns queue position', () => {
     const store = createStore();
@@ -44,6 +60,21 @@ describe('session-queue', () => {
 
     expect(result).toEqual({ position: 0 });
     expect(store.queue).toHaveLength(1);
+  });
+
+  it('returns the insertion index for a human message placed ahead of PR events', () => {
+    const store = createStore();
+    enqueueMessage(store, message('human-1'));
+    const prSource = {
+      type: 'pr_event',
+      request: { workspaceId: 'w', prId: 'p', bindingRevision: 1 },
+    } as const;
+    expect(enqueueMessage(store, message('pr-1', prSource))).toEqual({ position: 1 });
+
+    const result = enqueueMessage(store, message('human-2'));
+
+    expect(store.queue.map((item) => item.id)).toEqual(['human-1', 'human-2', 'pr-1']);
+    expect(result).toEqual({ position: 1 });
   });
 
   it('returns queue full error at service limit', () => {

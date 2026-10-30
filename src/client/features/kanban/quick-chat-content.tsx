@@ -8,6 +8,7 @@ import {
   ChatTranscript,
   type TranscriptScrollOptions,
 } from '@/client/features/chat';
+import { useSubagentTimelineMessages } from '@/client/features/subagents';
 
 interface QuickChatContentProps {
   workspaceId: string;
@@ -22,7 +23,15 @@ export function QuickChatContent({
   chatState,
   transcriptScroll,
 }: QuickChatContentProps) {
-  const groupedMessages = useGroupedChatMessages(chatState.messages);
+  const timeline = useSubagentTimelineMessages(
+    chatState.messages,
+    chatState.runtimeSessionId,
+    chatState.connected,
+    chatState.sessionStatus.phase === 'loading'
+  );
+  const groupedMessages = useGroupedChatMessages(timeline.messages, {
+    filterDuplicateResults: true,
+  });
   const queuedMessageIds = useMemo(
     () => new Set(chatState.queuedMessages.map((message) => message.id)),
     [chatState.queuedMessages]
@@ -40,6 +49,7 @@ export function QuickChatContent({
       <ChatTranscript
         workspaceId={workspaceId}
         messages={groupedMessages}
+        subagentTimelineError={timeline.error}
         acpPlan={chatState.acpPlan}
         running={running}
         work={chatState.sessionRuntime.work}
