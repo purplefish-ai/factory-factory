@@ -485,6 +485,7 @@ export const periodicTaskAccessor = {
           id: input.periodicTaskId,
           isEnabled: true,
           nextRunAt: { lte: data.lastRunAt },
+          project: { isArchived: false },
           executions: { none: { status: 'RUNNING' } },
         },
         data,

@@ -394,6 +394,7 @@ describe('periodicTaskAccessor.reserveExecutionAndMarkDispatched', () => {
         id: 'task-1',
         isEnabled: true,
         nextRunAt: { lte: new Date('2026-02-28T15:00:00.000Z') },
+        project: { isArchived: false },
         executions: { none: { status: 'RUNNING' } },
       },
       data: expect.objectContaining({
@@ -461,6 +462,7 @@ describe('periodicTaskAccessor.reserveExecutionAndMarkDispatched', () => {
         id: 'task-1',
         isEnabled: true,
         nextRunAt: { lte: new Date('2026-02-28T15:00:00.000Z') },
+        project: { isArchived: false },
         executions: { none: { status: 'RUNNING' } },
       },
       data: expect.objectContaining({

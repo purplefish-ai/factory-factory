@@ -177,6 +177,39 @@ describe('due periodic tasks through shared dispatch', () => {
     expect(initializeWorktree).toHaveBeenCalledTimes(2);
   });
 
+  it('retains failed admission and its advanced schedule when a project archives before workspace insertion', async () => {
+    const task = await createTask();
+    const creation = new WorkspaceCreationService({ logger });
+    configure(async (source) => {
+      await db.prisma.project.update({ where: { id: 'project' }, data: { isArchived: true } });
+      return { workspace: await creation.create(source) };
+    });
+    try {
+      await runCycle();
+      expect(events).toHaveLength(1);
+      expect(await db.prisma.workspace.count()).toBe(0);
+      expect(await service.listExecutions(task.id)).toEqual([
+        expect.objectContaining({
+          status: 'FAILED',
+          workspaceId: null,
+          errorMessage: 'Cannot create a workspace in an archived project',
+        }),
+      ]);
+      const admitted = await db.prisma.periodicTask.findUniqueOrThrow({ where: { id: task.id } });
+      expect(admitted.lastRunAt).toBeInstanceOf(Date);
+      expect(admitted.nextRunAt.getTime()).toBeGreaterThan(task.nextRunAt.getTime());
+      await db.prisma.project.update({ where: { id: 'project' }, data: { isArchived: false } });
+      await runCycle();
+      expect(events).toHaveLength(1);
+      expect(await db.prisma.periodicTaskExecution.count()).toBe(1);
+      expect(
+        (await db.prisma.periodicTask.findUniqueOrThrow({ where: { id: task.id } })).nextRunAt
+      ).toEqual(admitted.nextRunAt);
+    } finally {
+      await db.prisma.project.update({ where: { id: 'project' }, data: { isArchived: false } });
+    }
+  });
+
   it.each(['disabled', 'not due', 'running predecessor', 'lost claim'] as const)(
     'dispatches nothing for a stale due snapshot with %s',
     async (condition) => {

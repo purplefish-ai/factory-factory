@@ -173,6 +173,52 @@ describe('WorkspaceCreationService', () => {
     ).mockResolvedValue();
   });
 
+  describe('guarded project error mapping', () => {
+    it.each([true, false])(
+      'maps project relation failures when archived=%s',
+      async (isArchived) => {
+        const databaseError = Object.assign(new Error('Prisma relation details'), {
+          code: 'P2025',
+        });
+        vi.mocked(workspaceAccessorModule.workspaceAccessor.create).mockRejectedValueOnce(
+          databaseError
+        );
+        vi.mocked(projectAccessorModule.projectAccessor.findById).mockResolvedValue(
+          isArchived ? { ...mockProject, isArchived: true } : null
+        );
+        await expect(
+          service.create({ type: 'MANUAL', projectId: 'proj-1', name: 'Rejected' })
+        ).rejects.toMatchObject({
+          code: isArchived ? 'PRECONDITION_FAILED' : 'NOT_FOUND',
+          message: isArchived
+            ? 'Cannot create a workspace in an archived project'
+            : 'Project not found: proj-1',
+        });
+      }
+    );
+
+    it('preserves unrelated relation failures in active projects', async () => {
+      const databaseError = Object.assign(new Error('Parent relation missing'), { code: 'P2025' });
+      vi.mocked(workspaceAccessorModule.workspaceAccessor.create).mockRejectedValueOnce(
+        databaseError
+      );
+      vi.mocked(projectAccessorModule.projectAccessor.findById).mockResolvedValue(mockProject);
+      await expect(
+        service.create({ type: 'MANUAL', projectId: 'proj-1', name: 'Rejected' })
+      ).rejects.toBe(databaseError);
+    });
+
+    it('preserves other database failures', async () => {
+      const databaseError = new Error('Database unavailable');
+      vi.mocked(workspaceAccessorModule.workspaceAccessor.create).mockRejectedValueOnce(
+        databaseError
+      );
+      await expect(
+        service.create({ type: 'MANUAL', projectId: 'proj-1', name: 'Rejected' })
+      ).rejects.toBe(databaseError);
+    });
+  });
+
   describe('create', () => {
     describe('MANUAL source', () => {
       it('should create workspace with manual source', async () => {

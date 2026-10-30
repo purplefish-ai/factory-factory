@@ -15,6 +15,7 @@ beforeAll(async () => {
   ));
 }, 30_000);
 afterEach(async () => {
+  await db.prisma.periodicTaskExecution.deleteMany();
   await db.prisma.periodicTask.deleteMany();
   await clearIntegrationDatabase(db.prisma);
 });
@@ -57,4 +58,32 @@ it('skips archived projects during due-task polling and resumes eligible tasks a
   expect((await periodicTaskAccessor.findDueTasks()).map((task) => task.id).sort()).toEqual(
     [due.id, paused.id].sort()
   );
+});
+
+it('does not consume the schedule when the project archives after the due read', async () => {
+  const project = await createProject('race');
+  const task = await db.prisma.periodicTask.create({
+    data: {
+      projectId: project.id,
+      name: 'Agent',
+      prompt: 'Instructions',
+      cadence: 'DAILY',
+      nextRunAt: new Date(0),
+    },
+  });
+  expect((await periodicTaskAccessor.findDueTasks()).map((due) => due.id)).toEqual([task.id]);
+  await db.prisma.project.update({ where: { id: project.id }, data: { isArchived: true } });
+  const reserve = () =>
+    periodicTaskAccessor.reserveExecutionAndMarkDispatched(
+      { periodicTaskId: task.id, workspaceId: null, status: 'RUNNING' },
+      { cadence: 'DAILY', scheduledTime: null, timezone: null, scheduledDayOfMonth: null }
+    );
+  expect(await reserve()).toBeNull();
+  expect(await db.prisma.periodicTaskExecution.count()).toBe(0);
+  expect(await db.prisma.periodicTask.findUnique({ where: { id: task.id } })).toMatchObject({
+    nextRunAt: new Date(0),
+    lastRunAt: null,
+  });
+  await db.prisma.project.update({ where: { id: project.id }, data: { isArchived: false } });
+  expect(await reserve()).toMatchObject({ periodicTaskId: task.id, status: 'RUNNING' });
 });
