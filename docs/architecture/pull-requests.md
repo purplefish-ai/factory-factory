@@ -342,10 +342,11 @@ preserved for receipt history.
 
 Closing a conversation retains its provider session ID in archived transcript
 metadata. Receipt recovery reads that identity from the archive's header,
-without parsing its archived messages, and checks provider-owned history,
-including after another conversation is selected. If history is unavailable,
-restore the provider history files and archived identity, then explicitly resume
-the selected conversation. Local transcript messages cannot prove receipt.
+without parsing its archived messages (it parses the whole archive only when the
+header cannot be isolated), and checks provider-owned history, including after
+another conversation is selected. If history is unavailable, restore the
+provider history files and archived identity, then explicitly resume the
+selected conversation. Local transcript messages cannot prove receipt.
 
 Transport attempts stop after three failures. User stop and runtime failure
 persist a pause and invalidate queued requests; explicit user continuation

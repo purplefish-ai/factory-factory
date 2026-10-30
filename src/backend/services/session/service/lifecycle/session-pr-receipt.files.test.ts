@@ -160,26 +160,25 @@ describe('findPRDeliveryReceipt against provider transcripts', () => {
       const repo = join(tempDir, 'repo');
       const transcriptPath = '.context/closed-sessions/main.json';
       mkdirSync(join(repo, '.context', 'closed-sessions'), { recursive: true });
-      // Same shape and formatting as closed-session persistence, with a message
-      // list larger than the header probe.
-      writeFileSync(
-        join(repo, transcriptPath),
-        JSON.stringify(
-          {
-            version: 1,
-            sessionId: 'main',
-            workspaceId: 'workspace-1',
-            metadata: {
-              provider,
-              ...(provider === 'CODEX' ? { codexAccountId: 'account-1' } : {}),
-              providerSessionId: 'provider-1',
-            },
-            messages: [{ type: 'user', content: 'x'.repeat(200_000) }],
+      // Same shape and formatting as closed-session persistence. The message
+      // list is cut off past the header probe, so only a header-only read can
+      // recover the provider identity.
+      const archive = JSON.stringify(
+        {
+          version: 1,
+          sessionId: 'main',
+          workspaceId: 'workspace-1',
+          metadata: {
+            provider,
+            ...(provider === 'CODEX' ? { codexAccountId: 'account-1' } : {}),
+            providerSessionId: 'provider-1',
           },
-          null,
-          2
-        )
+          messages: [{ type: 'user', content: 'x'.repeat(200_000) }],
+        },
+        null,
+        2
       );
+      writeFileSync(join(repo, transcriptPath), archive.slice(0, 100_000));
       mocks.archives.mockResolvedValue([
         { sessionId: 'main', provider, transcriptPath, workspace: { worktreePath: repo } },
       ]);

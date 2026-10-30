@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { codexSessionHistoryLoaderService } from './codex-session-history-loader.service';
 
 function writeSessionFile(params: {
@@ -600,6 +600,53 @@ describe('codexSessionHistoryLoaderService', () => {
     });
 
     expect(result).toEqual({ status: 'not_found' });
+  });
+
+  it('parses only lines containing onlyLinesContaining, keeping line-based timestamps', async () => {
+    const providerSessionId = 'session-marker-scan';
+    const marker = '<!-- factory-factory-pr-event:delivery-1 -->';
+    writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: '2026/02/14',
+      fileName: `rollout-2026-02-14T00-00-00-${providerSessionId}.jsonl`,
+      entries: [
+        { type: 'session_meta', payload: { id: providerSessionId, cwd: '/work' } },
+        { type: 'event_msg', payload: { type: 'user_message', message: 'unrelated prompt' } },
+        { type: 'event_msg', payload: { type: 'agent_message', message: 'unrelated reply' } },
+        { type: 'event_msg', payload: { type: 'user_message', message: `${marker}\nPR update` } },
+        {
+          timestamp: 'not-a-date',
+          type: 'event_msg',
+          payload: { type: 'agent_message', message: `quoting ${marker}` },
+        },
+      ],
+    });
+
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    const result = await codexSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: '/work',
+      onlyLinesContaining: marker,
+    });
+    now.mockRestore();
+
+    // Skipped lines still count toward line-based fallback timestamps.
+    expect(result).toMatchObject({
+      status: 'loaded',
+      history: [
+        {
+          type: 'user',
+          content: `${marker}\nPR update`,
+          timestamp: new Date(1_000_004).toISOString(),
+        },
+        {
+          type: 'assistant',
+          content: `quoting ${marker}`,
+          timestamp: new Date(1_000_005).toISOString(),
+        },
+      ],
+    });
+    expect(result.status === 'loaded' && result.history).toHaveLength(2);
   });
 
   it('returns not_found when session file does not exist', async () => {
