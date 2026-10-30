@@ -44,6 +44,10 @@ describe('resolveWorkspaceFileLink', () => {
   it.each([
     ['forward slashes', 'C:/Users/martin/factory-factory/workspace-demo/src/app.ts:12'],
     ['backslashes', String.raw`C:\Users\martin\factory-factory\workspace-demo\src\app.ts:12`],
+    [
+      'percent-encoded backslashes',
+      'C:%5CUsers%5Cmartin%5Cfactory-factory%5Cworkspace-demo%5Csrc%5Capp.ts:12',
+    ],
   ])('resolves a bare Windows absolute path with %s', (_label, href) => {
     expect(
       resolveWorkspaceFileLink(

@@ -58,9 +58,10 @@ function getPathnameFromHref(href: string, origin?: string): string | null {
   }
 
   // `new URL` would parse a bare Windows path such as `C:/repo` as a URL with
-  // protocol `c:`, so treat drive-letter paths as raw paths. Drop any query or
+  // protocol `c:`, so treat drive-letter paths as raw paths. Markdown renderers
+  // percent-encode backslashes, so also accept `C:%5Crepo`. Drop any query or
   // fragment, as the URL branch does via `url.pathname`.
-  if (/^[A-Za-z]:[\\/]/.test(trimmed)) {
+  if (/^[A-Za-z]:(?:[\\/]|%5C)/i.test(trimmed)) {
     return decodeRawPath(trimmed.split(/[?#]/, 1)[0] ?? trimmed);
   }
 
