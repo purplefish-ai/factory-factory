@@ -84,6 +84,26 @@ async function setup() {
   });
   return { service, probe, login, rows, base, native, observations, makeObservation, store };
 }
+it('creates an account despite invalid native trust config and retries preparation on use', async () => {
+  const { service, native, base, rows } = await setup();
+  await writeFile(join(native, 'config.toml'), 'invalid TOML');
+
+  const account = await service.createAccount('New');
+  expect(account.authenticated).toBe(false);
+  expect(rows.filter((row) => row.kind === 'MANAGED')).toHaveLength(1);
+  const configPath = join(base, 'codex-accounts', account.id, 'config.toml');
+  expect(await readFile(configPath, 'utf8')).toBe('cli_auth_credentials_store = "file"\n');
+  await expect(service.getRuntimeContext(account.id)).rejects.toThrow('project trust');
+
+  await writeFile(
+    join(native, 'config.toml'),
+    '[projects."/repos/project"]\ntrust_level = "trusted"\n'
+  );
+  expect((await service.getRuntimeContext(account.id)).accountId).toBe(account.id);
+  expect(await readFile(configPath, 'utf8')).toContain('[projects."/repos/project"]');
+  expect(rows.filter((row) => row.kind === 'MANAGED')).toHaveLength(1);
+});
+
 it('stages reauthentication and preserves original credentials on wrong identity', async () => {
   const { service, login, base, observations, makeObservation } = await setup();
   const account = await service.createAccount('Bound');

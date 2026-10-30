@@ -7,6 +7,18 @@ export async function resolveAccountContext(
   row: AccountRow,
   config: AccountConfig
 ): Promise<CodexRuntimeContext> {
+  const context = await prepareAccountContext(row, config);
+  if (row.kind === 'MANAGED') {
+    await inheritProjectTrust(config.getCodexHome(), context.homeDir);
+  }
+  return context;
+}
+
+/** Initial account registration prepares private storage without reading native trust config. */
+export async function prepareAccountContext(
+  row: AccountRow,
+  config: AccountConfig
+): Promise<CodexRuntimeContext> {
   const env = config.getChildProcessEnv();
   if (row.kind === 'NATIVE_DEFAULT') {
     return {
@@ -60,7 +72,6 @@ export async function resolveAccountContext(
     throw new Error('Managed Codex credential store must use isolated file credentials');
   }
   await chmod(configPath, 0o600);
-  await inheritProjectTrust(config.getCodexHome(), homeDir);
   for (const key of Object.keys(env)) {
     if (
       /^(OPENAI_|AZURE_OPENAI_|CODEX_)/i.test(key) ||

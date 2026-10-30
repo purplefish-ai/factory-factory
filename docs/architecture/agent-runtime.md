@@ -404,7 +404,9 @@ resume. Explicit managed-profile project entries take precedence. Only project
 trust levels are inherited; credentials and other account settings stay
 isolated. This lets linked worktrees load repository-local Codex configuration
 without requiring the same repository to be trusted again for every ChatGPT
-account.
+account. Initial account creation only prepares private storage; trust
+inheritance is deferred until use so an inheritance failure does not report a
+persisted account as a failed creation.
 
 Account management and plan usage are restricted to trusted local clients.
 Sign-in uses Codex's native browser OAuth flow. Only one browser login runs at a
