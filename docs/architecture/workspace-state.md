@@ -288,6 +288,23 @@ continuation cancels instead of dispatching success over a newer fetch. Scoped
 recovery retries a mounted bootstrap without undefined success or a stuck load.
 Fresh requests started after settlement keep normal membership authority.
 
+Within one server process, requests for the same workspace share an in-progress
+archive's result, including overlapping single and column archives. Cleanup runs
+once; waiting requests receive the same success or cleanup failure. When an
+ordinary archive is already in flight, an explicit Git index-lock removal
+request waits and retries with its recovery option only if that archive fails
+with an index-lock error. With no archive in flight, recovery runs immediately.
+
+Already archived workspaces are accepted quietly. An archiving snapshot with no
+local pending operation is re-read so a rolled-back archive can be retried. A
+known local failed rollback resumes cleanup on the next request. Other archiving
+rows are acknowledged immediately without taking over another process's cleanup,
+waiting for it, or observing its eventual result. Age alone does not establish
+ownership; abandoned archives from a prior process remain subject to startup
+recovery. Requests that lose the conditional state transition re-read the
+workspace and retry once if it has rolled back to an archivable state. Other
+invalid transitions and cleanup failures remain errors.
+
 The board keeps issue intake suppressed per pending operation and owns locked
 subset recovery, retries and selection. The detail route owns its dialogs and
 post-success navigation; leaving its committed workspace lifetime suppresses

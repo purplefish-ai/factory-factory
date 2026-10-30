@@ -4,7 +4,9 @@ import { createLogger } from '@/backend/services/logger.service';
 import type { SessionStopReason } from '@/backend/services/session';
 import {
   workspaceActivityService,
+  workspaceDataService,
   workspaceMaintenanceService,
+  WorkspaceStateMachineError,
   workspaceStateMachine,
   worktreeLifecycleService,
 } from '@/backend/services/workspace';
@@ -12,6 +14,23 @@ import type { WorkspaceWithProject } from './types';
 import { fireLifecycleNotification } from './workspace-children.orchestrator';
 
 const logger = createLogger('workspace-archive-orchestrator');
+
+type ArchiveWorkspaceResult =
+  | Awaited<ReturnType<typeof workspaceStateMachine.markArchived>>
+  | WorkspaceWithProject;
+
+interface PendingArchive {
+  result: Promise<ArchiveWorkspaceResult>;
+  removeGitIndexLock: boolean;
+}
+
+type ArchiveSourceStatus = Awaited<
+  ReturnType<typeof workspaceStateMachine.startArchivingWithSourceStatus>
+>['previousStatus'];
+
+const pendingArchives = new Map<string, PendingArchive>();
+// Only a failed rollback proves that this process abandoned an ARCHIVING row.
+const interruptedArchiveSources = new Map<string, ArchiveSourceStatus>();
 
 interface ArchiveWorkspaceOptions {
   removeGitIndexLock?: boolean;
@@ -191,7 +210,69 @@ export async function archiveWorkspace(
   options: ArchiveWorkspaceOptions,
   services: ArchiveWorkspaceDependencies
 ) {
-  if (!workspaceStateMachine.isValidTransition(workspace.status, 'ARCHIVING')) {
+  // Single and bulk callers share the result, including real cleanup failures.
+  const pending = pendingArchives.get(workspace.id);
+  if (pending) {
+    return await joinPendingArchive(pending, workspace, options, services);
+  }
+
+  const operation = performArchive(workspace, options, services);
+  pendingArchives.set(workspace.id, {
+    result: operation,
+    removeGitIndexLock: options.removeGitIndexLock === true,
+  });
+  try {
+    return await operation;
+  } finally {
+    pendingArchives.delete(workspace.id);
+  }
+}
+
+async function joinPendingArchive(
+  pending: PendingArchive,
+  workspace: WorkspaceWithProject,
+  options: ArchiveWorkspaceOptions,
+  services: ArchiveWorkspaceDependencies
+): Promise<ArchiveWorkspaceResult> {
+  try {
+    return await pending.result;
+  } catch (error) {
+    if (
+      options.removeGitIndexLock &&
+      !pending.removeGitIndexLock &&
+      error instanceof ApplicationError &&
+      error.kind === 'GIT_INDEX_LOCKED'
+    ) {
+      // The owner releases its pending entry before joined callers resume.
+      // Honor explicit lock recovery after the ordinary archive has stopped.
+      return await archiveWorkspace(workspace, options, services);
+    }
+    throw error;
+  }
+}
+
+async function performArchive(
+  requestedWorkspace: WorkspaceWithProject,
+  options: ArchiveWorkspaceOptions,
+  services: ArchiveWorkspaceDependencies,
+  retryTransition = true
+): Promise<ArchiveWorkspaceResult> {
+  // The previous owner may have rolled back since the router read ARCHIVING.
+  const workspace =
+    requestedWorkspace.status === 'ARCHIVING' ||
+    interruptedArchiveSources.has(requestedWorkspace.id)
+      ? await workspaceDataService.findByIdWithProject(requestedWorkspace.id)
+      : requestedWorkspace;
+  if (!workspace) {
+    interruptedArchiveSources.delete(requestedWorkspace.id);
+    throw new ApplicationError('NOT_FOUND', `Workspace not found: ${requestedWorkspace.id}`);
+  }
+  const resumeSource = getArchiveResumeSource(workspace);
+  if (workspace.status === 'ARCHIVED' || (workspace.status === 'ARCHIVING' && !resumeSource)) {
+    return workspace;
+  }
+
+  if (!(resumeSource || workspaceStateMachine.isValidTransition(workspace.status, 'ARCHIVING'))) {
     throw new ApplicationError(
       'INVALID_INPUT',
       `Cannot archive workspace from status: ${workspace.status}`
@@ -199,15 +280,31 @@ export async function archiveWorkspace(
   }
 
   return await workspaceActivityService.withNotificationsSuppressed(workspace.id, async () => {
-    const { previousStatus: statusBeforeArchive } =
-      await workspaceStateMachine.startArchivingWithSourceStatus(workspace.id);
+    let statusBeforeArchive: ArchiveSourceStatus;
+    try {
+      statusBeforeArchive =
+        resumeSource ??
+        (await workspaceStateMachine.startArchivingWithSourceStatus(workspace.id)).previousStatus;
+    } catch (error) {
+      return await resolveArchiveTransitionConflict(
+        workspace.id,
+        error,
+        options,
+        services,
+        retryTransition
+      );
+    }
 
     try {
-      return await completeArchive(workspace, options, services);
+      const archived = await completeArchive(workspace, options, services);
+      interruptedArchiveSources.delete(workspace.id);
+      return archived;
     } catch (error) {
       try {
         await workspaceStateMachine.transition(workspace.id, statusBeforeArchive);
+        interruptedArchiveSources.delete(workspace.id);
       } catch (rollbackError) {
+        interruptedArchiveSources.set(workspace.id, statusBeforeArchive);
         logger.error('Failed to rollback workspace status after archive failure', {
           workspaceId: workspace.id,
           rollbackTo: statusBeforeArchive,
@@ -217,6 +314,38 @@ export async function archiveWorkspace(
       throw error;
     }
   });
+}
+
+function getArchiveResumeSource(workspace: WorkspaceWithProject): ArchiveSourceStatus | undefined {
+  if (workspace.status !== 'ARCHIVING') {
+    interruptedArchiveSources.delete(workspace.id);
+    return undefined;
+  }
+  // Age alone cannot establish that another process has stopped cleanup.
+  return interruptedArchiveSources.get(workspace.id);
+}
+
+async function resolveArchiveTransitionConflict(
+  workspaceId: string,
+  error: unknown,
+  options: ArchiveWorkspaceOptions,
+  services: ArchiveWorkspaceDependencies,
+  retryTransition: boolean
+): Promise<ArchiveWorkspaceResult> {
+  // A queued bulk item can become archived after its router read, or lose
+  // the conditional transition to an archive owned by another process.
+  if (error instanceof WorkspaceStateMachineError) {
+    const current = await workspaceDataService.findByIdWithProject(workspaceId);
+    if (
+      current &&
+      (current.status === 'ARCHIVING' ||
+        current.status === 'ARCHIVED' ||
+        (retryTransition && (current.status === 'READY' || current.status === 'FAILED')))
+    ) {
+      return await performArchive(current, options, services, false);
+    }
+  }
+  throw error;
 }
 
 /**

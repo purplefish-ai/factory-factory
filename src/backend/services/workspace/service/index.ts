@@ -18,6 +18,7 @@ export {
   type WorkspaceCreatedEvent,
   WORKSPACE_STATE_CHANGED,
   type WorkspaceStateChangedEvent,
+  WorkspaceStateMachineError,
   workspaceStateMachine,
 } from './lifecycle/state-machine.service';
 export { workspacePRMonitoringService } from './lifecycle/workspace-pr-monitoring.service';
