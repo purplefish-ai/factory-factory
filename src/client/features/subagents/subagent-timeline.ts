@@ -1,3 +1,4 @@
+import { getSubagentIconIndices } from '@/client/lib/subagent-icon-indices';
 import type { ChatMessage } from '@/lib/chat-protocol';
 import type { SubagentSummary } from '@/shared/acp-protocol';
 
@@ -6,6 +7,7 @@ const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled', 'interrup
 /** Project provider-owned lifecycle evidence without persisting synthetic chat messages. */
 export function createSubagentTimelineEvents(subagents: SubagentSummary[]): ChatMessage[] {
   const events = new Map<string, ChatMessage>();
+  const iconIndices = getSubagentIconIndices(subagents);
   for (const agent of subagents) {
     const name = agent.name?.trim() || 'Sub-agent';
     const append = (phase: 'started' | 'finished', timestamp: string | null, label: string) => {
@@ -16,6 +18,7 @@ export function createSubagentTimelineEvents(subagents: SubagentSummary[]): Chat
       events.set(id, {
         id,
         order: 0,
+        subagentIconIndex: iconIndices.get(agent.id),
         source: 'agent',
         timestamp,
         text: `${name} ${label}`,

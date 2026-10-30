@@ -93,3 +93,18 @@ export const ListError: Story = {
     state: { kind: 'error', message: 'The provider could not list sub-agents.', onRetry: fn() },
   },
 };
+
+export const ManySimultaneousAgents: Story = {
+  args: {
+    state: {
+      kind: 'ready',
+      subagents: activeSubagents.flatMap((agent, group) =>
+        Array.from({ length: 8 }, (_, index) => ({
+          ...agent,
+          id: `agent-${group}-${index}`,
+          name: `Worker ${group * 8 + index + 1}`,
+        }))
+      ),
+    },
+  },
+};

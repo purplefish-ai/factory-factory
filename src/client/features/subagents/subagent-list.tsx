@@ -4,6 +4,7 @@ import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import { useEffect, useMemo, useState } from 'react';
 import { SubagentIcon } from '@/client/components/subagent-icon';
+import { getSubagentIconIndices } from '@/client/lib/subagent-icon-indices';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { isActiveSubagent } from './subagent-status';
@@ -201,6 +202,11 @@ export function SubagentList({ state, selectedSubagentId, onSelect }: SubagentLi
     };
   }, [state]);
 
+  const iconIndices = useMemo(
+    () => getSubagentIconIndices(state.kind === 'ready' ? state.subagents : []),
+    [state]
+  );
+
   useEffect(() => {
     if (groups.active.length === 0) {
       return;
@@ -246,11 +252,11 @@ export function SubagentList({ state, selectedSubagentId, onSelect }: SubagentLi
       {state.error && <PaginationError error={state.error} />}
       {groups.active.length > 0 && (
         <ul className="divide-y divide-border/50">
-          {groups.active.map((subagent, index) => (
+          {groups.active.map((subagent) => (
             <SubagentRow
               key={subagent.id}
               subagent={subagent}
-              iconIndex={index}
+              iconIndex={iconIndices.get(subagent.id) ?? 0}
               selected={selectedSubagentId === subagent.id}
               onSelect={onSelect}
             />
@@ -275,11 +281,11 @@ export function SubagentList({ state, selectedSubagentId, onSelect }: SubagentLi
           </button>
           {completedExpanded && (
             <ul className="divide-y divide-border/50 border-t border-border/50">
-              {groups.terminal.map((subagent, index) => (
+              {groups.terminal.map((subagent) => (
                 <SubagentRow
                   key={subagent.id}
                   subagent={subagent}
-                  iconIndex={groups.active.length + index}
+                  iconIndex={iconIndices.get(subagent.id) ?? 0}
                   selected={selectedSubagentId === subagent.id}
                   onSelect={onSelect}
                 />

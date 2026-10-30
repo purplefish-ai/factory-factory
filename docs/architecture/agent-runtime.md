@@ -765,10 +765,13 @@ sub-agent count in chat opens the right panel and selects Sessions. Its stored
 panel key remains `agents`; child-workspace access remains available for parent
 workspaces. The count has a decorative group of up to three colorful botanical
 icons; larger groups keep the full count without adding more icons. The Sessions
-list uses the same botanical icons for sub-agent rows. Its header counts active
-(starting, running, or waiting) sub-agents; terminal agents remain under the
-separate collapsible Completed count. The panel automatically loads all summary
-pages before showing the active count, so children on later provider pages are
+list and lifecycle rows share twelve nature icons assigned by session-wide
+creation order (with agent ID breaking ties), keeping assignments when agents
+finish. Additional agents use distinct numbered badges instead of repeating
+icons. Unknown creation times sort last. Its header counts active (starting,
+running, or waiting) sub-agents; terminal agents remain under the separate
+collapsible Completed count. The panel automatically loads all summary pages
+before showing the active count, so children on later provider pages are
 included. A page failure keeps loaded rows visible and offers Retry without
 displaying a partial count. Repeated provider cursors stop automatic pagination
 and offer the same recovery instead of repeatedly fetching the same page.
