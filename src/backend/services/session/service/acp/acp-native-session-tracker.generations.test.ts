@@ -149,6 +149,60 @@ describe('Codex resumed subagent transcripts', () => {
     expect(tracker.getBackgroundWork().runningSubagents).toBe(1);
   });
 
+  it.each(['subagent_spawned', 'async_task_spawned', 'async_task_state_update'])(
+    'rejects stale-generation work creation from %s',
+    (sessionUpdate) => {
+      const tracker = new AcpNativeSessionTracker({ groupCodexGenerations: true });
+      spawn(tracker, childId);
+      finish(tracker, childId);
+      spawn(tracker, resumedId);
+      send(tracker, childId, {
+        sessionUpdate,
+        subagentSessionId: 'phantom',
+        asyncTaskId: 'phantom',
+        name: 'Late work',
+        state: 'running',
+      });
+      finish(tracker, resumedId);
+      expect(tracker.list({ limit: 10 }).subagents).toHaveLength(1);
+      expect(tracker.getBackgroundWork()).toEqual({
+        backgroundTasks: [],
+        runningSubagents: 0,
+        activeGoals: 0,
+      });
+      // The current generation may still create real work.
+      send(tracker, resumedId, {
+        sessionUpdate,
+        subagentSessionId: 'real',
+        asyncTaskId: 'real',
+        name: 'Live work',
+        state: 'running',
+      });
+      expect(
+        tracker.getBackgroundWork().backgroundTasks.length +
+          tracker.getBackgroundWork().runningSubagents
+      ).toBe(1);
+    }
+  );
+
+  it('lets old-generation tasks finish after their parent resumes', () => {
+    const tracker = new AcpNativeSessionTracker({ groupCodexGenerations: true });
+    spawn(tracker, childId);
+    send(tracker, childId, {
+      sessionUpdate: 'async_task_spawned',
+      asyncTaskId: 'existing',
+      name: 'Existing work',
+    });
+    finish(tracker, childId);
+    spawn(tracker, resumedId);
+    send(tracker, childId, {
+      sessionUpdate: 'async_task_state_update',
+      asyncTaskId: 'existing',
+      state: 'completed',
+    });
+    expect(tracker.getBackgroundWork().backgroundTasks).toEqual([]);
+  });
+
   it('keeps provider session identities separate without Codex generation grouping', () => {
     const tracker = new AcpNativeSessionTracker();
     spawn(tracker, childId);

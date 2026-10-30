@@ -23,17 +23,28 @@ function validTimestamp(value: string | null): number | null {
   return Number.isNaN(timestamp) ? null : timestamp;
 }
 
+function hasInvalidTimestamp(value: string | null): boolean {
+  return value !== null && validTimestamp(value) === null;
+}
+
+function isTerminalReopening(
+  stored: SubagentSelection['subagent'],
+  candidate: SubagentSelection['subagent']
+): boolean {
+  return TERMINAL_STATUSES.has(stored.status) && !TERMINAL_STATUSES.has(candidate.status);
+}
+
 function isProvenAtLeastAsFresh(
   stored: SubagentSelection['subagent'],
   candidate: SubagentSelection['subagent'],
   hasSuccessfulPostMountFetch: boolean
 ): boolean {
+  if (candidate.generation === undefined && isTerminalReopening(stored, candidate)) {
+    return false;
+  }
   const storedTimestamp = validTimestamp(stored.updatedAt);
   const candidateTimestamp = validTimestamp(candidate.updatedAt);
-  if (
-    (stored.updatedAt !== null && storedTimestamp === null) ||
-    (candidate.updatedAt !== null && candidateTimestamp === null)
-  ) {
+  if (hasInvalidTimestamp(stored.updatedAt) || hasInvalidTimestamp(candidate.updatedAt)) {
     return false;
   }
   // Generations include a runtime-local replay offset. Real observation times
@@ -48,7 +59,7 @@ function isProvenAtLeastAsFresh(
   if ((candidate.generation ?? 1) !== (stored.generation ?? 1)) {
     return (candidate.generation ?? 1) > (stored.generation ?? 1);
   }
-  if (TERMINAL_STATUSES.has(stored.status) && !TERMINAL_STATUSES.has(candidate.status)) {
+  if (isTerminalReopening(stored, candidate)) {
     return false;
   }
   if (storedTimestamp === null || candidateTimestamp === null) {

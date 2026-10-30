@@ -279,6 +279,17 @@ describe('useLiveSubagentSelection', () => {
     }
   );
 
+  it('keeps generation-less providers terminal despite a newer running snapshot', () => {
+    const stored = selection({ status: 'completed', updatedAt: '2026-08-10T10:00:00.000Z' });
+    const candidate = selection({
+      status: 'running',
+      updatedAt: '2026-08-10T10:01:00.000Z',
+    }).subagent;
+    setPages([{ supported: true, subagents: [candidate], nextCursor: null }]);
+    renderHookProbe(stored);
+    expect(JSON.parse(container.textContent ?? '')).toEqual(stored);
+  });
+
   it('does not regress a terminal selection at an equal timestamp', () => {
     const terminal = selection({
       status: 'completed',

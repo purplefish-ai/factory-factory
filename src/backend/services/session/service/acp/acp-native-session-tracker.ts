@@ -258,6 +258,16 @@ export class AcpNativeSessionTracker {
     if (sessionId !== this.rootSessionId && !this.ownsSession(sessionId)) {
       return true;
     }
+    // A saved parent ID may still settle existing nested work after a resume,
+    // but only its active generation can start or reactivate work.
+    if (
+      sessionId !== this.rootSessionId &&
+      this.children.get(this.childId(sessionId))?.activeSessionId !== sessionId &&
+      kind !== 'subagent_state_update' &&
+      !(kind === 'async_task_state_update' && update.state !== 'running')
+    ) {
+      return true;
+    }
     switch (kind) {
       case 'subagent_spawned':
         this.spawn(sessionId, update);
