@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { subscribeToSubagentChanges } from '@/client/lib/subagent-events';
+import { getSubagentIconIndices } from '@/client/lib/subagent-icon-indices';
 import { createTrailingRefresh } from '@/client/lib/trailing-refresh';
 import { trpc } from '@/client/lib/trpc';
 import { getNextSubagentPageParam } from './subagent-pagination';
@@ -45,6 +46,13 @@ function isProvenAtLeastAsFresh(
 }
 
 export function useLiveSubagentSelection(selection: SubagentSelection): SubagentSelection {
+  return useLiveSubagent(selection).selection;
+}
+
+export function useLiveSubagent(selection: SubagentSelection): {
+  selection: SubagentSelection;
+  iconIndex: number;
+} {
   const query = trpc.session.listSubagents.useInfiniteQuery(
     { sessionId: selection.parentSessionId, cursor: null, limit: 100 },
     {
@@ -56,10 +64,13 @@ export function useLiveSubagentSelection(selection: SubagentSelection): Subagent
   const hadCachedDataAtMount = useRef(query.data !== undefined);
   const [successfulRefetchDataUpdatedAt, setSuccessfulRefetchDataUpdatedAt] = useState(0);
 
-  const refreshed = query.data?.pages
-    .filter((page) => page.supported)
-    .flatMap((page) => page.subagents)
-    .find((candidate) => candidate.id === selection.subagent.id);
+  const subagents =
+    query.data?.pages.filter((page) => page.supported).flatMap((page) => page.subagents) ?? [];
+  const refreshed = subagents.find((candidate) => candidate.id === selection.subagent.id);
+  const iconIndex =
+    getSubagentIconIndices(refreshed ? subagents : [...subagents, selection.subagent]).get(
+      selection.subagent.id
+    ) ?? 0;
   const candidateWasCachedAtMount = useRef(refreshed !== undefined);
   const querySnapshot = useRef({
     dataUpdatedAt: query.dataUpdatedAt,
@@ -160,8 +171,12 @@ export function useLiveSubagentSelection(selection: SubagentSelection): Subagent
     refreshed,
   ]);
 
-  return refreshed &&
-    isProvenAtLeastAsFresh(selection.subagent, refreshed, hasSuccessfulPostMountFetch)
-    ? { ...selection, subagent: refreshed }
-    : selection;
+  return {
+    selection:
+      refreshed &&
+      isProvenAtLeastAsFresh(selection.subagent, refreshed, hasSuccessfulPostMountFetch)
+        ? { ...selection, subagent: refreshed }
+        : selection,
+    iconIndex,
+  };
 }

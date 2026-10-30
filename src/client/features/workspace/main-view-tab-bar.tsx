@@ -6,8 +6,9 @@ import { GitDiffIcon } from '@phosphor-icons/react/dist/csr/GitDiff';
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { useEffect } from 'react';
 import { AgentSessionStatus } from '@/client/components/agent-session-status';
+import { SubagentIcon } from '@/client/components/subagent-icon';
 import { NewSessionAccountAction } from '@/client/features/session-selection';
-import { type SubagentSelection, useLiveSubagentSelection } from '@/client/features/subagents';
+import { type SubagentSelection, useLiveSubagent } from '@/client/features/subagents';
 import { getSessionDisplayName } from '@/client/lib/session-display-name';
 import { TabButton } from '@/components/ui/tab-button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -53,23 +54,6 @@ function getTabIcon(type: MainViewTab['type']) {
       return ArchiveIcon;
     case 'subagent':
       return RobotIcon;
-  }
-}
-
-function getSubagentIconClass(status: SubagentSelection['subagent']['status']): string {
-  switch (status) {
-    case 'starting':
-    case 'running':
-      return 'text-blue-500 animate-pulse motion-reduce:animate-none';
-    case 'waiting':
-      return 'text-amber-500';
-    case 'completed':
-      return 'text-green-500';
-    case 'failed':
-      return 'text-destructive';
-    case 'cancelled':
-    case 'interrupted':
-      return 'text-muted-foreground';
   }
 }
 
@@ -158,19 +142,9 @@ interface TabItemProps {
 
 function TabItem({ tab, isActive, onSelect, onClose }: TabItemProps) {
   const Icon = getTabIcon(tab.type);
-  const subagentStatus =
-    tab.type === 'subagent' ? tab.subagentSelection?.subagent.status : undefined;
-  const icon = subagentStatus ? (
-    <RobotIcon
-      aria-label={`${subagentStatus} sub-agent`}
-      className={cn('h-3.5 w-3.5 shrink-0', getSubagentIconClass(subagentStatus))}
-    />
-  ) : (
-    <Icon className="h-3.5 w-3.5 shrink-0" />
-  );
   return (
     <TabButton
-      icon={icon}
+      icon={<Icon className="h-3.5 w-3.5 shrink-0" />}
       label={tab.label}
       isActive={isActive}
       onSelect={onSelect}
@@ -197,7 +171,7 @@ function SubagentTabItem({
   onClose,
   onRefresh,
 }: SubagentTabItemProps) {
-  const current = useLiveSubagentSelection(selection);
+  const { selection: current, iconIndex } = useLiveSubagent(selection);
   const { parentSessionId, parentSessionName, subagent } = current;
 
   useEffect(() => {
@@ -209,10 +183,17 @@ function SubagentTabItem({
   return (
     <TabButton
       icon={
-        <RobotIcon
-          aria-label={`${current.subagent.status} sub-agent`}
-          className={cn('h-3.5 w-3.5 shrink-0', getSubagentIconClass(current.subagent.status))}
-        />
+        <span
+          role="img"
+          aria-label={`${subagent.status} sub-agent`}
+          className={cn(
+            'inline-flex shrink-0',
+            (subagent.status === 'starting' || subagent.status === 'running') &&
+              'animate-pulse motion-reduce:animate-none'
+          )}
+        >
+          <SubagentIcon index={iconIndex} className="h-3.5 w-3.5" />
+        </span>
       }
       label={label}
       isActive={isActive}
