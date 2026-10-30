@@ -1,5 +1,6 @@
 import { chmod, lstat, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { inheritProjectTrust } from './profile-trust';
 import type { AccountConfig, AccountRow, CodexRuntimeContext } from './types';
 
 export async function resolveAccountContext(
@@ -59,6 +60,7 @@ export async function resolveAccountContext(
     throw new Error('Managed Codex credential store must use isolated file credentials');
   }
   await chmod(configPath, 0o600);
+  await inheritProjectTrust(config.getCodexHome(), homeDir);
   for (const key of Object.keys(env)) {
     if (
       /^(OPENAI_|AZURE_OPENAI_|CODEX_)/i.test(key) ||
