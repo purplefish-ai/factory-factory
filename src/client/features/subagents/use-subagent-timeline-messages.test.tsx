@@ -92,7 +92,7 @@ it('projects all pages, refreshes the selected session, and switches independent
   dispatchSubagentChange({ sessionId: 'other', subagentId: 'a', change: 'updated' });
   expect(mocks.invalidate).not.toHaveBeenCalled();
   dispatchSubagentChange({ sessionId: 'parent', subagentId: 'a', change: 'completed' });
-  expect(mocks.invalidate).toHaveBeenCalledWith({ sessionId: 'parent', cursor: null, limit: 100 });
+  expect(mocks.invalidate).toHaveBeenCalledWith({ sessionId: 'parent' });
 
   harness.render({ sessionId: 'next', enabled: true });
   expect(harness.container.textContent).toBe('');

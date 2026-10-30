@@ -45,6 +45,51 @@ export const WorkspaceCreation: Story = {
 
 export const SessionLoading: Story = {};
 
+export const InlineTasks: Story = {
+  render: (args) => <StartupPreview {...args} />,
+  args: {
+    loadingSession: false,
+    acpPlan: {
+      updatedAt: '2026-10-30T00:00:00Z',
+      entries: [
+        { content: 'Read design, notes, parser code', status: 'completed', priority: 'medium' },
+        { content: 'Implement drawing titles', status: 'in_progress', priority: 'high' },
+        { content: 'Truth file and title measurement', status: 'pending', priority: 'medium' },
+        { content: 'Ship titles PR', status: 'pending', priority: 'low' },
+      ],
+    },
+  },
+};
+
+export const CompletedTasks: Story = {
+  ...InlineTasks,
+  args: {
+    ...InlineTasks.args,
+    acpPlan: {
+      updatedAt: '2026-10-30T00:00:00Z',
+      entries: [{ content: 'Ship titles PR', status: 'completed', priority: 'medium' }],
+    },
+  },
+};
+
+export const LongTaskLabels: Story = {
+  ...InlineTasks,
+  args: {
+    ...InlineTasks.args,
+    acpPlan: {
+      updatedAt: '2026-10-30T00:00:00Z',
+      entries: [
+        {
+          content:
+            'Verify deeply nested file paths and long task labels wrap within the conversation: src/client/features/chat/agent-activity/tool-renderers/tool-input-renderer.tsx',
+          status: 'in_progress',
+          priority: 'medium',
+        },
+      ],
+    },
+  },
+};
+
 const startupMessage = createUserMessage('Please fix the failing tests and explain what changed.');
 
 function StartupPreview(props: ComponentProps<typeof VirtualizedMessageList>) {
@@ -197,6 +242,17 @@ export const SubagentTimelineRecovery: Story = {
     subagentTimelineError: {
       message: 'Some sub-agent activity could not be loaded.',
       onRetry: () => undefined,
+    },
+  },
+};
+
+export const SubagentTimelineRecoveryWithTasks: Story = {
+  ...SubagentTimelineRecovery,
+  args: {
+    ...SubagentTimelineRecovery.args,
+    acpPlan: {
+      entries: [{ content: 'Verify chat activity', status: 'in_progress', priority: 'high' }],
+      updatedAt: '2026-10-30T12:00:00Z',
     },
   },
 };

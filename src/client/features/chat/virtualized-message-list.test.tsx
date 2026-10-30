@@ -205,6 +205,25 @@ it('keeps a sub-agent timeline load error visible and offers retry without messa
   }
 });
 
+it('keeps inline tasks visible alongside sub-agent history recovery', () => {
+  const message = 'Some sub-agent activity could not be loaded.';
+  const harness = createHarness({
+    acpPlan: {
+      entries: [{ content: 'Verify recovery', status: 'in_progress', priority: 'high' }],
+      updatedAt: '2026-10-30T12:00:00Z',
+    },
+    subagentTimelineError: { message, onRetry: vi.fn() },
+  });
+  try {
+    expect(document.body.textContent).toContain(message);
+    expect(document.querySelector('[aria-label="Tasks"]')?.textContent).toContain(
+      'Verify recovery'
+    );
+  } finally {
+    harness.cleanup();
+  }
+});
+
 describe('VirtualizedMessageList auto-scroll behavior', () => {
   it('delegates prepend scroll anchoring to the virtualizer', () => {
     const harness = createHarness({

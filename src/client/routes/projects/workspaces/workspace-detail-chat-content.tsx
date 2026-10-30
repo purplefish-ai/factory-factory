@@ -30,6 +30,7 @@ export interface ChatContentProps {
   onWorkspaceFileLink?: (path: string) => void;
   onOpenAgents?: () => void;
   messages: ReturnType<typeof useChatWebSocket>['messages'];
+  acpPlan?: ReturnType<typeof useChatWebSocket>['acpPlan'];
   sessionStatus: ReturnType<typeof useChatWebSocket>['sessionStatus'];
   sessionRuntime: SessionRuntimeState;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
@@ -274,6 +275,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
           workspaceId={props.workspaceId}
           messages={groupedMessages}
           subagentTimelineError={timeline.error}
+          acpPlan={props.acpPlan}
           running={running}
           work={props.sessionRuntime.work}
           startingSession={displayStartingState}

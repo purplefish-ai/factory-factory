@@ -110,7 +110,6 @@ vi.mock('./periodic-task-panel', () => ({
 }));
 vi.mock('./screenshots-panel', () => ({ ScreenshotsPanel: () => null }));
 vi.mock('./setup-logs-panel', () => ({ SetupLogsPanel: () => null }));
-vi.mock('./todo-panel-container', () => ({ TodoPanelContainer: () => null }));
 
 vi.mock('./terminal-panel', () => ({
   TerminalPanel: () => null,

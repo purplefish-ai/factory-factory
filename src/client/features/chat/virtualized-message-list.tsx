@@ -14,7 +14,10 @@ import {
   useWorkspaceToolExpansionState,
 } from './agent-activity/tool-renderers/tool-expansion-state';
 import { CompactingIndicator } from './compacting-indicator';
+import type { AcpPlanState } from './reducer';
 import { SessionActivityIndicator } from './session-activity-indicator';
+import { TodoPanel } from './todo-panel';
+import { useTodoTracker } from './use-todo-tracker';
 
 // =============================================================================
 // Types
@@ -24,6 +27,7 @@ interface VirtualizedMessageListProps {
   /** Workspace ID (enables persisted tool expansion state per workspace) */
   workspaceId?: string;
   messages: GroupedMessageItem[];
+  acpPlan?: AcpPlanState | null;
   running: boolean;
   work?: SessionWorkState;
   onOpenAgents?: () => void;
@@ -181,6 +185,7 @@ const VirtualRow = memo(function VirtualRow({
 export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   workspaceId,
   messages: allMessages,
+  acpPlan,
   running,
   work,
   onOpenAgents,
@@ -203,6 +208,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   initBanner,
   subagentTimelineError,
 }: VirtualizedMessageListProps) {
+  const todoState = useTodoTracker(allMessages, acpPlan);
   const hasBackgroundActivity = Boolean(
     work && (work.backgroundTasks.length > 0 || work.runningSubagents > 0 || work.activeGoals > 0)
   );
@@ -242,6 +248,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   loadingSessionRef.current = loadingSession;
   const showingInitSpinner = initBanner?.kind === 'info';
   const hasScrollableContent =
+    todoState.todos.length > 0 ||
     allMessages.length > 0 ||
     running ||
     hasBackgroundActivity ||
@@ -623,6 +630,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
             </button>
           </div>
         )}
+        {!loadingSession && <TodoPanel todoState={todoState} />}
 
         {/* Context compaction indicator */}
         <CompactingIndicator isCompacting={isCompacting} className="mb-4" />

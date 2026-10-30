@@ -1,4 +1,5 @@
 import type { ChatMessage, CommandInfo, MessageState, QueuedMessage } from '@/shared/acp-protocol';
+import type { AcpPlanNotification } from '@/shared/acp-protocol/task-plan';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 
@@ -23,6 +24,7 @@ export interface SessionStore {
   historyHydratedAt?: string;
   historyHydrationSource?: 'jsonl' | 'acp_fallback' | 'none';
   liveSlashCommands?: CommandInfo[];
+  taskPlan?: AcpPlanNotification;
   transcript: ChatMessage[];
   transcriptIdToIndex: Map<string, number>;
   queue: QueuedMessage[];

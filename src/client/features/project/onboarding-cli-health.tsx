@@ -39,12 +39,16 @@ function buildItems(health: {
 
   // Claude
   if (!health.claude.isInstalled) {
-    items.push({ label: 'Claude', status: 'missing', detail: 'Not installed' });
+    items.push({
+      label: 'Claude',
+      status: 'missing',
+      detail: 'Bundled runtime unavailable — update Factory Factory',
+    });
   } else if (health.claude.isAuthenticated !== true) {
     items.push({
       label: 'Claude',
       status: 'warning',
-      detail: 'Installed — run claude login to authenticate',
+      detail: 'Installed — use Sign in to Claude in the setup terminal',
     });
   } else {
     items.push({ label: 'Claude', status: 'ok', detail: 'Ready' });
@@ -61,7 +65,7 @@ function buildItems(health: {
     items.push({
       label: 'Codex',
       status: 'warning',
-      detail: 'Run ff codex login to authenticate',
+      detail: 'Use Sign in to Codex in the setup terminal',
     });
   } else {
     items.push({ label: 'Codex', status: 'ok', detail: 'Ready' });

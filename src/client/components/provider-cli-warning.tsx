@@ -1,24 +1,16 @@
 import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
-import { ArrowSquareOutIcon } from '@phosphor-icons/react/dist/csr/ArrowSquareOut';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
-import { toast } from 'sonner';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import type { CodexAccountSummary } from '@/shared/codex-accounts';
-
-const PROVIDER_INFO = {
-  CLAUDE: {
-    label: 'Claude',
-    installUrl: 'https://claude.ai/download',
-  },
-} as const;
 
 function getWarning(
   provider: 'CLAUDE' | 'CODEX',
   health: {
     claude: {
       isInstalled: boolean;
+      isAuthenticated?: boolean;
       version?: string;
       latestVersion?: string;
       isOutdated?: boolean;
@@ -35,29 +27,19 @@ function getWarning(
 ): {
   title: string;
   description: string;
-  linkLabel?: string;
-  linkUrl?: string;
-  canUpgrade?: boolean;
 } | null {
   if (provider === 'CLAUDE') {
-    const info = PROVIDER_INFO.CLAUDE;
     if (!health.claude.isInstalled) {
       return {
-        title: `${info.label} CLI is not installed`,
-        description: `Install the ${info.label} CLI to use this provider.`,
-        linkLabel: 'Install',
-        linkUrl: info.installUrl,
+        title: 'Claude runtime is unavailable',
+        description: 'Update or reinstall Factory Factory to restore its bundled Claude runtime.',
       };
     }
-    if (health.claude.isOutdated) {
-      const installed = health.claude.version ?? 'unknown';
-      const latest = health.claude.latestVersion ?? 'latest';
+    if (health.claude.isAuthenticated === false) {
       return {
-        title: `${info.label} CLI is out of date`,
-        description: `Installed ${installed}; latest is ${latest}. Upgrade to avoid compatibility issues.`,
-        linkLabel: 'Upgrade',
-        linkUrl: info.installUrl,
-        canUpgrade: true,
+        title: 'Claude is not authenticated',
+        description:
+          'Open the setup terminal in Settings and choose Sign in to Claude. If ff is installed, run "ff claude auth login".',
       };
     }
     return null;
@@ -72,7 +54,8 @@ function getWarning(
   if (health.codex.isAuthenticated === false && !hasUsableCodexAccount) {
     return {
       title: 'Codex is not authenticated',
-      description: 'Run `ff codex login` in your terminal to authenticate.',
+      description:
+        'Open the setup terminal in Settings and choose Sign in to Codex. If ff is installed, run "ff codex login".',
     };
   }
   return null;
@@ -90,7 +73,7 @@ function getAccountWarning(
     description:
       account.kind === 'MANAGED'
         ? 'Sign in to this account from Settings.'
-        : 'Run `ff codex login` in your terminal to authenticate.',
+        : 'Open the setup terminal in Settings and choose Sign in to Codex. If ff is installed, run "ff codex login".',
   };
 }
 
@@ -107,16 +90,6 @@ export function ProviderCliWarning({
   codexAccountId?: string;
 }) {
   const utils = trpc.useUtils();
-  const upgradeProviderCli = trpc.admin.upgradeProviderCLI.useMutation({
-    onSuccess: (result) => {
-      toast.success(result.message);
-      utils.admin.checkCLIHealth.setData({ forceRefresh: false }, result.health);
-      void utils.admin.checkCLIHealth.invalidate();
-    },
-    onError: (error) => {
-      toast.error(error.message);
-    },
-  });
   const { data: health, isRefetching } = trpc.admin.checkCLIHealth.useQuery(
     { forceRefresh: false },
     {
@@ -156,35 +129,8 @@ export function ProviderCliWarning({
       <WarningIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
       <div className="flex-1 space-y-1">
         <p className="text-amber-900 dark:text-amber-200">{warning.title}</p>
-        <p className="text-xs text-amber-800/80 dark:text-amber-300/80">
-          {warning.description}
-          {warning.linkUrl && (
-            <>
-              {' '}
-              <a
-                href={warning.linkUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-0.5 underline"
-              >
-                {warning.linkLabel}
-                <ArrowSquareOutIcon className="h-3 w-3" />
-              </a>
-            </>
-          )}
-        </p>
+        <p className="text-xs text-amber-800/80 dark:text-amber-300/80">{warning.description}</p>
       </div>
-      {warning.canUpgrade && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-7 border-amber-500/60 px-2 text-xs text-amber-800 hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-900/40"
-          onClick={() => upgradeProviderCli.mutate({ provider })}
-          disabled={isRefetching || upgradeProviderCli.isPending}
-        >
-          {upgradeProviderCli.isPending ? 'Upgrading...' : 'Upgrade'}
-        </Button>
-      )}
       <Button
         variant="ghost"
         size="icon"
@@ -195,7 +141,7 @@ export function ProviderCliWarning({
             'Could not check provider status'
           );
         }}
-        disabled={isRefetching || upgradeProviderCli.isPending}
+        disabled={isRefetching}
       >
         <ArrowsClockwiseIcon className={`h-3.5 w-3.5 ${isRefetching ? 'animate-spin' : ''}`} />
         <span className="sr-only">Recheck</span>

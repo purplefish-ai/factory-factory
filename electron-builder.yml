@@ -63,27 +63,10 @@ extraResources:
     to: prisma/schema.prisma
 asar: true
 asarUnpack:
-  # Adapter entrypoints and native provider executables spawn outside Electron ASAR.
-  - node_modules/@agentclientprotocol/**/*
-  - node_modules/.pnpm/@agentclientprotocol+*/**/*
-  - node_modules/.pnpm/@openai+codex*/**/*
-  - node_modules/.pnpm/@anthropic-ai+claude-agent-sdk*/**/*
-  # Native modules must be unpacked for Node.js to load them
-  - node_modules/better-sqlite3/**/*
-  - node_modules/bindings/**/*
-  - node_modules/file-uri-to-path/**/*
-  - node_modules/node-pty/**/*
-  # Prisma generated client and runtime (mapped to dist/prisma/generated in files)
+  # The unpacked backend and ACP subprocesses need the production dependency tree,
+  # including pure-JS packages such as diff and zod. Keep runtime resolution intact.
+  - node_modules/**/*
   - dist/prisma/generated/**/*
-  - node_modules/@prisma/**/*
-  - node_modules/.prisma/**/*
-  - node_modules/.pnpm/@prisma*/**/*
-  - node_modules/.pnpm/.prisma*/**/*
-  - node_modules/.pnpm/better-sqlite3*/**/*
-  - node_modules/.pnpm/node-pty*/**/*
-  - node_modules/.pnpm/bindings*/**/*
-  - node_modules/.pnpm/file-uri-to-path*/**/*
-  - node_modules/.pnpm/node-addon-api*/**/*
   # Compiled backend (runs in Electron main process)
   - dist/src/backend/**/*
   # Markdown prompts resolved relative to the compiled backend

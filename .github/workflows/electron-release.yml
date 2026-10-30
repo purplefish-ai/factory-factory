@@ -53,6 +53,9 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
+      - name: Verify bundled Claude without global CLIs
+        run: node scripts/check-packaged-claude.mjs --allow-unauthenticated
+
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -91,6 +94,9 @@ jobs:
       - name: Build Electron app
         run: pnpm build:electron
 
+      - name: Verify bundled Claude without global CLIs
+        run: node scripts/check-packaged-claude.mjs --allow-unauthenticated
+
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -126,6 +132,9 @@ jobs:
 
       - name: Build Electron app
         run: pnpm build:electron
+
+      - name: Verify bundled Claude without global CLIs
+        run: node scripts/check-packaged-claude.mjs --allow-unauthenticated
 
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

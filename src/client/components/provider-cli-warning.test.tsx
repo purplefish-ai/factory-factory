@@ -11,7 +11,7 @@ const state = vi.hoisted(() => ({
   }>,
   accountQuery: vi.fn(),
   health: {
-    claude: { isInstalled: true, isOutdated: false },
+    claude: { isInstalled: true, isAuthenticated: true, isOutdated: false },
     codex: { isInstalled: true, isAuthenticated: true, isOutdated: true },
   },
 }));
@@ -35,7 +35,7 @@ vi.mock('@/client/lib/trpc', () => ({
 
 beforeEach(() => {
   state.accounts = [];
-  state.health.claude = { isInstalled: true, isOutdated: false };
+  state.health.claude = { isInstalled: true, isAuthenticated: true, isOutdated: false };
   state.health.codex = { isInstalled: true, isAuthenticated: true, isOutdated: true };
 });
 
@@ -59,14 +59,23 @@ describe('ProviderCliWarning', () => {
     expect(markup).not.toContain('href=');
   });
 
-  it('retains the Claude upgrade action', () => {
+  it('ignores stale upgrade state for the managed Claude runtime', () => {
     state.health.claude.isOutdated = true;
-    const markup = renderToStaticMarkup(<ProviderCliWarning provider="CLAUDE" />);
-    const buttons = Array.from(
-      markup.matchAll(/<button\b[^>]*>([\s\S]*?)<\/button>/g),
-      (match) => match[1]
+    expect(renderToStaticMarkup(<ProviderCliWarning provider="CLAUDE" />)).toBe('');
+  });
+
+  it('offers managed Claude login when unauthenticated', () => {
+    state.health.claude.isAuthenticated = false;
+    expect(renderToStaticMarkup(<ProviderCliWarning provider="CLAUDE" />)).toContain(
+      'ff claude auth login'
     );
-    expect(buttons).toContainEqual(expect.stringContaining('Upgrade'));
+  });
+
+  it('offers app repair for a missing Claude runtime without a global install link', () => {
+    state.health.claude.isInstalled = false;
+    const markup = renderToStaticMarkup(<ProviderCliWarning provider="CLAUDE" />);
+    expect(markup).toContain('Update or reinstall Factory Factory');
+    expect(markup).not.toContain('href=');
   });
 });
 
