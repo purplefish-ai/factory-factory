@@ -183,11 +183,16 @@ describe('ProviderSubagentsSection', () => {
       });
     });
     expect(mocks.invalidate).toHaveBeenCalledOnce();
-    expect(mocks.invalidate).toHaveBeenCalledWith({
-      sessionId: 'session-1',
-      cursor: null,
-      limit: 100,
-    });
+    expect(mocks.invalidate).toHaveBeenCalledWith(
+      {
+        sessionId: 'session-1',
+        cursor: null,
+        limit: 100,
+      },
+      undefined,
+      // Change bursts reuse an in-flight list fetch instead of restarting it.
+      { cancelRefetch: false }
+    );
   });
 
   it('omits the entire section for unsupported providers', () => {

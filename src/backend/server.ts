@@ -22,6 +22,7 @@ import express from 'express';
 import { WebSocketServer } from 'ws';
 import type { Application } from './app-context';
 import { toError } from './lib/error-utils';
+import { eventLoopMonitor } from './lib/event-loop-monitor';
 import {
   createCorsMiddleware,
   createRequestLoggerMiddleware,
@@ -447,6 +448,7 @@ export function createServer(application: Application, requestedPort?: number): 
       await ratchetService.stop();
       await periodicTaskService.stop();
       await reconciliationService.stopPeriodicCleanup();
+      eventLoopMonitor.stop();
       await database.$disconnect();
 
       logger.info('Graceful cleanup completed');
@@ -512,6 +514,7 @@ export function createServer(application: Application, requestedPort?: number): 
       };
 
       try {
+        eventLoopMonitor.start();
         await bindServerWithPortFallback();
         await runStartupReconciliation();
 

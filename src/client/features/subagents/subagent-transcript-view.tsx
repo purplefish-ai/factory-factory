@@ -61,7 +61,8 @@ export function SubagentTranscriptView({ selection, workspaceId }: SubagentTrans
         detail.sessionId === selection.parentSessionId &&
         detail.subagentId === selection.subagent.id
       ) {
-        void query.refetch();
+        // Reuse an in-flight transcript fetch instead of restarting it per change.
+        void query.refetch({ cancelRefetch: false });
       }
     });
   }, [query.refetch, selection.parentSessionId, selection.subagent.id]);

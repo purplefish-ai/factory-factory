@@ -377,6 +377,20 @@ class WorkspaceAccessor {
     });
   }
 
+  /**
+   * Issue links for a project's workspaces. Selects only the columns issue
+   * filtering needs: whole rows carry large init output/metadata blobs, and
+   * archived rows dominate long-lived projects.
+   */
+  findIssueLinksByProjectId(
+    projectId: string
+  ): Promise<Pick<Workspace, 'id' | 'status' | 'githubIssueNumber' | 'linearIssueId'>[]> {
+    return prisma.workspace.findMany({
+      where: { projectId },
+      select: { id: true, status: true, githubIssueNumber: true, linearIssueId: true },
+    });
+  }
+
   /** Find workspaces with sessions included, for derived-state computation. */
   async findByProjectIdWithSessions(
     projectId: string,

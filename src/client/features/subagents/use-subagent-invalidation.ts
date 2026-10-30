@@ -44,7 +44,8 @@ export function useSubagentInvalidation(sessionId: string | null, enabled: boole
 
     return subscribeToSubagentChanges((detail) => {
       if (detail.sessionId === sessionId) {
-        void invalidateList(listInput(sessionId));
+        // Reuse an in-flight list fetch instead of cancelling it for every change.
+        void invalidateList(listInput(sessionId), undefined, { cancelRefetch: false });
       }
     });
   }, [invalidateList, sessionId]);

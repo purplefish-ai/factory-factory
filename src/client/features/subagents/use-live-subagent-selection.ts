@@ -73,20 +73,23 @@ export function useLiveSubagentSelection(selection: SubagentSelection): Subagent
     loadedPageCount: query.data?.pages.length ?? 0,
   };
 
-  const refetch = useCallback(async () => {
-    const before = querySnapshot.current;
-    const result = await query.refetch();
-    const resultPageCount = result.data?.pages.length ?? 0;
-    // The query cache is shared, so a next-page fetch can advance dataUpdatedAt
-    // without refreshing a candidate that was already cached.
-    if (
-      result.isSuccess &&
-      result.dataUpdatedAt > before.dataUpdatedAt &&
-      resultPageCount === before.loadedPageCount
-    ) {
-      setSuccessfulRefetchDataUpdatedAt((current) => Math.max(current, result.dataUpdatedAt));
-    }
-  }, [query.refetch]);
+  const refetch = useCallback(
+    async (options?: { cancelRefetch?: boolean }) => {
+      const before = querySnapshot.current;
+      const result = await query.refetch(options);
+      const resultPageCount = result.data?.pages.length ?? 0;
+      // The query cache is shared, so a next-page fetch can advance dataUpdatedAt
+      // without refreshing a candidate that was already cached.
+      if (
+        result.isSuccess &&
+        result.dataUpdatedAt > before.dataUpdatedAt &&
+        resultPageCount === before.loadedPageCount
+      ) {
+        setSuccessfulRefetchDataUpdatedAt((current) => Math.max(current, result.dataUpdatedAt));
+      }
+    },
+    [query.refetch]
+  );
 
   useEffect(() => {
     if (query.isRefetching) {
@@ -124,7 +127,8 @@ export function useLiveSubagentSelection(selection: SubagentSelection): Subagent
           detail.sessionId === selection.parentSessionId &&
           detail.subagentId === selection.subagent.id
         ) {
-          void refetch();
+          // Reuse an in-flight transcript fetch instead of restarting it per change.
+          void refetch({ cancelRefetch: false });
         }
       }),
     [refetch, selection.parentSessionId, selection.subagent.id]

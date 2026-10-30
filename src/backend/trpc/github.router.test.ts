@@ -9,7 +9,7 @@ const mockGithubCLIService = vi.hoisted(() => ({
 const mockClassifyGitHubCLIError = vi.hoisted(() => vi.fn());
 
 const mockWorkspaceDataService = vi.hoisted(() => ({
-  findByProjectId: vi.fn(),
+  findIssueLinksByProjectId: vi.fn(),
 }));
 
 const mockProjectManagementService = vi.hoisted(() => ({
@@ -38,7 +38,7 @@ describe('githubRouter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockClassifyGitHubCLIError.mockReturnValue('unknown');
-    mockWorkspaceDataService.findByProjectId.mockResolvedValue([]);
+    mockWorkspaceDataService.findIssueLinksByProjectId.mockResolvedValue([]);
   });
 
   it('returns preview metadata for the requested repository and PR', async () => {
@@ -116,7 +116,7 @@ describe('githubRouter', () => {
       { number: 57, title: 'Archived workspace' },
       { number: 58, title: 'Archiving workspace' },
     ]);
-    mockWorkspaceDataService.findByProjectId.mockResolvedValue([
+    mockWorkspaceDataService.findIssueLinksByProjectId.mockResolvedValue([
       { githubIssueNumber: 55, status: 'READY' },
       { githubIssueNumber: 57, status: 'ARCHIVED' },
       { githubIssueNumber: 58, status: 'ARCHIVING' },
