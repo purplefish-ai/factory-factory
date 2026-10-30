@@ -2,7 +2,7 @@ import { ChildProcess } from 'node:child_process';
 import { spawn } from 'node:child_process';
 import { PassThrough } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { treeKillAsync } from './runtime-utils';
+import { findAvailablePort, treeKillAsync } from './runtime-utils';
 import { startFactoryFactoryServer } from './server-startup';
 import { runTailscaleSession } from './tailscale';
 import { discoverTailscale } from './tailscale-client';
@@ -67,6 +67,10 @@ describe('owned Tailscale session', () => {
       signal: controller.signal,
     });
     await started();
+    expect(findAvailablePort).toHaveBeenCalledWith(3001, {
+      maxAttempts: 50,
+      signal: controller.signal,
+    });
     expect(startFactoryFactoryServer).toHaveBeenCalledWith(
       expect.objectContaining({
         requestedPort: 3002,
@@ -77,7 +81,7 @@ describe('owned Tailscale session', () => {
     expect(spawn).toHaveBeenCalledWith(
       'tailscale',
       ['serve', '--https=443', 'http://127.0.0.1:3007'],
-      expect.anything()
+      { stdio: ['inherit', 'pipe', 'pipe'] }
     );
     controller.abort();
     await result;

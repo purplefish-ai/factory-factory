@@ -2,13 +2,14 @@ import { type ChildProcess, spawn } from 'node:child_process';
 import { join } from 'node:path';
 import chalk from 'chalk';
 import type { Command } from 'commander';
-import * as QRCode from 'qrcode';
 import { runMigrations } from '@/backend/migrate';
 import { stopChild, watchChild } from './child-lifecycle';
 import { resolveDatabasePath } from './database-path';
+import { forwardDiagnosticOutput } from './diagnostic-output';
 import { ensureDataDir, findAvailablePort } from './runtime-utils';
 import { startFactoryFactoryServer } from './server-startup';
 import { discoverTailscale, parsePort } from './tailscale-client';
+import { supportsTerminalQrRendering, tryRenderTerminalQrCode } from './terminal-qr';
 
 interface TailscaleOptions {
   backendPort: number;
@@ -24,6 +25,7 @@ export async function runTailscaleSession(params: {
   const { projectRoot, options, signal } = params;
   const children: ChildProcess[] = [];
   const watchers: ReturnType<typeof watchChild>[] = [];
+  const outputDisposers: (() => void)[] = [];
   let onAbort = () => {
     /* No abort listener exists before children start. */
   };
@@ -38,7 +40,7 @@ export async function runTailscaleSession(params: {
       migrationsPath: join(projectRoot, 'prisma', 'migrations'),
       log: console.log,
     });
-    const requestedPort = await findAvailablePort(options.backendPort, { maxAttempts: 50 });
+    const requestedPort = await findAvailablePort(options.backendPort, { maxAttempts: 50, signal });
     signal.throwIfAborted();
     const backend = await startFactoryFactoryServer({
       projectRoot,
@@ -63,8 +65,10 @@ export async function runTailscaleSession(params: {
     );
     children.push(serve);
     watchers.push(watchChild(serve, 'Tailscale Serve'));
-    serve.stdout?.pipe(process.stdout, { end: false });
-    serve.stderr?.pipe(process.stderr, { end: false });
+    outputDisposers.push(
+      forwardDiagnosticOutput(serve.stdout, process.stdout),
+      forwardDiagnosticOutput(serve.stderr, process.stderr)
+    );
 
     const aborted = new Promise<undefined>((resolve) => {
       onAbort = () => resolve(undefined);
@@ -74,10 +78,10 @@ export async function runTailscaleSession(params: {
       }
     });
     // QR rendering is optional; it must not delay cleanup if a child exits.
-    if (process.stdout.isTTY) {
-      void QRCode.toString(origin, { type: 'terminal', small: true })
+    if (supportsTerminalQrRendering()) {
+      void tryRenderTerminalQrCode(origin)
         .then((qr) => {
-          if (!signal.aborted && serve.exitCode === null && serve.signalCode === null) {
+          if (qr && !signal.aborted && serve.exitCode === null && serve.signalCode === null) {
             console.log(qr);
           }
         })
@@ -96,6 +100,9 @@ export async function runTailscaleSession(params: {
   } finally {
     signal.removeEventListener('abort', onAbort);
     await Promise.all(children.map(stopChild));
+    for (const dispose of outputDisposers) {
+      dispose();
+    }
     for (const watcher of watchers) {
       watcher.dispose();
     }
@@ -117,7 +124,7 @@ export function registerTailscaleCommand(program: Command, projectRoot: string):
       try {
         await runTailscaleSession({ projectRoot, options, signal: controller.signal });
       } catch (error) {
-        console.error(chalk.red(`Tailscale startup failed: ${String(error)}`));
+        console.error(chalk.red(`Tailscale session failed: ${String(error)}`));
         process.exitCode = 1;
       } finally {
         process.off('SIGINT', onSignal);

@@ -28,12 +28,32 @@ export async function stopChild(child: ChildProcess): Promise<void> {
   if (!child.pid || child.exitCode !== null || child.signalCode !== null) {
     return;
   }
-  const watcher = watchChild(child, 'child');
+  let dispose = () => {
+    /* Replaced when termination listeners are installed. */
+  };
+  const terminated = new Promise<boolean>((resolve) => {
+    const onExit = () => resolve(true);
+    const onError = (error: Error) => {
+      console.error(chalk.yellow(`Child ${child.pid} shutdown error: ${error.message}`));
+    };
+    child.once('exit', onExit);
+    child.once('close', onExit);
+    child.on('error', onError);
+    dispose = () => {
+      child.off('exit', onExit);
+      child.off('close', onExit);
+      child.off('error', onError);
+    };
+  });
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    await treeKillAsync(child.pid, 'SIGTERM');
+    try {
+      await treeKillAsync(child.pid, 'SIGTERM');
+    } catch (error) {
+      console.error(chalk.yellow(`Could not send SIGTERM to child ${child.pid}: ${String(error)}`));
+    }
     const stopped = await Promise.race([
-      watcher.exited.then(() => true),
+      terminated,
       new Promise<boolean>((resolve) => {
         timer = setTimeout(() => resolve(false), 5000);
         timer.unref();
@@ -46,6 +66,6 @@ export async function stopChild(child: ChildProcess): Promise<void> {
     console.error(chalk.yellow(`Could not stop child ${child.pid}: ${String(error)}`));
   } finally {
     clearTimeout(timer);
-    watcher.dispose();
+    dispose();
   }
 }

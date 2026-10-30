@@ -74,7 +74,13 @@ function hasPort(config: ServeConfig, port: number): boolean {
 }
 
 export function assertServePortAvailable(rawConfig: string, port: number): void {
-  const config = serveConfigSchema.nullable().parse(parseJson(rawConfig, 'serve status'));
+  const parsed = serveConfigSchema.nullable().safeParse(parseJson(rawConfig, 'serve status'));
+  if (!parsed.success) {
+    throw new Error(
+      'Invalid Tailscale Serve configuration. Check "tailscale serve status --json" and update the Tailscale CLI if needed.'
+    );
+  }
+  const config = parsed.data;
   if (config && hasPort(config, port)) {
     throw new Error(
       `Tailscale port ${port} already has a Serve or Funnel configuration. Choose another port with --https-port (for example, --https-port 8443).`

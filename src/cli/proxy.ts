@@ -5,7 +5,6 @@ import type { Socket } from 'node:net';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import chalk from 'chalk';
-import * as QRCode from 'qrcode';
 import { runMigrations as runDbMigrations } from '@/backend/migrate';
 import {
   type AuthenticationCheck,
@@ -27,6 +26,7 @@ import {
 import { resolveDatabasePath } from './database-path';
 import { ensureDataDir, findAvailablePort, treeKillAsync } from './runtime-utils';
 import { startFactoryFactoryServer } from './server-startup';
+import { supportsTerminalQrRendering, tryRenderTerminalQrCode } from './terminal-qr';
 
 export { startFactoryFactoryServer } from './server-startup';
 
@@ -51,37 +51,6 @@ interface RunProxyCommandParams {
 }
 
 type ProcessRecord = { name: string; proc: ChildProcess };
-
-function supportsTerminalQrRendering(
-  stream: Pick<NodeJS.WriteStream, 'isTTY'> = process.stdout,
-  env: NodeJS.ProcessEnv = process.env
-): boolean {
-  if (!stream.isTTY) {
-    return false;
-  }
-
-  const term = (env.TERM || '').toLowerCase();
-  return term !== '' && term !== 'dumb';
-}
-
-async function tryRenderTerminalQrCode(
-  url: string,
-  renderQrCode: (
-    text: string,
-    options?: QRCode.QRCodeToStringOptionsTerminal
-  ) => Promise<string> = (text, options) => QRCode.toString(text, options)
-): Promise<string | null> {
-  try {
-    const output = await renderQrCode(url, {
-      type: 'terminal',
-      margin: 1,
-      small: true,
-    });
-    return output.trim() ? output : null;
-  } catch {
-    return null;
-  }
-}
 
 async function printDirectLinkQrCode(url: string): Promise<void> {
   if (!supportsTerminalQrRendering()) {

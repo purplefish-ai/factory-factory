@@ -142,7 +142,7 @@ server.listen(0, process.env.BACKEND_HOST, () => console.log('BACKEND_PORT:' + s
       disableChecks: 'false',
     });
   } finally {
-    if (backend) {
+    if (backend && backend.process.exitCode === null && backend.process.signalCode === null) {
       const exited = once(backend.process, 'exit');
       backend.process.kill();
       await exited;

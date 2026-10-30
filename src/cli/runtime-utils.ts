@@ -60,14 +60,18 @@ export async function waitForPort(
   throw new Error(`Timed out waiting for port ${port} after ${timeoutMs}ms`);
 }
 
-async function isPortInUse(port: number): Promise<boolean> {
+async function isPortInUse(port: number, signal?: AbortSignal): Promise<boolean> {
+  signal?.throwIfAborted();
   if (process.platform !== 'win32') {
     try {
       const { stdout } = await execPromise(`lsof -i :${port} -sTCP:LISTEN -t`, {
         timeout: 2000,
+        ...(signal ? { signal } : {}),
       });
+      signal?.throwIfAborted();
       return stdout.trim().length > 0;
     } catch {
+      signal?.throwIfAborted();
       // Even exit 1 can hide another user's listener; verify by binding below.
     }
   }
@@ -87,6 +91,7 @@ async function isPortInUse(port: number): Promise<boolean> {
 export interface FindAvailablePortOptions {
   excludePorts?: number[];
   maxAttempts?: number;
+  signal?: AbortSignal;
 }
 
 export async function findAvailablePort(
@@ -99,8 +104,10 @@ export async function findAvailablePort(
     );
   }
 
-  const { maxAttempts = 10, excludePorts = [] } = options;
+  const { maxAttempts = 10, excludePorts = [], signal } = options;
+  signal?.throwIfAborted();
   for (let i = 0; i < maxAttempts; i += 1) {
+    signal?.throwIfAborted();
     const port = startPort + i;
     if (port > MAX_PORT) {
       break;
@@ -108,7 +115,9 @@ export async function findAvailablePort(
     if (excludePorts.includes(port)) {
       continue;
     }
-    if (!(await isPortInUse(port))) {
+    const inUse = await isPortInUse(port, signal);
+    signal?.throwIfAborted();
+    if (!inUse) {
       return port;
     }
   }

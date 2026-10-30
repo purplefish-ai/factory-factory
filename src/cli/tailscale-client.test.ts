@@ -55,11 +55,19 @@ describe('Serve conflict protection', () => {
   it.each(['invalid', '[]', '{"TCP":42}', '{"Foreground":{"session":false}}'])(
     'fails closed on invalid config %s',
     (status) => {
-      expect(() => assertServePortAvailable(status, 443)).toThrow();
+      expect(() => assertServePortAvailable(status, 443)).toThrow(/tailscale serve status --json/i);
     }
   );
 });
 
 it.each(['0', '65536', '1.5', '443x', '-1', ''])('rejects invalid port %s', (value) => {
   expect(() => parsePort(value)).toThrow();
+});
+
+it.each([
+  ['1', 1],
+  ['443', 443],
+  ['65535', 65_535],
+] as const)('accepts valid port %s', (value, port) => {
+  expect(parsePort(value)).toBe(port);
 });
