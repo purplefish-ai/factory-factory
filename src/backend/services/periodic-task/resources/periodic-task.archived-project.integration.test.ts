@@ -76,7 +76,13 @@ it('does not consume the schedule when the project archives after the due read',
   const reserve = () =>
     periodicTaskAccessor.reserveExecutionAndMarkDispatched(
       { periodicTaskId: task.id, workspaceId: null, status: 'RUNNING' },
-      { cadence: 'DAILY', scheduledTime: null, timezone: null, scheduledDayOfMonth: null }
+      {
+        cadence: 'DAILY',
+        scheduledTime: null,
+        timezone: null,
+        scheduledDayOfMonth: null,
+        dueAt: new Date(0),
+      }
     );
   expect(await reserve()).toBeNull();
   expect(await db.prisma.periodicTaskExecution.count()).toBe(0);

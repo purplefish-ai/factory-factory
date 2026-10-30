@@ -121,6 +121,73 @@ describe('workspaceInitRouter', () => {
     });
   });
 
+  it.each([
+    ['with a setup warning', 'setup script failed'],
+    ['without a setup warning', null],
+  ])('recreates a missing worktree for a READY workspace %s', async (_label, initErrorMessage) => {
+    mockFindByIdWithProject.mockResolvedValue({
+      id: 'w1',
+      status: 'READY',
+      initErrorMessage,
+      worktreePath: null,
+      branchName: 'feature/x',
+      project: { worktreeBasePath: '/tmp/worktrees' },
+    });
+    mockStartProvisioningFromReady.mockResolvedValue({ id: 'w1', status: 'PROVISIONING' });
+    mockGetInitMode.mockResolvedValue(undefined);
+    mockFindById.mockResolvedValue({ id: 'w1', status: 'PROVISIONING' });
+
+    await expect(createCaller().retryInit({ id: 'w1' })).resolves.toEqual({
+      id: 'w1',
+      status: 'PROVISIONING',
+    });
+
+    expect(mockResetToNew).not.toHaveBeenCalled();
+    expect(mockStartProvisioningFromReady).toHaveBeenCalledWith('w1', 3);
+    expect(mockExecuteStartupScriptPipeline).not.toHaveBeenCalled();
+    expect(mockInitializeWorkspaceWorktree).toHaveBeenCalledWith('w1', {
+      branchName: 'feature/x',
+      useExistingBranch: undefined,
+      provisioningAlreadyStarted: true,
+    });
+  });
+
+  it.each(['FAILED', 'READY'] as const)(
+    'does not restart a %s workspace without a worktree when reading its init mode fails',
+    async (status) => {
+      mockFindByIdWithProject.mockResolvedValue({
+        id: 'w1',
+        status,
+        initErrorMessage: null,
+        worktreePath: null,
+        project: { worktreeBasePath: '/tmp/worktrees' },
+      });
+      mockGetInitMode.mockRejectedValueOnce(new Error('database unavailable'));
+
+      await expect(createCaller().retryInit({ id: 'w1' })).rejects.toThrow('database unavailable');
+
+      expect(mockResetToNew).not.toHaveBeenCalled();
+      expect(mockStartProvisioningFromReady).not.toHaveBeenCalled();
+      expect(mockInitializeWorkspaceWorktree).not.toHaveBeenCalled();
+    }
+  );
+
+  it('throws TOO_MANY_REQUESTS when a missing-worktree READY retry exceeds max retries', async () => {
+    mockFindByIdWithProject.mockResolvedValue({
+      id: 'w1',
+      status: 'READY',
+      initErrorMessage: null,
+      worktreePath: null,
+      project: { worktreeBasePath: '/tmp/worktrees' },
+    });
+    mockStartProvisioningFromReady.mockResolvedValue(null);
+
+    await expect(createCaller().retryInit({ id: 'w1' })).rejects.toMatchObject({
+      code: 'TOO_MANY_REQUESTS',
+    });
+    expect(mockInitializeWorkspaceWorktree).not.toHaveBeenCalled();
+  });
+
   it('retries failed initialization with existing worktree in the background', async () => {
     const deferredInit = createDeferredPromise<void>();
     const workspace = {
@@ -165,7 +232,8 @@ describe('workspaceInitRouter', () => {
       id: 'w1',
       status: 'READY',
       project: { worktreeBasePath: '/tmp' },
-      worktreePath: null,
+      worktreePath: '/tmp/w1',
+      initErrorMessage: null,
     });
     await expect(caller.retryInit({ id: 'w1' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
 

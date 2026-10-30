@@ -303,9 +303,31 @@ export class SnapshotReconciliationService {
   }
 
   /**
-   * Remove snapshot entries for workspaces no longer in the DB.
+   * Whether the store holds an observation for this workspace at or after
+   * `timestamp`, e.g. a creation seed that landed while the DB read was in
+   * flight.
    */
-  private removeStaleEntries(dbWorkspaceIds: Set<string>): {
+  private hasObservationSince(workspaceId: string, timestamp: number): boolean {
+    const entry = this.dependencies.workspaceSnapshotStore.getByWorkspaceId(workspaceId);
+    return (
+      entry !== undefined &&
+      Object.values(entry.fieldTimestamps).some(
+        (fieldTimestamp) => fieldTimestamp !== undefined && fieldTimestamp >= timestamp
+      )
+    );
+  }
+
+  /**
+   * Remove snapshot entries for workspaces no longer in the DB.
+   *
+   * Absence from a read that started at `pollStartTs` is an observation at that
+   * time, so it cannot override newer facts: entries seeded or updated since
+   * then are kept, and a later pass removes them if they are really gone.
+   */
+  private removeStaleEntries(
+    dbWorkspaceIds: Set<string>,
+    pollStartTs: number
+  ): {
     staleEntriesRemoved: number;
     deltasEmitted: number;
   } {
@@ -313,10 +335,10 @@ export class SnapshotReconciliationService {
     let removed = 0;
 
     for (const storeId of storeWorkspaceIds) {
-      if (
-        !dbWorkspaceIds.has(storeId) &&
-        this.dependencies.workspaceSnapshotStore.remove(storeId)
-      ) {
+      if (dbWorkspaceIds.has(storeId) || this.hasObservationSince(storeId, pollStartTs)) {
+        continue;
+      }
+      if (this.dependencies.workspaceSnapshotStore.remove(storeId)) {
         removed++;
         this.logger.info('Removed stale snapshot entry', { workspaceId: storeId });
       }
@@ -422,7 +444,10 @@ export class SnapshotReconciliationService {
 
       // Stale entries are part of the authoritative seed and must be removed
       // before a client receives its initial snapshot_full baseline.
-      const staleCleanup = this.removeStaleEntries(new Set(workspaces.map((w) => w.id)));
+      const staleCleanup = this.removeStaleEntries(
+        new Set(workspaces.map((w) => w.id)),
+        pollStartTs
+      );
       staleEntriesRemoved = staleCleanup.staleEntriesRemoved;
       deltasEmitted += staleCleanup.deltasEmitted;
       resolveSeed();

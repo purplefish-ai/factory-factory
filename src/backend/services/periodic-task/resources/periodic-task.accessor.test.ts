@@ -378,6 +378,7 @@ describe('periodicTaskAccessor.reserveExecutionAndMarkDispatched', () => {
           scheduledTime: '09:00',
           timezone: 'UTC',
           scheduledDayOfMonth: null,
+          dueAt: new Date('2026-02-28T15:00:00.000Z'),
         }
       )
     ).resolves.toBe(execution);
@@ -421,6 +422,7 @@ describe('periodicTaskAccessor.reserveExecutionAndMarkDispatched', () => {
           scheduledTime: '09:00',
           timezone: 'UTC',
           scheduledDayOfMonth: null,
+          dueAt: new Date('2026-02-28T15:00:00.000Z'),
         }
       )
     ).resolves.toBeNull();
@@ -454,6 +456,7 @@ describe('periodicTaskAccessor.reserveExecutionAndMarkDispatched', () => {
         scheduledTime: '09:00',
         timezone,
         scheduledDayOfMonth: null,
+        dueAt: new Date('2026-02-28T15:00:00.000Z'),
       }
     );
 
@@ -479,6 +482,113 @@ describe('periodicTaskAccessor.reserveExecutionAndMarkDispatched', () => {
       hour: '09',
       minute: '00',
     });
+  });
+
+  function reservedNextRunAt(): Date {
+    const call = prismaMock.periodicTask.updateMany.mock.calls[0]?.[0] as
+      | { data: { nextRunAt: Date } }
+      | undefined;
+    if (!call) {
+      throw new Error('updateMany was not called');
+    }
+    return call.data.nextRunAt;
+  }
+
+  async function reserveLate(
+    dispatchedAt: string,
+    schedule: {
+      cadence: 'DAILY' | 'MONTHLY';
+      scheduledTime: string;
+      timezone: string;
+      scheduledDayOfMonth: number | null;
+      dueAt: Date;
+    }
+  ): Promise<Date> {
+    vi.setSystemTime(new Date(dispatchedAt));
+    prismaMock.periodicTask.updateMany.mockResolvedValue({ count: 1 });
+    prismaMock.periodicTaskExecution.create.mockResolvedValue({ id: 'exec-1' });
+    await periodicTaskAccessor.reserveExecutionAndMarkDispatched(
+      { periodicTaskId: 'task-1', workspaceId: null, status: 'RUNNING' },
+      schedule
+    );
+    return reservedNextRunAt();
+  }
+
+  it('keeps the next daily slot when a run is picked up just past local midnight', async () => {
+    // Due 2024-01-01 23:59 America/New_York; picked up 90s later, at
+    // 2024-01-02 00:00:30 local. The next slot is 2024-01-02 23:59 local, not
+    // 2024-01-03 23:59, which would silently drop Jan 2's run.
+    const nextRunAt = await reserveLate('2024-01-02T05:00:30.000Z', {
+      cadence: 'DAILY',
+      scheduledTime: '23:59',
+      timezone: 'America/New_York',
+      scheduledDayOfMonth: null,
+      dueAt: new Date('2024-01-02T04:59:00.000Z'),
+    });
+
+    expect(nextRunAt.toISOString()).toBe('2024-01-03T04:59:00.000Z');
+  });
+
+  it('keeps the next monthly slot when a day-31 run is picked up just past midnight', async () => {
+    // Due 2024-01-31 23:59 America/New_York; picked up at 2024-02-01 00:00:30
+    // local. February's clamped slot is 2024-02-29 23:59 local
+    // (= 2024-03-01T04:59Z), not 2024-03-31 23:59 local.
+    const nextRunAt = await reserveLate('2024-02-01T05:00:30.000Z', {
+      cadence: 'MONTHLY',
+      scheduledTime: '23:59',
+      timezone: 'America/New_York',
+      scheduledDayOfMonth: 31,
+      dueAt: new Date('2024-02-01T04:59:00.000Z'),
+    });
+
+    expect(nextRunAt.toISOString()).toBe('2024-03-01T04:59:00.000Z');
+  });
+
+  it('measures dispatch time after the legacy monthly anchor lookup', async () => {
+    // The lookup finishes after the following slot (2026-02-28 09:00 UTC) has
+    // passed, so that slot must not be reserved as the next, already-due run.
+    vi.setSystemTime(new Date('2026-02-28T08:59:59.900Z'));
+    prismaMock.periodicTask.findUnique.mockImplementation(() => {
+      vi.setSystemTime(new Date('2026-02-28T09:00:01.000Z'));
+      return Promise.resolve({
+        createdAt: new Date('2026-01-31T12:00:00.000Z'),
+        scheduledDayOfMonth: null,
+        timezone: 'UTC',
+      });
+    });
+    prismaMock.periodicTask.updateMany.mockResolvedValue({ count: 1 });
+    prismaMock.periodicTaskExecution.create.mockResolvedValue({ id: 'exec-1' });
+
+    await periodicTaskAccessor.reserveExecutionAndMarkDispatched(
+      { periodicTaskId: 'task-1', workspaceId: null, status: 'RUNNING' },
+      {
+        cadence: 'MONTHLY',
+        scheduledTime: '09:00',
+        timezone: 'UTC',
+        scheduledDayOfMonth: null,
+        dueAt: new Date('2026-01-31T09:00:00.000Z'),
+      }
+    );
+
+    const data = prismaMock.periodicTask.updateMany.mock.calls[0]?.[0].data;
+    expect(data.lastRunAt).toEqual(new Date('2026-02-28T09:00:01.000Z'));
+    expect(data.nextRunAt).toEqual(new Date('2026-03-31T09:00:00.000Z'));
+  });
+
+  it('resumes one period from now instead of replaying slots missed over several days', async () => {
+    // Due 2024-01-01 09:00 America/New_York but the machine slept until
+    // 2024-01-05 08:00 local. One run covers the missed slots; the schedule
+    // resumes at 2024-01-06 09:00 local rather than at the overdue Jan 2 slot
+    // or the Jan 5 slot an hour after the catch-up run.
+    const nextRunAt = await reserveLate('2024-01-05T13:00:00.000Z', {
+      cadence: 'DAILY',
+      scheduledTime: '09:00',
+      timezone: 'America/New_York',
+      scheduledDayOfMonth: null,
+      dueAt: new Date('2024-01-01T14:00:00.000Z'),
+    });
+
+    expect(nextRunAt.toISOString()).toBe('2024-01-06T14:00:00.000Z');
   });
 });
 
