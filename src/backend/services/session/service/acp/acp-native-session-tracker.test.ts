@@ -68,6 +68,41 @@ describe('AcpNativeSessionTracker', () => {
     ]);
   });
 
+  it('retains replayed child tools for browsing without forwarding their side effects', () => {
+    const onSubagentToolUpdate = vi.fn();
+    const onTaskStatusChanged = vi.fn();
+    const tracker = new AcpNativeSessionTracker({ onSubagentToolUpdate, onTaskStatusChanged });
+    tracker.setRootSessionId('root');
+    tracker.beginHistoryReplay();
+    spawn(tracker);
+    const tool = {
+      sessionUpdate: 'tool_call',
+      toolCallId: 'historical-pr',
+      title: 'gh pr create',
+      kind: 'execute',
+      status: 'completed',
+    };
+    tracker.onRawMessage(update('child', tool));
+    expect(onSubagentToolUpdate).not.toHaveBeenCalled();
+    expect(onTaskStatusChanged).not.toHaveBeenCalled();
+    expect(tracker.getBackgroundWork()).toEqual({
+      backgroundTasks: [],
+      runningSubagents: 0,
+      activeGoals: 0,
+    });
+    tracker.completeHistoryReplay();
+    expect(tracker.read({ subagentId: 'child', limit: 10 }).updates).toMatchObject([tool]);
+
+    spawn(tracker, 'root', 'live-child');
+    tracker.onRawMessage(update('live-child', { ...tool, toolCallId: 'new-pr' }));
+    expect(onSubagentToolUpdate).toHaveBeenCalledOnce();
+    expect(onSubagentToolUpdate).toHaveBeenCalledWith(
+      'live-child',
+      expect.objectContaining({ toolCallId: 'new-pr' })
+    );
+    expect(onTaskStatusChanged).toHaveBeenLastCalledWith(true);
+  });
+
   it('uses a task type learned after the first update and preserves it on nameless updates', () => {
     const tracker = new AcpNativeSessionTracker();
     tracker.onRawMessage(

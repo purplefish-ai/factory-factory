@@ -302,12 +302,20 @@ permissions remain routed through the owning parent. Child tool calls also reach
 interceptors that opt in to sub-agent events, such as PR detection. The client
 negotiates upstream background-task metadata and combines subagent, goal and
 task activity so provider work outside a prompt keeps the session running.
-Native session loading reconstructs child histories; no Factory Factory
-extension is required from either adapter. Each child's in-memory transcript
-retains at most 100 turns and 2 MiB of serialized updates. Oldest whole turns
-are evicted; an oversized active turn is discarded until the next user turn.
-Cursors use monotonic turn offsets, and expired cursors fail explicitly instead
-of returning another turn.
+History replay reconstructs child transcripts without publishing background
+activity or forwarding historical child tool calls to interceptors. Replay
+completion clears unverified tasks and goals and marks unfinished replayed
+children interrupted; recovered terminal child states remain intact. Codex shell
+tasks survive because the adapter verifies them against its live terminal
+listing. Claude's negotiated `loadReplayEnd` marker ends this window before any
+subsequent live updates; providers without that marker use the load response.
+Transcript replay suppression lifts only for an in-flight prompt, never solely
+because background activity exists. Native session loading reconstructs child
+histories; no Factory Factory extension is required from either adapter. Each
+child's in-memory transcript retains at most 100 turns and 2 MiB of serialized
+updates. Oldest whole turns are evicted; an oversized active turn is discarded
+until the next user turn. Cursors use monotonic turn offsets, and expired
+cursors fail explicitly instead of returning another turn.
 
 ACP negotiates structured session failures. A prompt response carrying an error
 in `_meta.jetbrains.air.sessionFailure` fails the turn through the normal
