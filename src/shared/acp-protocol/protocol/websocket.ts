@@ -1,7 +1,7 @@
+import type { AcpPlanNotification } from '@/shared/acp-protocol/task-plan';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
-import type { AcpPlanNotification } from '../task-plan';
 import type { AgentMetadata } from './agent';
 import type { PluginInfo, ToolDefinition } from './content';
 import type { AskUserQuestion } from './interaction';
