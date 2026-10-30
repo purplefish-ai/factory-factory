@@ -169,6 +169,9 @@ export function createElectronLifecycle({
   // Set after the backend has stopped, so the next quit is allowed through.
   let readyToQuit = false;
   let backendExitPromptOpen = false;
+  // Counts stop requests, so a start that a stop cancelled (for example when
+  // the last window closes) is not reported as a startup failure.
+  let stopRequestCount = 0;
 
   const resolveMainWindow = (): BrowserWindowLike | null => {
     if (mainWindow !== null && !mainWindow.isDestroyed()) {
@@ -186,6 +189,7 @@ export function createElectronLifecycle({
   };
 
   const stopServer = (): Promise<void> => {
+    stopRequestCount++;
     if (stopServerPromise !== null) {
       return stopServerPromise;
     }
@@ -239,7 +243,8 @@ export function createElectronLifecycle({
 
   const handleCreateWindowFailure = (
     window: BrowserWindowLike | null,
-    error: unknown
+    error: unknown,
+    stopRequestCountAtStart: number
   ): BrowserWindowLike | null => {
     const failedWindow = window ?? mainWindow;
 
@@ -253,6 +258,11 @@ export function createElectronLifecycle({
     if (quitting) {
       // Quitting stops a backend that is still starting; that is not a failure.
       logger.log('[electron] Window creation stopped because the app is quitting');
+      return null;
+    }
+    if (stopRequestCount !== stopRequestCountAtStart) {
+      // Closing the last window stops the backend and cancels a start in flight.
+      logger.log('[electron] Window creation stopped because the backend was stopped');
       return null;
     }
 
@@ -280,6 +290,7 @@ export function createElectronLifecycle({
 
     createWindowPromise = (async () => {
       let window: BrowserWindowLike | null = null;
+      const stopRequestCountAtStart = stopRequestCount;
 
       try {
         logger.log('[electron] Starting createWindow...');
@@ -289,6 +300,10 @@ export function createElectronLifecycle({
         if (stopServerPromise !== null) {
           await stopServerPromise;
         }
+        if (quitting) {
+          // The quit already stopped the backend; a backend started now would never be stopped.
+          return null;
+        }
 
         const url = await serverManager.start();
         logger.log('[electron] Server started, URL:', url);
@@ -296,7 +311,7 @@ export function createElectronLifecycle({
         window = await createAndLoadWindow(url);
         return window;
       } catch (error) {
-        return handleCreateWindowFailure(window, error);
+        return handleCreateWindowFailure(window, error, stopRequestCountAtStart);
       } finally {
         createWindowPromise = null;
       }
@@ -306,7 +321,7 @@ export function createElectronLifecycle({
   };
 
   const handleActivate = async (): Promise<void> => {
-    if (browserWindow.getAllWindows().length > 0) {
+    if (quitting || browserWindow.getAllWindows().length > 0) {
       return;
     }
 
@@ -347,11 +362,12 @@ export function createElectronLifecycle({
       await createWindow();
       return;
     }
+    const stopRequestCountAtStart = stopRequestCount;
     try {
       const url = await serverManager.start();
       await window.loadURL(url);
     } catch (error) {
-      handleCreateWindowFailure(window, error);
+      handleCreateWindowFailure(window, error, stopRequestCountAtStart);
     }
   };
 
