@@ -497,9 +497,9 @@ describe('periodicTaskAccessor.reserveExecutionAndMarkDispatched', () => {
   async function reserveLate(
     dispatchedAt: string,
     schedule: {
-      cadence: 'DAILY' | 'MONTHLY';
-      scheduledTime: string;
-      timezone: string;
+      cadence: 'EVERY_FIVE_MINUTES' | 'DAILY' | 'WEEKLY' | 'MONTHLY';
+      scheduledTime: string | null;
+      timezone: string | null;
       scheduledDayOfMonth: number | null;
       dueAt: Date;
     }
@@ -575,11 +575,11 @@ describe('periodicTaskAccessor.reserveExecutionAndMarkDispatched', () => {
     expect(data.nextRunAt).toEqual(new Date('2026-03-31T09:00:00.000Z'));
   });
 
-  it('resumes one period from now instead of replaying slots missed over several days', async () => {
+  it("keeps today's daily slot when a task overdue by days is picked up before it", async () => {
     // Due 2024-01-01 09:00 America/New_York but the machine slept until
-    // 2024-01-05 08:00 local. One run covers the missed slots; the schedule
-    // resumes at 2024-01-06 09:00 local rather than at the overdue Jan 2 slot
-    // or the Jan 5 slot an hour after the catch-up run.
+    // 2024-01-05 08:00 local. One run covers the missed slots, and the schedule
+    // resumes at today's 09:00 slot rather than replaying Jan 2-4 or skipping
+    // to Jan 6.
     const nextRunAt = await reserveLate('2024-01-05T13:00:00.000Z', {
       cadence: 'DAILY',
       scheduledTime: '09:00',
@@ -588,7 +588,89 @@ describe('periodicTaskAccessor.reserveExecutionAndMarkDispatched', () => {
       dueAt: new Date('2024-01-01T14:00:00.000Z'),
     });
 
+    expect(nextRunAt.toISOString()).toBe('2024-01-05T14:00:00.000Z');
+  });
+
+  it("keeps today's daily slot when a task overdue by days is picked up past midnight", async () => {
+    // Due 2024-01-01 09:00 America/New_York; the app was off for two days and
+    // picks the task up at 2024-01-03 00:00:30 local, just past the day
+    // boundary. Jan 3's 09:00 slot is still ahead and must not be skipped.
+    const nextRunAt = await reserveLate('2024-01-03T05:00:30.000Z', {
+      cadence: 'DAILY',
+      scheduledTime: '09:00',
+      timezone: 'America/New_York',
+      scheduledDayOfMonth: null,
+      dueAt: new Date('2024-01-01T14:00:00.000Z'),
+    });
+
+    expect(nextRunAt.toISOString()).toBe('2024-01-03T14:00:00.000Z');
+  });
+
+  it("moves to tomorrow when today's daily slot has already passed", async () => {
+    // Slept until 2024-01-05 10:00 local: the catch-up run covers today's
+    // 09:00 slot too, so the next run is 2024-01-06 09:00 local.
+    const nextRunAt = await reserveLate('2024-01-05T15:00:00.000Z', {
+      cadence: 'DAILY',
+      scheduledTime: '09:00',
+      timezone: 'America/New_York',
+      scheduledDayOfMonth: null,
+      dueAt: new Date('2024-01-01T14:00:00.000Z'),
+    });
+
     expect(nextRunAt.toISOString()).toBe('2024-01-06T14:00:00.000Z');
+  });
+
+  it('keeps the weekly weekday when a task overdue by weeks is caught up', async () => {
+    // Monday 2024-01-01 09:00 America/New_York, picked up Wednesday Jan 10.
+    // The next slot is Monday Jan 15, not Wednesday Jan 17.
+    const nextRunAt = await reserveLate('2024-01-10T17:00:00.000Z', {
+      cadence: 'WEEKLY',
+      scheduledTime: '09:00',
+      timezone: 'America/New_York',
+      scheduledDayOfMonth: null,
+      dueAt: new Date('2024-01-01T14:00:00.000Z'),
+    });
+
+    expect(nextRunAt.toISOString()).toBe('2024-01-15T14:00:00.000Z');
+  });
+
+  it("keeps this month's slot when a monthly task overdue by months is caught up", async () => {
+    // Day 15 at 09:00 America/New_York, due Jan 15 and picked up Mar 10 (the
+    // DST start day). March 15 09:00 EDT is still ahead, so April is not next.
+    const nextRunAt = await reserveLate('2024-03-10T17:00:00.000Z', {
+      cadence: 'MONTHLY',
+      scheduledTime: '09:00',
+      timezone: 'America/New_York',
+      scheduledDayOfMonth: 15,
+      dueAt: new Date('2024-01-15T14:00:00.000Z'),
+    });
+
+    expect(nextRunAt.toISOString()).toBe('2024-03-15T13:00:00.000Z');
+  });
+
+  it('keeps the minute-cadence grid when a run is overdue by several periods', async () => {
+    const nextRunAt = await reserveLate('2024-01-01T12:12:30.000Z', {
+      cadence: 'EVERY_FIVE_MINUTES',
+      scheduledTime: null,
+      timezone: null,
+      scheduledDayOfMonth: null,
+      dueAt: new Date('2024-01-01T12:00:00.000Z'),
+    });
+
+    expect(nextRunAt.toISOString()).toBe('2024-01-01T12:15:00.000Z');
+  });
+
+  it('finds the next daily slot after a year-long gap across DST changes', async () => {
+    // Due 2023-01-01 09:00 America/New_York, picked up 2024-07-04 08:59 EDT.
+    const nextRunAt = await reserveLate('2024-07-04T12:59:00.000Z', {
+      cadence: 'DAILY',
+      scheduledTime: '09:00',
+      timezone: 'America/New_York',
+      scheduledDayOfMonth: null,
+      dueAt: new Date('2023-01-01T14:00:00.000Z'),
+    });
+
+    expect(nextRunAt.toISOString()).toBe('2024-07-04T13:00:00.000Z');
   });
 });
 

@@ -142,14 +142,16 @@ Each execution runs the configured prompt, monitors the workspace until the
 agent finishes, and advances the schedule. Concurrent runs are skipped. The
 schedule advances from the slot that was due, so a run picked up late (for
 example just past local midnight) keeps the following slot. A task that missed
-more than a full period runs once and resumes one period after that run instead
-of replaying the missed slots. Archived projects are excluded from due-task
-polling. Their task definitions retain their enabled state and schedule, so
-overdue tasks become eligible again when the project is unarchived. The atomic
-dispatch reservation rechecks the project state: archiving between the due-task
-read and reservation creates no execution and does not advance the schedule. The
-workspace insert also checks project archive state atomically if archiving races
-an already admitted run.
+more than a full period runs once instead of replaying the missed slots, then
+resumes at the first slot still ahead: a daily 09:00 task caught up at 08:00
+also runs at 09:00 that day, and weekly and monthly tasks keep their weekday and
+day of month. Archived projects are excluded from due-task polling. Their task
+definitions retain their enabled state and schedule, so overdue tasks become
+eligible again when the project is unarchived. The atomic dispatch reservation
+rechecks the project state: archiving between the due-task read and reservation
+creates no execution and does not advance the schedule. The workspace insert
+also checks project archive state atomically if archiving races an already
+admitted run.
 
 A run's outcome depends on its PR, workspace setup and Claude/Codex session:
 
