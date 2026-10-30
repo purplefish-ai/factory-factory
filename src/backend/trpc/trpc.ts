@@ -8,6 +8,7 @@ import {
   isOriginAllowed,
   isTrustedLocalAddress,
 } from '@/backend/lib/request-trust';
+import { FORWARDED_CLIENT_ADDRESS_HEADERS } from '@/shared/proxy-utils';
 import { toTRPCError } from './application-error-mapper';
 
 export { isLoopbackRemoteAddress };
@@ -16,6 +17,7 @@ export type RequestTrustInfo = {
   remoteAddress?: string;
   origin?: string;
   isLocal: boolean;
+  hasForwardedClientAddressHeaders?: boolean;
 };
 
 /** Context for tRPC procedures. */
@@ -36,6 +38,9 @@ function buildRequestTrust(req: Request): RequestTrustInfo {
     remoteAddress,
     origin: getHeaderValue(req.headers.origin),
     isLocal: isLoopbackRemoteAddress(remoteAddress),
+    hasForwardedClientAddressHeaders: FORWARDED_CLIENT_ADDRESS_HEADERS.some(
+      (header) => req.headers[header] !== undefined
+    ),
   };
 }
 
@@ -81,6 +86,12 @@ function isTrustedLocalContext(ctx: Context): boolean {
   }
 
   const corsConfig = ctx.appContext.services.configService.getCorsConfig();
+  // A local tunnel connects over loopback too. Match the WebSocket trust
+  // boundary before allowing Origin-less clients or applying CORS overrides.
+  if (ctx.requestTrust.hasForwardedClientAddressHeaders && !corsConfig.trustProxyHeaders) {
+    return false;
+  }
+
   const isLocal =
     ctx.requestTrust.isLocal ||
     isTrustedLocalAddress(ctx.requestTrust.remoteAddress, corsConfig.trustedLocalCidrs);
@@ -102,7 +113,9 @@ function isTrustedLocalContext(ctx: Context): boolean {
 /**
  * Procedure for mutations that can create workspaces, write executable config,
  * or trigger local command execution. HTTP callers must be local and use an
- * allowed browser origin when an Origin header is present.
+ * allowed browser origin when an Origin header is present. Forwarded requests
+ * also require an authenticated proxy that strips client-address headers, or
+ * the explicit trusted-proxy configuration.
  */
 export function assertTrustedLocalContext(ctx: Context): void {
   if (!isTrustedLocalContext(ctx)) {

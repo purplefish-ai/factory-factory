@@ -113,7 +113,9 @@ ff db:studio        # Inspect the local database with Prisma Studio
 
 `ff proxy` requires `cloudflared` on your `PATH`. Factory Factory automatically
 runs database migrations, finds an available port, and opens the browser when
-the server is ready.
+the server is ready. Use `--private` for remote workspace management and command
+execution. Public tunnels cannot invoke privileged operations; their forwarded
+requests are rejected even when they omit the `Origin` header.
 
 ### Hosting behind your own reverse proxy
 
@@ -127,14 +129,15 @@ via nginx, Caddy, or another reverse proxy:
 - Keep `BACKEND_HOST` bound to `localhost`/`127.0.0.1` so only your proxy can
   reach the server.
 
-By default the server rejects WebSocket upgrades that carry client-address
-headers (`x-forwarded-for`, `cf-connecting-ip`, etc.), because it expects to sit
-behind an authenticated proxy that strips them. If your reverse proxy adds these
-headers, either strip them before forwarding, or set `TRUST_PROXY_HEADERS=true`
-to accept them. **Only enable `TRUST_PROXY_HEADERS` when the backend is
-reachable solely through your trusted proxy** (i.e. bound to loopback) —
-otherwise clients could spoof address headers. The remote-address trust check
-(loopback / `TRUSTED_LOCAL_CIDRS`) still applies.
+By default the server rejects privileged HTTP requests and WebSocket upgrades
+that carry client-address headers (`x-forwarded-for`, `cf-connecting-ip`, etc.),
+because it expects to sit behind an authenticated proxy that strips them. If
+your reverse proxy adds these headers, either strip them before forwarding, or
+set `TRUST_PROXY_HEADERS=true` to accept them. **Only enable
+`TRUST_PROXY_HEADERS` when the backend is reachable solely through your trusted
+proxy** (i.e. bound to loopback) — otherwise clients could spoof address
+headers. The remote-address trust check (loopback / `TRUSTED_LOCAL_CIDRS`) still
+applies.
 
 For local testing from an origin that isn't in `CORS_ALLOWED_ORIGINS` (an
 alternate dev frontend, curl/Postman, or a LAN device that also satisfies
