@@ -1,5 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useState } from 'react';
+import { fn } from 'storybook/test';
+import { resolveWorkspaceFileLink } from '@/client/lib/workspace-file-links';
 import { Button } from './button';
 import { MarkdownRenderer } from './markdown';
 
@@ -14,6 +16,21 @@ type Story = StoryObj<typeof meta>;
 
 export const PlainMarkdown: Story = {
   args: { content: '# Workspace notes\n\nPlain **Markdown** loads without the diagram engine.' },
+};
+
+export const WindowsFileLinks: Story = {
+  args: {
+    content: [
+      'Workspace files on Windows open in the editor:',
+      '',
+      String.raw`- [foo.ts:12](C:\repo\src\foo.ts:12)`,
+      '- [bar.ts](C:/repo/src/bar.ts)',
+      '- [Outside the workspace](C:/elsewhere/baz.ts) stays inert',
+      '- [Unsafe](javascript:alert(1)) is blanked',
+    ].join('\n'),
+    resolveWorkspaceFileLink: (href: string) => resolveWorkspaceFileLink(href, String.raw`C:\repo`),
+    onWorkspaceFileLink: fn(),
+  },
 };
 
 export const Mermaid: Story = {

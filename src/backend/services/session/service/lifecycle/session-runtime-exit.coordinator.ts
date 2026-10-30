@@ -33,6 +33,7 @@ type RuntimeExitCoordinatorDependencies = {
     AcpEventProcessor,
     | 'createRuntimeEventHandler'
     | 'clearSessionState'
+    | 'clearStreamingState'
     | 'finalizeOrphanedToolCalls'
     | 'clearPendingToolCalls'
     | 'handleAcpLog'
@@ -67,8 +68,11 @@ export class SessionRuntimeExitCoordinator {
       ...(input.persistProviderSessionId
         ? {
             onSessionId: this.createProviderSessionIdHandler(),
-            onProviderIdentityRollover: (event) =>
-              this.dependencies.providerIdentityService.reconcile(event),
+            onProviderIdentityRollover: (event) => {
+              // Buffered output belongs to the old identity; write it before the reset archives it.
+              this.dependencies.acpEventProcessor.clearStreamingState(event.sessionId);
+              return this.dependencies.providerIdentityService.reconcile(event);
+            },
           }
         : {}),
       onRuntimeExit: (event) => this.handleExit(event),

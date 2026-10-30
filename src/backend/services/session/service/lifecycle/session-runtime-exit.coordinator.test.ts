@@ -52,6 +52,7 @@ function createExitCoordinatorHarness(options?: {
   const processor = {
     createRuntimeEventHandler: vi.fn(() => processorHandlers),
     clearSessionState: vi.fn(),
+    clearStreamingState: vi.fn(),
     finalizeOrphanedToolCalls: vi.fn(),
     clearPendingToolCalls: vi.fn(),
     handleAcpLog: vi.fn(),
@@ -165,6 +166,11 @@ describe('SessionRuntimeExitCoordinator', () => {
     };
     await harness.handlers.onProviderIdentityRollover?.(event);
     expect(harness.providerIdentityService.reconcile).toHaveBeenCalledWith(event);
+    // Buffered output is written before the reset archives the old identity.
+    expect(harness.processor.clearStreamingState).toHaveBeenCalledWith('session-1');
+    expect(harness.processor.clearStreamingState.mock.invocationCallOrder[0]).toBeLessThan(
+      harness.providerIdentityService.reconcile.mock.invocationCallOrder[0] ?? 0
+    );
   });
 
   it('propagates identity persistence failure to runtime startup', async () => {

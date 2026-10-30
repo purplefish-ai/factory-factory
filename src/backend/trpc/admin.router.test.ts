@@ -92,6 +92,7 @@ function createCaller(requestTrust?: Context['requestTrust']) {
 
   const terminalService = {
     getAllTerminals: vi.fn<() => Record<string, unknown>[]>(() => []),
+    refreshResourceUsage: vi.fn(() => Promise.resolve()),
   };
 
   const acpRuntimeManager = {

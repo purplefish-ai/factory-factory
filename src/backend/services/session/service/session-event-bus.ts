@@ -56,6 +56,15 @@ export class SessionEventBus extends EventEmitter {
   }
 
   /**
+   * True only when a transport is attached and reports nobody viewing the
+   * session, so callers can skip building payloads no one will receive.
+   * Without a transport this is false, keeping publishes observable in tests.
+   */
+  hasNoViewers(sessionId: string): boolean {
+    return this.viewerCountProvider !== null && this.viewerCountProvider(sessionId) === 0;
+  }
+
+  /**
    * Number of clients currently viewing a session. Returns 0 when no
    * transport adapter is attached.
    */

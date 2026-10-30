@@ -177,7 +177,8 @@ export const adminRouter = router({
     const activeSessionIds = activeAcpProcesses.map((process) => process.sessionId);
     const activeDbSessions = await sessionDataService.findAgentSessionsByIds(activeSessionIds);
 
-    // Get active terminals from in-memory map
+    // Get active terminals from in-memory map, with usage sampled for this view.
+    await terminalService.refreshResourceUsage();
     const activeTerminals = terminalService.getAllTerminals();
 
     // Include PID-backed DB sessions not in memory (orphan/stale edge cases).
