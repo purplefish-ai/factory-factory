@@ -152,9 +152,9 @@ export function useLiveSubagent(selection: SubagentSelection): {
     : query.isFetchedAfterMount && query.dataUpdatedAt > mountDataUpdatedAt.current;
 
   useEffect(() => {
+    // Icon assignment needs the entire session, even after the selected child is found.
     if (
       loadedPageCount === 0 ||
-      refreshed ||
       !query.hasNextPage ||
       query.isFetching ||
       query.isFetchNextPageError
@@ -168,7 +168,6 @@ export function useLiveSubagent(selection: SubagentSelection): {
     query.hasNextPage,
     query.isFetchNextPageError,
     query.isFetching,
-    refreshed,
   ]);
 
   return {
