@@ -8,6 +8,62 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-29
+
+### Added
+
+- Add project-scoped Agents management with editable instructions and schedules,
+  pause and delete controls, run history, and counts and failure badges; scope
+  Reviews and its navigation badge to the selected project (#2643)
+- Add permission mode selection when launching a workspace (#2655)
+- Open the Sessions panel from running sub-agent activity and show decorative
+  activity icons (#2623, #2643, #2657)
+
+### Changed
+
+- Make planning and fast mode direct toggles, simplify the Claude toolbar with
+  native ACP controls, and use Claude Auto mode for the Relaxed permission
+  preset with a fallback for unsupported models (#2620, #2641, #2642)
+- Batch queued chat messages and PR updates into one agent turn and consolidate
+  PR controls into the monitoring dropdown (#2630, #2638)
+- Collapse background process commands by default and animate the new workspace
+  form entrance (#2618, #2625)
+- Treat agent runs that finish without a PR as completed when their session
+  succeeds, including archived runs, while retaining failures for setup and
+  session startup errors (#2659)
+- Share background dispatch for PR updates and scheduled agents (#2640)
+- Shard CI tests with merged coverage enforcement, cache ABI-specific native
+  binaries, batch guardrail fixtures, and reuse workers only for audited shared
+  tests (#2629, #2632, #2633, #2634, #2635, #2636, #2637)
+- Remove unused initialization components, chat protocol types, and Claude test
+  fixture helpers (#2660, #2661, #2662)
+
+### Removed
+
+- Remove the auto-iteration workspace workflow and its controls. Existing loop
+  workspaces become standard workspaces; normal workspace and session data and
+  on-disk insight and logbook files remain available (#2639)
+
+### Fixed
+
+- Wait for workspace setup and startup scripts before starting agents, and keep
+  queued messages visible during session initialization (#2622, #2652)
+- Keep background apps from marking workspaces as working (#2619)
+- Preserve conversation history ordering after resume, restore Codex prompt
+  images during history replay, and fix streamed sub-agent transcript formatting
+  (#2624, #2631, #2656)
+- Preserve busy Codex sessions, recover fallback startup, and restore usage and
+  context snapshots when resuming idle sessions (#2649, #2653)
+- Populate streamed ACP tool call inputs and attach PRs created by native
+  sub-agents to their workspace (#2654, #2658)
+- Keep workspace detail mounted until archiving finishes so Git lock errors and
+  recovery controls remain visible (#2651)
+- Exclude archived GitHub repositories from review requests (#2621)
+- Let Ctrl+K close global search and skip the legacy thinking shortcut when
+  native effort controls replace it (#2648, #2650)
+- Correct React update handling and lifecycle mocks in workspace and startup
+  tests (#2626, #2627, #2628)
+
 ## [0.4.12] - 2026-10-28
 
 ### Added
