@@ -30,6 +30,12 @@ stale browser selections. Child inserts also connect only to active projects
 inside their nested-write transaction, so concurrent archival cannot bypass the
 preflight check. Existing children of archived projects remain visible.
 
+Closing a provider-backed session requires retained provider messages or a
+confirmed JSONL history load, including a confirmed empty history. Unavailable
+history and hydration cooldowns abort archival and preserve the live session for
+retry; local lifecycle and failed PR status cards do not prove the conversation
+was recovered. Empty ACP fallbacks remain eligible for a JSONL read.
+
 ## ACP runtime
 
 All agent sessions use Agent Client Protocol over stdio JSON-RPC through

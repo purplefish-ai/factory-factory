@@ -546,6 +546,22 @@ describe('sessionRouter', () => {
     });
   });
 
+  it('keeps the AgentSession and in-memory state when transcript archival fails', async () => {
+    const { caller, sessionLifecycleService, sessionDomainService } = createCaller();
+    mockSessionDataService.deleteAgentSession.mockResolvedValue({ deleted: true });
+    sessionLifecycleService.persistClosedSession.mockRejectedValueOnce(
+      new Error('Provider history is unavailable')
+    );
+    await expect(caller.deleteSession({ id: 's1' })).rejects.toThrow(
+      'Provider history is unavailable'
+    );
+    expect(mockSessionDataService.deleteAgentSession).not.toHaveBeenCalled();
+    expect(sessionDomainService.clearSession).not.toHaveBeenCalled();
+
+    await caller.deleteSession({ id: 's1' });
+    expect(mockSessionDataService.deleteAgentSession).toHaveBeenCalledWith('s1');
+  });
+
   it('handles start/stop/delete flows and terminal session procedures', async () => {
     const { caller, sessionLifecycleService, sessionDomainService } = createCaller();
     mockSessionDataService.findAgentSessionById.mockResolvedValue({ id: 's1' });

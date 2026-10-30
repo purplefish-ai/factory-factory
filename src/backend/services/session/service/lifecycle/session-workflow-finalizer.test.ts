@@ -37,6 +37,7 @@ function createFinalizerHarness(options?: {
       },
     ]),
     clearSession: vi.fn(),
+    getHistoryHydrationSource: vi.fn(() => undefined),
   };
   const persistence = {
     persistClosedSession: vi.fn<(input: PersistClosedSessionInput) => Promise<void>>(

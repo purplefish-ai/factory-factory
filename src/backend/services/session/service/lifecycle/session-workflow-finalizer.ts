@@ -6,9 +6,11 @@ import type {
   SessionLifecycleWorkspaceBridge,
 } from '@/backend/services/session/service/bridges';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { isLocalTranscriptMessage } from '@/backend/services/session/service/store/session-local-transcript';
 import type { PersistClosedSessionInput } from './closed-session-persistence.service';
 import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import { schedulePRDiscovery } from './session-pr-discovery.service';
+import { getProviderHistorySessionId } from './session-provider-history-hydrator';
 import type { SessionRepository } from './session.repository';
 
 const logger = createLogger('session-workflow-finalizer');
@@ -26,7 +28,10 @@ type WorkflowFinalizerDependencies = {
   workspaceLookup: {
     findById(workspaceId: string): Promise<{ worktreePath: string | null } | null>;
   };
-  sessionDomainService: Pick<SessionDomainService, 'clearSession' | 'getTranscriptSnapshot'>;
+  sessionDomainService: Pick<
+    SessionDomainService,
+    'clearSession' | 'getTranscriptSnapshot' | 'getHistoryHydrationSource'
+  >;
   closedSessionPersistenceService: {
     persistClosedSession(input: PersistClosedSessionInput): Promise<void>;
   };
@@ -128,6 +133,16 @@ export class SessionWorkflowFinalizer {
       workspace: { worktreePath: workspace.worktreePath },
     });
     await this.dependencies.lifecycleEventService.hydrate(sessionId);
+    const messages = this.dependencies.sessionDomainService.getTranscriptSnapshot(sessionId);
+    if (
+      getProviderHistorySessionId({ ...session, workspace }) &&
+      !messages.some((message) => !isLocalTranscriptMessage(message)) &&
+      this.dependencies.sessionDomainService.getHistoryHydrationSource(sessionId) !== 'jsonl'
+    ) {
+      throw new Error(
+        'Provider history is unavailable; retry closing the session after history can be loaded.'
+      );
+    }
 
     await this.dependencies.closedSessionPersistenceService.persistClosedSession({
       sessionId,
@@ -140,7 +155,7 @@ export class SessionWorkflowFinalizer {
       ...(session.providerSessionId ? { providerSessionId: session.providerSessionId } : {}),
       model: session.model,
       startedAt: session.createdAt,
-      messages: this.dependencies.sessionDomainService.getTranscriptSnapshot(sessionId),
+      messages,
     });
     return true;
   }
