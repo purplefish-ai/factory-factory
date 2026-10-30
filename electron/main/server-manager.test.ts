@@ -162,10 +162,16 @@ describe('ServerManager startup', () => {
     const startPromise = harness.manager.start();
     const child = await harness.child();
 
+    // The child stays alive after reporting the error until main kills it.
+    harness.killProcess.mockImplementation(() => child.exit(137));
     child.emit('message', { type: 'error', message: 'Error: migration 42 failed' });
-    child.exit(1);
 
     await expect(startPromise).rejects.toThrow('migration 42 failed');
+    expect(harness.killProcess).toHaveBeenCalledWith(child.pid, 'SIGKILL');
+
+    // The failed backend is forgotten, so the next start forks a new one.
+    await startManager(harness);
+    expect(harness.fork).toHaveBeenCalledTimes(2);
   });
 
   it('rejects when the backend exits before it is ready', async () => {
@@ -261,6 +267,33 @@ describe('ServerManager shutdown', () => {
     await expect(stopPromise).rejects.toThrow('exited with code 1 during shutdown');
     await startManager(harness);
     expect(harness.fork).toHaveBeenCalledTimes(2);
+  });
+
+  it('cancels a start in flight instead of waiting for it to become ready', async () => {
+    const harness = createManager();
+    const startPromise = harness.manager.start();
+    const child = await harness.child();
+
+    const stopPromise = harness.manager.stop();
+    expect(child.postMessage).toHaveBeenCalledWith({ type: 'shutdown' });
+    child.exit(0);
+
+    await expect(startPromise).rejects.toThrow('startup was cancelled');
+    await expect(stopPromise).resolves.toBeUndefined();
+    expect(harness.killProcess).not.toHaveBeenCalled();
+  });
+
+  it('kills a starting backend that ignores the cancel request', async () => {
+    const harness = createManager({ stopTimeoutMs: 20 });
+    const startPromise = harness.manager.start();
+    const child = await harness.child();
+    harness.killProcess.mockImplementation(() => child.exit(137));
+
+    const stopPromise = harness.manager.stop();
+
+    await expect(startPromise).rejects.toThrow('startup was cancelled');
+    await expect(stopPromise).resolves.toBeUndefined();
+    expect(harness.killProcess).toHaveBeenCalledWith(child.pid, 'SIGKILL');
   });
 
   it('does nothing when no backend is running', async () => {

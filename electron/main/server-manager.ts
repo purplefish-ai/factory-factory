@@ -147,6 +147,10 @@ export class ServerManager {
    * it if it has not exited within the stop timeout.
    */
   async stop(): Promise<void> {
+    // A start in flight holds the lock for up to the start timeout. Cancel it
+    // now so quitting during startup does not wait for the backend to be ready.
+    this.cancelPendingStart();
+
     await this.withLifecycleLock(async () => {
       const backend = this.backend;
       if (!backend) {
@@ -155,13 +159,7 @@ export class ServerManager {
 
       this.logger.log('[electron] Stopping backend server...');
       backend.stopping = true;
-      if (backend.exitCode === null) {
-        try {
-          backend.child.postMessage({ type: 'shutdown' });
-        } catch (error) {
-          this.logger.error('[electron] Failed to send shutdown to backend:', error);
-        }
-      }
+      this.requestShutdown(backend);
 
       const code = await waitWithTimeout(backend.exited, this.stopTimeoutMs);
       if (code === TIMED_OUT) {
@@ -174,6 +172,34 @@ export class ServerManager {
       }
       this.logger.log('[electron] Backend server stopped');
     });
+  }
+
+  private cancelPendingStart(): void {
+    const backend = this.backend;
+    if (!backend || backend.url !== null || backend.stopping) {
+      return;
+    }
+    this.logger.log('[electron] Cancelling backend startup...');
+    backend.stopping = true;
+    this.requestShutdown(backend);
+    // The backend handles shutdown between startup steps; kill it if a step
+    // (such as a long migration) keeps it from exiting in time.
+    void waitWithTimeout(backend.exited, this.stopTimeoutMs).then((result) => {
+      if (result === TIMED_OUT) {
+        void this.forceStop(backend);
+      }
+    });
+  }
+
+  private requestShutdown(backend: BackendProcess): void {
+    if (backend.exitCode !== null) {
+      return;
+    }
+    try {
+      backend.child.postMessage({ type: 'shutdown' });
+    } catch (error) {
+      this.logger.error('[electron] Failed to send shutdown to backend:', error);
+    }
   }
 
   /** Called when a started backend exits without being asked to stop. */
@@ -283,7 +309,13 @@ export class ServerManager {
         }
       };
       const onExit = (code: number) => {
-        finish(new Error(`Backend exited with code ${code} before it was ready`));
+        finish(
+          new Error(
+            backend.stopping
+              ? 'Backend startup was cancelled by a stop request'
+              : `Backend exited with code ${code} before it was ready`
+          )
+        );
       };
       const timeout = setTimeout(() => {
         finish(new Error(`Backend did not start within ${this.startTimeoutMs}ms`));

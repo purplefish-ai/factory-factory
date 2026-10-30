@@ -250,6 +250,12 @@ export function createElectronLifecycle({
       mainWindow = null;
     }
 
+    if (quitting) {
+      // Quitting stops a backend that is still starting; that is not a failure.
+      logger.log('[electron] Window creation stopped because the app is quitting');
+      return null;
+    }
+
     logger.error('[electron] Failed to create window:', error);
     dialog.showErrorBox(
       'Startup Error',
@@ -354,8 +360,9 @@ export function createElectronLifecycle({
       return;
     }
     backendExitPromptOpen = true;
+    let response: number;
     try {
-      const { response } = await dialog.showMessageBox({
+      ({ response } = await dialog.showMessageBox({
         type: 'error',
         title: 'Backend Stopped',
         message: 'The Factory Factory backend stopped unexpectedly.',
@@ -364,19 +371,20 @@ export function createElectronLifecycle({
         defaultId: 0,
         cancelId: 1,
         noLink: true,
-      });
-      if (quitting) {
-        return;
-      }
-      if (response !== 0) {
-        app.quit();
-        return;
-      }
-      logger.log('[electron] Restarting backend after unexpected exit...');
-      await restartBackend();
+      }));
     } finally {
+      // Clear before restarting so a crash of the restarted backend prompts again.
       backendExitPromptOpen = false;
     }
+    if (quitting) {
+      return;
+    }
+    if (response !== 0) {
+      app.quit();
+      return;
+    }
+    logger.log('[electron] Restarting backend after unexpected exit...');
+    await restartBackend();
   };
 
   const registerIpcHandlers = (): void => {

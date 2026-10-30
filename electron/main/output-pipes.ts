@@ -3,11 +3,12 @@ interface OutputStreamLike {
 }
 
 /**
- * Keep console output from crashing Electron main when stdout or stderr is a
- * closed pipe (for example, when the app was launched by a process that has
- * since exited). Without a listener, the asynchronous EPIPE `error` event
- * becomes an uncaught exception. Backend output is forwarded line by line, so
- * a closed pipe would otherwise raise one fatal error per line.
+ * Absorb every write error on stdout and stderr so console output can never
+ * crash Electron main. The common case is a closed pipe (EPIPE) after the
+ * process that launched the app exits; a closed terminal raises EIO instead.
+ * Without a listener, the asynchronous `error` event becomes an uncaught
+ * exception, and forwarded backend output would raise one per line. These
+ * streams only carry diagnostics, so there is nothing to report a failure to.
  */
 export function ignoreOutputStreamErrors(streams: OutputStreamLike[]): void {
   for (const stream of streams) {

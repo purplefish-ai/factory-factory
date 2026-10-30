@@ -848,8 +848,10 @@ it is `process.execPath`.
 
 Electron main stops the backend before quitting (`before-quit`) and when the
 last window closes. Stopping sends `shutdown`, waits 25 seconds for a graceful
-exit, then sends `SIGKILL`. If a started backend exits on its own, the app
-offers to restart it, reloading the window at the new URL, or to quit.
+exit, then sends `SIGKILL`. A stop during startup cancels the start the same way
+instead of waiting for the backend to become ready. If a started backend exits
+on its own, the app offers to restart it, reloading the window at the new URL,
+or to quit.
 
 Electron fatal-error handlers await backend shutdown before quitting. Concurrent
 fatal errors share one shutdown attempt. Cleanup failures and a 30-second

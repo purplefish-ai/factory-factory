@@ -15,6 +15,13 @@ import { registerFatalErrorHandlers } from './fatal-error-handlers';
 import { toError } from './lib/error-utils';
 import { registerShutdownSignalHandlers } from './shutdown-signal-handlers';
 
+/**
+ * parentPort.postMessage is asynchronous; exiting at once can drop the error
+ * report. Electron main kills the child as soon as the report arrives, so this
+ * delay only matters when it does not.
+ */
+const DEFAULT_ERROR_EXIT_DELAY_MS = 1000;
+
 const ParentMessageSchema = z.object({ type: z.literal('shutdown') });
 
 export type UtilityBackendMessage =
@@ -52,6 +59,7 @@ export interface ElectronUtilityBackendDependencies {
   migrate(): void;
   /** Composes the application and server, and registers the server instance. */
   createServer(): Promise<BackendServer>;
+  errorExitDelayMs?: number;
 }
 
 function describeError(error: unknown): string {
@@ -65,6 +73,7 @@ export async function runElectronUtilityBackend({
   logger,
   migrate,
   createServer,
+  errorExitDelayMs = DEFAULT_ERROR_EXIT_DELAY_MS,
 }: ElectronUtilityBackendDependencies): Promise<void> {
   let server: BackendServer | null = null;
   let shutdownRequested = false;
@@ -110,6 +119,6 @@ export async function runElectronUtilityBackend({
     }
     logger.error('Failed to start backend', toError(error));
     parentPort.postMessage({ type: 'error', message: describeError(error) });
-    process.exit(1);
+    setTimeout(() => process.exit(1), errorExitDelayMs);
   }
 }

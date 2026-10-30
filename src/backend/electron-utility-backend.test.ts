@@ -67,31 +67,39 @@ describe('runElectronUtilityBackend', () => {
   });
 
   it('reports migration failures and exits without creating a server', async () => {
-    const harness = createHarness({
-      migrate: vi.fn(() => {
-        throw new Error('bad migration');
-      }),
-    });
+    vi.useFakeTimers();
+    try {
+      const harness = createHarness({
+        migrate: vi.fn(() => {
+          throw new Error('bad migration');
+        }),
+      });
 
-    await runElectronUtilityBackend(harness.deps);
+      await runElectronUtilityBackend(harness.deps);
 
-    expect(harness.deps.createServer).not.toHaveBeenCalled();
-    expect(harness.posted).toHaveLength(1);
-    expect(harness.posted[0]).toMatchObject({ type: 'error' });
-    expect(harness.posted[0]?.type === 'error' && harness.posted[0].message).toContain(
-      'bad migration'
-    );
-    expect(harness.exit).toHaveBeenCalledWith(1);
+      expect(harness.deps.createServer).not.toHaveBeenCalled();
+      expect(harness.posted).toHaveLength(1);
+      expect(harness.posted[0]).toMatchObject({ type: 'error' });
+      expect(harness.posted[0]?.type === 'error' && harness.posted[0].message).toContain(
+        'bad migration'
+      );
+      // The error report is posted asynchronously, so the exit waits for it.
+      expect(harness.exit).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(harness.exit).toHaveBeenCalledWith(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('reports startup failures and exits', async () => {
-    const harness = createHarness();
+    const harness = createHarness({ errorExitDelayMs: 0 });
     harness.server.start.mockRejectedValue(new Error('port in use'));
 
     await runElectronUtilityBackend(harness.deps);
 
     expect(harness.posted[0]).toMatchObject({ type: 'error' });
-    expect(harness.exit).toHaveBeenCalledWith(1);
+    await vi.waitFor(() => expect(harness.exit).toHaveBeenCalledWith(1));
   });
 
   it('stops the server and exits cleanly on a shutdown message', async () => {

@@ -257,6 +257,31 @@ describe('electron quit handling', () => {
     await vi.waitFor(() => expect(app.quit).toHaveBeenCalledTimes(1));
   });
 
+  it('does not report a startup error when quitting cancels a starting backend', async () => {
+    let rejectStart!: (error: Error) => void;
+    const serverManager = {
+      start: vi.fn(
+        () =>
+          new Promise<string>((_resolve, reject) => {
+            rejectStart = reject;
+          })
+      ),
+      stop: vi.fn(() => {
+        rejectStart(new Error('Backend startup was cancelled by a stop request'));
+        return Promise.resolve();
+      }),
+    };
+    const { lifecycle, app, dialog } = createTestLifecycle({ serverManager });
+
+    const createPromise = lifecycle.createWindow();
+    await vi.waitFor(() => expect(serverManager.start).toHaveBeenCalled());
+    lifecycle.handleBeforeQuit(preventableEvent());
+
+    await expect(createPromise).resolves.toBeNull();
+    expect(dialog.showErrorBox).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(app.quit).toHaveBeenCalledTimes(1));
+  });
+
   it('registers before-quit and backend exit handlers', () => {
     const { lifecycle, app, serverManager } = createTestLifecycle();
 
@@ -330,6 +355,28 @@ describe('unexpected backend exit', () => {
       expect.stringContaining('migration failed')
     );
     expect(app.quit).toHaveBeenCalledTimes(1);
+  });
+
+  it('prompts again when the restarted backend crashes during restart', async () => {
+    const restartGate = deferred<string>();
+    const serverManager = {
+      start: vi
+        .fn()
+        .mockResolvedValueOnce('http://localhost:3001')
+        .mockReturnValueOnce(restartGate.promise),
+      stop: vi.fn().mockResolvedValue(undefined),
+    };
+    const { lifecycle, dialog } = createTestLifecycle({ serverManager });
+    await lifecycle.createWindow();
+
+    const firstExit = lifecycle.handleBackendExit({ code: 1 });
+    await vi.waitFor(() => expect(serverManager.start).toHaveBeenCalledTimes(2));
+    vi.mocked(dialog.showMessageBox).mockResolvedValueOnce({ response: 1, checkboxChecked: false });
+    await lifecycle.handleBackendExit({ code: 2 });
+
+    expect(dialog.showMessageBox).toHaveBeenCalledTimes(2);
+    restartGate.resolve('http://localhost:3002');
+    await firstExit;
   });
 
   it('shows one prompt for overlapping exits and none while quitting', async () => {
