@@ -203,9 +203,10 @@ because `pid` is the only handle on an orphaned run script (`verifyRunning` uses
 one transaction, since they were one statement before the split.
 
 Run-script output subscribers, such as the dev-logs socket, persist across
-stops, exits, and restarts until they unsubscribe or the workspace is archived.
-The postRun command starts only if its run script is still the active process
-after tunnel startup; a stop during that window has already run postRun cleanup.
+stops, exits, and restarts until they unsubscribe or the workspace is archived
+or deleted. The postRun command is spawned only if its run script is still
+active after tunnel startup, neither exited nor being stopped, because stop and
+exit cleanup would not see a postRun spawned later.
 
 ## Provider defaults
 

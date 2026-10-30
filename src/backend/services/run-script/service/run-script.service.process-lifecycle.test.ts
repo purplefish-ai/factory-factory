@@ -112,6 +112,8 @@ const COMMANDS = {
 describe('RunScriptService process lifecycle', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Some tests queue a postRun child that a passing test never consumes.
+    mockSpawn.mockReset();
     mockReconcileWorkspaceCommandCache.mockResolvedValue(COMMANDS);
     mockStart.mockResolvedValue({ runScriptStatus: 'STARTING' });
     mockMarkRunning.mockResolvedValue({ runScriptStatus: 'RUNNING' });
@@ -279,5 +281,64 @@ describe('RunScriptService process lifecycle', () => {
 
     // Only the (now stopped) run script should ever have been spawned.
     expect(mockSpawn).toHaveBeenCalledTimes(1);
+  });
+
+  // Stop tree-kills the run and its postRun, then waits for the run's 'exit'. A
+  // postRun whose tunnel resolves inside that wait must not be spawned.
+  it('does not spawn the postRun script while a stop waits for the run to exit', async () => {
+    const service = new RunScriptService();
+    const commands = {
+      runScriptCommand: 'pnpm dev --port {port}',
+      runScriptPostRunCommand: 'pnpm watch:assets',
+      runScriptCleanupCommand: null,
+    };
+    mockReconcileWorkspaceCommandCache.mockResolvedValue(commands);
+    mockFindFreePort.mockResolvedValue(4100);
+    let resolveTunnel!: (url: string | null) => void;
+    mockEnsureTunnel.mockReturnValue(
+      new Promise<string | null>((resolve) => {
+        resolveTunnel = resolve;
+      })
+    );
+    const runChild = new FakeChildProcess(1001);
+    mockSpawn.mockReturnValueOnce(runChild).mockReturnValueOnce(new FakeChildProcess(3003));
+    mockFindById.mockResolvedValue({
+      id: 'ws-1',
+      worktreePath: '/tmp/ws-1',
+      runScriptStatus: 'IDLE',
+      runScriptPid: null,
+      runScriptPort: null,
+      ...commands,
+    });
+
+    const startPromise = service.startRunScript('ws-1');
+    await vi.waitFor(() => expect(mockEnsureTunnel).toHaveBeenCalledWith('ws-1', 4100));
+
+    mockFindById.mockResolvedValue({
+      id: 'ws-1',
+      worktreePath: '/tmp/ws-1',
+      runScriptStatus: 'RUNNING',
+      runScriptPid: 1001,
+      runScriptPort: 4100,
+      ...commands,
+    });
+    // SIGTERM is sent, but the run has not exited yet.
+    mockTreeKill.mockImplementation(
+      (_pid: number, _signal: string, callback: (error: Error | null) => void) => callback(null)
+    );
+    const stopPromise = service.stopRunScript('ws-1');
+    await vi.waitFor(() =>
+      expect(mockTreeKill).toHaveBeenCalledWith(1001, 'SIGTERM', expect.any(Function))
+    );
+
+    resolveTunnel('https://example.trycloudflare.com');
+    await startPromise;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(mockSpawn).toHaveBeenCalledTimes(1);
+
+    runChild.signalCode = 'SIGTERM';
+    runChild.emit('exit', null, 'SIGTERM');
+    await expect(stopPromise).resolves.toEqual({ success: true });
   });
 });

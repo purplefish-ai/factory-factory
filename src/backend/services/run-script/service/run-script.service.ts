@@ -30,6 +30,8 @@ const RUN_SCRIPT_EXIT_STATE_MAX_ATTEMPTS = 3;
 export class RunScriptService {
   private readonly runningProcesses = new Map<string, ChildProcess>();
   private readonly postRunProcesses = new Map<string, ChildProcess>();
+  // Run processes a stop has begun killing; they may not have emitted 'exit' yet.
+  private readonly stoppingRunProcesses = new WeakSet<ChildProcess>();
 
   private readonly runOutput = new RunScriptOutputBuffer(MAX_OUTPUT_BUFFER_SIZE);
   private readonly postRunOutput = new RunScriptOutputBuffer(MAX_OUTPUT_BUFFER_SIZE);
@@ -93,11 +95,7 @@ export class RunScriptService {
         });
       }
 
-      logger.info('Starting run script', {
-        workspaceId,
-        command,
-        cwd: workspace.worktreePath,
-      });
+      logger.info('Starting run script', { workspaceId, command, cwd: workspace.worktreePath });
 
       const childProcess = spawnPipedShellCommand(command, workspace.worktreePath, (error) => {
         logger.warn('Run script process failed to spawn', { workspaceId, error });
@@ -417,7 +415,10 @@ export class RunScriptService {
   }
 
   private isActiveRunProcess(workspaceId: string, child: ChildProcess): boolean {
-    return this.runningProcesses.get(workspaceId) === child && child.exitCode === null;
+    if (this.stoppingRunProcesses.has(child) || child.exitCode !== null) {
+      return false;
+    }
+    return child.signalCode === null && this.runningProcesses.get(workspaceId) === child;
   }
 
   private async handleMarkRunningRace(
@@ -660,7 +661,7 @@ export class RunScriptService {
   ): Promise<void> {
     await Promise.resolve();
 
-    // A stop/exit during tunnel startup already killed postRun; don't leak a new one.
+    // Never spawn postRun for a stopping or exited run: its cleanup would miss it.
     if (!this.isActiveRunProcess(workspaceId, runProcess)) {
       logger.info('Skipping postRun for inactive run script', { workspaceId });
       return;
@@ -701,12 +702,7 @@ export class RunScriptService {
     });
 
     postRunProcess.on('exit', (code, signal) => {
-      logger.info('PostRun script exited', {
-        workspaceId,
-        pid: postRunProcess.pid,
-        code,
-        signal,
-      });
+      logger.info('PostRun script exited', { workspaceId, pid: postRunProcess.pid, code, signal });
       if (this.postRunProcesses.get(workspaceId) === postRunProcess) {
         this.postRunProcesses.delete(workspaceId);
       }
@@ -759,6 +755,9 @@ export class RunScriptService {
     childProcess: ChildProcess | undefined,
     pid: number | null
   ): Promise<void> {
+    if (childProcess) {
+      this.stoppingRunProcesses.add(childProcess);
+    }
     const targetPid = childProcess?.pid ?? pid;
     if (!targetPid) {
       return;
