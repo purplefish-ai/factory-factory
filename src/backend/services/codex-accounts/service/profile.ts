@@ -1,8 +1,21 @@
 import { chmod, lstat, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { inheritProjectTrust } from './profile-trust';
 import type { AccountConfig, AccountRow, CodexRuntimeContext } from './types';
 
 export async function resolveAccountContext(
+  row: AccountRow,
+  config: AccountConfig
+): Promise<CodexRuntimeContext> {
+  const context = await prepareAccountContext(row, config);
+  if (row.kind === 'MANAGED') {
+    await inheritProjectTrust(config.getCodexHome(), context.homeDir);
+  }
+  return context;
+}
+
+/** Initial account registration prepares private storage without reading native trust config. */
+export async function prepareAccountContext(
   row: AccountRow,
   config: AccountConfig
 ): Promise<CodexRuntimeContext> {

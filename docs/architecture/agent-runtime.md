@@ -398,6 +398,16 @@ application data directory; its credentials are stored by Codex itself, outside
 repositories. Settings, plugins, skills and memory are separate for each added
 account, while repository configuration still applies.
 
+Managed profiles inherit missing project trust decisions from the Native default
+Codex home's `config.toml` whenever prepared for use, including after a stop and
+resume. Explicit managed-profile project entries take precedence. Only project
+trust levels are inherited; credentials and other account settings stay
+isolated. This lets linked worktrees load repository-local Codex configuration
+without requiring the same repository to be trusted again for every ChatGPT
+account. Initial account creation only prepares private storage; trust
+inheritance is deferred until use so an inheritance failure does not report a
+persisted account as a failed creation.
+
 Account management and plan usage are restricted to trusted local clients.
 Sign-in uses Codex's native browser OAuth flow. Only one browser login runs at a
 time because the native callback uses a fixed localhost port. The dialog

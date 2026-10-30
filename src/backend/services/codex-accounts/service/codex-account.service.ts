@@ -14,7 +14,7 @@ import {
 } from './account-selection';
 import { matchesNativeEmailFallback } from './identity';
 import { LoginCoordinator } from './login-coordinator';
-import { resolveAccountContext, resolveHistoryContext } from './profile';
+import { prepareAccountContext, resolveAccountContext, resolveHistoryContext } from './profile';
 import { hasVerifiedScope } from './types';
 import type {
   AccountConfig,
@@ -264,7 +264,7 @@ export class CodexAccountService {
   }
   async createAccount(label: string): Promise<CodexAccountSummary> {
     const row = await this.dependencies.store.create(labelSchema.parse(label));
-    await resolveAccountContext(row, this.dependencies.config);
+    await prepareAccountContext(row, this.dependencies.config);
     return {
       id: row.id,
       label: row.label,
