@@ -6,15 +6,19 @@ import {
   lazy,
   memo,
   Suspense,
+  useCallback,
   useMemo,
   type ReactElement,
   type ReactNode,
 } from 'react';
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
 
 const MermaidDiagram = lazy(() => import('./mermaid-diagram'));
+
+// react-markdown percent-encodes backslashes, so `C:\repo` arrives as `C:%5Crepo`.
+const WINDOWS_DRIVE_PATH = /^[A-Za-z]:(?:[\\/]|%5C)/i;
 
 export interface MarkdownRendererProps {
   content: string;
@@ -130,6 +134,17 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     [onWorkspaceFileLink, resolveWorkspaceFileLink, renderExternalLink]
   );
 
+  // `defaultUrlTransform` blanks `C:` as an unknown protocol. Keep drive paths
+  // that resolve to a workspace file so the link handler can open them;
+  // everything else, including `javascript:`, goes through the default.
+  const urlTransform = useCallback(
+    (url: string) =>
+      onWorkspaceFileLink && WINDOWS_DRIVE_PATH.test(url) && resolveWorkspaceFileLink?.(url)
+        ? url
+        : defaultUrlTransform(url),
+    [onWorkspaceFileLink, resolveWorkspaceFileLink]
+  );
+
   return (
     <div
       className={cn(
@@ -137,7 +152,11 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
         className
       )}
     >
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={components}
+        urlTransform={urlTransform}
+      >
         {content}
       </ReactMarkdown>
     </div>
