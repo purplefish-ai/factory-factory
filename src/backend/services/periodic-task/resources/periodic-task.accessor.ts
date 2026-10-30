@@ -158,13 +158,15 @@ function dateFromTimeZoneDateTime(
 
 function computeNextMonthlyRunAtInTimeZone(
   from: Date,
+  periods: number,
   scheduledTime: string | null | undefined,
   timezone: string,
   scheduledDayOfMonth: number | null | undefined
 ): Date {
   const fromParts = getTimeZoneDateParts(from, timezone);
-  const targetYear = fromParts.month === 12 ? fromParts.year + 1 : fromParts.year;
-  const targetMonth = fromParts.month === 12 ? 1 : fromParts.month + 1;
+  const targetMonthIndex = fromParts.year * 12 + fromParts.month - 1 + periods;
+  const targetYear = Math.floor(targetMonthIndex / 12);
+  const targetMonth = (targetMonthIndex % 12) + 1;
   const targetDay = Math.min(
     scheduledDayOfMonth ?? fromParts.day,
     daysInMonth(targetYear, targetMonth)
@@ -218,9 +220,27 @@ function resolveScheduledDayOfMonth(
   return existingDay ?? getDayOfMonth(anchorDate, timezone);
 }
 
-function computeNextRunAt(
+const MINUTE_MS = 60_000;
+const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
+
+/**
+ * Upper bound on the time between two consecutive slots of a cadence. Calendar
+ * cadences allow an extra hour for a daylight saving change.
+ */
+const MAX_PERIOD_MS: Record<PeriodicTaskCadence, number> = {
+  EVERY_MINUTE: MINUTE_MS,
+  EVERY_FIVE_MINUTES: 5 * MINUTE_MS,
+  DAILY: DAY_MS + HOUR_MS,
+  WEEKLY: 7 * DAY_MS + HOUR_MS,
+  MONTHLY: 31 * DAY_MS + HOUR_MS,
+};
+
+/** The slot `periods` whole periods after `from`. */
+function advanceRunAt(
   cadence: PeriodicTaskCadence,
-  from: Date = new Date(),
+  from: Date,
+  periods: number,
   scheduledTime?: string | null,
   timezone?: string | null,
   scheduledDayOfMonth?: number | null
@@ -228,7 +248,9 @@ function computeNextRunAt(
   if (scheduledTime && timezone && (cadence === 'DAILY' || cadence === 'WEEKLY')) {
     const { year, month, day } = getTimeZoneDateParts(from, timezone);
     // Advance the task's calendar date, independent of server timezone and DST.
-    const target = new Date(Date.UTC(year, month - 1, day + (cadence === 'DAILY' ? 1 : 7)));
+    const target = new Date(
+      Date.UTC(year, month - 1, day + periods * (cadence === 'DAILY' ? 1 : 7))
+    );
     return dateFromTimeZoneDateTime(
       { year: target.getUTCFullYear(), month: target.getUTCMonth() + 1, day: target.getUTCDate() },
       parseScheduledTime(scheduledTime),
@@ -239,28 +261,27 @@ function computeNextRunAt(
   const next = new Date(from);
   switch (cadence) {
     case 'EVERY_MINUTE':
-      next.setMinutes(next.getMinutes() + 1);
-      break;
     case 'EVERY_FIVE_MINUTES':
-      next.setMinutes(next.getMinutes() + 5);
-      break;
+      // Elapsed time, so a daylight saving change cannot stretch the interval.
+      return new Date(from.getTime() + periods * MAX_PERIOD_MS[cadence]);
     case 'DAILY':
-      next.setDate(next.getDate() + 1);
+      next.setDate(next.getDate() + periods);
       break;
     case 'WEEKLY':
-      next.setDate(next.getDate() + 7);
+      next.setDate(next.getDate() + periods * 7);
       break;
     case 'MONTHLY': {
       if (timezone) {
         return computeNextMonthlyRunAtInTimeZone(
           from,
+          periods,
           scheduledTime,
           timezone,
           scheduledDayOfMonth
         );
       }
 
-      const targetMonth = next.getMonth() + 1;
+      const targetMonth = next.getMonth() + periods;
       next.setDate(1); // Avoid overflow when advancing month
       next.setMonth(targetMonth);
       const targetDay = scheduledDayOfMonth ?? getDayOfMonth(from, timezone);
@@ -270,6 +291,40 @@ function computeNextRunAt(
     }
   }
 
+  return next;
+}
+
+function computeNextRunAt(
+  cadence: PeriodicTaskCadence,
+  from: Date = new Date(),
+  scheduledTime?: string | null,
+  timezone?: string | null,
+  scheduledDayOfMonth?: number | null
+): Date {
+  return advanceRunAt(cadence, from, 1, scheduledTime, timezone, scheduledDayOfMonth);
+}
+
+/**
+ * The first slot of the series that continues from `dueAt` which falls after
+ * `after`. Consecutive slots are at most `MAX_PERIOD_MS` apart, so jumping by
+ * the whole periods that fit in the remaining gap never passes over a slot
+ * that is still ahead; a long outage takes a handful of steps, not one per
+ * missed slot.
+ */
+function computeNextRunAfter(
+  cadence: PeriodicTaskCadence,
+  dueAt: Date,
+  after: Date,
+  scheduledTime: string | null,
+  timezone: string | null,
+  scheduledDayOfMonth: number | null
+): Date {
+  let periods = 1;
+  let next = advanceRunAt(cadence, dueAt, periods, scheduledTime, timezone, scheduledDayOfMonth);
+  while (next <= after) {
+    periods += Math.max(1, Math.floor((after.getTime() - next.getTime()) / MAX_PERIOD_MS[cadence]));
+    next = advanceRunAt(cadence, dueAt, periods, scheduledTime, timezone, scheduledDayOfMonth);
+  }
   return next;
 }
 
@@ -299,30 +354,20 @@ async function buildDispatchedTaskData(
 
   // Advance from the slot that was due, not from the (possibly late) dispatch
   // time, so a pickup just past local midnight or the month boundary keeps the
-  // following slot. If that slot has already passed as well (the task missed
-  // more than a full period, e.g. while the machine slept), this single run
-  // covers every missed slot and the schedule resumes one period from now
-  // rather than replaying them back to back.
-  const nextFromDueSlot = computeNextRunAt(
-    cadence,
-    dueAt,
-    scheduledTime,
-    timezone,
-    resolvedScheduledDayOfMonth
-  );
+  // following slot. If the task missed more than a full period (e.g. while the
+  // machine slept), this single run covers every missed slot and the schedule
+  // resumes at the first slot still ahead, which may be later today.
   return {
     lastRunAt: dispatchedAt,
     scheduledDayOfMonth: resolvedScheduledDayOfMonth,
-    nextRunAt:
-      nextFromDueSlot > dispatchedAt
-        ? nextFromDueSlot
-        : computeNextRunAt(
-            cadence,
-            dispatchedAt,
-            scheduledTime,
-            timezone,
-            resolvedScheduledDayOfMonth
-          ),
+    nextRunAt: computeNextRunAfter(
+      cadence,
+      dueAt,
+      dispatchedAt,
+      scheduledTime,
+      timezone,
+      resolvedScheduledDayOfMonth
+    ),
   };
 }
 
