@@ -1,9 +1,46 @@
+import { createServer, type Server } from 'node:net';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PortAllocationService } from './port-allocation.service';
+
+function listenOnLoopback(): Promise<{ server: Server; port: number }> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      if (address === null || typeof address === 'string') {
+        reject(new Error('unexpected address'));
+        return;
+      }
+      resolve({ server, port: address.port });
+    });
+  });
+}
 
 describe('PortAllocationService', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  describe('isPortInUse', () => {
+    const servers: Server[] = [];
+
+    afterEach(async () => {
+      await Promise.all(
+        servers
+          .splice(0)
+          .map((server) => new Promise<void>((resolve) => server.close(() => resolve())))
+      );
+    });
+
+    it('reports a port as in use while another listener is bound to 127.0.0.1', async () => {
+      // Dev servers commonly bind loopback only. On macOS a wildcard bind probe
+      // still succeeds in that case, so the probe must not rely on it alone.
+      const { server, port } = await listenOnLoopback();
+      servers.push(server);
+
+      await expect(PortAllocationService.isPortInUse(port)).resolves.toBe(true);
+    });
   });
 
   describe('findFreePort', () => {

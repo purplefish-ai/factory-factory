@@ -6,7 +6,7 @@
 
 import { z } from 'zod';
 import type { ApplicationServices } from '@/backend/app-context';
-import { execCommand } from '@/backend/lib/shell';
+import { type ExecResult, execCommand } from '@/backend/lib/shell';
 import {
   colorSchemeIdSchema,
   fontFamilySchema,
@@ -258,14 +258,19 @@ export const userSettingsRouter = router({
         throw new Error('Invalid command format');
       }
 
+      let result: ExecResult;
       try {
-        await execCommand(cmd, args);
-        return { success: true, message: 'Command executed successfully' };
+        result = await execCommand(cmd, args);
       } catch (error) {
         throw new Error(
           `Command failed: ${error instanceof Error ? error.message : 'Unknown error'}`
         );
       }
+      // execCommand resolves (rather than rejects) when the command exits non-zero.
+      if (result.code !== 0) {
+        throw new Error(`Command failed: exited with code ${result.code}`);
+      }
+      return { success: true, message: 'Command executed successfully' };
     }),
 
   /**

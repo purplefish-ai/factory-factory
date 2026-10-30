@@ -14,6 +14,9 @@ vi.mock('./shell', () => ({
 }));
 
 const mockExecCommand = vi.mocked(shell.execCommand);
+// execCommand resolves with the exit code when a command fails; it rejects only
+// when the command cannot be spawned.
+const exitedWith = (code: number, stdout = '') => ({ stdout, stderr: '', code });
 
 describe('ide-helpers', () => {
   beforeEach(() => {
@@ -71,7 +74,7 @@ describe('ide-helpers', () => {
 
     it('should check macOS app when CLI is not in PATH', async () => {
       mockExecCommand
-        .mockRejectedValueOnce(new Error('which failed'))
+        .mockResolvedValueOnce(exitedWith(1))
         .mockResolvedValueOnce({ stdout: '/Applications/Cursor.app', stderr: '', code: 0 });
 
       const result = await checkIdeAvailable('cursor');
@@ -85,7 +88,7 @@ describe('ide-helpers', () => {
 
     it('should return false when neither CLI nor macOS app is available', async () => {
       mockExecCommand
-        .mockRejectedValueOnce(new Error('which failed'))
+        .mockResolvedValueOnce(exitedWith(1))
         .mockResolvedValueOnce({ stdout: '', stderr: '', code: 0 });
 
       const result = await checkIdeAvailable('cursor');
@@ -94,8 +97,25 @@ describe('ide-helpers', () => {
 
     it('should return false when mdfind fails', async () => {
       mockExecCommand
-        .mockRejectedValueOnce(new Error('which failed'))
+        .mockResolvedValueOnce(exitedWith(1))
         .mockRejectedValueOnce(new Error('mdfind failed'));
+
+      const result = await checkIdeAvailable('cursor');
+      expect(result).toBe(false);
+    });
+
+    it('should return false when mdfind exits non-zero', async () => {
+      mockExecCommand
+        .mockResolvedValueOnce(exitedWith(1))
+        .mockResolvedValueOnce(exitedWith(1, '/Applications/Cursor.app'));
+
+      const result = await checkIdeAvailable('cursor');
+      expect(result).toBe(false);
+    });
+
+    it('should return false when which cannot be spawned', async () => {
+      vi.stubGlobal('process', { ...process, platform: 'linux' });
+      mockExecCommand.mockRejectedValueOnce(new Error('which failed'));
 
       const result = await checkIdeAvailable('cursor');
       expect(result).toBe(false);
@@ -103,7 +123,7 @@ describe('ide-helpers', () => {
 
     it('should not check macOS app on non-darwin platforms', async () => {
       vi.stubGlobal('process', { ...process, platform: 'linux' });
-      mockExecCommand.mockRejectedValueOnce(new Error('which failed'));
+      mockExecCommand.mockResolvedValueOnce(exitedWith(1));
 
       const result = await checkIdeAvailable('cursor');
       expect(result).toBe(false);
@@ -170,6 +190,13 @@ describe('ide-helpers', () => {
       expect(result).toBe(false);
     });
 
+    it('should return false when the command exits non-zero', async () => {
+      mockExecCommand.mockResolvedValueOnce(exitedWith(1));
+
+      const result = await openCustomIde('myide {workspace}', '/path/to/workspace');
+      expect(result).toBe(false);
+    });
+
     it('should handle command without workspace placeholder', async () => {
       mockExecCommand.mockResolvedValueOnce({ stdout: '', stderr: '', code: 0 });
 
@@ -212,6 +239,35 @@ describe('ide-helpers', () => {
         'Cursor',
         '/path/to/workspace',
       ]);
+    });
+
+    it('should fallback to open -a on macOS when CLI exits non-zero', async () => {
+      mockExecCommand.mockResolvedValueOnce(exitedWith(1)).mockResolvedValueOnce(exitedWith(0));
+
+      const result = await openBuiltInIde('cursor', '/path/to/workspace');
+      expect(result).toBe(true);
+      expect(mockExecCommand).toHaveBeenNthCalledWith(2, 'open', [
+        '-a',
+        'Cursor',
+        '/path/to/workspace',
+      ]);
+    });
+
+    it('should return false when both CLI and open -a exit non-zero on macOS', async () => {
+      mockExecCommand.mockResolvedValueOnce(exitedWith(1)).mockResolvedValueOnce(exitedWith(1));
+
+      const result = await openBuiltInIde('cursor', '/path/to/workspace');
+      expect(result).toBe(false);
+      expect(mockExecCommand).toHaveBeenCalledTimes(2);
+    });
+
+    it('should return false when the CLI exits non-zero on non-darwin platforms', async () => {
+      vi.stubGlobal('process', { ...process, platform: 'linux' });
+      mockExecCommand.mockResolvedValueOnce(exitedWith(1));
+
+      const result = await openBuiltInIde('cursor', '/path/to/workspace');
+      expect(result).toBe(false);
+      expect(mockExecCommand).toHaveBeenCalledTimes(1);
     });
 
     it('should return false when both CLI and open -a fail on macOS', async () => {

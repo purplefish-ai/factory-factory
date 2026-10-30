@@ -422,6 +422,11 @@ describe('userSettingsRouter', () => {
     await expect(caller.testCustomCommand({ customCommand: 'echo {workspace}' })).rejects.toThrow(
       'Command failed: spawn failed'
     );
+
+    mockExecCommand.mockResolvedValueOnce({ code: 1, stdout: '', stderr: '' });
+    await expect(caller.testCustomCommand({ customCommand: 'echo {workspace}' })).rejects.toThrow(
+      'Command failed: exited with code 1'
+    );
   });
 
   it.each([
