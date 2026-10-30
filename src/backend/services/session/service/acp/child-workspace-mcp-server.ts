@@ -445,6 +445,9 @@ export function getChildWorkspaceMcpServerConfig(opts: {
     command: opts.nodeExecPath,
     args: [fileURLToPath(import.meta.url)],
     env: {
+      // Codex passes MCP servers only a small env allowlist. Without this, the
+      // Electron app binary would start a second desktop app instead of Node.
+      ELECTRON_RUN_AS_NODE: '1',
       FF_CHILD_WORKSPACE_MCP: '1',
       FF_WORKSPACE_ID: opts.workspaceId,
       FF_WORKSPACE_PARENT_ID: opts.parentWorkspaceId ?? '',

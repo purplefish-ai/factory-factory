@@ -98,6 +98,9 @@ describe('session lifecycle external ports', () => {
     expect(mcpServers?.[0]?.command).toBe(
       '/Applications/Factory Factory.app/Contents/MacOS/Factory Factory'
     );
+    // Codex does not inherit the backend env, so the server config must say
+    // to run the Electron binary as Node.
+    expect(mcpServers?.[0]?.env).toMatchObject({ ELECTRON_RUN_AS_NODE: '1' });
   });
 
   it.each(['0.0.0.0', '::', '::0', '0:0:0:0:0:0:0:0', '0::', '0:0::', '::0:0', '0000::', '[0::]'])(

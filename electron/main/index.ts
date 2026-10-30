@@ -3,9 +3,12 @@ import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage } from 'electron';
 import { registerFatalErrorHandlers } from './fatal-error-handlers.js';
 import { createElectronLifecycle } from './lifecycle.js';
+import { ignoreOutputStreamErrors } from './output-pipes.js';
 import { ServerManager } from './server-manager.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+ignoreOutputStreamErrors([process.stdout, process.stderr]);
 
 const serverManager = new ServerManager();
 registerFatalErrorHandlers({ app, dialog, logger: console, process, serverManager });
