@@ -4,6 +4,9 @@ Rejected or failed messages restore their text and attachments only when the
 current session composer is empty. A newer draft or attachment selection is
 preserved, and clearing it later does not replay the earlier recovery.
 
+Chat drafts restored before the composer mounts are visible on its first render
+and retained when typing begins after a reload.
+
 Claude session history restores inline image blocks as attachments on the
 original user prompt, including image-only prompts. Harness metadata, sidechain
 entries, and image-reference companions are omitted from chat replay; their
