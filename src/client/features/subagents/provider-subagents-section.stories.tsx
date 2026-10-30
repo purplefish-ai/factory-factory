@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { observable } from '@trpc/server/observable';
 import { useState } from 'react';
 import { expect, fn, userEvent, within } from 'storybook/test';
+import { z } from 'zod';
 import { trpc } from '@/client/lib/trpc';
 import { ProviderSubagentsSection } from './provider-subagents-section';
 import type { SubagentListItem } from './types';
@@ -23,19 +24,38 @@ function storySubagent(index: number, activeCount: number): SubagentListItem {
   };
 }
 
-function SectionStory({ activeCount = 2 }: { activeCount?: number }) {
+function SectionStory({
+  activeCount = 2,
+  pageSize = 8,
+}: {
+  activeCount?: number;
+  pageSize?: number;
+}) {
   const [queryClient] = useState(() => new QueryClient());
   const [client] = useState(() =>
     trpc.createClient({
       links: [
-        () => () =>
-          observable((observer) => {
-            const subagents = Array.from({ length: 8 }, (_, index) =>
-              storySubagent(index, activeCount)
-            );
-            observer.next({ result: { data: { supported: true, subagents, nextCursor: null } } });
-            observer.complete();
-          }),
+        () =>
+          ({ op }) =>
+            observable((observer) => {
+              const subagents = Array.from({ length: 8 }, (_, index) =>
+                storySubagent(index, activeCount)
+              );
+              const ordered = [...subagents.slice(activeCount), ...subagents.slice(0, activeCount)];
+              const { cursor } = z.object({ cursor: z.string().nullish() }).parse(op.input);
+              const offset = Number(cursor ?? 0);
+              const end = offset + Math.max(1, pageSize);
+              observer.next({
+                result: {
+                  data: {
+                    supported: true,
+                    subagents: ordered.slice(offset, end),
+                    nextCursor: end < ordered.length ? String(end) : null,
+                  },
+                },
+              });
+              observer.complete();
+            }),
       ],
     })
   );
@@ -58,6 +78,7 @@ function SectionStory({ activeCount = 2 }: { activeCount?: number }) {
 const meta = {
   title: 'Subagents/ProviderSubagentsSection',
   component: SectionStory,
+  render: (args) => <SectionStory key={`${args.activeCount}-${args.pageSize}`} {...args} />,
 } satisfies Meta<typeof SectionStory>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -85,5 +106,16 @@ export const AllCompleted: Story = {
     const canvas = within(canvasElement);
     await expect(await canvas.findByLabelText('Active sub-agents')).toHaveTextContent('0');
     await expect(canvas.getByRole('button', { name: 'Completed · 8' })).toBeVisible();
+  },
+};
+
+export const ActiveAgentsOnLaterPages: Story = {
+  args: { activeCount: 2, pageSize: 2 },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByLabelText('Active sub-agents')).toHaveTextContent('2');
+    await expect(canvas.getByText('Bug 12846')).toBeVisible();
+    await expect(canvas.getByText('Audit and scope review')).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Completed · 6' })).toBeVisible();
   },
 };

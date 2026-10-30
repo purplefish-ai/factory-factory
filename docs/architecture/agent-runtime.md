@@ -670,7 +670,10 @@ workspaces. The count has a decorative group of up to three colorful botanical
 icons; larger groups keep the full count without adding more icons. The Sessions
 list uses the same botanical icons for sub-agent rows. Its header counts active
 (starting, running, or waiting) sub-agents; terminal agents remain under the
-separate collapsible Completed count.
+separate collapsible Completed count. The panel automatically loads all summary
+pages before showing the active count, so children on later provider pages are
+included. A page failure keeps loaded rows visible and offers Retry without
+displaying a partial count.
 
 Sub-agent transcript projection applies the same refinements without duplicating
 tool cards and joins consecutive assistant text chunks before rendering

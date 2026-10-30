@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
     hasNextPage: false,
     isFetchNextPageError: false,
     isFetchingNextPage: false,
+    isFetching: false,
     isLoading: false,
     refetch: vi.fn(() => Promise.resolve()),
   },
@@ -68,6 +69,7 @@ describe('ProviderSubagentsSection', () => {
     mocks.queryResult.hasNextPage = false;
     mocks.queryResult.isFetchNextPageError = false;
     mocks.queryResult.isFetchingNextPage = false;
+    mocks.queryResult.isFetching = false;
     mocks.queryResult.isLoading = false;
     mocks.fetchNextPage.mockClear();
     mocks.queryResult.refetch.mockClear();
@@ -304,7 +306,7 @@ describe('ProviderSubagentsSection', () => {
     });
   });
 
-  it('loads later provider pages without discarding already visible sub-agents', () => {
+  it('automatically loads every page before showing the active count', () => {
     const first = {
       id: 'child-first-page',
       name: 'First page agent',
@@ -321,20 +323,53 @@ describe('ProviderSubagentsSection', () => {
       nextCursor: 'second-page',
     };
     mocks.queryResult.hasNextPage = true;
+    const props = {
+      sessionId: 'session-1',
+      parentSessionName: 'Session 1',
+      enabled: true,
+      onSelect: vi.fn(),
+    };
+    render(props);
+
+    expect(container.querySelector('[aria-label="Active sub-agents"]')).toBeNull();
+    expect(container.textContent).toContain('Completed · 1');
+    expect(mocks.fetchNextPage).toHaveBeenCalledOnce();
+
+    const firstPage = mocks.queryResult.data;
+    mocks.infinitePages = [firstPage, { supported: true, subagents: [], nextCursor: 'third-page' }];
+    render(props);
+    expect(mocks.fetchNextPage).toHaveBeenCalledTimes(2);
+    expect(container.querySelector('[aria-label="Active sub-agents"]')).toBeNull();
+
+    mocks.infinitePages = [
+      ...mocks.infinitePages,
+      {
+        supported: true,
+        subagents: [
+          { ...first, id: 'active-1', status: 'starting' },
+          { ...first, id: 'active-2', status: 'waiting' },
+        ],
+        nextCursor: null,
+      },
+    ];
+    mocks.queryResult.hasNextPage = false;
+    render(props);
+
+    expect(container.querySelector('[aria-label="Active sub-agents"]')?.textContent).toBe('2');
+    expect(container.textContent).toContain('Completed · 1');
+  });
+
+  it('waits for an in-flight request before automatically fetching another page', () => {
+    mocks.queryResult.data = { supported: true, subagents: [], nextCursor: 'next-page' };
+    mocks.queryResult.hasNextPage = true;
+    mocks.queryResult.isFetching = true;
     render({
       sessionId: 'session-1',
       parentSessionName: 'Session 1',
       enabled: true,
       onSelect: vi.fn(),
     });
-
-    const loadMore = [...container.querySelectorAll('button')].find(
-      (button) => button.textContent === 'Load more'
-    );
-    expect(loadMore).toBeDefined();
-    void act(() => loadMore?.click());
-
-    expect(mocks.fetchNextPage).toHaveBeenCalledOnce();
+    expect(mocks.fetchNextPage).not.toHaveBeenCalled();
   });
 
   it('keeps loaded sub-agents visible and retries only the failed next page', () => {
@@ -366,6 +401,8 @@ describe('ProviderSubagentsSection', () => {
 
     expect(container.textContent).toContain('Keep this loaded agent');
     expect(container.textContent).toContain('Older sub-agent page failed');
+    expect(container.querySelector('[aria-label="Active sub-agents"]')).toBeNull();
+    expect(mocks.fetchNextPage).not.toHaveBeenCalled();
     const retry = [...container.querySelectorAll('button')].find(
       (button) => button.textContent === 'Retry'
     );
