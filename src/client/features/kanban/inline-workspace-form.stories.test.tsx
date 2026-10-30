@@ -8,6 +8,10 @@ import * as stories from './inline-workspace-form.stories';
 
 const { SavedCodexDefaults } = composeStories(stories);
 
+// Timers are fake, so only CPU time counts: rendering the full story tree in
+// jsdom takes seconds when the rest of the suite competes for CPU.
+vi.setConfig({ testTimeout: 15_000 });
+
 beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   vi.useFakeTimers();

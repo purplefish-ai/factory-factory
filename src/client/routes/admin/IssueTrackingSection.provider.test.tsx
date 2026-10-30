@@ -124,10 +124,14 @@ async function mount(initial: IssueProvider) {
   await tick();
 }
 
+// Settle queued React Query and React work with zero-delay turns. A real 10ms
+// timer could fire before that work under CPU load and leave the DOM stale.
 async function tick() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  });
+  for (let flush = 0; flush < 5; flush++) {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  }
 }
 
 function choose(provider: IssueProvider) {

@@ -13,6 +13,21 @@ function waitForFlush(): Promise<void> {
   });
 }
 
+// Wait until the stream has written every line. Under CPU load a write can land
+// after any fixed delay, and a late write would also refresh the file's mtime.
+async function waitForLines(dir: string, count: number): Promise<string> {
+  for (;;) {
+    const [fileName] = await readdir(dir);
+    if (fileName) {
+      const filePath = join(dir, fileName);
+      if (readFileSync(filePath, 'utf-8').split('\n').length > count) {
+        return filePath;
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
 describe('AcpTraceLogger', () => {
   const TraceEntrySchema = z.object({
     ts: z.string(),
@@ -61,11 +76,10 @@ describe('AcpTraceLogger', () => {
     logger.log('session-1', 'raw_acp_event', { eventType: 'acp_session_update' });
     logger.log('session-1', 'translated_delta', { type: 'agent_message' });
     logger.closeSession('session-1');
-    await waitForFlush();
+    const filePath = await waitForLines(dir, 2);
 
-    const files = await readdir(dir);
-    expect(files).toHaveLength(1);
-    const contents = readFileSync(join(dir, files[0]!), 'utf-8').trim().split('\n');
+    expect(await readdir(dir)).toHaveLength(1);
+    const contents = readFileSync(filePath, 'utf-8').trim().split('\n');
     expect(contents).toHaveLength(2);
 
     const first = TraceEntrySchema.parse(JSON.parse(contents[0] ?? '{}'));
@@ -108,11 +122,7 @@ describe('AcpTraceLogger', () => {
     const logger = new AcpTraceLogger();
     logger.log('session-1', 'raw_acp_event', { eventType: 'acp_session_update' });
     logger.closeSession('session-1');
-    await waitForFlush();
-
-    const [fileName] = await readdir(dir);
-    expect(fileName).toBeDefined();
-    const filePath = join(dir, fileName!);
+    const filePath = await waitForLines(dir, 1);
     const oldMs = Date.now() - 8 * 24 * 60 * 60 * 1000;
     const oldDate = new Date(oldMs);
     utimesSync(filePath, oldDate, oldDate);
