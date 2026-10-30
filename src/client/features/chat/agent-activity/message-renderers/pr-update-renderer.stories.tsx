@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useRef } from 'react';
+import { MessageItem } from '@/client/features/chat/agent-activity/agent-activity';
 import { VirtualizedMessageList } from '@/client/features/chat/virtualized-message-list';
-import { MessageItem } from '../agent-activity';
 import { PRUpdateRenderer } from './pr-update-renderer';
 
 const meta = { title: 'Chat/PR update', component: PRUpdateRenderer } satisfies Meta<
