@@ -750,11 +750,11 @@ separate, muted sub-agent start and finish rows. Failure, cancellation, and
 interruption retain their own labels. In workspace-detail chat, these rows open
 the Sessions panel. Both workspace-detail and Quick Chat reconstruct the rows
 from provider metadata when history reloads; unknown timestamps are not
-invented. If summaries cannot be loaded completely, chat keeps known rows
-visible and offers Retry. Adjacent tool activity stays collapsed by default as
-muted summary rows; expanding a summary shows chronological calls with input and
-output available on demand. Failed calls remain visible in the collapsed
-summary.
+invented. If a request fails or the provider repeats a pagination cursor, chat
+keeps known rows visible and offers Retry. Adjacent tool activity stays
+collapsed by default as muted summary rows; expanding a summary shows
+chronological calls with input and output available on demand. Failed calls
+remain visible in the collapsed summary.
 
 Sub-agent transcript projection applies the same refinements without duplicating
 tool cards and joins consecutive assistant text chunks before rendering

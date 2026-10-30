@@ -5,6 +5,8 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 import { dispatchSubagentChange } from '@/client/lib/subagent-events';
 import type { ChatMessage } from '@/lib/chat-protocol';
+import type { getNextSubagentPageParam } from './subagent-pagination';
+import type { SubagentListItem, SubagentListResult } from './types';
 import { useSubagentTimelineMessages } from './use-subagent-timeline-messages';
 
 const mocks = vi.hoisted(() => ({
@@ -12,9 +14,8 @@ const mocks = vi.hoisted(() => ({
   invalidate: vi.fn(() => Promise.resolve()),
   next: vi.fn(() => Promise.resolve()),
   refetch: vi.fn(() => Promise.resolve()),
-  pagesBySession: new Map<string, unknown[]>(),
+  pagesBySession: new Map<string, SubagentListResult[]>(),
   pageParams: [null] as unknown[],
-  hasNextPage: false,
   error: null as Error | null,
 }));
 vi.mock('@/client/lib/trpc', () => ({
@@ -22,14 +23,22 @@ vi.mock('@/client/lib/trpc', () => ({
     useUtils: () => ({ session: { listSubagents: { invalidate: mocks.invalidate } } }),
     session: {
       listSubagents: {
-        useInfiniteQuery: (input: { sessionId: string }, ...args: unknown[]) => {
-          mocks.query(input, ...args);
+        useInfiniteQuery: (
+          input: { sessionId: string },
+          options: { getNextPageParam: typeof getNextSubagentPageParam }
+        ) => {
+          mocks.query(input, options);
+          const pages = mocks.pagesBySession.get(input.sessionId) ?? [];
+          const lastPage = pages.at(-1);
+          const nextPage = lastPage
+            ? options.getNextPageParam(lastPage, pages, mocks.pageParams.at(-1), mocks.pageParams)
+            : undefined;
           return {
             data: {
-              pages: mocks.pagesBySession.get(input.sessionId) ?? [],
+              pages,
               pageParams: mocks.pageParams,
             },
-            hasNextPage: mocks.hasNextPage,
+            hasNextPage: nextPage !== undefined,
             isFetching: false,
             error: mocks.error,
             fetchNextPage: mocks.next,
@@ -48,11 +57,10 @@ afterEach(() => {
   vi.clearAllMocks();
   mocks.pagesBySession.clear();
   mocks.pageParams = [null];
-  mocks.hasNextPage = false;
   mocks.error = null;
 });
 
-const agent = {
+const agent: SubagentListItem = {
   id: 'a',
   name: 'Review',
   status: 'running',
@@ -82,7 +90,7 @@ function createHarness(props: HarnessProps) {
 }
 
 it('projects all pages, refreshes the selected session, and switches independently of cached parent data', () => {
-  const pages = [
+  const pages: SubagentListResult[] = [
     { supported: true, subagents: [agent], nextCursor: 'page-2' },
     { supported: true, subagents: [{ ...agent, id: 'b', name: 'Build' }], nextCursor: null },
   ];
@@ -121,6 +129,7 @@ it('keeps lifecycle row objects stable while new text streams into the transcrip
 it('keeps known lifecycle rows and offers recovery when the provider repeats a page cursor', () => {
   mocks.pagesBySession.set('parent', [
     { supported: true, subagents: [agent], nextCursor: 'repeat' },
+    { supported: true, subagents: [], nextCursor: 'repeat' },
   ]);
   mocks.pageParams = [null, 'repeat'];
   const harness = createHarness({ sessionId: 'parent', enabled: true });
@@ -142,4 +151,19 @@ it('offers the same recovery after a page request fails without discarding loade
   timelineError?.onRetry();
   expect(mocks.refetch).toHaveBeenCalledOnce();
   expect(mocks.next).not.toHaveBeenCalled();
+});
+
+it('automatically loads the next provider page and stops at the end of the list', () => {
+  mocks.pagesBySession.set('parent', [{ supported: true, subagents: [agent], nextCursor: 'next' }]);
+  const harness = createHarness({ sessionId: 'parent', enabled: true });
+  expect(mocks.next).toHaveBeenCalledOnce();
+  mocks.pagesBySession.set('parent', [
+    { supported: true, subagents: [agent], nextCursor: 'next' },
+    { supported: true, subagents: [{ ...agent, id: 'b', name: 'Build' }], nextCursor: null },
+  ]);
+  mocks.pageParams = [null, 'next'];
+  harness.render({ sessionId: 'parent', enabled: true });
+  expect(harness.container.textContent).toBe('Review started working,Build started working');
+  expect(mocks.next).toHaveBeenCalledOnce();
+  expect(timelineError).toBeNull();
 });
