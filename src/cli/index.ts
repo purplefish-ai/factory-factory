@@ -10,6 +10,7 @@ import { config } from 'dotenv';
 import open from 'open';
 import { runMigrations as runDbMigrations } from '@/backend/migrate';
 import { getLogFilePath } from '@/backend/services/logger.service';
+import { registerClaudeCommand } from './claude';
 import { registerCodexCommand } from './codex';
 import { resolveDatabasePath } from './database-path';
 import { runProxyCommand } from './proxy';
@@ -678,7 +679,8 @@ program
     await runProxyCommand({ options, projectRoot: PROJECT_ROOT });
   });
 
-// Run login and native CLI commands using the same Codex bundled with ACP.
+// Run native CLI commands using the same provider runtimes bundled with ACP.
+registerClaudeCommand(program);
 registerCodexCommand(program);
 
 // ============================================================================

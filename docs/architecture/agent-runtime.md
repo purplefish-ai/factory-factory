@@ -43,13 +43,38 @@ client app handlers preserve elicitation and native subagent features;
 `claude-agent-acp` 0.99.1 and Codex uses the released
 `@agentclientprotocol/codex-acp` 2.5.0. Factory Factory does not implement a
 Codex harness adapter. Codex's compatible runtime is packaged with its adapter;
-`ff codex login` authenticates that same runtime.
+`ff codex login` authenticates that same runtime. Claude also ships its native
+runtime through the adapter's matched Agent SDK. `ff claude` delegates to the
+adapter's `--cli` passthrough, and `ff claude auth login` authenticates it.
+Health checks inspect these managed runtimes, never global provider CLIs. Setup
+terminal sign-in actions launch these commands directly in a PTY; they do not
+require `ff` or Node on PATH. Replacing the shell with a login process ignores
+output/exit events from the replaced PTY and tags login exits with their
+provider so an earlier shell exit cannot finish a pending login. It restores a
+shell when login exits. Login actions stay disabled while authentication is
+active, and server errors are shown in terminal output; ordinary shell exits
+stay stopped. Both runtimes update with Factory Factory releases; legacy
+global-upgrade requests are rejected. `CLAUDE_CODE_EXECUTABLE` remains an
+explicit upstream override and is inherited by both Claude sessions and managed
+CLI operations.
+
+On Unix, the `ff claude` and `ff codex` passthroughs forward terminal resizes.
+Both passthroughs bound process-tree shutdown after interrupts or abnormal
+provider CLI exits. Cleanup failures are logged without replacing the provider's
+exit status. Successful commands retain the native CLI's background-job
+behavior. Desktop sign-in guidance uses the setup terminal buttons; typed `ff`
+commands require the CLI to be installed.
 
 Adapter entrypoints run with the host Node runtime, including Electron's bundled
-Node, and are unpacked in desktop packages. Model discovery uses the same
-bundled Codex runtime, without starting an inference turn. Claude model
-discovery uses an ephemeral ACP session with tools disabled. Both catalog
-services coalesce requests and cache successful results for 30 seconds.
+Node, and are unpacked in desktop packages along with their complete production
+dependency trees. The desktop release smoke check runs bundled Claude and its
+actual ACP catalog loader with an empty PATH; CI may require authentication
+before returning model choices. Authentication-only validation requires the
+explicit `--allow-unauthenticated` smoke flag and reports that the catalog was
+not verified when that fallback is used. Model discovery uses the same bundled
+Codex runtime, without starting an inference turn. Claude model discovery uses
+an ephemeral ACP session with tools disabled. Both catalog services coalesce
+requests and cache successful results for 30 seconds.
 
 Session startup validates that the workspace working directory exists and is a
 directory before spawning an adapter. Missing worktrees report the affected path
@@ -683,6 +708,22 @@ services own their named responsibility and reconciliation evidence where
 applicable; context supplies operational inputs. The lifecycle facade delegates
 public operations and the session composition root wires the owners.
 
+## Task lists
+
+The current task list appears inline beneath the conversation in workspace chat
+and quick chat for both Claude and Codex. The UI uses the latest ACP plan
+snapshot, including empty snapshots that clear the checklist. Older Claude
+TodoWrite calls provide a fallback when no ACP plan has arrived. Completed tasks
+remain visible and muted. Task lists stay hidden during session history loading;
+session switches reset their ACP state. The former Tasks sidebar tab is removed,
+and saved selections of that tab migrate to Changes. The session store retains
+the latest validated ACP task snapshot for reconnect replay, including empty
+lists. Plan snapshots emitted during provider history attachment pass replay
+suppression so restored conversations can recover tasks. Authoritative session
+snapshots include the current task list, so queue updates preserve valid tasks
+and hydration clears stale client state when no list exists. Replacing a
+provider's archived history also clears its task snapshot.
+
 ## Provider sub-agents
 
 Provider-initiated sub-agents are session-scoped, read-only, and provider-owned.
@@ -700,7 +741,9 @@ included. A page failure keeps loaded rows visible and offers Retry without
 displaying a partial count. Repeated provider cursors stop automatic pagination
 and offer the same recovery instead of repeatedly fetching the same page.
 Restored transcript selection uses the same cursor guard when looking for a
-child on later pages.
+child on later pages. Live sub-agent events invalidate list queries by parent
+session, without cursor or page-size fields, so infinite-query caches refresh
+newly spawned and completed children without a page reload.
 
 Sub-agent transcript projection applies the same refinements without duplicating
 tool cards and joins consecutive assistant text chunks before rendering

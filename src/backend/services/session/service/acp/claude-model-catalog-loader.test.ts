@@ -16,7 +16,7 @@ const mocks = vi.hoisted(() => ({
   ndJsonStream: vi.fn(),
   newSession: vi.fn(),
   prompt: vi.fn(),
-  resolveAcpBinary: vi.fn(),
+  resolveProviderAcpSpawnCommand: vi.fn(),
   spawn: vi.fn(),
 }));
 
@@ -61,7 +61,7 @@ vi.mock('@/backend/services/logger.service', async (importOriginal) => ({
 
 vi.mock('./acp-runtime-spawn', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./acp-runtime-spawn')>()),
-  resolveAcpBinary: mocks.resolveAcpBinary,
+  resolveProviderAcpSpawnCommand: mocks.resolveProviderAcpSpawnCommand,
 }));
 
 const catalogSession = {
@@ -104,7 +104,11 @@ describe('fetchClaudeModelCatalogFromAcp', () => {
     mocks.extMethod.mockResolvedValue({});
     mocks.getCurrentProcessEnv.mockReturnValue({ FACTORY_SESSION_ENV: 'preserved' });
     mocks.ndJsonStream.mockReturnValue({ readable: {}, writable: {} });
-    mocks.resolveAcpBinary.mockReturnValue('/resolved/claude-agent-acp');
+    mocks.resolveProviderAcpSpawnCommand.mockReturnValue({
+      command: process.execPath,
+      args: ['/app/app.asar.unpacked/claude-agent-acp/dist/index.js'],
+      commandLabel: 'claude-agent-acp',
+    });
 
     const child = Object.assign(new EventEmitter(), {
       exitCode: null as number | null,
@@ -144,19 +148,21 @@ describe('fetchClaudeModelCatalogFromAcp', () => {
       },
     ]);
     expect(mocks.directAgentConstructor).not.toHaveBeenCalled();
-    expect(mocks.resolveAcpBinary).toHaveBeenCalledWith(
-      '@agentclientprotocol/claude-agent-acp',
-      'claude-agent-acp'
+    expect(mocks.resolveProviderAcpSpawnCommand).toHaveBeenCalledWith('CLAUDE');
+    expect(mocks.spawn).toHaveBeenCalledWith(
+      process.execPath,
+      ['/app/app.asar.unpacked/claude-agent-acp/dist/index.js'],
+      {
+        cwd: tmpdir(),
+        detached: false,
+        env: {
+          BROWSER: 'none',
+          ELECTRON_RUN_AS_NODE: '1',
+          FACTORY_SESSION_ENV: 'preserved',
+        },
+        stdio: ['pipe', 'pipe', 'pipe'],
+      }
     );
-    expect(mocks.spawn).toHaveBeenCalledWith('/resolved/claude-agent-acp', [], {
-      cwd: tmpdir(),
-      detached: false,
-      env: {
-        BROWSER: 'none',
-        FACTORY_SESSION_ENV: 'preserved',
-      },
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
     expect(mocks.initialize).toHaveBeenCalledWith({
       protocolVersion: 1,
       clientCapabilities: {},

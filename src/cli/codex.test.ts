@@ -30,8 +30,10 @@ it('forwards login arguments to the managed runtime and preserves its exit statu
   });
   await expect(runCodexCommand(['login', '--device-auth'])).resolves.toBe(7);
   expect(mocks.spawn).toHaveBeenCalledWith(
-    process.execPath,
-    [expect.stringContaining('codex-acp'), 'cli', 'login', '--device-auth'],
+    process.platform === 'win32' ? expect.stringMatching(/codex\.exe$/) : process.execPath,
+    process.platform === 'win32'
+      ? ['login', '--device-auth']
+      : [expect.stringContaining('codex-acp'), 'cli', 'login', '--device-auth'],
     expect.objectContaining({
       stdio: 'inherit',
       env: expect.objectContaining({ ELECTRON_RUN_AS_NODE: '1' }),
@@ -42,13 +44,18 @@ it('forwards login arguments to the managed runtime and preserves its exit statu
 it.each(['SIGINT', 'SIGTERM'] as const)(
   'forwards %s, waits for the child, and removes signal listeners',
   async (signal) => {
-    const child = Object.assign(new EventEmitter(), { kill: vi.fn() });
+    const child = Object.assign(new EventEmitter(), {
+      exitCode: null,
+      signalCode: null,
+      kill: vi.fn(),
+    });
     mocks.spawn.mockReturnValue(child);
     const before = process.listenerCount(signal);
     const pending = runCodexCommand(['login']);
     expect(process.listenerCount(signal)).toBe(before + 1);
     const forward = process.listeners(signal).at(-1);
     forward?.(signal);
+    await Promise.resolve();
     expect(child.kill).toHaveBeenCalledWith(signal);
     let settled = false;
     void pending.then(() => {

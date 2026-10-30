@@ -1,3 +1,4 @@
+import type { AcpPlanNotification } from '@/shared/acp-protocol/task-plan';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
@@ -73,6 +74,7 @@ interface WebSocketMessagePayloadByType {
     messages: ChatMessage[];
     queuedMessages: QueuedMessage[];
     sessionRuntime: SessionRuntimeState;
+    taskPlan?: AcpPlanNotification | null;
     pendingInteractiveRequest?: PendingInteractiveRequest | null;
     loadRequestId?: string;
   };

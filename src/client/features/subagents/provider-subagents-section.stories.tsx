@@ -1,10 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { observable } from '@trpc/server/observable';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { expect, fn, userEvent, within } from 'storybook/test';
 import { z } from 'zod';
+import { dispatchSubagentChange } from '@/client/lib/subagent-events';
 import { trpc } from '@/client/lib/trpc';
+import { Button } from '@/components/ui/button';
 import { ProviderSubagentsSection } from './provider-subagents-section';
 import type { SubagentListItem } from './types';
 
@@ -28,11 +30,14 @@ function SectionStory({
   activeCount = 2,
   pageSize = 8,
   repeatCursor = false,
+  liveUpdates = false,
 }: {
   activeCount?: number;
   pageSize?: number;
   repeatCursor?: boolean;
+  liveUpdates?: boolean;
 }) {
+  const currentActiveCount = useRef(activeCount);
   const [queryClient] = useState(() => new QueryClient());
   const [client] = useState(() =>
     trpc.createClient({
@@ -41,9 +46,12 @@ function SectionStory({
           ({ op }) =>
             observable((observer) => {
               const subagents = Array.from({ length: 8 }, (_, index) =>
-                storySubagent(index, activeCount)
+                storySubagent(index, currentActiveCount.current)
               );
-              const ordered = [...subagents.slice(activeCount), ...subagents.slice(0, activeCount)];
+              const ordered = [
+                ...subagents.slice(currentActiveCount.current),
+                ...subagents.slice(0, currentActiveCount.current),
+              ];
               const { cursor } = z.object({ cursor: z.string().nullish() }).parse(op.input);
               const offset = Number(cursor ?? 0);
               const end = offset + Math.max(1, pageSize);
@@ -65,6 +73,20 @@ function SectionStory({
     <trpc.Provider client={client} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
         <div className="w-[320px] border bg-background">
+          {liveUpdates && (
+            <Button
+              onClick={() => {
+                currentActiveCount.current = Math.min(8, currentActiveCount.current + 1);
+                dispatchSubagentChange({
+                  sessionId: 'session-1',
+                  subagentId: `agent-${currentActiveCount.current - 1}`,
+                  change: 'created',
+                });
+              }}
+            >
+              Start another sub-agent
+            </Button>
+          )}
           <ProviderSubagentsSection
             sessionId="session-1"
             parentSessionName="Chat 1"
@@ -81,7 +103,10 @@ const meta = {
   title: 'Subagents/ProviderSubagentsSection',
   component: SectionStory,
   render: (args) => (
-    <SectionStory key={`${args.activeCount}-${args.pageSize}-${args.repeatCursor}`} {...args} />
+    <SectionStory
+      key={`${args.activeCount}-${args.pageSize}-${args.repeatCursor}-${args.liveUpdates}`}
+      {...args}
+    />
   ),
 } satisfies Meta<typeof SectionStory>;
 export default meta;
@@ -135,5 +160,16 @@ export const RepeatedProviderCursor: Story = {
     ).toBeVisible();
     await expect(canvas.queryByLabelText('Active sub-agents')).not.toBeInTheDocument();
     await expect(canvas.getByRole('button', { name: 'Retry' })).toBeVisible();
+  },
+};
+
+export const LiveSubagentUpdates: Story = {
+  args: { activeCount: 1, pageSize: 2, liveUpdates: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByLabelText('Active sub-agents')).toHaveTextContent('1');
+    await userEvent.click(canvas.getByRole('button', { name: 'Start another sub-agent' }));
+    await expect(await canvas.findByText('Audit and scope review')).toBeVisible();
+    await expect(canvas.getByLabelText('Active sub-agents')).toHaveTextContent('2');
   },
 };

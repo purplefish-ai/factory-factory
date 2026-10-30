@@ -107,8 +107,8 @@ RUN apk add --no-cache \
   && pip3 install --no-cache-dir --break-system-packages pipx==1.18.5 virtualenv==21.15.0 \
   && python3 -m pipx ensurepath
 
-# Install Claude CLI and Codex CLI globally
-RUN pnpm add -g --allow-build=@anthropic-ai/claude-code @anthropic-ai/claude-code @openai/codex
+# Keep standalone Codex available for workspace shell use; Claude uses ff claude.
+RUN pnpm add -g @openai/codex
 
 # Copy built application
 COPY --from=builder /app/dist ./dist
@@ -121,6 +121,10 @@ COPY --from=builder /app/patches ./patches
 COPY --from=builder /app/prisma/migrations ./prisma/migrations
 COPY --from=builder /app/prisma/schema.prisma ./prisma/
 COPY --from=builder /app/prisma/generated ./prisma/generated
+
+# Expose managed provider login commands in setup and workspace terminals.
+RUN chmod +x /app/dist/src/cli/index.js \
+  && ln -s /app/dist/src/cli/index.js /usr/local/bin/ff
 
 # Create data directory
 RUN mkdir -p /data
