@@ -65,13 +65,11 @@ export async function runProviderCommand(command: {
       if (termination !== undefined) {
         return;
       }
-      termination = Promise.resolve().then(() =>
-        terminateDisposableProcessTree(child, { initialSignal })
-      );
-      void termination.catch((error: unknown) => {
-        cleanup();
-        reject(error);
-      });
+      termination = Promise.resolve()
+        .then(() => terminateDisposableProcessTree(child, { initialSignal }))
+        .catch((error: unknown) => {
+          console.error('Could not clean up provider processes:', error);
+        });
     };
     const onInterrupt = () => forward('SIGINT');
     const onTerminate = () => forward('SIGTERM');
@@ -92,7 +90,7 @@ export async function runProviderCommand(command: {
     child.once('exit', (code, signal) => {
       // Successful native commands can intentionally leave background jobs running.
       if (termination === undefined && (code !== 0 || signal)) {
-        termination = terminateDisposableProcessTree(child);
+        forward('SIGTERM');
       }
       const status = code ?? (signal ? (SIGNAL_EXIT_CODES[signal] ?? 1) : 1);
       const finish = () => {
@@ -100,10 +98,7 @@ export async function runProviderCommand(command: {
         resolve(status);
       };
       if (termination !== undefined) {
-        void termination.then(finish, (error: unknown) => {
-          cleanup();
-          reject(error);
-        });
+        void termination.then(finish);
       } else {
         finish();
       }

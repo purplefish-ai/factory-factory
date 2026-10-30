@@ -39,7 +39,7 @@ function getWarning(
       return {
         title: 'Claude is not authenticated',
         description:
-          'Open the setup terminal in Settings and choose Sign in to Claude. If ff is installed, run `ff claude auth login`.',
+          'Open the setup terminal in Settings and choose Sign in to Claude. If ff is installed, run "ff claude auth login".',
       };
     }
     return null;
@@ -55,7 +55,7 @@ function getWarning(
     return {
       title: 'Codex is not authenticated',
       description:
-        'Open the setup terminal in Settings and choose Sign in to Codex. If ff is installed, run `ff codex login`.',
+        'Open the setup terminal in Settings and choose Sign in to Codex. If ff is installed, run "ff codex login".',
     };
   }
   return null;
@@ -73,7 +73,7 @@ function getAccountWarning(
     description:
       account.kind === 'MANAGED'
         ? 'Sign in to this account from Settings.'
-        : 'Open the setup terminal in Settings and choose Sign in to Codex. If ff is installed, run `ff codex login`.',
+        : 'Open the setup terminal in Settings and choose Sign in to Codex. If ff is installed, run "ff codex login".',
   };
 }
 

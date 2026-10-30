@@ -147,3 +147,32 @@ it.skipIf(process.platform === 'win32').each([runClaudeCommand, runCodexCommand]
     expect(kill).not.toHaveBeenCalled();
   }
 );
+
+it.skipIf(process.platform === 'win32').each([runClaudeCommand, runCodexCommand])(
+  'preserves provider status when process cleanup fails',
+  async (run) => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.spyOn(process, 'kill').mockImplementation(() => {
+      throw Object.assign(new Error('denied'), { code: 'EPERM' });
+    });
+    for (const outcome of [
+      { code: 7, signal: null, interrupt: false, status: 7 },
+      { code: null, signal: 'SIGTERM', interrupt: false, status: 143 },
+      { code: 0, signal: null, interrupt: true, status: 0 },
+    ]) {
+      const child = Object.assign(new EventEmitter(), { pid: 424_242, kill: vi.fn() });
+      spawn.mockReturnValue(child);
+      const before = process.listenerCount('SIGTERM');
+      const pending = run(['--help']);
+      if (outcome.interrupt) {
+        process.listeners('SIGTERM').at(-1)?.('SIGTERM');
+        await vi.advanceTimersByTimeAsync(0);
+      }
+      child.emit('exit', outcome.code, outcome.signal);
+      await expect(pending).resolves.toBe(outcome.status);
+      expect(process.listenerCount('SIGTERM')).toBe(before);
+    }
+    expect(log).toHaveBeenCalledTimes(3);
+    expect(log).toHaveBeenCalledWith('Could not clean up provider processes:', expect.any(Error));
+  }
+);
