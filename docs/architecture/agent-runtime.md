@@ -284,23 +284,24 @@ existing card's input, preserving its original order and tool name through live
 updates and reconnects. Status-only updates and invalid inputs leave the input
 intact.
 
-Permission requests retain the provider's option IDs and choices. Upstream Codex
-plan review and Claude's AIR `Approve Plan` requests with plan text are
-normalized into the application's plan UI, including pending requests restored
-on reconnect. Approval clears the composer's plan mode. Interactive sessions
-wait for a user response; read-only reviewers automatically reject plan
-implementation. Both adapters own their plan implementation continuation; the
-client does not enqueue a second approval turn. Structured questions use ACP
-form elicitation, with validated answers mapped into the existing question UI.
-Numeric fields display validation errors before submission, and blank enum
-choices retain their exact provider values behind visible labels. String
-patterns use bounded RE2 compilation and linear-time matching in the browser and
-backend; unsupported expressions fail closed. Run `pnpm test:acp:manual` for the
-live handshake or `pnpm test:acp:manual:prompt` to explicitly enable a read-only
-model round trip. URL elicitation exposes the destination and message and
-requires explicit consent; it never opens a URL automatically. Cancellation
-resolves pending permissions and elicitations as cancelled and dismisses their
-prompts.
+Permission requests retain the provider's option IDs and choices. When requests
+overlap, the newest is shown; answering it restores the next unanswered one,
+including on reconnect. Upstream Codex plan review and Claude's AIR
+`Approve Plan` requests with plan text are normalized into the application's
+plan UI, including pending requests restored on reconnect. Approval clears the
+composer's plan mode. Interactive sessions wait for a user response; read-only
+reviewers automatically reject plan implementation. Both adapters own their plan
+implementation continuation; the client does not enqueue a second approval turn.
+Structured questions use ACP form elicitation, with validated answers mapped
+into the existing question UI. Numeric fields display validation errors before
+submission, and blank enum choices retain their exact provider values behind
+visible labels. String patterns use bounded RE2 compilation and linear-time
+matching in the browser and backend; unsupported expressions fail closed. Run
+`pnpm test:acp:manual` for the live handshake or `pnpm test:acp:manual:prompt`
+to explicitly enable a read-only model round trip. URL elicitation exposes the
+destination and message and requires explicit consent; it never opens a URL
+automatically. Cancellation resolves pending permissions and elicitations as
+cancelled and dismisses their prompts.
 
 Native subagent/session updates are captured before SDK validation because the
 subagent contract is still a draft. Children retain separate transcripts and
@@ -365,7 +366,8 @@ or awaiting that turn's approval, question or elicitation. A background shell,
 independently running child or active goal does not block the next parent prompt
 once that RPC completes. The provider remains authoritative: if it reports an
 active turn that the client cannot observe, the existing bounded busy retry
-preserves the queued message.
+preserves the queued message, and the running turn keeps its tool-call tracking
+for interceptors such as PR detection.
 
 The workspace and quick-chat composers use prompt ownership for their queue
 placeholder and send-button label; background activity keeps the stop control

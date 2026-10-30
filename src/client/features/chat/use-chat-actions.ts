@@ -12,6 +12,7 @@
  */
 
 import { useCallback } from 'react';
+import type { WebSocketSend, WebSocketSendOptions } from '@/hooks/use-websocket-transport';
 import type { ChatSettings, MessageAttachment } from '@/lib/chat-protocol';
 import { DEFAULT_THINKING_BUDGET } from '@/lib/chat-protocol';
 import type {
@@ -42,7 +43,7 @@ type AcpPermissionOption = {
 
 export interface UseChatActionsOptions {
   /** Send function from WebSocket transport */
-  send: (message: unknown) => boolean;
+  send: WebSocketSend;
   /** Dispatch function from reducer */
   dispatch: React.Dispatch<ChatAction>;
   /** State ref for stable callbacks */
@@ -82,12 +83,15 @@ export interface UseChatActionsReturn {
 // Helper Functions
 // =============================================================================
 
+/** For settings rolled back when `send` returns false: never queue them for replay. */
+const UNQUEUED_SEND: WebSocketSendOptions = { queuePolicy: 'drop' };
+
 function generateMessageId(): string {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
 function maybeSendThinkingBudgetUpdate(
-  send: (message: unknown) => boolean,
+  send: WebSocketSend,
   settings: Partial<ChatSettings>,
   thinkingEnabled: boolean
 ): void {
@@ -99,7 +103,7 @@ function maybeSendThinkingBudgetUpdate(
 }
 
 function maybeSendModelUpdate(
-  send: (message: unknown) => boolean,
+  send: WebSocketSend,
   settings: Partial<ChatSettings>,
   newSettings: ChatSettings,
   capabilities: ChatState['chatCapabilities'],
@@ -121,7 +125,8 @@ function maybeSendModelUpdate(
     modelMessage.reasoningEffort = newSettings.reasoningEffort;
   }
 
-  return send(modelMessage);
+  // The caller rolls back an unsent selection, so it must not be replayed after reconnecting.
+  return send(modelMessage, UNQUEUED_SEND);
 }
 
 function getOutboundSettings(state: ChatState): QueueMessageRequest['settings'] {
@@ -396,7 +401,7 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
         value,
         ...(requestId ? { requestId } : {}),
       };
-      if (!send(msg)) {
+      if (!send(msg, UNQUEUED_SEND)) {
         rejectUnsentModelRequest(requestId);
       }
     },

@@ -415,13 +415,15 @@ export class SessionDomainService extends EventEmitter {
     });
   }
 
-  clearPendingInteractiveRequestIfMatches(sessionId: string, requestId: string): void {
+  /** Returns whether `requestId` was the pending request and has been cleared. */
+  clearPendingInteractiveRequestIfMatches(sessionId: string, requestId: string): boolean {
     const store = this.registry.getOrCreateActive(sessionId);
     if (!clearPendingInteractiveRequestIfMatches(store, requestId)) {
-      return;
+      return false;
     }
     this.publisher.forwardSnapshot(store, { reason: 'pending_request_cleared' });
     this.emit('pending_request_changed', { sessionId, requestId, hasPending: false });
+    return true;
   }
 
   markProcessExit(sessionId: string, code: number | null): void {

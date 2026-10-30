@@ -101,6 +101,11 @@ export class AcpEventProcessor {
   private readonly sessionToWorkflow = new Map<string, string>();
   /** Maps sessionId → stable key for the currently executing prompt attempt. */
   private readonly activePromptAttemptKeys = new Map<string, string>();
+  /**
+   * Tool calls already tracked when the current prompt began, e.g. from a provider turn
+   * this process did not start. They stay tracked until the prompt is accepted and ends.
+   */
+  private readonly toolCallsBeforePromptTurn = new Map<string, Set<string>>();
 
   constructor(options: AcpEventProcessorDependencies) {
     this.runtimeManager = options.runtimeManager;
@@ -269,6 +274,7 @@ export class AcpEventProcessor {
     this.acpEventTranslator.clearTerminalOutput(sessionId);
     this.subagentToolEvents.clearSession(sessionId);
     this.pendingAcpToolCalls.delete(sessionId);
+    this.toolCallsBeforePromptTurn.delete(sessionId);
     this.clearAllToolCallTimers(sessionId);
   }
 
@@ -282,15 +288,33 @@ export class AcpEventProcessor {
 
   beginPromptTurn(sessionId: string): string {
     this.finishAcpTextBlock(sessionId);
-    this.pendingAcpToolCalls.set(sessionId, new Map());
+    const existingToolCallIds = this.pendingAcpToolCalls.get(sessionId)?.keys();
+    this.toolCallsBeforePromptTurn.set(sessionId, new Set(existingToolCallIds));
     const attemptKey = randomUUID();
     this.activePromptAttemptKeys.set(sessionId, attemptKey);
     return attemptKey;
   }
 
+  /** Ends a prompt turn; tool calls that predate it are not reported as its orphans. */
   finishPromptTurn(sessionId: string): void {
     this.finishAcpTextBlock(sessionId);
     this.activePromptAttemptKeys.delete(sessionId);
+    for (const toolUseId of this.toolCallsBeforePromptTurn.get(sessionId) ?? []) {
+      this.removePendingToolCall(sessionId, toolUseId);
+    }
+    this.toolCallsBeforePromptTurn.delete(sessionId);
+  }
+
+  /**
+   * Discards a prompt the provider rejected without starting a turn (for example because
+   * another turn is in progress). The running turn keeps its tool-call tracking.
+   */
+  abandonPromptTurn(sessionId: string, attemptKey: string): void {
+    if (this.activePromptAttemptKeys.get(sessionId) !== attemptKey) {
+      return;
+    }
+    this.activePromptAttemptKeys.delete(sessionId);
+    this.toolCallsBeforePromptTurn.delete(sessionId);
   }
 
   getWorkspaceId(sessionId: string): string | undefined {
