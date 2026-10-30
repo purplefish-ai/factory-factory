@@ -683,6 +683,22 @@ services own their named responsibility and reconciliation evidence where
 applicable; context supplies operational inputs. The lifecycle facade delegates
 public operations and the session composition root wires the owners.
 
+## Task lists
+
+The current task list appears inline beneath the conversation in workspace chat
+and quick chat for both Claude and Codex. The UI uses the latest ACP plan
+snapshot, including empty snapshots that clear the checklist. Older Claude
+TodoWrite calls provide a fallback when no ACP plan has arrived. Completed tasks
+remain visible and muted. Task lists stay hidden during session history loading;
+session switches reset their ACP state. The former Tasks sidebar tab is removed,
+and saved selections of that tab migrate to Changes. The session store retains
+the latest validated ACP task snapshot for reconnect replay, including empty
+lists. Plan snapshots emitted during provider history attachment pass replay
+suppression so restored conversations can recover tasks. Authoritative session
+snapshots include the current task list, so queue updates preserve valid tasks
+and hydration clears stale client state when no list exists. Replacing a
+provider's archived history also clears its task snapshot.
+
 ## Provider sub-agents
 
 Provider-initiated sub-agents are session-scoped, read-only, and provider-owned.

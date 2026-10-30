@@ -12,6 +12,10 @@
 
 import type { ChatMessage, WebSocketMessage } from '@/lib/chat-protocol';
 import { isWebSocketMessage, isWsAgentMessage } from '@/lib/chat-protocol';
+import {
+  acpPlanNotificationSchema,
+  parseAcpPlanNotification,
+} from '@/shared/acp-protocol/task-plan';
 import { generateMessageId } from './helpers';
 import { reduceMessageCompactSlice } from './slices/messages/compact';
 import { reduceMessageQueueSlice } from './slices/messages/queue';
@@ -252,9 +256,13 @@ function handleUserQuestionMessage(data: WebSocketMessage): ChatAction | null {
 }
 
 function handleSessionSnapshot(data: WebSocketMessage): ChatAction | null {
-  if (!(data.messages && data.queuedMessages && data.sessionRuntime)) {
+  if (
+    data.type !== 'session_snapshot' ||
+    !(data.messages && data.queuedMessages && data.sessionRuntime)
+  ) {
     return null;
   }
+  const taskPlan = acpPlanNotificationSchema.safeParse(data.taskPlan);
   return {
     type: 'SESSION_SNAPSHOT',
     payload: {
@@ -262,6 +270,9 @@ function handleSessionSnapshot(data: WebSocketMessage): ChatAction | null {
       queuedMessages: data.queuedMessages,
       sessionRuntime: data.sessionRuntime,
       pendingInteractiveRequest: data.pendingInteractiveRequest ?? null,
+      acpPlan: taskPlan.success
+        ? { entries: taskPlan.data.entries, updatedAt: new Date().toISOString() }
+        : null,
     },
   };
 }
@@ -415,17 +426,12 @@ function handleTaskNotificationMessage(data: WebSocketMessage): ChatAction | nul
   if (!data.message) {
     return null;
   }
-  // Check if this is an ACP plan update (JSON message with type 'acp_plan')
-  try {
-    const parsed = JSON.parse(data.message);
-    if (parsed && parsed.type === 'acp_plan' && Array.isArray(parsed.entries)) {
-      return {
-        type: 'ACP_PLAN_UPDATE',
-        payload: { entries: parsed.entries },
-      };
-    }
-  } catch {
-    // Not JSON, treat as regular task notification
+  const parsed = parseAcpPlanNotification(data.message);
+  if (parsed) {
+    return {
+      type: 'ACP_PLAN_UPDATE',
+      payload: { entries: parsed.entries },
+    };
   }
   return { type: 'SDK_TASK_NOTIFICATION', payload: { message: data.message } };
 }
