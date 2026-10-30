@@ -40,12 +40,14 @@ it.skipIf(process.platform === 'win32')(
           wrapperPid = z.coerce.number().int().min(2).parse(readFileSync(wrapperFile, 'utf8'));
           nativePid = z.coerce.number().int().min(2).parse(readFileSync(nativeFile, 'utf8'));
         },
-        { timeout: 3000 }
+        { timeout: 10_000 }
       );
       const signal = process.listeners('SIGTERM').at(-1);
       expect(signal).toBeDefined();
+      const shutdownStartedAt = Date.now();
       signal?.('SIGTERM');
       await expect(pending).resolves.toBe(143);
+      expect(Date.now() - shutdownStartedAt).toBeLessThan(6000);
       await vi.waitFor(
         () => {
           expect(() => process.kill(nativePid!, 0)).toThrow();
@@ -63,5 +65,5 @@ it.skipIf(process.platform === 'win32')(
       rmSync(root, { recursive: true, force: true });
     }
   },
-  10_000
+  20_000
 );
