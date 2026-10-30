@@ -49,6 +49,18 @@ export async function runProviderCommand(command: {
   });
   return await new Promise<number>((resolve, reject) => {
     let termination: Promise<void> | undefined;
+    const onResize = () => {
+      if (child.pid === undefined) {
+        return;
+      }
+      try {
+        process.kill(-child.pid, 'SIGWINCH');
+      } catch (error) {
+        if (!(error instanceof Error && 'code' in error && error.code === 'ESRCH')) {
+          console.error('Could not resize the provider terminal:', error);
+        }
+      }
+    };
     const forward = (initialSignal: 'SIGINT' | 'SIGTERM') => {
       if (termination !== undefined) {
         return;
@@ -66,9 +78,13 @@ export async function runProviderCommand(command: {
     const cleanup = () => {
       process.off('SIGINT', onInterrupt);
       process.off('SIGTERM', onTerminate);
+      process.off('SIGWINCH', onResize);
     };
     process.on('SIGINT', onInterrupt);
     process.on('SIGTERM', onTerminate);
+    if (process.platform !== 'win32') {
+      process.on('SIGWINCH', onResize);
+    }
     child.once('error', (error) => {
       cleanup();
       reject(error);

@@ -90,3 +90,23 @@ it.skipIf(process.platform === 'win32').each([runClaudeCommand, runCodexCommand]
     expect(process.listenerCount('SIGINT')).toBe(before);
   }
 );
+
+it.skipIf(process.platform === 'win32').each([runClaudeCommand, runCodexCommand])(
+  'forwards terminal resize to the owned group and removes its listener',
+  async (run) => {
+    const kill = vi.spyOn(process, 'kill').mockReturnValue(true);
+    const child = Object.assign(new EventEmitter(), { pid: 424_242, kill: vi.fn() });
+    spawn.mockReturnValue(child);
+    const before = process.listenerCount('SIGWINCH');
+    const pending = run(['--help']);
+    try {
+      expect(process.listenerCount('SIGWINCH')).toBe(before + 1);
+      process.listeners('SIGWINCH').at(-1)?.('SIGWINCH');
+      expect(kill).toHaveBeenCalledWith(-424_242, 'SIGWINCH');
+    } finally {
+      child.emit('exit', 0);
+      await pending;
+    }
+    expect(process.listenerCount('SIGWINCH')).toBe(before);
+  }
+);
