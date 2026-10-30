@@ -97,7 +97,7 @@ it.each([
 });
 
 it('leaves other links without previews', async () => {
-  const link = await render('[Issue](https://github.com/o/r/issues/42)');
+  const link = await render('[Other](https://example.com/o/r/issues/42)');
   await act(() => link.focus());
   expect(useQuery).not.toHaveBeenCalled();
   expect(document.querySelector('[data-slot="tooltip-content"]')).toBeNull();

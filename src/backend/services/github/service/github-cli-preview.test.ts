@@ -55,3 +55,38 @@ it('allows a deleted author and rejects malformed preview metadata', async () =>
     'Invalid gh CLI response'
   );
 });
+
+it('fetches issue preview metadata without bodies or comments', async () => {
+  const issue = {
+    title: 'Fix previews',
+    state: 'OPEN',
+    author: null,
+    createdAt: preview.createdAt,
+  };
+  vi.mocked(execFile).mockResolvedValue({ stdout: JSON.stringify(issue), stderr: '' } as never);
+  await expect(githubCLIService.getIssuePreview('owner/repo', 42)).resolves.toEqual(issue);
+  expect(execFile).toHaveBeenCalledExactlyOnceWith(
+    'gh',
+    ['issue', 'view', '42', '--repo', 'owner/repo', '--json', 'title,state,author,createdAt'],
+    expect.any(Object)
+  );
+});
+
+it('rejects malformed issue metadata and propagates failed reads', async () => {
+  vi.mocked(execFile).mockResolvedValue({
+    stdout: JSON.stringify({
+      title: 'Invalid',
+      state: 'MERGED',
+      author: null,
+      createdAt: preview.createdAt,
+    }),
+    stderr: '',
+  } as never);
+  await expect(githubCLIService.getIssuePreview('owner/repo', 42)).rejects.toThrow(
+    'Invalid gh CLI response'
+  );
+  vi.mocked(execFile).mockRejectedValue(new Error('Issue not found'));
+  await expect(githubCLIService.getIssuePreview('owner/repo', 42)).rejects.toThrow(
+    'Issue not found'
+  );
+});
