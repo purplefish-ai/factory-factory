@@ -1,8 +1,8 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
 import { vi } from 'vitest';
+import { TunedPrismaBetterSqlite3 } from '@/backend/lib/sqlite-adapter';
 import { runMigrations } from '@/backend/migrate';
 import type { PrismaClient } from '@prisma-gen/client';
 import { PrismaClient as PrismaClientCtor } from '@prisma-gen/client';
@@ -33,7 +33,7 @@ export async function createIntegrationDatabase(): Promise<IntegrationDatabase> 
   // The runtime DB module caches Prisma globally; clear both module and global caches
   // so each integration suite gets a fresh client bound to its own temp DB path.
   vi.resetModules();
-  const adapter = new PrismaBetterSqlite3({ url: databasePath });
+  const adapter = new TunedPrismaBetterSqlite3({ url: databasePath });
   const prisma = new PrismaClientCtor({ adapter });
   (globalThis as { prismaGlobal?: PrismaClient }).prismaGlobal = prisma;
   await prisma.$connect();

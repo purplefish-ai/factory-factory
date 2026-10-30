@@ -66,7 +66,7 @@ export const githubRouter = router({
           githubCLIService.listIssues(githubOwner, githubRepo, {
             assignee: '@me',
           }),
-          workspaceDataService.findByProjectId(input.projectId),
+          workspaceDataService.findIssueLinksByProjectId(input.projectId),
         ]);
         return {
           issues: filterIssuesLinkedToActiveWorkspaces(

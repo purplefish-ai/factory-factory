@@ -170,7 +170,7 @@ class ReconciliationService {
   private async recoverStaleProvisioningWorkspace(
     workspace: WorkspaceNeedingWorktree
   ): Promise<void> {
-    if (workspace.initScriptPid && isProcessRunning(workspace.initScriptPid)) {
+    if (workspace.initScriptPid && (await isProcessRunning(workspace.initScriptPid))) {
       logger.info('Skipping stale provisioning workspace with running init script', {
         workspaceId: workspace.id,
         initStartedAt: workspace.initStartedAt,

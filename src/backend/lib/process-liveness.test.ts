@@ -1,49 +1,77 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mockExecFileSync = vi.hoisted(() => vi.fn());
+const mockPsState = vi.hoisted(() => vi.fn<() => string>());
+const mockExecFile = vi.hoisted(() =>
+  vi.fn(
+    (
+      _file: string,
+      _args: string[],
+      _options: unknown,
+      callback: (error: Error | null, result: { stdout: string; stderr: string }) => void
+    ) => {
+      callback(null, { stdout: mockPsState(), stderr: '' });
+    }
+  )
+);
 
 vi.mock('node:child_process', () => ({
-  execFileSync: mockExecFileSync,
+  execFile: mockExecFile,
 }));
 
 import { isProcessRunning } from './process-liveness';
 
 describe('isProcessRunning', () => {
   beforeEach(() => {
-    mockExecFileSync.mockReturnValue('S');
+    mockPsState.mockReturnValue('S');
   });
 
   afterEach(() => vi.restoreAllMocks());
 
-  it('treats zombie processes as dead', () => {
+  it('treats zombie processes as dead', async () => {
     vi.spyOn(process, 'kill').mockReturnValue(true);
-    mockExecFileSync.mockReturnValue('Z+');
+    mockPsState.mockReturnValue('Z+');
 
-    expect(isProcessRunning(123)).toBe(false);
-    expect(mockExecFileSync).toHaveBeenCalledWith(
+    await expect(isProcessRunning(123)).resolves.toBe(false);
+    expect(mockExecFile).toHaveBeenCalledWith(
       'ps',
       ['-o', 'stat=', '-p', '123'],
-      expect.objectContaining({ encoding: 'utf8' })
+      expect.objectContaining({ encoding: 'utf8' }),
+      expect.any(Function)
     );
   });
 
-  it('treats permission-denied processes as alive', () => {
+  it('treats live non-zombie processes as running', async () => {
+    vi.spyOn(process, 'kill').mockReturnValue(true);
+
+    await expect(isProcessRunning(123)).resolves.toBe(true);
+  });
+
+  it('keeps a live PID when its state lookup fails', async () => {
+    vi.spyOn(process, 'kill').mockReturnValue(true);
+    mockExecFile.mockImplementationOnce((_file, _args, _options, callback) => {
+      callback(new Error('ps unavailable'), { stdout: '', stderr: '' });
+    });
+
+    await expect(isProcessRunning(123)).resolves.toBe(true);
+  });
+
+  it('treats permission-denied processes as alive', async () => {
     vi.spyOn(process, 'kill').mockImplementation(() => {
       const error = new Error('permission denied') as NodeJS.ErrnoException;
       error.code = 'EPERM';
       throw error;
     });
 
-    expect(isProcessRunning(123)).toBe(true);
+    await expect(isProcessRunning(123)).resolves.toBe(true);
   });
 
-  it('treats missing processes as dead', () => {
+  it('treats missing processes as dead', async () => {
     vi.spyOn(process, 'kill').mockImplementation(() => {
       const error = new Error('missing') as NodeJS.ErrnoException;
       error.code = 'ESRCH';
       throw error;
     });
 
-    expect(isProcessRunning(123)).toBe(false);
+    await expect(isProcessRunning(123)).resolves.toBe(false);
   });
 });

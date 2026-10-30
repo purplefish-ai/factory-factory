@@ -21,6 +21,7 @@ import { getAcpWorkState } from './session-work-state';
 import type { SessionConfigService } from './session.config.service';
 import { toPublicProviderErrorMessage } from './session.error-message';
 import type { SessionPermissionService } from './session.permission.service';
+import { SubagentChangeCoalescer } from './subagent-change-coalescer';
 import { SubagentToolEventCollector } from './subagent-tool-events';
 
 const logger = createLogger('session');
@@ -69,6 +70,7 @@ export type AcpEventProcessorDependencies = {
   onToolCallTimeout: (sessionId: string, toolUseId: string, toolName: string) => void;
   toolCallTimeoutMs?: number;
   textFlushIntervalMs?: number;
+  subagentUpdateIntervalMs?: number;
 };
 
 export class AcpEventProcessor {
@@ -78,6 +80,7 @@ export class AcpEventProcessor {
   private readonly sessionConfigService: SessionConfigService;
   private readonly acpEventTranslator = new AcpEventTranslator(logger);
   private readonly subagentToolEvents = new SubagentToolEventCollector();
+  private readonly subagentChanges: SubagentChangeCoalescer;
   private readonly onToolCallTimeout: (
     sessionId: string,
     toolUseId: string,
@@ -120,6 +123,16 @@ export class AcpEventProcessor {
     this.onToolCallTimeout = options.onToolCallTimeout;
     this.toolCallTimeoutMs = options.toolCallTimeoutMs ?? DEFAULT_TOOL_CALL_TIMEOUT_MS;
     this.textFlushIntervalMs = options.textFlushIntervalMs ?? DEFAULT_TEXT_FLUSH_INTERVAL_MS;
+    this.subagentChanges = new SubagentChangeCoalescer(
+      (sessionId, subagentId, change) =>
+        this.sessionDomainService.emitDelta(sessionId, {
+          type: 'subagents_changed',
+          sessionId,
+          subagentId,
+          change,
+        }),
+      options.subagentUpdateIntervalMs
+    );
   }
 
   createRuntimeEventHandler(
@@ -218,12 +231,7 @@ export class AcpEventProcessor {
     }
 
     if (event.type === 'acp_subagents_changed') {
-      this.sessionDomainService.emitDelta(sid, {
-        type: 'subagents_changed',
-        sessionId: sid,
-        subagentId: event.subagentId,
-        change: event.change,
-      });
+      this.subagentChanges.push(sid, event.subagentId, event.change);
       return;
     }
 
@@ -284,6 +292,7 @@ export class AcpEventProcessor {
   }
 
   clearSessionState(sessionId: string): void {
+    this.subagentChanges.flushSession(sessionId);
     this.clearStreamingState(sessionId);
     this.clearPendingToolCalls(sessionId);
     this.clearReplaySuppression(sessionId);

@@ -305,11 +305,11 @@ export class AcpNativeSessionTracker {
     const start = Math.max(child.turnOffset, end - input.limit);
     return {
       projectionBoundary: 'turn',
-      updates: structuredClone(
-        child.turns
-          .slice(start - child.turnOffset, end - child.turnOffset)
-          .flatMap((turn) => turn.updates)
-      ),
+      // Stored updates are never mutated, so a fresh array is enough; deep-cloning a
+      // multi-megabyte transcript on every read blocked the event loop.
+      updates: child.turns
+        .slice(start - child.turnOffset, end - child.turnOffset)
+        .flatMap((turn) => turn.updates),
       nextCursor: start > child.turnOffset ? String(start) : null,
     };
   }

@@ -141,6 +141,17 @@ describe('workspaceAccessor', () => {
     });
   });
 
+  it('selects only issue-link columns in findIssueLinksByProjectId', async () => {
+    mockFindMany.mockResolvedValueOnce([]);
+
+    await workspaceAccessor.findIssueLinksByProjectId('project-1');
+
+    expect(mockFindMany).toHaveBeenCalledWith({
+      where: { projectId: 'project-1', status: { notIn: ['ARCHIVING', 'ARCHIVED'] } },
+      select: { status: true, githubIssueNumber: true, linearIssueId: true },
+    });
+  });
+
   it('excludes statuses in findByProjectIdWithSessions', async () => {
     mockFindMany.mockResolvedValueOnce([]);
 

@@ -22,6 +22,7 @@ import express from 'express';
 import { WebSocketServer } from 'ws';
 import type { Application } from './app-context';
 import { toError } from './lib/error-utils';
+import { eventLoopMonitor } from './lib/event-loop-monitor';
 import {
   createCorsMiddleware,
   createRequestLoggerMiddleware,
@@ -90,6 +91,7 @@ export function createServer(application: Application, requestedPort?: number): 
   let explicitStartupStarted = false;
   let startupComplete = false;
   let cleanupStarted = false;
+  let eventLoopMonitorStarted = false;
   let cleanupPromise: Promise<void> | null = null;
 
   const app = express();
@@ -416,6 +418,11 @@ export function createServer(application: Application, requestedPort?: number): 
     }
 
     cleanupStarted = true;
+    // Release the shared monitor first so a failing cleanup step cannot leak it.
+    if (eventLoopMonitorStarted) {
+      eventLoopMonitorStarted = false;
+      eventLoopMonitor.stop();
+    }
     cleanupPromise = (async () => {
       logger.info('Starting graceful cleanup');
 
@@ -512,6 +519,8 @@ export function createServer(application: Application, requestedPort?: number): 
       };
 
       try {
+        eventLoopMonitor.start();
+        eventLoopMonitorStarted = true;
         await bindServerWithPortFallback();
         await runStartupReconciliation();
 
