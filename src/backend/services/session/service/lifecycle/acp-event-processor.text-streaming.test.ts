@@ -343,6 +343,26 @@ describe('AcpEventProcessor assistant text streaming', () => {
     });
   });
 
+  it('writes a pending thought before a replayed user message', () => {
+    const deps = makeDeps();
+    vi.mocked(deps.runtimeManager.isSessionWorking).mockReturnValue(false);
+    const injectCommittedUserMessage = vi.fn();
+    Object.assign(deps.sessionDomainService, { injectCommittedUserMessage });
+    const processor = new AcpEventProcessor(deps);
+    const { onAcpEvent } = processor.createRuntimeEventHandler('sid');
+
+    processor.handleAcpDelta('sid', thoughtDelta('earlier'));
+    onAcpEvent?.('sid', {
+      type: 'acp_session_update',
+      update: { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: 'next' } },
+    } as Parameters<NonNullable<typeof onAcpEvent>>[1]);
+
+    expect(deps.sessionDomainService.appendClaudeEvent).toHaveBeenCalledOnce();
+    expect(
+      vi.mocked(deps.sessionDomainService.appendClaudeEvent).mock.invocationCallOrder[0]
+    ).toBeLessThan(injectCommittedUserMessage.mock.invocationCallOrder[0] ?? 0);
+  });
+
   it('flushes a pending thought when the prompt turn finishes', () => {
     const deps = makeDeps();
     const processor = new AcpEventProcessor(deps);

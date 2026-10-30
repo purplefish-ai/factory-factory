@@ -101,6 +101,29 @@ describe('event collector session refreshes', () => {
     collector.stop();
   });
 
+  it('does not cache a lookup that finishes after the collector restarts', async () => {
+    const { collector, sessionDomainService, findAgentSessionById } = createCollector();
+    let resolveLookup!: (value: { id: string; workspaceId: string }) => void;
+    findAgentSessionById.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveLookup = resolve;
+      })
+    );
+    collector.start();
+    sessionDomainService.emit('runtime_changed', { sessionId: 's-1' });
+    collector.stop();
+    collector.start();
+    resolveLookup({ id: 's-1', workspaceId: 'ws-1' });
+    await vi.advanceTimersByTimeAsync(150);
+
+    sessionDomainService.emit('runtime_changed', { sessionId: 's-1' });
+    await vi.advanceTimersByTimeAsync(150);
+
+    // The stale lookup was not cached, so the restarted collector looks it up again.
+    expect(findAgentSessionById).toHaveBeenCalledTimes(2);
+    collector.stop();
+  });
+
   it('forgets cached session workspaces when stopped', async () => {
     const { collector, sessionDomainService, findAgentSessionById } = createCollector();
     collector.start();

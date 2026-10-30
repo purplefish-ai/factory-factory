@@ -495,6 +495,7 @@ export class AcpEventProcessor {
    * Live sends are already committed by our send pipeline, so only inject replay chunks.
    */
   private handleAcpUserMessageChunk(sid: string, text: string): void {
+    this.thoughts.flush(sid);
     this.maybeLiftReplaySuppression(sid);
     if (this.suppressAcpReplayForSession.has(sid)) {
       return;

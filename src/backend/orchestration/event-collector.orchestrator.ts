@@ -293,6 +293,7 @@ class EventCollectorState {
   readonly sessionRefreshes = new KeyedTrailingRunner();
   readonly sessionWorkspaceIds = new Map<string, string>();
   readonly sessionWorkspaceLookups = new Map<string, Promise<string | null>>();
+  sessionWorkspaceGeneration = 0;
 
   constructor(readonly dependencies: Readonly<EventCollectorDependencies>) {
     this.logger = dependencies.createLogger('event-collector');
@@ -311,6 +312,8 @@ function removeWorkspaceWithState(state: EventCollectorState, workspaceId: strin
       state.sessionWorkspaceIds.delete(sessionId);
     }
   }
+  state.sessionWorkspaceGeneration += 1;
+  state.sessionWorkspaceLookups.clear();
   state.linearMergeCompletion?.removeWorkspace(workspaceId);
   state.dependencies.workspaceActivityService.clearWorkspace(workspaceId);
   state.dependencies.prFetchCoordinator.removeWorkspace(workspaceId);
@@ -330,23 +333,35 @@ async function resolveSessionWorkspaceId(
     return cached;
   }
   // Share one lookup between events that arrive before the first one resolves.
-  let lookup = state.sessionWorkspaceLookups.get(sessionId);
-  if (!lookup) {
-    lookup = lookUpSessionWorkspaceId(state, sessionId).finally(() => {
-      state.sessionWorkspaceLookups.delete(sessionId);
-    });
-    state.sessionWorkspaceLookups.set(sessionId, lookup);
+  const existing = state.sessionWorkspaceLookups.get(sessionId);
+  if (existing !== undefined) {
+    return await existing;
   }
+  const lookup: Promise<string | null> = lookUpSessionWorkspaceId(
+    state,
+    sessionId,
+    state.sessionWorkspaceGeneration
+  ).finally(() => {
+    if (state.sessionWorkspaceLookups.get(sessionId) === lookup) {
+      state.sessionWorkspaceLookups.delete(sessionId);
+    }
+  });
+  state.sessionWorkspaceLookups.set(sessionId, lookup);
   return await lookup;
 }
 
 async function lookUpSessionWorkspaceId(
   state: EventCollectorState,
-  sessionId: string
+  sessionId: string,
+  generation: number
 ): Promise<string | null> {
   const session = await state.dependencies.sessionDataService.findAgentSessionById(sessionId);
   if (!session) {
     return null;
+  }
+  // A workspace removal or collector stop since this lookup began invalidates it.
+  if (generation !== state.sessionWorkspaceGeneration) {
+    return session.workspaceId;
   }
   if (state.sessionWorkspaceIds.size >= SESSION_WORKSPACE_CACHE_MAX_ENTRIES) {
     state.sessionWorkspaceIds.clear();
@@ -938,6 +953,7 @@ function stopEventCollectorWithState(state: EventCollectorState): void {
     state.sessionRefreshes.clear();
     state.sessionWorkspaceIds.clear();
     state.sessionWorkspaceLookups.clear();
+    state.sessionWorkspaceGeneration += 1;
     state.linearMergeCompletion?.stop();
     state.linearMergeCompletion = null;
     state.logger.info('Event collector stopped');
