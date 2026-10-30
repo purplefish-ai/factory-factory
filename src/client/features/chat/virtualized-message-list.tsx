@@ -31,6 +31,7 @@ interface VirtualizedMessageListProps {
   running: boolean;
   work?: SessionWorkState;
   onOpenAgents?: () => void;
+  subagentTimelineError?: { message: string; onRetry: () => void } | null;
   startingSession: boolean;
   loadingSession: boolean;
   latestThinking?: string | null;
@@ -134,6 +135,7 @@ interface VirtualRowProps {
   onRewindToMessage?: (uuid: string) => void;
   resolveWorkspaceFileLink?: (href: string) => string | null;
   onWorkspaceFileLink?: (path: string) => void;
+  onOpenAgents?: () => void;
   /** Reads persisted expansion state for tool rows/groups */
   getToolExpansionState?: (key: string, defaultOpen: boolean) => boolean;
   /** Persists expansion state for tool rows/groups */
@@ -152,6 +154,7 @@ const VirtualRow = memo(function VirtualRow({
   onRewindToMessage,
   resolveWorkspaceFileLink,
   onWorkspaceFileLink,
+  onOpenAgents,
   getToolExpansionState,
   setToolExpansionState,
   toolExpansionToken,
@@ -160,6 +163,7 @@ const VirtualRow = memo(function VirtualRow({
     <div ref={measureElement} data-index={index} className="pb-2">
       <GroupedMessageItemRenderer
         item={item}
+        onOpenAgents={onOpenAgents}
         isQueued={isQueued}
         onRemove={onRemove}
         userMessageUuid={userMessageUuid}
@@ -202,6 +206,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   resolveWorkspaceFileLink,
   onWorkspaceFileLink,
   initBanner,
+  subagentTimelineError,
 }: VirtualizedMessageListProps) {
   const todoState = useTodoTracker(allMessages, acpPlan);
   const hasBackgroundActivity = Boolean(
@@ -252,7 +257,8 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
     running ||
     hasBackgroundActivity ||
     startingSession ||
-    showingInitSpinner;
+    showingInitSpinner ||
+    Boolean(subagentTimelineError);
   const getToolExpansionState = workspaceId ? getExpansionState : undefined;
   const setToolExpansionState = workspaceId ? setExpansionState : undefined;
   const getToolExpansionToken = useCallback(
@@ -261,7 +267,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
         return undefined;
       }
 
-      const sequenceDefaultOpen = item.pairedCalls.length > 1;
+      const sequenceDefaultOpen = false;
       const sequenceState = getToolExpansionState(
         createToolSequenceExpansionKey(item.id),
         sequenceDefaultOpen
@@ -594,6 +600,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
               >
                 <VirtualRow
                   item={item}
+                  onOpenAgents={onOpenAgents}
                   index={virtualRow.index}
                   measureElement={virtualizer.measureElement}
                   isQueued={isQueued}
@@ -615,6 +622,18 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
           })}
         </div>
 
+        {subagentTimelineError && (
+          <div role="status" className="flex items-center gap-2 py-1 text-sm text-muted-foreground">
+            <span className="min-w-0">{subagentTimelineError.message}</span>
+            <button
+              type="button"
+              onClick={subagentTimelineError.onRetry}
+              className="shrink-0 rounded-sm underline underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              Retry
+            </button>
+          </div>
+        )}
         {!loadingSession && <TodoPanel todoState={todoState} />}
 
         {/* Context compaction indicator */}

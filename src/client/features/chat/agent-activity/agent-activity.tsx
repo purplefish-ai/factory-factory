@@ -12,6 +12,10 @@ import { AssistantMessageRenderer, MessageWrapper } from './message-renderers';
 import { ChildWorkspaceUpdateRenderer } from './message-renderers/child-workspace-update-renderer';
 import { ParentWorkspaceUpdateRenderer } from './message-renderers/parent-workspace-update-renderer';
 import { PRUpdateRenderer } from './message-renderers/pr-update-renderer';
+import {
+  isSubagentLifecycleMessage,
+  SubagentLifecycleRenderer,
+} from './message-renderers/subagent-lifecycle-renderer';
 import { ToolSequenceGroup } from './tool-renderers';
 import {
   createToolCallExpansionKey,
@@ -53,6 +57,10 @@ function getAssistantCopyText(message: ChatMessage['message']): string | null {
   return null;
 }
 
+function isPRUpdateMessage(message: ChatMessage): boolean {
+  return message.message?.type === 'pr_update' || message.id.startsWith('pr-event-');
+}
+
 // =============================================================================
 // Message Item
 // =============================================================================
@@ -69,6 +77,7 @@ export interface MessageItemProps {
   onRewindToMessage?: (uuid: string) => void;
   resolveWorkspaceFileLink?: (href: string) => string | null;
   onWorkspaceFileLink?: (path: string) => void;
+  onOpenAgents?: () => void;
 }
 
 function PRUpdateMessageItem({
@@ -98,8 +107,12 @@ export const MessageItem = memo(function MessageItem({
   onRewindToMessage,
   resolveWorkspaceFileLink,
   onWorkspaceFileLink,
+  onOpenAgents,
 }: MessageItemProps) {
-  if (message.message?.type === 'pr_update' || message.id.startsWith('pr-event-')) {
+  if (isSubagentLifecycleMessage(message.message)) {
+    return <SubagentLifecycleRenderer message={message} onOpenAgents={onOpenAgents} />;
+  }
+  if (isPRUpdateMessage(message)) {
     return <PRUpdateMessageItem message={message} isQueued={isQueued} />;
   }
   // User messages
@@ -270,6 +283,7 @@ export interface GroupedMessageItemRendererProps {
   onRewindToMessage?: (uuid: string) => void;
   resolveWorkspaceFileLink?: (href: string) => string | null;
   onWorkspaceFileLink?: (path: string) => void;
+  onOpenAgents?: () => void;
   /** Reads persisted expansion state by key */
   getToolExpansionState?: (key: string, defaultOpen: boolean) => boolean;
   /** Persists expansion state by key */
@@ -289,12 +303,13 @@ export const GroupedMessageItemRenderer = memo(function GroupedMessageItemRender
   onRewindToMessage,
   resolveWorkspaceFileLink,
   onWorkspaceFileLink,
+  onOpenAgents,
   getToolExpansionState,
   setToolExpansionState,
   toolExpansionToken: _toolExpansionToken,
 }: GroupedMessageItemRendererProps) {
   if (isToolSequence(item)) {
-    const sequenceDefaultOpen = item.pairedCalls.length > 1;
+    const sequenceDefaultOpen = false;
     const sequenceExpansionKey = createToolSequenceExpansionKey(item.id);
     const sequenceOpen = getToolExpansionState?.(sequenceExpansionKey, sequenceDefaultOpen);
     const handleSequenceOpenChange =
@@ -325,6 +340,7 @@ export const GroupedMessageItemRenderer = memo(function GroupedMessageItemRender
   return (
     <MessageItem
       message={item}
+      onOpenAgents={onOpenAgents}
       isQueued={isQueued}
       onRemove={onRemove}
       userMessageUuid={userMessageUuid}

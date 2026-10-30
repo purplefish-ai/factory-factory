@@ -80,10 +80,12 @@ export function getStringAnswerError(
   rules: Extract<QuestionValidation, { type: 'string' }>,
   text: string
 ): string | null {
-  if (rules.minLength !== undefined && text.length < rules.minLength) {
+  // JSON Schema string lengths count Unicode code points, not UTF-16 code units.
+  const length = [...text].length;
+  if (rules.minLength !== undefined && length < rules.minLength) {
     return `Enter at least ${rules.minLength} characters.`;
   }
-  if (rules.maxLength !== undefined && text.length > rules.maxLength) {
+  if (rules.maxLength !== undefined && length > rules.maxLength) {
     return `Enter no more than ${rules.maxLength} characters.`;
   }
   if (rules.pattern !== undefined) {

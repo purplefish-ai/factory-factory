@@ -322,6 +322,38 @@ describe('real chat WebSocket configuration lifecycle', () => {
     );
   });
 
+  it('does not replay a model change that was rolled back as unsent while disconnected', async () => {
+    const harness = await mount();
+    await act(() => harness.socket.close());
+    expect(harness.chat.connected).toBe(false);
+
+    await act(() => harness.chat.updateSettings({ selectedModel: 'six-luna' }));
+    expect(harness.chat.chatSettings.selectedModel).toBe('six-sol');
+    expect(
+      harness.chat.messages.some(
+        (message) =>
+          message.message?.type === 'error' && message.message.error?.includes('not sent')
+      )
+    ).toBe(true);
+
+    const next = await harness.reconnect();
+    const replayedTypes = next.sent.map((raw) => outboundSchema.parse(JSON.parse(raw)).type);
+    expect(replayedTypes).not.toContain('set_model');
+  });
+
+  it('does not replay a config option change that was rolled back as unsent', async () => {
+    const harness = await mount();
+    await harness.hydrate(harness.socket, [modelOption, reasoningOption]);
+    await act(() => harness.socket.close());
+
+    await act(() => harness.chat.setConfigOption(reasoningOption.id, 'high'));
+    expect(harness.chat.chatSettings.reasoningEffort).toBe('low');
+
+    const next = await harness.reconnect();
+    const replayedTypes = next.sent.map((raw) => outboundSchema.parse(JSON.parse(raw)).type);
+    expect(replayedTypes).not.toContain('set_config_option');
+  });
+
   it('shows the real native model control as busy until its correlated reply arrives', async () => {
     const harness = await mount();
     await harness.hydrate(harness.socket, [modelOption]);

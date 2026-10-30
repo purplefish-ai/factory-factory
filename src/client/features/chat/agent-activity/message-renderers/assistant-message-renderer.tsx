@@ -161,7 +161,7 @@ export const MessageWrapper = memo(function MessageWrapper({
   className,
 }: MessageWrapperProps) {
   return (
-    <div className={cn('py-2', className)}>
+    <div className={cn('py-1', className)}>
       <div className="max-w-full">{children}</div>
     </div>
   );

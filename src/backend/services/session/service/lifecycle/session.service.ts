@@ -224,14 +224,7 @@ export class SessionService {
           error,
         });
       }
-      this.completePromptTurnIfCurrent(sessionId, stopGeneration, 'prompt_error', {
-        phase: 'error',
-        processState: 'alive',
-        activity: 'IDLE',
-        errorMessage: toErrorMessage(error),
-        ...getAcpWorkState(this.runtimeManager.getClient(sessionId)),
-        updatedAt: new Date().toISOString(),
-      });
+      this.completeFailedPromptTurn({ sessionId, stopGeneration, attemptKey, error });
       throw error;
     } finally {
       if (workspaceId && this.workspaceBridge) {
@@ -276,6 +269,36 @@ export class SessionService {
       ...getAcpWorkState(this.runtimeManager.getClient(sessionId)),
       updatedAt: new Date().toISOString(),
     });
+  }
+
+  private completeFailedPromptTurn({
+    sessionId,
+    stopGeneration,
+    attemptKey,
+    error,
+  }: {
+    sessionId: string;
+    stopGeneration: number;
+    attemptKey: string;
+    error: unknown;
+  }): void {
+    const runtime: SessionRuntimeState = {
+      phase: 'error',
+      processState: 'alive',
+      activity: 'IDLE',
+      errorMessage: toErrorMessage(error),
+      ...getAcpWorkState(this.runtimeManager.getClient(sessionId)),
+      updatedAt: new Date().toISOString(),
+    };
+    if (!this.isTurnAlreadyInProgressError(error)) {
+      this.completePromptTurnIfCurrent(sessionId, stopGeneration, 'prompt_error', runtime);
+      return;
+    }
+    // The provider never started this prompt: keep the running turn's tool-call tracking.
+    this.acpEventProcessor.abandonPromptTurn(sessionId, attemptKey);
+    if (this.lifecycleGate.isGenerationCurrent(sessionId, stopGeneration)) {
+      this.sessionDomainService.setRuntimeSnapshot(sessionId, runtime);
+    }
   }
 
   private async recordPromptFailure({

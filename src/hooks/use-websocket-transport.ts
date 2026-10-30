@@ -19,6 +19,17 @@ const STALE_MESSAGE_TYPES = new Set(['stop', 'interrupt', 'soft_stop']);
 
 export type WebSocketQueuePolicy = 'replay' | 'drop';
 
+export interface WebSocketSendOptions {
+  /**
+   * Drops this message instead of queuing it for replay when it cannot be sent now. Use it
+   * when the caller treats a `false` return as "never sent" (for example to roll back
+   * optimistic state). A drop transport never replays, so there is no 'replay' override.
+   */
+  queuePolicy?: 'drop';
+}
+
+export type WebSocketSend = (message: unknown, options?: WebSocketSendOptions) => boolean;
+
 function isStaleReplayMessage(message: unknown): boolean {
   const messageType =
     typeof message === 'object' && message !== null && 'type' in message ? message.type : undefined;
@@ -110,10 +121,10 @@ export interface UseWebSocketTransportReturn {
   gaveUp: boolean;
   /**
    * Send a message (will be JSON stringified).
-   * If disconnected, message is queued for delivery on reconnect.
-   * Returns true if sent immediately, false if queued or dropped.
+   * If disconnected, message is queued for delivery on reconnect unless the effective
+   * queue policy is 'drop'. Returns true if sent immediately, false if queued or dropped.
    */
-  send: (message: unknown) => boolean;
+  send: WebSocketSend;
   /** Manually trigger a reconnection attempt. */
   reconnect: () => void;
 }
@@ -397,7 +408,7 @@ export function useWebSocketTransport(
 
   // Send a message (JSON stringified), queuing if disconnected
   const send = useCallback(
-    (message: unknown): boolean => {
+    (message: unknown, sendOptions?: WebSocketSendOptions): boolean => {
       const ws = wsRef.current;
       const socketIsOpen = ws?.readyState === WebSocket.OPEN;
       const hasBacklog = messageQueueRef.current.length > 0;
@@ -406,7 +417,7 @@ export function useWebSocketTransport(
         return true;
       }
 
-      if (queuePolicy !== 'replay') {
+      if (queuePolicy !== 'replay' || sendOptions?.queuePolicy === 'drop') {
         return false;
       }
 

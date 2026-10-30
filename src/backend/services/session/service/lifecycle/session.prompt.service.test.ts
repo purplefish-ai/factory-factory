@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { interceptorRegistry } from '@/backend/interceptors/registry';
 import { SessionDomainService } from '@/backend/services/session';
 import { PromptTimeoutError } from '@/backend/services/session/service/acp';
 import { AcpNativeSessionTracker } from '@/backend/services/session/service/acp/acp-native-session-tracker';
@@ -19,6 +20,7 @@ function createPromptService() {
     getWorkspaceId: vi.fn().mockReturnValue('workspace-1'),
     getProvider: vi.fn().mockReturnValue('CODEX'),
     beginPromptTurn: vi.fn().mockReturnValue('attempt-key'),
+    abandonPromptTurn: vi.fn(),
     finishPromptTurn: vi.fn(),
     finalizeOrphanedToolCalls: vi.fn(),
   };
@@ -62,6 +64,30 @@ function createPromptService() {
     isGenerationCurrent,
     workspaceBridge,
   };
+}
+
+function startTool(acpEventProcessor: AcpEventProcessor, id: string, command: string) {
+  acpEventProcessor.handleAcpDelta('session-1', {
+    type: 'agent_message',
+    data: {
+      type: 'stream_event',
+      event: {
+        type: 'content_block_start',
+        index: 0,
+        content_block: { type: 'tool_use', id, name: 'Bash', input: { command } },
+      },
+    },
+  });
+}
+
+function completeTool(acpEventProcessor: AcpEventProcessor, id: string) {
+  acpEventProcessor.handleAcpDelta('session-1', {
+    type: 'agent_message',
+    data: {
+      type: 'user',
+      message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: 'ok' }] },
+    },
+  });
 }
 
 function createDeferred<T>() {
@@ -607,5 +633,78 @@ describe('SessionService prompt coordination', () => {
 
     secondPrompt.resolve({ stopReason: 'end_turn' });
     await expect(second).resolves.toBeUndefined();
+  });
+
+  it('does not report tool calls that predate an accepted prompt as its orphans', async () => {
+    const { service, runtimeManager, acpEventProcessor, sessionDomainService } =
+      createLifecyclePromptHarness();
+    const notifyToolStart = vi
+      .spyOn(interceptorRegistry, 'notifyToolStart')
+      .mockImplementation(() => undefined);
+    try {
+      startTool(acpEventProcessor, 'tool-1', 'pnpm test');
+      const appendClaudeEvent = vi.spyOn(sessionDomainService, 'appendClaudeEvent');
+      runtimeManager.sendPrompt.mockResolvedValueOnce({ stopReason: 'end_turn' });
+
+      await service.sendSessionMessage('session-1', 'follow-up');
+
+      expect(appendClaudeEvent).not.toHaveBeenCalled();
+      expect(acpEventProcessor.pendingAcpToolCalls.has('session-1')).toBe(false);
+    } finally {
+      notifyToolStart.mockRestore();
+    }
+  });
+
+  describe('when the provider already has a turn in progress', () => {
+    const busy = 'A turn is already in progress for this session';
+
+    it('keeps the running turn tool-call metadata for interceptors', async () => {
+      const { service, runtimeManager, acpEventProcessor } = createLifecyclePromptHarness();
+      const notifyToolComplete = vi
+        .spyOn(interceptorRegistry, 'notifyToolComplete')
+        .mockImplementation(() => undefined);
+      const notifyToolStart = vi
+        .spyOn(interceptorRegistry, 'notifyToolStart')
+        .mockImplementation(() => undefined);
+      try {
+        startTool(acpEventProcessor, 'tool-1', 'gh pr create --fill');
+        runtimeManager.sendPrompt.mockRejectedValueOnce(new Error(busy));
+        await expect(service.sendSessionMessage('session-1', 'follow-up')).rejects.toThrow(busy);
+
+        completeTool(acpEventProcessor, 'tool-1');
+
+        expect(notifyToolComplete).toHaveBeenCalledWith(
+          expect.objectContaining({
+            toolUseId: 'tool-1',
+            toolName: 'Bash',
+            input: { command: 'gh pr create --fill' },
+          }),
+          expect.anything()
+        );
+      } finally {
+        notifyToolComplete.mockRestore();
+        notifyToolStart.mockRestore();
+      }
+    });
+
+    it('does not finalize the running turn tool calls as orphans', async () => {
+      const { service, runtimeManager, acpEventProcessor, sessionDomainService } =
+        createLifecyclePromptHarness();
+      const notifyToolStart = vi
+        .spyOn(interceptorRegistry, 'notifyToolStart')
+        .mockImplementation(() => undefined);
+      try {
+        startTool(acpEventProcessor, 'tool-1', 'pnpm test');
+        const appendClaudeEvent = vi.spyOn(sessionDomainService, 'appendClaudeEvent');
+        runtimeManager.sendPrompt.mockRejectedValueOnce(new Error(busy));
+        await expect(service.sendSessionMessage('session-1', 'follow-up')).rejects.toThrow(busy);
+
+        expect(appendClaudeEvent).not.toHaveBeenCalled();
+        expect(acpEventProcessor.pendingAcpToolCalls.get('session-1')?.has('tool-1')).toBe(true);
+        expect(acpEventProcessor.getActivePromptAttemptKey('session-1')).toBeUndefined();
+      } finally {
+        notifyToolStart.mockRestore();
+      }
+    });
   });
 });

@@ -605,6 +605,12 @@ function findPrecedingAgentText(messages: ChatMessage[], startIndex: number): st
     if (prev.source !== 'agent' || !prev.message) {
       continue;
     }
+    if (
+      prev.message.type === 'system' &&
+      (prev.message.subtype === 'subagent_started' || prev.message.subtype === 'subagent_finished')
+    ) {
+      continue;
+    }
     if (prev.message.type === 'result') {
       return null;
     }

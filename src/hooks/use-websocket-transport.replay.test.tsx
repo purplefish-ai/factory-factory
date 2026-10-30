@@ -198,6 +198,29 @@ describe('useWebSocketTransport replay queue', () => {
     harness.cleanup();
   });
 
+  it('drops messages sent with a drop override instead of replaying them', async () => {
+    const harness = createHarness();
+    await flushEffects();
+
+    const transport = harness.transportRef.current;
+    if (!transport) {
+      throw new Error('Transport was not initialized');
+    }
+    const socket = getLastSocket();
+
+    expect(transport.send({ id: 'queued' })).toBe(false);
+    expect(transport.send({ id: 'dropped' }, { queuePolicy: 'drop' })).toBe(false);
+    flushSync(() => {
+      socket.simulateOpen();
+    });
+
+    expect(extractMessageIds(socket)).toEqual(['queued']);
+    expect(transport.send({ id: 'sent' }, { queuePolicy: 'drop' })).toBe(true);
+    expect(extractMessageIds(socket)).toEqual(['queued', 'sent']);
+
+    harness.cleanup();
+  });
+
   it('preserves FIFO ordering when onConnected sends after reconnect replay', async () => {
     vi.useFakeTimers();
     vi.spyOn(Math, 'random').mockReturnValue(0);

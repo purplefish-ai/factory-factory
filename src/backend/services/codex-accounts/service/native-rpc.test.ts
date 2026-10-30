@@ -3,13 +3,16 @@ import { PassThrough } from 'node:stream';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { withNativeRpc } from './native-rpc';
-const mocks = vi.hoisted(() => ({ spawn: vi.fn(), cleanup: vi.fn() }));
+const mocks = vi.hoisted(() => ({ spawn: vi.fn(), cleanup: vi.fn(), warn: vi.fn() }));
 vi.mock('node:child_process', () => ({ spawn: mocks.spawn }));
 vi.mock('@/backend/lib/owned-codex-command', () => ({
   getOwnedCodexCommand: () => ({ command: 'owned-native', args: ['app-server'] }),
 }));
 vi.mock('@/backend/lib/owned-process-cleanup', () => ({
   terminateDisposableProcessTree: mocks.cleanup,
+}));
+vi.mock('@/backend/services/logger.service', () => ({
+  createLogger: () => ({ info: vi.fn(), debug: vi.fn(), warn: mocks.warn, error: vi.fn() }),
 }));
 const requestSchema = z.object({ id: z.number().optional(), method: z.string() });
 const context = {
@@ -88,10 +91,21 @@ it('includes slow cleanup within the configured operation deadline', async () =>
   }
 });
 
-it('propagates owned cleanup failure without returning process diagnostics', async () => {
+it('keeps a successful result when owned cleanup fails and logs the failure', async () => {
   mocks.cleanup.mockRejectedValue(new Error('Disposable process cleanup failed'));
-  await expect(withNativeRpc(context, (rpc) => rpc.request('account/read'))).rejects.toThrow(
-    'Disposable process cleanup failed'
-  );
+  expect(await withNativeRpc(context, (rpc) => rpc.request('account/read'))).toEqual({ ok: true });
+  expect(mocks.warn).toHaveBeenCalledWith('Codex native process cleanup failed', {
+    accountId: 'managed-one',
+    error: 'Disposable process cleanup failed',
+  });
+  expect(child.stderr.destroyed).toBe(true);
+});
+
+it('reports the operation failure instead of a later cleanup failure', async () => {
+  respond = false;
+  mocks.cleanup.mockRejectedValue(new Error('Disposable process cleanup failed'));
+  await expect(
+    withNativeRpc(context, (rpc) => rpc.request('account/read'), { timeoutMs: 10 })
+  ).rejects.toThrow('Codex native account operation failed');
   expect(child.stderr.destroyed).toBe(true);
 });

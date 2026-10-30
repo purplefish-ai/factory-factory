@@ -4,18 +4,25 @@ import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
 import type { ChatInput, UseChatWebSocketReturn } from '@/client/features/chat';
+import type { ChatMessage, GroupedMessageItem } from '@/lib/chat-protocol';
 import { createInitialSessionRuntimeState } from '@/shared/session-runtime';
 import { QuickChatContent } from './quick-chat-content';
 
 const input = vi.hoisted(() => vi.fn((_props: ComponentProps<typeof ChatInput>) => null));
-const list = vi.hoisted(() => vi.fn((_props: { queuedMessageIds?: Set<string> }) => null));
-vi.mock('@/client/features/chat', () => ({
-  VirtualizedMessageList: list,
-  useGroupedChatMessages: (messages: unknown[]) => messages,
-  ChatInput: input,
-  PermissionPrompt: () => null,
-  QuestionPrompt: () => null,
-}));
+const list = vi.hoisted(() =>
+  vi.fn((_props: { queuedMessageIds?: Set<string>; messages?: GroupedMessageItem[] }) => null)
+);
+vi.mock('@/client/features/chat', async (importOriginal) => {
+  const { useGroupedChatMessages } =
+    await importOriginal<typeof import('@/client/features/chat')>();
+  return {
+    VirtualizedMessageList: list,
+    useGroupedChatMessages,
+    ChatInput: input,
+    PermissionPrompt: () => null,
+    QuestionPrompt: () => null,
+  };
+});
 
 describe('QuickChatContent composer and queue controls', () => {
   it.each([
@@ -71,6 +78,64 @@ describe('QuickChatContent composer and queue controls', () => {
       }
     }
   );
+
+  it('renders a final answer once when a lifecycle row precedes its matching result', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'answer',
+        source: 'agent',
+        order: 0,
+        timestamp: '2026-10-30T12:00:00Z',
+        message: {
+          type: 'assistant',
+          message: { role: 'assistant', content: 'The fix is ready.' },
+        },
+      },
+      {
+        id: 'lifecycle',
+        source: 'agent',
+        order: 1,
+        timestamp: '2026-10-30T12:00:01Z',
+        message: { type: 'system', subtype: 'subagent_finished', text: 'Review finished' },
+      },
+      {
+        id: 'result',
+        source: 'agent',
+        order: 2,
+        timestamp: '2026-10-30T12:00:02Z',
+        message: { type: 'result', result: 'The fix is ready.' },
+      },
+    ];
+    const chatState = {
+      messages,
+      queuedMessages: [],
+      pendingMessages: new Map(),
+      pendingRequest: { type: 'none' },
+      sessionStatus: { phase: 'ready' },
+      sessionRuntime: createInitialSessionRuntimeState(),
+    } as unknown as UseChatWebSocketReturn;
+    const root = createRoot(document.createElement('div'));
+    try {
+      flushSync(() =>
+        root.render(
+          <QuickChatContent
+            workspaceId="workspace-1"
+            chatState={chatState}
+            viewportRef={createRef()}
+            onScroll={vi.fn()}
+            isNearBottom
+            scrollToBottom={vi.fn()}
+          />
+        )
+      );
+      expect(list.mock.lastCall?.[0].messages?.map((item) => item.id)).toEqual([
+        'answer',
+        'lifecycle',
+      ]);
+    } finally {
+      flushSync(() => root.unmount());
+    }
+  });
 
   it('connects queue controls and composer attachments to shared chat state', () => {
     const removeQueuedMessage = vi.fn();
@@ -130,3 +195,7 @@ describe('QuickChatContent composer and queue controls', () => {
     }
   });
 });
+
+vi.mock('@/client/features/subagents', () => ({
+  useSubagentTimelineMessages: (messages: unknown[]) => ({ messages, error: null }),
+}));
