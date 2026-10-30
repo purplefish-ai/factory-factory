@@ -121,6 +121,18 @@ async function readFactoryConfigSafe(
   }
 }
 
+async function markFailedAfterInitFailure(workspaceId: string, error: Error): Promise<void> {
+  try {
+    await workspaceStateMachine.markFailed(workspaceId, error.message);
+  } catch (markFailedError) {
+    // The workspace may have been deleted mid-provisioning; cleanup must still run.
+    logger.warn('Failed to mark workspace FAILED after init failure', {
+      workspaceId,
+      error: toError(markFailedError).message,
+    });
+  }
+}
+
 async function handleWorkspaceInitFailure(
   workspaceId: string,
   error: Error,
@@ -128,7 +140,7 @@ async function handleWorkspaceInitFailure(
   unregisteredWorktreeCleanupCandidate?: UnregisteredWorktreeCleanupCandidate
 ): Promise<void> {
   logger.error('Failed to initialize workspace worktree', error, { workspaceId });
-  await workspaceStateMachine.markFailed(workspaceId, error.message);
+  await markFailedAfterInitFailure(workspaceId, error);
   if (unregisteredWorktreeCleanupCandidate) {
     await cleanupUnregisteredWorktreeAfterInitFailure(
       workspaceId,

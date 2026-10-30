@@ -205,6 +205,21 @@ describe('scroll-state', () => {
     });
   });
 
+  // File tab ids are `file-${path}` and ':' is legal in file names, so one tab id
+  // can be a `${otherTabId}:` prefix of another tab's scroll keys.
+  it('keeps scroll state for a tab whose id extends the removed tab id with ":"', () => {
+    let record = upsertScrollState({}, 'file-notes', 'code', { top: 100, left: 0 });
+    record = upsertScrollState(record, 'file-notes:draft.md', 'markdown', { top: 900, left: 0 });
+
+    const next = removeScrollStatesForTab(record, 'file-notes');
+
+    expect(getScrollStateFromRecord(next, 'file-notes', 'code')).toBeNull();
+    expect(getScrollStateFromRecord(next, 'file-notes:draft.md', 'markdown')).toEqual({
+      top: 900,
+      left: 0,
+    });
+  });
+
   it('returns null when no scroll state exists for a tab', () => {
     const record = upsertScrollState({}, 'tab-1', 'code', { top: 1, left: 2 });
 

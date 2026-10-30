@@ -1,4 +1,4 @@
-import { type ChildProcess, spawn } from 'node:child_process';
+import type { ChildProcess } from 'node:child_process';
 import { toError } from '@/backend/lib/error-utils';
 import { createLogger } from '@/backend/services/logger.service';
 import { workspaceDataService } from '@/backend/services/workspace';
@@ -12,6 +12,7 @@ import { RunScriptOutputBuffer } from './run-script-output-buffer';
 import {
   runCleanupScriptProcess,
   shouldRejectStopWithoutProcess,
+  spawnPipedShellCommand,
   treeKillProcess,
   waitForChildProcessExit,
 } from './run-script-process-utils';
@@ -92,25 +93,20 @@ export class RunScriptService {
         });
       }
 
-      // Spawn the process
       logger.info('Starting run script', {
         workspaceId,
         command,
         cwd: workspace.worktreePath,
       });
 
-      const childProcess = spawn('bash', ['-c', command], {
-        cwd: workspace.worktreePath,
-        detached: false,
-        stdio: ['ignore', 'pipe', 'pipe'],
+      const childProcess = spawnPipedShellCommand(command, workspace.worktreePath, (error) => {
+        logger.warn('Run script process failed to spawn', { workspaceId, error });
       });
-
       const pid = childProcess.pid;
       if (!pid) {
         throw new Error('Failed to spawn run script process');
       }
 
-      // Store process reference
       this.runningProcesses.set(workspaceId, childProcess);
 
       // Clear and initialize output buffers for new run
@@ -248,7 +244,6 @@ export class RunScriptService {
     }
 
     this.runningProcesses.delete(workspaceId);
-    this.runOutput.clearListeners(workspaceId);
     await runScriptProxyService.stopTunnel(workspaceId);
   }
 
@@ -382,6 +377,7 @@ export class RunScriptService {
       if (runScriptPostRunCommand && worktreePath) {
         void this.spawnPostRunScript(
           workspaceId,
+          childProcess,
           runScriptPostRunCommand,
           worktreePath,
           port
@@ -407,9 +403,7 @@ export class RunScriptService {
       return null;
     }
 
-    const isStillActive =
-      this.runningProcesses.get(workspaceId) === childProcess && childProcess.exitCode === null;
-    if (isStillActive) {
+    if (this.isActiveRunProcess(workspaceId, childProcess)) {
       return proxyUrl;
     }
 
@@ -420,6 +414,10 @@ export class RunScriptService {
     });
     await runScriptProxyService.stopTunnel(workspaceId);
     return null;
+  }
+
+  private isActiveRunProcess(workspaceId: string, child: ChildProcess): boolean {
+    return this.runningProcesses.get(workspaceId) === child && child.exitCode === null;
   }
 
   private async handleMarkRunningRace(
@@ -655,11 +653,18 @@ export class RunScriptService {
 
   private async spawnPostRunScript(
     workspaceId: string,
+    runProcess: ChildProcess,
     runScriptPostRunCommand: string,
     worktreePath: string,
     port: number | undefined
   ): Promise<void> {
     await Promise.resolve();
+
+    // A stop/exit during tunnel startup already killed postRun; don't leak a new one.
+    if (!this.isActiveRunProcess(workspaceId, runProcess)) {
+      logger.info('Skipping postRun for inactive run script', { workspaceId });
+      return;
+    }
 
     let command = runScriptPostRunCommand;
     if (port && command.includes('{port}')) {
@@ -668,14 +673,10 @@ export class RunScriptService {
 
     logger.info('Starting postRun script', { workspaceId, command });
 
-    const postRunProcess = spawn('bash', ['-c', command], {
-      cwd: worktreePath,
-      detached: false,
-      stdio: ['ignore', 'pipe', 'pipe'],
+    const postRunProcess = spawnPipedShellCommand(command, worktreePath, (error) => {
+      logger.warn('Failed to spawn postRun process', { workspaceId, error });
     });
-
     if (!postRunProcess.pid) {
-      logger.warn('Failed to spawn postRun process', { workspaceId });
       return;
     }
 
@@ -797,7 +798,6 @@ export class RunScriptService {
     }
 
     this.runningProcesses.delete(workspaceId);
-    this.runOutput.clearListeners(workspaceId);
     return true;
   }
 

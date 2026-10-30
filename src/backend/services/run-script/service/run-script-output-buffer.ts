@@ -28,10 +28,6 @@ export class RunScriptOutputBuffer {
     this.buffers.delete(workspaceId);
   }
 
-  clearListeners(workspaceId: string): void {
-    this.listeners.delete(workspaceId);
-  }
-
   subscribe(workspaceId: string, listener: (data: string) => void): () => void {
     let listeners = this.listeners.get(workspaceId);
     if (!listeners) {

@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import type { TranscriptPosition } from '@/client/features/chat';
 
-export type ScrollMode = 'code' | 'markdown' | 'chat';
+const SCROLL_MODES = ['code', 'markdown', 'chat'] as const;
+
+export type ScrollMode = (typeof SCROLL_MODES)[number];
 
 export interface ScrollState {
   top: number;
@@ -139,12 +141,7 @@ export function removeScrollStatesForTab(
   record: Record<string, ScrollState>,
   tabId: string
 ): Record<string, ScrollState> {
-  const prefix = `${tabId}:`;
-  const next: Record<string, ScrollState> = {};
-  for (const [key, value] of Object.entries(record)) {
-    if (!key.startsWith(prefix)) {
-      next[key] = value;
-    }
-  }
-  return next;
+  // Match exact keys: tab ids embed file paths, which may themselves contain ':'.
+  const tabKeys = new Set(SCROLL_MODES.map((mode) => makeScrollStateKey(tabId, mode)));
+  return Object.fromEntries(Object.entries(record).filter(([key]) => !tabKeys.has(key)));
 }
